@@ -455,6 +455,7 @@ ETALRK0   0                                                                     
 ETALRK1   31                                                                       Max SKY Red order with good Etalon lines
 AGEWLS    -0.2205656666666667                                                      Approx age of WLSFILE compared to this file (days)
 AGEWLS2   0.14193433333333330                                                      Approx age of WLSFILE2 compared to this file (days)
+STDWREF   /data/reference_fits/430LFCWLS.fits                                      filename of ref wls for stdev(WLS-ref)
 STDWGS00  0.09425503797584399                                                      stdev(WLS-ref) (pix), Green SCI order 00       
 STDWGS01  0.08849442069640202                                                      stdev(WLS-ref) (pix), Green SCI order 01       
 STDWGS02  0.08371697673720710                                                      stdev(WLS-ref) (pix), Green SCI order 02       

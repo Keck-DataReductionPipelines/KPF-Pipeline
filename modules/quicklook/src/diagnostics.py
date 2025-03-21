@@ -940,6 +940,7 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
     are generated for combinations of [Green, Red] and [SCI, SKY, CAL].
     
     Keywords:
+        STDWREF - filename of reference wavelength solution
         STDWGSNN (35 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Green SCI1, SCI2, SCI3 order NN
         STDWGKNN (35 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Green SKY order NN
         STDWGCNN (35 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Green CAL order NN
@@ -1037,6 +1038,7 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
 
         
     for chip in chips:
+        L1.header['PRIMARY']['STDWREF'] = (wls_filename['rough_wls'], 'filename of ref wls for stdev(WLS-ref)')
         for EXT in ['SCI', 'SKY', 'CAL']:
             norder = L1[chip+'_CAL_WAVE'].shape[0]
             for o in range(norder):
