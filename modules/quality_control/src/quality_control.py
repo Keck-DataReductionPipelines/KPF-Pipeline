@@ -1394,16 +1394,14 @@ class QCL0(QC):
 
     def EM_flux_not_negative(self, debug=False):
         """
-        This Quality Control function checks if 20 or more consecutive elements of the
-        exposure meter spectra are negative.  Negative flux usually indicates
-        over-subtraction of bias from the raw EM images.  The check is applied to the
-        EM-SCI and EM-SKY fibers and returns False if negative flux is detected in
-        either.  Note that this check only works for L0 files with the EXPMETER_SCI and
-        EXPMETER_SKY extensions present.
+        This Quality Control function checks if 20 or more consecutive elements 
+        of the SCI and SKY exposure meter spectra are negative.  Negative flux 
+        usually indicates over-subtraction of bias from the raw EM images.  
+        The check is applied to the EM-SCI and EM-SKY fibers and returns False 
+        if negative flux is detected in either.  Note that this check only works 
+        for L0 files with the EXPMETER_SCI and EXPMETER_SKY extensions present.
 
         Args:
-             L0 - an L0 object
-             fiber ('SCI' [default value] or 'SKY) - the EM fiber output to be tested
              debug - an optional flag.  If True, missing data products are noted.
 
          Returns:
