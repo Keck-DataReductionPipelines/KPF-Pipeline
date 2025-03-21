@@ -978,13 +978,13 @@ def add_headers_L2_barycentric(L2, logger=None):
     
         # Add range and standard deviation stats
         if hasattr(myL2, 'Delta_CCFBJD_weighted_std'):
-            L2.header['PRIMARY']['BJDSTD'] = (myL2.Delta_CCFBJD_weighted_std, 'Weighted stddev of BJD for orders (m/s)')
+            L2.header['PRIMARY']['BJDSTD'] = (myL2.Delta_CCFBJD_weighted_std, 'Weighted stddev of BJD for orders (sec)')
         if hasattr(myL2, 'Delta_CCFBJD_weighted_range'):
-            L2.header['PRIMARY']['BJDRNG'] = (myL2.Delta_CCFBJD_weighted_range, 'Range(BJD) for non-zero-weight orders (m/s)')
+            L2.header['PRIMARY']['BJDRNG'] = (myL2.Delta_CCFBJD_weighted_range, 'Range(BJD) for non-zero-weight orders (sec)')
         if hasattr(myL2, 'Delta_Bary_RVC_weighted_std'):
-            L2.header['PRIMARY']['BCVSTD'] = (myL2.Delta_Bary_RVC_weighted_std, 'Weighted stddev of BCV for orders (sec)')
+            L2.header['PRIMARY']['BCVSTD'] = (myL2.Delta_Bary_RVC_weighted_std, 'Weighted stddev of BCV for orders (m/s)')
         if hasattr(myL2, 'Delta_Bary_RVC_weighted_range'):
-            L2.header['PRIMARY']['BCVRNG'] = (myL2.Delta_Bary_RVC_weighted_range, 'Range(BCV) for non-zero-weight orders (sec)')
+            L2.header['PRIMARY']['BCVRNG'] = (myL2.Delta_Bary_RVC_weighted_range, 'Range(BCV) for non-zero-weight orders (m/s)')
 
     except Exception as e:
         logger.error(f"Problem with L2 BJD/BCV measurements: {e}\n{traceback.format_exc()}")
