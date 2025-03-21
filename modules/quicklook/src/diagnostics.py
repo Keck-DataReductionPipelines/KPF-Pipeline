@@ -982,11 +982,11 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
     myL1_ref.add_dispersion_arrays()
 
     # Method to compute Stdev of WLS
-    def compute_std_wls(L1, L1_ref, EXT=['SCI'], CHIP=['GREEN'], ORDER=[0], debug=False):
+    def compute_stats_wls(L1, L1_ref, EXT=['SCI'], CHIP=['GREEN'], ORDER=[0], debug=False):
         """
-        Compute the standard deviation of the difference between the wavelength
-        solution (L1) and a reference (L1_ref).  The output is in units of 
-        pixels.
+        Compute the median and the standard deviation of the difference between 
+        the wavelength solution (L1) and a reference (L1_ref).  
+        The output is in units of pixels.
 
         Args:
             EXT (array): possible values in the array are 'SCI', 'SKY', 'CAL'
@@ -995,8 +995,9 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
             debug: if True, print debugging statements
 
         Returns:
-            std_wls (float): Standard deviation of the differen between the WLS
-                             and reference WLS for EXT, CHIP, ORDER
+            med_wls, std_wls (floats): Median and standard deviation 
+                                       of the differen between the WLS and 
+                                       reference WLS for EXT, CHIP, ORDER
         """
 
         # Determine which extensions to check
@@ -1025,39 +1026,56 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
             if debug:
                 print(f'EXT_WAVE = ' + EXT_WAVE)
             EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+            pix_diff_med = 0
             pix_diff_std = 0
+            print(ORDER)
             for o in ORDER:
                 if not (L1_ref[EXT_DISP][o,:] == 0).all():
-                    this_pix_diff_std = np.std((L1[EXT_WAVE][o,:] - L1_ref[EXT_WAVE][o,:]) / L1_ref[EXT_DISP][o,:])
-                    if this_pix_diff_std > pix_diff_std:
+                    numerator = L1[EXT_WAVE][o,:] - L1_ref[EXT_WAVE][o,:]
+                    denominator = L1_ref[EXT_DISP][o, :]
+                    zero_diff_mask = numerator == 0
+                    pix_diff_array = np.divide(numerator, denominator, out=np.zeros_like(numerator, dtype=float), where=denominator!=0)
+                    pix_diff_array[zero_diff_mask] = 0
+                    #pix_diff_array = (L1[EXT_WAVE][o,:] - L1_ref[EXT_WAVE][o,:]) / L1_ref[EXT_DISP][o,:]
+                    this_pix_diff_med = np.nanmedian(pix_diff_array)
+                    this_pix_diff_std = np.nanstd(pix_diff_array)
+
+                    if abs(this_pix_diff_med) > abs(pix_diff_med):
+                        pix_diff_med = this_pix_diff_med
+                    if abs(this_pix_diff_std) > abs(pix_diff_std):
                         pix_diff_std = this_pix_diff_std
                     if debug:
-                        print(o, this_pix_diff_std)
+                        print(o, this_pix_diff_median, this_pix_diff_std)
+                    
+        return pix_diff_med, pix_diff_std
 
-        return pix_diff_std
-
-        
     for chip in chips:
-        L1.header['PRIMARY']['STDWREF'] = (wls_filename['rough_wls'], 'filename of ref wls for stdev(WLS-ref)')
+        L1.header['PRIMARY']['STATWREF'] = (wls_filename['rough_wls'], 'filename of ref wls for median/stdev(WLS-ref) stats')
         for EXT in ['SCI', 'SKY', 'CAL']:
             norder = L1[chip+'_CAL_WAVE'].shape[0]
             for o in range(norder):
                 try:
-                    std_wls = compute_std_wls(myL1.L1, myL1_ref.L1, EXT=[EXT], CHIP=[chip.upper()], ORDER=[o])
+                    med_wls, std_wls = compute_stats_wls(myL1.L1, myL1_ref.L1, EXT=[EXT], CHIP=[chip.upper()], ORDER=[o])
                     if chip == 'green':
                         if EXT == 'SCI':
-                            L1.header['PRIMARY'][f'STDWGS{o:02d}'] = (std_wls, f'stdev(WLS-ref) [pix], Green SCI order {o:02d}')
-                        if EXT == 'SKY':
-                            L1.header['PRIMARY'][f'STDWGK{o:02d}'] = (std_wls, f'stdev(WLS-ref) [pix], Green SKY order {o:02d}')
-                        if EXT == 'CAL':
-                            L1.header['PRIMARY'][f'STDWGC{o:02d}'] = (std_wls, f'stdev(WLS-ref) [pix], Green CAL order {o:02d}')
+                            L1.header['PRIMARY'][f'MEDWGS{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Green SCI order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWGS{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Green SCI order {o:02d}')
+                        elif EXT == 'SKY':
+                            L1.header['PRIMARY'][f'MEDWGK{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Green SKY order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWGK{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Green SKY order {o:02d}')
+                        elif EXT == 'CAL':
+                            L1.header['PRIMARY'][f'MEDWGC{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Green CAL order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWGC{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Green CAL order {o:02d}')
                     if chip == 'red':
                         if EXT == 'SCI':
-                            L1.header['PRIMARY'][f'STDWRS{o:02d}'] = (std_wls, f'stdev(WLS-ref) [pix], Red SCI order {o:02d}')
-                        if EXT == 'SKY':
-                            L1.header['PRIMARY'][f'STDWRK{o:02d}'] = (std_wls, f'stdev(WLS-ref) [pix], Red SKY order {o:02d}')
-                        if EXT == 'CAL':
-                            L1.header['PRIMARY'][f'STDWRC{o:02d}'] = (std_wls, f'stdev(WLS-ref) [pix], Red CAL order {o:02d}')
+                            L1.header['PRIMARY'][f'MEDWRS{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Red SCI order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWRS{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Red SCI order {o:02d}')
+                        elif EXT == 'SKY':
+                            L1.header['PRIMARY'][f'MEDWRK{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Red SKY order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWRK{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Red SKY order {o:02d}')
+                        elif EXT == 'CAL':
+                            L1.header['PRIMARY'][f'MEDWRC{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Red CAL order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWRC{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Red CAL order {o:02d}')
     
                 except Exception as e:
                     logger.error(f"Problem with green L1 {name} line measurements: {e}\n{traceback.format_exc()}")

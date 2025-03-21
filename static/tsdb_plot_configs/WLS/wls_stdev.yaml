@@ -1,4 +1,4 @@
-description: WLS Standard Deviation
+description: WLS Standard Deviation of (L1 - L1_ref)
 plot_type: time_series_multipanel
 panel_arr:
 
@@ -1449,5 +1449,5 @@ panel_arr:
     paneldict:
       ylabel: "Red SKY\nstdev(WLS-ref) [pix]"
       not_junk: true
-      title: WLS Standard Deviation (L1 - L1_ref)
+      title: WLS Standard Deviation of (L1 - L1_ref)
       legend_frac_size: 0.25
