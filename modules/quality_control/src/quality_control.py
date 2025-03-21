@@ -976,7 +976,8 @@ class QC:
                 self.logger.info(f'ObsID = {kfpera_csv} is not in the correct format.')
             return KPFERA
         datetime_ObsID = get_datetime_obsid(ObsID)
-        self.logger.info(f"The datetime of ObsID is {datetime_ObsID}.")
+        if debug:
+            self.logger.info(f"The datetime of ObsID is {datetime_ObsID}.")
 
         if os.path.exists(kfpera_csv):
             try:
@@ -985,10 +986,10 @@ class QC:
                     self.logger.info(f'Read the KPFERA file {kfpera_csv}.')
                 nrows = len(df_kpfera)
                 for i in np.arange(nrows):
-                    starttime = datetime.strptime(df_kpfera.iloc[i][1].strip(), '%Y-%m-%d %H:%M:%S')
-                    stoptime  = datetime.strptime(df_kpfera.iloc[i][2].strip(), '%Y-%m-%d %H:%M:%S')
+                    starttime = datetime.strptime(df_kpfera.iloc[i].iloc[1].strip(), '%Y-%m-%d %H:%M:%S')
+                    stoptime  = datetime.strptime(df_kpfera.iloc[i].iloc[2].strip(), '%Y-%m-%d %H:%M:%S')
                     if (datetime_ObsID > starttime) and (datetime_ObsID < stoptime):
-                        KPFERA = float(df_kpfera.iloc[i][0])
+                        KPFERA = float(df_kpfera.iloc[i].iloc[0])
                         if debug:
                             self.logger.info(f'Setting KPFERA = {KPFERA}')
             except Exception as e:

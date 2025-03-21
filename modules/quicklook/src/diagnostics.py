@@ -1048,7 +1048,7 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
         return pix_diff_med, pix_diff_std
 
     for chip in chips:
-        L1.header['PRIMARY']['STATWREF'] = (wls_filename['rough_wls'], 'filename of ref wls for median/stdev(WLS-ref) stats')
+        L1.header['PRIMARY']['STATWREF'] = (wls_filename['rough_wls'], 'ref fn for WLS-ref')
         for EXT in ['SCI', 'SKY', 'CAL']:
             norder = L1[chip+'_CAL_WAVE'].shape[0]
             for o in range(norder):
