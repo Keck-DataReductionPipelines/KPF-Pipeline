@@ -356,6 +356,9 @@ OLDWLS2   1                                                                     
 FLATSNR   1                                                                        QC: 1 = SNR of flat greater minimum threshold and less than maximum threshold
 LFCLINES  1                                                                        QC: 1 = Number and distribution of LFC lines above threshold ampltidue is sufficient for all orders/orderlets available
 ETALINES  1                                                                        QC: 1 = Number and distribution of Etalon lines above threshold ampltidue is sufficient for all orders/orderlets available
+WILDLSCI  1                                                                        QC: 1 = SCI WLS not wild (stdev compared to reference < 5 pixels)
+WILDLSKY  1                                                                        QC: 1 = SKY WLS not wild (stdev compared to reference < 5 pixels)
+WILDLCAL  1                                                                        QC: 1 = CAL WLS not wild (stdev compared to reference < 5 pixels)
 SNRSC452  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRSK452  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRCL452  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
