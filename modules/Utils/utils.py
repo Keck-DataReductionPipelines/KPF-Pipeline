@@ -3,7 +3,7 @@
 
 from astropy.time import Time
 from astropy import units as u
-from astropy.coordinates import EarthLocation, SkyCoord, AltAz, get_sun, get_moon
+from astropy.coordinates import EarthLocation, SkyCoord, AltAz, get_sun, get_body
 
 def get_sun_alt(UTdatetime):
     """
@@ -44,6 +44,33 @@ def get_moon_sep(UTdatetime, RA, dec):
 
     return sep.deg # in degrees
     
+def get_moon_sep(UTdatetime, RA, dec, observer_location=None):
+    """
+    Returns the separation in degrees between the Moon and an object with
+    coordinates RA/dec at a specific UT datetime and observer location.
+
+    Args:
+        UTdatetime (Time): Astropy Time object specifying UT datetime.
+        RA (str): Right ascension of the object (e.g., \"10:24:36.5\").
+        dec (str): Declination of the object (e.g., \"+45:10:45.1\").
+        observer_location (EarthLocation, optional): Observer's location. Defaults to Maunakea.
+
+    Returns:
+        float: Separation between Moon and object in degrees.
+    """
+    if observer_location is None:
+        observer_location = EarthLocation(lat='19d49m42.6s', lon='-155d28m48.9s', height=4205)
+
+    # Create SkyCoord object for the target
+    target_coord = SkyCoord(RA, dec, unit=(u.hourangle, u.deg), frame='icrs')
+
+    # Get Moon coordinates at given datetime and observer location
+    moon_coord = get_body('moon', UTdatetime, observer_location)
+
+    # Compute separation
+    separation = target_coord.separation(moon_coord)
+
+    return separation.deg
 
 class DummyLogger:
     """
