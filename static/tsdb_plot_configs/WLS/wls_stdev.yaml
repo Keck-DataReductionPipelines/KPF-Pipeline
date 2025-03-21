@@ -1,6 +1,8 @@
 description: WLS Standard Deviation
 plot_type: time_series_multipanel
 panel_arr:
+
+# Green SCI      
   - panelvars:
       - col: STDWGS00
         plot_type: scatter
@@ -248,10 +250,11 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Green SCI\nstdev(WLS-ref) [pix]
+      ylabel: "Green SCI\nstdev(WLS-ref) [pix]"
       not_junk: true
       legend_frac_size: 0.25
 
+# Green CAL      
   - panelvars:
       - col: STDWGC00
         plot_type: scatter
@@ -499,9 +502,11 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Green CAL\nstdev(WLS-ref) [pix]
+      ylabel: "Green CAL\nstdev(WLS-ref) [pix]"
       not_junk: true
       legend_frac_size: 0.25
+
+# Green SKY      
   - panelvars:
       - col: STDWGK00
         plot_type: scatter
@@ -748,6 +753,12 @@ panel_arr:
           label: Green SKY order 34
           marker: .
           linewidth: 0.5
+    paneldict:
+      ylabel: "Green SKY\nstdev(WLS-ref) [pix]"
+      not_junk: true
+      legend_frac_size: 0.25
+
+# Red SCI      
   - panelvars:
       - col: STDWRS00
         plot_type: scatter
@@ -973,31 +984,12 @@ panel_arr:
           label: Red SCI order 31
           marker: .
           linewidth: 0.5
-      - col: STDWRS32
-        plot_type: scatter
-        unit: pixels
-        plot_attr:
-          label: Red SCI order 32
-          marker: .
-          linewidth: 0.5
-      - col: STDWRS33
-        plot_type: scatter
-        unit: pixels
-        plot_attr:
-          label: Red SCI order 33
-          marker: .
-          linewidth: 0.5
-      - col: STDWRS34
-        plot_type: scatter
-        unit: pixels
-        plot_attr:
-          label: Red SCI order 34
-          marker: .
-          linewidth: 0.5
     paneldict:
-      ylabel: Red SCI\nstdev(WLS-ref) [pix]
+      ylabel: "Red SCI\nstdev(WLS-ref) [pix]"
       not_junk: true
       legend_frac_size: 0.25
+
+# Red CAL      
   - panelvars:
       - col: STDWRC00
         plot_type: scatter
@@ -1223,31 +1215,12 @@ panel_arr:
           label: Red CAL order 31
           marker: .
           linewidth: 0.5
-      - col: STDWRC32
-        plot_type: scatter
-        unit: pixels
-        plot_attr:
-          label: Red CAL order 32
-          marker: .
-          linewidth: 0.5
-      - col: STDWRC33
-        plot_type: scatter
-        unit: pixels
-        plot_attr:
-          label: Red CAL order 33
-          marker: .
-          linewidth: 0.5
-      - col: STDWRC34
-        plot_type: scatter
-        unit: pixels
-        plot_attr:
-          label: Red CAL order 34
-          marker: .
-          linewidth: 0.5
     paneldict:
-      ylabel: Red CAL\nstdev(WLS-ref) [pix]
+      ylabel: "Red CAL\nstdev(WLS-ref) [pix]"
       not_junk: true
       legend_frac_size: 0.25
+
+# Red SKY      
   - panelvars:
       - col: STDWRK00
         plot_type: scatter
@@ -1473,32 +1446,8 @@ panel_arr:
           label: Red SKY order 31
           marker: .
           linewidth: 0.5
-      - col: STDWRK32
-        plot_type: scatter
-        unit: pixels
-        plot_attr:
-          label: Red SKY order 32
-          marker: .
-          linewidth: 0.5
-      - col: STDWRK33
-        plot_type: scatter
-        unit: pixels
-        plot_attr:
-          label: Red SKY order 33
-          marker: .
-          linewidth: 0.5
-      - col: STDWRK34
-        plot_type: scatter
-        unit: pixels
-        plot_attr:
-          label: Red SKY order 34
-          marker: .
-          linewidth: 0.5
     paneldict:
-      ylabel: Red SKY\nstdev(WLS-ref) [pix]
+      ylabel: "Red SKY\nstdev(WLS-ref) [pix]"
       not_junk: true
-      title: WLS Standard Deviation
+      title: WLS Standard Deviation (L1 - L1_ref)
       legend_frac_size: 0.25
-
-
-
