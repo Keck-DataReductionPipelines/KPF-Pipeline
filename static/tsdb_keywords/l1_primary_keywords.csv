@@ -95,7 +95,7 @@ ETALRK0|float|Min Red SKY order with good LFC lines|None
 ETALRK1|float|Max Red SKY order with good LFC lines|None
 WLSFILE|string|first wavelength interpolation reference|None
 WLSFILE2|string|second wavelength interpolation reference|None
-STDWREF|string|filename of ref wls for stdev(WLS-ref)|None
+STDWREF|string|filename of ref WLS for stdev(WLS-ref)|None
 STDWGS00|float|stdev(WLS-ref) [pix], Green SCI order 00|pixels       
 STDWGS01|float|stdev(WLS-ref) [pix], Green SCI order 01|pixels       
 STDWGS02|float|stdev(WLS-ref) [pix], Green SCI order 02|pixels       
