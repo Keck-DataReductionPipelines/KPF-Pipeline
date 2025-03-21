@@ -1028,7 +1028,6 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
             EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
             pix_diff_med = 0
             pix_diff_std = 0
-            print(ORDER)
             for o in ORDER:
                 if not (L1_ref[EXT_DISP][o,:] == 0).all():
                     numerator = L1[EXT_WAVE][o,:] - L1_ref[EXT_WAVE][o,:]
@@ -1036,7 +1035,6 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
                     zero_diff_mask = numerator == 0
                     pix_diff_array = np.divide(numerator, denominator, out=np.zeros_like(numerator, dtype=float), where=denominator!=0)
                     pix_diff_array[zero_diff_mask] = 0
-                    #pix_diff_array = (L1[EXT_WAVE][o,:] - L1_ref[EXT_WAVE][o,:]) / L1_ref[EXT_DISP][o,:]
                     this_pix_diff_med = np.nanmedian(pix_diff_array)
                     this_pix_diff_std = np.nanstd(pix_diff_array)
 
