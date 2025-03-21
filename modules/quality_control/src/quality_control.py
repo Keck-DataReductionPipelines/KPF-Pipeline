@@ -4,12 +4,17 @@ import numpy.ma as ma
 import pandas as pd
 from datetime import datetime
 from scipy.ndimage import convolve1d
+from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger, styled_text
 from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected
 from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_L1
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
+from modules.calibration_lookup.src.alg import GetCalibrations
+
+DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../calibration_lookup/configs/default.cfg')
+DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
@@ -703,6 +708,45 @@ class QCDefinitions:
         self.fits_comments[name29] = 'QC: Number and dist of Etalon lines sufficient'
         self.db_columns[name29] = None
         self.fits_keyword_fail_value[name29] = 0
+
+        name30 = 'L1_wild_WLS_SCI'
+        self.names.append(name30)
+        self.kpf_data_levels[name30] = ['L1']
+        self.descriptions[name30] = 'Check for wild SCI WLS (stdev > 5 pix in any order)'
+        self.data_types[name30] = 'int'
+        self.spectrum_types[name30] = ['all', ]
+        self.master_types[name30] = []
+        self.required_data_products[name30] = [] # no required data products
+        self.fits_keywords[name30] = 'WILDLSCI'
+        self.fits_comments[name30] = 'QC: SCI wavelength solution not wild'
+        self.db_columns[name30] = None
+        self.fits_keyword_fail_value[name30] = 0
+
+        name31 = 'L1_wild_WLS_SKY'
+        self.names.append(name31)
+        self.kpf_data_levels[name31] = ['L1']
+        self.descriptions[name31] = 'Check for wild SKY WLS (stdev > 5 pix in any order)'
+        self.data_types[name31] = 'int'
+        self.spectrum_types[name31] = ['all', ]
+        self.master_types[name31] = []
+        self.required_data_products[name31] = [] # no required data products
+        self.fits_keywords[name31] = 'WILDLSKY'
+        self.fits_comments[name31] = 'QC: SKY wavelength solution not wild'
+        self.db_columns[name31] = None
+        self.fits_keyword_fail_value[name31] = 0
+
+        name32 = 'L1_wild_WLS_CAL'
+        self.names.append(name32)
+        self.kpf_data_levels[name32] = ['L1']
+        self.descriptions[name32] = 'Check for wild CAL WLS (stdev > 5 pix in any order)'
+        self.data_types[name32] = 'int'
+        self.spectrum_types[name32] = ['all', ]
+        self.master_types[name32] = []
+        self.required_data_products[name32] = [] # no required data products
+        self.fits_keywords[name32] = 'WILDLCAL'
+        self.fits_comments[name32] = 'QC: CAL wavelength solution not wild'
+        self.db_columns[name32] = None
+        self.fits_keyword_fail_value[name32] = 0
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -2607,6 +2651,177 @@ class QCL1(QC):
                 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS(self, EXT=['CAL'], max_stdev_pixels=5, debug=False):
+        """
+        This Quality Control function checks if the wavelength solution for 
+        SCI1, SCI2, and SCI3 on both CCDs are not "wild".  Wild is defined 
+        as having a standard deviation (note: standard deviation != RMS) 
+        compared to a reference wavelength solution of > 5 pixels for any 
+        spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the SCI1, SCI2, and SCI3 wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+
+        GREEN_WAVE_extensions = []
+        RED_WAVE_extensions   = []
+
+        try:
+            if 'CAL' in EXT:
+                GREEN_WAVE_extensions.append("GREEN_CAL_WAVE")
+                RED_WAVE_extensions.append("RED_CAL_WAVE")
+            if 'SCI' in EXT:
+                GREEN_WAVE_extensions.append("GREEN_SCI_WAVE1")
+                GREEN_WAVE_extensions.append("GREEN_SCI_WAVE2")
+                GREEN_WAVE_extensions.append("GREEN_SCI_WAVE3")
+                RED_WAVE_extensions.append("RED_SCI_WAVE1")
+                RED_WAVE_extensions.append("RED_SCI_WAVE2")
+                RED_WAVE_extensions.append("RED_SCI_WAVE3")
+            if 'SKY' in EXT:
+                GREEN_WAVE_extensions.append("GREEN_SKY_WAVE")
+                RED_WAVE_extensions.append("RED_SKY_WAVE")
+
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            data_products = get_data_products_L1(L1)
+            
+            # Get reference wavelength solution
+            dt = get_datetime_obsid(myL1.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+            if debug:
+                print(f'DEFAULT_CALIBRATION_CFG_PATH = ' + DEFAULT_CALIBRATION_CFG_PATH)
+            GC = GetCalibrations(dt, DEFAULT_CALIBRATION_CFG_PATH, use_db=False)
+            wls_filename = GC.lookup(subset=['rough_wls']) 
+            if debug:
+                print(f'wls_filename = ' + wls_filename['rough_wls'])
+            L1_ref = KPF1.from_fits(wls_filename['rough_wls'])
+            myL1_ref = AnalyzeL1(L1_ref)  
+            myL1_ref.add_dispersion_arrays()
+            
+            QC_pass = True
+            if 'Green' in data_products:
+                for EXT_WAVE in GREEN_WAVE_extensions:
+                    if debug:
+                        print(f'EXT_WAVE = ' + EXT_WAVE)
+                    EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+                    norder = myL1.L1[EXT_WAVE].shape[0]
+                    for o in range(norder):
+                        if not (myL1_ref.L1[EXT_DISP][o,:] == 0).all():
+                            pix_diff_std = np.std((myL1.L1[EXT_WAVE][o,:] - myL1_ref.L1[EXT_WAVE][o,:]) / myL1_ref.L1[EXT_DISP][o,:])
+                            if debug:
+                                print(o, pix_diff_std)
+                            if pix_diff_std > max_stdev_pixels:
+                                QC_pass = False
+
+            if 'Red' in data_products:
+                for EXT_WAVE in RED_WAVE_extensions:
+                    if debug:
+                        print(f'EXT_WAVE = ' + EXT_WAVE)
+                    EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+                    norder = myL1.L1[EXT_WAVE].shape[0]
+                    for o in range(norder):
+                        if not (myL1_ref.L1[EXT_DISP][o,:] == 0).all():
+                            pix_diff_std = np.std((myL1.L1[EXT_WAVE][o,:] - myL1_ref.L1[EXT_WAVE][o,:]) / myL1_ref.L1[EXT_DISP][o,:])
+                            if debug:
+                                print(o, pix_diff_std)
+                            if pix_diff_std > max_stdev_pixels:
+                                QC_pass = False
+
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS_SCI(self, max_stdev_pixels=5, debug=False):
+        """
+        Using the method L1_wild_WLS, this Quality Control function checks 
+        if the wavelength solution for SCI1, SCI2, and SCI3 on both CCDs 
+        are not "wild".  Wild is defined as having a standard deviation 
+        (note: standard deviation != RMS) compared to a reference wavelength 
+        solution of > 5 pixels for any spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the SCI1, SCI2, and SCI3 wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+        
+        QC_pass = False
+
+        try: 
+            QC_pass = self.L1_wild_WLS(EXT=['SCI'], max_stdev_pixels=max_stdev_pixels, debug=debug)
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS_SKY(self, max_stdev_pixels=5, debug=False):
+        """
+        Using the method L1_wild_WLS, this Quality Control function checks 
+        if the wavelength solution for SKY on both CCDs 
+        are not "wild".  Wild is defined as having a standard deviation 
+        (note: standard deviation != RMS) compared to a reference wavelength 
+        solution of > 5 pixels for any spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the SKY wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+        
+        QC_pass = False
+
+        try: 
+            QC_pass = self.L1_wild_WLS(EXT=['SKY'], max_stdev_pixels=max_stdev_pixels, debug=debug)
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS_CAL(self, max_stdev_pixels=5, debug=False):
+        """
+        Using the method L1_wild_WLS, this Quality Control function checks 
+        if the wavelength solution for CAL on both CCDs 
+        are not "wild".  Wild is defined as having a standard deviation 
+        (note: standard deviation != RMS) compared to a reference wavelength 
+        solution of > 5 pixels for any spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the CAL wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+        
+        QC_pass = False
+
+        try: 
+            QC_pass = self.L1_wild_WLS(EXT=['CAL'], max_stdev_pixels=max_stdev_pixels, debug=debug)
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
             QC_pass = False
 
         return QC_pass
