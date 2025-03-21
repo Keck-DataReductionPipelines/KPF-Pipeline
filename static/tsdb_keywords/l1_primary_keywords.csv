@@ -307,8 +307,8 @@ OLDWLS2|bool|QC: WLSFILE2 within 2 days of this obs|None
 FLATSNR|bool|QC: SNR of flat >min and <max|None
 LFCLINES|bool|QC: Number and dist of LFC lines sufficient|None
 ETALINES|bool|QC: Number and dist of Etalon lines sufficient|None
-WILDLSCI|bool|QC: SCI WLS not wild (stdev < 5 pix)|None
-WILDLSKY|bool|QC: SKY WLS not wild (stdev < 5 pix)|None
-WILDLCAL|bool|QC: CAL WLS not wild (stdev < 5 pix)|None
+WILDWSCI|bool|QC: SCI WLS not wild (stdev < 5 pix)|None
+WILDWSKY|bool|QC: SKY WLS not wild (stdev < 5 pix)|None
+WILDWCAL|bool|QC: CAL WLS not wild (stdev < 5 pix)|None
 AGEWLS|float|WLSFILE approx age (days)|None
 AGEWLS2|float|WLSFILE2 approx age (days)|None

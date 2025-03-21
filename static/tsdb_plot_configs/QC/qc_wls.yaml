@@ -11,7 +11,7 @@ panel_arr:
       ylabel: "L1 WLS\nFiles Pass Sanity Checks\n(WLSL1)"
       legend_frac_size: 0.15
   - panelvars:
-      - col: WILDLSCI
+      - col: WILDWSCI
         plot_type: state
         plot_attr:
           label: "SCI WLS not wild\n(stdev < 5 pix)"
@@ -20,7 +20,7 @@ panel_arr:
       ylabel: "SCI WLS not wild\n(stdev < 5 pix)\n(WILDLSCI)"
       legend_frac_size: 0.15
   - panelvars:
-      - col: WILDLCAL
+      - col: WILDWCAL
         plot_type: state
         plot_attr:
           label: "CAL WLS not wild\n(stdev < 5 pix)"
@@ -29,7 +29,7 @@ panel_arr:
       ylabel: "CAL WLS not wild\n(stdev < 5 pix)\n(WILDLCAL)"
       legend_frac_size: 0.15
   - panelvars:
-      - col: WILDLSKY
+      - col: WILDWSKY
         plot_type: state
         plot_attr:
           label: "SKY WLS not wild\n(stdev < 5 pix)"

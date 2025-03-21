@@ -717,7 +717,7 @@ class QCDefinitions:
         self.spectrum_types[name30] = ['all', ]
         self.master_types[name30] = []
         self.required_data_products[name30] = [] # no required data products
-        self.fits_keywords[name30] = 'WILDLSCI'
+        self.fits_keywords[name30] = 'WILDWSCI'
         self.fits_comments[name30] = 'QC: SCI wavelength solution not wild'
         self.db_columns[name30] = None
         self.fits_keyword_fail_value[name30] = 0
@@ -730,7 +730,7 @@ class QCDefinitions:
         self.spectrum_types[name31] = ['all', ]
         self.master_types[name31] = []
         self.required_data_products[name31] = [] # no required data products
-        self.fits_keywords[name31] = 'WILDLSKY'
+        self.fits_keywords[name31] = 'WILDWSKY'
         self.fits_comments[name31] = 'QC: SKY wavelength solution not wild'
         self.db_columns[name31] = None
         self.fits_keyword_fail_value[name31] = 0
@@ -743,7 +743,7 @@ class QCDefinitions:
         self.spectrum_types[name32] = ['all', ]
         self.master_types[name32] = []
         self.required_data_products[name32] = [] # no required data products
-        self.fits_keywords[name32] = 'WILDLCAL'
+        self.fits_keywords[name32] = 'WILDWCAL'
         self.fits_comments[name32] = 'QC: CAL wavelength solution not wild'
         self.db_columns[name32] = None
         self.fits_keyword_fail_value[name32] = 0
