@@ -5,36 +5,36 @@ panel_arr:
       - col: WLSL1
         plot_type: state
         plot_attr:
-          label: "L1 Wavelength Solution\nFiles Pass Sanity Checks"
+          label: "L1 WLS\nFiles Pass Sanity Checks"
           marker: .
     paneldict:
-      ylabel: "L1 Wavelength Solution\nFiles Pass Sanity Checks\n(WLSL1)"
+      ylabel: "L1 WLS\nFiles Pass Sanity Checks\n(WLSL1)"
       legend_frac_size: 0.15
   - panelvars:
       - col: WILDLSCI
         plot_type: state
         plot_attr:
-          label: "SCI WLS not wild/n(stdev < 5 pix)"
+          label: "SCI WLS not wild\n(stdev < 5 pix)"
           marker: .
     paneldict:
-      ylabel: "SCI WLS not wild/n(stdev < 5 pix)\n(WILDLSCI)"
+      ylabel: "SCI WLS not wild\n(stdev < 5 pix)\n(WILDLSCI)"
       legend_frac_size: 0.15
   - panelvars:
       - col: WILDLCAL
         plot_type: state
         plot_attr:
-          label: "CAL WLS not wild/n(stdev < 5 pix)"
+          label: "CAL WLS not wild\n(stdev < 5 pix)"
           marker: .
     paneldict:
-      ylabel: "CAL WLS not wild/n(stdev < 5 pix)\n(WILDLCAL)"
+      ylabel: "CAL WLS not wild\n(stdev < 5 pix)\n(WILDLCAL)"
       legend_frac_size: 0.15
   - panelvars:
       - col: WILDLSKY
         plot_type: state
         plot_attr:
-          label: "SKY WLS not wild/n(stdev < 5 pix)"
+          label: "SKY WLS not wild\n(stdev < 5 pix)"
           marker: .
     paneldict:
-      ylabel: "SKY WLS not wild/n(stdev < 5 pix)\n(WILDLSKY)"
+      ylabel: "SKY WLS not wild\n(stdev < 5 pix)\n(WILDLSKY)"
       title: QC - Wavelength Solution Checks
       legend_frac_size: 0.15
