@@ -412,7 +412,7 @@ class QCDefinitions:
 
         name6 = 'EM_not_saturated'
         self.names.append(name6)
-        self.kpf_data_levels[name6] = ['L0', '2D']
+        self.kpf_data_levels[name6] = ['L0']
         self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
@@ -425,7 +425,7 @@ class QCDefinitions:
 
         name7 = 'EM_flux_not_negative'
         self.names.append(name7)
-        self.kpf_data_levels[name7] = ['L0', '2D']
+        self.kpf_data_levels[name7] = ['L0']
         self.descriptions[name7] = 'Negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name7] = 'int'
         self.spectrum_types[name7] = ['all', ]
@@ -581,7 +581,7 @@ class QCDefinitions:
 
         name18 = 'L0_bad_readout_check'
         self.names.append(name18)
-        self.kpf_data_levels[name18] = ['L0', '2D']
+        self.kpf_data_levels[name18] = ['L0']
         self.descriptions[name18] = 'Check Texp that identifies error in reading CCD'
         self.data_types[name18] = 'int'
         self.spectrum_types[name18] = ['all', ]
