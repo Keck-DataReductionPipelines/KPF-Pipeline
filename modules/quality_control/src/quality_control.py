@@ -1061,7 +1061,6 @@ class QCL0(QC):
 
         try:
             L0 = self.kpf_object
-            debug=True
 
             # Determine which extensions should be in the L0 file.
             # First add the triggrered cameras (Green, Red, CaHK, ExpMeter) to list of data products
