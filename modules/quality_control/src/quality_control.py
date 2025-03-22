@@ -785,7 +785,7 @@ class QCDefinitions:
         self.master_types[name35] = []
         self.required_data_products[name35] = [] # no required data products
         self.fits_keywords[name35] = 'TARGPLAU'
-        self.fits_comments[name35] = 'QC: TARG kwds have plausible values'
+        self.fits_comments[name35] = 'QC: TARG kwds present with plausible values'
         self.db_columns[name35] = None
         self.fits_keyword_fail_value[name35] = 0
 
