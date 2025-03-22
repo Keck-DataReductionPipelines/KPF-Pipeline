@@ -776,6 +776,19 @@ class QCDefinitions:
         self.db_columns[name34] = None
         self.fits_keyword_fail_value[name34] = 0
 
+        name35 = 'good_TARG_headers'
+        self.names.append(name35)
+        self.kpf_data_levels[name35] = ['L0']
+        self.descriptions[name35] = 'Check TARG headers for plausible values'
+        self.data_types[name35] = 'int'
+        self.spectrum_types[name35] = ['Star', ]
+        self.master_types[name35] = []
+        self.required_data_products[name35] = [] # no required data products
+        self.fits_keywords[name35] = 'TARGPLAU'
+        self.fits_comments[name35] = 'QC: TARG kwds have plausible values'
+        self.db_columns[name35] = None
+        self.fits_keyword_fail_value[name35] = 0
+
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
@@ -1593,6 +1606,78 @@ class QCL0(QC):
             else:
                 QC_pass = False
 
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+
+    def good_TARG_headers(self):
+        """
+        This Quality Control function checks that a set of "TARG" keywords exist
+        in an L0 file and that a subset of those for reasonable values.
+        
+        keywords that are checked: 
+            TARGNAME, TARGRA, TARGDEC, TARGEPOC, TARGEQUI, TARGPLAX, 
+            TARGPMDC, TARGPMRA, TARGRADV, TARGWAVE, TARGFRAM, TARGTEFF
+
+        Conditions checked:
+            radial velocity: TARGRADV < 100 km/s
+            parallax: TARGPLAX < 1 arcsec
+            epoch, equinox: TARGEPOC, TARGEQUI >= 1950 and < 2050
+            proper motion: TARGPMDC, TARGPMRA < 15 arcsec/yr (NOT CURRENTLY CHECKED - units uncertain)
+            effective temperature: TARGTEFF < 10000 K and > 2000 K
+        
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        QC_pass = True
+        try:
+            L0 = self.kpf_object
+            header = L0.header['PRIMARY']
+
+            # Check that certain TARGxxxx keywords exist
+            TARG_keywords = ['TARGNAME', 'TARGRA', 'TARGDEC', 'TARGEPOC', 'TARGEQUI', 'TARGPLAX', 'TARGPMDC', 'TARGPMRA', 'TARGRADV', 'TARGWAVE', 'TARGFRAM', 'TARGTEFF']            
+            for kwd in TARG_keywords:
+                if not kwd in header:
+                    QC_pass = False
+                    self.logger.info(f'Missing L0 keyword: {kwd}')
+            
+            # Check that TARGRADV < 350 km/s (see Fig. 8 of Chubak et al. 2012 - arXiv:1207.6212)
+            if 'TARGRADV' in header:
+                 if abs(header['TARGRADV']) > 350:
+                     QC_pass = False
+                     self.logger.info(f'L0 keyword problem: abs(TARGRADV) = abs({str(header["TARGRADV"])}) > 100 km/s')
+            
+            # Check that TARGPLAX < 1 arcsec
+            if 'TARGPLAX' in header:
+                 if float(header['TARGPLAX']) >= 1 * 1000:
+                     QC_pass = False
+                     self.logger.info(f'L0 keyword problem: TARGPLAX = {str(header["TARGPLAX"])} > 1000 mas')
+            
+            # Check that TARGEPOC, TARGEQUI >= 1950 and < 2050
+            kwds = ['TARGEPOC', 'TARGEQUI']
+            for kwd in kwds:
+                if kwd in header:
+                     if (float(header[kwd]) <= 1950) or (float(header[kwd]) > 2050):
+                         QC_pass = False
+                         self.logger.info(f'L0 keyword problem: {kwd} = {str(header[kwd])} <= 1950 or > 2050')
+            
+#            # Check that TARGPMDC, TARGPMRA < 15 arcsec/yr
+#            kwds = ['TARGPMDC', 'TARGPMRA']
+#            for kwd in kwds:
+#                if kwd in header:
+#                     if float(header[kwd]) > 15:
+#                          QC_pass = False
+            
+            # Check that TARGTEFF > 2000 K and < 10000 K
+            if 'TARGTEFF' in header:
+                 if (float(header['TARGTEFF']) <= 2000) or (float(header['TARGTEFF']) >= 10000):
+                     QC_pass = False
+            
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False

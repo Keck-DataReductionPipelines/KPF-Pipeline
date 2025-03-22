@@ -245,6 +245,7 @@ OLDDARK   1                                           QC: 1 = Master dark within
 OLDFLAT   1                                           QC: 1 = Master flat within 5 days of this obs
 NTPGOOD   1                                           QC: 1 = NTP time within 100 ms
 GUIDGOOD  1                                           QC: 1 = Guider RMS and bias within 50 mas RMS
+TARGPLAU  1                                           QC: 1 = TARG kwds are present with plausible values
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)

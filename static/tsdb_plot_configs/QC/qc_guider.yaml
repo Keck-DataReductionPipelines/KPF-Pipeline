@@ -5,7 +5,7 @@ panel_arr:
       - col: GUIDGOOD
         plot_type: state
         plot_attr:
-          label: Guider RMS and bias\nwithin 50 mas RMS
+          label: "Guider RMS and bias\nwithin 50 mas RMS"
           marker: .
     paneldict:
       ylabel: "Guider RMS and bias\nwithin 50 mas RMS\n(GUIDGOOD)"
