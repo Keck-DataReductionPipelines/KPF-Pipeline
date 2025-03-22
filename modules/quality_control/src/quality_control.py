@@ -1,4 +1,5 @@
 import os
+import re
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
@@ -748,6 +749,19 @@ class QCDefinitions:
         self.db_columns[name32] = None
         self.fits_keyword_fail_value[name32] = 0
 
+        name33 = 'NTP_timing'
+        self.names.append(name33)
+        self.kpf_data_levels[name33] = ['L0']
+        self.descriptions[name33] = 'Check network time protocol status message'
+        self.data_types[name33] = 'int'
+        self.spectrum_types[name33] = ['all', ]
+        self.master_types[name33] = []
+        self.required_data_products[name33] = [] # no required data products
+        self.fits_keywords[name33] = 'NTPGOOD'
+        self.fits_comments[name33] = 'QC: NTP time to within 100 ms'
+        self.db_columns[name33] = None
+        self.fits_keyword_fail_value[name33] = 0
+
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
@@ -1488,6 +1502,38 @@ class QCL0(QC):
             QC_pass = False
 
         return QC_pass
+
+
+    def NTP_timing(self, max_timing_error_ms=100, debug=False):
+        """
+        This Quality Control function checks if the status message from 
+        the Network Time Protocol (NTP) indicates that the timing uncertainty
+        is less than max_timing_error_ms.
+
+        Args:
+            debug - an optional flag.  If True, missing data products are noted.
+
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        QC_pass = False
+        try:
+            L0 = self.kpf_object
+            if 'TIMEERR' in L0.header['PRIMARY']:
+                NTP_string = L0.header['PRIMARY']['TIMEERR'] # NTP status message
+                match = re.search(r'NTP time correct to within ([\d.]+) ms', NTP_string)
+                if match:
+                    timing_error_ms = float(match.group(1))
+                    if timing_error_ms < max_timing_error_ms:
+                        QC_pass = True
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
 
 #####################################################################
 

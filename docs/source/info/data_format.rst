@@ -243,6 +243,7 @@ LFC2DFOK  1                                           QC: 1 = LFC flux meets thr
 OLDBIAS   1                                           QC: 1 = Master bias within 5 days of this obs|None
 OLDDARK   1                                           QC: 1 = Master dark within 5 days of this obs|None
 OLDFLAT   1                                           QC: 1 = Master flat within 5 days of this obs|None
+NTPGOOD   1                                           QC: 1 = NTP time within 100 ms
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)

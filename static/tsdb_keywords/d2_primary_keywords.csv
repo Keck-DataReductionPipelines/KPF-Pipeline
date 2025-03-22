@@ -63,3 +63,4 @@ AGEFLAT|float|FLATFILE age (whole days)|None
 OLDBIAS|bool|QC: Master bias within 5 days of this obs|None
 OLDDARK|bool|QC: Master dark within 5 days of this obs|None
 OLDFLAT|bool|QC: Master flat within 5 days of this obs|None
+NTPGOOD|book|QC: NTP time within 100 ms|None
