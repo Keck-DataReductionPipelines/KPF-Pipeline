@@ -9,6 +9,7 @@ from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger, styled_text
 from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected
 from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_L1
+from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
@@ -761,6 +762,19 @@ class QCDefinitions:
         self.fits_comments[name33] = 'QC: NTP time to within 100 ms'
         self.db_columns[name33] = None
         self.fits_keyword_fail_value[name33] = 0
+
+        name34 = 'good_guiding'
+        self.names.append(name34)
+        self.kpf_data_levels[name34] = ['L0']
+        self.descriptions[name34] = 'Check if guiding meets specs'
+        self.data_types[name34] = 'int'
+        self.spectrum_types[name34] = ['Star', ]
+        self.master_types[name34] = []
+        self.required_data_products[name34] = [] # no required data products
+        self.fits_keywords[name34] = 'GUIDGOOD'
+        self.fits_comments[name34] = 'QC: Guider RMS and bias within 50 mas RMS'
+        self.db_columns[name34] = None
+        self.fits_keyword_fail_value[name34] = 0
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -1527,6 +1541,57 @@ class QCL0(QC):
                     timing_error_ms = float(match.group(1))
                     if timing_error_ms < max_timing_error_ms:
                         QC_pass = True
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+        return QC_pass
+
+
+    def good_guiding(self, max_guider_rms_mas=50, max_guider_offset_mas=50, debug=False):
+        """
+        This Quality Control function checks if the Guider has an RMS guiding
+        performance of 50 mas (settable with max_guider_rms_mas) or better
+        in the X and Y directions.  The same test is applied for guiding offsets.
+
+        Args:
+            debug - an optional flag.  If True, missing data products are noted.
+
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        QC_pass = True
+        try:
+            L0 = self.kpf_object
+            myGuider = AnalyzeGuider(L0)
+
+            # Check guiding RMS
+            if hasattr(myGuider, 'x_rms'):
+                if myGuider.x_rms > max_guider_rms_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+            if hasattr(myGuider, 'y_rms'):
+                if myGuider.y_rms > max_guider_rms_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+
+            # Check guiding offsets
+            if hasattr(myGuider, 'x_bias'):
+                if myGuider.x_bias > max_guider_offset_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+            if hasattr(myGuider, 'y_bias'):
+                if myGuider.y_bias > max_guider_offset_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
 
         except Exception as e:
             self.logger.info(f"Exception: {e}")

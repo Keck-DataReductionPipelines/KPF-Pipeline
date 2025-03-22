@@ -1,0 +1,13 @@
+description: QC - Guider Performance
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: GUIDGOOD
+        plot_type: state
+        plot_attr:
+          label: Guider RMS and bias\nwithin 50 mas RMS
+          marker: .
+    paneldict:
+      ylabel: "Guider RMS and bias\nwithin 50 mas RMS\n(GUIDGOOD)"
+      title: QC - Guider Performance
+      legend_frac_size: 0.15
