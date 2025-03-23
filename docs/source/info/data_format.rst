@@ -516,7 +516,7 @@ CCD1ERV2       0.001175044        Error on CCD1RV2
 CCD1RV3        19.3740241724      RV (km/s) of SCI3 (all orders, Green CCD); corrected for barycentric RV
 CCD1ERV3       0.0012185926       Error on CCD1RV3
 CCD1RVC        0.0                RV (km/s) of CAL (all orders, Green CCD); corrected for barycentric RV
-CCD1ERV        0.0                Error on CCD1RVC
+CCD1ERVC        0.0                Error on CCD1RVC
 CCD1RVS        18.2490292404      RV (km/s) of SKY (all orders, Green CCD); corrected for barycentric RV
 CCD1ERVS       0.0                Error on CCD1RVS
 CCD1RV         19.395608349       RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Green CCD); corrected for barycentric RV
