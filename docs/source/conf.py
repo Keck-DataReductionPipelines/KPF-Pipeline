@@ -41,7 +41,7 @@ extensions = ['sphinx.ext.autodoc',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
     'sphinx_rtd_theme',
-    'sphinxcontrib.napoleon',
+    'sphinx.ext.napoleon',
     'nbsphinx',
 ]
 
