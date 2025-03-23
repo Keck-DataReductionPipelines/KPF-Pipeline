@@ -23,9 +23,9 @@ pyyaml
 pyfonts
 
 # Documentation
+Sphinx>=5.0.0
 sphinx
 sphinx-rtd-theme
-sphinxcontrib-napoleon
 nbsphinx
 pandoc
 ipython
