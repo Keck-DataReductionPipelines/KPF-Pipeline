@@ -432,7 +432,6 @@ def get_data_products_L0(L0):
         if L0['EXPMETER_SCI'].size > 1:
             data_products.append('ExpMeter')
     if hasattr(L0, 'GUIDER_AVG'):
-        print('**** Got to 3 *****')
         if (L0['GUIDER_AVG'].size > 1):
             data_products.append('Guider')
     elif hasattr(L0, 'guider_avg'): # Early KPF files used lower case guider_avg

@@ -127,6 +127,33 @@ class AnalyzeL1:
         self.ObsID = primary_header.get_obsid()
 
 
+    def add_dispersion_arrays(self, smooth=False):
+        '''
+        Computes the dispersion (dwavlength/dpixel) for all of the WAVE 
+        extensions in self.L1 and adds DISP extensions to to self.L1.
+
+        Arguments:
+            smooth - if True, then the dispersion is smoothed (not implemented)
+    
+        Returns:
+            None
+        '''
+        
+        # Compute dispersion
+        WAVE_extensions = [ "GREEN_SCI_WAVE1","GREEN_SCI_WAVE2","GREEN_SCI_WAVE3", "GREEN_SKY_WAVE", "GREEN_CAL_WAVE", "RED_SCI_WAVE1", "RED_SCI_WAVE2", "RED_SCI_WAVE3", "RED_SKY_WAVE", "RED_CAL_WAVE"]
+        for EXT_WAVE in WAVE_extensions:
+             EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+             if hasattr(self.L1, EXT_WAVE):
+                 # Create dispersion extension
+                 setattr(self.L1, EXT_DISP, np.zeros_like(getattr(self.L1, EXT_WAVE)))
+                 # Compute dispersion for each order
+                 norder = self.L1[EXT_WAVE].shape[0]
+                 for o in range(norder):
+                     self.L1[EXT_DISP][o, 1:-1] = (self.L1[EXT_WAVE][o, 2:] - self.L1[EXT_WAVE][o, :-2]) / 2.0
+                     self.L1[EXT_DISP][o, 0]    = (self.L1[EXT_WAVE][o, 1]  - self.L1[EXT_WAVE][o, 0])
+                     self.L1[EXT_DISP][o, -1]   = (self.L1[EXT_WAVE][o, -1] - self.L1[EXT_WAVE][o, -2])
+
+
     def measure_WLS_age(self, kwd='WLSFILE', verbose=False):
         '''
         Computes the number of days between the observation and the

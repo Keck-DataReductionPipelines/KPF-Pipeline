@@ -3,7 +3,7 @@
 
 from astropy.time import Time
 from astropy import units as u
-from astropy.coordinates import EarthLocation, SkyCoord, AltAz, get_sun, get_moon
+from astropy.coordinates import EarthLocation, SkyCoord, AltAz, get_sun, get_body
 
 def get_sun_alt(UTdatetime):
     """
@@ -17,33 +17,40 @@ def get_sun_alt(UTdatetime):
               Negative values correspond to the Sun below the horizon.
     """
     
-    sun = get_sun(UTdatetime)
+    sun = get_sun(UTdatetime).transform_to('icrs')
     maunakea = EarthLocation(lat='19d49m42.6s', lon='-155d28m48.9s', height=4205) 
     altaz_sun = sun.transform_to(AltAz(obstime=UTdatetime, location=maunakea))
     alt = altaz_sun.alt.deg
 
     return alt
     
-def get_moon_sep(UTdatetime, RA, dec):
+def get_moon_sep(UTdatetime, RA, dec, observer_location=None):
     """
-    Returns the separation in degrees between the Moon and an object with 
-    coordinates RA/dec at a specific UT datetime.
+    Returns the separation in degrees between the Moon and an object with
+    coordinates RA/dec at a specific UT datetime and observer location.
 
     Args:
-        UTdatetime - an astropy Time object with the UT datetime
-        RA - right ascension of the object (string format, e.g. "10:24:36.5")
-        dec - declination of the object (string format, e.g. "+45:10:45.1")
+        UTdatetime (Time): Astropy Time object specifying UT datetime.
+        RA (str): Right ascension of the object (e.g., \"10:24:36.5\").
+        dec (str): Declination of the object (e.g., \"+45:10:45.1\").
+        observer_location (EarthLocation, optional): Observer's location. Defaults to Maunakea.
 
     Returns:
-        sep - separation (degrees)
+        float: Separation between Moon and object in degrees.
     """
+    if observer_location is None:
+        observer_location = EarthLocation(lat='19d49m42.6s', lon='-155d28m48.9s', height=4205)
 
-    target = SkyCoord(RA, dec, unit=(u.hourangle, u.deg))
-    moon = get_moon(UTdatetime)
-    sep = target.separation(moon)
+    # Create SkyCoord object for the target
+    target_coord = SkyCoord(RA, dec, unit=(u.hourangle, u.deg), frame='icrs')
 
-    return sep.deg # in degrees
-    
+    # Get Moon coordinates at given datetime and observer location
+    moon_coord = get_body('moon', UTdatetime, observer_location).transform_to('icrs')
+
+    # Compute separation
+    separation = target_coord.separation(moon_coord)
+
+    return separation.deg
 
 class DummyLogger:
     """

@@ -1,0 +1,13 @@
+description: QC - TARG Keywords
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: TARGPLAU
+        plot_type: state
+        plot_attr:
+          label: "TARG kwds have\nplausible values"
+          marker: .
+    paneldict:
+      ylabel: "TARG kwds have\nplausible values\n(TARGPLAU)"
+      title: QC - TARG Keywords
+      legend_frac_size: 0.15

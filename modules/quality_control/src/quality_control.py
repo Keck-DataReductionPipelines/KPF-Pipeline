@@ -1,15 +1,22 @@
 import os
+import re
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
 from datetime import datetime
 from scipy.ndimage import convolve1d
+from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger, styled_text
 from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected
 from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_L1
+from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
+from modules.calibration_lookup.src.alg import GetCalibrations
+
+DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../calibration_lookup/configs/default.cfg')
+DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
@@ -407,7 +414,7 @@ class QCDefinitions:
 
         name6 = 'EM_not_saturated'
         self.names.append(name6)
-        self.kpf_data_levels[name6] = ['L0', '2D']
+        self.kpf_data_levels[name6] = ['L0']
         self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY.'
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
@@ -420,7 +427,7 @@ class QCDefinitions:
 
         name7 = 'EM_flux_not_negative'
         self.names.append(name7)
-        self.kpf_data_levels[name7] = ['L0', '2D']
+        self.kpf_data_levels[name7] = ['L0']
         self.descriptions[name7] = 'Negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name7] = 'int'
         self.spectrum_types[name7] = ['all', ]
@@ -576,7 +583,7 @@ class QCDefinitions:
 
         name18 = 'L0_bad_readout_check'
         self.names.append(name18)
-        self.kpf_data_levels[name18] = ['L0', '2D']
+        self.kpf_data_levels[name18] = ['L0']
         self.descriptions[name18] = 'Check Texp that identifies error in reading CCD'
         self.data_types[name18] = 'int'
         self.spectrum_types[name18] = ['all', ]
@@ -703,6 +710,84 @@ class QCDefinitions:
         self.fits_comments[name29] = 'QC: Number and dist of Etalon lines sufficient'
         self.db_columns[name29] = None
         self.fits_keyword_fail_value[name29] = 0
+
+        name30 = 'L1_wild_WLS_SCI'
+        self.names.append(name30)
+        self.kpf_data_levels[name30] = ['L1']
+        self.descriptions[name30] = 'Check for wild SCI WLS (stdev > 5 pix in any order)'
+        self.data_types[name30] = 'int'
+        self.spectrum_types[name30] = ['all', ]
+        self.master_types[name30] = []
+        self.required_data_products[name30] = [] # no required data products
+        self.fits_keywords[name30] = 'WILDWSCI'
+        self.fits_comments[name30] = 'QC: SCI wavelength solution not wild'
+        self.db_columns[name30] = None
+        self.fits_keyword_fail_value[name30] = 0
+
+        name31 = 'L1_wild_WLS_SKY'
+        self.names.append(name31)
+        self.kpf_data_levels[name31] = ['L1']
+        self.descriptions[name31] = 'Check for wild SKY WLS (stdev > 5 pix in any order)'
+        self.data_types[name31] = 'int'
+        self.spectrum_types[name31] = ['all', ]
+        self.master_types[name31] = []
+        self.required_data_products[name31] = [] # no required data products
+        self.fits_keywords[name31] = 'WILDWSKY'
+        self.fits_comments[name31] = 'QC: SKY wavelength solution not wild'
+        self.db_columns[name31] = None
+        self.fits_keyword_fail_value[name31] = 0
+
+        name32 = 'L1_wild_WLS_CAL'
+        self.names.append(name32)
+        self.kpf_data_levels[name32] = ['L1']
+        self.descriptions[name32] = 'Check for wild CAL WLS (stdev > 5 pix in any order)'
+        self.data_types[name32] = 'int'
+        self.spectrum_types[name32] = ['all', ]
+        self.master_types[name32] = []
+        self.required_data_products[name32] = [] # no required data products
+        self.fits_keywords[name32] = 'WILDWCAL'
+        self.fits_comments[name32] = 'QC: CAL wavelength solution not wild'
+        self.db_columns[name32] = None
+        self.fits_keyword_fail_value[name32] = 0
+
+        name33 = 'NTP_timing'
+        self.names.append(name33)
+        self.kpf_data_levels[name33] = ['L0']
+        self.descriptions[name33] = 'Check network time protocol status message'
+        self.data_types[name33] = 'int'
+        self.spectrum_types[name33] = ['all', ]
+        self.master_types[name33] = []
+        self.required_data_products[name33] = [] # no required data products
+        self.fits_keywords[name33] = 'NTPGOOD'
+        self.fits_comments[name33] = 'QC: NTP time to within 100 ms'
+        self.db_columns[name33] = None
+        self.fits_keyword_fail_value[name33] = 0
+
+        name34 = 'good_guiding'
+        self.names.append(name34)
+        self.kpf_data_levels[name34] = ['L0']
+        self.descriptions[name34] = 'Check if guiding meets specs'
+        self.data_types[name34] = 'int'
+        self.spectrum_types[name34] = ['Star', ]
+        self.master_types[name34] = []
+        self.required_data_products[name34] = [] # no required data products
+        self.fits_keywords[name34] = 'GUIDGOOD'
+        self.fits_comments[name34] = 'QC: Guider RMS and bias within 50 mas RMS'
+        self.db_columns[name34] = None
+        self.fits_keyword_fail_value[name34] = 0
+
+        name35 = 'good_TARG_headers'
+        self.names.append(name35)
+        self.kpf_data_levels[name35] = ['L0']
+        self.descriptions[name35] = 'Check TARG headers for plausible values'
+        self.data_types[name35] = 'int'
+        self.spectrum_types[name35] = ['Star', ]
+        self.master_types[name35] = []
+        self.required_data_products[name35] = [] # no required data products
+        self.fits_keywords[name35] = 'TARGPLAU'
+        self.fits_comments[name35] = 'QC: TARG kwds present with plausible values'
+        self.db_columns[name35] = None
+        self.fits_keyword_fail_value[name35] = 0
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -932,7 +1017,8 @@ class QC:
                 self.logger.info(f'ObsID = {kfpera_csv} is not in the correct format.')
             return KPFERA
         datetime_ObsID = get_datetime_obsid(ObsID)
-        self.logger.info(f"The datetime of ObsID is {datetime_ObsID}.")
+        if debug:
+            self.logger.info(f"The datetime of ObsID is {datetime_ObsID}.")
 
         if os.path.exists(kfpera_csv):
             try:
@@ -941,10 +1027,10 @@ class QC:
                     self.logger.info(f'Read the KPFERA file {kfpera_csv}.')
                 nrows = len(df_kpfera)
                 for i in np.arange(nrows):
-                    starttime = datetime.strptime(df_kpfera.iloc[i][1].strip(), '%Y-%m-%d %H:%M:%S')
-                    stoptime  = datetime.strptime(df_kpfera.iloc[i][2].strip(), '%Y-%m-%d %H:%M:%S')
+                    starttime = datetime.strptime(df_kpfera.iloc[i].iloc[1].strip(), '%Y-%m-%d %H:%M:%S')
+                    stoptime  = datetime.strptime(df_kpfera.iloc[i].iloc[2].strip(), '%Y-%m-%d %H:%M:%S')
                     if (datetime_ObsID > starttime) and (datetime_ObsID < stoptime):
-                        KPFERA = float(df_kpfera.iloc[i][0])
+                        KPFERA = float(df_kpfera.iloc[i].iloc[0])
                         if debug:
                             self.logger.info(f'Setting KPFERA = {KPFERA}')
             except Exception as e:
@@ -1016,7 +1102,6 @@ class QCL0(QC):
 
         try:
             L0 = self.kpf_object
-            debug=True
 
             # Determine which extensions should be in the L0 file.
             # First add the triggrered cameras (Green, Red, CaHK, ExpMeter) to list of data products
@@ -1350,16 +1435,14 @@ class QCL0(QC):
 
     def EM_flux_not_negative(self, debug=False):
         """
-        This Quality Control function checks if 20 or more consecutive elements of the
-        exposure meter spectra are negative.  Negative flux usually indicates
-        over-subtraction of bias from the raw EM images.  The check is applied to the
-        EM-SCI and EM-SKY fibers and returns False if negative flux is detected in
-        either.  Note that this check only works for L0 files with the EXPMETER_SCI and
-        EXPMETER_SKY extensions present.
+        This Quality Control function checks if 20 or more consecutive elements 
+        of the SCI and SKY exposure meter spectra are negative.  Negative flux 
+        usually indicates over-subtraction of bias from the raw EM images.  
+        The check is applied to the EM-SCI and EM-SKY fibers and returns False 
+        if negative flux is detected in either.  Note that this check only works 
+        for L0 files with the EXPMETER_SCI and EXPMETER_SKY extensions present.
 
         Args:
-             L0 - an L0 object
-             fiber ('SCI' [default value] or 'SKY) - the EM fiber output to be tested
              debug - an optional flag.  If True, missing data products are noted.
 
          Returns:
@@ -1446,6 +1529,161 @@ class QCL0(QC):
             QC_pass = False
 
         return QC_pass
+
+
+    def NTP_timing(self, max_timing_error_ms=100, debug=False):
+        """
+        This Quality Control function checks if the status message from 
+        the Network Time Protocol (NTP) indicates that the timing uncertainty
+        is less than max_timing_error_ms.
+
+        Args:
+            debug - an optional flag.  If True, missing data products are noted.
+
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        QC_pass = False
+        try:
+            L0 = self.kpf_object
+            if 'TIMEERR' in L0.header['PRIMARY']:
+                NTP_string = L0.header['PRIMARY']['TIMEERR'] # NTP status message
+                match = re.search(r'NTP time correct to within ([\d.]+) ms', NTP_string)
+                if match:
+                    timing_error_ms = float(match.group(1))
+                    if timing_error_ms < max_timing_error_ms:
+                        QC_pass = True
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+        return QC_pass
+
+
+    def good_guiding(self, max_guider_rms_mas=50, max_guider_offset_mas=50, debug=False):
+        """
+        This Quality Control function checks if the Guider has an RMS guiding
+        performance of 50 mas (settable with max_guider_rms_mas) or better
+        in the X and Y directions.  The same test is applied for guiding offsets.
+
+        Args:
+            debug - an optional flag.  If True, missing data products are noted.
+
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        QC_pass = True
+        try:
+            L0 = self.kpf_object
+            myGuider = AnalyzeGuider(L0)
+
+            # Check guiding RMS
+            if hasattr(myGuider, 'x_rms'):
+                if myGuider.x_rms > max_guider_rms_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+            if hasattr(myGuider, 'y_rms'):
+                if myGuider.y_rms > max_guider_rms_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+
+            # Check guiding offsets
+            if hasattr(myGuider, 'x_bias'):
+                if myGuider.x_bias > max_guider_offset_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+            if hasattr(myGuider, 'y_bias'):
+                if myGuider.y_bias > max_guider_offset_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+
+    def good_TARG_headers(self):
+        """
+        This Quality Control function checks that a set of "TARG" keywords exist
+        in an L0 file and that a subset of those for reasonable values.
+        
+        keywords that are checked: 
+            TARGNAME, TARGRA, TARGDEC, TARGEPOC, TARGEQUI, TARGPLAX, 
+            TARGPMDC, TARGPMRA, TARGRADV, TARGWAVE, TARGFRAM, TARGTEFF
+
+        Conditions checked:
+            radial velocity: TARGRADV < 100 km/s
+            parallax: TARGPLAX < 1 arcsec
+            epoch, equinox: TARGEPOC, TARGEQUI >= 1950 and < 2050
+            proper motion: TARGPMDC, TARGPMRA < 15 arcsec/yr (NOT CURRENTLY CHECKED - units uncertain)
+            effective temperature: TARGTEFF < 10000 K and > 2000 K
+        
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        QC_pass = True
+        try:
+            L0 = self.kpf_object
+            header = L0.header['PRIMARY']
+
+            # Check that certain TARGxxxx keywords exist
+            TARG_keywords = ['TARGNAME', 'TARGRA', 'TARGDEC', 'TARGEPOC', 'TARGEQUI', 'TARGPLAX', 'TARGPMDC', 'TARGPMRA', 'TARGRADV', 'TARGWAVE', 'TARGFRAM', 'TARGTEFF']            
+            for kwd in TARG_keywords:
+                if not kwd in header:
+                    QC_pass = False
+                    self.logger.info(f'Missing L0 keyword: {kwd}')
+            
+            # Check that TARGRADV < 350 km/s (see Fig. 8 of Chubak et al. 2012 - arXiv:1207.6212)
+            if 'TARGRADV' in header:
+                 if abs(header['TARGRADV']) > 350:
+                     QC_pass = False
+                     self.logger.info(f'L0 keyword problem: abs(TARGRADV) = abs({str(header["TARGRADV"])}) > 100 km/s')
+            
+            # Check that TARGPLAX < 1 arcsec
+            if 'TARGPLAX' in header:
+                 if float(header['TARGPLAX']) >= 1 * 1000:
+                     QC_pass = False
+                     self.logger.info(f'L0 keyword problem: TARGPLAX = {str(header["TARGPLAX"])} > 1000 mas')
+            
+            # Check that TARGEPOC, TARGEQUI >= 1950 and < 2050
+            kwds = ['TARGEPOC', 'TARGEQUI']
+            for kwd in kwds:
+                if kwd in header:
+                     if (float(header[kwd]) <= 1950) or (float(header[kwd]) > 2050):
+                         QC_pass = False
+                         self.logger.info(f'L0 keyword problem: {kwd} = {str(header[kwd])} <= 1950 or > 2050')
+            
+#            # Check that TARGPMDC, TARGPMRA < 15 arcsec/yr
+#            kwds = ['TARGPMDC', 'TARGPMRA']
+#            for kwd in kwds:
+#                if kwd in header:
+#                     if float(header[kwd]) > 15:
+#                          QC_pass = False
+            
+            # Check that TARGTEFF > 2000 K and < 10000 K
+            if 'TARGTEFF' in header:
+                 if (float(header['TARGTEFF']) <= 2000) or (float(header['TARGTEFF']) >= 10000):
+                     QC_pass = False
+            
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
 
 #####################################################################
 
@@ -2607,6 +2845,177 @@ class QCL1(QC):
                 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS(self, EXT=['CAL'], max_stdev_pixels=5, debug=False):
+        """
+        This Quality Control function checks if the wavelength solution for 
+        SCI1, SCI2, and SCI3 on both CCDs are not "wild".  Wild is defined 
+        as having a standard deviation (note: standard deviation != RMS) 
+        compared to a reference wavelength solution of > 5 pixels for any 
+        spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the SCI1, SCI2, and SCI3 wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+
+        GREEN_WAVE_extensions = []
+        RED_WAVE_extensions   = []
+
+        try:
+            if 'CAL' in EXT:
+                GREEN_WAVE_extensions.append("GREEN_CAL_WAVE")
+                RED_WAVE_extensions.append("RED_CAL_WAVE")
+            if 'SCI' in EXT:
+                GREEN_WAVE_extensions.append("GREEN_SCI_WAVE1")
+                GREEN_WAVE_extensions.append("GREEN_SCI_WAVE2")
+                GREEN_WAVE_extensions.append("GREEN_SCI_WAVE3")
+                RED_WAVE_extensions.append("RED_SCI_WAVE1")
+                RED_WAVE_extensions.append("RED_SCI_WAVE2")
+                RED_WAVE_extensions.append("RED_SCI_WAVE3")
+            if 'SKY' in EXT:
+                GREEN_WAVE_extensions.append("GREEN_SKY_WAVE")
+                RED_WAVE_extensions.append("RED_SKY_WAVE")
+
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            data_products = get_data_products_L1(L1)
+            
+            # Get reference wavelength solution
+            dt = get_datetime_obsid(myL1.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+            if debug:
+                print(f'DEFAULT_CALIBRATION_CFG_PATH = ' + DEFAULT_CALIBRATION_CFG_PATH)
+            GC = GetCalibrations(dt, DEFAULT_CALIBRATION_CFG_PATH, use_db=False)
+            wls_filename = GC.lookup(subset=['rough_wls']) 
+            if debug:
+                print(f'wls_filename = ' + wls_filename['rough_wls'])
+            L1_ref = KPF1.from_fits(wls_filename['rough_wls'])
+            myL1_ref = AnalyzeL1(L1_ref)  
+            myL1_ref.add_dispersion_arrays()
+            
+            QC_pass = True
+            if 'Green' in data_products:
+                for EXT_WAVE in GREEN_WAVE_extensions:
+                    if debug:
+                        print(f'EXT_WAVE = ' + EXT_WAVE)
+                    EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+                    norder = myL1.L1[EXT_WAVE].shape[0]
+                    for o in range(norder):
+                        if not (myL1_ref.L1[EXT_DISP][o,:] == 0).all():
+                            pix_diff_std = np.std((myL1.L1[EXT_WAVE][o,:] - myL1_ref.L1[EXT_WAVE][o,:]) / myL1_ref.L1[EXT_DISP][o,:])
+                            if debug:
+                                print(o, pix_diff_std)
+                            if pix_diff_std > max_stdev_pixels:
+                                QC_pass = False
+
+            if 'Red' in data_products:
+                for EXT_WAVE in RED_WAVE_extensions:
+                    if debug:
+                        print(f'EXT_WAVE = ' + EXT_WAVE)
+                    EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+                    norder = myL1.L1[EXT_WAVE].shape[0]
+                    for o in range(norder):
+                        if not (myL1_ref.L1[EXT_DISP][o,:] == 0).all():
+                            pix_diff_std = np.std((myL1.L1[EXT_WAVE][o,:] - myL1_ref.L1[EXT_WAVE][o,:]) / myL1_ref.L1[EXT_DISP][o,:])
+                            if debug:
+                                print(o, pix_diff_std)
+                            if pix_diff_std > max_stdev_pixels:
+                                QC_pass = False
+
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS_SCI(self, max_stdev_pixels=5, debug=False):
+        """
+        Using the method L1_wild_WLS, this Quality Control function checks 
+        if the wavelength solution for SCI1, SCI2, and SCI3 on both CCDs 
+        are not "wild".  Wild is defined as having a standard deviation 
+        (note: standard deviation != RMS) compared to a reference wavelength 
+        solution of > 5 pixels for any spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the SCI1, SCI2, and SCI3 wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+        
+        QC_pass = False
+
+        try: 
+            QC_pass = self.L1_wild_WLS(EXT=['SCI'], max_stdev_pixels=max_stdev_pixels, debug=debug)
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS_SKY(self, max_stdev_pixels=5, debug=False):
+        """
+        Using the method L1_wild_WLS, this Quality Control function checks 
+        if the wavelength solution for SKY on both CCDs 
+        are not "wild".  Wild is defined as having a standard deviation 
+        (note: standard deviation != RMS) compared to a reference wavelength 
+        solution of > 5 pixels for any spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the SKY wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+        
+        QC_pass = False
+
+        try: 
+            QC_pass = self.L1_wild_WLS(EXT=['SKY'], max_stdev_pixels=max_stdev_pixels, debug=debug)
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS_CAL(self, max_stdev_pixels=5, debug=False):
+        """
+        Using the method L1_wild_WLS, this Quality Control function checks 
+        if the wavelength solution for CAL on both CCDs 
+        are not "wild".  Wild is defined as having a standard deviation 
+        (note: standard deviation != RMS) compared to a reference wavelength 
+        solution of > 5 pixels for any spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the CAL wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+        
+        QC_pass = False
+
+        try: 
+            QC_pass = self.L1_wild_WLS(EXT=['CAL'], max_stdev_pixels=max_stdev_pixels, debug=debug)
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
             QC_pass = False
 
         return QC_pass

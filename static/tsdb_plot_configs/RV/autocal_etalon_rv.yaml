@@ -9,7 +9,6 @@ panel_arr:
         plot_type: errorbar
         plot_attr:
           label: CCFRV - CCFRVC [m/s]
-          marker: .
           fmt: o 
           linewidth: 0.5
           color: royalblue
@@ -35,7 +34,6 @@ panel_arr:
         plot_attr:
           label: CCD1RV - CCD1RVC [m/s]
           color: firebrick
-          marker: .
           fmt: o 
           linewidth: 0.5
           color: forestgreen
@@ -61,7 +59,6 @@ panel_arr:
         plot_attr:
           label: CCD2RV - CCD2RVC [m/s]
           color: darkred
-          marker: .
           fmt: o 
           linewidth: 0.5
           color: firebrick

@@ -91,6 +91,7 @@ class AnalyzeTimeSeries:
           rejection.  This should be in Delta values.
         * For time series state plots, include the number of points in each state 
           in the legend.
+        * Make separate keywords for DRPTAG for 2D, L1, L2
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):

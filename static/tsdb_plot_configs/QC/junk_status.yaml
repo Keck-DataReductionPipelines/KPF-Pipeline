@@ -5,7 +5,7 @@ panel_arr:
       - col: NOTJUNK
         plot_type: state
         plot_attr:
-          label: Junk State\n(NOTJUNK)
+          label: "Junk State\n(NOTJUNK)"
           marker: .
     paneldict:
       ylabel: Junk Status
