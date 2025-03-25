@@ -1619,7 +1619,7 @@ class QCL0(QC):
         This Quality Control function checks that a set of "TARG" keywords exist
         in an L0 file and that a subset of those for reasonable values.
         
-        keywords that are checked: 
+        keywords that are checked for existence: 
             TARGNAME, TARGRA, TARGDEC, TARGEPOC, TARGEQUI, TARGPLAX, 
             TARGPMDC, TARGPMRA, TARGRADV, TARGWAVE, TARGFRAM, TARGTEFF
 
