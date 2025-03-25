@@ -61,7 +61,16 @@ panel_arr:
           color: indianred
     paneldict:
       ylabel: LFC RV (km/s)
-      only_object: "[\"autocal-lfc-all-morn\", \"autocal-lfc-all-eve\", \"autocal-lfc-all-night\", \"cal-LFC\", \"cal-LFC-morn\", \"cal-LFC-eve\", \"LFC_all\", \"lfc_all\", \"LFC\"]"
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
       not_junk: true
       legend_frac_size: 0.30
 
@@ -125,7 +134,10 @@ panel_arr:
           color: indianred
     paneldict:
       ylabel: ThAr RV (km/s)
-      only_object: "[\"autocal-thar-all-night\", \"autocal-thar-all-eve\", \"autocal-thar-all-morn\"]"
+      only_object: 
+        - autocal-thar-all-night
+        - autocal-thar-all-eve
+        - autocal-thar-all-morn
       not_junk: true
       legend_frac_size: 0.30
 
