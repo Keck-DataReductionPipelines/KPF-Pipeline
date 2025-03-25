@@ -7,7 +7,7 @@ CCD1ERV2|float|Error on CCD1RV2|km/s
 CCD1RV3|float|RV of SCI3 (all Green orders); bcvel corrected|km/s
 CCD1ERV3|float|Error on CCD1RV3|km/s
 CCD1RVC|float|RV of CAL (all Green orders); bcvel corrected|km/s
-CCD1ERV|float|Error on CCD1RVC|km/s
+CCD1ERVC|float|Error on CCD1RVC|km/s
 CCD1RVS|float|RV of SKY (all Green orders); bcvel corrected|km/s
 CCD1ERVS|float|Error on CCD1RVS|km/s
 CCD1RV|float|RV of avg(SCI1/SCI2/SCI3), all Green orders; bcvel corr'd|km/s
