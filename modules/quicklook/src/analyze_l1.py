@@ -1759,7 +1759,7 @@ class AnalyzeL1:
                 if row == 4:
                     ax.set_xlabel('Wavelength [Ang]', fontsize=14)
                 if col == 0:
-                    ax.set_ylabel(f'$\Delta$ pixels ' + f'({orderlet_label})\nper order', fontsize=14)
+                    ax.set_ylabel(f'$\\Delta$ pixels ' + f'({orderlet_label})\nper order', fontsize=14)
 
         # Adjust spacing between subplots
         plt.subplots_adjust(hspace=0)
