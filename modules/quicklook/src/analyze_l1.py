@@ -1222,7 +1222,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[0,0].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='teal') 
         axs[0,0].legend(loc='upper right')
         axs[0,0].set_ylabel('SCI1 / SCI2', fontsize=18)
@@ -1232,7 +1232,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[0,1].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='teal') 
         axs[0,1].legend(loc='upper right')
         axs[0,1].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
@@ -1241,7 +1241,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[0,2].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='teal') 
         axs[0,2].legend(loc='upper right')
         axs[0,2].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
@@ -1252,7 +1252,7 @@ class AnalyzeL1:
         med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[1,0].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='tomato') 
         axs[1,0].legend(loc='upper right')
         axs[1,0].set_ylabel('SCI3 / SCI2', fontsize=18)
@@ -1261,7 +1261,7 @@ class AnalyzeL1:
         med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[1,1].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='tomato') 
         axs[1,1].legend(loc='upper right')
         axs[1,1].grid()
@@ -1269,7 +1269,7 @@ class AnalyzeL1:
         med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[1,2].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='tomato') 
         axs[1,2].legend(loc='upper right')
         axs[1,2].grid()
@@ -1279,7 +1279,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         axs[2,0].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='cornflowerblue') 
         axs[2,0].legend(loc='upper right')
         axs[2,0].set_ylabel('SCI1 / SCI3', fontsize=18)
@@ -1288,7 +1288,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         axs[2,1].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='cornflowerblue') 
         axs[2,1].legend(loc='upper right')
         axs[2,1].grid()
@@ -1296,7 +1296,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         axs[2,2].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='cornflowerblue') 
         axs[2,2].legend(loc='upper right')
         axs[2,2].grid()
@@ -1306,7 +1306,7 @@ class AnalyzeL1:
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='orchid') 
         axs[3,0].legend(loc='upper right')
         axs[3,0].set_ylabel('SKY / SCI2', fontsize=18)
@@ -1315,13 +1315,13 @@ class AnalyzeL1:
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='orchid') 
         axs[3,1].legend(loc='upper right')
         axs[3,1].grid()
         o=o3; imin = imin3; imax = imax3
         axs[3,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='orchid') 
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
@@ -1333,7 +1333,7 @@ class AnalyzeL1:
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,0].legend(loc='upper right')
         axs[4,0].set_ylabel('CAL / SCI2', fontsize=18)
@@ -1343,7 +1343,7 @@ class AnalyzeL1:
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,1].legend(loc='upper right')
         axs[4,1].set_xlabel('Wavelength (Ang)', fontsize=18)
@@ -1352,7 +1352,7 @@ class AnalyzeL1:
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,2].legend(loc='upper right')
         axs[4,2].set_xlabel('Wavelength (Ang)', fontsize=18)
@@ -1759,7 +1759,7 @@ class AnalyzeL1:
                 if row == 4:
                     ax.set_xlabel('Wavelength [Ang]', fontsize=14)
                 if col == 0:
-                    ax.set_ylabel(f'$\Delta$ pixels ' + f'({orderlet_label})\nper order', fontsize=14)
+                    ax.set_ylabel(f'$\\Delta$ pixels ' + f'({orderlet_label})\nper order', fontsize=14)
 
         # Adjust spacing between subplots
         plt.subplots_adjust(hspace=0)

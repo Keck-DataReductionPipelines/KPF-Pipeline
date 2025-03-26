@@ -476,8 +476,8 @@ class Analyze2D:
                          va=(((reg[r]['y1'] < 2080) and (reg[r]['y1'] > 100))*('top')+
                              ((reg[r]['y1'] > 2080) or (reg[r]['y1'] < 100))*('bottom'))
                         )
-            coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
-            ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
+            coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
+            ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
             now = datetime.now()
             plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), ha='right', color='gray')
             plt.text(4220,  500, coll_text, size=11, rotation=90, ha='center')
@@ -972,8 +972,8 @@ class Analyze2D:
     
             # Add annotations
             textstr = '\n'.join((
-                r'$\mu=%.2f$ e-' % (mu, ),
-                r'$\sigma=%.2f$ e-' % (std, ),
+                r'$\\mu=%.2f$ e-' % (mu, ),
+                r'$\\sigma=%.2f$ e-' % (std, ),
                 r'$\mathrm{median}=%.2f$ e-' % (median, )))
             props = dict(boxstyle='round', facecolor='red', alpha=0.15)
             plt.gca().text(0.98, 0.95, textstr, transform=plt.gca().transAxes, fontsize=12,
@@ -1069,8 +1069,8 @@ class Analyze2D:
         
         # Add annotations
         textstr = '\n'.join((
-            r'$\mu=%.2f$ e-' % (mu, ),
-            r'$\sigma=%.2f$ e-' % (std, ),
+            r'$\\mu=%.2f$ e-' % (mu, ),
+            r'$\\sigma=%.2f$ e-' % (std, ),
             r'$\mathrm{median}=%.2f$ e-' % (median, )))
         props = dict(boxstyle='round', facecolor='red', alpha=0.15)
         plt.gca().text(0.98, 0.95, textstr, transform=plt.gca().transAxes, fontsize=12,
