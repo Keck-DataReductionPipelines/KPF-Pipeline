@@ -1,4 +1,4 @@
-#! /usr/local/bin/perl
+#! /usr/bin/perl
 
 ##########################################################################
 # Pipeline Perl script to registerCalFilesForDate.py from within a

@@ -1,5 +1,37 @@
 #!/usr/bin/env python3
 
+"""
+Script Name: ingest_watch_kpf_tsdb.py
+
+Description:
+    This script watches directories for new or modified KPF files and ingests their
+    data into a KPF Time Series Database. The script utilizes the Watchdog library
+    to monitor filesystem events and triggers ingestion processes. Additionally, it 
+    performs periodic scans of data directories to ensure all observations are 
+    ingested.
+
+Features:
+    - Ingests file metadata and telemetry into the database.
+    - Watches multiple directories for new or modified KPF files.
+    - Performs periodic scans of data directories.
+    - Supports multithreaded execution.
+
+Usage:
+    Run this script with optional arguments to specify the database path:
+    
+        python ingest_watch_kpf_tsdb.py --db_path /path/to/database.db
+
+Options:
+    --db_path   Path to the time series database file. Default: /data/time_series/kpf_ts.db
+
+Examples:
+    1. Using default database path:
+        python ingest_watch_kpf_tsdb.py
+
+    2. Specifying a custom database path:
+        python ingest_watch_kpf_tsdb.py --db_path /custom/path/to/kpf_ts.db
+"""
+
 import os
 import time
 import queue
@@ -112,7 +144,7 @@ def periodic_scan(db_path,stop_event):
     time.sleep(20)            
     start_date = '20221201'
     end_date   = '20400101'
-    sec_between_scans = 3600
+    sec_between_scans = 3600*12
     last_run_time = datetime.now() - timedelta(seconds=sec_between_scans)
 
     while not stop_event.is_set():

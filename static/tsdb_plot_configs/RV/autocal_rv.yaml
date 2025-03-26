@@ -1,0 +1,214 @@
+description: LFC, ThAr, & Etalon RVs (autocal)
+plot_type: time_series_multipanel
+panel_arr:
+  # 1) lfc_rv_panel
+  - panelvars:
+      - col: CCD1RV1
+        plot_type: plot
+        plot_attr:
+          label: CCD1RV1 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1RV2
+        plot_type: plot
+        plot_attr:
+          label: CCD1RV2 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1RV3
+        plot_type: plot
+        plot_attr:
+          label: CCD1RV3 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1RVC
+        plot_type: plot
+        plot_attr:
+          label: CCD1RVC (km/s)
+          marker: s
+          linewidth: 0.5
+          color: limegreen
+      - col: CCD2RV1
+        plot_type: plot
+        plot_attr:
+          label: CCD2RV1 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2RV2
+        plot_type: plot
+        plot_attr:
+          label: CCD2RV2 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2RV3
+        plot_type: plot
+        plot_attr:
+          label: CCD2RV3 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2RVC
+        plot_type: plot
+        plot_attr:
+          label: CCD2RVC (km/s)
+          marker: s
+          linewidth: 0.5
+          color: indianred
+    paneldict:
+      ylabel: LFC RV (km/s)
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
+      not_junk: true
+      legend_frac_size: 0.30
+
+  # 2) thar_rv_panel
+  - panelvars:
+      - col: CCD1RV1
+        plot_type: plot
+        plot_attr:
+          label: CCD1RV1 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1RV2
+        plot_type: plot
+        plot_attr:
+          label: CCD1RV2 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1RV3
+        plot_type: plot
+        plot_attr:
+          label: CCD1RV3 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1RVC
+        plot_type: plot
+        plot_attr:
+          label: CCD1RVC (km/s)
+          marker: s
+          linewidth: 0.5
+          color: limegreen
+      - col: CCD2RV1
+        plot_type: plot
+        plot_attr:
+          label: CCD2RV1 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2RV2
+        plot_type: plot
+        plot_attr:
+          label: CCD2RV2 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2RV3
+        plot_type: plot
+        plot_attr:
+          label: CCD2RV3 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2RVC
+        plot_type: plot
+        plot_attr:
+          label: CCD2RVC (km/s)
+          marker: s
+          linewidth: 0.5
+          color: indianred
+    paneldict:
+      ylabel: ThAr RV (km/s)
+      only_object: 
+        - autocal-thar-all-night
+        - autocal-thar-all-eve
+        - autocal-thar-all-morn
+      not_junk: true
+      legend_frac_size: 0.30
+
+  # 3) etalon_rv_panel
+  - panelvars:
+      - col: CCD1RV1
+        plot_type: plot
+        plot_attr:
+          label: CCD1RV1 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1RV2
+        plot_type: plot
+        plot_attr:
+          label: CCD1RV2 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1RV3
+        plot_type: plot
+        plot_attr:
+          label: CCD1RV3 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1RVC
+        plot_type: plot
+        plot_attr:
+          label: CCD1RVC (km/s)
+          marker: s
+          linewidth: 0.5
+          color: limegreen
+      - col: CCD2RV1
+        plot_type: plot
+        plot_attr:
+          label: CCD2RV1 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2RV2
+        plot_type: plot
+        plot_attr:
+          label: CCD2RV2 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2RV3
+        plot_type: plot
+        plot_attr:
+          label: CCD2RV3 (km/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2RVC
+        plot_type: plot
+        plot_attr:
+          label: CCD2RVC (km/s)
+          marker: s
+          linewidth: 0.5
+          color: indianred
+    paneldict:
+      title: LFC, ThAr, & Etalon RVs
+      ylabel: Etalon RV (km/s)
+      subtract_median: True
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
+      not_junk: true
+      legend_frac_size: 0.30

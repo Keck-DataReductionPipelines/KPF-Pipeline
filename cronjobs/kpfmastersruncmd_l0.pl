@@ -1,4 +1,4 @@
-#! /usr/local/bin/perl
+#! /usr/bin/perl
 
 ##########################################################################
 # Pipeline Perl script to do detached docker run.  Can run this script
@@ -107,7 +107,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '2.3';
+my $version = '2.4';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -122,7 +122,7 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/kpfmasterscmd_l0';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'kpf-drp:latest';
+my $containerimage = 'russkpfmasters:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
 
@@ -141,6 +141,11 @@ my $pythonscript2 = 'scripts/reformat_smooth_lamp_fitsfile_for_kpf_drp.py';
 
 my ($pylogfileDir2, $pylogfileBase2) = $pythonscript2 =~ /(.+)\/(.+)\.py/;
 my $pylogfile2 = $pylogfileBase2 . '_' . $procdate . '.out';
+
+my $pythonscript3 = 'database/scripts/cleanupMastersOnDiskAndDatabaseForDate.py';
+
+my ($pylogfileDir3, $pylogfileBase3) = $pythonscript3 =~ /(.+)\/(.+)\.py/;
+my $pylogfile3 = $pylogfileBase3 . '_' . $procdate . '.out';
 
 
 # Get database parameters from ~/.pgpass file.
@@ -182,6 +187,8 @@ print "pythonscript=$pythonscript\n";
 print "pylogfile=$pylogfile\n";
 print "pythonscript2=$pythonscript2\n";
 print "pylogfile2=$pylogfile2\n";
+print "pythonscript3=$pythonscript3\n";
+print "pylogfile3=$pylogfile3\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
@@ -209,6 +216,7 @@ my $script = "#! /bin/bash\n" .
              "python $pythonscript /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits >& ${pylogfile}\n" .
              "python $pythonscript2 /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp.fits >& ${pylogfile2}\n" .
              "rm /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits\n" .
+             "python $pythonscript3 $procdate >& ${pylogfile3}\n" .
              "mkdir -p /masters/${procdate}\n" .
              "sleep 3\n" .
              "cp -p /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .

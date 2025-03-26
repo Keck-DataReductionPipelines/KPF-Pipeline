@@ -1,0 +1,42 @@
+description: LFC Diagnostics
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: kpfcal.IRFLUX
+        plot_type: scatter
+        unit: counts
+        plot_attr:
+          label: Fiberlock IR
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Intensity (counts)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: kpfcal.VISFLUX
+        plot_type: scatter
+        unit: counts
+        plot_attr:
+          label: Fiberlock Vis
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Intensity (counts)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: kpfcal.BLUECUTIACT
+        plot_type: scatter
+        unit: A
+        plot_attr:
+          label: Blue Cut Amp.
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Current (A)
+      title: LFC Diagnostics
+      not_junk: true
+      legend_frac_size: 0.25

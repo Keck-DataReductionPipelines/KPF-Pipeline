@@ -9,6 +9,10 @@ update:
 clear: 
 	rm -f -r *.log
 	rm -f -r cores
+	rm -f    core.*
+	rm -f    temp_kpf_ts_*.db
+	rm -f -r temp_kpf_ts_plots*
+	rm -f -r temp_QLP_plots*
 
 clean: clear
 	rm -f -r build/

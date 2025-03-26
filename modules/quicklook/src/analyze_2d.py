@@ -1,4 +1,6 @@
 import time
+import copy
+import traceback
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,12 +10,13 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
-from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import HeaderParse, get_datecode_from_filename
 from modules.Utils.utils import DummyLogger
 from astropy.time import Time
 from astropy.table import Table
-from datetime import datetime
+from datetime import datetime, timedelta
 from scipy.optimize import curve_fit
+from kpfpipe.models.level0 import KPF0
 #import emcee
 #import corner
 
@@ -27,7 +30,7 @@ class Analyze2D:
         D2 - a 2D object
 
     Attributes:
-        header - header of input 2D file
+        header - header of the PRIMARY extension of the 2D object
         name - name of source (e.g., 'Bias', 'Etalon', '185144')
         ObsID - observation  ID (e.g. 'KP.20230704.02326.27')
         exptime - exposure time (sec)
@@ -55,7 +58,7 @@ class Analyze2D:
 
     def __init__(self, D2, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
-        self.D2 = D2 # use D2 instead of 2D because variable names can't start with a number
+        self.D2 = copy.deepcopy(D2) # use D2 instead of 2D because variable names can't start with a number
         self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
         primary_header = HeaderParse(D2, 'PRIMARY')
         self.header = primary_header.header
@@ -80,6 +83,53 @@ class Analyze2D:
             self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
         except:
             self.logger.error('Problem computing SNR for Green 2D image')
+
+
+    def measure_master_age(self, kwd='BIASFILE', verbose=False):
+        '''
+        Computes the number of whole days between the observation and a master file 
+        listed in the PRIMARY header.  
+
+        Arguments:
+            kwd - keyword name of WLS file (usually 
+                  'BIASFILE', 'DARKFILE', or 'FLATFILE')
+    
+        Returns:
+            master_wls_file - number of days between the observation and the
+                              date of observations for the WLS files
+        '''
+
+        date_obs_str = self.header['DATE-OBS']
+        date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%d").date()
+
+        if verbose:
+            self.logger.info(f'Date of observation: {date_obs_str}')
+        
+        try:
+            if kwd in self.header:
+                master_filename = self.header[kwd]
+                master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
+                master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
+                if verbose:
+                    self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
+                
+                age_master_file = (master_filename_datetime - date_obs_datetime).days
+                if verbose:
+                    self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
+    
+                return age_master_file
+            else:
+                age_master_file = -999 # standard value indicating keyword not available
+                return age_master_file
+
+        except KeyError as e:
+            self.logger.info(f"KeyError: {e}")
+            pass
+
+        except Exception as e:
+            self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
+            return None
+
 
     def measure_2D_dark_current(self, chip=None):
         """
@@ -234,6 +284,7 @@ class Analyze2D:
     def plot_2D_image(self, chip=None, variance=False, data_over_sqrt_variance=False,
                             overplot_dark_current=False, blur_size=None, 
                             subtract_master_bias=False,
+                            subtract_master_dark=False,
                             fig_path=None, show_plot=False):
         """
         Generate a plot of the a 2D image.  Overlay measurements of 
@@ -244,11 +295,12 @@ class Analyze2D:
             variance - plot variance (VAR extensions) instead of signal (CCD extensions)
             data_over_sqrt_variance - plot data divided by sqrt(variance), an approximate SNR image
             overlay_dark_current - if True, dark current measurements are over-plotted
-            subtract_master_bias - if not False, a master bias will be subtracted'
-                                   if 'auto', then the path to the master bias is 
+            subtract_master_bias - if not False, a master bias will be subtracted
+                                   if True, then the path to the master bias is 
                                    the value from the BIASFILE keyword
                                    if his parameter is set to a path, that file 
                                    will be used 
+            subtract_master_dark - same as subtract_master_bias
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -257,6 +309,62 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+    
+        # Subtract master bias frame
+        bias_read = False
+        dark_read = False
+        if subtract_master_bias == False:
+            pass
+        else:
+            if subtract_master_bias == True:
+                if ('BIASDIR' in self.header) and ('BIASFILE' in self.header):
+                    if self.header['BIASDIR'].startswith("/masters"):
+                        pre = '/data'
+                    else:
+                        pre = ''
+                    bias_filename = pre + self.header['BIASDIR'] + '/' + self.header['BIASFILE']
+            else:
+            	bias_filename = subtract_master_bias
+            
+            try:
+                D2_master_bias = KPF0.from_fits(bias_filename)
+                bias_read = True
+            except Exception as e:
+                self.logger.error(f"Problem reading {bias_filename}: {e}\n{traceback.format_exc()}")
+            if bias_read:
+                for extension in ['GREEN_CCD', 'RED_CCD']:
+                    if extension in D2_master_bias.extensions:
+                        self.D2[extension] -= D2_master_bias[extension]
+            else:
+                subtract_master_bias = False
+        
+        # Subtract scaled master dark frame
+        if subtract_master_dark == False:
+            pass
+        else:
+            if subtract_master_dark == True:
+                if ('DARKDIR' in self.header) and ('DARKFILE' in self.header):
+                    if self.header['DARKDIR'].startswith("/masters"):
+                        pre = '/data'
+                    else:
+                        pre = ''
+                    dark_filename = pre + self.header['DARKDIR'] + '/' + self.header['DARKFILE']
+            else:
+            	dark_filename = subtract_master_dark
+            
+            try:
+                D2_master_dark = KPF0.from_fits(dark_filename)
+                dark_read = True
+            except Exception as e:
+                self.logger.error(f"Problem reading {dark_filename}: {e}\n{traceback.format_exc()}")
+            if dark_read:
+                for extension in ['GREEN_CCD', 'RED_CCD']:
+                    if extension in D2_master_dark.extensions:
+                        self.D2[extension] -= D2_master_dark[extension] * float(self.exptime)
+            else:
+                subtract_master_dark = False
+        
+        chip = chip.lower()
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -310,7 +418,11 @@ class Analyze2D:
             title_txt = title_txt + ' (Variance)'
         elif data_over_sqrt_variance:
             title_txt = title_txt + ' (SNR)'
-        plt.title(title_txt, fontsize=18)
+        if bias_read:
+            title_txt = title_txt + ' (Bias subtracted)'
+        if dark_read:
+            title_txt = title_txt + ' (Dark subtracted)'
+        plt.title(title_txt, fontsize=14)
         plt.xlabel('Column (pixel number)', fontsize=18)
         plt.ylabel('Row (pixel number)', fontsize=18)
         plt.xticks(fontsize=14)
@@ -364,8 +476,8 @@ class Analyze2D:
                          va=(((reg[r]['y1'] < 2080) and (reg[r]['y1'] > 100))*('top')+
                              ((reg[r]['y1'] > 2080) or (reg[r]['y1'] < 100))*('bottom'))
                         )
-            coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
-            ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
+            coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
+            ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
             now = datetime.now()
             plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), ha='right', color='gray')
             plt.text(4220,  500, coll_text, size=11, rotation=90, ha='center')
@@ -381,7 +493,17 @@ class Analyze2D:
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -35), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
+        if bias_read:
+            bias_label = 'Bias: ' + bias_filename
+            plt.annotate(bias_label, xy=(-0.1, 0), xycoords='axes fraction', 
+                        fontsize=8, color="darkgray", ha="left", va="bottom",
+                        xytext=(0, -52), textcoords='offset points')
+        if dark_read:
+            dark_label = 'Dark: ' + dark_filename
+            plt.annotate(dark_label, xy=(-0.1, 0), xycoords='axes fraction', 
+                        fontsize=8, color="darkgray", ha="left", va="bottom",
+                        xytext=(0, -52), textcoords='offset points')
+            plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -490,6 +612,7 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+        chip = chip.lower()
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -547,6 +670,7 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+        chip = chip.lower()
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -620,12 +744,16 @@ class Analyze2D:
         plt.close('all')
 
 
-    def plot_2D_order_trace2x2(self, chip=None, fig_path=None, show_plot=False):
+    def plot_2D_order_trace2x2(self, chip=None, order_trace_master_file='auto',
+                               fig_path=None, show_plot=False, 
+                               width=200, height=200, 
+                               start_x_arr='default', start_y_arr='default'):
         """
         Overlay the order trace on the 2D image in a 3x3 array of zoom-in plots.  
 
         Args:
             chip (string) - "green" or "red"
+            order_trace_master_file (string) - path to order trace file; auto means use defaults
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -633,6 +761,7 @@ class Analyze2D:
             PNG plot in fig_path or shows the plot it in the current environment 
             (e.g., in a Jupyter Notebook).
         """
+        chip = chip.lower()
         
         # Set parameters based on the chip selected
         obs_date = Time(self.header['DATE-MID'])
@@ -641,25 +770,27 @@ class Analyze2D:
             if chip == 'green':
                 CHIP = 'GREEN'
                 chip_title = 'Green'
-                if obs_date < service_mission_date1:
-                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
-                else:
-                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
-                width  = 200
-                height = 200
-                start_x_arr = [ 0, 3600,  0, 3600]
-                start_y_arr = [1200, 1200,  545,  545]
+                if order_trace_master_file == 'auto':
+                    if obs_date < service_mission_date1:
+                        order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
+                    else:
+                        order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
+                if start_x_arr == 'default':
+                    start_x_arr = [ 0, 3600,  0, 3600]
+                if start_y_arr == 'default':
+                    start_y_arr = [1200, 1200,  545,  545]
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
-                if obs_date < service_mission_date1:
-                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
-                else:
-                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
-                width  = 200
-                height = 200
-                start_x_arr = [ 0, 3600,  0, 3600]
-                start_y_arr = [1538, 1538,  545,  550]
+                if order_trace_master_file == 'auto':
+                    if obs_date < service_mission_date1:
+                        order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
+                    else:
+                        order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
+                if start_x_arr == 'default':
+                    start_x_arr = [ 0, 3600,  0, 3600]
+                if start_y_arr == 'default':
+                    start_y_arr = [1538, 1538,  545,  550]
             image = np.array(self.D2[CHIP + '_CCD'].data)
             order_trace_master = pd.read_csv(order_trace_master_file)
         else:
@@ -670,13 +801,13 @@ class Analyze2D:
         fig, axs = plt.subplots(2, 2, figsize=(19,17), tight_layout=False)
         for i in range(2):
             for j in range(2):
-                # Calculate the top left corner of each sub-image
+                # Calculate the top left corner of each subimage
                 start_x = start_x_arr[2*i+j]
                 start_y = start_y_arr[2*i+j]
-                end_x = min(start_x+width, image.shape[0])
+                end_x = min(start_x+width,  image.shape[0])
                 end_y = min(start_y+height, image.shape[1])
 
-                # Slice out and display the sub-image
+                # Slice out and display the subimage
                 sub_img = image[start_y:end_y, start_x:end_x]
                 im = axs[i, j].imshow(sub_img, origin='lower', 
                                  extent=[start_x, end_x, start_y, end_y], # these indices appear backwards, but work
@@ -686,6 +817,7 @@ class Analyze2D:
                                  cmap='viridis')
                 axs[i, j].set_xlim(start_x, start_x+width)
                 axs[i, j].set_ylim(start_y, start_y+height)
+                
                 # Overplot order trace
                 for o in range(1,np.shape(order_trace_master)[0]-2,1):#[50]:#range(np.shape(order_trace)[0])
                     x_grid_master = np.linspace(order_trace_master.iloc[o]['X1'], 
@@ -709,8 +841,6 @@ class Analyze2D:
                 cbar.ax.tick_params(labelsize=12)
 
         plt.grid(False)
-#        plt.tight_layout()
-        #plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
         ax = fig.add_subplot(111, frame_on=False)
         ax.grid(False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
@@ -738,6 +868,7 @@ class Analyze2D:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
 
     def plot_bias_histogram(self, variance=False, data_over_sqrt_variance=False, chip=None, fig_path=None, show_plot=False):
         """
@@ -841,8 +972,8 @@ class Analyze2D:
     
             # Add annotations
             textstr = '\n'.join((
-                r'$\mu=%.2f$ e-' % (mu, ),
-                r'$\sigma=%.2f$ e-' % (std, ),
+                r'$\\mu=%.2f$ e-' % (mu, ),
+                r'$\\sigma=%.2f$ e-' % (std, ),
                 r'$\mathrm{median}=%.2f$ e-' % (median, )))
             props = dict(boxstyle='round', facecolor='red', alpha=0.15)
             plt.gca().text(0.98, 0.95, textstr, transform=plt.gca().transAxes, fontsize=12,
@@ -938,8 +1069,8 @@ class Analyze2D:
         
         # Add annotations
         textstr = '\n'.join((
-            r'$\mu=%.2f$ e-' % (mu, ),
-            r'$\sigma=%.2f$ e-' % (std, ),
+            r'$\\mu=%.2f$ e-' % (mu, ),
+            r'$\\sigma=%.2f$ e-' % (std, ),
             r'$\mathrm{median}=%.2f$ e-' % (median, )))
         props = dict(boxstyle='round', facecolor='red', alpha=0.15)
         plt.gca().text(0.98, 0.95, textstr, transform=plt.gca().transAxes, fontsize=12,
@@ -975,13 +1106,22 @@ class Analyze2D:
         plt.close('all')
 
     
-    def plot_2D_image_histogram(self, chip=None, fig_path=None, show_plot=False, 
-                                saturation_limit_2d=240000):
+    def plot_2D_image_histogram(self, chip=None, 
+                                      subtract_master_bias=False,
+                                      subtract_master_dark=False, 
+                                      saturation_limit_2d=240000,
+                                      fig_path=None, show_plot=False):
         """
-        Add description
+        Make a histogram of the pixel intensities for a 2D image.
 
         Args:
             chip (string) - "green" or "red"
+            subtract_master_bias - if not False, a master bias will be subtracted
+                                   if True, then the path to the master bias is 
+                                   the value from the BIASFILE keyword
+                                   if his parameter is set to a path, that file 
+                                   will be used 
+            subtract_master_dark - same as subtract_master_bias
             fig_path (string) - set to the path for the file 
                 to be generated.
             show_plot (boolean) - show the plot in the current environment.
@@ -991,8 +1131,65 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+    
+        # Subtract master bias frame
+        bias_read = False
+        dark_read = False
+        if subtract_master_bias == False:
+            pass
+        else:
+            D2_subtracted = copy.deepcopy(self.D2)
+            if subtract_master_bias == True:
+                if ('BIASDIR' in self.header) and ('BIASFILE' in self.header):
+                    if self.header['BIASDIR'].startswith("/masters"):
+                        pre = '/data'
+                    else:
+                        pre = ''
+                    bias_filename = pre + self.header['BIASDIR'] + '/' + self.header['BIASFILE']
+            else:
+            	bias_filename = subtract_master_bias
+            
+            try:
+                D2_master_bias = KPF0.from_fits(bias_filename)
+                bias_read = True
+            except Exception as e:
+                self.logger.error(f"Problem reading {bias_filename}: {e}\n{traceback.format_exc()}")
+            if bias_read:
+                for extension in ['GREEN_CCD', 'RED_CCD']:
+                    if extension in D2_master_bias.extensions:
+                        D2_subtracted[extension] -= D2_master_bias[extension]
+            else:
+                subtract_master_bias = False
+        
+        # Subtract scaled master dark frame
+        if subtract_master_dark == False:
+            pass
+        else:
+            D2_subtracted = copy.deepcopy(self.D2)
+            if subtract_master_dark == True:
+                if ('DARKDIR' in self.header) and ('DARKFILE' in self.header):
+                    if self.header['DARKDIR'].startswith("/masters"):
+                        pre = '/data'
+                    else:
+                        pre = ''
+                    dark_filename = pre + self.header['DARKDIR'] + '/' + self.header['DARKFILE']
+            else:
+            	dark_filename = subtract_master_dark
+            
+            try:
+                D2_master_dark = KPF0.from_fits(dark_filename)
+                dark_read = True
+            except Exception as e:
+                self.logger.error(f"Problem reading {dark_filename}: {e}\n{traceback.format_exc()}")
+            if dark_read:
+                for extension in ['GREEN_CCD', 'RED_CCD']:
+                    if extension in D2_master_dark.extensions:
+                        D2_subtracted[extension] -= D2_master_dark[extension] * float(self.exptime)
+            else:
+                subtract_master_dark = False
         
         # Set parameters based on the chip selected
+        chip = chip.lower()
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN'
@@ -1003,6 +1200,11 @@ class Analyze2D:
             image = np.array(self.D2[CHIP + '_CCD'].data)
             # Flatten the image array for speed in histrogram computation
             flatten_image = image.flatten()
+            
+            if bias_read or dark_read:
+                image_subtracted = np.array(D2_subtracted[CHIP + '_CCD'].data)
+                flatten_image_subtracted = image_subtracted.flatten()
+                mad_subtracted = median_abs_deviation(flatten_image_subtracted, nan_policy='omit')
         else:
             self.logger.info(f'chip not supplied. Exiting plot_2D_image_histogram()')
             return
@@ -1018,7 +1220,7 @@ class Analyze2D:
             bins = 40
         plt.hist(flatten_image, 
                  bins=bins, 
-                 label='Median: ' + '%4.1f' % np.nanmedian(flatten_image) + ' e-; '
+                 label='2D: Median: ' + '%4.1f' % np.nanmedian(flatten_image) + ' e-; '
                        'Stddev: ' + '%4.1f' % np.nanstd(flatten_image) + ' e-; '
                        'MAD: '    + '%4.1f' % mad + ' e-; '
                        'Saturated? ' + str(np.nanpercentile(flatten_image,99.99)>saturation_limit_2d), 
@@ -1026,13 +1228,33 @@ class Analyze2D:
                  density = False, 
                  range = (np.nanpercentile(flatten_image,  0.005),
                           np.nanpercentile(flatten_image, 99.995)))
+        if bias_read or dark_read:
+            plt.hist(flatten_image_subtracted, 
+                     bins=bins, 
+                     label='2D - master '  + bias_read*'bias' + dark_read*'dark' + ': Median: ' + '%4.1f' % np.nanmedian(flatten_image_subtracted) + ' e-; '
+                           'Stddev: ' + '%4.1f' % np.nanstd(flatten_image_subtracted) + ' e-; '
+                           'MAD: '    + '%4.1f' % mad + ' e-; '
+                           'Saturated? ' + str(np.nanpercentile(flatten_image_subtracted,99.99)>saturation_limit_2d), 
+
+                     histtype='step',      
+                     color='red',          
+                     linewidth=2.0,        
+                     alpha=1.0,            
+                     density=False,
+
+                     range = (np.nanpercentile(flatten_image_subtracted,  0.005),
+                              np.nanpercentile(flatten_image_subtracted, 99.995)))
         plt.title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         plt.xlabel('Counts (e-)', fontsize=16)
         plt.ylabel('Number of Pixels', fontsize=16)
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
         plt.yscale('log')
-        plt.legend(loc='lower right', fontsize=11)
+        if bias_read or dark_read:
+            plt.legend(loc='lower right', fontsize=10)
+        else:
+            plt.legend(loc='lower right', fontsize=10)
+
          
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

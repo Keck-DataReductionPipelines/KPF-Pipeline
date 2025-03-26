@@ -45,6 +45,7 @@ do_hk = config.ARGUMENT.do_hk
 do_bk_subtraction = config.ARGUMENT.do_bk_subtraction
 do_bc = config.ARGUMENT.do_bc
 do_outlier = config.ARGUMENT.do_outlier_rejection
+do_only_drift = config.ARGUMENT.do_only_drift
 
 # data type of data model, 'KPF' for kpf data.
 data_type = config.ARGUMENT.data_type
@@ -75,7 +76,7 @@ if context.watch:
 	if 'L0' in file_path:
 		lev0_file_path = str_replace(file_path, 'L0', '2D')
 		lev0_file_path = str_replace(lev0_file_path, '.fits', '_2D.fits')
-		lev1_file_path = str_replace(file_path, 'L0', 'L1')
+		lev1_file_path = str_replace(lev0_file_path, '2D', 'L1')
 		# do_order_trace = False
 
 	# do spectral extraction if 2D data is watched, do 2D->l1->l2
@@ -574,8 +575,11 @@ if do_spectral_extraction or do_hk or do_bc:
 				if do_db_query_for_before_after_master_files == True:
 					invoke_subrecipe("recipes/wls_interpolation.subrecipe") #HTI
 					output_data = interpolated_l1
-					SetHeaderValue(output_data, 'WLSFILE', master_file_before) # db_rec_before from subrecipe
-					SetHeaderValue(output_data, 'WLSFILE2', master_file_after) # db_rec_after from subrecipe
+					
+					# etalon drift correction
+					# invoke_subrecipe("recipes/drift_correction.subrecipe")
+					# output_data = output_l1
+
 				else:
 					for idx in ccd_idx:
 						if wave_fits[idx] != None and exists(wave_fits[idx]):
@@ -640,9 +644,6 @@ if do_spectral_extraction or do_hk or do_bc:
 					output_data = kpf_object
 
 					result = to_fits(output_data, output_lev1_file)
-
-			if exists(output_lev1_file):
-				lev1_list = lev1_list + [output_lev1_file]
 
 ## do radial velocity or rv reweighting:
 #  description: do radial velocity on the specified extensions of L1 data and produce L2 data.

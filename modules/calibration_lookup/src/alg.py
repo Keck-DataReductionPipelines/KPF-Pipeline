@@ -1,6 +1,12 @@
 
-from datetime import datetime
+import sys
+if sys.version_info >= (3, 9):
+    from importlib import resources
+else:
+    import importlib_resources as resources
+
 import pandas as pd
+from datetime import datetime
 
 from database.modules.utils.kpf_db import KPFDB
 from keckdrpframework.models.arguments import Arguments
@@ -13,8 +19,12 @@ class GetCalibrations:
        returns a dictionary with all calibration types.
 
     """
-    def __init__(self, datetime, default_config_path, logger=None):
+    def __init__(self, datetime, default_config_path, use_db=True, logger=None):
 
+        """
+        use_db (boolean) - to disable db access, set to False (e.g., when looking up file-based keywords only)
+        """
+        
         # Initialize DB class
         # self.db_lookup = QueryDBNearestMasterFilesFramework(self.action, self.context)
 
@@ -33,7 +43,8 @@ class GetCalibrations:
         self.wls_cal_types = eval(self.config['PARAM']['wls_cal_types'])
         self.max_age = eval(self.config['PARAM']['max_cal_age'])
         self.defaults = eval(self.config['PARAM']['defaults'])
-        self.db = KPFDB(logger=self.log)
+        if use_db:
+            self.db = KPFDB(logger=self.log)
 
     def lookup(self, subset=None):
         dt = datetime.strptime(self.datetime, "%Y-%m-%dT%H:%M:%S.%f")
@@ -48,7 +59,10 @@ class GetCalibrations:
                 continue
             if lookup == 'file':
                 filename = self.caldate_files[cal]
-                df = pd.read_csv(filename, header=0, skipinitialspace=True)
+                fndir, fn = filename.split("/", 1)
+                # Use resources.open_text() to read the .csv because it has a relative path within repo
+                with resources.open_text(fndir, fn) as f:
+                    df = pd.read_csv(f, header=0, skipinitialspace=True)
                 for i, row in df.iterrows():
                     start = datetime.strptime(row['UT_start_date'], "%Y-%m-%d %H:%M:%S")
                     end = datetime.strptime(row['UT_end_date'], "%Y-%m-%d %H:%M:%S")

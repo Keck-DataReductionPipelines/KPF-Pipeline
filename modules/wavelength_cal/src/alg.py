@@ -331,7 +331,7 @@ class WaveCalibration:
                 continue
 
             if self.cal_type == 'Etalon':  # For etalon
-                etalon_mask = pd.read_csv(self.etalon_mask_in, names=['wave','weight'], delim_whitespace=True)
+                etalon_mask = pd.read_csv(self.etalon_mask_in, names=['wave','weight'], sep='\s+')
                 wls, fitted_peak_pixels = self.find_etalon_peaks(order_flux,rough_wls_order,etalon_mask) # returns original mask and new mask positions for one order.
                 wls=wls.tolist()
 
@@ -1324,8 +1324,8 @@ class WaveCalibration:
         p0 = [y[i], x[i], 0.015*3, np.min(y)] #0.015 Ang/pix. Args are heigh, center,width, zero-pt
         #print("Initial guess:",p0)
 
-        with np.warnings.catch_warnings():
-            np.warnings.simplefilter("ignore")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
             try:   
                 popt, _ = curve_fit(self.calculate_gaussian, x, y, p0=p0, maxfev=1000000)
             except RuntimeError:
@@ -1399,8 +1399,8 @@ class WaveCalibration:
         i = np.argmax(y[len(y) // 4 : len(y) * 3 // 4]) + len(y) // 4
         
         p0 = [y[i], x[i], 1.5, np.min(y)]
-        with np.warnings.catch_warnings():
-            np.warnings.simplefilter("ignore")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
             popt, pcov = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=1000000)
             pcov[np.isinf(pcov)] = 0 # convert inf to zero
             pcov[np.isnan(pcov)] = 0 # convert nan to zero

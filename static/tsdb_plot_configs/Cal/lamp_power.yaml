@@ -1,0 +1,94 @@
+description: Power Meter Measurements of Lamp Brightness
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: PTHDAY
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: ThAr Daily
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: ThAr Daily Power (W)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: PTHAU
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: ThAr Gold
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: ThAr Gold Power (W)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: PUDAY
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: UNe Daily
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: UNe Daily Power (W)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: PUAU
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: UNe Gold
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: UNe Gold Power (W)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: PLFC
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: LFC
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: LFC Power (W)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: PETAL
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: Etalon
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Etalon Power (W)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: PBRB
+        plot_type: scatter
+        unit: W
+        plot_attr:
+          label: Broadband
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Broadband Power (W)
+      not_junk: true
+      title: Power Meter Measurements of Lamp Brightness
+      legend_frac_size: 0.25

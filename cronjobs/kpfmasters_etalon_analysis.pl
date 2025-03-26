@@ -1,4 +1,4 @@
-#! /usr/local/bin/perl
+#! /usr/bin/perl
 
 ##########################################################################
 # Pipeline Perl script to do detached docker run.  Can run this script
@@ -111,7 +111,7 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/kpfmasters_etalon_analysis';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';              # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'kpf-drp:latest';
+my $containerimage = 'russkpfmasters:latest';
 
 
 # Ensure PYTHONPATH or equivalent is set; e.g., $ENV{PYTHONPATH} = "/data/user/rlaher/git/KPF-Pipeline"
@@ -119,7 +119,8 @@ my $pythonpath = $ENV{PYTHONPATH};
 if (defined $pythonpath) {
     print "PYTHONPATH=$pythonpath\n";
 } else {
-    print "PYTHONPATH not defined (assume current PATH is sufficient); continuing...\n";
+    $ENV{PYTHONPATH} = '/data/user/rlaher/git/KPF-Pipeline/polly/src';
+    print "PYTHONPATH not defined; reset to PYTHONPATH=$ENV{PYTHONPATH}\n";
 }
 
 my $pythonscript = 'cronjobs/run_analysis_for_masters.py';

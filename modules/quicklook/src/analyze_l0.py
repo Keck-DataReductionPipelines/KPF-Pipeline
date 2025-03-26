@@ -1,4 +1,5 @@
 import re
+import copy
 import time
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,7 +31,7 @@ class AnalyzeL0:
 
     def __init__(self, L0, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
-        self.L0 = L0
+        self.L0 = copy.deepcopy(L0)
         self.data_products = get_data_products_L0(L0)
         primary_header = HeaderParse(L0, 'PRIMARY')
         self.header = primary_header.header
@@ -65,6 +66,10 @@ class AnalyzeL0:
             
             self.read_speed, self.green_acf, self.red_acf, self.green_read_time, self.red_read_time = \
                   primary_header.get_read_speed()
+            if self.green_read_time == 0:
+                 self.green_read_time = None
+            if self.red_read_time == 0:
+                 self.red_read_time = None
     
     def reject_outliers(self, data, n=5.0):
         """
@@ -276,7 +281,7 @@ class AnalyzeL0:
                     rn_text += f"{self.read_noise_overscan[region]:.2f}"
                     if i < nregions-1:
                         rn_text += ', '
-            rn_text += ' e-'
+            rn_text += r' e- (rms of overscan; 5-$\sigma$ outlier rej.)'
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

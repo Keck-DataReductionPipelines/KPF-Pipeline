@@ -404,7 +404,7 @@ class VarExtsFramework(KPF0_Primitive):
             self.logger.info('--->ext,img_shape = {},{}'.format(ext,img_shape))
 
             fits_obj[ext] = img.astype(np.float32)
-            fits_obj.header[ext]['BUNIT'] = ('electrons','Units of variance')
+            fits_obj.header[ext]['BUNIT'] = ('electrons squared','Units of variance')
 
         # Remove any AMP extensions (which are automatically re-added as empty extensions for L0 FITS objects).
 
@@ -519,7 +519,7 @@ class VarExtsFramework(KPF0_Primitive):
         dark_greenvarimg,dark_redvarimg = self.assemble_var_images(self.masterdark_path)
         flat_greenvarimg,flat_redvarimg = self.assemble_var_images(self.masterflat_path)
 
-        # Sum the variances for GREEN and RED chips, after converting all terms to electrons.
+        # Sum the variances for GREEN and RED chips, after converting all terms to electrons squared.
         # The terms in the following formulas are, respectively:
         # 1. Read-noise variance
         # 2. Master-bias variance

@@ -1,0 +1,12 @@
+keyword|datatype|description|unit
+datecode|string|8-digit date code (e.g., 20240101)|None
+ObsID|string|Observation ID (e.g., KP.20240101.12345.67)|None
+L0_filename|string|Full path to L0 file|None
+D2_filename|string|Full path to 2D file|None
+L1_filename|string|Full path to L1 file|None
+L2_filename|string|Full path to L2 file|None
+L0_header_read_time|string|Last modification of L0 file|None
+D2_header_read_time|string|Last modification of 2D file|None
+L1_header_read_time|string|Last modification of L1 file|None
+L2_header_read_time|string|Last modification of L2 file|None
+Source|string|Source type (e.g., 'Star' or 'Flat')|None
