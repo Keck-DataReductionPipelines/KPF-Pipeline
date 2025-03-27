@@ -13,7 +13,9 @@ panel_arr:
       ylabel: stddev(BJD) [m/s]
       title: Barycentric Variations
       not_junk: true
+      on_sky: true
       legend_frac_size: 0.30
+
   - panelvars:
       - col: BJDRNG
         plot_type: scatter
@@ -26,6 +28,7 @@ panel_arr:
       ylabel: range(BJD) [m/s]
       title: Barycentric Variations
       not_junk: true
+      on_sky: true
       legend_frac_size: 0.30
 
   - panelvars:
@@ -40,7 +43,9 @@ panel_arr:
       ylabel: stddev(BCV) [sec]
       title: Barycentric Variations
       not_junk: true
+      on_sky: true
       legend_frac_size: 0.30
+
   - panelvars:
       - col: BCVRNG
         plot_type: scatter
@@ -53,4 +58,5 @@ panel_arr:
       ylabel: range(BCV) [m/s]
       title: Barycentric Variations
       not_junk: true
+      on_sky: true
       legend_frac_size: 0.30
