@@ -92,6 +92,7 @@ class AnalyzeTimeSeries:
         * For time series state plots, include the number of points in each state 
           in the legend.
         * Make separate keywords for DRPTAG for 2D, L1, L2
+        * Don't create the metadata table every time.  Check if it's there first.
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
