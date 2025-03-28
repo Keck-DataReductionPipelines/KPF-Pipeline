@@ -10,12 +10,20 @@ import subprocess
 import tempfile
 
 def is_running_in_docker():
+    # Method 1: Check /.dockerenv presence
+    if os.path.exists('/.dockerenv'):
+        return True
+    
+    # Method 2: Check for Docker or container-specific strings in /proc/self/cgroup
     try:
-        with open('/proc/self/cgroup', 'rt') as ifh:
-            return 'docker' in ifh.read()
+        with open('/proc/self/cgroup', 'rt') as f:
+            cgroup_content = f.read()
+            if 'docker' in cgroup_content or 'kubepods' in cgroup_content or 'containerd' in cgroup_content:
+                return True
     except Exception:
-        return False
-
+        pass
+    
+    return False
 
 def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
     """
