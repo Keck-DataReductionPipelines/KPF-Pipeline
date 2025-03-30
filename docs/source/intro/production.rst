@@ -68,6 +68,7 @@ the file event triggers system that initiate reprocessing of specific files.::
 This script is used to touch a list of KPF L0 files that have names like 
 KP.20230623.12345.67.fits.  This is useful to initiate reprocessing 
 using the KPF DRP.  The list of L0 files can be provided in multiple ways:
+
 #. As command-line arguments when invoking the script.
 #. In the first column of a CSV file specified with the -f option. This is useful for CSV files with a large set of L0 filenames downloaded from Jump.  Such files might have double quotes around the L0 filename, which the script will remove when appropriate.
 #. All filenames in a directory specified with the -d option.
