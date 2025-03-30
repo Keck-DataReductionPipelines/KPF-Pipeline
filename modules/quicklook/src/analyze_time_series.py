@@ -91,8 +91,6 @@ class AnalyzeTimeSeries:
           rejection.  This should be in Delta values.
         * For time series state plots, include the number of points in each state 
           in the legend.
-        * Make separate keywords for DRPTAG for 2D, L1, L2
-        * Don't create the metadata table every time.  Check if it's there first.
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -189,7 +187,7 @@ class AnalyzeTimeSeries:
         create_meta_table_query = """
             CREATE TABLE IF NOT EXISTS kpfdb_metadata (
                 keyword     TEXT NOT NULL PRIMARY KEY,
-                datatype   TEXT,
+                datatype    TEXT,
                 description TEXT,
                 units       TEXT,
                 source      TEXT
@@ -679,12 +677,19 @@ class AnalyzeTimeSeries:
                 # Populate header_data from header
                 header_data = {key: header.get(key, None) for key in keyword_types.keys()}
     
-                # If DRPTAG is valid, propagate its value
+                # If DRPTAG is valid, propagate its value to appropriate data level
                 drptag_value = header.get('DRPTAG', None)
                 if drptag_value is not None:
                     for target_key in ['DRPTAG2D', 'DRPTAGL1', 'DRPTAGL2']:
                         if target_key in header_data:
                             header_data[target_key] = drptag_value
+    
+                # If DRPHASH is valid, propagate its value to appropriate data level
+                drphash_value = header.get('DRPHASH', None)
+                if drphash_value is not None:
+                    for target_key in ['DRPHSH2D', 'DRPHSHL1', 'DRPHSHL2']:
+                        if target_key in header_data:
+                            header_data[target_key] = drphash_value
     
         except Exception as e:
             # Log any issues with the file
