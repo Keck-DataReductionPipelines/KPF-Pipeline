@@ -30,7 +30,7 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
     Script Name: qlp_parallel.py
    
     Description:
-      This commandn line script uses the 'parallel' utility to execute the recipe 
+      This command line script uses the 'parallel' utility to execute the recipe 
       called 'recipes/quicklook_match.recipe' to generate standard Quicklook data 
       products.  The script selects all KPF files based on their
       type (L0/2D/L1/L2/master) from the standard data directory using a date 
@@ -95,36 +95,40 @@ def main(start_date, end_date, l0, d2, l1, l2, master, ncpu, load, print_files):
 
     base_dir = "/data"
     all_files = []
-    if l0 or ((not master) and (not l0) and (not d2) and (not l1) and (not l2)):
+    process_all = ((not master) and (not l0) and (not d2) and (not l1) and (not l2))
+    if l0 or process_all:
         print("Checking L0 files")
         all_files.extend(glob.glob(f"{base_dir}/L0/20??????/*.fits"))
-    if d2 or ((not master) and (not l0) and (not d2) and (not l1) and (not l2)):
+    if d2 or process_all:
         all_files.extend(glob.glob(f"{base_dir}/2D/20??????/*_2D.fits"))
         print("Checking 2D files")
-    if l1 or ((not master) and (not l0) and (not d2) and (not l1) and (not l2)):
+    if l1 or process_all:
         all_files.extend(glob.glob(f"{base_dir}/L1/20??????/*_L1.fits"))
         print("Checking L1 files")
-    if l2 or ((not master) and (not l0) and (not d2) and (not l1) and (not l2)):
+    if l2 or process_all:
         all_files.extend(glob.glob(f"{base_dir}/L2/20??????/*_L2.fits"))
         print("Checking L2 files")
-    print("Processing filenames")
+    print("Processing L0/2D/L1/L2 filenames")
     all_files = [item for item in all_files if '-' not in item]  # remove bad files like `KP.20240101.00000.00-1.fits`
-    base_names = np.array([os.path.basename(file) for file in all_files], dtype='U')
-    base_names = np.where(np.char.startswith(base_names, 'KP.'), np.char.replace(base_names, 'KP.',   '', count=1), base_names)
-    base_names = np.where(np.char.endswith(base_names, '.fits'), np.char.replace(base_names, '.fits', '', count=1), base_names)
-    base_names = np.where(np.char.endswith(base_names, '_2D'),   np.char.replace(base_names, '_2D',   '', count=1), base_names)
-    base_names = np.where(np.char.endswith(base_names, '_L1'),   np.char.replace(base_names, '_L1',   '', count=1), base_names)
-    base_names = np.where(np.char.endswith(base_names, '_L2'),   np.char.replace(base_names, '_L2',   '', count=1), base_names)
-    base_dates = np.array([item[:item.rfind('.')] + item[item.rfind('.')+1:] for item in base_names])
-    base_dates = base_dates.astype(float)
-    filtered_indices = np.where((base_dates >= start_date) & (base_dates <= end_date))[0]
-    filtered_files = np.array(all_files)[filtered_indices]
-    sorted_indices = np.argsort([file.split('/')[-1] for file in filtered_files])
-    sorted_paths = filtered_files[sorted_indices]
-    sorted_files = sorted_paths.tolist()
+    if l0 or d2 or l1 or l2 or process_all: 
+        base_names = np.array([os.path.basename(file) for file in all_files], dtype='U')
+        base_names = np.where(np.char.startswith(base_names, 'KP.'), np.char.replace(base_names, 'KP.',   '', count=1), base_names)
+        base_names = np.where(np.char.endswith(base_names, '.fits'), np.char.replace(base_names, '.fits', '', count=1), base_names)
+        base_names = np.where(np.char.endswith(base_names, '_2D'),   np.char.replace(base_names, '_2D',   '', count=1), base_names)
+        base_names = np.where(np.char.endswith(base_names, '_L1'),   np.char.replace(base_names, '_L1',   '', count=1), base_names)
+        base_names = np.where(np.char.endswith(base_names, '_L2'),   np.char.replace(base_names, '_L2',   '', count=1), base_names)
+        base_dates = np.array([item[:item.rfind('.')] + item[item.rfind('.')+1:] for item in base_names])
+        base_dates = base_dates.astype(float)
+        filtered_indices = np.where((base_dates >= start_date) & (base_dates <= end_date))[0]
+        filtered_files = np.array(all_files)[filtered_indices]
+        sorted_indices = np.argsort([file.split('/')[-1] for file in filtered_files])
+        sorted_paths = filtered_files[sorted_indices]
+        sorted_files = sorted_paths.tolist()
+    else:
+        sorted_files = []
 
-    if master or ((not master) and (not l0) and (not d2) and (not l1) and (not l2)):
-        print("Adding Master files")
+    if master or process_all:
+        print("Checking Master files")
         master_files = []
         master_files.extend(glob.glob(f"{base_dir}/masters/20??????/*.fits"))
         pattern = r'/data/masters/(\d{8})/'
