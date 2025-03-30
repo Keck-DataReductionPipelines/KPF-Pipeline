@@ -55,10 +55,6 @@ For a daterange from yyyymmdd to YYYYMMDD with NCPU cpus.::
 
     ./scripts/qlp_parallel.py yyyymmdd YYYYMMDD --ncpu NCPU --l0 --2d --l1 --l2 --master
 
-Alternatively, launch QLP instances for only recent observations::
-
-    ./scripts/launch_qlp.sh --only_recent
-
 **Reprocess specific observations:**
 
 Individual observations can be reprocessed by touching the L0 files, or touching
@@ -76,7 +72,7 @@ using the KPF DRP.  The list of L0 files can be provided in multiple ways:
 #. In the first column of a CSV file specified with the -f option. This is useful for CSV files with a large set of L0 filenames downloaded from Jump.  Such files might have double quotes around the L0 filename, which the script will remove when appropriate.
 #. All filenames in a directory specified with the -d option.
 
-Command-line options (all are optional)::
+The (optional) command-line options are::
 
     -f <filename>       : The script will read the KPF L0 filenames 
                           from the first column of a CSV with the name <filename>.
