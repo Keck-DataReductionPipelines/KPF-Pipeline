@@ -86,6 +86,7 @@ The (optional) command-line options are::
     -e                  : Echo the touch commands instead of executing them.
 
 Examples:
+
 #. To provide filenames using command line arguments: `./kpf_slowtouch.sh KP.20230623.12345.67.fits KP.20230623.12345.68.fits`
 #. To provide filenames using a CSV file: `./kpf_slowtouch.sh -f filenames.csv`
 #. To provide files listed in a directory: `./kpf_slowtouch.sh -d /path/to/directory`
