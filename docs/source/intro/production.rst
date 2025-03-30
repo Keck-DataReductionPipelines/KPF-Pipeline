@@ -20,14 +20,14 @@ Alternatively, launch QLP instances for only recent observations::
     ./scripts/launch_qlp.sh --only_recent
 
   
-**Ingestion for Observational Database:**
+**Time Series Database Ingestion:**
   
 Start a script that will watch for new L0/2D/L1/L2 files and ingest them.  
 Another thread of the script will periodically scan the data directories to search for files 
 (or updates that were missed with the watch thread) to ingest.  
 Periodic scans start one hour after the previous one completed.::
 
-    ./scripts/ingest_dates_kpf_tsdb.py  
+    ./scripts/ingest_watch_kpf_tsdb.py  
 
 The above script will take care of most ingestion needs.  To ingest from date 
 yyyymmdd to YYYYMMDD, use::
@@ -49,7 +49,7 @@ Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYM
 
     kpf --ncpu 50 /data/L0/YYYYMMDD/ -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
 
-**Quicklook reprocessing:**
+**Quicklook reprocessing -- qlp_parallel.py:**
 
 For a daterange from yyyymmdd to YYYYMMDD with NCPU cpus.::
 
@@ -105,7 +105,7 @@ The full description is here::
       ./scripts/qlp_parallel.py 20240501 20240505 --ncpu 150 --load 90
 
 
-**Reprocess specific observations:**
+**Reprocess specific observations -- kpf_slowtouch.sh:**
 
 Individual observations can be reprocessed by touching the L0 files, or touching
 the 2D/L1/L2 files to start reprocessing at a later stage. To reprocess a set 
@@ -143,7 +143,7 @@ Some example uses of this script are:
 #. To change the default L0 path and sleep interval between touches: ``./kpf_slowtouch.sh KP.20230623.12345.67.fits -p /new/path -s 0.5``
 #. To echo the touch commands instead of executing them: ``./kpf_slowtouch.sh KP.20230623.12345.67.fits -e``
 
-**Monitoring processing progress:**
+**Monitoring processing progress -- kpf_processing_progress.py:**
 
 Print the status of processing for a date range::
 
