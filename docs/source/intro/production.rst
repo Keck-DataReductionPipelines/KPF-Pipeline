@@ -34,7 +34,7 @@ yyyymmdd to YYYYMMDD, use::
 
     ./scripts/ingest_dates_kpf_tsdb.py yyyymmdd YYYYMMDD
 
-**Generate Time Series Plots**: 
+**Generation of Time Series Plots**: 
 
 This script will generate time series plots of telemetry and other information on regular intervals using the Observational Database::
 
@@ -85,15 +85,15 @@ The (optional) command-line options are::
                           Default value: 0.2 [sec]
     -e                  : Echo the touch commands instead of executing them.
 
-Examples:
+Some example uses of this script are:
 
-#. To provide filenames using command line arguments: `./kpf_slowtouch.sh KP.20230623.12345.67.fits KP.20230623.12345.68.fits`
-#. To provide filenames using a CSV file: `./kpf_slowtouch.sh -f filenames.csv`
-#. To provide files listed in a directory: `./kpf_slowtouch.sh -d /path/to/directory`
-#. To change the default L0 path and sleep interval between touches: `./kpf_slowtouch.sh KP.20230623.12345.67.fits -p /new/path -s 0.5`
-#. To echo the touch commands instead of executing them: `./kpf_slowtouch.sh KP.20230623.12345.67.fits -e`
+#. To provide filenames using command line arguments: ``./kpf_slowtouch.sh KP.20230623.12345.67.fits KP.20230623.12345.68.fits``
+#. To provide filenames using a CSV file: ``./kpf_slowtouch.sh -f filenames.csv``
+#. To provide files listed in a directory: ``./kpf_slowtouch.sh -d /path/to/directory``
+#. To change the default L0 path and sleep interval between touches: ``./kpf_slowtouch.sh KP.20230623.12345.67.fits -p /new/path -s 0.5``
+#. To echo the touch commands instead of executing them: ``./kpf_slowtouch.sh KP.20230623.12345.67.fits -e``
 
-**Monitoring processing progress**
+**Monitoring processing progress:**
 
 Print the status of processing for a date range::
 
