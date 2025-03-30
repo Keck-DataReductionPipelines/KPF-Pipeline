@@ -330,6 +330,58 @@ class AnalyzeL1:
         return (SCI_fl, CAL_fl, SKY_fl)
 
 
+    def count_saturated_lines(self, chip='green'):
+        """
+        This method uses the find_peaks algorithm to measure the number of 
+        emission lines above an intensity threshold. Additionally, it checks
+        that each order has at least one peak in each of the 
+        `divisions_per_order` subregions.  This method is usually applied to 
+        LFC or Etalon spectra.
+    
+        Args:
+            chip (str):               CCD name ('green' or 'red')
+            intensity_thresh (float): minimum line amplitude to be considered good
+            min_lines (int):          minimum number of lines in a spectral 
+                                      order for it to be considered good
+            divisions_per_order (int): number of contiguous subregions each order 
+                                       must have at least one peak in
+    
+        Returns:
+            SCI_fl, CAL_fl, SKY_fl where, e.g., SCI_fl = [first_good_order, last_good_order]
+        """
+        
+        chip = chip.lower()
+        data = np.array(self.L1[chip.upper() + '_CAL_WAVE'].data, dtype='d')
+        orderlets = ['SCI_FLUX1', 'SCI_FLUX2', 'SCI_FLUX3', 'CAL_FLUX', 'SKY_FLUX']
+        
+        norder = data.shape[0]
+        norderlet = len(orderlets)
+        # lines[o, oo] will hold the final "count" for each (order, orderlet)
+        lines = np.zeros((norder, norderlet), dtype=int)
+        
+        for oo, oo_str in enumerate(orderlets):
+            for o in range(norder):
+                # Extract flux for this order / orderlet
+                flux = np.array(self.L1[chip.upper() + '_' + oo_str].data, dtype='d')[o, :].flatten()
+                
+                # Set saturation level for each orderlet
+                saturation = 2.5e6
+                if oo == 3:
+                    saturation = 1.25e6
+                                                       
+                # Find peaks above intensity_thresh
+                peaks, properties = find_peaks(flux, height=saturation)
+                lines[o, oo] = len(peaks)
+        
+        SCI1_sat_lines = int(np.sum(lines[:, 0]))                   
+        SCI2_sat_lines = int(np.sum(lines[:, 1]))                   
+        SCI3_sat_lines = int(np.sum(lines[:, 2]))                   
+        CAL_sat_lines  = int(np.sum(lines[:, 3]))                   
+        SKY_sat_lines  = int(np.sum(lines[:, 4]))                   
+    
+        return (SCI1_sat_lines, SCI2_sat_lines, SCI3_sat_lines, CAL_sat_lines, SKY_sat_lines)
+
+
     def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):
         """
         Compute the signal-to-noise ratio (SNR) for each spectral order and

@@ -863,6 +863,12 @@ STDWRC28  0.01379038876707553                                                   
 STDWRC29  0.00914032555395159                                                      stddev(WLS-ref) [pix], Red CAL order 29         
 STDWRC30  0.01440898205622853                                                      stddev(WLS-ref) [pix], Red CAL order 30         
 STDWRC31  0.00899757354138056                                                      stddev(WLS-ref) [pix], Red CAL order 31         
+NSATGS2   23                                                                       Number of saturated lines in Green SCI2
+NSATGC    23                                                                       Number of saturated lines in Green CAL
+NSATGK    23                                                                       Number of saturated lines in Green SKY
+NSATRS2   23                                                                       Number of saturated lines in Red SCI2
+NSATRC    23                                                                       Number of saturated lines in Red CAL
+NSATRK    23                                                                       Number of saturated lines in Red SKY
 ========  =======================================================================  =========
 
 The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
