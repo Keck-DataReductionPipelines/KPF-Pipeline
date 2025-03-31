@@ -76,19 +76,25 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
             end_date   = None # (now - timedelta(days=366)).replace(hour=0, minute=0, second=0, microsecond=0)
             time_range_type =  time_range_type
         elif date_range == 'this_day':
-            start_date = (now - timedelta(days=15)).replace(hour=0, minute=0, second=0, microsecond=0)
-            start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-            end_date   =  now
+            start_date = (now - timedelta(days=1.0)).replace(hour=0, minute=0, second=0, microsecond=0)
+            #start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            #end_date = (now + timedelta(days=1.0)).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = (now).replace(hour=23, minute=59, second=59, microsecond=0)
+            #end_date   =  now
             time_range_type =  time_range_type
         elif date_range == 'this_month':
             start_date = (now - timedelta(days=31)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-            end_date   = now
+            #start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            #end_date = (now).replace(hour=23, minute=59, second=59, microsecond=0)
+            end_date = (now + timedelta(days=1.0)).replace(hour=0, minute=0, second=0, microsecond=0)
+            #end_date   = now
             time_range_type = time_range_type
         elif date_range == 'this_year':
             start_date = (now - timedelta(days=366)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-            start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-            end_date   =  now
+            #start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_date = (now + timedelta(days=1.0)).replace(hour=0, minute=0, second=0, microsecond=0)
+            #end_date = (now).replace(hour=23, minute=59, second=59, microsecond=0)
+            #end_date   =  now
             time_range_type = time_range_type
         elif date_range == 'last_10_days':
             # need to determine where to store the results from this so that it doesn't crash Jump
@@ -99,6 +105,10 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
             time_range_type = time_range_type
 
         start_time = time.time()
+        print(f'start_date = {str(start_date)}')
+        print(f'end_date = {str(end_date)}')
+        print(f'time_range_type = {str(time_range_type)}')
+        print()
         generate_plots(start_date=start_date, end_date=end_date, time_range_type=time_range_type, db_path=db_path)
         end_time = time.time()
         execution_time = end_time - start_time
