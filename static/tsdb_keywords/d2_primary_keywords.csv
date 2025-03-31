@@ -5,8 +5,8 @@ FLATFILE|string|Master flat file used (except for flat exposures)|None
 BIASDIR|string|Directory for BIASDIR|None
 DARKDIR|string|Directory for DARKDIR|None
 FLATDIR|string|Directory for FLATDIR|None
-DRPTAG|string|Git version number of KPF-Pipeline used|None
-DRPHASH|string|Git commit hash version of KPF-Pipeline used|None
+DRPTAG2D|string|Git version number of KPF-Pipeline used to make 2D|None
+DRPHSH2D|string|Git commit hash version of KPF-Pipeline used to make 2D|None
 RNRED1|float|Read noise for RED_AMP1 (first amp region on Red)|e-
 RNRED2|float|Read noise for RED_AMP2 (second amp region on Red)|e-
 RNGREEN1|float|Read noise for GREEN_AMP1 (first amp region on Green)|e-

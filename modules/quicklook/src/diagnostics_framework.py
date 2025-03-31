@@ -221,12 +221,32 @@ class DiagnosticsFramework(KPF0_Primitive):
                             self.kpf_object = diagnostics.add_headers_L1_cal_line_quality(self.kpf_object, cal='Etalon', logger=self.logger)
                             exit_code = 1
                         else: 
-                            self.logger.info("Observation type {} != 'LFC' or 'Etalon'.  LFC line diagnostics not computed.".format(name))
+                            self.logger.info("Observation type {} != 'LFC' or 'Etalon'.  Line diagnostics not computed.".format(name))
                     else: 
                         self.logger.info("Green/Red not in L1 file. LFC/Etalon line diagnostics not computed.")
 
                 except Exception as e:
                     self.logger.error(f"Measuring LFC/Etalon line diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # L1 count saturated lines for Cal lamps
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_L1_saturated_lines'):
+                try:
+                    data_products = get_data_products_L1(self.kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
+                        name = primary_header.get_name()
+                        if name in ['LFC', 'Etalon', 'ThAr', 'UNe']:
+                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_saturated_lines", style="Bold", color="Blue")}')
+                            self.kpf_object = diagnostics.add_headers_L1_saturated_lines(self.kpf_object, logger=self.logger)
+                            exit_code = 1
+                        else: 
+                            self.logger.info("Observation type {} not in ['LFC', 'Etalon', 'ThAr', 'UNe'].  Saturated lines not counted.".format(name))
+                    else: 
+                        self.logger.info("Green/Red not in L1 file. Saturated lines not counted.")
+
+                except Exception as e:
+                    self.logger.error(f"Counting saturated lines failed: {e}\n{traceback.format_exc()}")
 
             # L1 standard deviation of WLS compared to WLS_ref
             if (self.diagnostics_name == 'all') or \

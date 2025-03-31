@@ -705,7 +705,7 @@ class QuicklookAlg:
                     my_2D = Analyze2D(kpf2d, logger=self.logger)
                     for chip in chips:  
                         filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
-                                   '_2D_image_3x3zoom_' + chip + '_zoomable.png'
+                                   '_2D_image_zoom3x3_' + chip + '_zoomable.png'
                         self.logger.info('Generating QLP image ' + filename)
                         my_2D.plot_2D_image_zoom_3x3(chip=chip, fig_path=filename, show_plot=False)
 

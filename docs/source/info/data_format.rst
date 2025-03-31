@@ -225,8 +225,8 @@ The 2D file inherits all L0 keywords.  Below are additional keywords.
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
-DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used for processing
-DRPHASH   'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used for processing
+DRPTAG2D  v2.5.2                                      Git version number of KPF-Pipeline used to make 2D
+DRPHSH2D  'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make 2D
 NOTJUNK   1                                           QC: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
 DATAPRL0  1                                           QC: 1 = L0 data products present with non-zero array sizes
 KWRDPRL0  1                                           QC: 1 = L0 expected keywords present 
@@ -347,6 +347,8 @@ The L1 file inherits all L0 and 2D keywords.  Below are additional important key
 ========  =======================================================================  =========
 Keyword   Value (example)                                                          Comment
 ========  =======================================================================  =========
+DRPTAGL1  v2.5.2                                                                   Git version number of KPF-Pipeline used to make L1
+DRPHSHL1  'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'                               Git commit hash version of KPF-Pipeline used to make L1
 WLSFILE   /masters/20231230/kpf_20231230_master_WLS_autocal-lfc-all-eve_L1.fits    First wavelength interpolation reference for this L1 file
 WLSFILE2  /masters/20231231/kpf_20231231_master_WLS_autocal-lfc-all-morn_L1.fits   Second wavelength interpolation reference for this L1 file
 MONOTWLS  1                                                                        QC: 1 = L1 wavelength solution is monotonic
@@ -861,6 +863,12 @@ STDWRC28  0.01379038876707553                                                   
 STDWRC29  0.00914032555395159                                                      stddev(WLS-ref) [pix], Red CAL order 29         
 STDWRC30  0.01440898205622853                                                      stddev(WLS-ref) [pix], Red CAL order 30         
 STDWRC31  0.00899757354138056                                                      stddev(WLS-ref) [pix], Red CAL order 31         
+NSATGS2   23                                                                       Number of saturated lines in Green SCI2
+NSATGC    23                                                                       Number of saturated lines in Green CAL
+NSATGK    23                                                                       Number of saturated lines in Green SKY
+NSATRS2   23                                                                       Number of saturated lines in Red SCI2
+NSATRC    23                                                                       Number of saturated lines in Red CAL
+NSATRK    23                                                                       Number of saturated lines in Red SKY
 ========  =======================================================================  =========
 
 The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
@@ -883,6 +891,8 @@ The L2 file inherits all L0, 2D, and L1 keywords.  Below are additional importan
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
+DRPTAGL2  v2.5.2                                      Git version number of KPF-Pipeline used to make L2
+DRPHSHL2  'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make L2
 CCFRV     19.4247572623                               Average of CCD1RV and CCD2RV using weights from RV table
 CCFERV    0.001175044                                 Error on CCFRV
 CCFRVC    19.4247572623                               Average of CCD1RVC and CCD2RVC using weights from RV table

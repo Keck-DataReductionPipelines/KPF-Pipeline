@@ -4,9 +4,9 @@ panel_arr:
   - panelvars:
       - col: BJDSTD
         plot_type: scatter
-        unit: m/s
+        unit: sec
         plot_attr:
-          label: stddev(BJD) [sec]
+          label: stddev(BJD)
           marker: .
           linewidth: 0.5
     paneldict:
@@ -19,9 +19,9 @@ panel_arr:
   - panelvars:
       - col: BJDRNG
         plot_type: scatter
-        unit: m/s
+        unit: sec
         plot_attr:
-          label: range(BJD) [sec]
+          label: range(BJD)
           marker: .
           linewidth: 0.5
     paneldict:
@@ -34,9 +34,9 @@ panel_arr:
   - panelvars:
       - col: BCVSTD
         plot_type: scatter
-        unit: sec
+        unit: m/s
         plot_attr:
-          label: stddev(BCV) [m/s]
+          label: stddev(BCV)
           marker: .
           linewidth: 0.5
     paneldict:
@@ -51,11 +51,11 @@ panel_arr:
         plot_type: scatter
         unit: m/s
         plot_attr:
-          label: range(BCV) [sec]
+          label: range(BCV)
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: range(BCV) [sec]
+      ylabel: range(BCV) [m/s]
       title: Barycentric Variations
       not_junk: true
       on_sky: true
