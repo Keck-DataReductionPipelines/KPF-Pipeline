@@ -1,4 +1,6 @@
 keyword|datatype|description|unit
+DRPTAGL1|string|Git version number of KPF-Pipeline used to make L1|None
+DRPHSHL1|string|Git commit hash version of KPF-Pipeline used to make L1|None
 SNRSC452|float|SNR of L1 SCI1+SCI2+SCI3 (95th %ile) near 452 nm|None
 SNRSK452|float|SNR of L1 SKY (95th %ile) near 452 nm|None
 SNRCL452|float|SNR of L1 CAL (95th %ile) near 452 nm|None
@@ -513,3 +515,9 @@ WILDWSKY|bool|QC: SKY WLS not wild (stdev < 5 pix)|None
 WILDWCAL|bool|QC: CAL WLS not wild (stdev < 5 pix)|None
 AGEWLS|float|WLSFILE approx age (days)|None
 AGEWLS2|float|WLSFILE2 approx age (days)|None
+NSATGS2|float|Number of saturated lines in Green SCI2|None
+NSATGC|float|Number of saturated lines in Green CAL|None
+NSATGK|float|Number of saturated lines in Green SKY|None
+NSATRS2|float|Number of saturated lines in Red SCI2|None
+NSATRC|float|Number of saturated lines in Red CAL|None
+NSATRK|float|Number of saturated lines in Red SKY|None

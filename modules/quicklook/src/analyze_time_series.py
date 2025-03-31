@@ -91,7 +91,6 @@ class AnalyzeTimeSeries:
           rejection.  This should be in Delta values.
         * For time series state plots, include the number of points in each state 
           in the legend.
-        * Make separate keywords for DRPTAG for 2D, L1, L2
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -188,7 +187,7 @@ class AnalyzeTimeSeries:
         create_meta_table_query = """
             CREATE TABLE IF NOT EXISTS kpfdb_metadata (
                 keyword     TEXT NOT NULL PRIMARY KEY,
-                datatype   TEXT,
+                datatype    TEXT,
                 description TEXT,
                 units       TEXT,
                 source      TEXT
@@ -661,6 +660,7 @@ class AnalyzeTimeSeries:
     def extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
         Extract keywords from keyword_types.keys from an extension in a L0/2D/L1/L2 file.
+        Additionally, if DRPTAG is valid, populate DRPTAG2D, DRPTAGL1, and DRPTAGL2 with its value.
         """
         # Initialize the result dictionary with None for all keywords
         header_data = {key: None for key in keyword_types.keys()}
@@ -674,8 +674,23 @@ class AnalyzeTimeSeries:
             with fits.open(file_path, memmap=True) as hdul:
                 header = hdul[extension].header
     
-                # Use dictionary comprehension to populate header_data
+                # Populate header_data from header
                 header_data = {key: header.get(key, None) for key in keyword_types.keys()}
+    
+                # If DRPTAG is valid, propagate its value to appropriate data level
+                drptag_value = header.get('DRPTAG', None)
+                if drptag_value is not None:
+                    for target_key in ['DRPTAG2D', 'DRPTAGL1', 'DRPTAGL2']:
+                        if target_key in header_data:
+                            header_data[target_key] = drptag_value
+    
+                # If DRPHASH is valid, propagate its value to appropriate data level
+                drphash_value = header.get('DRPHASH', None)
+                if drphash_value is not None:
+                    for target_key in ['DRPHSH2D', 'DRPHSHL1', 'DRPHSHL2']:
+                        if target_key in header_data:
+                            header_data[target_key] = drphash_value
+    
         except Exception as e:
             # Log any issues with the file
             self.logger.info(f"Bad file: {file_path}. Error: {e}")

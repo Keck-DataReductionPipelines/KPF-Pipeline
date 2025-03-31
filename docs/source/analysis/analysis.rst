@@ -10,6 +10,5 @@ Using Analysis Methods
     analyzel1.rst
     dictonary_format.rst
     analyzewls.rst
-    analyzetimeseries.rst
 
 The links above provide explanations and tutorials on using the Analysis classes to analyze KPF data, make plots, and draw inferences.

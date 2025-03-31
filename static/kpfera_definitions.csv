@@ -4,4 +4,5 @@ KPFERA, UT_start_date,       UT_end_date,         comment
 1.5,    2024-02-03 00:00:01, 2024-02-11 00:00:00, Service Mission #1 (engineering)
 2.0,    2024-02-23 12:00:00, 2024-11-01 00:00:00, Second science era: After Service Mission #1
 2.5,    2024-11-01 12:00:00, 2025-01-01 00:00:00, Service Mission #2 (engineering) which extended into on-sky science observations because of quasi-fixed pattern noise
-2.6,    2025-01-01 12:00:00, 3000-01-01 00:00:00, After a full Green-side warmup (CCR pressure issue)
+2.6,    2025-01-01 12:00:00, 2025-03-28 23:00:00, After a full Green-side warmup (CCR pressure issue)
+2.7,    2025-03-28 23:00:01, 3000-01-01 00:00:00, Service Mission #3 (engineering) (Red CCR installed; Green CCR misbehaving; still quasi-fixed pattern noise)

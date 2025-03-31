@@ -1621,7 +1621,11 @@ class QCL0(QC):
         
         keywords that are checked for existence: 
             TARGNAME, TARGRA, TARGDEC, TARGEPOC, TARGEQUI, TARGPLAX, 
-            TARGPMDC, TARGPMRA, TARGRADV, TARGWAVE, TARGFRAM, TARGTEFF
+            TARGPMDC, TARGPMRA, TARGRADV, TARGFRAM, TARGTEFF
+        
+        keywords that are verified to be numbers: 
+            TARGEPOC, TARGEQUI, TARGPLAX, 
+            TARGPMDC, TARGPMRA, TARGRADV, TARGTEFF
 
         Conditions checked:
             radial velocity: TARGRADV < 100 km/s
@@ -1634,17 +1638,39 @@ class QCL0(QC):
             QC_pass - a boolean signifying that the QC passed for failed
         """
 
+        def is_number(maybe_num):
+            '''
+            Return True if the input is a number (int or float) and False otherwise.
+            '''
+            if maybe_num == None:
+                return False
+            if isinstance(maybe_num, bool):
+                return False
+            if isinstance(maybe_num, (int, float)):
+                if not np.isnan(maybe_num):
+                    return True
+            return False
+
         QC_pass = True
         try:
             L0 = self.kpf_object
             header = L0.header['PRIMARY']
 
             # Check that certain TARGxxxx keywords exist
-            TARG_keywords = ['TARGNAME', 'TARGRA', 'TARGDEC', 'TARGEPOC', 'TARGEQUI', 'TARGPLAX', 'TARGPMDC', 'TARGPMRA', 'TARGRADV', 'TARGWAVE', 'TARGFRAM', 'TARGTEFF']            
+            TARG_keywords = ['TARGNAME', 'TARGRA', 'TARGDEC', 'TARGEPOC', 'TARGEQUI', 'TARGPLAX', 'TARGPMDC', 'TARGPMRA', 'TARGRADV', 'TARGFRAM', 'TARGTEFF']            
             for kwd in TARG_keywords:
                 if not kwd in header:
                     QC_pass = False
                     self.logger.info(f'Missing L0 keyword: {kwd}')
+                    return QC_pass
+            
+            # Check that certain TARGxxxx keywords are numbers
+            TARG_keywords = ['TARGEPOC', 'TARGEQUI', 'TARGPLAX', 'TARGPMDC', 'TARGPMRA', 'TARGRADV', 'TARGTEFF']            
+            for kwd in TARG_keywords:
+                if not is_number(header[kwd]):
+                    QC_pass = False
+                    self.logger.info(f'Keyword {kwd} = {header[kwd]} is not a number')
+                    return QC_pass
             
             # Check that TARGRADV < 350 km/s (see Fig. 8 of Chubak et al. 2012 - arXiv:1207.6212)
             if 'TARGRADV' in header:

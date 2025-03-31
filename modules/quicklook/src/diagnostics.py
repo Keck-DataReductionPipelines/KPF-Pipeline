@@ -933,6 +933,60 @@ def add_headers_L1_cal_line_quality(L1, intensity_thresh=40**2, min_lines=100,
     return L1
 
 
+def add_headers_L1_saturated_lines(L1, logger=None):
+    """
+    Counts the number of saturated lines and adds keywords to the L1 object headers
+    
+    Keywords:
+        NSATGS2 - Number of saturated lines in Green SCI2
+        NSATGC  - Number of saturated lines in Green CAL
+        NSATGK  - Number of saturated lines in Green SKY
+        NSATRS2 - Number of saturated lines in Red SCI2
+        NSATRC  - Number of saturated lines in Red CAL
+        NSATRK  - Number of saturated lines in Red SKY
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L1(L1)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
+        print('Not a valid L1.')
+        return L1
+        
+    # Use the AnalyzeL1 class to compute ratios between spectral orders
+    myL1 = AnalyzeL1(L1, logger=logger)
+    for chip in chips:
+        if chip == 'green':
+            try: 
+                (SCI1_lines, SCI2_lines, SCI3_lines, CAL_lines, SKY_lines) =  myL1.count_saturated_lines(chip='green')
+                L1.header['PRIMARY']['NSATGS2'] = (SCI2_lines, 'Number of saturated lines in Green SCI2')
+                L1.header['PRIMARY']['NSATGC']  = (CAL_lines,  'Number of saturated lines in Green CAL')
+                L1.header['PRIMARY']['NSATGK']  = (SKY_lines,  'Number of saturated lines in Green SKY')
+            except Exception as e:
+                logger.error(f"Problem counting satured lines for green chip: {e}\n{traceback.format_exc()}")
+        if chip == 'red':
+            try:
+                (SCI1_lines, SCI2_lines, SCI3_lines, CAL_lines, SKY_lines) =  myL1.count_saturated_lines(chip='red')
+                L1.header['PRIMARY']['NSATRS2'] = (SCI2_lines, 'Number of saturated lines in Red SCI2')
+                L1.header['PRIMARY']['NSATRC']  = (CAL_lines,  'Number of saturated lines in Red CAL')
+                L1.header['PRIMARY']['NSATRK']  = (SKY_lines,  'Number of saturated lines in Red SKY')
+            except Exception as e:
+                logger.error(f"Problem counting satured lines for red chip: {e}\n{traceback.format_exc()}")
+    return L1
+
+
 def add_headers_L1_std_wls(L1, logger=None, debug=False):
     """
     Computes the standard deviation of the L1 wavelength solution compared to a 
