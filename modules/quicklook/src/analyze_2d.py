@@ -694,45 +694,41 @@ class Analyze2D:
         offsets = [-sep, 0, sep]
         
         # Generate the array of 2D images
-        fig, axs = plt.subplots(3, 3, figsize=(10,8.5), tight_layout=True)
+        fig, axs = plt.subplots(3, 3, figsize=(10, 8)) 
+        
         for i in range(3):
             for j in range(3):
-                # Calculate the top left corner of each sub-image
                 start_x = center_x - size // 2 + offsets[i]
                 start_y = center_y - size // 2 + offsets[j]
-
-                # Slice out and display the sub-image
                 sub_img = image[start_x:start_x+size, start_y:start_y+size]
-                im = axs[2-i, j].imshow(sub_img, origin='lower', 
-                                 extent=[start_y, start_y+size, start_x, start_x+size], # these indices appear backwards, but work
-                                 vmin = np.nanpercentile(sub_img,0.1), 
-                                 vmax = np.nanpercentile(sub_img,99.9),
-                                 interpolation = 'None',
-                                 cmap='viridis')
+                im = axs[2-i, j].imshow(sub_img, origin='lower',
+                                        extent=[start_y, start_y+size, start_x, start_x+size],
+                                        vmin=np.nanpercentile(sub_img, 0.1),
+                                        vmax=np.nanpercentile(sub_img, 99.9),
+                                        interpolation='none', cmap='viridis')
                 axs[2-i, j].grid(False)
-                axs[2-i, j].tick_params(top=False, right=False, labeltop=False, labelright=False)
-                if i != 2:
-                    axs[i, j].tick_params(labelbottom=False) # turn off x tick labels
+                axs[2-i, j].tick_params(top=False, right=False, labeltop=False, labelright=False, labelsize=9)
+                if i != 0:
+                    axs[2-i, j].tick_params(labelbottom=False)
                 if j != 0:
-                    axs[i, j].tick_params(labelleft=False) # turn off y tick labels
-                fig.colorbar(im, ax=axs[2-i, j], fraction=0.046, pad=0.04) # Adjust the fraction and pad for proper placement
-        plt.grid(False)
-        plt.tight_layout()
-        plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
-        ax = fig.add_subplot(111, frame_on=False)
-        ax.grid(False)
-        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        ax.set_title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
-        ax.set_xlabel('Column (pixel number)', fontsize=18, labelpad=10)
-        ax.set_ylabel('Row (pixel number)', fontsize=18, labelpad=10)
+                    axs[2-i, j].tick_params(labelleft=False)
+        
+                # Add colorbar for each subplot
+                cbar = fig.colorbar(im, ax=axs[2-i, j], fraction=0.046, pad=0.04)
+                cbar.ax.tick_params(labelsize=7)
 
-        # Create a timestamp and annotate in the lower right corner
+        # Adjust spacing between subplots
+        plt.subplots_adjust(wspace=0.15, hspace=0.15)
+        
+        # Use suptitle and fig.text for cleaner labels
+        fig.suptitle(f'2D - {chip_title} CCD: {self.ObsID} - {self.name}', fontsize=14)
+        fig.text(0.5, 0.04, 'Column (pixel number)', ha='center', fontsize=16)
+        fig.text(0.06, 0.5, 'Row (pixel number)', va='center', rotation='vertical', fontsize=16)
+        plt.subplots_adjust(top=0.945, bottom=0.10)  # or tweak to 0.91, 0.93, etc.
+        
+        # Timestamp annotation
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(0, -40), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
+        fig.text(0.95, 0.01, f"KPF QLP: {current_time}", fontsize=8, color="darkgray", ha="right", va="bottom")
 
         # Display the plot
         if fig_path != None:
