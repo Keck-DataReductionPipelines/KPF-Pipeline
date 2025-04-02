@@ -343,10 +343,7 @@ class Analyze2D:
             peak_lag = lags[peak_idx]
             #print(f"peak_lag: {peak_lag:.1f}, offset: {vertex:.3f}, delta: {vertex - peak_lag:.3f}")
             return vertex, peak_lag
-    
-        plot_correlations = fig_path or show_plot
-        
-        
+          
         if chip == 'green' or chip == 'red':
             CHIP = chip.upper()
             EXT = CHIP + '_CCD'
@@ -415,17 +412,22 @@ class Analyze2D:
         elif chip == 'red':
             self.red_offset = filtered_median
             self.red_offset_sigma = sigma
-
     
-        if plot_correlations:
+        if fig_path or show_plot:
             plt.figure(figsize=(15, 4))
-    
+            plottitle = f'Cross Dispersion Offset - {self.ObsID}'
+            if chip == 'green':
+                plottitle = plottitle + f' - Green: {self.green_offset:.4f} ± {self.green_offset_sigma:.4f}'
+            if chip == 'red':
+                plottitle = plottitle + f' - Red: {self.red_offset:.4f} ± {self.red_offset_sigma:.4f}'
+            plt.suptitle(plottitle, fontsize=16, y=0.98)    
+            
             # Plot all cross-correlations
             plt.subplot(1, 3, 1)
             for corr, lags in zip(all_corrs, all_lags):
                 plt.plot(lags, corr, alpha=0.5)
-            plt.axvline(filtered_median, color='r', linestyle='--', label=f'Median Offset: {filtered_median:.4f}')
-            plt.title('All Cross-correlations')
+            plt.axvline(filtered_median, color='r', linestyle='--', label=f'Offset: {filtered_median:.4f} pix')
+            plt.title('Cross-correlations of All Slices')
             plt.xlabel('Lag')
             plt.xlim(-120, 120)
             plt.ylabel('Correlation')
@@ -459,9 +461,18 @@ class Analyze2D:
     
             plt.tight_layout()
             
+            # Annotate the reference file
+            if type(ref_image) == type('abc'):
+                ref_label = f'Reference: {ref_image}'
+                plt.subplot(1, 3, 1)
+                plt.annotate(ref_label, xy=(0, 0), xycoords='axes fraction', 
+                            fontsize=8, color="darkgray", ha="left", va="bottom",
+                            xytext=(0, -50), textcoords='offset points')
+            
             # Create a timestamp and annotate in the lower right corner
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             timestamp_label = f"KPF QLP: {current_time}"
+            plt.subplot(1, 3, 3)
             plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                         fontsize=8, color="darkgray", ha="right", va="bottom",
                         xytext=(0, -50), textcoords='offset points')
