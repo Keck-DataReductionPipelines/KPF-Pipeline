@@ -16,6 +16,8 @@ from astropy.time import Time
 from astropy.table import Table
 from datetime import datetime, timedelta
 from scipy.optimize import curve_fit
+from scipy.signal import correlate
+from scipy.stats import median_abs_deviation
 from kpfpipe.models.level0 import KPF0
 #import emcee
 #import corner
@@ -279,6 +281,197 @@ class Analyze2D:
         #bounds = ([-np.inf,np.inf],[-np.inf,np.inf],[],[])
         params_2g, _ = curve_fit(two_gaussian_cdfs, intensities, cdf, p0=initial_params_2g)#, bounds=bounds)
         print(params_2g)
+
+
+    def measure_xdisp_offset(self, chip=None, ref_image=None, ref_extension=None, 
+                             num_slices=31, slice_width=30, fit_half_width=8, 
+                             fig_path=None, show_plot=False):
+        """
+        This method compares the self.D2 image (green or red) to a reference 
+        2D image and determines the amount of vertical shift between then using
+        cross-correlation functions of vertical slices of each image.
+        
+        Args:
+            chip (string) - 'green' or 'red'
+            ref_image (2D object, np.array, or filename) - another 2D object, 
+                numpy array with the same dimensions as self.D2, 
+                or the filename of a 2D object
+            num_slices - how many vertical columns to sample across the image
+            slice_width - how wide each vertical slice is, in pixels
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Attributes (set by this method):
+            green_offset - offset in pixels between green 2D image an a reference
+            green_offset_sigma - uncertainty in green_offset
+            red_offset - offset in pixels between green 2D image an a reference
+            red_offset_sigma - uncertainty in red_offset
+
+        Returns:
+            (optionally:) PNG plot in fig_path or shows the plot it in the 
+            current environment (e.g., in a Jupyter Notebook).
+        """
+
+        def parabolic_peak(x, a, b, c):
+            '''Parabola function'''
+            return a * x**2 + b * x + c
+        
+        def subpixel_peak_position_fixed(corr, lags, fit_half_width=8):
+            """
+            Find peak of CCF.
+            """
+            peak_idx = np.argmax(corr)
+            if peak_idx <= fit_half_width or peak_idx >= len(corr) - fit_half_width:
+                return lags[peak_idx], lags[peak_idx]  # Edge case
+        
+            x_vals = lags[peak_idx - fit_half_width:peak_idx + fit_half_width + 1]
+            y_vals = corr[peak_idx - fit_half_width:peak_idx + fit_half_width + 1]
+        
+            x_init = lags[peak_idx - 1:peak_idx + 2]
+            y_init = corr[peak_idx - 1:peak_idx + 2]
+            a, b, c = np.polyfit(x_init, y_init, 2)
+            p0 = [a, b, c]
+            try:
+                popt, _ = curve_fit(parabolic_peak, x_vals, y_vals, p0=p0)
+                a, b, _ = popt
+                if np.abs(a) < 1e-6:
+                    raise ValueError("Flat curvature")
+                vertex = -b / (2 * a)
+            except Exception:
+                vertex = lags[peak_idx]
+        
+            peak_lag = lags[peak_idx]
+            #print(f"peak_lag: {peak_lag:.1f}, offset: {vertex:.3f}, delta: {vertex - peak_lag:.3f}")
+            return vertex, peak_lag
+    
+        plot_correlations = fig_path or show_plot
+        
+        
+        if chip == 'green' or chip == 'red':
+            CHIP = chip.upper()
+            EXT = CHIP + '_CCD'
+            img1 = self.D2[EXT]
+            if ref_extension != None:
+                EXT = CHIP + ref_extension
+            if type(ref_image) == type(self.D2):
+                img2 = ref_image[EXT]
+            elif type(ref_image) == type(img1):
+                img2 = ref_image
+            elif type(ref_image) == type('abc'):
+                D2_ref = KPF0.from_fits(ref_image)
+                img2 = D2_ref[EXT]
+        else:
+            self.error('measure_xdisp_offset: chip not specified.  Returning.')
+                       
+        assert img1.shape == img2.shape, "Images must be the same shape"
+        
+        h, w = img1.shape
+        xs = (w // 2 - (num_slices // 2) * slice_width) + np.arange(num_slices) * slice_width
+    
+        all_corrs = []
+        all_lags = []
+        offsets = []
+        peak_lags = []
+        lags = np.arange(-h + 1, h)
+    
+        for x in xs:
+            slice1 = img1[:, x:x+slice_width].mean(axis=1)
+            slice2 = img2[:, x:x+slice_width].mean(axis=1)
+            slice1 -= np.mean(slice1)
+            slice2 -= np.mean(slice2)
+            corr = correlate(slice1, slice2, mode='full')
+            # lags already defined globally
+            all_lags.append(lags)  # ensure lags match corr
+            all_corrs.append(corr)
+    
+            offset, peak_lag = subpixel_peak_position_fixed(corr, lags, fit_half_width=fit_half_width)
+            offsets.append(offset)
+            peak_lags.append(peak_lag)
+    
+        # Filter out large outliers
+        offsets = np.array(offsets)
+        if np.all(offsets == offsets[0]):
+            filtered_offsets = offsets
+        else:
+            median = np.median(offsets)
+            mad = median_abs_deviation(offsets)
+            threshold = 5 * mad
+            filtered_offsets = offsets[np.abs(offsets - median) < threshold]
+        filtered_median = np.median(filtered_offsets)
+
+    
+        # If no offsets passed the outlier filter, use all offsets
+        if len(filtered_offsets) == 0:
+            filtered_offsets = offsets
+    
+        # Compute 1-sigma uncertainty from percentiles
+        lower = np.percentile(filtered_offsets, 16)
+        upper = np.percentile(filtered_offsets, 84)
+        sigma = (upper - lower) / 2
+     
+        if chip == 'green':
+            self.green_offset = filtered_median
+            self.green_offset_sigma = sigma
+        elif chip == 'red':
+            self.red_offset = filtered_median
+            self.red_offset_sigma = sigma
+
+    
+        if plot_correlations:
+            plt.figure(figsize=(15, 4))
+    
+            # Plot all cross-correlations
+            plt.subplot(1, 3, 1)
+            for corr, lags in zip(all_corrs, all_lags):
+                plt.plot(lags, corr, alpha=0.5)
+            plt.axvline(filtered_median, color='r', linestyle='--', label=f'Median Offset: {filtered_median:.4f}')
+            plt.title('All Cross-correlations')
+            plt.xlabel('Lag')
+            plt.xlim(-120, 120)
+            plt.ylabel('Correlation')
+            plt.legend()
+            plt.grid(True)
+    
+            # Zoom-in around actual subpixel peak offsets
+            plt.subplot(1, 3, 2)
+            zoom_range = 5
+            for corr, lags, offset in zip(all_corrs, all_lags, offsets):
+                center_idx = np.argmin(np.abs(lags - offset))
+                if center_idx - zoom_range >= 0 and center_idx + zoom_range + 1 <= len(corr):
+                    zoom_lags = lags[center_idx - zoom_range:center_idx + zoom_range + 1]
+                    zoom_corr = corr[center_idx - zoom_range:center_idx + zoom_range + 1]
+                    plt.plot(zoom_lags, zoom_corr, marker='o', alpha=0.6)
+            plt.axvline(filtered_median, color='r', linestyle='--', label='Median Offset')
+            plt.title('Zoom-In Around Peaks')
+            plt.xlabel('Lag')
+            plt.legend()
+            plt.grid(True)
+    
+            # Histogram of offsets
+            plt.subplot(1, 3, 3)
+            plt.hist(filtered_offsets, bins=20, edgecolor='k', alpha=0.7)
+            plt.axvline(filtered_median, color='r', linestyle='--', label='Median Offset')
+            plt.title('Offset Histogram')
+            plt.xlabel('Offset (pixels)')
+            plt.ylabel('Frequency')
+            plt.legend()
+            plt.grid(True)
+    
+            plt.tight_layout()
+            
+            # Create a timestamp and annotate in the lower right corner
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            timestamp_label = f"KPF QLP: {current_time}"
+            plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                        fontsize=8, color="darkgray", ha="right", va="bottom",
+                        xytext=(0, -50), textcoords='offset points')
+    
+            # Display the plot
+            if fig_path != None:
+                plt.savefig(fig_path, dpi=300, facecolor='w')
+            if show_plot == True:
+                plt.show()
+            plt.close('all')
 
 
     def plot_2D_image(self, chip=None, variance=False, data_over_sqrt_variance=False,
