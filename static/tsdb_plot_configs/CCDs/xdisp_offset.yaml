@@ -6,11 +6,11 @@ panel_arr:
         col_err: XDSPSYG1
         plot_type: errorbar
         plot_attr:
-          label: Green Cross-dispersion\noffset [pix]\nmaster ref
+          label: "Green Cross-dispersion\noffset [pix] - master ref"
           fmt: o 
           linewidth: 0.5
     paneldict:
-      ylabel: "Green Cross-dispersion\noffset [pix]\nmaster ref"
+      ylabel: "Green Cross-dispersion\noffset [pix] - master ref"
       only_object: 
         - autocal-flat-all
       not_junk: true
@@ -20,11 +20,11 @@ panel_arr:
         col_err: XDSPSYR1
         plot_type: errorbar
         plot_attr:
-          label: Red Cross-dispersion\noffset [pix]\nmaster ref
+          label: "Red Cross-dispersion\noffset [pix] - master ref"
           fmt: o 
           linewidth: 0.5
     paneldict:
-      ylabel: "Red Cross-dispersion\noffset [pix]\nmaster ref"
+      ylabel: "Red Cross-dispersion\noffset [pix] - master ref"
       only_object: 
         - autocal-flat-all
       not_junk: true
@@ -34,11 +34,11 @@ panel_arr:
         col_err: XDSPSYG2
         plot_type: errorbar
         plot_attr:
-          label: Green Cross-dispersion\noffset [pix]\nref in era
+          label: "Green Cross-dispersion\noffset [pix] - ref in era"
           fmt: o 
           linewidth: 0.5
     paneldict:
-      ylabel: "Green Cross-dispersion\noffset [pix]\nref in era"
+      ylabel: "Green Cross-dispersion\noffset [pix] - ref in era"
       only_object: 
         - autocal-flat-all
       not_junk: true
@@ -48,11 +48,11 @@ panel_arr:
         col_err: XDSPSYR2
         plot_type: errorbar
         plot_attr:
-          label: Red Cross-dispersion\noffset [pix]\nref in era
+          label: "Red Cross-dispersion\noffset [pix] - ref in era"
           fmt: o 
           linewidth: 0.5
     paneldict:
-      ylabel: "Red Cross-dispersion\noffset [pix]\nref in era"
+      ylabel: "Red Cross-dispersion\noffset [pix] - ref in era"
       only_object: 
         - autocal-flat-all
       title: CCD Cross Dispersion Offsets
