@@ -11,6 +11,7 @@ from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
 from modules.Utils.kpf_parse import HeaderParse, get_datecode_from_filename
+from modules.Utils.kpf_parse import get_datetime_obsid
 from modules.Utils.utils import DummyLogger
 from astropy.time import Time
 from astropy.table import Table
@@ -349,7 +350,7 @@ class Analyze2D:
             EXT = CHIP + '_CCD'
             img1 = self.D2[EXT]
             if ref_extension != None:
-                EXT = CHIP + ref_extension
+                EXT = CHIP + '_' + ref_extension
             if type(ref_image) == type(self.D2):
                 img2 = ref_image[EXT]
             elif type(ref_image) == type(img1):
