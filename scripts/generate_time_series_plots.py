@@ -240,9 +240,8 @@ if __name__ == "__main__":
                         help='path to database file; default = /data/time_series/kpf_ts.db')
     args = parser.parse_args()   
 
-# For now, only one thread is active because of a non-tread-safe issue with fonts in the version of matplotlib that we use
     tasks = [
-        {"thread_name": "Today Thread",       "interval":    3600, "time_range_type": "day",    "date_range": 'this_day'},
+        {"thread_name": "Today Thread",       "interval":     600, "time_range_type": "day",    "date_range": 'this_day'},
         {"thread_name": "This Month Thread",  "interval":  3*3600, "time_range_type": "month",  "date_range": 'this_month'},
         {"thread_name": "This Year Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": 'this_year'},
         {"thread_name": "All Days Thread",    "interval": 48*3600, "time_range_type": "day",    "date_range": 'all_days'},
