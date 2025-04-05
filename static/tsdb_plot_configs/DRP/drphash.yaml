@@ -33,7 +33,7 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: DRP Commit Hash - L2
-      title: KPF-Pipeline Commit Hash String
+      title: KPF-Pipeline Commit Hash
       not_junk: true
       nolegend: true
       legend_frac_size: 0.0

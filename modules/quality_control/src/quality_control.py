@@ -215,7 +215,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         data_products_required = qc_obj.qcdefinitions.required_data_products[qc_name]
                         all_required_data_products_present = all(element in data_products_expected for element in data_products_required)
                     if all_required_data_products_present:
-                        text_running_qc = styled_text('Running QC', style="Bold", color="Magenta")
+                        text_running_qc = styled_text('QC', style="Bold", color="Magenta")
                         text_qc_name = styled_text(qc_name, style="Bold", color="Blue")
                         text_qc_keyword = styled_text(qc_obj.qcdefinitions.fits_keywords[qc_name], style="Bold", color="Blue")
                         logger.info(f'{text_running_qc}: {text_qc_name} ({text_qc_keyword}; {qc_obj.qcdefinitions.descriptions[qc_name]})')
@@ -558,7 +558,7 @@ class QCDefinitions:
         name17 = 'add_kpfera'
         self.names.append(name17)
         self.kpf_data_levels[name17] = ['L0', '2D', 'L1', 'L2']
-        self.descriptions[name17] = 'Not a QC test; used to add the KPFERA keyword to header.'
+        self.descriptions[name17] = 'Not a QC test; KPFERA keyword added to header.'
         self.data_types[name17] = 'float'
         self.spectrum_types[name17] = ['all', ]
         self.master_types[name17] = []

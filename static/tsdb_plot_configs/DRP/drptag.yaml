@@ -43,6 +43,6 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: KPF ERA
-      title: KPF ERA
+      title: KPF-Pipeline Version Number
       not_junk: true
       legend_frac_size: 0.15

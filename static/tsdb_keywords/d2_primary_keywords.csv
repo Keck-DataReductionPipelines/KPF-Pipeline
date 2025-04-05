@@ -1,12 +1,32 @@
 keyword|datatype|description|unit
+KPFERA|string|The era during which the observation was made, e.g. '2.0'|None
+NOTJUNK|bool|Not in the list of junk files check|None
+DRPTAG2D|string|Git version number of KPF-Pipeline used to make 2D|None
+DRPHSH2D|string|Git commit hash version of KPF-Pipeline used to make 2D|None
+DATAPRL0|bool|QC: L0 data products present with non-zero array sizes|None
+DATAPR2D|bool|QC: 2D red and green data present|None
+CAHKPR2D|bool|QC: 2D CaHK data present|None
+KWRDPRL0|bool|QC: L0 expected keywords present|None
+TIMCHKL0|bool|QC: Consistent times in L0 file|None
+EMSAT|bool|QC: Exp Meter not saturated|None
+EMNEG|bool|QC: Exp Meter not negative flux|None
+GOODREAD|bool|QC: Texp not consistent with CCD readout error|None
+POS2DSNR|bool|QC: 2D Red/Green data/var^0.5 not significantly negative|None
+LOWBIAS|bool|QC: 2D bias flux not low|None
+LOWDARK|bool|QC: 2D dark flux not low|None
+LFC2DFOK|bool|QC: LFC flux meets threshold of 4000 counts|None
+OLDBIAS|bool|QC: Master bias within 5 days of this obs|None
+OLDDARK|bool|QC: Master dark within 5 days of this obs|None
+OLDFLAT|bool|QC: Master flat within 5 days of this obs|None
+NTPGOOD|bool|QC: NTP time within 100 ms|None
+GUIDGOOD|bool|QC: Guider RMS and bias within 50 mas RMS|None
+TARGPLAU|bool|QC: TARG kwds present with plausible values|None
 BIASFILE|string|Master bias file used (except for bias exposures)|None
 DARKFILE|string|Master dark file used (except for dark exposures)|None
 FLATFILE|string|Master flat file used (except for flat exposures)|None
 BIASDIR|string|Directory for BIASDIR|None
 DARKDIR|string|Directory for DARKDIR|None
 FLATDIR|string|Directory for FLATDIR|None
-DRPTAG2D|string|Git version number of KPF-Pipeline used to make 2D|None
-DRPHSH2D|string|Git commit hash version of KPF-Pipeline used to make 2D|None
 RNRED1|float|Read noise for RED_AMP1 (first amp region on Red)|e-
 RNRED2|float|Read noise for RED_AMP2 (second amp region on Red)|e-
 RNGREEN1|float|Read noise for GREEN_AMP1 (first amp region on Green)|e-
@@ -43,26 +63,14 @@ GDRSEEJZ|float|Seeing in J+Z-band from Moffat func fit|arcsec
 GDRSEEV|float|Scaled seeing in V-band from J+Z-band|arcsec
 MOONSEP|float|Separation between Moon and target star|deg
 SUNALT|float|Altitude of Sun; negative = below horizon|deg
-KPFERA|string|The era during which the observation was made, e.g. '2.0'|None
-NOTJUNK|bool|Not in the list of junk files check|None
-DATAPRL0|bool|QC: L0 data products present with non-zero array sizes|None
-DATAPR2D|bool|QC: 2D red and green data present|None
-CAHKPR2D|bool|QC: 2D CaHK data present|None
-KWRDPRL0|bool|QC: L0 expected keywords present|None
-TIMCHKL0|bool|QC: Consistent times in L0 file|None
-EMSAT|bool|QC: Exp Meter not saturated|None
-EMNEG|bool|QC: Exp Meter not negative flux|None
-GOODREAD|bool|QC: Texp not consistent with CCD readout error|None
-POS2DSNR|bool|QC: 2D Red/Green data/var^0.5 not significantly negative|None
-LOWBIAS|bool|QC: 2D bias flux not low|None
-LOWDARK|bool|QC: 2D dark flux not low|None
-LFC2DFOK|bool|QC: LFC flux meets threshold of 4000 counts|None
-AGEBIAS|float|BIASFILE age (whole days)|None
-AGEDARK|float|DARKFILE age (whole days)|None
-AGEFLAT|float|FLATFILE age (whole days)|None
-OLDBIAS|bool|QC: Master bias within 5 days of this obs|None
-OLDDARK|bool|QC: Master dark within 5 days of this obs|None
-OLDFLAT|bool|QC: Master flat within 5 days of this obs|None
-NTPGOOD|bool|QC: NTP time within 100 ms|None
-GUIDGOOD|bool|QC: Guider RMS and bias within 50 mas RMS|None
-TARGPLAU|bool|QC: TARG kwds present with plausible values|None
+AGEBIAS|float|BIASFILE age|days
+AGEDARK|float|DARKFILE age|days
+AGEFLAT|float|FLATFILE age|days
+XDSPDYG1|float|Green cross-dispersion offset compared to master reference|pixels
+XDSPDYR1|float|Red cross-dispersion offset compared to master reference|pixels
+XDSPDYG2|float|Green cross-dispersion offset compared to reference in era|pixels
+XDSPDYR2|float|Red cross-dispersion offset compared to reference in era|pixels
+XDSPSYG1|float|Uncertainty in XDSPDYG1|pixels
+XDSPSYR1|float|Uncertainty in XDSPDYR1|pixels
+XDSPSYG2|float|Uncertainty in XDSPDYG2|pixels
+XDSPSYR2|float|Uncertainty in XDSPDYR2|pixels

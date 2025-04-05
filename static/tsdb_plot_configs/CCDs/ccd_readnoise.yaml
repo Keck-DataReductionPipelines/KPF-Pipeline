@@ -21,7 +21,7 @@ panel_arr:
     paneldict:
       ylabel: "Green CCD\nRead Noise [e-]"
       not_junk: true
-      legend_frac_size: 0.25
+      legend_frac_size: 0.2
 
   - panelvars:
       - col: RNRED1
@@ -44,4 +44,4 @@ panel_arr:
       ylabel: "Red CCD\nRead Noise [e-]"
       title: CCD Read Noise
       not_junk: true
-      legend_frac_size: 0.25
+      legend_frac_size: 0.2
