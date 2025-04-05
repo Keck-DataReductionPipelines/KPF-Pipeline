@@ -76,6 +76,7 @@ class AnalyzeTimeSeries:
         'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
+        * Write methods to return a list of files that fail a list of QCs (using AND/OR) with optional nojunk flag
         * Add temperature derivatives as columns; they will need to be computed.
         * Add the option of using a Postgres database
         * Make standard correlation plots.
@@ -1250,6 +1251,8 @@ class AnalyzeTimeSeries:
             * Make standard correlation plots.
             * Make standard phased plots (by day)
         """
+        import warnings
+        warnings.filterwarnings("ignore", message=".*tight_layout.*")
 
         def num_fmt(n: float, sf: int = 3) -> str:
             """
@@ -1298,7 +1301,7 @@ class AnalyzeTimeSeries:
                     unique_cols.add(d['col_err'])
                 if 'col_subtract' in d:
                     unique_cols.add(d['col_subtract'])
-        # add this logVERTEX - Visible Experiment for Rapid Transient EXplorationic?
+        # add this?
         #if 'only_object' in thispanel['paneldict']:
         #if 'object_like' in thispanel['paneldict']:
 
@@ -2000,7 +2003,7 @@ class AnalyzeTimeSeries:
     
     
     def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
-                           last_n_days=None, 
+                           last_n_days=None, yaml_paths=None, 
                            fig_dir=None, show_plot=False, 
                            print_plot_names=False, verbose=False):
         """
@@ -2022,10 +2025,12 @@ class AnalyzeTimeSeries:
         """
 
         plots = {}
+
+        if yaml_paths is None:        
+            import static.tsdb_plot_configs
+            yaml_paths = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py
         
-        import static.tsdb_plot_configs
-        all_yaml = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py
-        for this_yaml_path in all_yaml:
+        for this_yaml_path in yaml_paths:
             thisplotconfigdict = self.yaml_to_dict(this_yaml_path)
             plot_name = str.split(str.split(this_yaml_path,'/')[-1], '.')[0]
             subdir = str.split(os.path.dirname(this_yaml_path),'/')[-1]
