@@ -36,12 +36,17 @@ Examples:
         The script automatically reports on thread activity and execution times every 5 minutes.
 """
 
+import glob
+import copy
 import time
 import argparse
 import logging
+import threading
 from threading import Thread
 from datetime import datetime, timedelta
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
+
+thread_local = threading.local()
 
 def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
     """
@@ -57,7 +62,13 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
                            where (start_date, end_date) is a tuple of datetime objects 
                            or the string 'today'
     """
-    print(f"Starting: {thread_name} to be executed every {interval/3600} hours.")
+    import static.tsdb_plot_configs
+    yaml_paths = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py
+    yaml_paths = copy.deepcopy(yaml_paths)  # defensive copy, just in case
+    
+    fig_dir_base = f"/output/{thread_name.replace(' ', '_')}/"
+    
+    print(f"Starting: {thread_name} to be executed every {interval/3600:.2f} hours.")
     initial_date_range = date_range
 
     while True:
@@ -102,18 +113,19 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
         print(f'    end_date = {str(end_date)}')
         print(f'    time_range_type = {str(time_range_type)}')
         print()
-        generate_plots(start_date=start_date, end_date=end_date, time_range_type=time_range_type, db_path=db_path)
+        generate_plots(start_date=start_date, end_date=end_date, time_range_type=time_range_type, db_path=db_path, yaml_paths=yaml_paths)
         end_time = time.time()
         execution_time = end_time - start_time
         sleep_time = interval - execution_time
         if sleep_time < 0:
             sleep_time = 0
-        print(f'Finished pass through {thread_name} in ' + str(int(execution_time)) + ' seconds.\nStarting again in {sleep_time} seconds.')
+        print(f'Finished pass through {thread_name} in {execution_time/3600:.2f} hours.\nStarting again in {sleep_time/3600:.2f} hours.')
         if sleep_time > 0:
             time.sleep(sleep_time)
 
 def generate_plots(start_date=None, end_date=None, 
                    time_range_type='all', clean=True, 
+                   yaml_paths=None, 
                    db_path='/data/time_series/kpf_ts.db',
                    base_dir='/data/QLP/'):
     """
@@ -133,8 +145,14 @@ def generate_plots(start_date=None, end_date=None,
         PNG plots in the output directory.
     """
     
+    # Create a per-thread AnalyzeTimeSeries instance if it doesn't exist
+    if not hasattr(thread_local, "myTS"):
+        thread_local.myTS = AnalyzeTimeSeries(db_path=db_path)
+
+    myTS = thread_local.myTS  # Use thread-local instance
+    
     if start_date == None or end_date == None:
-        myTS = AnalyzeTimeSeries(db_path=db_path)
+        #myTS = AnalyzeTimeSeries(db_path=db_path)
         first_last_dates = myTS.get_first_last_dates()
         if start_date == None:
             start_date = first_last_dates[0].replace(hour=0, minute=0, second=0, microsecond=0)
@@ -169,9 +187,9 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + day.strftime("%Y%m%d") + '/Time_Series/'
                 else:
                     savedir = None
-                myTS = AnalyzeTimeSeries(db_path=db_path)
-                myTS.plot_all_quicklook(day, interval='day', fig_dir=savedir)
-                del myTS # free up memory
+                #myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS.plot_all_quicklook(day, interval='day', fig_dir=savedir, yaml_paths=yaml_paths)
+                #del myTS # free up memory
             except Exception as e:
                 print(e)
 
@@ -183,9 +201,9 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + month.strftime("%Y%m") + 'M/Time_Series/'
                 else:
                     savedir = None
-                myTS = AnalyzeTimeSeries(db_path=db_path)
-                myTS.plot_all_quicklook(month, interval='month', fig_dir=savedir)
-                del myTS # free up memory
+                #myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS.plot_all_quicklook(month, interval='month', fig_dir=savedir, yaml_paths=yaml_paths)
+                #del myTS # free up memory
             except Exception as e:
                 print(e)
 
@@ -197,9 +215,9 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + year.strftime("%Y") + 'Y/Time_Series/'
                 else:
                     savedir = None
-                myTS = AnalyzeTimeSeries(db_path=db_path)
-                myTS.plot_all_quicklook(year, interval='year', fig_dir=savedir)
-                del myTS # free up memory
+                #myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS.plot_all_quicklook(year, interval='year', fig_dir=savedir, yaml_paths=yaml_paths)
+                #del myTS # free up memory
             except Exception as e:
                 print(e)
 
@@ -211,9 +229,9 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + decade.strftime("%Y")[0:3] + '0D/Time_Series/' 
                 else:
                     savedir = None
-                myTS = AnalyzeTimeSeries(db_path=db_path)
-                myTS.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
-                del myTS # free up memory
+                #myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS.plot_all_quicklook(decade, interval='decade', fig_dir=savedir, yaml_paths=yaml_paths)
+                #del myTS # free up memory
             except Exception as e:
                 print(e)
 
@@ -266,12 +284,12 @@ if __name__ == "__main__":
     args = parser.parse_args()   
 
     tasks = [
-        {"thread_name": "Today Thread",       "interval":     600, "time_range_type": "day",    "date_range": 'this_day'},
-        {"thread_name": "This Month Thread",  "interval":  3*3600, "time_range_type": "month",  "date_range": 'this_month'},
-        {"thread_name": "This Year Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": 'this_year'},
-        {"thread_name": "All Days Thread",    "interval": 48*3600, "time_range_type": "day",    "date_range": 'all_days'},
-        {"thread_name": "All Months Thread",  "interval": 24*3600, "time_range_type": "month",  "date_range": 'all_months'},
-        {"thread_name": "All Years Thread",   "interval": 24*3600, "time_range_type": "year",   "date_range": 'all_years'},
+        #{"thread_name": "Today Thread",       "interval":     600, "time_range_type": "day",    "date_range": 'this_day'},
+        #{"thread_name": "This Month Thread",  "interval":  3*3600, "time_range_type": "month",  "date_range": 'this_month'},
+        #{"thread_name": "This Year Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": 'this_year'},
+        #{"thread_name": "All Days Thread",    "interval": 48*3600, "time_range_type": "day",    "date_range": 'all_days'},
+        #{"thread_name": "All Months Thread",  "interval": 24*3600, "time_range_type": "month",  "date_range": 'all_months'},
+        #{"thread_name": "All Years Thread",   "interval": 24*3600, "time_range_type": "year",   "date_range": 'all_years'},
         {"thread_name": "All Decades Thread", "interval": 24*3600, "time_range_type": "decade", "date_range": (None, None)},
     ]
 
