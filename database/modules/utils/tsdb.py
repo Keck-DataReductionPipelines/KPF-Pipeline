@@ -1,15 +1,25 @@
 import os
-import psycopg2
 import re
+import glob
+import sqlite3
 import hashlib
+import psycopg2
 import pandas as pd
 import numpy as np
 import time
 from astropy.time import Time
+from astropy.table import Table
+from astropy.io import fits
+from tqdm import tqdm
+from tqdm.notebook import tqdm_notebook
+from datetime import datetime
+from functools import partial
+from concurrent.futures import ProcessPoolExecutor
 
 from kpfpipe.models.level1 import KPF1
 from kpfpipe.logger import start_logger
 from modules.Utils.utils import DummyLogger
+from modules.Utils.kpf_parse import get_datecode
 
 DEFAULT_CFG_PATH = 'database/modules/utils/tsdb.cfg'
 
@@ -64,7 +74,7 @@ class TSDB:
 #        68 = Failed to compute checksum
     """
 
-    def __init__(self, db_type='sqlite3', db_path=None, logger=None, drop=False, verbose=False):
+    def __init__(self, db_type='sqlite3', db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False, verbose=False):
         """
         Todo: add docstring, including explanation of db_type = 'sqlite3' or 'postgres'
         """
@@ -96,7 +106,7 @@ class TSDB:
         self.L2_RV_keyword_types         = self.get_keyword_types(level='L2_RV')
 
         if drop:
-            self.drop_table()
+            self.drop_tables()
             self.logger.info('Dropping KPF database ' + str(self.db_path))
 
         self.conn = None
@@ -156,11 +166,18 @@ class TSDB:
                     print('record = {}'.format(record))
         
         if drop:
-            self.drop_table()
+            self.drop_tables()
             self.logger.info('Dropping KPF database ' + str(self.db_path))
 
-        self.create_database()
-        self.create_metadata_table()
+        # Create tables if needed
+        if not self.check_if_table_exsits(tablename='tsdb'):
+            self.create_database()
+        else:
+            self.logger.info("Primary table 'tsdb' already exists.")
+        if not self.check_if_table_exsits(tablename='tsdb_metadata'):
+            self.create_metadata_table()
+        else:
+            self.logger.info("Metadata table 'tsdb_metadata' already exists.")
         self.print_db_status()
 
 
@@ -179,14 +196,14 @@ class TSDB:
                 print('Database connection closed.')
 
 
-    def drop_table(self):
+    def drop_tables(self):
         """
         Start over on the database by dropping the main table.
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute("DROP TABLE IF EXISTS kpfdb")
-        cursor.execute("DROP TABLE IF EXISTS kpfdb_metadata")
+        cursor.execute("DROP TABLE IF EXISTS tsdb")
+        cursor.execute("DROP TABLE IF EXISTS tsdb_metadata")
         conn.commit()
         conn.close()
 
@@ -213,17 +230,17 @@ class TSDB:
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute('SELECT COUNT(*) FROM kpfdb')
+        cursor.execute('SELECT COUNT(*) FROM tsdb')
         nrows = cursor.fetchone()[0]
-        cursor.execute('PRAGMA table_info(kpfdb)')
+        cursor.execute('PRAGMA table_info(tsdb)')
         ncolumns = len(cursor.fetchall())
-        cursor.execute('SELECT MAX(MAX(L0_header_read_time),MAX(L1_header_read_time)) FROM kpfdb')
+        cursor.execute('SELECT MAX(MAX(L0_header_read_time),MAX(L1_header_read_time)) FROM tsdb')
         most_recent_read_time = cursor.fetchone()[0]
-        cursor.execute('SELECT MIN(datecode) FROM kpfdb')
+        cursor.execute('SELECT MIN(datecode) FROM tsdb')
         earliest_datecode = cursor.fetchone()[0]
-        cursor.execute('SELECT MAX(datecode) FROM kpfdb')
+        cursor.execute('SELECT MAX(datecode) FROM tsdb')
         latest_datecode = cursor.fetchone()[0]
-        cursor.execute('SELECT COUNT(DISTINCT datecode) FROM kpfdb')
+        cursor.execute('SELECT COUNT(DISTINCT datecode) FROM tsdb')
         unique_datecodes_count = cursor.fetchone()[0]
         conn.close()
         self.logger.info(f"Summary: {nrows} obs x {ncolumns} cols over {unique_datecodes_count} days in {earliest_datecode}-{latest_datecode}; updated {most_recent_read_time}")
@@ -251,180 +268,7 @@ class TSDB:
         cursor.execute(create_meta_table_query)
         conn.commit()
 
-
-    def create_database(self):
-        """
-        Create SQLite3 database using the standard KPF scheme.
-        """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA wal_autocheckpoint")
-        cursor.execute("PRAGMA cache_size = -2000000;")
-    
-        # Define columns for each file type
-        L0_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
-        L0_telemetry_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
-        D2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
-        L1_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
-        L2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
-        L2_CCF_header_cols = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
-        L2_RV_header_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
-        L2_RV_cols         = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_keyword_types.items()]
-        cols = L0_header_cols + L0_telemetry_cols + D2_header_cols + L1_header_cols + L2_header_cols + L2_CCF_header_cols + L2_RV_header_cols + L2_RV_cols
-        cols += ['"datecode" TEXT', '"ObsID" TEXT']
-        cols += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
-        cols += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
-        cols += ['"Source" TEXT']
-        create_table_query = f'CREATE TABLE IF NOT EXISTS kpfdb ({", ".join(cols)}, UNIQUE(ObsID))'
-        cursor.execute(create_table_query)
-        
-        # Define indexed columns
-        index_commands = [
-            ('CREATE UNIQUE INDEX idx_ObsID       ON kpfdb ("ObsID");',       'idx_ObsID'),
-            ('CREATE UNIQUE INDEX idx_L0_filename ON kpfdb ("L0_filename");', 'idx_L0_filename'),
-            ('CREATE UNIQUE INDEX idx_D2_filename ON kpfdb ("D2_filename");', 'idx_D2_filename'),
-            ('CREATE UNIQUE INDEX idx_L1_filename ON kpfdb ("L1_filename");', 'idx_L1_filename'),
-            ('CREATE UNIQUE INDEX idx_L2_filename ON kpfdb ("L2_filename");', 'idx_L2_filename'),
-            ('CREATE INDEX idx_FIUMODE ON kpfdb ("FIUMODE");', 'idx_FIUMODE'),
-            ('CREATE INDEX idx_OBJECT ON kpfdb ("OBJECT");', 'idx_OBJECT'),
-            ('CREATE INDEX idx_DATE_MID ON kpfdb ("DATE-MID");', 'idx_DATE_MID'),
-        ]
-        
-        # Iterate and create indexes if they don't exist
-        for command, index_name in index_commands:
-            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='index' AND name='{index_name}';")
-            if cursor.fetchone() is None:
-                cursor.execute(command)
-                
-        conn.commit()
-        conn.close()
-        self.logger.info("Primary table 'kpfdb' created/updated successfully.")
-
-
-    def ingest_one_observation(self, dir_path, L0_filename):
-        """
-        Ingest a single observation into the database.
-        """
-        base_filename = L0_filename.split('.fits')[0]
-        L0_file_path = f"{dir_path}/{base_filename}.fits"
-
-        # update the DB if necessary
-        if self.is_any_file_updated(L0_file_path):
-        
-            D2_file_path = f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"
-            L1_file_path = f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits"
-            L2_file_path = f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits"
-            D2_filename  = f"{L0_filename.replace('L0', '2D')}"
-            L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
-            L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
-
-            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types, extension='PRIMARY') 
-            L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
-            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types, extension='PRIMARY') 
-            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types, extension='PRIMARY') 
-            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types, extension='PRIMARY') 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
-            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='GREEN_CCF') 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
-            L2_RV_data        = self.extract_rvs(L2_file_path) 
-
-            header_data = {**L0_header_data, 
-                           **L0_telemetry,
-                           **D2_header_data, 
-                           **L1_header_data, 
-                           **L2_header_data, 
-                           **L2_CCF_header_data, 
-                           **L2_RV_header_data, 
-                           **L2_RV_data, 
-                          }
-            header_data['ObsID'] = (L0_filename.split('.fits')[0])
-            header_data['datecode'] = get_datecode(L0_filename)  
-            header_data['Source'] = self.get_source(L0_header_data)
-            header_data['L0_filename'] = L0_filename
-            header_data['D2_filename'] = f"{base_filename}_2D.fits"
-            header_data['L1_filename'] = f"{base_filename}_L1.fits"
-            header_data['L2_filename'] = f"{base_filename}_L2.fits"
-            header_data['L0_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            header_data['D2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            header_data['L1_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            header_data['L2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
-            # Insert into database
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA cache_size = -2000000;")
-            columns = ', '.join([f'"{key}"' for key in header_data.keys()])
-            placeholders = ', '.join(['?'] * len(header_data))
-            insert_query = f'INSERT OR REPLACE INTO kpfdb ({columns}) VALUES ({placeholders})'
-            cursor.execute(insert_query, tuple(header_data.values()))
-            conn.commit()
-            conn.close()
-
-
-    def ingest_batch_observation(self, batch):
-        """
-        Ingest a batch of observations into the database in parallel using 
-        ProcessPoolExecutor, but check if each file has been updated before 
-        parallel processing, to reduce overhead.
-        """
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-        # === 1) Check for updated files in main thread ===
-        updated_batch = []
-        for file_path in batch:
-            if self.is_any_file_updated(file_path):
-                updated_batch.append(file_path)
-    
-        # If nothing to do, exit quickly
-        if not updated_batch:
-            return
-    
-        # === 2) Prepare arguments for parallel execution ===
-        args = {
-            'now_str': now_str,
-            'L0_header_keyword_types': self.L0_header_keyword_types,
-            'L0_telemetry_types': self.L0_telemetry_types,
-            'D2_header_keyword_types': self.D2_header_keyword_types,
-            'L1_header_keyword_types': self.L1_header_keyword_types,
-            'L2_header_keyword_types': self.L2_header_keyword_types,
-            'L2_CCF_header_keyword_types': self.L2_CCF_header_keyword_types,
-            'L2_RV_header_keyword_types': self.L2_RV_header_keyword_types,
-            'extract_kwd_func': self.extract_kwd,
-            'extract_telemetry_func': self.extract_telemetry,
-            'extract_rvs_func': self.extract_rvs,
-#            'is_any_file_updated_func': self.is_any_file_updated,  # this isn't needed because it's checked eaerlier
-            'get_source_func': self.get_source,
-            'get_datecode_func': get_datecode  # Assuming get_datecode is a standalone function
-        }
-    
-        partial_process_file = partial(process_file, **args)
-    
-        # === 3) Run extraction in parallel ONLY for updated files ===
-        max_workers = min([len(updated_batch), 20, os.cpu_count()])
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(partial_process_file, updated_batch))
-    
-        # Filter out None results (though now we expect fewer None’s, 
-        # because we already did the update check in the main thread)
-        batch_data = [res for res in results if res is not None]
-    
-        # === 4) Perform bulk insert ===
-        if batch_data:
-            columns = ', '.join([f'"{key}"' for key in batch_data[0].keys()])
-            placeholders = ', '.join(['?'] * len(batch_data[0]))
-            insert_query = f'INSERT OR REPLACE INTO kpfdb ({columns}) VALUES ({placeholders})'
-            data_tuples = [tuple(data.values()) for data in batch_data]
-    
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA cache_size = -2000000;")
-            cursor.executemany(insert_query, data_tuples)
-            conn.commit()
-            conn.close()
-
-
-    def load_keyword_csv(csv_path, source_label):
+        def load_keyword_csv(csv_path, source_label):
             """
             Helper function to read a CSV file and return a DataFrame with columns:
                keyword | datatype | unit | description | source
@@ -486,7 +330,209 @@ class TSDB:
         conn.commit()
         conn.close()
 
-        self.logger.info("Metadata table 'kpfdb_metadata' created/updated successfully.")
+        self.logger.info("Metadata table 'kpfdb_metadata' created.")
+
+
+    def check_if_table_exsits(self, tablename=None):
+        """
+        Return True if the named table exists.
+        """
+        
+        # To-do: check if SQLITE3 is being used
+
+        result = False
+        try: 
+            if tablename != None:
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name=?;
+                """, (tablename,))
+                tables = cursor.fetchone() 
+                result = False
+                if tables != None:
+                    if isinstance(tables, tuple):
+                        if tablename in tables:
+                            result = True
+            else:
+            	self.logger.info('check_if_table_exsits: tablename not specified.')
+        except:
+            self.logger.info('check_if_table_exsits: problem with query')
+
+        return result
+
+
+    def create_database(self):
+        """
+        Create SQLite3 database using the standard KPF scheme.
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA wal_autocheckpoint")
+        cursor.execute("PRAGMA cache_size = -2000000;")
+    
+        # Define columns for each file type
+        L0_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
+        L0_telemetry_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
+        D2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
+        L1_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
+        L2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
+        L2_CCF_header_cols = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
+        L2_RV_header_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
+        L2_RV_cols         = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_keyword_types.items()]
+        cols = L0_header_cols + L0_telemetry_cols + D2_header_cols + L1_header_cols + L2_header_cols + L2_CCF_header_cols + L2_RV_header_cols + L2_RV_cols
+        cols += ['"datecode" TEXT', '"ObsID" TEXT']
+        cols += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
+        cols += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
+        cols += ['"Source" TEXT']
+        create_table_query = f'CREATE TABLE IF NOT EXISTS tsdb ({", ".join(cols)}, UNIQUE(ObsID))'
+        cursor.execute(create_table_query)
+        
+        # Define indexed columns
+        index_commands = [
+            ('CREATE UNIQUE INDEX idx_ObsID       ON tsdb ("ObsID");',       'idx_ObsID'),
+            ('CREATE UNIQUE INDEX idx_L0_filename ON tsdb ("L0_filename");', 'idx_L0_filename'),
+            ('CREATE UNIQUE INDEX idx_D2_filename ON tsdb ("D2_filename");', 'idx_D2_filename'),
+            ('CREATE UNIQUE INDEX idx_L1_filename ON tsdb ("L1_filename");', 'idx_L1_filename'),
+            ('CREATE UNIQUE INDEX idx_L2_filename ON tsdb ("L2_filename");', 'idx_L2_filename'),
+            ('CREATE INDEX idx_FIUMODE ON tsdb ("FIUMODE");', 'idx_FIUMODE'),
+            ('CREATE INDEX idx_OBJECT ON tsdb ("OBJECT");', 'idx_OBJECT'),
+            ('CREATE INDEX idx_DATE_MID ON tsdb ("DATE-MID");', 'idx_DATE_MID'),
+        ]
+        
+        # Iterate and create indexes if they don't exist
+        for command, index_name in index_commands:
+            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='index' AND name='{index_name}';")
+            if cursor.fetchone() is None:
+                cursor.execute(command)
+                
+        conn.commit()
+        conn.close()
+        self.logger.info("Primary table 'tsdb' created.")
+
+
+    def ingest_one_observation(self, dir_path, L0_filename):
+        """
+        Ingest a single observation into the database.
+        """
+        base_filename = L0_filename.split('.fits')[0]
+        L0_file_path = f"{dir_path}/{base_filename}.fits"
+
+        # update the DB if necessary
+        if self.is_any_file_updated(L0_file_path):
+        
+            D2_file_path = f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"
+            L1_file_path = f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits"
+            L2_file_path = f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits"
+            D2_filename  = f"{L0_filename.replace('L0', '2D')}"
+            L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
+            L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
+
+            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types, extension='PRIMARY') 
+            L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types, extension='PRIMARY') 
+            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types, extension='PRIMARY') 
+            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types, extension='PRIMARY') 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
+            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='GREEN_CCF') 
+            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
+            L2_RV_data        = self.extract_rvs(L2_file_path) 
+
+            header_data = {**L0_header_data, 
+                           **L0_telemetry,
+                           **D2_header_data, 
+                           **L1_header_data, 
+                           **L2_header_data, 
+                           **L2_CCF_header_data, 
+                           **L2_RV_header_data, 
+                           **L2_RV_data, 
+                          }
+            header_data['ObsID'] = (L0_filename.split('.fits')[0])
+            header_data['datecode'] = get_datecode(L0_filename)  
+            header_data['Source'] = self.get_source(L0_header_data)
+            header_data['L0_filename'] = L0_filename
+            header_data['D2_filename'] = f"{base_filename}_2D.fits"
+            header_data['L1_filename'] = f"{base_filename}_L1.fits"
+            header_data['L2_filename'] = f"{base_filename}_L2.fits"
+            header_data['L0_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            header_data['D2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            header_data['L1_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            header_data['L2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    
+            # Insert into database
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA cache_size = -2000000;")
+            columns = ', '.join([f'"{key}"' for key in header_data.keys()])
+            placeholders = ', '.join(['?'] * len(header_data))
+            insert_query = f'INSERT OR REPLACE INTO tsdb ({columns}) VALUES ({placeholders})'
+            cursor.execute(insert_query, tuple(header_data.values()))
+            conn.commit()
+            conn.close()
+
+
+    def ingest_batch_observation(self, batch):
+        """
+        Ingest a batch of observations into the database in parallel using 
+        ProcessPoolExecutor, but check if each file has been updated before 
+        parallel processing, to reduce overhead.
+        """
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+        # === 1) Check for updated files in main thread ===
+        updated_batch = []
+        for file_path in batch:
+            if self.is_any_file_updated(file_path):
+                updated_batch.append(file_path)
+    
+        # If nothing to do, exit quickly
+        if not updated_batch:
+            return
+    
+        # === 2) Prepare arguments for parallel execution ===
+        args = {
+            'now_str': now_str,
+            'L0_header_keyword_types': self.L0_header_keyword_types,
+            'L0_telemetry_types': self.L0_telemetry_types,
+            'D2_header_keyword_types': self.D2_header_keyword_types,
+            'L1_header_keyword_types': self.L1_header_keyword_types,
+            'L2_header_keyword_types': self.L2_header_keyword_types,
+            'L2_CCF_header_keyword_types': self.L2_CCF_header_keyword_types,
+            'L2_RV_header_keyword_types': self.L2_RV_header_keyword_types,
+            'extract_kwd_func': self.extract_kwd,
+            'extract_telemetry_func': self.extract_telemetry,
+            'extract_rvs_func': self.extract_rvs,
+#            'is_any_file_updated_func': self.is_any_file_updated,  # this isn't needed because it's checked eaerlier
+            'get_source_func': self.get_source,
+            'get_datecode_func': get_datecode  # Assuming get_datecode is a standalone function
+        }
+    
+        partial_process_file = partial(process_file, **args)
+    
+        # === 3) Run extraction in parallel ONLY for updated files ===
+        max_workers = min([len(updated_batch), 20, os.cpu_count()])
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(partial_process_file, updated_batch))
+    
+        # Filter out None results (though now we expect fewer None’s, 
+        # because we already did the update check in the main thread)
+        batch_data = [res for res in results if res is not None]
+    
+        # === 4) Perform bulk insert ===
+        if batch_data:
+            columns = ', '.join([f'"{key}"' for key in batch_data[0].keys()])
+            placeholders = ', '.join(['?'] * len(batch_data[0]))
+            insert_query = f'INSERT OR REPLACE INTO tsdb ({columns}) VALUES ({placeholders})'
+            data_tuples = [tuple(data.values()) for data in batch_data]
+    
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA cache_size = -2000000;")
+            cursor.executemany(insert_query, data_tuples)
+            conn.commit()
+            conn.close()
 
 
     def map_data_type_to_sql(self, dtype):
@@ -793,7 +839,7 @@ class TSDB:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("PRAGMA cache_size = -2000000;")
-        query = f'SELECT L0_header_read_time, D2_header_read_time, L1_header_read_time, L2_header_read_time FROM kpfdb WHERE L0_filename = "{L0_filename}"'
+        query = f'SELECT L0_header_read_time, D2_header_read_time, L1_header_read_time, L2_header_read_time FROM tsdb WHERE L0_filename = "{L0_filename}"'
         cursor.execute(query)
         result = cursor.fetchone()
         conn.close()
@@ -947,7 +993,7 @@ class TSDB:
 
     def print_metadata_table(self):
         """
-        Read the kpfdb_metadata table, group by 'source', and print out rows
+        Read the tsdb_metadata table, group by 'source', and print out rows
         in fixed-width columns in the custom order below, without printing
         the 'source' column.
         """
@@ -975,7 +1021,7 @@ class TSDB:
             cursor.execute(
                 """
                 SELECT keyword, datatype, units, description
-                FROM kpfdb_metadata
+                FROM tsdb_metadata
                 WHERE source = ?
                 ORDER BY keyword;
                 """,
@@ -1021,12 +1067,26 @@ class TSDB:
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        query = f"SELECT keyword, datatype, units, description, source FROM kpfdb_metadata"
+        query = f"SELECT keyword, datatype, units, description, source FROM tsdb_metadata"
         df = pd.read_sql_query(query, conn)
         conn.close()
         
         return df
 
+
+    def select_query(self, query):
+        """
+        Query the database with the query 'query'.  Any query can be used, 
+        but no 'commit' statement is used do database changes won't be saved.
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(query)
+        tables = cursor.fetchall()
+        conn.close()
+        
+        return tables
+        
 
     def query_to_pandas(self, query):
         try:
@@ -1063,7 +1123,7 @@ class TSDB:
         # Query for the minimum and maximum dates in the 'DATE-MID' column
         query = """
             SELECT MIN("DATE-MID") AS min_date, MAX("DATE-MID") AS max_date
-            FROM kpfdb
+            FROM tsdb
         """
         result = pd.read_sql_query(query, conn)
         conn.close()
@@ -1110,7 +1170,7 @@ class TSDB:
             quoted_columns = '*'
         else:
             quoted_columns = [f'"{column}"' for column in columns]
-        query = f"SELECT {', '.join(quoted_columns)} FROM kpfdb"
+        query = f"SELECT {', '.join(quoted_columns)} FROM tsdb"
 
         # Append WHERE clauses
         where_queries = []
@@ -1179,13 +1239,13 @@ class TSDB:
     
         # Get all column names if columns are not specified
         if columns is None:
-            query_get_columns = "PRAGMA table_info(kpfdb)"
+            query_get_columns = "PRAGMA table_info(tsdb)"
             all_columns_info = pd.read_sql_query(query_get_columns, conn)
             columns = all_columns_info['name'].tolist()
     
         # Enclose column names in double quotes
         quoted_columns = [f'"{column}"' for column in columns]
-        query = f"SELECT {', '.join(quoted_columns)} FROM kpfdb"
+        query = f"SELECT {', '.join(quoted_columns)} FROM tsdb"
     
         # Append WHERE clauses
         where_queries = []
@@ -1316,3 +1376,21 @@ def process_file(file_path, now_str,
     header_data['L2_header_read_time'] = now_str
 
     return header_data
+
+
+def convert_to_list_if_array(string):
+    """
+    Convert a string like '["autocal-lfc-all-morn", "autocal-lfc-all-eve"]' to an array.
+    """
+    # Check if the string starts with '[' and ends with ']'
+    if type(string) == 'str':
+        if string.startswith('[') and string.endswith(']'):
+            try:
+                # Attempt to parse the string as JSON
+                return json.loads(string)
+            except json.JSONDecodeError:
+                # The string is not a valid JSON array
+                return string
+    else:
+        # The string does not look like a JSON array
+        return string

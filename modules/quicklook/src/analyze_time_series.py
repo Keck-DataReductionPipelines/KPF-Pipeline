@@ -1,18 +1,18 @@
 import os
 import ast
 import time
-import glob
-import copy
+#import glob
+#import copy
 import json
 import yaml
-import sqlite3
-import calendar
+#import sqlite3
+#import calendar
 import numpy as np
 import pandas as pd
 #from tqdm import tqdm
 #from tqdm.notebook import tqdm_notebook
-from astropy.table import Table
-from astropy.io import fits
+#from astropy.table import Table
+#from astropy.io import fits
 from datetime import datetime, timedelta
 import matplotlib
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
@@ -22,13 +22,13 @@ import matplotlib.dates as mdates
 import matplotlib.ticker as ticker
 import matplotlib.colors as mcolors
 from matplotlib.ticker import FuncFormatter
-from functools import partial
-from concurrent.futures import ProcessPoolExecutor
+#from functools import partial
+#from concurrent.futures import ProcessPoolExecutor
 from matplotlib.dates import HourLocator, DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
 
 from modules.Utils.utils import DummyLogger
-from modules.Utils.kpf_parse import get_datecode
-from database.modules.utils.kpf_tsdb import TSDB
+#from modules.Utils.kpf_parse import get_datecode
+from database.modules.utils.tsdb import TSDB
 
 import sys
 if sys.version_info >= (3, 9):
@@ -96,7 +96,9 @@ class AnalyzeTimeSeries:
        
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting AnalyzeTimeSeries')
-        self.tsdb = TSDB(db_type=db_type, db_path=db_path, logger=logger, drop=drop, verbose=verbose)
+        
+        db_type='sqlite3'
+        self.db = TSDB(db_type=db_type, db_path=db_path, base_dir=base_dir, logger=logger, drop=drop, verbose=verbose)
 
 
     def plot_time_series_multipanel(self, plotdict, 
@@ -175,7 +177,7 @@ class AnalyzeTimeSeries:
             base_filenames = [str.split(f,'.')[0] for f in base_filenames]
             try:
                 ind = base_filenames.index(plotdict_str)
-                plotdict = self.tsdb.yaml_to_dict(all_yaml[ind])
+                plotdict = self.yaml_to_dict(all_yaml[ind])
                 self.logger.info(f'Plotting from config: {all_yaml[ind]}')
             except Exception as e:
                 self.logger.info(f"Couldn't find the file {plotdict_str}.  Error message: {e}")
@@ -241,14 +243,14 @@ class AnalyzeTimeSeries:
                 end_date_was_none = False
 
             # Get data from database
-            df = self.tsdb.dataframe_from_db(unique_cols, 
-                                             start_date=start_date, 
-                                             end_date=end_date, 
-                                             not_junk=not_junk, 
-                                             only_object=only_object, 
-                                             object_like=object_like,
-                                             only_source=only_source, 
-                                             verbose=False)
+            df = self.db.dataframe_from_db(unique_cols, 
+                                           start_date=start_date, 
+                                           end_date=end_date, 
+                                           not_junk=not_junk, 
+                                           only_object=only_object, 
+                                           object_like=object_like,
+                                           only_source=only_source, 
+                                           verbose=False)
             df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
             if start_date_was_none == True:
                 start_date = min(df['DATE-MID'])
@@ -258,7 +260,7 @@ class AnalyzeTimeSeries:
 
             # Remove outliers
             if clean:
-                df = self.tsdb.clean_df(df)
+                df = self.db.clean_df(df)
 
             # Filter using on_sky criterion
             if 'on_sky' in thispanel['paneldict']:
@@ -635,7 +637,7 @@ class AnalyzeTimeSeries:
     
         # Load data
         columns = ['DATE-BEG', 'NOTJUNK', 'Source', 'OBJECT']
-        df = self.tsdb.dataframe_from_db(columns)
+        df = self.db.dataframe_from_db(columns)
         df['DATE-BEG'] = pd.to_datetime(df['DATE-BEG'], errors='coerce')
         #df['DATE-END'] = pd.to_datetime(df['DATE-END'], errors='coerce')
         df = df.dropna(subset=['DATE-BEG'])
@@ -1029,23 +1031,6 @@ def add_one_month(inputdate):
     
     outputdate = datetime(year, month, day)
     return outputdate
-
-def convert_to_list_if_array(string):
-    """
-    Convert a string like '["autocal-lfc-all-morn", "autocal-lfc-all-eve"]' to an array.
-    """
-    # Check if the string starts with '[' and ends with ']'
-    if type(string) == 'str':
-        if string.startswith('[') and string.endswith(']'):
-            try:
-                # Attempt to parse the string as JSON
-                return json.loads(string)
-            except json.JSONDecodeError:
-                # The string is not a valid JSON array
-                return string
-    else:
-        # The string does not look like a JSON array
-        return string
 
 def is_numeric(value):
     if value is None:  # Explicitly handle NoneType
