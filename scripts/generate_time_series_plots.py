@@ -231,7 +231,7 @@ def monitor_processes(tasks, proc_dict, sleep_time, db_path):
     def print_process_table():
         now = datetime.now()
     
-        header = f"{'Process Name':<25} {'Interval (hr)':>15}   {'Uptime':<10}"
+        header = f"{'Process Name':<25} {'Interval':>12}   {'Uptime':>12}"
         divider = "-" * len(header)
         print("\nProcess Status Report:")
         print(divider)
@@ -243,6 +243,7 @@ def monitor_processes(tasks, proc_dict, sleep_time, db_path):
             interval = task["interval"]
             proc = proc_dict.get(proc_name)
     
+            # Restart if needed
             if not proc or not proc.is_alive():
                 print(f"{proc_name} stopped, restarting...")
                 new_proc = Process(
@@ -256,16 +257,20 @@ def monitor_processes(tasks, proc_dict, sleep_time, db_path):
                 process_start_times[proc_name] = datetime.now()
                 proc = new_proc
     
+            # Format interval as HH:MM:SS
+            interval_td = timedelta(seconds=interval)
+            total_seconds = int(interval_td.total_seconds())
+            ihours, iremainder = divmod(total_seconds, 3600)
+            iminutes, iseconds = divmod(iremainder, 60)
+            interval_str = f"{ihours:02}:{iminutes:02}:{iseconds:02}"
+    
+            # Format uptime as HH:MM:SS
             uptime = now - process_start_times[proc_name]
-            hours, remainder = divmod(uptime.total_seconds(), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            uptime_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+            uhours, uremainder = divmod(uptime.total_seconds(), 3600)
+            uminutes, useconds = divmod(uremainder, 60)
+            uptime_str = f"{int(uhours):02}:{int(uminutes):02}:{int(useconds):02}"
     
-            interval_hr = interval / 3600
-            int_part, frac_part = f"{interval_hr:.2f}".split('.')
-            interval_str = f"{int(int_part):>3}.{frac_part}"
-    
-            print(f"{proc_name:<25} {interval_str:>15}   {uptime_str:<10}")
+            print(f"{proc_name:<25} {interval_str:>12}   {uptime_str:>12}")
     
         print(divider + "\n")
 
