@@ -2003,7 +2003,7 @@ class AnalyzeTimeSeries:
     
     
     def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
-                           last_n_days=None, yaml_paths=None, 
+                           last_n_days=None, 
                            fig_dir=None, show_plot=False, 
                            print_plot_names=False, verbose=False):
         """
@@ -2026,9 +2026,8 @@ class AnalyzeTimeSeries:
 
         plots = {}
 
-        if yaml_paths is None:        
-            import static.tsdb_plot_configs
-            yaml_paths = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py
+        import static.tsdb_plot_configs
+        yaml_paths = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py
         
         for this_yaml_path in yaml_paths:
             thisplotconfigdict = self.yaml_to_dict(this_yaml_path)

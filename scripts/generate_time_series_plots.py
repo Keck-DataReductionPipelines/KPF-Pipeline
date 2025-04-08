@@ -5,16 +5,16 @@ Script Name: generate_time_series_plots.py
 
 Description:
     This script generates KPF time series plots over various time intervals and
-    saves the results to predefined directories. It supports multithreaded execution
+    saves the results to predefined directories. It supports multiprocess execution
     for tasks with different intervals and date ranges, including daily, monthly,
     yearly, and decade-based plots. Additionally, the script monitors the status
-    of running threads and reports on their activity.
+    of running processes and reports on their activity.
 
 Features:
     - Generates plots for multiple time intervals (day, month, year, decade).
     - Supports custom date ranges for plot generation.
-    - Multithreaded execution for efficiency, allowing simultaneous tasks.
-    - Monitors thread status and execution time for each task.
+    - Multiprocess execution for efficiency, allowing simultaneous tasks.
+    - Monitors process status and execution time for each task.
     - Saves results in a structured format for further analysis.
 
 Usage:
@@ -32,8 +32,8 @@ Examples:
     2. Specifying a custom database path:
         python generate_time_series_plots.py --db_path /custom/path/to/kpf_ts.db
 
-    3. Monitoring thread statuses:
-        The script automatically reports on thread activity and execution times every 5 minutes.
+    3. Monitoring process statuses:
+        The script automatically reports on process activity and execution times every 5 minutes.
 """
 
 import glob
@@ -41,14 +41,11 @@ import copy
 import time
 import argparse
 import logging
-import threading
-from threading import Thread
+from multiprocessing import Process
 from datetime import datetime, timedelta
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
-thread_local = threading.local()
-
-def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
+def schedule_task(interval, time_range_type, date_range, proc_name, db_path):
     """
     Schedules the plot generation task to run after an initial delay and then 
     at specified intervals, allowing for different arguments for each task.
@@ -62,13 +59,10 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
                            where (start_date, end_date) is a tuple of datetime objects 
                            or the string 'today'
     """
-    import static.tsdb_plot_configs
-    yaml_paths = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py
-    yaml_paths = copy.deepcopy(yaml_paths)  # defensive copy, just in case
     
-    fig_dir_base = f"/output/{thread_name.replace(' ', '_')}/"
+    fig_dir_base = f"/output/{proc_name.replace(' ', '_')}/"
     
-    print(f"Starting: {thread_name} to be executed every {interval/3600:.2f} hours.")
+    print(f"Starting: {proc_name} to be executed every {interval/3600:.2f} hours.")
     initial_date_range = date_range
 
     while True:
@@ -113,19 +107,18 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
         print(f'    end_date = {str(end_date)}')
         print(f'    time_range_type = {str(time_range_type)}')
         print()
-        generate_plots(start_date=start_date, end_date=end_date, time_range_type=time_range_type, db_path=db_path, yaml_paths=yaml_paths)
+        generate_plots(start_date=start_date, end_date=end_date, time_range_type=time_range_type, db_path=db_path)
         end_time = time.time()
         execution_time = end_time - start_time
         sleep_time = interval - execution_time
         if sleep_time < 0:
             sleep_time = 0
-        print(f'Finished pass through {thread_name} in {execution_time/3600:.2f} hours.\nStarting again in {sleep_time/3600:.2f} hours.')
+        print(f'Finished pass through {proc_name} in {execution_time/3600:.2f} hours.\nStarting again in {sleep_time/3600:.2f} hours.')
         if sleep_time > 0:
             time.sleep(sleep_time)
 
 def generate_plots(start_date=None, end_date=None, 
                    time_range_type='all', clean=True, 
-                   yaml_paths=None, 
                    db_path='/data/time_series/kpf_ts.db',
                    base_dir='/data/QLP/'):
     """
@@ -145,14 +138,8 @@ def generate_plots(start_date=None, end_date=None,
         PNG plots in the output directory.
     """
     
-    # Create a per-thread AnalyzeTimeSeries instance if it doesn't exist
-    if not hasattr(thread_local, "myTS"):
-        thread_local.myTS = AnalyzeTimeSeries(db_path=db_path)
-
-    myTS = thread_local.myTS  # Use thread-local instance
-    
     if start_date == None or end_date == None:
-        #myTS = AnalyzeTimeSeries(db_path=db_path)
+        myTS = AnalyzeTimeSeries(db_path=db_path)
         first_last_dates = myTS.get_first_last_dates()
         if start_date == None:
             start_date = first_last_dates[0].replace(hour=0, minute=0, second=0, microsecond=0)
@@ -187,9 +174,9 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + day.strftime("%Y%m%d") + '/Time_Series/'
                 else:
                     savedir = None
-                #myTS = AnalyzeTimeSeries(db_path=db_path)
-                myTS.plot_all_quicklook(day, interval='day', fig_dir=savedir, yaml_paths=yaml_paths)
-                #del myTS # free up memory
+                myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS.plot_all_quicklook(day, interval='day', fig_dir=savedir)
+                del myTS # free up memory
             except Exception as e:
                 print(e)
 
@@ -201,9 +188,9 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + month.strftime("%Y%m") + 'M/Time_Series/'
                 else:
                     savedir = None
-                #myTS = AnalyzeTimeSeries(db_path=db_path)
-                myTS.plot_all_quicklook(month, interval='month', fig_dir=savedir, yaml_paths=yaml_paths)
-                #del myTS # free up memory
+                myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS.plot_all_quicklook(month, interval='month', fig_dir=savedir)
+                del myTS # free up memory
             except Exception as e:
                 print(e)
 
@@ -215,9 +202,9 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + year.strftime("%Y") + 'Y/Time_Series/'
                 else:
                     savedir = None
-                #myTS = AnalyzeTimeSeries(db_path=db_path)
-                myTS.plot_all_quicklook(year, interval='year', fig_dir=savedir, yaml_paths=yaml_paths)
-                #del myTS # free up memory
+                myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS.plot_all_quicklook(year, interval='year', fig_dir=savedir)
+                del myTS # free up memory
             except Exception as e:
                 print(e)
 
@@ -229,91 +216,83 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + decade.strftime("%Y")[0:3] + '0D/Time_Series/' 
                 else:
                     savedir = None
-                #myTS = AnalyzeTimeSeries(db_path=db_path)
-                myTS.plot_all_quicklook(decade, interval='decade', fig_dir=savedir, yaml_paths=yaml_paths)
-                #del myTS # free up memory
+                myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
+                del myTS # free up memory
             except Exception as e:
                 print(e)
 
 
-def monitor_threads(tasks, thread_dict, sleep_time, db_path):
-    """
-    Continuously monitor threads and restart any that fail.
-
-    Args:
-        tasks: list of task configurations
-        thread_dict: dict mapping thread_name to Thread objects
-        sleep_time: monitoring interval in seconds
-        db_path: database path to pass to restarted threads
-    """
+def monitor_processes(tasks, proc_dict, sleep_time, db_path):
     import logging
 
     while True:
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        logging.info(f"------ Thread Status at {current_time} ------")
+        logging.info(f"------ Process Status at {current_time} ------")
 
         for task in tasks:
-            thread_name = task["thread_name"]
-            thread = thread_dict.get(thread_name)
-            alive = thread.is_alive()
+            proc_name = task["proc_name"]
+            proc = proc_dict.get(proc_name)
+            alive = proc.is_alive()
 
             if not alive:
-                logging.warning(f"{thread_name} has stopped. Restarting...")
-                new_thread = Thread(
+                logging.warning(f"{proc_name} has stopped. Restarting...")
+                new_proc = Process(
                     target=schedule_task,
                     args=(task["interval"], task["time_range_type"], 
-                          task["date_range"], thread_name, db_path),
-                    name=thread_name
+                          task["date_range"], proc_name, db_path),
+                    name=proc_name
                 )
-                new_thread.start_time = datetime.now()
-                new_thread.start()
-                thread_dict[thread_name] = new_thread
-                logging.info(f"{thread_name} successfully restarted.")
+                new_proc.start()
+                proc_dict[proc_name] = new_proc
+                logging.info(f"{proc_name} successfully restarted.")
             else:
-                logging.info(f"{thread_name}: Alive since {thread.start_time}")
+                logging.info(f"{proc_name}: Running")
 
         logging.info("------------------------------------------\n")
         time.sleep(sleep_time)
-
-
+        
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description='Repeatedly generate KPF time series plots.')
     parser.add_argument('--db_path', type=str, default='/data/time_series/kpf_ts.db', 
                         help='path to database file; default = /data/time_series/kpf_ts.db')
     args = parser.parse_args()   
 
     tasks = [
-        #{"thread_name": "Today Thread",       "interval":     600, "time_range_type": "day",    "date_range": 'this_day'},
-        #{"thread_name": "This Month Thread",  "interval":  3*3600, "time_range_type": "month",  "date_range": 'this_month'},
-        #{"thread_name": "This Year Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": 'this_year'},
-        #{"thread_name": "All Days Thread",    "interval": 48*3600, "time_range_type": "day",    "date_range": 'all_days'},
-        #{"thread_name": "All Months Thread",  "interval": 24*3600, "time_range_type": "month",  "date_range": 'all_months'},
-        #{"thread_name": "All Years Thread",   "interval": 24*3600, "time_range_type": "year",   "date_range": 'all_years'},
-        {"thread_name": "All Decades Thread", "interval": 24*3600, "time_range_type": "decade", "date_range": (None, None)},
+        {"proc_name": "Today Process",       "interval":     300, "time_range_type": "day",    "date_range": 'this_day'},
+        {"proc_name": "This Month Process",  "interval":     600, "time_range_type": "month",  "date_range": 'this_month'},
+        {"proc_name": "This Year Process",   "interval":  2*3600, "time_range_type": "year",   "date_range": 'this_year'},
+        {"proc_name": "All Days Process",    "interval": 48*3600, "time_range_type": "day",    "date_range": 'all_days'},
+        {"proc_name": "All Months Process",  "interval": 24*3600, "time_range_type": "month",  "date_range": 'all_months'},
+        {"proc_name": "All Years Process",   "interval": 24*3600, "time_range_type": "year",   "date_range": 'all_years'},
+        {"proc_name": "All Decades Process", "interval": 24*3600, "time_range_type": "decade", "date_range": (None, None)},
     ]
 
-    threads = {}
+    processes = {}
     for task in tasks:
-        thread = Thread(
-            target=schedule_task, 
-            args=(task["interval"], task["time_range_type"], task["date_range"], 
-                  task["thread_name"], args.db_path),
-            name=task["thread_name"]
+        proc = Process(
+            target=schedule_task,
+            args=(task["interval"], task["time_range_type"], task["date_range"],
+                  task["proc_name"], args.db_path),
+            name=task["proc_name"]
         )
-        thread.start_time = datetime.now()  
-        thread.start()  
-        threads[task["thread_name"]] = thread
-        time.sleep(10)  # Slight delay to stagger thread starts
+        proc.start()
+        processes[task["proc_name"]] = proc
+        time.sleep(15)
 
-    monitor_thread_sleep_time = 3600  # seconds (1 hour)
-    monitor_thread = Thread(
-        target=monitor_threads, 
-        args=(tasks, threads, monitor_thread_sleep_time, args.db_path),
-        name="MonitorThread"
-    )
-    monitor_thread.daemon = True  # Ensures monitor stops with main program
-    monitor_thread.start()
-
-    for thread in threads.values():
-        thread.join()
+    # Simple monitoring loop directly in main process
+    while True:
+        for task in tasks:
+            proc_name = task["proc_name"]
+            proc = processes[proc_name]
+            if not proc.is_alive():
+                print(f"{proc_name} stopped, restarting...")
+                new_proc = Process(
+                    target=schedule_task,
+                    args=(task["interval"], task["time_range_type"],
+                          task["date_range"], proc_name, args.db_path),
+                    name=proc_name
+                )
+                new_proc.start()
+                processes[proc_name] = new_proc
+        time.sleep(3600)
