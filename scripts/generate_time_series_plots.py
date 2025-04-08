@@ -62,6 +62,7 @@ def schedule_task(interval, time_range_type, date_range, proc_name, db_path):
     
     fig_dir_base = f"/output/{proc_name.replace(' ', '_')}/"
     
+    print()
     print(f"Starting: {proc_name} to be executed every {interval/3600:.2f} hours.")
     initial_date_range = date_range
 
@@ -224,33 +225,54 @@ def generate_plots(start_date=None, end_date=None,
 
 
 def monitor_processes(tasks, proc_dict, sleep_time, db_path):
-    import logging
 
-    while True:
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        logging.info(f"------ Process Status at {current_time} ------")
+    process_start_times = {task["proc_name"]: datetime.now() for task in tasks}
 
+    def print_process_table():
+        now = datetime.now()
+    
+        header = f"{'Process Name':<25} {'Interval (hr)':>15}   {'Uptime':<10}"
+        divider = "-" * len(header)
+        print("\nProcess Status Report:")
+        print(divider)
+        print(header)
+        print(divider)
+    
         for task in tasks:
             proc_name = task["proc_name"]
+            interval = task["interval"]
             proc = proc_dict.get(proc_name)
-            alive = proc.is_alive()
-
-            if not alive:
-                logging.warning(f"{proc_name} has stopped. Restarting...")
+    
+            if not proc or not proc.is_alive():
+                print(f"{proc_name} stopped, restarting...")
                 new_proc = Process(
                     target=schedule_task,
-                    args=(task["interval"], task["time_range_type"], 
+                    args=(interval, task["time_range_type"],
                           task["date_range"], proc_name, db_path),
                     name=proc_name
                 )
                 new_proc.start()
                 proc_dict[proc_name] = new_proc
-                logging.info(f"{proc_name} successfully restarted.")
-            else:
-                logging.info(f"{proc_name}: Running")
+                process_start_times[proc_name] = datetime.now()
+                proc = new_proc
+    
+            uptime = now - process_start_times[proc_name]
+            hours, remainder = divmod(uptime.total_seconds(), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            uptime_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+    
+            interval_hr = interval / 3600
+            int_part, frac_part = f"{interval_hr:.2f}".split('.')
+            interval_str = f"{int(int_part):>3}.{frac_part}"
+    
+            print(f"{proc_name:<25} {interval_str:>15}   {uptime_str:<10}")
+    
+        print(divider + "\n")
 
-        logging.info("------------------------------------------\n")
+    while True:
+        print_process_table()
         time.sleep(sleep_time)
+
         
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Repeatedly generate KPF time series plots.')
@@ -280,20 +302,4 @@ if __name__ == "__main__":
         processes[task["proc_name"]] = proc
         time.sleep(15)
 
-    # Simple monitoring loop directly in main process
-    while True:
-        for task in tasks:
-            proc_name = task["proc_name"]
-            proc = processes[proc_name]
-            if not proc.is_alive():
-                print(f"{proc_name} stopped, restarting...")
-                new_proc = Process(
-                    target=schedule_task,
-                    args=(task["interval"], task["time_range_type"],
-                          task["date_range"], proc_name, args.db_path),
-                    name=proc_name
-                )
-                new_proc.start()
-                processes[proc_name] = new_proc
-        print(f"Process check complete.")
-        time.sleep(3600)
+    monitor_processes(tasks, processes, sleep_time=300, db_path=args.db_path)
