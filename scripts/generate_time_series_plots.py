@@ -295,4 +295,5 @@ if __name__ == "__main__":
                 )
                 new_proc.start()
                 processes[proc_name] = new_proc
+        print(f"Process check complete.")
         time.sleep(3600)
