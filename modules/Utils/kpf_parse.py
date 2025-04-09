@@ -84,16 +84,21 @@ class HeaderParse:
         """
         try: 
             if 'IMTYPE' in self.header:
+                # Bias
                 if (('ELAPSED' in self.header) and 
                     ((self.header['IMTYPE'] == 'Bias') or (self.header['ELAPSED'] == 0))):
                         self.name = 'Bias'
+                # Dark
                 elif self.header['IMTYPE'] == 'Dark':
                     self.name = 'Dark' 
+                # Wide Flat
                 elif self.header['FFFB'].strip().lower() == 'yes':
                         self.name = 'Wide Flat' # Flatfield Fiber (wide flats)
+                # Flat
                 elif self.header['IMTYPE'].strip().lower() == 'flatlamp':
                      if 'brdband' in self.header['OCTAGON'].strip().lower():
                         self.name = 'Flat' # Flat through regular fibers
+                # Calibration lamps
                 elif self.header['IMTYPE'].strip().lower() == 'arclamp':
                     if 'lfc' in self.header['OCTAGON'].strip().lower():
                         self.name = 'LFC'
@@ -106,6 +111,14 @@ class HeaderParse:
                 elif ((self.header['TARGNAME'].strip().lower() == 'sun') or 
                       (self.header['TARGNAME'].strip().lower() == 'socal')):
                     self.name = 'Sun' # SoCal
+                # March-April, 2025 -- IMTYPE not populated because reduced headers
+                elif self.header['IMTYPE'].strip().lower() == 'none':
+                     if 'OBJECT' in self.header:
+                         if 'bias' in self.header['OBJECT'].strip().lower():
+                            self.name = 'Bias' 
+                         elif 'dark' in self.header['OBJECT'].strip().lower():
+                            self.name = 'Dark' 
+                # Stars
                 if ('OBJECT' in self.header) and ('FIUMODE' in self.header):
                     if (self.header['FIUMODE'] == 'Observing'):
                         if use_star_names:
