@@ -12,6 +12,7 @@ from keckdrpframework.models.arguments import Arguments
 import modules.quicklook.src.diagnostics as diagnostics
 from modules.Utils.utils import styled_text
 from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
 from modules.Utils.kpf_parse import get_data_products_L2
 
@@ -87,9 +88,12 @@ class DiagnosticsFramework(KPF0_Primitive):
                     primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
                     name = primary_header.get_name()
                     if name == 'Dark':
-                        self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_dark_current_2D", style="Bold", color="Blue")}')
-                        self.kpf_object = diagnostics.add_headers_dark_current_2D(self.kpf_object, logger=self.logger)
-                        exit_code = 1
+                        #data_products = get_data_products_2D(self.kpf_object)
+                        #if (('Green' in data_products) or ('Red' in data_products)) and ('Telemetry' in data_products): 
+                        if True:
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_dark_current_2D", style="Bold", color="Blue")}')
+                            self.kpf_object = diagnostics.add_headers_dark_current_2D(self.kpf_object, logger=self.logger)
+                            exit_code = 1
                     else: 
                         self.logger.info("Observation type {} != 'Dark'.  Dark current not computed.".format(name))
                 except Exception as e:

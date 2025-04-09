@@ -62,7 +62,15 @@ class Analyze2D:
     def __init__(self, D2, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
         self.D2 = copy.deepcopy(D2) # use D2 instead of 2D because variable names can't start with a number
-        self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+        try:
+            if hasattr(self.D2,'TELEMETRY'):
+                self.df_telemetry = self.D2['TELEMETRY']  
+                if self.df_telemetry.empty:
+                    self.df_telemetry = None
+            else:
+            	self.df_telemetry = None
+        except:
+            self.df_telemetry = None
         primary_header = HeaderParse(D2, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
@@ -163,23 +171,29 @@ class Analyze2D:
             None
         """
         D2 = self.D2
-        self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+        if hasattr(self.D2, 'TELEMETRY'):
+            if not self.D2['TELEMETRY'].empty:
+                self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+            self.df_telemetry = None
+        else:
+            self.df_telemetry = None
         if not self.exptime > 1:
             exptime_hr = 1/3600 
         else:
             exptime_hr = self.exptime/3600
 
         # Read telemetry
-        #df_telemetry = Table.read(D2, hdu='TELEMETRY').to_pandas() # need to refer to HDU by name
-        num_columns = ['average', 'stddev', 'min', 'max']
-        for column in self.df_telemetry:
-            #df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
-            self.df_telemetry = self.df_telemetry.replace('-nan', 0)# replace nan with 0
-            if column in num_columns:
-                self.df_telemetry[column] = pd.to_numeric(self.df_telemetry[column], downcast="float")
-            else:
-                self.df_telemetry[column] = self.df_telemetry[column].astype(str)
-        self.df_telemetry.set_index("keyword", inplace=True)
+        if self.df_telemetry is not None:
+            #df_telemetry = Table.read(D2, hdu='TELEMETRY').to_pandas() # need to refer to HDU by name
+            num_columns = ['average', 'stddev', 'min', 'max']
+            for column in self.df_telemetry:
+                #df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
+                self.df_telemetry = self.df_telemetry.replace('-nan', 0)# replace nan with 0
+                if column in num_columns:
+                    self.df_telemetry[column] = pd.to_numeric(self.df_telemetry[column], downcast="float")
+                else:
+                    self.df_telemetry[column] = self.df_telemetry[column].astype(str)
+            self.df_telemetry.set_index("keyword", inplace=True)
 
         reg = {'ref1': {'name': 'Reference Region 1',         'x1': 1690, 'x2': 1990, 'y1': 1690, 'y2': 1990, 'short':'ref1', 'med_elec':0, 'label':''},
                'ref2': {'name': 'Reference Region 2',         'x1': 1690, 'x2': 1990, 'y1': 2090, 'y2': 2390, 'short':'ref2', 'med_elec':0, 'label':''},
@@ -194,16 +208,28 @@ class Analyze2D:
               }
         if (chip.lower() == 'green'): 
             frame = np.array(D2['GREEN_CCD'].data)
-            self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
-            self.green_ech_pressure_torr  = self.df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
-            self.green_coll_current_a     = self.df_telemetry.at['kpfgreen.COL_CURR',  'average']
-            self.green_ech_current_a      = self.df_telemetry.at['kpfgreen.ECH_CURR',  'average']
+            if self.df_telemetry is not None:
+                self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
+                self.green_ech_pressure_torr  = self.df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
+                self.green_coll_current_a     = self.df_telemetry.at['kpfgreen.COL_CURR',  'average']
+                self.green_ech_current_a      = self.df_telemetry.at['kpfgreen.ECH_CURR',  'average']
+            else:
+                self.green_coll_pressure_torr = None
+                self.green_ech_pressure_torr  = None
+                self.green_coll_current_a     = None
+                self.green_ech_current_a      = None
         if (chip.lower() == 'red'): 
             frame = np.array(D2['RED_CCD'].data)
-            self.red_coll_pressure_torr = self.df_telemetry.at['kpfred.COL_PRESS', 'average']
-            self.red_ech_pressure_torr  = self.df_telemetry.at['kpfred.ECH_PRESS', 'average']
-            self.red_coll_current_a     = self.df_telemetry.at['kpfred.COL_CURR',  'average']
-            self.red_ech_current_a      = self.df_telemetry.at['kpfred.ECH_CURR',  'average']
+            if self.df_telemetry is not None:
+                self.red_coll_pressure_torr = self.df_telemetry.at['kpfred.COL_PRESS', 'average']
+                self.red_ech_pressure_torr  = self.df_telemetry.at['kpfred.ECH_PRESS', 'average']
+                self.red_coll_current_a     = self.df_telemetry.at['kpfred.COL_CURR',  'average']
+                self.red_ech_current_a      = self.df_telemetry.at['kpfred.ECH_CURR',  'average']
+            else:
+                self.red_coll_pressure_torr = None
+                self.red_ech_pressure_torr  = None
+                self.red_coll_current_a     = None
+                self.red_ech_current_a      = None
 
         for r in reg.keys():
             current_region = frame[reg[r]['y1']:reg[r]['y2'], reg[r]['x1']:reg[r]['x2']]
@@ -578,19 +604,35 @@ class Analyze2D:
                 chip_title = 'Green'
                 if overplot_dark_current:
                     reg = self.green_dark_current_regions
-                    coll_pressure_torr = self.green_coll_pressure_torr
-                    ech_pressure_torr = self.green_ech_pressure_torr
-                    coll_current_a = self.green_coll_current_a
-                    ech_current_a = self.green_ech_current_a
+                    if self.green_coll_pressure_torr != None:
+                        coll_pressure_torr = self.green_coll_pressure_torr
+                    if self.green_ech_pressure_torr != None:
+                        ech_pressure_torr = self.green_ech_pressure_torr
+                    if self.green_coll_current_a != None:
+                        coll_current_a = self.green_coll_current_a
+                    if self.green_ech_current_a != None:
+                        ech_current_a = self.green_ech_current_a
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
                 if overplot_dark_current:
                     reg = self.red_dark_current_regions
-                    coll_pressure_torr = self.red_coll_pressure_torr
-                    ech_pressure_torr = self.red_ech_pressure_torr
-                    coll_current_a = self.red_coll_current_a
-                    ech_current_a = self.red_ech_current_a
+                    if self.red_coll_pressure_torr != None:
+                        coll_pressure_torr = self.red_coll_pressure_torr
+                    else:
+                        coll_pressure_torr = None
+                    if self.red_ech_pressure_torr != None:
+                        ech_pressure_torr = self.red_ech_pressure_torr
+                    else:
+                        ech_pressure_torr = None
+                    if self.red_coll_current_a != None:
+                        coll_current_a = self.red_coll_current_a
+                    else:
+                        coll_current_a = None
+                    if self.red_ech_current_a != None:
+                        ech_current_a = self.red_ech_current_a
+                    else:
+                        ech_current_a = None
             if variance:
                 image = np.array(self.D2[CHIP + '_VAR'].data)
             elif data_over_sqrt_variance:
@@ -681,12 +723,14 @@ class Analyze2D:
                          va=(((reg[r]['y1'] < 2080) and (reg[r]['y1'] > 100))*('top')+
                              ((reg[r]['y1'] > 2080) or (reg[r]['y1'] < 100))*('bottom'))
                         )
-            coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
-            ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
-            now = datetime.now()
             plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), ha='right', color='gray')
-            plt.text(4220,  500, coll_text, size=11, rotation=90, ha='center')
-            plt.text(4220, 3000, ech_text,  size=11, rotation=90, ha='center')
+            if coll_pressure_torr != None and coll_current_a != None:
+                coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
+                plt.text(4220,  500, coll_text, size=11, rotation=90, ha='center')
+            if ech_pressure_torr != None and ech_current_a != None:
+                ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
+                plt.text(4220, 3000, ech_text,  size=11, rotation=90, ha='center')
+            now = datetime.now()
             plt.text(3950, 1500, 'Bench Side\n (blue side of orders)', size=14, rotation=90, ha='center', color='white')
             plt.text( 150, 1500, 'Top Side\n (red side of orders)',    size=14, rotation=90, ha='center', color='white')
             plt.text(2040,   70, 'Collimator Side',                    size=14, rotation= 0, ha='center', color='white')

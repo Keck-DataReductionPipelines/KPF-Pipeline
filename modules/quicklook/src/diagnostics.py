@@ -68,18 +68,18 @@ def add_headers_2D_flux(D2, logger=None):
     for chip in chips:
         if chip == 'green':
             try:
-                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 2), '99th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 2), '90th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 2), '50th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 2), '10th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 3), '99th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 3), '90th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 3), '50th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 3), '10th percentile flux in 2D Green image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Green 2D flux measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 2), '99th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 2), '90th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 2), '50th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 2), '10th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 3), '99th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 3), '90th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 3), '50th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 3), '10th percentile flux in 2D Red image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Red 2D flux measurements: {e}\n{traceback.format_exc()}")
     return D2
@@ -167,14 +167,14 @@ def add_headers_dark_current_2D(D2, logger=None):
                     try:
                         if hasattr(my2D, 'green_dark_current_regions'):
                             if 'med_elec' in my2D.green_dark_current_regions[keywords[k]['key']]:
-                                value = "{:.2f}".format(my2D.green_dark_current_regions[keywords[k]['key']]['med_elec'])
+                                value = "{:.3f}".format(my2D.green_dark_current_regions[keywords[k]['key']]['med_elec'])
                     except Exception as e:
                         logger.error(f"Problem with green dark current : {e}\n{traceback.format_exc()}")
                 if chip == 'red':
                     try:
                         if hasattr(my2D, 'red_dark_current_regions'):
                             if 'med_elec' in my2D.red_dark_current_regions[keywords[k]['key']]:
-                                value = "{:.2f}".format(my2D.red_dark_current_regions[keywords[k]['key']]['med_elec'])
+                                value = "{:.3f}".format(my2D.red_dark_current_regions[keywords[k]['key']]['med_elec'])
                     except Exception as e:
                         logger.error(f"Problem with red dark current: {e}\n{traceback.format_exc()}")                
                 if value != None:
@@ -491,7 +491,7 @@ def add_headers_2D_xdisp_offset(D2, logger=None):
                     my2D.measure_xdisp_offset(chip='red', ref_image=reference_file, ref_extension=ref_extension)
                     keyword_value = f'{my2D.red_offset:.5f}'
                     keyword_sigma = f'{my2D.red_offset_sigma:.5f}'
-                    D2.header['PRIMARY']['XDSPDYR'+keyword_suffix] = (keyword_value, '[pix] Red x-disp offset;'+comment_txt)
+                    D2.header['PRIMARY']['XDSPDYR'+keyword_suffix] = (keyword_value, '[pix] Red x-disp offset; '+comment_txt)
                     D2.header['PRIMARY']['XDSPSYR'+keyword_suffix] = (keyword_sigma, '[pix] uncertainty in XDSPDYR'+keyword_suffix)
                 except Exception as e:
                     logger.error(f"Problem with Red 2D cross-dispersion offset measurements: {e}\n{traceback.format_exc()}")
