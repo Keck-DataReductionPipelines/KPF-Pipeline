@@ -1377,7 +1377,26 @@ class AnalyzeTimeSeries:
                         df = df[df['FIUMODE'] == 'Calibration']
                     
             thistitle = ''
-            if abs((end_date - start_date).days) <= 1.2:
+            if ((end_date - start_date).days <= 1.05) and ((end_date - start_date).days >= 0.95):
+                if not empty_df:
+                    t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
+                xtitle = start_date.strftime('%B %d, %Y') + ' (UT Times)'
+                if 'title' in thispanel['paneldict']:
+                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
+                
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 3600)
+                axs[p].xaxis.set_major_locator(ticker.MultipleLocator(2))  # tick every 2 hr
+                axs[p].xaxis.set_minor_locator(ticker.MultipleLocator(1))  # tick every 2 hr
+                def format_HHMM(x, pos):
+                    try:
+                        date = start_date + timedelta(hours=x)
+                        #return date.strftime('%H:%M') #+ ' UT'
+                        return date.strftime('%H:%M') + ' UT \n' + (date-timedelta(hours=10)).strftime('%H:%M') + ' HST'
+                    except:
+                        return ''
+                axs[p].xaxis.set_major_formatter(ticker.FuncFormatter(format_HHMM))
+
+            elif abs((end_date - start_date).days) <= 1.2:
                 if not empty_df:
                     t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
                 xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
@@ -1398,6 +1417,25 @@ class AnalyzeTimeSeries:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
+            elif 28 <= (end_date - start_date).days <= 31:
+                if not empty_df:
+                    t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                xtitle = start_date.strftime('%B %Y') + ' (UT Times)'
+                if 'title' in thispanel['paneldict']:
+                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
+                
+                axs[p].set_xlim(0, (end_date - start_date).days)
+                axs[p].xaxis.set_major_locator(ticker.MultipleLocator(1))  # tick every 1 day
+            
+                # Custom formatter to convert "days since start" into actual calendar labels
+                def format_mmdd(x, pos):
+                    try:
+                        date = start_date + timedelta(days=int(x))
+                        return date.strftime('%d')
+                    except:
+                        return ''
+                axs[p].xaxis.set_major_formatter(ticker.FuncFormatter(format_mmdd))
+                #axs[p].tick_params(axis='x', rotation=60)
             elif abs((end_date - start_date).days) < 32:
                 if not empty_df:
                      t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
@@ -1667,11 +1705,11 @@ class AnalyzeTimeSeries:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     #xytext=(100, -32), 
-                    xytext=(0, -32), 
+                    xytext=(0, -36), 
                     textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
