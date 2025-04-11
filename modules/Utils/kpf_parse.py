@@ -243,7 +243,6 @@ def get_datecode(ObsID):
     return datecode
 
 
-
 def get_filename(ObsID, level='L0', fullpath=False):
     """
     Extract the datecode from an ObsID or a KPF filename 
@@ -577,6 +576,30 @@ def get_data_products_L2(L2):
     if hasattr(L2, 'RECEIPT'):
         if L2['RECEIPT'].size > 1:
             data_products.append('Receipt')
+    return data_products
+
+
+def get_data_levels_expected(spectrum_type):
+    """
+    Returns a list of data levels expected for a spectrum of a given type
+
+    Args:
+        spectrum_type - possible values: 
+            'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe',
+            'Sun', 'Star'
+
+    Returns:
+        list of data expected data levels, e.g. ['L0', '2D', 'L1', 'L2']
+    """
+    data_products = ['L0']
+    
+    if spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+        data_products.append('2D')
+    if spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+        data_products.append('L1')
+    if spectrum_type in ['Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+        data_products.append('L2')
+
     return data_products
 
 
