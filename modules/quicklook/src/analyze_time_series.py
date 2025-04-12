@@ -1312,6 +1312,7 @@ class AnalyzeTimeSeries:
             plt.subplots_adjust(hspace=0)
         #plt.tight_layout() # this caused a core dump in scripts/generate_time_series_plots.py
 
+        overplot_night_box = False
         no_data = True # for now; will be set to False when data is detected
         for p in np.arange(npanels):
             thispanel = panel_arr[p]            
@@ -1380,13 +1381,13 @@ class AnalyzeTimeSeries:
             if ((end_date - start_date).days <= 1.05) and ((end_date - start_date).days >= 0.95):
                 if not empty_df:
                     t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
-                xtitle = start_date.strftime('%B %d, %Y') + ' (UT Times)'
+                xtitle = start_date.strftime('%B %d, %Y') + ' (UT; HST=UT-10 hours)'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
                 
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 3600)
-                axs[p].xaxis.set_major_locator(ticker.MultipleLocator(2))  # tick every 2 hr
-                axs[p].xaxis.set_minor_locator(ticker.MultipleLocator(1))  # tick every 2 hr
+                axs[p].xaxis.set_major_locator(ticker.MultipleLocator(2))  # major tick every 2 hr
+                axs[p].xaxis.set_minor_locator(ticker.MultipleLocator(1))  # minor tick every 1 hr
                 def format_HHMM(x, pos):
                     try:
                         date = start_date + timedelta(hours=x)
@@ -1395,7 +1396,14 @@ class AnalyzeTimeSeries:
                     except:
                         return ''
                 axs[p].xaxis.set_major_formatter(ticker.FuncFormatter(format_HHMM))
-
+                overplot_night_box = True
+                sunset_h  =  4.5   # 04:30 UT = 18:30 HST
+                sunrise_h = 16.5   # 16:30 UT =  6:30 HST
+                axs[p].axvspan(sunset_h, sunrise_h, facecolor='silver', alpha=0.2, hatch='', edgecolor='silver')
+                axs[p].annotate("Night", xy=((sunset_h+sunrise_h)/48, 1), xycoords='axes fraction', 
+                                fontsize=10, color="darkgray", ha="center", va="top",
+                                xytext=(0, -5), 
+                                textcoords='offset points')
             elif abs((end_date - start_date).days) <= 1.2:
                 if not empty_df:
                     t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
@@ -1682,6 +1690,8 @@ class AnalyzeTimeSeries:
                      clr  = axh['color']
                      alp  = axh['alpha']
                      axs[p].axhspan(ymin, ymax, color=clr, alpha=alp)
+                
+
 
             # Make legend
             if makelegend:
@@ -1709,7 +1719,7 @@ class AnalyzeTimeSeries:
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     #xytext=(100, -32), 
-                    xytext=(0, -36), 
+                    xytext=(0, -38), 
                     textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
