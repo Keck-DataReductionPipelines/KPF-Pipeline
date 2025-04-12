@@ -498,7 +498,7 @@ class Analyze2D:
             
             # Create a timestamp and annotate in the lower right corner
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            timestamp_label = f"KPF QLP: {current_time}"
+            timestamp_label = f"KPF QLP: {current_time} UT"
             plt.subplot(1, 3, 3)
             plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                         fontsize=8, color="darkgray", ha="right", va="bottom",
@@ -738,7 +738,7 @@ class Analyze2D:
          
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -35), textcoords='offset points')
@@ -1095,7 +1095,7 @@ class Analyze2D:
 
         # Annotations
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=16, color="darkgray", ha="right", va="bottom",
                     xytext=(-50, -150), textcoords='offset points')
@@ -1246,7 +1246,7 @@ class Analyze2D:
  
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
@@ -1335,7 +1335,7 @@ class Analyze2D:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
@@ -1503,7 +1503,7 @@ class Analyze2D:
          
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
@@ -1599,7 +1599,7 @@ class Analyze2D:
          
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
