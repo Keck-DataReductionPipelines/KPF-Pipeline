@@ -98,7 +98,7 @@ class AnalyzeL2:
         else:
             self.df_RV['Perc_Delta_Bary_RVC'] = self.df_RV['Delta_Bary_RVC'].copy() * 0 # just set to zero
         # compute maximum and minimum percent change difference (for only orders with nonzero weights)
-        x = self.df_RV['Perc_Delta_Bary_RV']
+        x = self.df_RV['Perc_Delta_Bary_RVC']
         self.Max_Perc_Delta_Bary_RV = x[nonzero_mask].max()
         self.Min_Perc_Delta_Bary_RV = x[nonzero_mask].min()
 
