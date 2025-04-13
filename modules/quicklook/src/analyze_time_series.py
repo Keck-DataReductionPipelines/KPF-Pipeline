@@ -22,7 +22,7 @@ import matplotlib.dates as mdates
 import matplotlib.ticker as ticker
 import matplotlib.colors as mcolors
 from matplotlib.ticker import FuncFormatter
-from modules.Utils.utils import DummyLogger
+from modules.Utils.utils import DummyLogger, get_sunrise_sunset_ut
 from modules.Utils.kpf_parse import get_datecode
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor
@@ -1391,17 +1391,18 @@ class AnalyzeTimeSeries:
                 def format_HHMM(x, pos):
                     try:
                         date = start_date + timedelta(hours=x)
-                        #return date.strftime('%H:%M') #+ ' UT'
                         return date.strftime('%H:%M') + ' UT \n' + (date-timedelta(hours=10)).strftime('%H:%M') + ' HST'
                     except:
                         return ''
                 axs[p].xaxis.set_major_formatter(ticker.FuncFormatter(format_HHMM))
                 overplot_night_box = True
-                sunset_h  =  4.5   # 04:30 UT = 18:30 HST
-                sunrise_h = 16.5   # 16:30 UT =  6:30 HST
-                axs[p].axvspan(sunset_h, sunrise_h, facecolor='silver', alpha=0.2, hatch='', edgecolor='silver')
+                
+                sunrise, sunset = get_sunrise_sunset_ut("2025-04-12")
+                sunrise_h = sunrise.hour + sunrise.minute/60 + sunrise.second/3600
+                sunset_h  = sunset.hour  + sunset.minute/60  + sunset.second/3600
+                axs[p].axvspan(sunset_h, sunrise_h, facecolor='lightgray', alpha=0.2, hatch='', edgecolor='silver')
                 axs[p].annotate("Night", xy=((sunset_h+sunrise_h)/48, 1), xycoords='axes fraction', 
-                                fontsize=10, color="darkgray", ha="center", va="top",
+                                fontsize=10, color="silver", ha="center", va="top",
                                 xytext=(0, -5), 
                                 textcoords='offset points')
             elif abs((end_date - start_date).days) <= 1.2:
@@ -1443,7 +1444,6 @@ class AnalyzeTimeSeries:
                     except:
                         return ''
                 axs[p].xaxis.set_major_formatter(ticker.FuncFormatter(format_mmdd))
-                #axs[p].tick_params(axis='x', rotation=60)
             elif abs((end_date - start_date).days) < 32:
                 if not empty_df:
                      t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
@@ -1452,6 +1452,33 @@ class AnalyzeTimeSeries:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=3, prune=None))
+            elif 360 <= (end_date - start_date).days <= 370:
+                if not empty_df:
+                    t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                xtitle = start_date.strftime('%Y')
+                if 'title' in thispanel['paneldict']:
+                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
+                axs[p].set_xlim(0, (end_date - start_date).days)
+
+                # Set major ticks at month boundaries
+                month_starts = []
+                current = start_date.replace(day=1)
+                while current < end_date:
+                    delta = (current - start_date).days
+                    month_starts.append(delta)
+                    if current.month == 12:
+                        current = current.replace(year=current.year + 1, month=1)
+                    else:
+                        current = current.replace(month=current.month + 1)
+
+                axs[p].xaxis.set_major_locator(ticker.FixedLocator(month_starts))
+                def format_mmdd(x, pos):
+                    try:
+                        date = start_date + timedelta(days=int(x))
+                        return date.strftime('%m-%d')
+                    except:
+                        return ''
+                axs[p].xaxis.set_major_formatter(ticker.FuncFormatter(format_mmdd))
             else:
                 if not empty_df:
                     t = df['DATE-MID'] # dates
@@ -1549,6 +1576,10 @@ class AnalyzeTimeSeries:
                         t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                     elif abs((end_date - start_date).days) < 32:
                         t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                    elif 360 <= (end_date - start_date).days <= 370:
+                        if not empty_df:
+                            t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+
                     else:
                         t = df['DATE-MID'] # dates
     
