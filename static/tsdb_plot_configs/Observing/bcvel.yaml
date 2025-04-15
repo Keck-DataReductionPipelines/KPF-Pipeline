@@ -60,3 +60,34 @@ panel_arr:
       not_junk: true
       on_sky: true
       legend_frac_size: 0.30
+
+  - panelvars:
+      - col: MAXPCBCV
+        plot_type: scatter
+        plot_attr:
+          label: max(PCBCV)
+          marker: .
+          linewidth: 0.5
+      - col: MINPCBCV
+        plot_type: scatter
+        plot_attr:
+          label: min(PCBCV)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Percent Change (BCV) [%]
+      title: Barycentric Variations
+      axhspan:
+        1:
+          ymin: -100
+          ymax: -1
+          color: red
+          alpha: 0.1
+        2:
+          ymin: 1
+          ymax: 100
+          color: red
+          alpha: 0.1
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.30
