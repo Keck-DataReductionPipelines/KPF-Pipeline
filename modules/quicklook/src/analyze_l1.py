@@ -177,27 +177,30 @@ class AnalyzeL1:
             self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
         
         try:
-            wls_filename = self.header[kwd]
-            wls_filename_datetime = get_datecode_from_filename(wls_filename, datetime_out=True)
-            if "morn" in wls_filename:
-                wls_filename_datetime += timedelta(hours=18.8)
-            elif "eve" in wls_filename:
-                wls_filename_datetime += timedelta(hours=3.5)
-            elif "midnight" in wls_filename:
-                wls_filename_datetime += timedelta(hours=9.5)
-            if verbose:
-                self.logger.info(f'Date of {kwd}: {wls_filename_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
-
-            if type(wls_filename_datetime) == type(date_obs_datetime):
-                age_wls_file = (wls_filename_datetime - date_obs_datetime).total_seconds() / 86400.0
+            if kwd in self.header:
+                wls_filename = self.header[kwd]
+                wls_filename_datetime = get_datecode_from_filename(wls_filename, datetime_out=True)
+                if "morn" in wls_filename:
+                    wls_filename_datetime += timedelta(hours=18.8)
+                elif "eve" in wls_filename:
+                    wls_filename_datetime += timedelta(hours=3.5)
+                elif "midnight" in wls_filename:
+                    wls_filename_datetime += timedelta(hours=9.5)
+                if verbose:
+                    self.logger.info(f'Date of {kwd}: {wls_filename_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
+    
+                if type(wls_filename_datetime) == type(date_obs_datetime):
+                    age_wls_file = (wls_filename_datetime - date_obs_datetime).total_seconds() / 86400.0
+                else:
+                    self.logger.info("Error comparing datetimes: ")
+                    self.logger.info("wls_filename_datetime = " + str(wls_filename_datetime))
+                    self.logger.info("date_obs_datetime = " + str(date_obs_datetime))
+                    age_wls_file = None
+                if verbose:
+                    self.logger.info(f'Days between observation and {kwd}: {age_wls_file}')
             else:
-                self.logger.info("Error comparing datetimes: ")
-                self.logger.info("wls_filename_datetime = " + str(wls_filename_datetime))
-                self.logger.info("date_obs_datetime = " + str(date_obs_datetime))
+                self.logger.info(f"{kwd} not in header")
                 age_wls_file = None
-
-            if verbose:
-                self.logger.info(f'Days between observation and {kwd}: {age_wls_file}')
 
             return age_wls_file
 
