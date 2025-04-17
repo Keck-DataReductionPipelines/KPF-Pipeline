@@ -1069,6 +1069,7 @@ class AnalyzeTimeSeries:
             where_queries.append(f'({or_objects})')
         # does object_like work?
         if object_like is not None: 
+            object_like = [f"OBJECT LIKE '%{obj}%'" for obj in object_like]
             or_objects = ' OR '.join(object_like)
             where_queries.append(f'({or_objects})')
         if only_source is not None:
