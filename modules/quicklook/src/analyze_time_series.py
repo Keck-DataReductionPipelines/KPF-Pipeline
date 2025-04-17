@@ -1312,25 +1312,6 @@ class AnalyzeTimeSeries:
         no_data = True # for now; will be set to False when data is detected
         for p in np.arange(npanels):
             thispanel = panel_arr[p]            
-            # not_junk = None
-            # if 'not_junk' in thispanel['paneldict']:
-            #     if str(thispanel['paneldict']['not_junk']).lower() == 'true':
-            #         not_junk = True
-            #     elif str(thispanel['paneldict']['not_junk']).lower() == 'false':
-            #         not_junk = False
-            # only_object = None
-            # if 'only_object' in thispanel['paneldict']:
-            #     only_object = thispanel['paneldict']['only_object']
-            # object_like = None
-            # if 'object_like' in thispanel['paneldict']:
-            #     object_like = thispanel['paneldict']['object_like']
-            #     if isinstance(object_like, str):
-            #         object_like = [object_like]  # Convert single string to list
-            # only_source = None
-            # if 'only_source' in thispanel['paneldict']:
-            #     only_source = thispanel['paneldict']['only_source']
-
-            #START DHRITI CODE
             not_junk = thispanel['paneldict'].get('not_junk', plotdict.get('not_junk', None))
             if isinstance(not_junk, str):
                 not_junk = True if not_junk.lower() == 'true' else False if not_junk.lower() == 'false' else not_junk
@@ -1348,7 +1329,6 @@ class AnalyzeTimeSeries:
                             flattened.append(item)
                     object_like = flattened
             only_source = thispanel['paneldict'].get('only_source', plotdict.get('only_source', None))
-            #END DHRITI CODE
 
             if start_date == None:
                 start_date = datetime(2020, 1,  1)
@@ -1694,7 +1674,7 @@ class AnalyzeTimeSeries:
             self.logger.info(f"Error saving file or showing plot: {e}")
 
     def plot_rv_per_fiber_wavelength(self, rv, chip, fiber, start_date=None, end_date=None, only_object=None, only_source=None, 
-                                    object_like=None, fig_path=None, show_plot=False, 
+                                    object_like=None, fig_path=None, show_plot=True, 
                                     log_savefig_timing=False):
         """
         Generate a timeseries showing every orderlet of a specific fiber (SCI1, SCI2, or SCI3) for either green or red. 
@@ -1793,7 +1773,7 @@ class AnalyzeTimeSeries:
                 plt.scatter(times, rv_values + i * 0.01, label=rv_col, alpha=0.7, s=2)
 
         plt.xlabel("Time")
-        plt.ylabel(f"{rv.upper()} RV")
+        plt.ylabel(f"RV OF {rv.upper()}")
         plt.title(f"{rv.upper()} RV FOR {fiber.upper()} {chip.upper()}")
         plt.legend(fontsize=8) 
         plt.grid(True)
