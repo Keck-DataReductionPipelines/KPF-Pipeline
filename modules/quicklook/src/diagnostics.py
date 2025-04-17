@@ -44,10 +44,10 @@ def add_headers_2D_flux(D2, logger=None):
         RD2DF10P - 10th percentile flux in the 2D Red image (e-)
 
     Args:
-        D2 - a KPF L1 object 
+        D2 - a KPF 2D object 
 
     Returns:
-        D2 - a L1 file with header keywords added
+        D2 - a 2D file with header keywords added
     """
 
     if logger == None:
@@ -68,21 +68,22 @@ def add_headers_2D_flux(D2, logger=None):
     for chip in chips:
         if chip == 'green':
             try:
-                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 2), '99th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 2), '90th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 2), '50th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 2), '10th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 3), '99th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 3), '90th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 3), '50th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 3), '10th percentile flux in 2D Green image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Green 2D flux measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 2), '99th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 2), '90th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 2), '50th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 2), '10th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 3), '99th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 3), '90th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 3), '50th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 3), '10th percentile flux in 2D Red image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Red 2D flux measurements: {e}\n{traceback.format_exc()}")
     return D2
+
 
 def add_headers_dark_current_2D(D2, logger=None):
     """
@@ -166,20 +167,21 @@ def add_headers_dark_current_2D(D2, logger=None):
                     try:
                         if hasattr(my2D, 'green_dark_current_regions'):
                             if 'med_elec' in my2D.green_dark_current_regions[keywords[k]['key']]:
-                                value = "{:.2f}".format(my2D.green_dark_current_regions[keywords[k]['key']]['med_elec'])
+                                value = "{:.3f}".format(my2D.green_dark_current_regions[keywords[k]['key']]['med_elec'])
                     except Exception as e:
                         logger.error(f"Problem with green dark current : {e}\n{traceback.format_exc()}")
                 if chip == 'red':
                     try:
                         if hasattr(my2D, 'red_dark_current_regions'):
                             if 'med_elec' in my2D.red_dark_current_regions[keywords[k]['key']]:
-                                value = "{:.2f}".format(my2D.red_dark_current_regions[keywords[k]['key']]['med_elec'])
+                                value = "{:.3f}".format(my2D.red_dark_current_regions[keywords[k]['key']]['med_elec'])
                     except Exception as e:
                         logger.error(f"Problem with red dark current: {e}\n{traceback.format_exc()}")                
                 if value != None:
                     D2.header['PRIMARY'][keyword] = (value, comment)
     
     return D2
+
 
 def add_headers_guider(D2, logger=None):
     """
@@ -262,6 +264,7 @@ def add_headers_guider(D2, logger=None):
         logger.error(f"Problem with guider fit: {e}\n{traceback.format_exc()}")
                                            
     return D2
+
 
 def add_headers_hk(D2, logger=None):
     """
@@ -415,6 +418,83 @@ def add_headers_masters_age_2D(D2, logger=None, verbose=False):
             logger.error(f"Problem with {new_keyword} age determination: Age of {master_file} compared to this file (whole days) = {new_keyword}")
             D2.header['PRIMARY'][new_keyword] = (-999, 'ERROR: Age of {master_file} compared to this file (whole days)')
 
+    return D2
+
+
+def add_headers_2D_xdisp_offset(D2, logger=None):
+    """
+    Adds keywords to the 2D object header for measurements of offsets in 
+    cross-dispersion
+    
+    Keywords:
+        XDSPDYG1 - Green cross-dispersion offset [pix] compared to master reference
+        XDSPDYG2 - Green cross-dispersion offset [pix] compared to reference in era
+        XDSPDYR1 - Red cross-dispersion offset [pix] compared to master reference
+        XDSPDYR2 - Red cross-dispersion offset [pix] compared to reference in era
+        XDSPSYG1 - Uncertainty [pix] in XDSPDYG1 
+        XDSPSYG2 - Uncertainty [pix] in XDSPDYG2
+        XDSPSYR1 - Uncertainty [pix] in XDSPDYR1
+        XDSPSYR2 - Uncertainty [pix] in XDSPDYR2
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_2D(D2)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        print('Not a valid 2D.')
+        return D2
+        
+    # Compute cross-dispersion offsets with two references: global and in era
+    for ref in ['global', 'era']:
+        if ref == 'era':
+            dt = get_datetime_obsid(my2D.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+            keyword_suffix = '2'
+            comment_txt = 'in-era reference'
+        elif ref == 'global':
+            dt = '2024-02-11T00:00:00.000000' # reference time for all KPF observations
+            keyword_suffix = '1'
+            comment_txt = 'global reference'
+        default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+        GC = GetCalibrations(dt, default_config_path, use_db=False)
+        wls_dict = GC.lookup(subset=['trace_flat'])
+        reference_file = wls_dict['trace_flat']
+        my2D = Analyze2D(D2, logger=logger)
+        if 'master' in reference_file:
+            ref_extension = 'CCD_STACK'
+        else:
+            ref_extension = None
+        
+        for chip in chips:
+            if chip == 'green':
+                try:
+                    my2D.measure_xdisp_offset(chip='green', ref_image=reference_file, ref_extension=ref_extension)
+                    keyword_value = f'{my2D.green_offset:.5f}'
+                    keyword_sigma = f'{my2D.green_offset_sigma:.5f}'
+                    D2.header['PRIMARY']['XDSPDYG'+keyword_suffix] = (keyword_value, '[pix] Green x-disp offset; '+comment_txt)
+                    D2.header['PRIMARY']['XDSPSYG'+keyword_suffix] = (keyword_sigma, '[pix] uncertainty in XDSPDYG'+keyword_suffix)
+                except Exception as e:
+                    logger.error(f"Problem with Green 2D cross-dispersion offset measurements: {e}\n{traceback.format_exc()}")
+            if chip == 'red':
+                try:
+                    my2D.measure_xdisp_offset(chip='red', ref_image=reference_file, ref_extension=ref_extension)
+                    keyword_value = f'{my2D.red_offset:.5f}'
+                    keyword_sigma = f'{my2D.red_offset_sigma:.5f}'
+                    D2.header['PRIMARY']['XDSPDYR'+keyword_suffix] = (keyword_value, '[pix] Red x-disp offset; '+comment_txt)
+                    D2.header['PRIMARY']['XDSPSYR'+keyword_suffix] = (keyword_sigma, '[pix] uncertainty in XDSPDYR'+keyword_suffix)
+                except Exception as e:
+                    logger.error(f"Problem with Red 2D cross-dispersion offset measurements: {e}\n{traceback.format_exc()}")
     return D2
 
 
