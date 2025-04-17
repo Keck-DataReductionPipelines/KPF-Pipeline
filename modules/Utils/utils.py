@@ -1,9 +1,11 @@
 # This file contains assorted utility functions that are mostly 
 # for computing astronomical quantities associated with KPF data.
 
+from datetime import datetime
 from astropy.time import Time
 from astropy import units as u
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz, get_sun, get_body
+import numpy as np
 
 def get_sun_alt(UTdatetime):
     """
@@ -23,6 +25,47 @@ def get_sun_alt(UTdatetime):
     alt = altaz_sun.alt.deg
 
     return alt
+
+from astropy.coordinates import EarthLocation, get_sun, AltAz
+from astropy.time import Time
+import astropy.units as u
+import numpy as np
+from datetime import datetime
+
+# Define Maunakea location
+maunakea = EarthLocation(lat='19d49m42.6s', lon='-155d28m48.9s', height=4205)
+
+def get_sunrise_sunset_ut(utc_date):
+    """
+    Return sunrise and sunset times (UTC) as datetime.datetime objects for 
+    the given UT date at Maunakea.
+
+    Parameters:
+        utc_date (str): Date string in 'YYYY-MM-DD' format
+
+    Returns:
+        (sunrise_dt, sunset_dt): Tuple of datetime.datetime objects (UT) or (None, None)
+    """
+    # Generate time samples (every 5 minutes over 24 hours)
+    midnight = Time(utc_date + ' 00:00:00', scale='utc')
+    delta_minutes = np.linspace(0, 1440, 288)  # 5-minute steps
+    times = midnight + delta_minutes * u.minute
+
+    # Compute Sun altitude
+    altaz_frame = AltAz(obstime=times, location=maunakea)
+    sun_altitudes = get_sun(times).transform_to(altaz_frame).alt
+
+    # Find transitions across the horizon
+    above_horizon = sun_altitudes > 0 * u.deg
+    crossings = np.where(np.diff(above_horizon.astype(int)) != 0)[0]
+
+    if len(crossings) >= 2:
+        sunrise = times[crossings[0]].to_datetime()
+        sunset = times[crossings[1]].to_datetime()
+        return sunrise, sunset
+    else:
+        return None, None  # Polar day or night
+   
     
 def get_moon_sep(UTdatetime, RA, dec, observer_location=None):
     """
