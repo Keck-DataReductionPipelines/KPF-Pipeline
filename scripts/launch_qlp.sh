@@ -4,7 +4,7 @@ read -r -d '' SCRIPT_DOC <<'EOF'
 Script name: launch_qlp.sh
 Author: Andrew Howard
 
-This script launches 20 QLP (Quicklook Pipeline) instances for data levels 
+This script launches 50 QLP (Quicklook Pipeline) instances for data levels 
 L0, 2D, L1, L2, and masters. It utilizes the specified recipe and config 
 files to process observational data in the KPF pipeline. The script can 
 optionally process only recent observations from the current day.
@@ -45,7 +45,7 @@ done
 
 # Launch QLP instances for each data level
 for lvl in "${data_levels[@]}"; do
-    ncpus=20
+    ncpus=50
     cmd="kpf --ncpus=${ncpus} --watch ${KPFPIPE_DATA}/${lvl}/ -r ${recipe_file} -c ${config_file}"
     echo $cmd
     eval $cmd &
