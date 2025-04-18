@@ -11,11 +11,14 @@ from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
 from modules.Utils.kpf_parse import HeaderParse, get_datecode_from_filename
+from modules.Utils.kpf_parse import get_datetime_obsid
 from modules.Utils.utils import DummyLogger
 from astropy.time import Time
 from astropy.table import Table
 from datetime import datetime, timedelta
 from scipy.optimize import curve_fit
+from scipy.signal import correlate
+from scipy.stats import median_abs_deviation
 from kpfpipe.models.level0 import KPF0
 #import emcee
 #import corner
@@ -59,7 +62,15 @@ class Analyze2D:
     def __init__(self, D2, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
         self.D2 = copy.deepcopy(D2) # use D2 instead of 2D because variable names can't start with a number
-        self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+        try:
+            if hasattr(self.D2,'TELEMETRY'):
+                self.df_telemetry = self.D2['TELEMETRY']  
+                if self.df_telemetry.empty:
+                    self.df_telemetry = None
+            else:
+            	self.df_telemetry = None
+        except:
+            self.df_telemetry = None
         primary_header = HeaderParse(D2, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
@@ -160,23 +171,29 @@ class Analyze2D:
             None
         """
         D2 = self.D2
-        self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+        if hasattr(self.D2, 'TELEMETRY'):
+            if not self.D2['TELEMETRY'].empty:
+                self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+            self.df_telemetry = None
+        else:
+            self.df_telemetry = None
         if not self.exptime > 1:
             exptime_hr = 1/3600 
         else:
             exptime_hr = self.exptime/3600
 
         # Read telemetry
-        #df_telemetry = Table.read(D2, hdu='TELEMETRY').to_pandas() # need to refer to HDU by name
-        num_columns = ['average', 'stddev', 'min', 'max']
-        for column in self.df_telemetry:
-            #df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
-            self.df_telemetry = self.df_telemetry.replace('-nan', 0)# replace nan with 0
-            if column in num_columns:
-                self.df_telemetry[column] = pd.to_numeric(self.df_telemetry[column], downcast="float")
-            else:
-                self.df_telemetry[column] = self.df_telemetry[column].astype(str)
-        self.df_telemetry.set_index("keyword", inplace=True)
+        if self.df_telemetry is not None:
+            #df_telemetry = Table.read(D2, hdu='TELEMETRY').to_pandas() # need to refer to HDU by name
+            num_columns = ['average', 'stddev', 'min', 'max']
+            for column in self.df_telemetry:
+                #df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
+                self.df_telemetry = self.df_telemetry.replace('-nan', 0)# replace nan with 0
+                if column in num_columns:
+                    self.df_telemetry[column] = pd.to_numeric(self.df_telemetry[column], downcast="float")
+                else:
+                    self.df_telemetry[column] = self.df_telemetry[column].astype(str)
+            self.df_telemetry.set_index("keyword", inplace=True)
 
         reg = {'ref1': {'name': 'Reference Region 1',         'x1': 1690, 'x2': 1990, 'y1': 1690, 'y2': 1990, 'short':'ref1', 'med_elec':0, 'label':''},
                'ref2': {'name': 'Reference Region 2',         'x1': 1690, 'x2': 1990, 'y1': 2090, 'y2': 2390, 'short':'ref2', 'med_elec':0, 'label':''},
@@ -191,16 +208,28 @@ class Analyze2D:
               }
         if (chip.lower() == 'green'): 
             frame = np.array(D2['GREEN_CCD'].data)
-            self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
-            self.green_ech_pressure_torr  = self.df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
-            self.green_coll_current_a     = self.df_telemetry.at['kpfgreen.COL_CURR',  'average']
-            self.green_ech_current_a      = self.df_telemetry.at['kpfgreen.ECH_CURR',  'average']
+            if self.df_telemetry is not None:
+                self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
+                self.green_ech_pressure_torr  = self.df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
+                self.green_coll_current_a     = self.df_telemetry.at['kpfgreen.COL_CURR',  'average']
+                self.green_ech_current_a      = self.df_telemetry.at['kpfgreen.ECH_CURR',  'average']
+            else:
+                self.green_coll_pressure_torr = None
+                self.green_ech_pressure_torr  = None
+                self.green_coll_current_a     = None
+                self.green_ech_current_a      = None
         if (chip.lower() == 'red'): 
             frame = np.array(D2['RED_CCD'].data)
-            self.red_coll_pressure_torr = self.df_telemetry.at['kpfred.COL_PRESS', 'average']
-            self.red_ech_pressure_torr  = self.df_telemetry.at['kpfred.ECH_PRESS', 'average']
-            self.red_coll_current_a     = self.df_telemetry.at['kpfred.COL_CURR',  'average']
-            self.red_ech_current_a      = self.df_telemetry.at['kpfred.ECH_CURR',  'average']
+            if self.df_telemetry is not None:
+                self.red_coll_pressure_torr = self.df_telemetry.at['kpfred.COL_PRESS', 'average']
+                self.red_ech_pressure_torr  = self.df_telemetry.at['kpfred.ECH_PRESS', 'average']
+                self.red_coll_current_a     = self.df_telemetry.at['kpfred.COL_CURR',  'average']
+                self.red_ech_current_a      = self.df_telemetry.at['kpfred.ECH_CURR',  'average']
+            else:
+                self.red_coll_pressure_torr = None
+                self.red_ech_pressure_torr  = None
+                self.red_coll_current_a     = None
+                self.red_ech_current_a      = None
 
         for r in reg.keys():
             current_region = frame[reg[r]['y1']:reg[r]['y2'], reg[r]['x1']:reg[r]['x2']]
@@ -279,6 +308,208 @@ class Analyze2D:
         #bounds = ([-np.inf,np.inf],[-np.inf,np.inf],[],[])
         params_2g, _ = curve_fit(two_gaussian_cdfs, intensities, cdf, p0=initial_params_2g)#, bounds=bounds)
         print(params_2g)
+
+
+    def measure_xdisp_offset(self, chip=None, ref_image=None, ref_extension=None, 
+                             num_slices=31, slice_width=30, fit_half_width=8, 
+                             fig_path=None, show_plot=False):
+        """
+        This method compares the self.D2 image (green or red) to a reference 
+        2D image and determines the amount of vertical shift between then using
+        cross-correlation functions of vertical slices of each image.
+        
+        Args:
+            chip (string) - 'green' or 'red'
+            ref_image (2D object, np.array, or filename) - another 2D object, 
+                numpy array with the same dimensions as self.D2, 
+                or the filename of a 2D object
+            num_slices - how many vertical columns to sample across the image
+            slice_width - how wide each vertical slice is, in pixels
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Attributes (set by this method):
+            green_offset - offset in pixels between green 2D image an a reference
+            green_offset_sigma - uncertainty in green_offset
+            red_offset - offset in pixels between green 2D image an a reference
+            red_offset_sigma - uncertainty in red_offset
+
+        Returns:
+            (optionally:) PNG plot in fig_path or shows the plot it in the 
+            current environment (e.g., in a Jupyter Notebook).
+        """
+
+        def parabolic_peak(x, a, b, c):
+            '''Parabola function'''
+            return a * x**2 + b * x + c
+        
+        def subpixel_peak_position_fixed(corr, lags, fit_half_width=8):
+            """
+            Find peak of CCF.
+            """
+            peak_idx = np.argmax(corr)
+            if peak_idx <= fit_half_width or peak_idx >= len(corr) - fit_half_width:
+                return lags[peak_idx], lags[peak_idx]  # Edge case
+        
+            x_vals = lags[peak_idx - fit_half_width:peak_idx + fit_half_width + 1]
+            y_vals = corr[peak_idx - fit_half_width:peak_idx + fit_half_width + 1]
+        
+            x_init = lags[peak_idx - 1:peak_idx + 2]
+            y_init = corr[peak_idx - 1:peak_idx + 2]
+            a, b, c = np.polyfit(x_init, y_init, 2)
+            p0 = [a, b, c]
+            try:
+                popt, _ = curve_fit(parabolic_peak, x_vals, y_vals, p0=p0)
+                a, b, _ = popt
+                if np.abs(a) < 1e-6:
+                    raise ValueError("Flat curvature")
+                vertex = -b / (2 * a)
+            except Exception:
+                vertex = lags[peak_idx]
+        
+            peak_lag = lags[peak_idx]
+            #print(f"peak_lag: {peak_lag:.1f}, offset: {vertex:.3f}, delta: {vertex - peak_lag:.3f}")
+            return vertex, peak_lag
+          
+        if chip == 'green' or chip == 'red':
+            CHIP = chip.upper()
+            EXT = CHIP + '_CCD'
+            img1 = self.D2[EXT]
+            if ref_extension != None:
+                EXT = CHIP + '_' + ref_extension
+            if type(ref_image) == type(self.D2):
+                img2 = ref_image[EXT]
+            elif type(ref_image) == type(img1):
+                img2 = ref_image
+            elif type(ref_image) == type('abc'):
+                D2_ref = KPF0.from_fits(ref_image)
+                img2 = D2_ref[EXT]
+        else:
+            self.error('measure_xdisp_offset: chip not specified.  Returning.')
+                       
+        assert img1.shape == img2.shape, "Images must be the same shape"
+        
+        h, w = img1.shape
+        xs = (w // 2 - (num_slices // 2) * slice_width) + np.arange(num_slices) * slice_width
+    
+        all_corrs = []
+        all_lags = []
+        offsets = []
+        peak_lags = []
+        lags = np.arange(-h + 1, h)
+    
+        for x in xs:
+            slice1 = img1[:, x:x+slice_width].mean(axis=1)
+            slice2 = img2[:, x:x+slice_width].mean(axis=1)
+            slice1 -= np.mean(slice1)
+            slice2 -= np.mean(slice2)
+            corr = correlate(slice1, slice2, mode='full')
+            # lags already defined globally
+            all_lags.append(lags)  # ensure lags match corr
+            all_corrs.append(corr)
+    
+            offset, peak_lag = subpixel_peak_position_fixed(corr, lags, fit_half_width=fit_half_width)
+            offsets.append(offset)
+            peak_lags.append(peak_lag)
+    
+        # Filter out large outliers
+        offsets = np.array(offsets)
+        if np.all(offsets == offsets[0]):
+            filtered_offsets = offsets
+        else:
+            median = np.median(offsets)
+            mad = median_abs_deviation(offsets)
+            threshold = 5 * mad
+            filtered_offsets = offsets[np.abs(offsets - median) < threshold]
+        filtered_median = np.median(filtered_offsets)
+
+    
+        # If no offsets passed the outlier filter, use all offsets
+        if len(filtered_offsets) == 0:
+            filtered_offsets = offsets
+    
+        # Compute 1-sigma uncertainty from percentiles
+        lower = np.percentile(filtered_offsets, 16)
+        upper = np.percentile(filtered_offsets, 84)
+        sigma = (upper - lower) / 2
+     
+        if chip == 'green':
+            self.green_offset = filtered_median
+            self.green_offset_sigma = sigma
+        elif chip == 'red':
+            self.red_offset = filtered_median
+            self.red_offset_sigma = sigma
+    
+        if fig_path or show_plot:
+            plt.figure(figsize=(15, 4))
+            plottitle = f'Cross Dispersion Offset - {self.ObsID}'
+            if chip == 'green':
+                plottitle = plottitle + f' - Green: {self.green_offset:.4f} ± {self.green_offset_sigma:.4f}'
+            if chip == 'red':
+                plottitle = plottitle + f' - Red: {self.red_offset:.4f} ± {self.red_offset_sigma:.4f}'
+            plt.suptitle(plottitle, fontsize=16, y=0.98)    
+            
+            # Plot all cross-correlations
+            plt.subplot(1, 3, 1)
+            for corr, lags in zip(all_corrs, all_lags):
+                plt.plot(lags, corr, alpha=0.5)
+            plt.axvline(filtered_median, color='r', linestyle='--', label=f'Offset: {filtered_median:.4f} pix')
+            plt.title('Cross-correlations of All Slices')
+            plt.xlabel('Lag')
+            plt.xlim(-120, 120)
+            plt.ylabel('Correlation')
+            plt.legend()
+            plt.grid(True)
+    
+            # Zoom-in around actual subpixel peak offsets
+            plt.subplot(1, 3, 2)
+            zoom_range = 5
+            for corr, lags, offset in zip(all_corrs, all_lags, offsets):
+                center_idx = np.argmin(np.abs(lags - offset))
+                if center_idx - zoom_range >= 0 and center_idx + zoom_range + 1 <= len(corr):
+                    zoom_lags = lags[center_idx - zoom_range:center_idx + zoom_range + 1]
+                    zoom_corr = corr[center_idx - zoom_range:center_idx + zoom_range + 1]
+                    plt.plot(zoom_lags, zoom_corr, marker='o', alpha=0.6)
+            plt.axvline(filtered_median, color='r', linestyle='--', label='Median Offset')
+            plt.title('Zoom-In Around Peaks')
+            plt.xlabel('Lag')
+            plt.legend()
+            plt.grid(True)
+    
+            # Histogram of offsets
+            plt.subplot(1, 3, 3)
+            plt.hist(filtered_offsets, bins=20, edgecolor='k', alpha=0.7)
+            plt.axvline(filtered_median, color='r', linestyle='--', label='Median Offset')
+            plt.title('Offset Histogram')
+            plt.xlabel('Offset (pixels)')
+            plt.ylabel('Frequency')
+            plt.legend()
+            plt.grid(True)
+    
+            plt.tight_layout()
+            
+            # Annotate the reference file
+            if type(ref_image) == type('abc'):
+                ref_label = f'Reference: {ref_image}'
+                plt.subplot(1, 3, 1)
+                plt.annotate(ref_label, xy=(0, 0), xycoords='axes fraction', 
+                            fontsize=8, color="darkgray", ha="left", va="bottom",
+                            xytext=(0, -50), textcoords='offset points')
+            
+            # Create a timestamp and annotate in the lower right corner
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            timestamp_label = f"KPF QLP: {current_time} UT"
+            plt.subplot(1, 3, 3)
+            plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                        fontsize=8, color="darkgray", ha="right", va="bottom",
+                        xytext=(0, -50), textcoords='offset points')
+    
+            # Display the plot
+            if fig_path != None:
+                plt.savefig(fig_path, dpi=300, facecolor='w')
+            if show_plot == True:
+                plt.show()
+            plt.close('all')
 
 
     def plot_2D_image(self, chip=None, variance=False, data_over_sqrt_variance=False,
@@ -373,19 +604,35 @@ class Analyze2D:
                 chip_title = 'Green'
                 if overplot_dark_current:
                     reg = self.green_dark_current_regions
-                    coll_pressure_torr = self.green_coll_pressure_torr
-                    ech_pressure_torr = self.green_ech_pressure_torr
-                    coll_current_a = self.green_coll_current_a
-                    ech_current_a = self.green_ech_current_a
+                    if self.green_coll_pressure_torr != None:
+                        coll_pressure_torr = self.green_coll_pressure_torr
+                    if self.green_ech_pressure_torr != None:
+                        ech_pressure_torr = self.green_ech_pressure_torr
+                    if self.green_coll_current_a != None:
+                        coll_current_a = self.green_coll_current_a
+                    if self.green_ech_current_a != None:
+                        ech_current_a = self.green_ech_current_a
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
                 if overplot_dark_current:
                     reg = self.red_dark_current_regions
-                    coll_pressure_torr = self.red_coll_pressure_torr
-                    ech_pressure_torr = self.red_ech_pressure_torr
-                    coll_current_a = self.red_coll_current_a
-                    ech_current_a = self.red_ech_current_a
+                    if self.red_coll_pressure_torr != None:
+                        coll_pressure_torr = self.red_coll_pressure_torr
+                    else:
+                        coll_pressure_torr = None
+                    if self.red_ech_pressure_torr != None:
+                        ech_pressure_torr = self.red_ech_pressure_torr
+                    else:
+                        ech_pressure_torr = None
+                    if self.red_coll_current_a != None:
+                        coll_current_a = self.red_coll_current_a
+                    else:
+                        coll_current_a = None
+                    if self.red_ech_current_a != None:
+                        ech_current_a = self.red_ech_current_a
+                    else:
+                        ech_current_a = None
             if variance:
                 image = np.array(self.D2[CHIP + '_VAR'].data)
             elif data_over_sqrt_variance:
@@ -476,12 +723,14 @@ class Analyze2D:
                          va=(((reg[r]['y1'] < 2080) and (reg[r]['y1'] > 100))*('top')+
                              ((reg[r]['y1'] > 2080) or (reg[r]['y1'] < 100))*('bottom'))
                         )
-            coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
-            ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
-            now = datetime.now()
             plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), ha='right', color='gray')
-            plt.text(4220,  500, coll_text, size=11, rotation=90, ha='center')
-            plt.text(4220, 3000, ech_text,  size=11, rotation=90, ha='center')
+            if coll_pressure_torr != None and coll_current_a != None:
+                coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
+                plt.text(4220,  500, coll_text, size=11, rotation=90, ha='center')
+            if ech_pressure_torr != None and ech_current_a != None:
+                ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
+                plt.text(4220, 3000, ech_text,  size=11, rotation=90, ha='center')
+            now = datetime.now()
             plt.text(3950, 1500, 'Bench Side\n (blue side of orders)', size=14, rotation=90, ha='center', color='white')
             plt.text( 150, 1500, 'Top Side\n (red side of orders)',    size=14, rotation=90, ha='center', color='white')
             plt.text(2040,   70, 'Collimator Side',                    size=14, rotation= 0, ha='center', color='white')
@@ -489,7 +738,7 @@ class Analyze2D:
          
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -35), textcoords='offset points')
@@ -694,45 +943,41 @@ class Analyze2D:
         offsets = [-sep, 0, sep]
         
         # Generate the array of 2D images
-        fig, axs = plt.subplots(3, 3, figsize=(10,8.5), tight_layout=True)
+        fig, axs = plt.subplots(3, 3, figsize=(10, 8)) 
+        
         for i in range(3):
             for j in range(3):
-                # Calculate the top left corner of each sub-image
                 start_x = center_x - size // 2 + offsets[i]
                 start_y = center_y - size // 2 + offsets[j]
-
-                # Slice out and display the sub-image
                 sub_img = image[start_x:start_x+size, start_y:start_y+size]
-                im = axs[2-i, j].imshow(sub_img, origin='lower', 
-                                 extent=[start_y, start_y+size, start_x, start_x+size], # these indices appear backwards, but work
-                                 vmin = np.nanpercentile(sub_img,0.1), 
-                                 vmax = np.nanpercentile(sub_img,99.9),
-                                 interpolation = 'None',
-                                 cmap='viridis')
+                im = axs[2-i, j].imshow(sub_img, origin='lower',
+                                        extent=[start_y, start_y+size, start_x, start_x+size],
+                                        vmin=np.nanpercentile(sub_img, 0.1),
+                                        vmax=np.nanpercentile(sub_img, 99.9),
+                                        interpolation='none', cmap='viridis')
                 axs[2-i, j].grid(False)
-                axs[2-i, j].tick_params(top=False, right=False, labeltop=False, labelright=False)
-                if i != 2:
-                    axs[i, j].tick_params(labelbottom=False) # turn off x tick labels
+                axs[2-i, j].tick_params(top=False, right=False, labeltop=False, labelright=False, labelsize=9)
+                if i != 0:
+                    axs[2-i, j].tick_params(labelbottom=False)
                 if j != 0:
-                    axs[i, j].tick_params(labelleft=False) # turn off y tick labels
-                fig.colorbar(im, ax=axs[2-i, j], fraction=0.046, pad=0.04) # Adjust the fraction and pad for proper placement
-        plt.grid(False)
-        plt.tight_layout()
-        plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
-        ax = fig.add_subplot(111, frame_on=False)
-        ax.grid(False)
-        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        ax.set_title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
-        ax.set_xlabel('Column (pixel number)', fontsize=18, labelpad=10)
-        ax.set_ylabel('Row (pixel number)', fontsize=18, labelpad=10)
+                    axs[2-i, j].tick_params(labelleft=False)
+        
+                # Add colorbar for each subplot
+                cbar = fig.colorbar(im, ax=axs[2-i, j], fraction=0.046, pad=0.04)
+                cbar.ax.tick_params(labelsize=7)
 
-        # Create a timestamp and annotate in the lower right corner
+        # Adjust spacing between subplots
+        plt.subplots_adjust(wspace=0.15, hspace=0.15)
+        
+        # Use suptitle and fig.text for cleaner labels
+        fig.suptitle(f'2D - {chip_title} CCD: {self.ObsID} - {self.name}', fontsize=14)
+        fig.text(0.5, 0.04, 'Column (pixel number)', ha='center', fontsize=16)
+        fig.text(0.06, 0.5, 'Row (pixel number)', va='center', rotation='vertical', fontsize=16)
+        plt.subplots_adjust(top=0.945, bottom=0.10)  # or tweak to 0.91, 0.93, etc.
+        
+        # Timestamp annotation
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(0, -40), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
+        fig.text(0.95, 0.01, f"KPF QLP: {current_time}", fontsize=8, color="darkgray", ha="right", va="bottom")
 
         # Display the plot
         if fig_path != None:
@@ -850,7 +1095,7 @@ class Analyze2D:
 
         # Annotations
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=16, color="darkgray", ha="right", va="bottom",
                     xytext=(-50, -150), textcoords='offset points')
@@ -972,8 +1217,8 @@ class Analyze2D:
     
             # Add annotations
             textstr = '\n'.join((
-                r'$\mu=%.2f$ e-' % (mu, ),
-                r'$\sigma=%.2f$ e-' % (std, ),
+                r'$\\mu=%.2f$ e-' % (mu, ),
+                r'$\\sigma=%.2f$ e-' % (std, ),
                 r'$\mathrm{median}=%.2f$ e-' % (median, )))
             props = dict(boxstyle='round', facecolor='red', alpha=0.15)
             plt.gca().text(0.98, 0.95, textstr, transform=plt.gca().transAxes, fontsize=12,
@@ -1001,7 +1246,7 @@ class Analyze2D:
  
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
@@ -1069,8 +1314,8 @@ class Analyze2D:
         
         # Add annotations
         textstr = '\n'.join((
-            r'$\mu=%.2f$ e-' % (mu, ),
-            r'$\sigma=%.2f$ e-' % (std, ),
+            r'$\\mu=%.2f$ e-' % (mu, ),
+            r'$\\sigma=%.2f$ e-' % (std, ),
             r'$\mathrm{median}=%.2f$ e-' % (median, )))
         props = dict(boxstyle='round', facecolor='red', alpha=0.15)
         plt.gca().text(0.98, 0.95, textstr, transform=plt.gca().transAxes, fontsize=12,
@@ -1090,7 +1335,7 @@ class Analyze2D:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
@@ -1258,7 +1503,7 @@ class Analyze2D:
          
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
@@ -1354,7 +1599,7 @@ class Analyze2D:
          
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')

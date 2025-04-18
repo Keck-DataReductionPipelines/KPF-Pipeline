@@ -5,16 +5,16 @@ Script Name: generate_time_series_plots.py
 
 Description:
     This script generates KPF time series plots over various time intervals and
-    saves the results to predefined directories. It supports multithreaded execution
+    saves the results to predefined directories. It supports multiprocess execution
     for tasks with different intervals and date ranges, including daily, monthly,
     yearly, and decade-based plots. Additionally, the script monitors the status
-    of running threads and reports on their activity.
+    of running processes and reports on their activity.
 
 Features:
     - Generates plots for multiple time intervals (day, month, year, decade).
     - Supports custom date ranges for plot generation.
-    - Multithreaded execution for efficiency, allowing simultaneous tasks.
-    - Monitors thread status and execution time for each task.
+    - Multiprocess execution for efficiency, allowing simultaneous tasks.
+    - Monitors process status and execution time for each task.
     - Saves results in a structured format for further analysis.
 
 Usage:
@@ -32,17 +32,20 @@ Examples:
     2. Specifying a custom database path:
         python generate_time_series_plots.py --db_path /custom/path/to/kpf_ts.db
 
-    3. Monitoring thread statuses:
-        The script automatically reports on thread activity and execution times every 5 minutes.
+    3. Monitoring process statuses:
+        The script automatically reports on process activity and execution times every 5 minutes.
 """
 
+import glob
+import copy
 import time
 import argparse
-from threading import Thread
+import logging
+from multiprocessing import Process
 from datetime import datetime, timedelta
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
-def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
+def schedule_task(interval, time_range_type, date_range, proc_name, db_path):
     """
     Schedules the plot generation task to run after an initial delay and then 
     at specified intervals, allowing for different arguments for each task.
@@ -56,39 +59,41 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
                            where (start_date, end_date) is a tuple of datetime objects 
                            or the string 'today'
     """
-    print(f"Starting: {thread_name} to be executed every {interval/3600} hours.")
+    
+    fig_dir_base = f"/output/{proc_name.replace(' ', '_')}/"
+    
+    print()
+    print(f"Starting: {proc_name} to be executed every {interval/3600:.2f} hours.")
     initial_date_range = date_range
 
     while True:
         date_range = initial_date_range
         start_time = time.time()
         now = datetime.now()
+        end_of_today = (now).replace(hour=23, minute=59, second=59, microsecond=0)
         if date_range == 'all_days':
             start_date = None
-            end_date   = None # (now - timedelta(days=2)).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date   = None
             time_range_type =  time_range_type
         elif date_range == 'all_months':
             start_date = None
-            end_date   = None # (now - timedelta(days=62)).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date   = None
             time_range_type =  time_range_type
         elif date_range == 'all_years':
             start_date = None
-            end_date   = None # (now - timedelta(days=366)).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date   = None
             time_range_type =  time_range_type
         elif date_range == 'this_day':
-            start_date = (now - timedelta(days=15)).replace(hour=0, minute=0, second=0, microsecond=0)
-            start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-            end_date   =  now
+            start_date = (now - timedelta(days=1.0)).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = end_of_today
             time_range_type =  time_range_type
         elif date_range == 'this_month':
             start_date = (now - timedelta(days=31)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-            end_date   = now
+            end_date   = end_of_today
             time_range_type = time_range_type
         elif date_range == 'this_year':
             start_date = (now - timedelta(days=366)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-            start_date = (now - timedelta(days=1000)).replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-            end_date   =  now
+            end_date   = end_of_today
             time_range_type = time_range_type
         elif date_range == 'last_10_days':
             # need to determine where to store the results from this so that it doesn't crash Jump
@@ -99,11 +104,17 @@ def schedule_task(interval, time_range_type, date_range, thread_name, db_path):
             time_range_type = time_range_type
 
         start_time = time.time()
+        print(f'    start_date = {str(start_date)}')
+        print(f'    end_date = {str(end_date)}')
+        print(f'    time_range_type = {str(time_range_type)}')
+        print()
         generate_plots(start_date=start_date, end_date=end_date, time_range_type=time_range_type, db_path=db_path)
         end_time = time.time()
         execution_time = end_time - start_time
-        print(f'Finished pass through {thread_name} in ' + str(int(execution_time)) + ' seconds.\n')
         sleep_time = interval - execution_time
+        if sleep_time < 0:
+            sleep_time = 0
+        print(f'Finished pass through {proc_name} in {execution_time/3600:.2f} hours.\nStarting again in {sleep_time/3600:.2f} hours.')
         if sleep_time > 0:
             time.sleep(sleep_time)
 
@@ -132,9 +143,9 @@ def generate_plots(start_date=None, end_date=None,
         myTS = AnalyzeTimeSeries(db_path=db_path)
         first_last_dates = myTS.get_first_last_dates()
         if start_date == None:
-            start_date = first_last_dates[0]
+            start_date = first_last_dates[0].replace(hour=0, minute=0, second=0, microsecond=0)
         if end_date == None:
-            end_date = first_last_dates[1]
+            end_date = first_last_dates[1].replace(hour=23, minute=59, second=59, microsecond=0)
     
     time_range_type = time_range_type.lower()
     if time_range_type not in ['day', 'month', 'year', 'decade', 'all']:
@@ -166,7 +177,7 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = None
                 myTS = AnalyzeTimeSeries(db_path=db_path)
                 myTS.plot_all_quicklook(day, interval='day', fig_dir=savedir)
-                myTS = None
+                del myTS # free up memory
             except Exception as e:
                 print(e)
 
@@ -180,7 +191,7 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = None
                 myTS = AnalyzeTimeSeries(db_path=db_path)
                 myTS.plot_all_quicklook(month, interval='month', fig_dir=savedir)
-                myTS = None
+                del myTS # free up memory
             except Exception as e:
                 print(e)
 
@@ -194,7 +205,7 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = None
                 myTS = AnalyzeTimeSeries(db_path=db_path)
                 myTS.plot_all_quicklook(year, interval='year', fig_dir=savedir)
-                myTS = None
+                del myTS # free up memory
             except Exception as e:
                 print(e)
 
@@ -208,52 +219,92 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = None
                 myTS = AnalyzeTimeSeries(db_path=db_path)
                 myTS.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
-                myTS = None
+                del myTS # free up memory
             except Exception as e:
                 print(e)
 
 
-def monitor_threads(threads, sleep_time):
-    time.sleep(10)
+def monitor_processes(tasks, proc_dict, sleep_time, db_path):
+
+    process_start_times = {task["proc_name"]: datetime.now() for task in tasks}
+
+    def print_process_table():
+        now = datetime.now()
+    
+        header = f"{'Process Name':<25} {'Interval':>12}   {'Uptime':>12}"
+        divider = "-" * len(header)
+        print("\nProcess Status Report:")
+        print(divider)
+        print(header)
+        print(divider)
+    
+        for task in tasks:
+            proc_name = task["proc_name"]
+            interval = task["interval"]
+            proc = proc_dict.get(proc_name)
+    
+            # Restart if needed
+            if not proc or not proc.is_alive():
+                print(f"{proc_name} stopped, restarting...")
+                new_proc = Process(
+                    target=schedule_task,
+                    args=(interval, task["time_range_type"],
+                          task["date_range"], proc_name, db_path),
+                    name=proc_name
+                )
+                new_proc.start()
+                proc_dict[proc_name] = new_proc
+                process_start_times[proc_name] = datetime.now()
+                proc = new_proc
+    
+            # Format interval as HH:MM:SS
+            interval_td = timedelta(seconds=interval)
+            total_seconds = int(interval_td.total_seconds())
+            ihours, iremainder = divmod(total_seconds, 3600)
+            iminutes, iseconds = divmod(iremainder, 60)
+            interval_str = f"{ihours:02}:{iminutes:02}:{iseconds:02}"
+    
+            # Format uptime as HH:MM:SS
+            uptime = now - process_start_times[proc_name]
+            uhours, uremainder = divmod(uptime.total_seconds(), 3600)
+            uminutes, useconds = divmod(uremainder, 60)
+            uptime_str = f"{int(uhours):02}:{int(uminutes):02}:{int(useconds):02}"
+    
+            print(f"{proc_name:<25} {interval_str:>12}   {uptime_str:>12}")
+    
+        print(divider + "\n")
+
     while True:
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        print("\n------ Thread Status at " + current_time + " ------")
-        for thread in threads:
-            print(f"{thread.name}: {'Alive' if thread.is_alive() else 'Dead'} - Started at {thread.start_time}")
-        print("--------------------------------------------------- \n")
+        print_process_table()
         time.sleep(sleep_time)
 
+        
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description='Repeatedly generate KPF time series plots.')
     parser.add_argument('--db_path', type=str, default='/data/time_series/kpf_ts.db', 
                         help='path to database file; default = /data/time_series/kpf_ts.db')
     args = parser.parse_args()   
 
-# For now, only one thread is active because of a non-tread-safe issue with fonts in the version of matplotlib that we use
     tasks = [
-        {"thread_name": "Today Thread",       "interval":    3600, "time_range_type": "day",    "date_range": 'this_day'},
-#        {"thread_name": "This Month Thread",  "interval": 12*3600, "time_range_type": "month",  "date_range": 'this_month'},
-#        {"thread_name": "This Year Thread",   "interval": 12*3600, "time_range_type": "year",   "date_range": 'this_year'},
-#        {"thread_name": "All Days Thread",    "interval": 96*3600, "time_range_type": "day",    "date_range": 'all_days'},
-#        {"thread_name": "All Months Thread",  "interval": 2*3600, "time_range_type": "month",  "date_range": 'all_months'},
-#        {"thread_name": "All Years Thread",   "interval": 24*3600, "time_range_type": "year",   "date_range": 'all_years'},
-#        {"thread_name": "All Decades Thread", "interval": 24*3600, "time_range_type": "decade", "date_range": (None, None)},
+        {"proc_name": "Today Process",       "interval":     300, "time_range_type": "day",    "date_range": 'this_day'},
+        {"proc_name": "This Month Process",  "interval":     600, "time_range_type": "month",  "date_range": 'this_month'},
+        {"proc_name": "This Year Process",   "interval":  2*3600, "time_range_type": "year",   "date_range": 'this_year'},
+        {"proc_name": "All Days Process",    "interval": 48*3600, "time_range_type": "day",    "date_range": 'all_days'},
+        {"proc_name": "All Months Process",  "interval":  3*3600, "time_range_type": "month",  "date_range": 'all_months'},
+        {"proc_name": "All Years Process",   "interval":  3*3600, "time_range_type": "year",   "date_range": 'all_years'},
+        {"proc_name": "All Decades Process", "interval": 24*3600, "time_range_type": "decade", "date_range": (None, None)},
     ]
 
-    threads = []
+    processes = {}
     for task in tasks:
-        thread = Thread(target=schedule_task, args=(task["interval"], task["time_range_type"], task["date_range"], task["thread_name"], args.db_path), name=task["thread_name"])
-        thread.start_time = datetime.now()  
-        thread.start()  
-        threads.append(thread)
-        time.sleep(20)
+        proc = Process(
+            target=schedule_task,
+            args=(task["interval"], task["time_range_type"], task["date_range"],
+                  task["proc_name"], args.db_path),
+            name=task["proc_name"]
+        )
+        proc.start()
+        processes[task["proc_name"]] = proc
+        time.sleep(15)
 
-    monitor_thread_sleep_time = 3600 # seconds
-    monitor_thread = Thread(target=monitor_threads, args=(threads, monitor_thread_sleep_time))
-    monitor_thread.start()
-
-    for thread in threads:
-        thread.join() 
-
-    monitor_thread.join() 
+    monitor_processes(tasks, processes, sleep_time=300, db_path=args.db_path)

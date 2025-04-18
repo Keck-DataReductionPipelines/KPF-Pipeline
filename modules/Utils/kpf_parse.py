@@ -84,16 +84,21 @@ class HeaderParse:
         """
         try: 
             if 'IMTYPE' in self.header:
+                # Bias
                 if (('ELAPSED' in self.header) and 
                     ((self.header['IMTYPE'] == 'Bias') or (self.header['ELAPSED'] == 0))):
                         self.name = 'Bias'
+                # Dark
                 elif self.header['IMTYPE'] == 'Dark':
                     self.name = 'Dark' 
+                # Wide Flat
                 elif self.header['FFFB'].strip().lower() == 'yes':
                         self.name = 'Wide Flat' # Flatfield Fiber (wide flats)
+                # Flat
                 elif self.header['IMTYPE'].strip().lower() == 'flatlamp':
                      if 'brdband' in self.header['OCTAGON'].strip().lower():
                         self.name = 'Flat' # Flat through regular fibers
+                # Calibration lamps
                 elif self.header['IMTYPE'].strip().lower() == 'arclamp':
                     if 'lfc' in self.header['OCTAGON'].strip().lower():
                         self.name = 'LFC'
@@ -106,6 +111,14 @@ class HeaderParse:
                 elif ((self.header['TARGNAME'].strip().lower() == 'sun') or 
                       (self.header['TARGNAME'].strip().lower() == 'socal')):
                     self.name = 'Sun' # SoCal
+                # March-April, 2025 -- IMTYPE not populated because reduced headers
+                elif self.header['IMTYPE'].strip().lower() == 'none':
+                     if 'OBJECT' in self.header:
+                         if 'bias' in self.header['OBJECT'].strip().lower():
+                            self.name = 'Bias' 
+                         elif 'dark' in self.header['OBJECT'].strip().lower():
+                            self.name = 'Dark' 
+                # Stars
                 if ('OBJECT' in self.header) and ('FIUMODE' in self.header):
                     if (self.header['FIUMODE'] == 'Observing'):
                         if use_star_names:
@@ -228,7 +241,6 @@ def get_datecode(ObsID):
     datecode = ObsID.split('.')[1]
 
     return datecode
-
 
 
 def get_filename(ObsID, level='L0', fullpath=False):
@@ -432,7 +444,6 @@ def get_data_products_L0(L0):
         if L0['EXPMETER_SCI'].size > 1:
             data_products.append('ExpMeter')
     if hasattr(L0, 'GUIDER_AVG'):
-        print('**** Got to 3 *****')
         if (L0['GUIDER_AVG'].size > 1):
             data_products.append('Guider')
     elif hasattr(L0, 'guider_avg'): # Early KPF files used lower case guider_avg
@@ -565,6 +576,30 @@ def get_data_products_L2(L2):
     if hasattr(L2, 'RECEIPT'):
         if L2['RECEIPT'].size > 1:
             data_products.append('Receipt')
+    return data_products
+
+
+def get_data_levels_expected(spectrum_type):
+    """
+    Returns a list of data levels expected for a spectrum of a given type
+
+    Args:
+        spectrum_type - possible values: 
+            'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe',
+            'Sun', 'Star'
+
+    Returns:
+        list of data expected data levels, e.g. ['L0', '2D', 'L1', 'L2']
+    """
+    data_products = ['L0']
+    
+    if spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+        data_products.append('2D')
+    if spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+        data_products.append('L1')
+    if spectrum_type in ['Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+        data_products.append('L2')
+
     return data_products
 
 

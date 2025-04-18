@@ -125,12 +125,14 @@ class AnalyzeEM:
         self.ind_551_658 = np.where((self.wav_SCI >= self.wav1) & (self.wav_SCI < self.wav2))
         self.ind_658_764 = np.where((self.wav_SCI >= self.wav2) & (self.wav_SCI < self.wav3))
         self.ind_764p    = np.where((self.wav_SCI >= self.wav3))
-        self.counts_SCI         = self.df_SCI_EM.sum(axis=1)                         # flux (ADU) vs. time (per sample)
+
+        cols_to_exclude = ['Date-Beg', 'Date-Beg-Corr','Date-End', 'Date-End-Corr'] # for sums below
+        self.counts_SCI         = self.df_SCI_EM.drop(columns=cols_to_exclude).sum(axis=1) # flux (ADU) vs. time (per sample)
         self.counts_SCI_551m    = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI <  self.wav1))]].sum(axis=1)
         self.counts_SCI_551_658 = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI >= self.wav1) & (self.wav_SCI < self.wav2))]].sum(axis=1)
         self.counts_SCI_658_764 = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI >= self.wav2) & (self.wav_SCI < self.wav3))]].sum(axis=1)
         self.counts_SCI_764p    = self.df_SCI_EM[self.wav_SCI_str[np.where((self.wav_SCI >= self.wav3))]].sum(axis=1)
-        self.counts_SKY         = self.df_SKY_EM.sum(axis=1)                         # flux (ADU) vs. time (per sample)
+        self.counts_SKY         = self.df_SKY_EM.drop(columns=cols_to_exclude).sum(axis=1) # flux (ADU) vs. time (per sample)
         self.counts_SKY_551m    = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY <  self.wav1))]].sum(axis=1)
         self.counts_SKY_551_658 = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY >= self.wav1) & (self.wav_SKY < self.wav2))]].sum(axis=1)
         self.counts_SKY_658_764 = self.df_SKY_EM[self.wav_SKY_str[np.where((self.wav_SKY >= self.wav2) & (self.wav_SKY < self.wav3))]].sum(axis=1)
@@ -256,7 +258,7 @@ class AnalyzeEM:
      
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -30), textcoords='offset points')
@@ -311,7 +313,7 @@ class AnalyzeEM:
      
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -30), textcoords='offset points')

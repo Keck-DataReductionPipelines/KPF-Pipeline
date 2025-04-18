@@ -1,12 +1,14 @@
 # This file contains methods to write diagnostic information to the KPF headers.
 
 # Standard dependencies
+import os
 import traceback
 import numpy as np
 from datetime import datetime, timedelta
 from astropy.time import Time
 
 # Local dependencies
+from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
@@ -19,7 +21,13 @@ from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
 from modules.Utils.kpf_parse import get_data_products_L2
 from modules.Utils.kpf_parse import get_datecode_from_filename
+from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected
 from modules.Utils.utils import get_moon_sep, get_sun_alt
+from modules.calibration_lookup.src.alg import GetCalibrations
+
+DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../calibration_lookup/configs/default.cfg')
+DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
+
 
 def add_headers_2D_flux(D2, logger=None):
     """
@@ -36,10 +44,10 @@ def add_headers_2D_flux(D2, logger=None):
         RD2DF10P - 10th percentile flux in the 2D Red image (e-)
 
     Args:
-        D2 - a KPF L1 object 
+        D2 - a KPF 2D object 
 
     Returns:
-        D2 - a L1 file with header keywords added
+        D2 - a 2D file with header keywords added
     """
 
     if logger == None:
@@ -60,21 +68,22 @@ def add_headers_2D_flux(D2, logger=None):
     for chip in chips:
         if chip == 'green':
             try:
-                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 2), '99th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 2), '90th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 2), '50th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 2), '10th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 3), '99th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 3), '90th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 3), '50th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 3), '10th percentile flux in 2D Green image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Green 2D flux measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 2), '99th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 2), '90th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 2), '50th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 2), '10th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 3), '99th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 3), '90th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 3), '50th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 3), '10th percentile flux in 2D Red image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Red 2D flux measurements: {e}\n{traceback.format_exc()}")
     return D2
+
 
 def add_headers_dark_current_2D(D2, logger=None):
     """
@@ -158,20 +167,21 @@ def add_headers_dark_current_2D(D2, logger=None):
                     try:
                         if hasattr(my2D, 'green_dark_current_regions'):
                             if 'med_elec' in my2D.green_dark_current_regions[keywords[k]['key']]:
-                                value = "{:.2f}".format(my2D.green_dark_current_regions[keywords[k]['key']]['med_elec'])
+                                value = "{:.3f}".format(my2D.green_dark_current_regions[keywords[k]['key']]['med_elec'])
                     except Exception as e:
                         logger.error(f"Problem with green dark current : {e}\n{traceback.format_exc()}")
                 if chip == 'red':
                     try:
                         if hasattr(my2D, 'red_dark_current_regions'):
                             if 'med_elec' in my2D.red_dark_current_regions[keywords[k]['key']]:
-                                value = "{:.2f}".format(my2D.red_dark_current_regions[keywords[k]['key']]['med_elec'])
+                                value = "{:.3f}".format(my2D.red_dark_current_regions[keywords[k]['key']]['med_elec'])
                     except Exception as e:
                         logger.error(f"Problem with red dark current: {e}\n{traceback.format_exc()}")                
                 if value != None:
                     D2.header['PRIMARY'][keyword] = (value, comment)
     
     return D2
+
 
 def add_headers_guider(D2, logger=None):
     """
@@ -254,6 +264,7 @@ def add_headers_guider(D2, logger=None):
         logger.error(f"Problem with guider fit: {e}\n{traceback.format_exc()}")
                                            
     return D2
+
 
 def add_headers_hk(D2, logger=None):
     """
@@ -407,6 +418,83 @@ def add_headers_masters_age_2D(D2, logger=None, verbose=False):
             logger.error(f"Problem with {new_keyword} age determination: Age of {master_file} compared to this file (whole days) = {new_keyword}")
             D2.header['PRIMARY'][new_keyword] = (-999, 'ERROR: Age of {master_file} compared to this file (whole days)')
 
+    return D2
+
+
+def add_headers_2D_xdisp_offset(D2, logger=None):
+    """
+    Adds keywords to the 2D object header for measurements of offsets in 
+    cross-dispersion
+    
+    Keywords:
+        XDSPDYG1 - Green cross-dispersion offset [pix] compared to master reference
+        XDSPDYG2 - Green cross-dispersion offset [pix] compared to reference in era
+        XDSPDYR1 - Red cross-dispersion offset [pix] compared to master reference
+        XDSPDYR2 - Red cross-dispersion offset [pix] compared to reference in era
+        XDSPSYG1 - Uncertainty [pix] in XDSPDYG1 
+        XDSPSYG2 - Uncertainty [pix] in XDSPDYG2
+        XDSPSYR1 - Uncertainty [pix] in XDSPDYR1
+        XDSPSYR2 - Uncertainty [pix] in XDSPDYR2
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_2D(D2)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        print('Not a valid 2D.')
+        return D2
+        
+    # Compute cross-dispersion offsets with two references: global and in era
+    for ref in ['global', 'era']:
+        if ref == 'era':
+            dt = get_datetime_obsid(my2D.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+            keyword_suffix = '2'
+            comment_txt = 'in-era reference'
+        elif ref == 'global':
+            dt = '2024-02-11T00:00:00.000000' # reference time for all KPF observations
+            keyword_suffix = '1'
+            comment_txt = 'global reference'
+        default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+        GC = GetCalibrations(dt, default_config_path, use_db=False)
+        wls_dict = GC.lookup(subset=['trace_flat'])
+        reference_file = wls_dict['trace_flat']
+        my2D = Analyze2D(D2, logger=logger)
+        if 'master' in reference_file:
+            ref_extension = 'CCD_STACK'
+        else:
+            ref_extension = None
+        
+        for chip in chips:
+            if chip == 'green':
+                try:
+                    my2D.measure_xdisp_offset(chip='green', ref_image=reference_file, ref_extension=ref_extension)
+                    keyword_value = f'{my2D.green_offset:.5f}'
+                    keyword_sigma = f'{my2D.green_offset_sigma:.5f}'
+                    D2.header['PRIMARY']['XDSPDYG'+keyword_suffix] = (keyword_value, '[pix] Green x-disp offset; '+comment_txt)
+                    D2.header['PRIMARY']['XDSPSYG'+keyword_suffix] = (keyword_sigma, '[pix] uncertainty in XDSPDYG'+keyword_suffix)
+                except Exception as e:
+                    logger.error(f"Problem with Green 2D cross-dispersion offset measurements: {e}\n{traceback.format_exc()}")
+            if chip == 'red':
+                try:
+                    my2D.measure_xdisp_offset(chip='red', ref_image=reference_file, ref_extension=ref_extension)
+                    keyword_value = f'{my2D.red_offset:.5f}'
+                    keyword_sigma = f'{my2D.red_offset_sigma:.5f}'
+                    D2.header['PRIMARY']['XDSPDYR'+keyword_suffix] = (keyword_value, '[pix] Red x-disp offset; '+comment_txt)
+                    D2.header['PRIMARY']['XDSPSYR'+keyword_suffix] = (keyword_sigma, '[pix] uncertainty in XDSPDYR'+keyword_suffix)
+                except Exception as e:
+                    logger.error(f"Problem with Red 2D cross-dispersion offset measurements: {e}\n{traceback.format_exc()}")
     return D2
 
 
@@ -920,7 +1008,209 @@ def add_headers_L1_cal_line_quality(L1, intensity_thresh=40**2, min_lines=100,
                     L1.header['PRIMARY'][f'{prefix}LRK1'] = (SKY_r_fl[1], f'Max RED SKY order with good {name} lines')
 
             except Exception as e:
-                logger.error(f"Problem with rreen L1 {name} line measurements: {e}\n{traceback.format_exc()}")
+                logger.error(f"Problem with red L1 {name} line measurements: {e}\n{traceback.format_exc()}")
+
+    return L1
+
+
+def add_headers_L1_saturated_lines(L1, logger=None):
+    """
+    Counts the number of saturated lines and adds keywords to the L1 object headers
+    
+    Keywords:
+        NSATGS2 - Number of saturated lines in Green SCI2
+        NSATGC  - Number of saturated lines in Green CAL
+        NSATGK  - Number of saturated lines in Green SKY
+        NSATRS2 - Number of saturated lines in Red SCI2
+        NSATRC  - Number of saturated lines in Red CAL
+        NSATRK  - Number of saturated lines in Red SKY
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L1(L1)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
+        print('Not a valid L1.')
+        return L1
+        
+    # Use the AnalyzeL1 class to compute ratios between spectral orders
+    myL1 = AnalyzeL1(L1, logger=logger)
+    for chip in chips:
+        if chip == 'green':
+            try: 
+                (SCI1_lines, SCI2_lines, SCI3_lines, CAL_lines, SKY_lines) =  myL1.count_saturated_lines(chip='green')
+                L1.header['PRIMARY']['NSATGS2'] = (SCI2_lines, 'Number of saturated lines in Green SCI2')
+                L1.header['PRIMARY']['NSATGC']  = (CAL_lines,  'Number of saturated lines in Green CAL')
+                L1.header['PRIMARY']['NSATGK']  = (SKY_lines,  'Number of saturated lines in Green SKY')
+            except Exception as e:
+                logger.error(f"Problem counting satured lines for green chip: {e}\n{traceback.format_exc()}")
+        if chip == 'red':
+            try:
+                (SCI1_lines, SCI2_lines, SCI3_lines, CAL_lines, SKY_lines) =  myL1.count_saturated_lines(chip='red')
+                L1.header['PRIMARY']['NSATRS2'] = (SCI2_lines, 'Number of saturated lines in Red SCI2')
+                L1.header['PRIMARY']['NSATRC']  = (CAL_lines,  'Number of saturated lines in Red CAL')
+                L1.header['PRIMARY']['NSATRK']  = (SKY_lines,  'Number of saturated lines in Red SKY')
+            except Exception as e:
+                logger.error(f"Problem counting satured lines for red chip: {e}\n{traceback.format_exc()}")
+    return L1
+
+
+def add_headers_L1_std_wls(L1, logger=None, debug=False):
+    """
+    Computes the standard deviation of the L1 wavelength solution compared to a 
+    reference wavelength solution. The output is in units of pixels.  Keywords 
+    are generated for combinations of [Green, Red] and [SCI, SKY, CAL].
+    
+    Keywords:
+        STDWREF - filename of reference wavelength solution
+        STDWGSNN (35 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Green SCI1, SCI2, SCI3 order NN
+        STDWGKNN (35 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Green SKY order NN
+        STDWGCNN (35 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Green CAL order NN
+        STDWRSNN (32 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Red SCI1, SCI2, SCI3 order NN
+        STDWRKNN (32 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Red SKY order NN
+        STDWRCNN (32 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Red CAL order NN
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with header keywords added
+    """
+    if logger == None:
+        logger = DummyLogger()
+
+    # Use the AnalyzeL1 class 
+    myL1 = AnalyzeL1(L1, logger=logger)
+    data_products = get_data_products_L1(L1)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+
+    # Check that the input object is of the right type
+    if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
+        self.logger.error('Not a valid L1.')
+        return L1
+
+    # Get reference wavelength solution
+    dt = get_datetime_obsid(myL1.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+    if debug:
+        print(f'DEFAULT_CALIBRATION_CFG_PATH = ' + DEFAULT_CALIBRATION_CFG_PATH)
+    GC = GetCalibrations(dt, DEFAULT_CALIBRATION_CFG_PATH, use_db=False)
+    wls_filename = GC.lookup(subset=['rough_wls']) 
+    if debug:
+        print(f'wls_filename = ' + wls_filename['rough_wls'])
+    L1_ref = KPF1.from_fits(wls_filename['rough_wls'])
+    myL1_ref = AnalyzeL1(L1_ref)  
+    myL1_ref.add_dispersion_arrays()
+
+    # Method to compute Stdev of WLS
+    def compute_stats_wls(L1, L1_ref, EXT=['SCI'], CHIP=['GREEN'], ORDER=[0], debug=False):
+        """
+        Compute the median and the standard deviation of the difference between 
+        the wavelength solution (L1) and a reference (L1_ref).  
+        The output is in units of pixels.
+
+        Args:
+            EXT (array): possible values in the array are 'SCI', 'SKY', 'CAL'
+            CHIP (array): possible values in the array are 'GREEN', 'RED'
+            ORDER (array): possible values are integers from 0 to 34
+            debug: if True, print debugging statements
+
+        Returns:
+            med_wls, std_wls (floats): Median and standard deviation 
+                                       of the differen between the WLS and 
+                                       reference WLS for EXT, CHIP, ORDER
+        """
+
+        # Determine which extensions to check
+        WAVE_extensions   = []
+        if 'CAL' in EXT:
+            if 'GREEN' in CHIP:
+                WAVE_extensions.append("GREEN_CAL_WAVE")
+            if 'RED' in CHIP:
+                WAVE_extensions.append("RED_CAL_WAVE")
+        if 'SCI' in EXT:
+            if 'GREEN' in CHIP:
+                WAVE_extensions.append("GREEN_SCI_WAVE1")
+                WAVE_extensions.append("GREEN_SCI_WAVE2")
+                WAVE_extensions.append("GREEN_SCI_WAVE3")
+            if 'RED' in CHIP:
+                WAVE_extensions.append("RED_SCI_WAVE1")
+                WAVE_extensions.append("RED_SCI_WAVE2")
+                WAVE_extensions.append("RED_SCI_WAVE3")
+        if 'SKY' in EXT:
+            if 'GREEN' in CHIP:
+                WAVE_extensions.append("GREEN_SKY_WAVE")
+            if 'RED' in CHIP:
+                WAVE_extensions.append("RED_SKY_WAVE")
+
+        for EXT_WAVE in WAVE_extensions:
+            if debug:
+                print(f'EXT_WAVE = ' + EXT_WAVE)
+            EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+            pix_diff_med = 0
+            pix_diff_std = 0
+            for o in ORDER:
+                if not (L1_ref[EXT_DISP][o,:] == 0).all():
+                    numerator = L1[EXT_WAVE][o,:] - L1_ref[EXT_WAVE][o,:]
+                    denominator = L1_ref[EXT_DISP][o, :]
+                    zero_diff_mask = numerator == 0
+                    pix_diff_array = np.divide(numerator, denominator, out=np.zeros_like(numerator, dtype=float), where=denominator!=0)
+                    pix_diff_array[zero_diff_mask] = 0
+                    this_pix_diff_med = np.nanmedian(pix_diff_array)
+                    this_pix_diff_std = np.nanstd(pix_diff_array)
+
+                    if abs(this_pix_diff_med) > abs(pix_diff_med):
+                        pix_diff_med = this_pix_diff_med
+                    if abs(this_pix_diff_std) > abs(pix_diff_std):
+                        pix_diff_std = this_pix_diff_std
+                    if debug:
+                        print(o, this_pix_diff_median, this_pix_diff_std)
+                    
+        return pix_diff_med, pix_diff_std
+
+    for chip in chips:
+        L1.header['PRIMARY']['STATWREF'] = (wls_filename['rough_wls'], 'ref fn for WLS-ref')
+        for EXT in ['SCI', 'SKY', 'CAL']:
+            norder = L1[chip+'_CAL_WAVE'].shape[0]
+            for o in range(norder):
+                try:
+                    med_wls, std_wls = compute_stats_wls(myL1.L1, myL1_ref.L1, EXT=[EXT], CHIP=[chip.upper()], ORDER=[o])
+                    if chip == 'green':
+                        if EXT == 'SCI':
+                            L1.header['PRIMARY'][f'MEDWGS{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Green SCI order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWGS{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Green SCI order {o:02d}')
+                        elif EXT == 'SKY':
+                            L1.header['PRIMARY'][f'MEDWGK{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Green SKY order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWGK{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Green SKY order {o:02d}')
+                        elif EXT == 'CAL':
+                            L1.header['PRIMARY'][f'MEDWGC{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Green CAL order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWGC{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Green CAL order {o:02d}')
+                    if chip == 'red':
+                        if EXT == 'SCI':
+                            L1.header['PRIMARY'][f'MEDWRS{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Red SCI order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWRS{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Red SCI order {o:02d}')
+                        elif EXT == 'SKY':
+                            L1.header['PRIMARY'][f'MEDWRK{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Red SKY order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWRK{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Red SKY order {o:02d}')
+                        elif EXT == 'CAL':
+                            L1.header['PRIMARY'][f'MEDWRC{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Red CAL order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWRC{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Red CAL order {o:02d}')
+    
+                except Exception as e:
+                    logger.error(f"Problem with green L1 {name} line measurements: {e}\n{traceback.format_exc()}")
 
     return L1
 

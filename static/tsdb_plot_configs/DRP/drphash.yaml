@@ -2,14 +2,39 @@ description: KPF-Pipeline Commit Hash
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
-      - col: DRPHASH
+      - col: DRPHSH2D
         plot_type: state
         plot_attr:
-          label: Commit Hash
+          label: Commit Hash - 2D
           marker: .
     paneldict:
-      ylabel: DRP Commit Hash
-      title: KPF-Pipeline Commit Hash String
+      ylabel: DRP Commit Hash - 2D
       not_junk: true
       nolegend: true
       legend_frac_size: 0.0
+
+  - panelvars:
+      - col: DRPHSHL1
+        plot_type: state
+        plot_attr:
+          label: Commit Hash - L1
+          marker: .
+    paneldict:
+      ylabel: DRP Commit Hash - L1
+      not_junk: true
+      nolegend: true
+      legend_frac_size: 0.0
+
+  - panelvars:
+      - col: DRPHSHL2
+        plot_type: state
+        plot_attr:
+          label: Commit Hash - L2
+          marker: .
+    paneldict:
+      ylabel: DRP Commit Hash - L2
+      title: KPF-Pipeline Commit Hash
+      not_junk: true
+      nolegend: true
+      legend_frac_size: 0.0
+

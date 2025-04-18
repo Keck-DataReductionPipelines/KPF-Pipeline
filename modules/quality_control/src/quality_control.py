@@ -1,15 +1,22 @@
 import os
+import re
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
 from datetime import datetime
 from scipy.ndimage import convolve1d
+from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger, styled_text
-from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected
-from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_L1
+from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected, get_ObsID
+from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_2D, get_data_products_L1, get_data_products_L2
+from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
+from modules.calibration_lookup.src.alg import GetCalibrations
+
+DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../calibration_lookup/configs/default.cfg')
+DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
 
 """
 This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
@@ -208,7 +215,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         data_products_required = qc_obj.qcdefinitions.required_data_products[qc_name]
                         all_required_data_products_present = all(element in data_products_expected for element in data_products_required)
                     if all_required_data_products_present:
-                        text_running_qc = styled_text('Running QC', style="Bold", color="Magenta")
+                        text_running_qc = styled_text('QC', style="Bold", color="Magenta")
                         text_qc_name = styled_text(qc_name, style="Bold", color="Blue")
                         text_qc_keyword = styled_text(qc_obj.qcdefinitions.fits_keywords[qc_name], style="Bold", color="Blue")
                         logger.info(f'{text_running_qc}: {text_qc_name} ({text_qc_keyword}; {qc_obj.qcdefinitions.descriptions[qc_name]})')
@@ -246,7 +253,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
     return kpf_object
 
 
-def check_all_QC_keywords_present(kpf_object, logger=None):
+def QC_report(kpf_object, return_keywords=True, print_output=False, logger=None):
     """
     Method to determine if all QC tests have been run on the input kpf_object
     by examining it's keywords.  The method determines the data_level for
@@ -256,25 +263,144 @@ def check_all_QC_keywords_present(kpf_object, logger=None):
 
     Args:
         kpf_object - a KPF object (L0, 2D, L1, or L2)
+        return_keywords (boolean) - if true, keywords are returned (e.g., 'OLDBIAS') instead of method names (e.g., 'D2_master_bias_age')
+        print_output (bolean) - if true, print the output instead of returning anything
         logger - Python logger object; if None, the DummyLogger is used
 
     Returns:
-        kpf_object - the input kpf_object with QC keywords added
+        tuple of (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail), where
+            qc_names_missing = names of QC tests with keywords missing from kpf_object that should be
+            qc_names_present = names of QC tests with keywords in kpf_object that should be
+            qc_names_present_pass = names of QC tests with keywords in kpf_object that should be and QC = True (passed)
+            qc_names_present_fail = names of QC tests with keywords in kpf_object that should be and QC = False (failed)
     """
 
+    def unique_preserve_order(mylist):
+        from itertools import chain
+        flattened = list(chain.from_iterable(mylist))
+        seen = set()
+        return [x for x in flattened if not (x in seen or seen.add(x))]
+
+    def get_appropriate_qcs(data_level, spectrum_type):
+        '''
+        Get a list of QC method names appropriate for the data level
+        
+        Args:
+            data_level - 'L0', '2D', 'L1', or 'L2'
+            spectrum_type - types of spectra that a QC is  applied to
+                One of: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>    
+        Returns:
+            qc_names - list of QC method names to be run on level object
+        '''
+        if data_level == 'L0':
+            qc_obj = QCL0(kpf_object)
+            data_products_present = get_data_products_L0(kpf_object)
+        elif data_level == '2D':
+            qc_obj = QC2D(kpf_object)
+            data_products_present = get_data_products_2D(kpf_object)
+        elif data_level == 'L1':
+            qc_obj = QCL1(kpf_object)
+            data_products_present = get_data_products_L1(kpf_object)
+        elif data_level == 'L2':
+            qc_obj = QCL2(kpf_object)
+            data_products_present = get_data_products_L2(kpf_object)
+
+        qc_names = []
+        for qc_name in qc_obj.qcdefinitions.names:
+            if data_level in qc_obj.qcdefinitions.kpf_data_levels[qc_name]:
+                required_data_products_present = all(elem in data_products_present for elem in qc_obj.qcdefinitions.required_data_products[qc_name])
+                if required_data_products_present:
+                    if ('all' in qc_obj.qcdefinitions.spectrum_types[qc_name]) or (spectrum_type in qc_obj.qcdefinitions.spectrum_types[qc_name]):
+                        qc_names.append(qc_name)
+        
+        return qc_names
+    
+    if print_output:
+        return_keywords = False
     logger = logger if logger is not None else DummyLogger()
-    data_level = get_kpf_level(kpf_object)
+    this_data_level = get_kpf_level(kpf_object)
     primary_header = HeaderParse(kpf_object, 'PRIMARY')
     this_spectrum_type = primary_header.get_name(use_star_names=False)
+    try:
+        ObsID = kpf_object.header['PRIMARY']['OFNAME']
+    except:
+        ObsID = 'ObsID not available'
 
-    if data_level == 'L0':
-        data_levels = data_levels = ['L0']
-    if data_level == '2D':
-        data_levels = data_levels = ['L0', '2D']
-    if data_level == 'L1':
-        data_levels = data_levels = ['L0', '2D', 'L1']
-    if data_level == 'L2':
-        data_levels = data_levels = ['L0', '2D', 'L1', 'L2']
+    # Determine data levels for QCs that should have been applied
+    if this_data_level == 'L0':
+        data_levels = ['L0']
+    if this_data_level == '2D':
+        data_levels = ['L0', '2D']
+    if this_data_level == 'L1':
+        data_levels = ['L0', '2D', 'L1']
+    if this_data_level == 'L2':
+        data_levels = ['L0', '2D', 'L1', 'L2']
+        
+    # List expected QC tests
+    expected_qc_names = []
+    for dl in data_levels:
+        new_qc_names = get_appropriate_qcs(dl, this_spectrum_type)
+        expected_qc_names.append(new_qc_names)
+    expected_qc_names = unique_preserve_order(expected_qc_names)
+
+    # KPFERA is not a QC keyword, so remove it
+    if 'add_kpfera' in expected_qc_names:
+        expected_qc_names.remove('add_kpfera')
+
+    # Check for keywords of QC tests that should have been applied
+    qc_names_missing = []
+    qc_names_present = []
+    qc_names_present_pass = []
+    qc_names_present_fail = []
+    qcd = QCDefinitions()
+    for qc_name in expected_qc_names:
+        kwd = qcd.fits_keywords[qc_name]
+        if kwd in kpf_object.header['PRIMARY']:
+            if return_keywords:
+                qc_names_present.append(qcd.fits_keywords[qc_name])
+            else:
+                qc_names_present.append(qc_name)
+            if kpf_object.header['PRIMARY'][kwd]:
+                if return_keywords:
+                    qc_names_present_pass.append(qcd.fits_keywords[qc_name])
+                else:
+                    qc_names_present_pass.append(qc_name)
+            else:
+                if return_keywords:
+                    qc_names_present_fail.append(qcd.fits_keywords[qc_name])
+                else:
+                    qc_names_present_fail.append(qc_name)
+        else:
+            if return_keywords:
+                qc_names_missing.append(qcd.fits_keywords[qc_name])
+            else:
+                qc_names_missing.append(qc_name)
+    
+    if print_output:
+        print(f'{styled_text(f"Quality Control Report for {ObsID} ({this_spectrum_type})", style="Bold", color="Black")}')
+        print()
+        print(f'{styled_text("Keyword     Level  QC Test Description", style="Bold", color="Black")}')  
+        for qc_name in expected_qc_names:
+            kwd = qcd.fits_keywords[qc_name]
+            if qc_name in qc_names_present:
+                val = kpf_object.header['PRIMARY'][kwd]
+                if val:
+                   col = 'Green'
+                else: 
+                   col = 'Red'
+            else:
+                col = 'Black'
+            lvl = qcd.kpf_data_levels[qc_name][0]
+            if qc_name in qc_names_present:
+                present = "✓"
+            else:
+                present = "✗"
+            desc = qcd.descriptions[qc_name]
+            print(f'{styled_text(kwd, style="Bold", color=col)} {" " * (8 - len(kwd))} {(present)} {lvl + "    "} {desc}')    
+        print()
+        print(f"{styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+    else:
+        return (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail)
 
 #####################################################################
 
@@ -329,7 +455,7 @@ class QCDefinitions:
         # Define QC metrics
         name1 = 'not_junk'
         self.names.append(name1)
-        self.descriptions[name1] = 'File is not in list of junk files.'
+        self.descriptions[name1] = 'File is not in list of junk files'
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name1] = 'int'
         self.spectrum_types[name1] = ['all', ] # Need trailing comma to make list hashable
@@ -342,7 +468,7 @@ class QCDefinitions:
 
         name2 = 'monotonic_wavelength_solution'
         self.names.append(name2)
-        self.descriptions[name2] = 'Wavelength solution is monotonic.'
+        self.descriptions[name2] = 'Wavelength solution is monotonic'
         self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
         self.spectrum_types[name2] = ['all', ]
@@ -356,7 +482,7 @@ class QCDefinitions:
         name3 = 'L0_data_products'
         self.names.append(name3)
         self.kpf_data_levels[name3] = ['L0']
-        self.descriptions[name3] = 'Expected L0 data products present with non-zero array sizes.'
+        self.descriptions[name3] = 'Expected L0 data products present with non-zero array sizes'
         self.data_types[name3] = 'int'
         self.spectrum_types[name3] = ['all', ]
         self.master_types[name3] = ['all', ]
@@ -369,7 +495,7 @@ class QCDefinitions:
         name4 = 'L0_header_keywords_present'
         self.names.append(name4)
         self.kpf_data_levels[name4] = ['L0']
-        self.descriptions[name4] = 'Expected L0 header keywords present.'
+        self.descriptions[name4] = 'Expected L0 header keywords present'
         self.data_types[name4] = 'int'
         self.spectrum_types[name4] = ['all', ]
         self.master_types[name4] = ['all', ]
@@ -382,7 +508,7 @@ class QCDefinitions:
         name5 = 'L0_datetime'
         self.names.append(name5)
         self.kpf_data_levels[name5] = ['L0']
-        self.descriptions[name5] = 'Timing consistency in L0 header keywords and ExpMeter table.'
+        self.descriptions[name5] = 'Timing consistency in L0 header keywords and ExpMeter table'
         self.data_types[name5] = 'int'
         self.spectrum_types[name5] = ['all', ]
         self.master_types[name5] = ['all', ]
@@ -395,7 +521,7 @@ class QCDefinitions:
         name5b = 'L2_datetime'
         self.names.append(name5b)
         self.kpf_data_levels[name5b] = ['L2']
-        self.descriptions[name5b] = 'Timing consistency in L2 files.'
+        self.descriptions[name5b] = 'Timing consistency in L2 files'
         self.data_types[name5b] = 'int'
         self.spectrum_types[name5b] = ['all', ]
         self.master_types[name5b] = []
@@ -407,8 +533,8 @@ class QCDefinitions:
 
         name6 = 'EM_not_saturated'
         self.names.append(name6)
-        self.kpf_data_levels[name6] = ['L0', '2D']
-        self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY.'
+        self.kpf_data_levels[name6] = ['L0']
+        self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY'
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
         self.master_types[name6] = []
@@ -420,7 +546,7 @@ class QCDefinitions:
 
         name7 = 'EM_flux_not_negative'
         self.names.append(name7)
-        self.kpf_data_levels[name7] = ['L0', '2D']
+        self.kpf_data_levels[name7] = ['L0']
         self.descriptions[name7] = 'Negative flux in the EM-SCI and EM-SKY by looking for 20 consecuitive pixels in the summed spectra with negative flux.'
         self.data_types[name7] = 'int'
         self.spectrum_types[name7] = ['all', ]
@@ -447,7 +573,7 @@ class QCDefinitions:
         name9 = 'data_2D_bias_low_flux'
         self.names.append(name9)
         self.kpf_data_levels[name9] = ['2D']
-        self.descriptions[name9] = 'Flux is low in bias exposure.'
+        self.descriptions[name9] = 'Flux is low in bias exposure'
         self.data_types[name9] = 'int'
         self.spectrum_types[name9] = ['Bias', ]
         self.master_types[name9] = ['Bias', ]
@@ -460,7 +586,7 @@ class QCDefinitions:
         name10 = 'data_2D_dark_low_flux'
         self.names.append(name10)
         self.kpf_data_levels[name10] = ['2D']
-        self.descriptions[name10] = 'Flux is low in dark exposure.'
+        self.descriptions[name10] = 'Flux is low in dark exposure'
         self.data_types[name10] = 'int'
         self.spectrum_types[name10] = ['Dark', ]
         self.master_types[name10] = ['Dark', ]
@@ -477,7 +603,7 @@ class QCDefinitions:
         self.spectrum_types[name11] = ['all', ]
         self.master_types[name11] = ['all', ]
         self.required_data_products[name11] = [] # no required data products
-        self.descriptions[name11] = 'Red/Green data present in L1 with expected shapes.'
+        self.descriptions[name11] = 'Green and Red data present in L1 with expected shapes'
         self.fits_keywords[name11] = 'DATAPRL1'
         self.fits_comments[name11] = 'QC: L1 red and green data present check'
         self.db_columns[name11] = None
@@ -486,7 +612,7 @@ class QCDefinitions:
         name12 = 'data_L1_CaHK'
         self.names.append(name12)
         self.kpf_data_levels[name12] = ['L1']
-        self.descriptions[name12] = 'CaHK data present in L1 with expected shape.'
+        self.descriptions[name12] = 'CaHK data present in L1 with expected shape'
         self.data_types[name12] = 'int'
         self.spectrum_types[name12] = ['all', ]
         self.master_types[name12] = []
@@ -499,7 +625,7 @@ class QCDefinitions:
         name13 = 'data_L2'
         self.names.append(name13)
         self.kpf_data_levels[name13] = ['L2']
-        self.descriptions[name13] = 'All data present in L2.'
+        self.descriptions[name13] = 'All data present in L2'
         self.data_types[name13] = 'int'
         self.spectrum_types[name13] = ['all', ]
         self.master_types[name13] = []
@@ -512,7 +638,7 @@ class QCDefinitions:
         name14 = 'data_2D_CaHK'
         self.names.append(name14)
         self.kpf_data_levels[name14] = ['2D']
-        self.descriptions[name14] = 'CaHK CCD data present with expected array sizes.'
+        self.descriptions[name14] = 'CaHK CCD data present with expected array sizes'
         self.data_types[name14] = 'int'
         self.spectrum_types[name14] = ['all', ]
         self.master_types[name14] = []
@@ -525,7 +651,7 @@ class QCDefinitions:
         name15 = 'data_2D_red_green'
         self.names.append(name15)
         self.kpf_data_levels[name15] = ['2D']
-        self.descriptions[name15] = 'Red/Green CCD data present with expected array sizes.'
+        self.descriptions[name15] = 'Green and Red CCD data present with expected array sizes'
         self.data_types[name15] = 'int'
         self.spectrum_types[name15] = ['all', ]
         self.master_types[name15] = ['all', ]
@@ -538,7 +664,7 @@ class QCDefinitions:
         name16 = 'positive_2D_SNR'
         self.names.append(name16)
         self.kpf_data_levels[name16] = ['2D']
-        self.descriptions[name16] = 'Red/Green CCD data/var^0.5 not significantly negative.'
+        self.descriptions[name16] = 'Green and Red CCD data/variance^0.5 not significantly negative'
         self.data_types[name16] = 'int'
         self.spectrum_types[name16] = ['all', ]
         self.master_types[name16] = []
@@ -551,7 +677,7 @@ class QCDefinitions:
         name17 = 'add_kpfera'
         self.names.append(name17)
         self.kpf_data_levels[name17] = ['L0', '2D', 'L1', 'L2']
-        self.descriptions[name17] = 'Not a QC test; used to add the KPFERA keyword to header.'
+        self.descriptions[name17] = 'Not a QC test; KPFERA keyword added to header'
         self.data_types[name17] = 'float'
         self.spectrum_types[name17] = ['all', ]
         self.master_types[name17] = []
@@ -564,7 +690,7 @@ class QCDefinitions:
         name19 = 'L1_check_snr_lfc'
         self.names.append(name19)
         self.kpf_data_levels[name19] = ['L1']
-        self.descriptions[name19] = 'Check for saturated LFC frames.'
+        self.descriptions[name19] = 'LFC not saturated'
         self.data_types[name19] = 'int'
         self.spectrum_types[name19] = ['LFC', ]
         self.master_types[name19] = ['LFC', ]
@@ -576,8 +702,8 @@ class QCDefinitions:
 
         name18 = 'L0_bad_readout_check'
         self.names.append(name18)
-        self.kpf_data_levels[name18] = ['L0', '2D']
-        self.descriptions[name18] = 'Check Texp that identifies error in reading CCD'
+        self.kpf_data_levels[name18] = ['L0']
+        self.descriptions[name18] = 'CCD read properly (Texp !≈ 6 sec and Texp_desired > 7 sec)'
         self.data_types[name18] = 'int'
         self.spectrum_types[name18] = ['all', ]
         self.master_types[name18] = ['all', ]
@@ -590,7 +716,7 @@ class QCDefinitions:
         name20 = 'L1_correct_wls_check'
         self.names.append(name20)
         self.kpf_data_levels[name20] = ['L1']
-        self.descriptions[name20] = 'Check WLS files used by L1 file'
+        self.descriptions[name20] = 'WLS files exist, are not the same, and bracket the observation'
         self.data_types[name20] = 'int'
         self.spectrum_types[name20] = ['all', ]
         self.master_types[name20] = ['all', ]
@@ -603,7 +729,7 @@ class QCDefinitions:
         name21 = 'D2_master_bias_age'
         self.names.append(name21)
         self.kpf_data_levels[name21] = ['2D']
-        self.descriptions[name21] = 'Check master dark file age'
+        self.descriptions[name21] = 'Master bias from within 5 days of this observation'
         self.data_types[name21] = 'int'
         self.spectrum_types[name21] = ['Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name21] = []
@@ -616,7 +742,7 @@ class QCDefinitions:
         name23 = 'D2_master_dark_age'
         self.names.append(name23)
         self.kpf_data_levels[name23] = ['2D']
-        self.descriptions[name23] = 'Check master dark file age'
+        self.descriptions[name23] = 'Master dark from within 5 days of this observation'
         self.data_types[name23] = 'int'
         self.spectrum_types[name23] = ['Bias', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name23] = []
@@ -629,7 +755,7 @@ class QCDefinitions:
         name24 = 'D2_master_flat_age'
         self.names.append(name24)
         self.kpf_data_levels[name24] = ['2D']
-        self.descriptions[name24] = 'Check master flat file age'
+        self.descriptions[name24] = 'Master flat from within 5 days of this observation'
         self.data_types[name24] = 'int'
         self.spectrum_types[name24] = ['Bias', 'Dark', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name24] = []
@@ -642,7 +768,7 @@ class QCDefinitions:
         name25 = 'L1_WLSFILE_age'
         self.names.append(name25)
         self.kpf_data_levels[name25] = ['L1']
-        self.descriptions[name25] = 'Check WLSFILE file age'
+        self.descriptions[name25] = 'WLSFILE from within 2 days of this observation'
         self.data_types[name25] = 'int'
         self.spectrum_types[name25] = ['all', ]
         self.master_types[name25] = []
@@ -655,7 +781,7 @@ class QCDefinitions:
         name26 = 'L1_WLSFILE2_age'
         self.names.append(name26)
         self.kpf_data_levels[name26] = ['L1']
-        self.descriptions[name26] = 'Check WLSFILE2 file age'
+        self.descriptions[name26] = 'WLSFILE2 from within 2 days of this observation'
         self.data_types[name26] = 'int'
         self.spectrum_types[name26] = ['all', ]
         self.master_types[name26] = []
@@ -668,7 +794,7 @@ class QCDefinitions:
         name27 = 'L1_FLAT_SNR'
         self.names.append(name27)
         self.kpf_data_levels[name27] = ['L1']
-        self.descriptions[name27] = 'Check SNR of flat'
+        self.descriptions[name27] = 'Flat SNR sufficient, all orders/orderlets'
         self.data_types[name27] = 'int'
         self.spectrum_types[name27] = ['Flat', ]
         self.master_types[name27] = []
@@ -681,7 +807,7 @@ class QCDefinitions:
         name28 = 'L1_LFC_lines'
         self.names.append(name28)
         self.kpf_data_levels[name28] = ['L1']
-        self.descriptions[name28] = 'Check number and distribution of LFC lines/order'
+        self.descriptions[name28] = 'Number and distribution of LFC lines sufficient'
         self.data_types[name28] = 'int'
         self.spectrum_types[name28] = ['LFC', ]
         self.master_types[name28] = []
@@ -694,7 +820,7 @@ class QCDefinitions:
         name29 = 'L1_Etalon_lines'
         self.names.append(name29)
         self.kpf_data_levels[name29] = ['L1']
-        self.descriptions[name29] = 'Check number and distribution of Etalon lines/order'
+        self.descriptions[name29] = 'Number and distribution of Etalon lines sufficient'
         self.data_types[name29] = 'int'
         self.spectrum_types[name29] = ['Etalon', ]
         self.master_types[name29] = []
@@ -703,6 +829,110 @@ class QCDefinitions:
         self.fits_comments[name29] = 'QC: Number and dist of Etalon lines sufficient'
         self.db_columns[name29] = None
         self.fits_keyword_fail_value[name29] = 0
+
+        name30 = 'L1_wild_WLS_SCI'
+        self.names.append(name30)
+        self.kpf_data_levels[name30] = ['L1']
+        self.descriptions[name30] = 'Not wild SCI WLS (stdev < 5 pix in all orders compared to ref)'
+        self.data_types[name30] = 'int'
+        self.spectrum_types[name30] = ['all', ]
+        self.master_types[name30] = []
+        self.required_data_products[name30] = [] # no required data products
+        self.fits_keywords[name30] = 'WILDWSCI'
+        self.fits_comments[name30] = 'QC: SCI wavelength solution not wild'
+        self.db_columns[name30] = None
+        self.fits_keyword_fail_value[name30] = 0
+
+        name31 = 'L1_wild_WLS_SKY'
+        self.names.append(name31)
+        self.kpf_data_levels[name31] = ['L1']
+        self.descriptions[name31] = 'Not wild SKY WLS (stdev < 5 pix in all orders compared to ref)'
+        self.data_types[name31] = 'int'
+        self.spectrum_types[name31] = ['all', ]
+        self.master_types[name31] = []
+        self.required_data_products[name31] = [] # no required data products
+        self.fits_keywords[name31] = 'WILDWSKY'
+        self.fits_comments[name31] = 'QC: SKY wavelength solution not wild'
+        self.db_columns[name31] = None
+        self.fits_keyword_fail_value[name31] = 0
+
+        name32 = 'L1_wild_WLS_CAL'
+        self.names.append(name32)
+        self.kpf_data_levels[name32] = ['L1']
+        self.descriptions[name32] = 'Not wild CAL WLS (stdev < 5 pix in all orders compared to ref)'
+        self.data_types[name32] = 'int'
+        self.spectrum_types[name32] = ['all', ]
+        self.master_types[name32] = []
+        self.required_data_products[name32] = [] # no required data products
+        self.fits_keywords[name32] = 'WILDWCAL'
+        self.fits_comments[name32] = 'QC: CAL wavelength solution not wild'
+        self.db_columns[name32] = None
+        self.fits_keyword_fail_value[name32] = 0
+
+        name33 = 'NTP_timing'
+        self.names.append(name33)
+        self.kpf_data_levels[name33] = ['L0']
+        self.descriptions[name33] = 'NTP time accurate to within 100 ms'
+        self.data_types[name33] = 'int'
+        self.spectrum_types[name33] = ['all', ]
+        self.master_types[name33] = []
+        self.required_data_products[name33] = [] # no required data products
+        self.fits_keywords[name33] = 'NTPGOOD'
+        self.fits_comments[name33] = 'QC: NTP time accurate to within 100 ms'
+        self.db_columns[name33] = None
+        self.fits_keyword_fail_value[name33] = 0
+
+        name34 = 'good_guiding'
+        self.names.append(name34)
+        self.kpf_data_levels[name34] = ['L0']
+        self.descriptions[name34] = 'Guiding meets specs'
+        self.data_types[name34] = 'int'
+        self.spectrum_types[name34] = ['Star', ]
+        self.master_types[name34] = []
+        self.required_data_products[name34] = [] # no required data products
+        self.fits_keywords[name34] = 'GUIDGOOD'
+        self.fits_comments[name34] = 'QC: Guider RMS and bias within 50 mas RMS'
+        self.db_columns[name34] = None
+        self.fits_keyword_fail_value[name34] = 0
+
+        name35 = 'good_TARG_headers'
+        self.names.append(name35)
+        self.kpf_data_levels[name35] = ['L0']
+        self.descriptions[name35] = 'TARG headers have plausible values'
+        self.data_types[name35] = 'int'
+        self.spectrum_types[name35] = ['Star', ]
+        self.master_types[name35] = []
+        self.required_data_products[name35] = [] # no required data products
+        self.fits_keywords[name35] = 'TARGPLAU'
+        self.fits_comments[name35] = 'QC: TARG kwds present with plausible values'
+        self.db_columns[name35] = None
+        self.fits_keyword_fail_value[name35] = 0
+
+#        name36 = 'DRP_version_equal_2D_L1'
+#        self.names.append(name36)
+#        self.kpf_data_levels[name36] = ['L1']
+#        self.descriptions[name36] = 'Same DRP version for 2D and L1'
+#        self.data_types[name36] = 'int'
+#        self.spectrum_types[name36] = ['all',]
+#        self.master_types[name36] = []
+#        self.required_data_products[name36] = [] # no required data products
+#        self.fits_keywords[name36] = 'DRPS2DL1'
+#        self.fits_comments[name36] = 'QC: Same DRP version for 2D and L1'
+#        self.db_columns[name36] = None
+#        self.fits_keyword_fail_value[name36] = 0
+#
+#        name37 = 'DRP_version_equal_L1_L2'
+#        self.names.append(name37)
+#        self.kpf_data_levels[name37] = ['L2']
+#        self.descriptions[name37] = 'Same DRP version for L1 and L2'
+#        self.data_types[name37] = 'int'
+#        self.spectrum_types[name37] = ['all',]
+#        self.master_types[name37] = []
+#        self.required_data_products[name37] = [] # no required data products
+#        self.fits_keywords[name37] = 'DRPS2DL1'
+#        self.fits_comments[name37] = 'QC: Same DRP version for L1 and L2'
+#        self.db_columns[name37] = None
+#        self.fits_keyword_fail_value[name37] = 0
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -932,7 +1162,8 @@ class QC:
                 self.logger.info(f'ObsID = {kfpera_csv} is not in the correct format.')
             return KPFERA
         datetime_ObsID = get_datetime_obsid(ObsID)
-        self.logger.info(f"The datetime of ObsID is {datetime_ObsID}.")
+        if debug:
+            self.logger.info(f"The datetime of ObsID is {datetime_ObsID}.")
 
         if os.path.exists(kfpera_csv):
             try:
@@ -941,10 +1172,10 @@ class QC:
                     self.logger.info(f'Read the KPFERA file {kfpera_csv}.')
                 nrows = len(df_kpfera)
                 for i in np.arange(nrows):
-                    starttime = datetime.strptime(df_kpfera.iloc[i][1].strip(), '%Y-%m-%d %H:%M:%S')
-                    stoptime  = datetime.strptime(df_kpfera.iloc[i][2].strip(), '%Y-%m-%d %H:%M:%S')
+                    starttime = datetime.strptime(df_kpfera.iloc[i].iloc[1].strip(), '%Y-%m-%d %H:%M:%S')
+                    stoptime  = datetime.strptime(df_kpfera.iloc[i].iloc[2].strip(), '%Y-%m-%d %H:%M:%S')
                     if (datetime_ObsID > starttime) and (datetime_ObsID < stoptime):
-                        KPFERA = float(df_kpfera.iloc[i][0])
+                        KPFERA = float(df_kpfera.iloc[i].iloc[0])
                         if debug:
                             self.logger.info(f'Setting KPFERA = {KPFERA}')
             except Exception as e:
@@ -1016,7 +1247,6 @@ class QCL0(QC):
 
         try:
             L0 = self.kpf_object
-            debug=True
 
             # Determine which extensions should be in the L0 file.
             # First add the triggrered cameras (Green, Red, CaHK, ExpMeter) to list of data products
@@ -1350,16 +1580,14 @@ class QCL0(QC):
 
     def EM_flux_not_negative(self, debug=False):
         """
-        This Quality Control function checks if 20 or more consecutive elements of the
-        exposure meter spectra are negative.  Negative flux usually indicates
-        over-subtraction of bias from the raw EM images.  The check is applied to the
-        EM-SCI and EM-SKY fibers and returns False if negative flux is detected in
-        either.  Note that this check only works for L0 files with the EXPMETER_SCI and
-        EXPMETER_SKY extensions present.
+        This Quality Control function checks if 20 or more consecutive elements 
+        of the SCI and SKY exposure meter spectra are negative.  Negative flux 
+        usually indicates over-subtraction of bias from the raw EM images.  
+        The check is applied to the EM-SCI and EM-SKY fibers and returns False 
+        if negative flux is detected in either.  Note that this check only works 
+        for L0 files with the EXPMETER_SCI and EXPMETER_SKY extensions present.
 
         Args:
-             L0 - an L0 object
-             fiber ('SCI' [default value] or 'SKY) - the EM fiber output to be tested
              debug - an optional flag.  If True, missing data products are noted.
 
          Returns:
@@ -1446,6 +1674,187 @@ class QCL0(QC):
             QC_pass = False
 
         return QC_pass
+
+
+    def NTP_timing(self, max_timing_error_ms=100, debug=False):
+        """
+        This Quality Control function checks if the status message from 
+        the Network Time Protocol (NTP) indicates that the timing uncertainty
+        is less than max_timing_error_ms.
+
+        Args:
+            debug - an optional flag.  If True, missing data products are noted.
+
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        QC_pass = False
+        try:
+            L0 = self.kpf_object
+            if 'TIMEERR' in L0.header['PRIMARY']:
+                NTP_string = L0.header['PRIMARY']['TIMEERR'] # NTP status message
+                match = re.search(r'NTP time correct to within ([\d.]+) ms', NTP_string)
+                if match:
+                    timing_error_ms = float(match.group(1))
+                    if timing_error_ms < max_timing_error_ms:
+                        QC_pass = True
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+        return QC_pass
+
+
+    def good_guiding(self, max_guider_rms_mas=50, max_guider_offset_mas=50, debug=False):
+        """
+        This Quality Control function checks if the Guider has an RMS guiding
+        performance of 50 mas (settable with max_guider_rms_mas) or better
+        in the X and Y directions.  The same test is applied for guiding offsets.
+
+        Args:
+            debug - an optional flag.  If True, missing data products are noted.
+
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        QC_pass = True
+        try:
+            L0 = self.kpf_object
+            myGuider = AnalyzeGuider(L0)
+
+            # Check guiding RMS
+            if hasattr(myGuider, 'x_rms'):
+                if myGuider.x_rms > max_guider_rms_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+            if hasattr(myGuider, 'y_rms'):
+                if myGuider.y_rms > max_guider_rms_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+
+            # Check guiding offsets
+            if hasattr(myGuider, 'x_bias'):
+                if myGuider.x_bias > max_guider_offset_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+            if hasattr(myGuider, 'y_bias'):
+                if myGuider.y_bias > max_guider_offset_mas:
+                    QC_pass = False
+            else:
+                QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+
+    def good_TARG_headers(self):
+        """
+        This Quality Control function checks that a set of "TARG" keywords exist
+        in an L0 file and that a subset of those for reasonable values.
+        
+        keywords that are checked for existence: 
+            TARGNAME, TARGRA, TARGDEC, TARGEPOC, TARGEQUI, TARGPLAX, 
+            TARGPMDC, TARGPMRA, TARGRADV, TARGFRAM, TARGTEFF
+        
+        keywords that are verified to be numbers: 
+            TARGEPOC, TARGEQUI, TARGPLAX, 
+            TARGPMDC, TARGPMRA, TARGRADV, TARGTEFF
+
+        Conditions checked:
+            radial velocity: TARGRADV < 100 km/s
+            parallax: TARGPLAX < 1 arcsec
+            epoch, equinox: TARGEPOC, TARGEQUI >= 1950 and < 2050
+            proper motion: TARGPMDC, TARGPMRA < 15 arcsec/yr (NOT CURRENTLY CHECKED - units uncertain)
+            effective temperature: TARGTEFF < 10000 K and > 2000 K
+        
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        def is_number(maybe_num):
+            '''
+            Return True if the input is a number (int or float) and False otherwise.
+            '''
+            if maybe_num == None:
+                return False
+            if isinstance(maybe_num, bool):
+                return False
+            if isinstance(maybe_num, (int, float)):
+                if not np.isnan(maybe_num):
+                    return True
+            return False
+
+        QC_pass = True
+        try:
+            L0 = self.kpf_object
+            header = L0.header['PRIMARY']
+
+            # Check that certain TARGxxxx keywords exist
+            TARG_keywords = ['TARGNAME', 'TARGRA', 'TARGDEC', 'TARGEPOC', 'TARGEQUI', 'TARGPLAX', 'TARGPMDC', 'TARGPMRA', 'TARGRADV', 'TARGFRAM', 'TARGTEFF']            
+            for kwd in TARG_keywords:
+                if not kwd in header:
+                    QC_pass = False
+                    self.logger.info(f'Missing L0 keyword: {kwd}')
+                    return QC_pass
+            
+            # Check that certain TARGxxxx keywords are numbers
+            TARG_keywords = ['TARGEPOC', 'TARGEQUI', 'TARGPLAX', 'TARGPMDC', 'TARGPMRA', 'TARGRADV', 'TARGTEFF']            
+            for kwd in TARG_keywords:
+                if not is_number(header[kwd]):
+                    QC_pass = False
+                    self.logger.info(f'Keyword {kwd} = {header[kwd]} is not a number')
+                    return QC_pass
+            
+            # Check that TARGRADV < 350 km/s (see Fig. 8 of Chubak et al. 2012 - arXiv:1207.6212)
+            if 'TARGRADV' in header:
+                 if abs(header['TARGRADV']) > 350:
+                     QC_pass = False
+                     self.logger.info(f'L0 keyword problem: abs(TARGRADV) = abs({str(header["TARGRADV"])}) > 100 km/s')
+            
+            # Check that TARGPLAX < 1 arcsec
+            if 'TARGPLAX' in header:
+                 if float(header['TARGPLAX']) >= 1 * 1000:
+                     QC_pass = False
+                     self.logger.info(f'L0 keyword problem: TARGPLAX = {str(header["TARGPLAX"])} > 1000 mas')
+            
+            # Check that TARGEPOC, TARGEQUI >= 1950 and < 2050
+            kwds = ['TARGEPOC', 'TARGEQUI']
+            for kwd in kwds:
+                if kwd in header:
+                     if (float(header[kwd]) <= 1950) or (float(header[kwd]) > 2050):
+                         QC_pass = False
+                         self.logger.info(f'L0 keyword problem: {kwd} = {str(header[kwd])} <= 1950 or > 2050')
+            
+#            # Check that TARGPMDC, TARGPMRA < 15 arcsec/yr
+#            kwds = ['TARGPMDC', 'TARGPMRA']
+#            for kwd in kwds:
+#                if kwd in header:
+#                     if float(header[kwd]) > 15:
+#                          QC_pass = False
+            
+            # Check that TARGTEFF > 2000 K and < 10000 K
+            if 'TARGTEFF' in header:
+                 if (float(header['TARGTEFF']) <= 2000) or (float(header['TARGTEFF']) >= 10000):
+                     QC_pass = False
+            
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
 
 #####################################################################
 
@@ -2610,6 +3019,203 @@ class QCL1(QC):
             QC_pass = False
 
         return QC_pass
+
+
+    def L1_wild_WLS(self, EXT=['CAL'], max_stdev_pixels=5, debug=False):
+        """
+        This Quality Control function checks if the wavelength solution for 
+        SCI1, SCI2, and SCI3 on both CCDs are not "wild".  Wild is defined 
+        as having a standard deviation (note: standard deviation != RMS) 
+        compared to a reference wavelength solution of > 5 pixels for any 
+        spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the SCI1, SCI2, and SCI3 wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+
+        GREEN_WAVE_extensions = []
+        RED_WAVE_extensions   = []
+
+        try:
+            if 'CAL' in EXT:
+                GREEN_WAVE_extensions.append("GREEN_CAL_WAVE")
+                RED_WAVE_extensions.append("RED_CAL_WAVE")
+            if 'SCI' in EXT:
+                GREEN_WAVE_extensions.append("GREEN_SCI_WAVE1")
+                GREEN_WAVE_extensions.append("GREEN_SCI_WAVE2")
+                GREEN_WAVE_extensions.append("GREEN_SCI_WAVE3")
+                RED_WAVE_extensions.append("RED_SCI_WAVE1")
+                RED_WAVE_extensions.append("RED_SCI_WAVE2")
+                RED_WAVE_extensions.append("RED_SCI_WAVE3")
+            if 'SKY' in EXT:
+                GREEN_WAVE_extensions.append("GREEN_SKY_WAVE")
+                RED_WAVE_extensions.append("RED_SKY_WAVE")
+
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            data_products = get_data_products_L1(L1)
+            
+            # Get reference wavelength solution
+            dt = get_datetime_obsid(myL1.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+            if debug:
+                print(f'DEFAULT_CALIBRATION_CFG_PATH = ' + DEFAULT_CALIBRATION_CFG_PATH)
+            GC = GetCalibrations(dt, DEFAULT_CALIBRATION_CFG_PATH, use_db=False)
+            wls_filename = GC.lookup(subset=['rough_wls']) 
+            if debug:
+                print(f'wls_filename = ' + wls_filename['rough_wls'])
+            L1_ref = KPF1.from_fits(wls_filename['rough_wls'])
+            myL1_ref = AnalyzeL1(L1_ref)  
+            myL1_ref.add_dispersion_arrays()
+            
+            QC_pass = True
+            if 'Green' in data_products:
+                for EXT_WAVE in GREEN_WAVE_extensions:
+                    if debug:
+                        print(f'EXT_WAVE = ' + EXT_WAVE)
+                    EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+                    norder = myL1.L1[EXT_WAVE].shape[0]
+                    for o in range(norder):
+                        if not (myL1_ref.L1[EXT_DISP][o,:] == 0).all():
+                            pix_diff_std = np.std((myL1.L1[EXT_WAVE][o,:] - myL1_ref.L1[EXT_WAVE][o,:]) / myL1_ref.L1[EXT_DISP][o,:])
+                            if debug:
+                                print(o, pix_diff_std)
+                            if pix_diff_std > max_stdev_pixels:
+                                QC_pass = False
+
+            if 'Red' in data_products:
+                for EXT_WAVE in RED_WAVE_extensions:
+                    if debug:
+                        print(f'EXT_WAVE = ' + EXT_WAVE)
+                    EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+                    norder = myL1.L1[EXT_WAVE].shape[0]
+                    for o in range(norder):
+                        if not (myL1_ref.L1[EXT_DISP][o,:] == 0).all():
+                            pix_diff_std = np.std((myL1.L1[EXT_WAVE][o,:] - myL1_ref.L1[EXT_WAVE][o,:]) / myL1_ref.L1[EXT_DISP][o,:])
+                            if debug:
+                                print(o, pix_diff_std)
+                            if pix_diff_std > max_stdev_pixels:
+                                QC_pass = False
+
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS_SCI(self, max_stdev_pixels=5, debug=False):
+        """
+        Using the method L1_wild_WLS, this Quality Control function checks 
+        if the wavelength solution for SCI1, SCI2, and SCI3 on both CCDs 
+        are not "wild".  Wild is defined as having a standard deviation 
+        (note: standard deviation != RMS) compared to a reference wavelength 
+        solution of > 5 pixels for any spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the SCI1, SCI2, and SCI3 wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+        
+        QC_pass = False
+
+        try: 
+            QC_pass = self.L1_wild_WLS(EXT=['SCI'], max_stdev_pixels=max_stdev_pixels, debug=debug)
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS_SKY(self, max_stdev_pixels=5, debug=False):
+        """
+        Using the method L1_wild_WLS, this Quality Control function checks 
+        if the wavelength solution for SKY on both CCDs 
+        are not "wild".  Wild is defined as having a standard deviation 
+        (note: standard deviation != RMS) compared to a reference wavelength 
+        solution of > 5 pixels for any spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the SKY wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+        
+        QC_pass = False
+
+        try: 
+            QC_pass = self.L1_wild_WLS(EXT=['SKY'], max_stdev_pixels=max_stdev_pixels, debug=debug)
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_wild_WLS_CAL(self, max_stdev_pixels=5, debug=False):
+        """
+        Using the method L1_wild_WLS, this Quality Control function checks 
+        if the wavelength solution for CAL on both CCDs 
+        are not "wild".  Wild is defined as having a standard deviation 
+        (note: standard deviation != RMS) compared to a reference wavelength 
+        solution of > 5 pixels for any spectral order.
+
+        Args:
+            debug: if True, print debugging statements
+
+        Returns:
+            QC_pass (bool): True if the CAL wavelength solutions
+                            are not wild (stdev of WLS compared to reference > 5 
+                            pixels for all spectral orders.)
+        """
+        
+        QC_pass = False
+
+        try: 
+            QC_pass = self.L1_wild_WLS(EXT=['CAL'], max_stdev_pixels=max_stdev_pixels, debug=debug)
+        except Exception as e:
+            self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+# Consider if this QC should use the receipt for keywords to determine DRP version numbers
+#    def DRP_version_equal_2D_L1(self, debug=False):
+#        """
+#        Check if the same DRP produced 2D and L1.
+#        """
+#        
+#        QC_pass = False
+#
+#        try: 
+#            if hasattr(self.kpf_object.header, 'DRPTAG2D'):
+#                DRPTAG2D = self.kpf_object.header['DRPTAG2D']
+#            else:
+#                DRPTAG2D = None
+#            if hasattr(self.kpf_object.header, 'DRPTAGL1'):
+#                DRPTAGL1 = self.kpf_object.header['DRPTAGL1']
+#            elif:
+#                
+#            else:
+#                DRPTAG2D = None
+#            QC_pass = ...
+#        except Exception as e:
+#            self.logger.error(f"Exception: {e}")
+#            QC_pass = False
+#
+#        return QC_pass
 
 
 #####################################################################

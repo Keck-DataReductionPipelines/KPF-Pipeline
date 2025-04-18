@@ -1,9 +1,11 @@
 # This file contains assorted utility functions that are mostly 
 # for computing astronomical quantities associated with KPF data.
 
+from datetime import datetime
 from astropy.time import Time
 from astropy import units as u
-from astropy.coordinates import EarthLocation, SkyCoord, AltAz, get_sun, get_moon
+from astropy.coordinates import EarthLocation, SkyCoord, AltAz, get_sun, get_body
+import numpy as np
 
 def get_sun_alt(UTdatetime):
     """
@@ -17,33 +19,81 @@ def get_sun_alt(UTdatetime):
               Negative values correspond to the Sun below the horizon.
     """
     
-    sun = get_sun(UTdatetime)
+    sun = get_sun(UTdatetime).transform_to('icrs')
     maunakea = EarthLocation(lat='19d49m42.6s', lon='-155d28m48.9s', height=4205) 
     altaz_sun = sun.transform_to(AltAz(obstime=UTdatetime, location=maunakea))
     alt = altaz_sun.alt.deg
 
     return alt
-    
-def get_moon_sep(UTdatetime, RA, dec):
-    """
-    Returns the separation in degrees between the Moon and an object with 
-    coordinates RA/dec at a specific UT datetime.
 
-    Args:
-        UTdatetime - an astropy Time object with the UT datetime
-        RA - right ascension of the object (string format, e.g. "10:24:36.5")
-        dec - declination of the object (string format, e.g. "+45:10:45.1")
+from astropy.coordinates import EarthLocation, get_sun, AltAz
+from astropy.time import Time
+import astropy.units as u
+import numpy as np
+from datetime import datetime
+
+# Define Maunakea location
+maunakea = EarthLocation(lat='19d49m42.6s', lon='-155d28m48.9s', height=4205)
+
+def get_sunrise_sunset_ut(utc_date):
+    """
+    Return sunrise and sunset times (UTC) as datetime.datetime objects for 
+    the given UT date at Maunakea.
+
+    Parameters:
+        utc_date (str): Date string in 'YYYY-MM-DD' format
 
     Returns:
-        sep - separation (degrees)
+        (sunrise_dt, sunset_dt): Tuple of datetime.datetime objects (UT) or (None, None)
     """
+    # Generate time samples (every 5 minutes over 24 hours)
+    midnight = Time(utc_date + ' 00:00:00', scale='utc')
+    delta_minutes = np.linspace(0, 1440, 288)  # 5-minute steps
+    times = midnight + delta_minutes * u.minute
 
-    target = SkyCoord(RA, dec, unit=(u.hourangle, u.deg))
-    moon = get_moon(UTdatetime)
-    sep = target.separation(moon)
+    # Compute Sun altitude
+    altaz_frame = AltAz(obstime=times, location=maunakea)
+    sun_altitudes = get_sun(times).transform_to(altaz_frame).alt
 
-    return sep.deg # in degrees
+    # Find transitions across the horizon
+    above_horizon = sun_altitudes > 0 * u.deg
+    crossings = np.where(np.diff(above_horizon.astype(int)) != 0)[0]
+
+    if len(crossings) >= 2:
+        sunrise = times[crossings[0]].to_datetime()
+        sunset = times[crossings[1]].to_datetime()
+        return sunrise, sunset
+    else:
+        return None, None  # Polar day or night
+   
     
+def get_moon_sep(UTdatetime, RA, dec, observer_location=None):
+    """
+    Returns the separation in degrees between the Moon and an object with
+    coordinates RA/dec at a specific UT datetime and observer location.
+
+    Args:
+        UTdatetime (Time): Astropy Time object specifying UT datetime.
+        RA (str): Right ascension of the object (e.g., \"10:24:36.5\").
+        dec (str): Declination of the object (e.g., \"+45:10:45.1\").
+        observer_location (EarthLocation, optional): Observer's location. Defaults to Maunakea.
+
+    Returns:
+        float: Separation between Moon and object in degrees.
+    """
+    if observer_location is None:
+        observer_location = EarthLocation(lat='19d49m42.6s', lon='-155d28m48.9s', height=4205)
+
+    # Create SkyCoord object for the target
+    target_coord = SkyCoord(RA, dec, unit=(u.hourangle, u.deg), frame='icrs')
+
+    # Get Moon coordinates at given datetime and observer location
+    moon_coord = get_body('moon', UTdatetime, observer_location).transform_to('icrs')
+
+    # Compute separation
+    separation = target_coord.separation(moon_coord)
+
+    return separation.deg
 
 class DummyLogger:
     """

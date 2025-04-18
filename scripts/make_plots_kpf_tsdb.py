@@ -4,6 +4,7 @@
 Script Name: make_plots_kpf_tsdb.py
 
 Description:
+    OLD SCRIPT?
     This script generates standard KPF Time Series plots from the database. 
     It supports plotting data over specific intervals such as day, month, year, 
     decade, or custom ranges like the last N days. The plots are saved to 

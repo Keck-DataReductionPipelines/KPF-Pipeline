@@ -127,6 +127,33 @@ class AnalyzeL1:
         self.ObsID = primary_header.get_obsid()
 
 
+    def add_dispersion_arrays(self, smooth=False):
+        '''
+        Computes the dispersion (dwavlength/dpixel) for all of the WAVE 
+        extensions in self.L1 and adds DISP extensions to to self.L1.
+
+        Arguments:
+            smooth - if True, then the dispersion is smoothed (not implemented)
+    
+        Returns:
+            None
+        '''
+        
+        # Compute dispersion
+        WAVE_extensions = [ "GREEN_SCI_WAVE1","GREEN_SCI_WAVE2","GREEN_SCI_WAVE3", "GREEN_SKY_WAVE", "GREEN_CAL_WAVE", "RED_SCI_WAVE1", "RED_SCI_WAVE2", "RED_SCI_WAVE3", "RED_SKY_WAVE", "RED_CAL_WAVE"]
+        for EXT_WAVE in WAVE_extensions:
+             EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+             if hasattr(self.L1, EXT_WAVE):
+                 # Create dispersion extension
+                 setattr(self.L1, EXT_DISP, np.zeros_like(getattr(self.L1, EXT_WAVE)))
+                 # Compute dispersion for each order
+                 norder = self.L1[EXT_WAVE].shape[0]
+                 for o in range(norder):
+                     self.L1[EXT_DISP][o, 1:-1] = (self.L1[EXT_WAVE][o, 2:] - self.L1[EXT_WAVE][o, :-2]) / 2.0
+                     self.L1[EXT_DISP][o, 0]    = (self.L1[EXT_WAVE][o, 1]  - self.L1[EXT_WAVE][o, 0])
+                     self.L1[EXT_DISP][o, -1]   = (self.L1[EXT_WAVE][o, -1] - self.L1[EXT_WAVE][o, -2])
+
+
     def measure_WLS_age(self, kwd='WLSFILE', verbose=False):
         '''
         Computes the number of days between the observation and the
@@ -150,27 +177,30 @@ class AnalyzeL1:
             self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
         
         try:
-            wls_filename = self.header[kwd]
-            wls_filename_datetime = get_datecode_from_filename(wls_filename, datetime_out=True)
-            if "morn" in wls_filename:
-                wls_filename_datetime += timedelta(hours=18.8)
-            elif "eve" in wls_filename:
-                wls_filename_datetime += timedelta(hours=3.5)
-            elif "midnight" in wls_filename:
-                wls_filename_datetime += timedelta(hours=9.5)
-            if verbose:
-                self.logger.info(f'Date of {kwd}: {wls_filename_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
-
-            if type(wls_filename_datetime) == type(date_obs_datetime):
-                age_wls_file = (wls_filename_datetime - date_obs_datetime).total_seconds() / 86400.0
+            if kwd in self.header:
+                wls_filename = self.header[kwd]
+                wls_filename_datetime = get_datecode_from_filename(wls_filename, datetime_out=True)
+                if "morn" in wls_filename:
+                    wls_filename_datetime += timedelta(hours=18.8)
+                elif "eve" in wls_filename:
+                    wls_filename_datetime += timedelta(hours=3.5)
+                elif "midnight" in wls_filename:
+                    wls_filename_datetime += timedelta(hours=9.5)
+                if verbose:
+                    self.logger.info(f'Date of {kwd}: {wls_filename_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
+    
+                if type(wls_filename_datetime) == type(date_obs_datetime):
+                    age_wls_file = (wls_filename_datetime - date_obs_datetime).total_seconds() / 86400.0
+                else:
+                    self.logger.info("Error comparing datetimes: ")
+                    self.logger.info("wls_filename_datetime = " + str(wls_filename_datetime))
+                    self.logger.info("date_obs_datetime = " + str(date_obs_datetime))
+                    age_wls_file = None
+                if verbose:
+                    self.logger.info(f'Days between observation and {kwd}: {age_wls_file}')
             else:
-                self.logger.info("Error comparing datetimes: ")
-                self.logger.info("wls_filename_datetime = " + str(wls_filename_datetime))
-                self.logger.info("date_obs_datetime = " + str(date_obs_datetime))
+                self.logger.info(f"{kwd} not in header")
                 age_wls_file = None
-
-            if verbose:
-                self.logger.info(f'Days between observation and {kwd}: {age_wls_file}')
 
             return age_wls_file
 
@@ -301,6 +331,58 @@ class AnalyzeL1:
         SKY_fl = [SKY_f, SKY_l]
     
         return (SCI_fl, CAL_fl, SKY_fl)
+
+
+    def count_saturated_lines(self, chip='green'):
+        """
+        This method uses the find_peaks algorithm to measure the number of 
+        emission lines above an intensity threshold. Additionally, it checks
+        that each order has at least one peak in each of the 
+        `divisions_per_order` subregions.  This method is usually applied to 
+        LFC or Etalon spectra.
+    
+        Args:
+            chip (str):               CCD name ('green' or 'red')
+            intensity_thresh (float): minimum line amplitude to be considered good
+            min_lines (int):          minimum number of lines in a spectral 
+                                      order for it to be considered good
+            divisions_per_order (int): number of contiguous subregions each order 
+                                       must have at least one peak in
+    
+        Returns:
+            SCI_fl, CAL_fl, SKY_fl where, e.g., SCI_fl = [first_good_order, last_good_order]
+        """
+        
+        chip = chip.lower()
+        data = np.array(self.L1[chip.upper() + '_CAL_WAVE'].data, dtype='d')
+        orderlets = ['SCI_FLUX1', 'SCI_FLUX2', 'SCI_FLUX3', 'CAL_FLUX', 'SKY_FLUX']
+        
+        norder = data.shape[0]
+        norderlet = len(orderlets)
+        # lines[o, oo] will hold the final "count" for each (order, orderlet)
+        lines = np.zeros((norder, norderlet), dtype=int)
+        
+        for oo, oo_str in enumerate(orderlets):
+            for o in range(norder):
+                # Extract flux for this order / orderlet
+                flux = np.array(self.L1[chip.upper() + '_' + oo_str].data, dtype='d')[o, :].flatten()
+                
+                # Set saturation level for each orderlet
+                saturation = 2.5e6
+                if oo == 3:
+                    saturation = 1.25e6
+                                                       
+                # Find peaks above intensity_thresh
+                peaks, properties = find_peaks(flux, height=saturation)
+                lines[o, oo] = len(peaks)
+        
+        SCI1_sat_lines = int(np.sum(lines[:, 0]))                   
+        SCI2_sat_lines = int(np.sum(lines[:, 1]))                   
+        SCI3_sat_lines = int(np.sum(lines[:, 2]))                   
+        CAL_sat_lines  = int(np.sum(lines[:, 3]))                   
+        SKY_sat_lines  = int(np.sum(lines[:, 4]))                   
+    
+        return (SCI1_sat_lines, SCI2_sat_lines, SCI3_sat_lines, CAL_sat_lines, SKY_sat_lines)
 
 
     def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):
@@ -512,7 +594,7 @@ class AnalyzeL1:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         ax3.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
@@ -595,7 +677,7 @@ class AnalyzeL1:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -50), textcoords='offset points')
@@ -800,7 +882,7 @@ class AnalyzeL1:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=16, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -50), textcoords='offset points')
@@ -891,7 +973,7 @@ class AnalyzeL1:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -30), textcoords='offset points')
@@ -1121,7 +1203,7 @@ class AnalyzeL1:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -30), textcoords='offset points')
@@ -1195,7 +1277,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[0,0].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='teal') 
         axs[0,0].legend(loc='upper right')
         axs[0,0].set_ylabel('SCI1 / SCI2', fontsize=18)
@@ -1205,7 +1287,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[0,1].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='teal') 
         axs[0,1].legend(loc='upper right')
         axs[0,1].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
@@ -1214,7 +1296,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[0,2].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='teal') 
         axs[0,2].legend(loc='upper right')
         axs[0,2].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
@@ -1225,7 +1307,7 @@ class AnalyzeL1:
         med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[1,0].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='tomato') 
         axs[1,0].legend(loc='upper right')
         axs[1,0].set_ylabel('SCI3 / SCI2', fontsize=18)
@@ -1234,7 +1316,7 @@ class AnalyzeL1:
         med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[1,1].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='tomato') 
         axs[1,1].legend(loc='upper right')
         axs[1,1].grid()
@@ -1242,7 +1324,7 @@ class AnalyzeL1:
         med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[1,2].plot(w_sci2[o,imin:imax], f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='tomato') 
         axs[1,2].legend(loc='upper right')
         axs[1,2].grid()
@@ -1252,7 +1334,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         axs[2,0].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='cornflowerblue') 
         axs[2,0].legend(loc='upper right')
         axs[2,0].set_ylabel('SCI1 / SCI3', fontsize=18)
@@ -1261,7 +1343,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         axs[2,1].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='cornflowerblue') 
         axs[2,1].legend(loc='upper right')
         axs[2,1].grid()
@@ -1269,7 +1351,7 @@ class AnalyzeL1:
         med = np.median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         axs[2,2].plot(w_sci2[o,imin:imax], f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='cornflowerblue') 
         axs[2,2].legend(loc='upper right')
         axs[2,2].grid()
@@ -1279,7 +1361,7 @@ class AnalyzeL1:
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='orchid') 
         axs[3,0].legend(loc='upper right')
         axs[3,0].set_ylabel('SKY / SCI2', fontsize=18)
@@ -1288,13 +1370,13 @@ class AnalyzeL1:
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='orchid') 
         axs[3,1].legend(loc='upper right')
         axs[3,1].grid()
         o=o3; imin = imin3; imax = imax3
         axs[3,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='orchid') 
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
@@ -1306,7 +1388,7 @@ class AnalyzeL1:
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,0].legend(loc='upper right')
         axs[4,0].set_ylabel('CAL / SCI2', fontsize=18)
@@ -1316,7 +1398,7 @@ class AnalyzeL1:
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,1].legend(loc='upper right')
         axs[4,1].set_xlabel('Wavelength (Ang)', fontsize=18)
@@ -1325,7 +1407,7 @@ class AnalyzeL1:
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,2].legend(loc='upper right')
         axs[4,2].set_xlabel('Wavelength (Ang)', fontsize=18)
@@ -1342,7 +1424,7 @@ class AnalyzeL1:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -30), textcoords='offset points')
@@ -1732,7 +1814,7 @@ class AnalyzeL1:
                 if row == 4:
                     ax.set_xlabel('Wavelength [Ang]', fontsize=14)
                 if col == 0:
-                    ax.set_ylabel(f'$\Delta$ pixels ' + f'({orderlet_label})\nper order', fontsize=14)
+                    ax.set_ylabel(f'$\\Delta$ pixels ' + f'({orderlet_label})\nper order', fontsize=14)
 
         # Adjust spacing between subplots
         plt.subplots_adjust(hspace=0)
@@ -1740,7 +1822,7 @@ class AnalyzeL1:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         axes[4, 4].annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -50), textcoords='offset points')
