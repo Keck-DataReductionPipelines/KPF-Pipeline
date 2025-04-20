@@ -96,6 +96,7 @@ class TSDB:
         self.base_dir = base_dir
         self.logger.info('Base data directory: ' + self.base_dir)
 
+        self.derived_keyword_types       = self.get_keyword_types(level='derived')
         self.L0_header_keyword_types     = self.get_keyword_types(level='L0')
         self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
         self.D2_header_keyword_types     = self.get_keyword_types(level='2D')
@@ -248,7 +249,7 @@ class TSDB:
 
     def create_metadata_table(self):
         """
-        Create a separate table 'kpfdb_metadata' to store column/keyword 
+        Create a separate table 'tsdb_metadata' to store column/keyword 
         descriptions and units. Then load data from multiple CSV sources plus 
         custom RV prefixes and insert into the database table.
         """
@@ -257,7 +258,7 @@ class TSDB:
         cursor = conn.cursor()
     
         create_meta_table_query = """
-            CREATE TABLE IF NOT EXISTS kpfdb_metadata (
+            CREATE TABLE IF NOT EXISTS tsdb_metadata (
                 keyword     TEXT NOT NULL PRIMARY KEY,
                 datatype    TEXT,
                 description TEXT,
@@ -314,9 +315,9 @@ class TSDB:
         ], ignore_index=True)
         df_all.drop_duplicates(subset='keyword', keep='first', inplace=True)
 
-        # Insert (or replace) into kpfdb_metadata
+        # Insert (or replace) into tsdb_metadata
         insert_query = """
-            INSERT OR REPLACE INTO kpfdb_metadata
+            INSERT OR REPLACE INTO tsdb_metadata
             (keyword, datatype, description, units, source)
             VALUES (?, ?, ?, ?, ?)
         """
@@ -330,7 +331,7 @@ class TSDB:
         conn.commit()
         conn.close()
 
-        self.logger.info("Metadata table 'kpfdb_metadata' created.")
+        self.logger.info("Metadata table 'tsdb_metadata' created.")
 
 
     def check_if_table_exsits(self, tablename=None):
@@ -365,7 +366,7 @@ class TSDB:
 
     def create_database(self):
         """
-        Create SQLite3 database using the standard KPF scheme.
+        Create database using the standard KPF schema.
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -374,6 +375,7 @@ class TSDB:
         cursor.execute("PRAGMA cache_size = -2000000;")
     
         # Define columns for each file type
+        derived_cols       = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.derived_keyword_types.items()]
         L0_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
         L0_telemetry_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
         D2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
@@ -382,22 +384,13 @@ class TSDB:
         L2_CCF_header_cols = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
         L2_RV_header_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
         L2_RV_cols         = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_keyword_types.items()]
-        cols = L0_header_cols + L0_telemetry_cols + D2_header_cols + L1_header_cols + L2_header_cols + L2_CCF_header_cols + L2_RV_header_cols + L2_RV_cols
-        cols += ['"datecode" TEXT', '"ObsID" TEXT']
-        cols += ['"L0_filename" TEXT', '"D2_filename" TEXT', '"L1_filename" TEXT', '"L2_filename" TEXT', ]
-        cols += ['"L0_header_read_time" TEXT', '"D2_header_read_time" TEXT', '"L1_header_read_time" TEXT', '"L2_header_read_time" TEXT', ]
-        cols += ['"Source" TEXT']
+        cols = derived_cols + L0_header_cols + L0_telemetry_cols + D2_header_cols + L1_header_cols + L2_header_cols + L2_CCF_header_cols + L2_RV_header_cols + L2_RV_cols
         create_table_query = f'CREATE TABLE IF NOT EXISTS tsdb ({", ".join(cols)}, UNIQUE(ObsID))'
         cursor.execute(create_table_query)
         
         # Define indexed columns
         index_commands = [
-            ('CREATE UNIQUE INDEX idx_ObsID       ON tsdb ("ObsID");',       'idx_ObsID'),
-            ('CREATE UNIQUE INDEX idx_L0_filename ON tsdb ("L0_filename");', 'idx_L0_filename'),
-            ('CREATE UNIQUE INDEX idx_D2_filename ON tsdb ("D2_filename");', 'idx_D2_filename'),
-            ('CREATE UNIQUE INDEX idx_L1_filename ON tsdb ("L1_filename");', 'idx_L1_filename'),
-            ('CREATE UNIQUE INDEX idx_L2_filename ON tsdb ("L2_filename");', 'idx_L2_filename'),
-            ('CREATE INDEX idx_FIUMODE ON tsdb ("FIUMODE");', 'idx_FIUMODE'),
+            ('CREATE UNIQUE INDEX idx_ObsID ON tsdb ("ObsID");', 'idx_ObsID'),
             ('CREATE INDEX idx_OBJECT ON tsdb ("OBJECT");', 'idx_OBJECT'),
             ('CREATE INDEX idx_DATE_MID ON tsdb ("DATE-MID");', 'idx_DATE_MID'),
         ]
@@ -613,6 +606,12 @@ class TSDB:
             prefixes = ['RV1', 'RV2', 'RV3', 'RVS', 'ERVS', 'RVC', 'ERVC', 'RVY', 'ERVY', 'CCFBJD', 'BCRV', 'CCFW']
             nums = [f"{i:02d}" for i in range(67)]
             keyword_types = {f"{prefix}{num}": 'REAL' for num in nums for prefix in prefixes}
+
+        # Derived keywords    
+        elif level == 'derived':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/derived_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
         else:
             keyword_types = {}
@@ -1154,67 +1153,31 @@ class TSDB:
     def display_dataframe_from_db(self, columns, only_object=None, object_like=None, only_source=None, 
                                   on_sky=None, start_date=None, end_date=None):
         """
-        TO-DO: should this method just call dataframe_from_db()?
-        
         Prints a pandas dataframe of attributes (specified by column names) for all 
         observations in the DB. The query can be restricted to observations matching a 
-        particular object name(s).  The query can also be restricted to observations 
-        that are on-sky/off-sky and after start_date and/or before end_date. 
-
-        Args:
-            columns (string, list of strings, or '*' for all) - database columns to query
-            only_object (string or list of strings) - object names to include in query
-            only_source (string or list of strings) - source names to include in query (e.g., 'Star')
-            object_like (string or list of strings) - partial object names to search for
-            on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
-            start_date (datetime object) - only return observations after start_date
-            end_date (datetime object) - only return observations before end_date
-            false (boolean) - if True, prints the SQL query
-
-        Returns:
-            A printed dataframe of the specified columns matching the constraints.
-        """
-        conn = sqlite3.connect(self.db_path)
-        
-        # Enclose column names in double quotes
-        if columns == '*':
-            quoted_columns = '*'
-        else:
-            quoted_columns = [f'"{column}"' for column in columns]
-        query = f"SELECT {', '.join(quoted_columns)} FROM tsdb"
-
-        # Append WHERE clauses
-        where_queries = []
-        if only_object is not None:
-            only_object = [f"OBJECT = '{only_object}'"]
-            or_objects = ' OR '.join(only_object)
-            where_queries.append(f'({or_objects})')
-        # is object_like working?
-        if object_like is not None:
-            object_like = [f"OBJECT LIKE '%{obj}%'" for obj in object_like]
-            or_objects = ' OR '.join(object_like)
-            where_queries.append(f'({or_objects})')
-        if only_source is not None:
-            only_source = [f"SOURCE = '{only_source}'"]
-            or_sources = ' OR '.join(only_source)
-            where_queries.append(f'({or_sources})')
-        if on_sky is not None:
-            if on_sky == True:
-                where_queries.append(f"FIUMODE = 'Observing'")
-            if on_sky == False:
-                where_queries.append(f"FIUMODE = 'Calibration'")
-        if start_date is not None:
-            start_date_txt = start_date.strftime('%Y-%m-%d %H:%M:%S')
-            where_queries.append(f' ("DATE-MID" > "{start_date_txt}")')
-        if end_date is not None:
-            end_date_txt = end_date.strftime('%Y-%m-%d %H:%M:%S')
-            where_queries.append(f' ("DATE-MID" < "{end_date_txt}")')
-        if where_queries != []:
-            query += " WHERE " + ' AND '.join(where_queries)
+        particular object name(s), source(s), on-sky status, and a date range.
     
-        # Execute query
-        df = pd.read_sql_query(query, conn, params=(only_object,) if only_object is not None else None)
-        conn.close()
+        Args:
+            columns (string or list of strings, or '*' for all) - database columns to query
+            only_object (string or list of strings) - object names to include in query
+            object_like (string or list of strings) - partial object names to search for
+            only_source (string or list of strings) - source names to include in query
+            on_sky (True, False, None) - select on-sky/off-sky observations
+            start_date (datetime) - only return observations after this date
+            end_date (datetime) - only return observations before this date
+    
+        Returns:
+            None. Prints the resulting dataframe.
+        """
+        df = self.dataframe_from_db(
+            columns=columns,
+            only_object=only_object,
+            object_like=object_like,
+            only_source=only_source,
+            on_sky=on_sky,
+            start_date=start_date,
+            end_date=end_date
+        )
         print(df)
 
 
