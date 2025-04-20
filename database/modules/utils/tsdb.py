@@ -74,12 +74,12 @@ class TSDB:
 #        68 = Failed to compute checksum
     """
 
-    def __init__(self, db_type='sqlite3', db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False, verbose=False):
+    def __init__(self, backend='sqlite3', db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False, verbose=False):
         """
-        Todo: add docstring, including explanation of db_type = 'sqlite3' or 'postgres'
+        Todo: add docstring, including explanation of backend = 'sqlite3' or 'postgres'
         """
         
-        self.db_type = db_type # sqlite3 or postgresql
+        self.backend = backend # sqlite3 or postgresql
         self.verbose = verbose
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting KPF_TSDB')
@@ -111,16 +111,16 @@ class TSDB:
 
         self.conn = None
 
-        if db_type == 'sqlite3':
+        if backend == 'sqlite3':
             pass
 
-        elif db_type == 'postgresql':
+        elif backend == 'postgresql':
             # Get database connection parameters from environment.
-            dbport = os.getenv('DBPORT')
-            dbname = os.getenv('DBNAME')
-            dbuser = os.getenv('DBUSER')
-            dbpass = os.getenv('DBPASS')
-            dbserver = os.getenv('DBSERVER')
+            self.dbport = os.getenv('DBPORT')
+            self.dbname = os.getenv('DBNAME')
+            self.dbuser = os.getenv('DBUSER')
+            self.dbpass = os.getenv('DBPASS')
+            self.dbserver = os.getenv('DBSERVER')
         
             self.exit_code = 0
             #self.cId = None
@@ -131,7 +131,7 @@ class TSDB:
             n_attempts = 3
             for i in range(n_attempts):
                 try:
-                    self.conn = psycopg2.connect(host=dbserver,database=dbname,port=dbport,user=dbuser,password=dbpass)
+                    self.conn = psycopg2.connect(host=self.dbserver,database=self.dbname,port=self.dbport,user=self.dbuser,password=self.dbpass)
                     db_fail = False
                     break
                 except:
@@ -198,7 +198,7 @@ class TSDB:
 
     def drop_tables(self):
         """
-        Start over on the database by dropping the main table.
+        Start over on the database by dropping the main tables.
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -540,13 +540,24 @@ class TSDB:
         Function to map the data types specified in get_keyword_types to sqlite3
         data types.
         """
-        return {
-            'int': 'INTEGER',
-            'float': 'REAL',
-            'bool': 'BOOLEAN',
-            'datetime': 'TEXT',  # SQLite does not have a native datetime type
-            'string': 'TEXT'
-        }.get(dtype, 'TEXT')
+        if self.backend == 'sqlite3':
+            return {
+                'int': 'INTEGER',
+                'float': 'REAL',
+                'bool': 'BOOLEAN',
+                'datetime': 'TEXT',  # SQLite does not have a native datetime type
+                'string': 'TEXT'
+            }.get(dtype, 'TEXT')
+        elif self.backend == 'postgresql':
+            return {
+                'int': 'INTEGER',
+                'float': 'DOUBLE PRECISION',
+                'bool': 'BOOLEAN',
+                'datetime': 'TIMESTAMP',
+                'string': 'TEXT'
+            }.get(dtype, 'TEXT')
+        else:
+            raise ValueError(f"Unsupported backend: {self.backend}")
 
 
     def get_keyword_types(self, level):

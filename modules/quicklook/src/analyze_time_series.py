@@ -98,8 +98,8 @@ class AnalyzeTimeSeries:
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting AnalyzeTimeSeries')
         
-        db_type='sqlite3'
-        self.db = TSDB(db_type=db_type, db_path=db_path, base_dir=base_dir, logger=logger, drop=drop, verbose=verbose)
+        backend='sqlite3'
+        self.db = TSDB(backend=backend, db_path=db_path, base_dir=base_dir, logger=logger, drop=drop, verbose=verbose)
 
 
     def plot_time_series_multipanel(self, plotdict, 
