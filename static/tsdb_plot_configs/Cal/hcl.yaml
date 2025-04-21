@@ -10,9 +10,9 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Temperature (C)
+      ylabel: Hallway\nTemperature (C)
       not_junk: true
-      legend_frac_size: 0.35
+      legend_frac_size: 0.20
 
   - panelvars:
       - col: kpfmet.TH_DAILY
@@ -44,7 +44,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Temperature (C)
+      ylabel: Cal Lamp\nTemperatures (C)
       not_junk: true
       title: Hollow-Cathode Lamp Temperatures
-      legend_frac_size: 0.35
+      legend_frac_size: 0.20
