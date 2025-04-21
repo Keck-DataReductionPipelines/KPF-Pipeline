@@ -36,24 +36,24 @@ def test_analyze_time_series():
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
     
     # Test metadata table capabilities
-    myTS.print_metadata_table()
-    df = myTS.metadata_table_to_df()
+    myTS.db.print_metadata_table()
+    df = myTS.db.metadata_table_to_df()
     
     # Test file ingestion methods
     df_ObsIDs = pd.read_csv(ObsID_filename)
     ObsID_list = df_ObsIDs['observation_id'].tolist()
-    myTS.ingest_one_observation(base_dir, ObsID_list[0] + '.fits')
+    myTS.db.ingest_one_observation(base_dir, ObsID_list[0] + '.fits')
     
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
     start_date = datetime.datetime(2025,1,12)
     end_date = datetime.datetime(2025,1,13)
-    myTS.ingest_dates_to_db(start_date, end_date)
+    myTS.db.ingest_dates_to_db(start_date, end_date)
 
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
-    myTS.add_ObsIDs_to_db(ObsID_list)
+    myTS.db.add_ObsIDs_to_db(ObsID_list)
     
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
-    myTS.add_ObsID_list_to_db(ObsID_filename)
+    myTS.db.add_ObsID_list_to_db(ObsID_filename)
 
     # Test plotting
     start_date = datetime.datetime(2025,1,12)
@@ -63,10 +63,10 @@ def test_analyze_time_series():
     
     # Test miscellaneous methods
     columns = ['ObsID','GDRXRMS','FIUMODE']
-    myTS.display_dataframe_from_db(columns)
+    myTS.db.display_dataframe_from_db(columns)
     df = myTS.dataframe_from_db(columns=columns)
-    myTS.ObsIDlist_from_db('autocal-bias')
-    myTS.drop_table()
+    myTS.db.ObsIDlist_from_db('autocal-bias')
+    myTS.db.drop_table()
     
     # Remove the temporary database file and plot directory
     os.remove(temp_db_path)
