@@ -64,7 +64,7 @@ def test_analyze_time_series():
     # Test miscellaneous methods
     columns = ['ObsID','GDRXRMS','FIUMODE']
     myTS.db.display_dataframe_from_db(columns)
-    df = myTS.dataframe_from_db(columns=columns)
+    df = myTS.db.dataframe_from_db(columns=columns)
     myTS.db.ObsIDlist_from_db('autocal-bias')
     myTS.db.drop_table()
     
