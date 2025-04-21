@@ -1033,8 +1033,8 @@ class TSDB:
 
         self.logger.info(f'{ObsID_filename} read with {str(len(df))} properly formatted ObsIDs.')
 
-        #t = tqdm_notebook(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
-        t = self.tqdm(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
+        #t = tqdm_notebook(df.iloc[:, 0].values.tolist(), desc=f'ObsIDs', leave=True)
+        t = self.tqdm(df.iloc[:, 0].values.tolist(), desc=f'ObsIDs', leave=True)
         for ObsID in t:
             dir_path = self.base_dir + '/' + get_datecode(ObsID) + '/'
             filename = ObsID + '.fits'
@@ -1261,7 +1261,7 @@ class TSDB:
     
         if columns is None or columns == '*':
             metadata_df = pd.read_sql_query("SELECT keyword, table_name FROM tsdb_metadata;", conn)
-            columns = metadata_df['keyword'].tolist()
+            columns = metadata_df['keyword'].values.tolist()
         else:
             columns = [columns] if isinstance(columns, str) else list(columns)
             clean_columns = [str(col).strip() for col in columns if isinstance(col, str) or col is not None]
@@ -1274,7 +1274,7 @@ class TSDB:
             columns = clean_columns
     
         kw_table_map = dict(zip(metadata_df['keyword'], metadata_df['table_name']))
-        tables_needed = set(metadata_df['table_name'].tolist())
+        tables_needed = set(metadata_df['table_name'].values.tolist())
     
         # Ensure tables for filters are included
         filter_columns = ['OBJECT', 'Source', 'NOTJUNK', 'FIUMODE', 'datecode']
@@ -1288,7 +1288,7 @@ class TSDB:
     
         dataframes = {}
         for table in tables_needed:
-            table_cols = metadata_df[metadata_df['table_name'] == table]['keyword'].tolist()
+            table_cols = metadata_df[metadata_df['table_name'] == table]['keyword'].values.tolist()
             table_cols += [col for col in filter_columns if filter_kw_table_map.get(col) == table and col not in table_cols]
             if 'ObsID' not in table_cols:
                 table_cols.append('ObsID')
@@ -1363,7 +1363,7 @@ class TSDB:
                                     start_date=start_date, end_date=end_date, 
                                     not_junk=not_junk)
         
-        return df['ObsID'].tolist()
+        return df['ObsID'].values.tolist()
         
 
 def process_file(file_path, now_str,
