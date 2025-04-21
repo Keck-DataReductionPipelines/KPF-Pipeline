@@ -96,7 +96,12 @@ class TSDB:
         self.base_dir = base_dir
         self.logger.info('Base data directory: ' + self.base_dir)
 
-        self.derived_keyword_types       = self.get_keyword_types(level='derived')
+
+        # Initialize metadata entries first
+        self.init_metadata_entries()
+
+        # These may not be needed after multi-table update
+        self.base_keyword_types          = self.get_keyword_types(level='base')
         self.L0_header_keyword_types     = self.get_keyword_types(level='L0')
         self.L0_telemetry_types          = self.get_keyword_types(level='L0_telemetry')
         self.D2_header_keyword_types     = self.get_keyword_types(level='2D')
@@ -171,15 +176,17 @@ class TSDB:
             self.logger.info('Dropping KPF database ' + str(self.db_path))
 
         # Create tables if needed
-        if not self.check_if_table_exsits(tablename='tsdb'):
-            self.create_database()
-        else:
-            self.logger.info("Primary table 'tsdb' already exists.")
         if not self.check_if_table_exsits(tablename='tsdb_metadata'):
             self.create_metadata_table()
         else:
             self.logger.info("Metadata table 'tsdb_metadata' already exists.")
-        self.print_db_status()
+
+        # Check existence using one of the new tables
+        primary_table = 'tsdb_base'
+        if not self.check_if_table_exsits(tablename=primary_table):
+            self.create_database()
+        else:
+            self.logger.info("Primary tables already exist.")
 
 
     def close(self):
@@ -224,114 +231,249 @@ class TSDB:
         if os.path.exists(shm_file):
             os.remove(shm_file)
 
-        
-    def print_db_status(self):
-        """
-        Prints a brief summary of the database status.
-        """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('SELECT COUNT(*) FROM tsdb')
-        nrows = cursor.fetchone()[0]
-        cursor.execute('PRAGMA table_info(tsdb)')
-        ncolumns = len(cursor.fetchall())
-        cursor.execute('SELECT MAX(MAX(L0_header_read_time),MAX(L1_header_read_time)) FROM tsdb')
-        most_recent_read_time = cursor.fetchone()[0]
-        cursor.execute('SELECT MIN(datecode) FROM tsdb')
-        earliest_datecode = cursor.fetchone()[0]
-        cursor.execute('SELECT MAX(datecode) FROM tsdb')
-        latest_datecode = cursor.fetchone()[0]
-        cursor.execute('SELECT COUNT(DISTINCT datecode) FROM tsdb')
-        unique_datecodes_count = cursor.fetchone()[0]
-        conn.close()
-        self.logger.info(f"Summary: {nrows} obs x {ncolumns} cols over {unique_datecodes_count} days in {earliest_datecode}-{latest_datecode}; updated {most_recent_read_time}")
-        
 
-    def create_metadata_table(self):
+    def init_metadata_entries(self):
         """
-        Create a separate table 'tsdb_metadata' to store column/keyword 
-        descriptions and units. Then load data from multiple CSV sources plus 
-        custom RV prefixes and insert into the database table.
+        Load and combine all keyword metadata entries from CSV files into a single attribute (self.metadata_entries).
         """
-        # Connect to the database and create the metadata table if it doesn't exist
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-    
-        create_meta_table_query = """
-            CREATE TABLE IF NOT EXISTS tsdb_metadata (
-                keyword     TEXT NOT NULL PRIMARY KEY,
-                datatype    TEXT,
-                description TEXT,
-                units       TEXT,
-                source      TEXT
-            )
-        """
-        cursor.execute(create_meta_table_query)
-        conn.commit()
-
         def load_keyword_csv(csv_path, source_label):
-            """
-            Helper function to read a CSV file and return a DataFrame with columns:
-               keyword | datatype | unit | description | source
-            """
             df = pd.read_csv(csv_path, delimiter='|', dtype=str)
             df['source'] = source_label
-            df = df[['keyword', 'datatype', 'unit', 'description', 'source']]
-            return df
-
-        # Load keywords from CSV files for multiple levels
-        df_der   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/derived_keywords.csv',      source_label='Derived Keywords')
-        df_l0    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_primary_keywords.csv',   source_label='L0 PRIMARY Header')
-        df_2d    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/d2_primary_keywords.csv',   source_label='2D PRIMARY Header')
-        df_l1    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_keywords.csv',   source_label='L1 PRIMARY Header')
-        df_l2    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_primary_keywords.csv',   source_label='L2 PRIMARY Header')
-        df_l0t   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_telemetry_keywords.csv', source_label='L0 TELEMETRY Extension')
-        df_l2rv  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv',        source_label='L2 RV Header')
-        df_l2ccf = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_green_ccf_keywords.csv', source_label='L2 CCF Header')
-
-        # Build the RV prefix keywords (the 8th source)
+            df.rename(columns={'unit': 'units'}, inplace=True)  # fix potential unit naming
+            return df[['keyword', 'datatype', 'units', 'description', 'source']]
+    
+        df_base  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/base_keywords.csv',         'Base Keywords')
+        df_l0    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_primary_keywords.csv',   'L0 PRIMARY Header')
+        df_2d    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/d2_primary_keywords.csv',   '2D PRIMARY Header')
+        df_l1    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_keywords.csv',   'L1 PRIMARY Header')
+        df_l2    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_primary_keywords.csv',   'L2 PRIMARY Header')
+        df_l0t   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_telemetry_keywords.csv', 'L0 TELEMETRY Extension')
+        df_l2rv  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv',        'L2 RV Header')
+        df_l2ccf = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_green_ccf_keywords.csv', 'L2 CCF Header')
+    
+        # RV prefix keywords
         prefixes = ['RV1','RV2','RV3','RVS','ERVS','RVC','ERVC','RVY','ERVY','CCFBJD','BCRV','CCFW']
         units    = ['km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','days','km/s','None']
         descs    = ['RV for SCI1 order ', 'RV for SCI2 order ', 'RV for SCI3 order ','RV for SCI order ', 'Error in RV for SCI order ', 'RV for CAL order ','Error in RV for CAL order ', 'RV for SKY order ',  'Error in RV for SKY order ','BJD for order ','Barycentric RV for order ','CCF weight for order ']
         nums = [f"{i:02d}" for i in range(67)]
-
-        prefix_unit_map = dict(zip(prefixes, units))
-        prefix_desc_map = dict(zip(prefixes, descs))
-
+    
         rv_entries = []
-        for prefix in prefixes:
+        for prefix, unit, desc in zip(prefixes, units, descs):
             for num in nums:
-                kw   = f"{prefix}{num}"
-                dtyp = "REAL"
-                desc = f"{prefix_desc_map[prefix]}{num}"
-                unt  = prefix_unit_map[prefix]
-                rv_entries.append([kw, dtyp, unt, desc, 'L2 RV Extension'])
+                kw = f"{prefix}{num}"
+                rv_entries.append({
+                    'keyword': kw,
+                    'datatype': 'REAL',
+                    'units': unit,
+                    'description': f"{desc}{num}",
+                    'source': 'L2 RV Extension'
+                })
+    
+        df_rv = pd.DataFrame(rv_entries)
+    
+        # Combine all into one DataFrame
+        df_all = pd.concat([df_base, df_l0, df_2d, df_l1, df_l2, df_l0t, df_l2rv, df_l2ccf, df_rv], ignore_index=True)
+    
+        # Remove duplicates
+        df_all.drop_duplicates(subset='keyword', inplace=True)
+    
+        # Store as a list of dictionaries
+        self.metadata_entries = df_all.to_dict(orient='records')
 
-        df_rv = pd.DataFrame(rv_entries, columns=['keyword','datatype','unit','description','source'])
+     
+#    def print_db_status(self):
+#        """
+#        Prints a brief summary of the database status.
+#        """
+#        conn = sqlite3.connect(self.db_path)
+#        cursor = conn.cursor()
+#        cursor.execute('SELECT COUNT(*) FROM tsdb_base')
+#        nrows = cursor.fetchone()[0]
+#        cursor.execute('PRAGMA table_info(tsdb_base)')
+#        ncolumns = len(cursor.fetchall())
+#        cursor.execute('SELECT MAX(MAX(L0_header_read_time),MAX(L1_header_read_time)) FROM tsdb_base')
+#        most_recent_read_time = cursor.fetchone()[0]
+#        cursor.execute('SELECT MIN(datecode) FROM tsdb_base')
+#        earliest_datecode = cursor.fetchone()[0]
+#        cursor.execute('SELECT MAX(datecode) FROM tsdb_base')
+#        latest_datecode = cursor.fetchone()[0]
+#        cursor.execute('SELECT COUNT(DISTINCT datecode) FROM tsdb_base')
+#        unique_datecodes_count = cursor.fetchone()[0]
+#        conn.close()
+#        self.logger.info(f"Summary: {nrows} obs x {ncolumns} cols over {unique_datecodes_count} days in {earliest_datecode}-{latest_datecode}; updated {most_recent_read_time}")
 
-        # Combine all dataframes and remove duplicate keywords
-        df_all = pd.concat([
-            df_der, df_l0, df_2d, df_l1, df_l2, df_l0t, df_l2rv, df_l2ccf, df_rv
-        ], ignore_index=True)
-        df_all.drop_duplicates(subset='keyword', keep='first', inplace=True)
-
-        # Insert (or replace) into tsdb_metadata
-        insert_query = """
-            INSERT OR REPLACE INTO tsdb_metadata
-            (keyword, datatype, description, units, source)
-            VALUES (?, ?, ?, ?, ?)
+    def print_db_status(self):
         """
+        Prints a formatted summary table of the database status for each table.
+        """
+        tables = ['tsdb_base', 'tsdb_l0', 'tsdb_2d', 'tsdb_l1', 'tsdb_l2',
+                  'tsdb_l0t', 'tsdb_l2rv', 'tsdb_l2ccf']
+    
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+    
+        summary_data = []
+    
+        for table in tables:
+            cursor.execute(f'SELECT COUNT(*) FROM {table}')
+            nrows = cursor.fetchone()[0]
+    
+            cursor.execute(f'PRAGMA table_info({table})')
+            ncolumns = len(cursor.fetchall())
+    
+            summary_data.append((table, ncolumns, nrows))
+    
+        cursor.execute('SELECT MAX(L0_header_read_time), MAX(L1_header_read_time) FROM tsdb_base')
+        most_recent_read_time = max(filter(None, cursor.fetchone()))
+    
+        cursor.execute('SELECT MIN(datecode), MAX(datecode), COUNT(DISTINCT datecode) FROM tsdb_base')
+        earliest_datecode, latest_datecode, unique_datecodes_count = cursor.fetchone()
+    
+        conn.close()
+    
+        # Print the summary table
+        self.logger.info("Database Table Summary:")
+        self.logger.info(f"{'Table':<15} {'Columns':>7} {'Rows':>10}")
+        self.logger.info("-" * 35)
+        for table, cols, rows in summary_data:
+            self.logger.info(f"{table:<15} {cols:>7} {rows:>10}")
+    
+        # Print the additional stats
+        self.logger.info(f"\nDates: {unique_datecodes_count} days from {earliest_datecode} to {latest_datecode}")
+        self.logger.info(f"Last update: {most_recent_read_time}")
+           
 
-        for _, row in df_all.iterrows():
+#    def create_metadata_table(self):
+#        """
+#        Create a separate table 'tsdb_metadata' to store column/keyword 
+#        descriptions and units. Then load data from multiple CSV sources plus 
+#        custom RV prefixes and insert into the database table.
+#        """
+#        # Connect to the database and create the metadata table if it doesn't exist
+#        conn = sqlite3.connect(self.db_path)
+#        cursor = conn.cursor()
+#    
+#        create_meta_table_query = """
+#            CREATE TABLE IF NOT EXISTS tsdb_metadata (
+#                keyword     TEXT NOT NULL PRIMARY KEY,
+#                datatype    TEXT,
+#                description TEXT,
+#                units       TEXT,
+#                source      TEXT
+#            )
+#        """
+#        cursor.execute(create_meta_table_query)
+#        conn.commit()
+#
+#        def load_keyword_csv(csv_path, source_label):
+#            """
+#            Helper function to read a CSV file and return a DataFrame with columns:
+#               keyword | datatype | unit | description | source
+#            """
+#            df = pd.read_csv(csv_path, delimiter='|', dtype=str)
+#            df['source'] = source_label
+#            df = df[['keyword', 'datatype', 'unit', 'description', 'source']]
+#            return df
+#
+#        # Load keywords from CSV files for multiple levels
+#        df_base  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/base_keywords.csv',      source_label='Base Keywords')
+#        df_l0    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_primary_keywords.csv',   source_label='L0 PRIMARY Header')
+#        df_2d    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/d2_primary_keywords.csv',   source_label='2D PRIMARY Header')
+#        df_l1    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_keywords.csv',   source_label='L1 PRIMARY Header')
+#        df_l2    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_primary_keywords.csv',   source_label='L2 PRIMARY Header')
+#        df_l0t   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_telemetry_keywords.csv', source_label='L0 TELEMETRY Extension')
+#        df_l2rv  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv',        source_label='L2 RV Header')
+#        df_l2ccf = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_green_ccf_keywords.csv', source_label='L2 CCF Header')
+#
+#        # Build the RV prefix keywords (the 8th source)
+#        prefixes = ['RV1','RV2','RV3','RVS','ERVS','RVC','ERVC','RVY','ERVY','CCFBJD','BCRV','CCFW']
+#        units    = ['km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','days','km/s','None']
+#        descs    = ['RV for SCI1 order ', 'RV for SCI2 order ', 'RV for SCI3 order ','RV for SCI order ', 'Error in RV for SCI order ', 'RV for CAL order ','Error in RV for CAL order ', 'RV for SKY order ',  'Error in RV for SKY order ','BJD for order ','Barycentric RV for order ','CCF weight for order ']
+#        nums = [f"{i:02d}" for i in range(67)]
+#
+#        prefix_unit_map = dict(zip(prefixes, units))
+#        prefix_desc_map = dict(zip(prefixes, descs))
+#
+#        rv_entries = []
+#        for prefix in prefixes:
+#            for num in nums:
+#                kw   = f"{prefix}{num}"
+#                dtyp = "REAL"
+#                desc = f"{prefix_desc_map[prefix]}{num}"
+#                unt  = prefix_unit_map[prefix]
+#                rv_entries.append([kw, dtyp, unt, desc, 'L2 RV Extension'])
+#
+#        df_rv = pd.DataFrame(rv_entries, columns=['keyword','datatype','unit','description','source'])
+#
+#        # Combine all dataframes and remove duplicate keywords
+#        df_all = pd.concat([
+#            df_base, df_l0, df_2d, df_l1, df_l2, df_l0t, df_l2rv, df_l2ccf, df_rv
+#        ], ignore_index=True)
+#        df_all.drop_duplicates(subset='keyword', keep='first', inplace=True)
+#
+#        # Insert (or replace) into tsdb_metadata
+#        insert_query = """
+#            INSERT OR REPLACE INTO tsdb_metadata
+#            (keyword, datatype, description, units, source)
+#            VALUES (?, ?, ?, ?, ?)
+#        """
+#
+#        for _, row in df_all.iterrows():
+#            cursor.execute(
+#                insert_query,
+#                (row['keyword'], row['datatype'], row['description'], row['unit'], row['source'])
+#            )
+#
+#        conn.commit()
+#        conn.close()
+#
+#        self.logger.info("Metadata table 'tsdb_metadata' created.")
+
+
+    def create_metadata_table(self):
+        """Create the tsdb_metadata table with an added table_name column for category mapping."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+    
+        cursor.execute("DROP TABLE IF EXISTS tsdb_metadata")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tsdb_metadata (
+                keyword    TEXT PRIMARY KEY,
+                source     TEXT,
+                datatype   TEXT,
+                units      TEXT,
+                table_name TEXT
+            );
+        """)
+    
+        # Mapping from source to new table name
+        source_to_table = {
+            'Base Keywords':          'tsdb_base',
+            'L0 PRIMARY Header':      'tsdb_l0',
+            '2D PRIMARY Header':      'tsdb_2d',
+            'L1 PRIMARY Header':      'tsdb_l1',
+            'L2 PRIMARY Header':      'tsdb_l2',
+            'L0 TELEMETRY Extension': 'tsdb_l0t',
+            'L2 RV Header':           'tsdb_l2rv',
+            'L2 RV Extension':        'tsdb_l2rv',
+            'L2 CCF Header':          'tsdb_l2ccf'
+        }
+    
+        # Insert metadata entries and assign table_name based on source
+        for entry in self.metadata_entries:  # assume self.metadata_entries is prepared with all keyword info
+            keyword = entry.get('keyword')
+            source = entry.get('source')
+            datatype = entry.get('datatype', 'TEXT')
+            units = entry.get('units', None)
+            table_name = source_to_table.get(source, None)
             cursor.execute(
-                insert_query,
-                (row['keyword'], row['datatype'], row['description'], row['unit'], row['source'])
+                "INSERT OR REPLACE INTO tsdb_metadata (keyword, source, datatype, units, table_name) VALUES (?, ?, ?, ?, ?);",
+                (keyword, source, datatype, units, table_name)
             )
-
+    
         conn.commit()
         conn.close()
 
-        self.logger.info("Metadata table 'tsdb_metadata' created.")
 
 
     def check_if_table_exsits(self, tablename=None):
@@ -364,106 +506,213 @@ class TSDB:
         return result
 
 
+#    def create_database(self):
+#        """
+#        Create database using the standard KPF schema.
+#        """
+#        conn = sqlite3.connect(self.db_path)
+#        cursor = conn.cursor()
+#        conn.execute("PRAGMA journal_mode=WAL")
+#        conn.execute("PRAGMA wal_autocheckpoint")
+#        cursor.execute("PRAGMA cache_size = -2000000;")
+#    
+#        # Define columns for each file type
+#        base_cols          = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.base_keyword_types.items()]
+#        L0_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
+#        L0_telemetry_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
+#        D2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
+#        L1_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
+#        L2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
+#        L2_CCF_header_cols = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
+#        L2_RV_header_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
+#        L2_RV_cols         = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_keyword_types.items()]
+#        cols = base_cols + L0_header_cols + L0_telemetry_cols + D2_header_cols + L1_header_cols + L2_header_cols + L2_CCF_header_cols + L2_RV_header_cols + L2_RV_cols
+#        create_table_query = f'CREATE TABLE IF NOT EXISTS tsdb ({", ".join(cols)}, UNIQUE(ObsID))'
+#        cursor.execute(create_table_query)
+#        
+#        # Define indexed columns
+#        index_commands = [
+#            ('CREATE UNIQUE INDEX idx_ObsID ON tsdb ("ObsID");', 'idx_ObsID'),
+#            ('CREATE INDEX idx_OBJECT ON tsdb ("OBJECT");', 'idx_OBJECT'),
+#            ('CREATE INDEX idx_DATE_MID ON tsdb ("DATE-MID");', 'idx_DATE_MID'),
+#        ]
+#        
+#        # Iterate and create indexes if they don't exist
+#        for command, index_name in index_commands:
+#            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='index' AND name='{index_name}';")
+#            if cursor.fetchone() is None:
+#                cursor.execute(command)
+#                
+#        conn.commit()
+#        conn.close()
+#        self.logger.info("Primary table 'tsdb' created.")
+
+
     def create_database(self):
-        """
-        Create database using the standard KPF schema.
-        """
+        """Create TSDB tables split by category with ObsID as primary key."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA wal_autocheckpoint")
-        cursor.execute("PRAGMA cache_size = -2000000;")
     
-        # Define columns for each file type
-        derived_cols       = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.derived_keyword_types.items()]
-        L0_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_header_keyword_types.items()]
-        L0_telemetry_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L0_telemetry_types.items()]
-        D2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.D2_header_keyword_types.items()]
-        L1_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L1_header_keyword_types.items()]
-        L2_header_cols     = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_header_keyword_types.items()]
-        L2_CCF_header_cols = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_CCF_header_keyword_types.items()]
-        L2_RV_header_cols  = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_header_keyword_types.items()]
-        L2_RV_cols         = [f'"{key}" {self.map_data_type_to_sql(dtype)}' for key, dtype in self.L2_RV_keyword_types.items()]
-        cols = derived_cols + L0_header_cols + L0_telemetry_cols + D2_header_cols + L1_header_cols + L2_header_cols + L2_CCF_header_cols + L2_RV_header_cols + L2_RV_cols
-        create_table_query = f'CREATE TABLE IF NOT EXISTS tsdb ({", ".join(cols)}, UNIQUE(ObsID))'
-        cursor.execute(create_table_query)
-        
-        # Define indexed columns
-        index_commands = [
-            ('CREATE UNIQUE INDEX idx_ObsID ON tsdb ("ObsID");', 'idx_ObsID'),
-            ('CREATE INDEX idx_OBJECT ON tsdb ("OBJECT");', 'idx_OBJECT'),
-            ('CREATE INDEX idx_DATE_MID ON tsdb ("DATE-MID");', 'idx_DATE_MID'),
-        ]
-        
-        # Iterate and create indexes if they don't exist
-        for command, index_name in index_commands:
-            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='index' AND name='{index_name}';")
-            if cursor.fetchone() is None:
-                cursor.execute(command)
-                
+        tables = ['tsdb_base', 'tsdb_l0', 'tsdb_2d', 'tsdb_l1', 
+                  'tsdb_l2', 'tsdb_l0t', 'tsdb_l2rv', 'tsdb_l2ccf']
+        for tbl in tables:
+            cursor.execute(f"DROP TABLE IF EXISTS {tbl}")
+    
+        # Fetch keyword, datatype, and table_name from metadata
+        cursor.execute("SELECT keyword, datatype, table_name FROM tsdb_metadata;")
+        columns_by_table = {tbl: [] for tbl in tables}
+    
+        for keyword, dtype, table_name in cursor.fetchall():
+            if table_name not in columns_by_table or table_name is None:
+                continue
+            if keyword.strip().lower() == 'obsid':
+                continue  # ObsID already primary key
+    
+            sql_type = self.map_data_type_to_sql(dtype)
+            columns_by_table[table_name].append((keyword, sql_type))
+    
+        # Create each category table with ObsID as primary key and indexed
+        for tbl, cols in columns_by_table.items():
+            col_defs = ['"ObsID" TEXT PRIMARY KEY']
+            col_defs += [f'"{kw}" {sql_type}' for kw, sql_type in cols]
+            col_defs_sql = ", ".join(col_defs)
+    
+            cursor.execute(f"CREATE TABLE IF NOT EXISTS {tbl} ({col_defs_sql});")
+            cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_ObsID ON {tbl}(ObsID);")
+    
         conn.commit()
         conn.close()
-        self.logger.info("Primary table 'tsdb' created.")
+        self.logger.info("Category tables successfully created.")
 
+
+#    def ingest_one_observation(self, dir_path, L0_filename):
+#        """
+#        Ingest a single observation into the database.
+#        """
+#        base_filename = L0_filename.split('.fits')[0]
+#        L0_file_path = f"{dir_path}/{base_filename}.fits"
+#
+#        # update the DB if necessary
+#        if self.is_any_file_updated(L0_file_path):
+#        
+#            D2_file_path = f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"
+#            L1_file_path = f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits"
+#            L2_file_path = f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits"
+#            D2_filename  = f"{L0_filename.replace('L0', '2D')}"
+#            L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
+#            L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
+#
+#            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types, extension='PRIMARY') 
+#            L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
+#            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types, extension='PRIMARY') 
+#            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types, extension='PRIMARY') 
+#            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types, extension='PRIMARY') 
+#            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
+#            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='GREEN_CCF') 
+#            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
+#            L2_RV_data        = self.extract_rvs(L2_file_path) 
+#
+#            header_data = {**L0_header_data, 
+#                           **L0_telemetry,
+#                           **D2_header_data, 
+#                           **L1_header_data, 
+#                           **L2_header_data, 
+#                           **L2_CCF_header_data, 
+#                           **L2_RV_header_data, 
+#                           **L2_RV_data, 
+#                          }
+#            header_data['ObsID'] = (L0_filename.split('.fits')[0])
+#            header_data['datecode'] = get_datecode(L0_filename)  
+#            header_data['Source'] = self.get_source(L0_header_data)
+#            header_data['L0_filename'] = L0_filename
+#            header_data['D2_filename'] = f"{base_filename}_2D.fits"
+#            header_data['L1_filename'] = f"{base_filename}_L1.fits"
+#            header_data['L2_filename'] = f"{base_filename}_L2.fits"
+#            header_data['L0_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#            header_data['D2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#            header_data['L1_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#            header_data['L2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#                    
+#            # Insert into database
+#            conn = sqlite3.connect(self.db_path)
+#            cursor = conn.cursor()
+#            cursor.execute("PRAGMA cache_size = -2000000;")
+#            columns = ', '.join([f'"{key}"' for key in header_data.keys()])
+#            placeholders = ', '.join(['?'] * len(header_data))
+#            insert_query = f'INSERT OR REPLACE INTO tsdb ({columns}) VALUES ({placeholders})'
+#            cursor.execute(insert_query, tuple(header_data.values()))
+#            conn.commit()
+#            conn.close()
 
     def ingest_one_observation(self, dir_path, L0_filename):
         """
-        Ingest a single observation into the database.
+        Ingest a single observation into the multi-table database structure.
         """
         base_filename = L0_filename.split('.fits')[0]
         L0_file_path = f"{dir_path}/{base_filename}.fits"
-
-        # update the DB if necessary
-        if self.is_any_file_updated(L0_file_path):
-        
-            D2_file_path = f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"
-            L1_file_path = f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits"
-            L2_file_path = f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits"
-            D2_filename  = f"{L0_filename.replace('L0', '2D')}"
-            L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
-            L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
-
-            L0_header_data    = self.extract_kwd(L0_file_path, self.L0_header_keyword_types, extension='PRIMARY') 
-            L0_telemetry      = self.extract_telemetry(L0_file_path, self.L0_telemetry_types)
-            D2_header_data    = self.extract_kwd(D2_file_path, self.D2_header_keyword_types, extension='PRIMARY') 
-            L1_header_data    = self.extract_kwd(L1_file_path, self.L1_header_keyword_types, extension='PRIMARY') 
-            L2_header_data    = self.extract_kwd(L2_file_path, self.L2_header_keyword_types, extension='PRIMARY') 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
-            L2_CCF_header_data= self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='GREEN_CCF') 
-            L2_RV_header_data = self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV') 
-            L2_RV_data        = self.extract_rvs(L2_file_path) 
-
-            header_data = {**L0_header_data, 
-                           **L0_telemetry,
-                           **D2_header_data, 
-                           **L1_header_data, 
-                           **L2_header_data, 
-                           **L2_CCF_header_data, 
-                           **L2_RV_header_data, 
-                           **L2_RV_data, 
-                          }
-            header_data['ObsID'] = (L0_filename.split('.fits')[0])
-            header_data['datecode'] = get_datecode(L0_filename)  
-            header_data['Source'] = self.get_source(L0_header_data)
-            header_data['L0_filename'] = L0_filename
-            header_data['D2_filename'] = f"{base_filename}_2D.fits"
-            header_data['L1_filename'] = f"{base_filename}_L1.fits"
-            header_data['L2_filename'] = f"{base_filename}_L2.fits"
-            header_data['L0_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            header_data['D2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            header_data['L1_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            header_data['L2_header_read_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
-            # Insert into database
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA cache_size = -2000000;")
-            columns = ', '.join([f'"{key}"' for key in header_data.keys()])
-            placeholders = ', '.join(['?'] * len(header_data))
-            insert_query = f'INSERT OR REPLACE INTO tsdb ({columns}) VALUES ({placeholders})'
-            cursor.execute(insert_query, tuple(header_data.values()))
-            conn.commit()
-            conn.close()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+        if not self.is_any_file_updated(L0_file_path):
+            return
+    
+        D2_file_path = f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"
+        L1_file_path = f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits"
+        L2_file_path = f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits"
+    
+        # Extract header data
+        header_data = {
+            **self.extract_kwd(L0_file_path, self.L0_header_keyword_types, extension='PRIMARY'),
+            **self.extract_telemetry(L0_file_path, self.L0_telemetry_types),
+            **self.extract_kwd(D2_file_path, self.D2_header_keyword_types, extension='PRIMARY'),
+            **self.extract_kwd(L1_file_path, self.L1_header_keyword_types, extension='PRIMARY'),
+            **self.extract_kwd(L2_file_path, self.L2_header_keyword_types, extension='PRIMARY'),
+            **self.extract_kwd(L2_file_path, self.L2_CCF_header_keyword_types, extension='GREEN_CCF'),
+            **self.extract_kwd(L2_file_path, self.L2_RV_header_keyword_types, extension='RV'),
+            **self.extract_rvs(L2_file_path)
+        }
+    
+        # Add base/common metadata
+        header_data['ObsID'] = base_filename
+        header_data['datecode'] = get_datecode(base_filename)
+        header_data['Source'] = self.get_source(header_data)
+        header_data['L0_filename'] = L0_filename
+        header_data['D2_filename'] = f"{base_filename}_2D.fits"
+        header_data['L1_filename'] = f"{base_filename}_L1.fits"
+        header_data['L2_filename'] = f"{base_filename}_L2.fits"
+        header_data['L0_header_read_time'] = now_str
+        header_data['D2_header_read_time'] = now_str
+        header_data['L1_header_read_time'] = now_str
+        header_data['L2_header_read_time'] = now_str
+    
+        # Connect to DB
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+    
+        # Get keyword-to-table mapping from metadata
+        cursor.execute("SELECT keyword, table_name FROM tsdb_metadata;")
+        kw_to_table = dict(cursor.fetchall())
+    
+        # Prepare data for each table
+        table_data = {}
+        for kw, value in header_data.items():
+            table_name = kw_to_table.get(kw)
+            if table_name:
+                table_data.setdefault(table_name, {})[kw] = value
+        # ObsID must be in all tables
+        for tbl in table_data:
+            table_data[tbl]['ObsID'] = base_filename
+    
+        # Insert data into each table separately
+        for tbl, data in table_data.items():
+            columns = ', '.join([f'"{col}"' for col in data])
+            placeholders = ', '.join(['?'] * len(data))
+            insert_query = f'INSERT OR REPLACE INTO {tbl} ({columns}) VALUES ({placeholders})'
+            cursor.execute(insert_query, tuple(data.values()))
+    
+        conn.commit()
+        conn.close()
+    
+        self.logger.info(f"Ingested observation: {base_filename}")
 
 
     def ingest_batch_observation(self, batch):
@@ -607,9 +856,9 @@ class TSDB:
             nums = [f"{i:02d}" for i in range(67)]
             keyword_types = {f"{prefix}{num}": 'REAL' for num in nums for prefix in prefixes}
 
-        # Derived keywords    
-        elif level == 'derived':
-            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/derived_keywords.csv'
+        # Base keywords    
+        elif level == 'base':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/base_keywords.csv'
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
@@ -849,7 +1098,7 @@ class TSDB:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("PRAGMA cache_size = -2000000;")
-        query = f'SELECT L0_header_read_time, D2_header_read_time, L1_header_read_time, L2_header_read_time FROM tsdb WHERE L0_filename = "{L0_filename}"'
+        query = f'SELECT L0_header_read_time, D2_header_read_time, L1_header_read_time, L2_header_read_time FROM tsdb_base WHERE L0_filename = "{L0_filename}"'
         cursor.execute(query)
         result = cursor.fetchone()
         conn.close()
@@ -1012,7 +1261,7 @@ class TSDB:
     
         # Define your custom order of sources
         custom_order = [
-            "Derived Keywords",
+            "Base Keywords",
             "L0 PRIMARY Header",
             "2D PRIMARY Header",
             "L1 PRIMARY Header",
