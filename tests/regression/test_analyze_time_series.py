@@ -66,7 +66,7 @@ def test_analyze_time_series():
     myTS.db.display_dataframe_from_db(columns)
     df = myTS.db.dataframe_from_db(columns=columns)
     myTS.db.ObsIDlist_from_db('autocal-bias')
-    myTS.db.drop_table()
+    myTS.db.drop_tables()
     
     # Remove the temporary database file and plot directory
     os.remove(temp_db_path)
