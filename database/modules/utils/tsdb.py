@@ -61,17 +61,25 @@ class TSDB:
         L2_RV_ccf_keyword_types (dictionary) - specifies data types for L2 CCF header keywords
 
     To-do:
+        * Update these methods for postgresql
+            * __init__
+            * close()
+            * drop_tables()
+            * unlock_db()
+            * print_db_status()
+            * create_metadata_table()
+            * check_if_table_exists()
+            * create_database()
+            * ingest_one_observation()
+            * ingest_batch_observation()
+            * is_any_file_updated()
+            * print_metadata_table()
+            * select_query()
+            * get_first_last_dates()
+            * dataframe_from_db()
         * Add temperature derivatives as columns; they will need to be computed.
         * Add database for masters (separate from ObsIDs?)
 
-#    For PostgreSQL, it returns exitcode:
-#         0 = Normal
-#         2 = Exception raised closing database connection
-#        64 = Cannot connect to database
-#        65 = Input file does not exist
-#        66 = File checksum does not match database checksum
-#        67 = Could not execute query
-#        68 = Failed to compute checksum
     """
 
     def __init__(self, backend='sqlite3', db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False, verbose=False):
@@ -176,25 +184,12 @@ class TSDB:
             self.logger.info('Dropping KPF database ' + str(self.db_path))
             self.create_metadata_table()  
 
-        ## Create tables if needed
-        #if not self.check_if_table_exsits(tablename='tsdb_metadata'):
-        #    self.create_metadata_table()
-        #else:
-        #    self.logger.info("Metadata table 'tsdb_metadata' already exists.")
-#
-        ## Check existence using one of the new tables
-        #primary_table = 'tsdb_base'
-        #if not self.check_if_table_exsits(tablename=primary_table):
-        #    self.create_database()
-        #else:
-        #    self.logger.info("Primary tables already exist.")
-
         # Always (re)create metadata table first
         self.create_metadata_table()
         
         # Then create the data tables using metadata
         primary_table = 'tsdb_base'
-        if not self.check_if_table_exsits(tablename=primary_table):
+        if not self.check_if_table_exists(tablename=primary_table):
             self.create_database()
         else:
             self.logger.info("Primary tables already exist.")
@@ -389,7 +384,7 @@ class TSDB:
 
 
 
-    def check_if_table_exsits(self, tablename=None):
+    def check_if_table_exists(self, tablename=None):
         """
         Return True if the named table exists.
         """
@@ -412,9 +407,9 @@ class TSDB:
                         if tablename in tables:
                             result = True
             else:
-            	self.logger.info('check_if_table_exsits: tablename not specified.')
+            	self.logger.info('check_if_table_exists: tablename not specified.')
         except:
-            self.logger.info('check_if_table_exsits: problem with query')
+            self.logger.info('check_if_table_exists: problem with query')
 
         return result
 
@@ -526,66 +521,6 @@ class TSDB:
     
         self.logger.info(f"Ingested observation: {base_filename}")
 
-
-#    def ingest_batch_observation(self, batch):
-#        """
-#        Ingest a batch of observations into the database in parallel using 
-#        ProcessPoolExecutor, but check if each file has been updated before 
-#        parallel processing, to reduce overhead.
-#        """
-#        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-#    
-#        # === 1) Check for updated files in main thread ===
-#        updated_batch = []
-#        for file_path in batch:
-#            if self.is_any_file_updated(file_path):
-#                updated_batch.append(file_path)
-#    
-#        # If nothing to do, exit quickly
-#        if not updated_batch:
-#            return
-#    
-#        # === 2) Prepare arguments for parallel execution ===
-#        args = {
-#            'now_str': now_str,
-#            'L0_header_keyword_types': self.L0_header_keyword_types,
-#            'L0_telemetry_types': self.L0_telemetry_types,
-#            'D2_header_keyword_types': self.D2_header_keyword_types,
-#            'L1_header_keyword_types': self.L1_header_keyword_types,
-#            'L2_header_keyword_types': self.L2_header_keyword_types,
-#            'L2_CCF_header_keyword_types': self.L2_CCF_header_keyword_types,
-#            'L2_RV_header_keyword_types': self.L2_RV_header_keyword_types,
-#            'extract_kwd_func': self.extract_kwd,
-#            'extract_telemetry_func': self.extract_telemetry,
-#            'extract_rvs_func': self.extract_rvs,
-#            'get_source_func': self.get_source,
-#            'get_datecode_func': get_datecode  # Assuming get_datecode is a standalone function
-#        }
-#    
-#        partial_process_file = partial(process_file, **args)
-#    
-#        # === 3) Run extraction in parallel ONLY for updated files ===
-#        max_workers = min([len(updated_batch), 20, os.cpu_count()])
-#        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-#            results = list(executor.map(partial_process_file, updated_batch))
-#    
-#        # Filter out None results (though now we expect fewer None’s, 
-#        # because we already did the update check in the main thread)
-#        batch_data = [res for res in results if res is not None]
-#    
-#        # === 4) Perform bulk insert ===
-#        if batch_data:
-#            columns = ', '.join([f'"{key}"' for key in batch_data[0].keys()])
-#            placeholders = ', '.join(['?'] * len(batch_data[0]))
-#            insert_query = f'INSERT OR REPLACE INTO tsdb ({columns}) VALUES ({placeholders})'
-#            data_tuples = [tuple(data.values()) for data in batch_data]
-#    
-#            conn = sqlite3.connect(self.db_path)
-#            cursor = conn.cursor()
-#            cursor.execute("PRAGMA cache_size = -2000000;")
-#            cursor.executemany(insert_query, data_tuples)
-#            conn.commit()
-#            conn.close()
 
     def ingest_batch_observation(self, batch):
         """
@@ -952,13 +887,7 @@ class TSDB:
         for key in kwrds:
             if key in df.columns:
                 df = df.loc[df[key] > 0]
-                
-        # CCD temperatures
-#        kwrds = ['kpfgreen.STA_CCD_T', 'kpfred.STA_CCD_T']
-#        for key in kwrds:
-#            if key in df.columns:
-#                df = df.loc[df[key] > -200]
-        
+                       
         # Dark Current
         kwrds = ['FLXCOLLG', 'FLXECHG', 'FLXREG1G', 'FLXREG2G', 'FLXREG3G', 'FLXREG4G', 
                  'FLXREG5G', 'FLXREG6G', 'FLXCOLLR', 'FLXECHR', 'FLXREG1R', 'FLXREG2R', 
@@ -1450,11 +1379,6 @@ def process_file(file_path, now_str,
     L0_filename = base_filename.split('.fits')[0].split('/')[-1]
     L0_file_path = file_path
     
-
-    # Check if updated
-#    if not is_any_file_updated_func(L0_file_path):
-#        return None
-
     D2_filename  = f"{L0_filename.replace('L0', '2D')}"
     L1_filename  = f"{L0_filename.replace('L0', 'L1')}"
     L2_filename  = f"{L0_filename.replace('L0', 'L2')}"
