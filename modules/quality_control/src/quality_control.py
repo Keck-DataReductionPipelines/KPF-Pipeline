@@ -1,5 +1,6 @@
 import os
 import re
+import yaml
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
@@ -253,10 +254,160 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
     return kpf_object
 
 
-def QC_report(kpf_object, return_keywords=True, print_output=False, logger=None):
+#def QC_report(kpf_object, return_keywords=True, print_output=False, logger=None):
+#    """
+#    Method to determine if all QC tests have been run on the input kpf_object
+#    by examining it's keywords.  The method determines the data_level for
+#    kpf_object and checks for keywords of that level and lower, e.g., for
+#    data_level = 'L1', the method checks for keywords in levels 'L0', '2D',
+#    and 'L1'.
+#
+#    Args:
+#        kpf_object - a KPF object (L0, 2D, L1, or L2)
+#        return_keywords (boolean) - if true, keywords are returned (e.g., 'OLDBIAS') instead of method names (e.g., 'D2_master_bias_age')
+#        print_output (bolean) - if true, print the output instead of returning anything
+#        logger - Python logger object; if None, the DummyLogger is used
+#
+#    Returns:
+#        tuple of (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail), where
+#            qc_names_missing = names of QC tests with keywords missing from kpf_object that should be
+#            qc_names_present = names of QC tests with keywords in kpf_object that should be
+#            qc_names_present_pass = names of QC tests with keywords in kpf_object that should be and QC = True (passed)
+#            qc_names_present_fail = names of QC tests with keywords in kpf_object that should be and QC = False (failed)
+#    """
+#
+#    def unique_preserve_order(mylist):
+#        from itertools import chain
+#        flattened = list(chain.from_iterable(mylist))
+#        seen = set()
+#        return [x for x in flattened if not (x in seen or seen.add(x))]
+#
+#    def get_appropriate_qcs(data_level, spectrum_type):
+#        '''
+#        Get a list of QC method names appropriate for the data level
+#        
+#        Args:
+#            data_level - 'L0', '2D', 'L1', or 'L2'
+#            spectrum_type - types of spectra that a QC is  applied to
+#                One of: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>    
+#        Returns:
+#            qc_names - list of QC method names to be run on level object
+#        '''
+#        if data_level == 'L0':
+#            qc_obj = QCL0(kpf_object)
+#            data_products_present = get_data_products_L0(kpf_object)
+#        elif data_level == '2D':
+#            qc_obj = QC2D(kpf_object)
+#            data_products_present = get_data_products_2D(kpf_object)
+#        elif data_level == 'L1':
+#            qc_obj = QCL1(kpf_object)
+#            data_products_present = get_data_products_L1(kpf_object)
+#        elif data_level == 'L2':
+#            qc_obj = QCL2(kpf_object)
+#            data_products_present = get_data_products_L2(kpf_object)
+#
+#        qc_names = []
+#        for qc_name in qc_obj.qcdefinitions.names:
+#            if data_level in qc_obj.qcdefinitions.kpf_data_levels[qc_name]:
+#                required_data_products_present = all(elem in data_products_present for elem in qc_obj.qcdefinitions.required_data_products[qc_name])
+#                if required_data_products_present:
+#                    if ('all' in qc_obj.qcdefinitions.spectrum_types[qc_name]) or (spectrum_type in qc_obj.qcdefinitions.spectrum_types[qc_name]):
+#                        qc_names.append(qc_name)
+#        
+#        return qc_names
+#    
+#    if print_output:
+#        return_keywords = False
+#    logger = logger if logger is not None else DummyLogger()
+#    this_data_level = get_kpf_level(kpf_object)
+#    primary_header = HeaderParse(kpf_object, 'PRIMARY')
+#    this_spectrum_type = primary_header.get_name(use_star_names=False)
+#    try:
+#        ObsID = kpf_object.header['PRIMARY']['OFNAME']
+#    except:
+#        ObsID = 'ObsID not available'
+#
+#    # Determine data levels for QCs that should have been applied
+#    if this_data_level == 'L0':
+#        data_levels = ['L0']
+#    if this_data_level == '2D':
+#        data_levels = ['L0', '2D']
+#    if this_data_level == 'L1':
+#        data_levels = ['L0', '2D', 'L1']
+#    if this_data_level == 'L2':
+#        data_levels = ['L0', '2D', 'L1', 'L2']
+#        
+#    # List expected QC tests
+#    expected_qc_names = []
+#    for dl in data_levels:
+#        new_qc_names = get_appropriate_qcs(dl, this_spectrum_type)
+#        expected_qc_names.append(new_qc_names)
+#    expected_qc_names = unique_preserve_order(expected_qc_names)
+#
+#    # KPFERA is not a QC keyword, so remove it
+#    if 'add_kpfera' in expected_qc_names:
+#        expected_qc_names.remove('add_kpfera')
+#
+#    # Check for keywords of QC tests that should have been applied
+#    qc_names_missing = []
+#    qc_names_present = []
+#    qc_names_present_pass = []
+#    qc_names_present_fail = []
+#    qcd = QCDefinitions()
+#    for qc_name in expected_qc_names:
+#        kwd = qcd.fits_keywords[qc_name]
+#        if kwd in kpf_object.header['PRIMARY']:
+#            if return_keywords:
+#                qc_names_present.append(qcd.fits_keywords[qc_name])
+#            else:
+#                qc_names_present.append(qc_name)
+#            if kpf_object.header['PRIMARY'][kwd]:
+#                if return_keywords:
+#                    qc_names_present_pass.append(qcd.fits_keywords[qc_name])
+#                else:
+#                    qc_names_present_pass.append(qc_name)
+#            else:
+#                if return_keywords:
+#                    qc_names_present_fail.append(qcd.fits_keywords[qc_name])
+#                else:
+#                    qc_names_present_fail.append(qc_name)
+#        else:
+#            if return_keywords:
+#                qc_names_missing.append(qcd.fits_keywords[qc_name])
+#            else:
+#                qc_names_missing.append(qc_name)
+#    
+#    if print_output:
+#        print(f'{styled_text(f"Quality Control Report for {ObsID} ({this_spectrum_type})", style="Bold", color="Black")}')
+#        print()
+#        print(f'{styled_text("Keyword     Level  QC Test Description", style="Bold", color="Black")}')  
+#        for qc_name in expected_qc_names:
+#            kwd = qcd.fits_keywords[qc_name]
+#            if qc_name in qc_names_present:
+#                val = kpf_object.header['PRIMARY'][kwd]
+#                if val:
+#                   col = 'Green'
+#                else: 
+#                   col = 'Red'
+#            else:
+#                col = 'Black'
+#            lvl = qcd.kpf_data_levels[qc_name][0]
+#            if qc_name in qc_names_present:
+#                present = "✓"
+#            else:
+#                present = "✗"
+#            desc = qcd.descriptions[qc_name]
+#            print(f'{styled_text(kwd, style="Bold", color=col)} {" " * (8 - len(kwd))} {(present)} {lvl + "    "} {desc}')    
+#        print()
+#        print(f"{styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+#    else:
+#        return (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail)
+
+
+def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=None, logger=None):
     """
     Method to determine if all QC tests have been run on the input kpf_object
-    by examining it's keywords.  The method determines the data_level for
+    by examining its keywords. The method determines the data_level for
     kpf_object and checks for keywords of that level and lower, e.g., for
     data_level = 'L1', the method checks for keywords in levels 'L0', '2D',
     and 'L1'.
@@ -264,7 +415,8 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, logger=None)
     Args:
         kpf_object - a KPF object (L0, 2D, L1, or L2)
         return_keywords (boolean) - if true, keywords are returned (e.g., 'OLDBIAS') instead of method names (e.g., 'D2_master_bias_age')
-        print_output (bolean) - if true, print the output instead of returning anything
+        print_output (boolean) - if true, print the output instead of returning anything
+        yaml_path (str or None) - if not None, output the QC results to the specified YAML file path
         logger - Python logger object; if None, the DummyLogger is used
 
     Returns:
@@ -287,8 +439,9 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, logger=None)
         
         Args:
             data_level - 'L0', '2D', 'L1', or 'L2'
-            spectrum_type - types of spectra that a QC is  applied to
-                One of: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>    
+            spectrum_type - types of spectra that a QC is applied to
+                One of: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>
+
         Returns:
             qc_names - list of QC method names to be run on level object
         '''
@@ -314,92 +467,76 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, logger=None)
                         qc_names.append(qc_name)
         
         return qc_names
-    
-    if print_output:
-        return_keywords = False
+
     logger = logger if logger is not None else DummyLogger()
     this_data_level = get_kpf_level(kpf_object)
     primary_header = HeaderParse(kpf_object, 'PRIMARY')
     this_spectrum_type = primary_header.get_name(use_star_names=False)
+
     try:
         ObsID = kpf_object.header['PRIMARY']['OFNAME']
     except:
         ObsID = 'ObsID not available'
 
-    # Determine data levels for QCs that should have been applied
-    if this_data_level == 'L0':
-        data_levels = ['L0']
-    if this_data_level == '2D':
-        data_levels = ['L0', '2D']
-    if this_data_level == 'L1':
-        data_levels = ['L0', '2D', 'L1']
-    if this_data_level == 'L2':
-        data_levels = ['L0', '2D', 'L1', 'L2']
-        
-    # List expected QC tests
-    expected_qc_names = []
-    for dl in data_levels:
-        new_qc_names = get_appropriate_qcs(dl, this_spectrum_type)
-        expected_qc_names.append(new_qc_names)
-    expected_qc_names = unique_preserve_order(expected_qc_names)
+    data_levels_map = {'L0': ['L0'], '2D': ['L0', '2D'], 'L1': ['L0', '2D', 'L1'], 'L2': ['L0', '2D', 'L1', 'L2']}
+    data_levels = data_levels_map.get(this_data_level, [])
 
-    # KPFERA is not a QC keyword, so remove it
+    expected_qc_names = unique_preserve_order([get_appropriate_qcs(dl, this_spectrum_type) for dl in data_levels])
+
     if 'add_kpfera' in expected_qc_names:
         expected_qc_names.remove('add_kpfera')
 
-    # Check for keywords of QC tests that should have been applied
-    qc_names_missing = []
-    qc_names_present = []
-    qc_names_present_pass = []
-    qc_names_present_fail = []
+    qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail = [], [], [], []
     qcd = QCDefinitions()
+
+    report_rows = []
+
     for qc_name in expected_qc_names:
         kwd = qcd.fits_keywords[qc_name]
-        if kwd in kpf_object.header['PRIMARY']:
-            if return_keywords:
-                qc_names_present.append(qcd.fits_keywords[qc_name])
+        lvl = qcd.kpf_data_levels[qc_name][0]
+        desc = qcd.descriptions[qc_name]
+        present = kwd in kpf_object.header['PRIMARY']
+        passed = present and bool(kpf_object.header['PRIMARY'][kwd])
+
+        name_entry = kwd if return_keywords else qc_name
+
+        if present:
+            qc_names_present.append(name_entry)
+            if passed:
+                qc_names_present_pass.append(name_entry)
             else:
-                qc_names_present.append(qc_name)
-            if kpf_object.header['PRIMARY'][kwd]:
-                if return_keywords:
-                    qc_names_present_pass.append(qcd.fits_keywords[qc_name])
-                else:
-                    qc_names_present_pass.append(qc_name)
-            else:
-                if return_keywords:
-                    qc_names_present_fail.append(qcd.fits_keywords[qc_name])
-                else:
-                    qc_names_present_fail.append(qc_name)
+                qc_names_present_fail.append(name_entry)
         else:
-            if return_keywords:
-                qc_names_missing.append(qcd.fits_keywords[qc_name])
-            else:
-                qc_names_missing.append(qc_name)
-    
+            qc_names_missing.append(name_entry)
+
+        report_rows.append({
+            "Keyword": kwd,
+            "Level": lvl,
+            "Description": desc,
+            "Present": present,
+            "Pass": passed
+        })
+
+    if yaml_path is not None:
+        with open(yaml_path, 'w') as yaml_file:
+            yaml.dump({"QC_Report": report_rows}, yaml_file, sort_keys=False)
+        if logger:
+            logger.info(f"YAML QC report saved to {yaml_path}")
+
     if print_output:
         print(f'{styled_text(f"Quality Control Report for {ObsID} ({this_spectrum_type})", style="Bold", color="Black")}')
         print()
-        print(f'{styled_text("Keyword     Level  QC Test Description", style="Bold", color="Black")}')  
-        for qc_name in expected_qc_names:
-            kwd = qcd.fits_keywords[qc_name]
-            if qc_name in qc_names_present:
-                val = kpf_object.header['PRIMARY'][kwd]
-                if val:
-                   col = 'Green'
-                else: 
-                   col = 'Red'
-            else:
-                col = 'Black'
-            lvl = qcd.kpf_data_levels[qc_name][0]
-            if qc_name in qc_names_present:
-                present = "✓"
-            else:
-                present = "✗"
-            desc = qcd.descriptions[qc_name]
-            print(f'{styled_text(kwd, style="Bold", color=col)} {" " * (8 - len(kwd))} {(present)} {lvl + "    "} {desc}')    
+        print(f'{styled_text("Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
+
+        for row in report_rows:
+            checkmark = '✓' if row["Present"] else '✗'
+            col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
+            print(f'{styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
+
         print()
         print(f"{styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
-    else:
+
+    if not (yaml_path or print_output):
         return (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail)
 
 #####################################################################
