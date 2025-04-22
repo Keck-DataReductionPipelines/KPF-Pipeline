@@ -41,7 +41,7 @@ def test_analyze_time_series():
     
     # Test file ingestion methods
     df_ObsIDs = pd.read_csv(ObsID_filename)
-    ObsID_list = df_ObsIDs['observation_id'].values.tolist()
+    ObsID_list = df_ObsIDs['observation_id'].tolist()
     myTS.db.ingest_one_observation(base_dir, ObsID_list[0] + '.fits')
     
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
