@@ -88,7 +88,7 @@ class Handler(FileSystemEventHandler):
             
 def process_queue(event_queue, db_path, stop_event):
     """
-    This method process a set of events (files creations and modifications) by 
+    This method processes a set of events (files creations and modifications) by 
     ingesting the headers and telemetry from the corresponding observations.
     """
     processing_interval = 30  # seconds to wait before each processing cycle
