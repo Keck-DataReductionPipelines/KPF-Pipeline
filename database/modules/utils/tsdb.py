@@ -1292,7 +1292,7 @@ class TSDB:
             table_cols += [col for col in filter_columns if filter_kw_table_map.get(col) == table and col not in table_cols]
             if 'ObsID' not in table_cols:
                 table_cols.append('ObsID')
-    
+                    
             quoted_cols = [f'"{col}"' for col in table_cols]
             query = f"SELECT {', '.join(quoted_cols)} FROM {table}"
     
@@ -1339,7 +1339,10 @@ class TSDB:
                 df_merged = df_merged.merge(df, on='ObsID', how='left')
     
         if columns not in [None, '*']:
-            final_cols = ['ObsID'] + list(columns)
+            if 'ObsID' not in list(columns):
+                final_cols = ['ObsID'] + list(columns)
+            else:
+                final_cols = list(columns)
             df_merged = df_merged[[col for col in final_cols if col in df_merged.columns]]
     
         return df_merged
