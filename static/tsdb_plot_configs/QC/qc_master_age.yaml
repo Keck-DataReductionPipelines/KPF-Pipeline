@@ -50,4 +50,5 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "WLSFILE2 (2D)\nYounger than 2 Days\n(OLDWLS2)"
+      title: QC - Master File Ages
       legend_frac_size: 0.12

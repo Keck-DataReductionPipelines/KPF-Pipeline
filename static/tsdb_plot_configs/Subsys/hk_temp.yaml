@@ -47,7 +47,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: "Spectrometer\nTemperature (K)"
+      ylabel: "HK Spectrometer\nTemperature (K)"
       not_junk: true
       legend_frac_size: 0.30
 
@@ -96,7 +96,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: "Spectrometer\n$\\Delta$Temperature (K)"
+      ylabel: "HK Spectrometer\n$\\Delta$Temperature (K)"
       not_junk: true
       subtractmedian: true
       legend_frac_size: 0.30
@@ -118,7 +118,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: "Detector\nTemperature (K)"
+      ylabel: "HK Detector\nTemperature (K)"
       not_junk: true
       legend_frac_size: 0.30
 
@@ -139,7 +139,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: "Detector\n$\\Delta$Temperature (K)"
+      ylabel: "HK Detector\n$\\Delta$Temperature (K)"
       title: Ca H&K Spectrometer Temperatures
       not_junk: true
       subtractmedian: true
