@@ -246,6 +246,7 @@ OLDFLAT   1                                           QC: 1 = Master flat within
 NTPGOOD   1                                           QC: 1 = NTP time within 100 ms
 GUIDGOOD  1                                           QC: 1 = Guider RMS and bias within 50 mas RMS
 TARGPLAU  1                                           QC: 1 = TARG kwds present with plausible values
+ISGOOD    1                                           QC: 1 = all other QC tests passed
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
@@ -903,8 +904,11 @@ BJDSTD    41.66004757176901                           Weighted stddev of BJD for
 BJDRNG    147.1386909484863                           Range(BJD) for non-zero-weight spectral orders (sec)    
 BCVSTD    0.7123626558325037                          Weighted stddev of BCV for spectral orders (m/s)        
 BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (m/s)    
+MAXPCBCV  0.6894375932041458                          Maximum % change from CCFBCV for non-zero-weight spectral orders (%)
+MINPCBCV  -0.47031634755679774                        Minimum % change from CCFBCV for non-zero-weight spectral orders (%)
 TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
 DATAPRL2  1                                           QC: 1 = L2 data is present
+QCPCBCV   1                                           QC: 1 = PCBCV values within acceptable range
 ========  ==========================================  =========
 
 Radial Velocities

@@ -789,6 +789,19 @@ class QCDefinitions:
         self.db_columns[name35] = None
         self.fits_keyword_fail_value[name35] = 0
 
+        name36 = 'L2_barycentric_rv_percent_change'
+        self.names.append(name36)
+        self.kpf_data_levels[name36] = ['L2']
+        self.descriptions[name36] = 'Check non-zero-weight orders PCBCV values are within an acceptable range.'
+        self.data_types[name36] = 'int'
+        self.spectrum_types[name36] = ['Star', ]
+        self.master_types[name36] = []
+        self.required_data_products[name36] = ['Green', 'Red']
+        self.fits_keywords[name36] = 'QCPCBCV'
+        self.fits_comments[name36] = 'QC: PCBCV values within acceptable range'
+        self.db_columns[name36] = None
+        self.fits_keyword_fail_value[name36] = 0
+
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
             raise ValueError("Length of kpf_data_levels list does not equal number of entries in descriptions dictionary.")
@@ -3239,4 +3252,42 @@ class QCL2(QC):
             QC_pass = False
 
         return QC_pass
+    
+    def L2_barycentric_rv_percent_change(self, pos_threshold=1.0, neg_threshold=-1.0, debug=False):
+        """
+        This QC module checks the MAXPCBCV and MINPCBCV headers within the L2
+        primary headers in an L2 object. These headers represent the maximum and
+        minimum percent changes from the weighted average CCFBCV (for non-zero-
+        weight spectral orders). If an observation's maximum or minimum percent 
+        change is greater or less than 1/-1% (respectively), then the method
+        returns False. 
 
+        Args:
+             pos_threshold - The high percent change threshold (e.g., no orders
+                             with a percent change greater than 1%)
+             neg_threshold - The low percent change threshold (e.g., no orders
+                             with a percent change less than -1%)
+             debug - an optional flag.  If True, prints MAXPCBCV/MINPCBCV.
+        """
+
+        try:
+            L2 = self.kpf_object
+            myL2 = AnalyzeL2(L2, logger=self.logger)
+            QC_pass = True
+
+            max = myL2.Max_Perc_Delta_Bary_RV
+            min = myL2.Min_Perc_Delta_Bary_RV
+            if debug:
+                print(f"max: {max}, min: {min}")
+            if max > pos_threshold :
+                QC_pass = False
+                return QC_pass
+            if min < neg_threshold :
+                QC_pass = False
+                return QC_pass
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
