@@ -1,0 +1,237 @@
+description: LFC, ThAr, & Etalon ERVs (autocal)
+plot_type: time_series_multipanel
+panel_arr:
+  # 1) lfc_erv_panel
+  - panelvars:
+      - col: CCD1ERV1
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERV1 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1ERV2
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERV2 (mm/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1ERV3
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERV3 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1ERVC
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERVC (mm/s)
+          marker: s
+          linewidth: 0.5
+          color: limegreen
+      - col: CCD2ERV1
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERV1 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2ERV2
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERV2 (mm/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2ERV3
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERV3 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2ERVC
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERVC (m/s)
+          marker: s
+          linewidth: 0.5
+          color: indianred
+    paneldict:
+      ylabel: LFC ERV (m/s)
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
+      not_junk: true
+      legend_frac_size: 0.30
+
+  # 2) thar_erv_panel
+  - panelvars:
+      - col: CCD1ERV1
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERV1 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1ERV2
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERV2 (mm/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1ERV3
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERV3 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1ERVC
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERVC (mm/s)
+          marker: s
+          linewidth: 0.5
+          color: limegreen
+      - col: CCD2ERV1
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERV1 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2ERV2
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERV2 (mm/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2ERV3
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERV3 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2ERVC
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERVC (m/s)
+          marker: s
+          linewidth: 0.5
+          color: indianred
+    paneldict:
+      ylabel: ThAr ERV (m/s)
+      only_object: 
+        - autocal-thar-all-night
+        - autocal-thar-all-eve
+        - autocal-thar-all-morn
+      not_junk: true
+      legend_frac_size: 0.30
+
+  # 3) etalon_erv_panel
+  - panelvars:
+      - col: CCD1ERV1
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERV1 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1ERV2
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERV2 (mm/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1ERV3
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERV3 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: CCD1ERVC
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD1ERVC (mm/s)
+          marker: s
+          linewidth: 0.5
+          color: limegreen
+      - col: CCD2ERV1
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERV1 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2ERV2
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERV2 (mm/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2ERV3
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERV3 (m/s)
+          marker: .
+          linewidth: 0.5
+          color: red
+      - col: CCD2ERVC
+        col_multiply: 1000
+        plot_type: plot
+        plot_attr:
+          label: CCD2ERVC (m/s)
+          marker: s
+          linewidth: 0.5
+          color: indianred
+    paneldict:
+      title: LFC, ThAr, & Etalon ERVs
+      ylabel: Etalon ERV (m/s)
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
+      not_junk: true
+      legend_frac_size: 0.30
