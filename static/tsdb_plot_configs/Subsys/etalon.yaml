@@ -124,6 +124,7 @@ panel_arr:
           color: green
     paneldict:
       ylabel: "$\\Delta$Temperature (mK)"
+      title: Etalon Temperatures
       not_junk: true
       subtractmedian: true
       legend_frac_size: 0.25
