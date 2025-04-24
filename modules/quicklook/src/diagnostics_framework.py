@@ -12,6 +12,7 @@ from keckdrpframework.models.arguments import Arguments
 import modules.quicklook.src.diagnostics as diagnostics
 from modules.Utils.utils import styled_text
 from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
 from modules.Utils.kpf_parse import get_data_products_L2
 
@@ -74,7 +75,7 @@ class DiagnosticsFramework(KPF0_Primitive):
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_2D_flux'):
                 try:
-                    self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_flux", style="Bold", color="Blue")}')
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_flux", style="Bold", color="Blue")}')
                     self.kpf_object = diagnostics.add_headers_2D_flux(self.kpf_object, logger=self.logger)
                     exit_code = 1
                 except Exception as e:
@@ -87,9 +88,12 @@ class DiagnosticsFramework(KPF0_Primitive):
                     primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
                     name = primary_header.get_name()
                     if name == 'Dark':
-                        self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_dark_current_2D", style="Bold", color="Blue")}')
-                        self.kpf_object = diagnostics.add_headers_dark_current_2D(self.kpf_object, logger=self.logger)
-                        exit_code = 1
+                        #data_products = get_data_products_2D(self.kpf_object)
+                        #if (('Green' in data_products) or ('Red' in data_products)) and ('Telemetry' in data_products): 
+                        if True:
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_dark_current_2D", style="Bold", color="Blue")}')
+                            self.kpf_object = diagnostics.add_headers_dark_current_2D(self.kpf_object, logger=self.logger)
+                            exit_code = 1
                     else: 
                         self.logger.info("Observation type {} != 'Dark'.  Dark current not computed.".format(name))
                 except Exception as e:
@@ -99,7 +103,7 @@ class DiagnosticsFramework(KPF0_Primitive):
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_guider'):
                 try:
-                    self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_guider", style="Bold", color="Blue")}')
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_guider", style="Bold", color="Blue")}')
                     self.kpf_object = diagnostics.add_headers_guider(self.kpf_object, logger=self.logger)
                     exit_code = 1
                 except Exception as e:
@@ -109,7 +113,7 @@ class DiagnosticsFramework(KPF0_Primitive):
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_hk'):
                 try:
-                    self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_hk", style="Bold", color="Blue")}')
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_hk", style="Bold", color="Blue")}')
                     self.kpf_object = diagnostics.add_headers_hk(self.kpf_object, logger=self.logger)
                     exit_code = 1
                 except Exception as e:
@@ -119,7 +123,7 @@ class DiagnosticsFramework(KPF0_Primitive):
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_exposure_meter'):
                 try:
-                    self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_exposure_meter", style="Bold", color="Blue")}')
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_exposure_meter", style="Bold", color="Blue")}')
                     self.kpf_object = diagnostics.add_headers_exposure_meter(self.kpf_object, logger=self.logger)
                     exit_code = 1
                 except Exception as e:
@@ -129,11 +133,27 @@ class DiagnosticsFramework(KPF0_Primitive):
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_masters_age_2D'):
                 try:
-                    self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_masters_age_2D", style="Bold", color="Blue")}')
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_masters_age_2D", style="Bold", color="Blue")}')
                     self.kpf_object = diagnostics.add_headers_masters_age_2D(self.kpf_object, logger=self.logger)
                     exit_code = 1
                 except Exception as e:
                     self.logger.error(f"Age of masters for Bias/Dark/Flat not computed: {e}\n{traceback.format_exc()}")
+
+            # Cross-dispersion offset
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_2D_xdisp_offset'):
+                try:
+                    primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
+                    name = primary_header.get_name()
+                    if name == 'Flat':
+                        self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_xdisp_offset", style="Bold", color="Blue")}')
+                        self.kpf_object = diagnostics.add_headers_2D_xdisp_offset(self.kpf_object, logger=self.logger)
+                        exit_code = 1
+                    else: 
+                        self.logger.info("Observation type {} != 'Flat'.  Cross-disperion offset not computed.".format(name))
+                except Exception as e:
+                    self.logger.error(f"Measuring Cross-disperion offset failed: {e}\n{traceback.format_exc()}")
+
                         
         elif 'L1' in self.data_level_str:
             # WLS Age
@@ -143,7 +163,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                     data_products = get_data_products_L1(self.kpf_object )
                     if ('Green' in data_products) or ('Red' in data_products): 
                         if True:
-                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_masters_age_L1", style="Bold", color="Blue")}')
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_masters_age_L1", style="Bold", color="Blue")}')
                             self.kpf_object = diagnostics.add_headers_masters_age_L1(self.kpf_object, logger=self.logger)
                             exit_code = 1
                         else: 
@@ -160,7 +180,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                     data_products = get_data_products_L1(self.kpf_object )
                     if ('Green' in data_products) or ('Red' in data_products): 
                         if True:
-                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_SNR", style="Bold", color="Blue")}')
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_SNR", style="Bold", color="Blue")}')
                             self.kpf_object = diagnostics.add_headers_L1_SNR(self.kpf_object, logger=self.logger)
                             exit_code = 1
                         else: 
@@ -177,7 +197,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                     data_products = get_data_products_L1(self.kpf_object )
                     if ('Green' in data_products) or ('Red' in data_products): 
                         if True:
-                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_order_flux_ratios", style="Bold", color="Blue")}')
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_order_flux_ratios", style="Bold", color="Blue")}')
                             self.kpf_object = diagnostics.add_headers_L1_order_flux_ratios(self.kpf_object, logger=self.logger)
                             exit_code = 1
                         else: 
@@ -194,7 +214,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                     data_products = get_data_products_L1(self.kpf_object )
                     if ('Green' in data_products) or ('Red' in data_products): 
                         if True:
-                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_orderlet_flux_ratios", style="Bold", color="Blue")}')
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_orderlet_flux_ratios", style="Bold", color="Blue")}')
                             self.kpf_object = diagnostics.add_headers_L1_orderlet_flux_ratios(self.kpf_object, logger=self.logger)
                             exit_code = 1
                         else: 
@@ -213,11 +233,11 @@ class DiagnosticsFramework(KPF0_Primitive):
                         primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
                         name = primary_header.get_name()
                         if name == 'LFC':
-                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
                             self.kpf_object = diagnostics.add_headers_L1_cal_line_quality(self.kpf_object, cal='LFC', logger=self.logger)
                             exit_code = 1
                         elif name == 'Etalon':
-                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
                             self.kpf_object = diagnostics.add_headers_L1_cal_line_quality(self.kpf_object, cal='Etalon', logger=self.logger)
                             exit_code = 1
                         else: 
@@ -237,7 +257,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                         primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
                         name = primary_header.get_name()
                         if name in ['LFC', 'Etalon', 'ThAr', 'UNe']:
-                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_saturated_lines", style="Bold", color="Blue")}')
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_saturated_lines", style="Bold", color="Blue")}')
                             self.kpf_object = diagnostics.add_headers_L1_saturated_lines(self.kpf_object, logger=self.logger)
                             exit_code = 1
                         else: 
@@ -255,7 +275,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                     data_products = get_data_products_L1(self.kpf_object )
                     if ('Green' in data_products) or ('Red' in data_products): 
                         primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
-                        self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_std_wls", style="Bold", color="Blue")}')
+                        self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_std_wls", style="Bold", color="Blue")}')
                         self.kpf_object = diagnostics.add_headers_L1_std_wls(self.kpf_object, logger=self.logger)
                         exit_code = 1
                     else: 
@@ -274,7 +294,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                     data_products = get_data_products_L2(self.kpf_object )
                     if ('Green' in data_products) or ('Red' in data_products): 
                         if True:
-                            self.logger.info(f'{styled_text("Measuring Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L2_barycentric", style="Bold", color="Blue")}')
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L2_barycentric", style="Bold", color="Blue")}')
                             self.kpf_object = diagnostics.add_headers_L2_barycentric(self.kpf_object, logger=self.logger)
                             exit_code = 1
                         else: 
