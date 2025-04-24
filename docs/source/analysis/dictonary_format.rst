@@ -27,7 +27,7 @@ They are organized hierarchically with by orderlet, order, line, as shown the ex
   ``orderlet``: 'CAL', 'SCI1', 'SCI2', 'SCI3', or 'SKY', |br|
   ``chip``: 'RED' or 'GREEN', |br|
   ``norders``: number of orders, |br|
-  ``orders``: { list of ``orderlet_dict`` dictionaries named 0 to ``norders-1`` } |br|
+  ``orders``: { list of ``order_dict`` dictionaries named 0 to ``norders-1`` } |br|
   }
 
 ``order_dict`` = { |br|
