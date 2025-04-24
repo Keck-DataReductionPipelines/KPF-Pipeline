@@ -15,7 +15,7 @@ panel_arr:
         col_multiply: 1000
         plot_type: plot
         plot_attr:
-          label: CCD1ERV2 (mm/s)
+          label: CCD1ERV2 (m/s)
           marker: .
           linewidth: 0.5
           color: green
@@ -31,7 +31,7 @@ panel_arr:
         col_multiply: 1000
         plot_type: plot
         plot_attr:
-          label: CCD1ERVC (mm/s)
+          label: CCD1ERVC (m/s)
           marker: s
           linewidth: 0.5
           color: limegreen
@@ -47,7 +47,7 @@ panel_arr:
         col_multiply: 1000
         plot_type: plot
         plot_attr:
-          label: CCD2ERV2 (mm/s)
+          label: CCD2ERV2 (m/s)
           marker: .
           linewidth: 0.5
           color: red
@@ -96,7 +96,7 @@ panel_arr:
         col_multiply: 1000
         plot_type: plot
         plot_attr:
-          label: CCD1ERV2 (mm/s)
+          label: CCD1ERV2 (m/s)
           marker: .
           linewidth: 0.5
           color: green
@@ -112,7 +112,7 @@ panel_arr:
         col_multiply: 1000
         plot_type: plot
         plot_attr:
-          label: CCD1ERVC (mm/s)
+          label: CCD1ERVC (m/s)
           marker: s
           linewidth: 0.5
           color: limegreen
@@ -128,7 +128,7 @@ panel_arr:
         col_multiply: 1000
         plot_type: plot
         plot_attr:
-          label: CCD2ERV2 (mm/s)
+          label: CCD2ERV2 (m/s)
           marker: .
           linewidth: 0.5
           color: red
@@ -171,7 +171,7 @@ panel_arr:
         col_multiply: 1000
         plot_type: plot
         plot_attr:
-          label: CCD1ERV2 (mm/s)
+          label: CCD1ERV2 (m/s)
           marker: .
           linewidth: 0.5
           color: green
@@ -187,7 +187,7 @@ panel_arr:
         col_multiply: 1000
         plot_type: plot
         plot_attr:
-          label: CCD1ERVC (mm/s)
+          label: CCD1ERVC (m/s)
           marker: s
           linewidth: 0.5
           color: limegreen
@@ -203,7 +203,7 @@ panel_arr:
         col_multiply: 1000
         plot_type: plot
         plot_attr:
-          label: CCD2ERV2 (mm/s)
+          label: CCD2ERV2 (m/s)
           marker: .
           linewidth: 0.5
           color: red
