@@ -347,6 +347,8 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=No
         desc = qcd.descriptions[qc_name]
         present = kwd in kpf_object.header['PRIMARY']
         passed = present and bool(kpf_object.header['PRIMARY'][kwd])
+        master_types = qcd.master_types[qc_name]
+        drift_types = qcd.drift_types[qc_name]
 
         name_entry = kwd if return_keywords else qc_name
 
@@ -364,7 +366,9 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=No
             "Level": lvl,
             "Description": desc,
             "Present": present,
-            "Pass": passed
+            "Pass": passed,
+            "master_types": master_types,
+            "drift_types": drift_types,
         })
 
     if yaml_path is not None:
@@ -374,20 +378,53 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=No
             logger.info(f"YAML QC report saved to {yaml_path}")
 
     if print_output:
+        # All QCs
         print(f'{styled_text(f"Quality Control Report for {ObsID} ({this_spectrum_type})", style="Bold", color="Black")}')
         print()
-        print(f'{styled_text("Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
-
+        print(f'{styled_text(f"All QC Keywords:", style="Bold", color="Black")}')
+        print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
         for row in report_rows:
             checkmark = '✓' if row["Present"] else '✗'
             col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
-            print(f'{styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
-
+            print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
         print()
-        print(f"{styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+        print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+        print()
+
+        # QCs for Masters
+        if this_spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe']:
+            print(f'{styled_text(f"QC Keywords for observation to be included in master {this_spectrum_type} stack:", style="Bold", color="Black")}')
+            if not all(row['master_types'] == [] for row in report_rows):
+                print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
+                for row in report_rows:
+                    if any(x in row['master_types'] for x in [this_spectrum_type, 'all']):
+                        checkmark = '✓' if row["Present"] else '✗'
+                        col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
+                        print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
+                print()
+                print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+            else:
+                print(f'{styled_text("    None", style="Bold", color="Black")}')  
+            print()
+
+        # QCs for Drift Measurements
+        if this_spectrum_type in ['Etalon', 'LFC', 'ThAr', 'UNe']:
+            print(f'{styled_text(f"QC Keywords for observation to be included in {this_spectrum_type} drift measurements:", style="Bold", color="Black")}')
+            if not all(row['drift_types'] == [] for row in report_rows):
+                print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
+                for row in report_rows:
+                    if any(x in row['drift_types'] for x in [this_spectrum_type, 'all']):
+                        checkmark = '✓' if row["Present"] else '✗'
+                        col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
+                        print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
+                print()
+                print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+            else:
+                print(f'{styled_text("    None", style="Bold", color="Black")}')  
 
     if not (yaml_path or print_output):
         return (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail)
+
 
 #####################################################################
 
@@ -412,7 +449,7 @@ class QCDefinitions:
         spectrum_types (dictionary of arrays of strings): Each entry specifies the types of spectra that the metric will be applied to.
             Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>
         master_types (dictionary of arrays of strings): Each entry specifies the types of masters where the QC check is relevant.  If the QC fails for an exposure, it is not added to the master stack.
-            Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe'
+            Possible strings in array: 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe'
         drift_types (dictionary of arrays of strings): Each entry specifies the types of observations where the QC check is relevant.  If the QC fails for an exposure, it is not used in wavelength drift measurements.
             Possible strings in array: 'all', 'LFC', 'Etalon', 'ThAr', 'UNe'
         required_data_products (dictionary of arrays of strings): specifies if data products are needed to perform check
@@ -1081,16 +1118,16 @@ class QCDefinitions:
             self.logger.error("data_product or source not specified in get_required_QCs()")
             return None
 
-        QCs = []
+        QC_keywords = []
         for qc_name in self.names:
             if data_product.lower() == 'master':
                  if any(x in self.master_types[qc_name] for x in [source, 'all']):
-                      QCs.append(qc_name)
+                      QC_keywords.append(self.fits_keywords[qc_name])
             elif data_product.lower() == 'drift':
                  if any(x in self.drift_types[qc_name] for x in [source, 'all']):
-                      QCs.append(qc_name)
+                      QC_keywords.append(self.fits_keywords[qc_name])
         
-        return QCs
+        return QC_keywords
 
             
 
