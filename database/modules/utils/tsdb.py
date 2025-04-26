@@ -522,7 +522,7 @@ class TSDB:
         self.logger.info(f"Ingested observation: {base_filename}")
 
 
-    def ingest_batch_observation(self, batch):
+    def ingest_batch_observation(self, batch, force_ingest=False):
         """
         Ingest a batch of observations into the multi-table database in parallel, 
         checking each file for updates beforehand.
@@ -530,7 +530,10 @@ class TSDB:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
         # === 1) Check for updated files ===
-        updated_batch = [file_path for file_path in batch if self.is_any_file_updated(file_path)]
+        if force_ingest:
+            updated_batch = batch
+        else:
+            updated_batch = [file_path for file_path in batch if self.is_any_file_updated(file_path)]
         if not updated_batch:
             return
     
@@ -958,12 +961,13 @@ class TSDB:
         return False # DB modification times are all more recent than file modification times
            
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, quiet=False):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, force_ingest=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
+        If force_ingest=False, files are not reingested unless they have more recent modification dates than in DB.
         """
-
+        
         # Convert input dates to strings if necessary
         if isinstance(start_date_str, datetime):
             start_date_str = start_date_str.strftime("%Y%m%d")
@@ -995,10 +999,10 @@ class TSDB:
                         file_path = os.path.join(dir_path, L0_filename)
                         batch.append(file_path)
                         if len(batch) >= batch_size:
-                            self.ingest_batch_observation(batch)
+                            self.ingest_batch_observation(batch, force_ingest=force_ingest)
                             batch = []
                 if batch:
-                    self.ingest_batch_observation(batch)
+                    self.ingest_batch_observation(batch, force_ingest=force_ingest)
 
         if not quiet:
             self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
