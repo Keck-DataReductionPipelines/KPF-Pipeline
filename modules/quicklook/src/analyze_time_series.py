@@ -381,7 +381,7 @@ class AnalyzeTimeSeries:
             os.remove(shm_file)
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, force=False, quiet=False):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, force_ingest=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
@@ -418,10 +418,10 @@ class AnalyzeTimeSeries:
                         file_path = os.path.join(dir_path, L0_filename)
                         batch.append(file_path)
                         if len(batch) >= batch_size:
-                            self.ingest_batch_observation(batch, force=force)
+                            self.ingest_batch_observation(batch, force_ingest=force_ingest)
                             batch = []
                 if batch:
-                    self.ingest_batch_observation(batch, force=force)
+                    self.ingest_batch_observation(batch, force_ingest=force_ingest)
 
         if not quiet:
             self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
@@ -552,7 +552,7 @@ class AnalyzeTimeSeries:
             conn.commit()
             conn.close()
 
-    def ingest_batch_observation(self, batch, force=False):
+    def ingest_batch_observation(self, batch, force_ingest=False):
         """
         Ingest a batch of observations into the database in parallel using 
         ProcessPoolExecutor, but check if each file has been updated before 
@@ -563,7 +563,7 @@ class AnalyzeTimeSeries:
         # === 1) Check for updated files in main thread ===
         updated_batch = []
         for file_path in batch:
-            if force:
+            if force_ingest:
                 updated_batch.append(file_path)
             else:
                 if self.is_any_file_updated(file_path):
