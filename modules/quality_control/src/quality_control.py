@@ -1068,60 +1068,29 @@ class QCDefinitions:
             print()
 
 
-    def get_required_QCs(self, data_product=None):
+    def get_required_QCs(self, data_product=None, source=None):
         """
-        This method returns a list of QCs (or resulting keywords) required for 
-        particular category of data product (master, drift) and of a particular 
-        type (e.g., etalon, LFC, bias)
+        This method returns a list of QC keywords (or resulting keywords) that 
+        are required for particular category of data product (master, drift) 
+        and of a particular source (e.g., etalon, LFC, bias)
         """
 
-        name35 = 'good_TARG_headers'
-        self.names.append(name35)
-        self.kpf_data_levels[name35] = ['L0']
-        self.descriptions[name35] = 'TARG headers have plausible values'
-        self.data_types[name35] = 'int'
-        self.spectrum_types[name35] = ['Star', ]
-        self.master_types[name35] = []
-        self.drift_types[name35] = []
-        self.required_data_products[name35] = [] # no required data products
-        self.fits_keywords[name35] = 'TARGPLAU'
-        self.fits_comments[name35] = 'QC: TARG kwds present with plausible values'
-        self.db_columns[name35] = None
-        self.fits_keyword_fail_value[name35] = 0
+        if data_product == None or source == None:
+            self.logger.error("data_product or source not specified in get_required_QCs()")
+            return None
 
+        QCs = []
+        for qc_name in self.names:
+            if data_product.lower() == 'master':
+                 if any(x in self.master_types[qc_name] for x in [source, 'all']):
+                      QCs.append(qc_name)
+            elif data_product.lower() == 'drift':
+                 if any(x in self.drift_types[qc_name] for x in [source, 'all']):
+                      QCs.append(qc_name)
+        
+        return QCs
 
-        cases = ['plots', 'database']
-
-        for case in cases:
-
-            if case == 'plots':
-                search_directory = '/code/KPF-Pipeline/static/tsdb_plot_configs/'
-                file_ext = '.yaml'
-            if case == 'database':
-                search_directory = '/code/KPF-Pipeline/static/tsdb_keywords/'
-                file_ext = '.csv'
-
-            print(styled_text(f"Searching for *{file_ext} files in {search_directory} for QC keywords.", style="Bold"))
-            for name in self.names:
-                fits_kwd = self.fits_keywords.get(name, "")
-                if not fits_kwd:
-                    print(f"Warning: No search string found for '{name}'")
-                    continue
-                found_occurrence = False
-                for root, dirs, files in os.walk(search_directory):
-                    for file_name in files:
-                        if file_name.endswith(file_ext):
-                            full_path = os.path.join(root, file_name)
-                            # Read the file contents and check for the string
-                            with open(full_path, 'r', encoding='utf-8') as f:
-                                content = f.read()
-                                if fits_kwd in content:
-                                    found_occurrence = True
-                                    print(styled_text(f"Found ", color="Green") + styled_text(f"'{fits_kwd}' from '{name}'", style="Bold", color="Green") + styled_text(f" in: {full_path}", color="Green"))
-                if not found_occurrence:
-                    print(styled_text(f"No occurrence of ", color="Red") + styled_text(f"'{name}' => '{fits_kwd}'", style="Bold", color="Red") + styled_text(f" found in any {file_ext} file.", color="Red"))
-            print()
-
+            
 
 #####################################################################
 #
