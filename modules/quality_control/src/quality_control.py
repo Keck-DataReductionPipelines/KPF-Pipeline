@@ -1004,6 +1004,7 @@ class QCDefinitions:
                 data_type = self.data_types[qc_name]
                 spectrum_types = self.spectrum_types[qc_name]
                 master_types = self.master_types[qc_name]
+                drift_types = self.drift_types[qc_name]
                 required_data_products = self.required_data_products[qc_name]
                 keyword = self.fits_keywords[qc_name]
                 keyword_fail_value = self.fits_keyword_fail_value[qc_name]
@@ -1018,7 +1019,8 @@ class QCDefinitions:
                     print('      ' + styled_text("Date type: ", style="Bold") + data_type)
                     print('      ' + styled_text("Required data products: ", style="Bold") + str(required_data_products))
                     print('      ' + styled_text("Spectrum types (applied to): ", style="Bold") + str(spectrum_types))
-                    print('      ' + styled_text("Master types (applied to): ", style="Bold") + str(master_types))
+                    print('      ' + styled_text("Master types (required for): ", style="Bold") + str(master_types))
+                    print('      ' + styled_text("Drift types (required for): ", style="Bold") + str(drift_types))
                     print('      ' + styled_text("Keyword: ", style="Bold") + styled_text(keyword, style="Bold", color='Blue'))
                     print('      ' + styled_text("Keyword fail value: ", style="Bold") + str(keyword_fail_value))
                     print('      ' + styled_text("Comment: ", style="Bold") + comment)
