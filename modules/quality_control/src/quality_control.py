@@ -639,7 +639,7 @@ class QCDefinitions:
         self.kpf_data_levels[name11] = ['L1']
         self.data_types[name11] = 'int'
         self.spectrum_types[name11] = ['all', ]
-        self.master_types[name11] = ['all', ]
+        self.master_types[name11] = []
         self.drift_types[name11] = ['all', ]
         self.required_data_products[name11] = [] # no required data products
         self.descriptions[name11] = 'Green and Red data present in L1 with expected shapes'
@@ -766,7 +766,7 @@ class QCDefinitions:
         self.descriptions[name20] = 'WLS files exist, are not the same, and bracket the observation'
         self.data_types[name20] = 'int'
         self.spectrum_types[name20] = ['all', ]
-        self.master_types[name20] = ['all', ]
+        self.master_types[name20] = []
         self.drift_types[name20] = []
         self.required_data_products[name20] = [] # no required data products
         self.fits_keywords[name20] = 'WLSL1'
