@@ -1493,7 +1493,7 @@ class AnalyzeTimeSeries:
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(7, prune=None))
             if p == npanels-1: 
                 axs[p].set_xlabel(xtitle, fontsize=14)
-                axs[0].set_title(thistitle, fontsize=14)
+                axs[0].set_title(thistitle, fontsize=16)
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
             axs[p].grid(color='lightgray')        
@@ -2035,7 +2035,7 @@ class AnalyzeTimeSeries:
             plt.ylabel(dict_ylabel, fontsize=14)
         else:
             plt.ylabel("Number of Observations", fontsize=14)
-        plt.title(plot_title, fontsize=14)
+        plt.title(plot_title, fontsize=16)
     
         ax = plt.gca()
         ax.xaxis.set_major_locator(major_locator)
