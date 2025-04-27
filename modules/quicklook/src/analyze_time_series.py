@@ -2252,7 +2252,7 @@ class AnalyzeTimeSeries:
     def print_log_error_report(self, df, log_dir='/data/logs/', aggregated_summary=False):
         '''
         For each ObsID in the dataframe, open the corresponding log file,
-        find all lines containing [ERROR], and print either:
+        find all lines containing [ERROR]:, and print either:
         - aggregated error report (if aggregated_summary=True)
         - individual ObsID error reports (if aggregated_summary=False)
         '''
@@ -2273,16 +2273,17 @@ class AnalyzeTimeSeries:
             error_lines = []
             with open(log_path, 'r') as file:
                 for line in file:
-                    if '[ERROR]' in line:
+                    if '[ERROR]:' in line:
                         error_line = line.strip()
                         error_lines.append(error_line)
     
-                        # Extract the part after [ERROR] if possible
-                        if '] ' in error_line:
-                            _, error_body = error_line.split('] ', 1)
-                            error_counter[error_body.strip()] += 1
+                        # Extract only the part after [ERROR]:
+                        parts = error_line.split('[ERROR]:', 1)
+                        if len(parts) > 1:
+                            error_body = parts[1].strip()
+                            error_counter[error_body] += 1
                         else:
-                            error_counter[error_line.strip()] += 1
+                            error_counter[error_line] += 1
             
             if not aggregated_summary:
                 # Print individual ObsID report
@@ -2303,12 +2304,30 @@ class AnalyzeTimeSeries:
         if aggregated_summary:
             if error_counter:
                 print("\nAggregated Error Summary:\n")
+                
                 summary_df = pd.DataFrame(
-                    error_counter.items(),
-                    columns=['Error Message', 'Count']
+                    [(count, error) for error, count in error_counter.items()],
+                    columns=['Count', 'Error Message']
                 ).sort_values('Count', ascending=False).reset_index(drop=True)
                 
-                display(summary_df)
+                # Set wide display options for Pandas
+                pd.set_option('display.max_colwidth', None)
+                pd.set_option('display.width', 0)  # Let it be as wide as needed
+                
+                # Apply CSS for wrapping Error Message text
+                styles = """
+                <style>
+                    table.dataframe td {
+                        white-space: normal;
+                        word-wrap: break-word;
+                    }
+                    table.dataframe th {
+                        white-space: normal;
+                        word-wrap: break-word;
+                    }
+                </style>
+                """
+                display(HTML(styles + summary_df.to_html(index=False)))
             else:
                 print("No [ERROR] lines found across all logs.")
 
