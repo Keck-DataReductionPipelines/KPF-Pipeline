@@ -2312,22 +2312,14 @@ class AnalyzeTimeSeries:
                 
                 # Set wide display options for Pandas
                 pd.set_option('display.max_colwidth', None)
-                pd.set_option('display.width', 0)  # Let it be as wide as needed
+                pd.set_option('display.width', 0)
                 
-                # Apply CSS for wrapping Error Message text
-                styles = """
-                <style>
-                    table.dataframe td {
-                        white-space: normal;
-                        word-wrap: break-word;
-                    }
-                    table.dataframe th {
-                        white-space: normal;
-                        word-wrap: break-word;
-                    }
-                </style>
-                """
-                display(HTML(styles + summary_df.to_html(index=False)))
+                # Force all table cells to left-align with inline CSS
+                html = summary_df.to_html(index=False, escape=False)
+                html = html.replace('<td>', '<td style="text-align: left; white-space: normal; word-wrap: break-word;">')
+                html = html.replace('<th>', '<th style="text-align: left; white-space: normal; word-wrap: break-word;">')
+                
+                display(HTML(html))
             else:
                 print("No [ERROR] lines found across all logs.")
 
