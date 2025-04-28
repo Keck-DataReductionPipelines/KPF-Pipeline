@@ -383,10 +383,11 @@ class AnalyzeTimeSeries:
             os.remove(shm_file)
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, quiet=False):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, force_ingest=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
+        If force_ingest=False, files are not reingested unless they have more recent modification dates than in DB.
         """
 
         # Convert input dates to strings if necessary
@@ -420,10 +421,10 @@ class AnalyzeTimeSeries:
                         file_path = os.path.join(dir_path, L0_filename)
                         batch.append(file_path)
                         if len(batch) >= batch_size:
-                            self.ingest_batch_observation(batch)
+                            self.ingest_batch_observation(batch, force_ingest=force_ingest)
                             batch = []
                 if batch:
-                    self.ingest_batch_observation(batch)
+                    self.ingest_batch_observation(batch, force_ingest=force_ingest)
 
         if not quiet:
             self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
@@ -554,7 +555,7 @@ class AnalyzeTimeSeries:
             conn.commit()
             conn.close()
 
-    def ingest_batch_observation(self, batch):
+    def ingest_batch_observation(self, batch, force_ingest=False):
         """
         Ingest a batch of observations into the database in parallel using 
         ProcessPoolExecutor, but check if each file has been updated before 
@@ -564,9 +565,12 @@ class AnalyzeTimeSeries:
     
         # === 1) Check for updated files in main thread ===
         updated_batch = []
-        for file_path in batch:
-            if self.is_any_file_updated(file_path):
-                updated_batch.append(file_path)
+        if force_ingest:
+            updated_batch = batch
+        else:
+            for file_path in batch:
+                if self.is_any_file_updated(file_path):
+                        updated_batch.append(file_path)
     
         # If nothing to do, exit quickly
         if not updated_batch:
@@ -1072,7 +1076,7 @@ class AnalyzeTimeSeries:
             where_queries.append(f'({or_objects})')
         # does object_like work?
         if object_like is not None: 
-            object_like = [f"OBJECT LIKE '%{object_like}%'"]
+            object_like = [f"OBJECT LIKE '%{obj}%'" for obj in object_like]
             or_objects = ' OR '.join(object_like)
             where_queries.append(f'({or_objects})')
         if only_source is not None:
@@ -1318,24 +1322,23 @@ class AnalyzeTimeSeries:
         no_data = True # for now; will be set to False when data is detected
         for p in np.arange(npanels):
             thispanel = panel_arr[p]            
-            not_junk = None
-            if 'not_junk' in thispanel['paneldict']:
-                if str(thispanel['paneldict']['not_junk']).lower() == 'true':
-                    not_junk = True
-                elif str(thispanel['paneldict']['not_junk']).lower() == 'false':
-                    not_junk = False
-            only_object = None
-            if 'only_object' in thispanel['paneldict']:
-                only_object = thispanel['paneldict']['only_object']
-            object_like = None
-#            if 'object_like' in thispanel['paneldict']:
-#                if str(thispanel['paneldict']['object_like']).lower() == 'true':
-#                    object_like = True
-#                elif str(thispanel['paneldict']['object_like']).lower() == 'false':
-#                    object_like = False
-            only_source = None
-            if 'only_source' in thispanel['paneldict']:
-                only_source = thispanel['paneldict']['only_source']
+            not_junk = thispanel['paneldict'].get('not_junk', plotdict.get('not_junk', None))
+            if isinstance(not_junk, str):
+                not_junk = True if not_junk.lower() == 'true' else False if not_junk.lower() == 'false' else not_junk
+            only_object = thispanel['paneldict'].get('only_object', plotdict.get('only_object', None))
+            object_like = thispanel['paneldict'].get('object_like', plotdict.get('object_like', None))
+            if object_like is not None:
+                if isinstance(object_like, str):
+                    object_like = [object_like]
+                elif isinstance(object_like, list):
+                    flattened = []
+                    for item in object_like:
+                        if isinstance(item, list):
+                            flattened.extend(item)
+                        else:
+                            flattened.append(item)
+                    object_like = flattened
+            only_source = thispanel['paneldict'].get('only_source', plotdict.get('only_source', None))
 
             if start_date == None:
                 start_date = datetime(2020, 1,  1)
@@ -1491,7 +1494,7 @@ class AnalyzeTimeSeries:
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(7, prune=None))
             if p == npanels-1: 
                 axs[p].set_xlabel(xtitle, fontsize=14)
-                axs[0].set_title(thistitle, fontsize=14)
+                axs[0].set_title(thistitle, fontsize=16)
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
             axs[p].grid(color='lightgray')        
@@ -1769,6 +1772,123 @@ class AnalyzeTimeSeries:
         except Exception as e:
             self.logger.info(f"Error saving file or showing plot: {e}")
 
+    def plot_rv_per_fiber_wavelength(self, rv, chip, fiber, start_date=None, end_date=None, only_object=None, only_source=None, 
+                                    object_like=None, fig_path=None, show_plot=True, 
+                                    log_savefig_timing=False):
+        """
+        Generate a timeseries showing every orderlet of a specific fiber (SCI1, SCI2, or SCI3) for either green or red. 
+
+        Args:
+            rv (string) - string describing what rv type to plot (etalon, lfc, etc)
+            chip (string) - green or red
+            fiber (string) - SCI1, SCI2, or SCI3
+            start_date (datetime object) - start date for plot
+            end_date (datetime object) - end date for plot
+            only_object (string or list of strings) - object names to include in query
+            only_source (string or list of strings) - source names to include in query (e.g., 'Star')
+            object_like (string or list of strings) - partial object names to search for
+            fig_path (string) - set to the path for the file to be generated
+            show_plot (boolean) - show the plot in the current environment
+
+        Returns:
+            PNG plot in fig_path or shows the plot in the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+        unique_cols = set()
+        unique_cols.add('DATE-MID')
+        unique_cols.add('NOTJUNK')
+        unique_cols.add('ObsID')
+        if chip.lower() == 'green':
+            start = 0
+            end = 35
+            unique_cols.add('CCFW00')
+            unique_cols.add('CCFW01')
+            unique_cols.add('CCFW02')
+            unique_cols.add('CCFW03')
+            unique_cols.add('CCFW04')
+            unique_cols.add('CCFW05')
+            unique_cols.add('CCFW06')
+            unique_cols.add('CCFW07')
+            unique_cols.add('CCFW08')
+            unique_cols.add('CCFW09')
+            for i in range(10, 35):
+                unique_cols.add(f'CCFW{i}')
+            if fiber.lower() == 'sci1':
+                fib = 100
+                for i in range (100, 135):
+                    unique_cols.add(f'RV{i}')
+            elif fiber.lower() == 'sci2':
+                fib = 200
+                for i in range (200, 235):
+                    unique_cols.add(f'RV{i}')
+            elif fiber.lower() == 'sci3':
+                fib = 300
+                for i in range (300, 335):
+                    unique_cols.add(f'RV{i}')
+            else:
+                self.logger.error("Need to specify 'fiber'")
+        elif chip.lower() == 'red':
+            start = 35
+            end = 67
+            for i in range(35, 67):
+                unique_cols.add(f'CCFW{i}')
+            if fiber.lower() == 'sci1':
+                fib = 100
+                for i in range (135, 167):
+                    unique_cols.add(f'RV{i}')
+            elif fiber.lower() == 'sci2':
+                fib = 200
+                for i in range (235, 267):
+                    unique_cols.add(f'RV{i}')
+            elif fiber.lower() == 'sci3':
+                fib = 300
+                for i in range (335, 367):
+                    unique_cols.add(f'RV{i}')
+            else:
+                self.logger.error("Need to specify 'fiber'")
+        else:
+            self.logger.error("Need to specify 'chip'")
+
+        rv_df = self.dataframe_from_db(unique_cols, start_date=start_date, end_date=end_date, only_object=only_object, only_source=only_source, 
+                                    object_like=object_like, not_junk=True)
+        rv_df = rv_df.drop(columns=['NOTJUNK'])
+        rv_df = rv_df[['DATE-MID'] + ['ObsID'] + [col for col in rv_df.columns if (col != 'DATE-MID') and (col != 'ObsID')]]
+        rv_df.iloc[:, 2:] = rv_df.iloc[:, 2:].apply(pd.to_numeric, errors='coerce')
+        rv_columns = sorted([col for col in rv_df.columns if col.startswith('RV')], key=lambda x: int(x[2:]))
+        ccfw_columns = sorted([col for col in rv_df.columns if col.startswith('CCFW')], key=lambda x: int(x[4:]))
+        rv_df = pd.concat([rv_df['DATE-MID'], rv_df['ObsID'],rv_df[rv_columns], rv_df[ccfw_columns]], axis=1)
+        rv_df['DATE-MID'] = pd.to_datetime(rv_df['DATE-MID'])
+        
+        plt.figure(figsize=(10, 20)) 
+        for i in range(start, end):
+            rv_col = f"RV{fib + i}"
+            weight_col = f"CCFW{str(i).zfill(2)}"
+            
+            valid_indices = rv_df[weight_col] != 0
+            times = rv_df.loc[valid_indices, 'DATE-MID']
+            rv_values = rv_df.loc[valid_indices, rv_col]
+
+            if not rv_values.empty:
+                plt.scatter(times, rv_values + i * 0.01, label=rv_col, alpha=0.7, s=2)
+
+        plt.xlabel("Time")
+        plt.ylabel(f"RV OF {rv.upper()}")
+        plt.title(f"{rv.upper()} RV FOR {fiber.upper()} {chip.upper()}")
+        plt.legend(fontsize=8) 
+        plt.grid(True)
+
+        try:
+            if fig_path != None:
+                t0 = time.process_time()
+                plt.savefig(fig_path, dpi=300, facecolor='w')
+                if log_savefig_timing:
+                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+            if show_plot == True:
+                plt.show()
+            plt.close('all')
+        except Exception as e:
+            self.logger.info(f"Error saving file or showing plot: {e}")
+
 
     def plot_nobs_histogram(self, plot_dict=None, 
                             interval='full', date=None, exclude_junk=False, 
@@ -2033,7 +2153,7 @@ class AnalyzeTimeSeries:
             plt.ylabel(dict_ylabel, fontsize=14)
         else:
             plt.ylabel("Number of Observations", fontsize=14)
-        plt.title(plot_title, fontsize=14)
+        plt.title(plot_title, fontsize=16)
     
         ax = plt.gca()
         ax.xaxis.set_major_locator(major_locator)

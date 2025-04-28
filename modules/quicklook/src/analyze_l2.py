@@ -92,6 +92,15 @@ class AnalyzeL2:
         var_pop = np.sum(w * (x - wmean)**2) / np.sum(w) # weighted variance
         self.Delta_Bary_RVC_weighted_std = np.sqrt(var_pop) * 1000 # m/s
         self.Delta_Bary_RVC_weighted_range = (x[nonzero_mask].max() - x[nonzero_mask].min()) * 1000 # m/s
+        # compute per-order percent change difference from weighted Barycentric RV correction
+        if self.CCFBCV != 0:
+            self.df_RV['Perc_Delta_Bary_RVC'] = (self.df_RV['Delta_Bary_RVC'].copy() / self.CCFBCV) * 100 # percent
+        else:
+            self.df_RV['Perc_Delta_Bary_RVC'] = self.df_RV['Delta_Bary_RVC'].copy() * 0 # just set to zero
+        # compute maximum and minimum percent change difference (for only orders with nonzero weights)
+        x = self.df_RV['Perc_Delta_Bary_RVC']
+        self.Max_Perc_Delta_Bary_RV = x[nonzero_mask].max()
+        self.Min_Perc_Delta_Bary_RV = x[nonzero_mask].min()
 
 
     def plot_CCF_grid(self, chip=None, annotate=False, 
