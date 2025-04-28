@@ -1,14 +1,13 @@
 import configparser
 
 from kpfpipe.primitives.level1 import KPF1_Primitive
-#from modules.blaze.src.alg import DummyBlazeFunction
+from modules.blaze.src.alg import BlazeAlg
 from keckdrpframework.models.arguments import Arguments
-
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/blaze/configs/default.cfg'
 
-class Blaze(KPF1_Primitive):
+class AddBlaze(KPF1_Primitive):
     """Docstring
     
     """

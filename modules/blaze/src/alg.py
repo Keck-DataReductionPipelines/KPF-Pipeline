@@ -1,14 +1,16 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from scipy.ndimage import median_filter
+from scipy.interpolate import UnivariateSpline
+from astropy.stats import mad_std
+import astropy.constants as apc
+
 
 from kpfpipe.config.pipeline_config import ConfigClass
-from kpfpipe.ogger import start_logger
+from kpfpipe.logger import start_logger
 
 from modules.Utils.config_parser import ConfigHandler
-from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
-
-db_path = '/data/ime_series/kpf_ts_dec5b.db'
 
 class BlazeAlg:
     """Docstring
@@ -16,20 +18,19 @@ class BlazeAlg:
     """
     def __init__(self, l1_obj, default_config_path, logger=None):
         # Input arguments
-        self.config = ConfigXClass(default_config_path)
+        self.config = ConfigClass(default_config_path)
         if logger == None:
             self.log = start_logger('BlazeCorrection', default_config_path)
         else:
             self.log = logger
             
         cfg_params = ConfigHandler(self.config, 'PARAM')
-        self.db_path = cfg_params.get_config_value('ts_db_path')
-        print(self.db_path)
         
         self.l1_obj = l1_obj
         self.date_mid = self.l1_obj.header['PRIMARY']['DATE-MID']
         self.dt = datetime.strptime(self.date_mid, "%Y-%m-%dT%H:%M:%S.%f")
         self.drptag = self.l1_obj.header['PRIMARY']['DRPTAG']
+        self.method = 'spline'    # TODO: FIX HARDCODED METHOD
         
         try:
             self.readmode = self.l1_obj.header['PRIMARY']['READSPED']
@@ -39,35 +40,13 @@ class BlazeAlg:
             else:
                 self.readmode = 'fast'
                 
+        self.add_extensions()
                 
-        # Connect to TS DB
-        myTS = AnalyzeTimeSeries(db_path=self.db_path)
-        
-        date = self.dt.strftime(format='%Y%m%d')
-        start_date = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) - timedelta(days=1)
-        end_date   = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) + timedelta(days=1)
-
-        cols = ['ObsID', 'OBJECT', 'DATE-MID', 'DRPTAG', 'NOTJUNK', 'READSPED']
-        self.df = myTS.dataframe_from_db(start_date=start_date, end_date=end_date, columns=cols)
-        self.df = self.prepare_table()
-        
-    def prepare_table(self):
-        df = self.df
-        
-        df = df[(df['NOTJUNK'] == True)]
-        df = df[(df['DRPTAG'] == self.drptag)]
-        df = df[(df['READSPED'] == self.readmode)]
-        
-        # Extract 8-digit date code from utctime
-        df['date_code_utctime'] = df['DATE-MID'].str[:10].str.replace('-', '')
-        df['datetime'] = pd.to_datetime(df['DATE-MID'])
-        
-        return df
-    
+                    
     def add_keywords(self):
-        header = self.l1_ojb.header['PRIMARY']
-        header['BLAZECORR'] = 1
-        header['BLAZEMETH'] = self.method
+        header = self.l1_obj.header['PRIMARY']
+        header['BLAZCORR'] = 1
+        header['BLAZMETH'] = self.method
         
     def add_extensions(self):
         self.l1_obj.create_extension('GREEN_SCI_BLAZE1', np.array)
@@ -77,25 +56,77 @@ class BlazeAlg:
         self.l1_obj.create_extension('RED_SCI_BLAZE2', np.array)
         self.l1_obj.create_extension('RED_SCI_BLAZE3', np.array)
         
-    def apply_blaze_correction(self, method):
-        self.method = method
-        
+    def apply_blaze_correction(self):
         try:
-            blaze_method = self.__getattribute(method)
+            blaze_method = self.__getattribute__(self.method)
         except AttributeError:
-            self.log.error(f'Blaze correction method {method} not implemented.')
+            self.log.error(f'Blaze correction method {self.method} not implemented.')
             raise(AttributeError)
             
-        out_l1 = blaze_method()
+        out_l1 = blaze_method()        
+        self.add_keywords()
         
         return out_l1
     
-    def _uniform(self):
+    def uniform(self):
         self.l1_obj['GREEN_SCI_BLAZE1'] = np.ones_like(self.l1_obj['GREEN_SCI_FLUX1'])
         self.l1_obj['GREEN_SCI_BLAZE2'] = np.ones_like(self.l1_obj['GREEN_SCI_FLUX2'])
         self.l1_obj['GREEN_SCI_BLAZE3'] = np.ones_like(self.l1_obj['GREEN_SCI_FLUX3'])
         self.l1_obj['RED_SCI_BLAZE1'] = np.ones_like(self.l1_obj['RED_SCI_FLUX1'])
         self.l1_obj['RED_SCI_BLAZE2'] = np.ones_like(self.l1_obj['RED_SCI_FLUX2'])
         self.l1_obj['RED_SCI_BLAZE3'] = np.ones_like(self.l1_obj['RED_SCI_FLUX3'])
+        
+        return self.l1_obj
+    
+    def blackbody(self):
+        c = apc.c.value
+        h = apc.h.value
+        kB = apc.k_B.value
+        
+        for ccd in ['GREEN', 'RED']:
+            for i in range(3):
+                ext = f'{ccd}_SCI_WAVE{i+1}'    
+                
+                wave = self.l1_obj[ext]    # Angstroms
+                temp = 6000.               # TODO: FIX HARDCODED TEMPERATURE
+                
+                norder, npix = wave.shape
+                blaze_array = np.zeros((norder,npix))
+                
+                for o in range(norder):
+                    w = wave[o] * 1e-10   # Angstrom --> meter
+                    T = temp * 1.0        # Kelvin
+                    B = 2*h*c**2 / w**5 / (np.exp((h*c)/(w*kB*T))-1)
+                    
+                    blaze_array[o] = B/B.max()
+                    
+                self.l1_obj[f'{ccd}_SCI_BLAZE{i+1}'] = blaze_array
+                
+        return self.l1_obj
+    
+    def spline(self, filter_size=7, sigma_cut=20., smooth_factor=5, return_mask=False):
+        for ccd in ['GREEN', 'RED']:
+            for i in range(3):
+                ext = f'{ccd}_SCI_FLUX{i+1}'                
+                data = self.l1_obj[ext]
+                
+                norder, npix = data.shape
+                blaze_array = np.zeros((norder,npix))
+
+                for o in range(norder):
+                    x = np.arange(npix)
+                    f = data[o]
+            
+                    med = median_filter(f, size=filter_size)             
+                    mask = np.abs(f-med)/mad_std(f-med) > sigma_cut
+                    mask += f == 0
+            
+                    spline = UnivariateSpline(x[~mask], f[~mask], s=smooth_factor*npix)
+                    blaze_array[o] = spline(x)
+            
+                self.l1_obj[f'{ccd}_SCI_BLAZE{i+1}'] = blaze_array
+                
+        if return_mask:
+            return self.l1_obj, mask
         
         return self.l1_obj
