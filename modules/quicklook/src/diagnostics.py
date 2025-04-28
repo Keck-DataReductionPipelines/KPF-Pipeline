@@ -1234,6 +1234,12 @@ def add_headers_L2_barycentric(L2, logger=None):
                  orders excluded (sec)
         BJDSTD - Standard deviation of BJD values for the spectral orders, 
                  weighted by the CCF Weights (sec)
+        MAXPCBCV - The maximum of the spectral orders' percent change 
+                 differences from an observation's CCFBCV, with zero-weight 
+                 orders excluded (%)
+        MINPCBCV - The minimum of the spectral orders' percent change
+                 differences from an observation's CCFBCV, with zero-weight
+                 orders excluded (%)
 
     Args:
         L2 - a KPF L2 object 
@@ -1266,7 +1272,7 @@ def add_headers_L2_barycentric(L2, logger=None):
         if hasattr(myL2, 'CCFBJD'):
             L2.header['PRIMARY']['CCFBJD']  = (myL2.CCFBJD, 'Weighted avg of BJD values (days)')
     
-        # Add range and standard deviation stats
+        # Add range, standard deviation, and percent difference stats
         if hasattr(myL2, 'Delta_CCFBJD_weighted_std'):
             L2.header['PRIMARY']['BJDSTD'] = (myL2.Delta_CCFBJD_weighted_std, 'Weighted stddev of BJD for orders (sec)')
         if hasattr(myL2, 'Delta_CCFBJD_weighted_range'):
@@ -1275,6 +1281,10 @@ def add_headers_L2_barycentric(L2, logger=None):
             L2.header['PRIMARY']['BCVSTD'] = (myL2.Delta_Bary_RVC_weighted_std, 'Weighted stddev of BCV for orders (m/s)')
         if hasattr(myL2, 'Delta_Bary_RVC_weighted_range'):
             L2.header['PRIMARY']['BCVRNG'] = (myL2.Delta_Bary_RVC_weighted_range, 'Range(BCV) for non-zero-weight orders (m/s)')
+        if hasattr(myL2, 'Max_Perc_Delta_Bary_RV'):
+            L2.header['PRIMARY']['MAXPCBCV'] = (myL2.Max_Perc_Delta_Bary_RV, 'Maximum percent change from CCFBCV for non-zero-weight orders (%)')
+        if hasattr(myL2, 'Min_Perc_Delta_Bary_RV'):
+            L2.header['PRIMARY']['MINPCBCV'] = (myL2.Min_Perc_Delta_Bary_RV, 'Minimum percent change from CCFBCV for non-zero-weight orders (%)')
 
     except Exception as e:
         logger.error(f"Problem with L2 BJD/BCV measurements: {e}\n{traceback.format_exc()}")
