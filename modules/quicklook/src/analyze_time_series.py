@@ -381,10 +381,11 @@ class AnalyzeTimeSeries:
             os.remove(shm_file)
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, quiet=False):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, force_ingest=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
+        If force_ingest=False, files are not reingested unless they have more recent modification dates than in DB.
         """
 
         # Convert input dates to strings if necessary
@@ -418,10 +419,10 @@ class AnalyzeTimeSeries:
                         file_path = os.path.join(dir_path, L0_filename)
                         batch.append(file_path)
                         if len(batch) >= batch_size:
-                            self.ingest_batch_observation(batch)
+                            self.ingest_batch_observation(batch, force_ingest=force_ingest)
                             batch = []
                 if batch:
-                    self.ingest_batch_observation(batch)
+                    self.ingest_batch_observation(batch, force_ingest=force_ingest)
 
         if not quiet:
             self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
@@ -552,7 +553,7 @@ class AnalyzeTimeSeries:
             conn.commit()
             conn.close()
 
-    def ingest_batch_observation(self, batch):
+    def ingest_batch_observation(self, batch, force_ingest=False):
         """
         Ingest a batch of observations into the database in parallel using 
         ProcessPoolExecutor, but check if each file has been updated before 
@@ -562,9 +563,12 @@ class AnalyzeTimeSeries:
     
         # === 1) Check for updated files in main thread ===
         updated_batch = []
-        for file_path in batch:
-            if self.is_any_file_updated(file_path):
-                updated_batch.append(file_path)
+        if force_ingest:
+            updated_batch = batch
+        else:
+            for file_path in batch:
+                if self.is_any_file_updated(file_path):
+                        updated_batch.append(file_path)
     
         # If nothing to do, exit quickly
         if not updated_batch:
@@ -1488,7 +1492,7 @@ class AnalyzeTimeSeries:
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(7, prune=None))
             if p == npanels-1: 
                 axs[p].set_xlabel(xtitle, fontsize=14)
-                axs[0].set_title(thistitle, fontsize=14)
+                axs[0].set_title(thistitle, fontsize=16)
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
             axs[p].grid(color='lightgray')        
@@ -2147,7 +2151,7 @@ class AnalyzeTimeSeries:
             plt.ylabel(dict_ylabel, fontsize=14)
         else:
             plt.ylabel("Number of Observations", fontsize=14)
-        plt.title(plot_title, fontsize=14)
+        plt.title(plot_title, fontsize=16)
     
         ax = plt.gca()
         ax.xaxis.set_major_locator(major_locator)

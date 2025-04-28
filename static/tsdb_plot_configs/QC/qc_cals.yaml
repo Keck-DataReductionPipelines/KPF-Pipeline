@@ -2,12 +2,12 @@ description: QC - Master File Ages
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
-      - col: OLDBIAS
+      - col: FLATSNR
         plot_type: state
         plot_attr:
           label: "min < Flat SNR < max"
           marker: .
     paneldict:
       title: QC - Calibrations
-      ylabel: "Flat SNR okay"
+      ylabel: "Flat SNR okay\n(FLATSNR)"
       legend_frac_size: 0.12

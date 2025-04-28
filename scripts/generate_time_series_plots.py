@@ -225,25 +225,24 @@ def generate_plots(start_date=None, end_date=None,
 
 
 def monitor_processes(tasks, proc_dict, sleep_time, db_path):
-
     process_start_times = {task["proc_name"]: datetime.now() for task in tasks}
 
     def print_process_table():
         now = datetime.now()
-    
-        header = f"{'Process Name':<25} {'Interval':>12}   {'Uptime':>12}"
-        divider = "-" * len(header)
+
+        header   = f"{'Process Name':<25} {'Interval':>12}   {'Uptime':>12}"
+        divider  = "-" * len(header)
         print("\nProcess Status Report:")
         print(divider)
         print(header)
         print(divider)
-    
+
         for task in tasks:
             proc_name = task["proc_name"]
-            interval = task["interval"]
-            proc = proc_dict.get(proc_name)
-    
-            # Restart if needed
+            interval  = task["interval"]
+            proc      = proc_dict.get(proc_name)
+
+            # (Re)spawn a dead process
             if not proc or not proc.is_alive():
                 print(f"{proc_name} stopped, restarting...")
                 new_proc = Process(
@@ -253,32 +252,34 @@ def monitor_processes(tasks, proc_dict, sleep_time, db_path):
                     name=proc_name
                 )
                 new_proc.start()
-                proc_dict[proc_name] = new_proc
+                proc_dict[proc_name]        = new_proc
                 process_start_times[proc_name] = datetime.now()
                 proc = new_proc
-    
-            # Format interval as HH:MM:SS
-            interval_td = timedelta(seconds=interval)
-            total_seconds = int(interval_td.total_seconds())
-            ihours, iremainder = divmod(total_seconds, 3600)
+
+            # ---------- format interval  (DDD HH:MM:SS) ----------
+            idays      = interval // 86_400
+            iremainder = interval % 86_400
+            ihours, iremainder = divmod(iremainder, 3_600)
             iminutes, iseconds = divmod(iremainder, 60)
-            interval_str = f"{ihours:02}:{iminutes:02}:{iseconds:02}"
-    
-            # Format uptime as HH:MM:SS
-            uptime = now - process_start_times[proc_name]
-            uhours, uremainder = divmod(uptime.total_seconds(), 3600)
+            interval_str = f"{idays:03} {ihours:02}:{iminutes:02}:{iseconds:02}"
+
+            # ---------- format uptime   (DDD HH:MM:SS) ----------
+            uptime_td  = now - process_start_times[proc_name]
+            udays      = uptime_td.days
+            usecs_tot  = int(uptime_td.total_seconds()) - udays * 86_400
+            uhours, uremainder = divmod(usecs_tot, 3_600)
             uminutes, useconds = divmod(uremainder, 60)
-            uptime_str = f"{int(uhours):02}:{int(uminutes):02}:{int(useconds):02}"
-    
+            uptime_str  = f"{udays:03} {uhours:02}:{uminutes:02}:{useconds:02}"
+
             print(f"{proc_name:<25} {interval_str:>12}   {uptime_str:>12}")
-    
+
         print(divider + "\n")
 
     while True:
         print_process_table()
         time.sleep(sleep_time)
 
-        
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Repeatedly generate KPF time series plots.')
     parser.add_argument('--db_path', type=str, default='/data/time_series/kpf_ts.db', 
