@@ -11,5 +11,7 @@ BJDSTD|float|Weighted stddev (over orders) of BJD times|sec
 BJDRNG|float|Range(BJD) for non-zero-weight spectral orders|sec    
 BCVSTD|float|Weighted stddev (over orders) of BCV|m/s
 BCVRNG|float|Range(BCV) for non-zero-weight spectral orders|m/s
+MAXPCBCV|float|Maximum percent change from CCFBCV for non-zero-weight spectral orders|%
+MINPCBCV|float|Minimum percent change from CCFBCV for non-zero-weight spectral orders|%
 DATAPRL2|bool|QC: L2 data present|None
 TIMCHKL2|bool|QC: Consistent times in L2 file|None
