@@ -47,6 +47,9 @@ class KPF1(KPF0):
         if 'TELEMETRY' in l0.header:
             l1.header['TELEMETRY'] = l0.header['TELEMETRY']
             l1['TELEMETRY'] = l0['TELEMETRY']
+        if 'RECEIPT' in l0.header:
+            l1.header['RECEIPT'] = l0.header['RECEIPT']
+            l1['RECEIPT'] = l0['RECEIPT']
         l1.add_default_headers()
 
         return l1
