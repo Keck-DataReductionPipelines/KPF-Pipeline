@@ -252,13 +252,14 @@ class KPFDataModel(object):
                                f'md5_sum={md5.hexdigest()}', 'PASS')
 
     
-    def to_fits(self, fn):
+    def to_fits(self, fn, compressed=True):
         """
         Collect the content of this instance into a monolithic FITS file
 
         Args: 
             fn (str): file path
-
+            compressed (bool): if True, compress the file using the compression type specified in KPF_definitions.py
+                [default=True]                            
         Note:
             Can only write to KPF formatted FITS 
 
@@ -271,7 +272,7 @@ class KPFDataModel(object):
         if gen_hdul is None:
             raise TypeError('Write method not found. Is this the base class?')
         else: 
-            hdu_list = gen_hdul()
+            hdu_list = gen_hdul(compressed=compressed)
         
         # check that no card in any HDU is greater than 80
         # this is a hard limit by FITS 

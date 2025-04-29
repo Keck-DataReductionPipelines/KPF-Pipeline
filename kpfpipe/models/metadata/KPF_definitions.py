@@ -19,6 +19,8 @@ LEVEL0_HEADER_FILE = os.path.abspath(os.path.dirname(__file__)) + '/KPF_headers_
 LEVEL1_HEADER_FILE = LEVEL0_HEADER_FILE.replace('L0', 'L1')
 LEVEL2_HEADER_FILE = LEVEL0_HEADER_FILE.replace('L0', 'L2')
 
+L0_COMPRESSION_TYPE = 'RICE_1'
+
 # KPF level 0 extensions should be defined here
 # as a dictionary with the name of the extensions as keys
 # and the fits data type as the values
@@ -43,8 +45,6 @@ LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
                      'TELEMETRY': fits.BinTableHDU,
                      
                      'SOLAR_IRRADIANCE': fits.BinTableHDU}
-
-L0_COMPRESSION_TYPE = 'RICE_1'
 
 # KPF level 1 extensions should be defined here
 # as a dictionary with the name of the extensions as keys

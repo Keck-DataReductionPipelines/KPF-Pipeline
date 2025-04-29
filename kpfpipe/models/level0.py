@@ -210,7 +210,7 @@ class KPF0(KPFDataModel):
                 head += row
         print(head)
         
-    def _create_hdul(self):
+    def _create_hdul(self, compressed=True):
         '''
         Create an hdul in FITS format. 
         This is used by the base model for writing data context to file
@@ -230,6 +230,8 @@ class KPF0(KPFDataModel):
                 else:
                     ndim = len(data.shape)
                     hdu_type = value
+                if not compressed:
+                    hdu_type = fits.ImageHDU
 
                 if hdu_type == fits.CompImageHDU:
                     kwargs = {'compression_type': KPF_definitions.L0_COMPRESSION_TYPE}
