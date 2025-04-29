@@ -1,6 +1,7 @@
 import time
 import copy
 import numpy as np
+import seaborn as sns
 from datetime import datetime
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -426,7 +427,7 @@ class AnalyzeGuider:
         
         # Create the figure and subplots
         fig, axes = plt.subplots(1, 2, figsize=(16, 4), gridspec_kw={'width_ratios': [2, 1]}, tight_layout=True)
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
 
         # Plot the data
         if self.nframes_uniq_mas > 10:
@@ -488,7 +489,7 @@ class AnalyzeGuider:
         
         # Create the figure and subplots
         fig, axes = plt.subplots(4, 2, figsize=(16, 15), gridspec_kw={'width_ratios': [2, 1]}, tight_layout=True)
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
 
         # Count number of stars
         #nstars = []
@@ -698,7 +699,7 @@ class AnalyzeGuider:
         """
 
         # Construct plots
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
         plt.figure(figsize=(8, 4), tight_layout=True)
         if self.nframes > 0:
             plt.plot(self.t-min(self.t), self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95), color='royalblue')
@@ -743,7 +744,7 @@ class AnalyzeGuider:
         fwhm = (self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5)
 
         # Construct plots
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
         plt.figure(figsize=(8, 4), tight_layout=True)
         if self.nframes > 0:
             plt.plot(self.t-min(self.t), fwhm, color='royalblue')
