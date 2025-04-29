@@ -305,7 +305,7 @@ class DiagnosticsFramework(KPF0_Primitive):
                     self.logger.error(f"Measuring L2 BCV/BJD failed: {e}\n{traceback.format_exc()}")
             
         # Add RECEIPT entry
-        self.kpf_object.receipt_add_entry('Diagnostics', self.__module__, f'data_level_str=self.data_level_str, diagnostics_name=self.diagnostics_name', 'PASS')
+        self.kpf_object.receipt_add_entry('Diagnostics', self.__module__, f'data_level_str={self.data_level_str}, diagnostics_name={self.diagnostics_name}', 'PASS')
             
         # Finish
         self.logger.info('Finished {}'.format(self.__class__.__name__))

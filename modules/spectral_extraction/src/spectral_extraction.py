@@ -409,8 +409,30 @@ class SpectralExtraction(KPF0_Primitive):
         update_primary_header = False if level1_sample is None or ins != 'NEID' else True
         if output_level1 is not None:
             kpf1_obj = output_level1
+            print('**************************')
+            print('**************************')
+            print('**************************')
+            print('**************************')
+            print('not from_l0()')
+            print('RECEIPT=')
+            print(kpf1_obj['RECEIPT'])
+            print('**************************')
+            print('**************************')
+            print('**************************')
+            print('**************************')
         else:
             kpf1_obj = KPF1.from_l0(self.input_spectrum)
+            print('**************************')
+            print('**************************')
+            print('**************************')
+            print('**************************')
+            print('from_l0()')
+            print('RECEIPT=')
+            print(kpf1_obj['RECEIPT'])
+            print('**************************')
+            print('**************************')
+            print('**************************')
+            print('**************************')
 
         if op_result is not None:
             total_order, width = np.shape(op_result.values)

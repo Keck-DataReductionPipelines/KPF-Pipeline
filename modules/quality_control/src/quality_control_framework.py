@@ -80,7 +80,7 @@ class QualityControlFramework(KPF0_Primitive):
             qc_obj.qcdefinitions.list_qc_metrics()
 
         # Add RECEIPT entry
-        self.kpf_object.receipt_add_entry('QualityControl', self.__module__, f'data_level_str=self.data_level_str', 'PASS')
+        self.kpf_object.receipt_add_entry('QualityControl', self.__module__, f'data_level_str={self.data_level_str}', 'PASS')
         
         # Finish.
         self.logger.info('Finished {}'.format(self.__class__.__name__))

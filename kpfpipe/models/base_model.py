@@ -128,7 +128,7 @@ class KPFDataModel(object):
         self.header['RECEIPT'] = fits.Header()
         self.header['CONFIG'] = fits.Header()
 
-        self.receipt = pd.DataFrame([], columns=RECEIPT_COL)
+        self.receipt = pd.DataFrame([], columns=RECEIPT_COL).astype(str)
         self.RECEIPT = self.receipt
 
         self.config = pd.DataFrame([], columns=CONFIG_COL)
@@ -246,7 +246,8 @@ class KPFDataModel(object):
         # substitute hashlib.sha256 for hashlib.md5
         md5 = hashlib.md5()
         self.receipt_add_entry('from_fits', self.__module__,
-                               f'fn={fn}, md5_sum={md5.hexdigest()}', 'PASS')
+                               f'fn={fn}', 'PASS', 
+                               comment=f'md5_sum={md5.hexdigest()}')
         with open(fn, 'rb') as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 md5.update(chunk)
@@ -293,7 +294,7 @@ class KPFDataModel(object):
 
 # =============================================================================
 # Receipt related members
-    def receipt_add_entry(self, module, mod_path, param, status, chip='all'):
+    def receipt_add_entry(self, module, mod_path, param, status, chip='all', comment=''):
         '''
         Add an entry to the receipt
 
@@ -329,13 +330,14 @@ class KPFDataModel(object):
         # add the row to the bottom of the table
         row = {'Time': time,
                'Code_Release': git_tag,
-               'Commit_Hash': git_commit_hash,
                'Branch_Name': git_branch,
-               'Chip': chip,
-               'Module_Name': module,
                'Module_Level': str(self.level),
-               'Module_Path': mod_path,
+               'Module_Name': module,
                'Module_Param': param,
+               'Module_Path': mod_path,
+               'Comment': comment,
+               'Chip': chip,
+               'Commit_Hash': git_commit_hash,
                'Status': status}
 
         self.receipt = pd.concat([self.receipt, pd.DataFrame([row])], ignore_index=True)
