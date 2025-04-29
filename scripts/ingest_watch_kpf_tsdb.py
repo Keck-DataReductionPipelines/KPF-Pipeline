@@ -151,7 +151,7 @@ def periodic_scan(db_path,stop_event):
         if datetime.now() - last_run_time >= timedelta(seconds=sec_between_scans):
             myTS = AnalyzeTimeSeries(db_path=db_path)
             myTS.logger.info('Starting periodic scan for new or changed files.')
-            myTS.ingest_dates_to_db(start_date, end_date, batch_size=10000, reverse=True)
+            myTS.ingest_dates_to_db(start_date, end_date, batch_size=10000, reverse=True, force_ingest=True)
             myTS.print_db_status()
             myTS.logger.info('Ending periodic scan for new or changed files.')
             myTS = [] # clear memory
