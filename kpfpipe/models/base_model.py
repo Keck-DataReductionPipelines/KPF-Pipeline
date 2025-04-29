@@ -282,8 +282,7 @@ class KPFDataModel(object):
                 del hdu.header['PRIMARY']
             
         # Add receipt
-        self.receipt_add_entry('to_fits', self.__module__,
-                               f'fn={fn}}', 'PASS')
+        self.receipt_add_entry('to_fits', self.__module__, f'fn={fn}', 'PASS')
 
         # finish up writing
         hdul = fits.HDUList(hdu_list)
