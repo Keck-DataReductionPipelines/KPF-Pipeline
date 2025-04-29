@@ -306,4 +306,5 @@ class DiagnosticsFramework(KPF0_Primitive):
             
         # Finish
         self.logger.info('Finished {}'.format(self.__class__.__name__))
+        self.kpf_object.receipt_add_entry('Diagnostics', self.__module__, f'data_level_str=self.data_level_str, diagnostics_name=self.diagnostics_name', 'PASS')
         return Arguments([exit_code, self.kpf_object])
