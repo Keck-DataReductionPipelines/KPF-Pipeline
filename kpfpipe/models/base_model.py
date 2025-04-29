@@ -249,7 +249,7 @@ class KPFDataModel(object):
             for chunk in iter(lambda: f.read(4096), b""):
                 md5.update(chunk)
         self.receipt_add_entry('from_fits', self.__module__,
-                               f'md5_sum={md5.hexdigest()}', 'PASS')
+                               f'fn={fn}, md5_sum={md5.hexdigest()}', 'PASS')
 
     
     def to_fits(self, fn):
