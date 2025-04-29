@@ -219,7 +219,7 @@ class KPFDataModel(object):
             for hdu in hdu_list:
                 if isinstance(hdu, fits.PrimaryHDU):
                     self.header[hdu.name] = hdu.header
-                elif isinstance(hdu, fits.BinTableHDU):
+                elif isinstance(hdu, fits.BinTableHDU) and not isinstance(hdu, fits.CompImageHDU):
                     t = Table.read(hdu)
                     if 'RECEIPT' in hdu.name:
                         # Table contains the RECEIPT

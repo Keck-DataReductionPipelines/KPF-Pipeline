@@ -81,7 +81,7 @@ class KPF0(KPFDataModel):
 
         '''
         for hdu in hdul:
-            if isinstance(hdu, fits.ImageHDU):
+            if isinstance(hdu, fits.ImageHDU) or isinstance(hdu, fits.CompImageHDU):
                 if hdu.name not in self.extensions:
                     self.create_extension(hdu.name, np.ndarray)
                 setattr(self, hdu.name, hdu.data)
@@ -221,13 +221,21 @@ class KPF0(KPFDataModel):
             if value == fits.PrimaryHDU:
                 head = self.header[key]
                 hdu = fits.PrimaryHDU(header=head)
-            elif value == fits.ImageHDU:
+            elif value == fits.ImageHDU or value == fits.CompImageHDU:
                 data = getattr(self, key)
-                if data is None:
+                if data is None or data.size == 0 or data.ndim < 2 or any(dim == 0 for dim in data.shape):
                     ndim = 0
+                    hdu_type = fits.ImageHDU
                     # data = np.array([])
                 else:
                     ndim = len(data.shape)
+                    hdu_type = value
+
+                if hdu_type == fits.CompImageHDU:
+                    kwargs = {'compression_type': KPF_definitions.L0_COMPRESSION_TYPE}
+                    self.header[key]['ZCMPTYPE'] = KPF_definitions.L0_COMPRESSION_TYPE
+                else:
+                    kwargs = {}
                 self.header[key]['NAXIS'] = ndim
                 if ndim == 0:
                     self.header[key]['NAXIS1'] = 0
@@ -236,14 +244,14 @@ class KPF0(KPFDataModel):
                         self.header[key]['NAXIS{}'.format(d+1)] = data.shape[d]
                 head = self.header[key]
                 try:
-                    hdu = fits.ImageHDU(data=data, header=head)
+                    hdu = hdu_type(data=data, header=head, **kwargs)
                 except KeyError as ke:
                     print("KeyError exception raised: -->ke=" + str(ke))
                     print("Attempting to handle it...")
                     if str(ke) == '\'bool\'':
                         data = data.astype(float)
                         print("------>SHAPE=" + str(data.shape))
-                        hdu = fits.ImageHDU(data=data, header=head)
+                        hdu = hdu_type(data=data, header=head, **kwargs)
                     else:
                         raise KeyError("A different error...")
             elif value == fits.BinTableHDU:
