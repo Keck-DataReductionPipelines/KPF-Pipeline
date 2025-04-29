@@ -245,11 +245,11 @@ class KPFDataModel(object):
         # to hack astronomical data files.  If something more secure is is needed,
         # substitute hashlib.sha256 for hashlib.md5
         md5 = hashlib.md5()
+        self.receipt_add_entry('from_fits', self.__module__,
+                               f'fn={fn}, md5_sum={md5.hexdigest()}', 'PASS')
         with open(fn, 'rb') as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 md5.update(chunk)
-        self.receipt_add_entry('from_fits', self.__module__,
-                               f'fn={fn}, md5_sum={md5.hexdigest()}', 'PASS')
 
     
     def to_fits(self, fn):
@@ -281,6 +281,10 @@ class KPFDataModel(object):
             elif 'PRIMARY' in hdu.header.keys():
                 del hdu.header['PRIMARY']
             
+        # Add receipt
+        self.receipt_add_entry('to_fits', self.__module__,
+                               f'fn={fn}}', 'PASS')
+
         # finish up writing
         hdul = fits.HDUList(hdu_list)
         if not os.path.isdir(os.path.dirname(fn)):
