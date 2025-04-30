@@ -294,7 +294,7 @@ class KPFDataModel(object):
 
 # =============================================================================
 # Receipt related members
-    def receipt_add_entry(self, module, mod_path, param, status, chip='all', comment=''):
+    def receipt_add_entry(self, module, mod_path, param, status, chip='all', comment=' '):
         '''
         Add an entry to the receipt
 
@@ -335,7 +335,7 @@ class KPFDataModel(object):
                'Module_Name': module,
                'Module_Param': param,
                'Module_Path': mod_path,
-               'Comment': comment,
+               'Comment': str(comment),
                'Chip': chip,
                'Commit_Hash': git_commit_hash,
                'Status': status}

@@ -51,7 +51,10 @@ class KPF1(KPF0):
             l1.header['RECEIPT'] = l0.header['RECEIPT']
             l1['RECEIPT'] = l0['RECEIPT']
         l1.add_default_headers()
-
+        
+#        self.receipt_add_entry('KPF1.from_l0', self.__module__, f'abc', 'PASS', chip='all', 
+#                               comment=f'Copy TELEMETRY and RECEIPT from L0/2D to L1')
+#
         return l1
 
     def __init__(self):
@@ -89,4 +92,7 @@ class KPF1(KPF0):
             'KPF':  self._read_from_KPF,
             'NEID': self._read_from_NEID
         }
+        
+        self.receipt_add_entry('KPF1.__init__', self.__module__, f' ', 'PASS', 
+                               comment=f'Create L1 object')
 
