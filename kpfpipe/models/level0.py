@@ -82,7 +82,7 @@ class KPF0(KPFDataModel):
 
         '''
         for hdu in hdul:
-            if isinstance(hdu, fits.ImageHDU) or isinstance(hdu, fits.CompImageHDU):
+            if isinstance(hdu, fits.ImageHDU):
                 if hdu.name not in self.extensions:
                     self.create_extension(hdu.name, np.ndarray)
                 setattr(self, hdu.name, hdu.data)
