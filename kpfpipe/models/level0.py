@@ -227,7 +227,7 @@ class KPF0(KPFDataModel):
         ram_mb = total_ram_bytes / (1024 * 1024)
         print('Estimated RAM usage: {:.1f} MB'.format(ram_mb))
 
-    def _create_hdul(self, compressed=True):
+    def _create_hdul(self):
         '''
         Create an hdul in FITS format. 
         This is used by the base model for writing data context to file
@@ -238,7 +238,7 @@ class KPF0(KPFDataModel):
             if value == fits.PrimaryHDU:
                 head = self.header[key]
                 hdu = fits.PrimaryHDU(header=head)
-            elif value == fits.ImageHDU or value == fits.CompImageHDU:
+            elif value == fits.ImageHDU:
                 data = getattr(self, key)
                 if data is None or data.size == 0 or data.ndim < 2 or any(dim == 0 for dim in data.shape):
                     ndim = 0
@@ -247,17 +247,7 @@ class KPF0(KPFDataModel):
                 else:
                     ndim = len(data.shape)
                     hdu_type = value
-                if not compressed:
-                    hdu_type = fits.ImageHDU
 
-                if hdu_type == fits.CompImageHDU:
-                    kwargs = {'compression_type': KPF_definitions.L0_COMPRESSION_TYPE}
-                    self.header[key]['ZIMAGE'] = 'T'
-                    self.header[key]['ZCMPTYPE'] = KPF_definitions.L0_COMPRESSION_TYPE
-                    self.header[key]['BSCALE'] = 1.0
-                    self.header[key]['BZERO'] = 0.0
-                else:
-                    kwargs = {}
                 self.header[key]['NAXIS'] = ndim
                 if ndim == 0:
                     self.header[key]['NAXIS1'] = 0
@@ -266,14 +256,14 @@ class KPF0(KPFDataModel):
                         self.header[key]['NAXIS{}'.format(d+1)] = data.shape[d]
                 head = self.header[key]
                 try:
-                    hdu = hdu_type(data=data, header=head, **kwargs)
+                    hdu = hdu_type(data=data)
                 except KeyError as ke:
                     print("KeyError exception raised: -->ke=" + str(ke))
                     print("Attempting to handle it...")
                     if str(ke) == '\'bool\'':
                         data = data.astype(float)
                         print("------>SHAPE=" + str(data.shape))
-                        hdu = hdu_type(data=data, header=head, **kwargs)
+                        hdu = hdu_type(data=data)
                     else:
                         raise KeyError("A different error...")
             elif value == fits.BinTableHDU:
@@ -292,6 +282,9 @@ class KPF0(KPFDataModel):
                 hdu_list.append(hdu)
 
         return hdu_list
+    
+    def to_fits(self, fn, compressed=True):
+        return super().to_fits(fn, compressed=compressed)
     
 if __name__ == "__main__":
     pass

@@ -204,7 +204,7 @@ class KPFDataModel(object):
             required before calling this function
         
         """
-        if not fn.endswith('.fits'):
+        if not fn.endswith('.fits') and not fn.endswith('.fits.gz'):
             # Can only read .fits files
             raise IOError('input files must be FITS files')
 
@@ -220,7 +220,7 @@ class KPFDataModel(object):
             for hdu in hdu_list:
                 if isinstance(hdu, fits.PrimaryHDU):
                     self.header[hdu.name] = hdu.header
-                elif isinstance(hdu, fits.BinTableHDU) and not isinstance(hdu, fits.CompImageHDU):
+                elif isinstance(hdu, fits.BinTableHDU):
                     t = Table.read(hdu)
                     if 'RECEIPT' in hdu.name:
                         # Table contains the RECEIPT
@@ -253,7 +253,7 @@ class KPFDataModel(object):
                                f'md5_sum={md5.hexdigest()}', 'PASS')
 
     
-    def to_fits(self, fn, compressed=True):
+    def to_fits(self, fn, compressed=False):
         """
         Collect the content of this instance into a monolithic FITS file
 
@@ -265,7 +265,7 @@ class KPFDataModel(object):
             Can only write to KPF formatted FITS 
 
         """
-        if not fn.endswith('.fits'):
+        if not fn.endswith('.fits') and not fn.endswith('.fits.gz'):
             # we only want to write to a '.fits file
             raise NameError('filename must end with .fits')    
 
@@ -273,7 +273,7 @@ class KPFDataModel(object):
         if gen_hdul is None:
             raise TypeError('Write method not found. Is this the base class?')
         else: 
-            hdu_list = gen_hdul(compressed=compressed)
+            hdu_list = gen_hdul()
         
         # check that no card in any HDU is greater than 80
         # this is a hard limit by FITS 
@@ -287,6 +287,10 @@ class KPFDataModel(object):
         hdul = fits.HDUList(hdu_list)
         if not os.path.isdir(os.path.dirname(fn)):
             os.makedirs(os.path.dirname(fn), exist_ok=True)
+
+        if compressed and not fn.endswith('.fits.gz'):
+            fn = fn + '.gz'
+        
         hdul.writeto(fn, overwrite=True, output_verify='silentfix')
         hdul.close()
 

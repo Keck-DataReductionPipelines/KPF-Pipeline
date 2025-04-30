@@ -19,26 +19,24 @@ LEVEL0_HEADER_FILE = os.path.abspath(os.path.dirname(__file__)) + '/KPF_headers_
 LEVEL1_HEADER_FILE = LEVEL0_HEADER_FILE.replace('L0', 'L1')
 LEVEL2_HEADER_FILE = LEVEL0_HEADER_FILE.replace('L0', 'L2')
 
-L0_COMPRESSION_TYPE = 'RICE_1'
-
 # KPF level 0 extensions should be defined here
 # as a dictionary with the name of the extensions as keys
 # and the fits data type as the values
 LEVEL0_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
-                     'GREEN_AMP1': fits.CompImageHDU,
-                     'GREEN_AMP2': fits.CompImageHDU,
-                     'GREEN_CCD': fits.CompImageHDU,
-                     'GREEN_VAR': fits.CompImageHDU,
+                     'GREEN_AMP1': fits.ImageHDU,
+                     'GREEN_AMP2': fits.ImageHDU,
+                     'GREEN_CCD': fits.ImageHDU,
+                     'GREEN_VAR': fits.ImageHDU,
                      
-                     'RED_AMP1': fits.CompImageHDU,
-                     'RED_AMP2': fits.CompImageHDU,
-                     'RED_CCD': fits.CompImageHDU,
-                     'RED_VAR': fits.CompImageHDU,
+                     'RED_AMP1': fits.ImageHDU,
+                     'RED_AMP2': fits.ImageHDU,
+                     'RED_CCD': fits.ImageHDU,
+                     'RED_VAR': fits.ImageHDU,
                      
-                     'CA_HK': fits.CompImageHDU,
+                     'CA_HK': fits.ImageHDU,
                      'EXPMETER_SCI': fits.BinTableHDU,
                      'EXPMETER_SKY': fits.BinTableHDU,
-                     'GUIDECAM': fits.CompImageHDU,
+                     'GUIDECAM': fits.ImageHDU,
 
                      'RECEIPT': fits.BinTableHDU,
                      'CONFIG': fits.BinTableHDU,
@@ -116,6 +114,6 @@ LEVEL2_EXTENSIONS = {'PRIMARY': fits.PrimaryHDU,
 
 # mapping between fits extension data types and Python object data types
 FITS_TYPE_MAP = {fits.PrimaryHDU: OrderedDict,
-                 fits.ImageHDU: np.array,
+                 fits.ImageHDU: np.ndarray,
                  fits.CompImageHDU: np.array,
                  fits.BinTableHDU: pd.DataFrame}
