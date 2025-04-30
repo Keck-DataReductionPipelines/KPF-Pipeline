@@ -1,5 +1,6 @@
 import os
 import re
+import yaml
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
@@ -7,8 +8,8 @@ from datetime import datetime
 from scipy.ndimage import convolve1d
 from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger, styled_text
-from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected
-from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_L1
+from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected, get_ObsID
+from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_2D, get_data_products_L1, get_data_products_L2
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
@@ -215,7 +216,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         data_products_required = qc_obj.qcdefinitions.required_data_products[qc_name]
                         all_required_data_products_present = all(element in data_products_expected for element in data_products_required)
                     if all_required_data_products_present:
-                        text_running_qc = styled_text('Running QC', style="Bold", color="Magenta")
+                        text_running_qc = styled_text('QC', style="Bold", color="Magenta")
                         text_qc_name = styled_text(qc_name, style="Bold", color="Blue")
                         text_qc_keyword = styled_text(qc_obj.qcdefinitions.fits_keywords[qc_name], style="Bold", color="Blue")
                         logger.info(f'{text_running_qc}: {text_qc_name} ({text_qc_keyword}; {qc_obj.qcdefinitions.descriptions[qc_name]})')
@@ -253,35 +254,177 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
     return kpf_object
 
 
-def check_all_QC_keywords_present(kpf_object, logger=None):
+def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=None, logger=None):
     """
     Method to determine if all QC tests have been run on the input kpf_object
-    by examining it's keywords.  The method determines the data_level for
+    by examining its keywords. The method determines the data_level for
     kpf_object and checks for keywords of that level and lower, e.g., for
     data_level = 'L1', the method checks for keywords in levels 'L0', '2D',
     and 'L1'.
 
     Args:
         kpf_object - a KPF object (L0, 2D, L1, or L2)
+        return_keywords (boolean) - if true, keywords are returned (e.g., 'OLDBIAS') instead of method names (e.g., 'D2_master_bias_age')
+        print_output (boolean) - if true, print the output instead of returning anything
+        yaml_path (str or None) - if not None, output the QC results to the specified YAML file path
         logger - Python logger object; if None, the DummyLogger is used
 
     Returns:
-        kpf_object - the input kpf_object with QC keywords added
+        tuple of (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail), where
+            qc_names_missing = names of QC tests with keywords missing from kpf_object that should be
+            qc_names_present = names of QC tests with keywords in kpf_object that should be
+            qc_names_present_pass = names of QC tests with keywords in kpf_object that should be and QC = True (passed)
+            qc_names_present_fail = names of QC tests with keywords in kpf_object that should be and QC = False (failed)
     """
 
+    def unique_preserve_order(mylist):
+        from itertools import chain
+        flattened = list(chain.from_iterable(mylist))
+        seen = set()
+        return [x for x in flattened if not (x in seen or seen.add(x))]
+
+    def get_appropriate_qcs(data_level, spectrum_type):
+        '''
+        Get a list of QC method names appropriate for the data level
+        
+        Args:
+            data_level - 'L0', '2D', 'L1', or 'L2'
+            spectrum_type - types of spectra that a QC is applied to
+                One of: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>
+
+        Returns:
+            qc_names - list of QC method names to be run on level object
+        '''
+        if data_level == 'L0':
+            qc_obj = QCL0(kpf_object)
+            data_products_present = get_data_products_L0(kpf_object)
+        elif data_level == '2D':
+            qc_obj = QC2D(kpf_object)
+            data_products_present = get_data_products_2D(kpf_object)
+        elif data_level == 'L1':
+            qc_obj = QCL1(kpf_object)
+            data_products_present = get_data_products_L1(kpf_object)
+        elif data_level == 'L2':
+            qc_obj = QCL2(kpf_object)
+            data_products_present = get_data_products_L2(kpf_object)
+
+        qc_names = []
+        for qc_name in qc_obj.qcdefinitions.names:
+            if data_level in qc_obj.qcdefinitions.kpf_data_levels[qc_name]:
+                required_data_products_present = all(elem in data_products_present for elem in qc_obj.qcdefinitions.required_data_products[qc_name])
+                if required_data_products_present:
+                    if ('all' in qc_obj.qcdefinitions.spectrum_types[qc_name]) or (spectrum_type in qc_obj.qcdefinitions.spectrum_types[qc_name]):
+                        qc_names.append(qc_name)
+        
+        return qc_names
+
     logger = logger if logger is not None else DummyLogger()
-    data_level = get_kpf_level(kpf_object)
+    this_data_level = get_kpf_level(kpf_object)
     primary_header = HeaderParse(kpf_object, 'PRIMARY')
     this_spectrum_type = primary_header.get_name(use_star_names=False)
 
-    if data_level == 'L0':
-        data_levels = data_levels = ['L0']
-    if data_level == '2D':
-        data_levels = data_levels = ['L0', '2D']
-    if data_level == 'L1':
-        data_levels = data_levels = ['L0', '2D', 'L1']
-    if data_level == 'L2':
-        data_levels = data_levels = ['L0', '2D', 'L1', 'L2']
+    try:
+        ObsID = kpf_object.header['PRIMARY']['OFNAME']
+    except:
+        ObsID = 'ObsID not available'
+
+    data_levels_map = {'L0': ['L0'], '2D': ['L0', '2D'], 'L1': ['L0', '2D', 'L1'], 'L2': ['L0', '2D', 'L1', 'L2']}
+    data_levels = data_levels_map.get(this_data_level, [])
+
+    expected_qc_names = unique_preserve_order([get_appropriate_qcs(dl, this_spectrum_type) for dl in data_levels])
+
+    if 'add_kpfera' in expected_qc_names:
+        expected_qc_names.remove('add_kpfera')
+
+    qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail = [], [], [], []
+    qcd = QCDefinitions()
+
+    report_rows = []
+
+    for qc_name in expected_qc_names:
+        kwd = qcd.fits_keywords[qc_name]
+        lvl = qcd.kpf_data_levels[qc_name][0]
+        desc = qcd.descriptions[qc_name]
+        present = kwd in kpf_object.header['PRIMARY']
+        passed = present and bool(kpf_object.header['PRIMARY'][kwd])
+        master_types = qcd.master_types[qc_name]
+        drift_types = qcd.drift_types[qc_name]
+
+        name_entry = kwd if return_keywords else qc_name
+
+        if present:
+            qc_names_present.append(name_entry)
+            if passed:
+                qc_names_present_pass.append(name_entry)
+            else:
+                qc_names_present_fail.append(name_entry)
+        else:
+            qc_names_missing.append(name_entry)
+
+        report_rows.append({
+            "Keyword": kwd,
+            "Level": lvl,
+            "Description": desc,
+            "Present": present,
+            "Pass": passed,
+            "master_types": master_types,
+            "drift_types": drift_types,
+        })
+
+    if yaml_path is not None:
+        with open(yaml_path, 'w') as yaml_file:
+            yaml.dump({"QC_Report": report_rows}, yaml_file, sort_keys=False)
+        if logger:
+            logger.info(f"YAML QC report saved to {yaml_path}")
+
+    if print_output:
+        # All QCs
+        print(f'{styled_text(f"Quality Control Report for {ObsID} ({this_spectrum_type})", style="Bold", color="Black")}')
+        print()
+        print(f'{styled_text(f"All QC Keywords:", style="Bold", color="Black")}')
+        print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
+        for row in report_rows:
+            checkmark = '✓' if row["Present"] else '✗'
+            col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
+            print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
+        print()
+        print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+        print()
+
+        # QCs for Masters
+        if this_spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe']:
+            print(f'{styled_text(f"QC Keywords for observation to be included in master {this_spectrum_type} stack:", style="Bold", color="Black")}')
+            if not all(row['master_types'] == [] for row in report_rows):
+                print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
+                for row in report_rows:
+                    if any(x in row['master_types'] for x in [this_spectrum_type, 'all']):
+                        checkmark = '✓' if row["Present"] else '✗'
+                        col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
+                        print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
+                print()
+                print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+            else:
+                print(f'{styled_text("    None", style="Bold", color="Black")}')  
+            print()
+
+        # QCs for Drift Measurements
+        if this_spectrum_type in ['Etalon', 'LFC', 'ThAr', 'UNe']:
+            print(f'{styled_text(f"QC Keywords for observation to be included in {this_spectrum_type} drift measurements:", style="Bold", color="Black")}')
+            if not all(row['drift_types'] == [] for row in report_rows):
+                print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
+                for row in report_rows:
+                    if any(x in row['drift_types'] for x in [this_spectrum_type, 'all']):
+                        checkmark = '✓' if row["Present"] else '✗'
+                        col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
+                        print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
+                print()
+                print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+            else:
+                print(f'{styled_text("    None", style="Bold", color="Black")}')  
+
+    if not (yaml_path or print_output):
+        return (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail)
+
 
 #####################################################################
 
@@ -306,7 +449,9 @@ class QCDefinitions:
         spectrum_types (dictionary of arrays of strings): Each entry specifies the types of spectra that the metric will be applied to.
             Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>
         master_types (dictionary of arrays of strings): Each entry specifies the types of masters where the QC check is relevant.  If the QC fails for an exposure, it is not added to the master stack.
-            Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe'
+            Possible strings in array: 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe'
+        drift_types (dictionary of arrays of strings): Each entry specifies the types of observations where the QC check is relevant.  If the QC fails for an exposure, it is not used in wavelength drift measurements.
+            Possible strings in array: 'all', 'LFC', 'Etalon', 'ThAr', 'UNe'
         required_data_products (dictionary of arrays of strings): specifies if data products are needed to perform check
             if = [], then no required data products; other possible values are from get_data_products_L0, etc.
         fits_keywords (dictionary of strings): Each entry specifies the FITS-header keyword for the metric.
@@ -327,6 +472,7 @@ class QCDefinitions:
         self.data_types = {}
         self.spectrum_types = {}
         self.master_types = {} # if = [], then the QC test is not relevant for the construction of any masters
+        self.drift_types = {} # if = [], then the QC test is not relevant for drift measurements with any calibration type
         self.required_data_products = {} # if = [], then no required data products; other possible values: Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config, Receipt, Pyrheliometer
         self.fits_keywords = {}
         self.fits_comments = {}
@@ -336,11 +482,12 @@ class QCDefinitions:
         # Define QC metrics
         name1 = 'not_junk'
         self.names.append(name1)
-        self.descriptions[name1] = 'File is not in list of junk files.'
+        self.descriptions[name1] = 'File is not in list of junk files'
         self.kpf_data_levels[name1] = ['L0', '2D', 'L1', 'L2']
         self.data_types[name1] = 'int'
         self.spectrum_types[name1] = ['all', ] # Need trailing comma to make list hashable
         self.master_types[name1] = ['all', ]
+        self.drift_types[name1] = ['all', ]
         self.required_data_products[name1] = [] # no required data products
         self.fits_keywords[name1] = 'NOTJUNK'
         self.fits_comments[name1] = 'QC: Not in list of junk files'
@@ -349,11 +496,12 @@ class QCDefinitions:
 
         name2 = 'monotonic_wavelength_solution'
         self.names.append(name2)
-        self.descriptions[name2] = 'Wavelength solution is monotonic.'
+        self.descriptions[name2] = 'Wavelength solution is monotonic'
         self.kpf_data_levels[name2] = ['L1']
         self.data_types[name2] = 'int'
         self.spectrum_types[name2] = ['all', ]
         self.master_types[name2] = []
+        self.drift_types[name2] = []
         self.required_data_products[name2] = [] # no required data products
         self.fits_keywords[name2] = 'MONOTWLS'
         self.fits_comments[name2] = 'QC: Monotonic wavelength solution'
@@ -363,10 +511,11 @@ class QCDefinitions:
         name3 = 'L0_data_products'
         self.names.append(name3)
         self.kpf_data_levels[name3] = ['L0']
-        self.descriptions[name3] = 'Expected L0 data products present with non-zero array sizes.'
+        self.descriptions[name3] = 'Expected L0 data products present with non-zero array sizes'
         self.data_types[name3] = 'int'
         self.spectrum_types[name3] = ['all', ]
         self.master_types[name3] = ['all', ]
+        self.drift_types[name3] = ['all',]
         self.required_data_products[name3] = [] # no required data products
         self.fits_keywords[name3] = 'DATAPRL0'
         self.fits_comments[name3] = 'QC: L0 data present'
@@ -376,10 +525,11 @@ class QCDefinitions:
         name4 = 'L0_header_keywords_present'
         self.names.append(name4)
         self.kpf_data_levels[name4] = ['L0']
-        self.descriptions[name4] = 'Expected L0 header keywords present.'
+        self.descriptions[name4] = 'Expected L0 header keywords present'
         self.data_types[name4] = 'int'
         self.spectrum_types[name4] = ['all', ]
         self.master_types[name4] = ['all', ]
+        self.drift_types[name4] = ['all',]
         self.required_data_products[name4] = [] # no required data products
         self.fits_keywords[name4] = 'KWRDPRL0'
         self.fits_comments[name4] = 'QC: L0 keywords present'
@@ -389,10 +539,11 @@ class QCDefinitions:
         name5 = 'L0_datetime'
         self.names.append(name5)
         self.kpf_data_levels[name5] = ['L0']
-        self.descriptions[name5] = 'Timing consistency in L0 header keywords and ExpMeter table.'
+        self.descriptions[name5] = 'Timing consistency in L0 header keywords and ExpMeter table'
         self.data_types[name5] = 'int'
         self.spectrum_types[name5] = ['all', ]
         self.master_types[name5] = ['all', ]
+        self.drift_types[name5] = []
         self.required_data_products[name5] = [] # no required data products
         self.fits_keywords[name5] = 'TIMCHKL0'
         self.fits_comments[name5] = 'QC: L0 times consistent'
@@ -402,10 +553,11 @@ class QCDefinitions:
         name5b = 'L2_datetime'
         self.names.append(name5b)
         self.kpf_data_levels[name5b] = ['L2']
-        self.descriptions[name5b] = 'Timing consistency in L2 files.'
+        self.descriptions[name5b] = 'Timing consistency in L2 files'
         self.data_types[name5b] = 'int'
         self.spectrum_types[name5b] = ['all', ]
         self.master_types[name5b] = []
+        self.drift_types[name5b] = []
         self.required_data_products[name5b] = [] # no required data products
         self.fits_keywords[name5b] = 'TIMCHKL2'
         self.fits_comments[name5b] = 'QC: L2 times consistent'
@@ -415,10 +567,11 @@ class QCDefinitions:
         name6 = 'EM_not_saturated'
         self.names.append(name6)
         self.kpf_data_levels[name6] = ['L0']
-        self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY.'
+        self.descriptions[name6] = '2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY'
         self.data_types[name6] = 'int'
         self.spectrum_types[name6] = ['all', ]
         self.master_types[name6] = []
+        self.drift_types[name6] = []
         self.required_data_products[name6] = ['ExpMeter']
         self.fits_keywords[name6] = 'EMSAT'
         self.fits_comments[name6] = 'QC: EM not saturated'
@@ -432,6 +585,7 @@ class QCDefinitions:
         self.data_types[name7] = 'int'
         self.spectrum_types[name7] = ['all', ]
         self.master_types[name7] = []
+        self.drift_types[name7] = []
         self.required_data_products[name7] = ['ExpMeter']
         self.fits_keywords[name7] = 'EMNEG'
         self.fits_comments[name7] = 'QC: EM not negative flux'
@@ -445,6 +599,7 @@ class QCDefinitions:
         self.data_types[name8] = 'int'
         self.spectrum_types[name8] = ['LFC', ]
         self.master_types[name8] = ['LFC', ]
+        self.drift_types[name8] = ['LFC', ]
         self.required_data_products[name8] = [] # no required data products
         self.fits_keywords[name8] = 'LFC2DFOK'
         self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
@@ -454,10 +609,11 @@ class QCDefinitions:
         name9 = 'data_2D_bias_low_flux'
         self.names.append(name9)
         self.kpf_data_levels[name9] = ['2D']
-        self.descriptions[name9] = 'Flux is low in bias exposure.'
+        self.descriptions[name9] = 'Flux is low in bias exposure'
         self.data_types[name9] = 'int'
         self.spectrum_types[name9] = ['Bias', ]
         self.master_types[name9] = ['Bias', ]
+        self.drift_types[name9] = []
         self.required_data_products[name9] = [] # no required data products
         self.fits_keywords[name9] = 'LOWBIAS'
         self.fits_comments[name9] = 'QC: 2D bias low flux check'
@@ -467,10 +623,11 @@ class QCDefinitions:
         name10 = 'data_2D_dark_low_flux'
         self.names.append(name10)
         self.kpf_data_levels[name10] = ['2D']
-        self.descriptions[name10] = 'Flux is low in dark exposure.'
+        self.descriptions[name10] = 'Flux is low in dark exposure'
         self.data_types[name10] = 'int'
         self.spectrum_types[name10] = ['Dark', ]
         self.master_types[name10] = ['Dark', ]
+        self.drift_types[name10] = []
         self.required_data_products[name10] = [] # no required data products
         self.fits_keywords[name10] = 'LOWDARK'
         self.fits_comments[name10] = 'QC: 2D dark low flux check'
@@ -482,9 +639,10 @@ class QCDefinitions:
         self.kpf_data_levels[name11] = ['L1']
         self.data_types[name11] = 'int'
         self.spectrum_types[name11] = ['all', ]
-        self.master_types[name11] = ['all', ]
+        self.master_types[name11] = []
+        self.drift_types[name11] = ['all', ]
         self.required_data_products[name11] = [] # no required data products
-        self.descriptions[name11] = 'Red/Green data present in L1 with expected shapes.'
+        self.descriptions[name11] = 'Green and Red data present in L1 with expected shapes'
         self.fits_keywords[name11] = 'DATAPRL1'
         self.fits_comments[name11] = 'QC: L1 red and green data present check'
         self.db_columns[name11] = None
@@ -493,10 +651,11 @@ class QCDefinitions:
         name12 = 'data_L1_CaHK'
         self.names.append(name12)
         self.kpf_data_levels[name12] = ['L1']
-        self.descriptions[name12] = 'CaHK data present in L1 with expected shape.'
+        self.descriptions[name12] = 'CaHK data present in L1 with expected shape'
         self.data_types[name12] = 'int'
         self.spectrum_types[name12] = ['all', ]
         self.master_types[name12] = []
+        self.drift_types[name12] = []
         self.required_data_products[name12] = ['CaHK']
         self.fits_keywords[name12] = 'CAHKPRL1'
         self.fits_comments[name12] = 'QC: L1 CaHK present check'
@@ -506,10 +665,11 @@ class QCDefinitions:
         name13 = 'data_L2'
         self.names.append(name13)
         self.kpf_data_levels[name13] = ['L2']
-        self.descriptions[name13] = 'All data present in L2.'
+        self.descriptions[name13] = 'All data present in L2'
         self.data_types[name13] = 'int'
         self.spectrum_types[name13] = ['all', ]
         self.master_types[name13] = []
+        self.drift_types[name13] = []
         self.required_data_products[name13] = [] # no required data products
         self.fits_keywords[name13] = 'DATAPRL2'
         self.fits_comments[name13] = 'QC: L2 data present check'
@@ -519,10 +679,11 @@ class QCDefinitions:
         name14 = 'data_2D_CaHK'
         self.names.append(name14)
         self.kpf_data_levels[name14] = ['2D']
-        self.descriptions[name14] = 'CaHK CCD data present with expected array sizes.'
+        self.descriptions[name14] = 'CaHK CCD data present with expected array sizes'
         self.data_types[name14] = 'int'
         self.spectrum_types[name14] = ['all', ]
         self.master_types[name14] = []
+        self.drift_types[name14] = []
         self.required_data_products[name14] = ['CaHK']
         self.fits_keywords[name14] = 'CAHKPR2D'
         self.fits_comments[name14] = 'QC: 2D CaHK data present check'
@@ -532,10 +693,11 @@ class QCDefinitions:
         name15 = 'data_2D_red_green'
         self.names.append(name15)
         self.kpf_data_levels[name15] = ['2D']
-        self.descriptions[name15] = 'Red/Green CCD data present with expected array sizes.'
+        self.descriptions[name15] = 'Green and Red CCD data present with expected array sizes'
         self.data_types[name15] = 'int'
         self.spectrum_types[name15] = ['all', ]
         self.master_types[name15] = ['all', ]
+        self.drift_types[name15] = ['all', ]
         self.required_data_products[name15] = [] # no required data products
         self.fits_keywords[name15] = 'DATAPR2D'
         self.fits_comments[name15] = 'QC: 2D red and green data present check'
@@ -545,10 +707,11 @@ class QCDefinitions:
         name16 = 'positive_2D_SNR'
         self.names.append(name16)
         self.kpf_data_levels[name16] = ['2D']
-        self.descriptions[name16] = 'Red/Green CCD data/var^0.5 not significantly negative.'
+        self.descriptions[name16] = 'Green and Red CCD data/variance^0.5 not significantly negative'
         self.data_types[name16] = 'int'
         self.spectrum_types[name16] = ['all', ]
         self.master_types[name16] = []
+        self.drift_types[name16] = []
         self.required_data_products[name16] = [] # no required data products
         self.fits_keywords[name16] = 'POS2DSNR'
         self.fits_comments[name16] = 'QC: 2D check for > 10% data 5-sigma below zero'
@@ -558,10 +721,11 @@ class QCDefinitions:
         name17 = 'add_kpfera'
         self.names.append(name17)
         self.kpf_data_levels[name17] = ['L0', '2D', 'L1', 'L2']
-        self.descriptions[name17] = 'Not a QC test; used to add the KPFERA keyword to header.'
+        self.descriptions[name17] = 'Not a QC test; KPFERA keyword added to header'
         self.data_types[name17] = 'float'
         self.spectrum_types[name17] = ['all', ]
         self.master_types[name17] = []
+        self.drift_types[name17] = []
         self.required_data_products[name17] = [] # no required data products
         self.fits_keywords[name17] = 'KPFERA'
         self.fits_comments[name17] = 'Current era of KPF observations'
@@ -571,10 +735,11 @@ class QCDefinitions:
         name19 = 'L1_check_snr_lfc'
         self.names.append(name19)
         self.kpf_data_levels[name19] = ['L1']
-        self.descriptions[name19] = 'Check for saturated LFC frames.'
+        self.descriptions[name19] = 'LFC not saturated'
         self.data_types[name19] = 'int'
         self.spectrum_types[name19] = ['LFC', ]
         self.master_types[name19] = ['LFC', ]
+        self.drift_types[name19] = ['LFC', ]
         self.required_data_products[name19] = [] # no required data products
         self.fits_keywords[name19] = 'LFCSAT'
         self.fits_comments[name19] = 'QC: LFC not saturated'
@@ -584,10 +749,11 @@ class QCDefinitions:
         name18 = 'L0_bad_readout_check'
         self.names.append(name18)
         self.kpf_data_levels[name18] = ['L0']
-        self.descriptions[name18] = 'Check Texp that identifies error in reading CCD'
+        self.descriptions[name18] = 'CCD read properly (Texp !≈ 6 sec and Texp_desired > 7 sec)'
         self.data_types[name18] = 'int'
         self.spectrum_types[name18] = ['all', ]
         self.master_types[name18] = ['all', ]
+        self.drift_types[name18] = ['all', ]
         self.required_data_products[name18] = [] # no required data products
         self.fits_keywords[name18] = 'GOODREAD'
         self.fits_comments[name18] = 'QC: CCD read properly'
@@ -597,10 +763,11 @@ class QCDefinitions:
         name20 = 'L1_correct_wls_check'
         self.names.append(name20)
         self.kpf_data_levels[name20] = ['L1']
-        self.descriptions[name20] = 'Check WLS files used by L1 file'
+        self.descriptions[name20] = 'WLS files exist, are not the same, and bracket the observation'
         self.data_types[name20] = 'int'
         self.spectrum_types[name20] = ['all', ]
-        self.master_types[name20] = ['all', ]
+        self.master_types[name20] = []
+        self.drift_types[name20] = []
         self.required_data_products[name20] = [] # no required data products
         self.fits_keywords[name20] = 'WLSL1'
         self.fits_comments[name20] = 'QC: WLS files are correct in L1'
@@ -610,10 +777,11 @@ class QCDefinitions:
         name21 = 'D2_master_bias_age'
         self.names.append(name21)
         self.kpf_data_levels[name21] = ['2D']
-        self.descriptions[name21] = 'Check master dark file age'
+        self.descriptions[name21] = 'Master bias from within 5 days of this observation'
         self.data_types[name21] = 'int'
         self.spectrum_types[name21] = ['Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name21] = []
+        self.drift_types[name21] = []
         self.required_data_products[name21] = [] # no required data products
         self.fits_keywords[name21] = 'OLDBIAS'
         self.fits_comments[name21] = 'QC: Master bias within 5 days of this obs'
@@ -623,10 +791,11 @@ class QCDefinitions:
         name23 = 'D2_master_dark_age'
         self.names.append(name23)
         self.kpf_data_levels[name23] = ['2D']
-        self.descriptions[name23] = 'Check master dark file age'
+        self.descriptions[name23] = 'Master dark from within 5 days of this observation'
         self.data_types[name23] = 'int'
         self.spectrum_types[name23] = ['Bias', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name23] = []
+        self.drift_types[name23] = []
         self.required_data_products[name23] = [] # no required data products
         self.fits_keywords[name23] = 'OLDDARK'
         self.fits_comments[name23] = 'QC: Master dark within 5 days of this obs'
@@ -636,10 +805,11 @@ class QCDefinitions:
         name24 = 'D2_master_flat_age'
         self.names.append(name24)
         self.kpf_data_levels[name24] = ['2D']
-        self.descriptions[name24] = 'Check master flat file age'
+        self.descriptions[name24] = 'Master flat from within 5 days of this observation'
         self.data_types[name24] = 'int'
         self.spectrum_types[name24] = ['Bias', 'Dark', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name24] = []
+        self.drift_types[name24] = []
         self.required_data_products[name24] = [] # no required data products
         self.fits_keywords[name24] = 'OLDFLAT'
         self.fits_comments[name24] = 'QC: Master flat within 5 days of this obs'
@@ -649,10 +819,11 @@ class QCDefinitions:
         name25 = 'L1_WLSFILE_age'
         self.names.append(name25)
         self.kpf_data_levels[name25] = ['L1']
-        self.descriptions[name25] = 'Check WLSFILE file age'
+        self.descriptions[name25] = 'WLSFILE from within 2 days of this observation'
         self.data_types[name25] = 'int'
         self.spectrum_types[name25] = ['all', ]
         self.master_types[name25] = []
+        self.drift_types[name25] = []
         self.required_data_products[name25] = [] # no required data products
         self.fits_keywords[name25] = 'OLDWLS'
         self.fits_comments[name25] = 'QC: WLSFILE within 2 days of this obs'
@@ -662,10 +833,11 @@ class QCDefinitions:
         name26 = 'L1_WLSFILE2_age'
         self.names.append(name26)
         self.kpf_data_levels[name26] = ['L1']
-        self.descriptions[name26] = 'Check WLSFILE2 file age'
+        self.descriptions[name26] = 'WLSFILE2 from within 2 days of this observation'
         self.data_types[name26] = 'int'
         self.spectrum_types[name26] = ['all', ]
         self.master_types[name26] = []
+        self.drift_types[name26] = []
         self.required_data_products[name26] = [] # no required data products
         self.fits_keywords[name26] = 'OLDWLS2'
         self.fits_comments[name26] = 'QC: WLSFILE2 within 2 days of this obs'
@@ -675,10 +847,11 @@ class QCDefinitions:
         name27 = 'L1_FLAT_SNR'
         self.names.append(name27)
         self.kpf_data_levels[name27] = ['L1']
-        self.descriptions[name27] = 'Check SNR of flat'
+        self.descriptions[name27] = 'Flat SNR sufficient, all orders/orderlets'
         self.data_types[name27] = 'int'
         self.spectrum_types[name27] = ['Flat', ]
         self.master_types[name27] = []
+        self.drift_types[name27] = []
         self.required_data_products[name27] = [] # no required data products
         self.fits_keywords[name27] = 'FLATSNR'
         self.fits_comments[name27] = 'QC: Flat SNR sufficient, all orders/orderlets'
@@ -688,10 +861,11 @@ class QCDefinitions:
         name28 = 'L1_LFC_lines'
         self.names.append(name28)
         self.kpf_data_levels[name28] = ['L1']
-        self.descriptions[name28] = 'Check number and distribution of LFC lines/order'
+        self.descriptions[name28] = 'Number and distribution of LFC lines sufficient'
         self.data_types[name28] = 'int'
         self.spectrum_types[name28] = ['LFC', ]
         self.master_types[name28] = []
+        self.drift_types[name28] = ['LFC', ]
         self.required_data_products[name28] = [] # no required data products
         self.fits_keywords[name28] = 'LFCLINES'
         self.fits_comments[name28] = 'QC: Number and dist of LFC lines sufficient'
@@ -701,10 +875,11 @@ class QCDefinitions:
         name29 = 'L1_Etalon_lines'
         self.names.append(name29)
         self.kpf_data_levels[name29] = ['L1']
-        self.descriptions[name29] = 'Check number and distribution of Etalon lines/order'
+        self.descriptions[name29] = 'Number and distribution of Etalon lines sufficient'
         self.data_types[name29] = 'int'
         self.spectrum_types[name29] = ['Etalon', ]
         self.master_types[name29] = []
+        self.drift_types[name29] = ['Etalon', ]
         self.required_data_products[name29] = [] # no required data products
         self.fits_keywords[name29] = 'ETALINES'
         self.fits_comments[name29] = 'QC: Number and dist of Etalon lines sufficient'
@@ -714,10 +889,11 @@ class QCDefinitions:
         name30 = 'L1_wild_WLS_SCI'
         self.names.append(name30)
         self.kpf_data_levels[name30] = ['L1']
-        self.descriptions[name30] = 'Check for wild SCI WLS (stdev > 5 pix in any order)'
+        self.descriptions[name30] = 'Not wild SCI WLS (stdev < 5 pix in all orders compared to ref)'
         self.data_types[name30] = 'int'
         self.spectrum_types[name30] = ['all', ]
         self.master_types[name30] = []
+        self.drift_types[name30] = []
         self.required_data_products[name30] = [] # no required data products
         self.fits_keywords[name30] = 'WILDWSCI'
         self.fits_comments[name30] = 'QC: SCI wavelength solution not wild'
@@ -727,10 +903,11 @@ class QCDefinitions:
         name31 = 'L1_wild_WLS_SKY'
         self.names.append(name31)
         self.kpf_data_levels[name31] = ['L1']
-        self.descriptions[name31] = 'Check for wild SKY WLS (stdev > 5 pix in any order)'
+        self.descriptions[name31] = 'Not wild SKY WLS (stdev < 5 pix in all orders compared to ref)'
         self.data_types[name31] = 'int'
         self.spectrum_types[name31] = ['all', ]
         self.master_types[name31] = []
+        self.drift_types[name31] = []
         self.required_data_products[name31] = [] # no required data products
         self.fits_keywords[name31] = 'WILDWSKY'
         self.fits_comments[name31] = 'QC: SKY wavelength solution not wild'
@@ -740,10 +917,11 @@ class QCDefinitions:
         name32 = 'L1_wild_WLS_CAL'
         self.names.append(name32)
         self.kpf_data_levels[name32] = ['L1']
-        self.descriptions[name32] = 'Check for wild CAL WLS (stdev > 5 pix in any order)'
+        self.descriptions[name32] = 'Not wild CAL WLS (stdev < 5 pix in all orders compared to ref)'
         self.data_types[name32] = 'int'
         self.spectrum_types[name32] = ['all', ]
         self.master_types[name32] = []
+        self.drift_types[name32] = []
         self.required_data_products[name32] = [] # no required data products
         self.fits_keywords[name32] = 'WILDWCAL'
         self.fits_comments[name32] = 'QC: CAL wavelength solution not wild'
@@ -753,23 +931,25 @@ class QCDefinitions:
         name33 = 'NTP_timing'
         self.names.append(name33)
         self.kpf_data_levels[name33] = ['L0']
-        self.descriptions[name33] = 'Check network time protocol status message'
+        self.descriptions[name33] = 'NTP time accurate to within 100 ms'
         self.data_types[name33] = 'int'
         self.spectrum_types[name33] = ['all', ]
         self.master_types[name33] = []
+        self.drift_types[name33] = []
         self.required_data_products[name33] = [] # no required data products
         self.fits_keywords[name33] = 'NTPGOOD'
-        self.fits_comments[name33] = 'QC: NTP time to within 100 ms'
+        self.fits_comments[name33] = 'QC: NTP time accurate to within 100 ms'
         self.db_columns[name33] = None
         self.fits_keyword_fail_value[name33] = 0
 
         name34 = 'good_guiding'
         self.names.append(name34)
         self.kpf_data_levels[name34] = ['L0']
-        self.descriptions[name34] = 'Check if guiding meets specs'
+        self.descriptions[name34] = 'Guiding meets specs'
         self.data_types[name34] = 'int'
         self.spectrum_types[name34] = ['Star', ]
         self.master_types[name34] = []
+        self.drift_types[name34] = []
         self.required_data_products[name34] = [] # no required data products
         self.fits_keywords[name34] = 'GUIDGOOD'
         self.fits_comments[name34] = 'QC: Guider RMS and bias within 50 mas RMS'
@@ -779,15 +959,42 @@ class QCDefinitions:
         name35 = 'good_TARG_headers'
         self.names.append(name35)
         self.kpf_data_levels[name35] = ['L0']
-        self.descriptions[name35] = 'Check TARG headers for plausible values'
+        self.descriptions[name35] = 'TARG headers have plausible values'
         self.data_types[name35] = 'int'
         self.spectrum_types[name35] = ['Star', ]
         self.master_types[name35] = []
+        self.drift_types[name35] = []
         self.required_data_products[name35] = [] # no required data products
         self.fits_keywords[name35] = 'TARGPLAU'
         self.fits_comments[name35] = 'QC: TARG kwds present with plausible values'
         self.db_columns[name35] = None
         self.fits_keyword_fail_value[name35] = 0
+
+#        name36 = 'DRP_version_equal_2D_L1'
+#        self.names.append(name36)
+#        self.kpf_data_levels[name36] = ['L1']
+#        self.descriptions[name36] = 'Same DRP version for 2D and L1'
+#        self.data_types[name36] = 'int'
+#        self.spectrum_types[name36] = ['all',]
+#        self.master_types[name36] = []
+#        self.required_data_products[name36] = [] # no required data products
+#        self.fits_keywords[name36] = 'DRPS2DL1'
+#        self.fits_comments[name36] = 'QC: Same DRP version for 2D and L1'
+#        self.db_columns[name36] = None
+#        self.fits_keyword_fail_value[name36] = 0
+#
+#        name37 = 'DRP_version_equal_L1_L2'
+#        self.names.append(name37)
+#        self.kpf_data_levels[name37] = ['L2']
+#        self.descriptions[name37] = 'Same DRP version for L1 and L2'
+#        self.data_types[name37] = 'int'
+#        self.spectrum_types[name37] = ['all',]
+#        self.master_types[name37] = []
+#        self.required_data_products[name37] = [] # no required data products
+#        self.fits_keywords[name37] = 'DRPS2DL1'
+#        self.fits_comments[name37] = 'QC: Same DRP version for L1 and L2'
+#        self.db_columns[name37] = None
+#        self.fits_keyword_fail_value[name37] = 0
 
         # Integrity checks
         if len(self.names) != len(self.kpf_data_levels):
@@ -834,6 +1041,7 @@ class QCDefinitions:
                 data_type = self.data_types[qc_name]
                 spectrum_types = self.spectrum_types[qc_name]
                 master_types = self.master_types[qc_name]
+                drift_types = self.drift_types[qc_name]
                 required_data_products = self.required_data_products[qc_name]
                 keyword = self.fits_keywords[qc_name]
                 keyword_fail_value = self.fits_keyword_fail_value[qc_name]
@@ -848,7 +1056,8 @@ class QCDefinitions:
                     print('      ' + styled_text("Date type: ", style="Bold") + data_type)
                     print('      ' + styled_text("Required data products: ", style="Bold") + str(required_data_products))
                     print('      ' + styled_text("Spectrum types (applied to): ", style="Bold") + str(spectrum_types))
-                    print('      ' + styled_text("Master types (applied to): ", style="Bold") + str(master_types))
+                    print('      ' + styled_text("Master types (required for): ", style="Bold") + str(master_types))
+                    print('      ' + styled_text("Drift types (required for): ", style="Bold") + str(drift_types))
                     print('      ' + styled_text("Keyword: ", style="Bold") + styled_text(keyword, style="Bold", color='Blue'))
                     print('      ' + styled_text("Keyword fail value: ", style="Bold") + str(keyword_fail_value))
                     print('      ' + styled_text("Comment: ", style="Bold") + comment)
@@ -897,6 +1106,30 @@ class QCDefinitions:
                     print(styled_text(f"No occurrence of ", color="Red") + styled_text(f"'{name}' => '{fits_kwd}'", style="Bold", color="Red") + styled_text(f" found in any {file_ext} file.", color="Red"))
             print()
 
+
+    def get_required_QCs(self, data_product=None, source=None):
+        """
+        This method returns a list of QC keywords (or resulting keywords) that 
+        are required for particular category of data product (master, drift) 
+        and of a particular source (e.g., etalon, LFC, bias)
+        """
+
+        if data_product == None or source == None:
+            self.logger.error("data_product or source not specified in get_required_QCs()")
+            return None
+
+        QC_keywords = []
+        for qc_name in self.names:
+            if data_product.lower() == 'master':
+                 if any(x in self.master_types[qc_name] for x in [source, 'all']):
+                      QC_keywords.append(self.fits_keywords[qc_name])
+            elif data_product.lower() == 'drift':
+                 if any(x in self.drift_types[qc_name] for x in [source, 'all']):
+                      QC_keywords.append(self.fits_keywords[qc_name])
+        
+        return QC_keywords
+
+            
 
 #####################################################################
 #
@@ -3045,6 +3278,32 @@ class QCL1(QC):
             QC_pass = False
 
         return QC_pass
+
+# Consider if this QC should use the receipt for keywords to determine DRP version numbers
+#    def DRP_version_equal_2D_L1(self, debug=False):
+#        """
+#        Check if the same DRP produced 2D and L1.
+#        """
+#        
+#        QC_pass = False
+#
+#        try: 
+#            if hasattr(self.kpf_object.header, 'DRPTAG2D'):
+#                DRPTAG2D = self.kpf_object.header['DRPTAG2D']
+#            else:
+#                DRPTAG2D = None
+#            if hasattr(self.kpf_object.header, 'DRPTAGL1'):
+#                DRPTAGL1 = self.kpf_object.header['DRPTAGL1']
+#            elif:
+#                
+#            else:
+#                DRPTAG2D = None
+#            QC_pass = ...
+#        except Exception as e:
+#            self.logger.error(f"Exception: {e}")
+#            QC_pass = False
+#
+#        return QC_pass
 
 
 #####################################################################

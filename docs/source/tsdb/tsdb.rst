@@ -7,8 +7,9 @@ Using the Time Series Database
     :maxdepth: 2
     :titlesonly:
 
+    analyzetimeseries.rst
     tsdb_keywords.rst
     all_plots.rst
-    analyzetimeseries.rst
+    debugging_with_tsdb.rst
 
 The links above provide explanations and tutorials on using the time series database.

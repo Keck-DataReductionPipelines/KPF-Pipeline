@@ -71,8 +71,6 @@ class MidpointPhotonArrival:
         clip (boolean): This switch turns on (True) and off (False) the sigma clipping feature, which interpolates over
         	outliers. Defaults to True.
 
-    
-
     Notes:
         Currently, each wavelength is calculated independently.
     """
@@ -105,8 +103,7 @@ class MidpointPhotonArrival:
         self.segmentMax=segmentMax
         self.orderMid=orderMid
         self.midPhoto=midPhoto
-
- 
+        
 
     def sigmaClip(self,exposures):
         """This function replaces outliers that significantly deviate from the nearest neighbor flux values with the average of the neighboring values. 
@@ -170,7 +167,6 @@ class MidpointPhotonArrival:
                     break
             
         return(exposures)
-
 
 
     def CalcCDF(self, x, exposures, expBeg, expEnd):
@@ -243,7 +239,6 @@ class MidpointPhotonArrival:
         return cdfTot
 
 
-
     def binOrder(self,EMdataFrame,orderMin,orderMax):
         """bin the flux measurements by order
     
@@ -277,7 +272,6 @@ class MidpointPhotonArrival:
 
         return(EMdataFrameBin)
 
-    
 
     def midPoint(self,start,finish,exposures,expBeg,expEnd,clip=True):
         """This function calculates the photon midpoint arrival time.
@@ -304,7 +298,8 @@ class MidpointPhotonArrival:
     
         if clip:
             ##Apply sigma clipping filter
-            exposures=self.sigmaClip(exposures)
+            if len(exposures) > 2:
+                exposures=self.sigmaClip(exposures)
     
     
         #extrapolate edges
@@ -358,6 +353,7 @@ class MidpointPhotonArrival:
     
         
         return(outTime)
+    
     
     def orderedMidPoint(self):
         """This function calculates the photon midpoint arrival time for each user defined segment. If none are provided

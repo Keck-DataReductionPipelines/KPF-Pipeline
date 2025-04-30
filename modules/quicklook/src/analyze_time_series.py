@@ -22,11 +22,13 @@ import matplotlib.dates as mdates
 import matplotlib.ticker as ticker
 import matplotlib.colors as mcolors
 from matplotlib.ticker import FuncFormatter
-from modules.Utils.utils import DummyLogger
+from modules.Utils.utils import DummyLogger, get_sunrise_sunset_ut
 from modules.Utils.kpf_parse import get_datecode
+from collections import Counter
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor
 from matplotlib.dates import HourLocator, DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
+from IPython.display import display, HTML
 
 import sys
 if sys.version_info >= (3, 9):
@@ -76,6 +78,7 @@ class AnalyzeTimeSeries:
         'generate_time_series_plots.py' - creates standard time series plots
         
     To-do:
+        * Write methods to return a list of files that fail a list of QCs (using AND/OR) with optional nojunk flag
         * Add temperature derivatives as columns; they will need to be computed.
         * Add the option of using a Postgres database
         * Make standard correlation plots.
@@ -380,10 +383,11 @@ class AnalyzeTimeSeries:
             os.remove(shm_file)
 
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, quiet=False):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, force_ingest=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
+        If force_ingest=False, files are not reingested unless they have more recent modification dates than in DB.
         """
 
         # Convert input dates to strings if necessary
@@ -417,10 +421,10 @@ class AnalyzeTimeSeries:
                         file_path = os.path.join(dir_path, L0_filename)
                         batch.append(file_path)
                         if len(batch) >= batch_size:
-                            self.ingest_batch_observation(batch)
+                            self.ingest_batch_observation(batch, force_ingest=force_ingest)
                             batch = []
                 if batch:
-                    self.ingest_batch_observation(batch)
+                    self.ingest_batch_observation(batch, force_ingest=force_ingest)
 
         if not quiet:
             self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
@@ -551,7 +555,7 @@ class AnalyzeTimeSeries:
             conn.commit()
             conn.close()
 
-    def ingest_batch_observation(self, batch):
+    def ingest_batch_observation(self, batch, force_ingest=False):
         """
         Ingest a batch of observations into the database in parallel using 
         ProcessPoolExecutor, but check if each file has been updated before 
@@ -561,9 +565,12 @@ class AnalyzeTimeSeries:
     
         # === 1) Check for updated files in main thread ===
         updated_batch = []
-        for file_path in batch:
-            if self.is_any_file_updated(file_path):
-                updated_batch.append(file_path)
+        if force_ingest:
+            updated_batch = batch
+        else:
+            for file_path in batch:
+                if self.is_any_file_updated(file_path):
+                        updated_batch.append(file_path)
     
         # If nothing to do, exit quickly
         if not updated_batch:
@@ -1069,7 +1076,7 @@ class AnalyzeTimeSeries:
             where_queries.append(f'({or_objects})')
         # does object_like work?
         if object_like is not None: 
-            object_like = [f"OBJECT LIKE '%{object_like}%'"]
+            object_like = [f"OBJECT LIKE '%{obj}%'" for obj in object_like]
             or_objects = ' OR '.join(object_like)
             where_queries.append(f'({or_objects})')
         if only_source is not None:
@@ -1250,6 +1257,8 @@ class AnalyzeTimeSeries:
             * Make standard correlation plots.
             * Make standard phased plots (by day)
         """
+        import warnings
+        warnings.filterwarnings("ignore", message=".*tight_layout.*")
 
         def num_fmt(n: float, sf: int = 3) -> str:
             """
@@ -1298,7 +1307,7 @@ class AnalyzeTimeSeries:
                     unique_cols.add(d['col_err'])
                 if 'col_subtract' in d:
                     unique_cols.add(d['col_subtract'])
-        # add this logVERTEX - Visible Experiment for Rapid Transient EXplorationic?
+        # add this?
         #if 'only_object' in thispanel['paneldict']:
         #if 'object_like' in thispanel['paneldict']:
 
@@ -1309,27 +1318,27 @@ class AnalyzeTimeSeries:
             plt.subplots_adjust(hspace=0)
         #plt.tight_layout() # this caused a core dump in scripts/generate_time_series_plots.py
 
+        overplot_night_box = False
         no_data = True # for now; will be set to False when data is detected
         for p in np.arange(npanels):
             thispanel = panel_arr[p]            
-            not_junk = None
-            if 'not_junk' in thispanel['paneldict']:
-                if str(thispanel['paneldict']['not_junk']).lower() == 'true':
-                    not_junk = True
-                elif str(thispanel['paneldict']['not_junk']).lower() == 'false':
-                    not_junk = False
-            only_object = None
-            if 'only_object' in thispanel['paneldict']:
-                only_object = thispanel['paneldict']['only_object']
-            object_like = None
-#            if 'object_like' in thispanel['paneldict']:
-#                if str(thispanel['paneldict']['object_like']).lower() == 'true':
-#                    object_like = True
-#                elif str(thispanel['paneldict']['object_like']).lower() == 'false':
-#                    object_like = False
-            only_source = None
-            if 'only_source' in thispanel['paneldict']:
-                only_source = thispanel['paneldict']['only_source']
+            not_junk = thispanel['paneldict'].get('not_junk', plotdict.get('not_junk', None))
+            if isinstance(not_junk, str):
+                not_junk = True if not_junk.lower() == 'true' else False if not_junk.lower() == 'false' else not_junk
+            only_object = thispanel['paneldict'].get('only_object', plotdict.get('only_object', None))
+            object_like = thispanel['paneldict'].get('object_like', plotdict.get('object_like', None))
+            if object_like is not None:
+                if isinstance(object_like, str):
+                    object_like = [object_like]
+                elif isinstance(object_like, list):
+                    flattened = []
+                    for item in object_like:
+                        if isinstance(item, list):
+                            flattened.extend(item)
+                        else:
+                            flattened.append(item)
+                    object_like = flattened
+            only_source = thispanel['paneldict'].get('only_source', plotdict.get('only_source', None))
 
             if start_date == None:
                 start_date = datetime(2020, 1,  1)
@@ -1351,52 +1360,133 @@ class AnalyzeTimeSeries:
                                         object_like=object_like,
                                         only_source=only_source, 
                                         verbose=False)
-            df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
-            if start_date_was_none == True:
-                start_date = min(df['DATE-MID'])
-            if end_date_was_none == True:
-                end_date = max(df['DATE-MID'])
-            df = df.sort_values(by='DATE-MID')
-
-            # Remove outliers
-            if clean:
-                df = self.clean_df(df)
-
-            # Filter using on_sky criterion
-            if 'on_sky' in thispanel['paneldict']:
-                if str(thispanel['paneldict']['on_sky']).lower() == 'true':
-                    df = df[df['FIUMODE'] == 'Observing']
-                elif str(thispanel['paneldict']['on_sky']).lower() == 'false':
-                    df = df[df['FIUMODE'] == 'Calibration']
+            
+        	# Check if the resulting dataframe has any rows
+            empty_df = (len(df) == 0) # True if the dataframe has no rows
+            if not empty_df:
+                df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
+                if start_date_was_none == True:
+                    start_date = min(df['DATE-MID'])
+                if end_date_was_none == True:
+                    end_date = max(df['DATE-MID'])
+                df = df.sort_values(by='DATE-MID')
+    
+                # Remove outliers
+                if clean:
+                    df = self.clean_df(df)
+    
+                # Filter using on_sky criterion
+                if 'on_sky' in thispanel['paneldict']:
+                    if str(thispanel['paneldict']['on_sky']).lower() == 'true':
+                        df = df[df['FIUMODE'] == 'Observing']
+                    elif str(thispanel['paneldict']['on_sky']).lower() == 'false':
+                        df = df[df['FIUMODE'] == 'Calibration']
                     
             thistitle = ''
-            if abs((end_date - start_date).days) <= 1.2:
-                t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
+            if ((end_date - start_date).days <= 1.05) and ((end_date - start_date).days >= 0.95):
+                if not empty_df:
+                    t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
+                xtitle = start_date.strftime('%B %d, %Y') + ' (UT; HST=UT-10 hours)'
+                if 'title' in thispanel['paneldict']:
+                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
+                
+                axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 3600)
+                axs[p].xaxis.set_major_locator(ticker.MultipleLocator(2))  # major tick every 2 hr
+                axs[p].xaxis.set_minor_locator(ticker.MultipleLocator(1))  # minor tick every 1 hr
+                def format_HHMM(x, pos):
+                    try:
+                        date = start_date + timedelta(hours=x)
+                        return date.strftime('%H:%M') + ' UT \n' + (date-timedelta(hours=10)).strftime('%H:%M') + ' HST'
+                    except:
+                        return ''
+                axs[p].xaxis.set_major_formatter(ticker.FuncFormatter(format_HHMM))
+                overplot_night_box = True
+                
+                sunrise, sunset = get_sunrise_sunset_ut("2025-04-12")
+                sunrise_h = sunrise.hour + sunrise.minute/60 + sunrise.second/3600
+                sunset_h  = sunset.hour  + sunset.minute/60  + sunset.second/3600
+                axs[p].axvspan(sunset_h, sunrise_h, facecolor='lightgray', alpha=0.2, hatch='', edgecolor='silver')
+                axs[p].annotate("Night", xy=((sunset_h+sunrise_h)/48, 1), xycoords='axes fraction', 
+                                fontsize=10, color="silver", ha="center", va="top",
+                                xytext=(0, -5), 
+                                textcoords='offset points')
+            elif abs((end_date - start_date).days) <= 1.2:
+                if not empty_df:
+                    t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
                 xtitle = 'Hours since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = str(thispanel['paneldict']['title']) + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 3600)
-                if 'narrow_xlim_daily' in thispanel['paneldict']:
-                    if str(thispanel['paneldict']['narrow_xlim_daily']).lower() == 'true':
-                        if len(t) > 1:
-                            axs[p].set_xlim(min(t), max(t))
+                if not empty_df:
+                    if 'narrow_xlim_daily' in thispanel['paneldict']:
+                        if str(thispanel['paneldict']['narrow_xlim_daily']).lower() == 'true':
+                            if len(t) > 1:
+                                axs[p].set_xlim(min(t), max(t))
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
             elif abs((end_date - start_date).days) <= 3:
-                t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                if not empty_df:
+                    t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
+            elif 28 <= (end_date - start_date).days <= 31:
+                if not empty_df:
+                    t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                xtitle = start_date.strftime('%B %Y') + ' (UT Times)'
+                if 'title' in thispanel['paneldict']:
+                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
+                
+                axs[p].set_xlim(0, (end_date - start_date).days)
+                axs[p].xaxis.set_major_locator(ticker.MultipleLocator(1))  # tick every 1 day
+            
+                # Custom formatter to convert "days since start" into actual calendar labels
+                def format_mmdd(x, pos):
+                    try:
+                        date = start_date + timedelta(days=int(x))
+                        return date.strftime('%d')
+                    except:
+                        return ''
+                axs[p].xaxis.set_major_formatter(ticker.FuncFormatter(format_mmdd))
             elif abs((end_date - start_date).days) < 32:
-                t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                if not empty_df:
+                     t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
                 xtitle = 'Days since ' + start_date.strftime('%Y-%m-%d %H:%M') + ' UT'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=3, prune=None))
+            elif 360 <= (end_date - start_date).days <= 370:
+                if not empty_df:
+                    t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                xtitle = start_date.strftime('%Y')
+                if 'title' in thispanel['paneldict']:
+                    thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
+                axs[p].set_xlim(0, (end_date - start_date).days)
+
+                # Set major ticks at month boundaries
+                month_starts = []
+                current = start_date.replace(day=1)
+                while current < end_date:
+                    delta = (current - start_date).days
+                    month_starts.append(delta)
+                    if current.month == 12:
+                        current = current.replace(year=current.year + 1, month=1)
+                    else:
+                        current = current.replace(month=current.month + 1)
+
+                axs[p].xaxis.set_major_locator(ticker.FixedLocator(month_starts))
+                def format_mmdd(x, pos):
+                    try:
+                        date = start_date + timedelta(days=int(x))
+                        return date.strftime('%m-%d')
+                    except:
+                        return ''
+                axs[p].xaxis.set_major_formatter(ticker.FuncFormatter(format_mmdd))
             else:
-                t = df['DATE-MID'] # dates
+                if not empty_df:
+                    t = df['DATE-MID'] # dates
                 xtitle = 'Date'
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
@@ -1404,7 +1494,7 @@ class AnalyzeTimeSeries:
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(7, prune=None))
             if p == npanels-1: 
                 axs[p].set_xlabel(xtitle, fontsize=14)
-                axs[0].set_title(thistitle, fontsize=14)
+                axs[0].set_title(thistitle, fontsize=16)
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
             axs[p].grid(color='lightgray')        
@@ -1435,186 +1525,191 @@ class AnalyzeTimeSeries:
                     subtractmedian = True
 
             nvars = len(thispanel['panelvars'])
-            df_initial = df
-            for i in np.arange(nvars):
-                df = df_initial # start fresh for each panel in case NaN values were removed.
-                if 'plot_type' in thispanel['panelvars'][i]:
-                    plot_type = thispanel['panelvars'][i]['plot_type']
-                else:
-                    plot_type = 'scatter'
-                
-                # Extract data from df and manipulate
-                col_name = thispanel['panelvars'][i]['col']
-                # Filter out invalid values in col_name
-                df = df[~df[col_name].isin(['NaN', 'null', 'nan', 'None', None, np.nan])]
-                col_data = df[col_name]
-                col_data_replaced = col_data  # default, no subtraction
-                
-                if 'col_subtract' in thispanel['panelvars'][i]:
-                    col_subtract_name = thispanel['panelvars'][i]['col_subtract']
-                    # Now filter out invalid values in col_subtract_name,
-                    # and also re-filter col_name because removing rows re-indexes the DataFrame.
-                    df = df[~df[col_subtract_name].isin(['NaN', 'null', 'nan', 'None', None, np.nan])]
-                    # Re-grab the series after dropping rows
+            if not empty_df:
+                df_initial = df
+                for i in np.arange(nvars):
+                    df = df_initial # start fresh for each panel in case NaN values were removed.
+                    if 'plot_type' in thispanel['panelvars'][i]:
+                        plot_type = thispanel['panelvars'][i]['plot_type']
+                    else:
+                        plot_type = 'scatter'
+                    
+                    # Extract data from df and manipulate
+                    col_name = thispanel['panelvars'][i]['col']
+                    # Filter out invalid values in col_name
+                    df = df[~df[col_name].isin(['NaN', 'null', 'nan', 'None', None, np.nan])]
                     col_data = df[col_name]
-                    col_subtract_data = df[col_subtract_name]
-                    col_data_replaced = col_data - col_subtract_data
-
-                if 'col_multiply' in thispanel['panelvars'][i]:
-                    col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') * thispanel['panelvars'][i]['col_multiply']
-
-                if 'col_offset' in thispanel['panelvars'][i]:
-                    col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') + thispanel['panelvars'][i]['col_offset']
-
-                if 'col_err' in thispanel['panelvars'][i]:
-                    col_data_err = df[thispanel['panelvars'][i]['col_err']]
-                    col_data_err_replaced = col_data_err.replace('NaN',  np.nan)
-                    col_data_err_replaced = col_data_err.replace('null', np.nan)
+                    col_data_replaced = col_data  # default, no subtraction
+                    
+                    if 'col_subtract' in thispanel['panelvars'][i]:
+                        col_subtract_name = thispanel['panelvars'][i]['col_subtract']
+                        # Now filter out invalid values in col_subtract_name,
+                        # and also re-filter col_name because removing rows re-indexes the DataFrame.
+                        df = df[~df[col_subtract_name].isin(['NaN', 'null', 'nan', 'None', None, np.nan])]
+                        # Re-grab the series after dropping rows
+                        col_data = df[col_name]
+                        col_subtract_data = df[col_subtract_name]
+                        col_data_replaced = col_data - col_subtract_data
+    
                     if 'col_multiply' in thispanel['panelvars'][i]:
-                        col_data_err_replaced = pd.to_numeric(col_data_err_replaced, errors='coerce') * thispanel['panelvars'][i]['col_multiply']
+                        col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') * thispanel['panelvars'][i]['col_multiply']
+    
+                    if 'col_offset' in thispanel['panelvars'][i]:
+                        col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') + thispanel['panelvars'][i]['col_offset']
+    
+                    if 'col_err' in thispanel['panelvars'][i]:
+                        col_data_err = df[thispanel['panelvars'][i]['col_err']]
+                        col_data_err_replaced = col_data_err.replace('NaN',  np.nan)
+                        col_data_err_replaced = col_data_err.replace('null', np.nan)
+                        if 'col_multiply' in thispanel['panelvars'][i]:
+                            col_data_err_replaced = pd.to_numeric(col_data_err_replaced, errors='coerce') * thispanel['panelvars'][i]['col_multiply']
+    
+                    if 'normalize' in thispanel['panelvars'][i]:
+                        if thispanel['panelvars'][i]['normalize'] == True:
+                            col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') / np.nanmedian(pd.to_numeric(col_data_replaced, errors='coerce'))
+                    
+                    if plot_type == 'state':
+                        states = np.array(col_data_replaced)
+                    else:
+                        data = np.array(col_data_replaced, dtype='float')
+                        if plot_type == 'errorbar':
+                            data_err = np.array(col_data_err_replaced, dtype='float')
+    
+                    if abs((end_date - start_date).days) <= 1.2:
+                        t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
+                    elif abs((end_date - start_date).days) <= 3:
+                        t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                    elif abs((end_date - start_date).days) < 32:
+                        t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
+                    elif 360 <= (end_date - start_date).days <= 370:
+                        if not empty_df:
+                            t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
 
-                if 'normalize' in thispanel['panelvars'][i]:
-                    if thispanel['panelvars'][i]['normalize'] == True:
-                        col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') / np.nanmedian(pd.to_numeric(col_data_replaced, errors='coerce'))
-                
-                if plot_type == 'state':
-                    states = np.array(col_data_replaced)
-                else:
-                    data = np.array(col_data_replaced, dtype='float')
-                    if plot_type == 'errorbar':
-                        data_err = np.array(col_data_err_replaced, dtype='float')
-
-                if abs((end_date - start_date).days) <= 1.2:
-                    t = [(date - start_date).total_seconds() / 3600 for date in df['DATE-MID']]
-                elif abs((end_date - start_date).days) <= 3:
-                    t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
-                elif abs((end_date - start_date).days) < 32:
-                    t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
-                else:
-                    t = df['DATE-MID'] # dates
-
-                # Set plot attributes
-                plot_attributes = {}
-                if plot_type != 'state':
-                    if np.count_nonzero(~np.isnan(data)) > 0:
-                        if subtractmedian:
-                            data -= np.nanmedian(data)
-                        if 'plot_attr' in thispanel['panelvars'][i]:
-                            if 'label' in thispanel['panelvars'][i]['plot_attr']:
-                                label = thispanel['panelvars'][i]['plot_attr']['label']
-                                try:
-                                    if makelegend:
-                                        if len(~np.isnan(data)) > 0:
-                                            median = np.nanmedian(data)
-                                        else:
-                                            median = 0.
-                                        if len(~np.isnan(data)) > 2:
-                                            std_dev = np.nanstd(data)
-                                            if std_dev != 0 and not np.isnan(std_dev):
-                                                decimal_places = max(1, 2 - int(np.floor(np.log10(abs(std_dev)))) - 1)
+                    else:
+                        t = df['DATE-MID'] # dates
+    
+                    # Set plot attributes
+                    plot_attributes = {}
+                    if plot_type != 'state':
+                        if np.count_nonzero(~np.isnan(data)) > 0:
+                            if subtractmedian:
+                                data -= np.nanmedian(data)
+                            if 'plot_attr' in thispanel['panelvars'][i]:
+                                if 'label' in thispanel['panelvars'][i]['plot_attr']:
+                                    label = thispanel['panelvars'][i]['plot_attr']['label']
+                                    try:
+                                        if makelegend:
+                                            if len(~np.isnan(data)) > 0:
+                                                median = np.nanmedian(data)
+                                            else:
+                                                median = 0.
+                                            if len(~np.isnan(data)) > 2:
+                                                std_dev = np.nanstd(data)
+                                                if std_dev != 0 and not np.isnan(std_dev):
+                                                    decimal_places = max(1, 2 - int(np.floor(np.log10(abs(std_dev)))) - 1)
+                                                else:
+                                                    decimal_places = 1
                                             else:
                                                 decimal_places = 1
-                                        else:
-                                            decimal_places = 1
-                                            std_dev = 0.
-                                        formatted_median = f"{median:.{decimal_places}f}"
-                                        if len(~np.isnan(data)) > 2:
-                                            formatted_std_dev = f"{std_dev:.{decimal_places}f}"
-                                            label += ' (' + formatted_std_dev 
-                                            if 'unit' in thispanel['panelvars'][i]:
-                                                label += ' ' + str(thispanel['panelvars'][i]['unit'])
-                                            label += ' rms)'
-                                except Exception as e:
-                                    self.logger.error(e)
-                            plot_attributes = thispanel['panelvars'][i]['plot_attr']
-                            if 'label' in plot_attributes:
-                                plot_attributes['label'] = label
-                        else:
-                           plot_attributes = {}
-
-                # Plot type: scatter plot
-                if plot_type == 'scatter':
-                    axs[p].scatter(t, data, **plot_attributes)
-                
-                # Plot type: scatter plot with error bars
-                if plot_type == 'errorbar':
-                    axs[p].errorbar(t, data, yerr=data_err, **plot_attributes)
-                
-                # Plot type: connected points
-                if plot_type == 'plot':
-                    axs[p].plot(t, data, **plot_attributes)
-                
-                # Plot type: stepped lines
-                if plot_type == 'step':
-                    axs[p].step(t, data, **plot_attributes)
-                
-                # Plot type: scatter plots for non-float 'states'
-                if plot_type == 'state':
-                    # Plot states (e.g., DRP version number or QC result)
-                    # First, convert states to a consistent type for comparison
-                    states = [float(s) if is_numeric(s) else s for s in states]
-                    # Separate numeric and non-numeric states for sorting
-                    numeric_states = sorted(s for s in states if isinstance(s, float))
-                    non_numeric_states = sorted(s for s in states if isinstance(s, str))
-                    unique_states = sorted(set(states), key=lambda x: (not isinstance(x, float), x))
-                    unique_states = list(set(unique_states))
-                    # Check if unique_states contains only 0, 1, and None - QC test
-                    if set(unique_states).issubset({0.0, 1.0, 'None'}):
-                        states = ['Pass' if s == 1.0 else 'Fail' if s == 0.0 else s for s in states]
+                                                std_dev = 0.
+                                            formatted_median = f"{median:.{decimal_places}f}"
+                                            if len(~np.isnan(data)) > 2:
+                                                formatted_std_dev = f"{std_dev:.{decimal_places}f}"
+                                                label += ' (' + formatted_std_dev 
+                                                if 'unit' in thispanel['panelvars'][i]:
+                                                    label += ' ' + str(thispanel['panelvars'][i]['unit'])
+                                                label += ' rms)'
+                                    except Exception as e:
+                                        self.logger.error(e)
+                                plot_attributes = thispanel['panelvars'][i]['plot_attr']
+                                if 'label' in plot_attributes:
+                                    plot_attributes['label'] = label
+                            else:
+                               plot_attributes = {}
+    
+                    # Plot type: scatter plot
+                    if plot_type == 'scatter':
+                        axs[p].scatter(t, data, **plot_attributes)
+                    
+                    # Plot type: scatter plot with error bars
+                    if plot_type == 'errorbar':
+                        axs[p].errorbar(t, data, yerr=data_err, **plot_attributes)
+                    
+                    # Plot type: connected points
+                    if plot_type == 'plot':
+                        axs[p].plot(t, data, **plot_attributes)
+                    
+                    # Plot type: stepped lines
+                    if plot_type == 'step':
+                        axs[p].step(t, data, **plot_attributes)
+                    
+                    # Plot type: scatter plots for non-float 'states'
+                    if plot_type == 'state':
+                        # Plot states (e.g., DRP version number or QC result)
+                        # First, convert states to a consistent type for comparison
+                        states = [float(s) if is_numeric(s) else s for s in states]
+                        # Separate numeric and non-numeric states for sorting
+                        numeric_states = sorted(s for s in states if isinstance(s, float))
+                        non_numeric_states = sorted(s for s in states if isinstance(s, str))
                         unique_states = sorted(set(states), key=lambda x: (not isinstance(x, float), x))
                         unique_states = list(set(unique_states))
-                        if (unique_states == ['Pass', 'Fail']) or (unique_states == ['Pass']) or (unique_states == ['Fail']):
-                             unique_states = ['Fail', 'Pass']  # put Pass on the top of the plot
-                        state_to_color = {'Fail': 'indianred', 'Pass': 'forestgreen', 'None': 'cornflowerblue'}
-                        if thispanel['paneldict']['ylabel'] == 'Junk Status':
-                            states = ['Not Junk' if s == 'Pass' else 'Junk' if s == 'Fail' else s for s in states]
-                            unique_states = ['Junk', 'Not Junk']
-                            state_to_color = {'Junk': 'indianred', 'Not Junk': 'forestgreen', 'None': 'cornflowerblue'}
-                        mapped_states = [unique_states.index(state) if state in unique_states else None for state in states]
-                        colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
-                        color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
-                    else:
-                        unique_states = sorted(list(set(unique_states)))
-                        state_to_num = {state: i for i, state in enumerate(unique_states)}
-                        mapped_states = [state_to_num[state] for state in states]
-                        colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
-                        color_map = {state: colors[i] for i, state in enumerate(unique_states)}
-                    try:
-                        # check for a set of conditions that took forever to figure out
-                        if (hasattr(t, 'tolist') and callable(getattr(t, 'tolist'))):
-                            t = t.tolist()
+                        # Check if unique_states contains only 0, 1, and None - QC test
+                        if set(unique_states).issubset({0.0, 1.0, 'None'}):
+                            states = ['Pass' if s == 1.0 else 'Fail' if s == 0.0 else s for s in states]
+                            unique_states = sorted(set(states), key=lambda x: (not isinstance(x, float), x))
+                            unique_states = list(set(unique_states))
+                            if (unique_states == ['Pass', 'Fail']) or (unique_states == ['Pass']) or (unique_states == ['Fail']):
+                                 unique_states = ['Fail', 'Pass']  # put Pass on the top of the plot
+                            state_to_color = {'Fail': 'indianred', 'Pass': 'forestgreen', 'None': 'cornflowerblue'}
+                            if thispanel['paneldict']['ylabel'] == 'Junk Status':
+                                states = ['Not Junk' if s == 'Pass' else 'Junk' if s == 'Fail' else s for s in states]
+                                unique_states = ['Junk', 'Not Junk']
+                                state_to_color = {'Junk': 'indianred', 'Not Junk': 'forestgreen', 'None': 'cornflowerblue'}
+                            mapped_states = [unique_states.index(state) if state in unique_states else None for state in states]
+                            colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
+                            color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
                         else:
-                            t = list(t)
-                    except Exception as e:
-                        self.logger.info(f"Error converting to a list: {e}")
-                    try:
-                        if (hasattr(states, 'tolist') and callable(getattr(states, 'tolist'))):
-                            states = states.tolist()
-                        else:
-                            states = list(states)
-                    except Exception as e:
-                        self.logger.info(f"Error converting to a list: {e}")
-                    if len(states) != len(t):
-                        # Handle the mismatch
-                        print(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
-                    for state in unique_states:
-                        color = color_map[state]
-                        indices = [i for i, s in enumerate(states) if s == state]
-                        label_text = f"{state} ({len(indices)})"
-                        axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=label_text)
-                    axs[p].set_yticks(range(len(unique_states)))
-                    axs[p].set_yticklabels(unique_states)
-                
-                # Print 'no data' if appropriate
-                if len(t) > 1:
-                    no_data = False # this is checked for each variable
-                if (no_data and i == nvars-1):
-                    axs[p].text(0.5, 0.5, 'No Data', 
-                                horizontalalignment='center', verticalalignment='center', 
-                                fontsize=24, transform=axs[p].transAxes)
-
-                axs[p].xaxis.set_tick_params(labelsize=10)
-                axs[p].yaxis.set_tick_params(labelsize=10)
+                            unique_states = sorted(list(set(unique_states)))
+                            state_to_num = {state: i for i, state in enumerate(unique_states)}
+                            mapped_states = [state_to_num[state] for state in states]
+                            colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
+                            color_map = {state: colors[i] for i, state in enumerate(unique_states)}
+                        try:
+                            # check for a set of conditions that took forever to figure out
+                            if (hasattr(t, 'tolist') and callable(getattr(t, 'tolist'))):
+                                t = t.tolist()
+                            else:
+                                t = list(t)
+                        except Exception as e:
+                            self.logger.info(f"Error converting to a list: {e}")
+                        try:
+                            if (hasattr(states, 'tolist') and callable(getattr(states, 'tolist'))):
+                                states = states.tolist()
+                            else:
+                                states = list(states)
+                        except Exception as e:
+                            self.logger.info(f"Error converting to a list: {e}")
+                        if len(states) != len(t):
+                            # Handle the mismatch
+                            print(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
+                        for state in unique_states:
+                            color = color_map[state]
+                            indices = [i for i, s in enumerate(states) if s == state]
+                            label_text = f"{state} ({len(indices)})"
+                            axs[p].scatter([t[i] for i in indices], [mapped_states[i] for i in indices], color=color, label=label_text)
+                        axs[p].set_yticks(range(len(unique_states)))
+                        axs[p].set_yticklabels(unique_states)
+                    
+                    # Print 'no data' if appropriate
+                    if len(t) > 1:
+                        no_data = False # this is checked for each variable
+                    if (no_data and i == nvars-1):
+                        axs[p].text(0.5, 0.5, 'No Data', 
+                                    horizontalalignment='center', verticalalignment='center', 
+                                    fontsize=24, transform=axs[p].transAxes)
+    
+                    axs[p].xaxis.set_tick_params(labelsize=10)
+                    axs[p].yaxis.set_tick_params(labelsize=10)
 
             # Draw translucent boxes
             if 'axhspan' in thispanel['paneldict']:
@@ -1631,18 +1726,21 @@ class AnalyzeTimeSeries:
                      clr  = axh['color']
                      alp  = axh['alpha']
                      axs[p].axhspan(ymin, ymax, color=clr, alpha=alp)
+                
+
 
             # Make legend
             if makelegend:
-                if len(t) > 0:
-                    if 'legend_frac_size' in thispanel['paneldict']:
-                        legend_frac_size = thispanel['paneldict']['legend_frac_size']
-                    else:
-                        legend_frac_size = 0.20
-                    handles, labels = axs[p].get_legend_handles_labels()
-                    sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=True)
-                    handles, labels = zip(*sorted_pairs)
-                    axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
+                if not no_data:
+                    if len(t) > 0:
+                        if 'legend_frac_size' in thispanel['paneldict']:
+                            legend_frac_size = thispanel['paneldict']['legend_frac_size']
+                        else:
+                            legend_frac_size = 0.20
+                        handles, labels = axs[p].get_legend_handles_labels()
+                        sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=True)
+                        handles, labels = zip(*sorted_pairs)
+                        axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
 
             # Set y limits
             if ylim:
@@ -1653,15 +1751,132 @@ class AnalyzeTimeSeries:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     #xytext=(100, -32), 
-                    xytext=(0, -32), 
+                    xytext=(0, -38), 
                     textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot or make a PNG
+        try:
+            if fig_path != None:
+                t0 = time.process_time()
+                plt.savefig(fig_path, dpi=300, facecolor='w')
+                if log_savefig_timing:
+                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+            if show_plot == True:
+                plt.show()
+            plt.close('all')
+        except Exception as e:
+            self.logger.info(f"Error saving file or showing plot: {e}")
+
+    def plot_rv_per_fiber_wavelength(self, rv, chip, fiber, start_date=None, end_date=None, only_object=None, only_source=None, 
+                                    object_like=None, fig_path=None, show_plot=True, 
+                                    log_savefig_timing=False):
+        """
+        Generate a timeseries showing every orderlet of a specific fiber (SCI1, SCI2, or SCI3) for either green or red. 
+
+        Args:
+            rv (string) - string describing what rv type to plot (etalon, lfc, etc)
+            chip (string) - green or red
+            fiber (string) - SCI1, SCI2, or SCI3
+            start_date (datetime object) - start date for plot
+            end_date (datetime object) - end date for plot
+            only_object (string or list of strings) - object names to include in query
+            only_source (string or list of strings) - source names to include in query (e.g., 'Star')
+            object_like (string or list of strings) - partial object names to search for
+            fig_path (string) - set to the path for the file to be generated
+            show_plot (boolean) - show the plot in the current environment
+
+        Returns:
+            PNG plot in fig_path or shows the plot in the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+        unique_cols = set()
+        unique_cols.add('DATE-MID')
+        unique_cols.add('NOTJUNK')
+        unique_cols.add('ObsID')
+        if chip.lower() == 'green':
+            start = 0
+            end = 35
+            unique_cols.add('CCFW00')
+            unique_cols.add('CCFW01')
+            unique_cols.add('CCFW02')
+            unique_cols.add('CCFW03')
+            unique_cols.add('CCFW04')
+            unique_cols.add('CCFW05')
+            unique_cols.add('CCFW06')
+            unique_cols.add('CCFW07')
+            unique_cols.add('CCFW08')
+            unique_cols.add('CCFW09')
+            for i in range(10, 35):
+                unique_cols.add(f'CCFW{i}')
+            if fiber.lower() == 'sci1':
+                fib = 100
+                for i in range (100, 135):
+                    unique_cols.add(f'RV{i}')
+            elif fiber.lower() == 'sci2':
+                fib = 200
+                for i in range (200, 235):
+                    unique_cols.add(f'RV{i}')
+            elif fiber.lower() == 'sci3':
+                fib = 300
+                for i in range (300, 335):
+                    unique_cols.add(f'RV{i}')
+            else:
+                self.logger.error("Need to specify 'fiber'")
+        elif chip.lower() == 'red':
+            start = 35
+            end = 67
+            for i in range(35, 67):
+                unique_cols.add(f'CCFW{i}')
+            if fiber.lower() == 'sci1':
+                fib = 100
+                for i in range (135, 167):
+                    unique_cols.add(f'RV{i}')
+            elif fiber.lower() == 'sci2':
+                fib = 200
+                for i in range (235, 267):
+                    unique_cols.add(f'RV{i}')
+            elif fiber.lower() == 'sci3':
+                fib = 300
+                for i in range (335, 367):
+                    unique_cols.add(f'RV{i}')
+            else:
+                self.logger.error("Need to specify 'fiber'")
+        else:
+            self.logger.error("Need to specify 'chip'")
+
+        rv_df = self.dataframe_from_db(unique_cols, start_date=start_date, end_date=end_date, only_object=only_object, only_source=only_source, 
+                                    object_like=object_like, not_junk=True)
+        rv_df = rv_df.drop(columns=['NOTJUNK'])
+        rv_df = rv_df[['DATE-MID'] + ['ObsID'] + [col for col in rv_df.columns if (col != 'DATE-MID') and (col != 'ObsID')]]
+        rv_df.iloc[:, 2:] = rv_df.iloc[:, 2:].apply(pd.to_numeric, errors='coerce')
+        rv_columns = sorted([col for col in rv_df.columns if col.startswith('RV')], key=lambda x: int(x[2:]))
+        ccfw_columns = sorted([col for col in rv_df.columns if col.startswith('CCFW')], key=lambda x: int(x[4:]))
+        rv_df = pd.concat([rv_df['DATE-MID'], rv_df['ObsID'],rv_df[rv_columns], rv_df[ccfw_columns]], axis=1)
+        rv_df['DATE-MID'] = pd.to_datetime(rv_df['DATE-MID'])
+        
+        plt.figure(figsize=(10, 20)) 
+        for i in range(start, end):
+            rv_col = f"RV{fib + i}"
+            weight_col = f"CCFW{str(i).zfill(2)}"
+            
+            valid_indices = rv_df[weight_col] != 0
+            times = rv_df.loc[valid_indices, 'DATE-MID']
+            rv_values = rv_df.loc[valid_indices, rv_col]
+
+            if not rv_values.empty:
+                plt.scatter(times, rv_values + i * 0.01, label=rv_col, alpha=0.7, s=2)
+
+        plt.xlabel("Time")
+        plt.ylabel(f"RV OF {rv.upper()}")
+        plt.title(f"{rv.upper()} RV FOR {fiber.upper()} {chip.upper()}")
+        plt.legend(fontsize=8) 
+        plt.grid(True)
+
         try:
             if fig_path != None:
                 t0 = time.process_time()
@@ -1700,7 +1915,7 @@ class AnalyzeTimeSeries:
             
         Returns:
             PNG plot in fig_path or shows the plot in the current environment
-            (e.g., in a Jupyter Notebook).
+            (e.g., in a Jupyter Notebook). 
         
         To-do: 
             Add highlighting of QC tests
@@ -1938,7 +2153,7 @@ class AnalyzeTimeSeries:
             plt.ylabel(dict_ylabel, fontsize=14)
         else:
             plt.ylabel("Number of Observations", fontsize=14)
-        plt.title(plot_title, fontsize=14)
+        plt.title(plot_title, fontsize=16)
     
         ax = plt.gca()
         ax.xaxis.set_major_locator(major_locator)
@@ -2011,10 +2226,11 @@ class AnalyzeTimeSeries:
         """
 
         plots = {}
-        
+
         import static.tsdb_plot_configs
-        all_yaml = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py
-        for this_yaml_path in all_yaml:
+        yaml_paths = static.tsdb_plot_configs.all_yaml # an attribute from static/tsdb_plot_configs/__init__.py
+        
+        for this_yaml_path in yaml_paths:
             thisplotconfigdict = self.yaml_to_dict(this_yaml_path)
             plot_name = str.split(str.split(this_yaml_path,'/')[-1], '.')[0]
             subdir = str.split(os.path.dirname(this_yaml_path),'/')[-1]
@@ -2107,6 +2323,125 @@ class AnalyzeTimeSeries:
                 except Exception as e:
                     self.logger.error(f"Error while plotting {plot_name}: {e}")
                     continue  # Skip to the next plot
+
+
+    def print_df_with_obsid_links(self, df, url_stub='https://jump.caltech.edu/observing-logs/kpf/', nrows=None):
+        '''
+        Print a dataframe with links to a web page. 
+        The default page is set to "Jump", the portal used by the KPF Science Team.
+        The printed table will be sortable by clicking on column headers.
+        '''
+        df_copy = df.copy()  # Make a copy to avoid modifying the original DataFrame
+        
+        # Convert ObsID into clickable links
+        df_copy['ObsID'] = df_copy['ObsID'].apply(
+            lambda obsid: f'<a href="{url_stub}{obsid}" target="_blank">{obsid}</a>'
+        )
+        
+        # Limit number of rows if requested
+        if nrows is None:
+            limited_df = df_copy
+        else:
+            limited_df = df_copy.head(nrows)
+        
+        # Generate the HTML for the table
+        html = limited_df.to_html(escape=False, index=False, classes='sortable')
+        
+        # JavaScript for making the table sortable
+        sortable_script = """
+        <script>
+          function sortTable(table, col, reverse) {
+            const tb = table.tBodies[0],
+              tr = Array.from(tb.rows),
+              i = col;
+            reverse = -((+reverse) || -1);
+            tr.sort((a, b) => reverse * (a.cells[i].textContent.trim().localeCompare(b.cells[i].textContent.trim(), undefined, {numeric: true})));
+            for(let row of tr) tb.appendChild(row);
+          }
+          document.querySelectorAll('table.sortable th').forEach(th => th.addEventListener('click', (() => {
+            const table = th.closest('table');
+            Array.from(table.querySelectorAll('th')).forEach((th, idx) => th.addEventListener('click', (() => sortTable(table, idx, this.asc = !this.asc))));
+          })));
+        </script>
+        """
+        
+        # Display the combined table + script
+        display(HTML(html + sortable_script))
+
+
+    def print_log_error_report(self, df, log_dir='/data/logs/', aggregated_summary=False):
+        '''
+        For each ObsID in the dataframe, open the corresponding log file,
+        find all lines containing [ERROR]:, and print either:
+        - aggregated error report (if aggregated_summary=True)
+        - individual ObsID error reports (if aggregated_summary=False)
+        '''
+        error_counter = Counter()  # Collect error bodies for aggregation
+    
+        for obsid in df['ObsID']:
+            log_path = os.path.join(log_dir, f'{get_datecode(obsid)}/{obsid}.log')
+            
+            if not os.path.isfile(log_path):
+                if not aggregated_summary:
+                    print(f"ObsID: {obsid}")
+                    print(f"Log file: {log_path}")
+                    print(f"Log file not found.\n")
+                continue
+            
+            mod_time = datetime.utcfromtimestamp(os.path.getmtime(log_path)).strftime('%Y-%m-%d %H:%M:%S UTC')
+            
+            error_lines = []
+            with open(log_path, 'r') as file:
+                for line in file:
+                    if '[ERROR]:' in line:
+                        error_line = line.strip()
+                        error_lines.append(error_line)
+    
+                        # Extract only the part after [ERROR]:
+                        parts = error_line.split('[ERROR]:', 1)
+                        if len(parts) > 1:
+                            error_body = parts[1].strip()
+                            error_counter[error_body] += 1
+                        else:
+                            error_counter[error_line] += 1
+            
+            if not aggregated_summary:
+                # Print individual ObsID report
+                print(f"ObsID: {obsid}")
+                print(f"Log file: {log_path}")
+                print(f"Log modification date: {mod_time}")
+                print(f"Errors in log file:")
+                
+                if error_lines:
+                    for error in error_lines:
+                        print(f"    {error}")
+                else:
+                    print(f"    No [ERROR] lines found.")
+                
+                print("\n" + "-" * 50 + "\n")
+        
+        # After processing all ObsIDs, print the aggregated summary if requested
+        if aggregated_summary:
+            if error_counter:
+                print("\nAggregated Error Summary:\n")
+                
+                summary_df = pd.DataFrame(
+                    [(count, error) for error, count in error_counter.items()],
+                    columns=['Count', 'Error Message']
+                ).sort_values('Count', ascending=False).reset_index(drop=True)
+                
+                # Set wide display options for Pandas
+                pd.set_option('display.max_colwidth', None)
+                pd.set_option('display.width', 0)
+                
+                # Force all table cells to left-align with inline CSS
+                html = summary_df.to_html(index=False, escape=False)
+                html = html.replace('<td>', '<td style="text-align: left; white-space: normal; word-wrap: break-word;">')
+                html = html.replace('<th>', '<th style="text-align: left; white-space: normal; word-wrap: break-word;">')
+                
+                display(HTML(html))
+            else:
+                print("No [ERROR] lines found across all logs.")
 
 
 def process_file(file_path, now_str,

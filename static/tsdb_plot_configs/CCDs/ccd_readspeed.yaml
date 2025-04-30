@@ -14,7 +14,7 @@ panel_arr:
       ylabel: Read Speed (sec)
       title: CCD Read Speed
       not_junk: true
-      legend_frac_size: 0.25
+      legend_frac_size: 0.2
 
   - panelvars:
       - col: REDTRT
@@ -29,4 +29,4 @@ panel_arr:
       ylabel: Read Speed (sec)
       title: CCD Read Speed
       not_junk: true
-      legend_frac_size: 0.25
+      legend_frac_size: 0.2

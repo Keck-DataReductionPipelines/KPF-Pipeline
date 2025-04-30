@@ -322,6 +322,14 @@ HK2DF10P  128.83                                      10th percentile flux in th
 AGEBIAS   0                                           Age of master bias file compared to this file (whole days)
 AGEDARK   0                                           Age of master dark file compared to this file (whole days)
 AGEFLAT   0                                           Age of master flat file compared to this file (whole days)
+XDSPDYG1  -15.93355                                   Green cross-dispersion offset [pix] compared to master reference
+XDSPDYR1  -15.86130                                   Red cross-dispersion offset [pix] compared to master reference
+XDSPDYG2  0.02673                                     Green cross-dispersion offset [pix] compared to reference in era
+XDSPDYR2  0.05026                                     Red cross-dispersion offset [pix] compared to reference in era
+XDSPSYG1  0.00133                                     Uncertainty [pix] in XDSPDYG1
+XDSPSYR1  0.00217                                     Uncertainty [pix] in XDSPDYR1
+XDSPSYG2  0.00144                                     Uncertainty [pix] in XDSPDYG2
+XDSPSYR2  0.00058                                     Uncertainty [pix] in XDSPDYR2
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
