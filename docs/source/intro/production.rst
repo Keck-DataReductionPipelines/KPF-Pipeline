@@ -5,41 +5,32 @@ The following commands should be run from separate Docker containers to start pr
 
 **Main processing threads:**
 
-Launch 50 processes to watch for L0 files and process them into 2D/L1/L2 files::
+Launch 50 processes to watch for L0 files and process them into 2D/L1/L2 files.  In production processing by the DRP development team, this command is in the xterm called *Realtime Processing*.::
 
     kpf --ncpu 50 --watch /data/L0/ -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
 
 **Quicklook processing threads:** 
 
-Launch QLP instances for all data levels with the default recipe::
-
-    ./scripts/launch_qlp.sh
-
-Alternatively, launch QLP instances for only recent observations (within the last day)::
+Launch QLP instances for all data levels with the default recipe.  The QLP instances should be split between two commands, one that looks at recent files (generated in the last day from realtime processing and one that covers reprocessed files from 1+ days ago).  In production processing by the DRP development team, these two commands are in the xterm called *QLP --only_recent* and *QLP --not_recent*.::
 
     ./scripts/launch_qlp.sh --only_recent
 
-And one for not recent observations (more than a day ago)::
-
     ./scripts/launch_qlp.sh --not_recent
-  
+ 
 **Time Series Database Ingestion:**
   
 Start a script that will watch for new L0/2D/L1/L2 files and ingest them.  
 Another thread of the script will periodically scan the data directories to search for files 
 (or updates that were missed with the watch thread) to ingest.  
-Periodic scans start one hour after the previous one completed.::
+Periodic scans start one hour after the previous one completed.  
+In production processing by the DRP development team, this command is in the xterm called *TSDB Ingestion*.::
 
     ./scripts/ingest_watch_kpf_tsdb.py  
 
-The above script will take care of most ingestion needs.  To ingest from date 
-yyyymmdd to YYYYMMDD, use::
-
-    ./scripts/ingest_dates_kpf_tsdb.py yyyymmdd YYYYMMDD
-
 **Generation of Time Series Plots**: 
 
-This script will generate time series plots of telemetry and other information on regular intervals using the Observational Database::
+This script will generate time series plots of telemetry and other information on regular intervals using the Observational Database.
+In production processing by the DRP development team, this command is in the xterm called *TSDB Plots*.::
 
     ./scripts/generate_time_series_plots.py
 
@@ -48,9 +39,15 @@ Other Processing Tasks
 
 **Reprocessing L0 files:** 
   
-Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD::
+Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Reprocessing*.::
 
     kpf --ncpu 50 /data/L0/YYYYMMDD/ -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
+
+**Reprocessing Masters:**
+
+Reprocess master files from yyyymmdd to YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
+
+    <command to be added>
 
 **Quicklook reprocessing -- qlp_parallel.py:**
 
@@ -218,16 +215,8 @@ The full description is here::
     Example:
       ./scripts/kpf_processing_progress.sh 20231114 20231231 --print_files
 
+**Ingest Files Over Date Range Into the TSDB:**
 
-Example Setup
-*************
+To ingest observations from date yyyymmdd to YYYYMMDD into the time series database, use::
 
-Below is an example setup of production processing used by the DRP development team.  Words in bold indicate the names of xterm windows in a VNC instance.
-
-#. **Realtime Processing**: Command: ``kpf --watch /data/L0/ -c configs/kpf_drp.cfg -r recipes/kpf_drp.recipe``
-#. **Reprocessing**: Command: *various*
-#. **Masters Reprocessing**: Command: *various*
-#. **QLP --only_recent**: Command: ``./scripts/launch_qlp.sh --only_recent``
-#. **QLP --not_recent**: Command: ``./scripts/launch_qlp.sh --not_recent``
-#. **TSDB Plots**: Command: ``./scripts/generate_time_series_plots.py``
-#. **TSDB Ingestion**: Command: ``./scripts/ingest_watch_kpf_tsdb.py``
+    ./scripts/ingest_dates_kpf_tsdb.py yyyymmdd YYYYMMDD
