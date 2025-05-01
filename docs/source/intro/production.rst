@@ -215,3 +215,16 @@ The full description is here::
     Example:
       ./scripts/kpf_processing_progress.sh 20231114 20231231 --print_files
 
+
+Example Setup
+*************
+
+Below is an example setup of production processing used by the DRP development team.  Words in bold indicate the names of xterm windows in a VNC instance.
+
+#. **Realtime Processing**: Command: ``kpf --watch /data/L0/ -c configs/kpf_drp.cfg -r recipes/kpf_drp.recipe``
+#. **Reprocessing**: Command: *various*
+#. **Masters Reprocessing**: Command: *various*
+#. **QLP --only_recent**: Command: ``./scripts/launch_qlp.sh --only_recent``
+#. **QLP --not_recent**: Command: ``./scripts/launch_qlp.sh --not_recent``
+#. **TSDB Plots**: Command: ``./scripts/generate_time_series_plots.py``
+#. **TSDB Ingestion**: Command: ``./scripts/ingest_watch_kpf_tsdb.py``
