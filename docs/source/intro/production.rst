@@ -15,10 +15,13 @@ Launch QLP instances for all data levels with the default recipe::
 
     ./scripts/launch_qlp.sh
 
-Alternatively, launch QLP instances for only recent observations::
+Alternatively, launch QLP instances for only recent observations (within the last day)::
 
     ./scripts/launch_qlp.sh --only_recent
 
+And one for not recent observations (more than a day ago)::
+
+    ./scripts/launch_qlp.sh --not_recent
   
 **Time Series Database Ingestion:**
   
