@@ -1,7 +1,7 @@
 Production Processing
 =====================
 
-The following commands should be run from separate Docker containers to start production processing of KPF data.
+The following commands should be run from separate Docker containers to start production processing of KPF data. 
 
 **Main processing threads:**
 
