@@ -88,7 +88,7 @@ class Handler(FileSystemEventHandler):
             
 def process_queue(event_queue, db_path, stop_event):
     """
-    This method process a set of events (files creations and modifications) by 
+    This method processes a set of events (files creations and modifications) by 
     ingesting the headers and telemetry from the corresponding observations.
     """
     processing_interval = 30  # seconds to wait before each processing cycle
@@ -151,7 +151,7 @@ def periodic_scan(db_path,stop_event):
         if datetime.now() - last_run_time >= timedelta(seconds=sec_between_scans):
             myTS = AnalyzeTimeSeries(db_path=db_path)
             myTS.logger.info('Starting periodic scan for new or changed files.')
-            myTS.ingest_dates_to_db(start_date, end_date)
+            myTS.ingest_dates_to_db(start_date, end_date, batch_size=10000, reverse=True, force_ingest=True)
             myTS.print_db_status()
             myTS.logger.info('Ending periodic scan for new or changed files.')
             myTS = [] # clear memory

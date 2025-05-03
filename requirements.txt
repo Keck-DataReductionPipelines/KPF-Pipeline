@@ -19,6 +19,7 @@ psycopg2-binary
 tqdm
 dataclasses
 pyyaml
+seaborn
 # The following is required by polly.
 pyfonts
 
