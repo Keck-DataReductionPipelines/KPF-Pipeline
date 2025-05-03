@@ -60,6 +60,10 @@ class TSDB:
         L2_RV_header_keyword_types (dictionary) - specifies data types for L2 RV header keywords
         L2_RV_ccf_keyword_types (dictionary) - specifies data types for L2 CCF header keywords
 
+    Related Commandline Scripts:
+        'ingest_dates_kpf_tsdb.py' - ingest from a range of dates
+        'ingest_watch_kpf_tsdb.py' - ingest by watching a set of directories
+
     To-do:
         * Update these methods for postgresql
             * __init__
@@ -97,13 +101,19 @@ class TSDB:
             self.logger.info('Jupyter Notebook environment detected.')
         else:
             self.tqdm = tqdm
-
+        
+        self.tables = [
+            'tsdb_base', 'tsdb_l0', 'tsdb_2d', 'tsdb_l1',
+            'tsdb_l2', 'tsdb_l0t', 'tsdb_l2rv', 'tsdb_l2ccf',
+            'tsdb_metadata'  # include metadata table explicitly
+        ]
+    
 # ADJUST this for sqlite3 only
         self.db_path = db_path
         self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         self.base_dir = base_dir
         self.logger.info('Base data directory: ' + self.base_dir)
-
+        self.cursor = None
 
         # Initialize metadata entries first
         self.init_metadata_entries()
@@ -125,64 +135,42 @@ class TSDB:
 
         self.conn = None
 
-        if backend == 'sqlite3':
+        if self.backend == 'sqlite3':
             pass
 
         elif backend == 'postgresql':
-            # Get database connection parameters from environment.
             self.dbport = os.getenv('DBPORT')
             self.dbname = os.getenv('DBNAME')
             self.dbuser = os.getenv('DBUSER')
             self.dbpass = os.getenv('DBPASS')
             self.dbserver = os.getenv('DBSERVER')
         
-            self.exit_code = 0
-            #self.cId = None
-            #self.db_level = None
-
-            # Connect to database
-            db_fail = True
-            n_attempts = 3
-            for i in range(n_attempts):
-                try:
-                    self.conn = psycopg2.connect(host=self.dbserver,database=self.dbname,port=self.dbport,user=self.dbuser,password=self.dbpass)
-                    db_fail = False
-                    break
-                except:
-                    self.logger.info("Could not connect to database, retrying...")
-                    db_fail = True
-                    time.sleep(10)
-    
-            if db_fail:
-                self.logger.error(f"Could not connect to database after {n_attempts} attempts...")
-                self.exit_code = 64
-                return
-    
-            # Open database cursor.
-            self.cur = self.conn.cursor()
-    
-            # Select database version.
-            q1 = 'SELECT version();'
-            if self.verbose:
-                self.logger.info('q1 = {}'.format(q1))
-            self.cur.execute(q1)
-            db_version = self.cur.fetchone()
-            if self.verbose:
-                self.logger.info('PostgreSQL database version = {}'.format(db_version))
-    
-            # Check database current_user.
-            q2 = 'SELECT current_user;'
-            if self.verbose:
-                print('q2 = {}'.format(q2))
-            self.cur.execute(q2)
-            for record in self.cur:
-                if self.verbose:
-                    print('record = {}'.format(record))
+#            self.exit_code = 0
+#            #self.cId = None
+#            #self.db_level = None
+#
+#            # Connect to database
+#            db_fail = True
+#            n_attempts = 3
+#            for i in range(n_attempts):
+#                try:
+#                    self.conn = psycopg2.connect(host=self.dbserver,database=self.dbname,port=self.dbport,user=self.dbuser,password=self.dbpass)
+#                    db_fail = False
+#                    break
+#                except:
+#                    self.logger.info("Could not connect to database, retrying...")
+#                    db_fail = True
+#                    time.sleep(10)
+#    
+#            if db_fail:
+#                self.logger.error(f"Could not connect to database after {n_attempts} attempts...")
+#                self.exit_code = 64
+#                return
+#    
         
         if drop:
             self.drop_tables()
             self.logger.info('Dropping KPF database ' + str(self.db_path))
-            self.create_metadata_table()  
 
         # Always (re)create metadata table first
         self.create_metadata_table()
@@ -195,39 +183,43 @@ class TSDB:
             self.logger.info("Primary tables already exist.")
 
 
-    def close(self):
-        """
-        Close database cursor and then connection.
-        """
-        try:
-            self.cur.close()
-        except (Exception, psycopg2.DatabaseError) as error:
-            print(error)
-            self.exit_code = 2
-        finally:
-            if self.conn is not None:
-                self.conn.close()
-                print('Database connection closed.')
+    def _open_connection(self):
+        if self.backend == 'sqlite3':
+            self.conn = sqlite3.connect(self.db_path)
+            self.cursor = self.conn.cursor()
+    
+    
+    def _close_connection(self):
+        if self.conn:
+            self.conn.commit()
+            self.conn.close()
+            self.conn = None
+            self.cursor = None
+
+
+    def _execute_sql_command(self, command, params=None, fetch=False):
+        if self.cursor is None:
+            raise RuntimeError("Database connection is not open.")
+    
+        if params:
+            self.cursor.execute(command, params)
+        else:
+            self.cursor.execute(command)
+    
+        if fetch:
+            return self.cursor.fetchall()
 
 
     def drop_tables(self):
         """
         Start over on the database by dropping all data and metadata tables.
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-    
-        tables = [
-            'tsdb_base', 'tsdb_l0', 'tsdb_2d', 'tsdb_l1',
-            'tsdb_l2', 'tsdb_l0t', 'tsdb_l2rv', 'tsdb_l2ccf',
-            'tsdb_metadata'  # include metadata table explicitly
-        ]
-    
-        for tbl in tables:
-            cursor.execute(f"DROP TABLE IF EXISTS {tbl}")
-    
-        conn.commit()
-        conn.close()
+        self._open_connection()
+        try:
+            for tbl in self.tables:
+                self._execute_sql_command(f"DROP TABLE IF EXISTS {tbl}")
+        finally:
+            self._close_connection()
 
 
     def unlock_db(self):
@@ -299,30 +291,29 @@ class TSDB:
         """
         Prints a formatted summary table of the database status for each table.
         """
-        tables = ['tsdb_base', 'tsdb_l0', 'tsdb_2d', 'tsdb_l1', 'tsdb_l2',
-                  'tsdb_l0t', 'tsdb_l2rv', 'tsdb_l2ccf']
+        tables = self.tables.copy()
+        tables.remove('tsdb_metadata')
     
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        self._open_connection()
     
         summary_data = []
     
         for table in tables:
-            cursor.execute(f'SELECT COUNT(*) FROM {table}')
-            nrows = cursor.fetchone()[0]
+            self._execute_sql_command(f'SELECT COUNT(*) FROM {table}')
+            nrows = self.cursor.fetchone()[0]
     
-            cursor.execute(f'PRAGMA table_info({table})')
-            ncolumns = len(cursor.fetchall())
+            self._execute_sql_command(f'PRAGMA table_info({table})')
+            ncolumns = len(self.cursor.fetchall())
     
             summary_data.append((table, ncolumns, nrows))
     
-        cursor.execute('SELECT MAX(L0_header_read_time), MAX(L1_header_read_time) FROM tsdb_base')
-        most_recent_read_time = max(filter(None, cursor.fetchone()))
+        self._execute_sql_command('SELECT MAX(L0_header_read_time), MAX(L1_header_read_time) FROM tsdb_base')
+        most_recent_read_time = max(filter(None, self.cursor.fetchone()))
     
-        cursor.execute('SELECT MIN(datecode), MAX(datecode), COUNT(DISTINCT datecode) FROM tsdb_base')
-        earliest_datecode, latest_datecode, unique_datecodes_count = cursor.fetchone()
+        self._execute_sql_command('SELECT MIN(datecode), MAX(datecode), COUNT(DISTINCT datecode) FROM tsdb_base')
+        earliest_datecode, latest_datecode, unique_datecodes_count = self.cursor.fetchone()
     
-        conn.close()
+        self._close_connection()
     
         # Print the summary table
         self.logger.info("Database Table Summary:")
@@ -416,40 +407,44 @@ class TSDB:
 
     def create_database(self):
         """Create TSDB tables split by category with ObsID as primary key."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        self._open_connection()
     
-        tables = ['tsdb_base', 'tsdb_l0', 'tsdb_2d', 'tsdb_l1', 
-                  'tsdb_l2', 'tsdb_l0t', 'tsdb_l2rv', 'tsdb_l2ccf']
+        tables = self.tables.copy()
+        tables.remove('tsdb_metadata')
+    
+        # Drop existing tables if they exist
         for tbl in tables:
-            cursor.execute(f"DROP TABLE IF EXISTS {tbl}")
+            self._execute_sql_command(f"DROP TABLE IF EXISTS {tbl}")
     
         # Fetch keyword, datatype, and table_name from metadata
-        cursor.execute("SELECT keyword, datatype, table_name FROM tsdb_metadata;")
-        columns_by_table = {tbl: [] for tbl in tables}
+        sql_metadata = "SELECT keyword, datatype, table_name FROM tsdb_metadata;"
+        metadata_rows = self._execute_sql_command(sql_metadata, fetch=True)
     
-        for keyword, dtype, table_name in cursor.fetchall():
+        columns_by_table = {tbl: [] for tbl in tables}
+        for keyword, dtype, table_name in metadata_rows:
             if table_name not in columns_by_table or table_name is None:
                 continue
             if keyword.strip().lower() == 'obsid':
-                continue  # ObsID already primary key
-    
+                continue  # ObsID is primary key
             sql_type = self.map_data_type_to_sql(dtype)
             columns_by_table[table_name].append((keyword, sql_type))
     
-        # Create each category table with ObsID as primary key and indexed
+        # Create each table with ObsID as primary key and indexed
         for tbl, cols in columns_by_table.items():
             col_defs = ['"ObsID" TEXT PRIMARY KEY']
             col_defs += [f'"{kw}" {sql_type}' for kw, sql_type in cols]
             col_defs_sql = ", ".join(col_defs)
     
-            cursor.execute(f"CREATE TABLE IF NOT EXISTS {tbl} ({col_defs_sql});")
-            cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_ObsID ON {tbl}(ObsID);")
+            create_table_sql = f"CREATE TABLE IF NOT EXISTS {tbl} ({col_defs_sql});"
+            create_index_sql = f"CREATE INDEX IF NOT EXISTS idx_{tbl}_ObsID ON {tbl}(ObsID);"
     
-        conn.commit()
-        conn.close()
-        self.logger.info("Category tables successfully created.")
-
+            self._execute_sql_command(create_table_sql)
+            self._execute_sql_command(create_index_sql)
+    
+        self._close_connection()
+    
+        self.logger.info("Tables successfully created.")
+        
 
     def ingest_one_observation(self, dir_path, L0_filename):
         """
@@ -492,39 +487,38 @@ class TSDB:
         header_data['L2_header_read_time'] = now_str
     
         # Connect to DB
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        self._open_connection()
     
-        # Get keyword-to-table mapping from metadata
-        cursor.execute("SELECT keyword, table_name FROM tsdb_metadata;")
-        kw_to_table = dict(cursor.fetchall())
+        try:
+            # Get keyword-to-table mapping from metadata
+            metadata_rows = self._execute_sql_command("SELECT keyword, table_name FROM tsdb_metadata;", fetch=True)
+            kw_to_table = dict(metadata_rows)
     
-        # Prepare data for each table
-        table_data = {}
-        for kw, value in header_data.items():
-            table_name = kw_to_table.get(kw)
-            if table_name:
-                table_data.setdefault(table_name, {})[kw] = value
-        # ObsID must be in all tables
-        for tbl in table_data:
-            table_data[tbl]['ObsID'] = base_filename
+            # Prepare data for each table
+            table_data = {}
+            for kw, value in header_data.items():
+                table_name = kw_to_table.get(kw)
+                if table_name:
+                    table_data.setdefault(table_name, {})[kw] = value
+            # ObsID must be in all tables
+            for tbl in table_data:
+                table_data[tbl]['ObsID'] = base_filename
     
-        # Insert data into each table separately
-        for tbl, data in table_data.items():
-            columns = ', '.join([f'"{col}"' for col in data])
-            placeholders = ', '.join(['?'] * len(data))
-            insert_query = f'INSERT OR REPLACE INTO {tbl} ({columns}) VALUES ({placeholders})'
-            cursor.execute(insert_query, tuple(data.values()))
-    
-        conn.commit()
-        conn.close()
+            # Insert data into each table separately
+            for tbl, data in table_data.items():
+                columns = ', '.join([f'"{col}"' for col in data])
+                placeholders = ', '.join(['?'] * len(data))
+                insert_query = f'INSERT OR REPLACE INTO {tbl} ({columns}) VALUES ({placeholders})'
+                self._execute_sql_command(insert_query, params=tuple(data.values()))
+        finally:
+            self._close_connection()
     
         self.logger.info(f"Ingested observation: {base_filename}")
-
+    
 
     def ingest_batch_observation(self, batch, force_ingest=False):
         """
-        Ingest a batch of observations into the multi-table database in parallel, 
+        Ingest a batch of observations into the multi-table database in parallel,
         checking each file for updates beforehand.
         """
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -567,41 +561,41 @@ class TSDB:
         if not valid_results:
             return
     
-        # === 4) Group extracted data by table ===
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT keyword, table_name FROM tsdb_metadata;")
-        kw_to_table = dict(cursor.fetchall())
+        self._open_connection()
+        try:
+            # === 4) Group extracted data by table ===
+            metadata_rows = self._execute_sql_command("SELECT keyword, table_name FROM tsdb_metadata;", fetch=True)
+            kw_to_table = dict(metadata_rows)
     
-        # Organize data per table
-        table_data = {}
-        for obs_data in valid_results:
-            obsid = obs_data['ObsID']
-            data_by_table = {}
-            for kw, value in obs_data.items():
-                table = kw_to_table.get(kw)
-                if table:
-                    data_by_table.setdefault(table, {})[kw] = value
-            # Ensure ObsID is in every table
-            for table, data in data_by_table.items():
-                data['ObsID'] = obsid
-                table_data.setdefault(table, []).append(data)
+            # Organize data per table
+            table_data = {}
+            for obs_data in valid_results:
+                obsid = obs_data['ObsID']
+                data_by_table = {}
+                for kw, value in obs_data.items():
+                    table = kw_to_table.get(kw)
+                    if table:
+                        data_by_table.setdefault(table, {})[kw] = value
+                # Ensure ObsID is in every table
+                for table, data in data_by_table.items():
+                    data['ObsID'] = obsid
+                    table_data.setdefault(table, []).append(data)
     
-        # === 5) Perform bulk insert for each table ===
-        for table, rows in table_data.items():
-            if not rows:
-                continue
-            columns = list(rows[0].keys())
-            placeholders = ', '.join(['?'] * len(columns))
-            column_str = ', '.join([f'"{col}"' for col in columns])
-            insert_query = f'INSERT OR REPLACE INTO {table} ({column_str}) VALUES ({placeholders})'
-            data_tuples = [tuple(row[col] for col in columns) for row in rows]
+            # === 5) Perform bulk insert for each table ===
+            for table, rows in table_data.items():
+                if not rows:
+                    continue
+                columns = list(rows[0].keys())
+                placeholders = ', '.join(['?'] * len(columns))
+                column_str = ', '.join([f'"{col}"' for col in columns])
+                insert_query = f'INSERT OR REPLACE INTO {table} ({column_str}) VALUES ({placeholders})'
+                data_tuples = [tuple(row[col] for col in columns) for row in rows]
     
-            cursor.executemany(insert_query, data_tuples)
+                for data_tuple in data_tuples:
+                    self._execute_sql_command(insert_query, params=data_tuple)
+        finally:
+            self._close_connection()
     
-        conn.commit()
-        conn.close()
-
 
     def map_data_type_to_sql(self, dtype):
         """
@@ -911,57 +905,41 @@ class TSDB:
     def is_any_file_updated(self, L0_file_path):
         """
         Determines if any file from the L0/2D/L1/L2 set has been updated since the last 
-        noted modification in the database.  Returns True if is has been modified.
+        noted modification in the database. Returns True if it has been modified.
         """
-        L0_filename = L0_file_path.split('/')[-1]
-
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA cache_size = -2000000;")
-        query = f'SELECT L0_header_read_time, D2_header_read_time, L1_header_read_time, L2_header_read_time FROM tsdb_base WHERE L0_filename = "{L0_filename}"'
-        cursor.execute(query)
-        result = cursor.fetchone()
-        conn.close()
+        L0_filename = os.path.basename(L0_file_path)
     
-        if not result:  
-            return True # no record in database
-
+        self._open_connection()
         try:
-            L0_file_mod_time = datetime.fromtimestamp(os.path.getmtime(L0_file_path)).strftime("%Y-%m-%d %H:%M:%S")
-        except FileNotFoundError:
-            L0_file_mod_time = '1000-01-01 01:01'
-        if L0_file_mod_time > result[0]:
-            return True # L0 file was modified
-
-        D2_file_path = f"{L0_file_path.replace('L0', '2D')}"
-        D2_file_path = f"{D2_file_path.replace('.fits', '_2D.fits')}"
-        try:
-            D2_file_mod_time = datetime.fromtimestamp(os.path.getmtime(D2_file_path)).strftime("%Y-%m-%d %H:%M:%S")
-        except FileNotFoundError:
-            D2_file_mod_time = '1000-01-01 01:01'
-        if D2_file_mod_time > result[1]:
-            return True # 2D file was modified
-
-        L1_file_path = f"{D2_file_path.replace('2D', 'L1')}"
-        try:
-            L1_file_mod_time = datetime.fromtimestamp(os.path.getmtime(L1_file_path)).strftime("%Y-%m-%d %H:%M:%S")
-        except FileNotFoundError:
-            L1_file_mod_time = '1000-01-01 01:01'
-        if L1_file_mod_time > result[2]:
-            return True # L1 file was modified
-
-        L2_file_path = f"{L0_file_path.replace('L1', 'L2')}"
-        try:
-            L2_file_mod_time = datetime.fromtimestamp(os.path.getmtime(L2_file_path)).strftime("%Y-%m-%d %H:%M:%S")
-        except FileNotFoundError:
-            L2_file_mod_time = '1000-01-01 01:01'
-        if L2_file_mod_time > result[3]:
-            return True # L2 file was modified
-                    
-        return False # DB modification times are all more recent than file modification times
+            query = 'SELECT L0_header_read_time, D2_header_read_time, L1_header_read_time, L2_header_read_time FROM tsdb_base WHERE L0_filename = ?'
+            self._execute_sql_command(query, params=(L0_filename,))
+            result = self.cursor.fetchone()
+        finally:
+            self._close_connection()
+    
+        if not result:
+            return True  # No record in the database
+    
+        file_paths = {
+            'L0': L0_file_path,
+            'D2': L0_file_path.replace('L0', '2D').replace('.fits', '_2D.fits'),
+            'L1': L0_file_path.replace('L0', 'L1').replace('.fits', '_L1.fits'),
+            'L2': L0_file_path.replace('L0', 'L2').replace('.fits', '_L2.fits'),
+        }
+    
+        for idx, (key, path) in enumerate(file_paths.items()):
+            try:
+                mod_time = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
+            except FileNotFoundError:
+                mod_time = '1000-01-01 00:00:00'
+    
+            if mod_time > (result[idx] or '1000-01-01 00:00:00'):
+                return True  # File was modified more recently than DB timestamp
+    
+        return False  # No updates found
            
 
-    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=1000, reverse=False, force_ingest=False, quiet=False):
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=10000, reverse=False, force_ingest=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
         batch_size refers to the number of observations per DB insertion.
@@ -1077,9 +1055,6 @@ class TSDB:
         in fixed-width columns in the custom order below, without printing
         the 'source' column.
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-    
         # Define your custom order of sources
         custom_order = [
             "Base Keywords",
@@ -1089,93 +1064,73 @@ class TSDB:
             "L2 PRIMARY Header",
             "L0 TELEMETRY Extension",
             "L2 RV Header",
-            "L2 RV Extension"
+            "L2 RV Extension",
+            "L2 CCF Header"
         ]
     
-        col_width_keyword  = 35
+        col_width_keyword = 35
         col_width_datatype = 9
-        col_width_units    = 9
-        col_width_desc     = 90
+        col_width_units = 9
+        col_width_desc = 90
     
-        for src in custom_order:
-            cursor.execute(
+        self._open_connection()
+        try:
+            for src in custom_order:
+                query = """
+                    SELECT keyword, datatype, units, description
+                    FROM tsdb_metadata
+                    WHERE source = ?
+                    ORDER BY keyword;
                 """
-                SELECT keyword, datatype, units, description
-                FROM tsdb_metadata
-                WHERE source = ?
-                ORDER BY keyword;
-                """,
-                (src,)
-            )
-            rows = cursor.fetchall()
+                self._execute_sql_command(query, params=(src,))
+                rows = self.cursor.fetchall()
     
-            if not rows:
-                continue
+                if not rows:
+                    continue
     
-            print(f"{src}:")
-            print("-" * 90)
-            print(
-                f"{'Keyword':<{col_width_keyword}} "
-                f"{'Datatype':<{col_width_datatype}} "
-                f"{'Units':<{col_width_units}} "
-                f"{'Description':<{col_width_desc}}"
-            )
-            print("-" * 90)
-    
-            for keyword, datatype, units, description in rows:
-                # Convert None to an empty string to avoid formatting errors
-                keyword_str   = keyword if keyword else ""
-                datatype_str  = datatype if datatype else ""
-                units_str     = units if units else ""
-                desc_str      = description if description else ""
-    
+                print(f"{src}:")
+                print("-" * 150)
                 print(
-                    f"{keyword_str:<{col_width_keyword}} "
-                    f"{datatype_str:<{col_width_datatype}} "
-                    f"{units_str:<{col_width_units}} "
-                    f"{desc_str:<{col_width_desc}}"
+                    f"{'Keyword':<{col_width_keyword}} "
+                    f"{'Datatype':<{col_width_datatype}} "
+                    f"{'Units':<{col_width_units}} "
+                    f"{'Description':<{col_width_desc}}"
                 )
-            print()  
+                print("-" * 150)
     
-        conn.close()
+                for keyword, datatype, units, description in rows:
+                    keyword_str = keyword or ""
+                    datatype_str = datatype or ""
+                    units_str = units or ""
+                    desc_str = description or ""
+    
+                    print(
+                        f"{keyword_str:<{col_width_keyword}} "
+                        f"{datatype_str:<{col_width_datatype}} "
+                        f"{units_str:<{col_width_units}} "
+                        f"{desc_str:<{col_width_desc}}"
+                    )
+                print()
+        finally:
+            self._close_connection()
 
 
     def metadata_table_to_df(self):
         """
         Return a dataframe of the metadata table with columns:
-            keyword | datatype | unit | description | source
+            keyword | datatype | units | description | source
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        query = f"SELECT keyword, datatype, units, description, source FROM tsdb_metadata"
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        
-        return df
-
-
-    def select_query(self, query):
-        """
-        Query the database with the query 'query'.  Any query can be used, 
-        but no 'commit' statement is used do database changes won't be saved.
-        """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute(query)
-        tables = cursor.fetchall()
-        conn.close()
-        
-        return tables
-        
-
-    def query_to_pandas(self, query):
+        self._open_connection()
         try:
-            results = pd.read_sql_query(query, self.conn)
-        except:
-            self.log.warning(f"Error running database query:\n{query}\n")
-            results = pd.DataFrame([])
-
-        return results
+            query = "SELECT keyword, datatype, units, description, source FROM tsdb_metadata"
+            self._execute_sql_command(query)
+            rows = self.cursor.fetchall()
+    
+            df = pd.DataFrame(rows, columns=['keyword', 'datatype', 'units', 'description', 'source'])
+        finally:
+            self._close_connection()
+    
+        return df
 
 
     def is_notebook(self):
@@ -1195,27 +1150,23 @@ class TSDB:
     def get_first_last_dates(self):
         """
         Returns a tuple of datetime objects containing the first and last dates 
-        in the database.  DATE-MID is used for the date.
+        in the database. DATE-MID is used for the date.
         """
-
-        conn = sqlite3.connect(self.db_path)
+        self._open_connection()
+        try:
+            query = """
+                SELECT MIN("DATE-MID") AS min_date, MAX("DATE-MID") AS max_date
+                FROM tsdb_l0
+            """
+            self._execute_sql_command(query)
+            min_date_str, max_date_str = self.cursor.fetchone()
     
-        # Query for the minimum and maximum dates in the 'DATE-MID' column
-        query = """
-            SELECT MIN("DATE-MID") AS min_date, MAX("DATE-MID") AS max_date
-            FROM tsdb
-        """
-        result = pd.read_sql_query(query, conn)
-        conn.close()
-    
-        # Extract dates from the result and convert them to datetime objects
-        min_date_str = result['min_date'][0]
-        max_date_str = result['max_date'][0]
-    
-        # Convert strings to datetime objects, handling None values gracefully
-        date_format = '%Y-%m-%dT%H:%M:%S.%f'
-        first_date = datetime.strptime(min_date_str, date_format) if min_date_str else None
-        last_date = datetime.strptime(max_date_str, date_format) if max_date_str else None
+            # Convert strings to datetime objects, handling None values gracefully
+            date_format = '%Y-%m-%dT%H:%M:%S.%f'
+            first_date = datetime.strptime(min_date_str, date_format) if min_date_str else None
+            last_date = datetime.strptime(max_date_str, date_format) if max_date_str else None
+        finally:
+            self._close_connection()
     
         return first_date, last_date
 
@@ -1260,75 +1211,77 @@ class TSDB:
         Returns a pandas dataframe of attributes (specified by column names) from
         multi-table database. Queries can be restricted by object, source, date, etc.
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        self._open_connection()
+        try:
+            if columns is None or columns == '*':
+                sql = "SELECT keyword, table_name FROM tsdb_metadata;"
+                self._execute_sql_command(sql)
+                metadata_df = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
+                columns = metadata_df['keyword'].tolist()
+            else:
+                columns = [columns] if isinstance(columns, str) else list(columns)
+                clean_columns = [str(col).strip() for col in columns if isinstance(col, str) or col is not None]
+                placeholders = ','.join('?' for _ in clean_columns)
+                sql = f"SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders});"
+                self._execute_sql_command(sql, clean_columns)
+                metadata_df = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
+                columns = clean_columns
     
-        if columns is None or columns == '*':
-            metadata_df = pd.read_sql_query("SELECT keyword, table_name FROM tsdb_metadata;", conn)
-            columns = metadata_df['keyword'].tolist()
-        else:
-            columns = [columns] if isinstance(columns, str) else list(columns)
-            clean_columns = [str(col).strip() for col in columns if isinstance(col, str) or col is not None]
-            placeholders = ','.join('?' for _ in clean_columns)
-            metadata_df = pd.read_sql_query(
-                f"SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders});",
-                conn,
-                params=clean_columns
-            )
-            columns = clean_columns
+            kw_table_map = dict(zip(metadata_df['keyword'], metadata_df['table_name']))
+            tables_needed = set(metadata_df['table_name'].tolist())
     
-        kw_table_map = dict(zip(metadata_df['keyword'], metadata_df['table_name']))
-        tables_needed = set(metadata_df['table_name'].tolist())
+            # Ensure tables for filters are included
+            filter_columns = ['OBJECT', 'Source', 'NOTJUNK', 'FIUMODE', 'datecode']
+            placeholders = ','.join('?' for _ in filter_columns)
+            filter_sql = f"SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders});"
+            self._execute_sql_command(filter_sql, filter_columns)
+            filter_metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
+            filter_kw_table_map = dict(zip(filter_metadata['keyword'], filter_metadata['table_name']))
+            tables_needed.update(filter_metadata['table_name'])
     
-        # Ensure tables for filters are included
-        filter_columns = ['OBJECT', 'Source', 'NOTJUNK', 'FIUMODE', 'datecode']
-        filter_metadata = pd.read_sql_query(
-            f"SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({','.join('?' for _ in filter_columns)});",
-            conn,
-            params=filter_columns
-        )
-        filter_kw_table_map = dict(zip(filter_metadata['keyword'], filter_metadata['table_name']))
-        tables_needed.update(filter_metadata['table_name'])
+            dataframes = {}
+            for table in tables_needed:
+                table_cols = metadata_df[metadata_df['table_name'] == table]['keyword'].tolist()
+                table_cols += [col for col in filter_columns if filter_kw_table_map.get(col) == table and col not in table_cols]
+                if 'ObsID' not in table_cols:
+                    table_cols.append('ObsID')
     
-        dataframes = {}
-        for table in tables_needed:
-            table_cols = metadata_df[metadata_df['table_name'] == table]['keyword'].tolist()
-            table_cols += [col for col in filter_columns if filter_kw_table_map.get(col) == table and col not in table_cols]
-            if 'ObsID' not in table_cols:
-                table_cols.append('ObsID')
-                    
-            quoted_cols = [f'"{col}"' for col in table_cols]
-            query = f"SELECT {', '.join(quoted_cols)} FROM {table}"
+                quoted_cols = [f'"{col}"' for col in table_cols]
+                query = f"SELECT {', '.join(quoted_cols)} FROM {table}"
     
-            conditions = []
-            if only_object and filter_kw_table_map.get('OBJECT') == table:
-                only_object = [only_object] if isinstance(only_object, str) else only_object
-                conditions.append('(' + ' OR '.join([f'OBJECT = "{obj}"' for obj in only_object]) + ')')
-            if object_like and filter_kw_table_map.get('OBJECT') == table:
-                conditions.append(f"OBJECT LIKE '%{object_like}%'")
-            if only_source and filter_kw_table_map.get('Source') == table:
-                only_source = [only_source] if isinstance(only_source, str) else only_source
-                conditions.append('(' + ' OR '.join([f'Source = "{src}"' for src in only_source]) + ')')
-            if not_junk is not None and filter_kw_table_map.get('NOTJUNK') == table:
-                conditions.append(f'NOTJUNK = {1 if not_junk else 0}')
-            if on_sky is not None and filter_kw_table_map.get('FIUMODE') == table:
-                mode = 'Observing' if on_sky else 'Calibration'
-                conditions.append(f'FIUMODE = "{mode}"')
-            if filter_kw_table_map.get('datecode') == table:
-                if start_date:
-                    conditions.append(f'datecode >= "{start_date.strftime("%Y%m%d")}"')
-                if end_date:
-                    conditions.append(f'datecode <= "{end_date.strftime("%Y%m%d")}"')
+                conditions = []
+                if only_object and filter_kw_table_map.get('OBJECT') == table:
+                    only_object = [only_object] if isinstance(only_object, str) else only_object
+                    conditions.append('(' + ' OR '.join([f'OBJECT = "{obj}"' for obj in only_object]) + ')')
+                if object_like and filter_kw_table_map.get('OBJECT') == table:
+                    conditions.append(f"OBJECT LIKE '%{object_like}%'")
+                if only_source and filter_kw_table_map.get('Source') == table:
+                    only_source = [only_source] if isinstance(only_source, str) else only_source
+                    conditions.append('(' + ' OR '.join([f'Source = "{src}"' for src in only_source]) + ')')
+                if not_junk is not None and filter_kw_table_map.get('NOTJUNK') == table:
+                    conditions.append(f'NOTJUNK = {1 if not_junk else 0}')
+                if on_sky is not None and filter_kw_table_map.get('FIUMODE') == table:
+                    mode = 'Observing' if on_sky else 'Calibration'
+                    conditions.append(f'FIUMODE = "{mode}"')
+                if filter_kw_table_map.get('datecode') == table:
+                    if start_date:
+                        conditions.append(f'datecode >= "{start_date.strftime("%Y%m%d")}"')
+                    if end_date:
+                        conditions.append(f'datecode <= "{end_date.strftime("%Y%m%d")}"')
     
-            if conditions:
-                query += " WHERE " + ' AND '.join(conditions)
+                if conditions:
+                    query += " WHERE " + ' AND '.join(conditions)
     
-            if verbose:
-                self.logger.info(f"Querying {table}: {query}")
+                if verbose:
+                    self.logger.info(f"Querying {table}: {query}")
     
-            dataframes[table] = pd.read_sql_query(query, conn)
+                self._execute_sql_command(query)
+                fetched_data = self.cursor.fetchall()
+                col_names = [desc[0] for desc in self.cursor.description]
+                dataframes[table] = pd.DataFrame(fetched_data, columns=col_names)
     
-        conn.close()
+        finally:
+            self._close_connection()
     
         base_table = 'tsdb_base'
         if base_table in dataframes:
@@ -1343,10 +1296,10 @@ class TSDB:
                 df_merged = df_merged.merge(df, on='ObsID', how='left')
     
         if columns not in [None, '*']:
-            if 'ObsID' not in list(columns):
-                final_cols = ['ObsID'] + list(columns)
+            if 'ObsID' not in columns:
+                final_cols = ['ObsID'] + columns
             else:
-                final_cols = list(columns)
+                final_cols = columns
             df_merged = df_merged[[col for col in final_cols if col in df_merged.columns]]
     
         return df_merged
