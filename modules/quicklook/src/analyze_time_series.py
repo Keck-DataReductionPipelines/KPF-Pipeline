@@ -86,12 +86,10 @@ class AnalyzeTimeSeries:
           in the legend.
     """
 
-    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False, verbose=False):
+    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', logger=None, drop=False, verbose=False):
        
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting AnalyzeTimeSeries')
-        
-        backend='sqlite3'
         self.db = TSDB(backend=backend, db_path=db_path, base_dir=base_dir, logger=logger, drop=drop, verbose=verbose)
 
 

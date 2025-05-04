@@ -88,7 +88,7 @@ class TSDB:
         
         self.tables = [
             'tsdb_base', 'tsdb_l0', 'tsdb_2d', 'tsdb_l1',
-            'tsdb_l2', 'tsdb_l0t', 'tsdb_l2rv', 'tsdb_l2ccf',
+            'tsdb_l2', 'tsdb_l0t', 'tsdb_l2rv', 'tsdb_l2rvdata', 'tsdb_l2ccf',
             'tsdb_metadata'  # include metadata table explicitly
         ]
     
@@ -122,36 +122,13 @@ class TSDB:
         if self.backend == 'sqlite':
             pass
 
-        elif backend == 'postgresql':
-            self.dbport = os.getenv('DBPORT')
-            self.dbname = os.getenv('DBNAME')
-            self.dbuser = os.getenv('DBUSER')
-            self.dbpass = os.getenv('DBPASS')
-            self.dbserver = os.getenv('DBSERVER')
-        
-#            self.exit_code = 0
-#            #self.cId = None
-#            #self.db_level = None
-#
-#            # Connect to database
-#            db_fail = True
-#            n_attempts = 3
-#            for i in range(n_attempts):
-#                try:
-#                    self.conn = psycopg2.connect(host=self.dbserver,database=self.dbname,port=self.dbport,user=self.dbuser,password=self.dbpass)
-#                    db_fail = False
-#                    break
-#                except:
-#                    self.logger.info("Could not connect to database, retrying...")
-#                    db_fail = True
-#                    time.sleep(10)
-#    
-#            if db_fail:
-#                self.logger.error(f"Could not connect to database after {n_attempts} attempts...")
-#                self.exit_code = 64
-#                return
-#    
-        
+        elif backend == 'psql':
+            self.dbport   = os.getenv('DBPORT_TSDB')
+            self.dbname   = os.getenv('DBNAME_TSDB')
+            self.dbuser   = os.getenv('DBUSER_TSDB')
+            self.dbpass   = os.getenv('DBPASS_TSDB')
+            self.dbserver = os.getenv('DBSERVER_TSDB')
+                
         if drop:
             self.drop_tables()
             self.logger.info('Dropping KPF database ' + str(self.db_path))
@@ -171,27 +148,109 @@ class TSDB:
         if self.backend == 'sqlite':
             self.conn = sqlite3.connect(self.db_path)
             self.cursor = self.conn.cursor()
-    
+        elif self.backend == 'psql':
+            try:
+                db_fail = True
+                n_attempts = 3
+                for i in range(n_attempts):
+                    try: 
+                        self.conn = psycopg2.connect(
+                            host=self.dbserver,
+                            database=self.dbname,
+                            port=self.dbport,
+                            user=self.dbuser,
+                            password=self.dbpass
+                        )
+                        db_fail = False
+                        break
+                    except:
+                        self.logger.info("Could not connect to database, retrying...")
+                        db_fail = True
+                        time.sleep(10)
+                self.cursor = self.conn.cursor()
+            except Exception as e:
+                self.logger.error(f"Failed to connect to PostgreSQL: {e}")
+                raise
+                
     
     def _close_connection(self):
         if self.conn:
-            self.conn.commit()
+            if self.backend == 'sqlite':
+                self.conn.commit()
+            elif self.backend == 'psql':
+                self.conn.commit()
+            self.cursor.close()
             self.conn.close()
             self.conn = None
             self.cursor = None
 
-
+    
     def _execute_sql_command(self, command, params=None, fetch=False):
         if self.cursor is None:
             raise RuntimeError("Database connection is not open.")
     
-        if params:
-            self.cursor.execute(command, params)
-        else:
-            self.cursor.execute(command)
+        try:
+            if params:
+                if self.backend == 'sqlite':
+                    self.cursor.execute(command, params)
+                elif self.backend == 'psql':
+                    self.cursor.execute(command.replace('?', '%s'), params)
+            else:
+                self.cursor.execute(command)
     
-        if fetch:
-            return self.cursor.fetchall()
+            if fetch:
+                return self.cursor.fetchall()
+        except Exception as e:
+            self.logger.error(f"SQL Execution error: {e}\nCommand: {command}\nParams: {params}")
+            raise
+
+
+    def print_summary_all_tables(self):
+        """
+        Prints a summary of all tables in the database (not just the intended tables), 
+        including the number of rows and columns.
+        """
+        self._open_connection()
+        try:
+            if self.backend == 'sqlite':
+                self._execute_sql_command("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+                tables = [row[0] for row in self.cursor.fetchall()]
+    
+                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
+                print("-" * 40)
+    
+                for tbl in tables:
+                    self._execute_sql_command(f"PRAGMA table_info({tbl});")
+                    columns = len(self.cursor.fetchall())
+    
+                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
+                    rows = self.cursor.fetchone()[0]
+    
+                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
+    
+            elif self.backend == 'psql':
+                self._execute_sql_command("""
+                    SELECT tablename FROM pg_catalog.pg_tables
+                    WHERE schemaname='public' ORDER BY tablename;
+                """)
+                tables = [row[0] for row in self.cursor.fetchall()]
+    
+                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
+                print("-" * 40)
+    
+                for tbl in tables:
+                    self._execute_sql_command(f"""
+                        SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_name = '{tbl}';
+                    """)
+                    columns = self.cursor.fetchone()[0]
+    
+                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
+                    rows = self.cursor.fetchone()[0]
+    
+                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
+        finally:
+            self._close_connection()
 
 
     def drop_tables(self):
@@ -213,13 +272,16 @@ class TSDB:
         
         Use this method sparingly.
         """
-        wal_file = f"{self.db_path}-wal"
-        shm_file = f"{self.db_path}-shm"
-    
-        if os.path.exists(wal_file):
-            os.remove(wal_file)
-        if os.path.exists(shm_file):
-            os.remove(shm_file)
+        if self.backend == 'sqlite':
+            wal_file = f"{self.db_path}-wal"
+            shm_file = f"{self.db_path}-shm"
+        
+            if os.path.exists(wal_file):
+                os.remove(wal_file)
+                self.logger.info(f"File removed: {wal_file}")
+            if os.path.exists(shm_file):
+                os.remove(shm_file)
+                self.logger.info(f"File removed: {shm_file}")
 
 
     def init_metadata_entries(self):
@@ -260,7 +322,9 @@ class TSDB:
                 })
     
         df_rv = pd.DataFrame(rv_entries)
-    
+#        for index, row in df_rv.iterrows():
+#            print(f'{row["keyword"]}|float|{row["description"]}|{row["units"]}')
+
         # Combine all into one DataFrame
         df_all = pd.concat([df_base, df_l0, df_2d, df_l1, df_l2, df_l0t, df_l2rv, df_l2ccf, df_rv], ignore_index=True)
     
@@ -311,13 +375,17 @@ class TSDB:
         self.logger.info(f"Last update: {most_recent_read_time}")
            
 
+# UPDATE THIS BY READING METADATA_TABLE
     def create_metadata_table(self):
-        """Create the tsdb_metadata table with an added table_name column for category mapping."""
+        """
+        Create the tsdb_metadata table with an added table_name column for 
+        category mapping. Compatible with both SQLite and PostgreSQL.
+        """
         self._open_connection()
         try:
             self._execute_sql_command("DROP TABLE IF EXISTS tsdb_metadata")
-            self._execute_sql_command("""
-                CREATE TABLE IF NOT EXISTS tsdb_metadata (
+            create_sql = """
+                CREATE TABLE tsdb_metadata (
                     keyword     TEXT PRIMARY KEY,
                     source      TEXT,
                     datatype    TEXT,
@@ -325,7 +393,8 @@ class TSDB:
                     description TEXT,
                     table_name  TEXT
                 );
-            """)
+            """
+            self._execute_sql_command(create_sql)
     
             # Mapping from source to new table name
             source_to_table = {
@@ -336,22 +405,41 @@ class TSDB:
                 'L2 PRIMARY Header':      'tsdb_l2',
                 'L0 TELEMETRY Extension': 'tsdb_l0t',
                 'L2 RV Header':           'tsdb_l2rv',
-                'L2 RV Extension':        'tsdb_l2rv',
+                'L2 RV Extension':        'tsdb_l2rvdata',
                 'L2 CCF Header':          'tsdb_l2ccf'
             }
     
-            # Insert metadata entries and assign table_name based on source
+            # Backend-specific insert command
+            if self.backend == 'sqlite':
+                insert_sql = """
+                    INSERT OR REPLACE INTO tsdb_metadata 
+                    (keyword, source, datatype, units, description, table_name) 
+                    VALUES (?, ?, ?, ?, ?, ?);
+                """
+            elif self.backend == 'psql':
+                insert_sql = """
+                    INSERT INTO tsdb_metadata 
+                    (keyword, source, datatype, units, description, table_name)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (keyword) DO UPDATE SET
+                        source=EXCLUDED.source,
+                        datatype=EXCLUDED.datatype,
+                        units=EXCLUDED.units,
+                        description=EXCLUDED.description,
+                        table_name=EXCLUDED.table_name;
+                """
+            else:
+                raise ValueError(f"Unsupported backend: {self.backend}")
+    
+            # Insert metadata entries
             for entry in self.metadata_entries:
-                keyword = entry.get('keyword')
-                source = entry.get('source')
-                datatype = entry.get('datatype', 'TEXT')
-                units = entry.get('units', None)
+                keyword     = entry.get('keyword')
+                source      = entry.get('source')
+                datatype    = entry.get('datatype', 'TEXT')
+                units       = entry.get('units', None)
                 description = entry.get('description', None)
-                table_name = source_to_table.get(source, None)
-                self._execute_sql_command(
-                    "INSERT OR REPLACE INTO tsdb_metadata (keyword, source, datatype, units, description, table_name) VALUES (?, ?, ?, ?, ?, ?);",
-                    params=(keyword, source, datatype, units, description, table_name)
-                )
+                table_name  = source_to_table.get(source, None)
+                self._execute_sql_command(insert_sql, params=(keyword, source, datatype, units, description, table_name))
     
         finally:
             self._close_connection()
@@ -383,7 +471,9 @@ class TSDB:
 
 
     def create_database(self):
-        """Create TSDB tables split by category with ObsID as primary key."""
+        """
+        Create TSDB tables split by category with ObsID as primary key.
+        """
         self._open_connection()
     
         tables = self.tables.copy()
@@ -587,7 +677,7 @@ class TSDB:
                 'datetime': 'TEXT',  # SQLite does not have a native datetime type
                 'string': 'TEXT'
             }.get(dtype, 'TEXT')
-        elif self.backend == 'postgresql':
+        elif self.backend == 'psql':
             return {
                 'int': 'INTEGER',
                 'float': 'DOUBLE PRECISION',
