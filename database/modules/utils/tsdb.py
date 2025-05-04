@@ -65,33 +65,17 @@ class TSDB:
         'ingest_watch_kpf_tsdb.py' - ingest by watching a set of directories
 
     To-do:
-        * Update these methods for postgresql
-            * __init__
-            * close()
-            * drop_tables()
-            * unlock_db()
-            * print_db_status()
-            * create_metadata_table()
-            * check_if_table_exists()
-            * create_database()
-            * ingest_one_observation()
-            * ingest_batch_observation()
-            * is_any_file_updated()
-            * print_metadata_table()
-            * select_query()
-            * get_first_last_dates()
-            * dataframe_from_db()
         * Add temperature derivatives as columns; they will need to be computed.
         * Add database for masters (separate from ObsIDs?)
 
     """
 
-    def __init__(self, backend='sqlite3', db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False, verbose=False):
+    def __init__(self, backend='sqlite', db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False, verbose=False):
         """
-        Todo: add docstring, including explanation of backend = 'sqlite3' or 'postgres'
+        Todo: add docstring, including explanation of backend = 'sqlite' or 'psql'
         """
         
-        self.backend = backend # sqlite3 or postgresql
+        self.backend = backend # sqlite or psql
         self.verbose = verbose
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting KPF_TSDB')
@@ -108,7 +92,7 @@ class TSDB:
             'tsdb_metadata'  # include metadata table explicitly
         ]
     
-# ADJUST this for sqlite3 only
+# ADJUST this for sqlite only
         self.db_path = db_path
         self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         self.base_dir = base_dir
@@ -135,7 +119,7 @@ class TSDB:
 
         self.conn = None
 
-        if self.backend == 'sqlite3':
+        if self.backend == 'sqlite':
             pass
 
         elif backend == 'postgresql':
@@ -184,7 +168,7 @@ class TSDB:
 
 
     def _open_connection(self):
-        if self.backend == 'sqlite3':
+        if self.backend == 'sqlite':
             self.conn = sqlite3.connect(self.db_path)
             self.cursor = self.conn.cursor()
     
@@ -329,79 +313,72 @@ class TSDB:
 
     def create_metadata_table(self):
         """Create the tsdb_metadata table with an added table_name column for category mapping."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        self._open_connection()
+        try:
+            self._execute_sql_command("DROP TABLE IF EXISTS tsdb_metadata")
+            self._execute_sql_command("""
+                CREATE TABLE IF NOT EXISTS tsdb_metadata (
+                    keyword     TEXT PRIMARY KEY,
+                    source      TEXT,
+                    datatype    TEXT,
+                    units       TEXT,
+                    description TEXT,
+                    table_name  TEXT
+                );
+            """)
     
-        cursor.execute("DROP TABLE IF EXISTS tsdb_metadata")
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tsdb_metadata (
-                keyword     TEXT PRIMARY KEY,
-                source      TEXT,
-                datatype    TEXT,
-                units       TEXT,
-                description TEXT,
-                table_name  TEXT
-            );
-        """)
+            # Mapping from source to new table name
+            source_to_table = {
+                'Base Keywords':          'tsdb_base',
+                'L0 PRIMARY Header':      'tsdb_l0',
+                '2D PRIMARY Header':      'tsdb_2d',
+                'L1 PRIMARY Header':      'tsdb_l1',
+                'L2 PRIMARY Header':      'tsdb_l2',
+                'L0 TELEMETRY Extension': 'tsdb_l0t',
+                'L2 RV Header':           'tsdb_l2rv',
+                'L2 RV Extension':        'tsdb_l2rv',
+                'L2 CCF Header':          'tsdb_l2ccf'
+            }
     
-        # Mapping from source to new table name
-        source_to_table = {
-            'Base Keywords':          'tsdb_base',
-            'L0 PRIMARY Header':      'tsdb_l0',
-            '2D PRIMARY Header':      'tsdb_2d',
-            'L1 PRIMARY Header':      'tsdb_l1',
-            'L2 PRIMARY Header':      'tsdb_l2',
-            'L0 TELEMETRY Extension': 'tsdb_l0t',
-            'L2 RV Header':           'tsdb_l2rv',
-            'L2 RV Extension':        'tsdb_l2rv',
-            'L2 CCF Header':          'tsdb_l2ccf'
-        }
+            # Insert metadata entries and assign table_name based on source
+            for entry in self.metadata_entries:
+                keyword = entry.get('keyword')
+                source = entry.get('source')
+                datatype = entry.get('datatype', 'TEXT')
+                units = entry.get('units', None)
+                description = entry.get('description', None)
+                table_name = source_to_table.get(source, None)
+                self._execute_sql_command(
+                    "INSERT OR REPLACE INTO tsdb_metadata (keyword, source, datatype, units, description, table_name) VALUES (?, ?, ?, ?, ?, ?);",
+                    params=(keyword, source, datatype, units, description, table_name)
+                )
     
-        # Insert metadata entries and assign table_name based on source
-        for entry in self.metadata_entries:  # assume self.metadata_entries is prepared with all keyword info
-            keyword = entry.get('keyword')
-            source = entry.get('source')
-            datatype = entry.get('datatype', 'TEXT')
-            units = entry.get('units', None)
-            description = entry.get('description', None)
-            table_name = source_to_table.get(source, None)
-            cursor.execute(
-                "INSERT OR REPLACE INTO tsdb_metadata (keyword, source, datatype, units, table_name) VALUES (?, ?, ?, ?, ?);",
-                (keyword, source, datatype, units, table_name)
-            )
-    
-        conn.commit()
-        conn.close()
-
+        finally:
+            self._close_connection()
 
 
     def check_if_table_exists(self, tablename=None):
         """
         Return True if the named table exists.
         """
-        
-        # To-do: check if SQLITE3 is being used
-
-        result = False
-        try: 
-            if tablename != None:
-                conn = sqlite3.connect(self.db_path)
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT name FROM sqlite_master 
-                    WHERE type='table' AND name=?;
-                """, (tablename,))
-                tables = cursor.fetchone() 
-                result = False
-                if tables != None:
-                    if isinstance(tables, tuple):
-                        if tablename in tables:
-                            result = True
-            else:
-            	self.logger.info('check_if_table_exists: tablename not specified.')
-        except:
-            self.logger.info('check_if_table_exists: problem with query')
-
+        if tablename is None:
+            self.logger.info('check_if_table_exists: tablename not specified.')
+            return False
+    
+        self._open_connection()
+        try:
+            self._execute_sql_command("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name=?;
+            """, params=(tablename,))
+            tables = self.cursor.fetchone()
+            result = tables is not None and tablename in tables
+        except Exception as e:
+            self.error.info(f'check_if_table_exists: problem with query - {e}')
+            result = False
+        finally:
+            self._close_connection()
+    
         return result
 
 
@@ -599,10 +576,10 @@ class TSDB:
 
     def map_data_type_to_sql(self, dtype):
         """
-        Function to map the data types specified in get_keyword_types to sqlite3
+        Function to map the data types specified in get_keyword_types to sqlite
         data types.
         """
-        if self.backend == 'sqlite3':
+        if self.backend == 'sqlite':
             return {
                 'int': 'INTEGER',
                 'float': 'REAL',
@@ -766,8 +743,7 @@ class TSDB:
                             header_data[target_key] = drphash_value
     
         except Exception as e:
-            # Log any issues with the file
-            self.logger.info(f"Bad file: {file_path}. Error: {e}")
+            self.logger.error(f"Bad file: {file_path}. Error: {e}")
     
         return header_data
 
