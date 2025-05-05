@@ -24,9 +24,14 @@ class AnalyzeL0:
         nregions_red (int) - number of amplifier regions present in Red CCD image
         green_present (boolean) - True if the Green CCD image is in the L0 object
         red_present (boolean) - True if the Red CCD image is in the L0 object
-        read_noise_overscan (dictionary) - read noise estimates in e- determined by std of overscan regions.  
-                                           The dictionary is over the list of regions
-        
+        read_noise_overscan (dictionary) - read noise estimates in e- determined 
+            by std of overscan regions.  The dictionary is over the list of regions
+        std_mad_norm_ratio_overscan (dictionary) - read noise metric equal to 
+            the (0.7979*stdev/mad), where stdev is the standard deviation of 
+            a given overscan region, mad is the mean absolute deviation of a 
+            given overscan region.  This should be = 1.00 for Gaussian noise.
+            The dictionary is over the list of regions.
+         
     """
 
     def __init__(self, L0, logger=None):
@@ -58,11 +63,17 @@ class AnalyzeL0:
                  'RED_AMP4': 5.23,
             }
             self.read_noise_overscan = {} # initialize dictionary
+            self.std_mad_norm_ratio_overscan = {} # initialize dictionary
             try:
                 self.measure_read_noise_overscan()
             except Exception as e:
                 print(e)
                 print('measure_read_noise_overscan() failed on ' + self.ObsID)
+            try:
+                self.measure_std_mad_norm_ratio_overscan()
+            except Exception as e:
+                print(e)
+                print('measure_std_mad_norm_ratio_overscan() failed on ' + self.ObsID)
             
             self.read_speed, self.green_acf, self.red_acf, self.green_read_time, self.red_read_time = \
                   primary_header.get_read_speed()
@@ -156,7 +167,7 @@ class AnalyzeL0:
                     self.red_present = True
 
 
-    def measure_read_noise_overscan(self, nparallel=30, nserial=50, nsigma=5.0, verbose=False): 
+    def measure_read_noise_overscan(self, nparallel=30, nserial=50, nsigma=10, verbose=False): 
         """
         Measure read noise in the overscan region of a KPF CCD image. 
         Read noise is measured as the standard deviation of the pixel values, 
@@ -166,10 +177,10 @@ class AnalyzeL0:
             nparallel (integer) - overscan length in parallel direction 
                                   (30 pixels was final value in 2023)
             nserial (integer) - overscan length in serial direction 
-                                (30 pixels was final value in 2023)
+            nsigma (float) - number of sigma for outlier rejection method
     
         Attributes:
-            TBD
+            self.read_noise_overscan - dictionary of read noise values in self.regions
     
         Returns:
             None
@@ -195,10 +206,61 @@ class AnalyzeL0:
             if region == 'RED_AMP4':
                 data = data[:,::-1]
             overscan_region = data[5:2040 + nparallel-5,2044 + 10:2044 + nserial-10]
-            vals = self.reject_outliers(overscan_region.flat, nsigma)    
-            self.read_noise_overscan[region] = gain * np.std(vals)
+            vals = gain * self.reject_outliers(overscan_region.flat, nsigma)    
+            self.read_noise_overscan[region] = np.std(vals)
             if verbose:
-                self.logger.info(f'Read noise({region}) = {self.read_noise_overscan[region]}')
+                self.logger.info(f'Read noise({region}) = {self.read_noise_overscan[region]} e-')
+
+
+    def measure_std_mad_norm_ratio_overscan(self, nparallel=30, nserial=50, nsigma=10, verbose=False): 
+        """
+        Measure a read noise metric equal to (0.7979*stdev/mad), where stdev 
+        is the standard deviation of a given overscan region, mad is the mean 
+        absolute deviation of a given overscan region.  This should be = 1.00 
+        for Gaussian noise.  The dictionary is over the list of regions.
+        
+        Args:
+            nparallel (integer) - overscan length in parallel direction 
+                                  (30 pixels was final value in 2023)
+            nserial (integer) - overscan length in serial direction 
+            nsigma (float) - number of sigma for outlier rejection method
+    
+        Attributes:
+            self.std_mad_norm_ratio_overscan - dictionary of non-Gaussian 
+                read noise metrics, 0.7979 * stdev(region) / mad(region),
+                where region is one of the overscan regions 
+    
+        Returns:
+            None
+        """
+
+        for region in self.regions:
+            CHIP = region.split('_')[0]
+            NUM = region.split('AMP')[1]
+            gain = self.gain[CHIP+'_AMP'+NUM]
+            data = self.L0[region]
+            if np.nanmedian(data) > 200*2**16:  # divide by 2**16 if needed
+                data /= 2**16
+            if region == 'GREEN_AMP2':
+                data = data[:,::-1]  # flip so that overscan is on the right
+            if region == 'GREEN_AMP3':
+                data = data[::-1,:]
+            if region == 'GREEN_AMP4':
+                data = data[::-1,::-1]
+            if region == 'RED_AMP2':
+                data = data[:,::-1]
+            if region == 'RED_AMP3':
+                data = data 
+            if region == 'RED_AMP4':
+                data = data[:,::-1]
+            overscan_region = data[5:2040 + nparallel-5,2044 + 10:2044 + nserial-10]
+            vals = gain * self.reject_outliers(overscan_region.flat, nsigma)    
+            std = np.std(vals)
+            mad = np.mean(np.abs(vals - np.mean(vals)))
+            special_number = 0.7978845608 # sqrt(2/pi)
+            self.std_mad_norm_ratio_overscan[region] = special_number*std/mad
+            if verbose:
+                self.logger.info(f'Ratio of 0.7979 * stdev({region}) / mad({region})  = {self.std_mad_norm_ratio_overscan[region]}')
 
 
     def plot_L0_stitched_image(self, chip=None, fig_path=None, show_plot=False):
@@ -270,7 +332,7 @@ class AnalyzeL0:
         # Create label for read noise
         rn_text = ''
         if self.read_noise_overscan != {}:
-            rn_text = 'Read noise = '
+            rn_text = 'RN: '
             chip_regions = [item for item in self.regions if CHIP in item]
             for i, region in enumerate(chip_regions):
                 if CHIP == 'GREEN':
@@ -281,17 +343,29 @@ class AnalyzeL0:
                     rn_text += f"{self.read_noise_overscan[region]:.2f}"
                     if i < nregions-1:
                         rn_text += ', '
-            rn_text += r' e- (rms of overscan; 5-$\sigma$ outlier rej.)'
+            rn_text += r' e- (stdev(overscan); 10-$\sigma$ outlier rej.)'
+            rn_text += '\n'
+            rn_text += 'Non-Gaussian RN: '
+            for i, region in enumerate(chip_regions):
+                if CHIP == 'GREEN':
+                    nregions = self.nregions_green
+                if CHIP == 'RED':
+                    nregions = self.nregions_red
+                if region.split('_')[0] == CHIP:
+                    rn_text += f"{self.std_mad_norm_ratio_overscan[region]:.3f}"
+                    if i < nregions-1:
+                        rn_text += ', '
+            rn_text += r' (0.80$\times$stdev/mad in overscan)'
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(100, -32), textcoords='offset points')
+                    fontsize=8, color="darkgray", ha="right", va="top",
+                    xytext=(100, -21), textcoords='offset points')
         plt.annotate(rn_text, xy=(0, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="left", va="bottom",
-                    xytext=(-100, -32), textcoords='offset points')
+                    fontsize=8, color="darkgray", ha="left", va="top",
+                    xytext=(-50, -21), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
