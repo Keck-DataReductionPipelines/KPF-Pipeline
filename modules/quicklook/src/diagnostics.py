@@ -74,32 +74,32 @@ def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
         
     # Use the AnalyzeL0 class measure non-Gaussian read noise
     try:
-    myL0 = AnalyzeL0(L0), logger=logger)
-    for chip in chips:
-        if chip == 'green':
-            try:
-                if 'GREEN_AMP1' in myL0.std_mad_norm_ratio_overscan:
-                    L0.header['PRIMARY']['RNNGGR1'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP1'],5), 'Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan')
-                if 'GREEN_AMP2' in myL0.std_mad_norm_ratio_overscan:
-                    L0.header['PRIMARY']['RNNGGR2'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP2'],5), 'Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan')
-                if 'GREEN_AMP3' in myL0.std_mad_norm_ratio_overscan
-                    L0.header['PRIMARY']['RNNGGR3'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP3'],5), 'Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan')
-                if 'GREEN_AMP4' in myL0.std_mad_norm_ratio_overscan:
-                    L0.header['PRIMARY']['RNNGGR4'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP4'],5), 'Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan')
-            except Exception as e:
-                logger.error(f"Problem with L0 non-Gaussian read noise measurements Green: {e}\n{traceback.format_exc()}")
-        if chip == 'red':
-            try:
-                if 'RED_AMP1' in myL0.std_mad_norm_ratio_overscan:
-                    L0.header['PRIMARY']['RNNGRD1'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP1'],5), 'Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan')
-                if 'RED_AMP2' in myL0.std_mad_norm_ratio_overscan:
-                    L0.header['PRIMARY']['RNNGRD2'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP2'],5), 'Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan')
-                if 'RED_AMP3' in myL0.std_mad_norm_ratio_overscan
-                    L0.header['PRIMARY']['RNNGRD3'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP3'],5), 'Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan')
-                if 'RED_AMP4' in myL0.std_mad_norm_ratio_overscan:
-                    L0.header['PRIMARY']['RNNGRD4'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP4'],5), 'Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan')
-            except Exception as e:
-                logger.error(f"Problem with L0 non-Gaussian read noise measurements Red: {e}\n{traceback.format_exc()}")
+        myL0 = AnalyzeL0(L0, logger=logger)
+        for chip in chips:
+            if chip == 'green':
+                try:
+                    if 'GREEN_AMP1' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGGR1'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP1'],5), 'Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan')
+                    if 'GREEN_AMP2' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGGR2'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP2'],5), 'Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan')
+                    if 'GREEN_AMP3' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGGR3'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP3'],5), 'Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan')
+                    if 'GREEN_AMP4' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGGR4'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP4'],5), 'Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan')
+                except Exception as e:
+                    logger.error(f"Problem with L0 non-Gaussian read noise measurements Green: {e}\n{traceback.format_exc()}")
+            if chip == 'red':
+                try:
+                    if 'RED_AMP1' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGRD1'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP1'],5), 'Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan')
+                    if 'RED_AMP2' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGRD2'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP2'],5), 'Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan')
+                    if 'RED_AMP3' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGRD3'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP3'],5), 'Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan')
+                    if 'RED_AMP4' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGRD4'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP4'],5), 'Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan')
+                except Exception as e:
+                    logger.error(f"Problem with L0 non-Gaussian read noise measurements Red: {e}\n{traceback.format_exc()}")
     except:
         logger.error(f"Problem with L0 non-Gaussian read noise measurements: {e}\n{traceback.format_exc()}")
 
