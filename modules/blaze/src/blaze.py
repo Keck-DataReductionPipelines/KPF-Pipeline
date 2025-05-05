@@ -17,8 +17,9 @@ class AddBlaze(KPF1_Primitive):
         KPF1_Primitive.__init__(self, action, context)
         
         # Input arguments
-        self.l1_obj = self.action.args[0]   # KPF L1 object
-        self.method = self.action.args[1]   # string of method to use
+        self.target_l1 = self.action.args[0]           # KPF L1 object
+        self.smooth_lamp_l1 = self.action.args[1]      # KPF L1 object
+        self.method = self.action.args[2]              # string of method to use
         
         # Input configuration
         self.config = configparser.ConfigParser()
@@ -28,8 +29,13 @@ class AddBlaze(KPF1_Primitive):
             self.config_path = DEFAULT_CFG_PATH
             
     def _perform(self):
-        blaze = BlazeAlg(self.l1_obj, self.config_path)
-        out_l1 = blaze.apply_blaze_correction(method=self.method)
+        exit_code = 0
+        try:
+            blaze = BlazeAlg(self.target_l1, self.smooth_lamp_l1, self.config_path)
+            out_l1 = blaze.apply_blaze_correction(method=self.method)
+            exit_code = 1
+        except Exception as e:
+            self.logger.error(f"Blaze algorithm failed: {e}\n{traceback.format_exc()}")
         
         return Arguments(out_l1)
     
