@@ -29,6 +29,83 @@ DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../ca
 DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
 
 
+def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
+    """
+    Adds keywords to the L0 object header for a read noise metric equal to 
+        (0.7979*stdev(region)/mad(region)), where stdev 
+        is the standard deviation of a given overscan region, mad is the mean 
+        absolute deviation of a given overscan region.  
+        This should be = 1.00 for Gaussian noise.  
+        
+        For a simple noise model with two Gaussians centered on zero with 
+        a ratio of sigma values s and with the high-noise Gaussian having 
+        a relative total flux (area under the Gaussian) f, 
+        this metric: 0.7979*stdev(region)/mad(region) = f * (s^2 - 1)
+    
+    Keywords:
+        RNNGGR1 - Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan
+        RNNGGR2 - Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan
+        RNNGGR3 - Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan
+        RNNGGR4 - Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan
+        RNNGRD1 - Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan
+        RNNGRD2 - Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan
+        RNNGRD3 - Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan
+        RNNGRD4 - Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan
+
+    Args:
+        L0 - a KPF L0 object 
+
+    Returns:
+        L0 - a L0 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L0(L0)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L0)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        logger.info('Not a valid L0 or no Gree/Red CCD data.')
+        return L0
+        
+    # Use the AnalyzeL0 class measure non-Gaussian read noise
+    try:
+    myL0 = AnalyzeL0(L0), logger=logger)
+    for chip in chips:
+        if chip == 'green':
+            try:
+                if 'GREEN_AMP1' in myL0.std_mad_norm_ratio_overscan:
+                    L0.header['PRIMARY']['RNNGGR1'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP1'],5), 'Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan')
+                if 'GREEN_AMP2' in myL0.std_mad_norm_ratio_overscan:
+                    L0.header['PRIMARY']['RNNGGR2'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP2'],5), 'Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan')
+                if 'GREEN_AMP3' in myL0.std_mad_norm_ratio_overscan
+                    L0.header['PRIMARY']['RNNGGR3'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP3'],5), 'Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan')
+                if 'GREEN_AMP4' in myL0.std_mad_norm_ratio_overscan:
+                    L0.header['PRIMARY']['RNNGGR4'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP4'],5), 'Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan')
+            except Exception as e:
+                logger.error(f"Problem with L0 non-Gaussian read noise measurements Green: {e}\n{traceback.format_exc()}")
+        if chip == 'red':
+            try:
+                if 'RED_AMP1' in myL0.std_mad_norm_ratio_overscan:
+                    L0.header['PRIMARY']['RNNGRD1'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP1'],5), 'Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan')
+                if 'RED_AMP2' in myL0.std_mad_norm_ratio_overscan:
+                    L0.header['PRIMARY']['RNNGRD2'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP2'],5), 'Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan')
+                if 'RED_AMP3' in myL0.std_mad_norm_ratio_overscan
+                    L0.header['PRIMARY']['RNNGRD3'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP3'],5), 'Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan')
+                if 'RED_AMP4' in myL0.std_mad_norm_ratio_overscan:
+                    L0.header['PRIMARY']['RNNGRD4'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP4'],5), 'Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan')
+            except Exception as e:
+                logger.error(f"Problem with L0 non-Gaussian read noise measurements Red: {e}\n{traceback.format_exc()}")
+    except:
+        logger.error(f"Problem with L0 non-Gaussian read noise measurements: {e}\n{traceback.format_exc()}")
+
+    return L0
+
+
 def add_headers_2D_flux(D2, logger=None):
     """
     Adds keywords to the 2D object header for flux measurements
@@ -60,7 +137,7 @@ def add_headers_2D_flux(D2, logger=None):
     
     # Check that the input object is of the right type
     if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
-        print('Not a valid 2D.')
+        logger.info('Not a valid 2D or no Gree/Red CCD data.')
         return D2
         
     # Use the Analyze2D class to compute flux

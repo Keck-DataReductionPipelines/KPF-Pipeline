@@ -167,7 +167,7 @@ class AnalyzeL0:
                     self.red_present = True
 
 
-    def measure_read_noise_overscan(self, nparallel=30, nserial=50, nsigma=100, verbose=False): 
+    def measure_read_noise_overscan(self, nparallel=30, nserial=50, nsigma=10, verbose=False): 
         """
         Measure read noise in the overscan region of a KPF CCD image. 
         Read noise is measured as the standard deviation of the pixel values, 
@@ -212,7 +212,7 @@ class AnalyzeL0:
                 self.logger.info(f'Read noise({region}) = {self.read_noise_overscan[region]} e-')
 
 
-    def measure_std_mad_norm_ratio_overscan(self, nparallel=30, nserial=50, nsigma=100, verbose=False): 
+    def measure_std_mad_norm_ratio_overscan(self, nparallel=30, nserial=50, nsigma=10, verbose=False): 
         """
         Measure a read noise metric equal to (0.7979*stdev/mad), where stdev 
         is the standard deviation of a given overscan region, mad is the mean 
@@ -226,7 +226,9 @@ class AnalyzeL0:
             nsigma (float) - number of sigma for outlier rejection method
     
         Attributes:
-            self.read_noise_overscan - dictionary of read noise values in self.regions
+            self.std_mad_norm_ratio_overscan - dictionary of non-Gaussian 
+                read noise metrics, 0.7979 * stdev(region) / mad(region),
+                where region is one of the overscan regions 
     
         Returns:
             None
@@ -255,7 +257,8 @@ class AnalyzeL0:
             vals = gain * self.reject_outliers(overscan_region.flat, nsigma)    
             std = np.std(vals)
             mad = np.mean(np.abs(vals - np.mean(vals)))
-            self.std_mad_norm_ratio_overscan[region] = 0.7979*std/mad
+            special_number = 0.7978845608 # sqrt(2/pi)
+            self.std_mad_norm_ratio_overscan[region] = special_number*std/mad
             if verbose:
                 self.logger.info(f'Ratio of 0.7979 * stdev({region}) / mad({region})  = {self.std_mad_norm_ratio_overscan[region]}')
 
@@ -329,7 +332,7 @@ class AnalyzeL0:
         # Create label for read noise
         rn_text = ''
         if self.read_noise_overscan != {}:
-            rn_text = 'Read noise = '
+            rn_text = 'RN: '
             chip_regions = [item for item in self.regions if CHIP in item]
             for i, region in enumerate(chip_regions):
                 if CHIP == 'GREEN':
@@ -340,7 +343,7 @@ class AnalyzeL0:
                     rn_text += f"{self.read_noise_overscan[region]:.2f}"
                     if i < nregions-1:
                         rn_text += ', '
-            rn_text += r' e- (stdev; 100-$\sigma$ outlier rej.)'
+            rn_text += r' e- (stdev(overscan); 10-$\sigma$ outlier rej.)'
             rn_text += '\n'
             rn_text += 'Non-Gaussian RN: '
             for i, region in enumerate(chip_regions):
@@ -349,7 +352,7 @@ class AnalyzeL0:
                 if CHIP == 'RED':
                     nregions = self.nregions_red
                 if region.split('_')[0] == CHIP:
-                    rn_text += f"{self.std_mad_norm_ratio_overscan[region]:.2f}"
+                    rn_text += f"{self.std_mad_norm_ratio_overscan[region]:.3f}"
                     if i < nregions-1:
                         rn_text += ', '
             rn_text += r' (0.80$\times$stdev/mad in overscan)'
