@@ -94,6 +94,7 @@ class AnalyzeTimeSeries:
           rejection.  This should be in Delta values.
         * For time series state plots, include the number of points in each state 
           in the legend.
+        * Specify the yrange in the yaml files
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', logger=None, drop=False):
@@ -1494,7 +1495,7 @@ class AnalyzeTimeSeries:
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(7, prune=None))
             if p == npanels-1: 
                 axs[p].set_xlabel(xtitle, fontsize=14)
-                axs[0].set_title(thistitle, fontsize=16)
+                axs[0].set_title(thistitle, fontsize=18)
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
             axs[p].grid(color='lightgray')        
@@ -2153,7 +2154,7 @@ class AnalyzeTimeSeries:
             plt.ylabel(dict_ylabel, fontsize=14)
         else:
             plt.ylabel("Number of Observations", fontsize=14)
-        plt.title(plot_title, fontsize=16)
+        plt.title(plot_title, fontsize=18)
     
         ax = plt.gca()
         ax.xaxis.set_major_locator(major_locator)
