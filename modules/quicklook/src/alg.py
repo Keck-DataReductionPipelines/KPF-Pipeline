@@ -326,7 +326,7 @@ class QuicklookAlg:
                             self.logger.info('Generating QLP image ' + filename)
                             my_2D.measure_2D_dark_current(chip=chip)
                             my_2D.plot_2D_image(chip=chip, subtract_master_dark=True, 
-                                                overplot_dark_current=True, 
+                                                overplot_dark_current=True, units='e-/hr',
                                                 fig_path=filename, show_plot=False)
 
                         except Exception as e:

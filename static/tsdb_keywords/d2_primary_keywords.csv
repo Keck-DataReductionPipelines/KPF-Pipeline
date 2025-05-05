@@ -31,6 +31,14 @@ RNRED1|float|Read noise for RED_AMP1 (first amp region on Red)|e-
 RNRED2|float|Read noise for RED_AMP2 (second amp region on Red)|e-
 RNGREEN1|float|Read noise for GREEN_AMP1 (first amp region on Green)|e-
 RNGREEN2|float|Read noise for GREEN_AMP2 (second amp region on Green)|e-
+RNNGGR1|float|Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan|None
+RNNGGR2|float|Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan|None
+RNNGGR3|float|Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan|None
+RNNGGR4|float|Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan|None
+RNNGRD1|float|Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan|None
+RNNGRD2|float|Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan|None
+RNNGRD3|float|Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan|None
+RNNGRD4|float|Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan|None
 GREENTRT|float|Green read time|sec
 REDTRT|float|Red read time|sec
 READSPED|string|Categorization of CCD read speed ('regular' or 'fast')|None
