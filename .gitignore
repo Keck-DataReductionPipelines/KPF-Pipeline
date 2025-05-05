@@ -119,3 +119,9 @@ ENV/
 
  
 .pytest_cache
+
+# Processing
+*runDailyPipelines*
+*cleanupMasters*
+*runMasters*
+*.joblog
