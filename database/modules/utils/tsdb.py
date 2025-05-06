@@ -1237,21 +1237,43 @@ class TSDB:
         return first_date, last_date
 
 
-    def display_dataframe_from_db(self, columns, only_object=None, object_like=None, only_source=None, 
-                                  on_sky=None, start_date=None, end_date=None):
+    def display_dataframe_from_db(self, columns, 
+                                  only_object=None, object_like=None, only_source=None, 
+                                  on_sky=None, not_junk=None,
+                                  start_date=None, end_date=None, 
+                                  verbose=False):
         """
-        Prints a pandas dataframe of attributes (specified by column names) for all 
-        observations in the DB. The query can be restricted to observations matching a 
-        particular object name(s), source(s), on-sky status, and a date range.
+        Description:
+            Print a pandas DataFrame containing specified columns from a 
+            joined set of database tables, applying optional filters based on 
+            object names, source types, date ranges, sky condition, and quality 
+            checks.
     
         Args:
-            columns (string or list of strings, or '*' for all) - database columns to query
-            only_object (string or list of strings) - object names to include in query
-            object_like (string or list of strings) - partial object names to search for
-            only_source (string or list of strings) - source names to include in query
-            on_sky (True, False, None) - select on-sky/off-sky observations
-            start_date (datetime) - only return observations after this date
-            end_date (datetime) - only return observations before this date
+            columns (str or list of str, optional): Column name(s) to retrieve. 
+                Defaults to None (fetches all columns).
+            start_date (str or datetime, optional): Starting date for filtering 
+                observations (datetime object or YYYYMMDD or None). Defaults to 
+                None.
+            end_date (str or datetime, optional): Ending date for filtering 
+                observations (datetime object or YYYYMMDD or None). Defaults to 
+                None.
+            only_object (str or list of str, optional): Exact object name(s) to 
+                filter observations. Defaults to None.
+                E.g., only_object = ['autocal-dark', 'autocal-bias']
+            only_source (str or list of str, optional): Source type(s) to filter 
+                observations. Defaults to None.
+                E.g., only_source = ['Dark', 'Bias']
+            object_like (str or list of str, optional): Partial object name(s) 
+                for filtering observations using SQL LIKE conditions. Defaults 
+                to None.
+                E.g., object_like = ['autocal-etalon', 'autocal-bias']
+            on_sky (bool, optional): Filter by on-sky (True) or calibration 
+                (False) observations. Defaults to None.
+            not_junk (bool, optional): Filter by observations marked as not junk 
+                (True) or junk (False). Defaults to None.
+            verbose (bool, optional): Enables detailed logging of SQL queries 
+                and parameters. Defaults to False.
     
         Returns:
             None. Prints the resulting dataframe.
@@ -1261,9 +1283,11 @@ class TSDB:
             only_object=only_object,
             object_like=object_like,
             only_source=only_source,
-            on_sky=on_sky,
+            on_sky=on_sky, 
+            not_junk=not_junk,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            verbose=verbose
         )
         print(df)
 
@@ -1274,101 +1298,202 @@ class TSDB:
                           on_sky=None, not_junk=None, 
                           verbose=False):
         """
-        Returns a pandas dataframe of attributes (specified by column names) from
-        multi-table database. Queries can be restricted by object, source, date, etc.
+        Description:
+            Retrieves a pandas DataFrame containing specified columns from a 
+            joined set of database tables, applying optional filters based on 
+            object names, source types, date ranges, sky condition, and quality 
+            checks.
+    
+        Arguments:
+            columns (str or list of str, optional): Column name(s) to retrieve. 
+                Defaults to None (fetches all columns).
+            start_date (str or datetime, optional): Starting date for filtering 
+                observations (datetime object or YYYYMMDD or None). Defaults to 
+                None.
+            end_date (str or datetime, optional): Ending date for filtering 
+                observations (datetime object or YYYYMMDD or None). Defaults to 
+                None.
+            only_object (str or list of str, optional): Exact object name(s) to 
+                filter observations. Defaults to None.
+                E.g., only_object = ['autocal-dark', 'autocal-bias']
+            only_source (str or list of str, optional): Source type(s) to filter 
+                observations. Defaults to None.
+                E.g., only_source = ['Dark', 'Bias']
+            object_like (str or list of str, optional): Partial object name(s) 
+                for filtering observations using SQL LIKE conditions. Defaults 
+                to None.
+                E.g., object_like = ['autocal-etalon', 'autocal-bias']
+            on_sky (bool, optional): Filter by on-sky (True) or calibration 
+                (False) observations. Defaults to None.
+            not_junk (bool, optional): Filter by observations marked as not junk 
+                (True) or junk (False). Defaults to None.
+            verbose (bool, optional): Enables detailed logging of SQL queries 
+                and parameters. Defaults to False.
+    
+        Attributes:
+            None explicitly defined. This method interacts with class-level 
+                database connections and cursor objects.
+    
+        Returns:
+            pandas.DataFrame: DataFrame containing the requested data based on 
+                specified conditions.
+    
         """
+    
+        # Check and correct inputs
+        if only_object != None:
+            if isinstance(only_object, str):
+                only_object = [only_object]
+            elif not isinstance(only_object, list):
+                raise TypeError(f"Expected a string or a list of strings for only_object.")        
+    
+        if only_source != None:
+            if isinstance(only_source, str):
+                only_source = [only_source]
+            elif not isinstance(only_source, list):
+                raise TypeError(f"Expected a string or a list of strings for only_source.")        
+    
+        if object_like != None:
+            if isinstance(object_like, str):
+                object_like = [object_like]
+            elif not isinstance(object_like, list):
+                raise TypeError(f"Expected a string or a list of strings for object_like.")
+
+        # Database operations
         self._open_connection()
+    
         try:
-            if columns is None or columns == '*':
-                sql = "SELECT keyword, table_name FROM tsdb_metadata;"
-                self._execute_sql_command(sql)
-                metadata_df = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
-                columns = metadata_df['keyword'].tolist()
+            # Determine columns to fetch
+            if columns in (None, '*'):
+                self._execute_sql_command("SELECT keyword, table_name FROM tsdb_metadata;")
+                metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
+                columns_requested = metadata['keyword'].tolist()
             else:
-                columns = [columns] if isinstance(columns, str) else list(columns)
-                clean_columns = [str(col).strip() for col in columns if isinstance(col, str) or col is not None]
-                placeholders = ','.join('?' for _ in clean_columns)
-                sql = f"SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders});"
-                self._execute_sql_command(sql, clean_columns)
-                metadata_df = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
-                columns = clean_columns
+                columns_requested = [columns] if isinstance(columns, str) else columns
+                placeholders = ','.join('?' for _ in columns_requested)
+                self._execute_sql_command(
+                    f"SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders})",
+                    params=columns_requested
+                )
+                metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
     
-            kw_table_map = dict(zip(metadata_df['keyword'], metadata_df['table_name']))
-            tables_needed = set(metadata_df['table_name'].tolist())
+            kw_table_map = dict(zip(metadata['keyword'], metadata['table_name']))
+            tables_needed = set(metadata['table_name'].dropna())
     
-            # Ensure tables for filters are included
-            filter_columns = ['OBJECT', 'Source', 'NOTJUNK', 'FIUMODE', 'datecode']
-            placeholders = ','.join('?' for _ in filter_columns)
-            filter_sql = f"SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders});"
-            self._execute_sql_command(filter_sql, filter_columns)
-            filter_metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
-            filter_kw_table_map = dict(zip(filter_metadata['keyword'], filter_metadata['table_name']))
-            tables_needed.update(filter_metadata['table_name'])
+            # Always include base table for joins
+            tables_needed.add('tsdb_base')
     
-            dataframes = {}
-            for table in tables_needed:
-                table_cols = metadata_df[metadata_df['table_name'] == table]['keyword'].tolist()
-                table_cols += [col for col in filter_columns if filter_kw_table_map.get(col) == table and col not in table_cols]
-                if 'ObsID' not in table_cols:
-                    table_cols.append('ObsID')
+            # Collect columns per table, always include ObsID for joins
+            table_columns = {table: set(['ObsID']) for table in tables_needed}
+            for kw, tbl in kw_table_map.items():
+                table_columns[tbl].add(kw)
     
-                quoted_cols = [f'"{col}"' for col in table_cols]
-                query = f"SELECT {', '.join(quoted_cols)} FROM {table}"
+            # Build SELECT clause, avoiding duplicate ObsID columns
+            select_clauses = []
+            selected_cols_set = set()
+            for tbl in tables_needed:
+                for col in table_columns[tbl]:
+                    if col == 'ObsID':
+                        if 'ObsID' in selected_cols_set:
+                            continue  # avoid duplicates
+                        selected_cols_set.add('ObsID')
+                        select_clauses.append(f'{tbl}."ObsID" AS "ObsID"')
+                    else:
+                        select_clauses.append(f'{tbl}."{col}" AS "{col}"')
     
-                conditions = []
-                if only_object and filter_kw_table_map.get('OBJECT') == table:
-                    only_object = [only_object] if isinstance(only_object, str) else only_object
-                    conditions.append('(' + ' OR '.join([f'OBJECT = "{obj}"' for obj in only_object]) + ')')
-                if object_like and filter_kw_table_map.get('OBJECT') == table:
-                    conditions.append(f"OBJECT LIKE '%{object_like}%'")
-                if only_source and filter_kw_table_map.get('Source') == table:
-                    only_source = [only_source] if isinstance(only_source, str) else only_source
-                    conditions.append('(' + ' OR '.join([f'Source = "{src}"' for src in only_source]) + ')')
-                if not_junk is not None and filter_kw_table_map.get('NOTJUNK') == table:
-                    conditions.append(f'NOTJUNK = {1 if not_junk else 0}')
-                if on_sky is not None and filter_kw_table_map.get('FIUMODE') == table:
-                    mode = 'Observing' if on_sky else 'Calibration'
-                    conditions.append(f'FIUMODE = "{mode}"')
-                if filter_kw_table_map.get('datecode') == table:
-                    if start_date:
-                        conditions.append(f'datecode >= "{start_date.strftime("%Y%m%d")}"')
-                    if end_date:
-                        conditions.append(f'datecode <= "{end_date.strftime("%Y%m%d")}"')
+            select_sql = ', '.join(select_clauses)
     
-                if conditions:
-                    query += " WHERE " + ' AND '.join(conditions)
+            # FROM and LEFT JOIN clauses
+            from_clause = 'tsdb_base'
+            join_clauses = [
+                f'LEFT JOIN {tbl} ON tsdb_base."ObsID" = {tbl}."ObsID"'
+                for tbl in tables_needed if tbl != 'tsdb_base'
+            ]
     
-                if verbose:
-                    self.logger.info(f"Querying {table}: {query}")
+            # WHERE conditions
+            conditions, params = [], []
     
-                self._execute_sql_command(query)
-                fetched_data = self.cursor.fetchall()
-                col_names = [desc[0] for desc in self.cursor.description]
-                dataframes[table] = pd.DataFrame(fetched_data, columns=col_names)
+            def add_in_condition(column, values, table):
+                placeholders = ','.join('?' for _ in values)
+                conditions.append(f'{table}."{column}" IN ({placeholders})')
+                params.extend(values)
     
+            if only_object:
+                add_in_condition('OBJECT', only_object, 'tsdb_l0')
+    
+            if object_like:
+                like_conditions = [f'tsdb_l0."OBJECT" LIKE ?' for _ in object_like]
+                conditions.append('(' + ' OR '.join(like_conditions) + ')')
+                params.extend([f'%{ol}%' for ol in object_like])
+    
+            if only_source:
+                add_in_condition('Source', only_source, 'tsdb_base')
+    
+            if not_junk is not None:
+                if self.backend == 'sqlite':
+                    conditions.append('tsdb_2d."NOTJUNK" = ?')
+                    params.append(1 if not_junk else 0)
+                elif self.backend == 'psql':
+                    conditions.append('tsdb_2d."NOTJUNK" = %s')
+                    params.append(True if not_junk else False)
+
+            if on_sky is not None:
+                mode = 'Observing' if on_sky else 'Calibration'
+                conditions.append('tsdb_l0."FIUMODE" = ?')
+                params.append(mode)
+    
+            if start_date:
+                if isinstance(start_date, datetime):
+                    date_str = start_date.strftime("%Y-%m-%d" if self.backend == 'psql' else "%Y%m%d")
+                else:
+                    date_str = datetime.strptime(start_date, "%Y%m%d").strftime("%Y-%m-%d" if self.backend == 'psql' else "%Y%m%d")
+                conditions.append('tsdb_base."datecode" >= ?' if self.backend == 'sqlite' else 'tsdb_base."datecode" >= %s')
+                params.append(date_str)
+            
+            if end_date:
+                if isinstance(end_date, datetime):
+                    date_str = end_date.strftime("%Y-%m-%d" if self.backend == 'psql' else "%Y%m%d")
+                else:
+                    date_str = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d" if self.backend == 'psql' else "%Y%m%d")
+                conditions.append('tsdb_base."datecode" <= ?' if self.backend == 'sqlite' else 'tsdb_base."datecode" <= %s')
+                params.append(date_str)
+    
+            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    
+            query = f"""
+                SELECT {select_sql}
+                FROM {from_clause}
+                {' '.join(join_clauses)}
+                {where_clause}
+            """
+    
+            if verbose:
+                self.logger.debug("SQL Query:")
+                self.logger.debug(query)
+                self.logger.debug("Params:")
+                self.logger.debug(params)
+    
+            # Execute query and build dataframe
+            self._execute_sql_command(query, params)
+            fetched_data = self.cursor.fetchall()
+            col_names = [desc[0] for desc in self.cursor.description]
+    
+            df = pd.DataFrame(fetched_data, columns=col_names)
+    
+            # Reorder columns to match the requested input order, if specified
+            if columns not in (None, '*'):
+                final_column_order = [col for col in columns_requested if col in df.columns]
+            
+                # Include 'ObsID' only if it was explicitly requested
+                if 'ObsID' in df.columns and 'ObsID' not in columns_requested:
+                    df = df.drop(columns='ObsID')
+            
+                df = df[final_column_order]
+
         finally:
             self._close_connection()
     
-        base_table = 'tsdb_base'
-        if base_table in dataframes:
-            df_merged = dataframes.pop(base_table)
-        else:
-            df_merged = None
-    
-        for table, df in dataframes.items():
-            if df_merged is None:
-                df_merged = df
-            else:
-                df_merged = df_merged.merge(df, on='ObsID', how='left')
-    
-        if columns not in [None, '*']:
-            if 'ObsID' not in columns:
-                final_cols = ['ObsID'] + columns
-            else:
-                final_cols = columns
-            df_merged = df_merged[[col for col in final_cols if col in df_merged.columns]]
-    
-        return df_merged
+        return df
 
 
     def ObsIDlist_from_db(self, object_name, start_date=None, end_date=None, not_junk=None):
