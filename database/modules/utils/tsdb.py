@@ -267,21 +267,21 @@ class TSDB:
 
     def unlock_db(self):
         """
-        Remove the -wal and -shm lock files, 
-        e.g. /data/time_series/kpf_ts.db-wal and /data/time_series/kpf_ts.db-shm
-        
-        Use this method sparingly.
+        Remove the -wal and -shm lock files for SQLite databases.
+        For PostgreSQL, prints a message indicating that unlocking is not required.
         """
         if self.backend == 'sqlite':
             wal_file = f"{self.db_path}-wal"
             shm_file = f"{self.db_path}-shm"
-        
+    
             if os.path.exists(wal_file):
                 os.remove(wal_file)
                 self.logger.info(f"File removed: {wal_file}")
             if os.path.exists(shm_file):
                 os.remove(shm_file)
                 self.logger.info(f"File removed: {shm_file}")
+        elif self.backend == 'psql':
+            self.logger.info("unlock_db() is not applicable for PostgreSQL databases.")
 
 
     def init_metadata_entries(self):
@@ -334,7 +334,7 @@ class TSDB:
         # Store as a list of dictionaries
         self.metadata_entries = df_all.to_dict(orient='records')
 
-
+   
     def print_db_status(self):
         """
         Prints a formatted summary table of the database status for each table.
@@ -346,35 +346,44 @@ class TSDB:
     
         summary_data = []
     
-        for table in tables:
-            self._execute_sql_command(f'SELECT COUNT(*) FROM {table}')
-            nrows = self.cursor.fetchone()[0]
+        try:
+            for table in tables:
+                self._execute_sql_command(f'SELECT COUNT(*) FROM {table}')
+                nrows = self.cursor.fetchone()[0]
     
-            self._execute_sql_command(f'PRAGMA table_info({table})')
-            ncolumns = len(self.cursor.fetchall())
+                if self.backend == 'sqlite':
+                    self._execute_sql_command(f'PRAGMA table_info({table})')
+                    ncolumns = len(self.cursor.fetchall())
+                elif self.backend == 'psql':
+                    self._execute_sql_command("""
+                        SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_name=%s;
+                    """, params=(table,))
+                    ncolumns = self.cursor.fetchone()[0]
     
-            summary_data.append((table, ncolumns, nrows))
+                summary_data.append((table, ncolumns, nrows))
     
-        self._execute_sql_command('SELECT MAX(L0_header_read_time), MAX(L1_header_read_time) FROM tsdb_base')
-        most_recent_read_time = max(filter(None, self.cursor.fetchone()))
+            self._execute_sql_command('SELECT MAX(L0_header_read_time), MAX(L1_header_read_time) FROM tsdb_base')
+            most_recent_read_time = max(filter(None, self.cursor.fetchone()))
     
-        self._execute_sql_command('SELECT MIN(datecode), MAX(datecode), COUNT(DISTINCT datecode) FROM tsdb_base')
-        earliest_datecode, latest_datecode, unique_datecodes_count = self.cursor.fetchone()
+            self._execute_sql_command('SELECT MIN(datecode), MAX(datecode), COUNT(DISTINCT datecode) FROM tsdb_base')
+            earliest_datecode, latest_datecode, unique_datecodes_count = self.cursor.fetchone()
     
-        self._close_connection()
+            # Print the summary table
+            self.logger.info("Database Table Summary:")
+            self.logger.info(f"{'Table':<15} {'Columns':>7} {'Rows':>10}")
+            self.logger.info("-" * 35)
+            for table, cols, rows in summary_data:
+                self.logger.info(f"{table:<15} {cols:>7} {rows:>10}")
     
-        # Print the summary table
-        self.logger.info("Database Table Summary:")
-        self.logger.info(f"{'Table':<15} {'Columns':>7} {'Rows':>10}")
-        self.logger.info("-" * 35)
-        for table, cols, rows in summary_data:
-            self.logger.info(f"{table:<15} {cols:>7} {rows:>10}")
+            # Print the additional stats
+            self.logger.info(f"Dates: {unique_datecodes_count} days from {earliest_datecode} to {latest_datecode}")
+            self.logger.info(f"Last update: {most_recent_read_time}")
     
-        # Print the additional stats
-        self.logger.info(f"Dates: {unique_datecodes_count} days from {earliest_datecode} to {latest_datecode}")
-        self.logger.info(f"Last update: {most_recent_read_time}")
+        finally:
+            self._close_connection()
+   
            
-
 # UPDATE THIS BY READING METADATA_TABLE
     def create_metadata_table(self):
         """
@@ -447,7 +456,7 @@ class TSDB:
 
     def check_if_table_exists(self, tablename=None):
         """
-        Return True if the named table exists.
+        Check if the specified table exists in the database.
         """
         if tablename is None:
             self.logger.info('check_if_table_exists: tablename not specified.')
@@ -455,19 +464,19 @@ class TSDB:
     
         self._open_connection()
         try:
-            self._execute_sql_command("""
-                SELECT name FROM sqlite_master 
-                WHERE type='table' AND name=?;
-            """, params=(tablename,))
-            tables = self.cursor.fetchone()
-            result = tables is not None and tablename in tables
+            if self.backend == 'sqlite':
+                query = "SELECT name FROM sqlite_master WHERE type='table' AND name=?;"
+            elif self.backend == 'psql':
+                query = "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name=%s;"
+    
+            result = self._execute_sql_command(query, params=(tablename,), fetch=True)
+            return len(result) > 0
+    
         except Exception as e:
-            self.error.info(f'check_if_table_exists: problem with query - {e}')
-            result = False
+            self.logger.error(f"Error checking table existence: {e}")
+            return False
         finally:
             self._close_connection()
-    
-        return result
 
 
     def create_database(self):
@@ -978,13 +987,14 @@ class TSDB:
         self._open_connection()
         try:
             query = 'SELECT L0_header_read_time, D2_header_read_time, L1_header_read_time, L2_header_read_time FROM tsdb_base WHERE L0_filename = ?'
-            self._execute_sql_command(query, params=(L0_filename,))
-            result = self.cursor.fetchone()
+            result = self._execute_sql_command(query, params=(L0_filename,), fetch=True)
         finally:
             self._close_connection()
     
         if not result:
-            return True  # No record in the database
+            return True
+    
+        result = result[0]
     
         file_paths = {
             'L0': L0_file_path,
@@ -1000,10 +1010,9 @@ class TSDB:
                 mod_time = '1000-01-01 00:00:00'
     
             if mod_time > (result[idx] or '1000-01-01 00:00:00'):
-                return True  # File was modified more recently than DB timestamp
+                return True
     
-        return False  # No updates found
-           
+        return False           
 
     def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=10000, reverse=False, force_ingest=False, quiet=False):
         """
