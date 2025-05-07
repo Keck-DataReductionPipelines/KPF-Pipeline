@@ -1,4 +1,8 @@
+from modules.Utils.string_proc import str_replace
+from modules.Utils.string_proc import text_file_line_count
+from modules.Utils.data_handler import GetHeaderValue
 from modules.order_trace.src.order_mask import OrderMask
+from database.modules.query_db_one_l0_file.src.query_db_one_l0_file_framework import QueryDBOneL0FileFramework
 
 date_dir = context.date_dir
 input_dir = config.ARGUMENT. input_dir
@@ -12,14 +16,45 @@ ccd_list = config.ARGUMENT.ccd_list
 orderlet_names = config.ARGUMENT.orderlet_names
 orderlet_widths_ccds = config.ARGUMENT.orderlet_widths_ccds
 orderlet_values = config.ARGUMENT.orderlet_values
-start_order = config.ARGUMENT.start_order
-lev0_2d_file = config.ARGUMENT. lev0_2d_file
-
-input_order_trace = input_masters_dir + date_dir + '/kpf_' + date_dir + '_master_flat' 
-
-input_lev0_2d_file = input_dir + date_dir + '/' + lev0_2d_file
+input_flat_file_pattern = config.ARGUMENT.input_flat_file_pattern
 
 csv_ext = '.csv'
+fits_ext = '.fits'
+
+input_flat_file_prototype = output_dir + '/' + date_dir + '/' + input_flat_file_pattern
+
+input_flat_file = str_replace(input_flat_file_prototype,\
+                             'yyyymmdd',\
+                             date_dir)
+
+#lev0_2d_science_pattern = input_dir + date_dir + '/' + '*' + fits_ext
+
+#arclamp_files = []
+#lev0_2d_files = find_files(lev0_2d_science_pattern)
+#for input_lev0_2d_file in lev0_2d_files:
+#    lev0_2d_data = kpf0_from_fits(input_lev0_2d_file, data_type=data_type)
+#    dt_string = GetHeaderValue(lev0_2d_data, 'IMTYPE')
+#    if dt_string == "Arclamp":
+#        arclamp_files = arclamp_files + [input_lev0_2d_file]
+
+#if len(arclamp_files) > 0:
+#    input_lev0_2d_file = arclamp_files[0]
+#else:
+#    input_lev0_2d_file = None
+
+
+im_type = 'Arclamp'
+contentbitmask = 3
+query_one_l0_file_list = QueryDBOneL0FileFramework(data_type,im_type,date_dir,contentbitmask)
+
+l0_file_outside_container = query_one_l0_file_list[1][6]
+l0_file_inside_container = str_replace(l0_file_outside_container,\
+                                       '/data/kpf/L0',\
+                                       '/data/2D')
+input_lev0_2d_file = str_replace(l0_file_inside_container,\
+                                 '.fits',\
+                                 '_2D.fits')
+
 
 if overwrite and exists(input_lev0_2d_file):
 
@@ -36,12 +71,43 @@ if overwrite and exists(input_lev0_2d_file):
             orderlet_widths = []
 
         ccd = ccd_list[idx]
-        input_lev0_2d_trace_csv = input_order_trace + '_' + ccd + csv_ext
+
+        input_lev0_2d_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext)
         trace_list = trace_list + [input_lev0_2d_trace_csv]
 
+        # The start_order parameter list must be set manually, according to whether
+        # there are 35x5=175 data lines plus header line (total is 176 lines) for GREEN_CCD
+        # and 32x5=160 data lines plus header line (total is 161 lines) for RED_CCD.
+        # If so, start_order for a given chip is 0; otherwise, if missing one data line,
+        # set start_order to -1 (not sure what to do if missing more than one data line
+        # for a given chip (ask Cindy).
+        #
+        # Examples:
+        #
+        # cat /data/kpf/masters/20230716/kpf_20230716_master_flat_GREEN_CCD.csv |wc
+        #     175     175   19242
+        # cat /data/kpf/masters/20230716/kpf_20230716_master_flat_RED_CCD.csv |wc
+        #     160     160   17579
+        # In this case, each chip has a missing data line, so start_order = [-1, -1].
+        #
+        # cat /data/kpf/masters/20240211/kpf_20240211_master_flat_GREEN_CCD.csv |wc
+        #    176     176   19382
+        # cat /data/kpf/masters/20240211/kpf_20240211_master_flat_RED_CCD.csv |wc
+        #    162     162   17886
+        # In this case, the first chip has 175 data lines and the second chip has 161 data lines, so start_order = [0, +1].
+
+        num_lines_in_csv_file = text_file_line_count(input_lev0_2d_trace_csv)
+
+        if ccd == 'GREEN_CCD':
+            start_order = num_lines_in_csv_file - 1 - 175
+        elif ccd == 'RED_CCD':
+            start_order = num_lines_in_csv_file - 1 - 160
+        else:
+            start_order = -999999
+
         order_mask = OrderMask(lev0_2d_data, order_mask, orderlet_names=orderlet_names[idx],
-                               start_order=start_order[idx], trace_file=trace_list[idx],
+                               start_order=start_order, trace_file=trace_list[idx],
                                data_extension=ccd_list[idx], orderlet_widths=orderlet_widths, orderlet_values=orderlet_values[idx])
 
-    order_mask_file = output_dir + 'order_mask.fits'
+    order_mask_file = output_dir + '/' + date_dir + '/' + 'kpf_' + date_dir + '_order_mask.fits'
     result = to_fits(order_mask, order_mask_file)
