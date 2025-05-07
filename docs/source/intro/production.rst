@@ -43,11 +43,24 @@ Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYM
 
     kpf --ncpu 50 /data/L0/YYYYMMDD/ -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
 
+To process many nights of data, use a script to generate the a series of ``kpf`` commands for different YYYYMMDD dates and the ``parallel`` utility to track progress and resume if interrupted. 
+If the script full of 'kpf' commands is called ``process.sh``, it would be launched with::
+
+    cat process.sh | parallel -j 1 --progress --bar --resume --joblog reprocessing_progress.log
+
 **Reprocessing Masters:**
 
-Reprocess master files from yyyymmdd to YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
+Reprocess master files from yyyymmdd to YYYYMMDD is accomplished with a series of commands.  
+First activate the kpf-masters condo environment.
+From the ``cronjobs/`` directory, generate a series of shell scripts with the format ``runDailyPipelines_YYYYMMDD.sh`` 
+You can then use the generated script ``runMastersPipeline_From_YYYYMMDD_To_YYYYMMDDDD.sh`` to run the dates you specified or use the ``parallel`` utility with a command like the one below for better control over compute resources::
 
-    <command to be added>
+    conda activate /scr/doppler/conda/envs/kpf-masters
+    cd cronjobs
+    generateDailyRunScriptsBetweenTwoDates.pl yyyymmdd YYYYMMDD
+    ls runDailyPipelines_202*.sh | awk '{print "Sh "$1}' | parallel -j 5 --progress --bar --resume --joblog masters_reprocessing.log
+
+It is not reccomended to run more than 5-7 jobs at once to avoid I/O overload. In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
 
 **Quicklook reprocessing -- qlp_parallel.py:**
 
