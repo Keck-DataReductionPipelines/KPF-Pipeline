@@ -38,7 +38,7 @@ class AddBlaze(KPF1_Primitive):
         except Exception as e:
             self.logger.error(f"Blaze algorithm failed: {e}\n{traceback.format_exc()}")
         
-        return Arguments(out_l1)
+        return Arguments([exit_code, out_l1])
     
     def _pre(self):
         pass
