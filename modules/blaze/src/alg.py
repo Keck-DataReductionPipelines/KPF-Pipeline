@@ -36,13 +36,13 @@ class BlazeAlg:
         self.dt = datetime.strptime(self.date_mid, "%Y-%m-%dT%H:%M:%S.%f")
         self.drptag = self.target_l1.header['PRIMARY']['DRPTAG']
         
-        try:
-            self.readmode = self.target_l1.header['PRIMARY']['READSPED']
-        except KeyError:
-            if 'regular' in self.target_l1.header['PRIMARY']['GRACF']:
-                self.readmode = 'regular'
-            else:
-                self.readmode = 'fast'
+        #try:
+        #    self.readmode = self.target_l1.header['PRIMARY']['READSPED']
+        #except KeyError:
+        #    if 'regular' in self.target_l1.header['PRIMARY']['GRACF']:
+        #        self.readmode = 'regular'
+        #    else:
+        #        self.readmode = 'fast'
                 
         self.add_extensions()
         
