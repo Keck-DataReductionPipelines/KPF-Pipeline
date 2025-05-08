@@ -8,7 +8,7 @@ l1_obj = kpf1_from_fits(test_file)  # recipe language, automatically imports I/O
 obs_date_time = GetHeaderValue(l1_obj,'DATE-MID')
 cals = CalibrationLookup(obs_date_time, subset=['smooth_lamp_pattern'])
 
-blaze_output_list = AddBlaze(l1_obj, cals['smooth_lamp_pattern'])
+blaze_output_list = AddBlaze(l1_obj, cals['smooth_lamp_pattern'], 'spline')
 
 exit_code = blaze_output_list[0]
 new_l1_obj = blaze_output_list[1]
