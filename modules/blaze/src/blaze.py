@@ -1,4 +1,5 @@
 import configparser
+import traceback
 
 from kpfpipe.primitives.level1 import KPF1_Primitive
 from modules.blaze.src.alg import BlazeAlg
@@ -19,7 +20,7 @@ class AddBlaze(KPF1_Primitive):
         # Input arguments
         self.target_l1 = self.action.args[0]           # KPF L1 object
         self.smooth_lamp_l1 = self.action.args[1]      # KPF L1 object
-        self.method = self.action.args[2]              # string of method to use
+        #self.method = self.action.args[2]              # string of method to use
         
         # Input configuration
         self.config = configparser.ConfigParser()
@@ -32,7 +33,7 @@ class AddBlaze(KPF1_Primitive):
         exit_code = 0
         try:
             blaze = BlazeAlg(self.target_l1, self.smooth_lamp_l1, self.config_path)
-            out_l1 = blaze.apply_blaze_correction(method=self.method)
+            out_l1 = blaze.apply_blaze_correction()
             exit_code = 1
         except Exception as e:
             self.logger.error(f"Blaze algorithm failed: {e}\n{traceback.format_exc()}")
