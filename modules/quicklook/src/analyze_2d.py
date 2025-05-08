@@ -514,8 +514,8 @@ class Analyze2D:
 
     def plot_2D_image(self, chip=None, variance=False, data_over_sqrt_variance=False,
                             overplot_dark_current=False, blur_size=None, 
-                            subtract_master_bias=False,
-                            subtract_master_dark=False,
+                            subtract_master_bias=False, subtract_master_dark=False, 
+                            units='e-', vrange='auto', 
                             fig_path=None, show_plot=False):
         """
         Generate a plot of the a 2D image.  Overlay measurements of 
@@ -531,6 +531,8 @@ class Analyze2D:
                                    the value from the BIASFILE keyword
                                    if his parameter is set to a path, that file 
                                    will be used 
+            vrange - intensity units, e- or e-/hr
+            vrange - intensity range, two-element list or 'auto'
             subtract_master_dark - same as subtract_master_bias
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
@@ -638,10 +640,16 @@ class Analyze2D:
             elif data_over_sqrt_variance:
                 image = np.array(self.D2[CHIP + '_CCD'].data) / np.sqrt(np.array(self.D2[CHIP + '_VAR'].data))
             else:
-                image = np.array(self.D2[CHIP + '_CCD'].data)
+                if units =='e-':
+                    image = np.array(self.D2[CHIP + '_CCD'].data)
+                elif units =='e-/hr':
+                    image = np.array(self.D2[CHIP + '_CCD'].data) / (float(self.exptime)/3600)
+                else:
+                    self.logger.error('Invalid value for "units"')
+                    return
             
         else:
-            self.logger.debug('chip not supplied.  Exiting plot_2D_image')
+            self.logger.error('chip not supplied.  Exiting plot_2D_image')
             return
             
         if blur_size != None:
@@ -650,11 +658,14 @@ class Analyze2D:
 
         # Generate 2D image
         plt.figure(figsize=(10,8), tight_layout=True)
-        vmin = np.nanpercentile(image[100:-100,100:-100],0.1)
-        vmax = np.nanpercentile(image[100:-100,100:-100],99)
-        if variance or data_over_sqrt_variance:
-            vmin = np.nanpercentile(image, 0.01)
-            vmax = np.nanpercentile(image,99.99)
+        if vrange == 'auto':
+            vmin = np.nanpercentile(image[100:-100,100:-100],0.1)
+            vmax = np.nanpercentile(image[100:-100,100:-100],99)
+            if variance or data_over_sqrt_variance:
+                vmin = np.nanpercentile(image, 0.01)
+                vmax = np.nanpercentile(image,99.99)
+        else:
+            vmin, vmax = vrange[0], vrange[1]
         plt.imshow(image, vmin=vmin, vmax=vmax, 
                           interpolation = 'None', 
                           origin = 'lower', 
@@ -679,6 +690,8 @@ class Analyze2D:
             label = 'Variance (e-)'
         elif data_over_sqrt_variance:
             label = r'Counts (e-) / (Variance (e-))$^{0.5}$'
+        if units=='e-/hr':
+            label = 'Counts (e-/hr)'
         cbar = plt.colorbar(label = label)
         cbar.ax.yaxis.label.set_size(18)
         cbar.ax.tick_params(labelsize=14)
