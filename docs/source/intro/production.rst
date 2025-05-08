@@ -51,7 +51,7 @@ If the script full of 'kpf' commands is called ``process.sh``, it would be launc
 **Reprocessing Masters:**
 
 Reprocess master files from yyyymmdd to YYYYMMDD is accomplished with a series of commands.  
-First activate the kpf-masters condo environment.
+First activate the kpf-masters conda environment.
 From the ``cronjobs/`` directory, generate a series of shell scripts with the format ``runDailyPipelines_YYYYMMDD.sh`` 
 You can then use the generated script ``runMastersPipeline_From_YYYYMMDD_To_YYYYMMDDDD.sh`` to run the dates you specified or use the ``parallel`` utility with a command like the one below for better control over compute resources::
 
