@@ -124,6 +124,8 @@ class BlazeAlg:
         for ccd in ['GREEN', 'RED']:
             for i in range(5):
                 flux = self.smooth_lamp_l1[f'{ccd}_{flux_ext[i]}']
+
+                print(flux.shape, f'{ccd}_{flux_ext[i]}')
                 
                 norder, npix = flux.shape
                 blaze_array = np.zeros((norder,npix))
