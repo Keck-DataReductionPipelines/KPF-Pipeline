@@ -227,7 +227,7 @@ class KPF0(KPFDataModel):
         ram_mb = total_ram_bytes / (1024 * 1024)
         print('Estimated RAM usage: {:.1f} MB'.format(ram_mb))
 
-    def _create_hdul(self, compressed=True):
+    def _create_hdul(self, compressed=False):
         '''
         Create an hdul in FITS format. 
         This is used by the base model for writing data context to file

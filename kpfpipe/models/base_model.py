@@ -253,7 +253,7 @@ class KPFDataModel(object):
                                f'md5_sum={md5.hexdigest()}', 'PASS')
 
     
-    def to_fits(self, fn, compressed=True):
+    def to_fits(self, fn, compressed=False):
         """
         Collect the content of this instance into a monolithic FITS file
 
