@@ -534,7 +534,7 @@ if do_spectral_extraction or do_hk or do_bc:
 				if outlier_mask_path == None:
 					outlier_mask_file = ''
 				else:
-					outlier_mask_file = outlier_mask_path + short_lev0_file
+					outlier_mask_file = outlier_mask_path + "/" + context.date_dir + "/" + short_lev0_file
 
 				for idx in ccd_idx:
 					ccd = ccd_list[idx]

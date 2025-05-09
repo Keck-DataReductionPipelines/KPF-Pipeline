@@ -1,45 +1,36 @@
 Production Processing
 =====================
 
-The following commands should be run from separate Docker containers to start production processing of KPF data.
+The following commands should be run from separate Docker containers to start production processing of KPF data. 
 
 **Main processing threads:**
 
-Launch 50 processes to watch for L0 files and process them into 2D/L1/L2 files::
+Launch 50 processes to watch for L0 files and process them into 2D/L1/L2 files.  In production processing by the DRP development team, this command is in the xterm called *Realtime Processing*.::
 
     kpf --ncpu 50 --watch /data/L0/ -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
 
 **Quicklook processing threads:** 
 
-Launch QLP instances for all data levels with the default recipe::
-
-    ./scripts/launch_qlp.sh
-
-Alternatively, launch QLP instances for only recent observations (within the last day)::
+Launch QLP instances for all data levels with the default recipe.  The QLP instances should be split between two commands, one that looks at recent files (generated in the last day from realtime processing and one that covers reprocessed files from 1+ days ago).  In production processing by the DRP development team, these two commands are in the xterm called *QLP --only_recent* and *QLP --not_recent*.::
 
     ./scripts/launch_qlp.sh --only_recent
 
-And one for not recent observations (more than a day ago)::
-
     ./scripts/launch_qlp.sh --not_recent
-  
+ 
 **Time Series Database Ingestion:**
   
 Start a script that will watch for new L0/2D/L1/L2 files and ingest them.  
 Another thread of the script will periodically scan the data directories to search for files 
 (or updates that were missed with the watch thread) to ingest.  
-Periodic scans start one hour after the previous one completed.::
+Periodic scans start one hour after the previous one completed.  
+In production processing by the DRP development team, this command is in the xterm called *TSDB Ingestion*.::
 
     ./scripts/ingest_watch_kpf_tsdb.py  
 
-The above script will take care of most ingestion needs.  To ingest from date 
-yyyymmdd to YYYYMMDD, use::
-
-    ./scripts/ingest_dates_kpf_tsdb.py yyyymmdd YYYYMMDD
-
 **Generation of Time Series Plots**: 
 
-This script will generate time series plots of telemetry and other information on regular intervals using the Observational Database::
+This script will generate time series plots of telemetry and other information on regular intervals using the Observational Database.
+In production processing by the DRP development team, this command is in the xterm called *TSDB Plots*.::
 
     ./scripts/generate_time_series_plots.py
 
@@ -48,9 +39,28 @@ Other Processing Tasks
 
 **Reprocessing L0 files:** 
   
-Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD::
+Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Reprocessing*.::
 
-    kpf --ncpu 50 /data/L0/YYYYMMDD/ -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
+    kpf --ncpu 50 --reprocess /data/L0/YYYYMMDD/ -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
+
+To process many nights of data, use a script to generate the a series of ``kpf`` commands for different YYYYMMDD dates and the ``parallel`` utility to track progress and resume if interrupted. 
+If the script full of 'kpf' commands is called ``process.sh``, it would be launched with::
+
+    cat process.sh | parallel -j 1 --progress --bar --resume --joblog reprocessing_progress.log
+
+**Reprocessing Masters:**
+
+Reprocess master files from yyyymmdd to YYYYMMDD is accomplished with a series of commands.  
+First activate the kpf-masters conda environment.
+From the ``cronjobs/`` directory, generate a series of shell scripts with the format ``runDailyPipelines_YYYYMMDD.sh`` 
+You can then use the generated script ``runMastersPipeline_From_YYYYMMDD_To_YYYYMMDDDD.sh`` to run the dates you specified or use the ``parallel`` utility with a command like the one below for better control over compute resources::
+
+    conda activate /scr/doppler/conda/envs/kpf-masters
+    cd cronjobs
+    generateDailyRunScriptsBetweenTwoDates.pl yyyymmdd YYYYMMDD
+    ls runDailyPipelines_202*.sh | awk '{print "Sh "$1}' | parallel -j 5 --progress --bar --resume --joblog masters_reprocessing.log
+
+It is not reccomended to run more than 5-7 jobs at once to avoid I/O overload. In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
 
 **Quicklook reprocessing -- qlp_parallel.py:**
 
@@ -218,3 +228,8 @@ The full description is here::
     Example:
       ./scripts/kpf_processing_progress.sh 20231114 20231231 --print_files
 
+**Ingest Files Over Date Range Into the TSDB:**
+
+To ingest observations from date yyyymmdd to YYYYMMDD into the time series database, use::
+
+    ./scripts/ingest_dates_kpf_tsdb.py yyyymmdd YYYYMMDD

@@ -25,7 +25,13 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: Saturated Lines
-      only_object: Etalon
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
       not_junk: true
       legend_frac_size: 0.25
 
@@ -54,6 +60,12 @@ panel_arr:
     paneldict:
       ylabel: Saturated Lines
       title: Saturated Lines - Etalon
-      only_object: Etalon
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
       not_junk: true
       legend_frac_size: 0.25

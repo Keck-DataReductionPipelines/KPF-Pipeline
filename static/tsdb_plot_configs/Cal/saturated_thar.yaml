@@ -25,7 +25,13 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: Saturated Lines
-      only_object: ThAr
+      only_object: 
+        - autocal-thar-all-morn
+        - autocal-thar-all-eve
+        - autocal-thar-all-night
+        - autocal-thar-sci
+        - autocal-thar-sky
+        - autocal-thar-cal
       not_junk: true
       legend_frac_size: 0.25
 
@@ -54,6 +60,12 @@ panel_arr:
     paneldict:
       ylabel: Saturated Lines
       title: Saturated Lines - ThAr
-      only_object: ThAr
+      only_object: 
+        - autocal-thar-all-morn
+        - autocal-thar-all-eve
+        - autocal-thar-all-night
+        - autocal-thar-sci
+        - autocal-thar-sky
+        - autocal-thar-cal
       not_junk: true
       legend_frac_size: 0.25

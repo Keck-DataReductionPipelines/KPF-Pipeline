@@ -347,6 +347,8 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=No
         desc = qcd.descriptions[qc_name]
         present = kwd in kpf_object.header['PRIMARY']
         passed = present and bool(kpf_object.header['PRIMARY'][kwd])
+        master_types = qcd.master_types[qc_name]
+        drift_types = qcd.drift_types[qc_name]
 
         name_entry = kwd if return_keywords else qc_name
 
@@ -364,7 +366,9 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=No
             "Level": lvl,
             "Description": desc,
             "Present": present,
-            "Pass": passed
+            "Pass": passed,
+            "master_types": master_types,
+            "drift_types": drift_types,
         })
 
     if yaml_path is not None:
@@ -374,20 +378,53 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=No
             logger.info(f"YAML QC report saved to {yaml_path}")
 
     if print_output:
+        # All QCs
         print(f'{styled_text(f"Quality Control Report for {ObsID} ({this_spectrum_type})", style="Bold", color="Black")}')
         print()
-        print(f'{styled_text("Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
-
+        print(f'{styled_text(f"All QC Keywords:", style="Bold", color="Black")}')
+        print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
         for row in report_rows:
             checkmark = '✓' if row["Present"] else '✗'
             col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
-            print(f'{styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
-
+            print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
         print()
-        print(f"{styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+        print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+        print()
+
+        # QCs for Masters
+        if this_spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe']:
+            print(f'{styled_text(f"QC Keywords for observation to be included in master {this_spectrum_type} stack:", style="Bold", color="Black")}')
+            if not all(row['master_types'] == [] for row in report_rows):
+                print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
+                for row in report_rows:
+                    if any(x in row['master_types'] for x in [this_spectrum_type, 'all']):
+                        checkmark = '✓' if row["Present"] else '✗'
+                        col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
+                        print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
+                print()
+                print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+            else:
+                print(f'{styled_text("    None", style="Bold", color="Black")}')  
+            print()
+
+        # QCs for Drift Measurements
+        if this_spectrum_type in ['Etalon', 'LFC', 'ThAr', 'UNe']:
+            print(f'{styled_text(f"QC Keywords for observation to be included in {this_spectrum_type} drift measurements:", style="Bold", color="Black")}')
+            if not all(row['drift_types'] == [] for row in report_rows):
+                print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
+                for row in report_rows:
+                    if any(x in row['drift_types'] for x in [this_spectrum_type, 'all']):
+                        checkmark = '✓' if row["Present"] else '✗'
+                        col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
+                        print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
+                print()
+                print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
+            else:
+                print(f'{styled_text("    None", style="Bold", color="Black")}')  
 
     if not (yaml_path or print_output):
         return (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail)
+
 
 #####################################################################
 
@@ -412,7 +449,7 @@ class QCDefinitions:
         spectrum_types (dictionary of arrays of strings): Each entry specifies the types of spectra that the metric will be applied to.
             Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>
         master_types (dictionary of arrays of strings): Each entry specifies the types of masters where the QC check is relevant.  If the QC fails for an exposure, it is not added to the master stack.
-            Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe'
+            Possible strings in array: 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe'
         drift_types (dictionary of arrays of strings): Each entry specifies the types of observations where the QC check is relevant.  If the QC fails for an exposure, it is not used in wavelength drift measurements.
             Possible strings in array: 'all', 'LFC', 'Etalon', 'ThAr', 'UNe'
         required_data_products (dictionary of arrays of strings): specifies if data products are needed to perform check
@@ -602,7 +639,7 @@ class QCDefinitions:
         self.kpf_data_levels[name11] = ['L1']
         self.data_types[name11] = 'int'
         self.spectrum_types[name11] = ['all', ]
-        self.master_types[name11] = ['all', ]
+        self.master_types[name11] = []
         self.drift_types[name11] = ['all', ]
         self.required_data_products[name11] = [] # no required data products
         self.descriptions[name11] = 'Green and Red data present in L1 with expected shapes'
@@ -729,7 +766,7 @@ class QCDefinitions:
         self.descriptions[name20] = 'WLS files exist, are not the same, and bracket the observation'
         self.data_types[name20] = 'int'
         self.spectrum_types[name20] = ['all', ]
-        self.master_types[name20] = ['all', ]
+        self.master_types[name20] = []
         self.drift_types[name20] = []
         self.required_data_products[name20] = [] # no required data products
         self.fits_keywords[name20] = 'WLSL1'
@@ -1017,6 +1054,7 @@ class QCDefinitions:
                 data_type = self.data_types[qc_name]
                 spectrum_types = self.spectrum_types[qc_name]
                 master_types = self.master_types[qc_name]
+                drift_types = self.drift_types[qc_name]
                 required_data_products = self.required_data_products[qc_name]
                 keyword = self.fits_keywords[qc_name]
                 keyword_fail_value = self.fits_keyword_fail_value[qc_name]
@@ -1031,7 +1069,8 @@ class QCDefinitions:
                     print('      ' + styled_text("Date type: ", style="Bold") + data_type)
                     print('      ' + styled_text("Required data products: ", style="Bold") + str(required_data_products))
                     print('      ' + styled_text("Spectrum types (applied to): ", style="Bold") + str(spectrum_types))
-                    print('      ' + styled_text("Master types (applied to): ", style="Bold") + str(master_types))
+                    print('      ' + styled_text("Master types (required for): ", style="Bold") + str(master_types))
+                    print('      ' + styled_text("Drift types (required for): ", style="Bold") + str(drift_types))
                     print('      ' + styled_text("Keyword: ", style="Bold") + styled_text(keyword, style="Bold", color='Blue'))
                     print('      ' + styled_text("Keyword fail value: ", style="Bold") + str(keyword_fail_value))
                     print('      ' + styled_text("Comment: ", style="Bold") + comment)
@@ -1081,60 +1120,29 @@ class QCDefinitions:
             print()
 
 
-    def get_required_QCs(self, data_product=None):
+    def get_required_QCs(self, data_product=None, source=None):
         """
-        This method returns a list of QCs (or resulting keywords) required for 
-        particular category of data product (master, drift) and of a particular 
-        type (e.g., etalon, LFC, bias)
+        This method returns a list of QC keywords (or resulting keywords) that 
+        are required for particular category of data product (master, drift) 
+        and of a particular source (e.g., etalon, LFC, bias)
         """
 
-        name35 = 'good_TARG_headers'
-        self.names.append(name35)
-        self.kpf_data_levels[name35] = ['L0']
-        self.descriptions[name35] = 'TARG headers have plausible values'
-        self.data_types[name35] = 'int'
-        self.spectrum_types[name35] = ['Star', ]
-        self.master_types[name35] = []
-        self.drift_types[name35] = []
-        self.required_data_products[name35] = [] # no required data products
-        self.fits_keywords[name35] = 'TARGPLAU'
-        self.fits_comments[name35] = 'QC: TARG kwds present with plausible values'
-        self.db_columns[name35] = None
-        self.fits_keyword_fail_value[name35] = 0
+        if data_product == None or source == None:
+            self.logger.error("data_product or source not specified in get_required_QCs()")
+            return None
 
+        QC_keywords = []
+        for qc_name in self.names:
+            if data_product.lower() == 'master':
+                 if any(x in self.master_types[qc_name] for x in [source, 'all']):
+                      QC_keywords.append(self.fits_keywords[qc_name])
+            elif data_product.lower() == 'drift':
+                 if any(x in self.drift_types[qc_name] for x in [source, 'all']):
+                      QC_keywords.append(self.fits_keywords[qc_name])
+        
+        return QC_keywords
 
-        cases = ['plots', 'database']
-
-        for case in cases:
-
-            if case == 'plots':
-                search_directory = '/code/KPF-Pipeline/static/tsdb_plot_configs/'
-                file_ext = '.yaml'
-            if case == 'database':
-                search_directory = '/code/KPF-Pipeline/static/tsdb_keywords/'
-                file_ext = '.csv'
-
-            print(styled_text(f"Searching for *{file_ext} files in {search_directory} for QC keywords.", style="Bold"))
-            for name in self.names:
-                fits_kwd = self.fits_keywords.get(name, "")
-                if not fits_kwd:
-                    print(f"Warning: No search string found for '{name}'")
-                    continue
-                found_occurrence = False
-                for root, dirs, files in os.walk(search_directory):
-                    for file_name in files:
-                        if file_name.endswith(file_ext):
-                            full_path = os.path.join(root, file_name)
-                            # Read the file contents and check for the string
-                            with open(full_path, 'r', encoding='utf-8') as f:
-                                content = f.read()
-                                if fits_kwd in content:
-                                    found_occurrence = True
-                                    print(styled_text(f"Found ", color="Green") + styled_text(f"'{fits_kwd}' from '{name}'", style="Bold", color="Green") + styled_text(f" in: {full_path}", color="Green"))
-                if not found_occurrence:
-                    print(styled_text(f"No occurrence of ", color="Red") + styled_text(f"'{name}' => '{fits_kwd}'", style="Bold", color="Red") + styled_text(f" found in any {file_ext} file.", color="Red"))
-            print()
-
+            
 
 #####################################################################
 #
