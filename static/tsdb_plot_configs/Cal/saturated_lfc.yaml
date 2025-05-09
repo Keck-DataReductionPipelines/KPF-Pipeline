@@ -25,7 +25,16 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: Saturated Lines
-      only_object: LFC
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
       not_junk: true
       legend_frac_size: 0.25
 
@@ -54,6 +63,15 @@ panel_arr:
     paneldict:
       ylabel: Saturated Lines
       title: Saturated Lines - LFC
-      only_object: LFC
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
       not_junk: true
       legend_frac_size: 0.25
