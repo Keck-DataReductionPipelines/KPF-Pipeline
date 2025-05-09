@@ -65,6 +65,8 @@ class TSDB:
         'ingest_watch_kpf_tsdb.py' - ingest by watching a set of directories
 
     To-do:
+        * If backend='psql', check user privileges and only attempt methods that 
+          are allowed, e.g., no writing to the db for readonly user.
         * Add temperature derivatives as columns; they will need to be computed.
         * Add database for masters (separate from ObsIDs?)
 
@@ -1305,69 +1307,25 @@ class TSDB:
                           start_date=None, end_date=None, 
                           only_object=None, only_source=None, object_like=None, 
                           on_sky=None, not_junk=None, 
+                          extra_conditions=None,
+                          extra_conditions_logic='AND',
                           verbose=False):
         """
-        Description:
-            Retrieves a pandas DataFrame containing specified columns from a 
-            joined set of database tables, applying optional filters based on 
-            object names, source types, date ranges, sky condition, and quality 
-            checks.
-    
-        Arguments:
-            columns (str or list of str, optional): Column name(s) to retrieve. 
-                Defaults to None (fetches all columns).
-            start_date (str or datetime, optional): Starting date for filtering 
-                observations (datetime object or YYYYMMDD or None). Defaults to 
-                None.
-            end_date (str or datetime, optional): Ending date for filtering 
-                observations (datetime object or YYYYMMDD or None). Defaults to 
-                None.
-            only_object (str or list of str, optional): Exact object name(s) to 
-                filter observations. Defaults to None.
-                E.g., only_object = ['autocal-dark', 'autocal-bias']
-            only_source (str or list of str, optional): Source type(s) to filter 
-                observations. Defaults to None.
-                E.g., only_source = ['Dark', 'Bias']
-            object_like (str or list of str, optional): Partial object name(s) 
-                for filtering observations using SQL LIKE conditions. Defaults 
-                to None.
-                E.g., object_like = ['autocal-etalon', 'autocal-bias']
-            on_sky (bool, optional): Filter by on-sky (True) or calibration 
-                (False) observations. Defaults to None.
-            not_junk (bool, optional): Filter by observations marked as not junk 
-                (True) or junk (False). Defaults to None.
-            verbose (bool, optional): Enables detailed logging of SQL queries 
-                and parameters. Defaults to False.
-    
-        Attributes:
-            None explicitly defined. This method interacts with class-level 
-                database connections and cursor objects.
-    
-        Returns:
-            pandas.DataFrame: DataFrame containing the requested data based on 
-                specified conditions.
-    
+        Retrieves a pandas DataFrame containing specified columns from database tables,
+        applying optional filters based on object names, source types, date ranges,
+        sky condition, quality checks, and additional custom conditions.
+        
+        Parameters:
+            extra_conditions (list of str): Additional conditions (e.g., ['kpfgreen.STA_CCD_T > 55']).
+            extra_conditions_logic (str): Logic to combine extra_conditions ('AND' or 'OR').
         """
+        if isinstance(only_object, str):
+            only_object = [only_object]
+        if isinstance(only_source, str):
+            only_source = [only_source]
+        if isinstance(object_like, str):
+            object_like = [object_like]
     
-        # Check and correct inputs
-        if only_object != None:
-            if isinstance(only_object, str):
-                only_object = [only_object]
-            elif not isinstance(only_object, list):
-                raise TypeError(f"Expected a string or a list of strings for only_object.")        
-    
-        if only_source != None:
-            if isinstance(only_source, str):
-                only_source = [only_source]
-            elif not isinstance(only_source, list):
-                raise TypeError(f"Expected a string or a list of strings for only_source.")        
-    
-        if object_like != None:
-            if isinstance(object_like, str):
-                object_like = [object_like]
-            elif not isinstance(object_like, list):
-                raise TypeError(f"Expected a string or a list of strings for object_like.")
-
         # Database operations
         self._open_connection()
     
@@ -1388,23 +1346,31 @@ class TSDB:
     
             kw_table_map = dict(zip(metadata['keyword'], metadata['table_name']))
             tables_needed = set(metadata['table_name'].dropna())
+            tables_needed.update(['tsdb_base', 'tsdb_l0', 'tsdb_2d'])
     
-            # Always include base table for joins
-            tables_needed.add('tsdb_base')
-    
-            # Collect columns per table, always include ObsID for joins
+            # Collect columns per table, always include ObsID for joins and specified required columns
             table_columns = {table: set(['ObsID']) for table in tables_needed}
             for kw, tbl in kw_table_map.items():
                 table_columns[tbl].add(kw)
     
-            # Build SELECT clause, avoiding duplicate ObsID columns
+            # Explicitly add guaranteed columns
+            guaranteed_columns = {
+                'tsdb_base': ['Source'],
+                'tsdb_l0': ['OBJECT', 'FIUMODE'],
+                'tsdb_2d': ['NOTJUNK']
+            }
+    
+            for tbl, cols in guaranteed_columns.items():
+                for col in cols:
+                    table_columns[tbl].add(col)
+    
             select_clauses = []
             selected_cols_set = set()
             for tbl in tables_needed:
                 for col in table_columns[tbl]:
                     if col == 'ObsID':
                         if 'ObsID' in selected_cols_set:
-                            continue  # avoid duplicates
+                            continue
                         selected_cols_set.add('ObsID')
                         select_clauses.append(f'{tbl}."ObsID" AS "ObsID"')
                     else:
@@ -1422,13 +1388,10 @@ class TSDB:
             # WHERE conditions
             conditions, params = [], []
     
-            def add_in_condition(column, values, table):
-                placeholders = ','.join('?' for _ in values)
-                conditions.append(f'{table}."{column}" IN ({placeholders})')
-                params.extend(values)
-    
             if only_object:
-                add_in_condition('OBJECT', only_object, 'tsdb_l0')
+                placeholders = ','.join('?' for _ in only_object)
+                conditions.append(f'tsdb_l0."OBJECT" IN ({placeholders})')
+                params.extend(only_object)
     
             if object_like:
                 like_conditions = [f'tsdb_l0."OBJECT" LIKE ?' for _ in object_like]
@@ -1436,36 +1399,40 @@ class TSDB:
                 params.extend([f'%{ol}%' for ol in object_like])
     
             if only_source:
-                add_in_condition('Source', only_source, 'tsdb_base')
+                placeholders = ','.join('?' for _ in only_source)
+                conditions.append(f'tsdb_base."Source" IN ({placeholders})')
+                params.extend(only_source)
     
             if not_junk is not None:
-                if self.backend == 'sqlite':
-                    conditions.append('tsdb_2d."NOTJUNK" = ?')
-                    params.append(1 if not_junk else 0)
-                elif self.backend == 'psql':
-                    conditions.append('tsdb_2d."NOTJUNK" = %s')
-                    params.append(True if not_junk else False)
-
+                conditions.append('tsdb_2d."NOTJUNK" = ?')
+                params.append(1 if not_junk else 0)
+    
             if on_sky is not None:
                 mode = 'Observing' if on_sky else 'Calibration'
                 conditions.append('tsdb_l0."FIUMODE" = ?')
                 params.append(mode)
     
             if start_date:
-                if isinstance(start_date, datetime):
-                    date_str = start_date.strftime("%Y-%m-%d" if self.backend == 'psql' else "%Y%m%d")
-                else:
-                    date_str = datetime.strptime(start_date, "%Y%m%d").strftime("%Y-%m-%d" if self.backend == 'psql' else "%Y%m%d")
-                conditions.append('tsdb_base."datecode" >= ?' if self.backend == 'sqlite' else 'tsdb_base."datecode" >= %s')
+                date_str = pd.to_datetime(start_date).strftime("%Y%m%d")
+                conditions.append('tsdb_base."datecode" >= ?')
                 params.append(date_str)
-            
+    
             if end_date:
-                if isinstance(end_date, datetime):
-                    date_str = end_date.strftime("%Y-%m-%d" if self.backend == 'psql' else "%Y%m%d")
-                else:
-                    date_str = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d" if self.backend == 'psql' else "%Y%m%d")
-                conditions.append('tsdb_base."datecode" <= ?' if self.backend == 'sqlite' else 'tsdb_base."datecode" <= %s')
+                date_str = pd.to_datetime(end_date).strftime("%Y%m%d")
+                conditions.append('tsdb_base."datecode" <= ?')
                 params.append(date_str)
+    
+            # Automatically qualify column names in extra_conditions based on backend
+            if extra_conditions:
+                qualified_extra_conditions = []
+                for condition in extra_conditions:
+                    for keyword, table in kw_table_map.items():
+                        if keyword in condition:
+                            condition = condition.replace(keyword, f'{table}."{keyword}"')
+                    qualified_extra_conditions.append(condition)
+    
+                extra_clause = f" {extra_conditions_logic} ".join(qualified_extra_conditions)
+                conditions.append(f"({extra_clause})")
     
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     
@@ -1489,21 +1456,18 @@ class TSDB:
     
             df = pd.DataFrame(fetched_data, columns=col_names)
     
-            # Reorder columns to match the requested input order, if specified
+            # Reorder columns if specified
             if columns not in (None, '*'):
                 final_column_order = [col for col in columns_requested if col in df.columns]
-            
-                # Include 'ObsID' only if it was explicitly requested
                 if 'ObsID' in df.columns and 'ObsID' not in columns_requested:
                     df = df.drop(columns='ObsID')
-            
                 df = df[final_column_order]
-
+    
         finally:
             self._close_connection()
     
         return df
-
+        
 
     def ObsIDlist_from_db(self, object_name, start_date=None, end_date=None, not_junk=None):
         """
