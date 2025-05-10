@@ -373,7 +373,7 @@ class SpectralExtraction(KPF0_Primitive):
                     self.outlier_lev0[self.data_ext][:] = data_outlier
 
         if self.outlier_lev0 is not None and self.outlier_file:
-            self.outlier_lev0.to_fits(self.outlier_file)
+            self.outlier_lev0.to_fits(self.outlier_file, compressed=True)
 
         if good_result and self.output_level1 is not None:
             self.output_level1.receipt_add_entry('SpectralExtraction', self.__module__,

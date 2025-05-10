@@ -181,6 +181,7 @@ class KPFDataModel(object):
         if not os.path.isfile(fn):
             raise IOError(f'{fn} does not exist.')
             # this_data.to_fits(fn)
+
         # populate it with self.read()
         this_data.read(fn, data_type=data_type)
         # Return this instance
@@ -219,7 +220,7 @@ class KPFDataModel(object):
             for hdu in hdu_list:
                 if isinstance(hdu, fits.PrimaryHDU):
                     self.header[hdu.name] = hdu.header
-                elif isinstance(hdu, fits.BinTableHDU):
+                elif isinstance(hdu, fits.BinTableHDU) and not isinstance(hdu, fits.CompImageHDU):
                     t = Table.read(hdu)
                     if 'RECEIPT' in hdu.name:
                         # Table contains the RECEIPT
@@ -253,13 +254,14 @@ class KPFDataModel(object):
                 md5.update(chunk)
 
     
-    def to_fits(self, fn):
+    def to_fits(self, fn, compressed=False):
         """
         Collect the content of this instance into a monolithic FITS file
 
         Args: 
             fn (str): file path
-
+            compressed (bool): if True, compress the file using the compression type specified in KPF_definitions.py
+                [default=True]                            
         Note:
             Can only write to KPF formatted FITS 
 
@@ -272,7 +274,7 @@ class KPFDataModel(object):
         if gen_hdul is None:
             raise TypeError('Write method not found. Is this the base class?')
         else: 
-            hdu_list = gen_hdul()
+            hdu_list = gen_hdul(compressed=compressed)
         
         # check that no card in any HDU is greater than 80
         # this is a hard limit by FITS 
