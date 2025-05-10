@@ -57,7 +57,7 @@ You can then use the generated script ``runMastersPipeline_From_YYYYMMDD_To_YYYY
 
     conda activate /scr/doppler/conda/envs/kpf-masters
     cd cronjobs
-    generateDailyRunScriptsBetweenTwoDates.pl yyyymmdd YYYYMMDD
+    ./generateDailyRunScriptsBetweenTwoDates.pl yyyymmdd YYYYMMDD
     ls runDailyPipelines_202*.sh | awk '{print "Sh "$1}' | parallel -j 5 --progress --bar --resume --joblog masters_reprocessing.log
 
 It is not reccomended to run more than 5-7 jobs at once to avoid I/O overload. In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
