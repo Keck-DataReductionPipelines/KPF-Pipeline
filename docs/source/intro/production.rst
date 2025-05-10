@@ -58,9 +58,10 @@ You can then use the generated script ``runMastersPipeline_From_YYYYMMDD_To_YYYY
     conda activate /scr/doppler/conda/envs/kpf-masters
     cd cronjobs
     ./generateDailyRunScriptsBetweenTwoDates.pl yyyymmdd YYYYMMDD
-    ls runDailyPipelines_202*.sh | sort -r | awk '{print "sh "$1}' | parallel -j 5 --progress --bar --resume --joblog masters_reprocessing.log
+    ls runDailyPipelines_202311*.sh | sort -r | parallel --delay 600 -j 5 --progress --bar --resume --joblog masters_reprocessing.log sh {}
 
-It is not reccomended to run more than 5-7 jobs at once to avoid I/O overload. In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
+
+The example above is for November, 2023 (yyyymmdd=20231101, YYYYMMDD=20231130).  The name of the log file (``masters_reprocessing.log``) can be adjusted.  It is not recommended to run more than 5-7 jobs (``-j`` option) at once to avoid I/O overload; staggered processing (``--delay 600``) helps. In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
 
 **Quicklook reprocessing -- qlp_parallel.py:**
 
