@@ -322,18 +322,11 @@ class TSDB:
                     'description': f"{desc}{num}",
                     'source': 'L2 RV Extension'
                 })
-    
         df_rv = pd.DataFrame(rv_entries)
-#        for index, row in df_rv.iterrows():
-#            print(f'{row["keyword"]}|float|{row["description"]}|{row["units"]}')
 
         # Combine all into one DataFrame
         df_all = pd.concat([df_base, df_l0, df_2d, df_l1, df_l2, df_l0t, df_l2rv, df_l2ccf, df_rv], ignore_index=True)
-    
-        # Remove duplicates
         df_all.drop_duplicates(subset='keyword', inplace=True)
-    
-        # Store as a list of dictionaries
         self.metadata_entries = df_all.to_dict(orient='records')
 
    
