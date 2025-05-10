@@ -1311,14 +1311,63 @@ class TSDB:
                           extra_conditions_logic='AND',
                           verbose=False):
         """
-        Retrieves a pandas DataFrame containing specified columns from database tables,
-        applying optional filters based on object names, source types, date ranges,
-        sky condition, quality checks, and additional custom conditions.
-        
-        Parameters:
-            extra_conditions (list of str): Additional conditions (e.g., ['kpfgreen.STA_CCD_T > 55']).
-            extra_conditions_logic (str): Logic to combine extra_conditions ('AND' or 'OR').
+        Description:
+            Retrieves a pandas DataFrame containing specified columns from a set
+            of joined database tables, applying optional filters based on object
+            names, source types, date ranges, sky conditions, quality checks, and
+            additional custom conditions.
+
+        Args:
+            columns (str or list of str, optional):
+                Column name(s) to retrieve. Defaults to None (fetches all columns).
+
+            start_date (str or datetime, optional):
+                Starting date for filtering observations. Can be a datetime object,
+                a string in YYYYMMDD format, or None. Defaults to None.
+
+            end_date (str or datetime, optional):
+                Ending date for filtering observations. Can be a datetime object,
+                a string in YYYYMMDD format, or None. Defaults to None.
+
+            only_object (str or list of str, optional):
+                Exact object name(s) to filter observations. Defaults to None.
+                Example: ['autocal-dark', 'autocal-bias']
+
+            only_source (str or list of str, optional):
+                Source type(s) to filter observations. Defaults to None.
+                Example: ['Dark', 'Bias']
+
+            object_like (str or list of str, optional):
+                Partial object name(s) for filtering observations using SQL LIKE conditions.
+                Defaults to None.
+                Example: ['autocal-etalon', 'autocal-bias']
+
+            on_sky (bool, optional):
+                If True, filters for on-sky observations; if False, filters for calibration
+                observations. Defaults to None (no filtering).
+
+            not_junk (bool, optional):
+                If True, filters for observations marked as "not junk"; if False,
+                filters for "junk" observations. Defaults to None (no filtering).
+
+            extra_conditions (list of str, optional):
+                Additional custom SQL conditions to filter observations.
+                Example: ['kpfgreen.STA_CCD_T > 55']. Defaults to None.
+
+            extra_conditions_logic (str, optional):
+                Logical operator ('AND' or 'OR') used to combine multiple extra_conditions.
+                Defaults to 'AND'.
+
+            verbose (bool, optional):
+                Enables detailed logging of SQL queries and parameters when set to True.
+                Defaults to False.
+
+        Returns:
+            pd.DataFrame:
+                DataFrame containing the requested columns and filtered data.
+
         """
+
         if isinstance(only_object, str):
             only_object = [only_object]
         if isinstance(only_source, str):
