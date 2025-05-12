@@ -19,7 +19,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Reprocess datecoded directories.')
     parser.add_argument('startdate', type=str, help='Start date in YYYYMMDD format')
     parser.add_argument('enddate', type=str, help='End date in YYYYMMDD format')
-    parser.add_argument('--ncpu', type=int, default=max(1, multiprocessing.cpu_count() // 2),
+    parser.add_argument('--ncpus', type=int, default=max(1, multiprocessing.cpu_count() // 2),
                         help='Number of CPUs to use')
     parser.add_argument('--logfile', type=str, default='reprocess.log', help='Log file path')
     parser.add_argument('--dry-run', action='store_true', help='Print commands without executing them')
@@ -58,16 +58,15 @@ def main():
         l2_dir = f'/data/L2/{datecode}/'
         qlp_dir = f'/data/QLP/{datecode}/'
 
+        dirs_to_remove = [d2_dir, l1_dir, l2_dir, qlp_dir]
+
         cmds_rm = [
-            ['rm', '-rf', f'{d2_dir}*'],
-            ['rm', '-rf', f'{l1_dir}*'],
-            ['rm', '-rf', f'{l2_dir}*'],
-            ['rm', '-rf', f'{qlp_dir}*']
+            ['rm', '-rf', f'{directory}*'] for directory in dirs_to_remove if os.path.exists(directory)
         ]
 
         cmd_kpf = [
-            'kpf', '--ncpu', str(args.ncpu), '--reprocess',
-            src_dir, '-c', 'configs/kpf_drp.config', '-r', 'recipes/kpf_drp.recipe'
+            'kpf', '--ncpus', str(args.ncpus), '--watch',
+            src_dir, '--reprocess', '-c', 'configs/kpf_drp.cfg', '-r', 'recipes/kpf_drp.recipe'
         ]
 
         if args.dry_run:
@@ -75,9 +74,11 @@ def main():
                 print(' '.join(cmd_rm))
             print(' '.join(cmd_kpf))
         else:
-            for directory, cmd_rm in zip([d2_dir, l1_dir, l2_dir, qlp_dir], cmds_rm):
-                if os.path.exists(directory):
-                    subprocess.run(cmd_rm, check=False)
+            for cmd_rm in cmds_rm:
+                print(' '.join(cmd_rm))
+                subprocess.run(cmd_rm, check=False)
+
+            print(' '.join(cmd_kpf))
 
             start_time = datetime.datetime.now()
             result = subprocess.run(cmd_kpf)
