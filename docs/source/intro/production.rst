@@ -37,11 +37,11 @@ In production processing by the DRP development team, this command is in the xte
 Other Processing Tasks
 **********************
 
-**Reprocessing L0 files:** 
+**Reprocessing:** 
   
 Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Reprocessing*.::
 
-    kpf --ncpu 50 --reprocess /data/L0/YYYYMMDD/ -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
+    kpf --ncpu 50 --watch /data/L0/YYYYMMDD/ --reprocess -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
 
 To process many nights of data, use a script to generate the a series of ``kpf`` commands for different YYYYMMDD dates and the ``parallel`` utility to track progress and resume if interrupted. 
 If the script full of 'kpf' commands is called ``process.sh``, it would be launched with::
