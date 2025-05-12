@@ -143,7 +143,7 @@ ORDER BY startdate;"""
         
         # AND contentbits = {contentbitmask}
 
-        print(query_template)
+        # print(query_template)
         df = self.query_to_pandas(query_template)
         if len(df) == 0:
             return [1, None]

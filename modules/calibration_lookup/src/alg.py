@@ -73,7 +73,6 @@ class GetCalibrations:
                             output_cals[cal] = row['CALPATH']
             elif lookup == 'database':
                 for lvl, cal_type in zip(self.db_cal_file_levels, self.db_cal_types):
-                    print(cal_type)
                     if cal_type[0] in output_cals.keys() or cal_type[0].lower() not in subset:
                         continue
                     cal_type_lookup = cal_type.copy()
