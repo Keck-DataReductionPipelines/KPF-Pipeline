@@ -35,7 +35,7 @@ else:
     dt_string =  date_dir[0] + date_dir[1] + date_dir[2] + date_dir[3] +\
                  "-" + date_dir[4] + date_dir[5] + "-" + date_dir[6] + date_dir[7] + "T00:01:00.000000"
     cals = CalibrationLookup(dt_string)
-    ordermask_path = cals['order_mask']
+    ordermask_path = cals['ordermask']
     smoothlamppattern_path = cals['smooth_lamp_pattern']
 
 exptime_minimum = config.DARK.exptime_minimum
