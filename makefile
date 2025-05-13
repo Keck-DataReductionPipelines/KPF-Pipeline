@@ -36,13 +36,22 @@ docker:
 			   -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/testdata -v ${KPFPIPE_DATA}:/data -v ${KPFPIPE_DATA}/masters:/masters kpf-drp:latest bash
 
 regression_tests:
+	pip3 install -e .
+	$(MAKE) C  -C ${CCF_C}
+
 	pytest -x --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
 
 performance_tests:
+	pip3 install -e .
+	$(MAKE) C  -C ${CCF_C}
+
 	pytest -x --pyargs tests.performance
 
 validation_tests:
+	pip3 install -e .
+	$(MAKE) C  -C ${CCF_C}
+
 	pytest -x --pyargs tests.validation
 
 .PHONY: init
