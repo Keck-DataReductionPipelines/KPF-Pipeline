@@ -22,8 +22,9 @@ def parse_args():
     parser.add_argument('--ncpu', type=int, default=max(1, multiprocessing.cpu_count() // 2),
                         help='Number of CPUs to use')
     parser.add_argument('--logfile', type=str, default='reprocess.log', help='Log file path')
-    parser.add_argument('--not-nice', action='store_true', help='Do not apply standard nice (=15) deprioritization')
     parser.add_argument('--forward', action='store_true', help='Process datecodes in chronological order (reverse is default)')
+    parser.add_argument('--not-nice', action='store_true', help='Do not apply standard nice (=15) deprioritization')
+    parser.add_argument('--no-delete', action='store_true', help='Do not delete existing 2D/L1/L2/QLP files before reprocessing')
     parser.add_argument('--dry-run', action='store_true', help='Print commands without executing them')
     return parser.parse_args()
 
@@ -59,9 +60,9 @@ def main():
         datecode = single_date.strftime('%Y%m%d')
 
         src_dir = f'/data/L0/{datecode}/'
-        d2_dir = f'/data/2D/{datecode}/'
-        l1_dir = f'/data/L1/{datecode}/'
-        l2_dir = f'/data/L2/{datecode}/'
+        d2_dir  = f'/data/2D/{datecode}/'
+        l1_dir  = f'/data/L1/{datecode}/'
+        l2_dir  = f'/data/L2/{datecode}/'
         qlp_dir = f'/data/QLP/{datecode}/'
 
         dirs_to_remove = [d2_dir, l1_dir, l2_dir, qlp_dir]
@@ -76,12 +77,15 @@ def main():
         ]
 
         if args.dry_run:
-            for cmd_rm in cmds_rm:
-                print(' '.join(cmd_rm))
+            if not args.no_delete:
+                for cmd_rm in cmds_rm:
+                    print(' '.join(cmd_rm))
             print(' '.join(nice_prefix + cmd_kpf))
         else:
-            for cmd_rm in cmds_rm:
-                subprocess.run(cmd_rm, check=False)
+            if not args.no_delete:
+                for cmd_rm in cmds_rm:
+                    print(' '.join(cmd_rm))
+                    subprocess.run(' '.join(cmd_rm), shell=True, check=False)
 
             start_time = datetime.datetime.now()
             result = subprocess.run(nice_prefix + cmd_kpf)
