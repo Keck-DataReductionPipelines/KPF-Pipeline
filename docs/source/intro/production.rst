@@ -11,7 +11,7 @@ Launch 50 processes to watch for L0 files and process them into 2D/L1/L2 files. 
 
 **Quicklook processing threads:** 
 
-Launch QLP instances for all data levels with the default recipe.  The QLP instances should be split between two commands, one that looks at recent files (generated in the last day from realtime processing and one that covers reprocessed files from 1+ days ago).  In production processing by the DRP development team, these two commands are in the xterm called *QLP --only_recent* and *QLP --not_recent*.::
+Launch QLP instances for all data levels with the default recipe.  The QLP instances should be split between two commands, one that looks at recent files (generated in the last day from realtime processing and one that covers reprocessed files from 1+ days ago, the latter is deprioritized using 'nice=10').  In production processing by the DRP development team, these two commands are in the xterm called *QLP --only_recent* and *QLP --not_recent*.::
 
     ./scripts/launch_qlp.sh --only_recent
 
@@ -43,10 +43,32 @@ Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYM
 
     kpf --ncpu 50 --watch /data/L0/YYYYMMDD/ --reprocess -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
 
-To process many nights of data, use a script to generate the a series of ``kpf`` commands for different YYYYMMDD dates and the ``parallel`` utility to track progress and resume if interrupted. 
-If the script full of 'kpf' commands is called ``process.sh``, it would be launched with::
+To process many nights of data, use `reprocess.py`.  This script has deletes old 2D/L1/L2/QLP files before starting reprocessing of a given night.  Using the linux utility 'nice', it's execution is deprioritized (nice=15) so that regular processing isn't slowed down.  It also procuces or appends to a log file (default name: reprocess.log) with columns Datecode, Start Time, End Time, Run Time, and Version.::
 
-    cat process.sh | parallel -j 1 --progress --bar --resume --joblog reprocessing_progress.log
+    reprocess.py yyyymmdd YYYYMMDD
+
+Here's the docstring showing all of the options.::
+
+    usage: reprocess.py [-h] [--ncpu NCPU] [--logfile LOGFILE] [--forward] [--not-nice] [--no-delete]
+                        [--dry-run] [--stdout]
+                        startdate enddate
+
+    Reprocess KPF data over a date range.
+    
+    positional arguments:
+      startdate          Start date in YYYYMMDD format
+      enddate            End date in YYYYMMDD format
+    
+    optional arguments:
+      -h, --help         show this help message and exit
+      --ncpu NCPU        Number of CPUs to use
+      --logfile LOGFILE  Log file path
+      --forward          Process datecodes in chronological order (reverse is default)
+      --not-nice         Do not apply standard nice (=15) deprioritization
+      --no-delete        Do not delete existing 2D/L1/L2/QLP files before reprocessing
+      --dry-run          Print commands without executing them
+      --stdout           Display stdout from kpf command
+
 
 **Reprocessing Masters:**
 
