@@ -9,7 +9,7 @@ obs_date_time = GetHeaderValue(l1_obj,'DATE-MID')
 #cals = CalibrationLookup(obs_date_time, subset=['smooth_lamp_pattern'])
 #smooth_lamp_file = cals['smooth_lamp_pattern']
 
-smooth_lamp_file = '/data/reference_fits/kpf_20240211_smooth_lamp_made20240212.fits'
+smooth_lamp_file = '/data/masters/20241021/kpf_20241021_smooth_lamp_L1.fits'
 smooth_lamp_l1 = kpf1_from_fits(smooth_lamp_file)
 
 blaze_output_list = AddBlaze(l1_obj, smooth_lamp_l1)
