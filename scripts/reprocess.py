@@ -16,14 +16,15 @@ except ImportError:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Reprocess datecoded directories.')
+    parser = argparse.ArgumentParser(description='Reprocess KPF data over a date range.')
     parser.add_argument('startdate', type=str, help='Start date in YYYYMMDD format')
     parser.add_argument('enddate', type=str, help='End date in YYYYMMDD format')
     parser.add_argument('--ncpu', type=int, default=max(1, multiprocessing.cpu_count() // 2),
                         help='Number of CPUs to use')
     parser.add_argument('--logfile', type=str, default='reprocess.log', help='Log file path')
+    parser.add_argument('--not-nice', action='store_true', help='Do not apply standard nice (=15) deprioritization')
+    parser.add_argument('--forward', action='store_true', help='Process datecodes in chronological order (reverse is default)')
     parser.add_argument('--dry-run', action='store_true', help='Print commands without executing them')
-    parser.add_argument('--nonice', action='store_true', help='Do not apply nice (priority) modifications')
     return parser.parse_args()
 
 
@@ -43,14 +44,16 @@ def main():
 
     if not log_exists:
         with open(args.logfile, 'w') as f:
-            f.write(f"{'Datecode':<10}  {'Start Time':<19}  {'End Time':<19}  {'Compute Time':<15}  {'Version':<10}\n")
+            f.write(f"{'Datecode':<10}  {'Start Time':<19}  {'End Time':<19}  {'Run Time':<15}  {'Version':<10}\n")
 
     start_date = datetime.datetime.strptime(args.startdate, '%Y%m%d')
     end_date = datetime.datetime.strptime(args.enddate, '%Y%m%d')
 
-    dates = list(daterange(start_date, end_date))[::-1]  # reversed order
+    dates = list(daterange(start_date, end_date))
+    if not args.forward:
+        dates = dates[::-1]  # reversed order
 
-    nice_prefix = [] if args.nonice else ['nice', '-n', '10']
+    nice_prefix = [] if args.not_nice else ['nice', '-n', '15']
 
     for single_date in tqdm(dates, desc="Reprocessing Dates"):
         datecode = single_date.strftime('%Y%m%d')
@@ -68,17 +71,17 @@ def main():
         ]
 
         cmd_kpf = [
-            'kpf', '--ncpu', str(args.ncpu), '--reprocess',
-            src_dir, '-c', 'configs/kpf_drp.config', '-r', 'recipes/kpf_drp.recipe'
+            'kpf', '--ncpu', str(args.ncpu), '--watch', src_dir, '--reprocess', 
+            '-c', 'configs/kpf_drp.cfg', '-r', 'recipes/kpf_drp.recipe'
         ]
 
         if args.dry_run:
             for cmd_rm in cmds_rm:
-                print(' '.join(nice_prefix + cmd_rm))
+                print(' '.join(cmd_rm))
             print(' '.join(nice_prefix + cmd_kpf))
         else:
             for cmd_rm in cmds_rm:
-                subprocess.run(nice_prefix + cmd_rm, check=False)
+                subprocess.run(cmd_rm, check=False)
 
             start_time = datetime.datetime.now()
             result = subprocess.run(nice_prefix + cmd_kpf)
