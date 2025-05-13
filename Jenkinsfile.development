@@ -9,13 +9,7 @@ pipeline {
   }
 
   stages {
-    stage('Clean Workspace') {
-      steps {
-        // replicate your Pre‑Build Cleanup
-        cleanWs()
-      }
-    }
-
+    
     stage('Build & Test') {
       when {
         allOf {
