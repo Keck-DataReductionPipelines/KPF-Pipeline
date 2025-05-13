@@ -53,5 +53,6 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "Age of WLSFILE2\n(days, AGEWLS2)"
+      title: Ages of Master Files
       not_junk: true
       legend_frac_size: 0.15

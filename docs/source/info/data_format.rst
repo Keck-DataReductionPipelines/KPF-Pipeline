@@ -246,6 +246,7 @@ OLDFLAT   1                                           QC: 1 = Master flat within
 NTPGOOD   1                                           QC: 1 = NTP time within 100 ms
 GUIDGOOD  1                                           QC: 1 = Guider RMS and bias within 50 mas RMS
 TARGPLAU  1                                           QC: 1 = TARG kwds present with plausible values
+ISGOOD    1                                           QC: 1 = all other QC tests passed
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
@@ -322,14 +323,14 @@ HK2DF10P  128.83                                      10th percentile flux in th
 AGEBIAS   0                                           Age of master bias file compared to this file (whole days)
 AGEDARK   0                                           Age of master dark file compared to this file (whole days)
 AGEFLAT   0                                           Age of master flat file compared to this file (whole days)
-XDSPDYG1= '-15.93355'                                 Green cross-dispersion offset [pix] compared to master reference
-XDSPDYR1= '-15.86130'                                 Red cross-dispersion offset [pix] compared to master reference
-XDSPDYG2= '0.02673 '                                  Green cross-dispersion offset [pix] compared to reference in era
-XDSPDYR2= '0.05026 '                                  Red cross-dispersion offset [pix] compared to reference in era
-XDSPSYG1= '0.00133 '                                  Uncertainty [pix] in XDSPDYG1
-XDSPSYR1= '0.00217 '                                  Uncertainty [pix] in XDSPDYR1
-XDSPSYG2= '0.00144 '                                  Uncertainty [pix] in XDSPDYG2
-XDSPSYR2= '0.00058 '                                  Uncertainty [pix] in XDSPDYR2
+XDSPDYG1  -15.93355                                   Green cross-dispersion offset [pix] compared to master reference
+XDSPDYR1  -15.86130                                   Red cross-dispersion offset [pix] compared to master reference
+XDSPDYG2  0.02673                                     Green cross-dispersion offset [pix] compared to reference in era
+XDSPDYR2  0.05026                                     Red cross-dispersion offset [pix] compared to reference in era
+XDSPSYG1  0.00133                                     Uncertainty [pix] in XDSPDYG1
+XDSPSYR1  0.00217                                     Uncertainty [pix] in XDSPDYR1
+XDSPSYG2  0.00144                                     Uncertainty [pix] in XDSPDYG2
+XDSPSYR2  0.00058                                     Uncertainty [pix] in XDSPDYR2
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
@@ -911,8 +912,11 @@ BJDSTD    41.66004757176901                           Weighted stddev of BJD for
 BJDRNG    147.1386909484863                           Range(BJD) for non-zero-weight spectral orders (sec)    
 BCVSTD    0.7123626558325037                          Weighted stddev of BCV for spectral orders (m/s)        
 BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (m/s)    
+MAXPCBCV  0.6894375932041458                          Maximum % change from CCFBCV for non-zero-weight spectral orders (%)
+MINPCBCV  -0.47031634755679774                        Minimum % change from CCFBCV for non-zero-weight spectral orders (%)
 TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
 DATAPRL2  1                                           QC: 1 = L2 data is present
+QCPCBCV   1                                           QC: 1 = PCBCV values within acceptable range
 ========  ==========================================  =========
 
 Radial Velocities

@@ -1,4 +1,4 @@
-description: CCD temperatures
+description: CCD Temperatures
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
@@ -106,5 +106,6 @@ panel_arr:
           color: firebrick
     paneldict:
       ylabel: "Red CCD Temp (C)\nSSL sensor"
+      title: CCD Temperatures
       not_junk: true
       legend_frac_size: 0.25

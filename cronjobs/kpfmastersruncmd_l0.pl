@@ -107,7 +107,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '2.4';
+my $version = '2.5';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -234,6 +234,7 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `mkdir -p $sandbox/L0/$procdate`;
 `mkdir -p $sandbox/2D/$procdate`;
 `cp -pr /data/kpf/L0/$procdate/*.fits $sandbox/L0/$procdate`;
+`rm -f $sandbox/L0/$procdate/*-*fits`;
 
 my $dockerruncmd = "docker run -d --name $containername " .
                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
