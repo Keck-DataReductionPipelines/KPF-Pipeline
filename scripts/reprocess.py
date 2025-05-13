@@ -26,6 +26,7 @@ def parse_args():
     parser.add_argument('--not-nice', action='store_true', help='Do not apply standard nice (=15) deprioritization')
     parser.add_argument('--no-delete', action='store_true', help='Do not delete existing 2D/L1/L2/QLP files before reprocessing')
     parser.add_argument('--dry-run', action='store_true', help='Print commands without executing them')
+    parser.add_argument('--stdout', action='store_true', help='Display stdout from kpf command')
     return parser.parse_args()
 
 
@@ -72,7 +73,7 @@ def main():
         ]
 
         cmd_kpf = [
-            'kpf', '--ncpu', str(args.ncpu), '--watch', src_dir, '--reprocess', 
+            'kpf', '--ncpu', str(args.ncpu), '--watch', src_dir, '--reprocess',
             '-c', 'configs/kpf_drp.cfg', '-r', 'recipes/kpf_drp.recipe'
         ]
 
@@ -88,7 +89,9 @@ def main():
                     subprocess.run(' '.join(cmd_rm), shell=True, check=False)
 
             start_time = datetime.datetime.now()
-            result = subprocess.run(nice_prefix + cmd_kpf)
+            stdout_option = None if args.stdout else subprocess.DEVNULL
+            print(' '.join(nice_prefix) + ' ' + ' '.join(cmd_kpf))
+            result = subprocess.run(nice_prefix + cmd_kpf, capture_output=not args.stdout)
             end_time = datetime.datetime.now()
 
             compute_time = end_time - start_time
