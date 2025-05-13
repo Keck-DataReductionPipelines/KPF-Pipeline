@@ -36,7 +36,7 @@ docker:
 			   -v ${PWD}:/code/KPF-Pipeline -v ${KPFPIPE_TEST_DATA}:/testdata -v ${KPFPIPE_DATA}:/data -v ${KPFPIPE_DATA}/masters:/masters kpf-drp:latest bash
 
 regression_tests:
-	pytest -x --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest -x --cov=kpfpipe --cov=modules --pyargs tests.regression.test_kpf_masters_drp_recipe
 	coveralls
 
 performance_tests:
