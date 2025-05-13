@@ -37,11 +37,11 @@ In production processing by the DRP development team, this command is in the xte
 Other Processing Tasks
 **********************
 
-**Reprocessing L0 files:** 
+**Reprocessing:** 
   
 Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Reprocessing*.::
 
-    kpf --ncpu 50 --reprocess /data/L0/YYYYMMDD/ -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
+    kpf --ncpu 50 --watch /data/L0/YYYYMMDD/ --reprocess -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
 
 To process many nights of data, use a script to generate the a series of ``kpf`` commands for different YYYYMMDD dates and the ``parallel`` utility to track progress and resume if interrupted. 
 If the script full of 'kpf' commands is called ``process.sh``, it would be launched with::
@@ -57,10 +57,11 @@ You can then use the generated script ``runMastersPipeline_From_YYYYMMDD_To_YYYY
 
     conda activate /scr/doppler/conda/envs/kpf-masters
     cd cronjobs
-    generateDailyRunScriptsBetweenTwoDates.pl yyyymmdd YYYYMMDD
-    ls runDailyPipelines_202*.sh | awk '{print "Sh "$1}' | parallel -j 5 --progress --bar --resume --joblog masters_reprocessing.log
+    ./generateDailyRunScriptsBetweenTwoDates.pl yyyymmdd YYYYMMDD
+    ls runDailyPipelines_202311*.sh | sort -r | parallel --delay 600 -j 5 --progress --bar --resume --joblog masters_reprocessing.log sh {}
 
-It is not reccomended to run more than 5-7 jobs at once to avoid I/O overload. In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
+
+The example above is for November, 2023 (yyyymmdd=20231101, YYYYMMDD=20231130).  The name of the log file (``masters_reprocessing.log``) can be adjusted.  It is not recommended to run more than 5-7 jobs (``-j`` option) at once to avoid I/O overload; staggered processing (``--delay 600``) helps. In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
 
 **Quicklook reprocessing -- qlp_parallel.py:**
 
