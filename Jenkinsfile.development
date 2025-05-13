@@ -10,7 +10,7 @@ pipeline {
   environment {
     // We’ll copy the host’s ci-data into WORKSPACE/ci-data
     CI_DATA_DIR      = "${env.WORKSPACE}/ci-data"
-    KPFPIPE_TEST_DATA = "${env.CI_DATA_DIR}"
+    KPFPIPE_TEST_DATA = "/data/KPF-Pipeline-TestData"
     KPFPIPE_DATA      = "${env.CI_DATA_DIR}"
   }
 
@@ -28,10 +28,8 @@ pipeline {
         sh '''
           rm -rvf "${CI_DATA_DIR}"
           mkdir -p "${CI_DATA_DIR}"
-          cp -av /data/kpf/ci-data/* "${CI_DATA_DIR}/"
-          cp -av /data/KPF-Pipeline-TestData/NEIDdata "${CI_DATA_DIR}/NEIDdata"
-          mkdir -p "${CI_DATA_DIR}/reference_fits"
-          cp -urv /data/kpf/reference_fits/* "${CI_DATA_DIR}/reference_fits/"
+          ln -s /data/kpf/ci-data/* "${CI_DATA_DIR}/"
+          cp -urv /data/kpf/reference_fits "${CI_DATA_DIR}/"
         '''
       }
     }
@@ -57,6 +55,7 @@ pipeline {
             -e CI_PULL_REQUEST=\$ghprbPullId \
             -v \"\${PWD}:/code/KPF-Pipeline\" \
             -v \"${CI_DATA_DIR}:/data" \
+            -v \"${KPFPIPE_TEST_DATA}:/testdata"
             kpf-drp:latest \
             make regression_tests
         """
