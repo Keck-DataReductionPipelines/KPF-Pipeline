@@ -1,0 +1,101 @@
+pipeline {
+  agent any
+
+  options {
+    // keep builds for 30 days, max 30 builds per branch
+    buildDiscarder(logRotator(daysToKeepStr: '30', numToKeepStr: '30'))
+    // add timestamps to console output
+    timestamps()
+  }
+
+  stages {
+    stage('Clean Workspace') {
+      steps {
+        // replicate your Pre‑Build Cleanup
+        cleanWs()
+      }
+    }
+
+    stage('Build & Test') {
+      when {
+        allOf {
+          // 1) only run on PRs…
+          changeRequest()
+          // 2) …targeting develop
+          expression { env.CHANGE_TARGET == 'develop' }
+          // 3) …and *not* from master or develop
+          not { branch 'master' }
+          not { branch 'develop' }
+        }
+      }
+      steps {
+        // mark GitHub status “PENDING”
+        script {
+          step([
+            $class: 'GitHubCommitStatusSetter',
+            commitStatus: [
+              $class: 'AnyBuildResultSource',
+              result: 'PENDING'
+            ],
+            contextSource: [
+              $class: 'ManuallyEnteredCommitContextSource',
+              context: 'From GitHub property with fallback to job name'
+            ]
+          ])
+        }
+
+        // your original shell / docker commands
+        sh '''
+          export KPFPIPE_TEST_DATA=/data/KPF-Pipeline-TestData/
+          export KPFPIPE_DATA=/data/KPF-Pipeline-TestData/kpf/
+          cp -urv /data/kpf/reference_fits/* $KPFPIPE_DATA/reference_fits/
+          docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
+          docker run \
+            -e COVERALLS_REPO_TOKEN=VQhy1molIcAo0rTz2geFOhucmvkBiEPFc \
+            -e CI_PULL_REQUEST=$ghprbPullId \
+            -v "${PWD}:/code/KPF-Pipeline" \
+            -v ${KPFPIPE_TEST_DATA}:/testdata \
+            -v ${KPFPIPE_DATA}/masters:/masters \
+            -v ${KPFPIPE_DATA}:/data \
+            kpf-drp:latest \
+            make init regression_tests
+        '''
+      }
+
+      post {
+        success {
+          // mark GitHub status “SUCCESS”
+          script {
+            step([
+              $class: 'GitHubCommitStatusSetter',
+              commitStatus: [
+                $class: 'AnyBuildResultSource',
+                result: 'SUCCESS'
+              ],
+              contextSource: [
+                $class: 'ManuallyEnteredCommitContextSource',
+                context: 'From GitHub property with fallback to job name'
+              ]
+            ])
+          }
+        }
+        failure {
+          // mark GitHub status “FAILURE”
+          script {
+            step([
+              $class: 'GitHubCommitStatusSetter',
+              commitStatus: [
+                $class: 'AnyBuildResultSource',
+                result: 'FAILURE'
+              ],
+              contextSource: [
+                $class: 'ManuallyEnteredCommitContextSource',
+                context: 'From GitHub property with fallback to job name'
+              ]
+            ])
+          }
+        }
+      }
+    }
+  }
+}
