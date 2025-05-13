@@ -91,9 +91,9 @@ def main():
             compute_time_str = str(compute_time).split('.')[0]  # remove microseconds
 
             if result.returncode == 0:
-                logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<15}  {__version__:<10}")
+                logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {__version__:<10}")
             else:
-                logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<15}  FAILED    {__version__:<10}")
+                logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {__version__:<10} FAILED")
                 print(f"Error processing date {datecode}", file=sys.stderr)
 
 
