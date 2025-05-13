@@ -28,7 +28,7 @@ pipeline {
         sh '''
           rm -rvf "${CI_DATA_DIR}"
           mkdir -p "${CI_DATA_DIR}"
-          ln -s /data/kpf/ci-data/* "${CI_DATA_DIR}/"
+          cp -rv /data/kpf/ci-data/* "${CI_DATA_DIR}/"
           cp -rv /data/kpf/reference_fits "${CI_DATA_DIR}/"
         '''
       }
