@@ -16,8 +16,9 @@ def test_receipt():
     Add an entry in the receipt
     '''
     data = KPF0()
+    len_before = len(data.receipt)
     data.receipt_add_entry('test', 'test_path', 'test', 'PASS')
-    assert(len(data.receipt) == 1)
+    assert(len(data.receipt) == (len_before + 1))
 
 # =============================================================================
 # AUXILIARY
