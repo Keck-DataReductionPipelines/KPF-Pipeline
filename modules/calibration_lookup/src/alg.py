@@ -75,7 +75,10 @@ class GetCalibrations:
                 for lvl, cal_type in zip(self.db_cal_file_levels, self.db_cal_types):
                     if cal_type[0] in output_cals.keys() or cal_type[0].lower() not in subset:
                         continue
-                    db_results = self.db.get_nearest_master(self.datetime, lvl, cal_type)
+                    cal_type_lookup = cal_type.copy()
+                    if cal_type[0] == 'trace_flat':
+                        cal_type_lookup[0] = 'Flat'
+                    db_results = self.db.get_nearest_master(self.datetime, lvl, cal_type_lookup)
                     if db_results[0] == 0:
                         output_cals[cal_type[0].lower()] = db_results[1]
                     else:

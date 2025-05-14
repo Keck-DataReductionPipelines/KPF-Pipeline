@@ -152,8 +152,8 @@ ORDER BY startdate;"""
         obs_jd = obst.mjd
         
         # only look backwards for etalon masks
-        if cal_type_pair[0].lower() == 'etalonmask':
-            df = df[df['meanmjd'] < obs_jd]
+        # if cal_type_pair[0].lower() == 'etalonmask':
+        #     df = df[df['meanmjd'] < obs_jd]
 
         df['delta'] = (df['meanmjd'] - obs_jd).abs()
         if df['delta'].isnull().all():
