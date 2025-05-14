@@ -463,8 +463,8 @@ if do_spectral_extraction or do_hk or do_bc:
 		dt_string = GetHeaderValue(lev0_data, 'DATE-MID')
 		cals = CalibrationLookup(dt_string)
 		start_order = cals['start_order']
-		output_order_trace = cals['order_trace']
-		order_trace_flat = cals['trace_flat']
+		output_order_trace = cals['ordertrace']
+		order_trace_flat = cals['flat']
 
 		# prepare trace files and rectified L0 flat data for spectral extraction
 		if do_spectral_extraction:

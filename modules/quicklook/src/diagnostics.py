@@ -545,8 +545,8 @@ def add_headers_2D_xdisp_offset(D2, logger=None):
             comment_txt = 'global reference'
         default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
         GC = GetCalibrations(dt, default_config_path, use_db=False)
-        wls_dict = GC.lookup(subset=['trace_flat'])
-        reference_file = wls_dict['trace_flat']
+        wls_dict = GC.lookup(subset=['xdisp_ref'])
+        reference_file = wls_dict['xdisp_ref']
         my2D = Analyze2D(D2, logger=logger)
         if 'master' in reference_file:
             ref_extension = 'CCD_STACK'
