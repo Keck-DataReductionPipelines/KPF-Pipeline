@@ -48,9 +48,10 @@ def load_processed_dates(logfile, version):
             for line in f:
                 if line.startswith("Datecode") or "FAILED" in line:
                     continue
-                parts = line.split()
-                if len(parts) >= 5 and parts[4] == version:
-                    processed_dates.add(parts[0])
+                datecode = line[:10].strip()
+                log_version = line[67:77].strip()
+                if log_version == version:
+                    processed_dates.add(datecode)
     return processed_dates
 
 
