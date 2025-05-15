@@ -1,10 +1,11 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from scipy.ndimage import median_filter
-from scipy.interpolate import LSQUnivariateSpline
+from scipy.ndimage import median_filter, gaussian_filter
+from scipy.interpolate import LSQUnivariateSpline, CubicSpline
 from astropy.stats import mad_std
 import astropy.constants as apc
+import warnings
 
 import matplotlib.pyplot as plt
 
@@ -116,7 +117,7 @@ class BlazeAlg:
                 
         return self.target_l1
     
-    def spline(self, filter_size=15, sigma_cut=20., num_knots=256, remove_lamp_blackbody=False):
+    def spline(self, filter_size=15, sigma_cut=20., num_knots=256, remove_lamp_blackbody=False, normalize=True):
         flux_ext = ['SCI_FLUX1', 'SCI_FLUX2', 'SCI_FLUX3', 'SKY_FLUX', 'CAL_FLUX']
         wave_ext = ['SCI_WAVE1', 'SCI_WAVE2', 'SCI_WAVE3', 'SKY_WAVE', 'CAL_WAVE']
         blaze_ext = ['SCI_BLAZE1', 'SCI_BLAZE2', 'SCI_BLAZE3', 'SKY_BLAZE', 'CAL_BLAZE']
@@ -124,8 +125,7 @@ class BlazeAlg:
         for ccd in ['GREEN', 'RED']:
             for i in range(5):
                 flux = self.smooth_lamp_l1[f'{ccd}_{flux_ext[i]}']
-
-                print(flux.shape, f'{ccd}_{flux_ext[i]}')
+                wave = self.smooth_lamp_l1[f'{ccd}_{wave_ext[i]}']
                 
                 norder, npix = flux.shape
                 blaze_array = np.zeros((norder,npix))
@@ -136,9 +136,15 @@ class BlazeAlg:
                     f = np.array(flux[o], dtype='float')
 
                     mask = f == 0
-                    med = median_filter(f[~mask], size=filter_size)             
-                    mask[~mask] = np.abs(f[~mask]-med)/mad_std(f[~mask]-med) > sigma_cut
-                                    
+                    trend = gaussian_filter(median_filter(f[~mask], size=filter_size), filter_size)
+
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings('error')
+                        try:
+                            mask[~mask] = np.abs(f[~mask]-trend)/mad_std(f[~mask]-trend) > sigma_cut
+                        except RuntimeWarning as e:
+                            mask[~mask] = np.abs(f[~mask]-trend)/np.std(f[~mask]-trend) > sigma_cut
+                    
                     knots = np.linspace(x[~mask].min(), x[~mask].max(), num_knots)[1:-1]
                     spline = LSQUnivariateSpline(x[~mask], f[~mask], t=knots, ext='const')
 
@@ -146,6 +152,18 @@ class BlazeAlg:
                     
                 if remove_lamp_blackbody:
                     blaze_array /= lamp_bb_array
+
+                if normalize:
+                    b = blaze_array
+                    w = np.array(wave, dtype='float')
+                
+                    xmax = np.argmax(b, axis=1)
+                    bmax = np.max(b, axis=1)
+                    wmax = w[np.arange(len(b)),xmax]
+                
+                    spline = CubicSpline(wmax, bmax, bc_type='natural')
+
+                    blaze_array /= spline(w)
                 
                 self.target_l1[f'{ccd}_{blaze_ext[i]}'] = blaze_array
                         
