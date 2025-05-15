@@ -72,6 +72,9 @@ class KPF0(KPFDataModel):
             'NEID':  self._read_from_NEID,
             'PARAS': self._read_from_PARAS
         }        
+    
+        self.receipt_add_entry('KPF0.__init__', self.__module__, f' ', 'PASS', 
+                               comment=f'Create L0/2D object')
 
     def _read_from_KPF(self, hdul: fits.HDUList) -> None:
         '''
