@@ -465,7 +465,7 @@ if do_spectral_extraction or do_hk or do_bc:
 		cals = CalibrationLookup(dt_string)
 		start_order = cals['start_order']
 		output_order_trace = cals['ordertrace']
-		order_trace_flat = cals['flat']
+		order_trace_flat = cals['traceflat']
 
 		# prepare trace files and rectified L0 flat data for spectral extraction
 		if do_spectral_extraction:
