@@ -55,9 +55,17 @@ def main():
     if not args.forward:
         dates = dates[::-1]  # reversed order
 
+    valid_dates = [single_date for single_date in dates if os.path.exists(f'/data/L0/{single_date.strftime("%Y%m%d")}/')]
+
+    if not valid_dates:
+        print("No valid datecodes found in the specified range.")
+        sys.exit(0)
+
     nice_prefix = [] if args.not_nice else ['nice', '-n', '15']
 
-    for single_date in tqdm(dates, desc="Reprocessing Dates"):
+    for single_date in tqdm(valid_dates, desc="Reprocessing Dates"):
+        datecode = single_date.strftime('%Y%m%d')
+        tqdm.write(f"Reprocessing Datecode: {datecode}")
         datecode = single_date.strftime('%Y%m%d')
 
         src_dir = f'/data/L0/{datecode}/'
@@ -77,45 +85,42 @@ def main():
             '-c', 'configs/kpf_drp.cfg', '-r', 'recipes/kpf_drp.recipe'
         ]
 
-    if args.dry_run:
-        if not args.no_delete:
-            for cmd_rm in cmds_rm:
-                print(' '.join(cmd_rm))
-        print(' '.join(nice_prefix + cmd_kpf))
-    else:
-        if not args.no_delete:
-            for cmd_rm in cmds_rm:
-                print(' '.join(cmd_rm))
-                subprocess.run(cmd_rm, check=False)
-    
-        start_time = datetime.datetime.now()
-    
-        if args.stdout:
-            stdout_option = None
-            stderr_option = None
+        if args.dry_run:
+            if not args.no_delete:
+                for cmd_rm in cmds_rm:
+                    print(' '.join(cmd_rm))
+            print(' '.join(nice_prefix + cmd_kpf))
         else:
-            stdout_option = subprocess.DEVNULL
-            stderr_option = subprocess.DEVNULL
-    
-        print(' '.join(nice_prefix + cmd_kpf))
-        result = subprocess.run(
-            nice_prefix + cmd_kpf,
-            stdout=stdout_option,
-            stderr=stderr_option,
-            text=True,
-            check=False
-        )
-    
-        end_time = datetime.datetime.now()
-    
-        compute_time = end_time - start_time
-        compute_time_str = str(compute_time).split('.')[0]
-    
-        if result.returncode == 0:
-            logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {__version__:<10}")
-        else:
-            logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {__version__:<10} FAILED")
-            print(f"Error processing date {datecode}", file=sys.stderr)
+            if not args.no_delete:
+                for cmd_rm in cmds_rm:
+                    subprocess.run(cmd_rm, check=False)
+
+            start_time = datetime.datetime.now()
+
+            if args.stdout:
+                stdout_option = None
+                stderr_option = None
+            else:
+                stdout_option = subprocess.DEVNULL
+                stderr_option = subprocess.DEVNULL
+
+            result = subprocess.run(
+                nice_prefix + cmd_kpf,
+                stdout=stdout_option,
+                stderr=stderr_option,
+                text=True,
+                check=False
+            )
+
+            end_time = datetime.datetime.now()
+            compute_time = end_time - start_time
+            compute_time_str = str(compute_time).split('.')[0]
+
+            status = "" if result.returncode == 0 else " FAILED"
+            logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {__version__:<10}{status}")
+
+            if result.returncode != 0:
+                print(f"Error processing date {datecode}", file=sys.stderr)
 
 
 if __name__ == '__main__':
