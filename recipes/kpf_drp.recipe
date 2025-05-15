@@ -30,7 +30,8 @@ from modules.var_exts.src.var_exts_framework import VarExtsFramework
 from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
 from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 from modules.wavelength_cal.src.alg import WaveInterpolation          
-from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate 
+from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
+from modules.blaze.src.blaze import AddBlaze
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -588,6 +589,15 @@ if do_spectral_extraction or do_hk or do_bc:
 							for ext in wave_to_ext[idx]:
 								ExtCopy(wavecal_data, ext, ext, to_data_model=output_data) # only this needs changed.
 					SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
+
+				# Add blaze extensions
+				smooth_lamp_l1 = cals['smoothlamp']
+				blaze_output_list = AddBlaze(output_data, smooth_lamp_l1)
+
+				exit_code = blaze_output_list[0]
+				new_l1_obj = blaze_output_list[1]
+				if exit_code == 1:
+					output_data = new_l1_obj 
 
 				# Quality Control - L1 level
 				# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
