@@ -66,6 +66,7 @@ def main():
     if not log_exists:
         with open(args.logfile, 'w') as f:
             f.write(f"{'Datecode':<10}  {'Start Time':<19}  {'End Time':<19}  {'Run Time':<15}  {'Version':<10}\n")
+        os.chmod(args.logfile, 0o666)
 
     start_date = datetime.datetime.strptime(args.startdate, '%Y%m%d')
     end_date = datetime.datetime.strptime(args.enddate, '%Y%m%d')
@@ -138,6 +139,7 @@ def main():
 
             status = "" if result.returncode == 0 else " FAILED"
             logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {__version__:<10}{status}")
+            os.chmod(args.logfile, 0o666) # Read/write permissions outside of Docker (root)
 
             if result.returncode != 0:
                 print(f"Error processing date {datecode}", file=sys.stderr)
