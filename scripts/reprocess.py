@@ -6,6 +6,7 @@ import multiprocessing
 import os
 import subprocess
 import sys
+import pytz
 from tqdm import tqdm
 
 # Import the repository version
@@ -21,12 +22,15 @@ def parse_args():
     parser.add_argument('enddate', type=str, help='End date in YYYYMMDD format')
     parser.add_argument('--ncpu', type=int, default=max(1, multiprocessing.cpu_count() // 2),
                         help='Number of CPUs to use')
-    parser.add_argument('--logfile', type=str, default='reprocess.log', help='Log file path')
+    parser.add_argument('--overwrite', action='store_true', help='Overwrite previous successful processing results with current version in logfile')
+    parser.add_argument('--logfile', type=str, default='reprocess_obs.log', help='Log file path')
     parser.add_argument('--forward', action='store_true', help='Process datecodes in chronological order (reverse is default)')
     parser.add_argument('--not-nice', action='store_true', help='Do not apply standard nice (=15) deprioritization')
     parser.add_argument('--no-delete', action='store_true', help='Do not delete existing 2D/L1/L2/QLP files before reprocessing')
     parser.add_argument('--dry-run', action='store_true', help='Print commands without executing them')
     parser.add_argument('--stdout', action='store_true', help='Display stdout from kpf command')
+    parser.add_argument('--local-tz', type=str, default='America/Los_Angeles',
+                        help='Local timezone (default: America/Los_Angeles)')
     return parser.parse_args()
 
 
@@ -37,8 +41,23 @@ def daterange(start, end):
         current += datetime.timedelta(days=1)
 
 
+def load_processed_dates(logfile, version):
+    processed_dates = set()
+    if os.path.isfile(logfile):
+        with open(logfile, 'r') as f:
+            for line in f:
+                if line.startswith("Datecode") or "FAILED" in line:
+                    continue
+                parts = line.split()
+                if len(parts) >= 5 and parts[4] == version:
+                    processed_dates.add(parts[0])
+    return processed_dates
+
+
 def main():
     args = parse_args()
+
+    local_tz = pytz.timezone(args.local_tz)
 
     log_exists = os.path.isfile(args.logfile)
     logging.basicConfig(filename=args.logfile, level=logging.INFO,
@@ -61,30 +80,33 @@ def main():
         print("No valid datecodes found in the specified range.")
         sys.exit(0)
 
+    processed_dates = set()
+    if not args.overwrite:
+        processed_dates = load_processed_dates(args.logfile, __version__)
+
     nice_prefix = [] if args.not_nice else ['nice', '-n', '15']
 
     for single_date in tqdm(valid_dates, desc="Reprocessing Dates"):
         datecode = single_date.strftime('%Y%m%d')
+
+        if datecode in processed_dates:
+            tqdm.write(f"Skipping previously processed datecode: {datecode}")
+            continue
+
         tqdm.write(f"Reprocessing Datecode: {datecode}")
-        datecode = single_date.strftime('%Y%m%d')
 
-        src_dir      = f'/data/L0/{datecode}/'
-        d2_dir       = f'/data/2D/{datecode}/'
-        l1_dir       = f'/data/L1/{datecode}/'
-        l2_dir       = f'/data/L2/{datecode}/'
-        qlp_dir      = f'/data/QLP/{datecode}/'
-        outlier_dir  = f'/data/outliers/{datecode}/'
-        logs_dir     = f'/data/logs/{datecode}/'
-        logs_qlp_dir = f'/data/logs_QLP/{datecode}/'
-
-        dirs_to_remove = [d2_dir, l1_dir, l2_dir, qlp_dir, outlier_dir, logs_dir, logs_qlp_dir]
+        dirs_to_remove = [
+            f'/data/2D/{datecode}/', f'/data/L1/{datecode}/', f'/data/L2/{datecode}/',
+            f'/data/QLP/{datecode}/', f'/data/outliers/{datecode}/',
+            f'/data/logs/{datecode}/', f'/data/logs_QLP/{datecode}/'
+        ]
 
         cmds_rm = [
             ['rm', '-rf', f'{directory}*'] for directory in dirs_to_remove if os.path.exists(directory)
         ]
 
         cmd_kpf = [
-            'kpf', '--ncpu', str(args.ncpu), '--watch', src_dir, '--reprocess',
+            'kpf', '--ncpu', str(args.ncpu), '--watch', f'/data/L0/{datecode}/', '--reprocess',
             '-c', 'configs/kpf_drp.cfg', '-r', 'recipes/kpf_drp.recipe'
         ]
 
@@ -98,14 +120,9 @@ def main():
                 for cmd_rm in cmds_rm:
                     subprocess.run(cmd_rm, check=False)
 
-            start_time = datetime.datetime.now()
+            start_time = datetime.datetime.now(local_tz)
 
-            if args.stdout:
-                stdout_option = None
-                stderr_option = None
-            else:
-                stdout_option = subprocess.DEVNULL
-                stderr_option = subprocess.DEVNULL
+            stdout_option = stderr_option = None if args.stdout else subprocess.DEVNULL
 
             result = subprocess.run(
                 nice_prefix + cmd_kpf,
@@ -115,7 +132,7 @@ def main():
                 check=False
             )
 
-            end_time = datetime.datetime.now()
+            end_time = datetime.datetime.now(local_tz)
             compute_time = end_time - start_time
             compute_time_str = str(compute_time).split('.')[0]
 
