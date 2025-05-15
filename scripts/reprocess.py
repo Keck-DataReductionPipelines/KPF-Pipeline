@@ -68,13 +68,16 @@ def main():
         tqdm.write(f"Reprocessing Datecode: {datecode}")
         datecode = single_date.strftime('%Y%m%d')
 
-        src_dir = f'/data/L0/{datecode}/'
-        d2_dir  = f'/data/2D/{datecode}/'
-        l1_dir  = f'/data/L1/{datecode}/'
-        l2_dir  = f'/data/L2/{datecode}/'
-        qlp_dir = f'/data/QLP/{datecode}/'
+        src_dir      = f'/data/L0/{datecode}/'
+        d2_dir       = f'/data/2D/{datecode}/'
+        l1_dir       = f'/data/L1/{datecode}/'
+        l2_dir       = f'/data/L2/{datecode}/'
+        qlp_dir      = f'/data/QLP/{datecode}/'
+        outlier_dir  = f'/data/outliers/{datecode}/'
+        logs_dir     = f'/data/logs/{datecode}/'
+        logs_qlp_dir = f'/data/logs_QLP/{datecode}/'
 
-        dirs_to_remove = [d2_dir, l1_dir, l2_dir, qlp_dir]
+        dirs_to_remove = [d2_dir, l1_dir, l2_dir, qlp_dir, outlier_dir, logs_dir, logs_qlp_dir]
 
         cmds_rm = [
             ['rm', '-rf', f'{directory}*'] for directory in dirs_to_remove if os.path.exists(directory)
