@@ -78,11 +78,23 @@ class GetCalibrations:
                     cal_type_lookup = cal_type.copy()
                     if cal_type[0] == 'traceflat':
                         cal_type_lookup[0] = 'Flat'
-                    db_results = self.db.get_nearest_master(self.datetime, lvl, cal_type_lookup)
-                    if db_results[0] == 0:
-                        output_cals[cal_type[0].lower()] = db_results[1]
+                    if isinstance(cal_type_lookup[1], list):
+                        multi_results = []
+                        for lk in cal_type_lookup[1]:
+                            csl = [cal_type_lookup[0], cal_type_lookup[1][0]]
+                            db_results = self.db.get_nearest_master(self.datetime, lvl, csl)
+                            if db_results[0] == 0:
+                                multi_results.append(db_results[1])
+                            else:
+                                output_cals[cal_type[0].lower()] = self.defaults[cal_type[0].lower()]
+                                break
+                        output_cals[cal_type[0].lower()] = multi_results
                     else:
-                        output_cals[cal_type[0].lower()] = self.defaults[cal_type[0].lower()]
+                        db_results = self.db.get_nearest_master(self.datetime, lvl, cal_type_lookup)
+                        if db_results[0] == 0:
+                            output_cals[cal_type[0].lower()] = db_results[1]
+                        else:
+                            output_cals[cal_type[0].lower()] = self.defaults[cal_type[0].lower()]
             elif lookup == 'wls' or lookup == 'etalon':
                 for cal_type in self.wls_cal_types:
                     wls_results = self.db.get_bracketing_wls(self.datetime, cal_type[1], max_cal_delta_time=self.max_age)
