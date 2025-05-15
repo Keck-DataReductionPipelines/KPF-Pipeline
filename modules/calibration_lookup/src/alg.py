@@ -81,7 +81,7 @@ class GetCalibrations:
                     if isinstance(cal_type_lookup[1], list):
                         multi_results = []
                         for lk in cal_type_lookup[1]:
-                            csl = [cal_type_lookup[0], cal_type_lookup[1][0]]
+                            csl = [cal_type_lookup[0], lk]
                             db_results = self.db.get_nearest_master(self.datetime, lvl, csl)
                             if db_results[0] == 0:
                                 multi_results.append(db_results[1])
