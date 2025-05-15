@@ -85,10 +85,12 @@ class GetCalibrations:
                             db_results = self.db.get_nearest_master(self.datetime, lvl, csl)
                             if db_results[0] == 0:
                                 multi_results.append(db_results[1])
+                                use_defaults = False
                             else:
                                 output_cals[cal_type[0].lower()] = self.defaults[cal_type[0].lower()]
-                                break
-                        output_cals[cal_type[0].lower()] = multi_results
+                                use_defaults = True
+                        if not use_defaults:
+                            output_cals[cal_type[0].lower()] = multi_results
                     else:
                         db_results = self.db.get_nearest_master(self.datetime, lvl, cal_type_lookup)
                         if db_results[0] == 0:
