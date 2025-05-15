@@ -26,11 +26,11 @@ def parse_args():
     parser.add_argument('--logfile', type=str, default='reprocess_obs.log', help='Log file path')
     parser.add_argument('--forward', action='store_true', help='Process datecodes in chronological order (reverse is default)')
     parser.add_argument('--not-nice', action='store_true', help='Do not apply standard nice (=15) deprioritization')
-    parser.add_argument('--no-delete', action='store_true', help='Do not delete existing 2D/L1/L2/QLP files before reprocessing')
+    parser.add_argument('--no-delete', action='store_true', help='Do not delete existing 2D/L1/L2/QLP/outliers/logs/logs_QLP files before reprocessing')
     parser.add_argument('--dry-run', action='store_true', help='Print commands without executing them')
     parser.add_argument('--stdout', action='store_true', help='Display stdout from kpf command')
     parser.add_argument('--local-tz', type=str, default='America/Los_Angeles',
-                        help='Local timezone (default: America/Los_Angeles)')
+                        help='Local timezone for logfile lines (default: America/Los_Angeles)')
     return parser.parse_args()
 
 

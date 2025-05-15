@@ -39,36 +39,41 @@ Other Processing Tasks
 
 **Reprocessing:** 
   
-Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Reprocessing*.::
+Using a recipe, launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Reprocessing*.::
 
     kpf --ncpu 50 --watch /data/L0/YYYYMMDD/ --reprocess -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
 
-To process many nights of data, use `reprocess.py`.  This script has deletes old 2D/L1/L2/QLP files before starting reprocessing of a given night.  Using the linux utility 'nice', it's execution is deprioritized (nice=15) so that regular processing isn't slowed down.  It also procuces or appends to a log file (default name: reprocess.log) with columns Datecode, Start Time, End Time, Run Time, and Version.::
+To process many nights of data, the recommended procedure is to use `reprocess.py`.  
+This script has deletes old 2D/L1/L2/QLP/outliers/logs/logs_QLP files before starting reprocessing of a given night.  
+Using the linux utility 'nice', it's execution is deprioritized (nice=15) so that regular processing isn't slowed down.  
+It also procuces or appends to a log file (default name: reprocess_obs.log) with columns Datecode, Start Time, End Time, Run Time, and Version.
+Dates that have been reprocessed with the same pipeline versions (according to the log file) are skipped.::
 
-    reprocess.py yyyymmdd YYYYMMDD
+    reprocess_obs.py yyyymmdd YYYYMMDD
 
 Here's the docstring showing all of the options.::
 
-    usage: reprocess.py [-h] [--ncpu NCPU] [--logfile LOGFILE] [--forward] [--not-nice] [--no-delete]
-                        [--dry-run] [--stdout]
-                        startdate enddate
-
+    usage: reprocess_obs.py [-h] [--ncpu NCPU] [--overwrite] [--logfile LOGFILE] [--forward] [--not-nice]
+                            [--no-delete] [--dry-run] [--stdout] [--local-tz LOCAL_TZ]
+                            startdate enddate
+    
     Reprocess KPF data over a date range.
     
     positional arguments:
-      startdate          Start date in YYYYMMDD format
-      enddate            End date in YYYYMMDD format
+      startdate            Start date in YYYYMMDD format
+      enddate              End date in YYYYMMDD format
     
-    optional arguments:
-      -h, --help         show this help message and exit
-      --ncpu NCPU        Number of CPUs to use
-      --logfile LOGFILE  Log file path
-      --forward          Process datecodes in chronological order (reverse is default)
-      --not-nice         Do not apply standard nice (=15) deprioritization
-      --no-delete        Do not delete existing 2D/L1/L2/QLP files before reprocessing
-      --dry-run          Print commands without executing them
-      --stdout           Display stdout from kpf command
-
+    options:
+      -h, --help           show this help message and exit
+      --ncpu NCPU          Number of CPUs to use
+      --overwrite          Overwrite previous successful processing results with current version in logfile
+      --logfile LOGFILE    Log file path
+      --forward            Process datecodes in chronological order (reverse is default)
+      --not-nice           Do not apply standard nice (=15) deprioritization
+      --no-delete          Do not delete existing 2D/L1/L2/QLP files before reprocessing
+      --dry-run            Print commands without executing them
+      --stdout             Display stdout from kpf command
+      --local-tz LOCAL_TZ  Local timezone (default: America/Los_Angeles)
 
 **Reprocessing Masters:**
 
