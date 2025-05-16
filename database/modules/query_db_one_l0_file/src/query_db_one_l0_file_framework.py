@@ -201,7 +201,8 @@ class QueryDBOneL0FileFramework(KPF0_Primitive):
 
             # Compute checksum and compare with database value.
 
-            cksum = db.md5(filename)
+            inside_container_filename = filename.replace('/data/kpf/L0','/data/L0')
+            cksum = db.md5(inside_container_filename)
             self.logger.info('cksum = {}'.format(cksum))
 
             if cksum == checksum:
@@ -209,6 +210,9 @@ class QueryDBOneL0FileFramework(KPF0_Primitive):
             else:
                 print("*** Error: File checksum is incorrect; quitting...")
                 exitcode = 64
+
+
+            # Return outside-container filename.
 
             one_l0_file_list = [rId, mjdobs, imtype, contentbits, object, infobits, filename, checksum]
 
