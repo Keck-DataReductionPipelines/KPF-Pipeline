@@ -36,11 +36,22 @@ pipeline {
 
     stage('Build & Test') {
       when {
-        allOf {
-          changeRequest()
-          expression { env.CHANGE_TARGET == 'develop' }
-          not { branch 'master' }
-          not { branch 'develop' }
+        anyOf {
+          // Dev CI: PRs into develop from non-master/dev branches
+          allOf {
+            changeRequest()
+            expression { env.CHANGE_TARGET == 'develop' }
+            not { branch 'master' }
+            not { branch 'develop' }
+          }
+          // CI for PRs: PRs from develop into master
+          allOf {
+            changeRequest()
+            branch 'develop'
+            expression { env.CHANGE_TARGET == 'master' }
+          }
+          // CI for direct pushes to master
+          branch 'master'
         }
       }
       steps {
@@ -55,6 +66,7 @@ pipeline {
             -e CI_PULL_REQUEST=\$ghprbPullId \
             -v \"\${PWD}:/code/KPF-Pipeline\" \
             -v \"${CI_DATA_DIR}:/data" \
+            -v \"${CI_DATA_DIR}/masters:/masters" \
             -v \"${KPFPIPE_TEST_DATA}:/testdata" \
             kpf-drp:latest \
             make init regression_tests

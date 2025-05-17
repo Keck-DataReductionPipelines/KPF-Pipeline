@@ -48,8 +48,14 @@ class KPF2(KPF0):
         if 'TELEMETRY' in l1.header:
             l2.header['TELEMETRY'] = l1.header['TELEMETRY']
             l2['TELEMETRY'] = l1['TELEMETRY']
+        if 'RECEIPT' in l1.header:
+            l2.header['RECEIPT'] = l1.header['RECEIPT']
+            l2['RECEIPT'] = l1['RECEIPT']
         l2.add_default_headers()
-
+        
+#        self.receipt_add_entry('KPF2.from_l1', self.__module__, f'', 'PASS', 
+#                                  comment=f'Copy TELEMETRY and RECEIPT from L1 to L2')
+#
         return l2
 
     def __init__(self):
@@ -83,3 +89,5 @@ class KPF2(KPF0):
 
         self.add_default_headers()
 
+        self.receipt_add_entry('KPF2.__init__', self.__module__, f' ', 'PASS', 
+                               comment=f'Create L2 object')
