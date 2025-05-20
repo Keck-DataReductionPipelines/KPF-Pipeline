@@ -1,7 +1,7 @@
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.tools.recipe_test_unit import recipe_test
 
-recipe = open('recipes/blaze.recipe', 'r').read()
+recipe = open('tests/recipes/test_blaze.recipe', 'r').read()
 config = 'modules/blaze/configs/default.cfg'
 
 def test_blaze_recipe():
