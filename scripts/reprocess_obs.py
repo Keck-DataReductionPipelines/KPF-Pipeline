@@ -124,8 +124,23 @@ def main():
 
             start_time = datetime.datetime.now(local_tz)
 
-            stdout_option = stderr_option = None if args.stdout else subprocess.DEVNULL
+#            stdout_option = stderr_option = None if args.stdout else subprocess.DEVNULL
+#
+#            result = subprocess.run(
+#                nice_prefix + cmd_kpf,
+#                stdout=stdout_option,
+#                stderr=stderr_option,
+#                text=True,
+#                check=False
+#            )
 
+            if args.stdout:
+                stdout_option = None
+                stderr_option = subprocess.PIPE
+            else:
+                stdout_option = subprocess.DEVNULL
+                stderr_option = subprocess.PIPE
+            
             result = subprocess.run(
                 nice_prefix + cmd_kpf,
                 stdout=stdout_option,
@@ -133,6 +148,10 @@ def main():
                 text=True,
                 check=False
             )
+            
+            if result.returncode != 0:
+                print(f"Error processing date {datecode}", file=sys.stderr)
+                print(f"Error details:\n{result.stderr}", file=sys.stderr)
 
             end_time = datetime.datetime.now(local_tz)
             compute_time = end_time - start_time
