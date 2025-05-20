@@ -17,7 +17,7 @@ except ImportError:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Reprocess KPF data over a date range.')
+    parser = argparse.ArgumentParser(description='Reprocess KPF data over a date range. The results are logged in reprocess_obs.log with errors on a particular date written to <datecode>_error.log. Dates that have been successfully reprocessed with the current pipeline version (according to reprocess_obs.log) are skipped.')
     parser.add_argument('startdate', type=str, help='Start date in YYYYMMDD format')
     parser.add_argument('enddate', type=str, help='End date in YYYYMMDD format')
     parser.add_argument('--ncpu', type=int, default=max(1, multiprocessing.cpu_count() // 2),
@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument('--stdout', action='store_true', help='Display stdout from kpf command')
     parser.add_argument('--local-tz', type=str, default='America/Los_Angeles',
                         help='Local timezone for logfile lines (default: America/Los_Angeles)')
+    parser.add_argument('--verbose', action='store_true', help='Print detailed messages during execution')
     return parser.parse_args()
 
 
@@ -88,7 +89,7 @@ def main():
 
     nice_prefix = [] if args.not_nice else ['nice', '-n', '15']
 
-    for single_date in tqdm(valid_dates, desc="Reprocessing Dates"):
+    for single_date in tqdm(valid_dates, desc="Reprocessing Dates", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}"):
         datecode = single_date.strftime('%Y%m%d')
 
         if datecode in processed_dates:
@@ -103,10 +104,6 @@ def main():
             f'/data/logs/{datecode}/', f'/data/logs_QLP/{datecode}/'
         ]
 
-        cmds_rm = [
-            ['rm', '-rf', f'{directory}*'] for directory in dirs_to_remove if os.path.exists(directory)
-        ]
-
         cmd_kpf = [
             'kpf', '--ncpu', str(args.ncpu), '--watch', f'/data/L0/{datecode}/', '--reprocess',
             '-c', 'configs/kpf_drp.cfg', '-r', 'recipes/kpf_drp.recipe'
@@ -114,33 +111,23 @@ def main():
 
         if args.dry_run:
             if not args.no_delete:
-                for cmd_rm in cmds_rm:
-                    print(' '.join(cmd_rm))
+                for directory in dirs_to_remove:
+                    print(f'find {directory} -mindepth 1 -delete')
             print(' '.join(nice_prefix + cmd_kpf))
         else:
             if not args.no_delete:
-                for cmd_rm in cmds_rm:
-                    subprocess.run(cmd_rm, check=False)
+                for directory in dirs_to_remove:
+                    if os.path.exists(directory):
+                        result = subprocess.run(['find', directory, '-mindepth', '1', '-delete', '-print'], capture_output=True, text=True)
+                        deleted_files = result.stdout.strip().split('\n') if result.stdout else []
+                        if args.verbose:
+                            print(f"Deleted {len(deleted_files)} files from {directory}")
 
             start_time = datetime.datetime.now(local_tz)
 
-#            stdout_option = stderr_option = None if args.stdout else subprocess.DEVNULL
-#
-#            result = subprocess.run(
-#                nice_prefix + cmd_kpf,
-#                stdout=stdout_option,
-#                stderr=stderr_option,
-#                text=True,
-#                check=False
-#            )
+            stdout_option = None if args.stdout else subprocess.DEVNULL
+            stderr_option = subprocess.PIPE
 
-            if args.stdout:
-                stdout_option = None
-                stderr_option = subprocess.PIPE
-            else:
-                stdout_option = subprocess.DEVNULL
-                stderr_option = subprocess.PIPE
-            
             result = subprocess.run(
                 nice_prefix + cmd_kpf,
                 stdout=stdout_option,
@@ -148,21 +135,20 @@ def main():
                 text=True,
                 check=False
             )
-            
-            if result.returncode != 0:
-                print(f"Error processing date {datecode}", file=sys.stderr)
-                print(f"Error details:\n{result.stderr}", file=sys.stderr)
 
             end_time = datetime.datetime.now(local_tz)
             compute_time = end_time - start_time
             compute_time_str = str(compute_time).split('.')[0]
 
+            if result.returncode != 0:
+                error_message = f"Error processing date {datecode}\nError details:\n{result.stderr}"
+                print(error_message, file=sys.stderr)
+                with open(f"{datecode}_error.log", "w") as err_log:
+                    err_log.write(error_message)
+
             status = "" if result.returncode == 0 else " FAILED"
             logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {__version__:<10}{status}")
-            os.chmod(args.logfile, 0o666) # Read/write permissions outside of Docker (root)
-
-            if result.returncode != 0:
-                print(f"Error processing date {datecode}", file=sys.stderr)
+            os.chmod(args.logfile, 0o666)
 
 
 if __name__ == '__main__':
