@@ -112,8 +112,10 @@ $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment wit
 my $containerimage = 'russkpfmasters:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/create_order_trace_files.recipe';
 my $config = '/code/KPF-Pipeline/configs/create_order_trace_files.cfg';
-my $recipe2 = '/code/KPF-Pipeline/recipes/create_order_mask_file.recipe';
-my $config2 = '/code/KPF-Pipeline/configs/create_order_mask_file.cfg';
+my $recipe2 = '/code/KPF-Pipeline/recipes/create_order_rectification_file.recipe';
+my $config2 = '/code/KPF-Pipeline/configs/create_order_rectification_file.cfg';
+my $recipe3 = '/code/KPF-Pipeline/recipes/create_order_mask_file.recipe';
+my $config3 = '/code/KPF-Pipeline/configs/create_order_mask_file.cfg';
 my $sbxdir = "${sandbox}/masters/$procdate";
 
 
@@ -152,6 +154,10 @@ print "dockercmdscript=$dockercmdscript\n";
 print "containerimage=$containerimage\n";
 print "recipe=$recipe\n";
 print "config=$config\n";
+print "recipe2=$recipe2\n";
+print "config2=$config2\n";
+print "recipe3=$recipe3\n";
+print "config3=$config3\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
@@ -178,6 +184,8 @@ my $script = "#! /bin/bash\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
              "cp -p /data/masters/${procdate}/*.csv /masters/${procdate}\n" .
              "kpf -r $recipe2  -c $config2 --date ${procdate}\n" .
+             "cp -p /data/masters/${procdate}/kpf_${procdate}_master_flat_*.fits /masters/${procdate}\n" .
+             "kpf -r $recipe3  -c $config3 --date ${procdate}\n" .
              "cp -p /data/masters/${procdate}/*order_mask.fits /masters/${procdate}\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_order_trace_${procdate}.log\n" .
              "exit\n";
