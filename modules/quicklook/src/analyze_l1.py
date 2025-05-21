@@ -1013,7 +1013,7 @@ class AnalyzeL1:
                 interpolator = make_interp_spline(wav, flux, k=3)
                 newflux = interpolator(newwav)
             except Exception as e:
-                self.logger.info(f'Error: {e}')
+                self.logger.info(f'Exception: {e}')
                 self.logger.info('Using cubic-spline interpolation instead of B-splines.')
                 interpolator = interp1d(wav, flux, kind='cubic', fill_value='extrapolate')
                 newflux = interpolator(newwav)   
@@ -1022,8 +1022,8 @@ class AnalyzeL1:
                 interpolator = interp1d(wav, flux, kind='cubic', fill_value='extrapolate')
                 newflux = interpolator(newwav)   
             except Exception as e:
-                self.logger.info(f'Error: {e}')
-                self.logger.info(f'No interpolation applied.')
+                self.logger.info(f'Exception: {e}')
+                self.logger.info(f'No interpolation applied.  Using uninterpolated spectrum.')
                 newflux = flux  
         return newflux
 
