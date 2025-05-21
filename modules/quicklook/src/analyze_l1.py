@@ -171,8 +171,9 @@ class AnalyzeL1:
                            date of observations for the WLS files
         '''
 
-        date_mjd_str = self.header['MJD-OBS']
-        date_obs_datetime = Time(date_mjd_str, format='mjd').datetime
+        date_obs_str = self.header['DATE-MID']
+        date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f")
+        
         if verbose:
             self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
         
