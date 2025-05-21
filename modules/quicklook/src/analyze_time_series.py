@@ -85,6 +85,7 @@ class AnalyzeTimeSeries:
         * For time series state plots, include the number of points in each state 
           in the legend.
         * Specify the yrange in the yaml files
+        * Add qc_pass and qc_fail parameters to yaml files -- only include rows where certain QCs (specified by keywords) pass or fail
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', logger=None, verbose=False):

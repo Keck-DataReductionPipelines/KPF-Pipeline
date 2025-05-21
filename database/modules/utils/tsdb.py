@@ -68,6 +68,7 @@ class TSDB:
           are allowed, e.g., no writing to the db for readonly user.
         * Add temperature derivatives as columns; they will need to be computed.
         * Add database for masters (separate from ObsIDs?)
+        * Add qc_pass and qc_fail parameters to dataframe_from_db() -- only include rows where certain QCs (specified by keywords) pass or fail
 
     """
 
