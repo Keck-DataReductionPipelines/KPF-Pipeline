@@ -170,14 +170,14 @@ class AnalyzeL1:
             age_wls_file - number of days between the observation and the
                            date of observations for the WLS files
         '''
-
-        date_obs_str = self.header['DATE-MID']
-        date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f")
-        
-        if verbose:
-            self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
         
         try:
+            date_obs_str = self.header['DATE-MID']
+            date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f")
+            
+            if verbose:
+                self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
+
             if kwd in self.header:
                 wls_filename = self.header[kwd]
                 wls_filename_datetime = get_datecode_from_filename(wls_filename, datetime_out=True)

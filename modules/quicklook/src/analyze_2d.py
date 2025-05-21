@@ -109,14 +109,14 @@ class Analyze2D:
             master_wls_file - number of days between the observation and the
                               date of observations for the WLS files
         '''
-
-        date_obs_str = self.header['DATE-MID']
-        date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f").date()        
-
-        if verbose:
-            self.logger.info(f'Date of observation: {date_obs_str}')
         
         try:
+            date_obs_str = self.header['DATE-MID']
+            date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f").date()        
+    
+            if verbose:
+                self.logger.info(f'Date of observation: {date_obs_str}')
+
             if kwd in self.header:
                 master_filename = self.header[kwd]
                 master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
