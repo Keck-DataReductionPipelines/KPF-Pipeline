@@ -110,8 +110,8 @@ class Analyze2D:
                               date of observations for the WLS files
         '''
 
-        date_obs_str = self.header['DATE-OBS']
-        date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%d").date()
+        date_obs_str = self.header['DATE-MID']
+        date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f").date()        
 
         if verbose:
             self.logger.info(f'Date of observation: {date_obs_str}')
