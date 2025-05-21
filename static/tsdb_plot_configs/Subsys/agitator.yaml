@@ -35,6 +35,12 @@ panel_arr:
           label: Ambient Temp.
           marker: .
           linewidth: 0.5
+    paneldict:
+      ylabel: Temperature (C)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
       - col: kpfmot.AGITMOT_T
         plot_type: scatter
         unit: K
