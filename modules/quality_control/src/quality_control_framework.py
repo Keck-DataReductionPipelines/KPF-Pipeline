@@ -22,7 +22,6 @@ class QualityControlFramework(KPF0_Primitive):
         data_type (str): Type of data (e.g., KPF).
         data_level_str (str): L0, 2D, L1, L2 are possible choices.
         fits_object (KPF object): L0/2D/L1/L2 KPF object
-        actual_dir (str): Prefix of actual directory outside container that maps to /data (e.g., /data/kpf)
     """
 
     def __init__(self, action, context):
@@ -80,6 +79,9 @@ class QualityControlFramework(KPF0_Primitive):
         if self.qc_list_flag == 1:
             qc_obj.qcdefinitions.list_qc_metrics()
 
+        # Add RECEIPT entry
+        self.kpf_object.receipt_add_entry('QualityControl', self.__module__, f'data_level_str={self.data_level_str}', 'PASS')
+        
         # Finish.
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 

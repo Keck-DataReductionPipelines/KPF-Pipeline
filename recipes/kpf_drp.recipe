@@ -463,8 +463,8 @@ if do_spectral_extraction or do_hk or do_bc:
 		dt_string = GetHeaderValue(lev0_data, 'DATE-MID')
 		cals = CalibrationLookup(dt_string)
 		start_order = cals['start_order']
-		output_order_trace = cals['order_trace']
-		order_trace_flat = cals['trace_flat']
+		output_order_trace = cals['ordertrace']
+		order_trace_flat = cals['traceflat']
 
 		# prepare trace files and rectified L0 flat data for spectral extraction
 		if do_spectral_extraction:
@@ -534,7 +534,7 @@ if do_spectral_extraction or do_hk or do_bc:
 				if outlier_mask_path == None:
 					outlier_mask_file = ''
 				else:
-					outlier_mask_file = outlier_mask_path + short_lev0_file
+					outlier_mask_file = outlier_mask_path + "/" + context.date_dir + "/" + short_lev0_file
 
 				for idx in ccd_idx:
 					ccd = ccd_list[idx]

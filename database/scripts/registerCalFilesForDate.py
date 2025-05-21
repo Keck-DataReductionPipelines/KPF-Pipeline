@@ -54,7 +54,7 @@ def update_minmjd_maxmjd_etc_in_calfiles_table(datearg,cur):
 
 
     #############################################################
-    # 1. Handle smoothlamp and ordertrace records for all levels.
+    # 1. Handle smoothlamp, ordertrace, and ordermask records for all levels.
     #############################################################
 
 
@@ -122,6 +122,7 @@ def update_minmjd_maxmjd_etc_in_calfiles_table(datearg,cur):
 
         caltype_qualifier1 = 'smoothlamp'
         caltype_qualifier2 = 'ordertrace'
+        caltype_qualifier3 = 'ordermask'
         startdate_qualifier = datearg
 
         query_template =\
@@ -131,7 +132,7 @@ def update_minmjd_maxmjd_etc_in_calfiles_table(datearg,cur):
         "minmjd = TEMPLATE_MINMJD, " +\
         "maxmjd = TEMPLATE_MAXMJD, " +\
         "infobits = TEMPLATE_INFOBITS " +\
-        "where (caltype = 'TEMPLATE_CALTYPE1' or caltype = 'TEMPLATE_CALTYPE2') " +\
+        "where (caltype = 'TEMPLATE_CALTYPE1' or caltype = 'TEMPLATE_CALTYPE2' or caltype = 'TEMPLATE_CALTYPE3') " +\
         "and startdate = 'TEMPLATE_STARTDATE';"
 
 
@@ -146,6 +147,7 @@ def update_minmjd_maxmjd_etc_in_calfiles_table(datearg,cur):
         rep["TEMPLATE_INFOBITS"] = str(infobits_update)
         rep["TEMPLATE_CALTYPE1"] = caltype_qualifier1
         rep["TEMPLATE_CALTYPE2"] = caltype_qualifier2
+        rep["TEMPLATE_CALTYPE3"] = caltype_qualifier3
         rep["TEMPLATE_STARTDATE"] = startdate_qualifier
 
         rep = dict((re.escape(k), v) for k, v in rep.items())
@@ -167,7 +169,7 @@ def update_minmjd_maxmjd_etc_in_calfiles_table(datearg,cur):
                     print("Nothing returned from database update; continuing...")
 
         except (Exception, psycopg2.DatabaseError) as error:
-            print('*** Error updating CalFiles record for smoothlamp and ordertrace ({}); skipping...'.format(error))
+            print('*** Error updating CalFiles record for smoothlamp, ordertrace, and ordermask caltypes ({}); skipping...'.format(error))
             exitcode = 67
             return exitcode
 
@@ -984,6 +986,9 @@ for master_file in master_files:
                 elif re.match(r".+_smooth_lamp", fits_file):
                     filename_caltype = 'smoothlamp'
                     filename_object = "smoothlamp"
+                elif re.match(r".+_order_mask", fits_file):
+                    filename_caltype = 'ordermask'
+                    filename_object = "ordermask"
                 else:
                     filename_match = re.match(r".+_master_(.+)_(.+)\.fits", fits_file)
                     filename_caltype = filename_match.group(1)
@@ -1062,6 +1067,8 @@ for master_file in master_files:
                 if kwd == "IMTYPE" and level > 0:
                     val = filename_caltype
                 elif kwd == "IMTYPE" and filename_caltype == 'smoothlamp':
+                    val = filename_caltype
+                elif kwd == "IMTYPE" and filename_caltype == 'ordermask':
                     val = filename_caltype
                 elif kwd == "TARGOBJ" and level > 0:
                     val = filename_object

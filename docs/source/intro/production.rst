@@ -11,7 +11,7 @@ Launch 50 processes to watch for L0 files and process them into 2D/L1/L2 files. 
 
 **Quicklook processing threads:** 
 
-Launch QLP instances for all data levels with the default recipe.  The QLP instances should be split between two commands, one that looks at recent files (generated in the last day from realtime processing and one that covers reprocessed files from 1+ days ago).  In production processing by the DRP development team, these two commands are in the xterm called *QLP --only_recent* and *QLP --not_recent*.::
+Launch QLP instances for all data levels with the default recipe.  The QLP instances should be split between two commands, one that looks at recent files (generated in the last day from realtime processing and one that covers reprocessed files from 1+ days ago, the latter is deprioritized using 'nice=10').  In production processing by the DRP development team, these two commands are in the xterm called *QLP --only_recent* and *QLP --not_recent*.::
 
     ./scripts/launch_qlp.sh --only_recent
 
@@ -37,17 +37,58 @@ In production processing by the DRP development team, this command is in the xte
 Other Processing Tasks
 **********************
 
-**Reprocessing L0 files:** 
+**Reprocessing:** 
   
-Launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Reprocessing*.::
+Using a recipe, launch 50 processes to reprocess L0 files into 2D/L1/L2 files for the date YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Reprocessing*.::
 
-    kpf --ncpu 50 /data/L0/YYYYMMDD/ -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
+    kpf --ncpu 50 --watch /data/L0/YYYYMMDD/ --reprocess -c configs/kpf_drp.config -r recipes/kpf_drp.recipe
+
+To process many nights of data, the recommended procedure is to use `reprocess.py`.  
+This script has deletes old 2D/L1/L2/QLP/outliers/logs/logs_QLP files before starting reprocessing of a given night.  
+Using the linux utility 'nice', it's execution is deprioritized (nice=15) so that regular processing isn't slowed down.  
+It also procuces or appends to a log file (default name: reprocess_obs.log) with columns Datecode, Start Time, End Time, Run Time, and Version.
+Dates that have been reprocessed with the same pipeline versions (according to the log file) are skipped.::
+
+    reprocess_obs.py yyyymmdd YYYYMMDD
+
+Here's the docstring showing all of the options.::
+
+    usage: reprocess_obs.py [-h] [--ncpu NCPU] [--overwrite] [--logfile LOGFILE] [--forward] [--not-nice]
+                            [--no-delete] [--dry-run] [--stdout] [--local-tz LOCAL_TZ]
+                            startdate enddate
+    
+    Reprocess KPF data over a date range.
+    
+    positional arguments:
+      startdate            Start date in YYYYMMDD format
+      enddate              End date in YYYYMMDD format
+    
+    options:
+      -h, --help           show this help message and exit
+      --ncpu NCPU          Number of CPUs to use
+      --overwrite          Overwrite previous successful processing results with current version in logfile
+      --logfile LOGFILE    Log file path
+      --forward            Process datecodes in chronological order (reverse is default)
+      --not-nice           Do not apply standard nice (=15) deprioritization
+      --no-delete          Do not delete existing 2D/L1/L2/QLP files before reprocessing
+      --dry-run            Print commands without executing them
+      --stdout             Display stdout from kpf command
+      --local-tz LOCAL_TZ  Local timezone (default: America/Los_Angeles)
 
 **Reprocessing Masters:**
 
-Reprocess master files from yyyymmdd to YYYYMMDD.  In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
+Reprocess master files from yyyymmdd to YYYYMMDD is accomplished with a series of commands.  
+First activate the kpf-masters conda environment.
+From the ``cronjobs/`` directory, generate a series of shell scripts with the format ``runDailyPipelines_YYYYMMDD.sh`` 
+You can then use the generated script ``runMastersPipeline_From_YYYYMMDD_To_YYYYMMDDDD.sh`` to run the dates you specified or use the ``parallel`` utility with a command like the one below for better control over compute resources::
 
-    <command to be added>
+    conda activate /scr/doppler/conda/envs/kpf-masters
+    cd cronjobs
+    ./generateDailyRunScriptsBetweenTwoDates.pl yyyymmdd YYYYMMDD
+    ls runDailyPipelines_202311*.sh | sort -r | parallel --delay 600 -j 5 --progress --bar --resume --joblog masters_reprocessing.log sh {}
+
+
+The example above is for November, 2023 (yyyymmdd=20231101, YYYYMMDD=20231130).  The name of the log file (``masters_reprocessing.log``) can be adjusted.  It is not recommended to run more than 5-7 jobs (``-j`` option) at once to avoid I/O overload; staggered processing (``--delay 600``) helps. In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
 
 **Quicklook reprocessing -- qlp_parallel.py:**
 
