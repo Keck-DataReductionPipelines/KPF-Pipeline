@@ -507,14 +507,18 @@ WLSL1|bool|QC: L1 WLS file check passed|None
 LFCSAT|bool|QC: L1 LFC spectrum not saturated|None
 OLDWLS|bool|QC: WLSFILE within 2 days of this obs|None
 OLDWLS2|bool|QC: WLSFILE2 within 2 days of this obs|None
+OLDTRAC|bool|QC: TRACFILE within 5 days of this obs|None
+OLDLAMP|bool|QC: LAMPFILE within 5 days of this obs|None
 FLATSNR|bool|QC: SNR of flat >min and <max|None
 LFCLINES|bool|QC: Number and dist of LFC lines sufficient|None
 ETALINES|bool|QC: Number and dist of Etalon lines sufficient|None
 WILDWSCI|bool|QC: SCI WLS not wild (stdev < 5 pix)|None
 WILDWSKY|bool|QC: SKY WLS not wild (stdev < 5 pix)|None
 WILDWCAL|bool|QC: CAL WLS not wild (stdev < 5 pix)|None
-AGEWLS|float|WLSFILE approx age (days)|None
-AGEWLS2|float|WLSFILE2 approx age (days)|None
+AGEWLS|float|WLSFILE approx age|days
+AGEWLS2|float|WLSFILE2 approx age|days
+AGETRAC|float|Trace file approx age|days
+AGELAMP|float|Smooth lamp file approx age|days
 NSATGS2|float|Number of saturated lines in Green SCI2|None
 NSATGC|float|Number of saturated lines in Green CAL|None
 NSATGK|float|Number of saturated lines in Green SKY|None

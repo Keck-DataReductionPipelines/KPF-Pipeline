@@ -13,6 +13,16 @@ panel_arr:
       ylabel: Intensity (counts)
       not_junk: true
       legend_frac_size: 0.25
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
 
   - panelvars:
       - col: kpfcal.VISFLUX
@@ -26,6 +36,16 @@ panel_arr:
       ylabel: Intensity (counts)
       not_junk: true
       legend_frac_size: 0.25
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
 
   - panelvars:
       - col: kpfcal.BLUECUTIACT
@@ -40,3 +60,13 @@ panel_arr:
       title: LFC Diagnostics
       not_junk: true
       legend_frac_size: 0.25
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
