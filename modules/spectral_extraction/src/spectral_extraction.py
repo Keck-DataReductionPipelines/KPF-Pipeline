@@ -194,6 +194,7 @@ class SpectralExtraction(KPF0_Primitive):
         self.data_ext = data_ext
         order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
         order_trace_file = self.get_args_value('trace_file', action.args, args_keys)
+        self.order_trace_file = order_trace_file
         orderlets_on_image = self.get_args_value("orderlets_on_image", action.args, args_keys)
         self.outlier_rejection = self.get_args_value('do_outlier_rejection', action.args, args_keys)
         self.outlier_file = self.get_args_value("outlier_file", action.args, args_keys) if self.outlier_rejection \
