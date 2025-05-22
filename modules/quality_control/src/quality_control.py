@@ -983,6 +983,48 @@ class QCDefinitions:
         self.db_columns[name36] = None
         self.fits_keyword_fail_value[name36] = 0
 
+        name37 = 'trace_age'
+        self.names.append(name37)
+        self.kpf_data_levels[name37] = ['L1']
+        self.descriptions[name37] = 'Trace file from within 5 days of this observation'
+        self.data_types[name37] = 'int'
+        self.spectrum_types[name37] = ['Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
+        self.master_types[name37] = []
+        self.drift_types[name37] = []
+        self.required_data_products[name37] = [] # no required data products
+        self.fits_keywords[name37] = 'TRACFILE'
+        self.fits_comments[name37] = 'QC: Trace file within 5 days of this obs'
+        self.db_columns[name37] = None
+        self.fits_keyword_fail_value[name37] = 0
+
+        name38 = 'smooth_lamp_age'
+        self.names.append(name38)
+        self.kpf_data_levels[name38] = ['L1']
+        self.descriptions[name38] = 'Smooth lamp file from within 5 days of this observation'
+        self.data_types[name38] = 'int'
+        self.spectrum_types[name38] = ['Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
+        self.master_types[name38] = []
+        self.drift_types[name38] = []
+        self.required_data_products[name38] = [] # no required data products
+        self.fits_keywords[name38] = 'LAMPFILE'
+        self.fits_comments[name38] = 'QC: Smooth lamp file within 5 days of this obs'
+        self.db_columns[name38] = None
+        self.fits_keyword_fail_value[name38] = 0
+
+        name39 = 'agitator_operating'
+        self.names.append(name39)
+        self.kpf_data_levels[name39] = ['L0']
+        self.descriptions[name39] = 'Agitator is running with speed above minimum'
+        self.data_types[name39] = 'int'
+        self.spectrum_types[name39] = ['Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
+        self.master_types[name39] = []
+        self.drift_types[name39] = []
+        self.required_data_products[name39] = [] # no required data products
+        self.fits_keywords[name39] = 'AGITOK'
+        self.fits_comments[name39] = 'QC: Agitator running with speed above minimum'
+        self.db_columns[name39] = None
+        self.fits_keyword_fail_value[name39] = 0
+
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
 #        self.kpf_data_levels[name36] = ['L1']
@@ -1807,8 +1849,6 @@ class QCL0(QC):
 
         return QC_pass
 
-        return QC_pass
-
 
     def good_guiding(self, max_guider_rms_mas=50, max_guider_offset_mas=50, debug=False):
         """
@@ -1817,6 +1857,8 @@ class QCL0(QC):
         in the X and Y directions.  The same test is applied for guiding offsets.
 
         Args:
+            max_guider_rms_mas    - maximum RMS of Guider correction in mas
+            max_guider_offset_mas - maximum offset (average) of Guider correction in mas
             debug - an optional flag.  If True, missing data products are noted.
 
         Returns:
@@ -1857,7 +1899,6 @@ class QCL0(QC):
             QC_pass = False
 
         return QC_pass
-
 
 
     def good_TARG_headers(self):
@@ -1957,6 +1998,40 @@ class QCL0(QC):
         return QC_pass
 
 
+    def agitator_operating(self, min_abs_speed=1000, debug=False):
+        """
+        This Quality Control function checks that the Agitator is running 
+        with a motor speed (absolute value of counts/s) greater than a specified 
+        value.
+
+        Args:
+            min_abs_speed - minimum (absolute value) of motor speed for passing QC
+            debug - an optional flag.  If True, missing data products are noted.
+
+        Returns:
+            QC_pass - a boolean signifying that the QC passed for failed
+        """
+
+        QC_pass = False
+        try:
+            L0 = self.kpf_object
+            if 'AGITSTA' in L0.header['PRIMARY']:
+                if L0.header['PRIMARY']['AGITSTA'] == 'Running':
+                    if hasattr(L0, 'TELEMETRY'):
+                        df_telemetry = L0['TELEMETRY']
+                        df_telemetry.set_index("keyword", inplace=True)
+                        speed = df_telemetry.loc['kpfmot.AGITSPD', 'average']
+                        speed = abs(float(speed))
+                        if speed > min_abs_speed:
+                            QC_pass = True
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
 #####################################################################
 
 class QC2D(QC):
@@ -1974,6 +2049,7 @@ class QC2D(QC):
     # Call superclass.
     def __init__(self,kpf_object):
         super().__init__(kpf_object)
+
 
     def data_2D_red_green(self, debug=False):
         """
@@ -3288,6 +3364,68 @@ class QCL1(QC):
             QC_pass = self.L1_wild_WLS(EXT=['CAL'], max_stdev_pixels=max_stdev_pixels, debug=debug)
         except Exception as e:
             self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def trace_age(self, maxage=5, debug=False):
+        """
+        This Quality Control function checks if the trace file used to
+        process this exposure was from spectra within maxage (default: 5)
+        days from the exposure itself.
+
+        Args:
+            debug
+
+        Returns:
+            QC_pass (bool): True if the trace file used to process this exposure 
+            is from spectra within a certain number of days from the exposure 
+            itself.
+        """
+
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            age_master_file = myL1.measure_master_age(kwd='TRACFILE', verbose=debug)
+
+            QC_pass = True
+            if abs(age_master_file) > maxage:
+                QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def smooth_lamp_age(self, maxage=5, debug=False):
+        """
+        This Quality Control function checks if the trace file used to
+        process this exposure was from spectra within maxage (default: 5)
+        days from the exposure itself.
+
+        Args:
+            debug
+
+        Returns:
+            QC_pass (bool): True if the smooth lamp file used to process this 
+            exposure is from spectra within a certain number of days from the 
+            exposure itself.
+        """
+
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            age_master_file = myL1.measure_master_age(kwd='LAMPFILE', verbose=debug)
+
+            QC_pass = True
+            if abs(age_master_file) > maxage:
+                QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
             QC_pass = False
 
         return QC_pass
