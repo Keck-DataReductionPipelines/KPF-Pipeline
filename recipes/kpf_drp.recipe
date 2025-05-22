@@ -466,6 +466,7 @@ if do_spectral_extraction or do_hk or do_bc:
 		start_order = cals['start_order']
 		output_order_trace = cals['ordertrace']
 		order_trace_flat = cals['traceflat']
+		smooth_lamp_file = cals['smoothlamp']
 
 		# prepare trace files and rectified L0 flat data for spectral extraction
 		if do_spectral_extraction:
@@ -591,7 +592,7 @@ if do_spectral_extraction or do_hk or do_bc:
 					SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
 
 				# Add blaze extensions
-				smooth_lamp_l1 = cals['smoothlamp']
+				smooth_lamp_l1 = kpf1_from_fits(smooth_lamp_file, data_type=data_type)
 				blaze_output_list = AddBlaze(output_data, smooth_lamp_l1)
 
 				exit_code = blaze_output_list[0]
