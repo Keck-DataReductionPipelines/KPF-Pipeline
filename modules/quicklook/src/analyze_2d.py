@@ -107,7 +107,7 @@ class Analyze2D:
     
         Returns:
             master_wls_file - number of days between the observation and the
-                              date of observations for the WLS files
+                              date of observations for master file
         '''
         
         try:
@@ -119,18 +119,23 @@ class Analyze2D:
 
             if kwd in self.header:
                 master_filename = self.header[kwd]
-                master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
-                master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
-                if verbose:
-                    self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
+                if master_filename != 0:
+                    master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
+                    master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
+                    if verbose:
+                        self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
+                    
+                    age_master_file = (master_filename_datetime - date_obs_datetime).days
+                    if verbose:
+                        self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
+        
+                    return age_master_file
+                else:
+                  age_master_file = -99 # standard value indicating keyword not available
+                  return age_master_file
                 
-                age_master_file = (master_filename_datetime - date_obs_datetime).days
-                if verbose:
-                    self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
-    
-                return age_master_file
             else:
-                age_master_file = -999 # standard value indicating keyword not available
+                age_master_file = -99 # standard value indicating keyword not available
                 return age_master_file
 
         except KeyError as e:

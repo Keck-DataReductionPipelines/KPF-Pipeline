@@ -367,6 +367,8 @@ WLSL1     1                                                                     
 LFCSAT    1                                                                        QC: 1 = L1 LFC spectrum not saturated
 OLDWLS    1                                                                        QC: 1 = WLSFILE within 2 days of this obs
 OLDWLS2   1                                                                        QC: 1 = WLSFILE2 within 2 days of this obs
+OLDTRAC   1                                                                        QC: 1 = TRACFILE within 5 days of this obs
+OLDLAMP   1                                                                        QC: 1 = LAMPFILE within 5 days of this obs
 FLATSNR   1                                                                        QC: 1 = SNR of flat greater minimum threshold and less than maximum threshold
 LFCLINES  1                                                                        QC: 1 = Number and distribution of LFC lines above threshold ampltidue is sufficient for all orders/orderlets available
 ETALINES  1                                                                        QC: 1 = Number and distribution of Etalon lines above threshold ampltidue is sufficient for all orders/orderlets available
@@ -469,6 +471,8 @@ ETALRK0   0                                                                     
 ETALRK1   31                                                                       Max SKY Red order with good Etalon lines
 AGEWLS    -0.2205656666666667                                                      Approx age of WLSFILE compared to this file (days)
 AGEWLS2   0.14193433333333330                                                      Approx age of WLSFILE2 compared to this file (days)
+AGETRAC   -0.2205656666666667                                                      Approx age of TRACFILE compared to this file (days)
+AGELAMP   0.14193433333333330                                                      Approx age of LAMPFILE compared to this file (days)
 STATWREF  /data/reference_fits/430LFCWLS.fits                                      filename of ref for median/stdev(WLS-ref)
 MEDWGS00  0.09425503797584399                                                      median(WLS-ref) [pix], Green SCI order 00       
 MEDWGS01  0.08849442069640202                                                      median(WLS-ref) [pix], Green SCI order 01       

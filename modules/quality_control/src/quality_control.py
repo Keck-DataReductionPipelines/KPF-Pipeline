@@ -983,6 +983,34 @@ class QCDefinitions:
         self.db_columns[name36] = None
         self.fits_keyword_fail_value[name36] = 0
 
+        name37 = 'L1_trace_age'
+        self.names.append(name37)
+        self.kpf_data_levels[name37] = ['L1']
+        self.descriptions[name37] = 'Trace file from within 5 days of this observation'
+        self.data_types[name37] = 'int'
+        self.spectrum_types[name37] = ['Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
+        self.master_types[name37] = []
+        self.drift_types[name37] = []
+        self.required_data_products[name37] = [] # no required data products
+        self.fits_keywords[name37] = 'TRACFILE'
+        self.fits_comments[name37] = 'QC: Trace file within 5 days of this obs'
+        self.db_columns[name37] = None
+        self.fits_keyword_fail_value[name37] = 0
+
+        name38 = 'L1_smooth_lamp_age'
+        self.names.append(name38)
+        self.kpf_data_levels[name38] = ['L1']
+        self.descriptions[name38] = 'Smooth lamp file from within 5 days of this observation'
+        self.data_types[name38] = 'int'
+        self.spectrum_types[name38] = ['Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
+        self.master_types[name38] = []
+        self.drift_types[name38] = []
+        self.required_data_products[name38] = [] # no required data products
+        self.fits_keywords[name38] = 'LAMPFILE'
+        self.fits_comments[name38] = 'QC: Smooth lamp file within 5 days of this obs'
+        self.db_columns[name38] = None
+        self.fits_keyword_fail_value[name38] = 0
+
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
 #        self.kpf_data_levels[name36] = ['L1']
@@ -3288,6 +3316,68 @@ class QCL1(QC):
             QC_pass = self.L1_wild_WLS(EXT=['CAL'], max_stdev_pixels=max_stdev_pixels, debug=debug)
         except Exception as e:
             self.logger.error(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_trace_age(self, maxage=5, debug=False):
+        """
+        This Quality Control function checks if the trace file used to
+        process this exposure was from spectra within maxage (default: 5)
+        days from the exposure itself.
+
+        Args:
+            debug
+
+        Returns:
+            QC_pass (bool): True if the trace file used to process this exposure 
+            is from spectra within a certain number of days from the exposure 
+            itself.
+        """
+
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            age_master_file = myL1.measure_master_age(kwd='TRACFILE', verbose=debug)
+
+            QC_pass = True
+            if abs(age_master_file) > maxage:
+                QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def L1_smooth_lamp_age(self, maxage=5, debug=False):
+        """
+        This Quality Control function checks if the trace file used to
+        process this exposure was from spectra within maxage (default: 5)
+        days from the exposure itself.
+
+        Args:
+            debug
+
+        Returns:
+            QC_pass (bool): True if the smooth lamp file used to process this 
+            exposure is from spectra within a certain number of days from the 
+            exposure itself.
+        """
+
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            age_master_file = myL1.measure_master_age(kwd='LAMPFILE', verbose=debug)
+
+            QC_pass = True
+            if abs(age_master_file) > maxage:
+                QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
             QC_pass = False
 
         return QC_pass

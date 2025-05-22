@@ -210,6 +210,55 @@ class AnalyzeL1:
             return None
 
 
+    def measure_master_age(self, kwd='TRACFILE', verbose=False):
+        '''
+        Computes the number of whole days between the observation and a master file 
+        listed in the PRIMARY header.  
+
+        Arguments:
+            kwd - keyword name of WLS file (usually 'TRACFILE', or 'LAMPFILE')
+    
+        Returns:
+            master_wls_file - number of days between the observation and the
+                              date of observations for the master file
+        '''
+        
+        try:
+            date_obs_str = self.header['DATE-MID']
+            date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f").date()        
+    
+            if verbose:
+                self.logger.info(f'Date of observation: {date_obs_str}')
+
+            if kwd in self.header:
+                master_filename = self.header[kwd]
+                if master_filename != 0:
+                    master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
+                    master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
+                    if verbose:
+                        self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
+                    
+                    age_master_file = (master_filename_datetime - date_obs_datetime).days
+                    if verbose:
+                        self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
+                else:
+                    age_master_file = -99 # standard value indicating keyword not available
+                    return age_master_file
+    
+                return age_master_file
+            else:
+                age_master_file = -99 # standard value indicating keyword not available
+                return age_master_file
+
+        except KeyError as e:
+            self.logger.info(f"KeyError: {e}")
+            pass
+
+        except Exception as e:
+            self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
+            return None
+
+
     def measure_good_comb_orders(self, chip='green', 
                                        intensity_thresh=40**2, 
                                        min_lines=100, 
