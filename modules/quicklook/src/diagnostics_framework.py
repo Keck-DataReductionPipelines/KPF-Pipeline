@@ -171,8 +171,25 @@ class DiagnosticsFramework(KPF0_Primitive):
                     else: 
                         self.logger.info("Green/Red not in L1 file. Age of masters for wavelength solution not computed.")
                 except Exception as e:
-                    self.logger.error(f"Measuring L1 SNR failed: {e}\n{traceback.format_exc()}")
-            
+                    self.logger.error(f"Measuring L1 master age failed: {e}\n{traceback.format_exc()}")
+
+            # Order Trace and Smooth Lamp Age
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_trace_lamp_age_L1'):
+                try:
+                    data_products = get_data_products_L1(self.kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_trace_lamp_age_L1", style="Bold", color="Blue")}')
+                            self.kpf_object = diagnostics.add_headers_trace_lamp_age_L1(self.kpf_object, logger=self.logger)
+                            exit_code = 1
+                        else: 
+                            self.logger.info("Age of smooth lamp and order trace not computed.")
+                    else: 
+                        self.logger.info("Green/Red not in L1 file. Age of smooth lamp and order trace not computed.")
+                except Exception as e:
+                    self.logger.error(f"Measuring L1 order trace/smooth lamp failed: {e}\n{traceback.format_exc()}")
+
             # L1 SNR
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_L1_SNR'):

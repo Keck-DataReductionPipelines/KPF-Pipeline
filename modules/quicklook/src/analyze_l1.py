@@ -170,13 +170,14 @@ class AnalyzeL1:
             age_wls_file - number of days between the observation and the
                            date of observations for the WLS files
         '''
-
-        date_mjd_str = self.header['MJD-OBS']
-        date_obs_datetime = Time(date_mjd_str, format='mjd').datetime
-        if verbose:
-            self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
         
         try:
+            date_obs_str = self.header['DATE-MID']
+            date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f")
+            
+            if verbose:
+                self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
+
             if kwd in self.header:
                 wls_filename = self.header[kwd]
                 wls_filename_datetime = get_datecode_from_filename(wls_filename, datetime_out=True)
@@ -203,6 +204,55 @@ class AnalyzeL1:
                 age_wls_file = None
 
             return age_wls_file
+
+        except Exception as e:
+            self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
+            return None
+
+
+    def measure_master_age(self, kwd='TRACFILE', verbose=False):
+        '''
+        Computes the number of whole days between the observation and a master file 
+        listed in the PRIMARY header.  
+
+        Arguments:
+            kwd - keyword name of WLS file (usually 'TRACFILE', or 'LAMPFILE')
+    
+        Returns:
+            master_wls_file - number of days between the observation and the
+                              date of observations for the master file
+        '''
+        
+        try:
+            date_obs_str = self.header['DATE-MID']
+            date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f").date()        
+    
+            if verbose:
+                self.logger.info(f'Date of observation: {date_obs_str}')
+
+            if kwd in self.header:
+                master_filename = self.header[kwd]
+                if master_filename != 0:
+                    master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
+                    master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
+                    if verbose:
+                        self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
+                    
+                    age_master_file = (master_filename_datetime - date_obs_datetime).days
+                    if verbose:
+                        self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
+                else:
+                    age_master_file = -99 # standard value indicating keyword not available
+                    return age_master_file
+    
+                return age_master_file
+            else:
+                age_master_file = -99 # standard value indicating keyword not available
+                return age_master_file
+
+        except KeyError as e:
+            self.logger.info(f"KeyError: {e}")
+            pass
 
         except Exception as e:
             self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
@@ -1012,7 +1062,7 @@ class AnalyzeL1:
                 interpolator = make_interp_spline(wav, flux, k=3)
                 newflux = interpolator(newwav)
             except Exception as e:
-                self.logger.info(f'Error: {e}')
+                self.logger.info(f'Exception: {e}')
                 self.logger.info('Using cubic-spline interpolation instead of B-splines.')
                 interpolator = interp1d(wav, flux, kind='cubic', fill_value='extrapolate')
                 newflux = interpolator(newwav)   
@@ -1021,8 +1071,8 @@ class AnalyzeL1:
                 interpolator = interp1d(wav, flux, kind='cubic', fill_value='extrapolate')
                 newflux = interpolator(newwav)   
             except Exception as e:
-                self.logger.info(f'Error: {e}')
-                self.logger.info(f'No interpolation applied.')
+                self.logger.info(f'Exception: {e}')
+                self.logger.info(f'No interpolation applied.  Using uninterpolated spectrum.')
                 newflux = flux  
         return newflux
 
