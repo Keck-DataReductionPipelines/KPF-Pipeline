@@ -1,0 +1,73 @@
+from modules.Utils.string_proc import str_replace
+from modules.spectral_extraction.src.order_rectification import OrderRectification
+
+data_type = config.ARGUMENT.data_type
+overwrite = config.ARGUMENT.overwrite
+ccd_list = config.ARGUMENT.ccd_list
+ccd_idx = config.ARGUMENT.ccd_idx
+date_dir = context.date_dir
+output_dir = config.ARGUMENT.output_dir
+input_flat_file_pattern = config.ARGUMENT.input_flat_file_pattern
+rect_method = config.ARGUMENT.rectification_method
+orderlet_names = config.ARGUMENT.orderlet_names
+poly_degree = config.ARGUMENT.fitting_poly_degree
+
+input_flat_file_prototype = output_dir + '/' + date_dir + '/' + input_flat_file_pattern
+
+input_flat_file = str_replace(input_flat_file_prototype,\
+                             'yyyymmdd',\
+                             date_dir)
+
+ccd_stack = '_STACK'
+csv_ext = '.csv'
+fits_ext = '.fits'
+flat_rect = '_' + rect_method
+
+data_row_range = [0, -1]
+data_col_range = [0, -1]
+origin = [data_col_range[0], data_row_range[0]]
+
+output_lev0_flat_rect = str_replace(input_flat_file, fits_ext, flat_rect+fits_ext)
+
+if overwrite or not exists(output_lev0_flat_rect):
+    # do rectification on the flat data in case the order trace result files for all ccds exist.
+    # b_lev0_rect: a boolean to determine if continuing to do OrderRectification and produce output_lev0_flat_rect
+
+    trace_list = []
+
+    if exists(input_flat_file):
+        flat_data = kpf0_from_fits(input_flat_file)
+        b_all_traces = True
+
+        # loop to do order trace per ccd in case the order trace result file doesn't exist, and output to trace_list
+        for idx in ccd_idx:
+            ccd = ccd_list[idx]
+            # get order trace file name defined in config file
+            output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext)
+            trace_list = trace_list + [output_lev0_trace_csv]
+
+            b_all_traces = b_all_traces and exists(output_lev0_trace_csv)
+
+        lev0_flat_rect = flat_data
+
+        b_lev0_rect = lev0_flat_rect != None and b_all_traces
+        if b_lev0_rect:
+            for idx in ccd_idx:
+                ccd = ccd_list[idx]
+                # no clip file if rect_method == 'norect'
+                clip_file = None
+                trace_file = trace_list[idx]
+
+                if b_lev0_rect:
+                    lev0_flat_rect = OrderRectification(None, lev0_flat_rect,
+                            orderlet_names=orderlet_names[idx],
+                            trace_file=trace_file, data_extension=ccd,
+                            flat_extension = ccd+ccd_stack,
+                            rectification_method=rect_method,
+                            clip_file=clip_file,
+                            origin=origin, poly_degree=poly_degree)
+
+                # if lev0_flat_rect is not produced, the order rectfication stops here.
+                b_lev0_rect = b_lev0_rect and lev0_flat_rect != None
+            if b_lev0_rect:
+                result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
