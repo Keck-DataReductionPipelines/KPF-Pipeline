@@ -386,7 +386,8 @@ class SpectralExtraction(KPF0_Primitive):
             self.logger.info("SpectralExtraction: Receipt written")
             self.logger.info("SpectralExtraction: Done for orders " + " ".join(all_order_names) + "!")
 
-        self.output_level1.header['PRIMARY']['TRACFILE'] = os.path.basename(self.order_trace_file)
+        if self.order_trace_file:
+            self.output_level1.header['PRIMARY']['TRACFILE'] = os.path.basename(self.order_trace_file)
 
         return Arguments(self.output_level1) if good_result else Arguments(None)
 
