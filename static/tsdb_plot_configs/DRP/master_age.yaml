@@ -35,6 +35,28 @@ panel_arr:
       legend_frac_size: 0.15
 
   - panelvars:
+      - col: AGETRAC
+        plot_type: scatter
+        plot_attr:
+          label: Age of Trace File (days)
+          marker: .
+    paneldict:
+      ylabel: "Age of Trace\nFile (days, AGETRAC)"
+      not_junk: true
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: AGELAMP
+        plot_type: scatter
+        plot_attr:
+          label: Age of Smooth Lamp File (days)
+          marker: .
+    paneldict:
+      ylabel: "Age of Trace\nFile (days, AGELAMP)"
+      not_junk: true
+      legend_frac_size: 0.15
+
+  - panelvars:
       - col: AGEWLS
         plot_type: scatter
         plot_attr:
