@@ -596,10 +596,10 @@ if do_spectral_extraction or do_hk or do_bc:
 					smooth_lamp_l1 = kpf1_from_fits(smooth_lamp_file, data_type=data_type)
 					blaze_output_list = AddBlaze(output_data, smooth_lamp_l1)
 
-				exit_code = blaze_output_list[0]
-				new_l1_obj = blaze_output_list[1]
-				if exit_code == 1:
-					output_data = new_l1_obj 
+					exit_code = blaze_output_list[0]
+					new_l1_obj = blaze_output_list[1]
+					if exit_code == 1:
+						output_data = new_l1_obj 
 
 				# Quality Control - L1 level
 				# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
