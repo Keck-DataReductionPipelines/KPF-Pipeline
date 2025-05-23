@@ -320,6 +320,9 @@ HK2DF99P  62520.97                                    99th percentile flux in th
 HK2DF90P  40589.16                                    90th percentile flux in the 2D header (e-)
 HK2DF50P  613.23                                      50th percentile flux in the 2D header (e-)
 HK2DF10P  128.83                                      10th percentile flux in the 2D header (e-)
+BIASFILE  kpf_20250510_master_bias_autocal-bias.fits  Master bias file used to process this 2D file
+DARKFILE  kpf_20250510_master_dark_autocal-dark.fits  Master dark file used to process this 2D file
+FLATFILE  kpf_20250510_master_flat.fits               Master flat file used to process this 2D file
 AGEBIAS   0                                           Age of master bias file compared to this file (whole days)
 AGEDARK   0                                           Age of master dark file compared to this file (whole days)
 AGEFLAT   0                                           Age of master flat file compared to this file (whole days)
