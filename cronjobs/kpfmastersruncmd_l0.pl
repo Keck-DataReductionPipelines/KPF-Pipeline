@@ -107,7 +107,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '2.5';
+my $version = '2.6';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -146,6 +146,11 @@ my $pythonscript3 = 'database/scripts/cleanupMastersOnDiskAndDatabaseForDate.py'
 
 my ($pylogfileDir3, $pylogfileBase3) = $pythonscript3 =~ /(.+)\/(.+)\.py/;
 my $pylogfile3 = $pylogfileBase3 . '_' . $procdate . '.out';
+
+my $pythonscript4 = 'database/scripts/registerCalFilesForDate.py';
+
+my ($pylogfileDir4, $pylogfileBase4) = $pythonscript4 =~ /(.+)\/(.+)\.py/;
+my $pylogfile4 = $pylogfileBase4 . '_' . $procdate . '_2D.out';
 
 
 # Get database parameters from ~/.pgpass file.
@@ -189,6 +194,8 @@ print "pythonscript2=$pythonscript2\n";
 print "pylogfile2=$pylogfile2\n";
 print "pythonscript3=$pythonscript3\n";
 print "pylogfile3=$pylogfile3\n";
+print "pythonscript4=$pythonscript4\n";
+print "pylogfile4=$pylogfile4\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
@@ -222,10 +229,15 @@ my $script = "#! /bin/bash\n" .
              "cp -p /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
              "chown root:root /masters/${procdate}/*\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log\n" .
+             "python $pythonscript4 $procdate >& ${pylogfile4}\n" .
              "cp -p /code/KPF-Pipeline/${pylogfile} /masters/${procdate}\n" .
              "cp -p /code/KPF-Pipeline/${pylogfile2} /masters/${procdate}\n" .
+             "cp -p /code/KPF-Pipeline/${pylogfile3} /masters/${procdate}\n" .
+             "cp -p /code/KPF-Pipeline/${pylogfile4} /masters/${procdate}\n" .
              "rm /code/KPF-Pipeline/${pylogfile}\n" .
              "rm /code/KPF-Pipeline/${pylogfile2}\n" .
+             "rm /code/KPF-Pipeline/${pylogfile3}\n" .
+             "rm /code/KPF-Pipeline/${pylogfile4}\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
