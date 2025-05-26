@@ -1,11 +1,11 @@
 # This file contains assorted utility functions that are mostly 
 # for computing astronomical quantities associated with KPF data.
 
+import numpy as np
 from datetime import datetime
 from astropy.time import Time
 from astropy import units as u
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz, get_sun, get_body
-import numpy as np
 
 def get_sun_alt(UTdatetime):
     """
@@ -275,49 +275,57 @@ def styled_text(message, style="", color="", background=""):
     styled_message = f"{style_code}{color_code}{background_code}{message}{reset_code}"
     return styled_message
 
+
 def latex_number(number, sigfigs, min_exp=-2, max_exp=2):
     """
-    Formats a number into a LaTeX-formatted string, using scientific notation
-    if the exponent is outside the specified range.
+    Formats numbers into LaTeX-formatted strings, using scientific notation
+    if the exponent is outside the specified range. Supports single floats and array inputs.
 
     Parameters:
-    number (float): The number to format.
+    number (float or array-like): The number(s) to format.
     sigfigs (int): Number of significant figures.
     min_exp (int, optional): Minimum exponent for non-scientific notation. Defaults to -2.
     max_exp (int, optional): Maximum exponent for non-scientific notation. Defaults to 2.
 
     Returns:
-    str: LaTeX-formatted string.
+    str or list of str: LaTeX-formatted string(s).
 
     Examples:
-    >>> latex_number(1.236e-3, 3)
-    '$1.24 \\times 10^{-3}$'
-    >>> latex_number(1.236, 2)
-    '1.2'
-    >>> latex_number(123.6, 2)
-    '120'
-    >>> latex_number(1.236e4, 3, -1, 3)
-    '$1.24 \\times 10^{4}$'
+        >>> latex_number(1.236e-3, 3)
+        '$1.24 \\times 10^{-3}$'
+
+        >>> latex_number(1.236, 2)
+        '1.2'
+
+        >>> latex_number([123.6, 0.00456], 2)
+        ['120', '$4.6 \\times 10^{-3}$']
+
+        >>> latex_number(1.236e4, 3, -1, 3)
+        '$1.24 \\times 10^{4}$'
     """
     from math import log10, floor
 
-    if number == 0:
-        return '0'
+    def format_single(num):
+        if num == 0:
+            return '0'
 
-    exponent = int(floor(log10(abs(number))))
-    normalized = number / (10 ** exponent)
+        exponent = int(floor(log10(abs(num))))
+        normalized = num / (10 ** exponent)
 
-    # Round to the desired significant figures
-    normalized = round(normalized, sigfigs - 1)
+        normalized = round(normalized, sigfigs - 1)
 
-    # Adjust if rounding changes the exponent (e.g., 9.99 -> 10.0)
-    if normalized >= 10:
-        normalized /= 10
-        exponent += 1
+        if normalized >= 10:
+            normalized /= 10
+            exponent += 1
 
-    # Check exponent range for formatting
-    if min_exp <= exponent <= max_exp:
-        final_number = round(number, sigfigs - 1 - exponent)
-        return f'{final_number}'
+        if min_exp <= exponent <= max_exp:
+            final_number = round(num, sigfigs - 1 - exponent)
+            return f'{final_number}'
+        else:
+            return fr'${normalized} \times 10^{{{exponent}}}$'
+
+    if np.isscalar(number):
+        return format_single(number)
     else:
-        return fr'${normalized} \times 10^{{{exponent}}}$'
+        return [format_single(n) for n in np.atleast_1d(number)]
+
