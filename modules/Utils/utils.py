@@ -274,3 +274,50 @@ def styled_text(message, style="", color="", background=""):
     # Construct the styled message
     styled_message = f"{style_code}{color_code}{background_code}{message}{reset_code}"
     return styled_message
+
+def latex_number(number, sigfigs, min_exp=-2, max_exp=2):
+    """
+    Formats a number into a LaTeX-formatted string, using scientific notation
+    if the exponent is outside the specified range.
+
+    Parameters:
+    number (float): The number to format.
+    sigfigs (int): Number of significant figures.
+    min_exp (int, optional): Minimum exponent for non-scientific notation. Defaults to -2.
+    max_exp (int, optional): Maximum exponent for non-scientific notation. Defaults to 2.
+
+    Returns:
+    str: LaTeX-formatted string.
+
+    Examples:
+    >>> latex_number(1.236e-3, 3)
+    '$1.24 \\times 10^{-3}$'
+    >>> latex_number(1.236, 2)
+    '1.2'
+    >>> latex_number(123.6, 2)
+    '120'
+    >>> latex_number(1.236e4, 3, -1, 3)
+    '$1.24 \\times 10^{4}$'
+    """
+    from math import log10, floor
+
+    if number == 0:
+        return '0'
+
+    exponent = int(floor(log10(abs(number))))
+    normalized = number / (10 ** exponent)
+
+    # Round to the desired significant figures
+    normalized = round(normalized, sigfigs - 1)
+
+    # Adjust if rounding changes the exponent (e.g., 9.99 -> 10.0)
+    if normalized >= 10:
+        normalized /= 10
+        exponent += 1
+
+    # Check exponent range for formatting
+    if min_exp <= exponent <= max_exp:
+        final_number = round(number, sigfigs - 1 - exponent)
+        return f'{final_number}'
+    else:
+        return fr'${normalized} \times 10^{{{exponent}}}$'
