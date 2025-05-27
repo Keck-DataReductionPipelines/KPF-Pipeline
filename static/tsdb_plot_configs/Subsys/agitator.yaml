@@ -28,13 +28,6 @@ panel_arr:
       legend_frac_size: 0.25
 
   - panelvars:
-      - col: kpfmot.AGITAMBI_T
-        plot_type: scatter
-        unit: K
-        plot_attr:
-          label: Ambient Temp.
-          marker: .
-          linewidth: 0.5
       - col: kpfmot.AGITMOT_T
         plot_type: scatter
         unit: K
@@ -43,12 +36,25 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Temperature (C)
+      ylabel: Motor Temp. (C)
       not_junk: true
       legend_frac_size: 0.25
 
   - panelvars:
       - col: kpfmot.AGITAMBI_T
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Ambient Temp.
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Ambient Temp. (C)
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: kpfmot.OUTLET_A1_Amps
         plot_type: scatter
         unit: mA
         plot_attr:
@@ -56,7 +62,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: "Outlet A1 Power\n(mA)"
+      ylabel: "Agitator Power (mA)"
       title: KPF Agitator
       not_junk: true
       legend_frac_size: 0.25
