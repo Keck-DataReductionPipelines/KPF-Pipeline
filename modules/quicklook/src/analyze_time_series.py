@@ -1,18 +1,10 @@
 import os
 import ast
 import time
-#import glob
-#import copy
 import json
 import yaml
-#import sqlite3
-#import calendar
 import numpy as np
 import pandas as pd
-#from tqdm import tqdm
-#from tqdm.notebook import tqdm_notebook
-#from astropy.table import Table
-#from astropy.io import fits
 from datetime import datetime, timedelta
 import matplotlib
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'

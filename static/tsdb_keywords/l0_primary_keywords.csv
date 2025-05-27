@@ -12,7 +12,7 @@ EXPTIME|float|Requested exposure time|sec
 ELAPSED|float|Actual exposure time|sec
 FRAMENO|int|Frame number|None
 PROGNAME|string|Program name|None
-HA|float|Hour angle|hr
+HA|string|Hour angle|hr
 EL|float|Telescope elevation|deg
 AZ|float|Telescope azimuth|deg
 OBJECT|string|Object name|None
@@ -35,8 +35,8 @@ ETAV1C2T|float|Etalon inner side shield temp (Vescent 1 Channel 2)|C
 ETAV1C3T|float|Etalon inner bottom lid temp (Vescent 1 Channel 3)|C
 ETAV1C4T|float|Etalon outer etalon chamber temp (Vescent 1 Channel 4)|C
 ETAV2C3T|float|Etalon inner top lid temp (Vescent 2 Channel 3)|C
-WAVEBNS|float|Wavelengths of EM bins (string of four vals)|nm
-TOTCNTS|float|Total EM counts in WAVEBINS|counts
+WAVEBNS|string|Wavelengths of EM bins (string of four vals)|nm
+TOTCNTS|string|Total EM counts in WAVEBINS|counts
 TOTCORR|string|Total EM counts (corrected) in WAVEBINS|counts
 USTHRSH|string|Was exposure meter thresholding used? (Yes/No)|None
 THRSHLD|float|Threshold level|counts
