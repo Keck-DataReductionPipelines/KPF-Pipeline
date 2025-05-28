@@ -475,6 +475,10 @@ class QuicklookAlg:
 
         # Make L1 spectra plots
         try:
+            filename = savedir + self.ObsID + '_L1_spectrum_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            myL1.plot_L1_spectrum_one_row(xlog=True, fig_path=filename, show_plot=False)
+
             for oo, orderlet in enumerate(['SCI1', 'SCI2', 'SCI3', 'CAL', 'SKY']):
                 filename = savedir + self.ObsID + '_L1_spectrum_' + orderlet + '_zoomable.png'
                 self.logger.info('Generating QLP image ' + filename)
