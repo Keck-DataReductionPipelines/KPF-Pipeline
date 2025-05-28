@@ -254,27 +254,20 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
     return kpf_object
 
 
-def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=None, logger=None):
+def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_outfile=False, logger=None):
     """
     Method to determine if all QC tests have been run on the input kpf_object
-    by examining its keywords. The method determines the data_level for
-    kpf_object and checks for keywords of that level and lower, e.g., for
-    data_level = 'L1', the method checks for keywords in levels 'L0', '2D',
-    and 'L1'.
+    by examining its keywords. Adds an option to save the output in YAML format.
 
     Args:
-        kpf_object - a KPF object (L0, 2D, L1, or L2)
-        return_keywords (boolean) - if true, keywords are returned (e.g., 'OLDBIAS') instead of method names (e.g., 'D2_master_bias_age')
-        print_output (boolean) - if true, print the output instead of returning anything
-        yaml_path (str or None) - if not None, output the QC results to the specified YAML file path
-        logger - Python logger object; if None, the DummyLogger is used
+        kpf_object: a KPF object (L0, 2D, L1, or L2)
+        return_keywords (bool): if true, keywords are returned instead of method names
+        print_output (bool): if true, prints the output
+        yaml_outfile (str or bool): if True or filename provided, output is saved to YAML
+        logger: Python logger object; defaults to DummyLogger if None
 
     Returns:
-        tuple of (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail), where
-            qc_names_missing = names of QC tests with keywords missing from kpf_object that should be
-            qc_names_present = names of QC tests with keywords in kpf_object that should be
-            qc_names_present_pass = names of QC tests with keywords in kpf_object that should be and QC = True (passed)
-            qc_names_present_fail = names of QC tests with keywords in kpf_object that should be and QC = False (failed)
+        tuple containing QC test keyword information
     """
 
     def unique_preserve_order(mylist):
@@ -317,26 +310,21 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=No
                         qc_names.append(qc_name)
         
         return qc_names
-
+    
     logger = logger if logger is not None else DummyLogger()
     this_data_level = get_kpf_level(kpf_object)
     primary_header = HeaderParse(kpf_object, 'PRIMARY')
     this_spectrum_type = primary_header.get_name(use_star_names=False)
 
-    try:
-        ObsID = kpf_object.header['PRIMARY']['OFNAME']
-    except:
-        ObsID = 'ObsID not available'
+    ObsID = kpf_object.header['PRIMARY'].get('OFNAME', 'ObsID not available')
 
     data_levels_map = {'L0': ['L0'], '2D': ['L0', '2D'], 'L1': ['L0', '2D', 'L1'], 'L2': ['L0', '2D', 'L1', 'L2']}
     data_levels = data_levels_map.get(this_data_level, [])
 
     expected_qc_names = unique_preserve_order([get_appropriate_qcs(dl, this_spectrum_type) for dl in data_levels])
-
     if 'add_kpfera' in expected_qc_names:
         expected_qc_names.remove('add_kpfera')
 
-    qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail = [], [], [], []
     qcd = QCDefinitions()
 
     report_rows = []
@@ -350,16 +338,7 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=No
         master_types = qcd.master_types[qc_name]
         drift_types = qcd.drift_types[qc_name]
 
-        name_entry = kwd if return_keywords else qc_name
-
-        if present:
-            qc_names_present.append(name_entry)
-            if passed:
-                qc_names_present_pass.append(name_entry)
-            else:
-                qc_names_present_fail.append(name_entry)
-        else:
-            qc_names_missing.append(name_entry)
+        col = 'green' if passed else 'red' if present else 'black'
 
         report_rows.append({
             "Keyword": kwd,
@@ -367,63 +346,36 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_path=No
             "Description": desc,
             "Present": present,
             "Pass": passed,
+            "keyword_color": col,
             "master_types": master_types,
             "drift_types": drift_types,
         })
 
-    if yaml_path is not None:
-        with open(yaml_path, 'w') as yaml_file:
+    if yaml_outfile:
+        filename = yaml_outfile if isinstance(yaml_outfile, str) else 'qc_report.yaml'
+        with open(filename, 'w') as yaml_file:
             yaml.dump({"QC_Report": report_rows}, yaml_file, sort_keys=False)
-        if logger:
-            logger.info(f"YAML QC report saved to {yaml_path}")
+        logger.info(f"YAML QC report saved to {filename}")
 
     if print_output:
-        # All QCs
-        print(f'{styled_text(f"Quality Control Report for {ObsID} ({this_spectrum_type})", style="Bold", color="Black")}')
+        print(styled_text(f'Quality Control Report for {ObsID} ({this_spectrum_type}, {this_data_level})', style="Bold", color="Black"))
         print()
-        print(f'{styled_text(f"All QC Keywords:", style="Bold", color="Black")}')
-        print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
+        header = f"{'  Keyword':<18} {'Level':<8} {'Description'}"
+        print(styled_text(header, style="Bold", color="Black"))
         for row in report_rows:
             checkmark = '✓' if row["Present"] else '✗'
             col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
-            print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
+            keyword_display = styled_text(f"{checkmark} {row['Keyword']:<16}", style="Bold", color=col)
+            print(f"{keyword_display:<20} {row['Level']:<8} {row['Description']}")
         print()
-        print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
-        print()
+        print(f"{styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
 
-        # QCs for Masters
-        if this_spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe']:
-            print(f'{styled_text(f"QC Keywords for observation to be included in master {this_spectrum_type} stack:", style="Bold", color="Black")}')
-            if not all(row['master_types'] == [] for row in report_rows):
-                print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
-                for row in report_rows:
-                    if any(x in row['master_types'] for x in [this_spectrum_type, 'all']):
-                        checkmark = '✓' if row["Present"] else '✗'
-                        col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
-                        print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
-                print()
-                print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
-            else:
-                print(f'{styled_text("    None", style="Bold", color="Black")}')  
-            print()
-
-        # QCs for Drift Measurements
-        if this_spectrum_type in ['Etalon', 'LFC', 'ThAr', 'UNe']:
-            print(f'{styled_text(f"QC Keywords for observation to be included in {this_spectrum_type} drift measurements:", style="Bold", color="Black")}')
-            if not all(row['drift_types'] == [] for row in report_rows):
-                print(f'{styled_text("    Keyword      Level  QC Test Description", style="Bold", color="Black")}')  
-                for row in report_rows:
-                    if any(x in row['drift_types'] for x in [this_spectrum_type, 'all']):
-                        checkmark = '✓' if row["Present"] else '✗'
-                        col = 'Green' if row["Pass"] else 'Red' if row["Present"] else 'Black'
-                        print(f'    {styled_text(row["Keyword"], style="Bold", color=col):<9} {checkmark} {" " * (8 - len(row["Keyword"]))}  {row["Level"]:<6} {row["Description"]}')
-                print()
-                print(f"    {styled_text('Pass', style='Bold', color='Green')}/{styled_text('Fail', style='Bold', color='Red')}, ✓ - keyword present, ✗ - keyword missing")
-            else:
-                print(f'{styled_text("    None", style="Bold", color="Black")}')  
-
-    if not (yaml_path or print_output):
-        return (qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail)
+    if not (yaml_outfile or print_output):
+        qc_names_missing = [r["Keyword"] for r in report_rows if not r["Present"]]
+        qc_names_present = [r["Keyword"] for r in report_rows if r["Present"]]
+        qc_names_present_pass = [r["Keyword"] for r in report_rows if r["Present"] and r["Pass"]]
+        qc_names_present_fail = [r["Keyword"] for r in report_rows if r["Present"] and not r["Pass"]]
+        return qc_names_missing, qc_names_present, qc_names_present_pass, qc_names_present_fail
 
 
 #####################################################################
@@ -977,6 +929,7 @@ class QCDefinitions:
         self.data_types[name36] = 'int'
         self.spectrum_types[name36] = ['Star', ]
         self.master_types[name36] = []
+        self.drift_types[name36] = []
         self.required_data_products[name36] = ['Green', 'Red']
         self.fits_keywords[name36] = 'QCPCBCV'
         self.fits_comments[name36] = 'QC: PCBCV values within acceptable range'
