@@ -434,7 +434,8 @@ class TSDB:
    
     def print_db_status(self):
         """
-        Prints a formatted summary table of the database status for each table.
+        Prints a formatted summary table of the database status for each table,
+        handling both SQLite and PostgreSQL backends appropriately.
         """
         tables = self.tables.copy()
         tables.remove('tsdb_metadata')
@@ -452,24 +453,39 @@ class TSDB:
                     self._execute_sql_command(f'PRAGMA table_info({table})')
                     ncolumns = len(self.cursor.fetchall())
                 elif self.backend == 'psql':
-                    self._execute_sql_command("""
+                    self._execute_sql_command(
+                        """
                         SELECT COUNT(*) FROM information_schema.columns
                         WHERE table_name=%s;
-                    """, params=(table,))
+                        """, params=(table,)
+                    )
                     ncolumns = self.cursor.fetchone()[0]
     
                 summary_data.append((table, ncolumns, nrows))
     
-            self._execute_sql_command(
-                'SELECT MAX("L0_header_read_time"), MAX("L0_header_read_time") FROM tsdb_base'
-            )
-            fetched = self.cursor.fetchone()
-            filtered_times = list(filter(None, fetched))
-            most_recent_read_time = max(filtered_times) if filtered_times else 'N/A'
+            # Fetch the most recent header read time
+            if self.backend == 'sqlite':
+                self._execute_sql_command(
+                    'SELECT MAX(L0_header_read_time) FROM tsdb_base'
+                )
+            elif self.backend == 'psql':
+                self._execute_sql_command(
+                    'SELECT MAX("L0_header_read_time") FROM tsdb_base'
+                )
     
-            self._execute_sql_command(
-                'SELECT MIN(datecode), MAX(datecode), COUNT(DISTINCT datecode) FROM tsdb_base'
-            )
+            fetched = self.cursor.fetchone()
+            most_recent_read_time = fetched[0] or 'N/A'
+    
+            # Fetch earliest, latest, and unique datecodes
+            if self.backend == 'sqlite':
+                self._execute_sql_command(
+                    'SELECT MIN(datecode), MAX(datecode), COUNT(DISTINCT datecode) FROM tsdb_base'
+                )
+            elif self.backend == 'psql':
+                self._execute_sql_command(
+                    'SELECT MIN("datecode"), MAX("datecode"), COUNT(DISTINCT "datecode") FROM tsdb_base'
+                )
+    
             earliest_datecode, latest_datecode, unique_datecodes_count = self.cursor.fetchone()
     
             # Handle empty database scenario
@@ -484,13 +500,12 @@ class TSDB:
             for table, cols, rows in summary_data:
                 self.logger.info(f"{table:<15} {cols:>7} {rows:>10}")
     
-            # Print the additional stats
+            # Print additional stats
             self.logger.info(f"Dates: {unique_datecodes_count} days from {earliest_datecode} to {latest_datecode}")
             self.logger.info(f"Last update: {most_recent_read_time}")
     
         finally:
-            self._close_connection()
- 
+            self._close_connection() 
            
 # UPDATE THIS BY READING METADATA_TABLE
     def create_metadata_table(self):
