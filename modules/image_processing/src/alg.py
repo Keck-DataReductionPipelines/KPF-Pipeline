@@ -276,10 +276,6 @@ class ImageProcessingAlg():
         num_amps = self.num_amps()
 
         for ffi in self.ffi_exts:
-            # if 'amplifier' in mask.filename.lower() and \
-            #     num_amps[ffi] < 4:
-            #     self.logger.info(f"Skipping bad pixel mask for {ffi} as it has fewer than 4 amplifiers.")
-            #     continue
             self.logger.debug(f"Setting pixels to NaN where bad pixel mask is 0 for {ffi}.")
             mask[ffi][mask[ffi]==0] = np.nan
             try:
