@@ -268,6 +268,7 @@ class ImageProcessingAlg():
             One's where pixels are good and zeros where pixels are bad
 
         """
+        self.logger.info("Applying bad pixel mask to raw image.")
         header = self.rawimage.header['PRIMARY']
         if header['IMTYPE'].lower() != 'object':
             self.logger.info("Image is {}, skipping BPM correction.".format(header['IMTYPE']))
@@ -278,16 +279,18 @@ class ImageProcessingAlg():
         for ffi in self.ffi_exts:
             if 'amplifier' in mask.filename.lower() and \
                 num_amps[ffi] < 4:
+                self.logger.info(f"Skipping bad pixel mask for {ffi} as it has fewer than 4 amplifiers.")
                 continue
             mask[ffi][mask[ffi]==0] = np.nan
             try:
+                self.logger.info(f"Applying bad pixel mask for {ffi} with shape {mask[ffi].shape}")
                 self.rawimage[ffi] = self.rawimage[ffi] * mask[ffi]
                 self.rawimage.header['PRIMARY']['PIXMASK'] = True
             except Exception as e:
                 if self.logger:
-                    self.logger.info('*** Exception raised: {}'.format(e))
+                    self.logger.error('*** Exception raised: {}'.format(e))
                 else:
-                    print("*** Exception raised:", e)
+                    self.logger.error("*** Exception raised:", e)
 
     def get(self):
         """Returns bias-corrected raw image result.
