@@ -38,6 +38,8 @@ class AddBlaze(KPF1_Primitive):
         except Exception as e:
             self.logger.error(f"Blaze algorithm failed: {e}\n{traceback.format_exc()}")
         
+        out_l1.header['PRIMARY']['LAMPFILE'] = self.smooth_lamp_l1.filename
+
         return Arguments([exit_code, out_l1])
     
     def _pre(self):

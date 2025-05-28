@@ -1,3 +1,4 @@
+import re
 import time
 import copy
 import traceback
@@ -10,9 +11,8 @@ from modules.Utils.utils import DummyLogger
 from astropy.time import Time
 from matplotlib import gridspec
 from matplotlib.ticker import MaxNLocator
-from modules.Utils.kpf_parse import HeaderParse
-from modules.Utils.kpf_parse import get_datecode_from_filename
-from modules.Utils.kpf_parse import get_datetime_obsid
+from modules.Utils.kpf_parse import HeaderParse, get_datecode_from_filename, get_datetime_obsid
+from modules.Utils.utils import latex_number
 from modules.calibration_lookup.src.alg import GetCalibrations
 from kpfpipe.models.level1 import KPF1
 from scipy.interpolate import interp1d
@@ -170,14 +170,13 @@ class AnalyzeL1:
             age_wls_file - number of days between the observation and the
                            date of observations for the WLS files
         '''
+
+        date_mjd_str = self.header['MJD-OBS']
+        date_obs_datetime = Time(date_mjd_str, format='mjd').datetime
+        if verbose:
+            self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
         
         try:
-            date_obs_str = self.header['DATE-MID']
-            date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f")
-            
-            if verbose:
-                self.logger.info(f'Date of observation: {date_obs_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
-
             if kwd in self.header:
                 wls_filename = self.header[kwd]
                 wls_filename_datetime = get_datecode_from_filename(wls_filename, datetime_out=True)
@@ -204,55 +203,6 @@ class AnalyzeL1:
                 age_wls_file = None
 
             return age_wls_file
-
-        except Exception as e:
-            self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
-            return None
-
-
-    def measure_master_age(self, kwd='TRACFILE', verbose=False):
-        '''
-        Computes the number of whole days between the observation and a master file 
-        listed in the PRIMARY header.  
-
-        Arguments:
-            kwd - keyword name of WLS file (usually 'TRACFILE', or 'LAMPFILE')
-    
-        Returns:
-            master_wls_file - number of days between the observation and the
-                              date of observations for the master file
-        '''
-        
-        try:
-            date_obs_str = self.header['DATE-MID']
-            date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f").date()        
-    
-            if verbose:
-                self.logger.info(f'Date of observation: {date_obs_str}')
-
-            if kwd in self.header:
-                master_filename = self.header[kwd]
-                if master_filename != 0:
-                    master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
-                    master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
-                    if verbose:
-                        self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
-                    
-                    age_master_file = (master_filename_datetime - date_obs_datetime).days
-                    if verbose:
-                        self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
-                else:
-                    age_master_file = -99 # standard value indicating keyword not available
-                    return age_master_file
-    
-                return age_master_file
-            else:
-                age_master_file = -99 # standard value indicating keyword not available
-                return age_master_file
-
-        except KeyError as e:
-            self.logger.info(f"KeyError: {e}")
-            pass
 
         except Exception as e:
             self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
@@ -779,8 +729,6 @@ class AnalyzeL1:
                                        np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR1'].data,'d'))), 
                                        out=np.zeros_like(np.array(self.L1['RED_SCI_FLUX1'].data,'d'), dtype=float), 
                                        where=np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR1'].data,'d'))) != 0)
-                #flux_green = np.array(self.L1['GREEN_SCI_FLUX1'].data,'d') / np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR1'].data,'d')))
-                #flux_red   = np.array(self.L1['RED_SCI_FLUX1'].data,'d')   / np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR1'].data,'d')))
             else:
                 flux_green = np.array(self.L1['GREEN_SCI_FLUX1'].data,'d')
                 flux_red   = np.array(self.L1['RED_SCI_FLUX1'].data,'d')
@@ -800,11 +748,9 @@ class AnalyzeL1:
                                        np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR2'].data,'d'))), 
                                        out=np.zeros_like(np.array(self.L1['RED_SCI_FLUX2'].data,'d'), dtype=float), 
                                        where=np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR2'].data,'d'))) != 0)
-                #flux_green = np.array(self.L1['GREEN_SCI_FLUX2'].data,'d') / np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR2'].data,'d')))
-                #flux_red   = np.array(self.L1['RED_SCI_FLUX2'].data,'d')   / np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR2'].data,'d')))
             else:
-                flux_green = np.array(self.L1['GREEN_SCI_FLUX1'].data,'d')
-                flux_red   = np.array(self.L1['RED_SCI_FLUX1'].data,'d')
+                flux_green = np.array(self.L1['GREEN_SCI_FLUX2'].data,'d')
+                flux_red   = np.array(self.L1['RED_SCI_FLUX2'].data,'d')
         elif orderlet.lower() == 'sci3':
             wav_green  = np.array(self.L1['GREEN_SCI_WAVE3'].data,'d')
             wav_red    = np.array(self.L1['RED_SCI_WAVE3'].data,'d')
@@ -820,8 +766,6 @@ class AnalyzeL1:
                                        np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR3'].data,'d'))), 
                                        out=np.zeros_like(np.array(self.L1['RED_SCI_FLUX3'].data,'d'), dtype=float), 
                                        where=np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR3'].data,'d'))) != 0)
-                #flux_green = np.array(self.L1['GREEN_SCI_FLUX3'].data,'d') / np.sqrt(np.abs(np.array(self.L1['GREEN_SCI_VAR3'].data,'d')))
-                #flux_red   = np.array(self.L1['RED_SCI_FLUX3'].data,'d')   / np.sqrt(np.abs(np.array(self.L1['RED_SCI_VAR3'].data,'d')))
             else:
                 flux_green = np.array(self.L1['GREEN_SCI_FLUX3'].data,'d')
                 flux_red   = np.array(self.L1['RED_SCI_FLUX3'].data,'d')
@@ -840,8 +784,6 @@ class AnalyzeL1:
                                        np.sqrt(np.abs(np.array(self.L1['RED_SKY_VAR'].data,'d'))), 
                                        out=np.zeros_like(np.array(self.L1['RED_SKY_FLUX'].data,'d'), dtype=float), 
                                        where=np.sqrt(np.abs(np.array(self.L1['RED_SKY_VAR'].data,'d'))) != 0)
-                #flux_green = np.array(self.L1['GREEN_SKY_FLUX'].data,'d') / np.sqrt(np.abs(np.array(self.L1['GREEN_SKY_VAR'].data,'d')))
-                #flux_red   = np.array(self.L1['RED_SKY_FLUX'].data,'d')   / np.sqrt(np.abs(np.array(self.L1['RED_SKY_VAR'].data,'d')))
             else:
                 flux_green = np.array(self.L1['GREEN_SKY_FLUX'].data,'d')
                 flux_red   = np.array(self.L1['RED_SKY_FLUX'].data,'d')
@@ -860,8 +802,6 @@ class AnalyzeL1:
                                        np.sqrt(np.abs(np.array(self.L1['RED_CAL_VAR'].data,'d'))), 
                                        out=np.zeros_like(np.array(self.L1['RED_CAL_FLUX'].data,'d'), dtype=float), 
                                        where=np.sqrt(np.abs(np.array(self.L1['RED_CAL_VAR'].data,'d'))) != 0)
-                #flux_green = np.array(self.L1['GREEN_CAL_FLUX'].data,'d') / np.sqrt(np.abs(np.array(self.L1['GREEN_CAL_VAR'].data,'d')))
-                #flux_red   = np.array(self.L1['RED_CAL_FLUX'].data,'d')   / np.sqrt(np.abs(np.array(self.L1['RED_CAL_VAR'].data,'d')))
             else:
                 flux_green = np.array(self.L1['GREEN_CAL_FLUX'].data,'d')
                 flux_red   = np.array(self.L1['RED_CAL_FLUX'].data,'d')
@@ -908,7 +848,6 @@ class AnalyzeL1:
             ax[j].axhline(0, color='gray', linestyle='dotted', linewidth = 0.5)
 
         # Add axis labels
-
         if variance:
             title = 'L1 Variance Spectrum of ' + orderlet.upper() + ': ' + str(self.ObsID) + ' - ' + self.name
             ylabel = 'Variance (e-) in ' + orderlet.upper()
@@ -946,7 +885,179 @@ class AnalyzeL1:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
+
+    def get_source(self, header, fiber):
+        '''
+        Return the source in a particular fiber (SCI, SKY, or CAL).
+        Used in plot_L1_spectrum_one_row().
+        '''
         
+        source = ''
+        if fiber+'-OBJ' in header['PRIMARY']:
+            source = header['PRIMARY'][fiber+'-OBJ']
+            if source == 'Target':
+                if 'OBJECT' in header['PRIMARY']:
+                     source = header['PRIMARY']['OBJECT']
+        source = source.replace('Fiber', '')
+        
+        return source
+
+
+    def plot_L1_spectrum_one_row(self, variance=False, data_over_sqrt_variance=False, 
+                                       xlog=True, fig_path=None, show_plot=False):
+        """
+        Generate a rainbow-colored plot L1 spectrum of all orders (separate panels) 
+        in a single row.
+
+        Args:
+            variance - plot variance (VAR extensions) instead of signal (CCD extensions)
+            data_over_sqrt_variance - plot data divided by sqrt(variance), an approximate SNR spectrum
+            xlog - use a logarithmic x-axis
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it in the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+        
+        self.measure_orderlet_flux_ratios()
+        
+        fig, axes = plt.subplots(5, 1, sharex=True, figsize=(20, 16))
+        cm = plt.cm.get_cmap('rainbow')
+
+        orderlets = ['cal', 'sci1', 'sci2', 'sci3', 'sky']
+        for ax, orderlet in zip(axes, orderlets):
+
+            # Define wavelength and flux arrays
+            orderlet_short = re.sub(r'\d+', '', orderlet).upper()       # SCI, SKY, or CAL
+            orderlet_num   = re.sub(r'[A-Za-z]+', '', orderlet).upper() # if SCI: 1, 2, 3
+            source = self.get_source(self.L1.header, orderlet_short)
+            source_sci2 = self.get_source(self.L1.header, 'SCI')
+
+            wav_green  = np.array(self.L1[f'GREEN_{orderlet_short}_WAVE{orderlet_num}'].data,'d')
+            wav_red    = np.array(self.L1[f'RED_{orderlet_short}_WAVE{orderlet_num}'].data,'d')
+            if variance:
+                flux_green = np.array(self.L1[f'GREEN_{orderlet_short}_VAR{orderlet_num}'].data,'d')
+                flux_red   = np.array(self.L1[f'RED_{orderlet_short}_VAR{orderlet_num}'].data,'d')
+            elif data_over_sqrt_variance:
+                flux_green = np.divide(np.array(self.L1[f'GREEN_{orderlet_short}_FLUX{orderlet_num}'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1[f'GREEN_{orderlet_short}_VAR{orderlet_num}'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1[f'GREEN_{orderlet_short}_FLUX{orderlet_num}'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1[f'GREEN_{orderlet_short}_VAR{orderlet_num}'].data,'d'))) != 0)
+                flux_red   = np.divide(np.array(self.L1[f'RED_{orderlet_short}_FLUX1'].data,'d'), 
+                                       np.sqrt(np.abs(np.array(self.L1[f'RED_{orderlet_short}_VAR{orderlet_num}'].data,'d'))), 
+                                       out=np.zeros_like(np.array(self.L1[f'RED_{orderlet_short}_FLUX{orderlet_num}'].data,'d'), dtype=float), 
+                                       where=np.sqrt(np.abs(np.array(self.L1[f'RED_{orderlet_short}_VAR{orderlet_num}'].data,'d'))) != 0)
+            else:
+                flux_green = np.array(self.L1[f'GREEN_{orderlet_short}_FLUX{orderlet_num}'].data,'d')
+                flux_red   = np.array(self.L1[f'RED_{orderlet_short}_FLUX{orderlet_num}'].data,'d')
+
+            ratio_sky_sci2  = np.divide(self.f_sky_flat[self.f_sci2_flat_ind], self.f_sci2_flat[self.f_sci2_flat_ind], where=(self.f_sci2_flat[self.f_sci2_flat_ind]!=0))
+            ratio_cal_sci2  = np.divide(self.f_cal_flat[self.f_sci2_flat_ind], self.f_sci2_flat[self.f_sci2_flat_ind], where=(self.f_sci2_flat[self.f_sci2_flat_ind]!=0))
+            if orderlet.lower() in ['sci1', 'sci2', 'sci3']:
+                pass
+            elif orderlet.lower() == 'sky':
+                ratio_array = ratio_sky_sci2
+            elif orderlet.lower() == 'cal':
+                ratio_array = ratio_cal_sci2
+            else:
+                self.logger.error('plot_1D_spectrum: orderlet not specified properly.')
+
+            if orderlet in ['sci1', 'sci2', 'sci3']:
+                ratio_txt = ''
+            else:
+                ratio_max = np.percentile(ratio_array, 99) #max(ratio_array)
+                ratio_median = np.median(ratio_array)
+                ratio_txt = f'{orderlet.upper()}/SCI2: median={latex_number(ratio_median, 2)},' + ' 99th %ile=' + f'{latex_number(ratio_max, 2)}'
+
+
+            if np.shape(flux_green)==(0,):flux_green = wav_green*0. # placeholder when there is no data
+            if np.shape(flux_red)==(0,):  flux_red   = wav_red  *0. # placeholder when there is no data
+            wav  = np.concatenate((wav_green,  wav_red),  axis = 0)
+            flux = np.concatenate((flux_green, flux_red), axis = 0)
+
+            # Add axis labels
+            left, right  = min(wav.flatten()), max(wav.flatten())
+            low  = min([np.nanpercentile(flux[1:,:],[0.1,99.95])[0],0])
+            high = np.nanpercentile(flux,[0.1,99.95])[1]
+            delta = high-low
+            ax.set_xlim(left, right)
+            ax.set_ylim(low-delta*0.05, high+delta*0.15)
+            if xlog: 
+                ax.set_xscale('log')
+                xlabels = np.linspace(4500, 8500, 9) # np.logspace(np.log10(4450), np.log10(8700), num=10)
+                ax.set_xticks(xlabels)
+                ax.set_xticklabels([f'{label:.0f}' for label in xlabels])
+            ax.yaxis.set_tick_params(labelsize=16)
+
+            ylabel = orderlet.upper()
+            if variance:
+                title = 'L1 Variance Spectrum of ' + str(self.ObsID) + ' - ' + self.name
+                ylabel = ' Variance (e-)'
+            elif data_over_sqrt_variance:
+                title = 'L1 SNR Spectrum of ' + str(self.ObsID) + ' - ' + self.name
+                ylabel = ylabel + r' SNR'
+            else:
+                title = 'L1 Spectrum of ' + str(self.ObsID) + ' - ' + self.name
+                ylabel = ylabel + ' (e-)'
+
+            ax.set_ylabel(ylabel, fontsize = 20)
+            ax.label_outer()  # Hide x-axis labels on all but bottom subplot
+            ax.grid(True)
+
+            # Gray line between Green and Red channels
+            green_red_transition = 5991.30 # = np.mean([L1['GREEN_SCI_WAVE2'][34,0], L1['RED_SCI_WAVE2'][0,4079]])
+            ax.axvline(green_red_transition, color='lightgray', linestyle='solid', linewidth = 4.0)
+
+            # Iterate over spectral orders
+            for i in range(np.shape(wav)[0]):
+                if wav[i,0] == 0: continue
+                low, high = np.nanpercentile(flux[i,:],[0.1,99.9])
+                flux[i,:][(flux[i,:]>high) | (flux[i,:]<low)] = np.nan
+                n_orders_per_panel = 8
+                j = int(i/n_orders_per_panel)
+                rgba = cm((i % n_orders_per_panel)/n_orders_per_panel*1.)
+                ax.plot(wav[i,:], flux[i,:], linewidth = 0.3, color = rgba)
+            ax.text(0.02, 0.95, source, transform=ax.transAxes,
+                    verticalalignment='top', horizontalalignment='left',
+                    fontsize=16, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+            ax.text(0.98, 0.95, ratio_txt, transform=ax.transAxes,
+                    verticalalignment='top', horizontalalignment='right',
+                    fontsize=16, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+            ax.axhline(0, color='darkgray', linewidth = 2.0)
+            ax.axhline(0, color='white', linestyle='dotted', linewidth = 2.0)
+
+        # Set common X-axis label
+        axes[-1].set_xlabel('Wavelength (Ang)', fontsize = 20)
+        axes[-1].xaxis.set_tick_params(labelsize=16)
+
+        # Add overall title to array of plots
+        ax = fig.add_subplot(111, frame_on=False)
+        ax.grid(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
+        ax.set_title(title, fontsize=20)
+
+        # Create a timestamp and annotate in the lower right corner
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp_label = f"KPF QLP: {current_time} UT"
+        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                    fontsize=16, color="darkgray", ha="right", va="bottom",
+                    xytext=(0, -50), textcoords='offset points')
+        fig.subplots_adjust(hspace=0.02, bottom=0.10, top=0.95, left=0.06, right=0.98)
+
+        # Display the plot
+        if fig_path != None:
+            t0 = time.process_time()
+            plt.savefig(fig_path, dpi=288, facecolor='w')
+            self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
+
 
     def plot_1D_spectrum_single_order(self, chip=None, order=11, ylog=False, 
                                             orderlet=['SCI1', 'SCI2', 'SCI3'], 
@@ -1062,7 +1173,7 @@ class AnalyzeL1:
                 interpolator = make_interp_spline(wav, flux, k=3)
                 newflux = interpolator(newwav)
             except Exception as e:
-                self.logger.info(f'Exception: {e}')
+                self.logger.info(f'Error: {e}')
                 self.logger.info('Using cubic-spline interpolation instead of B-splines.')
                 interpolator = interp1d(wav, flux, kind='cubic', fill_value='extrapolate')
                 newflux = interpolator(newwav)   
@@ -1071,8 +1182,8 @@ class AnalyzeL1:
                 interpolator = interp1d(wav, flux, kind='cubic', fill_value='extrapolate')
                 newflux = interpolator(newwav)   
             except Exception as e:
-                self.logger.info(f'Exception: {e}')
-                self.logger.info(f'No interpolation applied.  Using uninterpolated spectrum.')
+                self.logger.info(f'Error: {e}')
+                self.logger.info(f'No interpolation applied.')
                 newflux = flux  
         return newflux
 
@@ -1080,7 +1191,7 @@ class AnalyzeL1:
     def measure_orderlet_flux_ratios(self):
         """
         Extracts the wavelengths and fluxes for each order.
-        Computes the flux ratios of SCI2/SCI1, SCI3/SCI1, CAL/SCI1, SKY/SCI1.
+        Computes the flux ratios of SCI2/SCI1, SCI3/SCI1, SCI1/SCI3, CAL/SCI2, SKY/SCI2.
 
         Args:
             None
@@ -1089,7 +1200,7 @@ class AnalyzeL1:
             None
         """
 
-        # Define wavelength and flux arrays
+        # Define wavelength (w) and flux (f) arrays for Green (g) and Red (r)
         self.w_g_sci1 = np.array(self.L1['GREEN_SCI_WAVE1'].data,'d')
         self.w_r_sci1 = np.array(self.L1['RED_SCI_WAVE1'].data,'d')
         self.f_g_sci1 = np.array(self.L1['GREEN_SCI_FLUX1'].data,'d')
@@ -1134,7 +1245,7 @@ class AnalyzeL1:
             self.f_r_sky_int[o,:]  = self.my_1d_interp(self.w_r_sky[o,:],  self.f_r_sky[o,:],  self.w_r_sci2[o,:])
             self.f_r_cal_int[o,:]  = self.my_1d_interp(self.w_r_cal[o,:],  self.f_r_cal[o,:],  self.w_r_sci2[o,:])
         
-        # Define ratios for each order
+        # Define arrays of flux ratios by order
         self.ratio_g_sci1_sci2 = np.zeros(35) # for each order median(f_g_sci1(intp on sci2 wav) / f_g_sci2)
         self.ratio_g_sci3_sci2 = np.zeros(35) # "
         self.ratio_g_sci1_sci3 = np.zeros(35) 
@@ -1159,7 +1270,7 @@ class AnalyzeL1:
         self.ratio_sky_sci2  = np.nanmedian(np.divide(self.f_sky_flat[self.f_sci2_flat_ind], self.f_sci2_flat[self.f_sci2_flat_ind], where=(self.f_sci2_flat[self.f_sci2_flat_ind]!=0)))
         self.ratio_cal_sci2  = np.nanmedian(np.divide(self.f_cal_flat[self.f_sci2_flat_ind], self.f_sci2_flat[self.f_sci2_flat_ind], where=(self.f_sci2_flat[self.f_sci2_flat_ind]!=0)))
         
-        # Compute ratios
+        # Compute arrays of orderlet ratios by order
         for o in np.arange(35):
             ind = (self.f_g_sci2[o,:] != 0) 
             self.ratio_g_sci1_sci2[o] = np.nanmedian(np.divide(self.f_g_sci1_int[o,ind], self.f_g_sci2[o,ind],     where=(self.f_g_sci2[o,ind]!=0)))
@@ -1322,7 +1433,8 @@ class AnalyzeL1:
         imin3 = ind_range[0]; imax3 = ind_range[1]
         
         sigmas = [50-34.1, 50, 50+34.1]
-        # Row 0
+        
+        # Row 0 - SCI1 / SCI2
         o=o1; imin = imin1; imax = imax1
         med = np.median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci2[o,imin:imax])
@@ -1352,7 +1464,7 @@ class AnalyzeL1:
         axs[0,2].set_title('Order = ' + str(o) + ' (' + str(imax-imin) + ' pixels)', fontsize=14)
         axs[0,2].grid()
 
-        # Row 1
+        # Row 1 - SCI3 / SCI2
         o=o1; imin = imin1; imax = imax1
         med = np.median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sci3_int[o,imin:imax] / f_sci2[o,imin:imax])
@@ -1379,7 +1491,7 @@ class AnalyzeL1:
         axs[1,2].legend(loc='upper right')
         axs[1,2].grid()
 
-        # Row 2
+        # Row 2 - SCI1 / SCI3
         o=o1; imin = imin1; imax = imax1
         med = np.median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
         med_unc = uncertainty_median(f_sci1_int[o,imin:imax] / f_sci3_int[o,imin:imax])
@@ -1406,58 +1518,72 @@ class AnalyzeL1:
         axs[2,2].legend(loc='upper right')
         axs[2,2].grid()
 
-        # Row 3
+        # Row 3 - SKY / SCI2
         o=o1; imin = imin1; imax = imax1
+        high = np.percentile(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 99)
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='orchid') 
         axs[3,0].legend(loc='upper right')
         axs[3,0].set_ylabel('SKY / SCI2', fontsize=18)
         axs[3,0].grid()
         o=o2; imin = imin2; imax = imax2
+        high = np.percentile(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 99)
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='orchid') 
         axs[3,1].legend(loc='upper right')
         axs[3,1].grid()
         o=o3; imin = imin3; imax = imax3
+        high = np.percentile(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 99)
+        med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
+        med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='orchid') 
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,2].legend(loc='upper right')
         axs[3,2].grid()
         
-        # Row 4
+        # Row 4 - CAL / SCI2
         o=o1; imin = imin1; imax = imax1
+        high = np.percentile(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 99)
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,0].legend(loc='upper right')
         axs[4,0].set_ylabel('CAL / SCI2', fontsize=18)
         axs[4,0].set_xlabel('Wavelength (Ang)', fontsize=18)
         axs[4,0].grid()
         o=o2; imin = imin2; imax = imax2
+        high = np.percentile(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 99)
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,1].legend(loc='upper right')
         axs[4,1].set_xlabel('Wavelength (Ang)', fontsize=18)
         axs[4,1].grid()
         o=o3; imin = imin3; imax = imax3
+        high = np.percentile(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 99)
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
+                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,2].legend(loc='upper right')
         axs[4,2].set_xlabel('Wavelength (Ang)', fontsize=18)
@@ -1493,7 +1619,7 @@ class AnalyzeL1:
     def compare_wave_to_reference(self, reference_file='auto'):
         '''
 
-        This method compares the WAVE arrays of the L1 object to a WAVE arrays
+        This method compares the WAVE arrays of the L1 object to the WAVE arrays
         of a reference L1.  The comparisons are: 1) the median difference in 
         wavelength or pixels between L1 and L1_ref per order and per orderlet, 
         2) the stddev of the difference in wavelength and pixel, 3) 

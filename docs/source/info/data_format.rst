@@ -322,6 +322,9 @@ HK2DF99P  62520.97                                    99th percentile flux in th
 HK2DF90P  40589.16                                    90th percentile flux in the 2D header (e-)
 HK2DF50P  613.23                                      50th percentile flux in the 2D header (e-)
 HK2DF10P  128.83                                      10th percentile flux in the 2D header (e-)
+BIASFILE  kpf_20250510_master_bias_autocal-bias.fits  Master bias file used to process this 2D file
+DARKFILE  kpf_20250510_master_dark_autocal-dark.fits  Master dark file used to process this 2D file
+FLATFILE  kpf_20250510_master_flat.fits               Master flat file used to process this 2D file
 AGEBIAS   0                                           Age of master bias file compared to this file (whole days)
 AGEDARK   0                                           Age of master dark file compared to this file (whole days)
 AGEFLAT   0                                           Age of master flat file compared to this file (whole days)
@@ -362,6 +365,8 @@ DRPTAGL1  v2.5.2                                                                
 DRPHSHL1  'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'                               Git commit hash version of KPF-Pipeline used to make L1
 WLSFILE   /masters/20231230/kpf_20231230_master_WLS_autocal-lfc-all-eve_L1.fits    First wavelength interpolation reference for this L1 file
 WLSFILE2  /masters/20231231/kpf_20231231_master_WLS_autocal-lfc-all-morn_L1.fits   Second wavelength interpolation reference for this L1 file
+TRACFILE  /masters/20250522/kpf_20250522_order_mask.fits                           Order trace file used to extract this L1 file
+LAMPFILE  /masters/20250522/kpf_20250522_smooth_lamp.fits                          Smooth lamp file used to extract this L1 file
 MONOTWLS  1                                                                        QC: 1 = L1 wavelength solution is monotonic
 DATAPRL1  1                                                                        QC: 1 = L1 red and green data present
 CAHKPRL1  1                                                                        QC: 1 = CaHK data present in L1 with expected shape

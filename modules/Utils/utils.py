@@ -1,11 +1,11 @@
 # This file contains assorted utility functions that are mostly 
 # for computing astronomical quantities associated with KPF data.
 
+import numpy as np
 from datetime import datetime
 from astropy.time import Time
 from astropy import units as u
 from astropy.coordinates import EarthLocation, SkyCoord, AltAz, get_sun, get_body
-import numpy as np
 
 def get_sun_alt(UTdatetime):
     """
@@ -274,3 +274,58 @@ def styled_text(message, style="", color="", background=""):
     # Construct the styled message
     styled_message = f"{style_code}{color_code}{background_code}{message}{reset_code}"
     return styled_message
+
+
+def latex_number(number, sigfigs, min_exp=-2, max_exp=2):
+    """
+    Formats numbers into LaTeX-formatted strings, using scientific notation
+    if the exponent is outside the specified range. Supports single floats and array inputs.
+
+    Parameters:
+    number (float or array-like): The number(s) to format.
+    sigfigs (int): Number of significant figures.
+    min_exp (int, optional): Minimum exponent for non-scientific notation. Defaults to -2.
+    max_exp (int, optional): Maximum exponent for non-scientific notation. Defaults to 2.
+
+    Returns:
+    str or list of str: LaTeX-formatted string(s).
+
+    Examples:
+        >>> latex_number(1.236e-3, 3)
+        '$1.24 \\times 10^{-3}$'
+
+        >>> latex_number(1.236, 2)
+        '1.2'
+
+        >>> latex_number([123.6, 0.00456], 2)
+        ['120', '$4.6 \\times 10^{-3}$']
+
+        >>> latex_number(1.236e4, 3, -1, 3)
+        '$1.24 \\times 10^{4}$'
+    """
+    from math import log10, floor
+
+    def format_single(num):
+        if num == 0:
+            return '0'
+
+        exponent = int(floor(log10(abs(num))))
+        normalized = num / (10 ** exponent)
+
+        normalized = round(normalized, sigfigs - 1)
+
+        if normalized >= 10:
+            normalized /= 10
+            exponent += 1
+
+        if min_exp <= exponent <= max_exp:
+            final_number = round(num, sigfigs - 1 - exponent)
+            return f'{final_number}'
+        else:
+            return fr'${normalized} \times 10^{{{exponent}}}$'
+
+    if np.isscalar(number):
+        return format_single(number)
+    else:
+        return [format_single(n) for n in np.atleast_1d(number)]
+
