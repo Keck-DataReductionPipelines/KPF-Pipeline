@@ -23,6 +23,7 @@ from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_wls import AnalyzeWLS
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
+from modules.quality_control.src.quality_control import QC_report
 from modules.Utils.kpf_parse import HeaderParse
 #import kpfpipe.pipelines.fits_primitives as fits_primitives
 from modules.Utils.kpf_parse import get_data_products_L0
@@ -239,6 +240,17 @@ class QuicklookAlg:
         except Exception as e:
             self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+        # Generate Quality Control report
+        try:    
+            savedir = D2_QLP_file_base +'QC/'    
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            
+            yaml_filename = savedir + self.ObsID + '_2D_QC_report.yaml' 
+            QC_report(kpf2d, yaml_outfile=yaml_filename)
+
+        except Exception as e:    
+            self.logger.error(f"Problem generating QC report: {e}\n{traceback.format_exc()}")
+
         # Make CaHK plots
         if 'HK' in self.data_products:    
             try:    
@@ -440,6 +452,17 @@ class QuicklookAlg:
         except Exception as e:
             self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+        # Generate Quality Control report
+        try:    
+            savedir = L1_QLP_file_base +'QC/'    
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            
+            yaml_filename = savedir + self.ObsID + '_L1_QC_report.yaml' 
+            QC_report(kpf1, yaml_outfile=yaml_filename)
+
+        except Exception as e:    
+            self.logger.error(f"Problem generating QC report: {e}\n{traceback.format_exc()}")
+
         # Make WLS plots
         try:
             savedir = L1_QLP_file_base +'WLS/'
@@ -599,6 +622,17 @@ class QuicklookAlg:
 
         except Exception as e:
             self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Generate Quality Control report
+        try:    
+            savedir = L2_QLP_file_base +'QC/'    
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            
+            yaml_filename = savedir + self.ObsID + '_L2_QC_report.yaml' 
+            QC_report(kpf2, yaml_outfile=yaml_filename)
+
+        except Exception as e:    
+            self.logger.error(f"Problem generating QC report: {e}\n{traceback.format_exc()}")
 
         # Make CCF grid plots
         if chips != []:    
