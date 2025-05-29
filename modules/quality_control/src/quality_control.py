@@ -317,6 +317,7 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_outfile
     this_spectrum_type = primary_header.get_name(use_star_names=False)
 
     ObsID = kpf_object.header['PRIMARY'].get('OFNAME', 'ObsID not available')
+    ObsID = ObsID.removesuffix('.fits')
 
     data_levels_map = {'L0': ['L0'], '2D': ['L0', '2D'], 'L1': ['L0', '2D', 'L1'], 'L2': ['L0', '2D', 'L1', 'L2']}
     data_levels = data_levels_map.get(this_data_level, [])

@@ -248,6 +248,9 @@ class QuicklookAlg:
             yaml_filename = savedir + self.ObsID + '_2D_QC_report.yaml' 
             QC_report(kpf2d, yaml_outfile=yaml_filename)
 
+        except Exception as e:    
+            self.logger.error(f"Problem generating QC report: {e}\n{traceback.format_exc()}")
+
         # Make CaHK plots
         if 'HK' in self.data_products:    
             try:    
@@ -457,6 +460,9 @@ class QuicklookAlg:
             yaml_filename = savedir + self.ObsID + '_L1_QC_report.yaml' 
             QC_report(kpf1, yaml_outfile=yaml_filename)
 
+        except Exception as e:    
+            self.logger.error(f"Problem generating QC report: {e}\n{traceback.format_exc()}")
+
         # Make WLS plots
         try:
             savedir = L1_QLP_file_base +'WLS/'
@@ -624,6 +630,9 @@ class QuicklookAlg:
             
             yaml_filename = savedir + self.ObsID + '_L2_QC_report.yaml' 
             QC_report(kpf2, yaml_outfile=yaml_filename)
+
+        except Exception as e:    
+            self.logger.error(f"Problem generating QC report: {e}\n{traceback.format_exc()}")
 
         # Make CCF grid plots
         if chips != []:    
