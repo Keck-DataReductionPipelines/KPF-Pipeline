@@ -278,7 +278,6 @@ def get_filename(ObsID, level='L0', fullpath=False):
     return path + filename
 
 
-
 def get_datecode_from_filename(filename, datetime_out=False):
     """
     Extract the datecode (YYYYMMDD) from a filename.  
