@@ -42,11 +42,11 @@ docker:
 			-e DBNAME=kpfopsdb \
 			-e DBUSER=${KPFPIPE_DB_USER} \
 			$(if $(KPFPIPE_DB_PASS),-e DBPASS="${KPFPIPE_DB_PASS}") \
-			-e DBSERVER_TSDB=127.0.0.1 \
-			-e DBPORT_TSDB=6127 \
-			-e DBNAME_TSDB=timeseriesopsdb \
-			$(if $(KPFPIPE_TSDB_DB_USER),-e DBUSER_TSDB="${KPFPIPE_TSDB_DB_USER}") \
-			$(if $(KPFPIPE_TSDB_DB_PASS),-e DBPASS_TSDB="${KPFPIPE_TSDB_DB_PASS}") \
+			-e TSDBSERVER=127.0.0.1 \
+			-e TSDBPORT=6127 \
+			-e TSDBNAME=timeseriesopsdb \
+			$(if $(KPFPIPE_TSDB_USER),-e TSDBUSER="${KPFPIPE_TSDDB_USER}") \
+			$(if $(KPFPIPE_TSDB_PASS),-e TSDBPASS="${KPFPIPE_TSDDB_PASS}") \
 			-e DBSERVER_TSDB=127.0.0.1 \
 			kpf-drp:latest bash)
 
@@ -57,11 +57,11 @@ docker:
 		-e DBUSER=${KPFPIPE_DB_USER} \
 		$(if $(KPFPIPE_DB_PASS),-e DBPASS="${KPFPIPE_DB_PASS}") \
 		-e DBSERVER=127.0.0.1 \
-		-e DBPORT_TSDB=6127 \
-		-e DBNAME_TSDB=timeseriesopsdb \
-		$(if $(KPFPIPE_TSDB_DB_USER),-e DBUSER_TSDB="${KPFPIPE_TSDB_DB_USER}") \
-		$(if $(KPFPIPE_TSDB_DB_PASS),-e DBPASS_TSDB="${KPFPIPE_TSDB_DB_PASS}") \
-		-e DBSERVER_TSDB=127.0.0.1 \
+		-e TSDBPORT=6127 \
+		-e TSDBNAME=timeseriesopsdb \
+		$(if $(KPFPIPE_TSDB_USER),-e TSDBUSER="${KPFPIPE_TSDB_USER}") \
+		$(if $(KPFPIPE_TSDB_PASS),-e TSDBPASS="${KPFPIPE_TSDB_PASS}") \
+		-e TSDBSERVER=127.0.0.1 \
 		-v ${PWD}:/code/KPF-Pipeline \
 		-v ${KPFPIPE_TEST_DATA}:/testdata \
 		-v ${KPFPIPE_DATA}:/data \

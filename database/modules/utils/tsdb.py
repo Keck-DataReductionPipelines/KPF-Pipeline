@@ -96,11 +96,11 @@ class TSDB:
             self.db_path = db_path
             self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         elif backend == 'psql':
-            self.dbport   = os.getenv('DBPORT_TSDB')
-            self.dbname   = os.getenv('DBNAME_TSDB')
-            self.dbuser   = os.getenv('DBUSER_TSDB')
-            self.dbpass   = os.getenv('DBPASS_TSDB')
-            self.dbserver = os.getenv('DBSERVER_TSDB')     
+            self.dbport   = os.getenv('TSDBPORT')
+            self.dbname   = os.getenv('TSDBNAME')
+            self.dbuser   = os.getenv('TSDBUSER')
+            self.dbpass   = os.getenv('TSDBPASS')
+            self.dbserver = os.getenv('TSDBSERVER')     
             self.logger.info('PSQL server: ' + self.dbserver)
             self.logger.info('PSQL user: ' + self.dbuser)
         
