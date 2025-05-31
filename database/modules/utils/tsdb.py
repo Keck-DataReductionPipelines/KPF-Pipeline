@@ -137,7 +137,7 @@ class TSDB:
             self.logger.info('PSQL user: ' + self.dbuser)
         
         # Read table information from file
-        self.keyword_base_path = '/code/KPF-Pipeline/static/tsdb_keywords'
+        self.keyword_base_path = '/code/KPF-Pipeline/static/tsdb_tables'
         self.csv_filepath = self.keyword_base_path + '/tables_metadata.csv'
         self.tables_metadata_df = pd.read_csv(self.csv_filepath).fillna('')
         tables = {}
@@ -963,41 +963,6 @@ class TSDB:
             }.get(dtype, 'TEXT')
         else:
             raise ValueError(f"Unsupported backend: {self.backend}")
-
-
-    def get_keyword_types(self, level):
-        """
-        Returns a dictionary of the data types for keywords at the specified data level.
-        """
-        base_path = '/code/KPF-Pipeline/static/tsdb_keywords'
-    
-        level_to_file = {
-            'L0': 'l0_primary_keywords.csv',
-            '2D': 'd2_primary_keywords.csv',
-            'L1': 'l1_primary_keywords.csv',
-            'L2': 'l2_primary_keywords.csv',
-            'L0_telemetry': 'l0_telemetry_keywords.csv',
-            'L2_RV_header': 'l2_rv_keywords.csv',
-            'L2_CCF_header': 'l2_green_ccf_keywords.csv',
-            'L2_RV_SCI1': 'l2_rv_sci1_keywords.csv',
-            'L2_RV_SCI2': 'l2_rv_sci2_keywords.csv',
-            'L2_RV_SCI3': 'l2_rv_sci3_keywords.csv',
-            'L2_RV_SCI': 'l2_rv_sci_keywords.csv',
-            'L2_RV_CAL': 'l2_rv_cal_keywords.csv',
-            'L2_RV_SKY': 'l2_rv_sky_keywords.csv',
-            'L2_RV_BCV': 'l2_rv_bcv_keywords.csv',
-            'L2_RV_BJD': 'l2_rv_bjd_keywords.csv',
-            'L2_RV_CCFW': 'l2_rv_ccfw_keywords.csv',
-            'base': 'base_keywords.csv'
-        }
-    
-        keywords_csv = level_to_file.get(level)
-    
-        if keywords_csv:
-            df_keywords = pd.read_csv(f'{base_path}/{keywords_csv}', delimiter='|', dtype=str)
-            return dict(zip(df_keywords['keyword'], df_keywords['datatype']))
-        else:
-            return {}
 
 
     def get_source(self, L0_dict):
