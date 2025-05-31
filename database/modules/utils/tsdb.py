@@ -684,7 +684,7 @@ class TSDB:
 
     def _set_boolean_columns(self):
         """
-        Set the `self.bool_columns` attribute with the names of all database columns 
+        Set the self.bool_columns attribute with the names of all database columns 
         that should be treated as booleans, based on the metadata table.
         """
         self._open_connection()
