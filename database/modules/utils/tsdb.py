@@ -105,8 +105,17 @@ class TSDB:
             self.logger.info('PSQL user: ' + self.dbuser)
         
         self.tables = [
-            'tsdb_base', 'tsdb_l0', 'tsdb_2d', 'tsdb_l1',
-            'tsdb_l2', 'tsdb_l0t', 'tsdb_l2rv', 'tsdb_l2rvdata', 'tsdb_l2ccf',
+            'tsdb_base', 
+            'tsdb_l0', 
+            'tsdb_2d', 
+            'tsdb_l1', 'tsdb_l1_medg',  'tsdb_l1_medr', 'tsdb_l1_stdg', 'tsdb_l1_stdr', 
+            'tsdb_l2', 
+            'tsdb_l0t', 
+            'tsdb_l2rv', 
+            'tsdb_l2ccf',
+            'tsdb_l2rv_bcv', 'tsdb_l2rv_bjd', 
+            'tsdb_l2rv_sci1', 'tsdb_l2rv_sci2', 'tsdb_l2rv_sci3', 'tsdb_l2rv_sci', 
+            'tsdb_l2rv_cal',  'tsdb_l2rv_sky', 'tsdb_l2rv_ccfw', 
             'tsdb_metadata'
         ]
         
@@ -128,9 +137,10 @@ class TSDB:
         metadata_table = 'tsdb_metadata'
         if not self.check_if_table_exists(tablename=metadata_table):
             self.logger.info("Metadata table does not exist.  Attempting to create.")
-            self.create_metadata_table()
+            self._create_metadata_table()
         else:
             self.logger.info("Metadata table exists.")
+        self._read_metadata_table()
         self._set_boolean_columns()
         
         # Then create the data tables using metadata
@@ -144,7 +154,7 @@ class TSDB:
 
     def _open_connection(self):
         """
-        Add docstring.
+        Open the database connection
         """
 
         if self.backend == 'sqlite':
@@ -177,7 +187,7 @@ class TSDB:
     
     def _close_connection(self):
         """
-        Add docstring.
+        Close the database connection.
         """
 
         if self.conn:
@@ -394,41 +404,36 @@ class TSDB:
         def load_keyword_csv(csv_path, source_label):
             df = pd.read_csv(csv_path, delimiter='|', dtype=str)
             df['source'] = source_label
+            df['csv_path'] = source_label
             df.rename(columns={'unit': 'units'}, inplace=True)  # fix potential unit naming
-            return df[['keyword', 'datatype', 'units', 'description', 'source']]
+            return df[['keyword', 'datatype', 'units', 'description', 'source', 'csv_path']]
     
-        df_base  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/base_keywords.csv',         'Base Keywords')
-        df_l0    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_primary_keywords.csv',   'L0 PRIMARY Header')
-        df_2d    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/d2_primary_keywords.csv',   '2D PRIMARY Header')
-        df_l1    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_keywords.csv',   'L1 PRIMARY Header')
-        df_l2    = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_primary_keywords.csv',   'L2 PRIMARY Header')
-        df_l0t   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_telemetry_keywords.csv', 'L0 TELEMETRY Extension')
-        df_l2rv  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv',        'L2 RV Header')
-        df_l2ccf = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_green_ccf_keywords.csv', 'L2 CCF Header')
+        df_base      = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/base_keywords.csv',            'Base Keywords')
+        df_l0        = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_primary_keywords.csv',      'L0 PRIMARY Header')
+        df_2d        = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/d2_primary_keywords.csv',      '2D PRIMARY Header')
+        df_l1        = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_keywords.csv',      'L1 PRIMARY Header')
+        df_l1_medg   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_medg_keywords.csv', 'L1 PRIMARY Header')
+        df_l1_medr   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_medr_keywords.csv', 'L1 PRIMARY Header')
+        df_l1_stdg   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_stdg_keywords.csv', 'L1 PRIMARY Header')
+        df_l1_stdr   = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l1_primary_stdr_keywords.csv', 'L1 PRIMARY Header')
+        df_l2        = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_primary_keywords.csv',      'L2 PRIMARY Header')
+        df_l0t       = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l0_telemetry_keywords.csv',    'L0 TELEMETRY Extension')
+        df_l2rv      = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_keywords.csv',           'L2 RV Header')
+        df_l2ccf     = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_green_ccf_keywords.csv',    'L2 CCF Header')
+        df_l2rv_sci1 = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_sci1_keywords.csv',      'L2 RV Extension')
+        df_l2rv_sci2 = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_sci2_keywords.csv',      'L2 RV Extension')
+        df_l2rv_sci3 = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_sci3_keywords.csv',      'L2 RV Extension')
+        df_l2rv_sci  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_sci_keywords.csv',       'L2 RV Extension')
+        df_l2rv_cal  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_cal_keywords.csv',       'L2 RV Extension')
+        df_l2rv_sky  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_sky_keywords.csv',       'L2 RV Extension')
+        df_l2rv_bjd  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_bjd_keywords.csv',       'L2 RV Extension')
+        df_l2rv_bcv  = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_bcv_keywords.csv',       'L2 RV Extension')
+        df_l2rv_ccfw = load_keyword_csv('/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_ccfw_keywords.csv',      'L2 RV Extension')
     
-        # RV prefix keywords
-        prefixes = ['RV1','RV2','RV3','RVS','ERVS','RVC','ERVC','RVY','ERVY','CCFBJD','BCRV','CCFW']
-        units    = ['km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','km/s','days','km/s','None']
-        descs    = ['RV for SCI1 order ', 'RV for SCI2 order ', 'RV for SCI3 order ','RV for SCI order ', 'Error in RV for SCI order ', 'RV for CAL order ','Error in RV for CAL order ', 'RV for SKY order ',  'Error in RV for SKY order ','BJD for order ','Barycentric RV for order ','CCF weight for order ']
-        nums = [f"{i:02d}" for i in range(67)]
-    
-        rv_entries = []
-        for prefix, unit, desc in zip(prefixes, units, descs):
-            for num in nums:
-                kw = f"{prefix}{num}"
-                rv_entries.append({
-                    'keyword': kw,
-                    'datatype': 'REAL',
-                    'units': unit,
-                    'description': f"{desc}{num}",
-                    'source': 'L2 RV Extension'
-                })
-        df_rv = pd.DataFrame(rv_entries)
-
         # Combine all into one DataFrame
-        df_all = pd.concat([df_base, df_l0, df_2d, df_l1, df_l2, df_l0t, df_l2rv, df_l2ccf, df_rv], ignore_index=True)
+        df_all = pd.concat([df_base, df_l0, df_2d, df_l1, df_l1_medg, df_l1_medr, df_l1_stdg, df_l1_stdr, df_l2, df_l0t, df_l2rv, df_l2ccf, df_l2rv_sci1, df_l2rv_sci2, df_l2rv_sci3, df_l2rv_sci,df_l2rv_cal, df_l2rv_sky, df_l2rv_bjd, df_l2rv_bcv, df_l2rv_ccfw], ignore_index=True)
         df_all.drop_duplicates(subset='keyword', inplace=True)
-
+        
         self.metadata_entries = df_all.to_dict(orient='records')
 
    
@@ -506,9 +511,9 @@ class TSDB:
     
         finally:
             self._close_connection() 
-           
-# UPDATE THIS BY READING METADATA_TABLE
-    def create_metadata_table(self):
+
+
+    def _create_metadata_table(self):
         """
         Create the tsdb_metadata table with an added table_name column for 
         category mapping. Compatible with both SQLite and PostgreSQL.
@@ -528,17 +533,29 @@ class TSDB:
             """
             self._execute_sql_command(create_sql)
     
-            # Mapping from source to new table name
-            source_to_table = {
-                'Base Keywords':          'tsdb_base',
-                'L0 PRIMARY Header':      'tsdb_l0',
-                '2D PRIMARY Header':      'tsdb_2d',
-                'L1 PRIMARY Header':      'tsdb_l1',
-                'L2 PRIMARY Header':      'tsdb_l2',
-                'L0 TELEMETRY Extension': 'tsdb_l0t',
-                'L2 RV Header':           'tsdb_l2rv',
-                'L2 RV Extension':        'tsdb_l2rvdata',
-                'L2 CCF Header':          'tsdb_l2ccf'
+            # Define a precise mapping of CSV files to tables
+            csv_to_table = { 
+                'base_keywords.csv':            ('Base Keywords',          'tsdb_base'),
+                'l0_primary_keywords.csv':      ('L0 PRIMARY Header',      'tsdb_l0'),
+                'd2_primary_keywords.csv':      ('2D PRIMARY Header',      'tsdb_2d'),
+                'l1_primary_keywords.csv':      ('L1 PRIMARY Header',      'tsdb_l1'),
+                'l1_primary_medg_keywords.csv': ('L1 PRIMARY Header',      'tsdb_l1_medg'),
+                'l1_primary_medr_keywords.csv': ('L1 PRIMARY Header',      'tsdb_l1_medr'),
+                'l1_primary_stdg_keywords.csv': ('L1 PRIMARY Header',      'tsdb_l1_stdg'),
+                'l1_primary_stdr_keywords.csv': ('L1 PRIMARY Header',      'tsdb_l1_stdr'),
+                'l2_primary_keywords.csv':      ('L2 PRIMARY Header',      'tsdb_l2'),
+                'l0_telemetry_keywords.csv':    ('L0 TELEMETRY Extension', 'tsdb_l0t'),
+                'l2_rv_keywords.csv':           ('L2 RV Header',           'tsdb_l2rv'),
+                'l2_green_ccf_keywords.csv':    ('L2 CCF Header',          'tsdb_l2ccf'),
+                'l2_rv_sci1_keywords.csv':      ('L2 RV Extension',        'tsdb_l2rv_sci1'),
+                'l2_rv_sci2_keywords.csv':      ('L2 RV Extension',        'tsdb_l2rv_sci2'),
+                'l2_rv_sci3_keywords.csv':      ('L2 RV Extension',        'tsdb_l2rv_sci3'),
+                'l2_rv_sci_keywords.csv':       ('L2 RV Extension',        'tsdb_l2rv_sci'),
+                'l2_rv_cal_keywords.csv':       ('L2 RV Extension',        'tsdb_l2rv_cal'),
+                'l2_rv_sky_keywords.csv':       ('L2 RV Extension',        'tsdb_l2rv_sky'),
+                'l2_rv_bjd_keywords.csv':       ('L2 RV Extension',        'tsdb_l2rv_bjd'),
+                'l2_rv_bcv_keywords.csv':       ('L2 RV Extension',        'tsdb_l2rv_bcv'),
+                'l2_rv_ccfw_keywords.csv':      ('L2 RV Extension',        'tsdb_l2rv_ccfw'),
             }
     
             # Backend-specific insert command
@@ -548,7 +565,7 @@ class TSDB:
                     (keyword, source, datatype, units, description, table_name) 
                     VALUES (?, ?, ?, ?, ?, ?);
                 """
-            elif self.backend == 'psql':
+            else:  # self.backend == 'psql'
                 insert_sql = """
                     INSERT INTO tsdb_metadata 
                     (keyword, source, datatype, units, description, table_name)
@@ -560,23 +577,38 @@ class TSDB:
                         description=EXCLUDED.description,
                         table_name=EXCLUDED.table_name;
                 """
-            else:
-                raise ValueError(f"Unsupported backend: {self.backend}")
     
-            # Insert metadata entries
-            for entry in self.metadata_entries:
-                keyword     = entry.get('keyword')
-                source      = entry.get('source')
-                datatype    = entry.get('datatype', 'TEXT')
-                units       = entry.get('units', None)
-                description = entry.get('description', None)
-                table_name  = source_to_table.get(source, None)
-                self._execute_sql_command(insert_sql, params=(keyword, source, datatype, units, description, table_name))
+            # Load each CSV explicitly and insert into metadata table
+            for csv_file, (source, table_name) in csv_to_table.items():
+                csv_path = f'/code/KPF-Pipeline/static/tsdb_keywords/{csv_file}'
+                df = pd.read_csv(csv_path, delimiter='|', dtype=str)
+    
+                for _, row in df.iterrows():
+                    keyword = row['keyword']
+                    datatype = row.get('datatype', 'TEXT')
+                    units = row.get('unit', None)
+                    description = row.get('description', None)
+    
+                    self._execute_sql_command(
+                        insert_sql, 
+                        params=(keyword, source, datatype, units, description, table_name)
+                    )
     
         finally:
             self._close_connection()
+    
+        self.logger.info("Metadata table created correctly.")
 
-        self.logger.info("Metadata table created.")
+
+    def _read_metadata_table(self):
+        """
+        Read the tsdb_metadata table and store it in the attribute self.metadata_table.
+        """
+        sql_metadata = "SELECT keyword, datatype, table_name FROM tsdb_metadata;"
+        self._open_connection()
+        self.metadata_rows = self._execute_sql_command(sql_metadata, fetch=True)
+        self._close_connection()
+        self.logger.info("Metadata table read.")
 
 
     def _create_data_tables(self):
@@ -642,12 +674,13 @@ class TSDB:
         """
         self._open_connection()
         try:
-            self.metadata_rows = self._execute_sql_command(
+            self.bool_rows = self._execute_sql_command(
                 "SELECT keyword, datatype, table_name FROM tsdb_metadata WHERE datatype = 'bool';",
                 fetch=True
             )
-            self.bool_columns = {row[0] for row in self.metadata_rows}
-            self.logger.info(f"Boolean columns set: {self.bool_columns}")
+            self.bool_columns = {row[0] for row in self.bool_rows}
+            if self.verbose:
+                self.logger.debug(f"Boolean columns set: {self.bool_columns}")
         finally:
             self._close_connection()
 
@@ -700,6 +733,7 @@ class TSDB:
 
         try:
             kw_to_table = {row[0]: row[2] for row in self.metadata_rows}
+#            print("Keyword-to-table mapping:", kw_to_table)
             table_data = {}
 
             for kw, value in header_data.items():
@@ -756,19 +790,71 @@ class TSDB:
 
         self.logger.info(f"Ingested observation: {base_filename}")
 
+
+
+    def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=10000, reverse=False, force_ingest=False, quiet=False):
+        """
+        Ingest KPF data for the date range start_date to end_date, inclusive.
+        batch_size refers to the number of observations per DB insertion.
+        If force_ingest=False, files are not reingested unless they have more 
+        recent modification dates than in DB.
+        """
+
+        # Convert input dates to strings if necessary
+        if isinstance(start_date_str, datetime):
+            start_date_str = start_date_str.strftime("%Y%m%d")
+        if isinstance(end_date_str, datetime):
+            end_date_str = end_date_str.strftime("%Y%m%d")
+        
+        if not quiet:
+            self.logger.info("Adding to database between " + start_date_str + " and " + end_date_str)
+        dir_paths = glob.glob(f"{self.base_dir}/????????")
+        sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date_str > end_date_str)
+        filtered_dir_paths = [
+            dir_path for dir_path in sorted_dir_paths
+            if start_date_str <= os.path.basename(dir_path) <= end_date_str
+        ]
+        if len(filtered_dir_paths) > 0:
+            # Reverse dates if the reverse flag is set
+            if reverse:
+                filtered_dir_paths.reverse()
+            
+            # Iterate over date directories
+            t1 = self.tqdm(filtered_dir_paths, desc=(filtered_dir_paths[0]).split('/')[-1], disable=quiet)
+            for dir_path in t1:
+                t1.set_description(dir_path.split('/')[-1])
+                t1.refresh() 
+                t2 = self.tqdm(os.listdir(dir_path), desc=f'Files', leave=False, disable=quiet)
+                batch = []
+                for L0_filename in t2:
+                    if L0_filename.endswith(".fits"):
+                        file_path = os.path.join(dir_path, L0_filename)
+                        batch.append(file_path)
+                        if len(batch) >= batch_size:
+                            self.ingest_batch_observation(batch, force_ingest=force_ingest)
+                            batch = []
+                if batch:
+                    self.ingest_batch_observation(batch, force_ingest=force_ingest)
+
+        if not quiet:
+            self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
+
+        self.print_db_status()
+
+
     def ingest_batch_observation(self, batch, force_ingest=False):
         """
         Ingest a batch of observations into the multi-table database in parallel,
-        checking each file for updates beforehand.
+        ensuring proper boolean handling, error resilience, bulk inserts, and efficient transactions.
         """
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
         # === 1) Check for updated files ===
-        if force_ingest:
-            updated_batch = batch
-        else:
-            updated_batch = [file_path for file_path in batch if self._is_any_file_updated(file_path)]
+        updated_batch = batch if force_ingest else [
+            file_path for file_path in batch if self._is_any_file_updated(file_path)
+        ]
         if not updated_batch:
+            self.logger.info("No new or updated files found in batch.")
             return
     
         # === 2) Prepare arguments for parallel execution ===
@@ -795,19 +881,22 @@ class TSDB:
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(partial_process_file, updated_batch))
     
-        # Filter None results just in case
         valid_results = [res for res in results if res]
     
         if not valid_results:
+            self.logger.warning("No valid results extracted from batch files.")
             return
     
         self._open_connection()
         try:
-            # === 4) Group extracted data by table ===
-            metadata_rows = self._execute_sql_command("SELECT keyword, table_name FROM tsdb_metadata;", fetch=True)
-            kw_to_table = dict(metadata_rows)
+            metadata_rows = self._execute_sql_command(
+                "SELECT keyword, datatype, table_name FROM tsdb_metadata;",
+                fetch=True
+            )
+            kw_to_table = {kw: table for kw, _, table in metadata_rows}
+            kw_to_dtype = {kw: dtype for kw, dtype, _ in metadata_rows}
     
-            # Organize data per table
+            # Group extracted data by table
             table_data = {}
             for obs_data in valid_results:
                 obsid = obs_data['ObsID']
@@ -821,18 +910,57 @@ class TSDB:
                     data['ObsID'] = obsid
                     table_data.setdefault(table, []).append(data)
     
-            # === 5) Perform bulk insert for each table ===
+            # === 4) Explicitly cast boolean columns ===
+            bool_columns = {kw for kw, dtype in kw_to_dtype.items() if dtype == 'bool'}
+            for tbl, rows in table_data.items():
+                for row in rows:
+                    for col in bool_columns:
+                        if col in row:
+                            val = row[col]
+                            row[col] = (str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y'])
+    
+            # === 5) Bulk insert within a transaction ===
+            if self.backend == 'sqlite':
+                placeholder_char = '?'
+            else:  # PostgreSQL
+                placeholder_char = '%s'
+    
             for table, rows in table_data.items():
                 if not rows:
                     continue
+    
                 columns = list(rows[0].keys())
-                placeholders = ', '.join(['?'] * len(columns))
-                column_str = ', '.join([f'"{col}"' for col in columns])
-                insert_query = f'INSERT OR REPLACE INTO {table} ({column_str}) VALUES ({placeholders})'
+                col_str = ', '.join(f'"{col}"' for col in columns)
+                placeholders = ', '.join([placeholder_char] * len(columns))
+    
+                if self.backend == 'sqlite':
+                    insert_query = f'INSERT OR REPLACE INTO {table} ({col_str}) VALUES ({placeholders})'
+                elif self.backend == 'psql':
+                    updates = ', '.join(f'"{col}" = EXCLUDED."{col}"' for col in columns if col != 'ObsID')
+                    conflict_clause = (
+                        f'ON CONFLICT ("ObsID") DO UPDATE SET {updates}' if updates else 'ON CONFLICT ("ObsID") DO NOTHING'
+                    )
+                    insert_query = f'INSERT INTO {table} ({col_str}) VALUES ({placeholders}) {conflict_clause}'
+    
                 data_tuples = [tuple(row[col] for col in columns) for row in rows]
     
-                for data_tuple in data_tuples:
-                    self._execute_sql_command(insert_query, params=data_tuple)
+                # Bulk insert using executemany within a try-except
+                try:
+                    self.cursor.executemany(insert_query, data_tuples)
+                except Exception as e:
+                    self.logger.error(f"Bulk insert error in table {table}: {e}")
+                    # Try individual inserts to isolate problematic rows
+                    for data_tuple in data_tuples:
+                        try:
+                            self._execute_sql_command(insert_query, params=data_tuple)
+                        except Exception as single_e:
+                            obsid_index = columns.index('ObsID')
+                            problematic_obsid = data_tuple[obsid_index]
+                            self.logger.error(f"Insert failed for ObsID {problematic_obsid} in table {table}: {single_e}")
+    
+            # Commit transaction after all inserts
+            self.conn.commit()
+    
         finally:
             self._close_connection()
     
@@ -910,11 +1038,59 @@ class TSDB:
             df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
             keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
-        # L2 RV data    
-        elif level == 'L2_RV':
-            prefixes = ['RV1', 'RV2', 'RV3', 'RVS', 'ERVS', 'RVC', 'ERVC', 'RVY', 'ERVY', 'CCFBJD', 'BCRV', 'CCFW']
-            nums = [f"{i:02d}" for i in range(67)]
-            keyword_types = {f"{prefix}{num}": 'REAL' for num in nums for prefix in prefixes}
+        # L2 RV data - SCI1    
+        elif level == 'L2_RV_SCI1':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_sci1_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 RV data - SCI2    
+        elif level == 'L2_RV_SCI2':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_sci2_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 RV data - SCI3    
+        elif level == 'L2_RV_SCI3':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_sci3_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 RV data - SCI    
+        elif level == 'L2_RV_SCI':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_sci_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 RV data - CAL    
+        elif level == 'L2_RV_CAL':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_cal_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 RV data - SKY    
+        elif level == 'L2_RV_SKY':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_sky_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 RV data - BCV    
+        elif level == 'L2_RV_BCV':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_bcv_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 RV data - BJD    
+        elif level == 'L2_RV_BJD':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_bjd_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
+
+        # L2 RV data - CCF WEIGHT    
+        elif level == 'L2_RV_CCFW':
+            keywords_csv='/code/KPF-Pipeline/static/tsdb_keywords/l2_rv_ccfw_keywords.csv'
+            df_keywords = pd.read_csv(keywords_csv, delimiter='|', dtype=str)
+            keyword_types = dict(zip(df_keywords['keyword'], df_keywords['datatype']))
 
         # Base keywords    
         elif level == 'base':
@@ -1221,7 +1397,6 @@ class TSDB:
 
         self.logger.info(f'{ObsID_filename} read with {str(len(df))} properly formatted ObsIDs.')
 
-        #t = tqdm_notebook(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
         t = self.tqdm(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
         for ObsID in t:
             dir_path = self.base_dir + '/' + get_datecode(ObsID) + '/'
@@ -1259,7 +1434,7 @@ class TSDB:
         """
         Read the tsdb_metadata table, group by 'source', and print out rows
         in fixed-width columns in the custom order below, without printing
-        the 'source' column.
+        the 'source' column. If units=NaN, it prints a blank.
         """
         # Define your custom order of sources
         custom_order = [
@@ -1307,7 +1482,7 @@ class TSDB:
                 for keyword, datatype, units, description in rows:
                     keyword_str = keyword or ""
                     datatype_str = datatype or ""
-                    units_str = units or ""
+                    units_str = "" if units in (None, "NaN", "nan", float("nan")) or pd.isna(units) else units
                     desc_str = description or ""
     
                     print(
@@ -1337,6 +1512,39 @@ class TSDB:
             self._close_connection()
     
         return df
+
+    def print_table_contents(self, table_name):
+        """
+        Print the contents of the specified table.  This is useful for debugging.
+    
+        Args:
+            table_name (str): Name of the table to print.
+        """
+        self._open_connection()
+        try:
+            # Fetch all data from the table
+            self._execute_sql_command(f"SELECT * FROM {table_name}")
+            rows = self.cursor.fetchall()
+    
+            # Fetch column names
+            column_names = [description[0] for description in self.cursor.description]
+    
+            # Print column names
+            print(f"Contents of table '{table_name}':")
+            print("-" * 100)
+            print('\t'.join(column_names))
+            print("-" * 100)
+    
+            # Print rows
+            for row in rows:
+                print('\t'.join([str(item) if item is not None else '' for item in row]))
+                
+            print("-" * 100)
+            print(f"Total rows: {len(rows)}")
+    
+        finally:
+            self._close_connection()
+
 
 
     def is_notebook(self):
@@ -1440,63 +1648,9 @@ class TSDB:
                           extra_conditions_logic='AND',
                           verbose=False):
         """
-        Description:
-            Retrieves a pandas DataFrame containing specified columns from a set
-            of joined database tables, applying optional filters based on object
-            names, source types, date ranges, sky conditions, quality checks, and
-            additional custom conditions.
-
-        Args:
-            columns (str or list of str, optional):
-                Column name(s) to retrieve. Defaults to None (fetches all columns).
-
-            start_date (str or datetime, optional):
-                Starting date for filtering observations. Can be a datetime object,
-                a string in YYYYMMDD format, or None. Defaults to None.
-
-            end_date (str or datetime, optional):
-                Ending date for filtering observations. Can be a datetime object,
-                a string in YYYYMMDD format, or None. Defaults to None.
-
-            only_object (str or list of str, optional):
-                Exact object name(s) to filter observations. Defaults to None.
-                Example: ['autocal-dark', 'autocal-bias']
-
-            only_source (str or list of str, optional):
-                Source type(s) to filter observations. Defaults to None.
-                Example: ['Dark', 'Bias']
-
-            object_like (str or list of str, optional):
-                Partial object name(s) for filtering observations using SQL LIKE conditions.
-                Defaults to None.
-                Example: ['autocal-etalon', 'autocal-bias']
-
-            on_sky (bool, optional):
-                If True, filters for on-sky observations; if False, filters for calibration
-                observations. Defaults to None (no filtering).
-
-            not_junk (bool, optional):
-                If True, filters for observations marked as "not junk"; if False,
-                filters for "junk" observations. Defaults to None (no filtering).
-
-            extra_conditions (list of str, optional):
-                Additional custom SQL conditions to filter observations.
-                Example: ['kpfgreen.STA_CCD_T > 55']. Defaults to None.
-
-            extra_conditions_logic (str, optional):
-                Logical operator ('AND' or 'OR') used to combine multiple extra_conditions.
-                Defaults to 'AND'.
-
-            verbose (bool, optional):
-                Enables detailed logging of SQL queries and parameters when set to True.
-                Defaults to False.
-
-        Returns:
-            pd.DataFrame:
-                DataFrame containing the requested columns and filtered data.
-
+        Retrieve a DataFrame from the database supporting both SQLite and PostgreSQL backends.
         """
-
+    
         if isinstance(only_object, str):
             only_object = [only_object]
         if isinstance(only_source, str):
@@ -1504,109 +1658,102 @@ class TSDB:
         if isinstance(object_like, str):
             object_like = [object_like]
     
-        # Database operations
+        quote = '"' if self.backend == 'psql' else '"'  # SQLite uses " for quoting as well
+        placeholder = '%s' if self.backend == 'psql' else '?'
+    
         self._open_connection()
     
         try:
-            # Determine columns to fetch
+            # Get column metadata
             if columns in (None, '*'):
-                self._execute_sql_command("SELECT keyword, table_name FROM tsdb_metadata;")
+                metadata_query = 'SELECT keyword, table_name FROM tsdb_metadata;'
+                self._execute_sql_command(metadata_query)
                 metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
                 columns_requested = metadata['keyword'].tolist()
             else:
                 columns_requested = [columns] if isinstance(columns, str) else columns
-                placeholders = ','.join('?' for _ in columns_requested)
-                self._execute_sql_command(
-                    f"SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders})",
-                    params=columns_requested
-                )
+                placeholders = ','.join([placeholder] * len(columns_requested))
+                metadata_query = f'SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders});'
+                self._execute_sql_command(metadata_query, params=columns_requested)
                 metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
     
             kw_table_map = dict(zip(metadata['keyword'], metadata['table_name']))
             tables_needed = set(metadata['table_name'].dropna())
             tables_needed.update(['tsdb_base', 'tsdb_l0', 'tsdb_2d'])
     
-            # Collect columns per table, always include ObsID for joins and specified required columns
-            table_columns = {table: set(['ObsID']) for table in tables_needed}
+            # Prepare select columns with proper quoting
+            table_columns = {table: {'ObsID'} for table in tables_needed}
             for kw, tbl in kw_table_map.items():
                 table_columns[tbl].add(kw)
     
-            # Explicitly add guaranteed columns
             guaranteed_columns = {
-                'tsdb_base': ['Source'],
+                'tsdb_base': ['Source', 'datecode'],
                 'tsdb_l0': ['OBJECT', 'FIUMODE'],
                 'tsdb_2d': ['NOTJUNK']
             }
-    
             for tbl, cols in guaranteed_columns.items():
-                for col in cols:
-                    table_columns[tbl].add(col)
+                table_columns[tbl].update(cols)
     
             select_clauses = []
             selected_cols_set = set()
             for tbl in tables_needed:
                 for col in table_columns[tbl]:
-                    if col == 'ObsID':
-                        if 'ObsID' in selected_cols_set:
-                            continue
-                        selected_cols_set.add('ObsID')
-                        select_clauses.append(f'{tbl}."ObsID" AS "ObsID"')
-                    else:
-                        select_clauses.append(f'{tbl}."{col}" AS "{col}"')
+                    col_quoted = f'{quote}{col}{quote}'
+                    alias_quoted = f'{quote}{col}{quote}'
+                    if col == 'ObsID' and col in selected_cols_set:
+                        continue
+                    selected_cols_set.add(col)
+                    select_clauses.append(f'{tbl}.{col_quoted} AS {alias_quoted}')
     
             select_sql = ', '.join(select_clauses)
     
-            # FROM and LEFT JOIN clauses
             from_clause = 'tsdb_base'
             join_clauses = [
-                f'LEFT JOIN {tbl} ON tsdb_base."ObsID" = {tbl}."ObsID"'
+                f'LEFT JOIN {tbl} ON tsdb_base.{quote}ObsID{quote} = {tbl}.{quote}ObsID{quote}'
                 for tbl in tables_needed if tbl != 'tsdb_base'
             ]
     
-            # WHERE conditions
             conditions, params = [], []
     
             if only_object:
-                placeholders = ','.join('?' for _ in only_object)
-                conditions.append(f'tsdb_l0."OBJECT" IN ({placeholders})')
+                placeholders = ','.join([placeholder] * len(only_object))
+                conditions.append(f'tsdb_l0.{quote}OBJECT{quote} IN ({placeholders})')
                 params.extend(only_object)
     
             if object_like:
-                like_conditions = [f'tsdb_l0."OBJECT" LIKE ?' for _ in object_like]
+                like_conditions = [f'tsdb_l0.{quote}OBJECT{quote} LIKE {placeholder}' for _ in object_like]
                 conditions.append('(' + ' OR '.join(like_conditions) + ')')
                 params.extend([f'%{ol}%' for ol in object_like])
     
             if only_source:
-                placeholders = ','.join('?' for _ in only_source)
-                conditions.append(f'tsdb_base."Source" IN ({placeholders})')
+                placeholders = ','.join([placeholder] * len(only_source))
+                conditions.append(f'tsdb_base.{quote}Source{quote} IN ({placeholders})')
                 params.extend(only_source)
     
             if not_junk is not None:
-                conditions.append('tsdb_2d."NOTJUNK" = ?')
-                params.append(1 if not_junk else 0)
+                conditions.append(f'tsdb_2d.{quote}NOTJUNK{quote} = {placeholder}')
+                params.append(True if not_junk else False)
     
             if on_sky is not None:
                 mode = 'Observing' if on_sky else 'Calibration'
-                conditions.append('tsdb_l0."FIUMODE" = ?')
+                conditions.append(f'tsdb_l0.{quote}FIUMODE{quote} = {placeholder}')
                 params.append(mode)
     
             if start_date:
                 date_str = pd.to_datetime(start_date).strftime("%Y%m%d")
-                conditions.append('tsdb_base."datecode" >= ?')
+                conditions.append(f'tsdb_base.{quote}datecode{quote} >= {placeholder}')
                 params.append(date_str)
     
             if end_date:
                 date_str = pd.to_datetime(end_date).strftime("%Y%m%d")
-                conditions.append('tsdb_base."datecode" <= ?')
+                conditions.append(f'tsdb_base.{quote}datecode{quote} <= {placeholder}')
                 params.append(date_str)
     
-            # Automatically qualify column names in extra_conditions based on backend
             if extra_conditions:
                 qualified_extra_conditions = []
                 for condition in extra_conditions:
                     for keyword, table in kw_table_map.items():
-                        if keyword in condition:
-                            condition = condition.replace(keyword, f'{table}."{keyword}"')
+                        condition = re.sub(rf'\\b{keyword}\\b', f'{table}.{quote}{keyword}{quote}', condition)
                     qualified_extra_conditions.append(condition)
     
                 extra_clause = f" {extra_conditions_logic} ".join(qualified_extra_conditions)
@@ -1627,14 +1774,13 @@ class TSDB:
                 self.logger.debug("Params:")
                 self.logger.debug(params)
     
-            # Execute query and build dataframe
             self._execute_sql_command(query, params)
             fetched_data = self.cursor.fetchall()
             col_names = [desc[0] for desc in self.cursor.description]
     
             df = pd.DataFrame(fetched_data, columns=col_names)
     
-            # Reorder columns if specified
+            # Reorder columns if explicitly requested
             if columns not in (None, '*'):
                 final_column_order = [col for col in columns_requested if col in df.columns]
                 if 'ObsID' in df.columns and 'ObsID' not in columns_requested:

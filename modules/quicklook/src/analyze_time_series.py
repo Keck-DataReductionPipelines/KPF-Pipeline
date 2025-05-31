@@ -231,7 +231,7 @@ class AnalyzeTimeSeries:
                 end_date_was_none = False
 
             # Get data from database
-            df = self.db.dataframe_from_db(unique_cols, 
+            df = self.db.dataframe_from_db(list(unique_cols), 
                                            start_date=start_date, 
                                            end_date=end_date, 
                                            not_junk=not_junk, 
