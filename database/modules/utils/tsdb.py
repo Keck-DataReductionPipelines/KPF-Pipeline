@@ -885,8 +885,6 @@ class TSDB:
         if not quiet:
             self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
 
-        self.print_db_status()
-
 
     @require_role(['admin', 'operations'])
     def _ingest_batch_observations(self, batch, force_ingest=False):
