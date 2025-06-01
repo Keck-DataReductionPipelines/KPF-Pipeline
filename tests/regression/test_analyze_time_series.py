@@ -38,26 +38,33 @@ def test_analyze_time_series():
     # Test metadata table capabilities
     myTS.db.print_metadata_table()
     df = myTS.db.metadata_table_to_df()
+    myTS.db.print_db_status()
     
     # Test file ingestion methods
     df_ObsIDs = pd.read_csv(ObsID_filename)
     ObsID_list = df_ObsIDs['observation_id'].tolist()
     myTS.db.ingest_one_observation(base_dir, ObsID_list[0] + '.fits')
+    myTS.db.print_db_status()
+    myTS.db.drop_tables()
     
-    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
     start_date = datetime.datetime(2025,1,12)
     end_date = datetime.datetime(2025,1,13)
     myTS.db.ingest_dates_to_db(start_date, end_date)
+    myTS.db.print_db_status()
+    myTS.db.drop_tables()
 
-    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
     myTS.db.add_ObsIDs_to_db(ObsID_list)
+    myTS.db.print_db_status()
+    myTS.db.drop_tables()
     
-    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
     myTS.db.add_ObsID_list_to_db(ObsID_filename)
+    myTS.db.print_db_status()
 
     # Test plotting
     start_date = datetime.datetime(2025,1,12)
-    
     myTS.plot_all_quicklook(start_date=start_date, interval='day', fig_dir=temp_plot_dir)
     myTS.plot_time_series_multipanel('junk_status', fig_path=temp_plot_dir + '/temp.png')
     
@@ -66,6 +73,7 @@ def test_analyze_time_series():
     myTS.db.display_dataframe_from_db(columns)
     df = myTS.db.dataframe_from_db(columns=columns)
     myTS.db.ObsIDlist_from_db('autocal-bias')
+    myTS.db.print_db_status()
     myTS.db.drop_tables()
     
     # Remove the temporary database file and plot directory

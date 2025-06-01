@@ -505,16 +505,40 @@ class TSDB:
     def print_db_status(self):
         """
         Prints a formatted summary table of the database status for each table,
-        handling both SQLite and PostgreSQL backends appropriately.
+        ensuring tables exist first, and handling both SQLite and PostgreSQL.
         """
         tables = [table for table in self.tables if table != 'tsdb_metadata']
-
+    
         self._open_connection()
     
         summary_data = []
     
         try:
             for table in tables:
+                # Verify table existence first
+                table_exists = False
+    
+                if self.backend == 'sqlite':
+                    self._execute_sql_command(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
+                        params=(table,)
+                    )
+                    table_exists = bool(self.cursor.fetchone())
+                elif self.backend == 'psql':
+                    self._execute_sql_command(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1 FROM information_schema.tables
+                            WHERE table_name=%s
+                        );
+                        """, params=(table,)
+                    )
+                    table_exists = self.cursor.fetchone()[0]
+    
+                if not table_exists:
+                    self.logger.warning(f"Table '{table}' does not exist; skipping.")
+                    continue
+    
                 self._execute_sql_command(f'SELECT COUNT(*) FROM {table}')
                 nrows = self.cursor.fetchone()[0]
     
@@ -532,35 +556,31 @@ class TSDB:
     
                 summary_data.append((table, ncolumns, nrows))
     
-            # Fetch the most recent header read time
-            if self.backend == 'sqlite':
-                self._execute_sql_command(
-                    'SELECT MAX(L0_header_read_time) FROM tsdb_base'
-                )
-            elif self.backend == 'psql':
-                self._execute_sql_command(
-                    'SELECT MAX("L0_header_read_time") FROM tsdb_base'
-                )
+            if not summary_data:
+                self.logger.info("No tables exist.")
+                return
     
-            fetched = self.cursor.fetchone()
-            most_recent_read_time = fetched[0] or 'N/A'
+            # Fetch additional stats if 'tsdb_base' exists
+            if 'tsdb_base' in [t[0] for t in summary_data]:
+                query_time_col = 'L0_header_read_time' if self.backend == 'sqlite' else '"L0_header_read_time"'
+                query_datecode_col = 'datecode' if self.backend == 'sqlite' else '"datecode"'
     
-            # Fetch earliest, latest, and unique datecodes
-            if self.backend == 'sqlite':
                 self._execute_sql_command(
-                    'SELECT MIN(datecode), MAX(datecode), COUNT(DISTINCT datecode) FROM tsdb_base'
+                    f'SELECT MAX({query_time_col}) FROM tsdb_base'
                 )
-            elif self.backend == 'psql':
+                most_recent_read_time = self.cursor.fetchone()[0] or 'N/A'
+    
                 self._execute_sql_command(
-                    'SELECT MIN("datecode"), MAX("datecode"), COUNT(DISTINCT "datecode") FROM tsdb_base'
+                    f'SELECT MIN({query_datecode_col}), MAX({query_datecode_col}), COUNT(DISTINCT {query_datecode_col}) FROM tsdb_base'
                 )
+                earliest_datecode, latest_datecode, unique_datecodes_count = self.cursor.fetchone()
     
-            earliest_datecode, latest_datecode, unique_datecodes_count = self.cursor.fetchone()
-    
-            # Handle empty database scenario
-            earliest_datecode = earliest_datecode or 'N/A'
-            latest_datecode = latest_datecode or 'N/A'
-            unique_datecodes_count = unique_datecodes_count or 0
+                earliest_datecode = earliest_datecode or 'N/A'
+                latest_datecode = latest_datecode or 'N/A'
+                unique_datecodes_count = unique_datecodes_count or 0
+            else:
+                most_recent_read_time = earliest_datecode = latest_datecode = 'N/A'
+                unique_datecodes_count = 0
     
             # Print the summary table
             self.logger.info("Database Table Summary:")
@@ -574,7 +594,7 @@ class TSDB:
             self.logger.info(f"Last update: {most_recent_read_time}")
     
         finally:
-            self._close_connection() 
+            self._close_connection()
 
 
     @require_role(['admin', 'operations'])

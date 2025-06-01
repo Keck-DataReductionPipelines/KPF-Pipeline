@@ -225,7 +225,7 @@ class AnalyzeTimeSeries:
             else:
                 start_date_was_none = False
             if end_date == None:
-                end_date = datetime(2300, 1,  1)
+                end_date = datetime(2040, 1,  1)
                 end_date_was_none = True
             else:
                 end_date_was_none = False
