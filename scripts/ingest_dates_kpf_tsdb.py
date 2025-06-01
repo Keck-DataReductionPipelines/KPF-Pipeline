@@ -26,9 +26,9 @@ def main(start_date, end_date, db_path, force):
     """
 
     myTS = AnalyzeTimeSeries(db_path=db_path)
-    myTS.print_db_status()
-    myTS.ingest_dates_to_db(start_date, end_date, reverse=True, force=force)
-    myTS.print_db_status()
+    myTS.db.print_db_status()
+    myTS.db.ingest_dates_to_db(start_date, end_date, reverse=True, force=force)
+    myTS.db.print_db_status()
 
 
 if __name__ == "__main__":
