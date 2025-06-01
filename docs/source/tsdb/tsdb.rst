@@ -8,6 +8,7 @@ Using the Time Series Database
     :titlesonly:
 
     analyzetimeseries.rst
+    database_details.rst
     tsdb_keywords.rst
     all_plots.rst
     debugging_with_tsdb.rst
