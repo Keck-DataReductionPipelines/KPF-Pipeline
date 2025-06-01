@@ -409,7 +409,7 @@ class TSDB:
 
 
     @require_role(['admin', 'operations'])
-    def _drop_tables(self, tables = 'all'):
+    def drop_tables(self, tables = 'all'):
         """
         Start over on the database by dropping all data and metadata tables.
         """
@@ -762,14 +762,16 @@ class TSDB:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
         extraction_results = {}
-    
-        for tbl, (file_level, ext) in self.extraction_plan.items():
+        
+        for tbl, plan in self.extraction_plan.items():
+            file_level = plan['file_level']
+            ext = plan['extension']
             file_path = (
                 f"{dir_path.replace('L0', file_level)}/{base_filename}_{file_level}.fits"
                 if file_level != 'L0'
                 else f"{dir_path}/{base_filename}.fits"
             )
-    
+     
             keywords = self.keywords_by_table.get(tbl, [])
     
             if tbl == 'tsdb_l0t':
