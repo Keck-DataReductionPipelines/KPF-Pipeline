@@ -113,6 +113,8 @@ WILDWSKY|bool|QC: SKY WLS not wild (stdev < 5 pix)|None
 WILDWCAL|bool|QC: CAL WLS not wild (stdev < 5 pix)|None
 AGEWLS|float|WLSFILE approx age (days)|None
 AGEWLS2|float|WLSFILE2 approx age (days)|None
+AGETRAC|float|Trace file approx age|days
+AGELAMP|float|Smooth lamp file approx age|days
 NSATGS2|float|Number of saturated lines in Green SCI2|None
 NSATGC|float|Number of saturated lines in Green CAL|None
 NSATGK|float|Number of saturated lines in Green SKY|None

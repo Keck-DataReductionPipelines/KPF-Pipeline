@@ -7,6 +7,8 @@ import psycopg2
 import pandas as pd
 import numpy as np
 import time
+import inspect
+from functools import wraps
 from astropy.time import Time
 from astropy.table import Table
 from astropy.io import fits
@@ -22,6 +24,12 @@ from modules.Utils.utils import DummyLogger
 from modules.Utils.kpf_parse import get_datecode
 
 DEFAULT_CFG_PATH = 'database/modules/utils/tsdb.cfg'
+        
+def safe_float(value):
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None  # or np.nan
 
 class TSDB:
     """
@@ -50,50 +58,38 @@ class TSDB:
     Arguments:
         backend (str):
             Specifies the type of database backend to use ('sqlite' for local file-based storage or 'psql' for PostgreSQL).
-    
         db_path (str):
             Path to the SQLite3 database file. Ignored if backend is PostgreSQL.
-    
         base_dir (str):
             Base directory containing KPF Level 0 (L0) observational data directories.
-    
         logger (logging.Logger or None):
             Logger object for capturing messages, warnings, and errors. If None, a DummyLogger
             with formatted print statements is used.
-    
         verbose (bool):
             Controls verbosity level of logging output.
     
     Attributes:
         backend (str):
             Database backend in use ('sqlite' or 'psql').
-    
         db_path (str):
             Filesystem path to the SQLite database.
-    
         base_dir (str):
             Root directory for observational data storage.
-    
         tables (dict):
             Dictionary mapping database tables to their CSV configurations.
-    
         extraction_plan (dict):
             Structured plan detailing the file level and FITS extension from which to extract
             keywords for each database table.
-    
         metadata_entries (list):
             Aggregated list of metadata entries extracted from keyword CSV files.
-    
         metadata_rows (list):
             Cached list of metadata entries loaded directly from the database metadata table.
-    
         bool_columns (set):
             Set of database columns identified as boolean, ensuring proper data typing.
     
     Related Command-Line Scripts:
         - 'ingest_dates_kpf_tsdb.py':
             Ingest observational data for specified date ranges into the TSDB database.
-    
         - 'ingest_watch_kpf_tsdb.py':
             Continuously watch directories for new observational data and automatically ingest them.
     
@@ -135,6 +131,8 @@ class TSDB:
             self.dbserver = os.getenv('TSDBSERVER')     
             self.logger.info('PSQL server: ' + self.dbserver)
             self.logger.info('PSQL user: ' + self.dbuser)
+            self.user_role = self.get_user_role()
+            self.logger.info('PSQL user role: ' + self.user_role)
         
         # Read table information from file
         self.keyword_base_path = '/code/KPF-Pipeline/static/tsdb_tables'
@@ -187,6 +185,44 @@ class TSDB:
             self._create_data_tables()
         else:
             self.logger.info("Data tables exist.")
+
+
+    def require_role(allowed_roles=None):
+        """
+        Decorator that restricts method execution based on backend and user roles.
+    
+        Args:
+            allowed_roles (list or None): List of roles that have access.
+                - If None, only sqlite backend is allowed.
+                - If a list, psql backend must match one of the roles in the list.
+        """
+        def decorator(func):
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                method_name = func.__name__
+                
+                if self.backend == 'sqlite':
+                    # SQLite backend always allowed if allowed_roles is None or explicitly allowed.
+                    return func(self, *args, **kwargs)
+    
+                elif self.backend == 'psql':
+                    if not hasattr(self, 'user_role'):
+                        self.user_role = self.get_user_role()
+    
+                    if allowed_roles and self.user_role in allowed_roles:
+                        return func(self, *args, **kwargs)
+                    else:
+                        allowed_str = ', '.join(allowed_roles) if allowed_roles else 'No roles'
+                        raise PermissionError(
+                            f"Method '{method_name}' not allowed for role '{self.user_role}'. "
+                            f"Allowed roles: {allowed_str}"
+                        )
+    
+                else:
+                    raise ValueError(f"Unsupported backend: {self.backend}")
+    
+            return wrapper
+        return decorator
 
 
     def _open_connection(self):
@@ -262,70 +298,64 @@ class TSDB:
             raise
 
 
-    def _check_table_permissions(self, table_name, schema_name='public'):
+    def get_user_role(self):
+        if self.backend != 'psql':
+            raise ValueError("get_user_role only supported with PostgreSQL backend")
+    
+        schema_perms = self._check_user_schema_permissions()
+    
+        if schema_perms['SUPERUSER']:
+            return 'admin'
+        elif schema_perms['CREATE'] and schema_perms['USAGE']:
+            return 'operations'
+        elif schema_perms['USAGE']:
+            return 'readonly'
+        else:
+            return 'none'
+
+
+    def _check_user_schema_permissions(self, schema_name='public'):
         """
-        Checks and returns the database permissions (SELECT, INSERT, UPDATE, DELETE, REFERENCES)
-        for the current user on a specified table. If the table does not exist, returns 'NA' for all permissions.
+        Checks schema-level permissions (usage and create) independently of any table.
     
         Args:
-            table_name (str): The name of the table to check permissions on.
-            schema_name (str, optional): The schema where the table is located. Defaults to 'public'.
+            schema_name (str): Schema name to check permissions for.
     
         Returns:
-            dict: Dictionary with permission types as keys ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'REFERENCES')
-                  and boolean values indicating whether the user has each permission. If the table does not exist,
-                  all permissions are set to 'NA'.
-    
-        Example:
-            permissions = check_table_permissions('my_table')
-            # Returns {'SELECT': True, 'INSERT': False, ...} or {'SELECT': 'NA', ...}
+            dict: User permissions indicating access capabilities.
         """
+        permissions = {
+            'USAGE': False,
+            'CREATE': False,
+            'SUPERUSER': False
+        }
     
-        permissions = {'SELECT': 'NA', 'INSERT': 'NA', 'UPDATE': 'NA', 'DELETE': 'NA', 'REFERENCES': 'NA'}
-    
-        _open_connection()    
+        self._open_connection()
         try:
-            # First, check if the table exists
-            cursor.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_schema = %s AND table_name = %s
-                );
-            """, (schema_name, table_name))
-    
-            exists = cursor.fetchone()[0]
-    
-            if not exists:
-                return permissions
-    
-            # If table exists, check permissions
-            query = """
+            # Check schema-level privileges directly
+            self.cursor.execute("""
                 SELECT
-                    has_table_privilege(current_user, %s, 'SELECT'),
-                    has_table_privilege(current_user, %s, 'INSERT'),
-                    has_table_privilege(current_user, %s, 'UPDATE'),
-                    has_table_privilege(current_user, %s, 'DELETE'),
-                    has_table_privilege(current_user, %s, 'REFERENCES');
-            """
-            full_table_name = f"{schema_name}.{table_name}"
-            cursor.execute(query, (full_table_name,) * 5)
-            result = cursor.fetchone()
+                    has_schema_privilege(current_user, %s, 'USAGE'),
+                    has_schema_privilege(current_user, %s, 'CREATE'),
+                    rolsuper
+                FROM pg_roles
+                WHERE rolname = current_user;
+            """, (schema_name, schema_name))
     
-            permissions['SELECT'] = result[0]
-            permissions['INSERT'] = result[1]
-            permissions['UPDATE'] = result[2]
-            permissions['DELETE'] = result[3]
-            permissions['REFERENCES'] = result[4]
+            result = self.cursor.fetchone()
+            if result:
+                permissions['USAGE'], permissions['CREATE'], permissions['SUPERUSER'] = result
     
         except psycopg2.Error as e:
-            print(f"Error checking permissions: {e}")
+            self.logger.error(f"Error checking schema permissions: {e}")
     
         finally:
-            _close_connection()
+            self._close_connection()
     
         return permissions
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def print_summary_all_tables(self):
         """
         Prints a summary of all tables in the database (not just the intended tables), 
@@ -351,30 +381,34 @@ class TSDB:
                     print(f"{tbl:<20} {columns:>7} {rows:>10}")
     
             elif self.backend == 'psql':
-                self._execute_sql_command("""
-                    SELECT tablename FROM pg_catalog.pg_tables
-                    WHERE schemaname='public' ORDER BY tablename;
-                """)
-                tables = [row[0] for row in self.cursor.fetchall()]
-    
-                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
-                print("-" * 40)
-    
-                for tbl in tables:
-                    self._execute_sql_command(f"""
-                        SELECT COUNT(*) FROM information_schema.columns
-                        WHERE table_name = '{tbl}';
+                if not self.user_role in ['admin', 'operations', 'readonly']:
+                    self.logger.error(f"User role = '{self.user_role}' is not sufficient for the method '{inspect.currentframe().f_code.co_name}'.")
+                else:
+                    self._execute_sql_command("""
+                         SELECT tablename FROM pg_catalog.pg_tables
+                         WHERE schemaname='public' ORDER BY tablename;
                     """)
-                    columns = self.cursor.fetchone()[0]
-    
-                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
-                    rows = self.cursor.fetchone()[0]
-    
-                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
+                    tables = [row[0] for row in self.cursor.fetchall()]
+         
+                    print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
+                    print("-" * 40)
+         
+                    for tbl in tables:
+                        self._execute_sql_command(f"""
+                            SELECT COUNT(*) FROM information_schema.columns
+                            WHERE table_name = '{tbl}';
+                        """)
+                        columns = self.cursor.fetchone()[0]
+         
+                        self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
+                        rows = self.cursor.fetchone()[0]
+         
+                        print(f"{tbl:<20} {columns:>7} {rows:>10}")
         finally:
             self._close_connection()
 
 
+    @require_role(['admin', 'operations'])
     def _drop_tables(self, tables = 'all'):
         """
         Start over on the database by dropping all data and metadata tables.
@@ -390,6 +424,7 @@ class TSDB:
             self._close_connection()
 
 
+    @require_role(['admin', 'operations'])
     def unlock_db(self):
         """
         Remove the -wal and -shm lock files for SQLite databases.
@@ -409,6 +444,7 @@ class TSDB:
             self.logger.info("unlock_db() is not applicable for PostgreSQL databases.")
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def check_if_table_exists(self, tablename=None):
         """
         Check if the specified table exists in the database.
@@ -465,6 +501,7 @@ class TSDB:
         self.metadata_entries = df_all.to_dict(orient='records')
 
    
+    @require_role(['admin', 'operations', 'readonly'])
     def print_db_status(self):
         """
         Prints a formatted summary table of the database status for each table,
@@ -540,6 +577,7 @@ class TSDB:
             self._close_connection() 
 
 
+    @require_role(['admin', 'operations'])
     def _create_metadata_table(self):
         """
         Create the tsdb_metadata table with table_name mapping from tables_metadata.csv.
@@ -616,6 +654,7 @@ class TSDB:
         self.logger.info("Metadata table created correctly.")
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def _read_metadata_table(self):
         """
         Read the tsdb_metadata table and store it in the attribute self.metadata_table.
@@ -627,6 +666,7 @@ class TSDB:
         self.logger.info("Metadata table read.")
 
 
+    @require_role(['admin', 'operations'])
     def _create_data_tables(self):
         """
         Create TSDB data tables split by category with ObsID as primary key.
@@ -644,7 +684,7 @@ class TSDB:
                 continue
             if keyword.strip().lower() == 'obsid':
                 continue  # ObsID is primary key
-            sql_type = self.map_data_type_to_sql(dtype)
+            sql_type = self._map_data_type_to_sql(dtype)
             columns_by_table[table_name].append((keyword, sql_type))
     
         # Create each table with ObsID as primary key (implicitly indexed)
@@ -661,6 +701,7 @@ class TSDB:
         self.logger.info("Data tables created.")
  
  
+    @require_role(['admin', 'operations'])
     def create_test_table(tablename, schema='public'):
         """
         Create a table to test database functionality.
@@ -682,6 +723,7 @@ class TSDB:
             self._close_connection()
            
 
+    @require_role(['admin', 'operations', 'readonly'])
     def _set_boolean_columns(self):
         """
         Set the self.bool_columns attribute with the names of all database columns 
@@ -700,6 +742,7 @@ class TSDB:
             self._close_connection()
 
 
+    @require_role(['admin', 'operations'])
     def ingest_one_observation(self, dir_path, L0_filename):
         """
         Ingest a single observation into the database using dynamic 
@@ -709,13 +752,17 @@ class TSDB:
             dir_path (str): Path to the directory containing the files.
             L0_filename (str): Filename of the L0 FITS file.
         """
+        def safe_float(value):
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return None  # or np.nan
 
         base_filename = L0_filename.split('.fits')[0]
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
         extraction_results = {}
     
-        # Iterate over each table defined in the extraction plan
         for tbl, (file_level, ext) in self.extraction_plan.items():
             file_path = (
                 f"{dir_path.replace('L0', file_level)}/{base_filename}_{file_level}.fits"
@@ -726,16 +773,12 @@ class TSDB:
             keywords = self.keywords_by_table.get(tbl, [])
     
             if tbl == 'tsdb_l0t':
-                extracted = self.extract_telemetry(file_path, {kw: self.kw_to_dtype[kw] for kw in keywords})
-            elif tbl == 'tsdb_l2_rv':
-                extracted = self.extract_kwd(file_path, {kw: self.kw_to_dtype[kw] for kw in keywords}, ext)
-            elif tbl == 'tsdb_l2_ccf':
-                extracted = self.extract_kwd(file_path, {kw: self.kw_to_dtype[kw] for kw in keywords}, ext)
+                extracted = self._extract_telemetry(file_path, {kw: self.kw_to_dtype[kw] for kw in keywords})
             elif tbl.startswith('tsdb_l2_') and tbl not in ['tsdb_l2', 'tsdb_l2_rv', 'tsdb_l2_ccf']:
-                extracted = self.extract_rvs(file_path)
+                extracted = self._extract_rvs(file_path)
             else:
                 kw_types = {kw: self.kw_to_dtype[kw] for kw in keywords}
-                extracted = self.extract_kwd(file_path, kw_types, ext)
+                extracted = self._extract_kwd(file_path, kw_types, ext)
     
             extraction_results.update(extracted)
     
@@ -752,6 +795,10 @@ class TSDB:
             'L1_header_read_time': now_str,
             'L2_header_read_time': now_str
         })
+    
+        for kw, dtype in self.kw_to_dtype.items():
+            if dtype == 'float' and kw in extraction_results:
+                extraction_results[kw] = safe_float(extraction_results[kw])
     
         self._open_connection()
         try:
@@ -788,6 +835,7 @@ class TSDB:
         self.logger.info(f"Ingested observation: {base_filename}")
 
 
+    @require_role(['admin', 'operations'])
     def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=10000, reverse=False, force_ingest=False, quiet=False):
         """
         Ingest KPF data for the date range start_date to end_date, inclusive.
@@ -827,10 +875,10 @@ class TSDB:
                         file_path = os.path.join(dir_path, L0_filename)
                         batch.append(file_path)
                         if len(batch) >= batch_size:
-                            self.ingest_batch_observation(batch, force_ingest=force_ingest)
+                            self._ingest_batch_observations(batch, force_ingest=force_ingest)
                             batch = []
                 if batch:
-                    self.ingest_batch_observation(batch, force_ingest=force_ingest)
+                    self._ingest_batch_observations(batch, force_ingest=force_ingest)
 
         if not quiet:
             self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
@@ -838,7 +886,8 @@ class TSDB:
         self.print_db_status()
 
 
-    def ingest_batch_observation(self, batch, force_ingest=False):
+    @require_role(['admin', 'operations'])
+    def _ingest_batch_observations(self, batch, force_ingest=False):
         """
         Ingest a batch of observations into the multi-table database, dynamically handling L1 tables and metadata.
     
@@ -854,7 +903,8 @@ class TSDB:
             file_path for file_path in batch if self._is_any_file_updated(file_path)
         ]
         if not updated_batch:
-            self.logger.info("No new or updated files found in batch.")
+            if self.verbose:
+                self.logger.info("No new or updated files found in batch.")
             return
     
         extraction_args = {
@@ -864,14 +914,18 @@ class TSDB:
             'kw_to_table': self.kw_to_table,
             'keywords_by_table': self.keywords_by_table,
             'kw_to_dtype': self.kw_to_dtype,
-            'extract_kwd_func': self.extract_kwd,
-            'extract_telemetry_func': self.extract_telemetry,
-            'extract_rvs_func': self.extract_rvs,
+            '_extract_kwd_func': self._extract_kwd,
+            '_extract_telemetry_func': self._extract_telemetry,
+            '_extract_rvs_func': self._extract_rvs,
             'get_source_func': self.get_source,
             'get_datecode_func': get_datecode
         }
     
-        partial_process_file = partial(process_file, **extraction_args)
+        partial_process_file = partial(
+            process_file, 
+            safe_float=safe_float, 
+            **extraction_args
+        )
     
         max_workers = min(len(updated_batch), 20, os.cpu_count())
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -940,7 +994,7 @@ class TSDB:
             self._close_connection()
 
 
-    def map_data_type_to_sql(self, dtype):
+    def _map_data_type_to_sql(self, dtype):
         """
         Function to map the data types specified in get_keyword_types to 
         sqlite and psql datatypes.
@@ -1008,7 +1062,7 @@ class TSDB:
             return 'Unknown'
         
     
-    def extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
+    def _extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
         Extract keywords from keyword_types.keys from an extension in a L0/2D/L1/L2 file.
         Additionally, if DRPTAG is valid, populate DRPTAG2D, DRPTAGL1, and DRPTAGL2 with its value.
@@ -1048,7 +1102,7 @@ class TSDB:
         return header_data
 
 
-    def extract_telemetry(self, file_path, keyword_types):
+    def _extract_telemetry(self, file_path, keyword_types):
         """
         Extract telemetry from the 'TELEMETRY' extension in a KPF L0 file.
         """
@@ -1083,7 +1137,7 @@ class TSDB:
         return telemetry_dict
 
 
-    def extract_rvs(self, file_path):
+    def _extract_rvs(self, file_path):
         """
         Extract RVs from the 'RV' extension in a KPF L2 file.
         """
@@ -1178,6 +1232,7 @@ class TSDB:
         return df
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def _is_any_file_updated(self, L0_file_path):
         """
         Determines if any file from the L0/2D/L1/L2 set has been updated since the last 
@@ -1231,6 +1286,7 @@ class TSDB:
         return False
 
 
+    @require_role(['admin', 'operations'])
     def add_ObsID_list_to_db(self, ObsID_filename, reverse=False):
         """
         Read a CSV file with ObsID values in the first column and ingest those files
@@ -1273,6 +1329,7 @@ class TSDB:
                 self.logger.error(e)
 
 
+    @require_role(['admin', 'operations'])
     def add_ObsIDs_to_db(self, ObsID_list):
         """
         Ingest files into the database from a list of strings 'ObsID_list'.  
@@ -1291,6 +1348,7 @@ class TSDB:
                 self.logger.error(e)
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def print_metadata_table(self):
         """
         Read the tsdb_metadata table, group by 'source', and print out rows
@@ -1357,6 +1415,7 @@ class TSDB:
             self._close_connection()
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def metadata_table_to_df(self):
         """
         Return a dataframe of the metadata table with columns:
@@ -1374,6 +1433,8 @@ class TSDB:
     
         return df
 
+
+    @require_role(['admin', 'operations', 'readonly'])
     def print_table_contents(self, table_name):
         """
         Print the contents of the specified table.  This is useful for debugging.
@@ -1407,7 +1468,6 @@ class TSDB:
             self._close_connection()
 
 
-
     def is_notebook(self):
         """
         Determine if the code is being executed in a Jupyter Notebook.  
@@ -1422,6 +1482,7 @@ class TSDB:
         return True
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def get_first_last_dates(self):
         """
         Returns a tuple of datetime objects containing the first and last dates 
@@ -1446,6 +1507,7 @@ class TSDB:
         return first_date, last_date
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def display_dataframe_from_db(self, columns, 
                                   only_object=None, object_like=None, only_source=None, 
                                   on_sky=None, not_junk=None,
@@ -1501,6 +1563,7 @@ class TSDB:
         print(df)
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def dataframe_from_db(self, columns=None, 
                           start_date=None, end_date=None, 
                           only_object=None, only_source=None, object_like=None, 
@@ -1509,7 +1572,41 @@ class TSDB:
                           extra_conditions_logic='AND',
                           verbose=False):
         """
-        Retrieve a DataFrame from the database supporting both SQLite and PostgreSQL backends.
+        Description:
+            Return a Pandas DataFrame containing specified columns from a 
+            joined set of database tables, applying optional filters based on 
+            object names, source types, date ranges, sky condition, and quality 
+            checks.
+    
+        Args:
+            columns (str or list of str, optional): Column name(s) to retrieve. 
+                Defaults to None (fetches all columns).
+            start_date (str or datetime, optional): Starting date for filtering 
+                observations (datetime object or YYYYMMDD or None). Defaults to 
+                None.
+            end_date (str or datetime, optional): Ending date for filtering 
+                observations (datetime object or YYYYMMDD or None). Defaults to 
+                None.
+            only_object (str or list of str, optional): Exact object name(s) to 
+                filter observations. Defaults to None.
+                E.g., only_object = ['autocal-dark', 'autocal-bias']
+            only_source (str or list of str, optional): Source type(s) to filter 
+                observations. Defaults to None.
+                E.g., only_source = ['Dark', 'Bias']
+            object_like (str or list of str, optional): Partial object name(s) 
+                for filtering observations using SQL LIKE conditions. Defaults 
+                to None.
+                E.g., object_like = ['autocal-etalon', 'autocal-bias']
+            on_sky (bool, optional): Filter by on-sky (True) or calibration 
+                (False) observations. Defaults to None.
+            not_junk (bool, optional): Filter by observations marked as not junk 
+                (True) or junk (False). Defaults to None.
+            verbose (bool, optional): Enables detailed logging of SQL queries 
+                and parameters. Defaults to False.
+    
+        Returns:
+            The resulting dataframe.
+
         """
     
         if isinstance(only_object, str):
@@ -1644,6 +1741,7 @@ class TSDB:
             # Reorder columns if explicitly requested
             if columns not in (None, '*'):
                 final_column_order = [col for col in columns_requested if col in df.columns]
+                df = df.sort_values(by='ObsID', ascending=True)
                 if 'ObsID' in df.columns and 'ObsID' not in columns_requested:
                     df = df.drop(columns='ObsID')
                 df = df[final_column_order]
@@ -1654,6 +1752,7 @@ class TSDB:
         return df
         
 
+    @require_role(['admin', 'operations', 'readonly'])
     def ObsIDlist_from_db(self, object_name, start_date=None, end_date=None, not_junk=None):
         """
         Returns a list of ObsIDs for the observations of object_name.
@@ -1673,15 +1772,16 @@ class TSDB:
                                     not_junk=not_junk)
         
         return df['ObsID'].tolist()
-        
+
 
 def process_file(file_path, now_str,
                  extraction_plan, bool_columns, kw_to_table, keywords_by_table, kw_to_dtype,
-                 extract_kwd_func, extract_telemetry_func, extract_rvs_func,
-                 get_source_func, get_datecode_func):
+                 _extract_kwd_func, _extract_telemetry_func, _extract_rvs_func,
+                 get_source_func, get_datecode_func, safe_float):
     """
     Process a single file to extract all relevant keywords based on the extraction plan.
-    """
+    """    
+    
     base_filename = os.path.basename(file_path).replace('.fits', '')
     file_level_paths = {
         'L0': file_path,
@@ -1704,11 +1804,11 @@ def process_file(file_path, now_str,
             continue
 
         if tbl == 'tsdb_l0t':
-            extracted = extract_telemetry_func(current_file_path, kw_types)
+            extracted = _extract_telemetry_func(current_file_path, kw_types)
         elif tbl.startswith('tsdb_l2_') and tbl not in ['tsdb_l2', 'tsdb_l2rv', 'tsdb_l2ccf']:
-            extracted = extract_rvs_func(current_file_path)
+            extracted = _extract_rvs_func(current_file_path)
         else:
-            extracted = extract_kwd_func(current_file_path, kw_types, extension)
+            extracted = _extract_kwd_func(current_file_path, kw_types, extension)
 
         extraction_results.update(extracted)
 
@@ -1732,6 +1832,11 @@ def process_file(file_path, now_str,
         if col in extraction_results:
             val = extraction_results[col]
             extraction_results[col] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y']
+
+    # Apply safe_float explicitly to all float columns
+    for kw, dtype in kw_to_dtype.items():
+        if dtype == 'float' and kw in extraction_results:
+            extraction_results[kw] = safe_float(extraction_results[kw])
 
     return extraction_results
 
