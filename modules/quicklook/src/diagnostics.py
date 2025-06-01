@@ -493,7 +493,7 @@ def add_headers_masters_age_2D(D2, logger=None, verbose=False):
     
         if file_error:
             logger.error(f"Problem with {new_keyword} age determination: Age of {master_file} compared to this file (whole days) = {new_keyword}")
-            D2.header['PRIMARY'][new_keyword] = (-999, 'ERROR: Age of {master_file} compared to this file (whole days)')
+            D2.header['PRIMARY'][new_keyword] = (-99, 'ERROR: Age of {master_file} compared to this file (whole days)')
 
     return D2
 
@@ -578,11 +578,7 @@ def add_headers_2D_xdisp_offset(D2, logger=None):
 def add_headers_masters_age_L1(L1, logger=None, verbose=False):
     """
     Computes the the number of days between the observation and the
-    date of observations for the WLS files.  The ages assumes the 
-    following times for autocal calibrations:
-        morn     = 18:48 UT  (HST morning cals)
-        midnight = 09:30 UT  (HST midnight cals)
-        eve      = 03:30 UT  (HST evening cals)
+    date of observations for the WLS files.  
 
     Keywords:
         AGEWLS  - Approx age of WLSFILE compared to this file (days)
@@ -623,7 +619,56 @@ def add_headers_masters_age_L1(L1, logger=None, verbose=False):
 
         except Exception as e:
             logger.error(f"Problem with determining age of {wlsfile}: {e}\n{traceback.format_exc()}")
-            L1.header['PRIMARY'][new_keyword] = (-999, 'ERROR: {wlsfile} age compared to this file (days).')
+            L1.header['PRIMARY'][new_keyword] = (-99, 'ERROR: {wlsfile} age compared to this file (days).')
+
+    return L1
+
+
+def add_headers_trace_lamp_age_L1(L1, logger=None, verbose=False):
+    """
+    Computes the the number of days between the observation and the
+    date of observations for the smooth lamp and order traces files.  
+
+    Keywords:
+        AGETRAC - Approx age of TRACFILE compared to this file (days)
+        AGEFLAT - Approx age of LAMPFILE compared to this file (days)
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with PRIMARY header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    # Check that the input object is of the right type
+    if (str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>"):
+        logger.info('Not a valid L1.  Master age keywords not added to header.')
+        return L1
+    
+    # Make datetime object of the observation time
+    date_mjd_str = L1.header['PRIMARY']['MJD-OBS']
+    date_obs_datetime = Time(date_mjd_str, format='mjd').datetime
+
+    # Loops over WLSFILE keywords
+    myL1 = AnalyzeL1(L1, logger=logger)
+    for file, new_keyword in zip(['TRACFILE', 'LAMPFILE'], ['AGETRAC', 'AGELAMP']):
+        try:
+            age_file = myL1.measure_master_age(kwd=file, verbose=verbose)
+            if verbose:
+                logger.info(f'{file} age compared to this file (days): {age_file}')
+            
+            if age_file == None:
+                age_file = -99
+
+            # Write age to primary header
+            L1.header['PRIMARY'][new_keyword] = (age_file, f'{file} age compared to this file (days)')
+
+        except Exception as e:
+            logger.error(f"Problem with determining age of {file}: {e}\n{traceback.format_exc()}")
+            L1.header['PRIMARY'][new_keyword] = (-99, 'ERROR: {file} age compared to this file (days).')
 
     return L1
 

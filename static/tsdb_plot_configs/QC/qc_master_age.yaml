@@ -33,6 +33,26 @@ panel_arr:
       legend_frac_size: 0.12
 
   - panelvars:
+      - col: OLDLAMP
+        plot_type: state
+        plot_attr:
+          label: "Smooth Lamp File Age"
+          marker: .
+    paneldict:
+      ylabel: "Smooth Lamp File \nYounger than 5 Days\n(OLDLAMP)"
+      legend_frac_size: 0.12
+
+  - panelvars:
+      - col: OLDTRAC
+        plot_type: state
+        plot_attr:
+          label: "Order Trace File Age"
+          marker: .
+    paneldict:
+      ylabel: "Order Trace File \nYounger than 5 Days\n(OLDTRAC)"
+      legend_frac_size: 0.12
+
+  - panelvars:
       - col: OLDWLS
         plot_type: state
         plot_attr:
