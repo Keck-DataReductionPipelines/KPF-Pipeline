@@ -130,7 +130,7 @@ def process_queue(event_queue, db_path, stop_event):
                 ObsID_batch = [get_ObsID(L0_path) for L0_path in L0_path_batch]
                 myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
                 myTS.logger.info('Ingesting ' + str(len(L0_path_batch)) + ' observations: ' + ', '.join(ObsID_batch))
-                myTS.db.ingest_batch_observation(L0_path_batch)
+                myTS.db.ingest_batch_observations(L0_path_batch)
                 myTS.logger.info('Finished ingesting ' + str(len(L0_path_batch)) + ' observations.')
                 myTS = [] # clear memory
             

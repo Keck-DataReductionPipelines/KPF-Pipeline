@@ -98,6 +98,7 @@ class TSDB:
         - Include derived temperature derivatives and other computed columns.
         - Introduce separate database management for calibration master files.
         - Provide quality control (QC) filtering options in query methods (e.g., qc_pass, qc_fail flags).
+        - Use config file for backend.  Possibly check the config for credentials.
     
     """
     def __init__(self, backend='sqlite', db_path='kpf_ts.db', base_dir='/data/L0', logger=None, verbose=False):
@@ -105,6 +106,7 @@ class TSDB:
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting KPF_TSDB')
         self.backend = backend # sqlite or psql
+        self.logger.info(f'Backend: {backend}')
         if self.backend != 'sqlite' and self.backend != 'psql':
             self.logger.info("Invalid entry for backend.  Must be 'sqlite' or 'psql'.")
             return
@@ -897,17 +899,17 @@ class TSDB:
                         file_path = os.path.join(dir_path, L0_filename)
                         batch.append(file_path)
                         if len(batch) >= batch_size:
-                            self._ingest_batch_observations(batch, force_ingest=force_ingest)
+                            self.ingest_batch_observations(batch, force_ingest=force_ingest)
                             batch = []
                 if batch:
-                    self._ingest_batch_observations(batch, force_ingest=force_ingest)
+                    self.ingest_batch_observations(batch, force_ingest=force_ingest)
 
         if not quiet:
             self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
 
 
     @require_role(['admin', 'operations'])
-    def _ingest_batch_observations(self, batch, force_ingest=False):
+    def ingest_batch_observations(self, batch, force_ingest=False):
         """
         Ingest a batch of observations into the multi-table database, dynamically handling L1 tables and metadata.
     
@@ -1515,12 +1517,21 @@ class TSDB:
                 FROM tsdb_l0
             """
             self._execute_sql_command(query)
-            min_date_str, max_date_str = self.cursor.fetchone()
+            min_date_raw, max_date_raw = self.cursor.fetchone()
     
-            # Convert strings to datetime objects, handling None values gracefully
             date_format = '%Y-%m-%dT%H:%M:%S.%f'
-            first_date = datetime.strptime(min_date_str, date_format) if min_date_str else None
-            last_date = datetime.strptime(max_date_str, date_format) if max_date_str else None
+    
+            def parse_date(date_input):
+                if isinstance(date_input, datetime):
+                    return date_input
+                elif isinstance(date_input, str):
+                    return datetime.strptime(date_input, date_format)
+                else:
+                    return None
+    
+            first_date = parse_date(min_date_raw)
+            last_date = parse_date(max_date_raw)
+    
         finally:
             self._close_connection()
     

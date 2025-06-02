@@ -139,12 +139,13 @@ def generate_plots(start_date=None, end_date=None,
         PNG plots in the output directory.
         
     To-do: 
-        Add argument for backend
+        Add argument for backend.
+        Add to CI.
     """
     
     if start_date == None or end_date == None:
         myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
-        first_last_dates = myTS.get_first_last_dates()
+        first_last_dates = myTS.db.get_first_last_dates()
         if start_date == None:
             start_date = first_last_dates[0].replace(hour=0, minute=0, second=0, microsecond=0)
         if end_date == None:
