@@ -28,7 +28,7 @@ class ModifyWLS:
 
         cfg_params = ConfigHandler(self.config, 'PARAM')
         self.db_path = cfg_params.get_config_value('ts_db_path')
-        print(self.db_path)
+        self.backend = cfg_params.get_config_value('ts_backend')
 
         self.l1_obj = l1_obj   # KPF L1 object
         self.date_mid = self.l1_obj.header['PRIMARY']['DATE-MID']
@@ -49,14 +49,14 @@ class ModifyWLS:
                 self.wls_session = session
 
         # Connect to TS DB
-        myTS = AnalyzeTimeSeries(db_path=self.db_path)
+        myTS = AnalyzeTimeSeries(db_path=self.db_path, backend=self.backend)
 
         date = self.dt.strftime(format='%Y%m%d')
         start_date = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) - timedelta(days=1)
         end_date   = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) + timedelta(days=1)
 
         cols=['ObsID', 'OBJECT', 'DATE-MID', 'DRPTAG','WLSFILE','WLSFILE2', 'CCFRV', 'CCD1RV', 'CCD2RV', 'NOTJUNK','READSPED','SNRSC548', 'SCIMPATH']
-        self.df = myTS.dataframe_from_db(start_date=start_date, end_date=end_date,columns=cols)
+        self.df = myTS.db.dataframe_from_db(start_date=start_date, end_date=end_date, columns=cols)
         self.df = self.prepare_table()
 
     def apply_drift(self, method):
