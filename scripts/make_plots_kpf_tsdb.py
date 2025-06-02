@@ -39,6 +39,9 @@ Examples:
 
     3. Generate daily plots and specify a custom database path:
         python make_plots_kpf_tsdb.py --db_path /custom/path/to/kpf_ts.db --interval day --wait_time 5
+        
+To-do:
+    Add argument for backend.
 """
 
 import os
@@ -52,12 +55,12 @@ def plot_data(db_path, interval, wait_time):
         date = datetime.now()
         date_str = date.strftime('%Y%m%d')
         savedir = f'/data/QLP/{date_str}/Time_Series/'
-        myTS = AnalyzeTimeSeries(db_path=db_path)
+        myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
         myTS.plot_all_quicklook(datetime(2024, 1, 1), interval=interval, fig_dir=savedir)
     elif interval.startswith('last'):
         savedir = f'/data/QLP/{interval}/Time_Series/'
         n_days = int(interval.replace('last_', '').replace('_days', '').replace('_day', ''))
-        myTS = AnalyzeTimeSeries(db_path=db_path)
+        myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
         myTS.plot_all_quicklook(last_n_days=n_days, fig_dir=savedir)
     time.sleep(wait_time)
 
