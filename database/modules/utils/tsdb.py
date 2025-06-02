@@ -125,14 +125,14 @@ class TSDB:
 
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting KPF_TSDB')
+        self.verbose = verbose
+        self.base_dir = base_dir
+        self.logger.info('Base data directory: ' + self.base_dir)
         self.backend = backend # sqlite or psql
         self.logger.info(f'Backend: {backend}')
         if self.backend != 'sqlite' and self.backend != 'psql':
             self.logger.info("Invalid entry for backend.  Must be 'sqlite' or 'psql'.")
             return
-        self.verbose = verbose
-        self.base_dir = base_dir
-        self.logger.info('Base data directory: ' + self.base_dir)
         self.conn = None
         self.cursor = None
 
