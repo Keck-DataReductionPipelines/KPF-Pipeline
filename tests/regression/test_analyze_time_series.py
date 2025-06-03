@@ -11,6 +11,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
+from database.modules.utils.tsdb import convert_to_list_if_array
 
 # Generate a unique DB filename and plot directory
 characters = string.ascii_letters + string.digits
@@ -79,6 +80,16 @@ def test_analyze_time_series():
     # Remove the temporary database file and plot directory
     os.remove(temp_db_path)
     shutil.rmtree(temp_plot_dir)
+    
+def test_extra_methods():
+    my_string = '["autocal-lfc-all-morn", "autocal-lfc-all-eve"]'
+    my_array = ["autocal-lfc-all-morn", "autocal-lfc-all-eve"]
+    out1 = convert_to_list_if_array(my_string)
+    out2 = convert_to_list_if_array(my_array)
+    assert type(out1) == type('abc')
+    assert type(out2) == type([1,2])
 
 if __name__ == '__main__':
     test_analyze_time_series()
+    test_extra_methods()
+    
