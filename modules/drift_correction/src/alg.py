@@ -53,7 +53,7 @@ class ModifyWLS:
         start_date = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) - timedelta(days=1)
         end_date   = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) + timedelta(days=1)
 
-        cols=['ObsID', 'OBJECT', 'DATE-MID', 'DRPTAG','WLSFILE','WLSFILE2', 'CCFRV', 'CCD1RV', 'CCD2RV', 'NOTJUNK','READSPED','SNRSC548', 'SCIMPATH']
+        cols=['ObsID', 'OBJECT', 'DATE-MID', 'DRPTAGL1','WLSFILE','WLSFILE2', 'CCFRV', 'CCD1RV', 'CCD2RV', 'NOTJUNK','READSPED','SNRSC548', 'SCIMPATH']
         self.df = myTS.db.dataframe_from_db(start_date=start_date, end_date=end_date, columns=cols)
         self.df = self.prepare_table()
 
