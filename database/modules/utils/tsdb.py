@@ -2,6 +2,7 @@ import os
 import re
 import glob
 import json
+import copy
 import sqlite3
 import hashlib
 import psycopg2
@@ -1556,42 +1557,22 @@ class TSDB:
 
     @require_role(['admin', 'operations', 'readonly'])
     def display_dataframe_from_db(self, columns, 
+                                  max_rows=60,
                                   only_object=None, object_like=None, only_source=None, 
                                   on_sky=None, not_junk=None,
+                                  QCs_pass=None, QCs_fail=None, 
                                   start_date=None, end_date=None, 
                                   verbose=False):
         """
         Description:
-            Print a pandas DataFrame containing specified columns from a 
-            joined set of database tables, applying optional filters based on 
-            object names, source types, date ranges, sky condition, and quality 
-            checks.
+            Make a formatted print out of a pandas DataFrame containing specified 
+            columns from a joined set of database tables, applying optional 
+            filters based on object names, source types, date ranges, 
+            sky condition, and quality checks.
     
         Args:
-            columns (str or list of str, optional): Column name(s) to retrieve. 
-                Defaults to None (fetches all columns).
-            start_date (str or datetime, optional): Starting date for filtering 
-                observations (datetime object or YYYYMMDD or None). Defaults to 
-                None.
-            end_date (str or datetime, optional): Ending date for filtering 
-                observations (datetime object or YYYYMMDD or None). Defaults to 
-                None.
-            only_object (str or list of str, optional): Exact object name(s) to 
-                filter observations. Defaults to None.
-                E.g., only_object = ['autocal-dark', 'autocal-bias']
-            only_source (str or list of str, optional): Source type(s) to filter 
-                observations. Defaults to None.
-                E.g., only_source = ['Dark', 'Bias']
-            object_like (str or list of str, optional): Partial object name(s) 
-                for filtering observations using SQL LIKE conditions. Defaults 
-                to None.
-                E.g., object_like = ['autocal-etalon', 'autocal-bias']
-            on_sky (bool, optional): Filter by on-sky (True) or calibration 
-                (False) observations. Defaults to None.
-            not_junk (bool, optional): Filter by observations marked as not junk 
-                (True) or junk (False). Defaults to None.
-            verbose (bool, optional): Enables detailed logging of SQL queries 
-                and parameters. Defaults to False.
+            max_rows (int, default=60): Maximum number of rows in output table.
+            (other arguments are the same as dataframe_from_db)
     
         Returns:
             None. Prints the resulting dataframe.
@@ -1603,11 +1584,18 @@ class TSDB:
             only_source=only_source,
             on_sky=on_sky, 
             not_junk=not_junk,
+            QCs_pass=QCs_pass, 
+            QCs_fail=QCs_fail, 
             start_date=start_date,
             end_date=end_date,
             verbose=verbose
         )
-        print(df)
+        num_rows = df.shape[0]
+        with pd.option_context('display.max_rows', max_rows,
+                               'display.max_columns', None,
+                               'display.width', 200):
+        
+            print(df)
 
 
     @require_role(['admin', 'operations', 'readonly'])
@@ -1615,6 +1603,7 @@ class TSDB:
                           start_date=None, end_date=None, 
                           only_object=None, only_source=None, object_like=None, 
                           on_sky=None, not_junk=None, 
+                          QCs_pass=None, QCs_fail=None, 
                           extra_conditions=None,
                           extra_conditions_logic='AND',
                           verbose=False):
@@ -1646,6 +1635,10 @@ class TSDB:
                 E.g., object_like = ['autocal-etalon', 'autocal-bias']
             on_sky (bool, optional): Filter by on-sky (True) or calibration 
                 (False) observations. Defaults to None.
+            QCs_pass (str or list of str, optional): Column names where rows 
+                must have True. Defaults to None.
+            QCs_fail (str or list of str, optional): Column names where rows 
+                must have False. Defaults to None.
             not_junk (bool, optional): Filter by observations marked as not junk 
                 (True) or junk (False). Defaults to None.
             verbose (bool, optional): Enables detailed logging of SQL queries 
@@ -1662,6 +1655,10 @@ class TSDB:
             only_source = [only_source]
         if isinstance(object_like, str):
             object_like = [object_like]
+        if isinstance(QCs_pass, str):
+            QCs_pass = [QCs_pass]
+        if isinstance(QCs_fail, str):
+            QCs_fail = [QCs_fail]
     
         quote = '"' if self.backend == 'psql' else '"'  # SQLite uses " for quoting as well
         placeholder = '%s' if self.backend == 'psql' else '?'
@@ -1677,9 +1674,14 @@ class TSDB:
                 columns_requested = metadata['keyword'].tolist()
             else:
                 columns_requested = [columns] if isinstance(columns, str) else columns
-                placeholders = ','.join([placeholder] * len(columns_requested))
+                columns_needed = columns_requested.copy()
+                if QCs_pass is not None:
+                    columns_needed.extend(QCs_pass)
+                if QCs_fail is not None:
+                    columns_needed.extend(QCs_fail)
+                placeholders = ','.join([placeholder] * len(columns_needed))
                 metadata_query = f'SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders});'
-                self._execute_sql_command(metadata_query, params=columns_requested)
+                self._execute_sql_command(metadata_query, params=columns_needed)
                 metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
     
             kw_table_map = dict(zip(metadata['keyword'], metadata['table_name']))
@@ -1690,7 +1692,7 @@ class TSDB:
             table_columns = {table: {'ObsID'} for table in tables_needed}
             for kw, tbl in kw_table_map.items():
                 table_columns[tbl].add(kw)
-    
+
             guaranteed_columns = {
                 'tsdb_base': ['Source', 'datecode'],
                 'tsdb_l0': ['OBJECT', 'FIUMODE'],
@@ -1717,7 +1719,7 @@ class TSDB:
                 f'LEFT JOIN {tbl} ON tsdb_base.{quote}ObsID{quote} = {tbl}.{quote}ObsID{quote}'
                 for tbl in tables_needed if tbl != 'tsdb_base'
             ]
-    
+
             conditions, params = [], []
     
             if only_object:
@@ -1743,6 +1745,16 @@ class TSDB:
                 mode = 'Observing' if on_sky else 'Calibration'
                 conditions.append(f'tsdb_l0.{quote}FIUMODE{quote} = {placeholder}')
                 params.append(mode)
+
+            if QCs_pass is not None:
+                for col in QCs_pass:
+                    conditions.append(f"{quote}{col}{quote} = {placeholder}")
+                    params.append(True)
+        
+            if QCs_fail is not None:
+                for col in QCs_fail:
+                    conditions.append(f"{quote}{col}{quote} = {placeholder}")
+                    params.append(False)
     
             if start_date:
                 date_str = pd.to_datetime(start_date).strftime("%Y%m%d")
@@ -1763,7 +1775,7 @@ class TSDB:
     
                 extra_clause = f" {extra_conditions_logic} ".join(qualified_extra_conditions)
                 conditions.append(f"({extra_clause})")
-    
+            
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     
             query = f"""
@@ -1772,7 +1784,7 @@ class TSDB:
                 {' '.join(join_clauses)}
                 {where_clause}
             """
-    
+
             if verbose:
                 self.logger.debug("SQL Query:")
                 self.logger.debug(query)
@@ -1797,7 +1809,7 @@ class TSDB:
             self._close_connection()
     
         return df
-        
+
 
     @require_role(['admin', 'operations', 'readonly'])
     def ObsIDlist_from_db(self, object_name, start_date=None, end_date=None, not_junk=None):
@@ -1819,6 +1831,124 @@ class TSDB:
                                     not_junk=not_junk)
         
         return df['ObsID'].tolist()
+
+    def print_df_with_obsid_links(self, df, url_stub='https://jump.caltech.edu/observing-logs/kpf/', nrows=None):
+        '''
+        Print a dataframe with links to a web page. 
+        The default page is set to "Jump", the portal used by the KPF Science Team.
+        The printed table will be sortable by clicking on column headers.
+        '''
+        df_copy = df.copy()  # Make a copy to avoid modifying the original DataFrame
+        
+        # Convert ObsID into clickable links
+        df_copy['ObsID'] = df_copy['ObsID'].apply(
+            lambda obsid: f'<a href="{url_stub}{obsid}" target="_blank">{obsid}</a>'
+        )
+        
+        # Limit number of rows if requested
+        if nrows is None:
+            limited_df = df_copy
+        else:
+            limited_df = df_copy.head(nrows)
+        
+        # Generate the HTML for the table
+        html = limited_df.to_html(escape=False, index=False, classes='sortable')
+        
+        # JavaScript for making the table sortable
+        sortable_script = """
+        <script>
+          function sortTable(table, col, reverse) {
+            const tb = table.tBodies[0],
+              tr = Array.from(tb.rows),
+              i = col;
+            reverse = -((+reverse) || -1);
+            tr.sort((a, b) => reverse * (a.cells[i].textContent.trim().localeCompare(b.cells[i].textContent.trim(), undefined, {numeric: true})));
+            for(let row of tr) tb.appendChild(row);
+          }
+          document.querySelectorAll('table.sortable th').forEach(th => th.addEventListener('click', (() => {
+            const table = th.closest('table');
+            Array.from(table.querySelectorAll('th')).forEach((th, idx) => th.addEventListener('click', (() => sortTable(table, idx, this.asc = !this.asc))));
+          })));
+        </script>
+        """
+        
+        # Display the combined table + script
+        display(HTML(html + sortable_script))
+
+
+    def print_log_error_report(self, df, log_dir='/data/logs/', aggregated_summary=False):
+        '''
+        For each ObsID in the dataframe, open the corresponding log file,
+        find all lines containing [ERROR]:, and print either:
+        - aggregated error report (if aggregated_summary=True)
+        - individual ObsID error reports (if aggregated_summary=False)
+        '''
+        error_counter = Counter()  # Collect error bodies for aggregation
+    
+        for obsid in df['ObsID']:
+            log_path = os.path.join(log_dir, f'{get_datecode(obsid)}/{obsid}.log')
+            
+            if not os.path.isfile(log_path):
+                if not aggregated_summary:
+                    print(f"ObsID: {obsid}")
+                    print(f"Log file: {log_path}")
+                    print(f"Log file not found.\n")
+                continue
+            
+            mod_time = datetime.utcfromtimestamp(os.path.getmtime(log_path)).strftime('%Y-%m-%d %H:%M:%S UTC')
+            
+            error_lines = []
+            with open(log_path, 'r') as file:
+                for line in file:
+                    if '[ERROR]:' in line:
+                        error_line = line.strip()
+                        error_lines.append(error_line)
+    
+                        # Extract only the part after [ERROR]:
+                        parts = error_line.split('[ERROR]:', 1)
+                        if len(parts) > 1:
+                            error_body = parts[1].strip()
+                            error_counter[error_body] += 1
+                        else:
+                            error_counter[error_line] += 1
+            
+            if not aggregated_summary:
+                # Print individual ObsID report
+                print(f"ObsID: {obsid}")
+                print(f"Log file: {log_path}")
+                print(f"Log modification date: {mod_time}")
+                print(f"Errors in log file:")
+                
+                if error_lines:
+                    for error in error_lines:
+                        print(f"    {error}")
+                else:
+                    print(f"    No [ERROR] lines found.")
+                
+                print("\n" + "-" * 50 + "\n")
+        
+        # After processing all ObsIDs, print the aggregated summary if requested
+        if aggregated_summary:
+            if error_counter:
+                print("\nAggregated Error Summary:\n")
+                
+                summary_df = pd.DataFrame(
+                    [(count, error) for error, count in error_counter.items()],
+                    columns=['Count', 'Error Message']
+                ).sort_values('Count', ascending=False).reset_index(drop=True)
+                
+                # Set wide display options for Pandas
+                pd.set_option('display.max_colwidth', None)
+                pd.set_option('display.width', 0)
+                
+                # Force all table cells to left-align with inline CSS
+                html = summary_df.to_html(index=False, escape=False)
+                html = html.replace('<td>', '<td style="text-align: left; white-space: normal; word-wrap: break-word;">')
+                html = html.replace('<th>', '<th style="text-align: left; white-space: normal; word-wrap: break-word;">')
+                
+                display(HTML(html))
+            else:
+                print("No [ERROR] lines found across all logs.")
 
 
 def process_file(file_path, now_str,
