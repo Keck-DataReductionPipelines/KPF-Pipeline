@@ -30,6 +30,9 @@ Examples:
 
     2. Specifying a custom database path:
         python ingest_watch_kpf_tsdb.py --db_path /custom/path/to/kpf_ts.db
+        
+To-do: 
+	1. Add backend as an argument
 """
 
 import os
@@ -125,9 +128,9 @@ def process_queue(event_queue, db_path, stop_event):
             if len(L0_path_batch) > 0:
                 L0_path_batch = sorted(L0_path_batch)
                 ObsID_batch = [get_ObsID(L0_path) for L0_path in L0_path_batch]
-                myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
                 myTS.logger.info('Ingesting ' + str(len(L0_path_batch)) + ' observations: ' + ', '.join(ObsID_batch))
-                myTS.ingest_batch_observation(L0_path_batch)
+                myTS.db.ingest_batch_observations(L0_path_batch)
                 myTS.logger.info('Finished ingesting ' + str(len(L0_path_batch)) + ' observations.')
                 myTS = [] # clear memory
             
@@ -149,10 +152,10 @@ def periodic_scan(db_path,stop_event):
 
     while not stop_event.is_set():
         if datetime.now() - last_run_time >= timedelta(seconds=sec_between_scans):
-            myTS = AnalyzeTimeSeries(db_path=db_path)
+            myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
             myTS.logger.info('Starting periodic scan for new or changed files.')
-            myTS.ingest_dates_to_db(start_date, end_date, batch_size=10000, reverse=True, force_ingest=True)
-            myTS.print_db_status()
+            myTS.db.ingest_dates_to_db(start_date, end_date, batch_size=10000, reverse=True, force_ingest=True)
+            myTS.db.print_db_status()
             myTS.logger.info('Ending periodic scan for new or changed files.')
             myTS = [] # clear memory
             last_run_time = datetime.now()

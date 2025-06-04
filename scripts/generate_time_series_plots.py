@@ -137,11 +137,15 @@ def generate_plots(start_date=None, end_date=None,
 
     Returns:
         PNG plots in the output directory.
+        
+    To-do: 
+        Add argument for backend.
+        Add to CI.
     """
     
     if start_date == None or end_date == None:
-        myTS = AnalyzeTimeSeries(db_path=db_path)
-        first_last_dates = myTS.get_first_last_dates()
+        myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
+        first_last_dates = myTS.db.get_first_last_dates()
         if start_date == None:
             start_date = first_last_dates[0].replace(hour=0, minute=0, second=0, microsecond=0)
         if end_date == None:
@@ -175,7 +179,7 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + day.strftime("%Y%m%d") + '/Time_Series/'
                 else:
                     savedir = None
-                myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
                 myTS.plot_all_quicklook(day, interval='day', fig_dir=savedir)
                 del myTS # free up memory
             except Exception as e:
@@ -189,7 +193,7 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + month.strftime("%Y%m") + 'M/Time_Series/'
                 else:
                     savedir = None
-                myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
                 myTS.plot_all_quicklook(month, interval='month', fig_dir=savedir)
                 del myTS # free up memory
             except Exception as e:
@@ -203,7 +207,7 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + year.strftime("%Y") + 'Y/Time_Series/'
                 else:
                     savedir = None
-                myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
                 myTS.plot_all_quicklook(year, interval='year', fig_dir=savedir)
                 del myTS # free up memory
             except Exception as e:
@@ -217,7 +221,7 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = base_dir + decade.strftime("%Y")[0:3] + '0D/Time_Series/' 
                 else:
                     savedir = None
-                myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
                 myTS.plot_all_quicklook(decade, interval='decade', fig_dir=savedir)
                 del myTS # free up memory
             except Exception as e:

@@ -11,6 +11,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
+from database.modules.utils.tsdb import convert_to_list_if_array
 
 # Generate a unique DB filename and plot directory
 characters = string.ascii_letters + string.digits
@@ -36,41 +37,59 @@ def test_analyze_time_series():
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
     
     # Test metadata table capabilities
-    myTS.print_metadata_table()
-    df = myTS.metadata_table_to_df()
+    myTS.db.print_metadata_table()
+    df = myTS.db.metadata_table_to_df()
+    myTS.db.print_db_status()
     
     # Test file ingestion methods
     df_ObsIDs = pd.read_csv(ObsID_filename)
     ObsID_list = df_ObsIDs['observation_id'].tolist()
-    myTS.ingest_one_observation(base_dir, ObsID_list[0] + '.fits')
+    myTS.db.ingest_one_observation(base_dir, ObsID_list[0] + '.fits')
+    myTS.db.print_db_status()
+    myTS.db.drop_tables()
     
-    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
     start_date = datetime.datetime(2025,1,12)
     end_date = datetime.datetime(2025,1,13)
-    myTS.ingest_dates_to_db(start_date, end_date)
+    myTS.db.ingest_dates_to_db(start_date, end_date)
+    myTS.db.print_db_status()
+    myTS.db.drop_tables()
 
-    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
-    myTS.add_ObsIDs_to_db(ObsID_list)
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
+    myTS.db.add_ObsIDs_to_db(ObsID_list)
+    myTS.db.print_db_status()
+    myTS.db.drop_tables()
     
-    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, drop=True)
-    myTS.add_ObsID_list_to_db(ObsID_filename)
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
+    myTS.db.add_ObsID_list_to_db(ObsID_filename)
+    myTS.db.print_db_status()
 
     # Test plotting
     start_date = datetime.datetime(2025,1,12)
-    
     myTS.plot_all_quicklook(start_date=start_date, interval='day', fig_dir=temp_plot_dir)
     myTS.plot_time_series_multipanel('junk_status', fig_path=temp_plot_dir + '/temp.png')
     
     # Test miscellaneous methods
     columns = ['ObsID','GDRXRMS','FIUMODE']
-    myTS.display_dataframe_from_db(columns)
-    df = myTS.dataframe_from_db(columns=columns)
-    myTS.ObsIDlist_from_db('autocal-bias')
-    myTS.drop_table()
+    myTS.db.display_dataframe_from_db(columns)
+    df = myTS.db.dataframe_from_db(columns=columns)
+    myTS.db.ObsIDlist_from_db('autocal-bias')
+    myTS.db.print_db_status()
+    myTS.db.drop_tables()
     
     # Remove the temporary database file and plot directory
     os.remove(temp_db_path)
     shutil.rmtree(temp_plot_dir)
+    
+def test_extra_methods():
+    my_string = '["autocal-lfc-all-morn", "autocal-lfc-all-eve"]'
+    my_array = ["autocal-lfc-all-morn", "autocal-lfc-all-eve"]
+    out1 = convert_to_list_if_array(my_string)
+    out2 = convert_to_list_if_array(my_array)
+    assert type(out1) == type('abc')
+    assert type(out2) == type([1,2])
 
 if __name__ == '__main__':
     test_analyze_time_series()
+    test_extra_methods()
+    
