@@ -63,7 +63,7 @@ panel_arr:
           linewidth: 0.5
           color: red
     paneldict:
-      ylabel: Flux Ratio (SCI2)
+      ylabel: "Relative Flux Ratio\n(SCI2)"
       title: autocal-flat-all Relative Flux ((Flux Ratio)/median(Flux Ratio))
       only_object: autocal-flat-all
       narrow_xlim_daily: true
