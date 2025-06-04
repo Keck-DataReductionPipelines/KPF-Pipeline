@@ -1,6 +1,7 @@
 import os
 import re
 import glob
+import json
 import sqlite3
 import hashlib
 import psycopg2
@@ -744,7 +745,7 @@ class TSDB:
  
  
     @require_role(['admin', 'operations'])
-    def create_test_table(tablename, schema='public'):
+    def create_test_table(self, tablename, schema='public'):
         """
         Create a table to test database functionality.
         """
@@ -753,13 +754,13 @@ class TSDB:
     
         try:
             # Specify schema explicitly
-            cursor.execute(f"CREATE TABLE {schema}.test (id integer);")
-            conn.commit()
+            self.cursor.execute(f"CREATE TABLE {schema}.test (id integer);")
+            self.conn.commit()
             print(f"CREATE TABLE {schema}.{tablename}")
     
         except psycopg2.Error as e:
             print(f"Error creating table: {e}")
-            conn.rollback()
+            self.conn.rollback()
     
         finally:
             self._close_connection()
@@ -794,11 +795,6 @@ class TSDB:
             dir_path (str): Path to the directory containing the files.
             L0_filename (str): Filename of the L0 FITS file.
         """
-        def safe_float(value):
-            try:
-                return float(value)
-            except (ValueError, TypeError):
-                return None  # or np.nan
 
         base_filename = L0_filename.split('.fits')[0]
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

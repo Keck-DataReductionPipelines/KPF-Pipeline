@@ -1,7 +1,6 @@
 import os
 import ast
 import time
-import json
 import yaml
 import numpy as np
 import pandas as pd
@@ -12,14 +11,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.ticker as ticker
-import matplotlib.colors as mcolors
 from matplotlib.ticker import FuncFormatter
-from modules.Utils.utils import DummyLogger, get_sunrise_sunset_ut
+from modules.Utils.utils import get_sunrise_sunset_ut
 from modules.Utils.kpf_parse import get_datecode
 from collections import Counter
-from functools import partial
-from concurrent.futures import ProcessPoolExecutor
-from matplotlib.dates import HourLocator, DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
+from matplotlib.dates import DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
 from IPython.display import display, HTML
 
 from modules.Utils.utils import DummyLogger
