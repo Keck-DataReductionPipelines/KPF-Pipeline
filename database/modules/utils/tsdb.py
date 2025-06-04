@@ -18,6 +18,7 @@ from tqdm import tqdm
 from tqdm.notebook import tqdm_notebook
 from datetime import datetime
 from functools import partial
+from IPython.display import display, HTML
 from concurrent.futures import ProcessPoolExecutor
 
 from kpfpipe.models.level1 import KPF1
@@ -1556,46 +1557,25 @@ class TSDB:
 
 
     @require_role(['admin', 'operations', 'readonly'])
-    def display_dataframe_from_db(self, columns, 
-                                  max_rows=60,
-                                  only_object=None, object_like=None, only_source=None, 
-                                  on_sky=None, not_junk=None,
-                                  QCs_pass=None, QCs_fail=None, 
-                                  start_date=None, end_date=None, 
-                                  verbose=False):
+    def ObsIDlist_from_db(self, object_name, start_date=None, end_date=None, not_junk=None):
         """
-        Description:
-            Make a formatted print out of a pandas DataFrame containing specified 
-            columns from a joined set of database tables, applying optional 
-            filters based on object names, source types, date ranges, 
-            sky condition, and quality checks.
-    
+        Returns a list of ObsIDs for the observations of object_name.
+
         Args:
-            max_rows (int, default=60): Maximum number of rows in output table.
-            (other arguments are the same as dataframe_from_db)
-    
+            object_name (string) - name of object (e.g., '4614')
+            not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
+            start_date (datetime object) - only return observations after start_date
+            end_date (datetime object) - only return observations after end_date
+
         Returns:
-            None. Prints the resulting dataframe.
+            Pandas dataframe of the specified columns matching the constraints.
         """
-        df = self.dataframe_from_db(
-            columns=columns,
-            only_object=only_object,
-            object_like=object_like,
-            only_source=only_source,
-            on_sky=on_sky, 
-            not_junk=not_junk,
-            QCs_pass=QCs_pass, 
-            QCs_fail=QCs_fail, 
-            start_date=start_date,
-            end_date=end_date,
-            verbose=verbose
-        )
-        num_rows = df.shape[0]
-        with pd.option_context('display.max_rows', max_rows,
-                               'display.max_columns', None,
-                               'display.width', 200):
+        # to-do: check if object_name is in the database before trying to create the df
+        df = self.dataframe_from_db(['ObsID'], object_like=object_name, 
+                                    start_date=start_date, end_date=end_date, 
+                                    not_junk=not_junk)
         
-            print(df)
+        return df['ObsID'].tolist()
 
 
     @require_role(['admin', 'operations', 'readonly'])
@@ -1812,68 +1792,102 @@ class TSDB:
 
 
     @require_role(['admin', 'operations', 'readonly'])
-    def ObsIDlist_from_db(self, object_name, start_date=None, end_date=None, not_junk=None):
+    def display_data(self, columns, 
+                           start_date=None, end_date=None, 
+                           only_object=None, object_like=None, only_source=None, 
+                           on_sky=None, not_junk=None,
+                           QCs_pass=None, QCs_fail=None, 
+                           max_height_px=800, # in pixels
+                           url_stub='https://jump.caltech.edu/observing-logs/kpf/',
+                           verbose=False):
         """
-        Returns a list of ObsIDs for the observations of object_name.
+        Description:
+            Make a formatted printout of a pandas DataFrame containing specified 
+            columns from a joined set of database tables, applying optional 
+            filters based on object names, source types, date ranges, 
+            sky condition, and quality checks. The table includes ObsIDs links, 
+            enables scrolling if necessary, and makes columns sortable.
 
         Args:
-            object_name (string) - name of object (e.g., '4614')
-            not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
-            start_date (datetime object) - only return observations after start_date
-            end_date (datetime object) - only return observations after end_date
+            max_height_px (int, default=800): Sets the vertical height (pixels) 
+                for scrolling.
+            url_stub (str): the URL for ObsID links.  The default page is set to 
+                "Jump", the portal used by the KPF Science Team.
+            (other arguments are the same as dataframe_from_db)
 
         Returns:
-            Pandas dataframe of the specified columns matching the constraints.
+            None. Prints the resulting dataframe.
         """
-        # to-do: check if object_name is in the database before trying to create the df
-        df = self.dataframe_from_db(['ObsID'], object_like=object_name, 
-                                    start_date=start_date, end_date=end_date, 
-                                    not_junk=not_junk)
         
-        return df['ObsID'].tolist()
-
-    def print_df_with_obsid_links(self, df, url_stub='https://jump.caltech.edu/observing-logs/kpf/', nrows=None):
-        '''
-        Print a dataframe with links to a web page. 
-        The default page is set to "Jump", the portal used by the KPF Science Team.
-        The printed table will be sortable by clicking on column headers.
-        '''
-        df_copy = df.copy()  # Make a copy to avoid modifying the original DataFrame
-        
-        # Convert ObsID into clickable links
-        df_copy['ObsID'] = df_copy['ObsID'].apply(
-            lambda obsid: f'<a href="{url_stub}{obsid}" target="_blank">{obsid}</a>'
+        df = self.dataframe_from_db(
+            columns=columns,
+            only_object=only_object,
+            object_like=object_like,
+            only_source=only_source,
+            on_sky=on_sky, 
+            not_junk=not_junk,
+            QCs_pass=QCs_pass, 
+            QCs_fail=QCs_fail, 
+            start_date=start_date,
+            end_date=end_date,
+            verbose=verbose
         )
-        
-        # Limit number of rows if requested
-        if nrows is None:
-            limited_df = df_copy
-        else:
-            limited_df = df_copy.head(nrows)
-        
-        # Generate the HTML for the table
-        html = limited_df.to_html(escape=False, index=False, classes='sortable')
-        
-        # JavaScript for making the table sortable
-        sortable_script = """
+
+        # Convert ObsID to clickable HTML links
+        if 'ObsID' in df.columns:
+            df['ObsID'] = df['ObsID'].apply(
+                lambda obsid: f'<a href="{url_stub}{obsid}" target="_blank">{obsid}</a>'
+            )
+
+        # Generate HTML table with scrolling and sortable columns
+        html = df.to_html(escape=False, index=False, classes='sortable')
+
+        # Wrap in styled div and JavaScript for sorting
+        styled_html = f'''
+        <style>
+        .sortable th {{
+            cursor: pointer;
+            background-color: #f1f1f1;
+        }}
+        </style>
+        <div style="overflow:auto; max-height:{max_height_px}px;">
+            {html}
+        </div>
         <script>
-          function sortTable(table, col, reverse) {
-            const tb = table.tBodies[0],
-              tr = Array.from(tb.rows),
-              i = col;
-            reverse = -((+reverse) || -1);
-            tr.sort((a, b) => reverse * (a.cells[i].textContent.trim().localeCompare(b.cells[i].textContent.trim(), undefined, {numeric: true})));
-            for(let row of tr) tb.appendChild(row);
-          }
-          document.querySelectorAll('table.sortable th').forEach(th => th.addEventListener('click', (() => {
-            const table = th.closest('table');
-            Array.from(table.querySelectorAll('th')).forEach((th, idx) => th.addEventListener('click', (() => sortTable(table, idx, this.asc = !this.asc))));
-          })));
+        document.addEventListener('DOMContentLoaded', function() {{
+            function sortTable(table, colIndex, asc) {{
+                const tbody = table.tBodies[0];
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+
+                rows.sort((a, b) => {{
+                    const aText = a.children[colIndex].innerText;
+                    const bText = b.children[colIndex].innerText;
+                    const aNum = parseFloat(aText);
+                    const bNum = parseFloat(bText);
+                    if (!isNaN(aNum) && !isNaN(bNum)) {{
+                        return asc ? aNum - bNum : bNum - aNum;
+                    }} else {{
+                        return asc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+                    }}
+                }});
+
+                rows.forEach(row => tbody.appendChild(row));
+            }}
+
+            document.querySelectorAll('table.sortable th').forEach((th, index) => {{
+                let ascending = true;
+                th.addEventListener('click', () => {{
+                    const table = th.closest('table');
+                    sortTable(table, index, ascending);
+                    ascending = !ascending;
+                }});
+            }});
+        }});
         </script>
-        """
-        
-        # Display the combined table + script
-        display(HTML(html + sortable_script))
+        '''
+
+        # Display the formatted table
+        display(HTML(styled_html))
 
 
     def print_log_error_report(self, df, log_dir='/data/logs/', aggregated_summary=False):

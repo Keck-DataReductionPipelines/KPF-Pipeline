@@ -16,7 +16,6 @@ from modules.Utils.utils import get_sunrise_sunset_ut
 from modules.Utils.kpf_parse import get_datecode
 from collections import Counter
 from matplotlib.dates import DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
-from IPython.display import display, HTML
 
 from modules.Utils.utils import DummyLogger
 from database.modules.utils.tsdb import TSDB
