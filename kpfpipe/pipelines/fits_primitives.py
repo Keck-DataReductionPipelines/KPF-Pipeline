@@ -68,7 +68,6 @@ class FromFitsBasePrimitive(BasePrimitive):
             data_type = self.action.args['data_type']
         except KeyError:
             data_type = 'KPF'
-        print(f"_perform_common: {filename} data_type is {data_type}")
         data_model = data_model.from_fits(filename, data_type)
 
         return Arguments(data_model, name=name+'_from_fits_result')
