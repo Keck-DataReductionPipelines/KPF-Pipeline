@@ -147,11 +147,21 @@ class TSDB:
             self.db_path = db_path
             self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         elif backend == 'psql':
-            self.dbport   = os.getenv('TSDBPORT')
-            self.dbname   = os.getenv('TSDBNAME')
-            self.dbuser   = os.getenv('TSDBUSER')
-            self.dbpass   = os.getenv('TSDBPASS')
-            self.dbserver = os.getenv('TSDBSERVER')     
+            self.dbport = os.getenv('TSDBPORT') or '6127'
+            if os.getenv('TSDBPORT') is None:
+                self.logger.info("Environment variable 'TSDBPORT' not found; using default port 6127.")
+            self.dbname = os.getenv('TSDBNAME') or 'timeseriesopsdb'
+            if os.getenv('TSDBNAME') is None:
+                self.logger.info("Environment variable 'TSDBNAME' not found; using default name 'timeseriesopsdb'.")
+            self.dbserver = os.getenv('TSDBSERVER') or '127.0.0.1'
+            if os.getenv('TSDBSERVER') is None:
+                self.logger.info("Environment variable 'TSDBSERVER' not found; using default server '127.0.0.1'.")
+            self.dbuser = os.getenv('TSDBUSER')
+            if os.getenv('TSDBUSER') is None:
+                self.logger.info("Environment variable 'TSDBUSER' not found.  No default value available.")
+            self.dbpass = os.getenv('TSDBPASS')
+            if os.getenv('TSDBPASS') is None:
+                self.logger.info("Environment variable 'TSDBPASS' not found.  No default value available.")
             self.logger.info('PSQL server: ' + self.dbserver)
             self.logger.info('PSQL username: ' + self.dbuser)
             self.user_role = self.get_user_role()
