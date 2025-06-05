@@ -1,5 +1,5 @@
-Production Processing
-=====================
+Processing KPF Observations
+===========================
 
 The following commands should be run from separate Docker containers to start production processing of KPF data. 
 
