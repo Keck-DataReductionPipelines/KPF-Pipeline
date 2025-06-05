@@ -34,14 +34,13 @@ class AddBlaze(KPF1_Primitive):
         try:
             blaze = BlazeAlg(self.target_l1, self.smooth_lamp_l1, self.config_path)
             out_l1 = blaze.apply_blaze_correction()
+            out_l1.header['PRIMARY']['LAMPFILE'] = self.smooth_lamp_l1.filename
             exit_code = 1
+            return Arguments([exit_code, out_l1])
         except Exception as e:
             self.logger.error(f"Blaze algorithm failed: {e}\n{traceback.format_exc()}")
-        
-        out_l1.header['PRIMARY']['LAMPFILE'] = self.smooth_lamp_l1.filename
+            return Arguments([exit_code, None])        
 
-        return Arguments([exit_code, out_l1])
-    
     def _pre(self):
         pass
     
