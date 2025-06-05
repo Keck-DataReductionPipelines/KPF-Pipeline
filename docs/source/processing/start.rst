@@ -8,3 +8,5 @@ This section contains topics about processing data with the ``KPF-Pipeline``.
     :titlesonly:
 
     production.rst
+    reprocessing.rst
+    other.rst
