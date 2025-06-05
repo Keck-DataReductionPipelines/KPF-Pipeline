@@ -646,6 +646,7 @@ class AnalyzeTimeSeries:
         except Exception as e:
             self.logger.info(f"Error saving file or showing plot: {e}")
 
+
     def plot_rv_per_fiber_wavelength(self, rv, chip, fiber, start_date=None, end_date=None, only_object=None, only_source=None, 
                                     object_like=None, fig_path=None, show_plot=True, 
                                     log_savefig_timing=False):
