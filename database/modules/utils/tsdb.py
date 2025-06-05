@@ -162,8 +162,8 @@ class TSDB:
             self.dbpass = os.getenv('TSDBPASS')
             if os.getenv('TSDBPASS') is None:
                 self.logger.info("Environment variable 'TSDBPASS' not found.  No default value available.")
-            self.logger.info('PSQL server: ' + self.dbserver)
-            self.logger.info('PSQL username: ' + self.dbuser)
+            self.logger.info('PSQL server: ' + str(self.dbserver))
+            self.logger.info('PSQL username: ' + str(self.dbuser))
             self.user_role = self.get_user_role()
             self.logger.info('PSQL user role: ' + self.user_role)
         
