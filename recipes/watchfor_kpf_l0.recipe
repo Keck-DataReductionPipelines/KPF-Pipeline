@@ -160,7 +160,7 @@ for raw_file_path in file_list:
         for bpm in bad_pixel_masks:
             pixels_masked = ImageProcessing(bpm_applied, bpm, lev0_ffi_exts, data_type, quicklook)
             bpm_applied = pixels_masked
-
+            
         # Diagnostics & Quality Control - 2D level
         kpf_object = bpm_applied
         data_level_str = '2D'

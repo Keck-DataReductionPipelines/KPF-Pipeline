@@ -390,7 +390,7 @@ class Analyze2D:
                 D2_ref = KPF0.from_fits(ref_image)
                 img2 = D2_ref[EXT]
         else:
-            self.error('measure_xdisp_offset: chip not specified.  Returning.')
+            self.logger.error('measure_xdisp_offset: chip not specified.  Returning.')
                        
         assert img1.shape == img2.shape, "Images must be the same shape"
         
