@@ -45,8 +45,8 @@ docker:
 			-e TSDBSERVER=127.0.0.1 \
 			-e TSDBPORT=6127 \
 			-e TSDBNAME=timeseriesopsdb \
-			$(if $(KPFPIPE_TSDB_USER),-e TSDBUSER="${KPFPIPE_TSDDB_USER}") \
-			$(if $(KPFPIPE_TSDB_PASS),-e TSDBPASS="${KPFPIPE_TSDDB_PASS}") \
+			$(if $(KPFPIPE_TSDB_USER),-e TSDBUSER="${KPFPIPE_TSDB_USER}") \
+			$(if $(KPFPIPE_TSDB_PASS),-e TSDBPASS="${KPFPIPE_TSDB_PASS}") \
 			-e DBSERVER_TSDB=127.0.0.1 \
 			kpf-drp:latest bash)
 

@@ -10,8 +10,6 @@ from kpfpipe.logger import start_logger
 from modules.Utils.config_parser import ConfigHandler
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
-# db_path = '/data/time_series/kpf_ts.db' # this is the standard database used for plotting, etc.
-db_path = '/data/time_series/kpf_ts_dec5b.db'
 
 class ModifyWLS:
     """This utility determines the drift correction derived from etalon frames and
@@ -165,7 +163,7 @@ class ModifyWLS:
         self.l1_obj.header['PRIMARY']['DRFTDEL'] = time_delta_hours
 
         # Apply drift correction in RV space
-        self.adjust_wls(drift_rv)
+        # self.adjust_wls(drift_rv) # Do not modify WLS
         self.add_keywords(drift_rv)
 
         return self.l1_obj
@@ -209,7 +207,7 @@ class ModifyWLS:
         self.l1_obj.header['PRIMARY']['DRFTDEL'] = before_time_delta_hours
         self.l1_obj.header['PRIMARY']['DRFTDEL2'] = after_time_delta_hours
 
-        self.adjust_wls(drift_rv)
+        # self.adjust_wls(drift_rv) # DO not change th wavelength solution itself.
         self.add_keywords(drift_rv)
 
         return self.l1_obj

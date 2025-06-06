@@ -79,6 +79,12 @@ class TSDB:
         base_dir (str):
             Base directory containing KPF Level 0 (L0) observational data 
             directories.
+        credentials (dictionary or None, optional): if set, values for any 
+            dictionary keywords (TSDBPORT, TSDBNAME, TSDBSERVER ,TSDBUSER, 
+            TSDBPASS) are used instead of environment variables and/or defaults.
+            For example, a credentials dictionary is:
+                credentials = {"TSDBUSER": 'myusername', "TSDBPASS": 'mypassword'}
+
         logger (logging.Logger or None):
             Logger object for capturing messages, warnings, and errors. If 
             None, a DummyLogger with formatted print statements is used.
@@ -124,14 +130,23 @@ class TSDB:
         - Use config file for backend.  Possibly check the config for credentials.
     
     """
-    def __init__(self, backend='sqlite', db_path='kpf_ts.db', base_dir='/data/L0', logger=None, verbose=False):
+    def __init__(self, 
+                 backend='sqlite', db_path='kpf_ts.db', base_dir='/data/L0', 
+                 credentials=None, logger=None, verbose=False):
 
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting KPF_TSDB')
         self.verbose = verbose
+        
+        if self.is_notebook():
+            self.tqdm = tqdm_notebook
+            self.logger.info('Jupyter Notebook environment detected.')
+        else:
+            self.tqdm = tqdm
+
         self.base_dir = base_dir
-        self.logger.info('Base data directory: ' + self.base_dir)
-        self.backend = backend # sqlite or psql
+        self.backend = backend 
+        self.logger.info(f'Base data directory: {self.base_dir}')
         self.logger.info(f'Backend: {backend}')
         if self.backend != 'sqlite' and self.backend != 'psql':
             self.logger.info("Invalid entry for backend.  Must be 'sqlite' or 'psql'.")
@@ -139,33 +154,55 @@ class TSDB:
         self.conn = None
         self.cursor = None
 
-        if self.is_notebook():
-            self.tqdm = tqdm_notebook
-            self.logger.info('Jupyter Notebook environment detected.')
-        else:
-            self.tqdm = tqdm
-
+        # Get database parameters
         if self.backend == 'sqlite':
             self.db_path = db_path
             self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         elif backend == 'psql':
-            self.dbport = os.getenv('TSDBPORT') or '6127'
-            if os.getenv('TSDBPORT') is None:
-                self.logger.info("Environment variable 'TSDBPORT' not found; using default port 6127.")
-            self.dbname = os.getenv('TSDBNAME') or 'timeseriesopsdb'
-            if os.getenv('TSDBNAME') is None:
-                self.logger.info("Environment variable 'TSDBNAME' not found; using default name 'timeseriesopsdb'.")
-            self.dbserver = os.getenv('TSDBSERVER') or '127.0.0.1'
-            if os.getenv('TSDBSERVER') is None:
-                self.logger.info("Environment variable 'TSDBSERVER' not found; using default server '127.0.0.1'.")
-            self.dbuser = os.getenv('TSDBUSER')
-            if os.getenv('TSDBUSER') is None:
-                self.logger.info("Environment variable 'TSDBUSER' not found.  No default value available.")
-            self.dbpass = os.getenv('TSDBPASS')
-            if os.getenv('TSDBPASS') is None:
-                self.logger.info("Environment variable 'TSDBPASS' not found.  No default value available.")
-            self.logger.info('PSQL server: ' + self.dbserver)
-            self.logger.info('PSQL username: ' + self.dbuser)
+            creds = credentials if isinstance(credentials, dict) else {}
+            # ----- TSDBPORT ------------------------------------------------------------
+            if 'TSDBPORT' in creds and creds['TSDBPORT'] is not None:
+                self.dbport = creds['TSDBPORT']
+                self.logger.info("Using TSDBPORT from credentials dictionary.")
+            else:
+                self.dbport = os.getenv('TSDBPORT') or '6127'
+                if os.getenv('TSDBPORT') is None:
+                    self.logger.info("Environment variable 'TSDBPORT' not found; using default port 6127.")
+            # ----- TSDBNAME ------------------------------------------------------------
+            if 'TSDBNAME' in creds and creds['TSDBNAME'] is not None:
+                self.dbname = creds['TSDBNAME']
+                self.logger.info("Using TSDBNAME from credentials dictionary.")
+            else:
+                self.dbname = os.getenv('TSDBNAME') or 'timeseriesopsdb'
+                if os.getenv('TSDBNAME') is None:
+                    self.logger.info("Environment variable 'TSDBNAME' not found; using default name 'timeseriesopsdb'.")
+            # ----- TSDBSERVER ----------------------------------------------------------
+            if 'TSDBSERVER' in creds and creds['TSDBSERVER'] is not None:
+                self.dbserver = creds['TSDBSERVER']
+                self.logger.info("Using TSDBSERVER from credentials dictionary.")
+            else:
+                self.dbserver = os.getenv('TSDBSERVER') or '127.0.0.1'
+                if os.getenv('TSDBSERVER') is None:
+                    self.logger.info("Environment variable 'TSDBSERVER' not found; using default server '127.0.0.1'.")
+            # ----- TSDBUSER ------------------------------------------------------------
+            if 'TSDBUSER' in creds and creds['TSDBUSER'] is not None:
+                self.dbuser = creds['TSDBUSER']
+                self.logger.info("Using TSDBUSER from credentials dictionary.")
+            else:
+                self.dbuser = os.getenv('TSDBUSER')
+                if os.getenv('TSDBUSER') is None:
+                    self.logger.info("Environment variable 'TSDBUSER' not found. No default value available. Many methods in this class won't work.")
+            # ----- TSDBPASS ------------------------------------------------------------
+            if 'TSDBPASS' in creds and creds['TSDBPASS'] is not None:
+                self.dbpass = creds['TSDBPASS']
+                self.logger.info("Using TSDBPASS from credentials dictionary.")
+            else:
+                self.dbpass = os.getenv('TSDBPASS')
+                if os.getenv('TSDBPASS') is None:
+                    self.logger.info("Environment variable 'TSDBPASS' not found. No default value available. Many methods in this class won't work.")
+
+            self.logger.info('PSQL server: ' + str(self.dbserver))
+            self.logger.info('PSQL username: ' + str(self.dbuser))
             self.user_role = self.get_user_role()
             self.logger.info('PSQL user role: ' + self.user_role)
         
@@ -195,8 +232,8 @@ class TSDB:
             if details['file_level'] is not None and details['extension'] is not None
         }
         
-        # Initialize metadata entries first
-        self._init_metadata_entries()
+#        # Initialize metadata entries first
+#        self._init_metadata_entries()
 
         # Create metadata table or use existing one
         metadata_table = 'tsdb_metadata'
@@ -208,7 +245,7 @@ class TSDB:
         self._read_metadata_table()
         self._set_boolean_columns()
         self.kw_to_table = {keyword: table_name for keyword, _, table_name in self.metadata_rows}
-        self.kw_to_dtype = {keyword: datatype for keyword, datatype, _ in self.metadata_rows}
+        self.kw_to_dtype = {keyword: datatype   for keyword, datatype, _   in self.metadata_rows}
         self.keywords_by_table = {}
         for keyword, table in self.kw_to_table.items():
             self.keywords_by_table.setdefault(table, []).append(keyword)
@@ -234,8 +271,6 @@ class TSDB:
         def decorator(func):
             @wraps(func)
             def wrapper(self, *args, **kwargs):
-                method_name = func.__name__
-                
                 if self.backend == 'sqlite':
                     # SQLite backend always allowed if allowed_roles is None or explicitly allowed.
                     return func(self, *args, **kwargs)
@@ -321,13 +356,22 @@ class TSDB:
             if params:
                 if self.backend == 'sqlite':
                     self.cursor.execute(command, params)
+                    if self.verbose:
+                        self.logger.debug(f'query: {command}')
                 elif self.backend == 'psql':
                     self.cursor.execute(command.replace('?', '%s'), params)
+                    if self.verbose:
+                        self.logger.debug(f'query: {command}')
             else:
+                if self.verbose:
+                    self.logger.debug(f'query: {command}')
                 self.cursor.execute(command)
     
             if fetch:
-                return self.cursor.fetchall()
+                response = self.cursor.fetchall()
+                if self.verbose:
+                    self.logger.debug(f'response: {response}')
+                return response
         except Exception as e:
             self.logger.error(f"SQL Execution error: {e}\nCommand: {command}\nParams: {params}")
             raise
@@ -390,7 +434,7 @@ class TSDB:
         return permissions
 
 
-    @require_role(['admin', 'operations', 'readonly'])
+    @require_role(['admin', 'operations'])
     def print_summary_all_tables(self):
         """
         Prints a summary of all tables in the database (not just the intended tables), 
@@ -416,29 +460,26 @@ class TSDB:
                     print(f"{tbl:<20} {columns:>7} {rows:>10}")
     
             elif self.backend == 'psql':
-                if not self.user_role in ['admin', 'operations', 'readonly']:
-                    self.logger.error(f"User role = '{self.user_role}' is not sufficient for the method '{inspect.currentframe().f_code.co_name}'.")
-                else:
-                    self._execute_sql_command("""
-                         SELECT tablename FROM pg_catalog.pg_tables
-                         WHERE schemaname='public' ORDER BY tablename;
+                self._execute_sql_command("""
+                     SELECT tablename FROM pg_catalog.pg_tables
+                     WHERE schemaname='public' ORDER BY tablename;
+                """)
+                tables = [row[0] for row in self.cursor.fetchall()]
+         
+                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
+                print("-" * 40)
+         
+                for tbl in tables:
+                    self._execute_sql_command(f"""
+                        SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_name = '{tbl}';
                     """)
-                    tables = [row[0] for row in self.cursor.fetchall()]
+                    columns = self.cursor.fetchone()[0]
          
-                    print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
-                    print("-" * 40)
+                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
+                    rows = self.cursor.fetchone()[0]
          
-                    for tbl in tables:
-                        self._execute_sql_command(f"""
-                            SELECT COUNT(*) FROM information_schema.columns
-                            WHERE table_name = '{tbl}';
-                        """)
-                        columns = self.cursor.fetchone()[0]
-         
-                        self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
-                        rows = self.cursor.fetchone()[0]
-         
-                        print(f"{tbl:<20} {columns:>7} {rows:>10}")
+                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
         finally:
             self._close_connection()
 
@@ -505,37 +546,37 @@ class TSDB:
             self._close_connection()
 
 
-    def _init_metadata_entries(self):
-        """
-        Load and combine all keyword metadata entries from CSV files into self.metadata_entries.
-        """
-        dfs = []
-        tables_metadata_df = pd.read_csv(self.csv_filepath).fillna('')
-    
-        for _, row in tables_metadata_df.iterrows():
-            csv_filename = row['csv']
-            label = row['label']
-            table_name = row['table_name']
-            
-            if not csv_filename:
-                continue  # skip if CSV not specified
-    
-            csv_path = os.path.join(self.keyword_base_path, csv_filename)
-            df = pd.read_csv(csv_path, delimiter='|', dtype=str).fillna('')
-            df['source'] = label
-            df['table_name'] = table_name
-            df['csv_path'] = csv_path
-            df.rename(columns={'unit': 'units'}, inplace=True)
-    
-            dfs.append(df[['keyword', 'datatype', 'units', 'description', 'source', 'table_name', 'csv_path']])
-    
-        # Combine all dataframes into one
-        df_all = pd.concat(dfs, ignore_index=True)
-        df_all.drop_duplicates(subset='keyword', inplace=True)
-    
-        self.metadata_entries = df_all.to_dict(orient='records')
-
-   
+#    def _init_metadata_entries(self):
+#        """
+#        Load and combine all keyword metadata entries from CSV files into self.metadata_entries.
+#        """
+#        dfs = []
+#        tables_metadata_df = pd.read_csv(self.csv_filepath).fillna('')
+#    
+#        for _, row in tables_metadata_df.iterrows():
+#            csv_filename = row['csv']
+#            label = row['label']
+#            table_name = row['table_name']
+#            
+#            if not csv_filename:
+#                continue  # skip if CSV not specified
+#    
+#            csv_path = os.path.join(self.keyword_base_path, csv_filename)
+#            df = pd.read_csv(csv_path, delimiter='|', dtype=str).fillna('')
+#            df['source'] = label
+#            df['table_name'] = table_name
+#            df['csv_path'] = csv_path
+#            df.rename(columns={'unit': 'units'}, inplace=True)
+#    
+#            dfs.append(df[['keyword', 'datatype', 'units', 'description', 'source', 'table_name', 'csv_path']])
+#    
+#        # Combine all dataframes into one
+#        df_all = pd.concat(dfs, ignore_index=True)
+#        df_all.drop_duplicates(subset='keyword', inplace=True)
+#    
+#        self.metadata_entries = df_all.to_dict(orient='records')
+#
+#   
     @require_role(['admin', 'operations', 'readonly'])
     def print_db_status(self):
         """

@@ -50,7 +50,8 @@ class AnalyzeTimeSeries:
     Arguments:
         db_path (string) - path to database file
         base_dir (string) - L0 directory
-        drop (boolean) - if true, the database at db_path is dropped at startup
+        backend (string; 'sqlite' or 'psql') - database format 
+        credentials (dictionary or None; optional) - optionally pass credentials for a PostgreSQL database
         logger (logger object) - a logger object can be passed, or one will be created
 
     Attributes:
@@ -75,11 +76,16 @@ class AnalyzeTimeSeries:
         * Add qc_pass and qc_fail parameters to yaml files -- only include rows where certain QCs (specified by keywords) pass or fail
     """
 
-    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', logger=None, verbose=False):
+    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', credentials=None, logger=None, verbose=False):
        
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting AnalyzeTimeSeries')
-        self.db = TSDB(backend=backend, db_path=db_path, base_dir=base_dir, logger=logger, verbose=verbose)
+        self.db = TSDB(backend=backend, 
+                       db_path=db_path, 
+                       base_dir=base_dir, 
+                       credentials=credentials, 
+                       logger=logger, 
+                       verbose=verbose)
 
 
     def plot_time_series_multipanel(self, plotdict, 
