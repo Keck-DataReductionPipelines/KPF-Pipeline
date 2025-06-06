@@ -16,7 +16,6 @@ from modules.Utils.utils import get_sunrise_sunset_ut
 from modules.Utils.kpf_parse import get_datecode
 from collections import Counter
 from matplotlib.dates import DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
-from IPython.display import display, HTML
 
 from modules.Utils.utils import DummyLogger
 from database.modules.utils.tsdb import TSDB
@@ -51,7 +50,8 @@ class AnalyzeTimeSeries:
     Arguments:
         db_path (string) - path to database file
         base_dir (string) - L0 directory
-        drop (boolean) - if true, the database at db_path is dropped at startup
+        backend (string; 'sqlite' or 'psql') - database format 
+        credentials (dictionary or None; optional) - optionally pass credentials for a PostgreSQL database
         logger (logger object) - a logger object can be passed, or one will be created
 
     Attributes:
@@ -76,11 +76,16 @@ class AnalyzeTimeSeries:
         * Add qc_pass and qc_fail parameters to yaml files -- only include rows where certain QCs (specified by keywords) pass or fail
     """
 
-    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', logger=None, verbose=False):
+    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', credentials=None, logger=None, verbose=False):
        
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting AnalyzeTimeSeries')
-        self.db = TSDB(backend=backend, db_path=db_path, base_dir=base_dir, logger=logger, verbose=verbose)
+        self.db = TSDB(backend=backend, 
+                       db_path=db_path, 
+                       base_dir=base_dir, 
+                       credentials=credentials, 
+                       logger=logger, 
+                       verbose=verbose)
 
 
     def plot_time_series_multipanel(self, plotdict, 
@@ -647,6 +652,7 @@ class AnalyzeTimeSeries:
         except Exception as e:
             self.logger.info(f"Error saving file or showing plot: {e}")
 
+
     def plot_rv_per_fiber_wavelength(self, rv, chip, fiber, start_date=None, end_date=None, only_object=None, only_source=None, 
                                     object_like=None, fig_path=None, show_plot=True, 
                                     log_savefig_timing=False):
@@ -1200,123 +1206,6 @@ class AnalyzeTimeSeries:
                     continue  # Skip to the next plot
 
 
-    def print_df_with_obsid_links(self, df, url_stub='https://jump.caltech.edu/observing-logs/kpf/', nrows=None):
-        '''
-        Print a dataframe with links to a web page. 
-        The default page is set to "Jump", the portal used by the KPF Science Team.
-        The printed table will be sortable by clicking on column headers.
-        '''
-        df_copy = df.copy()  # Make a copy to avoid modifying the original DataFrame
-        
-        # Convert ObsID into clickable links
-        df_copy['ObsID'] = df_copy['ObsID'].apply(
-            lambda obsid: f'<a href="{url_stub}{obsid}" target="_blank">{obsid}</a>'
-        )
-        
-        # Limit number of rows if requested
-        if nrows is None:
-            limited_df = df_copy
-        else:
-            limited_df = df_copy.head(nrows)
-        
-        # Generate the HTML for the table
-        html = limited_df.to_html(escape=False, index=False, classes='sortable')
-        
-        # JavaScript for making the table sortable
-        sortable_script = """
-        <script>
-          function sortTable(table, col, reverse) {
-            const tb = table.tBodies[0],
-              tr = Array.from(tb.rows),
-              i = col;
-            reverse = -((+reverse) || -1);
-            tr.sort((a, b) => reverse * (a.cells[i].textContent.trim().localeCompare(b.cells[i].textContent.trim(), undefined, {numeric: true})));
-            for(let row of tr) tb.appendChild(row);
-          }
-          document.querySelectorAll('table.sortable th').forEach(th => th.addEventListener('click', (() => {
-            const table = th.closest('table');
-            Array.from(table.querySelectorAll('th')).forEach((th, idx) => th.addEventListener('click', (() => sortTable(table, idx, this.asc = !this.asc))));
-          })));
-        </script>
-        """
-        
-        # Display the combined table + script
-        display(HTML(html + sortable_script))
-
-
-    def print_log_error_report(self, df, log_dir='/data/logs/', aggregated_summary=False):
-        '''
-        For each ObsID in the dataframe, open the corresponding log file,
-        find all lines containing [ERROR]:, and print either:
-        - aggregated error report (if aggregated_summary=True)
-        - individual ObsID error reports (if aggregated_summary=False)
-        '''
-        error_counter = Counter()  # Collect error bodies for aggregation
-    
-        for obsid in df['ObsID']:
-            log_path = os.path.join(log_dir, f'{get_datecode(obsid)}/{obsid}.log')
-            
-            if not os.path.isfile(log_path):
-                if not aggregated_summary:
-                    print(f"ObsID: {obsid}")
-                    print(f"Log file: {log_path}")
-                    print(f"Log file not found.\n")
-                continue
-            
-            mod_time = datetime.utcfromtimestamp(os.path.getmtime(log_path)).strftime('%Y-%m-%d %H:%M:%S UTC')
-            
-            error_lines = []
-            with open(log_path, 'r') as file:
-                for line in file:
-                    if '[ERROR]:' in line:
-                        error_line = line.strip()
-                        error_lines.append(error_line)
-    
-                        # Extract only the part after [ERROR]:
-                        parts = error_line.split('[ERROR]:', 1)
-                        if len(parts) > 1:
-                            error_body = parts[1].strip()
-                            error_counter[error_body] += 1
-                        else:
-                            error_counter[error_line] += 1
-            
-            if not aggregated_summary:
-                # Print individual ObsID report
-                print(f"ObsID: {obsid}")
-                print(f"Log file: {log_path}")
-                print(f"Log modification date: {mod_time}")
-                print(f"Errors in log file:")
-                
-                if error_lines:
-                    for error in error_lines:
-                        print(f"    {error}")
-                else:
-                    print(f"    No [ERROR] lines found.")
-                
-                print("\n" + "-" * 50 + "\n")
-        
-        # After processing all ObsIDs, print the aggregated summary if requested
-        if aggregated_summary:
-            if error_counter:
-                print("\nAggregated Error Summary:\n")
-                
-                summary_df = pd.DataFrame(
-                    [(count, error) for error, count in error_counter.items()],
-                    columns=['Count', 'Error Message']
-                ).sort_values('Count', ascending=False).reset_index(drop=True)
-                
-                # Set wide display options for Pandas
-                pd.set_option('display.max_colwidth', None)
-                pd.set_option('display.width', 0)
-                
-                # Force all table cells to left-align with inline CSS
-                html = summary_df.to_html(index=False, escape=False)
-                html = html.replace('<td>', '<td style="text-align: left; white-space: normal; word-wrap: break-word;">')
-                html = html.replace('<th>', '<th style="text-align: left; white-space: normal; word-wrap: break-word;">')
-                
-                display(HTML(html))
-            else:
-                print("No [ERROR] lines found across all logs.")
 
 
 def add_one_month(inputdate):

@@ -2,6 +2,7 @@ import os
 import re
 import glob
 import json
+import copy
 import sqlite3
 import hashlib
 import psycopg2
@@ -17,6 +18,7 @@ from tqdm import tqdm
 from tqdm.notebook import tqdm_notebook
 from datetime import datetime
 from functools import partial
+from IPython.display import display, HTML
 from concurrent.futures import ProcessPoolExecutor
 
 from kpfpipe.models.level1 import KPF1
@@ -77,6 +79,12 @@ class TSDB:
         base_dir (str):
             Base directory containing KPF Level 0 (L0) observational data 
             directories.
+        credentials (dictionary or None, optional): if set, values for any 
+            dictionary keywords (TSDBPORT, TSDBNAME, TSDBSERVER ,TSDBUSER, 
+            TSDBPASS) are used instead of environment variables and/or defaults.
+            For example, a credentials dictionary is:
+                credentials = {"TSDBUSER": 'myusername', "TSDBPASS": 'mypassword'}
+
         logger (logging.Logger or None):
             Logger object for capturing messages, warnings, and errors. If 
             None, a DummyLogger with formatted print statements is used.
@@ -122,14 +130,23 @@ class TSDB:
         - Use config file for backend.  Possibly check the config for credentials.
     
     """
-    def __init__(self, backend='sqlite', db_path='kpf_ts.db', base_dir='/data/L0', logger=None, verbose=False):
+    def __init__(self, 
+                 backend='sqlite', db_path='kpf_ts.db', base_dir='/data/L0', 
+                 credentials=None, logger=None, verbose=False):
 
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting KPF_TSDB')
         self.verbose = verbose
+        
+        if self.is_notebook():
+            self.tqdm = tqdm_notebook
+            self.logger.info('Jupyter Notebook environment detected.')
+        else:
+            self.tqdm = tqdm
+
         self.base_dir = base_dir
-        self.logger.info('Base data directory: ' + self.base_dir)
-        self.backend = backend # sqlite or psql
+        self.backend = backend 
+        self.logger.info(f'Base data directory: {self.base_dir}')
         self.logger.info(f'Backend: {backend}')
         if self.backend != 'sqlite' and self.backend != 'psql':
             self.logger.info("Invalid entry for backend.  Must be 'sqlite' or 'psql'.")
@@ -137,23 +154,55 @@ class TSDB:
         self.conn = None
         self.cursor = None
 
-        if self.is_notebook():
-            self.tqdm = tqdm_notebook
-            self.logger.info('Jupyter Notebook environment detected.')
-        else:
-            self.tqdm = tqdm
-
+        # Get database parameters
         if self.backend == 'sqlite':
             self.db_path = db_path
             self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
         elif backend == 'psql':
-            self.dbport   = os.getenv('TSDBPORT')
-            self.dbname   = os.getenv('TSDBNAME')
-            self.dbuser   = os.getenv('TSDBUSER')
-            self.dbpass   = os.getenv('TSDBPASS')
-            self.dbserver = os.getenv('TSDBSERVER')     
-            self.logger.info('PSQL server: ' + self.dbserver)
-            self.logger.info('PSQL username: ' + self.dbuser)
+            creds = credentials if isinstance(credentials, dict) else {}
+            # ----- TSDBPORT ------------------------------------------------------------
+            if 'TSDBPORT' in creds and creds['TSDBPORT'] is not None:
+                self.dbport = creds['TSDBPORT']
+                self.logger.info("Using TSDBPORT from credentials dictionary.")
+            else:
+                self.dbport = os.getenv('TSDBPORT') or '6127'
+                if os.getenv('TSDBPORT') is None:
+                    self.logger.info("Environment variable 'TSDBPORT' not found; using default port 6127.")
+            # ----- TSDBNAME ------------------------------------------------------------
+            if 'TSDBNAME' in creds and creds['TSDBNAME'] is not None:
+                self.dbname = creds['TSDBNAME']
+                self.logger.info("Using TSDBNAME from credentials dictionary.")
+            else:
+                self.dbname = os.getenv('TSDBNAME') or 'timeseriesopsdb'
+                if os.getenv('TSDBNAME') is None:
+                    self.logger.info("Environment variable 'TSDBNAME' not found; using default name 'timeseriesopsdb'.")
+            # ----- TSDBSERVER ----------------------------------------------------------
+            if 'TSDBSERVER' in creds and creds['TSDBSERVER'] is not None:
+                self.dbserver = creds['TSDBSERVER']
+                self.logger.info("Using TSDBSERVER from credentials dictionary.")
+            else:
+                self.dbserver = os.getenv('TSDBSERVER') or '127.0.0.1'
+                if os.getenv('TSDBSERVER') is None:
+                    self.logger.info("Environment variable 'TSDBSERVER' not found; using default server '127.0.0.1'.")
+            # ----- TSDBUSER ------------------------------------------------------------
+            if 'TSDBUSER' in creds and creds['TSDBUSER'] is not None:
+                self.dbuser = creds['TSDBUSER']
+                self.logger.info("Using TSDBUSER from credentials dictionary.")
+            else:
+                self.dbuser = os.getenv('TSDBUSER')
+                if os.getenv('TSDBUSER') is None:
+                    self.logger.info("Environment variable 'TSDBUSER' not found. No default value available. Many methods in this class won't work.")
+            # ----- TSDBPASS ------------------------------------------------------------
+            if 'TSDBPASS' in creds and creds['TSDBPASS'] is not None:
+                self.dbpass = creds['TSDBPASS']
+                self.logger.info("Using TSDBPASS from credentials dictionary.")
+            else:
+                self.dbpass = os.getenv('TSDBPASS')
+                if os.getenv('TSDBPASS') is None:
+                    self.logger.info("Environment variable 'TSDBPASS' not found. No default value available. Many methods in this class won't work.")
+
+            self.logger.info('PSQL server: ' + str(self.dbserver))
+            self.logger.info('PSQL username: ' + str(self.dbuser))
             self.user_role = self.get_user_role()
             self.logger.info('PSQL user role: ' + self.user_role)
         
@@ -183,8 +232,8 @@ class TSDB:
             if details['file_level'] is not None and details['extension'] is not None
         }
         
-        # Initialize metadata entries first
-        self._init_metadata_entries()
+#        # Initialize metadata entries first
+#        self._init_metadata_entries()
 
         # Create metadata table or use existing one
         metadata_table = 'tsdb_metadata'
@@ -196,7 +245,7 @@ class TSDB:
         self._read_metadata_table()
         self._set_boolean_columns()
         self.kw_to_table = {keyword: table_name for keyword, _, table_name in self.metadata_rows}
-        self.kw_to_dtype = {keyword: datatype for keyword, datatype, _ in self.metadata_rows}
+        self.kw_to_dtype = {keyword: datatype   for keyword, datatype, _   in self.metadata_rows}
         self.keywords_by_table = {}
         for keyword, table in self.kw_to_table.items():
             self.keywords_by_table.setdefault(table, []).append(keyword)
@@ -222,8 +271,6 @@ class TSDB:
         def decorator(func):
             @wraps(func)
             def wrapper(self, *args, **kwargs):
-                method_name = func.__name__
-                
                 if self.backend == 'sqlite':
                     # SQLite backend always allowed if allowed_roles is None or explicitly allowed.
                     return func(self, *args, **kwargs)
@@ -309,13 +356,22 @@ class TSDB:
             if params:
                 if self.backend == 'sqlite':
                     self.cursor.execute(command, params)
+                    if self.verbose:
+                        self.logger.debug(f'query: {command}')
                 elif self.backend == 'psql':
                     self.cursor.execute(command.replace('?', '%s'), params)
+                    if self.verbose:
+                        self.logger.debug(f'query: {command}')
             else:
+                if self.verbose:
+                    self.logger.debug(f'query: {command}')
                 self.cursor.execute(command)
     
             if fetch:
-                return self.cursor.fetchall()
+                response = self.cursor.fetchall()
+                if self.verbose:
+                    self.logger.debug(f'response: {response}')
+                return response
         except Exception as e:
             self.logger.error(f"SQL Execution error: {e}\nCommand: {command}\nParams: {params}")
             raise
@@ -378,7 +434,7 @@ class TSDB:
         return permissions
 
 
-    @require_role(['admin', 'operations', 'readonly'])
+    @require_role(['admin', 'operations'])
     def print_summary_all_tables(self):
         """
         Prints a summary of all tables in the database (not just the intended tables), 
@@ -404,29 +460,26 @@ class TSDB:
                     print(f"{tbl:<20} {columns:>7} {rows:>10}")
     
             elif self.backend == 'psql':
-                if not self.user_role in ['admin', 'operations', 'readonly']:
-                    self.logger.error(f"User role = '{self.user_role}' is not sufficient for the method '{inspect.currentframe().f_code.co_name}'.")
-                else:
-                    self._execute_sql_command("""
-                         SELECT tablename FROM pg_catalog.pg_tables
-                         WHERE schemaname='public' ORDER BY tablename;
+                self._execute_sql_command("""
+                     SELECT tablename FROM pg_catalog.pg_tables
+                     WHERE schemaname='public' ORDER BY tablename;
+                """)
+                tables = [row[0] for row in self.cursor.fetchall()]
+         
+                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
+                print("-" * 40)
+         
+                for tbl in tables:
+                    self._execute_sql_command(f"""
+                        SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_name = '{tbl}';
                     """)
-                    tables = [row[0] for row in self.cursor.fetchall()]
+                    columns = self.cursor.fetchone()[0]
          
-                    print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
-                    print("-" * 40)
+                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
+                    rows = self.cursor.fetchone()[0]
          
-                    for tbl in tables:
-                        self._execute_sql_command(f"""
-                            SELECT COUNT(*) FROM information_schema.columns
-                            WHERE table_name = '{tbl}';
-                        """)
-                        columns = self.cursor.fetchone()[0]
-         
-                        self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
-                        rows = self.cursor.fetchone()[0]
-         
-                        print(f"{tbl:<20} {columns:>7} {rows:>10}")
+                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
         finally:
             self._close_connection()
 
@@ -493,37 +546,37 @@ class TSDB:
             self._close_connection()
 
 
-    def _init_metadata_entries(self):
-        """
-        Load and combine all keyword metadata entries from CSV files into self.metadata_entries.
-        """
-        dfs = []
-        tables_metadata_df = pd.read_csv(self.csv_filepath).fillna('')
-    
-        for _, row in tables_metadata_df.iterrows():
-            csv_filename = row['csv']
-            label = row['label']
-            table_name = row['table_name']
-            
-            if not csv_filename:
-                continue  # skip if CSV not specified
-    
-            csv_path = os.path.join(self.keyword_base_path, csv_filename)
-            df = pd.read_csv(csv_path, delimiter='|', dtype=str).fillna('')
-            df['source'] = label
-            df['table_name'] = table_name
-            df['csv_path'] = csv_path
-            df.rename(columns={'unit': 'units'}, inplace=True)
-    
-            dfs.append(df[['keyword', 'datatype', 'units', 'description', 'source', 'table_name', 'csv_path']])
-    
-        # Combine all dataframes into one
-        df_all = pd.concat(dfs, ignore_index=True)
-        df_all.drop_duplicates(subset='keyword', inplace=True)
-    
-        self.metadata_entries = df_all.to_dict(orient='records')
-
-   
+#    def _init_metadata_entries(self):
+#        """
+#        Load and combine all keyword metadata entries from CSV files into self.metadata_entries.
+#        """
+#        dfs = []
+#        tables_metadata_df = pd.read_csv(self.csv_filepath).fillna('')
+#    
+#        for _, row in tables_metadata_df.iterrows():
+#            csv_filename = row['csv']
+#            label = row['label']
+#            table_name = row['table_name']
+#            
+#            if not csv_filename:
+#                continue  # skip if CSV not specified
+#    
+#            csv_path = os.path.join(self.keyword_base_path, csv_filename)
+#            df = pd.read_csv(csv_path, delimiter='|', dtype=str).fillna('')
+#            df['source'] = label
+#            df['table_name'] = table_name
+#            df['csv_path'] = csv_path
+#            df.rename(columns={'unit': 'units'}, inplace=True)
+#    
+#            dfs.append(df[['keyword', 'datatype', 'units', 'description', 'source', 'table_name', 'csv_path']])
+#    
+#        # Combine all dataframes into one
+#        df_all = pd.concat(dfs, ignore_index=True)
+#        df_all.drop_duplicates(subset='keyword', inplace=True)
+#    
+#        self.metadata_entries = df_all.to_dict(orient='records')
+#
+#   
     @require_role(['admin', 'operations', 'readonly'])
     def print_db_status(self):
         """
@@ -1555,59 +1608,25 @@ class TSDB:
 
 
     @require_role(['admin', 'operations', 'readonly'])
-    def display_dataframe_from_db(self, columns, 
-                                  only_object=None, object_like=None, only_source=None, 
-                                  on_sky=None, not_junk=None,
-                                  start_date=None, end_date=None, 
-                                  verbose=False):
+    def ObsIDlist_from_db(self, object_name, start_date=None, end_date=None, not_junk=None):
         """
-        Description:
-            Print a pandas DataFrame containing specified columns from a 
-            joined set of database tables, applying optional filters based on 
-            object names, source types, date ranges, sky condition, and quality 
-            checks.
-    
+        Returns a list of ObsIDs for the observations of object_name.
+
         Args:
-            columns (str or list of str, optional): Column name(s) to retrieve. 
-                Defaults to None (fetches all columns).
-            start_date (str or datetime, optional): Starting date for filtering 
-                observations (datetime object or YYYYMMDD or None). Defaults to 
-                None.
-            end_date (str or datetime, optional): Ending date for filtering 
-                observations (datetime object or YYYYMMDD or None). Defaults to 
-                None.
-            only_object (str or list of str, optional): Exact object name(s) to 
-                filter observations. Defaults to None.
-                E.g., only_object = ['autocal-dark', 'autocal-bias']
-            only_source (str or list of str, optional): Source type(s) to filter 
-                observations. Defaults to None.
-                E.g., only_source = ['Dark', 'Bias']
-            object_like (str or list of str, optional): Partial object name(s) 
-                for filtering observations using SQL LIKE conditions. Defaults 
-                to None.
-                E.g., object_like = ['autocal-etalon', 'autocal-bias']
-            on_sky (bool, optional): Filter by on-sky (True) or calibration 
-                (False) observations. Defaults to None.
-            not_junk (bool, optional): Filter by observations marked as not junk 
-                (True) or junk (False). Defaults to None.
-            verbose (bool, optional): Enables detailed logging of SQL queries 
-                and parameters. Defaults to False.
-    
+            object_name (string) - name of object (e.g., '4614')
+            not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
+            start_date (datetime object) - only return observations after start_date
+            end_date (datetime object) - only return observations after end_date
+
         Returns:
-            None. Prints the resulting dataframe.
+            Pandas dataframe of the specified columns matching the constraints.
         """
-        df = self.dataframe_from_db(
-            columns=columns,
-            only_object=only_object,
-            object_like=object_like,
-            only_source=only_source,
-            on_sky=on_sky, 
-            not_junk=not_junk,
-            start_date=start_date,
-            end_date=end_date,
-            verbose=verbose
-        )
-        print(df)
+        # to-do: check if object_name is in the database before trying to create the df
+        df = self.dataframe_from_db(['ObsID'], object_like=object_name, 
+                                    start_date=start_date, end_date=end_date, 
+                                    not_junk=not_junk)
+        
+        return df['ObsID'].tolist()
 
 
     @require_role(['admin', 'operations', 'readonly'])
@@ -1615,6 +1634,7 @@ class TSDB:
                           start_date=None, end_date=None, 
                           only_object=None, only_source=None, object_like=None, 
                           on_sky=None, not_junk=None, 
+                          QCs_pass=None, QCs_fail=None, 
                           extra_conditions=None,
                           extra_conditions_logic='AND',
                           verbose=False):
@@ -1646,6 +1666,10 @@ class TSDB:
                 E.g., object_like = ['autocal-etalon', 'autocal-bias']
             on_sky (bool, optional): Filter by on-sky (True) or calibration 
                 (False) observations. Defaults to None.
+            QCs_pass (str or list of str, optional): Column names where rows 
+                must have True. Defaults to None.
+            QCs_fail (str or list of str, optional): Column names where rows 
+                must have False. Defaults to None.
             not_junk (bool, optional): Filter by observations marked as not junk 
                 (True) or junk (False). Defaults to None.
             verbose (bool, optional): Enables detailed logging of SQL queries 
@@ -1662,6 +1686,10 @@ class TSDB:
             only_source = [only_source]
         if isinstance(object_like, str):
             object_like = [object_like]
+        if isinstance(QCs_pass, str):
+            QCs_pass = [QCs_pass]
+        if isinstance(QCs_fail, str):
+            QCs_fail = [QCs_fail]
     
         quote = '"' if self.backend == 'psql' else '"'  # SQLite uses " for quoting as well
         placeholder = '%s' if self.backend == 'psql' else '?'
@@ -1677,9 +1705,14 @@ class TSDB:
                 columns_requested = metadata['keyword'].tolist()
             else:
                 columns_requested = [columns] if isinstance(columns, str) else columns
-                placeholders = ','.join([placeholder] * len(columns_requested))
+                columns_needed = columns_requested.copy()
+                if QCs_pass is not None:
+                    columns_needed.extend(QCs_pass)
+                if QCs_fail is not None:
+                    columns_needed.extend(QCs_fail)
+                placeholders = ','.join([placeholder] * len(columns_needed))
                 metadata_query = f'SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders});'
-                self._execute_sql_command(metadata_query, params=columns_requested)
+                self._execute_sql_command(metadata_query, params=columns_needed)
                 metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
     
             kw_table_map = dict(zip(metadata['keyword'], metadata['table_name']))
@@ -1690,7 +1723,7 @@ class TSDB:
             table_columns = {table: {'ObsID'} for table in tables_needed}
             for kw, tbl in kw_table_map.items():
                 table_columns[tbl].add(kw)
-    
+
             guaranteed_columns = {
                 'tsdb_base': ['Source', 'datecode'],
                 'tsdb_l0': ['OBJECT', 'FIUMODE'],
@@ -1717,7 +1750,7 @@ class TSDB:
                 f'LEFT JOIN {tbl} ON tsdb_base.{quote}ObsID{quote} = {tbl}.{quote}ObsID{quote}'
                 for tbl in tables_needed if tbl != 'tsdb_base'
             ]
-    
+
             conditions, params = [], []
     
             if only_object:
@@ -1743,6 +1776,16 @@ class TSDB:
                 mode = 'Observing' if on_sky else 'Calibration'
                 conditions.append(f'tsdb_l0.{quote}FIUMODE{quote} = {placeholder}')
                 params.append(mode)
+
+            if QCs_pass is not None:
+                for col in QCs_pass:
+                    conditions.append(f"{quote}{col}{quote} = {placeholder}")
+                    params.append(True)
+        
+            if QCs_fail is not None:
+                for col in QCs_fail:
+                    conditions.append(f"{quote}{col}{quote} = {placeholder}")
+                    params.append(False)
     
             if start_date:
                 date_str = pd.to_datetime(start_date).strftime("%Y%m%d")
@@ -1763,7 +1806,7 @@ class TSDB:
     
                 extra_clause = f" {extra_conditions_logic} ".join(qualified_extra_conditions)
                 conditions.append(f"({extra_clause})")
-    
+            
             where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     
             query = f"""
@@ -1772,7 +1815,7 @@ class TSDB:
                 {' '.join(join_clauses)}
                 {where_clause}
             """
-    
+
             if verbose:
                 self.logger.debug("SQL Query:")
                 self.logger.debug(query)
@@ -1797,28 +1840,180 @@ class TSDB:
             self._close_connection()
     
         return df
-        
+
 
     @require_role(['admin', 'operations', 'readonly'])
-    def ObsIDlist_from_db(self, object_name, start_date=None, end_date=None, not_junk=None):
+    def display_data(self, columns, 
+                           start_date=None, end_date=None, 
+                           only_object=None, object_like=None, only_source=None, 
+                           on_sky=None, not_junk=None,
+                           QCs_pass=None, QCs_fail=None, 
+                           max_height_px=800, # in pixels
+                           url_stub='https://jump.caltech.edu/observing-logs/kpf/',
+                           verbose=False):
         """
-        Returns a list of ObsIDs for the observations of object_name.
+        Description:
+            Make a formatted printout of a pandas DataFrame containing specified 
+            columns from a joined set of database tables, applying optional 
+            filters based on object names, source types, date ranges, 
+            sky condition, and quality checks. The table includes ObsIDs links, 
+            enables scrolling if necessary, and makes columns sortable.
 
         Args:
-            object_name (string) - name of object (e.g., '4614')
-            not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
-            start_date (datetime object) - only return observations after start_date
-            end_date (datetime object) - only return observations after end_date
+            max_height_px (int, default=800): Sets the vertical height (pixels) 
+                for scrolling.
+            url_stub (str): the URL for ObsID links.  The default page is set to 
+                "Jump", the portal used by the KPF Science Team.
+            (other arguments are the same as dataframe_from_db)
 
         Returns:
-            Pandas dataframe of the specified columns matching the constraints.
+            None. Prints the resulting dataframe.
         """
-        # to-do: check if object_name is in the database before trying to create the df
-        df = self.dataframe_from_db(['ObsID'], object_like=object_name, 
-                                    start_date=start_date, end_date=end_date, 
-                                    not_junk=not_junk)
         
-        return df['ObsID'].tolist()
+        df = self.dataframe_from_db(
+            columns=columns,
+            only_object=only_object,
+            object_like=object_like,
+            only_source=only_source,
+            on_sky=on_sky, 
+            not_junk=not_junk,
+            QCs_pass=QCs_pass, 
+            QCs_fail=QCs_fail, 
+            start_date=start_date,
+            end_date=end_date,
+            verbose=verbose
+        )
+
+        # Convert ObsID to clickable HTML links
+        if 'ObsID' in df.columns:
+            df['ObsID'] = df['ObsID'].apply(
+                lambda obsid: f'<a href="{url_stub}{obsid}" target="_blank">{obsid}</a>'
+            )
+
+        # Generate HTML table with scrolling and sortable columns
+        html = df.to_html(escape=False, index=False, classes='sortable')
+
+        # Wrap in styled div and JavaScript for sorting
+        styled_html = f'''
+        <style>
+        .sortable th {{
+            cursor: pointer;
+            background-color: #f1f1f1;
+        }}
+        </style>
+        <div style="overflow:auto; max-height:{max_height_px}px;">
+            {html}
+        </div>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {{
+            function sortTable(table, colIndex, asc) {{
+                const tbody = table.tBodies[0];
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+
+                rows.sort((a, b) => {{
+                    const aText = a.children[colIndex].innerText;
+                    const bText = b.children[colIndex].innerText;
+                    const aNum = parseFloat(aText);
+                    const bNum = parseFloat(bText);
+                    if (!isNaN(aNum) && !isNaN(bNum)) {{
+                        return asc ? aNum - bNum : bNum - aNum;
+                    }} else {{
+                        return asc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+                    }}
+                }});
+
+                rows.forEach(row => tbody.appendChild(row));
+            }}
+
+            document.querySelectorAll('table.sortable th').forEach((th, index) => {{
+                let ascending = true;
+                th.addEventListener('click', () => {{
+                    const table = th.closest('table');
+                    sortTable(table, index, ascending);
+                    ascending = !ascending;
+                }});
+            }});
+        }});
+        </script>
+        '''
+
+        # Display the formatted table
+        display(HTML(styled_html))
+
+
+    def print_log_error_report(self, df, log_dir='/data/logs/', aggregated_summary=False):
+        '''
+        For each ObsID in the dataframe, open the corresponding log file,
+        find all lines containing [ERROR]:, and print either:
+        - aggregated error report (if aggregated_summary=True)
+        - individual ObsID error reports (if aggregated_summary=False)
+        '''
+        error_counter = Counter()  # Collect error bodies for aggregation
+    
+        for obsid in df['ObsID']:
+            log_path = os.path.join(log_dir, f'{get_datecode(obsid)}/{obsid}.log')
+            
+            if not os.path.isfile(log_path):
+                if not aggregated_summary:
+                    print(f"ObsID: {obsid}")
+                    print(f"Log file: {log_path}")
+                    print(f"Log file not found.\n")
+                continue
+            
+            mod_time = datetime.utcfromtimestamp(os.path.getmtime(log_path)).strftime('%Y-%m-%d %H:%M:%S UTC')
+            
+            error_lines = []
+            with open(log_path, 'r') as file:
+                for line in file:
+                    if '[ERROR]:' in line:
+                        error_line = line.strip()
+                        error_lines.append(error_line)
+    
+                        # Extract only the part after [ERROR]:
+                        parts = error_line.split('[ERROR]:', 1)
+                        if len(parts) > 1:
+                            error_body = parts[1].strip()
+                            error_counter[error_body] += 1
+                        else:
+                            error_counter[error_line] += 1
+            
+            if not aggregated_summary:
+                # Print individual ObsID report
+                print(f"ObsID: {obsid}")
+                print(f"Log file: {log_path}")
+                print(f"Log modification date: {mod_time}")
+                print(f"Errors in log file:")
+                
+                if error_lines:
+                    for error in error_lines:
+                        print(f"    {error}")
+                else:
+                    print(f"    No [ERROR] lines found.")
+                
+                print("\n" + "-" * 50 + "\n")
+        
+        # After processing all ObsIDs, print the aggregated summary if requested
+        if aggregated_summary:
+            if error_counter:
+                print("\nAggregated Error Summary:\n")
+                
+                summary_df = pd.DataFrame(
+                    [(count, error) for error, count in error_counter.items()],
+                    columns=['Count', 'Error Message']
+                ).sort_values('Count', ascending=False).reset_index(drop=True)
+                
+                # Set wide display options for Pandas
+                pd.set_option('display.max_colwidth', None)
+                pd.set_option('display.width', 0)
+                
+                # Force all table cells to left-align with inline CSS
+                html = summary_df.to_html(index=False, escape=False)
+                html = html.replace('<td>', '<td style="text-align: left; white-space: normal; word-wrap: break-word;">')
+                html = html.replace('<th>', '<th style="text-align: left; white-space: normal; word-wrap: break-word;">')
+                
+                display(HTML(html))
+            else:
+                print("No [ERROR] lines found across all logs.")
 
 
 def process_file(file_path, now_str,
