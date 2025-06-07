@@ -191,7 +191,7 @@ class TSDB:
             else:
                 self.dbuser = os.getenv('TSDBUSER')
                 if os.getenv('TSDBUSER') is None:
-                    self.logger.info("Environment variable 'TSDBUSER' not found. No default value available. Many methods in this class won't work.")
+                    self.logger.error("Environment variable 'TSDBUSER' not found. No default value available. Many methods in this class won't work.")
             # ----- TSDBPASS ------------------------------------------------------------
             if 'TSDBPASS' in creds and creds['TSDBPASS'] is not None:
                 self.dbpass = creds['TSDBPASS']
@@ -199,14 +199,14 @@ class TSDB:
             else:
                 self.dbpass = os.getenv('TSDBPASS')
                 if os.getenv('TSDBPASS') is None:
-                    self.logger.info("Environment variable 'TSDBPASS' not found. No default value available. Many methods in this class won't work.")
+                    self.logger.error("Environment variable 'TSDBPASS' not found. No default value available. Many methods in this class won't work.")
 
             self.logger.info('PSQL server: ' + str(self.dbserver))
             self.logger.info('PSQL username: ' + str(self.dbuser))
             self.user_role = self.get_user_role()
             self.logger.info('PSQL user role: ' + self.user_role)
         
-        # Read table information from file
+        # Read list of tables and columns from files
         self.keyword_base_path = '/code/KPF-Pipeline/static/tsdb_tables'
         self.csv_filepath = self.keyword_base_path + '/tables_metadata.csv'
         self.tables_metadata_df = pd.read_csv(self.csv_filepath).fillna('')
@@ -231,7 +231,8 @@ class TSDB:
             for table_name, details in self.tables.items()
             if details['file_level'] is not None and details['extension'] is not None
         }
-        
+
+# I don't think this is needed any more, but am keeping it during testing.  6/6/2025        
 #        # Initialize metadata entries first
 #        self._init_metadata_entries()
 
@@ -297,7 +298,22 @@ class TSDB:
 
     def _open_connection(self):
         """
-        Open the database connection
+        Establishes a connection to the database and initializes the cursor.
+    
+        This method supports both SQLite and PostgreSQL backends. It attempts multiple connection retries 
+        when using PostgreSQL to handle transient connection issues.
+    
+        Behavior by backend:
+            - SQLite:
+                Opens a connection to the database file specified by `self.db_path`.
+            - PostgreSQL:
+                Attempts to connect to the PostgreSQL database using parameters defined by:
+                    - `self.dbserver`
+                    - `self.dbname`
+                    - `self.dbport`
+                    - `self.dbuser`
+                    - `self.dbpass`
+                Retries up to three times if the connection fails initially, waiting 10 seconds between attempts.
         """
 
         if self.backend == 'sqlite':
@@ -322,6 +338,8 @@ class TSDB:
                         self.logger.info("Could not connect to database, retrying...")
                         db_fail = True
                         time.sleep(10)
+                if self.conn == None:
+                    self.logger.error('Database connection not established.  self.conn = None.')
                 self.cursor = self.conn.cursor()
             except Exception as e:
                 self.logger.error(f"Failed to connect to PostgreSQL: {e}")
@@ -330,9 +348,17 @@ class TSDB:
     
     def _close_connection(self):
         """
-        Close the database connection.
+        Commits any pending database transactions and safely closes the database connection and cursor.
+    
+        Behavior by backend:
+            - SQLite:
+                Commits all changes to the database file and closes the connection.
+            - PostgreSQL:
+                Commits transactions to the PostgreSQL database and closes the connection.
+    
+        After executing this method, the internal connection (`self.conn`) and cursor (`self.cursor`) 
+        are reset to None to indicate that no active connection exists.
         """
-
         if self.conn:
             if self.backend == 'sqlite':
                 self.conn.commit()
@@ -346,9 +372,25 @@ class TSDB:
     
     def _execute_sql_command(self, command, params=None, fetch=False):
         """
-        Add docstring.
+        Execute an SQL command using the currently opened database connection.
+        
+        This method supports both SQLite and PostgreSQL backends, automatically adjusting 
+        placeholder syntax as needed. It optionally returns fetched data and logs detailed 
+        debugging information when verbose mode is enabled.
+    
+        Args:
+            command (str): 
+                The SQL query or command to execute. Use '?' placeholders for parameters.
+            params (tuple or list, optional): 
+                Parameters to bind to the SQL command. Defaults to None.
+            fetch (bool, optional): 
+                If True, fetches and returns all results from the executed query.
+                Defaults to False.
+    
+        Returns:
+            list of tuples:
+                Result set returned by `cursor.fetchall()` if fetch is True; otherwise, None.
         """
-
         if self.cursor is None:
             raise RuntimeError("Database connection is not open.")
     
@@ -378,6 +420,23 @@ class TSDB:
 
 
     def get_user_role(self):
+        """
+        Determine and return the database user's role based on schema-level permissions.
+    
+        This method queries PostgreSQL schema privileges for the current user and classifies
+        the user's role into one of four categories based on their permissions:
+    
+        - 'admin': User has SUPERUSER privileges, providing full administrative access.
+        - 'operations': User has both CREATE and USAGE privileges on the database schema,
+          suitable for typical operational tasks, including data ingestion and table management.
+        - 'readonly': User has only USAGE privileges, restricting their actions to read-only
+          database queries.
+        - 'none': User lacks USAGE, CREATE, and SUPERUSER privileges, indicating no effective
+          permissions to interact with the schema.
+    
+        Returns:
+            str: The user's role classification ('admin', 'operations', 'readonly', or 'none').
+        """
         if self.backend != 'psql':
             raise ValueError("get_user_role only supported with PostgreSQL backend")
     
@@ -545,7 +604,7 @@ class TSDB:
         finally:
             self._close_connection()
 
-
+# I think this no longer needed.  Keeping it for tests just in case.  AWH 6/6/25
 #    def _init_metadata_entries(self):
 #        """
 #        Load and combine all keyword metadata entries from CSV files into self.metadata_entries.
@@ -676,7 +735,8 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def _create_metadata_table(self):
         """
-        Create the tsdb_metadata table with table_name mapping from tables_metadata.csv.
+        Create the tsdb_metadata table with table_name mapping from the file 
+        tables_metadata.csv.
         """
         self._open_connection()
         try:
@@ -743,7 +803,7 @@ class TSDB:
                         insert_sql,
                         params=(keyword, source, datatype, units, description, table_name)
                     )
-    
+
         finally:
             self._close_connection()
     
@@ -753,7 +813,8 @@ class TSDB:
     @require_role(['admin', 'operations', 'readonly'])
     def _read_metadata_table(self):
         """
-        Read the tsdb_metadata table and store it in the attribute self.metadata_table.
+        Read the tsdb_metadata table and store it in the attribute 
+        self.metadata_table.
         """
         sql_metadata = "SELECT keyword, datatype, table_name FROM tsdb_metadata;"
         self._open_connection()
@@ -765,7 +826,30 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def _create_data_tables(self):
         """
-        Create TSDB data tables split by category with ObsID as primary key.
+        Dynamically create database tables based on metadata definitions.
+    
+        This method constructs the database schema by generating tables defined 
+        in the `tsdb_metadata` table. Each table is created with `ObsID` as the primary key, 
+        alongside dynamically determined columns derived from keyword metadata.
+    
+        Process overview:
+            1. Queries the `tsdb_metadata` table to obtain column names, data types, 
+               and target tables.
+            2. Maps metadata-defined data types to appropriate SQLite or PostgreSQL 
+               data types.
+            3. Creates each table with `ObsID` as the primary key and the derived columns 
+               with correct SQL data types.
+            4. Skips creating columns explicitly named `ObsID` (handled as primary key).
+    
+        Preconditions:
+            - Metadata table (`tsdb_metadata`) must be populated and available.
+    
+        Postconditions:
+            - Database schema matches the structure defined by metadata CSV configurations.
+            - All necessary tables exist, ready for data ingestion.
+    
+        Usage:
+            Typically invoked during initial setup or schema resets.
         """
     
         # Fetch keyword, datatype, and table_name from metadata
@@ -822,8 +906,8 @@ class TSDB:
     @require_role(['admin', 'operations', 'readonly'])
     def _set_boolean_columns(self):
         """
-        Set the self.bool_columns attribute with the names of all database columns 
-        that should be treated as booleans, based on the metadata table.
+        Set the self.bool_columns attribute with the names of all database 
+        columns that should be treated as booleans, based on the metadata table.
         """
         self._open_connection()
         try:
@@ -841,14 +925,44 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def ingest_one_observation(self, dir_path, L0_filename):
         """
-        Ingest a single observation into the database using dynamic 
-        keyword-table mapping from metadata.
+        Ingest metadata and telemetry from a single KPF observation into the database.
+    
+        This method processes a single observation by extracting data from FITS files
+        associated with different processing levels (L0, 2D, L1, L2). The extracted
+        metadata, telemetry, radial velocities, and related keywords are dynamically
+        mapped and inserted into the corresponding database tables.
+    
+        Steps:
+            1. Determine file paths for associated data products (L0, 2D, L1, L2).
+            2. Extract header keywords, telemetry data, and radial velocity measurements
+               based on the predefined extraction plan.
+            3. Aggregate extracted data into structured dictionaries keyed by database tables.
+            4. Apply necessary data type conversions (e.g., floats, booleans).
+            5. Insert or update entries into respective database tables, resolving
+               conflicts by updating existing records if necessary.
     
         Args:
-            dir_path (str): Path to the directory containing the files.
-            L0_filename (str): Filename of the L0 FITS file.
+            dir_path (str):
+                Filesystem path to the directory containing the L0 FITS file.
+            L0_filename (str):
+                Filename of the Level 0 (raw) FITS file, typically in the format 
+                'ObsID.fits' (e.g., 'KP.20241020.12345.67.fits').
+    
+        Preconditions:
+            - Directory at `dir_path` exists and contains the L0 file and its related products.
+            - Database schema and metadata table (`tsdb_metadata`) are properly initialized.
+            - The method is executed with adequate database permissions ('admin' or 'operations').
+    
+        Postconditions:
+            - Observation metadata, telemetry, and measurements are ingested into the database.
+            - Existing records for the same ObsID are updated if they already exist.
+    
+        Usage:
+            Intended for incremental ingestion, such as manual ingestion or pipeline-triggered events.
+    
+        Example:
+            tsdb.ingest_one_observation('/data/L0/20241020/', 'KP.20241020.12345.67.fits')
         """
-
         base_filename = L0_filename.split('.fits')[0]
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
@@ -931,10 +1045,47 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def ingest_dates_to_db(self, start_date_str, end_date_str, batch_size=10000, reverse=False, force_ingest=False, quiet=False):
         """
-        Ingest KPF data for the date range start_date to end_date, inclusive.
-        batch_size refers to the number of observations per DB insertion.
-        If force_ingest=False, files are not reingested unless they have more 
-        recent modification dates than in DB.
+        Ingest observational data from a specified date range into the database.
+    
+        This method systematically ingests metadata and telemetry from Keck Planet Finder (KPF) observations
+        for each date within the provided start and end dates. It processes Level 0 FITS files and their
+        associated data products (2D, L1, and L2), extracting relevant information according to the extraction
+        plan. Observations are processed in batches to optimize performance and database transactions.
+    
+        Workflow:
+            1. Identify and sort directories corresponding to observation dates.
+            2. Iterate through each observation date, processing FITS files in batches.
+            3. Optionally skip re-ingesting observations unless files have been modified after the last database update.
+            4. Perform extraction, aggregation, and insertion of data into the database using multiprocessing for efficiency.
+    
+        Args:
+            start_date_str (str or datetime):
+                Start date for ingestion (inclusive), formatted as 'YYYYMMDD' or as a datetime object.
+            end_date_str (str or datetime):
+                End date for ingestion (inclusive), formatted as 'YYYYMMDD' or as a datetime object.
+            batch_size (int, optional, default=10000):
+                Maximum number of observations processed per database transaction batch.
+            reverse (bool, optional, default=False):
+                If True, processes observation dates in reverse chronological order.
+            force_ingest (bool, optional, default=False):
+                If True, ingests observations regardless of their modification timestamps in the database.
+            quiet (bool, optional, default=False):
+                If True, suppresses progress bar and reduces logging verbosity.
+    
+        Preconditions:
+            - Database tables and schema are properly initialized.
+            - Directories containing KPF observation files (`self.base_dir`) exist and follow the expected structure.
+            - User has sufficient database privileges ('admin' or 'operations').
+    
+        Postconditions:
+            - Database is populated or updated with observational data within the specified date range.
+    
+        Usage Scenario:
+            - Routine daily ingestion or re-ingestion of observational data.
+            - Batch updating of database following pipeline reprocessing events.
+    
+        Example:
+            tsdb.ingest_dates_to_db('20241001', '20241031', batch_size=500, reverse=True, force_ingest=True)
         """
 
         # Convert input dates to strings if necessary
@@ -980,11 +1131,52 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def ingest_batch_observations(self, batch, force_ingest=False):
         """
-        Ingest a batch of observations into the multi-table database, dynamically handling L1 tables and metadata.
+        Ingest a batch of observational data files into the database efficiently using parallel processing.
+    
+        This method handles multiple Keck Planet Finder (KPF) observational files simultaneously, extracting metadata,
+        telemetry, radial velocity (RV) measurements, and other relevant data from Level 0 (L0), Level 2D (2D), 
+        Level 1 (L1), and Level 2 (L2) FITS files. It employs multiprocessing to accelerate data extraction and 
+        ingestion processes, significantly enhancing performance during batch operations.
+    
+        Workflow:
+            1. Optionally filters the batch based on file modification times compared to database entries,
+               unless `force_ingest` is set to True.
+            2. Utilizes multiprocessing to concurrently extract required information from each file according 
+               to a predefined extraction plan.
+            3. Aggregates the extracted data into structured dictionaries mapped to appropriate database tables.
+            4. Inserts or updates database records efficiently in bulk, handling conflicts as necessary.
     
         Args:
-            batch (list): List of file paths for the batch.
-            force_ingest (bool): Force ingestion regardless of file modification checks.
+            batch (list of str):
+                List of file paths corresponding to KPF observational data (primarily L0 FITS files) to be ingested.
+            force_ingest (bool, optional, default=False):
+                If True, ingests all files in the batch irrespective of their modification status relative to the database.
+    
+        Preconditions:
+            - Database schema and tables are properly initialized.
+            - Files listed in `batch` exist and are accessible.
+            - User role has sufficient privileges (roles: 'admin', 'operations').
+    
+        Postconditions:
+            - Database tables are populated or updated with data extracted from the provided observational files.
+            - Data integrity and consistency are maintained via proper conflict handling and data type conversions.
+    
+        Performance:
+            - Parallelized processing leveraging available CPU cores, optimized for batches up to thousands of files.
+    
+        Raises:
+            Exception:
+                Logs and raises exceptions encountered during data extraction or database operations,
+                providing detailed information for debugging.
+    
+        Usage Scenario:
+            - Ideal for ingesting or updating database entries following bulk reprocessing of KPF data.
+            - Suitable for scheduled ingestion tasks involving large quantities of observational data.
+    
+        Example:
+            file_batch = ['/data/L0/20241001/KP.20241001.12345.67.fits', 
+                          '/data/L0/20241001/KP.20241001.12346.68.fits']
+            tsdb.ingest_batch_observations(file_batch, force_ingest=True)
         """
 
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1155,8 +1347,41 @@ class TSDB:
     
     def _extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
-        Extract keywords from keyword_types.keys from an extension in a L0/2D/L1/L2 file.
-        Additionally, if DRPTAG is valid, populate DRPTAG2D, DRPTAGL1, and DRPTAGL2 with its value.
+        Extracts specified header keywords from a given extension of a Keck Planet Finder (KPF) FITS file.
+    
+        This method reads a FITS file, accesses the header of the designated extension, and retrieves values for a specified list of keywords. It also ensures special keywords such as `DRPTAG` and `DRPHASH`, if present, propagate their values consistently across related data levels (2D, L1, L2) by setting corresponding header keywords (`DRPTAG2D`, `DRPHSH2D`, etc.).
+    
+        Workflow:
+            1. Opens the specified FITS file at the given extension.
+            2. Retrieves the requested keywords and initializes missing entries as `None`.
+            3. Ensures propagation of `DRPTAG` and `DRPHASH` values to corresponding higher-level data keywords.
+            4. Handles missing files or headers gracefully by returning a dictionary filled with `None` values and logging an appropriate error.
+    
+        Args:
+            file_path (str):
+                Path to the FITS file from which keywords are to be extracted.
+            
+            keyword_types (dict):
+                Dictionary mapping keyword names to their intended data types (e.g., 'float', 'string', 'bool'). Only keys from this dictionary will be extracted from the header.
+    
+            extension (str, optional):
+                FITS extension from which the header keywords are extracted. Default is 'PRIMARY'.
+    
+        Returns:
+            dict:
+                A dictionary mapping each requested keyword to its extracted value from the FITS header. If a keyword is missing from the header, its value is set to `None`.
+    
+        Usage Scenario:
+            - Typically utilized during data ingestion workflows to extract relevant metadata from FITS file headers for database storage.
+    
+        Example:
+            keyword_types = {'DATE-MID': 'datetime', 'TARGNAME': 'string', 'EXPTIME': 'float'}
+            header_data = tsdb._extract_kwd('/data/L0/KP.20241001.12345.67.fits', keyword_types)
+            # header_data = {
+            #     'DATE-MID': '2024-10-01T12:34:56.789', 
+            #     'TARGNAME': 'StarXYZ', 
+            #     'EXPTIME': 300.0
+            # }
         """
         # Initialize the result dictionary with None for all keywords
         header_data = {key: None for key in keyword_types.keys()}
@@ -1195,7 +1420,36 @@ class TSDB:
 
     def _extract_telemetry(self, file_path, keyword_types):
         """
-        Extract telemetry from the 'TELEMETRY' extension in a KPF L0 file.
+        Extract telemetry data from the 'TELEMETRY' extension of a Keck Planet Finder (KPF) Level 0 FITS file.
+    
+        This method reads telemetry keywords and their corresponding average values stored within the FITS file's
+        telemetry extension. It handles data sanitization by converting invalid entries (e.g., '-nan', 'nan', '-999') 
+        to numerical NaNs, ensuring consistency for downstream database ingestion.
+    
+        Workflow:
+            1. Opens the specified FITS file and accesses its 'TELEMETRY' extension.
+            2. Decodes and sanitizes telemetry keywords and their corresponding average values.
+            3. Constructs a dictionary mapping the requested telemetry keywords to their sanitized numerical values.
+    
+        Args:
+            file_path (str):
+                Path to the KPF Level 0 FITS file containing telemetry data.
+            keyword_types (dict):
+                Dictionary with telemetry keywords as keys and their expected data types (e.g., 'float') as values.
+    
+        Returns:
+            dict:
+                A dictionary mapping each requested telemetry keyword to its corresponding numerical value.
+                - Missing or invalid entries are returned as NaN.
+                - If telemetry extraction fails due to file or format issues, returns a dictionary with all values set to None.
+
+        Usage Scenario:
+            - Typically invoked during observational data ingestion to populate telemetry-specific database tables.
+    
+        Example:
+            keyword_types = {'kpfmet.TEMP': 'float', 'kpfmet.PRESS': 'float'}
+            telemetry_data = tsdb._extract_telemetry('/data/L0/KP.20241001.12345.67.fits', keyword_types)
+            # telemetry_data = {'kpfmet.TEMP': 20.5, 'kpfmet.PRESS': 1.02}
         """
         try:
             # Use astropy's Table to load only necessary data
@@ -1230,7 +1484,46 @@ class TSDB:
 
     def _extract_rvs(self, file_path):
         """
-        Extract RVs from the 'RV' extension in a KPF L2 file.
+        Extract radial velocity (RV) measurements from the 'RV' extension of a Keck Planet Finder (KPF) Level 2 FITS file.
+    
+        This method reads RV data structured across multiple spectral orders from the designated RV extension. It maps specific RV-related columns—such as stellar RV, calibration RV, sky RV, RV errors, barycentric corrections, and cross-correlation function weights—to standardized database keyword names. Each extracted value is associated with an order index (from 00 to 66).
+    
+        Workflow:
+            1. Opens the Level 2 FITS file and accesses the 'RV' extension.
+            2. Extracts RV-related columns including individual order RVs, RV errors, barycentric RV corrections, and weights.
+            3. Reorganizes extracted data into a standardized flat dictionary format suitable for database ingestion.
+            4. Ensures completeness and integrity of data, returning a dictionary populated with None values if data extraction is incomplete or erroneous.
+    
+        Args:
+            file_path (str):
+                Path to the KPF Level 2 FITS file containing radial velocity data.
+    
+        Returns:
+            dict:
+                A dictionary with standardized keys mapping to radial velocity measurements across all spectral orders (00 to 66). Keys follow patterns such as:
+                - 'RV1NN', 'RV2NN', 'RV3NN': Orderlet RVs for individual spectral orders.
+                - 'RVSNN', 'ERVSNN': Stellar RV and corresponding error.
+                - 'RVCNN', 'ERVCNN': Calibration RV and error.
+                - 'RVYNN', 'ERVYNN': Sky RV and error.
+                - 'CCFBJDNN': Barycentric Julian Date for each order.
+                - 'BCRVNN': Barycentric radial velocity correction.
+                - 'CCFWNN': Cross-correlation function weights.
+                
+                Example key format: 'RVS01' represents stellar RV for order 01.
+    
+                If data extraction fails or incomplete data is detected, all values are returned as None.
+    
+        Error Handling:
+            - Logs an error message and returns a fully populated dictionary of None values if file reading or data parsing fails, ensuring database integrity.
+    
+        Usage Scenario:
+            - Used primarily during data ingestion processes for populating the RV-specific database tables.
+    
+        Example:
+            rv_data = tsdb._extract_rvs('/data/L2/KP.20241001.12345.67_L2.fits')
+            # rv_data = {
+            #     'RVS00': -12.345, 'ERVS00': 0.005, 'RVC00': -12.350, 'ERVC00': 0.004, ..., 'CCFW66': 0.95
+            # }
         """
         mapping = {
             'orderlet1':   'RV1{}',
@@ -1326,8 +1619,9 @@ class TSDB:
     @require_role(['admin', 'operations', 'readonly'])
     def _is_any_file_updated(self, L0_file_path):
         """
-        Determines if any file from the L0/2D/L1/L2 set has been updated since the last 
-        noted modification in the database. Returns True if any file has been modified.
+        Determines if any file from the L0/2D/L1/L2 set has been updated since 
+        the last noted modification in the database. 
+        Returns True if any file has been modified.
         """
         L0_filename = os.path.basename(L0_file_path)
     
@@ -1380,9 +1674,9 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def add_ObsID_list_to_db(self, ObsID_filename, reverse=False):
         """
-        Read a CSV file with ObsID values in the first column and ingest those files
-        into the database.  If reverse=True, then they will be ingested in reverse
-        chronological order.
+        Read a CSV file with ObsID values in the first column and ingest those 
+        files into the database.  If reverse=True, then they will be ingested 
+        in reverse chronological order.
         """
         if os.path.isfile(ObsID_filename):
             try:
@@ -1614,9 +1908,10 @@ class TSDB:
 
         Args:
             object_name (string) - name of object (e.g., '4614')
-            not_junk (True, False, None) using NOTJUNK, select observations that are not Junk (True), Junk (False), or don't care (None)
+            not_junk (True, False, None) using NOTJUNK, select observations that 
+                are not Junk (True), Junk (False), or don't care (None)
             start_date (datetime object) - only return observations after start_date
-            end_date (datetime object) - only return observations after end_date
+            end_date (datetime object) - only return observations before end_date
 
         Returns:
             Pandas dataframe of the specified columns matching the constraints.
@@ -2021,7 +2316,8 @@ def process_file(file_path, now_str,
                  _extract_kwd_func, _extract_telemetry_func, _extract_rvs_func,
                  get_source_func, get_datecode_func, safe_float):
     """
-    Process a single file to extract all relevant keywords based on the extraction plan.
+    Process a single file to extract all relevant keywords based on the 
+    extraction plan.
     """    
     
     base_filename = os.path.basename(file_path).replace('.fits', '')
