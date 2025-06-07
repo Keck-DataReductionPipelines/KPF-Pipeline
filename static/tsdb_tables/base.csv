@@ -10,3 +10,5 @@ D2_header_read_time|string|Last modification of 2D file|None
 L1_header_read_time|string|Last modification of L1 file|None
 L2_header_read_time|string|Last modification of L2 file|None
 Source|string|Source type (e.g., 'Star' or 'Flat')|None
+RA_deg|float|right ascension (e.g., 5.272777)deg
+DEC_deg|float|declination (e.g., 188.736249)|deg

@@ -11,9 +11,10 @@ import numpy as np
 import time
 import inspect
 from functools import wraps
+from astropy.io import fits
 from astropy.time import Time
 from astropy.table import Table
-from astropy.io import fits
+from astropy.coordinates import Angle
 from tqdm import tqdm
 from tqdm.notebook import tqdm_notebook
 from datetime import datetime
@@ -120,12 +121,8 @@ class TSDB:
             automatically ingest them.
     
     To-do:
-        - Implement dynamic privilege checks for PostgreSQL backend to avoid 
-          unauthorized operations.
         - Include derived temperature derivatives and other computed columns.
         - Introduce separate database management for calibration master files.
-        - Provide quality control (QC) filtering options in query methods 
-          (e.g., qc_pass, qc_fail flags).
         - Use config file for backend.  Possibly check the config for credentials.
     
     """
@@ -204,11 +201,14 @@ class TSDB:
             self.logger.info('PSQL username: ' + str(self.dbuser))
             self.user_role = self.get_user_role()
             self.logger.info('PSQL user role: ' + self.user_role)
+
+        # Paths
+        self.keyword_base_path = '/code/KPF-Pipeline/static/tsdb_tables'
+        self.tables_metadata_filepath = os.path.join(self.keyword_base_path, 'tables_metadata.csv')
+        self.indexed_csv_path = os.path.join(self.keyword_base_path, 'indexed_columns.csv')
         
         # Read list of tables and columns from files
-        self.keyword_base_path = '/code/KPF-Pipeline/static/tsdb_tables'
-        self.csv_filepath = self.keyword_base_path + '/tables_metadata.csv'
-        self.tables_metadata_df = pd.read_csv(self.csv_filepath).fillna('')
+        self.tables_metadata_df = pd.read_csv(self.tables_metadata_filepath).fillna('')
         tables = {}
         for _, row in self.tables_metadata_df.iterrows():
             table_name = row['table_name']
@@ -299,20 +299,24 @@ class TSDB:
         """
         Establishes a connection to the database and initializes the cursor.
     
-        This method supports both SQLite and PostgreSQL backends. It attempts multiple connection retries 
-        when using PostgreSQL to handle transient connection issues.
+        This method supports both SQLite and PostgreSQL backends. It attempts 
+        multiple connection retries when using PostgreSQL to handle transient 
+        connection issues.
     
         Behavior by backend:
             - SQLite:
-                Opens a connection to the database file specified by `self.db_path`.
+                Opens a connection to the database file specified by 
+                `self.db_path`.
             - PostgreSQL:
-                Attempts to connect to the PostgreSQL database using parameters defined by:
+                Attempts to connect to the PostgreSQL database using parameters 
+                defined by:
                     - `self.dbserver`
                     - `self.dbname`
                     - `self.dbport`
                     - `self.dbuser`
                     - `self.dbpass`
-                Retries up to three times if the connection fails initially, waiting 10 seconds between attempts.
+                Retries up to three times if the connection fails initially, 
+                waiting 10 seconds between attempts.
         """
 
         if self.backend == 'sqlite':
@@ -347,16 +351,20 @@ class TSDB:
     
     def _close_connection(self):
         """
-        Commits any pending database transactions and safely closes the database connection and cursor.
+        Commits any pending database transactions and safely closes the database 
+        connection and cursor.
     
         Behavior by backend:
             - SQLite:
-                Commits all changes to the database file and closes the connection.
+                Commits all changes to the database file and closes the 
+                connection.
             - PostgreSQL:
-                Commits transactions to the PostgreSQL database and closes the connection.
+                Commits transactions to the PostgreSQL database and closes the 
+                connection.
     
-        After executing this method, the internal connection (`self.conn`) and cursor (`self.cursor`) 
-        are reset to None to indicate that no active connection exists.
+        After executing this method, the internal connection (`self.conn`) and 
+        cursor (`self.cursor`) are reset to None to indicate that no active 
+        connection exists.
         """
         if self.conn:
             if self.backend == 'sqlite':
@@ -373,13 +381,15 @@ class TSDB:
         """
         Execute an SQL command using the currently opened database connection.
         
-        This method supports both SQLite and PostgreSQL backends, automatically adjusting 
-        placeholder syntax as needed. It optionally returns fetched data and logs detailed 
-        debugging information when verbose mode is enabled.
+        This method supports both SQLite and PostgreSQL backends, automatically 
+        adjusting placeholder syntax as needed. It optionally returns fetched 
+        data and logs detailed debugging information when verbose mode is 
+        enabled.
     
         Args:
             command (str): 
-                The SQL query or command to execute. Use '?' placeholders for parameters.
+                The SQL query or command to execute. Use '?' placeholders for 
+                parameters.
             params (tuple or list, optional): 
                 Parameters to bind to the SQL command. Defaults to None.
             fetch (bool, optional): 
@@ -388,7 +398,8 @@ class TSDB:
     
         Returns:
             list of tuples:
-                Result set returned by `cursor.fetchall()` if fetch is True; otherwise, None.
+                Result set returned by `cursor.fetchall()` if fetch is True; 
+                otherwise, None.
         """
         if self.cursor is None:
             raise RuntimeError("Database connection is not open.")
@@ -420,21 +431,26 @@ class TSDB:
 
     def get_user_role(self):
         """
-        Determine and return the database user's role based on schema-level permissions.
+        Determine and return the database user's role based on schema-level 
+        permissions.
     
-        This method queries PostgreSQL schema privileges for the current user and classifies
-        the user's role into one of four categories based on their permissions:
+        This method queries PostgreSQL schema privileges for the current user 
+        and classifies the user's role into one of four categories based on 
+        their permissions:
     
-        - 'admin': User has SUPERUSER privileges, providing full administrative access.
-        - 'operations': User has both CREATE and USAGE privileges on the database schema,
-          suitable for typical operational tasks, including data ingestion and table management.
-        - 'readonly': User has only USAGE privileges, restricting their actions to read-only
-          database queries.
-        - 'none': User lacks USAGE, CREATE, and SUPERUSER privileges, indicating no effective
-          permissions to interact with the schema.
+        - 'admin': User has SUPERUSER privileges, providing full administrative 
+          access.
+        - 'operations': User has both CREATE and USAGE privileges on the 
+          database schema, suitable for typical operational tasks, including 
+          data ingestion and table management.
+        - 'readonly': User has only USAGE privileges, restricting their actions 
+          to read-only database queries.
+        - 'none': User lacks USAGE, CREATE, and SUPERUSER privileges, indicating 
+          no effective permissions to interact with the schema.
     
         Returns:
-            str: The user's role classification ('admin', 'operations', 'readonly', or 'none').
+            str: The user's role classification ('admin', 'operations', 
+                 'readonly', or 'none').
         """
         if self.backend != 'psql':
             raise ValueError("get_user_role only supported with PostgreSQL backend")
@@ -453,7 +469,8 @@ class TSDB:
 
     def _check_user_schema_permissions(self, schema_name='public'):
         """
-        Checks schema-level permissions (usage and create) independently of any table.
+        Checks schema-level permissions (usage and create) independently of 
+        any table.
     
         Args:
             schema_name (str): Schema name to check permissions for.
@@ -562,7 +579,8 @@ class TSDB:
     def unlock_db(self):
         """
         Remove the -wal and -shm lock files for SQLite databases.
-        For PostgreSQL, prints a message indicating that unlocking is not required.
+        For PostgreSQL, prints a message indicating that unlocking is not 
+        required.
         """
         if self.backend == 'sqlite':
             wal_file = f"{self.db_path}-wal"
@@ -734,12 +752,12 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def _create_metadata_table(self):
         """
-        Create the tsdb_metadata table, tracking whether each column is indexed based on:
-            - Explicitly listed columns from indexed_columns.csv.
+        Create the tsdb_metadata table, tracking whether each column is 
+        indexed based on:
+            - Explicitly listed columns from a file
             - Columns with descriptions containing 'QC:'.
         """
-        indexed_csv_path = os.path.join(self.keyword_base_path, 'indexed_columns.csv')
-        indexed_df = pd.read_csv(indexed_csv_path)
+        indexed_df = pd.read_csv(self.indexed_csv_path)
         indexed_columns = set(indexed_df['column'].tolist())
     
         # Drop existing metadata table if it exists
@@ -780,7 +798,7 @@ class TSDB:
             """
     
             # Load tables metadata
-            tables_metadata_df = pd.read_csv(self.csv_filepath).fillna('')
+            tables_metadata_df = pd.read_csv(self.tables_metadata_filepath).fillna('')
     
             # Iterate over metadata CSVs and populate entries
             for _, row in tables_metadata_df.iterrows():
@@ -830,28 +848,32 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def _create_data_tables(self):
         """
-        Create TSDB data tables from metadata definitions, with ObsID as primary key.
+        Create TSDB data tables from metadata definitions, with ObsID as 
+        primary key.
     
-        Columns specified in `indexed_columns.csv` and columns whose metadata description 
-        contains the substring \"QC:\" are automatically indexed. Indexing is based on column 
-        presence in the metadata, which may include multiple tables.
+        Columns specified in a file and columns whose metadata description 
+        contains the substring \"QC:\" are automatically indexed. Indexing is 
+        based on column presence in the metadata, which may include multiple 
+        tables.
     
         Key Steps:
             1. Loads columns to index from `indexed_columns.csv`.
-            2. Retrieves keyword, datatype, table_name, and description from the metadata table.
+            2. Retrieves keyword, datatype, table_name, and description from 
+               the metadata table.
             3. Dynamically creates each table with ObsID as the primary key.
             4. Creates indices for:
                 - Columns explicitly listed in `indexed_columns.csv`.
-                - Columns identified by having \"QC:\" in their metadata descriptions.
+                - Columns identified by having \"QC:\" in their metadata 
+                  descriptions.
             5. Ensures ObsID is indexed in tables other than `tsdb_base`.
-            6. Updates the metadata table to reflect indexed columns with an `indexed` boolean flag.
+            6. Updates the metadata table to reflect indexed columns with an 
+               `indexed` boolean flag.
     
-        Logs detailed messages indicating index creation successes and ensures database
-        operations are completed safely by properly closing connections.
+        Logs detailed messages indicating index creation successes and ensures 
+        database operations are completed safely by properly closing connections.
         """
     
-        indexed_csv_path = os.path.join(self.keyword_base_path, 'indexed_columns.csv')
-        indexed_df = pd.read_csv(indexed_csv_path)
+        indexed_df = pd.read_csv(self.indexed_csv_path)
         indexed_columns = set(indexed_df['column'].tolist())
     
         tables = [table for table in self.tables if table != 'tsdb_metadata']
@@ -964,21 +986,25 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def ingest_one_observation(self, dir_path, L0_filename):
         """
-        Ingest metadata and telemetry from a single KPF observation into the database.
+        Ingest metadata and telemetry from a single KPF observation into the 
+        database.
     
-        This method processes a single observation by extracting data from FITS files
-        associated with different processing levels (L0, 2D, L1, L2). The extracted
-        metadata, telemetry, radial velocities, and related keywords are dynamically
-        mapped and inserted into the corresponding database tables.
+        This method processes a single observation by extracting data from FITS 
+        files associated with different processing levels (L0, 2D, L1, L2). 
+        The extracted metadata, telemetry, radial velocities, and related 
+        keywords are dynamically mapped and inserted into the corresponding 
+        database tables.
     
         Steps:
-            1. Determine file paths for associated data products (L0, 2D, L1, L2).
-            2. Extract header keywords, telemetry data, and radial velocity measurements
-               based on the predefined extraction plan.
-            3. Aggregate extracted data into structured dictionaries keyed by database tables.
+            1. Determine file paths for associated data products (L0, 2D, L1, 
+               L2).
+            2. Extract header keywords, telemetry data, and radial velocity 
+               measurements based on the predefined extraction plan.
+            3. Aggregate extracted data into structured dictionaries keyed by 
+               database tables.
             4. Apply necessary data type conversions (e.g., floats, booleans).
-            5. Insert or update entries into respective database tables, resolving
-               conflicts by updating existing records if necessary.
+            5. Insert or update entries into respective database tables, 
+               resolving conflicts by updating existing records if necessary.
     
         Args:
             dir_path (str):
@@ -988,16 +1014,22 @@ class TSDB:
                 'ObsID.fits' (e.g., 'KP.20241020.12345.67.fits').
     
         Preconditions:
-            - Directory at `dir_path` exists and contains the L0 file and its related products.
-            - Database schema and metadata table (`tsdb_metadata`) are properly initialized.
-            - The method is executed with adequate database permissions ('admin' or 'operations').
+            - Directory at `dir_path` exists and contains the L0 file and its 
+              related products.
+            - Database schema and metadata table (`tsdb_metadata`) are properly 
+              initialized.
+            - The method is executed with adequate database permissions ('admin' 
+              or 'operations').
     
         Postconditions:
-            - Observation metadata, telemetry, and measurements are ingested into the database.
-            - Existing records for the same ObsID are updated if they already exist.
+            - Observation metadata, telemetry, and measurements are ingested 
+              into the database.
+            - Existing records for the same ObsID are updated if they already 
+              exist.
     
         Usage:
-            Intended for incremental ingestion, such as manual ingestion or pipeline-triggered events.
+            Intended for incremental ingestion, such as manual ingestion or 
+            pipeline-triggered events.
     
         Example:
             tsdb.ingest_one_observation('/data/L0/20241020/', 'KP.20241020.12345.67.fits')
@@ -1039,7 +1071,9 @@ class TSDB:
             'L0_header_read_time': now_str,
             'D2_header_read_time': now_str,
             'L1_header_read_time': now_str,
-            'L2_header_read_time': now_str
+            'L2_header_read_time': now_str,
+            'RA_deg': Angle(extraction_results.get('RA'), unit='hourangle').degree,
+            'DEC_deg': Angle(extraction_results.get('DEC'), unit='deg').degree
         })
     
         for kw, dtype in self.kw_to_dtype.items():
@@ -1086,38 +1120,50 @@ class TSDB:
         """
         Ingest observational data from a specified date range into the database.
     
-        This method systematically ingests metadata and telemetry from Keck Planet Finder (KPF) observations
-        for each date within the provided start and end dates. It processes Level 0 FITS files and their
-        associated data products (2D, L1, and L2), extracting relevant information according to the extraction
-        plan. Observations are processed in batches to optimize performance and database transactions.
+        This method systematically ingests metadata and telemetry from Keck 
+        Planet Finder (KPF) observations for each date within the provided start 
+        and end dates. It processes Level 0 FITS files and their associated data 
+        products (2D, L1, and L2), extracting relevant information according to 
+        the extraction plan. Observations are processed in batches to optimize 
+        performance and database transactions.
     
         Workflow:
             1. Identify and sort directories corresponding to observation dates.
-            2. Iterate through each observation date, processing FITS files in batches.
-            3. Optionally skip re-ingesting observations unless files have been modified after the last database update.
-            4. Perform extraction, aggregation, and insertion of data into the database using multiprocessing for efficiency.
+            2. Iterate through each observation date, processing FITS files in 
+               batches.
+            3. Optionally skip re-ingesting observations unless files have been 
+               modified after the last database update.
+            4. Perform extraction, aggregation, and insertion of data into the 
+               database using multiprocessing for efficiency.
     
         Args:
             start_date_str (str or datetime):
-                Start date for ingestion (inclusive), formatted as 'YYYYMMDD' or as a datetime object.
+                Start date for ingestion (inclusive), formatted as 'YYYYMMDD' or 
+                as a datetime object.
             end_date_str (str or datetime):
-                End date for ingestion (inclusive), formatted as 'YYYYMMDD' or as a datetime object.
+                End date for ingestion (inclusive), formatted as 'YYYYMMDD' or 
+                as a datetime object.
             batch_size (int, optional, default=10000):
-                Maximum number of observations processed per database transaction batch.
+                Maximum number of observations processed per database transaction 
+                batch.
             reverse (bool, optional, default=False):
-                If True, processes observation dates in reverse chronological order.
+                If True, processes observation dates in reverse chronological 
+                order.
             force_ingest (bool, optional, default=False):
-                If True, ingests observations regardless of their modification timestamps in the database.
+                If True, ingests observations regardless of their modification 
+                timestamps in the database.
             quiet (bool, optional, default=False):
                 If True, suppresses progress bar and reduces logging verbosity.
     
         Preconditions:
             - Database tables and schema are properly initialized.
-            - Directories containing KPF observation files (`self.base_dir`) exist and follow the expected structure.
+            - Directories containing KPF observation files (`self.base_dir`) 
+              exist and follow the expected structure.
             - User has sufficient database privileges ('admin' or 'operations').
     
         Postconditions:
-            - Database is populated or updated with observational data within the specified date range.
+            - Database is populated or updated with observational data within 
+              the specified date range.
     
         Usage Scenario:
             - Routine daily ingestion or re-ingestion of observational data.
@@ -1170,26 +1216,35 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def ingest_batch_observations(self, batch, force_ingest=False):
         """
-        Ingest a batch of observational data files into the database efficiently using parallel processing.
+        Ingest a batch of observational data files into the database efficiently 
+        using parallel processing.
     
-        This method handles multiple Keck Planet Finder (KPF) observational files simultaneously, extracting metadata,
-        telemetry, radial velocity (RV) measurements, and other relevant data from Level 0 (L0), Level 2D (2D), 
-        Level 1 (L1), and Level 2 (L2) FITS files. It employs multiprocessing to accelerate data extraction and 
-        ingestion processes, significantly enhancing performance during batch operations.
+        This method handles multiple Keck Planet Finder (KPF) observational 
+        files simultaneously, extracting metadata, telemetry, radial velocity 
+        (RV) measurements, and other relevant data from Level 0 (L0), 
+        Level 2D (2D), Level 1 (L1), and Level 2 (L2) FITS files. It employs 
+        multiprocessing to accelerate data extraction and ingestion processes, 
+        significantly enhancing performance during batch operations.
     
         Workflow:
-            1. Optionally filters the batch based on file modification times compared to database entries,
-               unless `force_ingest` is set to True.
-            2. Utilizes multiprocessing to concurrently extract required information from each file according 
-               to a predefined extraction plan.
-            3. Aggregates the extracted data into structured dictionaries mapped to appropriate database tables.
-            4. Inserts or updates database records efficiently in bulk, handling conflicts as necessary.
+            1. Optionally filters the batch based on file modification times 
+               compared to database entries, unless `force_ingest` is set to 
+               True.
+            2. Utilizes multiprocessing to concurrently extract required 
+               information from each file according to a predefined extraction 
+               plan.
+            3. Aggregates the extracted data into structured dictionaries mapped 
+               to appropriate database tables.
+            4. Inserts or updates database records efficiently in bulk, handling 
+               conflicts as necessary.
     
         Args:
             batch (list of str):
-                List of file paths corresponding to KPF observational data (primarily L0 FITS files) to be ingested.
+                List of file paths corresponding to KPF observational data 
+                (primarily L0 FITS files) to be ingested.
             force_ingest (bool, optional, default=False):
-                If True, ingests all files in the batch irrespective of their modification status relative to the database.
+                If True, ingests all files in the batch irrespective of their 
+                modification status relative to the database.
     
         Preconditions:
             - Database schema and tables are properly initialized.
@@ -1197,20 +1252,26 @@ class TSDB:
             - User role has sufficient privileges (roles: 'admin', 'operations').
     
         Postconditions:
-            - Database tables are populated or updated with data extracted from the provided observational files.
-            - Data integrity and consistency are maintained via proper conflict handling and data type conversions.
+            - Database tables are populated or updated with data extracted from 
+              the provided observational files.
+            - Data integrity and consistency are maintained via proper conflict 
+              handling and data type conversions.
     
         Performance:
-            - Parallelized processing leveraging available CPU cores, optimized for batches up to thousands of files.
+            - Parallelized processing leveraging available CPU cores, optimized 
+              for batches up to thousands of files.
     
         Raises:
             Exception:
-                Logs and raises exceptions encountered during data extraction or database operations,
-                providing detailed information for debugging.
+                Logs and raises exceptions encountered during data extraction or 
+                database operations, providing detailed information for
+                debugging.
     
         Usage Scenario:
-            - Ideal for ingesting or updating database entries following bulk reprocessing of KPF data.
-            - Suitable for scheduled ingestion tasks involving large quantities of observational data.
+            - Ideal for ingesting or updating database entries following bulk 
+              reprocessing of KPF data.
+            - Suitable for scheduled ingestion tasks involving large quantities 
+              of observational data.
     
         Example:
             file_batch = ['/data/L0/20241001/KP.20241001.12345.67.fits', 
@@ -1343,8 +1404,8 @@ class TSDB:
 
     def get_source(self, L0_dict):
         """
-        Returns the name of the source in a spectrum.  For stellar observations, this 
-        it returns 'Star'.  For calibration spectra, this is the lamp name 
+        Returns the name of the source in a spectrum.  For stellar observations, 
+        this it returns 'Star'.  For calibration spectra, this is the lamp name 
         (ThAr, UNe, LFC, etalon) or bias/dark.  
         Flats using KPF's regular fibers are distinguished from wide flats.                           
 
@@ -1386,32 +1447,48 @@ class TSDB:
     
     def _extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
-        Extracts specified header keywords from a given extension of a Keck Planet Finder (KPF) FITS file.
+        Extracts specified header keywords from a given extension of a Keck 
+        Planet Finder (KPF) FITS file.
     
-        This method reads a FITS file, accesses the header of the designated extension, and retrieves values for a specified list of keywords. It also ensures special keywords such as `DRPTAG` and `DRPHASH`, if present, propagate their values consistently across related data levels (2D, L1, L2) by setting corresponding header keywords (`DRPTAG2D`, `DRPHSH2D`, etc.).
+        This method reads a FITS file, accesses the header of the designated 
+        extension, and retrieves values for a specified list of keywords. 
+        It also ensures special keywords such as `DRPTAG` and `DRPHASH`, 
+        if present, propagate their values consistently across related data 
+        levels (2D, L1, L2) by setting corresponding header keywords 
+        (`DRPTAG2D`, `DRPHSH2D`, etc.).
     
         Workflow:
             1. Opens the specified FITS file at the given extension.
-            2. Retrieves the requested keywords and initializes missing entries as `None`.
-            3. Ensures propagation of `DRPTAG` and `DRPHASH` values to corresponding higher-level data keywords.
-            4. Handles missing files or headers gracefully by returning a dictionary filled with `None` values and logging an appropriate error.
+            2. Retrieves the requested keywords and initializes missing entries 
+               as `None`.
+            3. Ensures propagation of `DRPTAG` and `DRPHASH` values to 
+               corresponding higher-level data keywords.
+            4. Handles missing files or headers gracefully by returning a 
+               dictionary filled with `None` values and logging an appropriate 
+               error.
     
         Args:
             file_path (str):
                 Path to the FITS file from which keywords are to be extracted.
             
             keyword_types (dict):
-                Dictionary mapping keyword names to their intended data types (e.g., 'float', 'string', 'bool'). Only keys from this dictionary will be extracted from the header.
+                Dictionary mapping keyword names to their intended data types 
+                (e.g., 'float', 'string', 'bool'). Only keys from this 
+                dictionary will be extracted from the header.
     
             extension (str, optional):
-                FITS extension from which the header keywords are extracted. Default is 'PRIMARY'.
+                FITS extension from which the header keywords are extracted. 
+                Default is 'PRIMARY'.
     
         Returns:
             dict:
-                A dictionary mapping each requested keyword to its extracted value from the FITS header. If a keyword is missing from the header, its value is set to `None`.
+                A dictionary mapping each requested keyword to its extracted 
+                value from the FITS header. If a keyword is missing from the 
+                header, its value is set to `None`.
     
         Usage Scenario:
-            - Typically utilized during data ingestion workflows to extract relevant metadata from FITS file headers for database storage.
+            - Typically utilized during data ingestion workflows to extract 
+              relevant metadata from FITS file headers for database storage.
     
         Example:
             keyword_types = {'DATE-MID': 'datetime', 'TARGNAME': 'string', 'EXPTIME': 'float'}
@@ -1459,31 +1536,41 @@ class TSDB:
 
     def _extract_telemetry(self, file_path, keyword_types):
         """
-        Extract telemetry data from the 'TELEMETRY' extension of a Keck Planet Finder (KPF) Level 0 FITS file.
+        Extract telemetry data from the 'TELEMETRY' extension of a Keck Planet 
+        Finder (KPF) Level 0 FITS file.
     
-        This method reads telemetry keywords and their corresponding average values stored within the FITS file's
-        telemetry extension. It handles data sanitization by converting invalid entries (e.g., '-nan', 'nan', '-999') 
-        to numerical NaNs, ensuring consistency for downstream database ingestion.
+        This method reads telemetry keywords and their corresponding average 
+        values stored within the FITS file's telemetry extension. It handles 
+        data sanitization by converting invalid entries 
+        (e.g., '-nan', 'nan', '-999') to numerical NaNs, ensuring consistency 
+        for downstream database ingestion.
     
         Workflow:
-            1. Opens the specified FITS file and accesses its 'TELEMETRY' extension.
-            2. Decodes and sanitizes telemetry keywords and their corresponding average values.
-            3. Constructs a dictionary mapping the requested telemetry keywords to their sanitized numerical values.
+            1. Opens the specified FITS file and accesses its 'TELEMETRY' 
+               extension.
+            2. Decodes and sanitizes telemetry keywords and their corresponding 
+               average values.
+            3. Constructs a dictionary mapping the requested telemetry keywords 
+               to their sanitized numerical values.
     
         Args:
             file_path (str):
                 Path to the KPF Level 0 FITS file containing telemetry data.
             keyword_types (dict):
-                Dictionary with telemetry keywords as keys and their expected data types (e.g., 'float') as values.
+                Dictionary with telemetry keywords as keys and their expected 
+                data types (e.g., 'float') as values.
     
         Returns:
             dict:
-                A dictionary mapping each requested telemetry keyword to its corresponding numerical value.
+                A dictionary mapping each requested telemetry keyword to its 
+                corresponding numerical value.
                 - Missing or invalid entries are returned as NaN.
-                - If telemetry extraction fails due to file or format issues, returns a dictionary with all values set to None.
+                - If telemetry extraction fails due to file or format issues, 
+                  returns a dictionary with all values set to None.
 
         Usage Scenario:
-            - Typically invoked during observational data ingestion to populate telemetry-specific database tables.
+            - Typically invoked during observational data ingestion to populate 
+              telemetry-specific database tables.
     
         Example:
             keyword_types = {'kpfmet.TEMP': 'float', 'kpfmet.PRESS': 'float'}
@@ -1523,24 +1610,38 @@ class TSDB:
 
     def _extract_rvs(self, file_path):
         """
-        Extract radial velocity (RV) measurements from the 'RV' extension of a Keck Planet Finder (KPF) Level 2 FITS file.
+        Extract radial velocity (RV) measurements from the 'RV' extension of a 
+        Keck Planet Finder (KPF) Level 2 FITS file.
     
-        This method reads RV data structured across multiple spectral orders from the designated RV extension. It maps specific RV-related columns—such as stellar RV, calibration RV, sky RV, RV errors, barycentric corrections, and cross-correlation function weights—to standardized database keyword names. Each extracted value is associated with an order index (from 00 to 66).
+        This method reads RV data structured across multiple spectral orders 
+        from the designated RV extension. It maps specific RV-related 
+        columns—such as stellar RV, calibration RV, sky RV, RV errors, 
+        barycentric corrections, and cross-correlation function weights—to 
+        standardized database keyword names. Each extracted value is associated 
+        with an order index (from 00 to 66).
     
         Workflow:
             1. Opens the Level 2 FITS file and accesses the 'RV' extension.
-            2. Extracts RV-related columns including individual order RVs, RV errors, barycentric RV corrections, and weights.
-            3. Reorganizes extracted data into a standardized flat dictionary format suitable for database ingestion.
-            4. Ensures completeness and integrity of data, returning a dictionary populated with None values if data extraction is incomplete or erroneous.
+            2. Extracts RV-related columns including individual order RVs, 
+               RV errors, barycentric RV corrections, and weights.
+            3. Reorganizes extracted data into a standardized flat dictionary 
+               format suitable for database ingestion.
+            4. Ensures completeness and integrity of data, returning a 
+               dictionary populated with None values if data extraction is 
+               incomplete or erroneous.
     
         Args:
             file_path (str):
-                Path to the KPF Level 2 FITS file containing radial velocity data.
+                Path to the KPF Level 2 FITS file containing radial velocity 
+                data.
     
         Returns:
             dict:
-                A dictionary with standardized keys mapping to radial velocity measurements across all spectral orders (00 to 66). Keys follow patterns such as:
-                - 'RV1NN', 'RV2NN', 'RV3NN': Orderlet RVs for individual spectral orders.
+                A dictionary with standardized keys mapping to radial velocity 
+                measurements across all spectral orders (00 to 66). 
+                Keys follow patterns such as:
+                - 'RV1NN', 'RV2NN', 'RV3NN': Orderlet RVs for individual 
+                  spectral orders.
                 - 'RVSNN', 'ERVSNN': Stellar RV and corresponding error.
                 - 'RVCNN', 'ERVCNN': Calibration RV and error.
                 - 'RVYNN', 'ERVYNN': Sky RV and error.
@@ -1550,13 +1651,17 @@ class TSDB:
                 
                 Example key format: 'RVS01' represents stellar RV for order 01.
     
-                If data extraction fails or incomplete data is detected, all values are returned as None.
+                If data extraction fails or incomplete data is detected, all 
+                values are returned as None.
     
         Error Handling:
-            - Logs an error message and returns a fully populated dictionary of None values if file reading or data parsing fails, ensuring database integrity.
+            - Logs an error message and returns a fully populated dictionary of 
+              None values if file reading or data parsing fails, ensuring 
+              database integrity.
     
         Usage Scenario:
-            - Used primarily during data ingestion processes for populating the RV-specific database tables.
+            - Used primarily during data ingestion processes for populating the 
+              RV-specific database tables.
     
         Example:
             rv_data = tsdb._extract_rvs('/data/L2/KP.20241001.12345.67_L2.fits')
@@ -1776,8 +1881,8 @@ class TSDB:
     def print_metadata_table(self):
         """
         Read the tsdb_metadata table, group by 'source', and print out rows
-        in fixed-width columns in the custom order below, including the 'indexed' 
-        column. If units=NaN, it prints a blank.
+        in fixed-width columns in the custom order below, including the 
+        'indexed' column. If units=NaN, it prints a blank.
         """
         custom_order = [
             "Base Keywords",
@@ -1861,7 +1966,7 @@ class TSDB:
     @require_role(['admin', 'operations', 'readonly'])
     def print_table_contents(self, table_name):
         """
-        Print the contents of the specified table.  This is useful for debugging.
+        Print the contents of the specified table. This is useful for debugging.
     
         Args:
             table_name (str): Name of the table to print.
@@ -2401,7 +2506,9 @@ def process_file(file_path, now_str,
         'L0_header_read_time': now_str,
         'D2_header_read_time': now_str,
         'L1_header_read_time': now_str,
-        'L2_header_read_time': now_str
+        'L2_header_read_time': now_str,
+        'RA_deg': Angle(extraction_results.get('RA'), unit='hourangle').degree,
+        'DEC_deg': Angle(extraction_results.get('DEC'), unit='deg').degree
     })
 
     # Convert boolean columns explicitly
