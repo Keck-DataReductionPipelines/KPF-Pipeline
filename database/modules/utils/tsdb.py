@@ -83,8 +83,7 @@ class TSDB:
             dictionary keywords (TSDBPORT, TSDBNAME, TSDBSERVER ,TSDBUSER, 
             TSDBPASS) are used instead of environment variables and/or defaults.
             For example, a credentials dictionary is:
-                credentials = {"TSDBUSER": 'myusername', "TSDBPASS": 'mypassword'}
-
+                credentials = {"TSDBUSER": 'myuser', "TSDBPASS": 'mypass'}
         logger (logging.Logger or None):
             Logger object for capturing messages, warnings, and errors. If 
             None, a DummyLogger with formatted print statements is used.
@@ -492,55 +491,55 @@ class TSDB:
     
         return permissions
 
-
-    @require_role(['admin', 'operations'])
-    def print_summary_all_tables(self):
-        """
-        Prints a summary of all tables in the database (not just the intended tables), 
-        including the number of rows and columns.
-        """
-
-        self._open_connection()
-        try:
-            if self.backend == 'sqlite':
-                self._execute_sql_command("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
-                tables = [row[0] for row in self.cursor.fetchall()]
-    
-                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
-                print("-" * 40)
-    
-                for tbl in tables:
-                    self._execute_sql_command(f"PRAGMA table_info({tbl});")
-                    columns = len(self.cursor.fetchall())
-    
-                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
-                    rows = self.cursor.fetchone()[0]
-    
-                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
-    
-            elif self.backend == 'psql':
-                self._execute_sql_command("""
-                     SELECT tablename FROM pg_catalog.pg_tables
-                     WHERE schemaname='public' ORDER BY tablename;
-                """)
-                tables = [row[0] for row in self.cursor.fetchall()]
-         
-                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
-                print("-" * 40)
-         
-                for tbl in tables:
-                    self._execute_sql_command(f"""
-                        SELECT COUNT(*) FROM information_schema.columns
-                        WHERE table_name = '{tbl}';
-                    """)
-                    columns = self.cursor.fetchone()[0]
-         
-                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
-                    rows = self.cursor.fetchone()[0]
-         
-                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
-        finally:
-            self._close_connection()
+# I think this isn't used any more.  AWH 6/6/2025
+#    @require_role(['admin', 'operations'])
+#    def print_summary_all_tables(self):
+#        """
+#        Prints a summary of all tables in the database (not just the intended tables), 
+#        including the number of rows and columns.
+#        """
+#
+#        self._open_connection()
+#        try:
+#            if self.backend == 'sqlite':
+#                self._execute_sql_command("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+#                tables = [row[0] for row in self.cursor.fetchall()]
+#    
+#                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
+#                print("-" * 40)
+#    
+#                for tbl in tables:
+#                    self._execute_sql_command(f"PRAGMA table_info({tbl});")
+#                    columns = len(self.cursor.fetchall())
+#    
+#                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
+#                    rows = self.cursor.fetchone()[0]
+#    
+#                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
+#    
+#            elif self.backend == 'psql':
+#                self._execute_sql_command("""
+#                     SELECT tablename FROM pg_catalog.pg_tables
+#                     WHERE schemaname='public' ORDER BY tablename;
+#                """)
+#                tables = [row[0] for row in self.cursor.fetchall()]
+#         
+#                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
+#                print("-" * 40)
+#         
+#                for tbl in tables:
+#                    self._execute_sql_command(f"""
+#                        SELECT COUNT(*) FROM information_schema.columns
+#                        WHERE table_name = '{tbl}';
+#                    """)
+#                    columns = self.cursor.fetchone()[0]
+#         
+#                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
+#                    rows = self.cursor.fetchone()[0]
+#         
+#                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
+#        finally:
+#            self._close_connection()
 
 
     @require_role(['admin', 'operations'])
@@ -735,15 +734,20 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def _create_metadata_table(self):
         """
-        Create the tsdb_metadata table with table_name mapping from the file 
-        tables_metadata.csv.
+        Create the tsdb_metadata table, tracking whether each column is indexed based on:
+            - Explicitly listed columns from indexed_columns.csv.
+            - Columns with descriptions containing 'QC:'.
         """
+        indexed_csv_path = os.path.join(self.keyword_base_path, 'indexed_columns.csv')
+        indexed_df = pd.read_csv(indexed_csv_path)
+        indexed_columns = set(indexed_df['column'].tolist())
+    
+        # Drop existing metadata table if it exists
         self._open_connection()
         try:
-            # Drop the existing metadata table if it exists
             self._execute_sql_command("DROP TABLE IF EXISTS tsdb_metadata")
-            
-            # Create the new metadata table
+    
+            # Create metadata table with 'indexed' column
             create_sql = """
                 CREATE TABLE tsdb_metadata (
                     keyword     TEXT PRIMARY KEY,
@@ -751,63 +755,63 @@ class TSDB:
                     datatype    TEXT,
                     units       TEXT,
                     description TEXT,
-                    table_name  TEXT
+                    table_name  TEXT,
+                    indexed     BOOLEAN
                 );
             """
             self._execute_sql_command(create_sql)
     
-            # Backend-specific insert command
+            # Prepare insert SQL (SQLite and PostgreSQL compatible)
             insert_sql = """
                 INSERT INTO tsdb_metadata 
-                (keyword, source, datatype, units, description, table_name)
-                VALUES (?, ?, ?, ?, ?, ?);
+                (keyword, source, datatype, units, description, table_name, indexed)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
             """ if self.backend == 'sqlite' else """
                 INSERT INTO tsdb_metadata 
-                (keyword, source, datatype, units, description, table_name)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (keyword, source, datatype, units, description, table_name, indexed)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (keyword) DO UPDATE SET
                     source=EXCLUDED.source,
                     datatype=EXCLUDED.datatype,
                     units=EXCLUDED.units,
                     description=EXCLUDED.description,
-                    table_name=EXCLUDED.table_name;
+                    table_name=EXCLUDED.table_name,
+                    indexed=EXCLUDED.indexed;
             """
     
-            # Load the tables metadata CSV
+            # Load tables metadata
             tables_metadata_df = pd.read_csv(self.csv_filepath).fillna('')
     
-            # Iterate over each row in tables_metadata.csv
+            # Iterate over metadata CSVs and populate entries
             for _, row in tables_metadata_df.iterrows():
                 csv_filename = row['csv']
                 source = row['label']
                 table_name = row['table_name']
     
-                # Skip if no CSV file specified
                 if not csv_filename:
                     continue
     
                 csv_path = os.path.join(self.keyword_base_path, csv_filename)
-    
-                # Read keywords CSV with delimiter '|'
                 df_keywords = pd.read_csv(csv_path, delimiter='|', dtype=str).fillna('')
     
-                # Insert each keyword into metadata table
                 for _, keyword_row in df_keywords.iterrows():
                     keyword = keyword_row['keyword']
                     datatype = keyword_row.get('datatype', 'TEXT')
                     units = keyword_row.get('unit', '')
                     description = keyword_row.get('description', '')
     
-                    # Execute SQL insert
+                    # Determine indexing based on CSV or QC in description
+                    is_indexed = (keyword in indexed_columns) or ('QC:' in description)
+    
                     self._execute_sql_command(
                         insert_sql,
-                        params=(keyword, source, datatype, units, description, table_name)
+                        params=(keyword, source, datatype, units, description, table_name, is_indexed)
                     )
-
+    
+            self.logger.info("Metadata table created correctly with indexed columns.")
+    
         finally:
             self._close_connection()
-    
-        self.logger.info("Metadata table created correctly.")
 
 
     @require_role(['admin', 'operations', 'readonly'])
@@ -826,60 +830,95 @@ class TSDB:
     @require_role(['admin', 'operations'])
     def _create_data_tables(self):
         """
-        Dynamically create database tables based on metadata definitions.
+        Create TSDB data tables from metadata definitions, with ObsID as primary key.
     
-        This method constructs the database schema by generating tables defined 
-        in the `tsdb_metadata` table. Each table is created with `ObsID` as the primary key, 
-        alongside dynamically determined columns derived from keyword metadata.
+        Columns specified in `indexed_columns.csv` and columns whose metadata description 
+        contains the substring \"QC:\" are automatically indexed. Indexing is based on column 
+        presence in the metadata, which may include multiple tables.
     
-        Process overview:
-            1. Queries the `tsdb_metadata` table to obtain column names, data types, 
-               and target tables.
-            2. Maps metadata-defined data types to appropriate SQLite or PostgreSQL 
-               data types.
-            3. Creates each table with `ObsID` as the primary key and the derived columns 
-               with correct SQL data types.
-            4. Skips creating columns explicitly named `ObsID` (handled as primary key).
+        Key Steps:
+            1. Loads columns to index from `indexed_columns.csv`.
+            2. Retrieves keyword, datatype, table_name, and description from the metadata table.
+            3. Dynamically creates each table with ObsID as the primary key.
+            4. Creates indices for:
+                - Columns explicitly listed in `indexed_columns.csv`.
+                - Columns identified by having \"QC:\" in their metadata descriptions.
+            5. Ensures ObsID is indexed in tables other than `tsdb_base`.
+            6. Updates the metadata table to reflect indexed columns with an `indexed` boolean flag.
     
-        Preconditions:
-            - Metadata table (`tsdb_metadata`) must be populated and available.
-    
-        Postconditions:
-            - Database schema matches the structure defined by metadata CSV configurations.
-            - All necessary tables exist, ready for data ingestion.
-    
-        Usage:
-            Typically invoked during initial setup or schema resets.
+        Logs detailed messages indicating index creation successes and ensures database
+        operations are completed safely by properly closing connections.
         """
     
-        # Fetch keyword, datatype, and table_name from metadata
+        indexed_csv_path = os.path.join(self.keyword_base_path, 'indexed_columns.csv')
+        indexed_df = pd.read_csv(indexed_csv_path)
+        indexed_columns = set(indexed_df['column'].tolist())
+    
         tables = [table for table in self.tables if table != 'tsdb_metadata']
-        sql_metadata = "SELECT keyword, datatype, table_name FROM tsdb_metadata;"
+        sql_metadata = "SELECT keyword, datatype, table_name, description FROM tsdb_metadata;"
+    
         self._open_connection()
         metadata_rows = self._execute_sql_command(sql_metadata, fetch=True)
     
         columns_by_table = {tbl: [] for tbl in tables}
-        for keyword, dtype, table_name in metadata_rows:
+        tables_by_column = {}
+        qc_columns = set()
+    
+        for keyword, dtype, table_name, description in metadata_rows:
             if table_name not in columns_by_table or table_name is None:
                 continue
-            if keyword.strip().lower() == 'obsid':
-                continue  # ObsID is primary key
             sql_type = self._map_data_type_to_sql(dtype)
             columns_by_table[table_name].append((keyword, sql_type))
+            tables_by_column.setdefault(keyword, set()).add(table_name)
     
-        # Create each table with ObsID as primary key (implicitly indexed)
-        for tbl, cols in columns_by_table.items():
-            col_defs = ['"ObsID" TEXT PRIMARY KEY']
-            col_defs += [f'"{kw}" {sql_type}' for kw, sql_type in cols]
-            col_defs_sql = ", ".join(col_defs)
-        
-            create_table_sql = f"CREATE TABLE IF NOT EXISTS {tbl} ({col_defs_sql});"
-            self._execute_sql_command(create_table_sql)
+            if description and "QC:" in description:
+                qc_columns.add(keyword)
     
-        self._close_connection()
+        try:
+            for tbl, cols in columns_by_table.items():
+                col_defs = ['"ObsID" TEXT PRIMARY KEY']
+                col_defs += [f'"{kw}" {sql_type}' for kw, sql_type in cols if kw.lower() != 'obsid']
+                col_defs_sql = ", ".join(col_defs)
     
-        self.logger.info("Data tables created.")
- 
+                create_table_sql = f"CREATE TABLE IF NOT EXISTS {tbl} ({col_defs_sql});"
+                self._execute_sql_command(create_table_sql)
+    
+            all_indexed_columns = indexed_columns.union(qc_columns)
+    
+            for column in all_indexed_columns:
+                tables_to_index = tables_by_column.get(column, set())
+    
+                for tbl in tables_to_index:
+                    if tbl == 'tsdb_base' and column.lower() == 'obsid':
+                        continue
+    
+                    index_name = f"{tbl}_{column}_idx"
+                    index_sql = f'CREATE INDEX IF NOT EXISTS "{index_name}" ON {tbl} ("{column}");'
+                    self._execute_sql_command(index_sql)
+                    if self.verbose:
+                        self.logger.debug(f"Created index: {index_name} on table {tbl}({column})")
+    
+            # Check if the column 'indexed' exists in tsdb_metadata
+            self._execute_sql_command("PRAGMA table_info(tsdb_metadata);")
+            existing_columns = [row[1] for row in self.cursor.fetchall()]
+            
+            if 'indexed' not in existing_columns:
+                update_indexed_sql = """
+                    ALTER TABLE tsdb_metadata ADD COLUMN indexed BOOLEAN DEFAULT FALSE;
+                """
+                self._execute_sql_command(update_indexed_sql)
+    
+            for column in all_indexed_columns:
+                update_metadata_sql = f"""
+                    UPDATE tsdb_metadata SET indexed = TRUE WHERE keyword = ?;
+                """
+                self._execute_sql_command(update_metadata_sql, params=(column,))
+    
+        finally:
+            self._close_connection()
+    
+        self.logger.info("Data tables and indices created successfully.")
+
  
     @require_role(['admin', 'operations'])
     def create_test_table(self, tablename, schema='public'):
@@ -1737,10 +1776,9 @@ class TSDB:
     def print_metadata_table(self):
         """
         Read the tsdb_metadata table, group by 'source', and print out rows
-        in fixed-width columns in the custom order below, without printing
-        the 'source' column. If units=NaN, it prints a blank.
+        in fixed-width columns in the custom order below, including the 'indexed' 
+        column. If units=NaN, it prints a blank.
         """
-        # Define your custom order of sources
         custom_order = [
             "Base Keywords",
             "L0 PRIMARY Header",
@@ -1755,14 +1793,15 @@ class TSDB:
     
         col_width_keyword = 35
         col_width_datatype = 9
+        col_width_indexed = 7
         col_width_units = 9
-        col_width_desc = 90
+        col_width_desc = 80
     
         self._open_connection()
         try:
             for src in custom_order:
                 query = """
-                    SELECT keyword, datatype, units, description
+                    SELECT keyword, datatype, indexed, units, description
                     FROM tsdb_metadata
                     WHERE source = ?
                     ORDER BY keyword;
@@ -1774,26 +1813,26 @@ class TSDB:
                     continue
     
                 print(f"{src}:")
-                print("-" * 150)
+                print("-" * 160)
                 print(
                     f"{'Keyword':<{col_width_keyword}} "
                     f"{'Datatype':<{col_width_datatype}} "
+                    f"{'Indexed':<{col_width_indexed}} "
                     f"{'Units':<{col_width_units}} "
                     f"{'Description':<{col_width_desc}}"
                 )
-                print("-" * 150)
+                print("-" * 160)
     
-                for keyword, datatype, units, description in rows:
-                    keyword_str = keyword or ""
-                    datatype_str = datatype or ""
+                for keyword, datatype, indexed, units, description in rows:
                     units_str = "" if units in (None, "NaN", "nan", float("nan")) or pd.isna(units) else units
-                    desc_str = description or ""
+                    indexed_str = 'Yes' if indexed else ' No'
     
                     print(
-                        f"{keyword_str:<{col_width_keyword}} "
-                        f"{datatype_str:<{col_width_datatype}} "
+                        f"{keyword:<{col_width_keyword}} "
+                        f"{datatype:<{col_width_datatype}} "
+                        f"{indexed_str:<{col_width_indexed}} "
                         f"{units_str:<{col_width_units}} "
-                        f"{desc_str:<{col_width_desc}}"
+                        f"{description:<{col_width_desc}}"
                     )
                 print()
         finally:
@@ -2143,7 +2182,7 @@ class TSDB:
                            only_object=None, object_like=None, only_source=None, 
                            on_sky=None, not_junk=None,
                            QCs_pass=None, QCs_fail=None, 
-                           max_height_px=800, # in pixels
+                           max_height_px=600, # in pixels
                            url_stub='https://jump.caltech.edu/observing-logs/kpf/',
                            verbose=False):
         """
