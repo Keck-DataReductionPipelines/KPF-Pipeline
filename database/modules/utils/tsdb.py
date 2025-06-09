@@ -1060,6 +1060,13 @@ class TSDB:
     
             extraction_results.update(extracted)
     
+        # the Angle code was crashing
+        def safe_angle(value, unit, default=0.0):
+            try:
+                return Angle(value, unit=unit).degree
+            except Exception:
+                return default
+
         extraction_results.update({
             'ObsID': base_filename,
             'datecode': get_datecode(base_filename),
@@ -1072,8 +1079,8 @@ class TSDB:
             'D2_header_read_time': now_str,
             'L1_header_read_time': now_str,
             'L2_header_read_time': now_str,
-            'RA_deg': Angle(extraction_results.get('RA'), unit='hourangle').degree,
-            'DEC_deg': Angle(extraction_results.get('DEC'), unit='deg').degree
+            'RA_deg': safe_angle(extraction_results.get('RA'), unit='hourangle'),
+            'DEC_deg': safe_angle(extraction_results.get('DEC'), unit='deg')
         })
     
         for kw, dtype in self.kw_to_dtype.items():
@@ -2060,7 +2067,6 @@ class TSDB:
         Returns:
             Pandas dataframe of the specified columns matching the constraints.
         """
-        # to-do: check if object_name is in the database before trying to create the df
         df = self.dataframe_from_db(['ObsID'], object_like=object_name, 
                                     start_date=start_date, end_date=end_date, 
                                     not_junk=not_junk)
@@ -2282,11 +2288,11 @@ class TSDB:
 
 
     @require_role(['admin', 'operations', 'readonly'])
-    def display_data(self, columns, 
+    def display_data(self, df=None, columns=None, 
                            start_date=None, end_date=None, 
                            only_object=None, object_like=None, only_source=None, 
                            on_sky=None, not_junk=None,
-                           QCs_pass=None, QCs_fail=None, 
+                           QC_pass=None, QC_fail=None, 
                            max_height_px=600, # in pixels
                            url_stub='https://jump.caltech.edu/observing-logs/kpf/',
                            verbose=False):
@@ -2299,29 +2305,32 @@ class TSDB:
             enables scrolling if necessary, and makes columns sortable.
 
         Args:
+            df (dataframe, default=None): If df == None, generate a dataframe, 
+                otherwise use in the input df
             max_height_px (int, default=800): Sets the vertical height (pixels) 
                 for scrolling.
-            url_stub (str): the URL for ObsID links.  The default page is set to 
-                "Jump", the portal used by the KPF Science Team.
+            url_stub (str): the URL for ObsID links.  The default page is set 
+                to "Jump", the portal used by the KPF Science Team.
             (other arguments are the same as dataframe_from_db)
 
         Returns:
             None. Prints the resulting dataframe.
         """
         
-        df = self.dataframe_from_db(
-            columns=columns,
-            only_object=only_object,
-            object_like=object_like,
-            only_source=only_source,
-            on_sky=on_sky, 
-            not_junk=not_junk,
-            QCs_pass=QCs_pass, 
-            QCs_fail=QCs_fail, 
-            start_date=start_date,
-            end_date=end_date,
-            verbose=verbose
-        )
+        if df is None:
+            df = self.dataframe_from_db(
+                columns=columns,
+                only_object=only_object,
+                object_like=object_like,
+                only_source=only_source,
+                on_sky=on_sky, 
+                not_junk=not_junk,
+                QC_pass=QC_pass, 
+                QC_fail=QC_fail, 
+                start_date=start_date,
+                end_date=end_date,
+                verbose=verbose
+            )
 
         # Convert ObsID to clickable HTML links
         if 'ObsID' in df.columns:
@@ -2494,6 +2503,13 @@ def process_file(file_path, now_str,
 
         extraction_results.update(extracted)
 
+    # the Angle code was crashing
+    def safe_angle(value, unit, default=0.0):
+        try:
+            return Angle(value, unit=unit).degree
+        except Exception:
+            return default
+
     # Mandatory metadata
     extraction_results.update({
         'ObsID': base_filename,
@@ -2507,8 +2523,8 @@ def process_file(file_path, now_str,
         'D2_header_read_time': now_str,
         'L1_header_read_time': now_str,
         'L2_header_read_time': now_str,
-        'RA_deg': Angle(extraction_results.get('RA'), unit='hourangle').degree,
-        'DEC_deg': Angle(extraction_results.get('DEC'), unit='deg').degree
+        'RA_deg': safe_angle(extraction_results.get('RA'), unit='hourangle'),
+        'DEC_deg': safe_angle(extraction_results.get('DEC'), unit='deg')
     })
 
     # Convert boolean columns explicitly
