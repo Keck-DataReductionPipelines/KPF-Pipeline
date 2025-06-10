@@ -98,6 +98,8 @@ class TSDB:
             Filesystem path to the SQLite database.
         base_dir (str):
             Root directory for observational data storage.
+        tables_prefix (str):
+            Prefix of the table names; default = 'tsdb_'.
         tables (dict):
             Dictionary mapping database tables to their CSV configurations.
         extraction_plan (dict):
@@ -127,8 +129,13 @@ class TSDB:
     
     """
     def __init__(self, 
-                 backend='sqlite', db_path='kpf_ts.db', base_dir='/data/L0', 
-                 credentials=None, logger=None, verbose=False):
+                 backend='sqlite', 
+                 db_path='kpf_ts.db', 
+                 base_dir='/data/L0', 
+                 tables_prefix='tsdb_'
+                 credentials=None, 
+                 logger=None, 
+                 verbose=False):
 
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting KPF_TSDB')
@@ -140,6 +147,7 @@ class TSDB:
         else:
             self.tqdm = tqdm
 
+        self.prefix = tables_prefix
         self.base_dir = base_dir
         self.backend = backend 
         self.logger.info(f'Base data directory: {self.base_dir}')
@@ -231,12 +239,8 @@ class TSDB:
             if details['file_level'] is not None and details['extension'] is not None
         }
 
-# I don't think this is needed any more, but am keeping it during testing.  6/6/2025        
-#        # Initialize metadata entries first
-#        self._init_metadata_entries()
-
         # Create metadata table or use existing one
-        metadata_table = 'tsdb_metadata'
+        metadata_table = self.prefix + 'metadata'
         if not self.check_if_table_exists(tablename=metadata_table):
             self.logger.info("Metadata table does not exist.  Attempting to create.")
             self._create_metadata_table()
@@ -251,7 +255,7 @@ class TSDB:
             self.keywords_by_table.setdefault(table, []).append(keyword)
 
         # Create the data tables using metadata
-        primary_table = 'tsdb_base'
+        primary_table = self.prefix + 'base'
         if not self.check_if_table_exists(tablename=primary_table):
             self.logger.info("Data tables do not exist.  Attempting to create.")
             self._create_data_tables()
@@ -508,56 +512,6 @@ class TSDB:
     
         return permissions
 
-# I think this isn't used any more.  AWH 6/6/2025
-#    @require_role(['admin', 'operations'])
-#    def print_summary_all_tables(self):
-#        """
-#        Prints a summary of all tables in the database (not just the intended tables), 
-#        including the number of rows and columns.
-#        """
-#
-#        self._open_connection()
-#        try:
-#            if self.backend == 'sqlite':
-#                self._execute_sql_command("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
-#                tables = [row[0] for row in self.cursor.fetchall()]
-#    
-#                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
-#                print("-" * 40)
-#    
-#                for tbl in tables:
-#                    self._execute_sql_command(f"PRAGMA table_info({tbl});")
-#                    columns = len(self.cursor.fetchall())
-#    
-#                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
-#                    rows = self.cursor.fetchone()[0]
-#    
-#                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
-#    
-#            elif self.backend == 'psql':
-#                self._execute_sql_command("""
-#                     SELECT tablename FROM pg_catalog.pg_tables
-#                     WHERE schemaname='public' ORDER BY tablename;
-#                """)
-#                tables = [row[0] for row in self.cursor.fetchall()]
-#         
-#                print(f"{'Table Name':<20} {'Columns':>7} {'Rows':>10}")
-#                print("-" * 40)
-#         
-#                for tbl in tables:
-#                    self._execute_sql_command(f"""
-#                        SELECT COUNT(*) FROM information_schema.columns
-#                        WHERE table_name = '{tbl}';
-#                    """)
-#                    columns = self.cursor.fetchone()[0]
-#         
-#                    self._execute_sql_command(f"SELECT COUNT(*) FROM {tbl};")
-#                    rows = self.cursor.fetchone()[0]
-#         
-#                    print(f"{tbl:<20} {columns:>7} {rows:>10}")
-#        finally:
-#            self._close_connection()
-
 
     @require_role(['admin', 'operations'])
     def drop_tables(self, tables = 'all'):
@@ -621,45 +575,14 @@ class TSDB:
         finally:
             self._close_connection()
 
-# I think this no longer needed.  Keeping it for tests just in case.  AWH 6/6/25
-#    def _init_metadata_entries(self):
-#        """
-#        Load and combine all keyword metadata entries from CSV files into self.metadata_entries.
-#        """
-#        dfs = []
-#        tables_metadata_df = pd.read_csv(self.csv_filepath).fillna('')
-#    
-#        for _, row in tables_metadata_df.iterrows():
-#            csv_filename = row['csv']
-#            label = row['label']
-#            table_name = row['table_name']
-#            
-#            if not csv_filename:
-#                continue  # skip if CSV not specified
-#    
-#            csv_path = os.path.join(self.keyword_base_path, csv_filename)
-#            df = pd.read_csv(csv_path, delimiter='|', dtype=str).fillna('')
-#            df['source'] = label
-#            df['table_name'] = table_name
-#            df['csv_path'] = csv_path
-#            df.rename(columns={'unit': 'units'}, inplace=True)
-#    
-#            dfs.append(df[['keyword', 'datatype', 'units', 'description', 'source', 'table_name', 'csv_path']])
-#    
-#        # Combine all dataframes into one
-#        df_all = pd.concat(dfs, ignore_index=True)
-#        df_all.drop_duplicates(subset='keyword', inplace=True)
-#    
-#        self.metadata_entries = df_all.to_dict(orient='records')
-#
-#   
+ 
     @require_role(['admin', 'operations', 'readonly'])
     def print_db_status(self):
         """
         Prints a formatted summary table of the database status for each table,
         ensuring tables exist first, and handling both SQLite and PostgreSQL.
         """
-        tables = [table for table in self.tables if table != 'tsdb_metadata']
+        tables = [table for table in self.tables if table != self.prefix + 'metadata']
     
         self._open_connection()
     
@@ -713,17 +636,18 @@ class TSDB:
                 return
     
             # Fetch additional stats if 'tsdb_base' exists
-            if 'tsdb_base' in [t[0] for t in summary_data]:
+            if self.prefix + 'base' in [t[0] for t in summary_data]:
                 query_time_col = 'L0_header_read_time' if self.backend == 'sqlite' else '"L0_header_read_time"'
                 query_datecode_col = 'datecode' if self.backend == 'sqlite' else '"datecode"'
     
                 self._execute_sql_command(
-                    f'SELECT MAX({query_time_col}) FROM tsdb_base'
+                    f'SELECT MAX({query_time_col}) FROM {self.prefix}base'
                 )
+
                 most_recent_read_time = self.cursor.fetchone()[0] or 'N/A'
     
                 self._execute_sql_command(
-                    f'SELECT MIN({query_datecode_col}), MAX({query_datecode_col}), COUNT(DISTINCT {query_datecode_col}) FROM tsdb_base'
+                    f'SELECT MIN({query_datecode_col}), MAX({query_datecode_col}), COUNT(DISTINCT {query_datecode_col}) FROM {self.prefix}base'
                 )
                 earliest_datecode, latest_datecode, unique_datecodes_count = self.cursor.fetchone()
     
@@ -763,11 +687,11 @@ class TSDB:
         # Drop existing metadata table if it exists
         self._open_connection()
         try:
-            self._execute_sql_command("DROP TABLE IF EXISTS tsdb_metadata")
+            self._execute_sql_command("DROP TABLE IF EXISTS {self.prefix}metadata")
     
             # Create metadata table with 'indexed' column
-            create_sql = """
-                CREATE TABLE tsdb_metadata (
+            create_sql = f"""
+                CREATE TABLE {self.prefix}metadata (
                     keyword     TEXT PRIMARY KEY,
                     source      TEXT,
                     datatype    TEXT,
@@ -780,12 +704,12 @@ class TSDB:
             self._execute_sql_command(create_sql)
     
             # Prepare insert SQL (SQLite and PostgreSQL compatible)
-            insert_sql = """
-                INSERT INTO tsdb_metadata 
+            insert_sql = f"""
+                INSERT INTO {self.prefix}metadata 
                 (keyword, source, datatype, units, description, table_name, indexed)
                 VALUES (?, ?, ?, ?, ?, ?, ?);
-            """ if self.backend == 'sqlite' else """
-                INSERT INTO tsdb_metadata 
+            """ if self.backend == 'sqlite' else f"""
+                INSERT INTO {self.prefix}metadata 
                 (keyword, source, datatype, units, description, table_name, indexed)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (keyword) DO UPDATE SET
@@ -838,21 +762,21 @@ class TSDB:
         Read the tsdb_metadata table and store it in the attribute 
         self.metadata_table.
         """
-        sql_metadata = "SELECT keyword, datatype, table_name FROM tsdb_metadata;"
+        sql_metadata = f"SELECT keyword, datatype, table_name FROM {self.prefix}metadata;"
         self._open_connection()
         self.metadata_rows = self._execute_sql_command(sql_metadata, fetch=True)
         self._close_connection()
         self.logger.info("Metadata table read.")
 
 
-    @require_role(['admin', 'operations'])
+    @require_role(['admin'])
     def _create_data_tables(self):
         """
         Create TSDB data tables from metadata definitions, with ObsID as 
         primary key.
     
         Columns specified in a file and columns whose metadata description 
-        contains the substring \"QC:\" are automatically indexed. Indexing is 
+        contains the substring "QC:" are automatically indexed. Indexing is 
         based on column presence in the metadata, which may include multiple 
         tables.
     
@@ -863,21 +787,19 @@ class TSDB:
             3. Dynamically creates each table with ObsID as the primary key.
             4. Creates indices for:
                 - Columns explicitly listed in `indexed_columns.csv`.
-                - Columns identified by having \"QC:\" in their metadata 
+                - Columns identified by having "QC:" in their metadata 
                   descriptions.
             5. Ensures ObsID is indexed in tables other than `tsdb_base`.
             6. Updates the metadata table to reflect indexed columns with an 
                `indexed` boolean flag.
-    
-        Logs detailed messages indicating index creation successes and ensures 
-        database operations are completed safely by properly closing connections.
+            7. Sets PostgreSQL permissions and ownership on each table.
         """
     
         indexed_df = pd.read_csv(self.indexed_csv_path)
         indexed_columns = set(indexed_df['column'].tolist())
     
-        tables = [table for table in self.tables if table != 'tsdb_metadata']
-        sql_metadata = "SELECT keyword, datatype, table_name, description FROM tsdb_metadata;"
+        tables = [table for table in self.tables if table != f'{self.prefix}metadata']
+        sql_metadata = f"SELECT keyword, datatype, table_name, description FROM {self.prefix}metadata;"
     
         self._open_connection()
         metadata_rows = self._execute_sql_command(sql_metadata, fetch=True)
@@ -905,13 +827,28 @@ class TSDB:
                 create_table_sql = f"CREATE TABLE IF NOT EXISTS {tbl} ({col_defs_sql});"
                 self._execute_sql_command(create_table_sql)
     
+                # PostgreSQL-specific permission and ownership settings
+                if self.backend == 'psql':
+                    permission_sql = f"""
+                        ALTER TABLE {tbl} OWNER TO kpfadminrole;
+                        REVOKE ALL ON TABLE {tbl} FROM kpfreadrole;
+                        GRANT SELECT ON TABLE {tbl} TO GROUP kpfreadrole;
+                        REVOKE ALL ON TABLE {tbl} FROM kpfadminrole;
+                        GRANT ALL ON TABLE {tbl} TO GROUP kpfadminrole;
+                        REVOKE ALL ON TABLE {tbl} FROM kpfporole;
+                        GRANT INSERT,UPDATE,SELECT,DELETE,REFERENCES ON TABLE {tbl} TO kpfporole;
+                    """
+                    for stmt in permission_sql.strip().split(";"):
+                        if stmt.strip():
+                            self._execute_sql_command(stmt + ";")
+    
             all_indexed_columns = indexed_columns.union(qc_columns)
     
             for column in all_indexed_columns:
                 tables_to_index = tables_by_column.get(column, set())
     
                 for tbl in tables_to_index:
-                    if tbl == 'tsdb_base' and column.lower() == 'obsid':
+                    if tbl == f'{self.prefix}base' and column.lower() == 'obsid':
                         continue
     
                     index_name = f"{tbl}_{column}_idx"
@@ -921,18 +858,18 @@ class TSDB:
                         self.logger.debug(f"Created index: {index_name} on table {tbl}({column})")
     
             # Check if the column 'indexed' exists in tsdb_metadata
-            self._execute_sql_command("PRAGMA table_info(tsdb_metadata);")
+            self._execute_sql_command(f"PRAGMA table_info({self.prefix}metadata);")
             existing_columns = [row[1] for row in self.cursor.fetchall()]
-            
+    
             if 'indexed' not in existing_columns:
-                update_indexed_sql = """
-                    ALTER TABLE tsdb_metadata ADD COLUMN indexed BOOLEAN DEFAULT FALSE;
+                update_indexed_sql = f"""
+                    ALTER TABLE {self.prefix}metadata ADD COLUMN indexed BOOLEAN DEFAULT FALSE;
                 """
                 self._execute_sql_command(update_indexed_sql)
     
             for column in all_indexed_columns:
                 update_metadata_sql = f"""
-                    UPDATE tsdb_metadata SET indexed = TRUE WHERE keyword = ?;
+                    UPDATE {self.prefix}metadata SET indexed = TRUE WHERE keyword = ?;
                 """
                 self._execute_sql_command(update_metadata_sql, params=(column,))
     
@@ -941,7 +878,7 @@ class TSDB:
     
         self.logger.info("Data tables and indices created successfully.")
 
- 
+
     @require_role(['admin', 'operations'])
     def create_test_table(self, tablename, schema='public'):
         """
@@ -973,7 +910,7 @@ class TSDB:
         self._open_connection()
         try:
             self.bool_rows = self._execute_sql_command(
-                "SELECT keyword, datatype, table_name FROM tsdb_metadata WHERE datatype = 'bool';",
+                f"SELECT keyword, datatype, table_name FROM {self.prefix}metadata WHERE datatype = 'bool';",
                 fetch=True
             )
             self.bool_columns = {row[0] for row in self.bool_rows}
@@ -1050,9 +987,9 @@ class TSDB:
      
             keywords = self.keywords_by_table.get(tbl, [])
     
-            if tbl == 'tsdb_l0t':
+            if tbl == f'{self.prefix}l0t':
                 extracted = self._extract_telemetry(file_path, {kw: self.kw_to_dtype[kw] for kw in keywords})
-            elif tbl.startswith('tsdb_l2_') and tbl not in ['tsdb_l2', 'tsdb_l2_rv', 'tsdb_l2_ccf']:
+            elif tbl.startswith(f'{self.prefix}l2_') and tbl not in [f'{self.prefix}l2', f'{self.prefix}l2_rv', f'{self.prefix}l2_ccf']:
                 extracted = self._extract_rvs(file_path)
             else:
                 kw_types = {kw: self.kw_to_dtype[kw] for kw in keywords}
@@ -1790,7 +1727,7 @@ class TSDB:
             filename_col = 'L0_filename'
             placeholder = '?'
     
-        query = f'SELECT {col_str} FROM tsdb_base WHERE {filename_col} = {placeholder}'
+        query = f'SELECT {col_str} FROM {self.prefix}base WHERE {filename_col} = {placeholder}'
     
         self._open_connection()
         try:
@@ -1913,9 +1850,9 @@ class TSDB:
         self._open_connection()
         try:
             for src in custom_order:
-                query = """
+                query = f"""
                     SELECT keyword, datatype, indexed, units, description
-                    FROM tsdb_metadata
+                    FROM {self.prefix}metadata
                     WHERE source = ?
                     ORDER BY keyword;
                 """
@@ -1960,7 +1897,7 @@ class TSDB:
         """
         self._open_connection()
         try:
-            query = "SELECT keyword, datatype, units, description, source FROM tsdb_metadata"
+            query = f"SELECT keyword, datatype, units, description, source FROM {self.prefix}metadata"
             self._execute_sql_command(query)
             rows = self.cursor.fetchall()
     
@@ -2027,9 +1964,9 @@ class TSDB:
         """
         self._open_connection()
         try:
-            query = """
+            query = f"""
                 SELECT MIN("DATE-MID") AS min_date, MAX("DATE-MID") AS max_date
-                FROM tsdb_l0
+                FROM {self.prefix}l0
             """
             self._execute_sql_command(query)
             min_date_raw, max_date_raw = self.cursor.fetchone()
@@ -2160,7 +2097,7 @@ class TSDB:
         try:
             # Get column metadata
             if columns in (None, '*'):
-                metadata_query = 'SELECT keyword, table_name FROM tsdb_metadata;'
+                metadata_query = f'SELECT keyword, table_name FROM {self.prefix}metadata;'
                 self._execute_sql_command(metadata_query)
                 metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
                 columns_requested = metadata['keyword'].tolist()
@@ -2176,13 +2113,13 @@ class TSDB:
                 if QC_not_fail is not None:
                     columns_needed.extend(QC_not_fail)
                 placeholders = ','.join([placeholder] * len(columns_needed))
-                metadata_query = f'SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders});'
+                metadata_query = f'SELECT keyword, table_name FROM {self.prefix}metadata WHERE keyword IN ({placeholders});'
                 self._execute_sql_command(metadata_query, params=columns_needed)
                 metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
     
             kw_table_map = dict(zip(metadata['keyword'], metadata['table_name']))
             tables_needed = set(metadata['table_name'].dropna())
-            tables_needed.update(['tsdb_base', 'tsdb_l0', 'tsdb_2d'])
+            tables_needed.update([f'{self.prefix}base', f'{self.prefix}l0', f'{self.prefix}2d'])
     
             # Prepare select columns with proper quoting
             table_columns = {table: {'ObsID'} for table in tables_needed}
@@ -2190,9 +2127,9 @@ class TSDB:
                 table_columns[tbl].add(kw)
 
             guaranteed_columns = {
-                'tsdb_base': ['Source', 'datecode'],
-                'tsdb_l0': ['OBJECT', 'FIUMODE'],
-                'tsdb_2d': ['NOTJUNK']
+                f'{self.prefix}base': ['Source', 'datecode'],
+                f'{self.prefix}l0': ['OBJECT', 'FIUMODE'],
+                f'{self.prefix}2d': ['NOTJUNK']
             }
             for tbl, cols in guaranteed_columns.items():
                 table_columns[tbl].update(cols)
@@ -2210,36 +2147,36 @@ class TSDB:
     
             select_sql = ', '.join(select_clauses)
     
-            from_clause = 'tsdb_base'
+            from_clause = f'{self.prefix}base'
             join_clauses = [
-                f'LEFT JOIN {tbl} ON tsdb_base.{quote}ObsID{quote} = {tbl}.{quote}ObsID{quote}'
-                for tbl in tables_needed if tbl != 'tsdb_base'
+                f'LEFT JOIN {tbl} ON {self.prefix}base.{quote}ObsID{quote} = {tbl}.{quote}ObsID{quote}'
+                for tbl in tables_needed if tbl != f'{self.prefix}base'
             ]
 
             conditions, params = [], []
     
             if only_object:
                 placeholders = ','.join([placeholder] * len(only_object))
-                conditions.append(f'tsdb_l0.{quote}OBJECT{quote} IN ({placeholders})')
+                conditions.append(f'{self.prefix}l0.{quote}OBJECT{quote} IN ({placeholders})')
                 params.extend(only_object)
     
             if object_like:
-                like_conditions = [f'tsdb_l0.{quote}OBJECT{quote} LIKE {placeholder}' for _ in object_like]
+                like_conditions = [f'{self.prefix}l0.{quote}OBJECT{quote} LIKE {placeholder}' for _ in object_like]
                 conditions.append('(' + ' OR '.join(like_conditions) + ')')
                 params.extend([f'%{ol}%' for ol in object_like])
     
             if only_source:
                 placeholders = ','.join([placeholder] * len(only_source))
-                conditions.append(f'tsdb_base.{quote}Source{quote} IN ({placeholders})')
+                conditions.append(f'{self.prefix}base.{quote}Source{quote} IN ({placeholders})')
                 params.extend(only_source)
     
             if not_junk is not None:
-                conditions.append(f'tsdb_2d.{quote}NOTJUNK{quote} = {placeholder}')
+                conditions.append(f'{self.prefix}2d.{quote}NOTJUNK{quote} = {placeholder}')
                 params.append(True if not_junk else False)
     
             if on_sky is not None:
                 mode = 'Observing' if on_sky else 'Calibration'
-                conditions.append(f'tsdb_l0.{quote}FIUMODE{quote} = {placeholder}')
+                conditions.append(f'{self.prefix}l0.{quote}FIUMODE{quote} = {placeholder}')
                 params.append(mode)
 
             if QC_pass is not None:
@@ -2264,12 +2201,12 @@ class TSDB:
     
             if start_date:
                 date_str = pd.to_datetime(start_date).strftime("%Y%m%d")
-                conditions.append(f'tsdb_base.{quote}datecode{quote} >= {placeholder}')
+                conditions.append(f'{self.prefix}base.{quote}datecode{quote} >= {placeholder}')
                 params.append(date_str)
     
             if end_date:
                 date_str = pd.to_datetime(end_date).strftime("%Y%m%d")
-                conditions.append(f'tsdb_base.{quote}datecode{quote} <= {placeholder}')
+                conditions.append(f'{self.prefix}base.{quote}datecode{quote} <= {placeholder}')
                 params.append(date_str)
     
             if extra_conditions:
@@ -2527,9 +2464,9 @@ def process_file(file_path, now_str,
         if not os.path.exists(current_file_path):
             continue
 
-        if tbl == 'tsdb_l0t':
+        if tbl == f'{self.prefix}l0t':
             extracted = _extract_telemetry_func(current_file_path, kw_types)
-        elif tbl.startswith('tsdb_l2_') and tbl not in ['tsdb_l2', 'tsdb_l2rv', 'tsdb_l2ccf']:
+        elif tbl.startswith(f'{self.prefix}l2_') and tbl not in [f'{self.prefix}l2', f'{self.prefix}l2rv', f'{self.prefix}l2ccf']:
             extracted = _extract_rvs_func(current_file_path)
         else:
             extracted = _extract_kwd_func(current_file_path, kw_types, extension)
