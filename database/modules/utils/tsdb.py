@@ -132,7 +132,7 @@ class TSDB:
                  backend='sqlite', 
                  db_path='kpf_ts.db', 
                  base_dir='/data/L0', 
-                 tables_prefix='tsdb_'
+                 tables_prefix='tsdb_',
                  credentials=None, 
                  logger=None, 
                  verbose=False):
@@ -687,7 +687,7 @@ class TSDB:
         # Drop existing metadata table if it exists
         self._open_connection()
         try:
-            self._execute_sql_command("DROP TABLE IF EXISTS {self.prefix}metadata")
+            self._execute_sql_command(f"DROP TABLE IF EXISTS {self.prefix}metadata")
     
             # Create metadata table with 'indexed' column
             create_sql = f"""
@@ -1251,6 +1251,7 @@ class TSDB:
         partial_process_file = partial(
             process_file, 
             safe_float=safe_float, 
+            prefix=self.prefix,
             **extraction_args
         )
     
@@ -2437,7 +2438,7 @@ class TSDB:
 def process_file(file_path, now_str,
                  extraction_plan, bool_columns, kw_to_table, keywords_by_table, kw_to_dtype,
                  _extract_kwd_func, _extract_telemetry_func, _extract_rvs_func,
-                 get_source_func, get_datecode_func, safe_float):
+                 get_source_func, get_datecode_func, safe_float, prefix):
     """
     Process a single file to extract all relevant keywords based on the 
     extraction plan.
@@ -2464,9 +2465,9 @@ def process_file(file_path, now_str,
         if not os.path.exists(current_file_path):
             continue
 
-        if tbl == f'{self.prefix}l0t':
+        if tbl == f'{prefix}l0t':
             extracted = _extract_telemetry_func(current_file_path, kw_types)
-        elif tbl.startswith(f'{self.prefix}l2_') and tbl not in [f'{self.prefix}l2', f'{self.prefix}l2rv', f'{self.prefix}l2ccf']:
+        elif tbl.startswith(f'{prefix}l2_') and tbl not in [f'{prefix}l2', f'{prefix}l2rv', f'{prefix}l2ccf']:
             extracted = _extract_rvs_func(current_file_path)
         else:
             extracted = _extract_kwd_func(current_file_path, kw_types, extension)
