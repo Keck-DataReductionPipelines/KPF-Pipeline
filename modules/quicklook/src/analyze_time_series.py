@@ -797,9 +797,6 @@ class AnalyzeTimeSeries:
         Returns:
             PNG plot in fig_path or shows the plot in the current environment
             (e.g., in a Jupyter Notebook). 
-        
-        To-do: 
-            Add highlighting of QC tests
         """
         
         # Use plotting dictionary, if provided

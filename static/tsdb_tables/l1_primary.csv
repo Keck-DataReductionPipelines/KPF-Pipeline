@@ -61,16 +61,16 @@ FRS2U852|float|uncertainty on FRS2M852|None
 FRC2M852|float|median(CAL/SCI2) flux ratio near 852 nm|None
 FRC2U852|float|uncertainty on FRC2M852|None
 SKYSCIMS|float|SKY/SCI flux ratio in main spect. scaled from EM data|None
-EMSCCT48|float|cumulative EM counts [ADU] in SCI in 445-870 nm|counts
-EMSCCT45|float|cumulative EM counts [ADU] in SCI in 445-551 nm|counts
-EMSCCT56|float|cumulative EM counts [ADU] in SCI in 551-658 nm|counts
-EMSCCT67|float|cumulative EM counts [ADU] in SCI in 658-764 nm|counts
-EMSCCT78|float|cumulative EM counts [ADU] in SCI in 764-870 nm|counts
-EMSKCT48|float|cumulative EM counts [ADU] in SKY in 445-870 nm|counts
-EMSKCT45|float|cumulative EM counts [ADU] in SKY in 445-551 nm|counts
-EMSKCT56|float|cumulative EM counts [ADU] in SKY in 551-658 nm|counts
-EMSKCT67|float|cumulative EM counts [ADU] in SKY in 658-764 nm|counts
-EMSKCT78|float|cumulative EM counts [ADU] in SKY in 764-870 nm|counts
+EMSCCT48|float|cumulative EM counts in SCI in 445-870 nm|ADU
+EMSCCT45|float|cumulative EM counts in SCI in 445-551 nm|ADU
+EMSCCT56|float|cumulative EM counts in SCI in 551-658 nm|ADU
+EMSCCT67|float|cumulative EM counts in SCI in 658-764 nm|ADU
+EMSCCT78|float|cumulative EM counts in SCI in 764-870 nm|ADU
+EMSKCT48|float|cumulative EM counts in SKY in 445-870 nm|ADU
+EMSKCT45|float|cumulative EM counts in SKY in 445-551 nm|ADU
+EMSKCT56|float|cumulative EM counts in SKY in 551-658 nm|ADU
+EMSKCT67|float|cumulative EM counts in SKY in 658-764 nm|ADU
+EMSKCT78|float|cumulative EM counts in SKY in 764-870 nm|ADU
 LFCLGS0|int|Min Green SCI order with good LFC lines|None
 LFCLGS1|int|Max Green SCI order with good LFC lines|None
 LFCLGC0|int|Min Green CAL order with good LFC lines|None
@@ -111,8 +111,8 @@ ETALINES|bool|QC: Number and dist of Etalon lines sufficient|None
 WILDWSCI|bool|QC: SCI WLS not wild (stdev < 5 pix)|None
 WILDWSKY|bool|QC: SKY WLS not wild (stdev < 5 pix)|None
 WILDWCAL|bool|QC: CAL WLS not wild (stdev < 5 pix)|None
-AGEWLS|float|WLSFILE approx age (days)|None
-AGEWLS2|float|WLSFILE2 approx age (days)|None
+AGEWLS|float|WLSFILE approx age|days
+AGEWLS2|float|WLSFILE2 approx age|days
 AGETRAC|float|Trace file approx age|days
 AGELAMP|float|Smooth lamp file approx age|days
 NSATGS2|float|Number of saturated lines in Green SCI2|None

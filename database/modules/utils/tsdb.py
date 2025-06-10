@@ -1907,7 +1907,8 @@ class TSDB:
         col_width_datatype = 9
         col_width_indexed = 7
         col_width_units = 9
-        col_width_desc = 80
+        col_width_desc = 68
+        col_width_dashes = col_width_keyword + col_width_datatype + col_width_indexed + col_width_units + col_width_desc
     
         self._open_connection()
         try:
@@ -1925,7 +1926,7 @@ class TSDB:
                     continue
     
                 print(f"{src}:")
-                print("-" * 160)
+                print("-" * col_width_dashes)
                 print(
                     f"{'Keyword':<{col_width_keyword}} "
                     f"{'Datatype':<{col_width_datatype}} "
@@ -1933,11 +1934,11 @@ class TSDB:
                     f"{'Units':<{col_width_units}} "
                     f"{'Description':<{col_width_desc}}"
                 )
-                print("-" * 160)
+                print("-" * col_width_dashes)
     
                 for keyword, datatype, indexed, units, description in rows:
                     units_str = "" if units in (None, "NaN", "nan", float("nan")) or pd.isna(units) else units
-                    indexed_str = 'Yes' if indexed else ' No'
+                    indexed_str = 'Yes' if indexed else 'No'
     
                     print(
                         f"{keyword:<{col_width_keyword}} "
@@ -2067,7 +2068,7 @@ class TSDB:
         Returns:
             Pandas dataframe of the specified columns matching the constraints.
         """
-        df = self.dataframe_from_db(['ObsID'], object_like=object_name, 
+        df = self.dataframe_from_db(columns=['ObsID'], object_like=object_name, 
                                     start_date=start_date, end_date=end_date, 
                                     not_junk=not_junk)
         
@@ -2079,7 +2080,8 @@ class TSDB:
                           start_date=None, end_date=None, 
                           only_object=None, only_source=None, object_like=None, 
                           on_sky=None, not_junk=None, 
-                          QCs_pass=None, QCs_fail=None, 
+                          QC_pass=None, QC_fail=None, 
+                          QC_not_pass=None, QC_not_fail=None, 
                           extra_conditions=None,
                           extra_conditions_logic='AND',
                           verbose=False):
@@ -2111,10 +2113,20 @@ class TSDB:
                 E.g., object_like = ['autocal-etalon', 'autocal-bias']
             on_sky (bool, optional): Filter by on-sky (True) or calibration 
                 (False) observations. Defaults to None.
-            QCs_pass (str or list of str, optional): Column names where rows 
+            QC_pass (str or list of str, optional): Column names where rows 
                 must have True. Defaults to None.
-            QCs_fail (str or list of str, optional): Column names where rows 
+            QC_fail (str or list of str, optional): Column names where rows 
                 must have False. Defaults to None.
+            QC_not_pass (str or list of str, optional): Column names where rows 
+                are not True; allowable values are False and Null. A Null entry 
+                can happen when an observation is ingested for which a QC test 
+                has not been performed (e.g., because the QC was recently 
+                developed). Defaults to None.
+            QC_not_fail (str or list of str, optional): Column names where rows 
+                are not False; allowable values are True and Null. A Null entry 
+                can happen when an observation is ingested for which a QC test 
+                has not been performed (e.g., because the QC was recently 
+                developed). Defaults to None.
             not_junk (bool, optional): Filter by observations marked as not junk 
                 (True) or junk (False). Defaults to None.
             verbose (bool, optional): Enables detailed logging of SQL queries 
@@ -2131,10 +2143,14 @@ class TSDB:
             only_source = [only_source]
         if isinstance(object_like, str):
             object_like = [object_like]
-        if isinstance(QCs_pass, str):
-            QCs_pass = [QCs_pass]
-        if isinstance(QCs_fail, str):
-            QCs_fail = [QCs_fail]
+        if isinstance(QC_pass, str):
+            QC_pass = [QC_pass]
+        if isinstance(QC_fail, str):
+            QC_fail = [QC_fail]
+        if isinstance(QC_not_pass, str):
+            QC_not_pass = [QC_not_pass]
+        if isinstance(QC_not_fail, str):
+            QC_not_fail = [QC_not_fail]
     
         quote = '"' if self.backend == 'psql' else '"'  # SQLite uses " for quoting as well
         placeholder = '%s' if self.backend == 'psql' else '?'
@@ -2151,10 +2167,14 @@ class TSDB:
             else:
                 columns_requested = [columns] if isinstance(columns, str) else columns
                 columns_needed = columns_requested.copy()
-                if QCs_pass is not None:
-                    columns_needed.extend(QCs_pass)
-                if QCs_fail is not None:
-                    columns_needed.extend(QCs_fail)
+                if QC_pass is not None:
+                    columns_needed.extend(QC_pass)
+                if QC_fail is not None:
+                    columns_needed.extend(QC_fail)
+                if QC_not_pass is not None:
+                    columns_needed.extend(QC_not_pass)
+                if QC_not_fail is not None:
+                    columns_needed.extend(QC_not_fail)
                 placeholders = ','.join([placeholder] * len(columns_needed))
                 metadata_query = f'SELECT keyword, table_name FROM tsdb_metadata WHERE keyword IN ({placeholders});'
                 self._execute_sql_command(metadata_query, params=columns_needed)
@@ -2222,14 +2242,24 @@ class TSDB:
                 conditions.append(f'tsdb_l0.{quote}FIUMODE{quote} = {placeholder}')
                 params.append(mode)
 
-            if QCs_pass is not None:
-                for col in QCs_pass:
+            if QC_pass is not None:
+                for col in QC_pass:
                     conditions.append(f"{quote}{col}{quote} = {placeholder}")
                     params.append(True)
         
-            if QCs_fail is not None:
-                for col in QCs_fail:
+            if QC_fail is not None:
+                for col in QC_fail:
                     conditions.append(f"{quote}{col}{quote} = {placeholder}")
+                    params.append(False)
+    
+            if QC_not_pass is not None:
+                for col in QC_not_pass:
+                    conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
+                    params.append(False)
+        
+            if QC_not_fail is not None:
+                for col in QC_not_pass:
+                    conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
                     params.append(False)
     
             if start_date:
@@ -2293,6 +2323,7 @@ class TSDB:
                            only_object=None, object_like=None, only_source=None, 
                            on_sky=None, not_junk=None,
                            QC_pass=None, QC_fail=None, 
+                           QC_not_pass=None, QC_not_fail=None, 
                            max_height_px=600, # in pixels
                            url_stub='https://jump.caltech.edu/observing-logs/kpf/',
                            verbose=False):
@@ -2327,6 +2358,8 @@ class TSDB:
                 not_junk=not_junk,
                 QC_pass=QC_pass, 
                 QC_fail=QC_fail, 
+                QC_not_pass=QC_not_pass, 
+                QC_not_fail=QC_not_fail, 
                 start_date=start_date,
                 end_date=end_date,
                 verbose=verbose

@@ -34,7 +34,7 @@ ObsID_filename = '/code/KPF-Pipeline/tests/regression/test_analyze_time_series_O
 def test_analyze_time_series():
     
     # Generate a Time Series Database
-    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
+    myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, backend='sqlite')
     
     # Test metadata table capabilities
     myTS.db.print_metadata_table()
@@ -71,7 +71,7 @@ def test_analyze_time_series():
     
     # Test miscellaneous methods
     columns = ['ObsID','GDRXRMS','FIUMODE']
-    myTS.db.display_data(columns)
+    myTS.db.display_data(columns=columns)
     df = myTS.db.dataframe_from_db(columns=columns)
     myTS.db.ObsIDlist_from_db('autocal-bias')
     myTS.db.print_db_status()
