@@ -62,6 +62,7 @@ pipeline {
         sh """
           docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
           docker run --rm \
+            --network=host \
             -e COVERALLS_REPO_TOKEN=VQhy1molIcAo0rTz2geFOhucmvkBiEPFc \
             -e CI_PULL_REQUEST=\$ghprbPullId \
             -v \"\${PWD}:/code/KPF-Pipeline\" \
