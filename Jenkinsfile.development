@@ -71,8 +71,8 @@ pipeline {
             -e TSDBSERVER=127.0.0.1 \
             -e TSDBPORT=6127 \
             -e TSDBNAME=timeseriesopsdb \
-            -e TSDBUSER="${KPFPIPE_TSDB_USER}") \
-            -e TSDBPASS="${KPFPIPE_TSDB_PASS}") \
+            -e TSDBUSER="${KPFPIPE_TSDB_USER}" \
+            -e TSDBPASS="${KPFPIPE_TSDB_PASS}" \
             kpf-drp:latest \
             make init regression_tests
         """
