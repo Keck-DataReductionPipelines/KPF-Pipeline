@@ -225,8 +225,8 @@ The 2D file inherits all L0 keywords.  Below are additional keywords.
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
-DRPTAG2D  v2.5.2                                      Git version number of KPF-Pipeline used to make 2D
-DRPHSH2D  'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make 2D
+DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used to make 2D (in the time series database, DRPTAG is listed as DRPTAG2D)
+DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make 2D (in the time series database, DRPHSH is listed as DRPHSH2D)
 NOTJUNK   1                                           QC: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
 DATAPRL0  1                                           QC: 1 = L0 data products present with non-zero array sizes
 KWRDPRL0  1                                           QC: 1 = L0 expected keywords present 
@@ -361,8 +361,8 @@ The L1 file inherits all L0 and 2D keywords.  Below are additional important key
 ========  =======================================================================  =========
 Keyword   Value (example)                                                          Comment
 ========  =======================================================================  =========
-DRPTAGL1  v2.5.2                                                                   Git version number of KPF-Pipeline used to make L1
-DRPHSHL1  'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'                               Git commit hash version of KPF-Pipeline used to make L1
+DRPTAG    v2.5.2                                                                   Git version number of KPF-Pipeline used to make L1 (in the time series database, DRPTAG is listed as DRPTAGL1 for L1 files)
+DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'                               Git commit hash version of KPF-Pipeline used to make L1 (in the time series database, DRPHSH is listed as DRPHSHL1 for L1 files)
 WLSFILE   /masters/20231230/kpf_20231230_master_WLS_autocal-lfc-all-eve_L1.fits    First wavelength interpolation reference for this L1 file
 WLSFILE2  /masters/20231231/kpf_20231231_master_WLS_autocal-lfc-all-morn_L1.fits   Second wavelength interpolation reference for this L1 file
 TRACFILE  /masters/20250522/kpf_20250522_order_mask.fits                           Order trace file used to extract this L1 file
@@ -911,8 +911,8 @@ The L2 file inherits all L0, 2D, and L1 keywords.  Below are additional importan
 ========  ==========================================  =========
 Keyword   Value (example)                             Comment
 ========  ==========================================  =========
-DRPTAGL2  v2.5.2                                      Git version number of KPF-Pipeline used to make L2
-DRPHSHL2  'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make L2
+DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used to make L2 (in the time series database, DRPTAG is listed as DRPTAGL2 for L2 files)
+DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make L2 (in the time series database, DRPHSH is listed as DRPHSHL2 for L2 files)
 CCFRV     19.4247572623                               Average of CCD1RV and CCD2RV using weights from RV table
 CCFERV    0.001175044                                 Error on CCFRV
 CCFRVC    19.4247572623                               Average of CCD1RVC and CCD2RVC using weights from RV table

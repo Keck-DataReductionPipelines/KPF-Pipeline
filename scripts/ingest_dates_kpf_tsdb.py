@@ -23,12 +23,15 @@ def main(start_date, end_date, db_path, force):
    
     Example:
       ./ingest_dates_kpf_tsdb.py 20231201 20240101 --force
+      
+    To-do:
+      add backend as an argument
     """
 
-    myTS = AnalyzeTimeSeries(db_path=db_path)
-    myTS.print_db_status()
-    myTS.ingest_dates_to_db(start_date, end_date, reverse=True, force=force)
-    myTS.print_db_status()
+    myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
+    myTS.db.print_db_status()
+    myTS.db.ingest_dates_to_db(start_date, end_date, reverse=True, force=force)
+    myTS.db.print_db_status()
 
 
 if __name__ == "__main__":
