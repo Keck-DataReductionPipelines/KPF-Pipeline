@@ -133,6 +133,9 @@ class ModifyWLS:
         self.df['time_delta'] = (self.df['datetime'] - self.dt).abs().dt.total_seconds()
         
         # Find the index of the closest etalon RV
+        if len(self.df) == 0:
+            self.log.warning('No valid etalon frames found for drift correction.')
+            return self.l1_obj
         best_match = np.argmin(self.df['time_delta'])
         best_row = self.df.iloc[best_match]
         drift_rv = best_row['CCFRV']
