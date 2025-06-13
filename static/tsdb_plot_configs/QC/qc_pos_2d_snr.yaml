@@ -1,0 +1,13 @@
+description: "QC - Not Negative 2D SNR"
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: POS2DSNR
+        plot_type: state
+        plot_attr:
+          label: "Not Negative 2D SNR"
+          marker: "."
+    paneldict:
+      ylabel: "Not Negative 2D SNR\n(POS2DSNR)"
+      title: "QC - Red/Green CCD data/var^0.5 not significantly negative"
+      legend_frac_size: 0.15

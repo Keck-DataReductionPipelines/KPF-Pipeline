@@ -1,0 +1,93 @@
+description: Barycentric Variations
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: BJDSTD
+        plot_type: scatter
+        unit: sec
+        plot_attr:
+          label: stddev(BJD)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: stddev(BJD) [sec]
+      title: Barycentric Variations
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: BJDRNG
+        plot_type: scatter
+        unit: sec
+        plot_attr:
+          label: range(BJD)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: range(BJD) [sec]
+      title: Barycentric Variations
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: BCVSTD
+        plot_type: scatter
+        unit: m/s
+        plot_attr:
+          label: stddev(BCV)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: stddev(BCV) [m/s]
+      title: Barycentric Variations
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: BCVRNG
+        plot_type: scatter
+        unit: m/s
+        plot_attr:
+          label: range(BCV)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: range(BCV) [m/s]
+      title: Barycentric Variations
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: MAXPCBCV
+        plot_type: scatter
+        plot_attr:
+          label: max(PCBCV)
+          marker: .
+          linewidth: 0.5
+      - col: MINPCBCV
+        plot_type: scatter
+        plot_attr:
+          label: min(PCBCV)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Percent Change (BCV) [%]
+      title: Barycentric Variations
+      axhspan:
+        1:
+          ymin: -100
+          ymax: -1
+          color: red
+          alpha: 0.1
+        2:
+          ymin: 1
+          ymax: 100
+          color: red
+          alpha: 0.1
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.30

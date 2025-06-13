@@ -2,23 +2,18 @@
 Level 0 Data Model
 """
 # Standard dependencies
-from collections import OrderedDict
-import os
 import copy
 import warnings
+import os
 
 # External dependencies
-import astropy
 from astropy.io import fits
-from astropy.time import Time
 from astropy.table import Table
 import numpy as np
-from numpy.lib.shape_base import get_array_prepare
 import pandas as pd
 
 from kpfpipe.models.base_model import KPFDataModel
 from kpfpipe.models.metadata import KPF_definitions
-from kpfpipe.models.metadata.receipt_columns import RECEIPT_COL
 
 
 class KPF0(KPFDataModel):
@@ -77,6 +72,9 @@ class KPF0(KPFDataModel):
             'NEID':  self._read_from_NEID,
             'PARAS': self._read_from_PARAS
         }        
+    
+        self.receipt_add_entry('KPF0.__init__', self.__module__, f' ', 'PASS', 
+                               comment=f'Create L0/2D object')
 
     def _read_from_KPF(self, hdul: fits.HDUList) -> None:
         '''
@@ -87,7 +85,7 @@ class KPF0(KPFDataModel):
 
         '''
         for hdu in hdul:
-            if isinstance(hdu, fits.ImageHDU):
+            if isinstance(hdu, fits.ImageHDU) or isinstance(hdu, fits.CompImageHDU):
                 if hdu.name not in self.extensions:
                     self.create_extension(hdu.name, np.ndarray)
                 setattr(self, hdu.name, hdu.data)
@@ -176,16 +174,25 @@ class KPF0(KPFDataModel):
             
             else: 
                 raise NameError('cannot recognize HDU {}'.format(hdu.name))
-
     
     def info(self):
         '''
         Pretty print information about this data to stdout 
         '''
+        total_ram_bytes = 0  # <-- New: track total RAM usage
+
         if self.filename is not None:
             print('File name: {}'.format(self.filename))
+            try:
+                filepath = os.path.join(self.dirname, self.filename)
+                size_bytes = os.path.getsize(filepath)
+                size_mb = size_bytes / (1024 * 1024)
+                print('File size (on disk): {:.1f} MB'.format(size_mb))
+            except OSError:
+                print('File size: [Could not access file]')
         else: 
             print('Empty {:s} Data product'.format(self.__class__.__name__))
+
         # a typical command window is 80 in length
         head_key = '|{:20s} |{:20s} \n{:40}'.format(
             'Header Name', '# Cards',
@@ -196,6 +203,7 @@ class KPF0(KPFDataModel):
             row = '|{:20s} |{:20} \n'.format(key, len(value))
             head_key += row
         print(head_key)
+
         head = '|{:20s} |{:20s} |{:20s} \n{:40}'.format(
             'Extension Name', 'Data Type', 'Data Dimension',
             '='*80 + '\n'
@@ -207,16 +215,22 @@ class KPF0(KPFDataModel):
             
             ext = getattr(self, name)
             if isinstance(ext, (np.ndarray, np.generic)):
+                total_ram_bytes += ext.nbytes  # <-- New: add array memory
                 row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'image',
                                                         str(ext.shape))
                 head += row
             elif isinstance(ext, pd.DataFrame):
+                total_ram_bytes += ext.memory_usage(deep=True).sum()  # <-- New: add table memory
                 row = '|{:20s} |{:20s} |{:20s}\n'.format(name, 'table',
                                                         str(len(ext)))
                 head += row
         print(head)
-        
-    def _create_hdul(self):
+
+        # Print total RAM usage estimate
+        ram_mb = total_ram_bytes / (1024 * 1024)
+        print('Estimated RAM usage: {:.1f} MB'.format(ram_mb))
+
+    def _create_hdul(self, compressed=False):
         '''
         Create an hdul in FITS format. 
         This is used by the base model for writing data context to file
@@ -227,13 +241,26 @@ class KPF0(KPFDataModel):
             if value == fits.PrimaryHDU:
                 head = self.header[key]
                 hdu = fits.PrimaryHDU(header=head)
-            elif value == fits.ImageHDU:
+            elif value == fits.ImageHDU or value == fits.CompImageHDU:
                 data = getattr(self, key)
-                if data is None:
+                if data is None or data.size == 0 or data.ndim < 2 or any(dim == 0 for dim in data.shape):
                     ndim = 0
+                    hdu_type = fits.ImageHDU
                     # data = np.array([])
                 else:
                     ndim = len(data.shape)
+                    hdu_type = value
+                if not compressed:
+                    hdu_type = fits.ImageHDU
+
+                if hdu_type == fits.CompImageHDU:
+                    kwargs = {'compression_type': KPF_definitions.L0_COMPRESSION_TYPE}
+                    self.header[key]['ZIMAGE'] = 'T'
+                    self.header[key]['ZCMPTYPE'] = KPF_definitions.L0_COMPRESSION_TYPE
+                    self.header[key]['BSCALE'] = 1.0
+                    self.header[key]['BZERO'] = 0.0
+                else:
+                    kwargs = {}
                 self.header[key]['NAXIS'] = ndim
                 if ndim == 0:
                     self.header[key]['NAXIS1'] = 0
@@ -242,14 +269,14 @@ class KPF0(KPFDataModel):
                         self.header[key]['NAXIS{}'.format(d+1)] = data.shape[d]
                 head = self.header[key]
                 try:
-                    hdu = fits.ImageHDU(data=data, header=head)
+                    hdu = hdu_type(data=data, header=head, **kwargs)
                 except KeyError as ke:
                     print("KeyError exception raised: -->ke=" + str(ke))
                     print("Attempting to handle it...")
                     if str(ke) == '\'bool\'':
                         data = data.astype(float)
                         print("------>SHAPE=" + str(data.shape))
-                        hdu = fits.ImageHDU(data=data, header=head)
+                        hdu = hdu_type(data=data, header=head, **kwargs)
                     else:
                         raise KeyError("A different error...")
             elif value == fits.BinTableHDU:

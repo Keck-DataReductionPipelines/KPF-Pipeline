@@ -1,0 +1,71 @@
+description: Saturated Lines - ThAr
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: NSATGS2
+        plot_type: scatter
+        unit: counts
+        plot_attr:
+          label: 'Green SCI2'
+          marker: .
+          linewidth: 0.5
+      - col: NSATGC
+        plot_type: scatter
+        unit: counts
+        plot_attr:
+          label: 'Green CAL'
+          marker: .
+          linewidth: 0.5
+      - col: NSATGK
+        plot_type: scatter
+        unit: counts
+        plot_attr:
+          label: 'Green SKY'
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Saturated Lines
+      only_object: 
+        - autocal-thar-all-morn
+        - autocal-thar-all-eve
+        - autocal-thar-all-night
+        - autocal-thar-sci
+        - autocal-thar-sky
+        - autocal-thar-cal
+      not_junk: true
+      legend_frac_size: 0.25
+
+  - panelvars:
+      - col: NSATRS2
+        plot_type: scatter
+        unit: counts
+        plot_attr:
+          label: 'Red SCI2'
+          marker: .
+          linewidth: 0.5
+      - col: NSATRC
+        plot_type: scatter
+        unit: counts
+        plot_attr:
+          label: 'Red CAL'
+          marker: .
+          linewidth: 0.5
+      - col: NSATRK
+        plot_type: scatter
+        unit: counts
+        plot_attr:
+          label: 'Red SKY'
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Saturated Lines
+      title: Saturated Lines - ThAr
+      only_object: 
+        - autocal-thar-all-morn
+        - autocal-thar-all-eve
+        - autocal-thar-all-night
+        - autocal-thar-sci
+        - autocal-thar-sky
+        - autocal-thar-cal
+      not_junk: true
+      legend_frac_size: 0.25

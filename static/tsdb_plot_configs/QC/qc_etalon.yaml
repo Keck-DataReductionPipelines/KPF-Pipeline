@@ -1,0 +1,97 @@
+description: QC - Etalon Metrics
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: ETALINES
+        plot_type: state
+        plot_attr:
+          label: "Number and dist of\nEtalon lines sufficient"
+          marker: .
+    paneldict:
+      ylabel: "Number and dist of\nEtalon lines sufficient\n(ETALINES)"
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: ETALGK0
+        plot_type: plot
+        plot_attr:
+          label: "Max Good SKY Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALGK1
+        plot_type: plot
+        plot_attr:
+          label: "Min Good SKY Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALGS0
+        plot_type: plot
+        plot_attr:
+          label: "Max Good SCI Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALGS1
+        plot_type: plot
+        plot_attr:
+          label: "Min Good SCI Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALGC0
+        plot_type: plot
+        plot_attr:
+          label: "Max Good CAL Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALGC1
+        plot_type: plot
+        plot_attr:
+          label: "Min Good CAL Order"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Max/Min Good\nGreen Order"
+      not_junk: true
+      legend_frac_size: 0.30
+
+  - panelvars:
+      - col: ETALRK0
+        plot_type: plot
+        plot_attr:
+          label: "Max Good SKY Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALRK1
+        plot_type: plot
+        plot_attr:
+          label: "Min Good SKY Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALRS0
+        plot_type: plot
+        plot_attr:
+          label: "Max Good SCI Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALRS1
+        plot_type: plot
+        plot_attr:
+          label: "Min Good SCI Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALRC0
+        plot_type: plot
+        plot_attr:
+          label: "Max Good CAL Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALRC1
+        plot_type: plot
+        plot_attr:
+          label: "Min Good CAL Order"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Max/Min Good\nRed Order"
+      not_junk: true
+      legend_frac_size: 0.30
+      title: QC - Etalon Metrics

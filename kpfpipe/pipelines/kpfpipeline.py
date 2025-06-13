@@ -2,6 +2,8 @@
 # algorithm module. 
 from asyncio.log import logger
 import os
+import signal
+import sys
 import gc
 import time
 import glob
@@ -277,3 +279,9 @@ class KPFPipeline(BasePipeline):
         time.sleep(1)
 
         return Arguments(name="wait_complete")
+
+    def _pre(self):
+        pass
+
+    def _post(self):
+        pass

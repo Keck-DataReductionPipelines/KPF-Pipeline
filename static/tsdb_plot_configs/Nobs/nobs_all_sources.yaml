@@ -1,0 +1,9 @@
+description: All Sources - Number of Observations
+plot_type: nobs_histogram
+panel_arr:
+  - panelvars:
+    paneldict:
+      ylabel: "Number of Observations"
+      not_junk: true
+      plot_source: true
+

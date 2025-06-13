@@ -1,5 +1,7 @@
 import time
+import copy
 import numpy as np
+import seaborn as sns
 from datetime import datetime
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -9,6 +11,7 @@ from scipy.optimize import curve_fit
 from scipy.ndimage import median_filter
 from astropy.table import Table
 from astropy.time import Time
+from modules.Utils.utils import DummyLogger
 from modules.Utils.kpf_parse import HeaderParse
 from modules.Utils.utils import get_moon_sep, get_sun_alt
  
@@ -44,11 +47,8 @@ class AnalyzeGuider:
     """
 
     def __init__(self, L0, logger=None):
-        if logger:
-            self.logger = logger
-        else:
-            self.logger = None
-        self.L0 = L0
+        self.logger = logger if logger is not None else DummyLogger()
+        self.L0 = copy.deepcopy(L0)
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
 
         header_primary_obj = HeaderParse(L0, 'PRIMARY')
@@ -137,15 +137,22 @@ class AnalyzeGuider:
         Returns:
             None
         """
-
-        try:
-            self.x_rms = (np.nanmean(self.x_mas**2))**0.5
-            self.y_rms = (np.nanmean(self.y_mas**2))**0.5
-            self.r_rms = (np.nanmean(self.r_mas**2))**0.5
-            self.x_bias = np.nanmean(self.x_mas)
-            self.y_bias = np.nanmean(self.y_mas)
-        except:
-            print('Error computing guiding errors')
+        if self.nframes_uniq_mas > 10:
+            try:
+                self.x_rms = (np.nanmean(self.x_mas**2))**0.5
+                self.y_rms = (np.nanmean(self.y_mas**2))**0.5
+                self.r_rms = (np.nanmean(self.r_mas**2))**0.5
+                self.x_bias = np.nanmean(self.x_mas)
+                self.y_bias = np.nanmean(self.y_mas)
+            except:
+                self.logger.info('Error computing guiding errors')
+                self.x_rms = None
+                self.y_rms = None
+                self.r_rms = None
+                self.x_bias = None
+                self.y_bias = None
+        else:
+            self.logger.info('Error computing guiding errors.  Number of unique guiding errors = ' + str(self.nframes_uniq_mas) + '.')
             self.x_rms = None
             self.y_rms = None
             self.r_rms = None
@@ -153,7 +160,7 @@ class AnalyzeGuider:
             self.y_bias = None
 
 
-    def measure_seeing(self):
+    def measure_seeing(self, debug=False):
 
         """
         Compute the seeing from a stacked guider image.
@@ -202,7 +209,8 @@ class AnalyzeGuider:
         
         for alpha_guess in alpha_initial_guesses:
             try:
-                print(f"Trying to fit Guider image with alpha guess = {alpha_guess*0.056} arcsec.")
+                if debug:
+                    self.logger.info(f"Trying to fit Guider image with alpha guess = {alpha_guess*0.056} arcsec.")
                 # Update the initial guess with the current alpha value
                 p0 = [1, 343.1, 264.7, alpha_guess, 2.5]
                 if 'GCCRPIX1' in self.header:
@@ -236,8 +244,9 @@ class AnalyzeGuider:
             self.x0 = x0_fit
             self.y0 = y0_fit
             self.good_fit = True
-            print(f"Best fit found with alpha = {alpha_fit*0.056} arcsec.")
-            print("Fitted positions: " + str(self.x0*self.pixel_scale) + ", " + str(self.y0*self.pixel_scale))
+            if debug:
+                self.logger.info(f"Best fit found with alpha = {alpha_fit*0.056} arcsec.")
+                self.logger.ingo("Fitted positions: " + str(self.x0*self.pixel_scale) + ", " + str(self.y0*self.pixel_scale))
         else:
             self.good_fit = False
             print("No successful fit found.")
@@ -378,7 +387,7 @@ class AnalyzeGuider:
             
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(100, -40), textcoords='offset points')
@@ -418,7 +427,7 @@ class AnalyzeGuider:
         
         # Create the figure and subplots
         fig, axes = plt.subplots(1, 2, figsize=(16, 4), gridspec_kw={'width_ratios': [2, 1]}, tight_layout=True)
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
 
         # Plot the data
         if self.nframes_uniq_mas > 10:
@@ -480,7 +489,7 @@ class AnalyzeGuider:
         
         # Create the figure and subplots
         fig, axes = plt.subplots(4, 2, figsize=(16, 15), gridspec_kw={'width_ratios': [2, 1]}, tight_layout=True)
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
 
         # Count number of stars
         #nstars = []
@@ -655,7 +664,7 @@ class AnalyzeGuider:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -50), textcoords='offset points')
@@ -690,7 +699,7 @@ class AnalyzeGuider:
         """
 
         # Construct plots
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
         plt.figure(figsize=(8, 4), tight_layout=True)
         if self.nframes > 0:
             plt.plot(self.t-min(self.t), self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95), color='royalblue')
@@ -735,7 +744,7 @@ class AnalyzeGuider:
         fwhm = (self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5)
 
         # Construct plots
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
         plt.figure(figsize=(8, 4), tight_layout=True)
         if self.nframes > 0:
             plt.plot(self.t-min(self.t), fwhm, color='royalblue')

@@ -1,0 +1,1453 @@
+description: WLS Median Difference
+plot_type: time_series_multipanel
+panel_arr:
+
+# Green SCI      
+  - panelvars:
+      - col: MEDWGS00
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 00
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS01
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 01
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS02
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 02
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS03
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 03
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS04
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 04
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS05
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 05
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS06
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 06
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS07
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 07
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS08
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 08
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS09
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 09
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS10
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 10
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS11
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 11
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS12
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 12
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS13
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 13
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS14
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 14
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS15
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 15
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS16
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 16
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS17
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 17
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS18
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 18
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS19
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 19
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS20
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 20
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS21
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 21
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS22
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 22
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS23
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 23
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS24
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 24
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS25
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 25
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS26
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 26
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS27
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 27
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS28
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 28
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS29
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 29
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS30
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 30
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS31
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 31
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS32
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 32
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS33
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 33
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGS34
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SCI order 34
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Green SCI\nstdev(WLS-ref) [pix]"
+      not_junk: true
+      legend_frac_size: 0.25
+
+# Green CAL      
+  - panelvars:
+      - col: MEDWGC00
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 00
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC01
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 01
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC02
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 02
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC03
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 03
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC04
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 04
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC05
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 05
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC06
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 06
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC07
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 07
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC08
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 08
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC09
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 09
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC10
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 10
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC11
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 11
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC12
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 12
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC13
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 13
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC14
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 14
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC15
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 15
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC16
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 16
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC17
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 17
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC18
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 18
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC19
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 19
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC20
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 20
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC21
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 21
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC22
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 22
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC23
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 23
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC24
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 24
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC25
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 25
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC26
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 26
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC27
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 27
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC28
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 28
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC29
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 29
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC30
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 30
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC31
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 31
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC32
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 32
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC33
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 33
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGC34
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green CAL order 34
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Green CAL\nstdev(WLS-ref) [pix]"
+      not_junk: true
+      legend_frac_size: 0.25
+
+# Green SKY      
+  - panelvars:
+      - col: MEDWGK00
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 00
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK01
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 01
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK02
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 02
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK03
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 03
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK04
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 04
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK05
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 05
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK06
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 06
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK07
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 07
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK08
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 08
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK09
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 09
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK10
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 10
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK11
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 11
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK12
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 12
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK13
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 13
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK14
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 14
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK15
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 15
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK16
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 16
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK17
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 17
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK18
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 18
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK19
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 19
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK20
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 20
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK21
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 21
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK22
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 22
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK23
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 23
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK24
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 24
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK25
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 25
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK26
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 26
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK27
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 27
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK28
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 28
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK29
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 29
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK30
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 30
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK31
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 31
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK32
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 32
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK33
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 33
+          marker: .
+          linewidth: 0.5
+      - col: MEDWGK34
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Green SKY order 34
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Green SKY\nstdev(WLS-ref) [pix]"
+      not_junk: true
+      legend_frac_size: 0.25
+
+# Red SCI      
+  - panelvars:
+      - col: MEDWRS00
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 00
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS01
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 01
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS02
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 02
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS03
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 03
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS04
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 04
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS05
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 05
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS06
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 06
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS07
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 07
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS08
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 08
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS09
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 09
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS10
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 10
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS11
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 11
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS12
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 12
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS13
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 13
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS14
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 14
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS15
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 15
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS16
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 16
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS17
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 17
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS18
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 18
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS19
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 19
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS20
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 20
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS21
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 21
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS22
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 22
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS23
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 23
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS24
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 24
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS25
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 25
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS26
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 26
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS27
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 27
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS28
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 28
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS29
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 29
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS30
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 30
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRS31
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SCI order 31
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Red SCI\nstdev(WLS-ref) [pix]"
+      not_junk: true
+      legend_frac_size: 0.25
+
+# Red CAL      
+  - panelvars:
+      - col: MEDWRC00
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 00
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC01
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 01
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC02
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 02
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC03
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 03
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC04
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 04
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC05
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 05
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC06
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 06
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC07
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 07
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC08
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 08
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC09
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 09
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC10
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 10
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC11
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 11
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC12
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 12
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC13
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 13
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC14
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 14
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC15
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 15
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC16
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 16
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC17
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 17
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC18
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 18
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC19
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 19
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC20
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 20
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC21
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 21
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC22
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 22
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC23
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 23
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC24
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 24
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC25
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 25
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC26
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 26
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC27
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 27
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC28
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 28
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC29
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 29
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC30
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 30
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRC31
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red CAL order 31
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Red CAL\nstdev(WLS-ref) [pix]"
+      not_junk: true
+      legend_frac_size: 0.25
+
+# Red SKY      
+  - panelvars:
+      - col: MEDWRK00
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 00
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK01
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 01
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK02
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 02
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK03
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 03
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK04
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 04
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK05
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 05
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK06
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 06
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK07
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 07
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK08
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 08
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK09
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 09
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK10
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 10
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK11
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 11
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK12
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 12
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK13
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 13
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK14
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 14
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK15
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 15
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK16
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 16
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK17
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 17
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK18
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 18
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK19
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 19
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK20
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 20
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK21
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 21
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK22
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 22
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK23
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 23
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK24
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 24
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK25
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 25
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK26
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 26
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK27
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 27
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK28
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 28
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK29
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 29
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK30
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 30
+          marker: .
+          linewidth: 0.5
+      - col: MEDWRK31
+        plot_type: scatter
+        unit: pixels
+        plot_attr:
+          label: Red SKY order 31
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Red SKY\nstdev(WLS-ref) [pix]"
+      not_junk: true
+      title: WLS Median Difference (L1 - L1_ref)
+      legend_frac_size: 0.25

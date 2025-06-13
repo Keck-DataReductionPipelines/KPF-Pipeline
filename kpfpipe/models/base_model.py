@@ -128,7 +128,7 @@ class KPFDataModel(object):
         self.header['RECEIPT'] = fits.Header()
         self.header['CONFIG'] = fits.Header()
 
-        self.receipt = pd.DataFrame([], columns=RECEIPT_COL)
+        self.receipt = pd.DataFrame([], columns=RECEIPT_COL).astype(str)
         self.RECEIPT = self.receipt
 
         self.config = pd.DataFrame([], columns=CONFIG_COL)
@@ -181,6 +181,7 @@ class KPFDataModel(object):
         if not os.path.isfile(fn):
             raise IOError(f'{fn} does not exist.')
             # this_data.to_fits(fn)
+
         # populate it with self.read()
         this_data.read(fn, data_type=data_type)
         # Return this instance
@@ -219,7 +220,7 @@ class KPFDataModel(object):
             for hdu in hdu_list:
                 if isinstance(hdu, fits.PrimaryHDU):
                     self.header[hdu.name] = hdu.header
-                elif isinstance(hdu, fits.BinTableHDU):
+                elif isinstance(hdu, fits.BinTableHDU) and not isinstance(hdu, fits.CompImageHDU):
                     t = Table.read(hdu)
                     if 'RECEIPT' in hdu.name:
                         # Table contains the RECEIPT
@@ -245,20 +246,22 @@ class KPFDataModel(object):
         # to hack astronomical data files.  If something more secure is is needed,
         # substitute hashlib.sha256 for hashlib.md5
         md5 = hashlib.md5()
+        self.receipt_add_entry('from_fits', self.__module__,
+                               f'fn={fn}', 'PASS', 
+                               comment=f'md5_sum={md5.hexdigest()}')
         with open(fn, 'rb') as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 md5.update(chunk)
-        self.receipt_add_entry('from_fits', self.__module__,
-                               f'md5_sum={md5.hexdigest()}', 'PASS')
 
     
-    def to_fits(self, fn):
+    def to_fits(self, fn, compressed=False):
         """
         Collect the content of this instance into a monolithic FITS file
 
         Args: 
             fn (str): file path
-
+            compressed (bool): if True, compress the file using the compression type specified in KPF_definitions.py
+                [default=True]                            
         Note:
             Can only write to KPF formatted FITS 
 
@@ -271,7 +274,7 @@ class KPFDataModel(object):
         if gen_hdul is None:
             raise TypeError('Write method not found. Is this the base class?')
         else: 
-            hdu_list = gen_hdul()
+            hdu_list = gen_hdul(compressed=compressed)
         
         # check that no card in any HDU is greater than 80
         # this is a hard limit by FITS 
@@ -281,6 +284,9 @@ class KPFDataModel(object):
             elif 'PRIMARY' in hdu.header.keys():
                 del hdu.header['PRIMARY']
             
+        # Add receipt
+        self.receipt_add_entry('to_fits', self.__module__, f'fn={fn}', 'PASS')
+
         # finish up writing
         hdul = fits.HDUList(hdu_list)
         if not os.path.isdir(os.path.dirname(fn)):
@@ -290,7 +296,7 @@ class KPFDataModel(object):
 
 # =============================================================================
 # Receipt related members
-    def receipt_add_entry(self, module, mod_path, param, status, chip='all'):
+    def receipt_add_entry(self, module, mod_path, param, status, chip='all', comment=' '):
         '''
         Add an entry to the receipt
 
@@ -326,15 +332,17 @@ class KPFDataModel(object):
         # add the row to the bottom of the table
         row = {'Time': time,
                'Code_Release': git_tag,
-               'Commit_Hash': git_commit_hash,
                'Branch_Name': git_branch,
-               'Chip': chip,
-               'Module_Name': module,
                'Module_Level': str(self.level),
-               'Module_Path': mod_path,
+               'Module_Name': module,
                'Module_Param': param,
+               'Module_Path': mod_path,
+               'Comment': str(comment),
+               'Chip': chip,
+               'Commit_Hash': git_commit_hash,
                'Status': status}
-        self.receipt = self.receipt.append(row, ignore_index=True)
+
+        self.receipt = pd.concat([self.receipt, pd.DataFrame([row])], ignore_index=True)
         self.RECEIPT = self.receipt
 
         # add DRPTAG and DRPHASH to primary header

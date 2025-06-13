@@ -9,5 +9,6 @@ The sections below describe the data products and data reduction pipeline (DRP) 
    drp_overview.rst
    drp_algorithms.rst
    data_format.rst
+   masters_format.rst
    calibrations.rst
    data_faq.rst

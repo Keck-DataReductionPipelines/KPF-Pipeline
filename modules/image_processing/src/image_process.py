@@ -21,45 +21,45 @@ from modules.image_processing.src.alg import ImageProcessingAlg
 DEFAULT_CFG_PATH = 'modules/image_processing/configs/default.cfg'
 
 class ImageProcessing(KPF0_Primitive):
-    """This module defines class `ImageProcessing` which inherits from
-    `KPF0_Primitive` and provides methods to perform the event `bias
-    subtraction`, `dark_subtraction`, and `cosmic_ray_masking` in the recipe.
+    """
+    Pipeline primitive for KPF Level 0 image processing.
+
+    This class provides methods to perform image processing actions such as bias subtraction,
+    dark subtraction, flat division, cosmic ray masking, background subtraction, and bad pixel masking
+    on KPF0 data. The specific action is determined by the type of the correcting file or an action string.
+
+    Available action types:
+        - Bias: Subtracts a master bias frame from the raw image.
+        - Dark: Subtracts a master dark frame from the raw image.
+        - Flat: Divides the raw image by a flat field frame.
+        - Remove_Cosmics: Masks cosmic rays using the astroscrappy algorithm.
+        - Background_Subtraction: Subtracts background using an ordermask file.
+        - pixelmask: Masks bad pixels using a provided mask.
+
+    To add new actions, modify the `DEFINED_ACTIONS` list or set the IMTYPE in the header of the correcting file.
 
     Args:
-        KPF0_Primitive: Parent class
-
-        action (keckdrpframework.models.action.Action): Contains positional
-        arguments and keyword arguments passed by the `ImageProcessing` event
-        issued in recipe.
-
-        context (keckdrpframework.models.processing_context.ProcessingContext):
-            Contains path of config file defined for `bias_subtraction` module
-            in master config file associated with recipe.
+        action (keckdrpframework.models.action.Action): Contains positional and keyword arguments
+            passed by the `ImageProcessing` event issued in the recipe.
+            - action.args[0]: KPF0 instance containing the raw image data.
+            - action.args[1]: KPF0 instance with the correcting file (e.g., master bias, dark, flat)
+              or a string specifying an action (e.g., "remove_cosmics").
+            - action.args[2]: KPF0 instance containing FITS FFI extension(s) list.
+            - action.args[3]: KPF0 instance specifying the instrument/data type.
+            - action.args[4]: KPF0 instance indicating quicklook toggle (True/False).
+        context (keckdrpframework.models.processing_context.ProcessingContext): Contains
+            the path to the config file for image processing, as defined in the master config file.
 
     Attributes:
-        rawdata (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by
-            `actions.args[0]`
-
-        masterbias (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned
-            by `actions.args[1]`
-
-        ffi_exts(kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned by
-            `actions.args[2]`
-
-        data_type (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned
-            by `actions.args[3]`
-
-        quicklook (kpfpipe.models.level0.KPF0): Instance of `KPF0`,  assigned
-            by `actions.args[4]`
-
-        config_path (str): Path of config file for the computation of bias subtraction.
-
-        config (configparser.ConfigParser): Config context.
-
-        logger (logging.Logger): Instance of logging.Logger
-
-        alg (modules.bias_subtraction.src.alg.ImageProcessing): Instance of
-            `ImageProcessing,` which has operation codes for image processing.
+        raw_file (KPF0): The raw image data.
+        correcting_file_or_action (KPF0 or str): The correcting file or action string.
+        ffi_exts (KPF0): FITS FFI extension(s) list.
+        data_type (KPF0): Instrument/data type.
+        quicklook (KPF0): Quicklook toggle.
+        config_path (str): Path to the configuration file for image processing.
+        config (configparser.ConfigParser): Parsed configuration.
+        logger (logging.Logger): Logger instance.
+        alg (ImageProcessingAlg): Image processing algorithm handler.
     """
     def __init__(self,
                 action:Action,
@@ -146,7 +146,6 @@ class ImageProcessing(KPF0_Primitive):
 
         DEFINED_ACTIONS = ['remove_cosmics']
 
-        
         if self.correcting_file_or_action not in DEFINED_ACTIONS:
             #until master file part of data model is fixed
             if isinstance(self.correcting_file_or_action, KPF0):
@@ -163,7 +162,6 @@ class ImageProcessing(KPF0_Primitive):
                 action_type = 'Background_Subtraction'
             else:
                 action_type = correcting_file_or_action.header['PRIMARY']['IMTYPE']
-            print(action_type)
 
         else:
             if self.correcting_file_or_action == 'remove_cosmics':
@@ -186,7 +184,7 @@ class ImageProcessing(KPF0_Primitive):
         if action_type == 'Flat':
             if self.logger:
                 self.logger.info(
-                    f'Flat Division: dividing out flat frame from raw FFI(s)'
+                    f'Flat Division: dividing out flat frame {correcting_file_or_action} from raw FFI(s)'
                 )
             flat_corrected = self.alg.flat_division(correcting_file_or_action)
 
@@ -210,6 +208,5 @@ class ImageProcessing(KPF0_Primitive):
                     f'Bad pixel masking: masking bad pixels in FFI(s) {self.ffi_exts}'
                 )
             self.alg.bad_pixel_mask(correcting_file_or_action)
-
 
         return Arguments(self.alg.get())

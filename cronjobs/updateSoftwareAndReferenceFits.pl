@@ -1,18 +1,35 @@
-#! /usr/local/bin/perl
+#! /usr/bin/perl
 
 use strict;
 use warnings;
 
 select STDERR; $| = 1; select STDOUT; $| = 1;
 
-my $swdir = '/data/user/rlaher/git/KPF-Pipeline';
-&updateSoftwareWithGitPull($swdir);
 
-my $privaterefdir = '/data/user/rlaher/sbx/reference_fits';
+# Sandbox directory for intermediate files.
+# E.g., /data/user/rlaher/sbx
+my $sandbox = $ENV{KPFCRONJOB_SBX};
+
+if (! (defined $sandbox)) {
+    die "*** Env. var. KPFCRONJOB_SBX not set; quitting...\n";
+}
+
+# Code directory of KPF-Pipeline git repo where the docker run command is executed.
+# E.g., /data/user/rlaher/git/KPF-Pipeline
+my $codedir = $ENV{KPFCRONJOB_CODE};
+
+if (! (defined $codedir)) {
+    die "*** Env. var. KPFCRONJOB_CODE not set; quitting...\n";
+}
+
+
+&updateSoftwareWithGitPull($codedir);
+
+my $privaterefdir = $sandbox . '/reference_fits';
 my $publicrefdir = '/data/kpf/reference_fits';
 &updateReferenceFits($privaterefdir,$publicrefdir);
 
-my $privaterefdir2 = '/data/user/rlaher/sbx/reference';
+my $privaterefdir2 = $sandbox . '/reference';
 my $publicrefdir2 = '/data/kpf/reference';
 &updateReference($privaterefdir2,$publicrefdir2);
 

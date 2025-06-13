@@ -178,7 +178,7 @@ class WaveCalibrate(KPF1_Primitive):
                         peak_wavelengths_ang = pd.read_csv(self.linelist_path,
                                                            header=None,
                                                            names=['wave', 'weight'],
-                                                           delim_whitespace=True)
+                                                           sep='\s+')
                         peak_wavelengths_ang = peak_wavelengths_ang.query('weight == 1')
                     else:
                         raise ValueError('ThAr run requires linelist_path')
@@ -295,7 +295,21 @@ class WaveCalibrate(KPF1_Primitive):
         peak_wavelengths_ang = None
 
         lfc_allowed_wls = self.alg.comb_gen(comb_f0, comb_fr)
+        if self.save_wl_pixel_toggle:
+            try:
+                maskdir = os.path.join(self.output_dir, "wlpixelfiles")
+                os.makedirs(maskdir, exist_ok=True)
 
+                mask_fname = os.path.join(
+                    maskdir, f"LFCmask_{self.file_name}.csv"
+                )
+                if not os.path.exists(mask_fname):
+                    self.alg.save_lfc_mask(mask_fname, lfc_allowed_wls)
+                    
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Could not save LFC mask: {e}")
+        
         wl_soln, wls_and_pixels, orderlet_dict = self.alg.run_wavelength_cal(
             calflux, peak_wavelengths_ang=peak_wavelengths_ang,
             rough_wls=self.rough_wls, 

@@ -1,0 +1,50 @@
+description: Hollow-Cathode Lamp Temperatures
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: kpfmet.TEMP
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Hallway
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Hallway\nTemperature (C)
+      not_junk: true
+      legend_frac_size: 0.20
+
+  - panelvars:
+      - col: kpfmet.TH_DAILY
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Th-Ar Daily
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.TH_GOLD
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: Th-Ar Gold
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.U_DAILY
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: U-Ar Daily
+          marker: .
+          linewidth: 0.5
+      - col: kpfmet.U_GOLD
+        plot_type: scatter
+        unit: K
+        plot_attr:
+          label: U-Ar Gold
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Cal Lamp\nTemperatures (C)
+      not_junk: true
+      title: Hollow-Cathode Lamp Temperatures
+      legend_frac_size: 0.20

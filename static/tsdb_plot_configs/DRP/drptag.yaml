@@ -1,0 +1,48 @@
+description: KPF-Pipeline Version Number
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: DRPTAG2D
+        plot_type: state
+        plot_attr:
+          label: DRP Version - 2D
+          marker: .
+    paneldict:
+      ylabel: DRP Version - 2D
+      not_junk: true
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: DRPTAGL1
+        plot_type: state
+        plot_attr:
+          label: DRP Version - L1
+          marker: .
+    paneldict:
+      ylabel: DRP Version - L1
+      not_junk: true
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: DRPTAGL2
+        plot_type: state
+        plot_attr:
+          label: DRP Version - L2
+          marker: .
+    paneldict:
+      ylabel: DRP Version - L2
+      title: KPF-Pipeline Version Number
+      not_junk: true
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: KPFERA
+        plot_type: state
+        plot_attr:
+          label: KPF ERA
+          marker: .
+    paneldict:
+      ylabel: KPF ERA
+      title: KPF-Pipeline Version Number
+      not_junk: true
+      legend_frac_size: 0.15

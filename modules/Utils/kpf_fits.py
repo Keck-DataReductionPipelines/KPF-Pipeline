@@ -59,7 +59,7 @@ class FitsHeaders:
         self.input_fits_files = glob.glob(search_path)
         if logger:
             self.logger = logger
-            self.logger.debug('FitsHeaders class constructor: self.input_fits_files = {}'.format(self.input_fits_files))
+            self.logger.info('FitsHeaders class constructor: self.input_fits_files = {}'.format(self.input_fits_files))
         else:
             print("Starting logger...")
             self.logger = start_logger(self.__class__.__name__, 'configs/framework_logger.cfg')
@@ -96,14 +96,14 @@ class FitsHeaders:
                 except KeyError as err:
 
                     if self.logger:
-                        self.logger.debug('KeyError: {} ({}); skipping...'.format(err,fits_file))
+                        self.logger.info('KeyError: {} ({}); skipping...'.format(err,fits_file))
                     else:
                         print('---->KeyError: {} ({}); skipping...'.format(err,fits_file))
 
                 except TypeError as err:
 
                     if self.logger:
-                        self.logger.debug('TypeError: {} ({}); skipping...'.format(err,fits_file))
+                        self.logger.info('TypeError: {} ({}); skipping...'.format(err,fits_file))
                     else:
                         print('---->TypeError: {} ({}); skipping...'.format(err,fits_file))
 
@@ -113,7 +113,7 @@ class FitsHeaders:
             hdul.close()
 
         if self.logger:
-             self.logger.debug('FitsHeaders.match_headers_string_lower(): matched_fits_files = {}'.\
+             self.logger.info('FitsHeaders.match_headers_string_lower(): matched_fits_files = {}'.\
                    format(matched_fits_files))
         else:
             print('---->FitsHeaders.match_headers_string_lower(): matched_fits_files = {}'.\
@@ -142,7 +142,7 @@ class FitsHeaders:
                     val = fits.getval(fits_file, self.header_keywords[i])
 
                     if self.logger:
-                        self.logger.debug('FitsHeaders.match_headers_float_le(): file,i,keyword,input_value,header_value = {},{},{},{},{}'.\
+                        self.logger.info('FitsHeaders.match_headers_float_le(): file,i,keyword,input_value,header_value = {},{},{},{},{}'.\
                             format(fits_file,i,self.header_keywords[i],input_value,val))
                     else:
                         print('---->FitsHeaders.match_headers_float_le(): file,i,keyword,input_value,header_value = {},{},{},{},{}'.\
@@ -156,29 +156,22 @@ class FitsHeaders:
                     except ValueError as err2:
 
                         if self.logger:
-                            self.logger.debug('ValueError: {}; skipping...'.format(err2))
+                            self.logger.info('ValueError: {}; skipping...'.format(err2))
                         else:
                             print('---->ValueError: {}; skipping...'.format(err2))
 
-                except KeyError as err:
+                except Exception as err:
 
-                    if self.logger:
-                        self.logger.debug('KeyError: {}; skipping...'.format(err))
+                    if self.logger is not None:
+                        self.logger.info('Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
                     else:
-                        print('---->KeyError: {}; skipping...'.format(err))
-
-                except TypeError as err:
-
-                    if self.logger:
-                        self.logger.debug('TypeError: {}; skipping...'.format(err))
-                    else:
-                        print('---->TypeError: {}; skipping...'.format(err))
+                        print('---->Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
 
             if match_count == self.n_header_keywords:
                 matched_fits_files.append(fits_file)
 
         if self.logger:
-             self.logger.debug('FitsHeaders.match_headers_float_le(): matched_fits_files = {}'.\
+             self.logger.info('FitsHeaders.match_headers_float_le(): matched_fits_files = {}'.\
                    format(matched_fits_files))
         else:
             print('---->FitsHeaders.match_headers_float_le(): matched_fits_files = {}'.\
@@ -190,7 +183,7 @@ class FitsHeaders:
 
         """
         Return list of flat files defined by IMTYPE=‘flatlamp’, but exclude
-        those that either don't have  SCI-OBJ == CAL-OBJ and SKY-OBJ == CALOBJ
+        those that either don't have  SCI-OBJ == CAL-OBJ and SKY-OBJ == CAL-OBJ
         or those with SCI-OBJ == "" or SCI-OBJ == "None".
         """
 
@@ -206,35 +199,28 @@ class FitsHeaders:
                 val1 = fits.getval(fits_file, 'SCI-OBJ')
                 val2 = fits.getval(fits_file, 'CAL-OBJ')
                 val3 = fits.getval(fits_file, 'SKY-OBJ')
-                val4 = fits.getval(fits_file, 'ELAPSED')        # Require EXPTIME <= 2.0 seconds to avoid saturation.
+                val4 = fits.getval(fits_file, 'ELAPSED')        # Require EXPTIME <= 11.0 seconds to avoid saturation.
 
-                if ((val1 == val2) and (val2 == val3) and (val1 != '') and (val1.lower() != 'none') and (val4 <= 2.0)):
+                if ((val1 == val2) and (val2 == val3) and (val1 != '') and (val1.lower() != 'none') and (val4 <= 11.0)):
                     flag = 'keep'
                     filtered_matched_fits_files.append(fits_file)
 
                 if self.logger:
-                    self.logger.debug('flag,val1,val2,val3,val1.lower(),val4 = {},{},{},{},[{}],{}'.\
+                    self.logger.info('flag,val1,val2,val3,val1.lower(),val4 = {},{},{},{},[{}],{}'.\
                         format(flag,val1,val2,val3,val1.lower(),val4))
                 else:
                     print('---->flag,val1,val2,val3,val1.lower(),val4 = {},{},{},{},[{}],{}'.\
                         format(flag,val1,val2,val3,val1.lower(),val4))
 
-            except KeyError as err:
+            except Exception as err:
 
-                if self.logger:
-                    self.logger.debug('KeyError: {}; removing {} from list...'.format(err,fits_file))
+                if self.logger is not None:
+                    self.logger.info('Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
                 else:
-                    print('---->KeyError: {}; removing {} from list...'.format(err,fits_file))
-
-            except TypeError as err:
-
-                if self.logger:
-                    self.logger.debug('TypeError: {}; removing {} from list...'.format(err,fits_file))
-                else:
-                    print('---->TypeError: {}; removing {} from list...'.format(err,fits_file))
+                    print('---->Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
 
         if self.logger:
-             self.logger.debug('FitsHeaders.get_good_flats(): filtered_matched_fits_files = {}'.\
+             self.logger.info('FitsHeaders.get_good_flats(): filtered_matched_fits_files = {}'.\
                    format(filtered_matched_fits_files))
         else:
             print('---->FitsHeaders.get_good_flats(): filtered_matched_fits_files = {}'.\
@@ -255,7 +241,7 @@ class FitsHeaders:
         for fits_file in matched_fits_files:
 
             hdul = fits.open(fits_file)
-            
+
             flag = 'remove'
 
             try:
@@ -270,30 +256,23 @@ class FitsHeaders:
                         all_dark_objects.append(obj)
 
                 if self.logger:
-                    self.logger.debug('flag,val4 = {},{}'.\
+                    self.logger.info('flag,val4 = {},{}'.\
                         format(flag,val4))
                 else:
                     print('---->flag,val4 = {},{}'.\
                         format(flag,val4))
 
-            except KeyError as err:
+            except Exception as err:
 
-                if self.logger:
-                    self.logger.debug('KeyError: {}; removing {} from list...'.format(err,fits_file))
+                if self.logger is not None:
+                    self.logger.info('Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
                 else:
-                    print('---->KeyError: {}; removing {} from list...'.format(err,fits_file))
+                    print('---->Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
 
-            except TypeError as err:
-
-                if self.logger:
-                    self.logger.debug('TypeError: {}; removing {} from list...'.format(err,fits_file))
-                else:
-                    print('---->TypeError: {}; removing {} from list...'.format(err,fits_file))
-                
             hdul.close()
 
         if self.logger:
-             self.logger.debug('FitsHeaders.get_good_darks(): filtered_matched_fits_files = {}'.\
+             self.logger.info('FitsHeaders.get_good_darks(): filtered_matched_fits_files = {}'.\
                    format(filtered_matched_fits_files))
         else:
             print('---->FitsHeaders.get_good_darks(): filtered_matched_fits_files = {}'.\
@@ -327,27 +306,38 @@ class FitsHeaders:
                 except KeyError as err:
 
                     if self.logger:
-                        self.logger.debug('KeyError: {} ({}); skipping...'.format(err,fits_file))
+                        self.logger.info('KeyError: {} ({}); skipping...'.format(err,fits_file))
                     else:
                         print('---->KeyError: {} ({}); skipping...'.format(err,fits_file))
 
                 except TypeError as err:
 
                     if self.logger:
-                        self.logger.debug('TypeError: {} ({}); skipping...'.format(err,fits_file))
+                        self.logger.info('TypeError: {} ({}); skipping...'.format(err,fits_file))
                     else:
                         print('---->TypeError: {} ({}); skipping...'.format(err,fits_file))
 
             if match_count == self.n_header_keywords:
-                matched_fits_files.append(fits_file)
-                obj = hdul[0].header['OBJECT']
-                if obj not in all_arclamp_objects:
-                    all_arclamp_objects.append(obj)
-                
+
+                try:
+
+                    obj = hdul[0].header['OBJECT']
+                    matched_fits_files.append(fits_file)
+                    if obj not in all_arclamp_objects:
+                        all_arclamp_objects.append(obj)
+
+                except KeyError as err:
+
+                    if self.logger:
+                        self.logger.info('KeyError: {} ({}); skipping...'.format(err,fits_file))
+                    else:
+                        print('---->KeyError: {} ({}); skipping...'.format(err,fits_file))
+
+
             hdul.close()
 
         if self.logger:
-             self.logger.debug('FitsHeaders.get_good_arclamps(): matched_fits_files = {}'.\
+             self.logger.info('FitsHeaders.get_good_arclamps(): matched_fits_files = {}'.\
                    format(matched_fits_files))
         else:
             print('---->FitsHeaders.get_good_arclamps(): matched_fits_files = {}'.\
@@ -362,7 +352,7 @@ class FitsHeaders:
         with EXPTIME less than or equal to the specified maximum exposure time.
         """
 
-        exptime_maximum = 0.0
+        exptime_maximum = 0.1      # ELAPSED can be slightly greater than zero!
 
         matched_fits_files = self.match_headers_string_lower()
 
@@ -376,40 +366,52 @@ class FitsHeaders:
 
             try:
 
-                val4 = float(fits.getval(fits_file, 'ELAPSED'))
+                # These keyword must indicate closed shutters:
+                # SCISEL = 'closed ' / Science Select shutter at exp. midpoint
+                # SKYSEL = 'closed ' / Sky Select Shutter at exp. midpoint
+                # FFSHTR = 'closed ' / Flat field fiber shutter at exp. midpoint
+                # SCRAMSHT= 'closed ' / Scrambler shutter at exp. midpoint
+                # SIMCALSH= 'closed ' / Simult Cal shutter at exp. midpoint
 
-                if (val4 <= exptime_maximum):
-                    flag = 'keep'
-                    filtered_matched_fits_files.append(fits_file)
-                    obj = hdul[0].header['OBJECT']
-                    if obj not in all_bias_objects:
-                        all_bias_objects.append(obj)
+                SCISEL = hdul[0].header['SCISEL']
+                SKYSEL = hdul[0].header['SKYSEL']
+                FFSHTR = hdul[0].header['FFSHTR']
+                SCRAMSHT = hdul[0].header['SCRAMSHT']
+                SIMCALSH = hdul[0].header['SIMCALSH']
+
+                ELAPSED = hdul[0].header['ELAPSED']
+
+                if 'closed' in SCISEL and \
+                   'closed' in SKYSEL and \
+                   'closed' in FFSHTR and \
+                   'closed' in SCRAMSHT and \
+                   'closed' in SIMCALSH:
+
+                    if (ELAPSED <= exptime_maximum):
+                        flag = 'keep'
+                        filtered_matched_fits_files.append(fits_file)
+                        obj = hdul[0].header['OBJECT']
+                        if obj not in all_bias_objects:
+                            all_bias_objects.append(obj)
 
                 if self.logger:
-                    self.logger.debug('flag,val4 = {},{}'.\
-                        format(flag,val4))
+                    self.logger.info('flag,ELAPSED = {},{}'.\
+                        format(flag,ELAPSED))
                 else:
-                    print('---->flag,val4 = {},{}'.\
-                        format(flag,val4))
+                    print('---->flag,ELAPSED = {},{}'.\
+                        format(flag,ELAPSED))
 
-            except KeyError as err:
+            except Exception as err:
 
-                if self.logger:
-                    self.logger.debug('KeyError: {}; removing {} from list...'.format(err,fits_file))
+                if self.logger is not None:
+                    self.logger.info('Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
                 else:
-                    print('---->KeyError: {}; removing {} from list...'.format(err,fits_file))
+                    print('---->Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
 
-            except TypeError as err:
-
-                if self.logger:
-                    self.logger.debug('TypeError: {}; removing {} from list...'.format(err,fits_file))
-                else:
-                    print('---->TypeError: {}; removing {} from list...'.format(err,fits_file))
-                
             hdul.close()
 
         if self.logger:
-             self.logger.debug('FitsHeaders.get_good_biases(): filtered_matched_fits_files = {}'.\
+             self.logger.info('FitsHeaders.get_good_biases(): filtered_matched_fits_files = {}'.\
                    format(filtered_matched_fits_files))
         else:
             print('---->FitsHeaders.get_good_biases(): filtered_matched_fits_files = {}'.\

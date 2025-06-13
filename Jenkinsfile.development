@@ -1,0 +1,83 @@
+pipeline {
+  agent any
+
+  options {
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(daysToKeepStr:'30', numToKeepStr:'30'))
+    timestamps()
+  }
+
+  environment {
+    // We’ll copy the host’s ci-data into WORKSPACE/ci-data
+    CI_DATA_DIR      = "${env.WORKSPACE}/ci-data"
+    KPFPIPE_TEST_DATA = "/data/KPF-Pipeline-TestData"
+    KPFPIPE_DATA      = "${env.CI_DATA_DIR}"
+  }
+
+  stages {
+    stage('Clean & Checkout') {
+      steps {
+        cleanWs()
+        checkout scm
+      }
+    }
+
+    stage('Prepare CI Data') {
+      steps {
+        // Copy the minimal ci-data tree into this build's workspace
+        sh '''
+          rm -rvf "${CI_DATA_DIR}"
+          mkdir -p "${CI_DATA_DIR}"
+          cp -rv /data/kpf/ci-data/* "${CI_DATA_DIR}/"
+          cp -rv /data/kpf/reference_fits "${CI_DATA_DIR}/"
+        '''
+      }
+    }
+
+    stage('Build & Test') {
+      when {
+        anyOf {
+          // Dev CI: PRs into develop from non-master/dev branches
+          allOf {
+            changeRequest()
+            expression { env.CHANGE_TARGET == 'develop' }
+            not { branch 'master' }
+            not { branch 'develop' }
+          }
+          // CI for PRs: PRs from develop into master
+          allOf {
+            changeRequest()
+            branch 'develop'
+            expression { env.CHANGE_TARGET == 'master' }
+          }
+          // CI for direct pushes to master
+          branch 'master'
+        }
+      }
+      steps {
+        // sanity‑check
+        sh 'ls -R "${CI_DATA_DIR}"'
+
+        // build & run your tests, mounting only this workspace dir
+        sh """
+          docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
+          docker run --rm \
+            --network=host \
+            -e COVERALLS_REPO_TOKEN=VQhy1molIcAo0rTz2geFOhucmvkBiEPFc \
+            -e CI_PULL_REQUEST=\$ghprbPullId \
+            -v \"\${PWD}:/code/KPF-Pipeline\" \
+            -v \"${CI_DATA_DIR}:/data" \
+            -v \"${CI_DATA_DIR}/masters:/masters" \
+            -v \"${KPFPIPE_TEST_DATA}:/testdata" \
+            -e TSDBSERVER=127.0.0.1 \
+            -e TSDBPORT=6127 \
+            -e TSDBNAME=timeseriesopsdb \
+            -e \"TSDBUSER=${KPFPIPE_TSDB_USER}\" \
+            -e \"TSDBPASS=${KPFPIPE_TSDB_PASS}\" \
+            kpf-drp:latest \
+            make init regression_tests
+        """
+      }
+    }
+  }
+}

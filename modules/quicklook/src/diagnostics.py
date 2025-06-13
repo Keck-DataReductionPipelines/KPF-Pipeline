@@ -1,10 +1,14 @@
 # This file contains methods to write diagnostic information to the KPF headers.
 
 # Standard dependencies
+import os
 import traceback
 import numpy as np
+from datetime import datetime, timedelta
+from astropy.time import Time
 
 # Local dependencies
+from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
@@ -12,9 +16,95 @@ from modules.quicklook.src.analyze_hk import AnalyzeHK
 from modules.quicklook.src.analyze_em import AnalyzeEM
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l1 import uncertainty_median
+from modules.quicklook.src.analyze_l2 import AnalyzeL2
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
+from modules.Utils.kpf_parse import get_data_products_L2
+from modules.Utils.kpf_parse import get_datecode_from_filename
+from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected
 from modules.Utils.utils import get_moon_sep, get_sun_alt
+from modules.calibration_lookup.src.alg import GetCalibrations
+
+DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../calibration_lookup/configs/default.cfg')
+DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
+
+
+def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
+    """
+    Adds keywords to the L0 object header for a read noise metric equal to 
+        (0.7979*stdev(region)/mad(region)), where stdev 
+        is the standard deviation of a given overscan region, mad is the mean 
+        absolute deviation of a given overscan region.  
+        This should be = 1.00 for Gaussian noise.  
+        
+        For a simple noise model with two Gaussians centered on zero with 
+        a ratio of sigma values s and with the high-noise Gaussian having 
+        a relative total flux (area under the Gaussian) f, 
+        this metric: 0.7979*stdev(region)/mad(region) = f * (s^2 - 1)
+    
+    Keywords:
+        RNNGGR1 - Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan
+        RNNGGR2 - Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan
+        RNNGGR3 - Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan
+        RNNGGR4 - Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan
+        RNNGRD1 - Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan
+        RNNGRD2 - Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan
+        RNNGRD3 - Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan
+        RNNGRD4 - Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan
+
+    Args:
+        L0 - a KPF L0 object 
+
+    Returns:
+        L0 - a L0 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L0(L0)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L0)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        logger.info('Not a valid L0 or no Gree/Red CCD data.')
+        return L0
+        
+    # Use the AnalyzeL0 class measure non-Gaussian read noise
+    try:
+        myL0 = AnalyzeL0(L0, logger=logger)
+        for chip in chips:
+            if chip == 'green':
+                try:
+                    if 'GREEN_AMP1' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGGR1'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP1'],5), 'Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan')
+                    if 'GREEN_AMP2' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGGR2'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP2'],5), 'Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan')
+                    if 'GREEN_AMP3' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGGR3'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP3'],5), 'Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan')
+                    if 'GREEN_AMP4' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGGR4'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP4'],5), 'Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan')
+                except Exception as e:
+                    logger.error(f"Problem with L0 non-Gaussian read noise measurements Green: {e}\n{traceback.format_exc()}")
+            if chip == 'red':
+                try:
+                    if 'RED_AMP1' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGRD1'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP1'],5), 'Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan')
+                    if 'RED_AMP2' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGRD2'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP2'],5), 'Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan')
+                    if 'RED_AMP3' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGRD3'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP3'],5), 'Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan')
+                    if 'RED_AMP4' in myL0.std_mad_norm_ratio_overscan:
+                        L0.header['PRIMARY']['RNNGRD4'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP4'],5), 'Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan')
+                except Exception as e:
+                    logger.error(f"Problem with L0 non-Gaussian read noise measurements Red: {e}\n{traceback.format_exc()}")
+    except:
+        logger.error(f"Problem with L0 non-Gaussian read noise measurements: {e}\n{traceback.format_exc()}")
+
+    return L0
+
 
 def add_headers_2D_flux(D2, logger=None):
     """
@@ -31,10 +121,10 @@ def add_headers_2D_flux(D2, logger=None):
         RD2DF10P - 10th percentile flux in the 2D Red image (e-)
 
     Args:
-        D2 - a KPF L1 object 
+        D2 - a KPF 2D object 
 
     Returns:
-        D2 - a L1 file with header keywords added
+        D2 - a 2D file with header keywords added
     """
 
     if logger == None:
@@ -47,7 +137,7 @@ def add_headers_2D_flux(D2, logger=None):
     
     # Check that the input object is of the right type
     if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
-        print('Not a valid 2D KPF file.')
+        logger.info('Not a valid 2D or no Gree/Red CCD data.')
         return D2
         
     # Use the Analyze2D class to compute flux
@@ -55,21 +145,22 @@ def add_headers_2D_flux(D2, logger=None):
     for chip in chips:
         if chip == 'green':
             try:
-                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 2), '99th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 2), '90th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 2), '50th percentile flux in 2D Green image (e-)')
-                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 2), '10th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF99P'] = (round(my2D.green_percentile_99, 3), '99th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF90P'] = (round(my2D.green_percentile_90, 3), '90th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF50P'] = (round(my2D.green_percentile_50, 3), '50th percentile flux in 2D Green image (e-)')
+                D2.header['PRIMARY']['GR2DF10P'] = (round(my2D.green_percentile_10, 3), '10th percentile flux in 2D Green image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Green 2D flux measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 2), '99th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 2), '90th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 2), '50th percentile flux in 2D Red image (e-)')
-                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 2), '10th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF99P'] = (round(my2D.red_percentile_99, 3), '99th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF90P'] = (round(my2D.red_percentile_90, 3), '90th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF50P'] = (round(my2D.red_percentile_50, 3), '50th percentile flux in 2D Red image (e-)')
+                D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 3), '10th percentile flux in 2D Red image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Red 2D flux measurements: {e}\n{traceback.format_exc()}")
     return D2
+
 
 def add_headers_dark_current_2D(D2, logger=None):
     """
@@ -113,7 +204,7 @@ def add_headers_dark_current_2D(D2, logger=None):
     if 'Green' in data_products: chips.append('green')
     if 'Red'   in data_products: chips.append('red')
     if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
-        print('Not a valid 2D KPF file.')
+        print('Not a valid 2D.')
         return D2
     
     # list of dark current measurements generated by Analyze2D.measure_2D_dark_current
@@ -153,20 +244,21 @@ def add_headers_dark_current_2D(D2, logger=None):
                     try:
                         if hasattr(my2D, 'green_dark_current_regions'):
                             if 'med_elec' in my2D.green_dark_current_regions[keywords[k]['key']]:
-                                value = "{:.2f}".format(my2D.green_dark_current_regions[keywords[k]['key']]['med_elec'])
+                                value = "{:.3f}".format(my2D.green_dark_current_regions[keywords[k]['key']]['med_elec'])
                     except Exception as e:
                         logger.error(f"Problem with green dark current : {e}\n{traceback.format_exc()}")
                 if chip == 'red':
                     try:
                         if hasattr(my2D, 'red_dark_current_regions'):
                             if 'med_elec' in my2D.red_dark_current_regions[keywords[k]['key']]:
-                                value = "{:.2f}".format(my2D.red_dark_current_regions[keywords[k]['key']]['med_elec'])
+                                value = "{:.3f}".format(my2D.red_dark_current_regions[keywords[k]['key']]['med_elec'])
                     except Exception as e:
                         logger.error(f"Problem with red dark current: {e}\n{traceback.format_exc()}")                
                 if value != None:
                     D2.header['PRIMARY'][keyword] = (value, comment)
     
     return D2
+
 
 def add_headers_guider(D2, logger=None):
     """
@@ -196,7 +288,7 @@ def add_headers_guider(D2, logger=None):
     # Check that the input object is of the right type
     data_products = get_data_products_2D(D2)
     if (str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>") or not ('Guider' in data_products):
-        logger.info('Guider not in the 2D file or not a valid 2D KPF file.  Guider data products not added to header.')
+        logger.info('Guider not in the 2D file or not a valid.  Guider data products not added to header.')
         return D2
         
     # Use the AnalyzeGuider class to compute data products
@@ -250,6 +342,7 @@ def add_headers_guider(D2, logger=None):
                                            
     return D2
 
+
 def add_headers_hk(D2, logger=None):
     """
     Adds HK-related information to the header of a 2D object
@@ -273,7 +366,7 @@ def add_headers_hk(D2, logger=None):
     # Check that the input object is of the right type
     data_products = get_data_products_2D(D2)
     if (str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>") or not ('HK' in data_products):
-        logger.info('CaHK not in the 2D file or not a valid 2D KPF file.  CaHK data products not added to header.')
+        logger.info('CaHK not in the 2D file or not a valid 2D.  CaHK data products not added to header.')
         logger.info(data_products)
         return D2
         
@@ -320,7 +413,7 @@ def add_headers_exposure_meter(D2, logger=None):
     # Check that the input object is of the right type
     data_products = get_data_products_2D(D2)
     if (str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>") or not ('ExpMeter' in data_products):
-        logger.info('ExpMeter not in the 2D file or not a valid 2D KPF file.  EM data products not added to header.')
+        logger.info('ExpMeter not in the 2D file or not a valid 2D.  EM data products not added to header.')
         return D2
         
     # Use the Analyze EM class to data products
@@ -353,6 +446,231 @@ def add_headers_exposure_meter(D2, logger=None):
         logger.error(f"Problem with exposure meter measurements: {e}\n{traceback.format_exc()}")
 
     return D2
+
+
+def add_headers_masters_age_2D(D2, logger=None, verbose=False):
+    """
+    Computes the the number of days between the observation and the
+    date of observations for the master bias, master dark, and master flat.
+    
+    Keywords:
+        AGEBIAS - Age of master bias file compared to this file (whole days)
+        AGEDARK - Age of master dark file compared to this file (whole days)
+        AGEFLAT - Age of master flat file compared to this file (whole days)
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with PRIMARY header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    # Check that the input object is of the right type
+    if (str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>"):
+        logger.info('Not a valid 2D.  Master age keywords not added to header.')
+        return D2
+     
+    date_obs_str = D2.header['PRIMARY']['DATE-OBS']
+    date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%d").date()
+   
+    my2D = Analyze2D(D2, logger=logger)
+    master_files = ['BIASFILE', 'DARKFILE', 'FLATFILE']
+    new_keywords = ['AGEBIAS', 'AGEDARK', 'AGEFLAT']
+    for master_file, new_keyword in zip(master_files, new_keywords):
+        age_master_file = my2D.measure_master_age(kwd=master_file, verbose=verbose)
+        file_error = False
+        try:
+            if type(age_master_file) == type(0):
+                D2.header['PRIMARY'][new_keyword] = (age_master_file, f'{master_file} age compared to this file (whole days)')
+            else:
+                file_error = True
+        except Exception as e:
+            file_error = True
+            logger.error(f"Problem with {new_keyword} age determination: {e}\n{traceback.format_exc()}")
+    
+        if file_error:
+            logger.error(f"Problem with {new_keyword} age determination: Age of {master_file} compared to this file (whole days) = {new_keyword}")
+            D2.header['PRIMARY'][new_keyword] = (-99, 'ERROR: Age of {master_file} compared to this file (whole days)')
+
+    return D2
+
+
+def add_headers_2D_xdisp_offset(D2, logger=None):
+    """
+    Adds keywords to the 2D object header for measurements of offsets in 
+    cross-dispersion
+    
+    Keywords:
+        XDSPDYG1 - Green cross-dispersion offset [pix] compared to master reference
+        XDSPDYG2 - Green cross-dispersion offset [pix] compared to reference in era
+        XDSPDYR1 - Red cross-dispersion offset [pix] compared to master reference
+        XDSPDYR2 - Red cross-dispersion offset [pix] compared to reference in era
+        XDSPSYG1 - Uncertainty [pix] in XDSPDYG1 
+        XDSPSYG2 - Uncertainty [pix] in XDSPDYG2
+        XDSPSYR1 - Uncertainty [pix] in XDSPDYR1
+        XDSPSYR2 - Uncertainty [pix] in XDSPDYR2
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_2D(D2)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        print('Not a valid 2D.')
+        return D2
+        
+    # Compute cross-dispersion offsets with two references: global and in era
+    for ref in ['global', 'era']:
+        if ref == 'era':
+            dt = get_datetime_obsid(my2D.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+            keyword_suffix = '2'
+            comment_txt = 'in-era reference'
+        elif ref == 'global':
+            dt = '2024-02-11T00:00:00.000000' # reference time for all KPF observations
+            keyword_suffix = '1'
+            comment_txt = 'global reference'
+        default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+        GC = GetCalibrations(dt, default_config_path, use_db=False)
+        wls_dict = GC.lookup(subset=['xdisp_ref'])
+        reference_file = wls_dict['xdisp_ref']
+        my2D = Analyze2D(D2, logger=logger)
+        if 'master' in reference_file:
+            ref_extension = 'CCD_STACK'
+        else:
+            ref_extension = None
+        
+        for chip in chips:
+            if chip == 'green':
+                try:
+                    my2D.measure_xdisp_offset(chip='green', ref_image=reference_file, ref_extension=ref_extension)
+                    keyword_value = f'{my2D.green_offset:.5f}'
+                    keyword_sigma = f'{my2D.green_offset_sigma:.5f}'
+                    D2.header['PRIMARY']['XDSPDYG'+keyword_suffix] = (keyword_value, '[pix] Green x-disp offset; '+comment_txt)
+                    D2.header['PRIMARY']['XDSPSYG'+keyword_suffix] = (keyword_sigma, '[pix] uncertainty in XDSPDYG'+keyword_suffix)
+                except Exception as e:
+                    logger.error(f"Problem with Green 2D cross-dispersion offset measurements: {e}\n{traceback.format_exc()}")
+            if chip == 'red':
+                try:
+                    my2D.measure_xdisp_offset(chip='red', ref_image=reference_file, ref_extension=ref_extension)
+                    keyword_value = f'{my2D.red_offset:.5f}'
+                    keyword_sigma = f'{my2D.red_offset_sigma:.5f}'
+                    D2.header['PRIMARY']['XDSPDYR'+keyword_suffix] = (keyword_value, '[pix] Red x-disp offset; '+comment_txt)
+                    D2.header['PRIMARY']['XDSPSYR'+keyword_suffix] = (keyword_sigma, '[pix] uncertainty in XDSPDYR'+keyword_suffix)
+                except Exception as e:
+                    logger.error(f"Problem with Red 2D cross-dispersion offset measurements: {e}\n{traceback.format_exc()}")
+    return D2
+
+
+def add_headers_masters_age_L1(L1, logger=None, verbose=False):
+    """
+    Computes the the number of days between the observation and the
+    date of observations for the WLS files.  
+
+    Keywords:
+        AGEWLS  - Approx age of WLSFILE compared to this file (days)
+        AGEWLS2 - Approx age of WLSFILE2 compared to this file (days)
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with PRIMARY header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    # Check that the input object is of the right type
+    if (str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>"):
+        logger.info('Not a valid L1.  Master age keywords not added to header.')
+        return L1
+    
+    # Make datetime object of the observation time
+    date_mjd_str = L1.header['PRIMARY']['MJD-OBS']
+    date_obs_datetime = Time(date_mjd_str, format='mjd').datetime
+
+    # Loops over WLSFILE keywords
+    myL1 = AnalyzeL1(L1, logger=logger)
+    for wlsfile, new_keyword in zip(['WLSFILE', 'WLSFILE2'], ['AGEWLS', 'AGEWLS2']):
+        try:
+            age_wls_file = myL1.measure_WLS_age(kwd=wlsfile, verbose=verbose)
+            if verbose:
+                logger.info(f'{wlsfile} age compared to this file (days): {age_wls_file}')
+            
+            if age_wls_file == None:
+                age_wls_file = -99
+
+            # Write WLS age to primary header
+            L1.header['PRIMARY'][new_keyword] = (age_wls_file, f'{wlsfile} age compared to this file (days)')
+
+        except Exception as e:
+            logger.error(f"Problem with determining age of {wlsfile}: {e}\n{traceback.format_exc()}")
+            L1.header['PRIMARY'][new_keyword] = (-99, 'ERROR: {wlsfile} age compared to this file (days).')
+
+    return L1
+
+
+def add_headers_trace_lamp_age_L1(L1, logger=None, verbose=False):
+    """
+    Computes the the number of days between the observation and the
+    date of observations for the smooth lamp and order traces files.  
+
+    Keywords:
+        AGETRAC - Approx age of TRACFILE compared to this file (days)
+        AGEFLAT - Approx age of LAMPFILE compared to this file (days)
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with PRIMARY header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    # Check that the input object is of the right type
+    if (str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>"):
+        logger.info('Not a valid L1.  Master age keywords not added to header.')
+        return L1
+    
+    # Make datetime object of the observation time
+    date_mjd_str = L1.header['PRIMARY']['MJD-OBS']
+    date_obs_datetime = Time(date_mjd_str, format='mjd').datetime
+
+    # Loops over WLSFILE keywords
+    myL1 = AnalyzeL1(L1, logger=logger)
+    for file, new_keyword in zip(['TRACFILE', 'LAMPFILE'], ['AGETRAC', 'AGELAMP']):
+        try:
+            age_file = myL1.measure_master_age(kwd=file, verbose=verbose)
+            if verbose:
+                logger.info(f'{file} age compared to this file (days): {age_file}')
+            
+            if age_file == None:
+                age_file = -99
+
+            # Write age to primary header
+            L1.header['PRIMARY'][new_keyword] = (age_file, f'{file} age compared to this file (days)')
+
+        except Exception as e:
+            logger.error(f"Problem with determining age of {file}: {e}\n{traceback.format_exc()}")
+            L1.header['PRIMARY'][new_keyword] = (-99, 'ERROR: {file} age compared to this file (days).')
+
+    return L1
 
 
 def add_headers_L1_SNR(L1, logger=None):
@@ -393,7 +711,7 @@ def add_headers_L1_SNR(L1, logger=None):
     
     # Check that the input object is of the right type
     if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
-        print('Not a valid L1 KPF file.')
+        print('Not a valid L1.')
         return L1
         
     # Use the AnalyzeL1 class to compute SNR
@@ -402,39 +720,39 @@ def add_headers_L1_SNR(L1, logger=None):
     for chip in chips:
         if chip == 'green':
             try:
-                L1.header['PRIMARY']['SNRSC452'] = (round(myL1.GREEN_SNR[1,-1],1), 
+                L1.header['PRIMARY']['SNRSC452'] = (round(myL1.GREEN_SNR[1,-1],3), 
                                                     'SNR of L1 SCI (SCI1+SCI2+SCI3) near 452 nm')
-                L1.header['PRIMARY']['SNRSK452'] = (round(myL1.GREEN_SNR[1,-2],1),
+                L1.header['PRIMARY']['SNRSK452'] = (round(myL1.GREEN_SNR[1,-2],3),
                                                     'SNR of L1 SKY near 452 nm')
-                L1.header['PRIMARY']['SNRCL452'] = (round(myL1.GREEN_SNR[1,0],1),
+                L1.header['PRIMARY']['SNRCL452'] = (round(myL1.GREEN_SNR[1,0],3),
                                                     'SNR of L1 CAL near 452 nm')
-                L1.header['PRIMARY']['SNRSC548'] = (round(myL1.GREEN_SNR[25,-1],1),
+                L1.header['PRIMARY']['SNRSC548'] = (round(myL1.GREEN_SNR[25,-1],3),
                                                     'SNR of L1 SCI (SCI1+SCI2+SCI3) near 548 nm')
-                L1.header['PRIMARY']['SNRSK548'] = (round(myL1.GREEN_SNR[25,-2],1),
+                L1.header['PRIMARY']['SNRSK548'] = (round(myL1.GREEN_SNR[25,-2],3),
                                                     'SNR of L1 SKY near 548 nm')
-                L1.header['PRIMARY']['SNRCL548'] = (round(myL1.GREEN_SNR[25,0],1),
+                L1.header['PRIMARY']['SNRCL548'] = (round(myL1.GREEN_SNR[25,0],3),
                                                     'SNR of L1 CAL near 548 nm')
             except Exception as e:
                 logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                L1.header['PRIMARY']['SNRSC652'] = (round(myL1.RED_SNR[8,-1],1),
+                L1.header['PRIMARY']['SNRSC652'] = (round(myL1.RED_SNR[8,-1],3),
                                                     'SNR of L1 SCI (SCI1+SCI2+SCI3) near 652 nm')
-                L1.header['PRIMARY']['SNRSK652'] = (round(myL1.RED_SNR[8,-2],1),
+                L1.header['PRIMARY']['SNRSK652'] = (round(myL1.RED_SNR[8,-2],3),
                                                     'SNR of L1 SKY near 652 nm')
-                L1.header['PRIMARY']['SNRCL652'] = (round(myL1.RED_SNR[8,0],1),
+                L1.header['PRIMARY']['SNRCL652'] = (round(myL1.RED_SNR[8,0],3),
                                                     'SNR of L1 CAL near 652 nm')
-                L1.header['PRIMARY']['SNRSC747'] = (round(myL1.RED_SNR[20,-1],1),
+                L1.header['PRIMARY']['SNRSC747'] = (round(myL1.RED_SNR[20,-1],3),
                                                     'SNR of L1 SCI near 747 nm')
-                L1.header['PRIMARY']['SNRSK747'] = (round(myL1.RED_SNR[20,-2],1),
+                L1.header['PRIMARY']['SNRSK747'] = (round(myL1.RED_SNR[20,-2],3),
                                                     'SNR of L1 SKY (SCI1+SCI2+SCI3) near 747 nm')
-                L1.header['PRIMARY']['SNRCL747'] = (round(myL1.RED_SNR[20,0],1),
+                L1.header['PRIMARY']['SNRCL747'] = (round(myL1.RED_SNR[20,0],3),
                                                     'SNR of L1 CAL near 747 nm')
-                L1.header['PRIMARY']['SNRSC852'] = (round(myL1.RED_SNR[30,-1],1),
+                L1.header['PRIMARY']['SNRSC852'] = (round(myL1.RED_SNR[30,-1],3),
                                                     'SNR of L1 SCI near 852 nm')
-                L1.header['PRIMARY']['SNRSK852'] = (round(myL1.RED_SNR[30,-2],1),
+                L1.header['PRIMARY']['SNRSK852'] = (round(myL1.RED_SNR[30,-2],3),
                                                     'SNR of L1 SKY (SCI1+SCI2+SCI3) near 852 nm')
-                L1.header['PRIMARY']['SNRCL852'] = (round(myL1.RED_SNR[30,0],1),
+                L1.header['PRIMARY']['SNRCL852'] = (round(myL1.RED_SNR[30,0],3),
                                                     'SNR of L1 CAL near 852 nm')
             except Exception as e:
                 logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
@@ -468,7 +786,7 @@ def add_headers_L1_order_flux_ratios(L1, logger=None):
     
     # Check that the input object is of the right type
     if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
-        print('Not a valid L1 KPF file.')
+        print('Not a valid L1.')
         return L1
         
     # Use the AnalyzeL1 class to compute ratios between spectral orders
@@ -477,17 +795,17 @@ def add_headers_L1_order_flux_ratios(L1, logger=None):
     for chip in chips:
         if chips == ['green', 'red']:
             try: 
-                L1.header['PRIMARY']['FR452652'] = (round(myL1.GREEN_PEAK_FLUX[1,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                L1.header['PRIMARY']['FR452652'] = (round(myL1.GREEN_PEAK_FLUX[1,2]/myL1.RED_PEAK_FLUX[8,2],6), 
                                                     'Peak flux ratio (452nm/652nm) - SCI2')
-                L1.header['PRIMARY']['FR548652'] = (round(myL1.GREEN_PEAK_FLUX[25,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                L1.header['PRIMARY']['FR548652'] = (round(myL1.GREEN_PEAK_FLUX[25,2]/myL1.RED_PEAK_FLUX[8,2],6), 
                                                     'Peak flux ratio (548nm/652nm) - SCI2')
             except Exception as e:
                 logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
         if chip == 'red':
             try:
-                L1.header['PRIMARY']['FR747652'] = (round(myL1.RED_PEAK_FLUX[20,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                L1.header['PRIMARY']['FR747652'] = (round(myL1.RED_PEAK_FLUX[20,2]/myL1.RED_PEAK_FLUX[8,2],6), 
                                                     'Peak flux ratio (747nm/652nm) - SCI2')
-                L1.header['PRIMARY']['FR852652'] = (round(myL1.RED_PEAK_FLUX[30,2]/myL1.RED_PEAK_FLUX[8,2],4), 
+                L1.header['PRIMARY']['FR852652'] = (round(myL1.RED_PEAK_FLUX[30,2]/myL1.RED_PEAK_FLUX[8,2],6), 
                                                     'Peak flux ratio (852nm/652nm) - SCI2')
             except Exception as e:
                 logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
@@ -558,7 +876,7 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
     
     # Check that the input object is of the right type
     if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
-        print('Not a valid L1 KPF file.')
+        print('Not a valid L1.')
         return L1
         
     # Use the AnalyzeL1 class to compute flux ratios between orderlets
@@ -674,3 +992,424 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
             except Exception as e:
                 logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
     return L1
+
+
+def add_headers_L1_cal_line_quality(L1, intensity_thresh=40**2, min_lines=100, 
+                                    divisions_per_order=8, cal=None,logger=None):
+    """
+    Computes the min/max order per chip and orderlet with good LFC lines.
+    An order is good if at least min_lines with amplitude intensity_thresh.  
+    It also checks that there is at least one line of that amplitude in 8 
+    (set by divisions_per_order) equal-spaced regions per order.
+    
+    Keywords:
+        LFCLGS0 - Min order with good LFC lines on SCI orders of Green CCD
+        LFCLGS1 - Max order with good LFC lines on SCI orders of Green CCD
+        LFCLGC0 - Min order with good LFC lines on CAL orders of Green CCD
+        LFCLGC1 - Max order with good LFC lines on CAL orders of Green CCD
+        LFCLGK0 - Min order with good LFC lines on SKY orders of Green CCD
+        LFCLGK1 - Max order with good LFC lines on SKY orders of Green CCD
+        LFCLRS0 - Min order with good LFC lines on SCI orders of Red CCD
+        LFCLRS1 - Max order with good LFC lines on SCI orders of Red CCD
+        LFCLRC0 - Min order with good LFC lines on CAL orders of Red CCD
+        LFCLRC1 - Max order with good LFC lines on CAL orders of Red CCD
+        LFCLRK0 - Min order with good LFC lines on SKY orders of Red CCD
+        LFCLRK1 - Max order with good LFC lines on SKY orders of Red CCD
+        ETALGS0 - Min order with good Etalon lines on SCI orders of Green CCD
+        ETALGS1 - Max order with good Etalon lines on SCI orders of Green CCD
+        ETALGC0 - Min order with good Etalon lines on CAL orders of Green CCD
+        ETALGC1 - Max order with good Etalon lines on CAL orders of Green CCD
+        ETALGK0 - Min order with good Etalon lines on SKY orders of Green CCD
+        ETALGK1 - Max order with good Etalon lines on SKY orders of Green CCD
+        ETALRS0 - Min order with good Etalon lines on SCI orders of Red CCD
+        ETALRS1 - Max order with good Etalon lines on SCI orders of Red CCD
+        ETALRC0 - Min order with good Etalon lines on CAL orders of Red CCD
+        ETALRC1 - Max order with good Etalon lines on CAL orders of Red CCD
+        ETALRK0 - Min order with good Etalon lines on SKY orders of Red CCD
+        ETALRK1 - Max order with good Etalon lines on SKY orders of Red CCD
+
+    Args:
+        L1 - a KPF L1 object 
+        intensity_thresh (float): minimum line amplitude to be considered good
+        min_lines (int):          minimum number of lines in a spectral 
+                                  order for it to be considered good
+        divisions_per_order (int): number of contiguous subregions each order 
+                                   must have at least one peak in
+        cal: one of ['Etalon', 'LFC'] - sets type of calibration
+
+    Returns:
+        L1 - a L1 file with header keywords added
+    """
+    if logger == None:
+        logger = DummyLogger()
+
+    # Use the AnalyzeL1 class 
+    myL1 = AnalyzeL1(L1, logger=logger)
+    data_products = get_data_products_L1(L1)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+
+    # Determine which fibers are illuminated by LFC or Etalon
+    use_CAL, use_SCI, use_SKY = False, False, False
+    if cal == 'LFC':
+        cal_fiber = 'LFCFiber'
+        name = 'LFC'
+        prefix = 'LFC'
+    elif cal == 'Etalon':
+        cal_fiber = 'EtalonFiber'
+        name = 'Etalon'
+        prefix = 'ETA'
+    else:
+        self.logger.error('Calibration type not specified.')
+        return L1
+    if 'CAL-OBJ' in myL1.L1.header['PRIMARY']:
+        if myL1.L1.header['PRIMARY']['CAL-OBJ'] == cal_fiber:
+            use_CAL = True
+    if 'SCI-OBJ' in myL1.L1.header['PRIMARY']:
+        if myL1.L1.header['PRIMARY']['SCI-OBJ'] == cal_fiber:
+            use_SCI = True
+    if 'SKY-OBJ' in myL1.L1.header['PRIMARY']:
+        if myL1.L1.header['PRIMARY']['SKY-OBJ'] == cal_fiber:
+            use_SKY = True
+
+
+    # Check that the input object is of the right type
+    if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
+        print('Not a valid L1.')
+        return L1
+        
+    for chip in chips:
+        if chip == 'green':
+            try:
+                # Compute first and last good orders
+                SCI_g_fl, CAL_g_fl, SKY_g_fl = myL1.measure_good_comb_orders(chip='green', 
+                                               intensity_thresh=intensity_thresh, 
+                                               min_lines=min_lines, 
+                                               divisions_per_order=divisions_per_order)
+
+                # Replace None values with -1 to indicate no good orders
+                SCI_g_fl = [-1 if x is None else x for x in SCI_g_fl]
+                CAL_g_fl = [-1 if x is None else x for x in CAL_g_fl]
+                SKY_g_fl = [-1 if x is None else x for x in SKY_g_fl]
+
+                if use_SCI:
+                    L1.header['PRIMARY'][f'{prefix}LGS0'] = (SCI_g_fl[0], f'Min Green SCI order with good {name} lines')
+                    L1.header['PRIMARY'][f'{prefix}LGS1'] = (SCI_g_fl[1], f'Max Green SCI order with good {name} lines')
+                if use_CAL:
+                    L1.header['PRIMARY'][f'{prefix}LGC0'] = (CAL_g_fl[0], f'Min Green CAL order with good {name} lines')
+                    L1.header['PRIMARY'][f'{prefix}LGC1'] = (CAL_g_fl[1], f'Max Green CAL order with good {name} lines')
+                if use_SKY:
+                    L1.header['PRIMARY'][f'{prefix}LGK0'] = (SKY_g_fl[0], f'Min Green SKY order with good {name} lines')
+                    L1.header['PRIMARY'][f'{prefix}LGK1'] = (SKY_g_fl[1], f'Max Green SKY order with good {name} lines')
+
+            except Exception as e:
+                logger.error(f"Problem with green L1 {name} line measurements: {e}\n{traceback.format_exc()}")
+
+        if chip == 'red':
+            try:
+                # Compute first and last good orders
+                SCI_r_fl, CAL_r_fl, SKY_r_fl = myL1.measure_good_comb_orders(chip='red', 
+                                               intensity_thresh=intensity_thresh, 
+                                               min_lines=min_lines, 
+                                               divisions_per_order=divisions_per_order)
+
+                # Replace None values with -1 to indicate no good orders
+                SCI_r_fl = [-1 if x is None else x for x in SCI_r_fl]
+                CAL_r_fl = [-1 if x is None else x for x in CAL_r_fl]
+                SKY_r_fl = [-1 if x is None else x for x in SKY_r_fl]
+
+                if use_SCI:
+                    L1.header['PRIMARY'][f'{prefix}LRS0'] = (SCI_r_fl[0], f'Min RED SCI order with good {name} lines')
+                    L1.header['PRIMARY'][f'{prefix}LRS1'] = (SCI_r_fl[1], f'Max RED SCI order with good {name} lines')
+                if use_CAL:
+                    L1.header['PRIMARY'][f'{prefix}LRC0'] = (CAL_r_fl[0], f'Min RED CAL order with good {name} lines')
+                    L1.header['PRIMARY'][f'{prefix}LRC1'] = (CAL_r_fl[1], f'Max RED CAL order with good {name} lines')
+                if use_SKY:
+                    L1.header['PRIMARY'][f'{prefix}LRK0'] = (SKY_r_fl[0], f'Min RED SKY order with good {name} lines')
+                    L1.header['PRIMARY'][f'{prefix}LRK1'] = (SKY_r_fl[1], f'Max RED SKY order with good {name} lines')
+
+            except Exception as e:
+                logger.error(f"Problem with red L1 {name} line measurements: {e}\n{traceback.format_exc()}")
+
+    return L1
+
+
+def add_headers_L1_saturated_lines(L1, logger=None):
+    """
+    Counts the number of saturated lines and adds keywords to the L1 object headers
+    
+    Keywords:
+        NSATGS2 - Number of saturated lines in Green SCI2
+        NSATGC  - Number of saturated lines in Green CAL
+        NSATGK  - Number of saturated lines in Green SKY
+        NSATRS2 - Number of saturated lines in Red SCI2
+        NSATRC  - Number of saturated lines in Red CAL
+        NSATRK  - Number of saturated lines in Red SKY
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L1(L1)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
+        print('Not a valid L1.')
+        return L1
+        
+    # Use the AnalyzeL1 class to compute ratios between spectral orders
+    myL1 = AnalyzeL1(L1, logger=logger)
+    for chip in chips:
+        if chip == 'green':
+            try: 
+                (SCI1_lines, SCI2_lines, SCI3_lines, CAL_lines, SKY_lines) =  myL1.count_saturated_lines(chip='green')
+                L1.header['PRIMARY']['NSATGS2'] = (SCI2_lines, 'Number of saturated lines in Green SCI2')
+                L1.header['PRIMARY']['NSATGC']  = (CAL_lines,  'Number of saturated lines in Green CAL')
+                L1.header['PRIMARY']['NSATGK']  = (SKY_lines,  'Number of saturated lines in Green SKY')
+            except Exception as e:
+                logger.error(f"Problem counting satured lines for green chip: {e}\n{traceback.format_exc()}")
+        if chip == 'red':
+            try:
+                (SCI1_lines, SCI2_lines, SCI3_lines, CAL_lines, SKY_lines) =  myL1.count_saturated_lines(chip='red')
+                L1.header['PRIMARY']['NSATRS2'] = (SCI2_lines, 'Number of saturated lines in Red SCI2')
+                L1.header['PRIMARY']['NSATRC']  = (CAL_lines,  'Number of saturated lines in Red CAL')
+                L1.header['PRIMARY']['NSATRK']  = (SKY_lines,  'Number of saturated lines in Red SKY')
+            except Exception as e:
+                logger.error(f"Problem counting satured lines for red chip: {e}\n{traceback.format_exc()}")
+    return L1
+
+
+def add_headers_L1_std_wls(L1, logger=None, debug=False):
+    """
+    Computes the standard deviation of the L1 wavelength solution compared to a 
+    reference wavelength solution. The output is in units of pixels.  Keywords 
+    are generated for combinations of [Green, Red] and [SCI, SKY, CAL].
+    
+    Keywords:
+        STDWREF - filename of reference wavelength solution
+        STDWGSNN (35 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Green SCI1, SCI2, SCI3 order NN
+        STDWGKNN (35 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Green SKY order NN
+        STDWGCNN (35 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Green CAL order NN
+        STDWRSNN (32 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Red SCI1, SCI2, SCI3 order NN
+        STDWRKNN (32 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Red SKY order NN
+        STDWRCNN (32 keywords for orders NN) - stdev of the WLS (in pixels) compared to reference for Red CAL order NN
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with header keywords added
+    """
+    if logger == None:
+        logger = DummyLogger()
+
+    # Use the AnalyzeL1 class 
+    myL1 = AnalyzeL1(L1, logger=logger)
+    data_products = get_data_products_L1(L1)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+
+    # Check that the input object is of the right type
+    if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
+        self.logger.error('Not a valid L1.')
+        return L1
+
+    # Get reference wavelength solution
+    dt = get_datetime_obsid(myL1.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+    if debug:
+        print(f'DEFAULT_CALIBRATION_CFG_PATH = ' + DEFAULT_CALIBRATION_CFG_PATH)
+    GC = GetCalibrations(dt, DEFAULT_CALIBRATION_CFG_PATH, use_db=False)
+    wls_filename = GC.lookup(subset=['rough_wls']) 
+    if debug:
+        print(f'wls_filename = ' + wls_filename['rough_wls'])
+    L1_ref = KPF1.from_fits(wls_filename['rough_wls'])
+    myL1_ref = AnalyzeL1(L1_ref)  
+    myL1_ref.add_dispersion_arrays()
+
+    # Method to compute Stdev of WLS
+    def compute_stats_wls(L1, L1_ref, EXT=['SCI'], CHIP=['GREEN'], ORDER=[0], debug=False):
+        """
+        Compute the median and the standard deviation of the difference between 
+        the wavelength solution (L1) and a reference (L1_ref).  
+        The output is in units of pixels.
+
+        Args:
+            EXT (array): possible values in the array are 'SCI', 'SKY', 'CAL'
+            CHIP (array): possible values in the array are 'GREEN', 'RED'
+            ORDER (array): possible values are integers from 0 to 34
+            debug: if True, print debugging statements
+
+        Returns:
+            med_wls, std_wls (floats): Median and standard deviation 
+                                       of the differen between the WLS and 
+                                       reference WLS for EXT, CHIP, ORDER
+        """
+
+        # Determine which extensions to check
+        WAVE_extensions   = []
+        if 'CAL' in EXT:
+            if 'GREEN' in CHIP:
+                WAVE_extensions.append("GREEN_CAL_WAVE")
+            if 'RED' in CHIP:
+                WAVE_extensions.append("RED_CAL_WAVE")
+        if 'SCI' in EXT:
+            if 'GREEN' in CHIP:
+                WAVE_extensions.append("GREEN_SCI_WAVE1")
+                WAVE_extensions.append("GREEN_SCI_WAVE2")
+                WAVE_extensions.append("GREEN_SCI_WAVE3")
+            if 'RED' in CHIP:
+                WAVE_extensions.append("RED_SCI_WAVE1")
+                WAVE_extensions.append("RED_SCI_WAVE2")
+                WAVE_extensions.append("RED_SCI_WAVE3")
+        if 'SKY' in EXT:
+            if 'GREEN' in CHIP:
+                WAVE_extensions.append("GREEN_SKY_WAVE")
+            if 'RED' in CHIP:
+                WAVE_extensions.append("RED_SKY_WAVE")
+
+        for EXT_WAVE in WAVE_extensions:
+            if debug:
+                print(f'EXT_WAVE = ' + EXT_WAVE)
+            EXT_DISP = EXT_WAVE.replace('WAVE', 'DISP')
+            pix_diff_med = 0
+            pix_diff_std = 0
+            for o in ORDER:
+                if not (L1_ref[EXT_DISP][o,:] == 0).all():
+                    numerator = L1[EXT_WAVE][o,:] - L1_ref[EXT_WAVE][o,:]
+                    denominator = L1_ref[EXT_DISP][o, :]
+                    zero_diff_mask = numerator == 0
+                    pix_diff_array = np.divide(numerator, denominator, out=np.zeros_like(numerator, dtype=float), where=denominator!=0)
+                    pix_diff_array[zero_diff_mask] = 0
+                    this_pix_diff_med = np.nanmedian(pix_diff_array)
+                    this_pix_diff_std = np.nanstd(pix_diff_array)
+
+                    if abs(this_pix_diff_med) > abs(pix_diff_med):
+                        pix_diff_med = this_pix_diff_med
+                    if abs(this_pix_diff_std) > abs(pix_diff_std):
+                        pix_diff_std = this_pix_diff_std
+                    if debug:
+                        print(o, this_pix_diff_median, this_pix_diff_std)
+                    
+        return pix_diff_med, pix_diff_std
+
+    for chip in chips:
+        L1.header['PRIMARY']['STATWREF'] = (wls_filename['rough_wls'], 'ref fn for WLS-ref')
+        for EXT in ['SCI', 'SKY', 'CAL']:
+            norder = L1[chip+'_CAL_WAVE'].shape[0]
+            for o in range(norder):
+                try:
+                    med_wls, std_wls = compute_stats_wls(myL1.L1, myL1_ref.L1, EXT=[EXT], CHIP=[chip.upper()], ORDER=[o])
+                    if chip == 'green':
+                        if EXT == 'SCI':
+                            L1.header['PRIMARY'][f'MEDWGS{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Green SCI order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWGS{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Green SCI order {o:02d}')
+                        elif EXT == 'SKY':
+                            L1.header['PRIMARY'][f'MEDWGK{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Green SKY order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWGK{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Green SKY order {o:02d}')
+                        elif EXT == 'CAL':
+                            L1.header['PRIMARY'][f'MEDWGC{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Green CAL order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWGC{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Green CAL order {o:02d}')
+                    if chip == 'red':
+                        if EXT == 'SCI':
+                            L1.header['PRIMARY'][f'MEDWRS{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Red SCI order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWRS{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Red SCI order {o:02d}')
+                        elif EXT == 'SKY':
+                            L1.header['PRIMARY'][f'MEDWRK{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Red SKY order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWRK{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Red SKY order {o:02d}')
+                        elif EXT == 'CAL':
+                            L1.header['PRIMARY'][f'MEDWRC{o:02d}'] = (med_wls, f'median(WLS-ref) [pix], Red CAL order {o:02d}')
+                            L1.header['PRIMARY'][f'STDWRC{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Red CAL order {o:02d}')
+    
+                except Exception as e:
+                    logger.error(f"Problem with green L1 {name} line measurements: {e}\n{traceback.format_exc()}")
+
+    return L1
+
+
+def add_headers_L2_barycentric(L2, logger=None):
+    """
+    Adds Barycentric RV correction and BJD to the L2 primary header
+    
+    Keywords:
+        CCFBCV - Barycentric radial velocity correction (km/s), averaged
+                 over the BCV values for each spectral order and weighted 
+                 by the CCF Weights
+        CCFBJD - Weighted avg of BJD values (days)
+        BCVRNG - Range of values of barycentric radial velocity correction 
+                 (m/s) for the spectral orders, with zero-weight orders 
+                 excluded
+        BCVSTD - Standard deviation of values of barycentric radial velocity 
+                 correction (m/s) for the spectral orders and weighted by the 
+                 CCF Weights
+        BJDRNG - Range of BJD values for the spectral orders, with zero-weight
+                 orders excluded (sec)
+        BJDSTD - Standard deviation of BJD values for the spectral orders, 
+                 weighted by the CCF Weights (sec)
+        MAXPCBCV - The maximum of the spectral orders' percent change 
+                 differences from an observation's CCFBCV, with zero-weight 
+                 orders excluded (%)
+        MINPCBCV - The minimum of the spectral orders' percent change
+                 differences from an observation's CCFBCV, with zero-weight
+                 orders excluded (%)
+
+    Args:
+        L2 - a KPF L2 object 
+
+    Returns:
+        L2 - a L2 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    try:
+        data_products = get_data_products_L2(L2)
+        chips = []
+        if 'Green' in data_products: chips.append('green')
+        if 'Red'   in data_products: chips.append('red')
+        
+        # Check that the input object is of the right type
+        if str(type(L2)) != "<class 'kpfpipe.models.level2.KPF2'>" or chips == []:
+            print('Not a valid L2.')
+            return L2
+            
+        # Use the AnalyzeL2 class to compute BCV
+        myL2 = AnalyzeL2(L2, logger=logger)
+    
+        # Add values to header
+        if hasattr(myL2, 'CCFBCV'):
+            L2.header['PRIMARY']['CCFBCV'] = (myL2.CCFBCV, 'Weighted avg of barycentricRV correction (km/s)')
+        # remove the two lines below when CCFBJD is computed where the RV table is assembled
+        if hasattr(myL2, 'CCFBJD'):
+            L2.header['PRIMARY']['CCFBJD']  = (myL2.CCFBJD, 'Weighted avg of BJD values (days)')
+    
+        # Add range, standard deviation, and percent difference stats
+        if hasattr(myL2, 'Delta_CCFBJD_weighted_std'):
+            L2.header['PRIMARY']['BJDSTD'] = (myL2.Delta_CCFBJD_weighted_std, 'Weighted stddev of BJD for orders (sec)')
+        if hasattr(myL2, 'Delta_CCFBJD_weighted_range'):
+            L2.header['PRIMARY']['BJDRNG'] = (myL2.Delta_CCFBJD_weighted_range, 'Range(BJD) for non-zero-weight orders (sec)')
+        if hasattr(myL2, 'Delta_Bary_RVC_weighted_std'):
+            L2.header['PRIMARY']['BCVSTD'] = (myL2.Delta_Bary_RVC_weighted_std, 'Weighted stddev of BCV for orders (m/s)')
+        if hasattr(myL2, 'Delta_Bary_RVC_weighted_range'):
+            L2.header['PRIMARY']['BCVRNG'] = (myL2.Delta_Bary_RVC_weighted_range, 'Range(BCV) for non-zero-weight orders (m/s)')
+        if hasattr(myL2, 'Max_Perc_Delta_Bary_RV'):
+            L2.header['PRIMARY']['MAXPCBCV'] = (myL2.Max_Perc_Delta_Bary_RV, 'Maximum percent change from CCFBCV for non-zero-weight orders (%)')
+        if hasattr(myL2, 'Min_Perc_Delta_Bary_RV'):
+            L2.header['PRIMARY']['MINPCBCV'] = (myL2.Min_Perc_Delta_Bary_RV, 'Minimum percent change from CCFBCV for non-zero-weight orders (%)')
+
+    except Exception as e:
+        logger.error(f"Problem with L2 BJD/BCV measurements: {e}\n{traceback.format_exc()}")
+
+    return L2
+
