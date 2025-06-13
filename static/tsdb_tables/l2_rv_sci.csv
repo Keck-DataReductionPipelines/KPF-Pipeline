@@ -1,0 +1,135 @@
+keyword|datatype|description|unit
+RVS00|float|RV for SCI order 00|km/s
+RVS01|float|RV for SCI order 01|km/s
+RVS02|float|RV for SCI order 02|km/s
+RVS03|float|RV for SCI order 03|km/s
+RVS04|float|RV for SCI order 04|km/s
+RVS05|float|RV for SCI order 05|km/s
+RVS06|float|RV for SCI order 06|km/s
+RVS07|float|RV for SCI order 07|km/s
+RVS08|float|RV for SCI order 08|km/s
+RVS09|float|RV for SCI order 09|km/s
+RVS10|float|RV for SCI order 10|km/s
+RVS11|float|RV for SCI order 11|km/s
+RVS12|float|RV for SCI order 12|km/s
+RVS13|float|RV for SCI order 13|km/s
+RVS14|float|RV for SCI order 14|km/s
+RVS15|float|RV for SCI order 15|km/s
+RVS16|float|RV for SCI order 16|km/s
+RVS17|float|RV for SCI order 17|km/s
+RVS18|float|RV for SCI order 18|km/s
+RVS19|float|RV for SCI order 19|km/s
+RVS20|float|RV for SCI order 20|km/s
+RVS21|float|RV for SCI order 21|km/s
+RVS22|float|RV for SCI order 22|km/s
+RVS23|float|RV for SCI order 23|km/s
+RVS24|float|RV for SCI order 24|km/s
+RVS25|float|RV for SCI order 25|km/s
+RVS26|float|RV for SCI order 26|km/s
+RVS27|float|RV for SCI order 27|km/s
+RVS28|float|RV for SCI order 28|km/s
+RVS29|float|RV for SCI order 29|km/s
+RVS30|float|RV for SCI order 30|km/s
+RVS31|float|RV for SCI order 31|km/s
+RVS32|float|RV for SCI order 32|km/s
+RVS33|float|RV for SCI order 33|km/s
+RVS34|float|RV for SCI order 34|km/s
+RVS35|float|RV for SCI order 35|km/s
+RVS36|float|RV for SCI order 36|km/s
+RVS37|float|RV for SCI order 37|km/s
+RVS38|float|RV for SCI order 38|km/s
+RVS39|float|RV for SCI order 39|km/s
+RVS40|float|RV for SCI order 40|km/s
+RVS41|float|RV for SCI order 41|km/s
+RVS42|float|RV for SCI order 42|km/s
+RVS43|float|RV for SCI order 43|km/s
+RVS44|float|RV for SCI order 44|km/s
+RVS45|float|RV for SCI order 45|km/s
+RVS46|float|RV for SCI order 46|km/s
+RVS47|float|RV for SCI order 47|km/s
+RVS48|float|RV for SCI order 48|km/s
+RVS49|float|RV for SCI order 49|km/s
+RVS50|float|RV for SCI order 50|km/s
+RVS51|float|RV for SCI order 51|km/s
+RVS52|float|RV for SCI order 52|km/s
+RVS53|float|RV for SCI order 53|km/s
+RVS54|float|RV for SCI order 54|km/s
+RVS55|float|RV for SCI order 55|km/s
+RVS56|float|RV for SCI order 56|km/s
+RVS57|float|RV for SCI order 57|km/s
+RVS58|float|RV for SCI order 58|km/s
+RVS59|float|RV for SCI order 59|km/s
+RVS60|float|RV for SCI order 60|km/s
+RVS61|float|RV for SCI order 61|km/s
+RVS62|float|RV for SCI order 62|km/s
+RVS63|float|RV for SCI order 63|km/s
+RVS64|float|RV for SCI order 64|km/s
+RVS65|float|RV for SCI order 65|km/s
+RVS66|float|RV for SCI order 66|km/s
+ERVS00|float|Error in RV for SCI order 00|km/s
+ERVS01|float|Error in RV for SCI order 01|km/s
+ERVS02|float|Error in RV for SCI order 02|km/s
+ERVS03|float|Error in RV for SCI order 03|km/s
+ERVS04|float|Error in RV for SCI order 04|km/s
+ERVS05|float|Error in RV for SCI order 05|km/s
+ERVS06|float|Error in RV for SCI order 06|km/s
+ERVS07|float|Error in RV for SCI order 07|km/s
+ERVS08|float|Error in RV for SCI order 08|km/s
+ERVS09|float|Error in RV for SCI order 09|km/s
+ERVS10|float|Error in RV for SCI order 10|km/s
+ERVS11|float|Error in RV for SCI order 11|km/s
+ERVS12|float|Error in RV for SCI order 12|km/s
+ERVS13|float|Error in RV for SCI order 13|km/s
+ERVS14|float|Error in RV for SCI order 14|km/s
+ERVS15|float|Error in RV for SCI order 15|km/s
+ERVS16|float|Error in RV for SCI order 16|km/s
+ERVS17|float|Error in RV for SCI order 17|km/s
+ERVS18|float|Error in RV for SCI order 18|km/s
+ERVS19|float|Error in RV for SCI order 19|km/s
+ERVS20|float|Error in RV for SCI order 20|km/s
+ERVS21|float|Error in RV for SCI order 21|km/s
+ERVS22|float|Error in RV for SCI order 22|km/s
+ERVS23|float|Error in RV for SCI order 23|km/s
+ERVS24|float|Error in RV for SCI order 24|km/s
+ERVS25|float|Error in RV for SCI order 25|km/s
+ERVS26|float|Error in RV for SCI order 26|km/s
+ERVS27|float|Error in RV for SCI order 27|km/s
+ERVS28|float|Error in RV for SCI order 28|km/s
+ERVS29|float|Error in RV for SCI order 29|km/s
+ERVS30|float|Error in RV for SCI order 30|km/s
+ERVS31|float|Error in RV for SCI order 31|km/s
+ERVS32|float|Error in RV for SCI order 32|km/s
+ERVS33|float|Error in RV for SCI order 33|km/s
+ERVS34|float|Error in RV for SCI order 34|km/s
+ERVS35|float|Error in RV for SCI order 35|km/s
+ERVS36|float|Error in RV for SCI order 36|km/s
+ERVS37|float|Error in RV for SCI order 37|km/s
+ERVS38|float|Error in RV for SCI order 38|km/s
+ERVS39|float|Error in RV for SCI order 39|km/s
+ERVS40|float|Error in RV for SCI order 40|km/s
+ERVS41|float|Error in RV for SCI order 41|km/s
+ERVS42|float|Error in RV for SCI order 42|km/s
+ERVS43|float|Error in RV for SCI order 43|km/s
+ERVS44|float|Error in RV for SCI order 44|km/s
+ERVS45|float|Error in RV for SCI order 45|km/s
+ERVS46|float|Error in RV for SCI order 46|km/s
+ERVS47|float|Error in RV for SCI order 47|km/s
+ERVS48|float|Error in RV for SCI order 48|km/s
+ERVS49|float|Error in RV for SCI order 49|km/s
+ERVS50|float|Error in RV for SCI order 50|km/s
+ERVS51|float|Error in RV for SCI order 51|km/s
+ERVS52|float|Error in RV for SCI order 52|km/s
+ERVS53|float|Error in RV for SCI order 53|km/s
+ERVS54|float|Error in RV for SCI order 54|km/s
+ERVS55|float|Error in RV for SCI order 55|km/s
+ERVS56|float|Error in RV for SCI order 56|km/s
+ERVS57|float|Error in RV for SCI order 57|km/s
+ERVS58|float|Error in RV for SCI order 58|km/s
+ERVS59|float|Error in RV for SCI order 59|km/s
+ERVS60|float|Error in RV for SCI order 60|km/s
+ERVS61|float|Error in RV for SCI order 61|km/s
+ERVS62|float|Error in RV for SCI order 62|km/s
+ERVS63|float|Error in RV for SCI order 63|km/s
+ERVS64|float|Error in RV for SCI order 64|km/s
+ERVS65|float|Error in RV for SCI order 65|km/s
+ERVS66|float|Error in RV for SCI order 66|km/s

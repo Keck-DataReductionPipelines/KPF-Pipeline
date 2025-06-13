@@ -76,6 +76,10 @@ The KPF DRP uses `pytest <https://docs.pytest.org/>`_ for CI.  Tests are automat
 
     pytest -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py
 
+For verbose output during the test, add the `-s` flat (for STDOUT)::
+
+    pytest -s -x --cov=kpfpipe --cov=modules --pyargs tests/regression/test_tools.py
+
 See the makefile for examples of performance and validation tests.
 
 To show the lines without coverage in a particular file, run a command like::
