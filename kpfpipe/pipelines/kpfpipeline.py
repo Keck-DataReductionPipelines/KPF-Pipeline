@@ -104,7 +104,20 @@ class KPFPipeline(BasePipeline):
             Same behavior as os.path.exists() It returns True if the file or directory
             exists at the specified path.
 
+        print:
+            Similar behavior to print(), but it only accepts one argument and 
+            the output is through logger.info().  f-strings are supported.
+
         """
+        def _recipe_print(value):
+            """
+            Replacement for Python's built-in print inside a recipe.
+            Only one or zero positional arguments are supported (see the
+            recipe parser limitation on var-args built-ins).
+            """
+            self.logger.info(str(value))
+            return None
+
         self._recipe_visitor.register_builtin('int', int, 1)
         self._recipe_visitor.register_builtin('float', float, 1)
         self._recipe_visitor.register_builtin('str', str, 1)
@@ -114,7 +127,8 @@ class KPFPipeline(BasePipeline):
         self._recipe_visitor.register_builtin('splitext', os.path.splitext, 1)
         self._recipe_visitor.register_builtin('dirname', os.path.dirname, 1)
         self._recipe_visitor.register_builtin('exists', os.path.exists, 1)
-
+        self._recipe_visitor.register_builtin('print', _recipe_print, 1)
+ 
     def preload_env(self):
         """
         preload_env() preloads environment variables using dotenv """
