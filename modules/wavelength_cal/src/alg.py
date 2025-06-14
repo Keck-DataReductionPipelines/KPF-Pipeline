@@ -1737,7 +1737,24 @@ class WaveCalibration:
         comb_lines_ang = scipy.constants.c * 1e10 / frequencies
 
         return comb_lines_ang
+	    
+    def save_lfc_mask(self, file_name, comb_lines_ang):
+        """
+        Save the LFC mask produced from f0 and frep.
 
+        Parameters
+        ----------
+        file_name : str
+            Where to write the mask.
+        comb_lines_ang : (N,) ndarray
+            Wavelengths (Å) of all allowed comb modes.
+        """
+        df = pd.DataFrame(
+            {"line_positions": np.sort(comb_lines_ang),
+             "weight": np.ones_like(comb_lines_ang, dtype=int)}
+        )
+        df.to_csv(file_name, index=False, header=False, sep=" ")
+	    
     def save_wl_pixel_info(self,file_name,wave_pxl_data):
         """
         Saves wavelength pixel reference file.

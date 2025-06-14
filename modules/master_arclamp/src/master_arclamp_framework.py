@@ -467,6 +467,22 @@ class MasterArclampFramework(KPF0_Primitive):
                 elif "RED_CCD" in (ffi).upper():
                    master_arclamp_infobits |= 2**1
 
+
+        # If both GREEN_CCD and RED_CCD extensions have less than two frames in the stack,
+        # then do not generate the 2D FITS product.
+
+        all_bad = True
+        for ffi in self.lev0_ffi_exts:
+            if n_frames_kept[ffi] > 1:
+                all_bad = False
+                break
+
+        if all_bad:
+            self.logger.info('all_bad = {}'.format(all_bad))
+            master_arclamp_exit_code = 8
+            exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+            return Arguments(exit_list)
+
         for ext in del_ext_list:
             master_holder.del_extension(ext)
 

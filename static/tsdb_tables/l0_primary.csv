@@ -56,8 +56,8 @@ TARGFRAM|string|Target frame|None
 FULLTARG|string|Full Target name from kpfconfig|None
 GAIAID|string|GAIA Target name from kpfconfig|None
 2MASSID|string|2MASS Target name from kpfconfig|None
-GAIAMAG|string|GAIA G band magnitude|mag
-2MASSMAG|string|2MASS J band magnitude|mag
+GAIAMAG|float|GAIA G band magnitude|mag
+2MASSMAG|float|2MASS J band magnitude|mag
 TARGTEFF|float|Target effective temp|K
 RA|string|Right ascension|hr
 DEC|string|Declination|deg
