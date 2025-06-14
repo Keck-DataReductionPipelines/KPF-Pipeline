@@ -46,7 +46,7 @@ class AnalyzeGuider:
         flux_std - standard deviation of integrated flux
         peak_flux_median - median of peak flux (per pixel)
         peak_flux_std - standard deviation of peak flux (per pixel)
-        frac_saturated - fraction of frames with 1 or more pixels within 90% of saturation
+        frac_frames_saturated - fraction of frames with 1 or more pixels within 90% of saturation
     """
 
     def __init__(self, L0, logger=None):
@@ -57,8 +57,10 @@ class AnalyzeGuider:
         header_primary_obj = HeaderParse(L0, 'PRIMARY')
         if hasattr(L0, 'guider_avg'):
             header_guider_obj = HeaderParse(L0, 'guider_avg')
+            self.guider_avg = L0['guider_avg']
         elif hasattr(L0, 'GUIDER_AVG'):
             header_guider_obj = HeaderParse(L0, 'GUIDER_AVG')
+            self.guider_avg = L0['GUIDER_AVG']
         else:
             print("Guider image not in file.")
         self.guider_header = header_guider_obj.header
@@ -106,6 +108,9 @@ class AnalyzeGuider:
         self.df_GUIDER['timestamp'] = pd.to_numeric(self.df_GUIDER['timestamp'], errors='coerce')
         self.df_GUIDER['datetime'] = (pd.to_datetime(self.df_GUIDER['timestamp'], unit='s', origin='unix').dt.tz_localize('UTC'))
         self.df_GUIDER['timestep_ms'] = (self.df_GUIDER['datetime'].diff().dt.total_seconds() * 1000)
+        
+        self.saturation_threshold = 14000
+        self.n_saturated_pixels = np.count_nonzero(self.guider_avg[255-50:255+50, 320-50:320+50] > self.saturation_threshold)
 
         
         # Measure FWHM, flux, peak flux, etc.
@@ -116,12 +121,12 @@ class AnalyzeGuider:
             self.flux_std = np.std(self.df_GUIDER.object1_flux)
             self.peak_flux_median = np.median(self.df_GUIDER.object1_peak)
             self.peak_flux_std = np.std(self.df_GUIDER.object1_peak)
-            self.frac_saturated = (self.df_GUIDER['object1_peak'] > 15830*0.9).sum() / self.df_GUIDER.shape[0]
+            self.frac_frames_saturated = (self.df_GUIDER['object1_peak'] > 15830*0.9).sum() / self.df_GUIDER.shape[0]
         else:
             self.fwhm_mas_median = -1
             self.flux_median = -1
             self.peak_flux_median = -1
-            self.frac_saturated = -1
+            self.frac_frames_saturated = -1
 
         # Measure guiding statistics
         self.measure_guider_errors()
