@@ -112,7 +112,6 @@ class AnalyzeGuider:
         self.saturation_threshold = 15830
         self.n_saturated_pixels = np.count_nonzero(self.guider_avg[255-50:255+50, 320-50:320+50] > self.saturation_threshold*0.9)
 
-        
         # Measure FWHM, flux, peak flux, etc.
         if not (self.df_GUIDER['object1_flux'] == 0.0).all() and self.nframes > 2:
             self.fwhm_mas_median = np.median((self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5))
@@ -124,8 +123,11 @@ class AnalyzeGuider:
             self.frac_frames_saturated = (self.df_GUIDER['object1_peak'] > self.saturation_threshold*0.9).sum() / self.df_GUIDER.shape[0]
         else:
             self.fwhm_mas_median = -1
+            self.fwhm_mas_std = -1
             self.flux_median = -1
+            self.flux_std = -1
             self.peak_flux_median = -1
+            self.peak_flux_std = -1
             self.frac_frames_saturated = -1
 
         # Measure guiding statistics

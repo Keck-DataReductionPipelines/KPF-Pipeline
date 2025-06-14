@@ -1,0 +1,55 @@
+description: Guider Images
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: GDRFXMD
+        plot_type: scatter
+        unit: ADU
+        plot_attr:
+          label: Median(flux)
+          marker: .
+          linewidth: 0.5
+      - col: GDRPKMD
+        plot_type: scatter
+        unit: ADU
+        plot_attr:
+          label: Median(peak_flux)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Median(flux) [ADU]
+      narrow_xlim_daily: true
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.25
+
+panel_arr:
+  - panelvars:
+      - col: GDRFRSAT
+        plot_type: scatter
+        plot_attr:
+          label: "Fraction of frames\nw/in 90% saturated"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Fraction of frames\nw/in 90% saturated"
+      narrow_xlim_daily: true
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.25
+
+panel_arr:
+  - panelvars:
+      - col: GDRNSAT
+        plot_type: scatter
+        plot_attr:
+          label: "Number of\n90% saturated pix\nin co-added image"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Number of\n90% saturated pix\nin co-added image"
+      narrow_xlim_daily: true
+      title: Guider Images
+      not_junk: true
+      on_sky: true
+      legend_frac_size: 0.25
