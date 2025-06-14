@@ -109,8 +109,8 @@ class AnalyzeGuider:
         self.df_GUIDER['datetime'] = (pd.to_datetime(self.df_GUIDER['timestamp'], unit='s', origin='unix').dt.tz_localize('UTC'))
         self.df_GUIDER['timestep_ms'] = (self.df_GUIDER['datetime'].diff().dt.total_seconds() * 1000)
         
-        self.saturation_threshold = 14000
-        self.n_saturated_pixels = np.count_nonzero(self.guider_avg[255-50:255+50, 320-50:320+50] > self.saturation_threshold)
+        self.saturation_threshold = 15830
+        self.n_saturated_pixels = np.count_nonzero(self.guider_avg[255-50:255+50, 320-50:320+50] > self.saturation_threshold*0.9)
 
         
         # Measure FWHM, flux, peak flux, etc.
@@ -121,7 +121,7 @@ class AnalyzeGuider:
             self.flux_std = np.std(self.df_GUIDER.object1_flux)
             self.peak_flux_median = np.median(self.df_GUIDER.object1_peak)
             self.peak_flux_std = np.std(self.df_GUIDER.object1_peak)
-            self.frac_frames_saturated = (self.df_GUIDER['object1_peak'] > 15830*0.9).sum() / self.df_GUIDER.shape[0]
+            self.frac_frames_saturated = (self.df_GUIDER['object1_peak'] > self.saturation_threshold*0.9).sum() / self.df_GUIDER.shape[0]
         else:
             self.fwhm_mas_median = -1
             self.flux_median = -1
