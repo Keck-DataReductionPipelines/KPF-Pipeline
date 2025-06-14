@@ -105,6 +105,8 @@ WLSL1|bool|QC: L1 WLS file check passed|None
 LFCSAT|bool|QC: L1 LFC spectrum not saturated|None
 OLDWLS|bool|QC: WLSFILE within 2 days of this obs|None
 OLDWLS2|bool|QC: WLSFILE2 within 2 days of this obs|None
+OLDTRAC|bool|QC: Trace file within 5 days of this obs|None
+OLDLAMP|bool|QC: Smooth lamp file within 5 days of this obs|None
 FLATSNR|bool|QC: SNR of flat >min and <max|None
 LFCLINES|bool|QC: Number and dist of LFC lines sufficient|None
 ETALINES|bool|QC: Number and dist of Etalon lines sufficient|None
