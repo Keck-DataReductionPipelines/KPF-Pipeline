@@ -946,7 +946,7 @@ class QCDefinitions:
         self.master_types[name37] = []
         self.drift_types[name37] = []
         self.required_data_products[name37] = [] # no required data products
-        self.fits_keywords[name37] = 'TRACFILE'
+        self.fits_keywords[name37] = 'OLDTRAC'
         self.fits_comments[name37] = 'QC: Trace file within 5 days of this obs'
         self.db_columns[name37] = None
         self.fits_keyword_fail_value[name37] = 0
@@ -960,7 +960,7 @@ class QCDefinitions:
         self.master_types[name38] = []
         self.drift_types[name38] = []
         self.required_data_products[name38] = [] # no required data products
-        self.fits_keywords[name38] = 'LAMPFILE'
+        self.fits_keywords[name38] = 'OLDLAMP'
         self.fits_comments[name38] = 'QC: Smooth lamp file within 5 days of this obs'
         self.db_columns[name38] = None
         self.fits_keyword_fail_value[name38] = 0
