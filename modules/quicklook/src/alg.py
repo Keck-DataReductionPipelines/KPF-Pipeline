@@ -163,6 +163,11 @@ class QuicklookAlg:
                 self.logger.info('Generating QLP image ' + filename)
                 myGuider.plot_guider_error_time_series(fig_path=filename, show_plot=False)
 
+                # Guider Delta t of timesteps
+                filename = savedir + self.ObsID + '_deltat_time_series_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myGuider.plot_guider_delta_time_time_series(fig_path=filename, show_plot=False)
+
             except Exception as e:
                 self.logger.error(f"Failure in Guider quicklook pipeline: {e}\n{traceback.format_exc()}")
 

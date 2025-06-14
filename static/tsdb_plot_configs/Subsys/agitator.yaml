@@ -54,7 +54,7 @@ panel_arr:
       legend_frac_size: 0.25
 
   - panelvars:
-      - col: kpfmot.OUTLET_A1_Amps
+      - col: kpfpower.OUTLET_A1_Amps
         plot_type: scatter
         unit: mA
         plot_attr:

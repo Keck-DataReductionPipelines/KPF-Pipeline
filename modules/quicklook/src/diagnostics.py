@@ -272,6 +272,14 @@ def add_headers_guider(D2, logger=None):
         GDRYBIAS - y-coordinate bias guiding error in milliarcsec (mas)
         GDRSEEJZ - Seeing (arcsec) in J+Z-band from Moffat func fit
         GDRSEEV  - Scaled seeing (arcsec) in V-band from J+Z-band
+        GDRFWMD - Guider images: median(FWHM [mas])
+        GDRFWSTD - Guider images: std(FWHM [mas])
+        GDRFXMD - Guider images: median(flux [ADU])
+        GDRFXSTD - Guider images: std(flux [ADU])
+        GDRPKMD - Guider images: median(peak_flux [ADU])
+        GDRPKSTD - Guider images: std(peak_flux [ADU])
+        GDRFRSAT - Guider: frac of frames w/in 90% saturated
+        GDRNSAT - Guider: num 90% saturated pix in co-added image          
         MOONSEP  - Separation between Moon and target star (deg)
         SUNALT   - Altitude of Sun (deg)
 
@@ -314,11 +322,13 @@ def add_headers_guider(D2, logger=None):
         D2.header['PRIMARY']['GDRFXSTD'] = (round(myGuider.flux_std, 1),
                                            'Guider images: std(flux [ADU])')
         D2.header['PRIMARY']['GDRPKMD']  = (round(myGuider.peak_flux_median, 1),
-                                           'Guider images: median(flux [ADU])')
+                                           'Guider images: median(peak_flux [ADU])')
         D2.header['PRIMARY']['GDRPKSTD'] = (round(myGuider.peak_flux_std, 1),
-                                           'Guider images: std(flux [ADU])')
-        D2.header['PRIMARY']['GDRFRSAT'] = (round(myGuider.frac_saturated, 5),
-                                           'Guider images: frac of frames w/in 90% saturated')
+                                           'Guider images: std(peak_flux [ADU])')
+        D2.header['PRIMARY']['GDRFRSAT'] = (round(myGuider.frac_frames_saturated, 5),
+                                           'Guider: frac of frames w/in 90% saturated')
+        D2.header['PRIMARY']['GDRNSAT']  = (int(myGuider.n_saturated_pixels),
+                                           'Guider: num 90% saturated pix in co-added image')            
     except Exception as e:
         logger.error(f"Problem with guider measurements: {e}\n{traceback.format_exc()}")
     try: 

@@ -979,6 +979,20 @@ class QCDefinitions:
         self.db_columns[name39] = None
         self.fits_keyword_fail_value[name39] = 0
 
+        name40 = 'guider_not_saturated'
+        self.names.append(name40)
+        self.kpf_data_levels[name40] = ['L0']
+        self.descriptions[name40] = 'Guider avg frame not saturated and <10% of frames have a sat pixel'
+        self.data_types[name40] = 'int'
+        self.spectrum_types[name40] = ['Star']
+        self.master_types[name40] = []
+        self.drift_types[name40] = []
+        self.required_data_products[name40] = ['Guider']
+        self.fits_keywords[name40] = 'GUIDSAT'
+        self.fits_comments[name40] = 'QC: Guider not saturated'
+        self.db_columns[name40] = None
+        self.fits_keyword_fail_value[name40] = 0
+
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
 #        self.kpf_data_levels[name36] = ['L1']
@@ -1725,6 +1739,48 @@ class QCL0(QC):
                 QC_pass = False
             else:
                 QC_pass = True
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def guider_not_saturated(self, debug=False):
+        """
+        This Quality Control function does two checks for saturation of the 
+        Guider.  First, it checks that <10% of the guider frames have a saturated 
+        pixel.  Second, it checks that <4 pixels in the average (co-added) 
+        guider image are not saturated.
+
+        Args:
+             L0 - an L0 object
+             debug - an optional flag.  If True, missing data products are noted.
+
+         Returns:
+             QC_pass - a boolean signifying that the QC passed (True) for failed (False)
+        """
+
+        QC_pass = True
+        try:
+            # Read and condition the table of Exposure Meter Data
+            L0 = self.kpf_object
+            myGuider = AnalyzeGuider(L0)
+
+            # Check for saturated pixels
+            if hasattr(myGuider, 'n_saturated_pixels'):
+                if myGuider.n_saturated_pixels > 3:
+                    QC_pass = False
+            else:
+                QC_pass = False
+
+            # Check for saturated frames
+            if hasattr(myGuider, 'frac_frames_saturated'):
+                if myGuider.frac_frames_saturated > 0.1:
+                    QC_pass = False
+            else:
+                QC_pass = False
 
         except Exception as e:
             self.logger.info(f"Exception: {e}")

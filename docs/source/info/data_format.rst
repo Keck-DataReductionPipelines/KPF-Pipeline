@@ -230,7 +230,7 @@ DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of
 NOTJUNK   1                                           QC: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
 DATAPRL0  1                                           QC: 1 = L0 data products present with non-zero array sizes
 KWRDPRL0  1                                           QC: 1 = L0 expected keywords present 
-TIMCHKL0  1                                           QC: 1 = consistent times in L0 file
+TIMCHKL0  1                                           QC: 1 = Consistent times in L0 file
 EMSAT     1                                           QC: 1 = Exp Meter not saturated; 0 = 2+ reduced EM pixels within 90% of saturation in EM-SCI or EM-SKY 
 EMNEG     1                                           QC: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
 DATAPR2D  1                                           QC: 1 = 2D data products present with non-zero array sizes
@@ -245,7 +245,7 @@ OLDDARK   1                                           QC: 1 = Master dark within
 OLDFLAT   1                                           QC: 1 = Master flat within 5 days of this obs
 NTPGOOD   1                                           QC: 1 = NTP time within 100 ms
 GUIDGOOD  1                                           QC: 1 = Guider RMS and bias within 50 mas RMS
-TARGPLAU  1                                           QC: 1 = TARG kwds present with plausible values
+GUIDSAT   1                                           QC: 1 = Guider avg frame not saturated and <10% of frames have a sat pixel
 TARGPLAU  1                                           QC: 1 = TARG kwds present with plausible values
 AGITOK    1                                           QC: 1 = Agitator running with speed above minimum
 ISGOOD    1                                           QC: 1 = all other QC tests passed
@@ -280,13 +280,21 @@ FLXAMP1R  1.00                                        Dark current [e-/hr] - Red
 FLXAMP2R  1.00                                        Dark current [e-/hr] - Red CCD amplifier region 2 = [3700:4000,3080:3380]
 FLXCOLLR  1.00                                        Dark current [e-/hr] - Red CCD collimator-side region = [3700:4000,700:1000]
 FLXECHR   1.00                                        Dark current [e-/hr] - Red CCD echelle-side region = [3700:4000,700:1000]
-GDRXRMS   10.123                                      x-coordinate RMS guiding error in milliarcsec (mas)
-GDRYRMS   10.123                                      y-coordinate RMS guiding error in milliarcsec (mas)
-GDRRRMS   10.123                                      r-coordinate RMS guiding error in milliarcsec (mas)
-GDRXBIAS  0.0010                                      x-coordinate bias guiding error in milliarcsec (mas)
-GDRYBIAS  0.0010                                      y-coordinate bias guiding error in milliarcsec (mas)
-GDRSEEJZ  0.450                                       Seeing (arcsec) in J+Z-band from Moffat func fit
-GDRSEEV   0.450                                       Scaled seeing (arcsec) in V-band from J+Z-band
+GDRXRMS   10.123                                      Guider: x-coordinate RMS guiding error in milliarcsec (mas)
+GDRYRMS   10.123                                      Guider: y-coordinate RMS guiding error in milliarcsec (mas)
+GDRRRMS   10.123                                      Guider: r-coordinate RMS guiding error in milliarcsec (mas)
+GDRXBIAS  0.0010                                      Guider: x-coordinate bias guiding error in milliarcsec (mas)
+GDRYBIAS  0.0010                                      Guider: y-coordinate bias guiding error in milliarcsec (mas)
+GDRSEEJZ  0.450                                       Guider: Seeing (arcsec) in J+Z-band from Moffat func fit
+GDRSEEV   0.450                                       Guider: Scaled seeing (arcsec) in V-band from J+Z-band
+GDRFWMD   208.1                                       Guider frames: median(FWHM)[mas]
+GDRFWSTD  20.5                                        Guider frames: std(FWHM)[mas]
+GDRFXMD   218074.0                                    Guider frames: median(flux) [ADU]
+GDRFXSTD  98306.5                                     Guider frames: std(flux)[ADU]
+GDRPKMD   2729.5                                      Guider frames: median(peak_flux) [ADU]
+GDRPKSTD  1221.8                                      Guider frames: std(peak_flux)[ADU]
+GDRFRSAT  0.0                                         Guider: frac of frames w/in 90% saturated
+GDRNSAT   10                                          Guider: number of 90% saturated pix in co-added image
 MOONSEP   55.0                                        Separation between Moon and target star (deg)
 SUNALT    -45.0                                       Altitude of Sun (deg); negative = below horizon
 MEDGRN1   3.9642348e+07                               Median for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
