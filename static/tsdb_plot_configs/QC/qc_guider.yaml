@@ -9,5 +9,14 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "Guider RMS and bias\nwithin 50 mas RMS\n(GUIDGOOD)"
+      legend_frac_size: 0.15
+  - panelvars:
+      - col: GUIDSAT
+        plot_type: state
+        plot_attr:
+          label: "Guider Not Saturated"
+          marker: .
+    paneldict:
+      ylabel: "Guider Not Saturated\n(GUIDSAT)"
       title: QC - Guider Performance
       legend_frac_size: 0.15
