@@ -972,7 +972,6 @@ class AnalyzeL1:
                 ratio_median = np.median(ratio_array)
                 ratio_txt = f'{orderlet.upper()}/SCI2: median={latex_number(ratio_median, 2)},' + ' 99th %ile=' + f'{latex_number(ratio_max, 2)}'
 
-
             if np.shape(flux_green)==(0,):flux_green = wav_green*0. # placeholder when there is no data
             if np.shape(flux_red)==(0,):  flux_red   = wav_red  *0. # placeholder when there is no data
             wav  = np.concatenate((wav_green,  wav_red),  axis = 0)
@@ -1524,7 +1523,6 @@ class AnalyzeL1:
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,0].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='orchid') 
         axs[3,0].legend(loc='upper right')
@@ -1535,7 +1533,6 @@ class AnalyzeL1:
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,1].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='orchid') 
         axs[3,1].legend(loc='upper right')
@@ -1545,7 +1542,6 @@ class AnalyzeL1:
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[3,2].plot(w_sci2[o,imin:imax], f_sky_int[o,imin:imax] / f_sci2[o,imin:imax], 
-#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='orchid') 
         med = np.median(f_sky_int[o,imin:imax] / f_sci2[o,imin:imax])
@@ -1559,7 +1555,6 @@ class AnalyzeL1:
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,0].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,0].legend(loc='upper right')
@@ -1571,7 +1566,6 @@ class AnalyzeL1:
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,1].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,1].legend(loc='upper right')
@@ -1582,7 +1576,6 @@ class AnalyzeL1:
         med = np.median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         med_unc = uncertainty_median(f_cal_int[o,imin:imax] / f_sci2[o,imin:imax])
         axs[4,2].plot(w_sci2[o,imin:imax], f_cal_int[o,imin:imax] / f_sci2[o,imin:imax], 
-#                      label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}', 
                       label='median = ' + f'{med:07.5f}' + '$\\pm$' + f'{med_unc:07.5f}\n' + '99th %ile = ' + f'{latex_number(high, 2)}', 
                       linewidth=0.3, color='turquoise') 
         axs[4,2].legend(loc='upper right')

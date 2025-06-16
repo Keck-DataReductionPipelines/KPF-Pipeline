@@ -22,6 +22,7 @@ NTPGOOD|bool|QC: NTP time within 100 ms|None
 GUIDGOOD|bool|QC: Guider RMS and bias within 50 mas RMS|None
 TARGPLAU|bool|QC: TARG kwds present with plausible values|None
 AGITOK|bool|QC: Agitator running with speed above minimum|None
+GUIDSAT|bool|QC: Guider not saturated|None
 BIASFILE|string|Master bias file used (except for bias exposures)|None
 DARKFILE|string|Master dark file used (except for dark exposures)|None
 FLATFILE|string|Master flat file used (except for flat exposures)|None
@@ -70,6 +71,14 @@ GDRXBIAS|float|x-coordinate bias guiding error|mas
 GDRYBIAS|float|y-coordinate bias guiding error|mas
 GDRSEEJZ|float|Seeing in J+Z-band from Moffat func fit|arcsec
 GDRSEEV|float|Scaled seeing in V-band from J+Z-band|arcsec
+GDRFWMD|float|Guider frames: median(FWHM)|mas
+GDRFWSTD|float|Guider frames: std(FWHM)|mas
+GDRFXMD|float|Guider frames: median(flux)|ADU
+GDRFXSTD|float|Guider frames: std(flux)|ADU
+GDRPKMD|float|Guider frames: median(flux)|ADU
+GDRPKSTD|float|Guider frames: std(flux)|ADU
+GDRFRSAT|float|Guider: frac of frames w/in 90% saturated|None
+GDRNSAT|int|Guider: number of 90% saturated pix in co-added image|None
 MOONSEP|float|Separation between Moon and target star|deg
 SUNALT|float|Altitude of Sun; negative = below horizon|deg
 AGEBIAS|float|BIASFILE age|days
