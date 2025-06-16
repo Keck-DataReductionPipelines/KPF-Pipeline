@@ -306,6 +306,9 @@ def latex_number(number, sigfigs, min_exp=-2, max_exp=2):
     from math import log10, floor
 
     def format_single(num):
+        if np.isnan(num):
+            return 'NaN'
+
         if num == 0:
             return '0'
 
