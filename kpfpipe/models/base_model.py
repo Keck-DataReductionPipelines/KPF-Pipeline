@@ -315,7 +315,9 @@ class KPFDataModel(object):
         try:
             git_commit_hash = repo.head.object.hexsha
             git_branch = repo.active_branch.name
-            git_tag = str(repo.tags[-1])
+            # Sort tags by commit date (latest tag last)
+            tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
+            git_tag = str(tags[-1]) if tags else ''
         except TypeError:  # expected if running in testing env
             git_commit_hash = ''
             git_branch = ''

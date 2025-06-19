@@ -36,9 +36,13 @@ pipeline_logcfg = 'configs/logger.cfg'
 update_lock = threading.Lock()
 
 def _parseArguments(in_args: list) -> argparse.Namespace:
-    description = "KPF Pipeline CLI"
+    from kpfpipe import __version__  # Delayed import to avoid circularity
+    
+    description = f"KPF Pipeline CLI (version {__version__})"
 
     parser = argparse.ArgumentParser(description=description, prog='kpf')
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}',
+                        help="Show version number and exit")
     parser.add_argument('--watch', dest='watch', type=str, default=None,
                         help="Watch for new data arriving in a directory and run the recipe and config on each file.")
     parser.add_argument('--reprocess', dest='reprocess', action='store_true',
