@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-
 import sys
 import os
 import gc
@@ -26,6 +25,7 @@ from keckdrpframework.config.framework_config import ConfigClass
 
 from kpfpipe.pipelines.kpfpipeline import KPFPipeline
 from kpfpipe.logger import start_logger
+from kpfpipe.tools.git_tools import get_git_tag, get_git_branch
 
 # This is the default framework configuration file path
 framework_config = 'configs/framework.cfg'
@@ -36,12 +36,13 @@ pipeline_logcfg = 'configs/logger.cfg'
 update_lock = threading.Lock()
 
 def _parseArguments(in_args: list) -> argparse.Namespace:
-    from kpfpipe import __version__  # Delayed import to avoid circularity
     
-    description = f"KPF Pipeline CLI (version {__version__})"
+    git_tag = get_git_tag()
+    git_branch = get_git_branch()
+    description = f"KPF Pipeline CLI ({git_tag}, branch: {git_branch})"
 
     parser = argparse.ArgumentParser(description=description, prog='kpf')
-    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}',
+    parser.add_argument('--version', action='version', version=f'%(prog)s {git_tag}',
                         help="Show version number and exit")
     parser.add_argument('--watch', dest='watch', type=str, default=None,
                         help="Watch for new data arriving in a directory and run the recipe and config on each file.")

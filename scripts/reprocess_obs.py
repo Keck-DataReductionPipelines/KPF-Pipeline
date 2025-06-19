@@ -8,12 +8,7 @@ import subprocess
 import sys
 import pytz
 from tqdm import tqdm
-
-# Import the repository version
-try:
-    from kpfpipe import __version__
-except ImportError:
-    __version__ = 'unknown'
+from kpfpipe.tools.git_tools import get_git_tag, get_git_branch
 
 
 def parse_args():
@@ -58,7 +53,8 @@ def load_processed_dates(logfile, version):
 
 def main():
     args = parse_args()
-
+    git_tag = get_git_tag()
+    git_branch = get_git_branch()
     local_tz = pytz.timezone(args.local_tz)
 
     log_exists = os.path.isfile(args.logfile)
@@ -85,7 +81,7 @@ def main():
 
     processed_dates = set()
     if not args.overwrite:
-        processed_dates = load_processed_dates(args.logfile, __version__)
+        processed_dates = load_processed_dates(args.logfile, git_tag)
 
     nice_prefix = [] if args.not_nice else ['nice', '-n', '15']
 
@@ -96,7 +92,7 @@ def main():
             tqdm.write(f"Skipping previously processed datecode: {datecode}")
             continue
 
-        tqdm.write(f"Reprocessing Datecode: {datecode}")
+        tqdm.write(f"Reprocessing Datecode: {datecode} at {datetime.datetime.now().isoformat()} with {git_tag} (branch: {git_branch})")
 
         dirs_to_remove = [
             f'/data/2D/{datecode}/', f'/data/L1/{datecode}/', f'/data/L2/{datecode}/',
@@ -125,13 +121,10 @@ def main():
 
             start_time = datetime.datetime.now(local_tz)
 
-            stdout_option = None if args.stdout else subprocess.DEVNULL
-            stderr_option = subprocess.PIPE
-
             result = subprocess.run(
                 nice_prefix + cmd_kpf,
-                stdout=stdout_option,
-                stderr=stderr_option,
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL, 
                 text=True,
                 check=False
             )
@@ -147,7 +140,7 @@ def main():
                     err_log.write(error_message)
 
             status = "" if result.returncode == 0 else " FAILED"
-            logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {__version__:<10}{status}")
+            logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {git_tag:<10}{status}")
             os.chmod(args.logfile, 0o666)
 
 
