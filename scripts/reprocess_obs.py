@@ -63,7 +63,7 @@ def main():
 
     if not log_exists:
         with open(args.logfile, 'w') as f:
-            f.write(f"{'Datecode':<10}  {'Start Time':<19}  {'End Time':<19}  {'Run Time':<15}  {'Version':<10}\n")
+            f.write(f"{'Datecode':<10}  {'Start Time':<19}  {'End Time':<19}  {'Run Time':<11}  {'Version':<10}\n")
         os.chmod(args.logfile, 0o666)
 
     start_date = datetime.datetime.strptime(args.startdate, '%Y%m%d')
