@@ -59,6 +59,10 @@ class ModifyWLS:
     def apply_drift(self, method):
         self.method = method
 
+        if self.df.empty:
+            self.log.warning("DRIFT MODULE, apply_drift: Drift DataFrame is empty. Exiting early.")
+            return self.l1_obj
+
         is_solar = self.l1_obj.header['PRIMARY']['SCI-OBJ'].startswith('SoCal')
         if is_solar:
             self.log.warning(f'Drift correction not implemented for SoCal data')
