@@ -17,13 +17,12 @@ def parse_args():
     parser.add_argument('enddate', type=str, help='End date in YYYYMMDD format')
     parser.add_argument('--ncpu', type=int, default=max(1, multiprocessing.cpu_count() // 2),
                         help='Number of CPUs to use')
-    parser.add_argument('--overwrite', action='store_true', help='Overwrite previous successful processing results with current version in logfile')
+    parser.add_argument('--force', action='store_true', help='Process even if datecode/version are listed in the logfile')
     parser.add_argument('--logfile', type=str, default='reprocess_obs.log', help='Log file path')
     parser.add_argument('--forward', action='store_true', help='Process datecodes in chronological order (reverse is default)')
     parser.add_argument('--not-nice', action='store_true', help='Do not apply standard nice (=15) deprioritization')
-    parser.add_argument('--no-delete', action='store_true', help='Do not delete existing 2D/L1/L2/QLP/outliers/logs/logs_QLP files before reprocessing')
+    parser.add_argument('--delete', action='store_true', help='Delete existing 2D/L1/L2/QLP/outliers/logs/logs_QLP files before reprocessing')
     parser.add_argument('--dry-run', action='store_true', help='Print commands without executing them')
-    parser.add_argument('--stdout', action='store_true', help='Display stdout from kpf command')
     parser.add_argument('--local-tz', type=str, default='America/Los_Angeles',
                         help='Local timezone for logfile lines (default: America/Los_Angeles)')
     parser.add_argument('--verbose', action='store_true', help='Print detailed messages during execution')
@@ -80,7 +79,7 @@ def main():
         sys.exit(0)
 
     processed_dates = set()
-    if not args.overwrite:
+    if not args.force:
         processed_dates = load_processed_dates(args.logfile, git_tag)
 
     nice_prefix = [] if args.not_nice else ['nice', '-n', '15']
@@ -92,7 +91,7 @@ def main():
             tqdm.write(f"Skipping previously processed datecode: {datecode}")
             continue
 
-        tqdm.write(f"Reprocessing Datecode: {datecode} at {datetime.datetime.now().isoformat()} with {git_tag} (branch: {git_branch})")
+        tqdm.write(f"Reprocessing {datecode} at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} with {git_tag} (branch: {git_branch})")
 
         dirs_to_remove = [
             f'/data/2D/{datecode}/', f'/data/L1/{datecode}/', f'/data/L2/{datecode}/',
@@ -106,12 +105,12 @@ def main():
         ]
 
         if args.dry_run:
-            if not args.no_delete:
+            if args.delete:
                 for directory in dirs_to_remove:
                     print(f'find {directory} -mindepth 1 -delete')
             print(' '.join(nice_prefix + cmd_kpf))
         else:
-            if not args.no_delete:
+            if args.delete:
                 for directory in dirs_to_remove:
                     if os.path.exists(directory):
                         result = subprocess.run(['find', directory, '-mindepth', '1', '-delete', '-print'], capture_output=True, text=True)
