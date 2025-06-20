@@ -10,4 +10,4 @@ sys.path.insert(0, os.path.abspath('../KeckDRPFramework'))
 
 import kpfpipe.cli
 
-__version__ = '2.10.2'
+__version__ = '2.10.3'
