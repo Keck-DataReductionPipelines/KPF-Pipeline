@@ -14,8 +14,8 @@ In production processing by the DRP development team, this command is in the xte
 
 Here's the docstring showing all of the options.::
 
-    usage: reprocess_obs.py [-h] [--ncpu NCPU] [--overwrite] [--logfile LOGFILE] [--forward] [--force]
-                            [--not-nice] [--delete] [--dry-run] [--local-tz LOCAL_TZ]
+    usage: reprocess_obs.py [-h] [--ncpu NCPU] [--delete] [--verbose] [--force] [--logfile LOGFILE]
+                             [--forward] [--not-nice] [--dry-run] [--local-tz LOCAL_TZ]
                             startdate enddate
     
     Reprocess KPF data over a date range.
@@ -28,6 +28,7 @@ Here's the docstring showing all of the options.::
       -h, --help           show this help message and exit
       --ncpu NCPU          Number of CPUs to use
       --delete             Delete existing 2D/L1/L2/QLP files before reprocessing
+      --verbose            Verbose stdout
       --force              Process even if datecode/version are listed in the logfile
       --logfile LOGFILE    Log file path
       --forward            Process datecodes in chronological order (reverse is default)
