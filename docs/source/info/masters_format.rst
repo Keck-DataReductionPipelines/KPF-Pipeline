@@ -231,7 +231,7 @@ Master Flat
 ^^^^^^^^^^^
 
 A 2D master-flat file is a pixel-by-pixel clipped mean of a stack of L0 FITS image-data frames with
-``IMTYPE='Flatlamp'``,``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds observed on the same date.
+``IMTYPE='Flatlamp'``, ``OBJECT='autocal-flat-all'``, and ``EXPTIME`` less than or equal to 60 seconds observed on the same date.
 
 Here are the FITS extensions of interest in a 2D master-flat file:
 
