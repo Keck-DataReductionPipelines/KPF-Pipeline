@@ -14,8 +14,8 @@ In production processing by the DRP development team, this command is in the xte
 
 Here's the docstring showing all of the options.::
 
-    usage: reprocess_obs.py [-h] [--ncpu NCPU] [--overwrite] [--logfile LOGFILE] [--forward] [--not-nice]
-                            [--no-delete] [--dry-run] [--stdout] [--local-tz LOCAL_TZ]
+    usage: reprocess_obs.py [-h] [--ncpu NCPU] [--delete] [--verbose] [--force] [--logfile LOGFILE]
+                             [--forward] [--not-nice] [--dry-run] [--local-tz LOCAL_TZ]
                             startdate enddate
     
     Reprocess KPF data over a date range.
@@ -27,13 +27,13 @@ Here's the docstring showing all of the options.::
     options:
       -h, --help           show this help message and exit
       --ncpu NCPU          Number of CPUs to use
-      --overwrite          Overwrite previous successful processing results with current version in logfile
+      --delete             Delete existing 2D/L1/L2/QLP files before reprocessing
+      --verbose            Verbose stdout
+      --force              Process even if datecode/version are listed in the logfile
       --logfile LOGFILE    Log file path
       --forward            Process datecodes in chronological order (reverse is default)
       --not-nice           Do not apply standard nice (=15) deprioritization
-      --no-delete          Do not delete existing 2D/L1/L2/QLP files before reprocessing
       --dry-run            Print commands without executing them
-      --stdout             Display stdout from kpf command
       --local-tz LOCAL_TZ  Local timezone (default: America/Los_Angeles)
 
 One can also reprocess KPF data using the `kpf` command and a recipe.  
