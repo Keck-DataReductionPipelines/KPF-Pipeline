@@ -8,7 +8,7 @@ from datetime import datetime
 from scipy.ndimage import convolve1d
 from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger, styled_text
-from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected, get_ObsID
+from modules.Utils.kpf_parse import HeaderParse, get_latest_receipt_time, get_datetime_obsid, get_kpf_level, get_data_products_expected, get_ObsID
 from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_2D, get_data_products_L1, get_data_products_L2
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_2d import Analyze2D
@@ -314,7 +314,13 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_outfile
     logger = logger if logger is not None else DummyLogger()
     this_data_level = get_kpf_level(kpf_object)
     primary_header = HeaderParse(kpf_object, 'PRIMARY')
-    this_spectrum_type = primary_header.get_name(use_star_names=False)
+    this_spectrum_type = primary_header.get_name(use_star_names=False)    
+    latest_receipt_time = get_latest_receipt_time(kpf_object)
+    if 'DRPTAG' in primary_header.header:
+        drptag = primary_header.header['DRPTAG']
+    else:
+        drptag = ''
+
 
     ObsID = kpf_object.header['PRIMARY'].get('OFNAME', 'ObsID not available')
     ObsID = ObsID.removesuffix('.fits')
@@ -354,8 +360,14 @@ def QC_report(kpf_object, return_keywords=True, print_output=False, yaml_outfile
 
     if yaml_outfile:
         filename = yaml_outfile if isinstance(yaml_outfile, str) else 'qc_report.yaml'
+        qc_header = {
+            "Level": this_data_level,
+            "Modification_Date": latest_receipt_time,
+            "Type": this_spectrum_type,
+            "DRPTAG": drptag
+        }
         with open(filename, 'w') as yaml_file:
-            yaml.dump({"QC_Report": report_rows}, yaml_file, sort_keys=False)
+            yaml.dump({"QC_Header": qc_header, "QC_Report": report_rows}, yaml_file, sort_keys=False)
         logger.info(f"YAML QC report saved to {filename}")
 
     if print_output:

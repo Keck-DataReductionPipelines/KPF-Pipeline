@@ -131,7 +131,6 @@ class HeaderParse:
             self.name = ''
         return self.name
 
-
     def get_obsid(self):
         """
         Returns the ObsID for a KPF File (L0, 2D, L1, or L2).
@@ -693,3 +692,27 @@ def get_kpf_data(ObsID, data_level, data_dir='/data', return_kpf_object=True):
 
     return return_object
 
+
+def get_latest_receipt_time(kpf_object):
+    """
+    Return the 'Time' time from the last row where 'Module_Name' does not contain 'fits'.
+    
+    Args:
+        df (pd.DataFrame): Input DataFrame with a 'Module_Name' and 'Time' column.
+    
+    Returns:
+        str or None: The value of 'Time' in the last matching row, or None if not found.
+    """
+    try:
+        df = kpf_object['RECEIPT']
+        mask = ~df['Module_Name'].str.contains('fits', na=False)
+        filtered = df[mask]
+        last_time = filtered.iloc[-1]['Time']
+        last_time = datetime.fromisoformat(last_time).strftime('%Y-%m-%d %H:%M:%S')
+        if not filtered.empty:
+            return last_time
+        else:
+            print('Test')
+            return None
+    except:
+        return None
