@@ -47,7 +47,7 @@ class ModifyWLS:
                 self.wls_session = session
 
         # Connect to TS DB
-        myTS = AnalyzeTimeSeries(db_path=self.db_path, backend=self.backend)
+        myTS = AnalyzeTimeSeries(backend=self.backend)
 
         date = self.dt.strftime(format='%Y%m%d')
         start_date = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) - timedelta(days=60) # this should be as long as our longest time witout LFC.
@@ -58,6 +58,10 @@ class ModifyWLS:
 
     def apply_drift(self, method):
         self.method = method
+
+        if self.df.empty:
+            self.log.warning("DRIFT MODULE, apply_drift: Drift DataFrame is empty. Exiting early.")
+            return self.l1_obj
 
         is_solar = self.l1_obj.header['PRIMARY']['SCI-OBJ'].startswith('SoCal')
         if is_solar:
@@ -85,23 +89,34 @@ class ModifyWLS:
         df = df[df['OBJECT'].str.contains(r'etalon-all|slewcal', na=False)]
         current_drp_tag = self.drptag
         df = df[(df['DRPTAGL1'] == current_drp_tag)]
-
+        if df.empty:
+            self.log.warning("DRIFT MODULE, prepare_table1: Filtered to empty DataFrame. Exiting early.")
+            return df
         df = df[(df['READSPED'] == self.readmode)]
         snr_low_lim548  = 500 # needs double checked
         snr_high_lim548 = 2500 # needs double checked
         df = df[(df['SNRSC548'] > snr_low_lim548)]
         df = df[(df['SNRSC548'] <= snr_high_lim548)]
         # Extract date from DATE-MID, remove dashes without treating pattern as regex
+        if df.empty:
+            self.log.warning("DRIFT MODULE, prepare_table2: Filtered to empty DataFrame. Exiting early.")
+            return df
 
         df['date_code_utctime'] = df['DATE-MID'].astype(str).str.slice(0, 10).str.replace('-', '', regex=False)
         df['date_code_wls_file'] = df['WLSFILE'].str.extract(r'(\d{8})', expand=False)
         df['date_code_wls_file2'] = df['WLSFILE2'].str.extract(r'(\d{8})', expand=False)
+        if df.empty:
+            self.log.warning("DRIFT MODULE, prepare_table3: Filtered to empty DataFrame. Exiting early.")
+            return df
 
         df['etalon_mask_date'] = df['SCIMPATH'].str.split('/').str[-1].str.slice(0, 8) # SCIMPATH for etalon is the etalon mask date.
         df = df[df['date_code_wls_file'] == df['etalon_mask_date']] #This forces the WLS and Mask to be from the same date but this should never happen.
 
         df['datetime'] = pd.to_datetime(df['DATE-MID'])
         df = df[(df['ObsID'] != self.l1_obj.filename.split('_')[0])]         # don't allow it to choose itself as the drift correction
+        if df.empty:
+            self.log.warning("DRIFT MODULE, prepare_table4: Filtered to empty DataFrame. Exiting early.")
+            return df
 
         return df
 
