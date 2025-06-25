@@ -21,6 +21,8 @@ class StrayLightAlg:
                  target_2D, 
                  order_trace_green,
                  order_trace_red,
+                 default_config_path,
+                 logger=None
                 ):
         # Input arguments
         self.config = ConfigClass(default_config_path)
