@@ -5,6 +5,7 @@ import astropy.constants as apc
 from astropy.stats import mad_std
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.polynomial import polynomial as poly
 import pandas as pd
 from scipy.ndimage import median_filter, gaussian_filter
 from scipy.interpolate import LSQUnivariateSpline, CubicSpline
