@@ -102,7 +102,6 @@ class StrayLightAlg:
     
             smooth_stray_light = self._polyval2d(coeffs, self.polyorder, data_image.shape)
             smooth_stray_light = np.maximum(smooth_stray_light, 0)
-            smooth_stray_light -= np.mean((data_image - smooth_stray_light)[~mask])
 
             self.target_2D[f'{chip}_STRAY_LIGHT'] = smooth_stray_light.copy()
 
