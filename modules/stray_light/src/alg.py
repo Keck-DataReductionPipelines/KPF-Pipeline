@@ -16,7 +16,19 @@ from modules.Utils.config_parser import ConfigHandler
 
 class StrayLightAlg:
     """
-    Docstring
+    This module defines 'StrayLight' and methods to perform stray (scattered) light estimation from inter-order pixels.
+
+    Args:
+        target_2D (KPF0): A KPF 2D science object
+        order_trace_green (pd.DataFrame): a pre-loaded dataframe with order trace for GREEN CCD
+        order_trace_red (pd.DataFrame): a pre-loaded dataframe with order trace for RED CCD
+        config (configparser.ConfigParser): Config context
+        logger (logging.Logger): Instance of logging.Logger
+    
+    Attributes:
+        rawimage (np.ndarray): From parameter 'rawimage'.
+    
+
     """
     def __init__(self, 
                  target_2D, 
@@ -25,6 +37,17 @@ class StrayLightAlg:
                  default_config_path,
                  logger=None
                 ):
+        """
+        Inits StrayLight class with raw data, order traces, config, logger.
+
+        Args:
+            target_2D (KPF0): A KPF 2D science object
+            order_trace_green (pd.DataFrame): a pre-loaded dataframe with order trace for GREEN CCD
+            order_trace_red (pd.DataFrame): a pre-loaded dataframe with order trace for RED CCD
+            config (configparser.ConfigParser): Config context
+            logger (logging.Logger): Instance of logging.Logger
+        """
+
         # Input arguments
         self.config = ConfigClass(default_config_path)
         if logger == None:
@@ -45,6 +68,9 @@ class StrayLightAlg:
 
     
     def add_keywords(self, stray_light_image, inter_order_mask):
+        """
+        Adds keywords to track basic stray light statistics (mean, rms, min, max)
+        """
         header = self.target_2D.header['PRIMARY']
 
         if self.method == 'polynomial':
@@ -67,6 +93,14 @@ class StrayLightAlg:
 
 
     def estimate_stray_light(self):
+        """
+        Main method used to estimate stray light
+        Calls method defined in config file; allowed methods are 'zero', 'mean', and 'polynomial'
+
+        Returns:
+            stray_light_image (dict of ndarrys): 2D stray light images for GREEN and RED ccds
+            inter_order_mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
+        """
         try:
             stray_light_method = self.__getattribute__(self.method)
         except AttributeError:
@@ -80,6 +114,13 @@ class StrayLightAlg:
 
     
     def zero(self):
+        """
+        Method to estimate stray light -- returns zero (i.e. no stray light)
+
+        Returns:
+            stray_light (dict of ndarrys): 2D stray light images for GREEN and RED ccds
+            mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
+        """
         mask = {}
         stray_light = {}
 
@@ -91,6 +132,13 @@ class StrayLightAlg:
 
     
     def mean(self):
+        """
+        Method to estimate stray light -- returns mean of inter-order pixels
+
+        Returns:
+            stray_light (dict of ndarrys): 2D stray light images for GREEN and RED ccds
+            mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
+        """
         mask = {}
         stray_light = {}
 
@@ -105,6 +153,14 @@ class StrayLightAlg:
 
     
     def polynomial(self):
+        """
+        Method to estimate stray light -- fits a 2D polynomial to inter-order pixels
+        Polynomial order can be set in the config file
+        
+        Returns:
+            stray_light (dict of ndarrys): 2D stray light images for GREEN and RED ccds
+            mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
+        """
         mask = {}
         stray_light = {}
 
