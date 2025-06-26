@@ -43,18 +43,27 @@ class StrayLightAlg:
         self.order_trace['RED_CCD'] = order_trace_red
         self.drptag = self.target_2D.header['PRIMARY']['DRPTAG']
 
-        self.add_extensions()
-
     
-    def add_keywords(self):
+    def add_keywords(self, stray_light_image, inter_order_mask):
         header = self.target_2D.header['PRIMARY']
-        header['SL_METH'] = self.method      # COMMENT method used to estimate stray light
-        header['SL_POLY'] = self.polyorder   # COMMENT polynomial order used to estimate stray light
 
+        if self.method == 'polynomial':
+            method = f"{self.method}_{self.polyorder}"
+        else:
+            method = self.method
 
-    def add_extensions(self):
-        self.target_2D.create_extension('GREEN_STRAY_LIGHT', np.array)
-        self.target_2D.create_extension('RED_STRAY_LIGHT', np.array)
+        slg = stray_light_image['GREEN_CCD'][~inter_order_mask['GREEN_CCD']]
+        slr = stray_light_image['RED_CCD'][~inter_order_mask['RED_CCD']]
+
+        header['SL_METH'] = method             # COMMENT method used to estimate stray light
+        header['SLG_MEAN'] = np.mean(slg)      # COMMENT mean of GREEN inter-order stray light
+        header['SLG_RMS']  = np.std(slg)       # COMMENT root-mean-square of GREEN inter-order stray light
+        header['SLG_MIN']  = np.min(slg)       # COMMENT minimum of GREEN inter-order stray light
+        header['SLG_MAX']  = np.max(slg)       # COMMENT maximum of GREEN inter-order stray light
+        header['SLR_MEAN'] = np.mean(slr)      # COMMENT mean of RED inter-order stray light
+        header['SLR_RMS']  = np.std(slr)       # COMMENT root-mean-square of RED inter-order stray light
+        header['SLR_MIN']  = np.min(slr)       # COMMENT minimum of RED inter-order stray light
+        header['SLR_MAX']  = np.max(slr)       # COMMENT maximum of RED inter-order stray light
 
 
     def estimate_stray_light(self):
@@ -64,48 +73,57 @@ class StrayLightAlg:
             #self.log.error(f'Stray light method {self.method} not implemented.')
             raise(AttributeError)
 
-        out_2D = stray_light_method()
-        self.add_keywords()
+        stray_light_image, inter_order_mask = stray_light_method()
+        self.add_keywords(stray_light_image, inter_order_mask)
 
-        return out_2D
+        return stray_light_image, inter_order_mask
 
     
     def zero(self):
-        self.target_2D['GREEN_STRAY_LIGHT'] = np.zeros_like(self.target_2D['GREEN_CCD'])
-        self.target_2D['RED_STRAY_LIGHT'] = np.zeros_like(self.target_2D['RED_CCD'])
+        mask = {}
+        stray_light = {}
 
-        return self.target_2D
+        for chip in ['GREEN', 'RED']:
+            mask[f'{chip}_CCD'] = self._inter_order_mask(chip).astype('bool')
+            stray_light[f'{chip}_CCD'] = np.zeros_like(self.target_2D[f'{chip}_CCD'])
+
+        return stray_light, mask
 
     
     def mean(self):
-        for chip in ['GREEN', 'RED']:
-            data_image = np.array(self.target_2D[f'{chip}_CCD'].data)
-            mask = self._inter_order_mask(chip).astype('bool')
+        mask = {}
+        stray_light = {}
 
-            self.target_2D[f'{chip}_STRAY_LIGHT'] = np.mean(data_image[~mask])*np.ones_like(data_image)
+        for chip in ['GREEN', 'RED']:
+            m = self._inter_order_mask(chip).astype('bool')
+            d = np.array(self.target_2D[f'{chip}_CCD'].data)
+
+            mask[f'{chip}_CCD'] = m.copy()
+            stray_light[f'{chip}_CCD'] = np.mean(d[~m])*np.ones_like(d)
     
-        return self.target_2D
+        return stray_light, mask
 
     
     def polynomial(self):
+        mask = {}
+        stray_light = {}
+
         for chip in ['GREEN', 'RED']:
-            data_image = np.array(self.target_2D[f'{chip}_CCD'].data)
-            nrow, ncol = data_image.shape
-            
-            mask = self._inter_order_mask(chip).astype('bool')
-            
+            m = self._inter_order_mask(chip).astype('bool')
+            d = np.array(self.target_2D[f'{chip}_CCD'].data)
+
             clip = self.edge_clip
-            coeffs = self._polyfit2d(data_image[clip:-clip,clip:-clip],
+            coeffs = self._polyfit2d(d[clip:-clip,clip:-clip],
                                      self.polyorder,
-                                     mask[clip:-clip,clip:-clip]
+                                     m[clip:-clip,clip:-clip]
                                     )
     
-            smooth_stray_light = self._polyval2d(coeffs, self.polyorder, data_image.shape)
-            smooth_stray_light = np.maximum(smooth_stray_light, 0)
+            stray_light[f'{chip}_CCD'] = self._polyval2d(coeffs, self.polyorder, d.shape)
+            stray_light[f'{chip}_CCD'] = np.maximum(stray_light[f'{chip}_CCD'], 0)
 
-            self.target_2D[f'{chip}_STRAY_LIGHT'] = smooth_stray_light.copy()
+            mask[f'{chip}_CCD'] = m.copy()
 
-        return self.target_2D
+        return stray_light, mask
         
 
     def _polyfit2d(self, data_image, polyorder, mask=None):
