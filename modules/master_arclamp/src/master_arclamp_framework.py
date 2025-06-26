@@ -411,7 +411,11 @@ class MasterArclampFramework(KPF0_Primitive):
 
                 # Subtract off exposure time times master-dark-current rate.
 
-                single_normalized_frame_data = single_frame_data - exp_time * np.array(master_dark_data[ffi])
+                try:
+                    single_normalized_frame_data = single_frame_data - exp_time * np.array(master_dark_data[ffi])
+                except:
+                    single_normalized_frame_data = single_frame_data
+                    self.logger.debug('Could not subtract dark: np.shape(np.array(master_dark_data[ffi])) = {},{},{}'.format(i,ffi,np.shape(np.array(master_dark_data[ffi]))))
 
                 if self.skip_flattening == 0:
                     #self.logger.debug('Flattening arclamp image: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,frames_data_path[i],ffi,exp_time))
@@ -463,8 +467,42 @@ class MasterArclampFramework(KPF0_Primitive):
                 elif "RED_CCD" in (ffi).upper():
                    master_arclamp_infobits |= 2**1
 
+
+        # If both GREEN_CCD and RED_CCD extensions have less than two frames in the stack,
+        # then do not generate the 2D FITS product.
+
+        all_bad = True
+        for ffi in self.lev0_ffi_exts:
+            if n_frames_kept[ffi] > 1:
+                all_bad = False
+                break
+
+        if all_bad:
+            self.logger.info('all_bad = {}'.format(all_bad))
+            master_arclamp_exit_code = 8
+            exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+            return Arguments(exit_list)
+
         for ext in del_ext_list:
             master_holder.del_extension(ext)
+
+        # Remove confusing or non-relevant keywords, if existing.
+
+        try:
+            del master_holder.header['GREEN_CCD']['OSCANV1']
+            del master_holder.header['GREEN_CCD']['OSCANV2']
+            del master_holder.header['GREEN_CCD']['OSCANV3']
+            del master_holder.header['GREEN_CCD']['OSCANV4']
+        except KeyError as err:
+            pass
+
+        try:
+            del master_holder.header['RED_CCD']['OSCANV1']
+            del master_holder.header['RED_CCD']['OSCANV2']
+            del master_holder.header['RED_CCD']['OSCANV3']
+            del master_holder.header['RED_CCD']['OSCANV4']
+        except KeyError as err:
+            pass
 
         for ffi in self.lev0_ffi_exts:
             if ffi in del_ext_list: continue

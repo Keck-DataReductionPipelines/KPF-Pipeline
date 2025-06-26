@@ -1,27 +1,38 @@
-#! /usr/local/bin/perl
+#! /usr/bin/perl
 
 use strict;
 use warnings;
 
 select STDERR; $| = 1; select STDOUT; $| = 1;
-my $cmd0 = "df -h /data/user/rlaher/sbx";
+
+
+# Sandbox directory for intermediate files.
+# E.g., /data/user/rlaher/sbx
+my $sandbox = $ENV{KPFCRONJOB_SBX};
+
+if (! (defined $sandbox)) {
+    die "*** Env. var. KPFCRONJOB_SBX not set; quitting...\n";
+}
+
+
+my $cmd0 = "df -h ${sandbox}";
 print "Executing [$cmd0]...\n";
 my @op0 = `$cmd0`;
 if (@op0) { print "Output from [$cmd0]=[@op0]\n"; }
 
 my $olderthanndays = 3;   # Remove files older than 3 days.
 
-my $dir1 = "/data/user/rlaher/sbx/L0";
+my $dir1 = "${sandbox}/L0";
 &removeOldSubDirs($olderthanndays, $dir1);
 
 
-my $dir2 = "/data/user/rlaher/sbx/2D";
+my $dir2 = "${sandbox}/2D";
 &removeOldSubDirs($olderthanndays, $dir2);
 
-my $dir3 = "/data/user/rlaher/sbx/masters/wlpixelfiles";
+my $dir3 = "${sandbox}/masters/wlpixelfiles";
 &removeOldFiles($olderthanndays, $dir3);
 
-my $cmd1 = "df -h /data/user/rlaher/sbx";
+my $cmd1 = "df -h ${sandbox}";
 
 print "Executing [$cmd1]...\n";
 my @op1 = `$cmd1`;
@@ -37,9 +48,9 @@ sub removeOldSubDirs {
     my ($ndaysold, $dir) = @_;
 
     print "dir = $dir\n";
-    opendir(DIR, "$dir"); 
-    my @files = readdir DIR; 
-    closedir DIR; 
+    opendir(DIR, "$dir");
+    my @files = readdir DIR;
+    closedir DIR;
     foreach my $file (@files) {
         print "file = $file\n";
         if (($file eq ".") or ($file eq "..") or ($file =~ /^\.+/)) {
@@ -50,7 +61,7 @@ sub removeOldSubDirs {
         if ((-d $file) and (! ($file =~ /^.+\/\..*$/))) {
             my $fileage = -M $file;
             if ($fileage > $ndaysold) {
-                print "Removing directory---->[$file]\n";  
+                print "Removing directory---->[$file]\n";
                 `rm -rf $file`;
             }
         }
@@ -67,9 +78,9 @@ sub removeOldFiles {
     my ($ndaysold, $dir) = @_;
 
     print "dir = $dir\n";
-    opendir(DIR, "$dir"); 
-    my @files = readdir DIR; 
-    closedir DIR; 
+    opendir(DIR, "$dir");
+    my @files = readdir DIR;
+    closedir DIR;
     foreach my $file (@files) {
         print "file = $file\n";
         if (($file eq ".") or ($file eq "..") or ($file =~ /^\.+/)) {
@@ -80,7 +91,7 @@ sub removeOldFiles {
         if ((-f $file) and (! ($file =~ /^.+\/\..*$/))) {
             my $fileage = -M $file;
             if ($fileage > $ndaysold) {
-                print "Removing file---->[$file]\n";  
+                print "Removing file---->[$file]\n";
                 `rm -rf $file`;
             }
         }

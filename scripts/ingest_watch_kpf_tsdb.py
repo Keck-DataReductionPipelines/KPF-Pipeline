@@ -1,5 +1,40 @@
 #!/usr/bin/env python3
 
+"""
+Script Name: ingest_watch_kpf_tsdb.py
+
+Description:
+    This script watches directories for new or modified KPF files and ingests their
+    data into a KPF Time Series Database. The script utilizes the Watchdog library
+    to monitor filesystem events and triggers ingestion processes. Additionally, it 
+    performs periodic scans of data directories to ensure all observations are 
+    ingested.
+
+Features:
+    - Ingests file metadata and telemetry into the database.
+    - Watches multiple directories for new or modified KPF files.
+    - Performs periodic scans of data directories.
+    - Supports multithreaded execution.
+
+Usage:
+    Run this script with optional arguments to specify the database path:
+    
+        python ingest_watch_kpf_tsdb.py --db_path /path/to/database.db
+
+Options:
+    --db_path   Path to the time series database file. Default: /data/time_series/kpf_ts.db
+
+Examples:
+    1. Using default database path:
+        python ingest_watch_kpf_tsdb.py
+
+    2. Specifying a custom database path:
+        python ingest_watch_kpf_tsdb.py --db_path /custom/path/to/kpf_ts.db
+        
+To-do: 
+	1. Add backend as an argument
+"""
+
 import os
 import time
 import queue
@@ -56,7 +91,7 @@ class Handler(FileSystemEventHandler):
             
 def process_queue(event_queue, db_path, stop_event):
     """
-    This method process a set of events (files creations and modifications) by 
+    This method processes a set of events (files creations and modifications) by 
     ingesting the headers and telemetry from the corresponding observations.
     """
     processing_interval = 30  # seconds to wait before each processing cycle
@@ -93,9 +128,9 @@ def process_queue(event_queue, db_path, stop_event):
             if len(L0_path_batch) > 0:
                 L0_path_batch = sorted(L0_path_batch)
                 ObsID_batch = [get_ObsID(L0_path) for L0_path in L0_path_batch]
-                myTS = AnalyzeTimeSeries(db_path=db_path)
+                myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
                 myTS.logger.info('Ingesting ' + str(len(L0_path_batch)) + ' observations: ' + ', '.join(ObsID_batch))
-                myTS.ingest_batch_observation(L0_path_batch)
+                myTS.db.ingest_batch_observations(L0_path_batch)
                 myTS.logger.info('Finished ingesting ' + str(len(L0_path_batch)) + ' observations.')
                 myTS = [] # clear memory
             
@@ -112,15 +147,15 @@ def periodic_scan(db_path,stop_event):
     time.sleep(20)            
     start_date = '20221201'
     end_date   = '20400101'
-    sec_between_scans = 3600
+    sec_between_scans = 3600*12
     last_run_time = datetime.now() - timedelta(seconds=sec_between_scans)
 
     while not stop_event.is_set():
         if datetime.now() - last_run_time >= timedelta(seconds=sec_between_scans):
-            myTS = AnalyzeTimeSeries(db_path=db_path)
+            myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
             myTS.logger.info('Starting periodic scan for new or changed files.')
-            myTS.ingest_dates_to_db(start_date, end_date)
-            myTS.print_db_status()
+            myTS.db.ingest_dates_to_db(start_date, end_date, batch_size=10000, reverse=True, force_ingest=True)
+            myTS.db.print_db_status()
             myTS.logger.info('Ending periodic scan for new or changed files.')
             myTS = [] # clear memory
             last_run_time = datetime.now()

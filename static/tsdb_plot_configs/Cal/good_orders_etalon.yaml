@@ -1,0 +1,203 @@
+description: Good Orders - Etalon
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: ETALGC1
+        plot_type: plot
+        plot_attr:
+          label: "Max Good CAL Order"
+          marker: .
+          linewidth: 0.5
+          color: limegreen
+      - col: ETALGC0
+        plot_type: plot
+        plot_attr:
+          label: "Min Good CAL Order"
+          marker: .
+          linewidth: 0.5
+          color: green
+    paneldict:
+      ylabel: "Max/Min Good Orders\n(Etalon Green - SCI)"
+      not_junk: true
+      legend_frac_size: 0.30
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
+      axhspan:
+        1:
+          ymin: -0.7
+          ymax: -2.5
+          color: red
+          alpha: 0.2
+      
+  - panelvars:
+      - col: ETALGC1
+        plot_type: plot
+        plot_attr:
+          label: "Max Good CAL Order"
+          marker: .
+          linewidth: 0.5
+          color: limegreen
+      - col: ETALGC0
+        plot_type: plot
+        plot_attr:
+          label: "Min Good CAL Order"
+          marker: .
+          linewidth: 0.5
+          color: green
+    paneldict:
+      ylabel: "Max/Min Good Orders\n(Etalon Green - CAL)"
+      not_junk: true
+      legend_frac_size: 0.30
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
+      axhspan:
+        1:
+          ymin: -0.7
+          ymax: -2.5
+          color: red
+          alpha: 0.2
+      
+  - panelvars:
+      - col: ETALGK1
+        plot_type: plot
+        plot_attr:
+          label: "Max Good SKY Order"
+          marker: .
+          linewidth: 0.5
+          color: limegreen
+      - col: ETALGK0
+        plot_type: plot
+        plot_attr:
+          label: "Min Good SKY Order"
+          marker: .
+          linewidth: 0.5
+          color: green
+    paneldict:
+      ylabel: "Max/Min Good Orders\n(Etalon Green - CAL)"
+      not_junk: true
+      legend_frac_size: 0.30
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
+      axhspan:
+        1:
+          ymin: -0.7
+          ymax: -2.5
+          color: red
+          alpha: 0.2
+
+  - panelvars:
+      - col: ETALRS1
+        plot_type: plot
+        plot_attr:
+          color: red
+          label: "Max Good SCI Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALRS0
+        plot_type: plot
+        plot_attr:
+          color: indianred
+          label: "Min Good SCI Order"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Max/Min Good Orders\n(Etalon Red - SCI)"
+      not_junk: true
+      legend_frac_size: 0.30
+      title: Good Orders - Etalon
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
+      axhspan:
+        1:
+          ymin: -0.7
+          ymax: -2.5
+          color: red
+          alpha: 0.2
+
+  - panelvars:
+      - col: ETALRC1
+        plot_type: plot
+        plot_attr:
+          color: red
+          label: "Max Good CAL Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALRC0
+        plot_type: plot
+        plot_attr:
+          color: indianred
+          label: "Min Good CAL Order"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Max/Min Good Orders\n(Etalon Red - CAL)"
+      not_junk: true
+      legend_frac_size: 0.30
+      title: Good Orders - Etalon
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
+      axhspan:
+        1:
+          ymin: -0.7
+          ymax: -2.5
+          color: red
+          alpha: 0.2
+
+  - panelvars:
+      - col: ETALRK1
+        plot_type: plot
+        plot_attr:
+          color: red
+          label: "Max Good SKY Order"
+          marker: .
+          linewidth: 0.5
+      - col: ETALRK0
+        plot_type: plot
+        plot_attr:
+          color: indianred
+          label: "Min Good SKY Order"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Max/Min Good Orders\n(Etalon Red - SKY)"
+      not_junk: true
+      legend_frac_size: 0.30
+      title: Good Orders - Etalon
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+        - manualcal-etalon-all
+        - Etalon_cal
+        - etalon-sequence
+      axhspan:
+        1:
+          ymin: -0.7
+          ymax: -2.5
+          color: red
+          alpha: 0.2

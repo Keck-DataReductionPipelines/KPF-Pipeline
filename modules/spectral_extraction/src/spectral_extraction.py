@@ -194,6 +194,7 @@ class SpectralExtraction(KPF0_Primitive):
         self.data_ext = data_ext
         order_trace_ext = self.get_args_value('trace_extension', action.args, args_keys)
         order_trace_file = self.get_args_value('trace_file', action.args, args_keys)
+        self.order_trace_file = order_trace_file
         orderlets_on_image = self.get_args_value("orderlets_on_image", action.args, args_keys)
         self.outlier_rejection = self.get_args_value('do_outlier_rejection', action.args, args_keys)
         self.outlier_file = self.get_args_value("outlier_file", action.args, args_keys) if self.outlier_rejection \
@@ -373,7 +374,7 @@ class SpectralExtraction(KPF0_Primitive):
                     self.outlier_lev0[self.data_ext][:] = data_outlier
 
         if self.outlier_lev0 is not None and self.outlier_file:
-            self.outlier_lev0.to_fits(self.outlier_file)
+            self.outlier_lev0.to_fits(self.outlier_file, compressed=True)
 
         if good_result and self.output_level1 is not None:
             self.output_level1.receipt_add_entry('SpectralExtraction', self.__module__,
@@ -384,6 +385,9 @@ class SpectralExtraction(KPF0_Primitive):
         elif good_result and self.logger:
             self.logger.info("SpectralExtraction: Receipt written")
             self.logger.info("SpectralExtraction: Done for orders " + " ".join(all_order_names) + "!")
+
+        if self.order_trace_file:
+            self.output_level1.header['PRIMARY']['TRACFILE'] = os.path.basename(self.order_trace_file)
 
         return Arguments(self.output_level1) if good_result else Arguments(None)
 

@@ -1,17 +1,23 @@
 import time
+import copy
 import numpy as np
+import pandas as pd
+import seaborn as sns
 from datetime import datetime
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import matplotlib.mlab as mlab
 import matplotlib.gridspec as gridspec
+from matplotlib.ticker import LogLocator, ScalarFormatter
 from scipy.optimize import curve_fit
 from scipy.ndimage import median_filter
 from astropy.table import Table
 from astropy.time import Time
+from modules.Utils.utils import DummyLogger
 from modules.Utils.kpf_parse import HeaderParse
 from modules.Utils.utils import get_moon_sep, get_sun_alt
- 
+
+
 class AnalyzeGuider:
 
     """
@@ -40,22 +46,21 @@ class AnalyzeGuider:
         flux_std - standard deviation of integrated flux
         peak_flux_median - median of peak flux (per pixel)
         peak_flux_std - standard deviation of peak flux (per pixel)
-        frac_saturated - fraction of frames with 1 or more pixels within 90% of saturation
+        frac_frames_saturated - fraction of frames with 1 or more pixels within 90% of saturation
     """
 
     def __init__(self, L0, logger=None):
-        if logger:
-            self.logger = logger
-        else:
-            self.logger = None
-        self.L0 = L0
+        self.logger = logger if logger is not None else DummyLogger()
+        self.L0 = copy.deepcopy(L0)
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
 
         header_primary_obj = HeaderParse(L0, 'PRIMARY')
         if hasattr(L0, 'guider_avg'):
             header_guider_obj = HeaderParse(L0, 'guider_avg')
+            self.guider_avg = L0['guider_avg']
         elif hasattr(L0, 'GUIDER_AVG'):
             header_guider_obj = HeaderParse(L0, 'GUIDER_AVG')
+            self.guider_avg = L0['GUIDER_AVG']
         else:
             print("Guider image not in file.")
         self.guider_header = header_guider_obj.header
@@ -99,7 +104,14 @@ class AnalyzeGuider:
         self.r_mas = (self.x_mas**2+self.y_mas**2)**0.5
         self.nframes = self.df_GUIDER.shape[0]
         self.nframes_uniq_mas = min(np.unique(self.df_GUIDER.object1_x).size, np.unique(self.df_GUIDER.object1_y).size)
+
+        self.df_GUIDER['timestamp'] = pd.to_numeric(self.df_GUIDER['timestamp'], errors='coerce')
+        self.df_GUIDER['datetime'] = (pd.to_datetime(self.df_GUIDER['timestamp'], unit='s', origin='unix').dt.tz_localize('UTC'))
+        self.df_GUIDER['timestep_ms'] = (self.df_GUIDER['datetime'].diff().dt.total_seconds() * 1000)
         
+        self.saturation_threshold = 15830
+        self.n_saturated_pixels = np.count_nonzero(self.guider_avg[255-50:255+50, 320-50:320+50] > self.saturation_threshold*0.9)
+
         # Measure FWHM, flux, peak flux, etc.
         if not (self.df_GUIDER['object1_flux'] == 0.0).all() and self.nframes > 2:
             self.fwhm_mas_median = np.median((self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5))
@@ -108,12 +120,15 @@ class AnalyzeGuider:
             self.flux_std = np.std(self.df_GUIDER.object1_flux)
             self.peak_flux_median = np.median(self.df_GUIDER.object1_peak)
             self.peak_flux_std = np.std(self.df_GUIDER.object1_peak)
-            self.frac_saturated = (self.df_GUIDER['object1_peak'] > 15830*0.9).sum() / self.df_GUIDER.shape[0]
+            self.frac_frames_saturated = (self.df_GUIDER['object1_peak'] > self.saturation_threshold*0.9).sum() / self.df_GUIDER.shape[0]
         else:
             self.fwhm_mas_median = -1
+            self.fwhm_mas_std = -1
             self.flux_median = -1
+            self.flux_std = -1
             self.peak_flux_median = -1
-            self.frac_saturated = -1
+            self.peak_flux_std = -1
+            self.frac_frames_saturated = -1
 
         # Measure guiding statistics
         self.measure_guider_errors()
@@ -137,15 +152,22 @@ class AnalyzeGuider:
         Returns:
             None
         """
-
-        try:
-            self.x_rms = (np.nanmean(self.x_mas**2))**0.5
-            self.y_rms = (np.nanmean(self.y_mas**2))**0.5
-            self.r_rms = (np.nanmean(self.r_mas**2))**0.5
-            self.x_bias = np.nanmean(self.x_mas)
-            self.y_bias = np.nanmean(self.y_mas)
-        except:
-            print('Error computing guiding errors')
+        if self.nframes_uniq_mas > 10:
+            try:
+                self.x_rms = (np.nanmean(self.x_mas**2))**0.5
+                self.y_rms = (np.nanmean(self.y_mas**2))**0.5
+                self.r_rms = (np.nanmean(self.r_mas**2))**0.5
+                self.x_bias = np.nanmean(self.x_mas)
+                self.y_bias = np.nanmean(self.y_mas)
+            except:
+                self.logger.info('Error computing guiding errors')
+                self.x_rms = None
+                self.y_rms = None
+                self.r_rms = None
+                self.x_bias = None
+                self.y_bias = None
+        else:
+            self.logger.info('Error computing guiding errors.  Number of unique guiding errors = ' + str(self.nframes_uniq_mas) + '.')
             self.x_rms = None
             self.y_rms = None
             self.r_rms = None
@@ -153,7 +175,7 @@ class AnalyzeGuider:
             self.y_bias = None
 
 
-    def measure_seeing(self):
+    def measure_seeing(self, debug=False):
 
         """
         Compute the seeing from a stacked guider image.
@@ -202,7 +224,8 @@ class AnalyzeGuider:
         
         for alpha_guess in alpha_initial_guesses:
             try:
-                print(f"Trying to fit Guider image with alpha guess = {alpha_guess*0.056} arcsec.")
+                if debug:
+                    self.logger.info(f"Trying to fit Guider image with alpha guess = {alpha_guess*0.056} arcsec.")
                 # Update the initial guess with the current alpha value
                 p0 = [1, 343.1, 264.7, alpha_guess, 2.5]
                 if 'GCCRPIX1' in self.header:
@@ -236,8 +259,9 @@ class AnalyzeGuider:
             self.x0 = x0_fit
             self.y0 = y0_fit
             self.good_fit = True
-            print(f"Best fit found with alpha = {alpha_fit*0.056} arcsec.")
-            print("Fitted positions: " + str(self.x0*self.pixel_scale) + ", " + str(self.y0*self.pixel_scale))
+            if debug:
+                self.logger.info(f"Best fit found with alpha = {alpha_fit*0.056} arcsec.")
+                self.logger.ingo("Fitted positions: " + str(self.x0*self.pixel_scale) + ", " + str(self.y0*self.pixel_scale))
         else:
             self.good_fit = False
             print("No successful fit found.")
@@ -378,7 +402,7 @@ class AnalyzeGuider:
             
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(100, -40), textcoords='offset points')
@@ -418,7 +442,7 @@ class AnalyzeGuider:
         
         # Create the figure and subplots
         fig, axes = plt.subplots(1, 2, figsize=(16, 4), gridspec_kw={'width_ratios': [2, 1]}, tight_layout=True)
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
 
         # Plot the data
         if self.nframes_uniq_mas > 10:
@@ -480,7 +504,7 @@ class AnalyzeGuider:
         
         # Create the figure and subplots
         fig, axes = plt.subplots(4, 2, figsize=(16, 15), gridspec_kw={'width_ratios': [2, 1]}, tight_layout=True)
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
 
         # Count number of stars
         #nstars = []
@@ -655,7 +679,7 @@ class AnalyzeGuider:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -50), textcoords='offset points')
@@ -690,7 +714,7 @@ class AnalyzeGuider:
         """
 
         # Construct plots
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
         plt.figure(figsize=(8, 4), tight_layout=True)
         if self.nframes > 0:
             plt.plot(self.t-min(self.t), self.df_GUIDER.object1_flux/np.nanpercentile(self.df_GUIDER.object1_flux, 95), color='royalblue')
@@ -698,7 +722,7 @@ class AnalyzeGuider:
         else:
             plt.plot([0.], [0.], color='royalblue')        
         plt.title("Guiding Flux Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
-        plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
+        plt.xlabel("Seconds Start of Exposure", fontsize=14)
         plt.ylabel("Flux (fractional)", fontsize=14)
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
@@ -735,7 +759,7 @@ class AnalyzeGuider:
         fwhm = (self.df_GUIDER.object1_a**2 + self.df_GUIDER.object1_b**2)**0.5 / self.pixel_scale * (2*(2*np.log(2))**0.5)
 
         # Construct plots
-        plt.style.use('seaborn-whitegrid')
+        sns.set_theme(style='whitegrid')
         plt.figure(figsize=(8, 4), tight_layout=True)
         if self.nframes > 0:
             plt.plot(self.t-min(self.t), fwhm, color='royalblue')
@@ -743,7 +767,7 @@ class AnalyzeGuider:
         else:
             plt.plot([0.], [0.], color='royalblue')        
         plt.title("Guider FWHM Time Series: " + str(self.ObsID)+' - ' + self.name, fontsize=14)
-        plt.xlabel("Seconds since " + str(self.guider_header['DATE-BEG']), fontsize=14)
+        plt.xlabel("Seconds Start of Exposure", fontsize=14)
         plt.ylabel("FWHM (mas)", fontsize=14)
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
@@ -758,3 +782,118 @@ class AnalyzeGuider:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
+
+    def plot_guider_delta_time_time_series(self, fig_path=None, show_plot=False):
+        """
+        Plot the time between guider exposures and a histogram of those intervals.
+    
+        Panels
+        ------
+        • Left  (2/3 width) : Δt between frames as a function of elapsed time
+        • Right (1/3 width) : Histogram of Δt values (log-scaled counts axis)
+    
+        Args
+        ----
+        fig_path : str | None
+            Path to save the PNG.  If None, nothing is written.
+        show_plot : bool
+            If True, display the figure (useful in Jupyter).
+    
+        Returns
+        -------
+        None
+        """
+        sns.set_theme(style="whitegrid")
+    
+        # ── Prepare data ────────────────────────────────────────────────────────
+        if getattr(self, "nframes", 0) > 0:
+            x_sec = (
+                self.df_GUIDER["datetime"] - self.df_GUIDER["datetime"].iloc[0]
+            ).dt.total_seconds()
+            y_ms = self.df_GUIDER["timestep_ms"]
+        else:
+            x_sec = pd.Series([0.0])
+            y_ms  = pd.Series([0.0])
+    
+        ref_ms = 1000.0 / self.gcfps   # expected spacing (ms per frame)
+    
+        # ── Figure with a 2.5 : 1 column split ────────────────────────────────
+        fig, (ax_ts, ax_hist) = plt.subplots(
+            nrows=1,
+            ncols=2,
+            figsize=(11.5, 4),
+            gridspec_kw={"width_ratios": [2.5, 1], "wspace": 0.05},
+            sharey=True,
+            tight_layout=True,
+        )
+    
+        # ── Centered title spanning both panels ────────────────────────────────
+        fig.suptitle(
+            f"Time Between Guider Timestamps: {self.ObsID} – {self.name}",
+            fontsize=14
+        )
+    
+        # ── Left panel: time-series plot ───────────────────────────────────────
+        ax_ts.plot(
+            x_sec,
+            y_ms,
+            color="royalblue",
+            linewidth=1.2,
+            label=r"$\Delta t$ (ms)"
+        )
+        ax_ts.axhline(
+            ref_ms,
+            color="red",
+            linestyle="--",
+            linewidth=1.5,
+            alpha=0.7,
+            label=f"1 / fps = {ref_ms:.1f} ms"
+        )
+        ax_ts.set_xlabel("Seconds Since Start of Observation", fontsize=14)
+        ax_ts.set_ylabel(r"$\Delta t$ Between Timestamps (ms)", fontsize=14)
+        ax_ts.tick_params(labelsize=12)
+        ax_ts.legend(fontsize=10, loc="best")
+    
+        # ── Right panel: histogram (log counts) ────────────────────────────────
+        ax_hist.hist(
+            y_ms.dropna(),
+            bins="auto",
+            orientation="horizontal",
+            facecolor="royalblue",
+            edgecolor="royalblue",
+            alpha=0.70,
+        )
+        ax_hist.set_xscale("log")
+        ax_hist.xaxis.set_major_locator(LogLocator(base=10.0))
+        fmt = ScalarFormatter()
+        fmt.set_scientific(False)
+        ax_hist.xaxis.set_major_formatter(fmt)
+        ax_hist.set_xlabel(r"Number of $\Delta t$ Values", fontsize=13)
+        ax_hist.tick_params(labelsize=12)
+        ax_hist.axhline(ref_ms, color="red", linestyle="--", linewidth=1.5, alpha=0.7)
+    
+        sns.despine(ax=ax_hist, left=True)
+        for spine in ax_hist.spines.values():
+            spine.set_visible(True)
+        plt.setp(ax_hist.get_yticklabels(), visible=False)
+    
+        # ── Save / show / close ────────────────────────────────────────────────
+        if fig_path is not None:
+            t0 = time.process_time()
+            fig.savefig(fig_path, dpi=144, facecolor="w")
+            if getattr(self, "logger", None):
+                self.logger.info(f"savefig took {(time.process_time() - t0):.1f} s")
+    
+        if show_plot:
+            plt.show()
+    
+        plt.close(fig)
+
+
+
+
+
+
+
+

@@ -80,21 +80,25 @@ class HeaderParse:
             the source/image name
             possible values: 'Bias', 'Dark', 'Flat', 'Wide Flat', 
                              'LFC', 'Etalon', 'ThAr', 'UNe',
-                             'Sun', 'Star', <starname>,
-                             ''
+                             'Sun', 'Star', <starname>
         """
         try: 
             if 'IMTYPE' in self.header:
+                # Bias
                 if (('ELAPSED' in self.header) and 
                     ((self.header['IMTYPE'] == 'Bias') or (self.header['ELAPSED'] == 0))):
                         self.name = 'Bias'
+                # Dark
                 elif self.header['IMTYPE'] == 'Dark':
                     self.name = 'Dark' 
+                # Wide Flat
                 elif self.header['FFFB'].strip().lower() == 'yes':
                         self.name = 'Wide Flat' # Flatfield Fiber (wide flats)
+                # Flat
                 elif self.header['IMTYPE'].strip().lower() == 'flatlamp':
                      if 'brdband' in self.header['OCTAGON'].strip().lower():
                         self.name = 'Flat' # Flat through regular fibers
+                # Calibration lamps
                 elif self.header['IMTYPE'].strip().lower() == 'arclamp':
                     if 'lfc' in self.header['OCTAGON'].strip().lower():
                         self.name = 'LFC'
@@ -107,6 +111,14 @@ class HeaderParse:
                 elif ((self.header['TARGNAME'].strip().lower() == 'sun') or 
                       (self.header['TARGNAME'].strip().lower() == 'socal')):
                     self.name = 'Sun' # SoCal
+                # March-April, 2025 -- IMTYPE not populated because reduced headers
+                elif self.header['IMTYPE'].strip().lower() == 'none':
+                     if 'OBJECT' in self.header:
+                         if 'bias' in self.header['OBJECT'].strip().lower():
+                            self.name = 'Bias' 
+                         elif 'dark' in self.header['OBJECT'].strip().lower():
+                            self.name = 'Dark' 
+                # Stars
                 if ('OBJECT' in self.header) and ('FIUMODE' in self.header):
                     if (self.header['FIUMODE'] == 'Observing'):
                         if use_star_names:
@@ -118,7 +130,6 @@ class HeaderParse:
         except:
             self.name = ''
         return self.name
-
 
     def get_obsid(self):
         """
@@ -227,8 +238,69 @@ def get_datecode(ObsID):
     ObsID = ObsID.replace('_L1', '')
     ObsID = ObsID.replace('_L2', '')
     datecode = ObsID.split('.')[1]
+
     return datecode
 
+
+def get_filename(ObsID, level='L0', fullpath=False):
+    """
+    Extract the datecode from an ObsID or a KPF filename 
+
+    Args:
+        ObsID, e.g. 'KP.20230708.04519.63' 
+        level - 'L0', '2D', 'L1', or 'L2'
+        fullpath - if True, prepends /data/L0, etc.
+
+    Returns:
+        datecode, e.g. 'KP.20230708.04519.63_2D.fits' or '/data/2D/20230708/KP.20230708.04519.63_2D.fits'
+    """
+    path = ''
+    if fullpath:
+        if level == 'L0':
+            path = f'/data/L0/{get_datecode(ObsID)}/'
+        elif level == '2D':
+            path = f'/data/2D/{get_datecode(ObsID)}/'
+        elif level == 'L1':
+            path = f'/data/L1/{get_datecode(ObsID)}/'
+        elif level == 'L2':
+            path = f'/data/L2/{get_datecode(ObsID)}/'
+    
+    if level == 'L0':
+        filename = f'{ObsID}.fits'
+    elif level == '2D':
+        filename = f'{ObsID}_2D.fits'
+    elif level == 'L1':
+        filename = f'{ObsID}_L1.fits'
+    elif level == 'L2':
+        filename = f'{ObsID}_L2.fits'
+
+    return path + filename
+
+
+def get_datecode_from_filename(filename, datetime_out=False):
+    """
+    Extract the datecode (YYYYMMDD) from a filename.  
+    Return the string datecode or a datetime version if 
+    datetime_out is set to True.
+    Return None if no datetime is found
+
+    Args:
+        filename, e.g. 'kpf_20250115_master_bias_autocal-bias.fits'
+
+    Returns:
+        datecode, e.g. '20250115'
+    """
+    match = re.search(r"(\d{8})", filename)
+    if not match:
+        return None
+    
+    datecode = match.group(1)
+    
+    if datetime_out:
+        return datetime.strptime(datecode, "%Y%m%d")#.date()
+    else:
+        return datecode
+    
 
 def get_datetime_obsid(ObsID):
     """
@@ -296,9 +368,9 @@ def get_data_products_expected(kpf_object, data_level):
     Returns:
         array of data expected data products
     """
-    primary_header = HeaderParse(kpf_object, 'PRIMARY').header
+    primary_header = HeaderParse(kpf_object, 'PRIMARY')
     header = primary_header.header
-    name = primary_header.get_name() # 'Star','Sun','LFC', etc.
+    name = primary_header.get_name(use_star_names=False) # 'Star','Sun','LFC', etc.
     data_products = ['Telemetry']
     if data_level in ['2D', 'L1', 'L2']:
         data_products.append('Config')
@@ -324,7 +396,7 @@ def get_data_products_expected(kpf_object, data_level):
             if data_level in ['L2']:
                 if name in ['Star', 'Sun']:
                     data_products.append('Activity') # need a better way to determine (what about FWHM, etc.)
-    if 'EXPMETER' in header:
+    if ('EXPMETER' in header) or ('EXPMETER_SCI' in header) or ('EXPMETER_SKY' in header):
         if header['EXPMETER'] == 'YES':
             if data_level in ['L0', '2D']:
                 data_products.append('ExpMeter')
@@ -373,8 +445,8 @@ def get_data_products_L0(L0):
         if (L0['GUIDER_AVG'].size > 1):
             data_products.append('Guider')
     elif hasattr(L0, 'guider_avg'): # Early KPF files used lower case guider_avg
-        if (L0['guider_avg'].size > 1):
-            data_products.append('Guider')
+        #if (L0['guider_avg'].size > 1):  # this fails because it checks for GUIDER_AVG
+        data_products.append('Guider')
     if hasattr(L0, 'TELEMETRY'):
         if L0['TELEMETRY'].size > 1:
             data_products.append('Telemetry')
@@ -505,10 +577,35 @@ def get_data_products_L2(L2):
     return data_products
 
 
+def get_data_levels_expected(spectrum_type):
+    """
+    Returns a list of data levels expected for a spectrum of a given type
+
+    Args:
+        spectrum_type - possible values: 
+            'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe',
+            'Sun', 'Star'
+
+    Returns:
+        list of data expected data levels, e.g. ['L0', '2D', 'L1', 'L2']
+    """
+    data_products = ['L0']
+    
+    if spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+        data_products.append('2D')
+    if spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+        data_products.append('L1')
+    if spectrum_type in ['Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+        data_products.append('L2')
+
+    return data_products
+
+
 def hasattr_with_wildcard(obj, pattern):
     regex = re.compile(pattern)
     return any(regex.match(attr) for attr in dir(obj))
-    
+
+
 def get_kpf_level(kpf_object):
     """
     Returns a string with the KPF level ('L0', '2D', 'L1', 'L2') corresponding 
@@ -540,7 +637,7 @@ def get_kpf_level(kpf_object):
             return '2D'
 
     # elif L0 if one of the standard extensions is present with non-zero size
-    L0_attrs = ['GREEN_AMP1', 'RED_AMP1', 'CA_HK', 'EXPMETER_SCI', 'GUIDER_AVG', 'GUIDER_CUBE_ORIGINS']
+    L0_attrs = ['GREEN_AMP1', 'RED_AMP1', 'CA_HK', 'EXPMETER_SCI', 'GUIDER_AVG', 'GUIDER_CUBE_ORIGINS', 'guider_avg', 'guider_cube_origins']
     for L0_attr in L0_attrs:
         if hasattr(kpf_object, L0_attr):
             if kpf_object[L0_attr].size:
@@ -595,3 +692,27 @@ def get_kpf_data(ObsID, data_level, data_dir='/data', return_kpf_object=True):
 
     return return_object
 
+
+def get_latest_receipt_time(kpf_object):
+    """
+    Return the 'Time' time from the last row where 'Module_Name' does not contain 'fits'.
+    
+    Args:
+        df (pd.DataFrame): Input DataFrame with a 'Module_Name' and 'Time' column.
+    
+    Returns:
+        str or None: The value of 'Time' in the last matching row, or None if not found.
+    """
+    try:
+        df = kpf_object['RECEIPT']
+        mask = ~df['Module_Name'].str.contains('fits', na=False)
+        filtered = df[mask]
+        last_time = filtered.iloc[-1]['Time']
+        last_time = datetime.fromisoformat(last_time).strftime('%Y-%m-%d %H:%M:%S')
+        if not filtered.empty:
+            return last_time
+        else:
+            print('Test')
+            return None
+    except:
+        return None

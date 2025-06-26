@@ -1,0 +1,13 @@
+description: QC - Flat Metrics
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: FLATSNR
+        plot_type: state
+        plot_attr:
+          label: "Flat SNR sufficient,\nall orders/orderlets"
+          marker: .
+    paneldict:
+      ylabel: "Flat SNR sufficient,\nall orders/orderlets\n(FLATSNR)"
+      title: QC - Flat Metrics
+      legend_frac_size: 0.15

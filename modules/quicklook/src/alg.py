@@ -23,6 +23,7 @@ from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_wls import AnalyzeWLS
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
+from modules.quality_control.src.quality_control import QC_report
 from modules.Utils.kpf_parse import HeaderParse
 #import kpfpipe.pipelines.fits_primitives as fits_primitives
 from modules.Utils.kpf_parse import get_data_products_L0
@@ -162,6 +163,11 @@ class QuicklookAlg:
                 self.logger.info('Generating QLP image ' + filename)
                 myGuider.plot_guider_error_time_series(fig_path=filename, show_plot=False)
 
+                # Guider Delta t of timesteps
+                filename = savedir + self.ObsID + '_deltat_time_series_zoomable.png'
+                self.logger.info('Generating QLP image ' + filename)
+                myGuider.plot_guider_delta_time_time_series(fig_path=filename, show_plot=False)
+
             except Exception as e:
                 self.logger.error(f"Failure in Guider quicklook pipeline: {e}\n{traceback.format_exc()}")
 
@@ -170,11 +176,14 @@ class QuicklookAlg:
             try:
                 myL0 = AnalyzeL0(kpf0, logger=self.logger)
                 for chip in chips:
-                    savedir = L0_QLP_file_base +'L0/'
-                    os.makedirs(savedir, exist_ok=True) # make directories if needed
-                    filename = savedir + self.ObsID + '_L0_stitched_image_' + chip + '_zoomable.png'
-                    self.logger.info('Generating QLP image ' + filename)
-                    myL0.plot_L0_stitched_image(fig_path=filename, chip=chip, show_plot=False)
+                    try:
+                        savedir = L0_QLP_file_base +'L0/'
+                        os.makedirs(savedir, exist_ok=True) # make directories if needed
+                        filename = savedir + self.ObsID + '_L0_stitched_image_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        myL0.plot_L0_stitched_image(fig_path=filename, chip=chip, show_plot=False)
+                    except Exception as e:
+                        self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
             except Exception as e:
                 self.logger.error(f"Failure in L0 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
@@ -236,6 +245,17 @@ class QuicklookAlg:
         except Exception as e:
             self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+        # Generate Quality Control report
+        try:    
+            savedir = D2_QLP_file_base +'QC/'    
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            
+            yaml_filename = savedir + self.ObsID + '_2D_QC_report.yaml' 
+            QC_report(kpf2d, yaml_outfile=yaml_filename)
+
+        except Exception as e:    
+            self.logger.error(f"Problem generating QC report: {e}\n{traceback.format_exc()}")
+
         # Make CaHK plots
         if 'HK' in self.data_products:    
             try:    
@@ -273,22 +293,61 @@ class QuicklookAlg:
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
 
         # Make 2D images
-        # to-do: process bias and dark differently
         if chips != []:    
             try:
                 savedir = D2_QLP_file_base +'2D/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
-                    if my_2D.name == 'Dark':
-                        my_2D.measure_2D_dark_current(chip=chip)
-                        overplot_dark_current = True
-                    else:
-                        overplot_dark_current = False
-                    filename = savedir + self.ObsID + '_2D_image_' + chip + '_zoomable.png'
-                    self.logger.info('Generating QLP image ' + filename)
-                    my_2D.plot_2D_image(chip=chip, overplot_dark_current=overplot_dark_current, 
-                                        fig_path=filename, show_plot=False)
+                    try:
+                        if my_2D.name == 'Dark':
+                            my_2D.measure_2D_dark_current(chip=chip)
+                            overplot_dark_current = True
+                        else:
+                            overplot_dark_current = False
+                        filename = savedir + self.ObsID + '_2D_image_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_image(chip=chip, overplot_dark_current=overplot_dark_current, 
+                                            fig_path=filename, show_plot=False)
+                    except Exception as e:
+                        self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+            except Exception as e:
+                self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make Bias-subtracted Bias - 2D images
+        if chips != []:    
+            try:
+                my_2D = Analyze2D(kpf2d, logger=self.logger)
+                if my_2D.name == 'Bias': 
+                    for chip in chips:
+                        try:
+                            filename = savedir + self.ObsID + '_2D_image_bias_subtracted_' + chip + '_zoomable.png'
+                            self.logger.info('Generating QLP image ' + filename)
+                            my_2D.plot_2D_image(chip=chip, subtract_master_bias=True, 
+                                                fig_path=filename, show_plot=False)
+                        except Exception as e:
+                            self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+            except Exception as e:
+                self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make Dark-subtracted Darks - 2D images
+        if chips != []:    
+            try:
+                my_2D = Analyze2D(kpf2d, logger=self.logger)
+                if my_2D.name == 'Dark': 
+                    for chip in chips:
+                        try:
+                            filename = savedir + self.ObsID + '_2D_image_dark_subtracted_' + chip + '_zoomable.png'
+                            self.logger.info('Generating QLP image ' + filename)
+                            my_2D.measure_2D_dark_current(chip=chip)
+                            my_2D.plot_2D_image(chip=chip, subtract_master_dark=True, 
+                                                overplot_dark_current=True, units='e-/hr',
+                                                fig_path=filename, show_plot=False)
+
+                        except Exception as e:
+                            self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -300,9 +359,12 @@ class QuicklookAlg:
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
-                    filename = savedir + self.ObsID + '_2D_image_3x3zoom_' + chip + '_zoomable.png'
-                    self.logger.info('Generating QLP image ' + filename)
-                    my_2D.plot_2D_image_zoom_3x3(chip=chip, fig_path=filename, show_plot=False)
+                    try:
+                        filename = savedir + self.ObsID + '_2D_image_zoom3x3_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_image_zoom_3x3(chip=chip, fig_path=filename, show_plot=False)
+                    except Exception as e:
+                        self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -315,24 +377,29 @@ class QuicklookAlg:
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
-                    filename = savedir + self.ObsID + '_2D_order_trace_' + chip + '_zoomable.png'
-                    self.logger.info('Generating QLP image ' + filename)
-                    my_2D.plot_2D_order_trace2x2(chip=chip, fig_path=filename, show_plot=False)
+                    try:
+                        filename = savedir + self.ObsID + '_2D_order_trace_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_order_trace2x2(chip=chip, fig_path=filename, show_plot=False)
+                    except Exception as e:
+                        self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
-
-
-        # TO-DO Add bias histogram
 
         # Make 2D image histograms
         if chips != []:    
             try:
                 my_2D = Analyze2D(kpf2d, logger=self.logger)
+                is_bias = my_2D.name == 'Bias'
+                is_dark = my_2D.name == 'Dark'
                 for chip in chips:
-                    filename = savedir + self.ObsID + '_2D_histogram_' + chip + '_zoomable.png'
-                    self.logger.info('Generating QLP image ' + filename)
-                    my_2D.plot_2D_image_histogram(chip=chip, fig_path=filename, show_plot=False)
+                    try:
+                        filename = savedir + self.ObsID + '_2D_histogram_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_image_histogram(chip=chip, subtract_master_bias=is_bias, subtract_master_dark=is_dark, fig_path=filename, show_plot=False)
+                    except Exception as e:
+                        self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -342,13 +409,16 @@ class QuicklookAlg:
             try:
                 my_2D = Analyze2D(kpf2d, logger=self.logger)
                 for chip in chips:
-                    filename = savedir + self.ObsID + '_2D_column_cut_' + chip + '_zoomable.png'
-                    self.logger.info('Generating QLP image ' + filename)
-                    my_2D.plot_2D_column_cut(chip=chip, fig_path=filename, show_plot=False)
+                    try:
+                        filename = savedir + self.ObsID + '_2D_column_cut_' + chip + '_zoomable.png'
+                        self.logger.info('Generating QLP image ' + filename)
+                        my_2D.plot_2D_column_cut(chip=chip, fig_path=filename, show_plot=False)
+                    except Exception as e:
+                        self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
 
             except Exception as e:
                 self.logger.error(f"Failure in 2D quicklook pipeline: {e}\n{traceback.format_exc()}")
-        
+       
         
     #######################
     ##### QLP Level 1 #####
@@ -387,6 +457,17 @@ class QuicklookAlg:
         except Exception as e:
             self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+        # Generate Quality Control report
+        try:    
+            savedir = L1_QLP_file_base +'QC/'    
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            
+            yaml_filename = savedir + self.ObsID + '_L1_QC_report.yaml' 
+            QC_report(kpf1, yaml_outfile=yaml_filename)
+
+        except Exception as e:    
+            self.logger.error(f"Problem generating QC report: {e}\n{traceback.format_exc()}")
+
         # Make WLS plots
         try:
             savedir = L1_QLP_file_base +'WLS/'
@@ -394,10 +475,13 @@ class QuicklookAlg:
             if chips != []:    
                 try:
                     for chip in chips:
-                        filename = savedir + self.ObsID + '_WLS_orderlet_diff_' + chip + '_zoomable.png'
-                        self.logger.info('Generating QLP image ' + filename)
-                        myWLS = AnalyzeWLS(kpf1, logger=self.logger)
-                        myWLS.plot_WLS_orderlet_diff(chip=chip, fig_path=filename, show_plot=False)
+                        try:
+                            filename = savedir + self.ObsID + '_WLS_orderlet_diff_' + chip + '_zoomable.png'
+                            self.logger.info('Generating QLP image ' + filename)
+                            myWLS = AnalyzeWLS(kpf1, logger=self.logger)
+                            myWLS.plot_WLS_orderlet_diff(chip=chip, fig_path=filename, show_plot=False)
+                        except Exception as e:
+                            self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
                 except Exception as e:
                     self.logger.error(f"Failure in L1 quicklook pipeline: {e}\n{traceback.format_exc()}")
 
@@ -419,6 +503,10 @@ class QuicklookAlg:
 
         # Make L1 spectra plots
         try:
+            filename = savedir + self.ObsID + '_L1_spectrum_zoomable.png'
+            self.logger.info('Generating QLP image ' + filename)
+            myL1.plot_L1_spectrum_one_row(xlog=True, fig_path=filename, show_plot=False)
+
             for oo, orderlet in enumerate(['SCI1', 'SCI2', 'SCI3', 'CAL', 'SKY']):
                 filename = savedir + self.ObsID + '_L1_spectrum_' + orderlet + '_zoomable.png'
                 self.logger.info('Generating QLP image ' + filename)
@@ -540,6 +628,17 @@ class QuicklookAlg:
         except Exception as e:
             self.logger.error(f"Failure creating base output diretory in Exposure Meter quicklook pipeline: {e}\n{traceback.format_exc()}")
 
+        # Generate Quality Control report
+        try:    
+            savedir = L2_QLP_file_base +'QC/'    
+            os.makedirs(savedir, exist_ok=True) # make directories if needed
+            
+            yaml_filename = savedir + self.ObsID + '_L2_QC_report.yaml' 
+            QC_report(kpf2, yaml_outfile=yaml_filename)
+
+        except Exception as e:    
+            self.logger.error(f"Problem generating QC report: {e}\n{traceback.format_exc()}")
+
         # Make CCF grid plots
         if chips != []:    
             try:
@@ -550,6 +649,20 @@ class QuicklookAlg:
                     filename = savedir + self.ObsID + '_CCF_grid_' + chip + '_zoomable.png'
                     self.logger.info('Generating QLP image ' + filename)
                     myL2.plot_CCF_grid(chip=chip, fig_path=filename, show_plot=False)
+
+            except Exception as e:
+                self.logger.error(f"Failure in CCF quicklook pipeline: {e}\n{traceback.format_exc()}")
+
+        # Make BCVel plot per order
+        if chips != []:    
+            try:
+                myL2 = AnalyzeL2(kpf2, logger=self.logger)
+                if myL2.is_star:
+                    savedir = L2_QLP_file_base +'L2/'
+                    os.makedirs(savedir, exist_ok=True) # make directories if needed
+                    filename = savedir + self.ObsID + '_BJD_BCV_zoomable.png'
+                    self.logger.info('Generating QLP image ' + filename)
+                    myL2.plot_BJD_BCV_grid(fig_path=filename, show_plot=False)
 
             except Exception as e:
                 self.logger.error(f"Failure in CCF quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -635,7 +748,7 @@ class QuicklookAlg:
                     my_2D = Analyze2D(kpf2d, logger=self.logger)
                     for chip in chips:  
                         filename = savedir + self.input_file.split('/')[-1].replace('.fits', '') + \
-                                   '_2D_image_3x3zoom_' + chip + '_zoomable.png'
+                                   '_2D_image_zoom3x3_' + chip + '_zoomable.png'
                         self.logger.info('Generating QLP image ' + filename)
                         my_2D.plot_2D_image_zoom_3x3(chip=chip, fig_path=filename, show_plot=False)
 

@@ -1,4 +1,6 @@
 import time
+import copy
+import traceback
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,12 +10,16 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
-from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import HeaderParse, get_datecode_from_filename
+from modules.Utils.kpf_parse import get_datetime_obsid
 from modules.Utils.utils import DummyLogger
 from astropy.time import Time
 from astropy.table import Table
-from datetime import datetime
+from datetime import datetime, timedelta
 from scipy.optimize import curve_fit
+from scipy.signal import correlate
+from scipy.stats import median_abs_deviation
+from kpfpipe.models.level0 import KPF0
 #import emcee
 #import corner
 
@@ -27,7 +33,7 @@ class Analyze2D:
         D2 - a 2D object
 
     Attributes:
-        header - header of input 2D file
+        header - header of the PRIMARY extension of the 2D object
         name - name of source (e.g., 'Bias', 'Etalon', '185144')
         ObsID - observation  ID (e.g. 'KP.20230704.02326.27')
         exptime - exposure time (sec)
@@ -55,8 +61,16 @@ class Analyze2D:
 
     def __init__(self, D2, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
-        self.D2 = D2 # use D2 instead of 2D because variable names can't start with a number
-        self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+        self.D2 = copy.deepcopy(D2) # use D2 instead of 2D because variable names can't start with a number
+        try:
+            if hasattr(self.D2,'TELEMETRY'):
+                self.df_telemetry = self.D2['TELEMETRY']  
+                if self.df_telemetry.empty:
+                    self.df_telemetry = None
+            else:
+            	self.df_telemetry = None
+        except:
+            self.df_telemetry = None
         primary_header = HeaderParse(D2, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
@@ -72,8 +86,66 @@ class Analyze2D:
         self.red_ech_pressure_torr    = 0
         self.red_coll_current_a       = 0
         self.red_ech_current_a        = 0
-        self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(D2['GREEN_CCD'].data),[99,90,50,10])
-        self.red_percentile_99,   self.red_percentile_90,   self.red_percentile_50,   self.red_percentile_10   = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
+        try:
+            self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(D2['GREEN_CCD'].data),[99,90,50,10])
+        except:
+            self.logger.error('Problem computing SNR for Green 2D image')
+        try:
+            self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
+        except:
+            self.logger.error('Problem computing SNR for Green 2D image')
+
+
+    def measure_master_age(self, kwd='BIASFILE', verbose=False):
+        '''
+        Computes the number of whole days between the observation and a master file 
+        listed in the PRIMARY header.  
+
+        Arguments:
+            kwd - keyword name of WLS file (usually 
+                  'BIASFILE', 'DARKFILE', or 'FLATFILE')
+    
+        Returns:
+            master_wls_file - number of days between the observation and the
+                              date of observations for master file
+        '''
+        
+        try:
+            date_obs_str = self.header['DATE-MID']
+            date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f").date()        
+    
+            if verbose:
+                self.logger.info(f'Date of observation: {date_obs_str}')
+
+            if kwd in self.header:
+                master_filename = self.header[kwd]
+                if master_filename != 0:
+                    master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
+                    master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
+                    if verbose:
+                        self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
+                    
+                    age_master_file = (master_filename_datetime - date_obs_datetime).days
+                    if verbose:
+                        self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
+        
+                    return age_master_file
+                else:
+                  age_master_file = -99 # standard value indicating keyword not available
+                  return age_master_file
+                
+            else:
+                age_master_file = -99 # standard value indicating keyword not available
+                return age_master_file
+
+        except KeyError as e:
+            self.logger.info(f"KeyError: {e}")
+            pass
+
+        except Exception as e:
+            self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
+            return None
+
 
     def measure_2D_dark_current(self, chip=None):
         """
@@ -104,23 +176,29 @@ class Analyze2D:
             None
         """
         D2 = self.D2
-        self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+        if hasattr(self.D2, 'TELEMETRY'):
+            if not self.D2['TELEMETRY'].empty:
+                self.df_telemetry = self.D2['TELEMETRY']  # read as Table for astropy.io version of FITS
+            self.df_telemetry = None
+        else:
+            self.df_telemetry = None
         if not self.exptime > 1:
             exptime_hr = 1/3600 
         else:
             exptime_hr = self.exptime/3600
 
         # Read telemetry
-        #df_telemetry = Table.read(D2, hdu='TELEMETRY').to_pandas() # need to refer to HDU by name
-        num_columns = ['average', 'stddev', 'min', 'max']
-        for column in self.df_telemetry:
-            #df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
-            self.df_telemetry = self.df_telemetry.replace('-nan', 0)# replace nan with 0
-            if column in num_columns:
-                self.df_telemetry[column] = pd.to_numeric(self.df_telemetry[column], downcast="float")
-            else:
-                self.df_telemetry[column] = self.df_telemetry[column].astype(str)
-        self.df_telemetry.set_index("keyword", inplace=True)
+        if self.df_telemetry is not None:
+            #df_telemetry = Table.read(D2, hdu='TELEMETRY').to_pandas() # need to refer to HDU by name
+            num_columns = ['average', 'stddev', 'min', 'max']
+            for column in self.df_telemetry:
+                #df_telemetry[column] = df_telemetry[column].str.decode('utf-8')
+                self.df_telemetry = self.df_telemetry.replace('-nan', 0)# replace nan with 0
+                if column in num_columns:
+                    self.df_telemetry[column] = pd.to_numeric(self.df_telemetry[column], downcast="float")
+                else:
+                    self.df_telemetry[column] = self.df_telemetry[column].astype(str)
+            self.df_telemetry.set_index("keyword", inplace=True)
 
         reg = {'ref1': {'name': 'Reference Region 1',         'x1': 1690, 'x2': 1990, 'y1': 1690, 'y2': 1990, 'short':'ref1', 'med_elec':0, 'label':''},
                'ref2': {'name': 'Reference Region 2',         'x1': 1690, 'x2': 1990, 'y1': 2090, 'y2': 2390, 'short':'ref2', 'med_elec':0, 'label':''},
@@ -135,16 +213,28 @@ class Analyze2D:
               }
         if (chip.lower() == 'green'): 
             frame = np.array(D2['GREEN_CCD'].data)
-            self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
-            self.green_ech_pressure_torr  = self.df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
-            self.green_coll_current_a     = self.df_telemetry.at['kpfgreen.COL_CURR',  'average']
-            self.green_ech_current_a      = self.df_telemetry.at['kpfgreen.ECH_CURR',  'average']
+            if self.df_telemetry is not None:
+                self.green_coll_pressure_torr = self.df_telemetry.at['kpfgreen.COL_PRESS', 'average']
+                self.green_ech_pressure_torr  = self.df_telemetry.at['kpfgreen.ECH_PRESS', 'average']
+                self.green_coll_current_a     = self.df_telemetry.at['kpfgreen.COL_CURR',  'average']
+                self.green_ech_current_a      = self.df_telemetry.at['kpfgreen.ECH_CURR',  'average']
+            else:
+                self.green_coll_pressure_torr = None
+                self.green_ech_pressure_torr  = None
+                self.green_coll_current_a     = None
+                self.green_ech_current_a      = None
         if (chip.lower() == 'red'): 
             frame = np.array(D2['RED_CCD'].data)
-            self.red_coll_pressure_torr = self.df_telemetry.at['kpfred.COL_PRESS', 'average']
-            self.red_ech_pressure_torr  = self.df_telemetry.at['kpfred.ECH_PRESS', 'average']
-            self.red_coll_current_a     = self.df_telemetry.at['kpfred.COL_CURR',  'average']
-            self.red_ech_current_a      = self.df_telemetry.at['kpfred.ECH_CURR',  'average']
+            if self.df_telemetry is not None:
+                self.red_coll_pressure_torr = self.df_telemetry.at['kpfred.COL_PRESS', 'average']
+                self.red_ech_pressure_torr  = self.df_telemetry.at['kpfred.ECH_PRESS', 'average']
+                self.red_coll_current_a     = self.df_telemetry.at['kpfred.COL_CURR',  'average']
+                self.red_ech_current_a      = self.df_telemetry.at['kpfred.ECH_CURR',  'average']
+            else:
+                self.red_coll_pressure_torr = None
+                self.red_ech_pressure_torr  = None
+                self.red_coll_current_a     = None
+                self.red_ech_current_a      = None
 
         for r in reg.keys():
             current_region = frame[reg[r]['y1']:reg[r]['y2'], reg[r]['x1']:reg[r]['x2']]
@@ -225,9 +315,212 @@ class Analyze2D:
         print(params_2g)
 
 
+    def measure_xdisp_offset(self, chip=None, ref_image=None, ref_extension=None, 
+                             num_slices=31, slice_width=30, fit_half_width=8, 
+                             fig_path=None, show_plot=False):
+        """
+        This method compares the self.D2 image (green or red) to a reference 
+        2D image and determines the amount of vertical shift between then using
+        cross-correlation functions of vertical slices of each image.
+        
+        Args:
+            chip (string) - 'green' or 'red'
+            ref_image (2D object, np.array, or filename) - another 2D object, 
+                numpy array with the same dimensions as self.D2, 
+                or the filename of a 2D object
+            num_slices - how many vertical columns to sample across the image
+            slice_width - how wide each vertical slice is, in pixels
+            fig_path (string) - set to the path for the file to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Attributes (set by this method):
+            green_offset - offset in pixels between green 2D image an a reference
+            green_offset_sigma - uncertainty in green_offset
+            red_offset - offset in pixels between green 2D image an a reference
+            red_offset_sigma - uncertainty in red_offset
+
+        Returns:
+            (optionally:) PNG plot in fig_path or shows the plot it in the 
+            current environment (e.g., in a Jupyter Notebook).
+        """
+
+        def parabolic_peak(x, a, b, c):
+            '''Parabola function'''
+            return a * x**2 + b * x + c
+        
+        def subpixel_peak_position_fixed(corr, lags, fit_half_width=8):
+            """
+            Find peak of CCF.
+            """
+            peak_idx = np.argmax(corr)
+            if peak_idx <= fit_half_width or peak_idx >= len(corr) - fit_half_width:
+                return lags[peak_idx], lags[peak_idx]  # Edge case
+        
+            x_vals = lags[peak_idx - fit_half_width:peak_idx + fit_half_width + 1]
+            y_vals = corr[peak_idx - fit_half_width:peak_idx + fit_half_width + 1]
+        
+            x_init = lags[peak_idx - 1:peak_idx + 2]
+            y_init = corr[peak_idx - 1:peak_idx + 2]
+            a, b, c = np.polyfit(x_init, y_init, 2)
+            p0 = [a, b, c]
+            try:
+                popt, _ = curve_fit(parabolic_peak, x_vals, y_vals, p0=p0)
+                a, b, _ = popt
+                if np.abs(a) < 1e-6:
+                    raise ValueError("Flat curvature")
+                vertex = -b / (2 * a)
+            except Exception:
+                vertex = lags[peak_idx]
+        
+            peak_lag = lags[peak_idx]
+            #print(f"peak_lag: {peak_lag:.1f}, offset: {vertex:.3f}, delta: {vertex - peak_lag:.3f}")
+            return vertex, peak_lag
+          
+        if chip == 'green' or chip == 'red':
+            CHIP = chip.upper()
+            EXT = CHIP + '_CCD'
+            img1 = self.D2[EXT]
+            if ref_extension != None:
+                EXT = CHIP + '_' + ref_extension
+            if type(ref_image) == type(self.D2):
+                img2 = ref_image[EXT]
+            elif type(ref_image) == type(img1):
+                img2 = ref_image
+            elif type(ref_image) == type('abc'):
+                D2_ref = KPF0.from_fits(ref_image)
+                img2 = D2_ref[EXT]
+        else:
+            self.logger.error('measure_xdisp_offset: chip not specified.  Returning.')
+                       
+        assert img1.shape == img2.shape, "Images must be the same shape"
+        
+        h, w = img1.shape
+        xs = (w // 2 - (num_slices // 2) * slice_width) + np.arange(num_slices) * slice_width
+    
+        all_corrs = []
+        all_lags = []
+        offsets = []
+        peak_lags = []
+        lags = np.arange(-h + 1, h)
+    
+        for x in xs:
+            slice1 = img1[:, x:x+slice_width].mean(axis=1)
+            slice2 = img2[:, x:x+slice_width].mean(axis=1)
+            slice1 -= np.mean(slice1)
+            slice2 -= np.mean(slice2)
+            corr = correlate(slice1, slice2, mode='full')
+            # lags already defined globally
+            all_lags.append(lags)  # ensure lags match corr
+            all_corrs.append(corr)
+    
+            offset, peak_lag = subpixel_peak_position_fixed(corr, lags, fit_half_width=fit_half_width)
+            offsets.append(offset)
+            peak_lags.append(peak_lag)
+    
+        # Filter out large outliers
+        offsets = np.array(offsets)
+        if np.all(offsets == offsets[0]):
+            filtered_offsets = offsets
+        else:
+            median = np.median(offsets)
+            mad = median_abs_deviation(offsets)
+            threshold = 5 * mad
+            filtered_offsets = offsets[np.abs(offsets - median) < threshold]
+        filtered_median = np.median(filtered_offsets)
+
+    
+        # If no offsets passed the outlier filter, use all offsets
+        if len(filtered_offsets) == 0:
+            filtered_offsets = offsets
+    
+        # Compute 1-sigma uncertainty from percentiles
+        lower = np.percentile(filtered_offsets, 16)
+        upper = np.percentile(filtered_offsets, 84)
+        sigma = (upper - lower) / 2
+     
+        if chip == 'green':
+            self.green_offset = filtered_median
+            self.green_offset_sigma = sigma
+        elif chip == 'red':
+            self.red_offset = filtered_median
+            self.red_offset_sigma = sigma
+    
+        if fig_path or show_plot:
+            plt.figure(figsize=(15, 4))
+            plottitle = f'Cross Dispersion Offset - {self.ObsID}'
+            if chip == 'green':
+                plottitle = plottitle + f' - Green: {self.green_offset:.4f} ± {self.green_offset_sigma:.4f}'
+            if chip == 'red':
+                plottitle = plottitle + f' - Red: {self.red_offset:.4f} ± {self.red_offset_sigma:.4f}'
+            plt.suptitle(plottitle, fontsize=16, y=0.98)    
+            
+            # Plot all cross-correlations
+            plt.subplot(1, 3, 1)
+            for corr, lags in zip(all_corrs, all_lags):
+                plt.plot(lags, corr, alpha=0.5)
+            plt.axvline(filtered_median, color='r', linestyle='--', label=f'Offset: {filtered_median:.4f} pix')
+            plt.title('Cross-correlations of All Slices')
+            plt.xlabel('Lag')
+            plt.xlim(-120, 120)
+            plt.ylabel('Correlation')
+            plt.legend()
+            plt.grid(True)
+    
+            # Zoom-in around actual subpixel peak offsets
+            plt.subplot(1, 3, 2)
+            zoom_range = 5
+            for corr, lags, offset in zip(all_corrs, all_lags, offsets):
+                center_idx = np.argmin(np.abs(lags - offset))
+                if center_idx - zoom_range >= 0 and center_idx + zoom_range + 1 <= len(corr):
+                    zoom_lags = lags[center_idx - zoom_range:center_idx + zoom_range + 1]
+                    zoom_corr = corr[center_idx - zoom_range:center_idx + zoom_range + 1]
+                    plt.plot(zoom_lags, zoom_corr, marker='o', alpha=0.6)
+            plt.axvline(filtered_median, color='r', linestyle='--', label='Median Offset')
+            plt.title('Zoom-In Around Peaks')
+            plt.xlabel('Lag')
+            plt.legend()
+            plt.grid(True)
+    
+            # Histogram of offsets
+            plt.subplot(1, 3, 3)
+            plt.hist(filtered_offsets, bins=20, edgecolor='k', alpha=0.7)
+            plt.axvline(filtered_median, color='r', linestyle='--', label='Median Offset')
+            plt.title('Offset Histogram')
+            plt.xlabel('Offset (pixels)')
+            plt.ylabel('Frequency')
+            plt.legend()
+            plt.grid(True)
+    
+            plt.tight_layout()
+            
+            # Annotate the reference file
+            if type(ref_image) == type('abc'):
+                ref_label = f'Reference: {ref_image}'
+                plt.subplot(1, 3, 1)
+                plt.annotate(ref_label, xy=(0, 0), xycoords='axes fraction', 
+                            fontsize=8, color="darkgray", ha="left", va="bottom",
+                            xytext=(0, -50), textcoords='offset points')
+            
+            # Create a timestamp and annotate in the lower right corner
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            timestamp_label = f"KPF QLP: {current_time} UT"
+            plt.subplot(1, 3, 3)
+            plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
+                        fontsize=8, color="darkgray", ha="right", va="bottom",
+                        xytext=(0, -50), textcoords='offset points')
+    
+            # Display the plot
+            if fig_path != None:
+                plt.savefig(fig_path, dpi=300, facecolor='w')
+            if show_plot == True:
+                plt.show()
+            plt.close('all')
+
+
     def plot_2D_image(self, chip=None, variance=False, data_over_sqrt_variance=False,
                             overplot_dark_current=False, blur_size=None, 
-                            subtract_master_bias=False,
+                            subtract_master_bias=False, subtract_master_dark=False, 
+                            units='e-', vrange='auto', 
                             fig_path=None, show_plot=False):
         """
         Generate a plot of the a 2D image.  Overlay measurements of 
@@ -238,11 +531,14 @@ class Analyze2D:
             variance - plot variance (VAR extensions) instead of signal (CCD extensions)
             data_over_sqrt_variance - plot data divided by sqrt(variance), an approximate SNR image
             overlay_dark_current - if True, dark current measurements are over-plotted
-            subtract_master_bias - if not False, a master bias will be subtracted'
-                                   if 'auto', then the path to the master bias is 
+            subtract_master_bias - if not False, a master bias will be subtracted
+                                   if True, then the path to the master bias is 
                                    the value from the BIASFILE keyword
                                    if his parameter is set to a path, that file 
                                    will be used 
+            vrange - intensity units, e- or e-/hr
+            vrange - intensity range, two-element list or 'auto'
+            subtract_master_dark - same as subtract_master_bias
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -251,6 +547,62 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+    
+        # Subtract master bias frame
+        bias_read = False
+        dark_read = False
+        if subtract_master_bias == False:
+            pass
+        else:
+            if subtract_master_bias == True:
+                if ('BIASDIR' in self.header) and ('BIASFILE' in self.header):
+                    if self.header['BIASDIR'].startswith("/masters"):
+                        pre = '/data'
+                    else:
+                        pre = ''
+                    bias_filename = pre + self.header['BIASDIR'] + '/' + self.header['BIASFILE']
+            else:
+            	bias_filename = subtract_master_bias
+            
+            try:
+                D2_master_bias = KPF0.from_fits(bias_filename)
+                bias_read = True
+            except Exception as e:
+                self.logger.error(f"Problem reading {bias_filename}: {e}\n{traceback.format_exc()}")
+            if bias_read:
+                for extension in ['GREEN_CCD', 'RED_CCD']:
+                    if extension in D2_master_bias.extensions:
+                        self.D2[extension] -= D2_master_bias[extension]
+            else:
+                subtract_master_bias = False
+        
+        # Subtract scaled master dark frame
+        if subtract_master_dark == False:
+            pass
+        else:
+            if subtract_master_dark == True:
+                if ('DARKDIR' in self.header) and ('DARKFILE' in self.header):
+                    if self.header['DARKDIR'].startswith("/masters"):
+                        pre = '/data'
+                    else:
+                        pre = ''
+                    dark_filename = pre + self.header['DARKDIR'] + '/' + self.header['DARKFILE']
+            else:
+            	dark_filename = subtract_master_dark
+            
+            try:
+                D2_master_dark = KPF0.from_fits(dark_filename)
+                dark_read = True
+            except Exception as e:
+                self.logger.error(f"Problem reading {dark_filename}: {e}\n{traceback.format_exc()}")
+            if dark_read:
+                for extension in ['GREEN_CCD', 'RED_CCD']:
+                    if extension in D2_master_dark.extensions:
+                        self.D2[extension] -= D2_master_dark[extension] * float(self.exptime)
+            else:
+                subtract_master_dark = False
+        
+        chip = chip.lower()
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -259,28 +611,50 @@ class Analyze2D:
                 chip_title = 'Green'
                 if overplot_dark_current:
                     reg = self.green_dark_current_regions
-                    coll_pressure_torr = self.green_coll_pressure_torr
-                    ech_pressure_torr = self.green_ech_pressure_torr
-                    coll_current_a = self.green_coll_current_a
-                    ech_current_a = self.green_ech_current_a
+                    if self.green_coll_pressure_torr != None:
+                        coll_pressure_torr = self.green_coll_pressure_torr
+                    if self.green_ech_pressure_torr != None:
+                        ech_pressure_torr = self.green_ech_pressure_torr
+                    if self.green_coll_current_a != None:
+                        coll_current_a = self.green_coll_current_a
+                    if self.green_ech_current_a != None:
+                        ech_current_a = self.green_ech_current_a
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
                 if overplot_dark_current:
                     reg = self.red_dark_current_regions
-                    coll_pressure_torr = self.red_coll_pressure_torr
-                    ech_pressure_torr = self.red_ech_pressure_torr
-                    coll_current_a = self.red_coll_current_a
-                    ech_current_a = self.red_ech_current_a
+                    if self.red_coll_pressure_torr != None:
+                        coll_pressure_torr = self.red_coll_pressure_torr
+                    else:
+                        coll_pressure_torr = None
+                    if self.red_ech_pressure_torr != None:
+                        ech_pressure_torr = self.red_ech_pressure_torr
+                    else:
+                        ech_pressure_torr = None
+                    if self.red_coll_current_a != None:
+                        coll_current_a = self.red_coll_current_a
+                    else:
+                        coll_current_a = None
+                    if self.red_ech_current_a != None:
+                        ech_current_a = self.red_ech_current_a
+                    else:
+                        ech_current_a = None
             if variance:
                 image = np.array(self.D2[CHIP + '_VAR'].data)
             elif data_over_sqrt_variance:
                 image = np.array(self.D2[CHIP + '_CCD'].data) / np.sqrt(np.array(self.D2[CHIP + '_VAR'].data))
             else:
-                image = np.array(self.D2[CHIP + '_CCD'].data)
+                if units =='e-':
+                    image = np.array(self.D2[CHIP + '_CCD'].data)
+                elif units =='e-/hr':
+                    image = np.array(self.D2[CHIP + '_CCD'].data) / (float(self.exptime)/3600)
+                else:
+                    self.logger.error('Invalid value for "units"')
+                    return
             
         else:
-            self.logger.debug('chip not supplied.  Exiting plot_2D_image')
+            self.logger.error('chip not supplied.  Exiting plot_2D_image')
             return
             
         if blur_size != None:
@@ -289,11 +663,14 @@ class Analyze2D:
 
         # Generate 2D image
         plt.figure(figsize=(10,8), tight_layout=True)
-        vmin = np.nanpercentile(image[100:-100,100:-100],0.1)
-        vmax = np.nanpercentile(image[100:-100,100:-100],99)
-        if variance or data_over_sqrt_variance:
-            vmin = np.nanpercentile(image, 0.01)
-            vmax = np.nanpercentile(image,99.99)
+        if vrange == 'auto':
+            vmin = np.nanpercentile(image[100:-100,100:-100],0.1)
+            vmax = np.nanpercentile(image[100:-100,100:-100],99)
+            if variance or data_over_sqrt_variance:
+                vmin = np.nanpercentile(image, 0.01)
+                vmax = np.nanpercentile(image,99.99)
+        else:
+            vmin, vmax = vrange[0], vrange[1]
         plt.imshow(image, vmin=vmin, vmax=vmax, 
                           interpolation = 'None', 
                           origin = 'lower', 
@@ -304,7 +681,11 @@ class Analyze2D:
             title_txt = title_txt + ' (Variance)'
         elif data_over_sqrt_variance:
             title_txt = title_txt + ' (SNR)'
-        plt.title(title_txt, fontsize=18)
+        if bias_read:
+            title_txt = title_txt + ' (Bias subtracted)'
+        if dark_read:
+            title_txt = title_txt + ' (Dark subtracted)'
+        plt.title(title_txt, fontsize=14)
         plt.xlabel('Column (pixel number)', fontsize=18)
         plt.ylabel('Row (pixel number)', fontsize=18)
         plt.xticks(fontsize=14)
@@ -314,6 +695,8 @@ class Analyze2D:
             label = 'Variance (e-)'
         elif data_over_sqrt_variance:
             label = r'Counts (e-) / (Variance (e-))$^{0.5}$'
+        if units=='e-/hr':
+            label = 'Counts (e-/hr)'
         cbar = plt.colorbar(label = label)
         cbar.ax.yaxis.label.set_size(18)
         cbar.ax.tick_params(labelsize=14)
@@ -358,12 +741,14 @@ class Analyze2D:
                          va=(((reg[r]['y1'] < 2080) and (reg[r]['y1'] > 100))*('top')+
                              ((reg[r]['y1'] > 2080) or (reg[r]['y1'] < 100))*('bottom'))
                         )
-            coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
-            ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
             now = datetime.now()
             plt.text(4080, -250, now.strftime("%m/%d/%Y, %H:%M:%S"), ha='right', color='gray')
-            plt.text(4220,  500, coll_text, size=11, rotation=90, ha='center')
-            plt.text(4220, 3000, ech_text,  size=11, rotation=90, ha='center')
+            if coll_pressure_torr != None and coll_current_a != None:
+                coll_text = 'Ion Pump (Coll): \n' + (f'{coll_pressure_torr:.1e}' + ' Torr, ' + f'{coll_current_a*1e6:.1f}' + ' $\\mu$A')*(coll_pressure_torr > 1e-9) + ('Off')*(coll_pressure_torr < 1e-9)
+                plt.text(4220,  500, coll_text, size=11, rotation=90, ha='center')
+            if ech_pressure_torr != None and ech_current_a != None:
+                ech_text  = 'Ion Pump (Ech): \n'  + (f'{ech_pressure_torr:.1e}'  + ' Torr, ' + f'{ech_current_a*1e6:.1f}'  + ' $\\mu$A')*(ech_pressure_torr  > 1e-9) + ('Off')*(ech_pressure_torr < 1e-9)
+                plt.text(4220, 3000, ech_text,  size=11, rotation=90, ha='center')
             plt.text(3950, 1500, 'Bench Side\n (blue side of orders)', size=14, rotation=90, ha='center', color='white')
             plt.text( 150, 1500, 'Top Side\n (red side of orders)',    size=14, rotation=90, ha='center', color='white')
             plt.text(2040,   70, 'Collimator Side',                    size=14, rotation= 0, ha='center', color='white')
@@ -371,11 +756,21 @@ class Analyze2D:
          
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -35), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
+        if bias_read:
+            bias_label = 'Bias: ' + bias_filename
+            plt.annotate(bias_label, xy=(-0.1, 0), xycoords='axes fraction', 
+                        fontsize=8, color="darkgray", ha="left", va="bottom",
+                        xytext=(0, -52), textcoords='offset points')
+        if dark_read:
+            dark_label = 'Dark: ' + dark_filename
+            plt.annotate(dark_label, xy=(-0.1, 0), xycoords='axes fraction', 
+                        fontsize=8, color="darkgray", ha="left", va="bottom",
+                        xytext=(0, -52), textcoords='offset points')
+            plt.subplots_adjust(bottom=0.1)     
 
         # Display the plot
         if fig_path != None:
@@ -484,6 +879,7 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+        chip = chip.lower()
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -541,6 +937,7 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+        chip = chip.lower()
 
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
@@ -564,45 +961,41 @@ class Analyze2D:
         offsets = [-sep, 0, sep]
         
         # Generate the array of 2D images
-        fig, axs = plt.subplots(3, 3, figsize=(10,8.5), tight_layout=True)
+        fig, axs = plt.subplots(3, 3, figsize=(10, 8)) 
+        
         for i in range(3):
             for j in range(3):
-                # Calculate the top left corner of each sub-image
                 start_x = center_x - size // 2 + offsets[i]
                 start_y = center_y - size // 2 + offsets[j]
-
-                # Slice out and display the sub-image
                 sub_img = image[start_x:start_x+size, start_y:start_y+size]
-                im = axs[2-i, j].imshow(sub_img, origin='lower', 
-                                 extent=[start_y, start_y+size, start_x, start_x+size], # these indices appear backwards, but work
-                                 vmin = np.nanpercentile(sub_img,0.1), 
-                                 vmax = np.nanpercentile(sub_img,99.9),
-                                 interpolation = 'None',
-                                 cmap='viridis')
+                im = axs[2-i, j].imshow(sub_img, origin='lower',
+                                        extent=[start_y, start_y+size, start_x, start_x+size],
+                                        vmin=np.nanpercentile(sub_img, 0.1),
+                                        vmax=np.nanpercentile(sub_img, 99.9),
+                                        interpolation='none', cmap='viridis')
                 axs[2-i, j].grid(False)
-                axs[2-i, j].tick_params(top=False, right=False, labeltop=False, labelright=False)
-                if i != 2:
-                    axs[i, j].tick_params(labelbottom=False) # turn off x tick labels
+                axs[2-i, j].tick_params(top=False, right=False, labeltop=False, labelright=False, labelsize=9)
+                if i != 0:
+                    axs[2-i, j].tick_params(labelbottom=False)
                 if j != 0:
-                    axs[i, j].tick_params(labelleft=False) # turn off y tick labels
-                fig.colorbar(im, ax=axs[2-i, j], fraction=0.046, pad=0.04) # Adjust the fraction and pad for proper placement
-        plt.grid(False)
-        plt.tight_layout()
-        plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
-        ax = fig.add_subplot(111, frame_on=False)
-        ax.grid(False)
-        ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
-        ax.set_title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
-        ax.set_xlabel('Column (pixel number)', fontsize=18, labelpad=10)
-        ax.set_ylabel('Row (pixel number)', fontsize=18, labelpad=10)
+                    axs[2-i, j].tick_params(labelleft=False)
+        
+                # Add colorbar for each subplot
+                cbar = fig.colorbar(im, ax=axs[2-i, j], fraction=0.046, pad=0.04)
+                cbar.ax.tick_params(labelsize=7)
 
-        # Create a timestamp and annotate in the lower right corner
+        # Adjust spacing between subplots
+        plt.subplots_adjust(wspace=0.15, hspace=0.15)
+        
+        # Use suptitle and fig.text for cleaner labels
+        fig.suptitle(f'2D - {chip_title} CCD: {self.ObsID} - {self.name}', fontsize=14)
+        fig.text(0.5, 0.04, 'Column (pixel number)', ha='center', fontsize=16)
+        fig.text(0.06, 0.5, 'Row (pixel number)', va='center', rotation='vertical', fontsize=16)
+        plt.subplots_adjust(top=0.945, bottom=0.10)  # or tweak to 0.91, 0.93, etc.
+        
+        # Timestamp annotation
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
-        plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
-                    fontsize=8, color="darkgray", ha="right", va="bottom",
-                    xytext=(0, -40), textcoords='offset points')
-        plt.subplots_adjust(bottom=0.1)     
+        fig.text(0.95, 0.01, f"KPF QLP: {current_time}", fontsize=8, color="darkgray", ha="right", va="bottom")
 
         # Display the plot
         if fig_path != None:
@@ -614,12 +1007,16 @@ class Analyze2D:
         plt.close('all')
 
 
-    def plot_2D_order_trace2x2(self, chip=None, fig_path=None, show_plot=False):
+    def plot_2D_order_trace2x2(self, chip=None, order_trace_master_file='auto',
+                               fig_path=None, show_plot=False, 
+                               width=200, height=200, 
+                               start_x_arr='default', start_y_arr='default'):
         """
         Overlay the order trace on the 2D image in a 3x3 array of zoom-in plots.  
 
         Args:
             chip (string) - "green" or "red"
+            order_trace_master_file (string) - path to order trace file; auto means use defaults
             fig_path (string) - set to the path for the file to be generated.
             show_plot (boolean) - show the plot in the current environment.
 
@@ -627,6 +1024,7 @@ class Analyze2D:
             PNG plot in fig_path or shows the plot it in the current environment 
             (e.g., in a Jupyter Notebook).
         """
+        chip = chip.lower()
         
         # Set parameters based on the chip selected
         obs_date = Time(self.header['DATE-MID'])
@@ -635,25 +1033,27 @@ class Analyze2D:
             if chip == 'green':
                 CHIP = 'GREEN'
                 chip_title = 'Green'
-                if obs_date < service_mission_date1:
-                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
-                else:
-                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
-                width  = 200
-                height = 200
-                start_x_arr = [ 0, 3600,  0, 3600]
-                start_y_arr = [1200, 1200,  545,  545]
+                if order_trace_master_file == 'auto':
+                    if obs_date < service_mission_date1:
+                        order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
+                    else:
+                        order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
+                if start_x_arr == 'default':
+                    start_x_arr = [ 0, 3600,  0, 3600]
+                if start_y_arr == 'default':
+                    start_y_arr = [1200, 1200,  545,  545]
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
-                if obs_date < service_mission_date1:
-                    order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
-                else:
-                    order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
-                width  = 200
-                height = 200
-                start_x_arr = [ 0, 3600,  0, 3600]
-                start_y_arr = [1538, 1538,  545,  550]
+                if order_trace_master_file == 'auto':
+                    if obs_date < service_mission_date1:
+                        order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
+                    else:
+                        order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
+                if start_x_arr == 'default':
+                    start_x_arr = [ 0, 3600,  0, 3600]
+                if start_y_arr == 'default':
+                    start_y_arr = [1538, 1538,  545,  550]
             image = np.array(self.D2[CHIP + '_CCD'].data)
             order_trace_master = pd.read_csv(order_trace_master_file)
         else:
@@ -664,13 +1064,13 @@ class Analyze2D:
         fig, axs = plt.subplots(2, 2, figsize=(19,17), tight_layout=False)
         for i in range(2):
             for j in range(2):
-                # Calculate the top left corner of each sub-image
+                # Calculate the top left corner of each subimage
                 start_x = start_x_arr[2*i+j]
                 start_y = start_y_arr[2*i+j]
-                end_x = min(start_x+width, image.shape[0])
+                end_x = min(start_x+width,  image.shape[0])
                 end_y = min(start_y+height, image.shape[1])
 
-                # Slice out and display the sub-image
+                # Slice out and display the subimage
                 sub_img = image[start_y:end_y, start_x:end_x]
                 im = axs[i, j].imshow(sub_img, origin='lower', 
                                  extent=[start_x, end_x, start_y, end_y], # these indices appear backwards, but work
@@ -680,6 +1080,7 @@ class Analyze2D:
                                  cmap='viridis')
                 axs[i, j].set_xlim(start_x, start_x+width)
                 axs[i, j].set_ylim(start_y, start_y+height)
+                
                 # Overplot order trace
                 for o in range(1,np.shape(order_trace_master)[0]-2,1):#[50]:#range(np.shape(order_trace)[0])
                     x_grid_master = np.linspace(order_trace_master.iloc[o]['X1'], 
@@ -703,8 +1104,6 @@ class Analyze2D:
                 cbar.ax.tick_params(labelsize=12)
 
         plt.grid(False)
-#        plt.tight_layout()
-        #plt.subplots_adjust(wspace=-0.8, hspace=-0.8) # Reduce space between rows
         ax = fig.add_subplot(111, frame_on=False)
         ax.grid(False)
         ax.tick_params(labelcolor='none', top=False, bottom=False, left=False, right=False)
@@ -714,7 +1113,7 @@ class Analyze2D:
 
         # Annotations
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=16, color="darkgray", ha="right", va="bottom",
                     xytext=(-50, -150), textcoords='offset points')
@@ -732,6 +1131,7 @@ class Analyze2D:
         if show_plot == True:
             plt.show()
         plt.close('all')
+
 
     def plot_bias_histogram(self, variance=False, data_over_sqrt_variance=False, chip=None, fig_path=None, show_plot=False):
         """
@@ -835,8 +1235,8 @@ class Analyze2D:
     
             # Add annotations
             textstr = '\n'.join((
-                r'$\mu=%.2f$ e-' % (mu, ),
-                r'$\sigma=%.2f$ e-' % (std, ),
+                r'$\\mu=%.2f$ e-' % (mu, ),
+                r'$\\sigma=%.2f$ e-' % (std, ),
                 r'$\mathrm{median}=%.2f$ e-' % (median, )))
             props = dict(boxstyle='round', facecolor='red', alpha=0.15)
             plt.gca().text(0.98, 0.95, textstr, transform=plt.gca().transAxes, fontsize=12,
@@ -864,7 +1264,7 @@ class Analyze2D:
  
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
@@ -932,8 +1332,8 @@ class Analyze2D:
         
         # Add annotations
         textstr = '\n'.join((
-            r'$\mu=%.2f$ e-' % (mu, ),
-            r'$\sigma=%.2f$ e-' % (std, ),
+            r'$\\mu=%.2f$ e-' % (mu, ),
+            r'$\\sigma=%.2f$ e-' % (std, ),
             r'$\mathrm{median}=%.2f$ e-' % (median, )))
         props = dict(boxstyle='round', facecolor='red', alpha=0.15)
         plt.gca().text(0.98, 0.95, textstr, transform=plt.gca().transAxes, fontsize=12,
@@ -953,7 +1353,7 @@ class Analyze2D:
 
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
@@ -969,13 +1369,22 @@ class Analyze2D:
         plt.close('all')
 
     
-    def plot_2D_image_histogram(self, chip=None, fig_path=None, show_plot=False, 
-                                saturation_limit_2d=240000):
+    def plot_2D_image_histogram(self, chip=None, 
+                                      subtract_master_bias=False,
+                                      subtract_master_dark=False, 
+                                      saturation_limit_2d=240000,
+                                      fig_path=None, show_plot=False):
         """
-        Add description
+        Make a histogram of the pixel intensities for a 2D image.
 
         Args:
             chip (string) - "green" or "red"
+            subtract_master_bias - if not False, a master bias will be subtracted
+                                   if True, then the path to the master bias is 
+                                   the value from the BIASFILE keyword
+                                   if his parameter is set to a path, that file 
+                                   will be used 
+            subtract_master_dark - same as subtract_master_bias
             fig_path (string) - set to the path for the file 
                 to be generated.
             show_plot (boolean) - show the plot in the current environment.
@@ -985,8 +1394,65 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
 
         """
+    
+        # Subtract master bias frame
+        bias_read = False
+        dark_read = False
+        if subtract_master_bias == False:
+            pass
+        else:
+            D2_subtracted = copy.deepcopy(self.D2)
+            if subtract_master_bias == True:
+                if ('BIASDIR' in self.header) and ('BIASFILE' in self.header):
+                    if self.header['BIASDIR'].startswith("/masters"):
+                        pre = '/data'
+                    else:
+                        pre = ''
+                    bias_filename = pre + self.header['BIASDIR'] + '/' + self.header['BIASFILE']
+            else:
+            	bias_filename = subtract_master_bias
+            
+            try:
+                D2_master_bias = KPF0.from_fits(bias_filename)
+                bias_read = True
+            except Exception as e:
+                self.logger.error(f"Problem reading {bias_filename}: {e}\n{traceback.format_exc()}")
+            if bias_read:
+                for extension in ['GREEN_CCD', 'RED_CCD']:
+                    if extension in D2_master_bias.extensions:
+                        D2_subtracted[extension] -= D2_master_bias[extension]
+            else:
+                subtract_master_bias = False
+        
+        # Subtract scaled master dark frame
+        if subtract_master_dark == False:
+            pass
+        else:
+            D2_subtracted = copy.deepcopy(self.D2)
+            if subtract_master_dark == True:
+                if ('DARKDIR' in self.header) and ('DARKFILE' in self.header):
+                    if self.header['DARKDIR'].startswith("/masters"):
+                        pre = '/data'
+                    else:
+                        pre = ''
+                    dark_filename = pre + self.header['DARKDIR'] + '/' + self.header['DARKFILE']
+            else:
+            	dark_filename = subtract_master_dark
+            
+            try:
+                D2_master_dark = KPF0.from_fits(dark_filename)
+                dark_read = True
+            except Exception as e:
+                self.logger.error(f"Problem reading {dark_filename}: {e}\n{traceback.format_exc()}")
+            if dark_read:
+                for extension in ['GREEN_CCD', 'RED_CCD']:
+                    if extension in D2_master_dark.extensions:
+                        D2_subtracted[extension] -= D2_master_dark[extension] * float(self.exptime)
+            else:
+                subtract_master_dark = False
         
         # Set parameters based on the chip selected
+        chip = chip.lower()
         if chip == 'green' or chip == 'red':
             if chip == 'green':
                 CHIP = 'GREEN'
@@ -997,6 +1463,11 @@ class Analyze2D:
             image = np.array(self.D2[CHIP + '_CCD'].data)
             # Flatten the image array for speed in histrogram computation
             flatten_image = image.flatten()
+            
+            if bias_read or dark_read:
+                image_subtracted = np.array(D2_subtracted[CHIP + '_CCD'].data)
+                flatten_image_subtracted = image_subtracted.flatten()
+                mad_subtracted = median_abs_deviation(flatten_image_subtracted, nan_policy='omit')
         else:
             self.logger.info(f'chip not supplied. Exiting plot_2D_image_histogram()')
             return
@@ -1012,7 +1483,7 @@ class Analyze2D:
             bins = 40
         plt.hist(flatten_image, 
                  bins=bins, 
-                 label='Median: ' + '%4.1f' % np.nanmedian(flatten_image) + ' e-; '
+                 label='2D: Median: ' + '%4.1f' % np.nanmedian(flatten_image) + ' e-; '
                        'Stddev: ' + '%4.1f' % np.nanstd(flatten_image) + ' e-; '
                        'MAD: '    + '%4.1f' % mad + ' e-; '
                        'Saturated? ' + str(np.nanpercentile(flatten_image,99.99)>saturation_limit_2d), 
@@ -1020,17 +1491,37 @@ class Analyze2D:
                  density = False, 
                  range = (np.nanpercentile(flatten_image,  0.005),
                           np.nanpercentile(flatten_image, 99.995)))
+        if bias_read or dark_read:
+            plt.hist(flatten_image_subtracted, 
+                     bins=bins, 
+                     label='2D - master '  + bias_read*'bias' + dark_read*'dark' + ': Median: ' + '%4.1f' % np.nanmedian(flatten_image_subtracted) + ' e-; '
+                           'Stddev: ' + '%4.1f' % np.nanstd(flatten_image_subtracted) + ' e-; '
+                           'MAD: '    + '%4.1f' % mad + ' e-; '
+                           'Saturated? ' + str(np.nanpercentile(flatten_image_subtracted,99.99)>saturation_limit_2d), 
+
+                     histtype='step',      
+                     color='red',          
+                     linewidth=2.0,        
+                     alpha=1.0,            
+                     density=False,
+
+                     range = (np.nanpercentile(flatten_image_subtracted,  0.005),
+                              np.nanpercentile(flatten_image_subtracted, 99.995)))
         plt.title('2D - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         plt.xlabel('Counts (e-)', fontsize=16)
         plt.ylabel('Number of Pixels', fontsize=16)
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
         plt.yscale('log')
-        plt.legend(loc='lower right', fontsize=11)
+        if bias_read or dark_read:
+            plt.legend(loc='lower right', fontsize=10)
+        else:
+            plt.legend(loc='lower right', fontsize=10)
+
          
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')
@@ -1126,7 +1617,7 @@ class Analyze2D:
          
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -40), textcoords='offset points')

@@ -41,7 +41,7 @@ wheels/
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
-
+ 
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
@@ -82,6 +82,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+.jupyter/
 
 # pyenv
 .python-version
@@ -118,3 +119,9 @@ ENV/
 
  
 .pytest_cache
+
+# Processing
+*runDailyPipelines*
+*cleanupMasters*
+*runMasters*
+*.joblog

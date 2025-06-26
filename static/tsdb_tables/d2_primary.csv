@@ -1,0 +1,94 @@
+keyword|datatype|description|unit
+KPFERA|string|The era during which the observation was made, e.g. '2.0'|None
+NOTJUNK|bool|Not in the list of junk files check|None
+DRPTAG2D|string|Git version number of KPF-Pipeline used to make 2D|None
+DRPHSH2D|string|Git commit hash version of KPF-Pipeline used to make 2D|None
+DATAPRL0|bool|QC: L0 data products present with non-zero array sizes|None
+DATAPR2D|bool|QC: 2D red and green data present|None
+CAHKPR2D|bool|QC: 2D CaHK data present|None
+KWRDPRL0|bool|QC: L0 expected keywords present|None
+TIMCHKL0|bool|QC: Consistent times in L0 file|None
+EMSAT|bool|QC: Exp Meter not saturated|None
+EMNEG|bool|QC: Exp Meter not negative flux|None
+GOODREAD|bool|QC: Texp not consistent with CCD readout error|None
+POS2DSNR|bool|QC: 2D Red/Green data/var^0.5 not significantly negative|None
+LOWBIAS|bool|QC: 2D bias flux not low|None
+LOWDARK|bool|QC: 2D dark flux not low|None
+LFC2DFOK|bool|QC: LFC flux meets threshold of 4000 counts|None
+OLDBIAS|bool|QC: Master bias within 5 days of this obs|None
+OLDDARK|bool|QC: Master dark within 5 days of this obs|None
+OLDFLAT|bool|QC: Master flat within 5 days of this obs|None
+NTPGOOD|bool|QC: NTP time within 100 ms|None
+GUIDGOOD|bool|QC: Guider RMS and bias within 50 mas RMS|None
+TARGPLAU|bool|QC: TARG kwds present with plausible values|None
+AGITOK|bool|QC: Agitator running with speed above minimum|None
+GUIDSAT|bool|QC: Guider not saturated|None
+BIASFILE|string|Master bias file used (except for bias exposures)|None
+DARKFILE|string|Master dark file used (except for dark exposures)|None
+FLATFILE|string|Master flat file used (except for flat exposures)|None
+BIASDIR|string|Directory for BIASDIR|None
+DARKDIR|string|Directory for DARKDIR|None
+FLATDIR|string|Directory for FLATDIR|None
+RNRED1|float|Read noise for RED_AMP1 (first amp region on Red)|e-
+RNRED2|float|Read noise for RED_AMP2 (second amp region on Red)|e-
+RNGREEN1|float|Read noise for GREEN_AMP1 (first amp region on Green)|e-
+RNGREEN2|float|Read noise for GREEN_AMP2 (second amp region on Green)|e-
+RNNGGR1|float|Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan|None
+RNNGGR2|float|Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan|None
+RNNGGR3|float|Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan|None
+RNNGGR4|float|Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan|None
+RNNGRD1|float|Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan|None
+RNNGRD2|float|Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan|None
+RNNGRD3|float|Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan|None
+RNNGRD4|float|Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan|None
+GREENTRT|float|Green read time|sec
+REDTRT|float|Red read time|sec
+READSPED|string|Categorization of CCD read speed ('regular' or 'fast')|None
+FLXREG1G|float|Dark curr, Green region 1 = [1690:1990,1690:1990]|e-/hr
+FLXREG2G|float|Dark curr, Green region 2 = [1690:1990,2090:2390]|e-/hr
+FLXREG3G|float|Dark curr, Green region 3 = [2090:2390,1690:1990]|e-/hr
+FLXREG4G|float|Dark curr, Green region 4 = [2090:2390,2090:2390]|e-/hr
+FLXREG5G|float|Dark curr, Green region 5 = [80:380,3080:3380]|e-/hr
+FLXREG6G|float|Dark curr, Green region 6 = [1690:1990,1690:1990]|e-/hr
+FLXAMP1G|float|Dark curr, Green amp region 1 = [3700:4000,700:1000]|e-/hr
+FLXAMP2G|float|Dark curr, Green amp region 2 = [3700:4000,3080:3380]|e-/hr
+FLXCOLLG|float|Dark curr, Green coll-side region = [3700:4000,700:1000]|e-/hr
+FLXECHG|float|Dark curr, Green ech-side region = [3700:4000,700:1000]|e-/hr
+FLXREG1R|float|Dark curr, Red region 1 = [1690:1990,1690:1990]|e-/hr
+FLXREG2R|float|Dark curr, Red region 2 = [1690:1990,2090:2390]|e-/hr
+FLXREG3R|float|Dark curr, Red region 3 = [2090:2390,1690:1990]|e-/hr
+FLXREG4R|float|Dark curr, Red region 4 = [2090:2390,2090:2390]|e-/hr
+FLXREG5R|float|Dark curr, Red region 5 = [80:380,3080:3380]|e-/hr
+FLXREG6R|float|Dark curr, Red region 6 = [1690:1990,1690:1990]|e-/hr
+FLXAMP1R|float|Dark curr, Red amp region 1 = [3700:4000,700:1000]|e-/hr
+FLXAMP2R|float|Dark curr, Red amp region 2 = [3700:4000,3080:3380]|e-/hr
+FLXCOLLR|float|Dark curr, Red coll-side region = [3700:4000,700:1000]|e-/hr
+FLXECHR|float|Dark curr, Red ech-side region = [3700:4000,700:1000]|e-/hr
+GDRXRMS|float|x-coordinate RMS guiding error|mas
+GDRYRMS|float|y-coordinate RMS guiding error|mas
+GDRRRMS|float|r-coordinate RMS guiding error|mas
+GDRXBIAS|float|x-coordinate bias guiding error|mas
+GDRYBIAS|float|y-coordinate bias guiding error|mas
+GDRSEEJZ|float|Seeing in J+Z-band from Moffat func fit|arcsec
+GDRSEEV|float|Scaled seeing in V-band from J+Z-band|arcsec
+GDRFWMD|float|Guider frames: median(FWHM)|mas
+GDRFWSTD|float|Guider frames: std(FWHM)|mas
+GDRFXMD|float|Guider frames: median(flux)|ADU
+GDRFXSTD|float|Guider frames: std(flux)|ADU
+GDRPKMD|float|Guider frames: median(flux)|ADU
+GDRPKSTD|float|Guider frames: std(flux)|ADU
+GDRFRSAT|float|Guider: frac of frames w/in 90% saturated|None
+GDRNSAT|int|Guider: number of 90% saturated pix in co-added image|None
+MOONSEP|float|Separation between Moon and target star|deg
+SUNALT|float|Altitude of Sun; negative = below horizon|deg
+AGEBIAS|float|BIASFILE age|days
+AGEDARK|float|DARKFILE age|days
+AGEFLAT|float|FLATFILE age|days
+XDSPDYG1|float|Green cross-dispersion offset compared to master reference|pixels
+XDSPDYR1|float|Red cross-dispersion offset compared to master reference|pixels
+XDSPDYG2|float|Green cross-dispersion offset compared to reference in era|pixels
+XDSPDYR2|float|Red cross-dispersion offset compared to reference in era|pixels
+XDSPSYG1|float|Uncertainty in XDSPDYG1|pixels
+XDSPSYR1|float|Uncertainty in XDSPDYR1|pixels
+XDSPSYG2|float|Uncertainty in XDSPDYG2|pixels
+XDSPSYR2|float|Uncertainty in XDSPDYR2|pixels

@@ -4,6 +4,7 @@ import re
 import hashlib
 import pandas as pd
 import numpy as np
+import time
 from astropy.time import Time
 
 from kpfpipe.models.level1 import KPF1
@@ -26,7 +27,7 @@ def md5(fname):
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
     except:
-        print("*** Error: Failed to compute checksum =",fname,"; quitting...")
+        self.log.error("*** Error: Failed to compute checksum =",fname,"; quitting...")
         return 68
 
 
@@ -70,11 +71,21 @@ class KPFDB:
         dbserver = os.getenv('DBSERVER')
 
         # Connect to database
+        db_fail = True
+        n_attempts = 3
+        wait_times = [1,3,10]
+        for i in range(n_attempts):
+            try:
+                self.conn = psycopg2.connect(host=dbserver,database=dbname,port=dbport,user=dbuser,password=dbpass)
+                db_fail = False
+                break
+            except:
+                self.log.warning("Could not connect to database, retrying...")
+                db_fail = True
+                time.sleep(wait_times[1])
 
-        try:
-            self.conn = psycopg2.connect(host=dbserver,database=dbname,port=dbport,user=dbuser,password=dbpass)
-        except:
-            print("Could not connect to database...")
+        if db_fail:
+            self.log.warning(f"Could not connect to database after {n_attempts} attempts...")
             self.exit_code = 64
             return
 
@@ -85,18 +96,18 @@ class KPFDB:
         # Select database version.
 
         q1 = 'SELECT version();'
-        print('q1 = {}'.format(q1))
+        self.log.debug('q1 = {}'.format(q1))
         self.cur.execute(q1)
         db_version = self.cur.fetchone()
-        print('PostgreSQL database version = {}'.format(db_version))
+        self.log.debug('PostgreSQL database version = {}'.format(db_version))
 
         # Check database current_user.
 
         q2 = 'SELECT current_user;'
-        print('q2 = {}'.format(q2))
+        self.log.debug('q2 = {}'.format(q2))
         self.cur.execute(q2)
         for record in self.cur:
-            print('record = {}'.format(record))
+            self.log.debug('record = {}'.format(record))
 
     def query_to_pandas(self, query):
         try:
@@ -142,8 +153,8 @@ ORDER BY startdate;"""
         obs_jd = obst.mjd
         
         # only look backwards for etalon masks
-        if cal_type_pair[0].lower() == 'etalonmask':
-            df = df[df['meanmjd'] < obs_jd]
+        # if cal_type_pair[0].lower() == 'etalonmask':
+        #     df = df[df['meanmjd'] < obs_jd]
 
         df['delta'] = (df['meanmjd'] - obs_jd).abs()
         if df['delta'].isnull().all():
@@ -174,7 +185,7 @@ FROM calfiles
 WHERE CAST('{obs_date}' as date) BETWEEN (startdate - INTERVAL '{max_cal_delta_time}') AND (startdate + INTERVAL '{max_cal_delta_time}')
 and level = 1
 AND caltype = 'wls'
-AND (object like '%{object_name}-eve%' OR object like '%{object_name}-morn%' OR object like '%{object_name}-midnight%')
+AND (object like '%{object_name}-eve%' OR object like '%{object_name}-morn%')
 ORDER BY startdate;"""
         
         df = self.query_to_pandas(query_template)
@@ -209,17 +220,21 @@ ORDER BY startdate;"""
         try:
             best_before = before_df.loc[before_df['delta'].idxmin()]
             fname_before = os.path.join('/', best_before['filename'])
+            if not os.path.exists(fname_before):
+                raise IOError(f"{fname_before} does not exist.")
             self.verify_checksum(fname_before, best_before['checksum'])
             before_code = 0
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, IOError):
             fname_before = None
             before_code = 1
         try:
             best_after = after_df.loc[after_df['delta'].idxmin()]
             fname_after = os.path.join('/', best_after['filename'])
+            if not os.path.exists(fname_after):
+                raise IOError(f"{fname_after} does not exist.")
             self.verify_checksum(fname_after, best_after['checksum'])
             after_code = 0
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, IOError):
             fname_after = None
             after_code = 1
 
@@ -270,9 +285,9 @@ ORDER BY startdate;"""
 
         # Query database for all cal_types.
 
-        print('----> cal_file_level = {}'.format(cal_file_level))
-        print('----> contentbitmask = {}'.format(contentbitmask))
-        print('----> cal_type_pair = {}'.format(cal_type_pair))
+        self.log.debug('----> cal_file_level = {}'.format(cal_file_level))
+        self.log.debug('----> contentbitmask = {}'.format(contentbitmask))
+        self.log.debug('----> cal_type_pair = {}'.format(cal_type_pair))
 
         levelstr = str(cal_file_level)
         cal_type = cal_type_pair[0]
@@ -290,7 +305,7 @@ ORDER BY startdate;"""
         pattern = re.compile("|".join(rep.keys()))
         query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
 
-        print('query = {}'.format(query))
+        self.log.debug('query = {}'.format(query))
 
 
         # Execute query.
@@ -299,7 +314,7 @@ ORDER BY startdate;"""
             self.cur.execute(query)
 
         except (Exception, psycopg2.DatabaseError) as error:
-            print('*** Error executing query ({}); skipping...'.format(query))
+            self.log.error('*** Error executing query ({}); skipping...'.format(query))
             self.exit_code = 67
             return
 
@@ -315,9 +330,9 @@ ORDER BY startdate;"""
             checksum = record[5]
             infobits = record[6]
 
-            print('cId = {}'.format(cId))
-            print('filename = {}'.format(filename))
-            print('checksum = {}'.format(checksum))
+            self.log.debug('cId = {}'.format(cId))
+            self.log.debug('filename = {}'.format(filename))
+            self.log.debug('checksum = {}'.format(checksum))
 
             self.verify_checksum(filename, checksum)
 
@@ -330,12 +345,12 @@ ORDER BY startdate;"""
     def verify_checksum(self, filename, checksum):
         # See if file exists.
         isExist = os.path.exists(filename)
-        print('File existence = {}'.format(isExist))
+        self.log.debug('File existence = {}'.format(isExist))
 
         if isExist is True:
-            print("File exists...")
+            self.log.debug("File exists...")
         else:
-            print("*** Error: File does not exist; quitting...")
+            self.log.error("*** Error: File does not exist; quitting...")
             self.exit_code = 65
             return
 
@@ -343,18 +358,18 @@ ORDER BY startdate;"""
         # Compute checksum and compare with database value.
 
         cksum = md5(filename)
-        print('cksum = {}'.format(cksum))
+        self.log.debug('cksum = {}'.format(cksum))
 
         if  cksum == 68:
             self.exit_code = 68
             return
 
         if cksum == checksum:
-            print("File checksum is correct ({})...".format(filename))
+            self.log.debug("File checksum is correct ({})...".format(filename))
             self.filename = filename
             self.exit_code = 0
         else:
-            print("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
+            self.log.error("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
             self.exit_code = 66
             return
 
@@ -368,265 +383,9 @@ ORDER BY startdate;"""
         try:
             self.cur.close()
         except (Exception, psycopg2.DatabaseError) as error:
-            print(error)
+            self.log.error(error)
             self.exit_code = 2
         finally:
             if self.conn is not None:
                 self.conn.close()
-                print('Database connection closed.')
-
-
-    def get_nearest_master_file_before(self,obsdatetime,cal_file_level,contentbitmask,cal_type_pair,max_cal_file_age='1000 days'):
-
-        '''
-        Get nearest master file before for the specified set of input parameters.
-
-        obsdatetime is an # ISO datetime string, generally from the DATE-MID FITS keyword.
-        '''
-
-        # Reinitialize.
-
-        self.cId = None
-        self.db_level = None
-        self.db_cal_type = None
-        self.db_object = None
-        self.infobits = None
-        self.filename = None
-        self.exit_code = 0
-
-
-        # Define query template.
-
-        query_template =\
-            "select * from getCalFileBefore(" +\
-            "cast('OBSDATETIME' as timestamp)," +\
-            "cast(LEVEL as smallint)," +\
-            "cast('CALTYPE' as character varying(32))," +\
-            "cast('OBJECT' as character varying(32))," +\
-            "cast(CONTENTBITMASK as integer), " +\
-            "cast('MAXFILEAGE' as interval)) as " +\
-            "(cId integer," +\
-            " level smallint," +\
-            " caltype varchar(32)," +\
-            " object varchar(32)," +\
-            " filename varchar(255)," +\
-            " checksum varchar(32)," +\
-            " infobits integer," +\
-            " startDate date);"
-
-
-        # Query database for all cal_types.
-
-        print('----> cal_file_level = {}'.format(cal_file_level))
-        print('----> contentbitmask = {}'.format(contentbitmask))
-        print('----> cal_type_pair = {}'.format(cal_type_pair))
-
-        levelstr = str(cal_file_level)
-        cal_type = cal_type_pair[0]
-        object = cal_type_pair[1]
-
-        rep = {"OBSDATETIME": obsdatetime,
-               "LEVEL": levelstr,
-               "CALTYPE": cal_type,
-               "OBJECT": object,
-               "MAXFILEAGE": max_cal_file_age}
-
-        rep["CONTENTBITMASK"] = str(contentbitmask)
-
-        rep = dict((re.escape(k), v) for k, v in rep.items())
-        pattern = re.compile("|".join(rep.keys()))
-        query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
-
-        print('query = {}'.format(query))
-
-
-        # Execute query.
-
-        try:
-            self.cur.execute(query)
-
-        except (Exception, psycopg2.DatabaseError) as error:
-            print('*** Error executing query ({}); skipping...'.format(query))
-            self.exit_code = 67
-            return
-
-
-        record = self.cur.fetchone()
-
-        if record is not None:
-            cId = record[0]
-            db_level = record[1]
-            db_cal_type = record[2]
-            db_object = record[3]
-            filename = '/' + record[4]         # docker run has -v /data/kpf/masters:/masters
-            checksum = record[5]
-            infobits = record[6]
-
-            print('cId = {}'.format(cId))
-            print('filename = {}'.format(filename))
-            print('checksum = {}'.format(checksum))
-
-
-            # See if file exists.
-
-            isExist = os.path.exists(filename)
-            print('File existence = {}'.format(isExist))
-
-            if isExist is True:
-                print("File exists...")
-            else:
-                print("*** Error: File does not exist; quitting...")
-                self.exit_code = 65
-                return
-
-
-            # Compute checksum and compare with database value.
-
-            cksum = md5(filename)
-            print('cksum = {}'.format(cksum))
-
-            if  cksum == 68:
-                self.exit_code = 68
-                return
-
-            if cksum == checksum:
-                print("File checksum is correct ({})...".format(filename))
-                self.cId = cId
-                self.db_level = db_level
-                self.db_cal_type = db_cal_type
-                self.db_object = db_object
-                self.infobits = infobits
-                self.filename = filename
-                self.exit_code = 0
-            else:
-                print("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
-                self.exit_code = 66
-                return
-
-
-    def get_nearest_master_file_after(self,obsdatetime,cal_file_level,contentbitmask,cal_type_pair,max_cal_file_age='1000 days'):
-
-        '''
-        Get nearest master file after for the specified set of input parameters.
-
-        obsdatetime is an # ISO datetime string, generally from the DATE-MID FITS keyword.
-        '''
-
-        # Reinitialize.
-
-        self.cId = None
-        self.db_level = None
-        self.db_cal_type = None
-        self.db_object = None
-        self.infobits = None
-        self.filename = None
-        self.exit_code = 0
-
-
-        # Define query template.
-
-        query_template =\
-            "select * from getCalFileAfter(" +\
-            "cast('OBSDATETIME' as timestamp)," +\
-            "cast(LEVEL as smallint)," +\
-            "cast('CALTYPE' as character varying(32))," +\
-            "cast('OBJECT' as character varying(32))," +\
-            "cast(CONTENTBITMASK as integer), " +\
-            "cast('MAXFILEAGE' as interval)) as " +\
-            "(cId integer," +\
-            " level smallint," +\
-            " caltype varchar(32)," +\
-            " object varchar(32)," +\
-            " filename varchar(255)," +\
-            " checksum varchar(32)," +\
-            " infobits integer," +\
-            " startDate date);"
-
-
-        # Query database for all cal_types.
-
-        print('----> cal_file_level = {}'.format(cal_file_level))
-        print('----> contentbitmask = {}'.format(contentbitmask))
-        print('----> cal_type_pair = {}'.format(cal_type_pair))
-
-        levelstr = str(cal_file_level)
-        cal_type = cal_type_pair[0]
-        object = cal_type_pair[1]
-
-        rep = {"OBSDATETIME": obsdatetime,
-               "LEVEL": levelstr,
-               "CALTYPE": cal_type,
-               "OBJECT": object,
-               "MAXFILEAGE": max_cal_file_age}
-
-        rep["CONTENTBITMASK"] = str(contentbitmask)
-
-        rep = dict((re.escape(k), v) for k, v in rep.items())
-        pattern = re.compile("|".join(rep.keys()))
-        query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
-
-        print('query = {}'.format(query))
-
-
-        # Execute query.
-
-        try:
-            self.cur.execute(query)
-
-        except (Exception, psycopg2.DatabaseError) as error:
-            print('*** Error executing query ({}); skipping...'.format(query))
-            self.exit_code = 67
-            return
-
-
-        record = self.cur.fetchone()
-
-        if record is not None:
-            cId = record[0]
-            db_level = record[1]
-            db_cal_type = record[2]
-            db_object = record[3]
-            filename = '/' + record[4]         # docker run has -v /data/kpf/masters:/masters
-            checksum = record[5]
-            infobits = record[6]
-
-            print('cId = {}'.format(cId))
-            print('filename = {}'.format(filename))
-            print('checksum = {}'.format(checksum))
-
-
-            # See if file exists.
-
-            isExist = os.path.exists(filename)
-            print('File existence = {}'.format(isExist))
-
-            if isExist is True:
-                print("File exists...")
-            else:
-                print("*** Error: File does not exist; quitting...")
-                self.exit_code = 65
-                return
-
-
-            # Compute checksum and compare with database value.
-
-            cksum = md5(filename)
-            print('cksum = {}'.format(cksum))
-
-            if  cksum == 68:
-                self.exit_code = 68
-                return
-
-            if cksum == checksum:
-                print("File checksum is correct ({})...".format(filename))
-                self.cId = cId
-                self.db_level = db_level
-                self.db_cal_type = db_cal_type
-                self.db_object = db_object
-                self.infobits = infobits
-                self.filename = filename
-                self.exit_code = 0
-            else:
-                print("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
-                self.exit_code = 66
-                return
+                self.log.debug('Database connection closed.')

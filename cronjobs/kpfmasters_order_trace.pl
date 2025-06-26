@@ -1,4 +1,4 @@
-#! /usr/local/bin/perl
+#! /usr/bin/perl
 
 ##########################################################################
 # Pipeline Perl script to do detached docker run.  Can run this script
@@ -10,6 +10,8 @@
 # copied to sandbox directory /data/user/rlaher/sbx/masters/YYYYMMDD, and
 # outputs are written to the same directory, and then finally copied to
 # /data/kpf/masters/YYYYMMDD.
+#
+# Also generates a daily order-mask file with GREEN and RED FITS extensions.
 ##########################################################################
 
 use strict;
@@ -77,6 +79,23 @@ my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number o
 $containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
 
 
+# Database user for connecting to the database to run this script and query L0Files database table.
+# E.g., kpfporuss
+my $dbuser = $ENV{KPFDBUSER};
+
+if (! (defined $dbuser)) {
+    die "*** Env. var. KPFDBUSER not set; quitting...\n";
+}
+
+# Database name of KPF operations database containing the L0Files table.
+# E.g., kpfopsdb
+my $dbname = $ENV{KPFDBNAME};
+
+if (! (defined $dbname)) {
+    die "*** Env. var. KPFDBNAME not set; quitting...\n";
+}
+
+
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_order_trace.pl';
@@ -90,10 +109,40 @@ if (! (defined $procdate)) {
 
 my $dockercmdscript = 'jobs/kpfmasters_order_trace';               # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'kpf-drp:latest';
+my $containerimage = 'russkpfmasters:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/create_order_trace_files.recipe';
 my $config = '/code/KPF-Pipeline/configs/create_order_trace_files.cfg';
+my $recipe2 = '/code/KPF-Pipeline/recipes/create_order_rectification_file.recipe';
+my $config2 = '/code/KPF-Pipeline/configs/create_order_rectification_file.cfg';
+my $recipe3 = '/code/KPF-Pipeline/recipes/create_order_mask_file.recipe';
+my $config3 = '/code/KPF-Pipeline/configs/create_order_mask_file.cfg';
 my $sbxdir = "${sandbox}/masters/$procdate";
+
+
+# Get database parameters from ~/.pgpass file.
+
+my ($dbport, $dbpass);
+my @op = `cat ~/.pgpass`;
+foreach my $op (@op) {
+    chomp $op;
+    $op =~ s/^\s+|\s+$//g;  # strip blanks.
+    if (($op =~ /$dbuser/) and ($op =~ /$dbname/)) {
+        my (@f) = split(/\:/, $op);
+        $dbport = $f[1];
+        $dbpass = $f[4];
+    }
+}
+
+my $dbenvfilename = "db";
+$dbenvfilename .= '_' . $$ . '_' . $trunctime . '.env';                   # Augment with unique numbers (process ID and truncated seconds).
+my $dbenvfile = "$codedir/jobs/" . $dbenvfilename;
+my $dbenvfileinside = "/code/KPF-Pipeline/jobs/" . $dbenvfilename;
+
+`touch $dbenvfile`;
+`chmod 600 $dbenvfile`;
+open(OUT,">$dbenvfile") or die "Could not open $dbenvfile ($!); quitting...\n";
+print OUT "export DBPASS=\"$dbpass\"\n";
+close(OUT) or die "Could not close $dbenvfile ($!); quitting...\n";
 
 
 # Print environment.
@@ -105,10 +154,19 @@ print "dockercmdscript=$dockercmdscript\n";
 print "containerimage=$containerimage\n";
 print "recipe=$recipe\n";
 print "config=$config\n";
+print "recipe2=$recipe2\n";
+print "config2=$config2\n";
+print "recipe3=$recipe3\n";
+print "config3=$config3\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
 print "KPFCRONJOB_CODE=$codedir\n";
+print "dbuser=$dbuser\n";
+print "dbname=$dbname\n";
+print "dbport=$dbport\n";
+print "dbenvfile=$dbenvfile\n";
+print "dbenvfileinside=$dbenvfileinside\n";
 print "Docker container name = $containername\n";
 
 
@@ -117,6 +175,7 @@ print "Docker container name = $containername\n";
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
 my $script = "#! /bin/bash\n" .
+             "source $dbenvfileinside\n" .
              "make init\n" .
              "export PYTHONUNBUFFERED=1\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
@@ -124,6 +183,10 @@ my $script = "#! /bin/bash\n" .
              "cp -p /masters/${procdate}/kpf_${procdate}_master_flat.fits /data/masters/${procdate}\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
              "cp -p /data/masters/${procdate}/*.csv /masters/${procdate}\n" .
+             "kpf -r $recipe2  -c $config2 --date ${procdate}\n" .
+             "cp -p /data/masters/${procdate}/kpf_${procdate}_master_flat_*.fits /masters/${procdate}\n" .
+             "kpf -r $recipe3  -c $config3 --date ${procdate}\n" .
+             "cp -p /data/masters/${procdate}/*order_mask.fits /masters/${procdate}\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_order_trace_${procdate}.log\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
@@ -132,6 +195,7 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 
 my $dockerruncmd = "docker run -d --name $containername " .
                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
+                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;
