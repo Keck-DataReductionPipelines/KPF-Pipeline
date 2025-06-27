@@ -57,11 +57,6 @@ class SpectralExtractionAlg:
 
 
     def _orderlet_box(self, data_image, order_trace, trace_index, return_box_coords=False, verbose=False, do_plot=False):
-        """
-        data_image : ndarray (nrow x ncol): 2D data array of single CCD chip
-        order_trace : either "self.order_trace_green" or "self.order_trace_red"
-        trace_index : integer, index of trace on detector array
-        """
         nrow, ncol = data_image.shape
     
         # polynomial order trace
@@ -71,7 +66,6 @@ class SpectralExtractionAlg:
         trace_center = poly.polyval(np.arange(ncol), coeffs)
         trace_top    = trace_center + order_trace.TopEdge[trace_index]
         trace_bottom = trace_center - order_trace.BottomEdge[trace_index]
-
 
         # track where trace goes off detector
         off_detector = (trace_top > nrow-1) | (trace_bottom < 0)
@@ -139,7 +133,7 @@ class SpectralExtractionAlg:
         return D, W
 
 
-    def _spatial_profile(self, D, S, W, f, do_plot=False):
+    def spatial_profile(self, D, S, W, f, filter_size=101, sigma_clip_x=3.0, num_knots=32, do_plot=False):
         """
         Estimate the spatial profile of a 2D data array for a single orderlet
         Applies a spline along detector rows, interpolating over outlier pixels
@@ -147,7 +141,12 @@ class SpectralExtractionAlg:
         Args:
             D (np.ndarray): 2D data array, bias corrected and flat fielded
             S (np.ndarray): 2D stray light (sky/scattered/stray light background)
+            W (np.ndarray): 2D weight array to handle order curvature/tilt
             f (np.ndarray): 1D spectrum
+            filter_size (int): filter size for median filter, used to identify outliers
+            sigma_clip_x (float): sigma clipping threshold, used to identify outliers
+            num_knots (int): number of knots for spline
+
         """
         P = (D-S)/f
 
@@ -156,11 +155,11 @@ class SpectralExtractionAlg:
         x = np.arange(ncol)
 
         for i in range(nrow):
-            med = median_filter(P[i], size=self.profile_filter_size)
-            out = np.abs(P[i]-med)/mad_std(P[i]-med) > self.profile_sigma_clip
+            med = median_filter(P[i], size=filter_size)
+            out = np.abs(P[i]-med)/mad_std(P[i]-med) > sigma_clip_x
 
             try:
-                knots = np.linspace(x[~out].min()+1, x[~out].max()-1, self.profile_num_knots)[1:-1]
+                knots = np.linspace(x[~out].min()+1, x[~out].max()-1, num_knots)[1:-1]
                 spline = LSQUnivariateSpline(x[~out], P[i][~out], t=knots, ext='const')
             except ValueError:
                 knots = np.linspace(x[~out].min()+1, x[~out].max()-1, num_knots//2)[1:-1]
@@ -194,7 +193,6 @@ class SpectralExtractionAlg:
             Q: quantum scaling (electrons/photons/ADU)
             M: mask (1 = good pixel, 0=bad)
             W: weights, typically to define order trace
-            F: master flat, if provided will be used to estimate the spatial profile
         """
         # ensure mask and weight arrays exist
         if Q is None:
@@ -235,6 +233,11 @@ class SpectralExtractionAlg:
                            M=None, 
                            W=None, 
                            P=None,
+                           filter_size=101,
+                           sigma_clip_x=3.0,
+                           sigma_clip_y=5.0,
+                           num_knots=32,
+                           max_iter=20, 
                            verbose=False, 
                            do_plot=False
                            ):
@@ -293,14 +296,14 @@ class SpectralExtractionAlg:
     
         # optimal extraction loop
         loop = 0
-        while loop < self.extraction_max_iter:
+        while loop < max_iter:
             # spectrum
             f = np.sum(M*P*(D-S)*(W/V),axis=0)/np.sum(M*P**2*(W/V), axis=0)
             v = np.sum(M*P*W,axis=0)/np.sum(M*P**2*(W/V), axis=0)
         
             # profile
             if not static_profile:
-                P = self._spatial_profile(D, S, W, f)
+                P = self.spatial_profile(D, S, W, f, filter_size=filter_size, sigma_clip_x, num_knots)
             
             # variance
             V = V0 + np.abs(f*P + S)/Q
@@ -325,7 +328,7 @@ class SpectralExtractionAlg:
             for col in range(ncol):
                 row = worst_pixel_row[col]
             
-                if R[row,col] > self.extraction_sigma_clip**2:
+                if R[row,col] > sigma_clip_y**2:
                     M[row,col] = 0
     
                     if do_plot:
@@ -371,15 +374,24 @@ class SpectralExtractionAlg:
             return f_box, v_box, M
 
         f_flat, _ = self.box_extraction(F, np.zeros_like(F), V0, M=M, W=W)
-        P = self._spatial_profile(F, np.zeros_like(F), W, f_flat, num_knots=num_knots, sigma_clip_x=sigma_clip_x)
+        P = self.spatial_profile(F, 
+                                 np.zeros_like(F), 
+                                 W, 
+                                 f_flat, 
+                                 filter_size=self.profile_filter_size, 
+                                 sigma_clip_x=self.profile_sigma_clip, 
+                                 num_knots=self.profile_num_knots
+                                 )
 
-        f_opt, v_opt, _, M = self.optimal_extraction(D, 
+        f_opt, v_opt, P, M = self.optimal_extraction(D, 
                                                      S, 
                                                      V0, 
                                                      M=M, 
                                                      W=W, 
                                                      P=P,
+                                                     sigma_clip_y=self.extraction_sigma_clip,
+                                                     max_iter=self.extraction_max_iter, 
                                                      verbose=False, 
                                                      do_plot=False
                                                     )
-        return f_opt, v_opt, M
+        return f_opt, v_opt, P, M
