@@ -188,11 +188,16 @@ FIUMODE   Observing                                   FIU operating mode
 FFFB      Yes                                         Flatfield fiber on
 TOTCNTS   1.1299e+08 1.959e+08 1.8185e+08 1.1561e+08  Total Exp. Meter counts (DN) - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
 TOTCORR   2.3994e+08 4.1319e+08 3.8088e+08 2.403e+08  Total Exp. Meter counts (DN), corrected for dead time - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
-ETAV1C1T  23.990154                                   Etalon Vescent 1 Channel 1 temperature
-ETAV1C2T  23.79949                                    Etalon Vescent 1 Channel 2 temperature
-ETAV1C3T  23.599987                                   Etalon Vescent 1 Channel 3 temperature
-ETAV1C4T  23.900118                                   Etalon Vescent 1 Channel 4 temperature
-ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3 temperature
+ETAV1C1T  23.990154                                   Etalon Vescent 1 Ch 1 temp (Housing)
+ETAV1C2T  23.79949                                    Etalon Vescent 1 Ch 2 temp (Inner Side Shield)
+ETAV1C3T  23.599987                                   Etalon Vescent 1 Ch 3 temp (Inner Bottom Lid)
+ETAV1C4T  23.900118                                   Etalon Vescent 1 Ch 4 temp (Outer Etalon Chamber)
+ETAV2C3T  24.000668                                   Etalon Vescent 2 Ch 3 temp (Inner Top Lid Temp)
+ETAV1C1S  24.000000                                   Etalon Vescent 1 Ch 1 temp set point (Housing)
+ETAV1C2S  23.800000                                   Etalon Vescent 1 Ch 2 temp set point (Inner Side Shield)
+ETAV1C3S  23.600000                                   Etalon Vescent 1 Ch 3 temp set point (Inner Bottom Lid)
+ETAV1C4S  23.900000                                   Etalon Vescent 1 Ch 4 temp set point (Outer Etalon Chamber)
+ETAV2C3S  24.000000                                   Etalon Vescent 2 Ch 3 temp set point (Inner Top Lid Temp)
 PTHDAY    1.422E-05                                   Last ThAr Daily power meter measurement (Watts)
 PTHAU     1.422E-05                                   Last ThAr Gold power meter measurement (Watts)
 PUDAY     1.422E-05                                   Last UNe Daily power meter measurement (Watts)
