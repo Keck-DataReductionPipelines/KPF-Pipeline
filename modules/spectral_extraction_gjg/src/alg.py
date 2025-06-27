@@ -12,21 +12,30 @@ import pandas as pd
 from scipy.ndimage import median_filter
 from scipy.interpolate import LSQUnivariateSpline
 
+from kpfpipe.config.pipeline_config import ConfigClass
+from kpfpipe.logger import start_logger
+from modules.Utils.config_parser import ConfigHandler
+
 
 class SpectralExtractionAlg:
     """
     Args:
         target_2D (KPF0): A KPF 2D science object
-        order_trace_green (pd.DataFrame): a pre-loaded dataframe with order trace for GREEN CCD
-        order_trace_red (pd.DataFrame): a pre-loaded dataframe with order trace for RED CCD
+        master_flat_2D (KPF0): A KPF 2D master flat
+        stray_light_image (dict of ndarray): 2D stray light arrays for the GREEN and RED ccds
+        order_trace_green (pd.DataFrame): a pre-loaded dataframe with order trace for GREEN ccd
+        order_trace_red (pd.DataFrame): a pre-loaded dataframe with order trace for RED ccd
         config (configparser.ConfigParser): Config context
         logger (logging.Logger): Instance of logging.Logger
     """
     def __init__(self, 
                  target_2D, 
                  master_flat_2D, 
+                 stray_light_image,
                  order_trace_green, 
-                 order_trace_red
+                 order_trace_red,
+                 default_config_path,
+                 logger=None
                  ):
         # config inputs
         self.config = ConfigClass(default_config_path)
@@ -36,21 +45,22 @@ class SpectralExtractionAlg:
             self.log = logger
             
         cfg_params = ConfigHandler(self.config, 'PARAM')
-        self.stray_light_method = cfg_params.get_config_value('stray_light_method')
+        self.stray_light_method = str(cfg_params.get_config_value('stray_light_method'))
         self.stray_light_polyorder = int(cfg_params.get_config_value('stray_light_polyorder'))
         self.stray_light_edge_clip = int(cfg_params.get_config_value('stray_light_edge_clip'))
 
         self.extraction_method = cfg_params.get_config_value('extraction_method')
-        self.extraction_sigma_clip = cfg_params.get_config_value('extraction_sigma_clip')
-        self.extraction_max_iter = cfg_params.get_config_value('extraction_max_iter')
+        self.extraction_sigma_clip = float(cfg_params.get_config_value('extraction_sigma_clip'))
+        self.extraction_max_iter = int(cfg_params.get_config_value('extraction_max_iter'))
 
-        self.profile_filter_size = cfg_params.get_config_value('profile_filter_size')
-        self.profile_sigma_clip = cfg_params.get_config_value('profile_sigma_clip')
-        self.profile_num_knots = cfg_params.get_config_value('profile_num_knots')
+        self.profile_filter_size = int(cfg_params.get_config_value('profile_filter_size'))
+        self.profile_sigma_clip = float(cfg_params.get_config_value('profile_sigma_clip'))
+        self.profile_num_knots = int(cfg_params.get_config_value('profile_num_knots'))
 
         # data inputs
         self.target_2D = target_2D
         self.master_flat_2D = master_flat_2D
+        self.stray_light_image = stray_light_image
         self.order_trace = {}
         self.order_trace['GREEN_CCD'] = order_trace_green
         self.order_trace['RED_CCD'] = order_trace_red
@@ -135,7 +145,7 @@ class SpectralExtractionAlg:
 
     def spatial_profile(self, D, S, W, f, filter_size=101, sigma_clip_x=3.0, num_knots=32, do_plot=False):
         """
-        Estimate the spatial profile of a 2D data array for a single orderlet
+        Estimate the spatial profile of a 2D data array (typical use is for a single orderlet)
         Applies a spline along detector rows, interpolating over outlier pixels
     
         Args:
@@ -183,7 +193,7 @@ class SpectralExtractionAlg:
 
     def box_extraction(self, D, S, V0, Q=None, M=None, W=None, do_plot=False):
         """
-        Box extraction (simple sum along detector columns)
+        Box extraction on a data array D (typical use case is a single orderlet)
         Variable names follow Horne 1986
     
         Args
@@ -242,10 +252,11 @@ class SpectralExtractionAlg:
                            do_plot=False
                            ):
         """
-        Optimal extraction algorithm following Horne 1986
+        Optimal extraction on a data array D (typical use case is a single orderlet)
         Variable names follow Horne 1986
 
-        May optionally supply a flat frame F which can be used to estimate the spatial profile
+        May optionally supply a pre-computed spatial profile P
+        Pre-computing the spatial profile from a master flat is advised
     
         Args
             D: data array
@@ -255,6 +266,7 @@ class SpectralExtractionAlg:
             M: mask (1 = good pixel, 0=bad)
             W: weights, typically to define order trace
             P: pre-computed spatial profile
+            filter_size (int): filter size for median filter, used to identify outliers in spatial profile
             sigma_clip_x (float): sigma clipping used to identify outliers during profile modeling 
             sigma_clip_y (float): sigma clipping used to identify cosmic rays and pixel defects
             num_knots (int): number of knots in smoothing spline for profile modeling
@@ -371,13 +383,13 @@ class SpectralExtractionAlg:
                                  )
 
         # master flat data
-        F, _ = self._orderlet_box(self.master_flat_2D[f'{chip}_CCD'].data,
+        F, _ = self._orderlet_box(self.master_flat_2D[f'{chip}_CCD_STACK'].data,
                                   self.order_trace[f'{chip}_CCD'],
                                   trace_index
                                  )
 
         # stray light
-        S, _ = self._orderlet_box(self.stray_light_2D[f'{chip}_CCD'].data,
+        S, _ = self._orderlet_box(self.stray_light_image[f'{chip}_CCD'].data,
                                   self.order_trace[f'{chip}_CCD'],
                                   trace_index
                                  )
