@@ -303,7 +303,7 @@ class SpectralExtractionAlg:
         
             # profile
             if not static_profile:
-                P = self.spatial_profile(D, S, W, f, filter_size=filter_size, sigma_clip_x, num_knots)
+                P = self.spatial_profile(D, S, W, f, filter_size, sigma_clip_x, num_knots)
             
             # variance
             V = V0 + np.abs(f*P + S)/Q
@@ -347,6 +347,23 @@ class SpectralExtractionAlg:
 
     
     def extract_spectrum(self, method, chip, trace_index):
+        """
+        Extract 1D spectrum for a single orderlet
+
+        Args:
+            method (str): extraction method, can bo 'box' or 'optimal'
+            chip (str): 'GREEN' or 'RED' ccd
+            trace_index (int): integer identifying ordelet in order_trace
+
+        *** This method should be updated to take, order number and orderlet name as inputs ***
+        *** e.g. orderlet='SCI2', orderno=17 ***
+
+        Returns:
+            f (ndarray): extracted 1D spectrum
+            v (ndarray): extracted 1D variance
+            P (ndarray): 2D spatial profile (if 'optimal' extraction is used)
+            M (ndarray): 2D boolean bad pixel mask (if 'optimal' extraction is used)
+        """
         # target data
         D, W = self._orderlet_box(self.target_2D[f'{chip}_CCD'].data,
                                   self.order_trace[f'{chip}_CCD'],
@@ -371,7 +388,7 @@ class SpectralExtractionAlg:
         # box extraction
         f_box, v_box = self.box_extraction(D, S, V0, M=M, W=W)
         if method == 'box':
-            return f_box, v_box, M
+            return f_box, v_box
 
         f_flat, _ = self.box_extraction(F, np.zeros_like(F), V0, M=M, W=W)
         P = self.spatial_profile(F, 
