@@ -1005,6 +1005,20 @@ class QCDefinitions:
         self.db_columns[name40] = None
         self.fits_keyword_fail_value[name40] = 0
 
+        name41 = 'etalon_set_temp'
+        self.names.append(name41)
+        self.kpf_data_levels[name41] = ['L0']
+        self.descriptions[name41] = 'Etalon inner chamber temps near set points'
+        self.data_types[name41] = 'int'
+        self.spectrum_types[name41] = ['Etalon']
+        self.master_types[name41] = []
+        self.drift_types[name41] = []
+        self.required_data_products[name41] = []
+        self.fits_keywords[name41] = 'ETASTEMP'
+        self.fits_comments[name41] = 'QC: Etalon at set temperature'
+        self.db_columns[name41] = None
+        self.fits_keyword_fail_value[name41] = 0
+
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
 #        self.kpf_data_levels[name36] = ['L1']
@@ -2053,6 +2067,50 @@ class QCL0(QC):
 
         return QC_pass
 
+    def etalon_set_temp(self, 
+                        ETAV1C3T_thresh=0.0005, # Inner Bottom Lid temp threshold (C)
+                        ETAV1C4T_thresh=0.0005, # Outer Etalon Chamber temp threshold (C)
+                        debug=False):
+        """
+        This Quality Control function checks that measured temperatures 
+        in the Etalon are within specified ranges of their temperature set 
+        points.
+
+        Args:
+            debug
+
+        Returns:
+            QC_pass (bool): True if the Etalon inner chamber temperatures are 
+            near set points.
+        """
+
+        try:
+            L0 = self.kpf_object
+            header = L0.header['PRIMARY']
+            QC_pass = True
+            
+            # Inner Bottom Lid
+            if 'ETAV1C3S' in header:
+                setpoint = float(header['ETAV1C3S'])
+            else:
+                setpoint = 23.6
+            if abs(float(header['ETAV1C3T']) - setpoint) > ETAV1C3T_thresh:
+                QC_pass = False
+
+            # Outer Etalon Chamber
+            if 'ETAV1C4S' in header:
+                setpoint = float(header['ETAV1C4S'])
+            else:
+                setpoint = 23.9
+            if abs(float(header['ETAV1C4T']) - setpoint) > ETAV1C4T_thresh:
+                QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
 
 #####################################################################
 
@@ -2447,6 +2505,7 @@ class QC2D(QC):
             QC_pass = False
 
         return QC_pass
+
 
 #####################################################################
 

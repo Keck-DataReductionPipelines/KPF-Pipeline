@@ -23,6 +23,7 @@ GUIDGOOD|bool|QC: Guider RMS and bias within 50 mas RMS|None
 TARGPLAU|bool|QC: TARG kwds present with plausible values|None
 AGITOK|bool|QC: Agitator running with speed above minimum|None
 GUIDSAT|bool|QC: Guider not saturated|None
+ETASTEMP|bool|QC: Etalon at set temperature|None
 BIASFILE|string|Master bias file used (except for bias exposures)|None
 DARKFILE|string|Master dark file used (except for dark exposures)|None
 FLATFILE|string|Master flat file used (except for flat exposures)|None

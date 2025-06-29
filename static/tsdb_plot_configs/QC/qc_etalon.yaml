@@ -12,6 +12,16 @@ panel_arr:
       legend_frac_size: 0.30
 
   - panelvars:
+      - col: ETASTEMP
+        plot_type: state
+        plot_attr:
+          label: "Etalon at set temp"
+          marker: .
+    paneldict:
+      ylabel: "Etalon at set temp\n(ETASTEMP)"
+      legend_frac_size: 0.30
+
+  - panelvars:
       - col: ETALGK0
         plot_type: plot
         plot_attr:
