@@ -32,7 +32,7 @@ class StrayLightAlg:
     """
     def __init__(self, 
                  target_2D, 
-                 order_mask,
+                 masters_order_mask,
                  default_config_path,
                  logger=None
                 ):
@@ -41,7 +41,7 @@ class StrayLightAlg:
 
         Args:
             target_2D (KPF0): A KPF 2D science object
-            order_mask (KPF0): a KPF masters order mask
+            masters_order_mask (KPF0): a KPF masters order mask
             config (configparser.ConfigParser): Config context
             logger (logging.Logger): Instance of logging.Logger
         """
@@ -59,7 +59,7 @@ class StrayLightAlg:
         self.edge_clip = int(cfg_params.get_config_value('edge_clip'))
 
         self.target_2D = target_2D        
-        self.order_mask = order_mask
+        self.masters_order_mask = masters_order_mask
         self.drptag = self.target_2D.header['PRIMARY']['DRPTAG']
 
     
@@ -230,5 +230,5 @@ class StrayLightAlg:
 
     def _inter_order_mask(self, chip):
         # TODO: incorporate buffer to mask inter-orderlet pixels
-        mask = self.order_mask[f'{chip}_CCD'] > 0
+        mask = self.masters_order_mask[f'{chip}_CCD'] > 0
         return mask

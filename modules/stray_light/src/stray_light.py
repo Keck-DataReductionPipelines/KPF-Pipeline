@@ -19,8 +19,7 @@ class EstimateStrayLight(KPF0Primitive):
         
         # Input arguments
         self.target_2D = self.action.args[0]           # KPF 2D object
-        self.order_trace_green = self.action.args[1]   # TODO: read in .csv order trace
-        self.order_trace_red = self.action.args[2]
+        self.masters_order_mask = self.action.args[1]
         
         # Input configuration
         self.config = configparser.ConfigParser()
@@ -33,17 +32,16 @@ class EstimateStrayLight(KPF0Primitive):
         exit_code = 0
         try:
             straylight = StrayLightAlg(self.target_2D, 
-                                       self.order_trace_green, 
-                                       self.order_trace_red,
+                                       self.masters_order_mask,
                                        self.config_path
                                       )
             
-            out_2D = straylight.estimate_stray_light()
+            stray_light_image, inter_order_mask = straylight.estimate_stray_light()
             exit_code = 1
-            return Arguments([exit_code, out_2D])
+            return Arguments([exit_code, stray_light_image, inter_order_mask])
         except Exception as e:
             self.logger.error(f"StrayLight algorithm failed: {e}\n{traceback.format_exc()}")
-            return Arguments([exit_code, None])        
+            return Arguments([exit_code, None, None])
 
     def _pre(self):
         pass
