@@ -40,7 +40,7 @@ class SpectralExtractionAlg:
         # config inputs
         self.config = ConfigClass(default_config_path)
         if logger == None:
-            self.log = start_logger('StrayLight', default_config_path)
+            self.log = start_logger('SpectralExtraction', default_config_path)
         else:
             self.log = logger
             
