@@ -2054,6 +2054,40 @@ class QCL0(QC):
         return QC_pass
 
 
+    def not_vignetting(self, debug=False):
+        """
+        This Quality Control function checks L0 keywords to determine if the 
+        telescope is vignetted by one or more parts of the dome.
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - a boolean signifying that the vignetting state 
+             (True = not vignetting)
+        """
+
+        try:
+            L0 = self.kpf_object
+            header = L0.header['PRIMARY']
+
+            QC_pass = True
+
+            VIGN_keywords = ['VIGNETTE', 'STVIGNE', 'SBVIGNE']            
+            for kwd in TARG_keywords:
+                if not kwd in header:
+                    self.logger.info(f'Missing L0 keyword for related to vignetting: {kwd}')
+                else:
+                    if 'true' in kwd.lower():
+                        QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
 #####################################################################
 
 class QC2D(QC):
