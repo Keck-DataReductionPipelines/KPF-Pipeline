@@ -1005,17 +1005,17 @@ class QCDefinitions:
         self.db_columns[name40] = None
         self.fits_keyword_fail_value[name40] = 0
 
-        name41 = 'etalon_set_temp'
+        name41 = 'not_vignetting'
         self.names.append(name41)
         self.kpf_data_levels[name41] = ['L0']
-        self.descriptions[name41] = 'Etalon inner chamber temps near set points'
+        self.descriptions[name41] = 'Telescope not vignetted by dome/shutters'
         self.data_types[name41] = 'int'
-        self.spectrum_types[name41] = ['Etalon']
+        self.spectrum_types[name41] = ['Star']
         self.master_types[name41] = []
         self.drift_types[name41] = []
         self.required_data_products[name41] = []
-        self.fits_keywords[name41] = 'ETASTEMP'
-        self.fits_comments[name41] = 'QC: Etalon at set temperature'
+        self.fits_keywords[name41] = 'NOTVIGN'
+        self.fits_comments[name41] = 'QC: Telescope not vignetted by dome'
         self.db_columns[name41] = None
         self.fits_keyword_fail_value[name41] = 0
 
