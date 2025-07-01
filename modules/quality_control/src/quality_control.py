@@ -1005,6 +1005,20 @@ class QCDefinitions:
         self.db_columns[name40] = None
         self.fits_keyword_fail_value[name40] = 0
 
+        name41 = 'not_vignetting'
+        self.names.append(name41)
+        self.kpf_data_levels[name41] = ['L0']
+        self.descriptions[name41] = 'Telescope not vignetted by dome/shutters'
+        self.data_types[name41] = 'int'
+        self.spectrum_types[name41] = ['Star']
+        self.master_types[name41] = []
+        self.drift_types[name41] = []
+        self.required_data_products[name41] = []
+        self.fits_keywords[name41] = 'NOTVIGN'
+        self.fits_comments[name41] = 'QC: Telescope not vignetted by dome'
+        self.db_columns[name41] = None
+        self.fits_keyword_fail_value[name41] = 0
+
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
 #        self.kpf_data_levels[name36] = ['L1']
