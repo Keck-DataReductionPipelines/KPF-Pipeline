@@ -8,7 +8,7 @@ from keckdrpframework.models.arguments import Arguments
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/stray_light/configs/default.cfg'
 
-class EstimateStrayLight(KPF0Primitive):
+class EstimateStrayLight(KPF0_Primitive):
     """
     Docstring
     """
