@@ -2094,6 +2094,11 @@ class QCL0(QC):
                 else:
                     if 'true' in header[kwd].lower():
                         QC_pass = False
+                        if debug:
+                            self.logger.info(f'Vignetting detected using keyword {kwd}; value = {header[kwd].lower()}')
+                    else:
+                        if debug:
+                            self.logger.info(f'Vignetting not detected using keyword {kwd}; value = {header[kwd].lower()}')
 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
