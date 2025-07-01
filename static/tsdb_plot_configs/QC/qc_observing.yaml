@@ -1,0 +1,13 @@
+description: QC - Observing
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: NOTVIGN
+        plot_type: state
+        plot_attr:
+          label: Telescope Not Vignetted
+          marker: .
+    paneldict:
+      ylabel: "Telescope Not Vignetted\n(NOTVIGN)"
+      title: QC - Observing
+      legend_frac_size: 0.15
