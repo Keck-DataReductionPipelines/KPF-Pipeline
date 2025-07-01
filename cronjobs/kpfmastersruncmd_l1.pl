@@ -101,10 +101,43 @@ if (! (defined $dbname)) {
 }
 
 
+# Set up time-series database connection.
+
+my $tsdbport = $ENV{TSDBPORT};
+
+if (! (defined $tsdbport)) {
+    die "*** Env. var. TSDBPORT not set; quitting...\n";
+}
+
+my $tsdbname = $ENV{TSDBNAME};
+
+if (! (defined $tsdbname)) {
+    die "*** Env. var. TSDBNAME not set; quitting...\n";
+}
+
+my $tsdbserver = $ENV{TSDBSERVER};
+
+if (! (defined $tsdbserver)) {
+    die "*** Env. var. TSDBSERVER not set; quitting...\n";
+}
+
+my $tsdbuser = $ENV{TSDBUSER};
+
+if (! (defined $tsdbuser)) {
+    die "*** Env. var. TSDBUSER not set; quitting...\n";
+}
+
+my $tsdbpass = $ENV{TSDBPASS};
+
+if (! (defined $tsdbpass)) {
+    die "*** Env. var. TSDBPASS not set; quitting...\n";
+}
+
+
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l1.pl';
-my $version = '2.1';
+my $version = '2.2';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -140,6 +173,7 @@ my $dbenvfileinside = "/code/KPF-Pipeline/jobs/" . $dbenvfilename;
 `chmod 600 $dbenvfile`;
 open(OUT,">$dbenvfile") or die "Could not open $dbenvfile ($!); quitting...\n";
 print OUT "export DBPASS=\"$dbpass\"\n";
+print OUT "export TSDBPASS=\"$tsdbpass\"\n";
 close(OUT) or die "Could not close $dbenvfile ($!); quitting...\n";
 
 
@@ -162,6 +196,10 @@ print "dbport=$dbport\n";
 print "dbenvfile=$dbenvfile\n";
 print "dbenvfileinside=$dbenvfileinside\n";
 print "Docker container name = $containername\n";
+print "tsdbport=$tsdbport\n";
+print "tsdbname=$tsdbname\n";
+print "tsdbserver=$tsdbserver\n";
+print "tsdbuser=$tsdbuser\n";
 
 
 # Change directory to where the Dockerfile is located.
@@ -190,6 +228,7 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 my $dockerruncmd = "docker run -d --name $containername " .
                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
                    "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
+                   "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;
