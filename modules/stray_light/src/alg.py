@@ -32,8 +32,7 @@ class StrayLightAlg:
     """
     def __init__(self, 
                  target_2D, 
-                 order_trace_green,
-                 order_trace_red,
+                 order_mask,
                  default_config_path,
                  logger=None
                 ):
@@ -42,8 +41,7 @@ class StrayLightAlg:
 
         Args:
             target_2D (KPF0): A KPF 2D science object
-            order_trace_green (pd.DataFrame): a pre-loaded dataframe with order trace for GREEN CCD
-            order_trace_red (pd.DataFrame): a pre-loaded dataframe with order trace for RED CCD
+            order_mask (KPF0): a KPF masters order mask
             config (configparser.ConfigParser): Config context
             logger (logging.Logger): Instance of logging.Logger
         """
@@ -61,9 +59,7 @@ class StrayLightAlg:
         self.edge_clip = int(cfg_params.get_config_value('edge_clip'))
 
         self.target_2D = target_2D        
-        self.order_trace = {}
-        self.order_trace['GREEN_CCD'] = order_trace_green
-        self.order_trace['RED_CCD'] = order_trace_red
+        self.order_mask = order_mask
         self.drptag = self.target_2D.header['PRIMARY']['DRPTAG']
 
     
@@ -233,35 +229,6 @@ class StrayLightAlg:
 
 
     def _inter_order_mask(self, chip):
-        data_image = self.target_2D[f'{chip}_CCD'].data
-        order_trace = self.order_trace[f'{chip}_CCD']
-        
-        norder = len(order_trace)
-        nrow, ncol = data_image.shape
-    
-        mask = np.zeros((nrow,ncol),dtype='int')
-    
-        # polynomial order trace
-        for trace_index in range(norder):
-            coeffs = np.array([float(order_trace[f'Coeff{i}'][trace_index]) for i in range(4)])
-        
-            # trace in pixel coorrdinates on detector
-            trace_center = poly.polyval(np.arange(ncol), coeffs)
-            trace_top    = trace_center + order_trace.TopEdge[trace_index]
-            trace_bottom = trace_center - order_trace.BottomEdge[trace_index]
-        
-            # track edge pixel locations (+/- one pixel buffer)
-            edge_pixel_top = np.array(np.floor(trace_top), dtype='int') + 1
-            edge_pixel_bottom = np.array(np.floor(trace_bottom), dtype='int') - 1
-        
-            # broadcast vectors            
-            _row = np.arange(nrow)[:,None]                  # shape (nrow, 1)
-            _edge_pixel_top = edge_pixel_top[None,:]        # shape (1, ncol)
-            _edge_pixel_bottom = edge_pixel_bottom[None,:]
-            _trace_top = trace_top[None,:]
-            _trace_bottom = trace_bottom[None,:]
-            
-            # set mask_ij for pixels inside trace
-            mask[(_row > _edge_pixel_bottom) & (_row < _edge_pixel_top)] = 1
-            
+        # TODO: incorporate buffer to mask inter-orderlet pixels
+        mask = self.order_mask[f'{chip}_CCD'] > 0
         return mask
