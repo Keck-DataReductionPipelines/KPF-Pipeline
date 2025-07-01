@@ -2074,11 +2074,11 @@ class QCL0(QC):
             QC_pass = True
 
             VIGN_keywords = ['VIGNETTE', 'STVIGNE', 'SBVIGNE']            
-            for kwd in TARG_keywords:
+            for kwd in VIGN_keywords:
                 if not kwd in header:
                     self.logger.info(f'Missing L0 keyword for related to vignetting: {kwd}')
                 else:
-                    if 'true' in kwd.lower():
+                    if 'true' in header[kwd].lower():
                         QC_pass = False
 
         except Exception as e:
