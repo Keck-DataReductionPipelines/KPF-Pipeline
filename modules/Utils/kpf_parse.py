@@ -406,8 +406,8 @@ def get_data_products_expected(kpf_object, data_level):
     if data_level in ['L2']:
         if name in ['Star', 'Sun', 'LFC', 'Etalon', 'ThAr', 'UNe']:
             data_products.append('RV') # Is this the best way to determine if RV is present?  Should it be there for the calibrations?
-    if 'GUIDING' in header: 
-        if 'true' in header['GUIDING']:
+    if 'GUIDE' in header: 
+        if header['GUIDE'] == 'YES':
             if data_level in ['L0', '2D']:
                 data_products.append('Guider')
     if hasattr(kpf_object, 'SOCAL PYRHELIOMETER'): # Is this the best way to determine if Pyrheliometer data *should* be present?
