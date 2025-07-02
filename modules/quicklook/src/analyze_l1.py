@@ -904,8 +904,10 @@ class AnalyzeL1:
         return source
 
 
-    def plot_L1_spectrum_one_row(self, variance=False, data_over_sqrt_variance=False, 
-                                       xlog=True, fig_path=None, show_plot=False):
+    def plot_L1_spectrum_one_row(self, orderlets=['cal', 'sci1', 'sci2', 'sci3', 'sky'],
+                                       variance=False, data_over_sqrt_variance=False, 
+                                       xlog=True, tall=False, 
+                                       fig_path=None, show_plot=False):
         """
         Generate a rainbow-colored plot L1 spectrum of all orders (separate panels) 
         in a single row.
@@ -923,11 +925,12 @@ class AnalyzeL1:
         """
         
         self.measure_orderlet_flux_ratios()
+        norderlets = len(orderlets)
         
-        fig, axes = plt.subplots(5, 1, sharex=True, figsize=(20, 16))
+        fig, axes = plt.subplots(norderlets, 1, sharex=True, figsize=(20, 0.5+norderlets/5*15.5*(1+2*tall)), squeeze=False)
+        axes = axes.flatten()
         cm = plt.cm.get_cmap('rainbow')
 
-        orderlets = ['cal', 'sci1', 'sci2', 'sci3', 'sky']
         for ax, orderlet in zip(axes, orderlets):
 
             # Define wavelength and flux arrays
@@ -989,7 +992,7 @@ class AnalyzeL1:
                 xlabels = np.linspace(4500, 8500, 9) # np.logspace(np.log10(4450), np.log10(8700), num=10)
                 ax.set_xticks(xlabels)
                 ax.set_xticklabels([f'{label:.0f}' for label in xlabels])
-            ax.yaxis.set_tick_params(labelsize=16)
+            ax.yaxis.set_tick_params(labelsize=15)
 
             ylabel = orderlet.upper()
             if variance:
@@ -1030,7 +1033,7 @@ class AnalyzeL1:
 
         # Set common X-axis label
         axes[-1].set_xlabel('Wavelength (Ang)', fontsize = 20)
-        axes[-1].xaxis.set_tick_params(labelsize=16)
+        axes[-1].xaxis.set_tick_params(labelsize=15)
 
         # Add overall title to array of plots
         ax = fig.add_subplot(111, frame_on=False)
