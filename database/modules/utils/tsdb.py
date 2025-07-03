@@ -2435,6 +2435,62 @@ class TSDB:
                 print("No [ERROR] lines found across all logs.")
 
 
+def touch_files(obsids_or_df, data_dir='/data/' level='L0', sleep_sec=0.2):
+    """
+    Touch the .fits files corresponding to a list of ObsIDs or a DataFrame with 
+    an 'ObsID' column.
+    
+    Parameters
+    ----------
+    obsids_or_df : list[str] or pd.DataFrame
+        Either a list of ObsID strings or a DataFrame with an 'ObsID' column.
+    level : str, default='L0'
+        The data level. Determines the suffix for the filename.
+        Must be one of ['L0', '2D', 'L1', 'L2'].
+    data_dir : str, default='/data'
+        The data directory for FITS files.
+    sleep_sec : float, default=0.2
+        Number of seconds to sleep between touch commands.
+    verbose : bool, default=True
+        If True, print each touched file with timestamp.
+    """
+
+    # Determine the suffix based on the level
+    level_suffix_map = {
+        'L0': '',
+        '2D': '_2D',
+        'L1': '_L1',
+        'L2': '_L2'
+    }
+
+    if level not in level_suffix_map:
+        raise ValueError(f"Invalid level '{level}'. Must be one of {list(level_suffix_map.keys())}.")
+    
+    suffix = level_suffix_map[level]
+
+    # Extract list of ObsIDs
+    if isinstance(obsids_or_df, pd.DataFrame):
+        if 'ObsID' not in obsids_or_df.columns:
+            raise ValueError("DataFrame must contain an 'ObsID' column.")
+        obsid_list = obsids_or_df['ObsID'].tolist()
+    elif isinstance(obsids_or_df, list):
+        obsid_list = obsids_or_df
+    else:
+        raise TypeError("Input must be a list of ObsID strings or a pandas DataFrame.")
+
+    for obsid in obsid_list:
+        datecode = get_datecode(obsid)
+        filepath = f'{data_dir}/{datecode}/{obsid}{suffix}.fits'
+        try:
+            os.utime(filepath, None)
+            if verbose:
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print(f"[{now_str}] Touched: {filepath}")
+        except FileNotFoundError:
+            print(f"File not found: {filepath}")
+        time.sleep(sleep_sec)
+
+
 def process_file(file_path, now_str,
                  extraction_plan, bool_columns, kw_to_table, keywords_by_table, kw_to_dtype,
                  _extract_kwd_func, _extract_telemetry_func, _extract_rvs_func,
