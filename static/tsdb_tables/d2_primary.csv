@@ -25,6 +25,7 @@ AGITOK|bool|QC: Agitator running with speed above minimum|None
 GUIDSAT|bool|QC: Guider not saturated|None
 NOTVIGN|bool|QC: Telescope not vignetted by dome|None
 GOODEL|bool|QC: Telescope elevation above 30 deg (for ADC)|None
+ETASTEMP|bool|QC: Etalon at set temperature|None
 BIASFILE|string|Master bias file used (except for bias exposures)|None
 DARKFILE|string|Master dark file used (except for dark exposures)|None
 FLATFILE|string|Master flat file used (except for flat exposures)|None
