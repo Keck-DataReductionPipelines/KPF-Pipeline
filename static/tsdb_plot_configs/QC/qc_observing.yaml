@@ -1,0 +1,44 @@
+description: QC - Observing
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: NOTVIGN
+        plot_type: state
+        plot_attr:
+          label: Telescope Not Vignetted
+          marker: .
+    paneldict:
+      ylabel: "Telescope Not Vignetted\n(NOTVIGN)"
+      title: QC - Observing
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: GUIDGOOD
+        plot_type: state
+        plot_attr:
+          label: "Guider RMS and bias\nwithin 50 mas RMS"
+          marker: .
+    paneldict:
+      ylabel: "Guider RMS and bias\nwithin 50 mas RMS\n(GUIDGOOD)"
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: GUIDSAT
+        plot_type: state
+        plot_attr:
+          label: "Guider Not Saturated"
+          marker: .
+    paneldict:
+      ylabel: "Guider Not Saturated\n(GUIDSAT)"
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: GOODEL
+        plot_type: state
+        plot_attr:
+          label: "Telescope elevation > 30 deg"
+          marker: .
+    paneldict:
+      ylabel: "Telescope elevation > 30 deg\n(GUIDSAT)"
+      title: QC - Observing
+      legend_frac_size: 0.15

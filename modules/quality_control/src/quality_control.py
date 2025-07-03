@@ -1005,19 +1005,47 @@ class QCDefinitions:
         self.db_columns[name40] = None
         self.fits_keyword_fail_value[name40] = 0
 
-        name41 = 'etalon_set_temp'
+        name41 = 'not_vignetting'
         self.names.append(name41)
         self.kpf_data_levels[name41] = ['L0']
-        self.descriptions[name41] = 'Etalon inner chamber temps near set points'
+        self.descriptions[name41] = 'Telescope not vignetted by dome/shutters'
         self.data_types[name41] = 'int'
-        self.spectrum_types[name41] = ['Etalon']
+        self.spectrum_types[name41] = ['Star']
         self.master_types[name41] = []
         self.drift_types[name41] = []
         self.required_data_products[name41] = []
-        self.fits_keywords[name41] = 'ETASTEMP'
-        self.fits_comments[name41] = 'QC: Etalon at set temperature'
+        self.fits_keywords[name41] = 'NOTVIGN'
+        self.fits_comments[name41] = 'QC: Telescope not vignetted by dome'
         self.db_columns[name41] = None
         self.fits_keyword_fail_value[name41] = 0
+
+        name42 = 'not_low_elevation'
+        self.names.append(name42)
+        self.kpf_data_levels[name42] = ['L0']
+        self.descriptions[name42] = 'Telescope elevation above 30 deg (for ADC)'
+        self.data_types[name42] = 'int'
+        self.spectrum_types[name42] = ['Star']
+        self.master_types[name42] = []
+        self.drift_types[name42] = []
+        self.required_data_products[name42] = []
+        self.fits_keywords[name42] = 'GOODEL'
+        self.fits_comments[name42] = 'QC: Telescope elevation above 30 deg (for ADC)'
+        self.db_columns[name42] = None
+        self.fits_keyword_fail_value[name42] = 0
+
+        name43 = 'etalon_set_temp'
+        self.names.append(name43)
+        self.kpf_data_levels[name43] = ['L0']
+        self.descriptions[name43] = 'Etalon inner chamber temps near set points'
+        self.data_types[name43] = 'int'
+        self.spectrum_types[name43] = ['Etalon']
+        self.master_types[name43] = []
+        self.drift_types[name43] = []
+        self.required_data_products[name43] = []
+        self.fits_keywords[name43] = 'ETASTEMP'
+        self.fits_comments[name43] = 'QC: Etalon at set temperature'
+        self.db_columns[name43] = None
+        self.fits_keyword_fail_value[name43] = 0
 
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
@@ -2104,6 +2132,83 @@ class QCL0(QC):
                 setpoint = 23.9
             if abs(float(header['ETAV1C4T']) - setpoint) > ETAV1C4T_thresh:
                 QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def not_vignetting(self, debug=False):
+        """
+        This Quality Control method checks L0 keywords to determine if the 
+        telescope is vignetted by one or more parts of the dome.
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - a boolean signifying that the vignetting state 
+             (True = not vignetting)
+        """
+
+        try:
+            L0 = self.kpf_object
+            header = L0.header['PRIMARY']
+
+            QC_pass = True
+
+            VIGN_keywords = ['VIGNETTE', 'STVIGNE', 'SBVIGNE']            
+            for kwd in VIGN_keywords:
+                if not kwd in header:
+                    self.logger.info(f'Missing L0 keyword for related to vignetting: {kwd}')
+                else:
+                    if 'true' in header[kwd].lower():
+                        QC_pass = False
+                        if debug:
+                            self.logger.info(f'Vignetting detected using keyword {kwd}; value = {header[kwd].lower()}')
+                    else:
+                        if debug:
+                            self.logger.info(f'Vignetting not detected using keyword {kwd}; value = {header[kwd].lower()}')
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def not_low_elevation(self, debug=False):
+        """
+        This Quality Control method checks the EL keywords to determine if the 
+        telescope is pointed above 30 degrees (where the atmospheric dispersion 
+        corrector is designed to work).
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - a boolean signifying the telescope elevation > 30 degrees 
+             (True = elevation > 30 degrees)
+        """
+
+        try:
+            L0 = self.kpf_object
+            header = L0.header['PRIMARY']
+
+            QC_pass = True
+
+            if not 'EL' in header:
+                QC_pass = False
+            else:
+                if float(header['EL']) < 30:
+                    QC_pass = False
+                    if debug:
+                        self.logger.info(f"Elevation ({header['EL']}) < 30 degrees")
+                else:
+                    if debug:
+                        self.logger.info(f"Elevation ({header['EL']}) > 30 degrees")
 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
