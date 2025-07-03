@@ -1019,6 +1019,20 @@ class QCDefinitions:
         self.db_columns[name41] = None
         self.fits_keyword_fail_value[name41] = 0
 
+        name42 = 'not_low_elevation'
+        self.names.append(name42)
+        self.kpf_data_levels[name42] = ['L0']
+        self.descriptions[name42] = 'Telescope elevation above 30 deg (for ADC)'
+        self.data_types[name42] = 'int'
+        self.spectrum_types[name42] = ['Star']
+        self.master_types[name42] = []
+        self.drift_types[name42] = []
+        self.required_data_products[name42] = []
+        self.fits_keywords[name42] = 'GOODEL'
+        self.fits_comments[name42] = 'QC: Telescope elevation above 30 deg (for ADC)'
+        self.db_columns[name42] = None
+        self.fits_keyword_fail_value[name42] = 0
+
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
 #        self.kpf_data_levels[name36] = ['L1']
@@ -2070,7 +2084,7 @@ class QCL0(QC):
 
     def not_vignetting(self, debug=False):
         """
-        This Quality Control function checks L0 keywords to determine if the 
+        This Quality Control method checks L0 keywords to determine if the 
         telescope is vignetted by one or more parts of the dome.
 
         Args:
@@ -2099,6 +2113,44 @@ class QCL0(QC):
                     else:
                         if debug:
                             self.logger.info(f'Vignetting not detected using keyword {kwd}; value = {header[kwd].lower()}')
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def not_low_elevation(self, debug=False):
+        """
+        This Quality Control method checks the EL keywords to determine if the 
+        telescope is pointed above 30 degrees (where the atmospheric dispersion 
+        corrector is designed to work).
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - a boolean signifying the telescope elevation > 30 degrees 
+             (True = elevation > 30 degrees)
+        """
+
+        try:
+            L0 = self.kpf_object
+            header = L0.header['PRIMARY']
+
+            QC_pass = True
+
+            if not 'EL' in header:
+                QC_pass = False
+            else:
+                if float(header['EL']) < 30:
+                    QC_pass = False
+                    if debug:
+                        self.logger.info(f"Elevation ({header['EL']}) < 30 degrees")
+                else:
+                    if debug:
+                        self.logger.info(f"Elevation ({header['EL']}) > 30 degrees")
 
         except Exception as e:
             self.logger.info(f"Exception: {e}")

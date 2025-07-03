@@ -249,6 +249,7 @@ GUIDSAT   1                                           QC: 1 = Guider avg frame n
 TARGPLAU  1                                           QC: 1 = TARG kwds present with plausible values
 AGITOK    1                                           QC: 1 = Agitator running with speed above minimum
 NOTVIGN   1                                           QC: 1 = Telescope not vignetted by dome
+GOODEL    1                                           QC: 1 = Telescope elevation above 30 deg (for ADC)
 ISGOOD    1                                           QC: 1 = all other QC tests passed
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
