@@ -30,5 +30,15 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "Guider Not Saturated\n(GUIDSAT)"
-      title: QC - Guider Performance
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: GOODEL
+        plot_type: state
+        plot_attr:
+          label: "Telescope elevation > 30 deg"
+          marker: .
+    paneldict:
+      ylabel: "Telescope elevation > 30 deg\n(GUIDSAT)"
+      title: QC - Observing
       legend_frac_size: 0.15
