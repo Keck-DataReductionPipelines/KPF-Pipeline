@@ -14,7 +14,6 @@ import matplotlib.ticker as ticker
 from matplotlib.ticker import FuncFormatter
 from modules.Utils.utils import get_sunrise_sunset_ut
 from modules.Utils.kpf_parse import get_datecode
-from collections import Counter
 from matplotlib.dates import DayLocator, MonthLocator, YearLocator, AutoDateLocator, DateFormatter
 
 from modules.Utils.utils import DummyLogger

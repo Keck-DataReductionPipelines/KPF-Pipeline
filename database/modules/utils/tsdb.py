@@ -16,6 +16,7 @@ from astropy.time import Time
 from astropy.table import Table
 from astropy.coordinates import Angle
 from tqdm import tqdm
+from collections import Counter
 from tqdm.notebook import tqdm_notebook
 from datetime import datetime
 from functools import partial
@@ -2367,9 +2368,17 @@ class TSDB:
         - aggregated error report (if aggregated_summary=True)
         - individual ObsID error reports (if aggregated_summary=False)
         '''
+        # Function to strip HTML tags and extract the raw ObsID
+        def extract_obsid(raw):
+            if isinstance(raw, str):
+                match = re.search(r'>(KP\.\d{8}\.\d{5}\.\d{2})<', raw)
+                return match.group(1) if match else raw.strip()
+            return str(raw)
+
         error_counter = Counter()  # Collect error bodies for aggregation
     
         for obsid in df['ObsID']:
+            obsid = extract_obsid(obsid)
             log_path = os.path.join(log_dir, f'{get_datecode(obsid)}/{obsid}.log')
             
             if not os.path.isfile(log_path):
@@ -2433,62 +2442,6 @@ class TSDB:
                 display(HTML(html))
             else:
                 print("No [ERROR] lines found across all logs.")
-
-
-def touch_files(obsids_or_df, data_dir='/data/' level='L0', sleep_sec=0.2):
-    """
-    Touch the .fits files corresponding to a list of ObsIDs or a DataFrame with 
-    an 'ObsID' column.
-    
-    Parameters
-    ----------
-    obsids_or_df : list[str] or pd.DataFrame
-        Either a list of ObsID strings or a DataFrame with an 'ObsID' column.
-    level : str, default='L0'
-        The data level. Determines the suffix for the filename.
-        Must be one of ['L0', '2D', 'L1', 'L2'].
-    data_dir : str, default='/data'
-        The data directory for FITS files.
-    sleep_sec : float, default=0.2
-        Number of seconds to sleep between touch commands.
-    verbose : bool, default=True
-        If True, print each touched file with timestamp.
-    """
-
-    # Determine the suffix based on the level
-    level_suffix_map = {
-        'L0': '',
-        '2D': '_2D',
-        'L1': '_L1',
-        'L2': '_L2'
-    }
-
-    if level not in level_suffix_map:
-        raise ValueError(f"Invalid level '{level}'. Must be one of {list(level_suffix_map.keys())}.")
-    
-    suffix = level_suffix_map[level]
-
-    # Extract list of ObsIDs
-    if isinstance(obsids_or_df, pd.DataFrame):
-        if 'ObsID' not in obsids_or_df.columns:
-            raise ValueError("DataFrame must contain an 'ObsID' column.")
-        obsid_list = obsids_or_df['ObsID'].tolist()
-    elif isinstance(obsids_or_df, list):
-        obsid_list = obsids_or_df
-    else:
-        raise TypeError("Input must be a list of ObsID strings or a pandas DataFrame.")
-
-    for obsid in obsid_list:
-        datecode = get_datecode(obsid)
-        filepath = f'{data_dir}/{datecode}/{obsid}{suffix}.fits'
-        try:
-            os.utime(filepath, None)
-            if verbose:
-                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                print(f"[{now_str}] Touched: {filepath}")
-        except FileNotFoundError:
-            print(f"File not found: {filepath}")
-        time.sleep(sleep_sec)
 
 
 def process_file(file_path, now_str,
@@ -2584,3 +2537,67 @@ def convert_to_list_if_array(string):
     else:
         # The string does not look like a JSON array
         return string
+
+
+def touch_files(obsids_or_df, data_dir='/data', level='L0', sleep_sec=0.2, verbose=True):
+    """
+    Touch the .fits files corresponding to a list of ObsIDs or a DataFrame with 
+    an 'ObsID' column.
+    
+    Parameters
+    ----------
+    obsids_or_df : list[str] or pd.DataFrame
+        Either a list of ObsID strings or a DataFrame with an 'ObsID' column.
+    level : str, default='L0'
+        The data level. Determines the suffix for the filename.
+        Must be one of ['L0', '2D', 'L1', 'L2'].
+    data_dir : str, default='/data'
+        The data directory for FITS files.
+    sleep_sec : float, default=0.2
+        Number of seconds to sleep between touch commands.
+    verbose : bool, default=True
+        If True, print each touched file with timestamp.
+    """
+
+    # Determine the suffix based on the level
+    level_suffix_map = {
+        'L0': '',
+        '2D': '_2D',
+        'L1': '_L1',
+        'L2': '_L2'
+    }
+
+    if level not in level_suffix_map:
+        raise ValueError(f"Invalid level '{level}'. Must be one of {list(level_suffix_map.keys())}.")
+    
+    suffix = level_suffix_map[level]
+
+    # Extract list of ObsIDs
+    if isinstance(obsids_or_df, pd.DataFrame):
+        if 'ObsID' not in obsids_or_df.columns:
+            raise ValueError("DataFrame must contain an 'ObsID' column.")
+        obsid_list = obsids_or_df['ObsID'].tolist()
+    elif isinstance(obsids_or_df, list):
+        obsid_list = obsids_or_df
+    else:
+        raise TypeError("Input must be a list of ObsID strings or a pandas DataFrame.")
+
+    # Function to strip HTML tags and extract the raw ObsID
+    def extract_obsid(raw):
+        if isinstance(raw, str):
+            match = re.search(r'>(KP\.\d{8}\.\d{5}\.\d{2})<', raw)
+            return match.group(1) if match else raw.strip()
+        return str(raw)
+
+    for raw_obsid in obsid_list:
+        obsid = extract_obsid(raw_obsid)
+        datecode = get_datecode(obsid)
+        filepath = f'{data_dir}/{level}/{datecode}/{obsid}{suffix}.fits'
+        try:
+            os.utime(filepath, None)
+            if verbose:
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print(f"[{now_str}] Touched: {filepath}")
+        except FileNotFoundError:
+            print(f"File not found: {filepath}")
+        time.sleep(sleep_sec)
