@@ -2197,9 +2197,9 @@ class TSDB:
                     params.append(False)
         
             if QC_not_fail is not None:
-                for col in QC_not_pass:
+                for col in QC_not_fail:
                     conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
-                    params.append(False)
+                    params.append(True)
     
             if start_date:
                 date_str = pd.to_datetime(start_date).strftime("%Y%m%d")
