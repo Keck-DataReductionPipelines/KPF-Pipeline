@@ -1389,8 +1389,39 @@ class TSDB:
                     return 'Star'
         except:
             return 'Unknown'
+
+     
+    def expected_data_products(self, source):
+        """
+        Returns a tuple of three booleans describing if 2D/L1/L2 data projects
+        are expected to be produced.
         
+        Arguments:
+            source - one of 'Bias', 'Dark', 'Flat', 'Wide Flat', 
+                            'LFC', 'Etalon', 'ThAr', 'UNe',
+                            'Sun', 'Star', 'Unknown'
+        Returns:
+            A tuple of three booleans describing if 2D/L1/L2 data projects
+            are expected to be produced.
+        """
+        
+        expected_by_soure = {
+            'Bias':      (True, True, False),
+            'Dark':      (True, True, False),
+            'Flat':      (True, True, True),
+            'Wide Flat': (True, True, False),
+            'LFC':       (True, True, True),
+            'Etalon':    (True, True, True),
+            'ThAr':      (True, True, True),
+            'Une':       (True, True, True),
+            'Sun':       (True, True, True), 
+            'Star':      (True, True, True),
+            'Unknown':   (False, False, False),
+        }
     
+        return expected_by_soure()
+
+
     def _extract_kwd(self, file_path, keyword_types, extension='PRIMARY'):
         """
         Extracts specified header keywords from a given extension of a Keck 
