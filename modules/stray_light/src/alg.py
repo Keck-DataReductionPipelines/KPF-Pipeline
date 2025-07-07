@@ -27,7 +27,6 @@ class StrayLightAlg:
     
     Attributes:
         rawimage (np.ndarray): From parameter 'rawimage'.
-    
 
     """
     def __init__(self, 
@@ -77,15 +76,16 @@ class StrayLightAlg:
         slg = stray_light_image['GREEN_CCD'][~inter_order_mask['GREEN_CCD']]
         slr = stray_light_image['RED_CCD'][~inter_order_mask['RED_CCD']]
 
-        header['SL_METH'] = method             # COMMENT method used to estimate stray light
-        header['SLG_MEAN'] = np.mean(slg)      # COMMENT mean of GREEN inter-order stray light
-        header['SLG_RMS']  = np.std(slg)       # COMMENT root-mean-square of GREEN inter-order stray light
-        header['SLG_MIN']  = np.min(slg)       # COMMENT minimum of GREEN inter-order stray light
-        header['SLG_MAX']  = np.max(slg)       # COMMENT maximum of GREEN inter-order stray light
-        header['SLR_MEAN'] = np.mean(slr)      # COMMENT mean of RED inter-order stray light
-        header['SLR_RMS']  = np.std(slr)       # COMMENT root-mean-square of RED inter-order stray light
-        header['SLR_MIN']  = np.min(slr)       # COMMENT minimum of RED inter-order stray light
-        header['SLR_MAX']  = np.max(slr)       # COMMENT maximum of RED inter-order stray light
+        header['SLGMETH'] = method            # COMMENT method used to estimate stray light for GREEN
+        header['SLGMEAN'] = np.mean(slg)      # COMMENT mean of GREEN inter-order stray light
+        header['SLGRMS']  = np.std(slg)       # COMMENT standard deviation of GREEN inter-order stray light
+        header['SLGMIN']  = np.min(slg)       # COMMENT minimum of GREEN inter-order stray light
+        header['SLGMAX']  = np.max(slg)       # COMMENT maximum of GREEN inter-order stray light
+        header['SLRMETH'] = method            # COMMENT method used to estimate stray light for RED
+        header['SLRMEAN'] = np.mean(slr)      # COMMENT mean of RED inter-order stray light
+        header['SLRRMS']  = np.std(slr)       # COMMENT standard deviation of RED inter-order stray light
+        header['SLRMIN']  = np.min(slr)       # COMMENT minimum of RED inter-order stray light
+        header['SLRMAX']  = np.max(slr)       # COMMENT maximum of RED inter-order stray light
 
 
     def estimate_stray_light(self):
@@ -94,7 +94,7 @@ class StrayLightAlg:
         Calls method defined in config file; allowed methods are 'zero', 'mean', and 'polynomial'
 
         Returns:
-            stray_light_image (dict of ndarrys): 2D stray light images for GREEN and RED ccds
+            stray_light_image (dict of ndarrays): 2D stray light images for GREEN and RED ccds
             inter_order_mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
         """
         try:
