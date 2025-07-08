@@ -1033,6 +1033,34 @@ class QCDefinitions:
         self.db_columns[name42] = None
         self.fits_keyword_fail_value[name42] = 0
 
+        name43 = 'etalon_set_temp'
+        self.names.append(name43)
+        self.kpf_data_levels[name43] = ['L0']
+        self.descriptions[name43] = 'Etalon inner chamber temps near set points'
+        self.data_types[name43] = 'int'
+        self.spectrum_types[name43] = ['Etalon']
+        self.master_types[name43] = []
+        self.drift_types[name43] = []
+        self.required_data_products[name43] = []
+        self.fits_keywords[name43] = 'ETASTEMP'
+        self.fits_comments[name43] = 'QC: Etalon at set temperature'
+        self.db_columns[name43] = None
+        self.fits_keyword_fail_value[name43] = 0
+
+        name44 = 'telemetry_present'
+        self.names.append(name44)
+        self.kpf_data_levels[name44] = ['L0']
+        self.descriptions[name44] = 'TELEMETRY extension present in L0'
+        self.data_types[name44] = 'int'
+        self.spectrum_types[name44] = []
+        self.master_types[name44] = []
+        self.drift_types[name44] = []
+        self.required_data_products[name44] = []
+        self.fits_keywords[name44] = 'TELEPRL0'
+        self.fits_comments[name44] = 'QC: TELEMETRY extension present in L0'
+        self.db_columns[name44] = None
+        self.fits_keyword_fail_value[name44] = 0
+
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
 #        self.kpf_data_levels[name36] = ['L1']
@@ -1503,6 +1531,32 @@ class QCL0(QC):
                     QC_pass = False
                     if debug:
                         print('The keyword ' + keyword + ' is missing from the primary header.')
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def telemetry_present(self, debug=False):
+        """
+        This Quality Control function checks if the TELEMETRY extension is 
+        present in L0 files.
+
+        Args:
+             L0 - an L0 object
+             debug - an optional flag.  If True, missing data products are noted.
+
+         Returns:
+             QC_pass - a boolean signifying that the QC passed (True) for failed (False)
+        """
+
+        QC_pass = False
+        try:
+            L0 = self.kpf_object
+            if hasattr(L0, 'TELEMETRY'):
+                QC_pass = True
 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
