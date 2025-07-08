@@ -423,11 +423,6 @@ NSATGK    23                                                                    
 NSATRS2   23                                                                       Number of saturated lines in Red SCI2
 NSATRC    23                                                                       Number of saturated lines in Red CAL
 NSATRK    23                                                                       Number of saturated lines in Red SKY
-DRFTOBS   KP.20250708.20189.17                                                     Comment
-DRFTDEL   1.2114297222222221                                                       Comment
-DRFTCOR   1                                                                        Comment
-DRFTRV    0.2738220612333333                                                       Comment
-DRFTMETH  nearest_interpolation                                                    Comment
 SNRSC452  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRSK452  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRCL452  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
@@ -953,6 +948,9 @@ Keyword   Value (example)                             Comment
 ========  ==========================================  =========
 DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used to make L2 (in the time series database, DRPTAG is listed as DRPTAGL2 for L2 files)
 DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make L2 (in the time series database, DRPHSH is listed as DRPHSHL2 for L2 files)
+TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
+DATAPRL2  1                                           QC: 1 = L2 data is present
+QCPCBCV   1                                           QC: 1 = PCBCV values within acceptable range
 CCFRV     19.4247572623                               Average of CCD1RV and CCD2RV using weights from RV table
 CCFERV    0.001175044                                 Error on CCFRV
 CCFRVC    19.4247572623                               Average of CCD1RVC and CCD2RVC using weights from RV table
@@ -965,13 +963,12 @@ BCVSTD    0.7123626558325037                          Weighted stddev of BCV for
 BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (m/s)    
 MAXPCBCV  0.6894375932041458                          Maximum % change from CCFBCV for non-zero-weight spectral orders (%)
 MINPCBCV  -0.47031634755679774                        Minimum % change from CCFBCV for non-zero-weight spectral orders (%)
-TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
-DATAPRL2  1                                           QC: 1 = L2 data is present
-QCPCBCV   1                                           QC: 1 = PCBCV values within acceptable range
+DRFTOBS   KP.20250708.20189.17                        ObsID of reference drift observation
+DRFTDEL   1.2114297222222221                          Time since drift correction observation
+DRFTCOR   1                                           Drift correction applied (true/false)
+DRFTRV    0.2738220612333333                          Drift correction RV
+DRFTMETH  nearest_interpolation                       Drift correction method name
 ========  ==========================================  =========
-
-Radial Velocities
------------------
 
 L2 RV Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^
