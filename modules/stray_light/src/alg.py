@@ -73,7 +73,7 @@ class StrayLightAlg:
             method = self.method
 
         if chip == 'GREEN':
-            slg = stray_light_image['GREEN_CCD'][~inter_order_mask['GREEN_CCD']]
+            slg = stray_light_image[~inter_order_mask]
 
             header['SLGMETH'] = method            # COMMENT method used to estimate stray light for GREEN
             header['SLGMEAN'] = np.mean(slg)      # COMMENT mean of GREEN inter-order stray light
@@ -82,7 +82,7 @@ class StrayLightAlg:
             header['SLGMAX']  = np.max(slg)       # COMMENT maximum of GREEN inter-order stray light
 
         elif chip == 'RED':
-            slr = stray_light_image['RED_CCD'][~inter_order_mask['RED_CCD']]
+            slr = stray_light_image[~inter_order_mask]
 
             header['SLRMETH'] = method            # COMMENT method used to estimate stray light for RED
             header['SLRMEAN'] = np.mean(slr)      # COMMENT mean of RED inter-order stray light
@@ -91,83 +91,80 @@ class StrayLightAlg:
             header['SLRMAX']  = np.max(slr)       # COMMENT maximum of RED inter-order stray light
 
 
-    def estimate_stray_light(self, chip):
+    def estimate_stray_light(self, chip, method=None, polyorder=None, edge_clip=None):
         """
         Main method used to estimate stray light
         Calls method defined in config file; allowed methods are 'zero', 'mean', and 'polynomial'
 
+        Args:
+            chip (str) : 'GREEN' or 'RED' to select which CCD to fit
+            method (str) : fitting method, allowed methods are 'zero', 'mean' and 'polynomial'
+            polyorder (int) : order of polynomial
+            edge_clip (int) : number of pixels to ignore on each edge (default=0)
+            
         Returns:
             stray_light_image (dict of ndarrays): 2D stray light images for GREEN and RED ccds
             inter_order_mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
         """
+        # set parameters
+        if method is None:
+            method = self.method
+        if polyorder is None:
+            polyorder = self.polyorder
+        if edge_clip is None:
+            edge_clip = self.edge_clip
+
+        # select method and estimate stray light
         try:
-            stray_light_method = self.__getattribute__(self.method)
+            stray_light_method = self.__getattribute__(method)
         except AttributeError:
             #self.log.error(f'Stray light method {self.method} not implemented.')
             raise(AttributeError)
 
-        stray_light_image, inter_order_mask = stray_light_method(chip)
+        stray_light_image, inter_order_mask = stray_light_method(chip, method=method, polyorder=polyorder, edge_clip=edge_clip)
         self.add_keywords(stray_light_image, inter_order_mask, chip)
 
         return stray_light_image, inter_order_mask
 
     
-    def zero(self, chip):
+    def zero(self, chip, **kwargs):
         """
         Method to estimate stray light -- returns zero (i.e. no stray light)
-
-        Args:
-            chip (str) : 'GREEN' or 'RED' to select which CCD to fit
-
-        Returns:
-            stray_light (ndarray): 2D stray light image
-            mask (ndarray): 2D boolean mask of inter-order pixels 
         """
+        print("zero")
+        
         mask = self._inter_order_mask(chip).astype('bool')
         stray_light = np.zeros_like(self.target_2D[f'{chip}_CCD'])
 
         return stray_light, mask
 
     
-    def mean(self, chip):
+    def mean(self, chip, edge_clip=0, **kwargs):
         """
         Method to estimate stray light -- returns mean of inter-order pixels
-
-        Args:
-            chip (str) : 'GREEN' or 'RED' to select which CCD to fit
-
-        Returns:
-            stray_light (ndarray): 2D stray light image
-            mask (ndarray): 2D boolean mask of inter-order pixels 
         """
-        data = np.array(self.target_2D[f'{chip}_CCD'].data)
-        mask = self._inter_order_mask(chip).astype('bool')
+        if edge_clip > 0:
+            d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
+            m = mask[edge_clip:-edge_clip,edge_clip:-edge_clip]
+        
         stray_light = np.mean(data[~mask])*np.ones_like(data)
     
         return stray_light, mask
 
     
-    def polynomial(self, chip):
+    def polynomial(self, chip, polyorder, edge_clip=0, **kwargs):
         """
         Method to estimate stray light -- fits a 2D polynomial to inter-order pixels
-        
-        Args:
-            chip (str) : 'GREEN' or 'RED' to select which CCD to fit
-
-        Returns:
-            stray_light (ndarray): 2D stray light image
-            mask (ndarray): 2D boolean mask of inter-order pixels 
         """
         data = np.array(self.target_2D[f'{chip}_CCD'].data)
         mask = self._inter_order_mask(chip).astype('bool')
 
-        clip = self.edge_clip
-        coeffs = self._polyfit2d(data[clip:-clip,clip:-clip],
-                                    self.polyorder,
-                                    mask[clip:-clip,clip:-clip]
-                                )
-    
-        stray_light = self._polyval2d(coeffs, self.polyorder, data.shape)
+        if edge_clip > 0:
+            d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
+            m = mask[edge_clip:-edge_clip,edge_clip:-edge_clip]
+
+        coeffs = self._polyfit2d(d, polyorder, m)    
+        stray_light = self._polyval2d(coeffs, polyorder, data.shape)
         stray_light = np.maximum(stray_light, 0)
 
         return stray_light, mask
