@@ -18,6 +18,21 @@ AZ|float|Telescope azimuth|deg
 OBJECT|string|Object name|None
 AIRMASS|float|Airmass of target|None
 OCTAGON|string|Calibration octagon source|None
+TRIGTARG|string|Cameras that were sent triggers|None
+SRCSHTTR|string|Source shutters commanded|None
+TIMSHTTR|string|Timed shutters commanded|None
+OTIMSHTR|string|Timed shutters open exp. midpoint|None
+SCISEL|bool|Science Select shutter at exp. midpoint|None
+SKYSEL|bool|Sky Select Shutter at exp. midpoint|None
+FFSHTR|bool|Flat field fiber shutter at exp. midpoint|None
+SCRAMSHT|bool|Scrambler shutter at exp. midpoint|None
+SIMCALSH|bool|Simult Cal shutter at exp. midpoint|None
+CAHKSHT|bool|CaHK shutter at exp. midpoint|None
+SOLSCISH|bool|SoCal Sci shutter at exp. midpoint|None
+SOLCALSH|bool|SoCal Cal shutter at exp. midpoint|None
+CALSSSHT|bool|Cal SciSky shutter at exp. midpoint|None
+AOHATCH|bool|AO hatch at exp. midpoint|None
+FIUHTCH|bool|FIU hatch at exp. midpoint|None
 IMTYPE|string|Image type|None
 FFFB|string|Flat field fiber on (Yes/No)|None
 GREEN|string|Green camera found (Yes/No)|None
