@@ -11,3 +11,4 @@ Tutorials: Opening, Examining, and Manipulating KPF Files
     ../tutorials/KPF_Data_Tutorial_L1
     ../tutorials/KPF_Data_Tutorial_L2
     ../tutorials/KPF_Data_Tutorial_2D_and_Ion_Pumps
+    ../tutorials/Stray_Light_Tutorial
