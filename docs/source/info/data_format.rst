@@ -176,6 +176,20 @@ GAIAMAG   9.28                                        GAIA G band magnitude
 TARGTEFF  5398.0                                      Target effective temperature (K)
 OCTAGON   EtalonFiber                                 Selected octagon calibration source (not necessarily powered on)
 TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide              Cameras that were sent triggers
+SRCSHTTR  SciSelect,SkySelect,SoCalSci                Source shutters commanded
+TIMSHTTR  Scrambler,SimulCal                          Timed shutters commanded
+OTIMSHTR  Scrambler,SimulCal                          Timed shutters open exp. midpoint
+SCISEL    open                                        Science Select shutter at exp. midpoint
+SKYSEL    open                                        Sky Select Shutter at exp. midpoint
+FFSHTR    closed                                      Flat field fiber shutter at exp. midpoint
+SCRAMSHT  open                                        Scrambler shutter at exp. midpoint
+SIMCALSH  open                                        Simult Cal shutter at exp. midpoint
+CAHKSHT   closed                                      CaHK shutter at exp. midpoint
+SOLSCISH  open                                        SoCal Sci shutter at exp. midpoint
+SOLCALSH  closed                                      SoCal Cal shutter at exp. midpoint
+CALSSSHT  closed                                      Cal SciSky shutter at exp. midpoint
+AOHATCH   False                                       AO hatch at exp. midpoint
+FIUHTCH   False                                       FIU hatch at exp. midpoint
 IMTYPE    Object                                      Image Type
 TARGNAME  42813                                       KPF Target Name
 DCSNAME   42813                                       DCS Target Name
@@ -240,6 +254,7 @@ EMSAT     1                                           QC: 1 = Exp Meter not satu
 EMNEG     1                                           QC: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
 DATAPR2D  1                                           QC: 1 = 2D data products present with non-zero array sizes
 CAHKPR2D  1                                           QC: 1 = 2D CaHK data present with non-zero array sizes
+TELEPRL0  1                                           QC: 1 = TELEMETRY extension present in L0
 GOODREAD  1                                           QC: 1 = Exposure time not consistent with CCD readout error (~6 sec)
 POS2DSNR  1                                           QC: 1 = 2D Red and Green SNR (data/var^0.5) not significantly negative
 LOWBIAS   1                                           QC: 1 = 2D bias flux not low
@@ -352,6 +367,11 @@ XDSPSYG1  0.00133                                     Uncertainty [pix] in XDSPD
 XDSPSYR1  0.00217                                     Uncertainty [pix] in XDSPDYR1
 XDSPSYG2  0.00144                                     Uncertainty [pix] in XDSPDYG2
 XDSPSYR2  0.00058                                     Uncertainty [pix] in XDSPDYR2
+CLEARSKY  1                                           Indicates clear-sky conditions for SoCal [to be added in future DRP version]
+DNIMEAS   500.0                                       Mean DNI from pyrheliometer during the exposure [to be added in future DRP version]
+DNICLR    500.0                                       Theoretical DNI in perfect conditions [to be added in future DRP version]
+DNIRMS    1.0                                         RMS of DNIMEAS during the exposure [to be added in future DRP version]
+CLEARIDX  3.0                                         SoCal clearness index (<4==CLEARSKY) [to be added in future DRP version]
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
@@ -398,6 +418,17 @@ ETALINES  1                                                                     
 WILDWSCI  1                                                                        QC: 1 = SCI WLS not wild (stdev compared to reference < 5 pixels)
 WILDWSKY  1                                                                        QC: 1 = SKY WLS not wild (stdev compared to reference < 5 pixels)
 WILDWCAL  1                                                                        QC: 1 = CAL WLS not wild (stdev compared to reference < 5 pixels)
+NSATGS2   23                                                                       Number of saturated lines in Green SCI2
+NSATGC    23                                                                       Number of saturated lines in Green CAL
+NSATGK    23                                                                       Number of saturated lines in Green SKY
+NSATRS2   23                                                                       Number of saturated lines in Red SCI2
+NSATRC    23                                                                       Number of saturated lines in Red CAL
+NSATRK    23                                                                       Number of saturated lines in Red SKY
+DRFTOBS   KP.20250708.20189.17                                                     Comment
+DRFTDEL   1.2114297222222221                                                       Comment
+DRFTCOR   1                                                                        Comment
+DRFTRV    0.2738220612333333                                                       Comment
+DRFTMETH  nearest_interpolation                                                    Comment
 SNRSC452  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRSK452  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRCL452  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
@@ -899,12 +930,6 @@ STDWRC28  0.01379038876707553                                                   
 STDWRC29  0.00914032555395159                                                      stddev(WLS-ref) [pix], Red CAL order 29         
 STDWRC30  0.01440898205622853                                                      stddev(WLS-ref) [pix], Red CAL order 30         
 STDWRC31  0.00899757354138056                                                      stddev(WLS-ref) [pix], Red CAL order 31         
-NSATGS2   23                                                                       Number of saturated lines in Green SCI2
-NSATGC    23                                                                       Number of saturated lines in Green CAL
-NSATGK    23                                                                       Number of saturated lines in Green SKY
-NSATRS2   23                                                                       Number of saturated lines in Red SCI2
-NSATRC    23                                                                       Number of saturated lines in Red CAL
-NSATRK    23                                                                       Number of saturated lines in Red SKY
 ========  =======================================================================  =========
 
 The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
