@@ -1085,7 +1085,7 @@ class Analyze2D:
                 for o in range(1,np.shape(order_trace_master)[0]-2,1):#[50]:#range(np.shape(order_trace)[0])
                     x_grid_master = np.linspace(order_trace_master.iloc[o]['X1'], 
                                                 order_trace_master.iloc[o]['X2'], 
-                                                int(order_trace_master.iloc[o]['X2']-order_trace_master.iloc[o]['X1']))
+                                                int(order_trace_master.iloc[o]['X2']-order_trace_master.iloc[o]['X1'])+1)
                     x_grid_master = x_grid_master[x_grid_master >= start_x]
                     x_grid_master = x_grid_master[x_grid_master <= start_x+width]
                     y_grid_master = order_trace_master.iloc[o]['Coeff0'] + \
