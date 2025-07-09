@@ -956,12 +956,12 @@ CCFRV     19.4247572623                               Average of CCD1RV and CCD2
 CCFERV    0.001175044                                 Error on CCFRV
 CCFRVC    19.4247572623                               Average of CCD1RVC and CCD2RVC using weights from RV table
 CCFERVC   0.001175044                                 Error on CCFRVC
-CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders
+CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders (for solar observations, HJD is used)
 CCFBCV    21.751977696646478                          Weighted average of barycentric RV (km/s) for spectral orders
-BJDSTD    41.66004757176901                           Weighted stddev of BJD for spectral orders (sec)        
-BJDRNG    147.1386909484863                           Range(BJD) for non-zero-weight spectral orders (sec)    
-BCVSTD    0.7123626558325037                          Weighted stddev of BCV for spectral orders (m/s)        
-BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (m/s)    
+BJDSTD    41.66004757176901                           Weighted stddev of BJD for spectral orders (sec) (for solar observations, HJD is used)
+BJDRNG    147.1386909484863                           Range(BJD) for non-zero-weight spectral orders (sec)
+BCVSTD    0.7123626558325037                          Weighted stddev of BCV for spectral orders (m/s)
+BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (m/s)
 MAXPCBCV  0.6894375932041458                          Maximum % change from CCFBCV for non-zero-weight spectral orders (%)
 MINPCBCV  -0.47031634755679774                        Minimum % change from CCFBCV for non-zero-weight spectral orders (%)
 DRFTOBS   KP.20250708.20189.17                        ObsID of 1st reference drift observation
@@ -1003,7 +1003,7 @@ CCD1RVS        18.2490292404      RV (km/s) of SKY (all orders, Green CCD); corr
 CCD1ERVS       0.0                Error on CCD1RVS
 CCD1RV         19.395608349       RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Green CCD); corrected for barycentric RV
 CCD1ERV        0.0007214256       Error on CCD1RV  
-CCD1BJD        2460237.787166463  Photon-weighted mid-time (BJD) for CCD1RV
+CCD1BJD        2460237.787166463  Photon-weighted mid-time (BJD) for CCD1RV (for solar observations, HJD is used)
 CCD2ROW        35                 Row number in the RV table (below) of the bluest order on the Red CCD
 CCD2RV1        19.4423673077      RV (km/s) of SCI1 (all orders, Red CCD); corrected for barycentric RV
 CCD2ERV1       0.004087698        Error on CCD2RV1
@@ -1017,7 +1017,7 @@ CCD2RVS        51.9730319697      RV (km/s) of SKY (all orders, Red CCD); correc
 CCD2ERVS       0.0                Error on CCD2RVS
 CCD2RV         19.4069470745      RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Red CCD); corrected for barycentric RV
 CCD2ERV        0.0021111409       Error on CCD2RV  
-CCD2BJD        2460237.787150946  Photon-weighted mid-time (BJD) for CCD2RV
+CCD2BJD        2460237.787150946  Photon-weighted mid-time (BJD) for CCD2RV (for solar observations, HJD is used)
 =============  =================  =========
 
 L2 RV Extension
@@ -1041,7 +1041,7 @@ CAL RV         0.0                RV (km/s) of CAL (Green CCD); corrected for ba
 CAL error      0.0                error on 'CAL RV'
 SKY RV         0.0                RV (km/s) of sKY (Green CCD); corrected for barycentric RV
 SKY error      0.0                error on 'SKY RV'
-CCFBJD         2.460238e+06       Photon-weighted mid-time (BJD) for CCD1RV
+CCFBJD         2.460238e+06       Photon-weighted mid-time (BJD) for CCD1RV (for solar observations, HJD is used)
 Bary_RVC       -8.729925          Barycentric RV (km/s)
 source1        GREEN_SCI_FLUX1    name of array for orderlet1 (SCI1)
 source2        GREEN_SCI_FLUX2    name of array for orderlet2 (SCI2)
