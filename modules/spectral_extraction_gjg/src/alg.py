@@ -15,6 +15,7 @@ from scipy.interpolate import LSQUnivariateSpline
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.logger import start_logger
 from modules.Utils.config_parser import ConfigHandler
+from kpfpipe.models.level1 import KPF1
 
 
 class SpectralExtractionAlg:
@@ -48,6 +49,7 @@ class SpectralExtractionAlg:
         self.stray_light_method = str(cfg_params.get_config_value('stray_light_method'))
         self.stray_light_polyorder = int(cfg_params.get_config_value('stray_light_polyorder'))
         self.stray_light_edge_clip = int(cfg_params.get_config_value('stray_light_edge_clip'))
+        self.stray_light_mask_buffer = int(cfg_params.get_config_value('stray_light_mask_buffer'))
 
         self.extraction_method = cfg_params.get_config_value('extraction_method')
         self.extraction_sigma_clip = float(cfg_params.get_config_value('extraction_sigma_clip'))
@@ -64,6 +66,29 @@ class SpectralExtractionAlg:
         self.order_trace = {}
         self.order_trace['GREEN_CCD'] = order_trace_green
         self.order_trace['RED_CCD'] = order_trace_red
+
+        # initialize L1 object
+        self.target_L1 = KPF1.from_l0(self.target_2D)
+
+
+    def _get_orderlet_ext_from_trace_index(chip, trace_index):
+        if trace_index % 5 == 0:
+            drp_f_ext = f'{chip}_SKY_FLUX'
+            drp_v_ext = f'{chip}_SKY_VAR'
+        elif trace_index % 5 == 1:
+            drp_f_ext = f'{chip}_SCI_FLUX1'
+            drp_v_ext = f'{chip}_SCI_VAR1'
+        elif trace_index % 5 == 2:
+            drp_f_ext = f'{chip}_SCI_FLUX2'
+            drp_v_ext = f'{chip}_SCI_VAR2'
+        elif trace_index % 5 == 3:
+            drp_f_ext = f'{chip}_SCI_FLUX3'
+            drp_v_ext = f'{chip}_SCI_VAR3'
+        elif trace_index % 5 == 4:
+            drp_f_ext = f'{chip}_CAL_FLUX'
+            drp_v_ext = f'{chip}_CAL_VAR'
+
+        return drp_f_ext, drp_v_ext
 
 
     def _orderlet_box(self, data_image, order_trace, trace_index, return_box_coords=False, verbose=False, do_plot=False):
@@ -232,7 +257,8 @@ class SpectralExtractionAlg:
             plt.plot(v)
             plt.show()
             
-        return f, v
+        # return four values to match optimal extraction
+        return f, v, None, None
 
 
     def optimal_extraction(self, 
@@ -250,7 +276,7 @@ class SpectralExtractionAlg:
                            max_iter=20, 
                            verbose=False, 
                            do_plot=False
-                           ):
+                          ):
         """
         Optimal extraction on a data array D (typical use case is a single orderlet)
         Variable names follow Horne 1986
@@ -358,7 +384,7 @@ class SpectralExtractionAlg:
         return f, v, P, M
 
     
-    def extract_spectrum(self, method, chip, trace_index):
+    def extract_single_spectrum(self, method, chip, trace_index):
         """
         Extract 1D spectrum for a single orderlet
 
@@ -366,9 +392,6 @@ class SpectralExtractionAlg:
             method (str): extraction method, can bo 'box' or 'optimal'
             chip (str): 'GREEN' or 'RED' ccd
             trace_index (int): integer identifying ordelet in order_trace
-
-        *** This method should be updated to take, order number and orderlet name as inputs ***
-        *** e.g. orderlet='SCI2', orderno=17 ***
 
         Returns:
             f (ndarray): extracted 1D spectrum
@@ -424,3 +447,32 @@ class SpectralExtractionAlg:
                                                      do_plot=False
                                                     )
         return f_opt, v_opt, P, M
+    
+
+    def extract_all_spectra_on_ccd(self, method, chip):
+        """
+        Returns a dictionary with all extracted 1D spectra and variance for GREEN or RED ccd
+        """
+        # set up container
+        nrow, ncol = self.target_2D[f'{chip}_CCD'].shape
+        ntrace = len(self.order_trace[f'{chip}_CCD'])
+        norder = ntrace // 5
+
+        l1_arrays = {}
+        for trace_index in range(5):
+            f_ext, v_ext = _get_orderlet_ext_from_trace_index(chip, trace_index)
+
+            l1_arrays[f_ext] = np.zeros((norder,ncol))
+            l1_arrays[v_ext] = np.zeros((norder,ncol))
+
+        # extract spectra
+        for trace_index in range(ntrace):
+            order_index = trace_index // 5
+                        
+            f_ext, v_ext = _get_orderlet_ext_from_trace_index(chip, trace_index)
+            f, v, _, _ = spectrum_extractor.extract_single_spectrum(method, chip, trace_index)
+
+            l1_arrays[f_ext][order_index] = f_opt.copy()
+            l1_arrays[v_ext][order_index] = v_opt.copy()
+
+        return l1_arrays
