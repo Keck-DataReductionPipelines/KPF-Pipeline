@@ -247,8 +247,6 @@ class StrayLightAlg:
 
         if mask_buffer is not None:
             for i in range(mask_buffer):
-                print("buffering mask")
-                
                 buffer = np.zeros_like(mask)
             
                 row_diff = mask[:-1,:] != mask[1:,:]
