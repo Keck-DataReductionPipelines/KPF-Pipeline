@@ -33,8 +33,13 @@ FIUMODE|string|FIU operating mode - Observing = on-sky|None
 ETAV1C1T|float|Etalon housing temp (Vescent 1 Channel 1)|C
 ETAV1C2T|float|Etalon inner side shield temp (Vescent 1 Channel 2)|C
 ETAV1C3T|float|Etalon inner bottom lid temp (Vescent 1 Channel 3)|C
-ETAV1C4T|float|Etalon outer etalon chamber temp (Vescent 1 Channel 4)|C
+ETAV1C4T|float|Etalon outer chamber temp (Vescent 1 Channel 4)|C
 ETAV2C3T|float|Etalon inner top lid temp (Vescent 2 Channel 3)|C
+ETAV1C1S|float|Etalon housing temp set point(Vescent 1 Channel 1)|C
+ETAV1C2S|float|Etalon inner side shield temp set point(Vescent 1 Channel 2)|C
+ETAV1C3S|float|Etalon inner bottom lid temp set point(Vescent 1 Channel 3)|C
+ETAV1C4S|float|Etalon outer chamber temp set point(Vescent 1 Channel 4)|C
+ETAV2C3S|float|Etalon inner top lid temp set point (Vescent 2 Channel 3)|C
 WAVEBNS|string|Wavelengths of EM bins (string of four vals)|nm
 TOTCNTS|string|Total EM counts in WAVEBINS|counts
 TOTCORR|string|Total EM counts (corrected) in WAVEBINS|counts
