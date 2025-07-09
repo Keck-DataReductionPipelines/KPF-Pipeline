@@ -71,7 +71,7 @@ class SpectralExtractionAlg:
         self.target_L1 = KPF1.from_l0(self.target_2D)
 
 
-    def _get_orderlet_ext_from_trace_index(chip, trace_index):
+    def _get_orderlet_ext_from_trace_index(self, chip, trace_index):
         if trace_index % 5 == 0:
             drp_f_ext = f'{chip}_SKY_FLUX'
             drp_v_ext = f'{chip}_SKY_VAR'
@@ -325,7 +325,7 @@ class SpectralExtractionAlg:
         M[W == 0] = 0
 
         # initial estimates
-        f, v = self.box_extraction(D, S, V0, Q=Q, M=M, W=W)
+        f, v, _, _ = self.box_extraction(D, S, V0, Q=Q, M=M, W=W)
         
         if not static_profile:
             P = (D-S)/f
@@ -469,8 +469,8 @@ class SpectralExtractionAlg:
         for trace_index in range(ntrace):
             order_index = trace_index // 5
                         
-            f_ext, v_ext = _get_orderlet_ext_from_trace_index(chip, trace_index)
-            f, v, _, _ = spectrum_extractor.extract_single_spectrum(method, chip, trace_index)
+            f_ext, v_ext = self._get_orderlet_ext_from_trace_index(chip, trace_index)
+            f, v, _, _ = self.extract_single_spectrum(method, chip, trace_index)
 
             l1_arrays[f_ext][order_index] = f_opt.copy()
             l1_arrays[v_ext][order_index] = v_opt.copy()
