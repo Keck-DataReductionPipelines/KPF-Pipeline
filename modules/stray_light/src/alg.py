@@ -55,6 +55,7 @@ class StrayLightAlg:
         self.method = cfg_params.get_config_value('method')
         self.polyorder = int(cfg_params.get_config_value('polyorder'))
         self.edge_clip = int(cfg_params.get_config_value('edge_clip'))
+        self.mask_buffer = int(cfg_params.get_config_value('mask_buffer'))
 
         self.target_2D = target_2D        
         self.master_order_mask = master_order_mask
@@ -91,7 +92,7 @@ class StrayLightAlg:
             header['SLRMAX']  = np.max(slr)       # COMMENT maximum of RED inter-order stray light
 
 
-    def estimate_stray_light(self, chip, method=None, polyorder=None, edge_clip=None):
+    def estimate_stray_light(self, chip, method=None, polyorder=None, edge_clip=None, mask_buffer=None):
         """
         Main method used to estimate stray light
         Calls method defined in config file; allowed methods are 'zero', 'mean', and 'polynomial'
@@ -101,6 +102,7 @@ class StrayLightAlg:
             method (str) : fitting method, allowed methods are 'zero', 'mean' and 'polynomial'
             polyorder (int) : order of polynomial
             edge_clip (int) : number of pixels to ignore on each edge (default=0)
+            mask_buffer (int): illuminated mask region will be widened by N=mask_buffer pixels
             
         Returns:
             stray_light_image (dict of ndarrays): 2D stray light images for GREEN and RED ccds
@@ -113,6 +115,8 @@ class StrayLightAlg:
             polyorder = self.polyorder
         if edge_clip is None:
             edge_clip = self.edge_clip
+        if mask_buffer is None:
+            mask_buffer = self.mask_buffer
 
         # select method and estimate stray light
         try:
@@ -121,7 +125,13 @@ class StrayLightAlg:
             #self.log.error(f'Stray light method {self.method} not implemented.')
             raise(AttributeError)
 
-        stray_light_image, inter_order_mask = stray_light_method(chip, method=method, polyorder=polyorder, edge_clip=edge_clip)
+        stray_light_image, inter_order_mask = stray_light_method(chip, 
+                                                                 method=method, 
+                                                                 polyorder=polyorder, 
+                                                                 edge_clip=edge_clip, 
+                                                                 mask_buffer=mask_buffer
+                                                                )
+        
         self.add_keywords(stray_light_image, inter_order_mask, chip)
 
         return stray_light_image, inter_order_mask
@@ -139,25 +149,28 @@ class StrayLightAlg:
         return stray_light, mask
 
     
-    def mean(self, chip, edge_clip=0, **kwargs):
+    def mean(self, chip, edge_clip=0, mask_buffer=None, **kwargs):
         """
         Method to estimate stray light -- returns mean of inter-order pixels
         """
+        data = np.array(self.target_2D[f'{chip}_CCD'].data)
+        mask = self._inter_order_mask(chip, mask_buffer=mask_buffer).astype('bool')
+        
         if edge_clip > 0:
             d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
             m = mask[edge_clip:-edge_clip,edge_clip:-edge_clip]
         
-        stray_light = np.mean(data[~mask])*np.ones_like(data)
+        stray_light = np.mean(d[~m])*np.ones_like(d)
     
         return stray_light, mask
 
     
-    def polynomial(self, chip, polyorder, edge_clip=0, **kwargs):
+    def polynomial(self, chip, polyorder, edge_clip=0, mask_buffer=None, **kwargs):
         """
         Method to estimate stray light -- fits a 2D polynomial to inter-order pixels
         """
         data = np.array(self.target_2D[f'{chip}_CCD'].data)
-        mask = self._inter_order_mask(chip).astype('bool')
+        mask = self._inter_order_mask(chip, mask_buffer=mask_buffer).astype('bool')
 
         if edge_clip > 0:
             d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
@@ -220,14 +233,32 @@ class StrayLightAlg:
         return result
 
 
-    def _inter_order_mask(self, chip, dark_fibers=None):
+    def _inter_order_mask(self, chip, dark_fibers=None, mask_buffer=None):
         """
-        dark_fibers is a list of integers 1-5 indicating any non-illuminated fibers
+        Args:
+          dark_fibers (list) : list of integers 1-5 indicating any non-illuminated fibers
+          mask_buffer (int) : number of pixels to expand intra-order region of mask
         """
-        mask = self.master_order_mask[f'{chip}_CCD'] == 0
+        mask = self.master_order_mask[f'{chip}_CCD'] > 0
 
         if dark_fibers is not None:
             for fiber in dark_fibers:
-                mask += self.master_order_mask[f'{chip}_CCD'] == fiber
+                mask &= self.master_order_mask[f'{chip}_CCD'] != fiber
 
-        return ~mask
+        if mask_buffer is not None:
+            for i in range(mask_buffer):
+                print("buffering mask")
+                
+                buffer = np.zeros_like(mask)
+            
+                row_diff = mask[:-1,:] != mask[1:,:]
+                col_diff = mask[:,:-1] != mask[:,1:]
+            
+                buffer[:-1,:] |= row_diff
+                buffer[1:,:] |= row_diff
+                buffer[:,:-1] |= col_diff
+                buffer[:,1:] |= col_diff
+        
+                mask |= buffer
+
+        return mask
