@@ -7,6 +7,7 @@ DATAPRL0|bool|QC: L0 data products present with non-zero array sizes|None
 DATAPR2D|bool|QC: 2D red and green data present|None
 CAHKPR2D|bool|QC: 2D CaHK data present|None
 KWRDPRL0|bool|QC: L0 expected keywords present|None
+TELEPRL0|bool|QC: TELEMETRY extension present in L0|None
 TIMCHKL0|bool|QC: Consistent times in L0 file|None
 EMSAT|bool|QC: Exp Meter not saturated|None
 EMNEG|bool|QC: Exp Meter not negative flux|None
@@ -23,6 +24,8 @@ GUIDGOOD|bool|QC: Guider RMS and bias within 50 mas RMS|None
 TARGPLAU|bool|QC: TARG kwds present with plausible values|None
 AGITOK|bool|QC: Agitator running with speed above minimum|None
 GUIDSAT|bool|QC: Guider not saturated|None
+NOTVIGN|bool|QC: Telescope not vignetted by dome|None
+GOODEL|bool|QC: Telescope elevation above 30 deg (for ADC)|None
 ETASTEMP|bool|QC: Etalon at set temperature|None
 BIASFILE|string|Master bias file used (except for bias exposures)|None
 DARKFILE|string|Master dark file used (except for dark exposures)|None
@@ -93,3 +96,8 @@ XDSPSYG1|float|Uncertainty in XDSPDYG1|pixels
 XDSPSYR1|float|Uncertainty in XDSPDYR1|pixels
 XDSPSYG2|float|Uncertainty in XDSPDYG2|pixels
 XDSPSYR2|float|Uncertainty in XDSPDYR2|pixels
+CLEARSKY|bool|Indicates clear-sky conditions for SoCal|None
+DNIMEAS|float|Mean DNI from pyrheliometer during the exposure|W/m^2
+DNICLR|float|Theoretical DNI in perfect conditions|W/m^2
+DNIRMS|float|RMS of DNIMEAS during the exposure|W/m^2
+CLEARIDX|float|SoCal clearness index (<4==CLEARSKY)|None

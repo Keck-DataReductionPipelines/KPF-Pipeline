@@ -2502,7 +2502,7 @@ def process_file(file_path, now_str,
     for col in bool_columns:
         if col in extraction_results:
             val = extraction_results[col]
-            extraction_results[col] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y']
+            extraction_results[col] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y', 'open']
 
     # Apply safe_float explicitly to all float columns
     for kw, dtype in kw_to_dtype.items():
