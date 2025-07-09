@@ -964,10 +964,12 @@ BCVSTD    0.7123626558325037                          Weighted stddev of BCV for
 BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (m/s)    
 MAXPCBCV  0.6894375932041458                          Maximum % change from CCFBCV for non-zero-weight spectral orders (%)
 MINPCBCV  -0.47031634755679774                        Minimum % change from CCFBCV for non-zero-weight spectral orders (%)
-DRFTOBS   KP.20250708.20189.17                        ObsID of reference drift observation
-DRFTDEL   1.2114297222222221                          Time since drift correction observation
+DRFTOBS   KP.20250708.20189.17                        ObsID of 1st reference drift observation
+DRFTOBS2  KP.20250708.20189.17                        ObsID of 2nd reference drift observation
+DRFTDEL   1.2114297222222221                          Time to 1st drift correction observation (hr)
+DRFTDEL2  1.2114297222222221                          Time to 2nd drift correction observation (hr)
 DRFTCOR   1                                           Drift correction applied (true/false)
-DRFTRV    0.2738220612333333                          Drift correction RV
+DRFTRV    0.2738220612333333                          Drift correction RV (m/s)
 DRFTMETH  nearest_interpolation                       Drift correction method name
 ========  ==========================================  =========
 
