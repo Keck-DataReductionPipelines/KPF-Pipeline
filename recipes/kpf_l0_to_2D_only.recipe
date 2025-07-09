@@ -1,7 +1,20 @@
+# L2 to 2D imports
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.amplifier_mask import AmplifierMask
 from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
+
+# 2D to L1 imports. If 2D to L1 is a stand alone recipe, add these:
+# L1 level imports, copied from kpf_drp.recipe.
+from modules.order_trace.src.order_trace import OrderTrace
+from modules.spectral_extraction.src.order_rectification import OrderRectification
+from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
+from modules.order_trace.src.order_mask import OrderMask
+from modules.wavelength_cal.src.alg import WaveInterpolation          
+from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
+from modules.blaze.src.blaze import AddBlaze
+from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
+
 
 # general imports.
 from modules.Utils.string_proc import str_replace
@@ -61,29 +74,29 @@ if context.watch:
 	if 'L0' in file_path:
 		lev0_file_path = str_replace(file_path, 'L0', '2D')
 		lev0_file_path = str_replace(lev0_file_path, '.fits', '_2D.fits')
-		lev1_file_path = str_replace(lev0_file_path, '2D', 'L1')
+		# lev1_file_path = str_replace(lev0_file_path, '2D', 'L1')
 		# do_order_trace = False
 
 	# do spectral extraction if 2D data is watched, do 2D->l1->l2
 	# assume masters is operating on 2D files
-	if '2D' in file_path or 'masters' in file_path:
-		lev0_file_path = file_path
-		do_l0_to_2d = False
-		if 'masters' in file_path:
-			lev1_file_path = str_replace(file_path, '.fits', '_L1.fits')
-		else:
-			do_order_trace = False
-			lev1_file_path = str_replace(file_path, '2D', 'L1')
+	# if '2D' in file_path or 'masters' in file_path:
+	# 	lev0_file_path = file_path
+	# 	do_l0_to_2d = False
+	# 	if 'masters' in file_path:
+	# 		lev1_file_path = str_replace(file_path, '.fits', '_L1.fits')
+	# 	else:
+	# 		do_order_trace = False
+	# 		lev1_file_path = str_replace(file_path, '2D', 'L1')
 
-	# do rv if L1 data is watched, do l1->l2
-	if 'L1' in file_path:
-		lev1_file_path = file_path
-		lev0_file_path = str_replace(file_path, 'L1', '2D')
-		do_order_trace = False
-		do_spectral_extraction = False
-		do_l0_to_2d = False
-		do_bc = False
-		do_hk = False
+	# # do rv if L1 data is watched, do l1->l2
+	# if 'L1' in file_path:
+	# 	lev1_file_path = file_path
+	# 	lev0_file_path = str_replace(file_path, 'L1', '2D')
+	# 	do_order_trace = False
+	# 	do_spectral_extraction = False
+	# 	do_l0_to_2d = False
+	# 	do_bc = False
+	# 	do_hk = False
 
 else:
 	sel_obsid = context.date_dir
@@ -159,235 +172,237 @@ wave_fits = []
 for wls in wls_list:
 	wave_fits = wave_fits + [output_dir + wls]
 
-## do L0->2D conversion for watch mode
+# do L0->2D conversion for watch mode
 if do_l0_to_2d:
     invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 
 # THESE CONFIG.ARGUMENT VARIABLES CAN BE COMBINED WITH THOSE ABOVE ONCE THE L0/2D/L1/L2 CONDITOINALS ARE GONE.
 
-# Override wave_fits list with optional database query for nearest WLS master file.
-do_db_query_for_one_nearest_wls_master_file = config.ARGUMENT.do_db_query_for_one_nearest_wls_master_file
-date_dir_db_query = context.date_dir
-cal_file_level = config.ARGUMENT.cal_file_level
-contentbitmask = config.ARGUMENT.contentbitmask
-cal_type_pairs = config.ARGUMENT.cal_type_pairs
-max_cal_file_age = config.ARGUMENT.max_cal_file_age
+# # Override wave_fits list with optional database query for nearest WLS master file.
+# do_db_query_for_one_nearest_wls_master_file = config.ARGUMENT.do_db_query_for_one_nearest_wls_master_file
+# date_dir_db_query = context.date_dir
+# cal_file_level = config.ARGUMENT.cal_file_level
+# contentbitmask = config.ARGUMENT.contentbitmask
+# max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
 
-#    origin: origin of the image to be processed
-data_row_range = [0, -1]
-data_col_range = [0, -1]
-origin = [data_col_range[0], data_row_range[0]]
+# #    origin: origin of the image to be processed
+# data_row_range = [0, -1]
+# data_col_range = [0, -1]
+# origin = [data_col_range[0], data_row_range[0]]
 
-#    lev0_flat_pattern: input flat fits => /data/2D/<date_dir_flat>/<flat_file>
-#    output_order_trace: output path => /data/order_trace/<date_dir_flat>/
-lev0_flat_pattern = config.ARGUMENT.flat_file
-# use the full path of ourder trace files defind in config
-orderlet_gap_pixels = config.ARGUMENT.orderlet_gap_pixels
+# #    lev0_flat_pattern: input flat fits => /data/2D/<date_dir_flat>/<flat_file>
+# #    output_order_trace: output path => /data/order_trace/<date_dir_flat>/
+# lev0_flat_pattern = config.ARGUMENT.flat_file
+# # use the full path of ourder trace files defind in config
+# orderlet_gap_pixels = config.ARGUMENT.orderlet_gap_pixels
 
-if lev0_file_path:
-    lev0_science_pattern = lev0_file_path
-else:
-    lev0_science_pattern = input_2d_dir + '*' + fits_ext
+# if lev0_file_path:
+#     lev0_science_pattern = lev0_file_path
+# else:
+#     lev0_science_pattern = input_2d_dir + '*' + fits_ext
 
-output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir
-wave_to_ext = config.ARGUMENT.wave_to_ext
-orderlet_widths_ccds = config.ARGUMENT.orderlet_widths_ccds
+# output_extraction = output_dir + config.ARGUMENT.output_extraction + date_dir
+# wave_to_ext = config.ARGUMENT.wave_to_ext
+# orderlet_widths_ccds = config.ARGUMENT.orderlet_widths_ccds
 
-if rect_method != 'norect':
-	output_clip = output_extraction + config.ARGUMENT.output_clip + rect_method + '/'
-else:
-	output_clip = None
-orders_per_ccd = config.ARGUMENT.orders_per_ccd
-s_bary_idx = [0, orders_per_ccd[0]]
+# if rect_method != 'norect':
+# 	output_clip = output_extraction + config.ARGUMENT.output_clip + rect_method + '/'
+# else:
+# 	output_clip = None
+# orders_per_ccd = config.ARGUMENT.orders_per_ccd
+# s_bary_idx = [0, orders_per_ccd[0]]
 
-if lev1_file_path:
-	input_lev1_pattern = lev1_file_path
-else:
-	input_lev1_pattern = output_extraction + '*' + lev1_stem_suffix + fits_ext
-output_rv = output_dir + config.ARGUMENT.output_rv + date_dir
-output_rv_rw = output_rv + config.ARGUMENT.output_rv_reweighting
-bc_path = output_dir + config.ARGUMENT.output_barycorr
-lev2_pattern = output_rv + '*' + lev2_stem_suffix + fits_ext
+# if lev1_file_path:
+# 	input_lev1_pattern = lev1_file_path
+# else:
+# 	input_lev1_pattern = output_extraction + '*' + lev1_stem_suffix + fits_ext
+# output_rv = output_dir + config.ARGUMENT.output_rv + date_dir
+# output_rv_rw = output_rv + config.ARGUMENT.output_rv_reweighting
+# bc_path = output_dir + config.ARGUMENT.output_barycorr
+# lev2_pattern = output_rv + '*' + lev2_stem_suffix + fits_ext
 
-reweighting_method = config.ARGUMENT.reweighting_method
-reweighting_masks = config.ARGUMENT.reweighting_enable_masks
-data_ext_rv = config.ARGUMENT.orderlet_names_rv
-ccf_ext_names = config.ARGUMENT.ccf_ext
-rv_ext = config.ARGUMENT.rv_ext
-is_rv_cal = config.ARGUMENT.rv_correct_by_cal
-if 'static' in reweighting_method:
-	static_ccf_ratio = config.ARGUMENT.static_ccf_ratio
-else:
-	static_ccf_ratio = None
-rv_start_x = config.ARGUMENT.rv_start_x
-rv_end_x = config.ARGUMENT.rv_end_x
+# reweighting_method = config.ARGUMENT.reweighting_method
+# reweighting_masks = config.ARGUMENT.reweighting_enable_masks
+# data_ext_rv = config.ARGUMENT.orderlet_names_rv
+# ccf_ext_names = config.ARGUMENT.ccf_ext
+# rv_ext = config.ARGUMENT.rv_ext
+# is_rv_cal = config.ARGUMENT.rv_correct_by_cal
+# if 'static' in reweighting_method:
+# 	static_ccf_ratio = config.ARGUMENT.static_ccf_ratio
+# else:
+# 	static_ccf_ratio = None
+# rv_start_x = config.ARGUMENT.rv_start_x
+# rv_end_x = config.ARGUMENT.rv_end_x
 
-input_hk_pattern = lev0_science_pattern
+# input_hk_pattern = lev0_science_pattern
 
-## path containing ca_hk trace file and wavelength table
-input_hk_data_dir = output_dir
-hk_fiber_list = config.ARGUMENT.hk_fiber_list
-hk_spec_exts = config.ARGUMENT.hk_extract_exts
-hk_wave_exts = config.ARGUMENT.hk_wave_exts
-hk_trace_table = input_hk_data_dir + config.ARGUMENT.hk_trace_path
-hk_wavelength_csvs = config.ARGUMENT.hk_wavelength_path
-hk_wavelength_tables = []
-for hk_w in hk_wavelength_csvs:
-	hk_wavelength_tables = hk_wavelength_tables + [input_hk_data_dir + hk_w]
+# ## path containing ca_hk trace file and wavelength table
+# input_hk_data_dir = output_dir
+# hk_fiber_list = config.ARGUMENT.hk_fiber_list
+# hk_spec_exts = config.ARGUMENT.hk_extract_exts
+# hk_wave_exts = config.ARGUMENT.hk_wave_exts
+# hk_trace_table = input_hk_data_dir + config.ARGUMENT.hk_trace_path
+# hk_wavelength_csvs = config.ARGUMENT.hk_wavelength_path
+# hk_wavelength_tables = []
+# for hk_w in hk_wavelength_csvs:
+# 	hk_wavelength_tables = hk_wavelength_tables + [input_hk_data_dir + hk_w]
 
-if "*" in lev0_flat_pattern:
-	# for masters we need to add the date_dir part in the recipe because the config
-	# doesn't know about date_dir
-	ll0 = output_dir + date_dir + lev0_flat_pattern
-else:
-	ll0 = lev0_flat_pattern
+# if "*" in lev0_flat_pattern:
+# 	# for masters we need to add the date_dir part in the recipe because the config
+# 	# doesn't know about date_dir
+# 	ll0 = output_dir + date_dir + lev0_flat_pattern
+# else:
+# 	ll0 = lev0_flat_pattern
 
-flat_file_date_dir = context.date_dir
-input_flat_file = output_dir + flat_file_date_dir + "/kpf_" + flat_file_date_dir + "_master_flat.fits"
+# flat_file_date_dir = context.date_dir
+# input_flat_file = output_dir + flat_file_date_dir + "/kpf_" + flat_file_date_dir + "_master_flat.fits"
 
 
 # HTI THIS IS ONE OF THE FIRST PLACES THAT AN EXTERNAL ROUTINE IS CALLED. EVERYTHING ABOVE THIS IS PREPARING THE VARIABLES.
 #  I WONDER HOW MUCH OF ABOVE HERE CAN BE MOVED TO A CONFIGURATION FILE.
-if not exists(input_flat_file):
+# if not exists(input_flat_file):
 
-    # CalibrationLookup input datetime is one minute past the midnight boundary to ensure it is well past the selection threshold.
-    dt_string =  date_dir[0] + date_dir[1] + date_dir[2] + date_dir[3] +\
-             "-" + date_dir[4] + date_dir[5] + "-" + date_dir[6] + date_dir[7] + "T00:01:00.000000"
-    cals = CalibrationLookup(dt_string)
-    input_flat_file = cals['flat']
+#     # CalibrationLookup input datetime is one minute past the midnight boundary to ensure it is well past the selection threshold.
+#     dt_string =  date_dir[0] + date_dir[1] + date_dir[2] + date_dir[3] +\
+#              "-" + date_dir[4] + date_dir[5] + "-" + date_dir[6] + date_dir[7] + "T00:01:00.000000"
+#     cals = CalibrationLookup(dt_string)
+#     input_flat_file = cals['flat']
 
-_, short_flat_file = split(input_flat_file)
-flat_stem, flat_ext = splitext(short_flat_file)
+# _, short_flat_file = split(input_flat_file)
+# flat_stem, flat_ext = splitext(short_flat_file)
 
-trace_list = []
-b_all_traces = False
-lev0_flat_rect = None
-ccd_stack = '_STACK'
+# trace_list = []
+# b_all_traces = False
+# lev0_flat_rect = None
+# ccd_stack = '_STACK'
 
-if do_order_trace:
-	trace_list = []
-	flat_data = None
+# # Always false
+# if do_order_trace:
+# 	trace_list = []
+# 	flat_data = None
 
-	if exists(input_flat_file):
-		# read in flat fits file to produce KPF0 instance
-		flat_data = kpf0_from_fits(input_flat_file)
-		b_all_traces = True
+# 	if exists(input_flat_file):
+# 		# read in flat fits file to produce KPF0 instance
+# 		flat_data = kpf0_from_fits(input_flat_file)
+# 		b_all_traces = True
 
-		# loop to do order trace per ccd in case the order trace result file doesn't exist, and output to trace_list
-		for idx in ccd_idx:
-			ccd = ccd_list[idx]
-			# get order trace file name defined in config file
-			output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext)
-			trace_list = trace_list + [output_lev0_trace_csv]
-			if overwrite or not exists(output_lev0_trace_csv):
-				order_result_data = OrderTrace(flat_data, data_extension=ccd+ccd_stack,
-					result_path=output_lev0_trace_csv, is_output_file=True,
-					data_col_range=data_col_range, data_row_range=data_row_range,
-					fitting_poly_degree=poly_degree, orders_ccd=orders_per_ccd[idx],
-					do_post=True, orderlet_gap_pixels=orderlet_gap_pixels, overwrite=overwrite)
+# 		# loop to do order trace per ccd in case the order trace result file doesn't exist, and output to trace_list
+# 		for idx in ccd_idx:
+# 			ccd = ccd_list[idx]
+# 			# get order trace file name defined in config file
+# 			output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + csv_ext)
+# 			trace_list = trace_list + [output_lev0_trace_csv]
+# 			if overwrite or not exists(output_lev0_trace_csv):
+# 				order_result_data = OrderTrace(flat_data, data_extension=ccd+ccd_stack,
+# 					result_path=output_lev0_trace_csv, is_output_file=True,
+# 					data_col_range=data_col_range, data_row_range=data_row_range,
+# 					fitting_poly_degree=poly_degree, orders_ccd=orders_per_ccd[idx],
+# 					do_post=True, orderlet_gap_pixels=orderlet_gap_pixels, overwrite=overwrite)
 
-			b_all_traces = b_all_traces and exists(output_lev0_trace_csv)
+# 			b_all_traces = b_all_traces and exists(output_lev0_trace_csv)
 
-	output_lev0_flat_rect = str_replace(input_flat_file, fits_ext, flat_rect+fits_ext)
-	lev0_flat_rect = flat_data
+# 	output_lev0_flat_rect = str_replace(input_flat_file, fits_ext, flat_rect+fits_ext)
+# 	lev0_flat_rect = flat_data
 
-	# generate rectification result to flat level0 to avoid repeating the same process in spectral extraction
+# 	# generate rectification result to flat level0 to avoid repeating the same process in spectral extraction
 
-	if overwrite or not exists(output_lev0_flat_rect):
-		# do rectification on the flat data in case the order trace result files for all ccds exist.
-		# b_lev0_rect: a boolean to determine if continuing to do OrderRectification and produce output_lev0_flat_rect
+#   HTI this needs to happen in L0 to 2D
+# 	if overwrite or not exists(output_lev0_flat_rect):
+# 		# do rectification on the flat data in case the order trace result files for all ccds exist.
+# 		# b_lev0_rect: a boolean to determine if continuing to do OrderRectification and produce output_lev0_flat_rect
 
-		b_lev0_rect = lev0_flat_rect != None and b_all_traces
-		if b_lev0_rect:
-			for idx in ccd_idx:
-				ccd = ccd_list[idx]
-				# no clip file if rect_method == 'norect'
-				# or clip_file = output_clip + flat_stem + '_' + ccd
-				clip_file = None
-				trace_file = trace_list[idx]
+# 		b_lev0_rect = lev0_flat_rect != None and b_all_traces
+# 		if b_lev0_rect:
+# 			for idx in ccd_idx:
+# 				ccd = ccd_list[idx]
+# 				# no clip file if rect_method == 'norect'
+# 				# or clip_file = output_clip + flat_stem + '_' + ccd
+# 				clip_file = None
+# 				trace_file = trace_list[idx]
 
-				if b_lev0_rect:
-					lev0_flat_rect = OrderRectification(None, lev0_flat_rect,
-							orderlet_names=orderlet_names[idx],
-							trace_file=trace_file, data_extension=ccd,
-							flat_extension = ccd+ccd_stack,
-							rectification_method=rect_method,
-							clip_file=clip_file,
-							origin=origin, poly_degree=poly_degree)
+# 				if b_lev0_rect:
+# 					lev0_flat_rect = OrderRectification(None, lev0_flat_rect,
+# 							orderlet_names=orderlet_names[idx],
+# 							trace_file=trace_file, data_extension=ccd,
+# 							flat_extension = ccd+ccd_stack,
+# 							rectification_method=rect_method,
+# 							clip_file=clip_file,
+# 							origin=origin, poly_degree=poly_degree)
 
-				# if lev0_flat_rect is not produced, the order rectfication stops here.
-				b_lev0_rect = b_lev0_rect and lev0_flat_rect != None
-			if b_lev0_rect:
-				result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
+# 				# if lev0_flat_rect is not produced, the order rectfication stops here.
+# 				b_lev0_rect = b_lev0_rect and lev0_flat_rect != None
+# 			if b_lev0_rect:
+# 				result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
+# END ALWAYS FALSE CONDITIONAL
 
-lev1_list = []
-outlier_mask_path = config.ARGUMENT.outlier_mask_path
+# lev1_list = []
+# outlier_mask_path = config.ARGUMENT.outlier_mask_path
 
-if do_spectral_extraction or do_hk or do_bc:
-	lev0_flat_rect = None
+# if do_spectral_extraction or do_hk or do_bc:
+# 	lev0_flat_rect = None
 
-	# prepare bias, dark data for ca_hk
-	if do_hk:
-		hk_dark_data = config.ARGUMENT.hk_dark_fits
-		hk_bias_data = config.ARGUMENT.hk_bias_fits
-		if hk_dark_data:
-			hk_dark_data = kpf0_from_fits(input_hk_data_dir + hk_dark_data, data_type = data_type)
-		else:
-			hk_dark_data = None
+# 	# prepare bias, dark data for ca_hk
+# 	if do_hk:
+# 		hk_dark_data = config.ARGUMENT.hk_dark_fits
+# 		hk_bias_data = config.ARGUMENT.hk_bias_fits
+# 		if hk_dark_data:
+# 			hk_dark_data = kpf0_from_fits(input_hk_data_dir + hk_dark_data, data_type = data_type)
+# 		else:
+# 			hk_dark_data = None
 
-		if hk_bias_data:
-			hk_bias_data = kpf0_from_fits(input_hk_data_dir + hk_bias_data, data_type=data_type)
-		else:
-			hk_bias_data = None
+# 		if hk_bias_data:
+# 			hk_bias_data = kpf0_from_fits(input_hk_data_dir + hk_bias_data, data_type=data_type)
+# 		else:
+# 			hk_bias_data = None
 
-	# loop through ccd and L0 to do spectral extraction
-	lev0_files = find_files(lev0_science_pattern)
-	for input_lev0_file in lev0_files:
-		# lev0_data is KPF0 instance for input_lev0_file
-		lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
-		dt_string = GetHeaderValue(lev0_data, 'DATE-MID')
-		cals = CalibrationLookup(dt_string)
-		start_order = cals['start_order']
-		output_order_trace = cals['ordertrace']
-		order_trace_flat = cals['traceflat']
-		smooth_lamp_file = str_replace(cals['smoothlamp'], '.fits', '_L1.fits')
+	# # loop through ccd and L0 to do spectral extraction
+	# lev0_files = find_files(lev0_science_pattern)
+	# for input_lev0_file in lev0_files:
+	# 	# lev0_data is KPF0 instance for input_lev0_file
+	# 	lev0_data = kpf0_from_fits(input_lev0_file, data_type=data_type)
+	# 	dt_string = GetHeaderValue(lev0_data, 'DATE-MID')
+	# 	cals = CalibrationLookup(dt_string)
+	# 	start_order = cals['start_order']
+	# 	output_order_trace = cals['ordertrace']
+	# 	order_trace_flat = cals['traceflat']
+	# 	smooth_lamp_file = str_replace(cals['smoothlamp'], '.fits', '_L1.fits')
 
-		# prepare trace files and rectified L0 flat data for spectral extraction
-		if do_spectral_extraction:
-			# existence of flat and trace files
-			# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
-			output_lev0_flat_rect = str_replace(order_trace_flat, fits_ext, flat_rect+fits_ext)
-			if exists(output_lev0_flat_rect):
-				lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
+	# 	# prepare trace files and rectified L0 flat data for spectral extraction
+	# 	if do_spectral_extraction:
+	# 		# existence of flat and trace files
+	# 		# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
+	# 		output_lev0_flat_rect = str_replace(order_trace_flat, fits_ext, flat_rect+fits_ext)
+	# 		if exists(output_lev0_flat_rect):
+	# 			lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
 
-			if not trace_list:
-				b_all_traces = True
-				for idx in ccd_idx:
-					lev0_trace_csv = output_order_trace[idx]
-					trace_list = trace_list + [lev0_trace_csv]
-					b_all_traces = b_all_traces and exists(lev0_trace_csv)
+	# 		if not trace_list:
+	# 			b_all_traces = True
+	# 			for idx in ccd_idx:
+	# 				lev0_trace_csv = output_order_trace[idx]
+	# 				trace_list = trace_list + [lev0_trace_csv]
+	# 				b_all_traces = b_all_traces and exists(lev0_trace_csv)
 
 
-		# this used to denote the level 0 data before background subtraction
-		lev0_data_no_bk = kpf0_from_fits(input_lev0_file, data_type=data_type)
+		# # this used to denote the level 0 data before background subtraction
+		# lev0_data_no_bk = kpf0_from_fits(input_lev0_file, data_type=data_type)
 
-		_, short_lev0_file = split(input_lev0_file)
-		lev1_stem, lev1_ext = splitext(short_lev0_file)
+		# _, short_lev0_file = split(input_lev0_file)
+		# lev1_stem, lev1_ext = splitext(short_lev0_file)
 
-		# lev1_stem is w/o "_2D" suffix
-		if lev0_stem_suffix != None:
-			if lev0_stem_suffix in lev1_stem:
-				lev1_stem = str_replace(lev1_stem, lev0_stem_suffix, "")
-		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
+		# # lev1_stem is w/o "_2D" suffix
+		# if lev0_stem_suffix != None:
+		# 	if lev0_stem_suffix in lev1_stem:
+		# 		lev1_stem = str_replace(lev1_stem, lev0_stem_suffix, "")
+		# output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
 
-		is_raw = 1
-		if rect_method in input_lev0_file:
-		   is_raw = 0
-		if lev1_stem_suffix in input_lev0_file:
-		   is_raw = 0
-		if lev2_stem_suffix in input_lev0_file:
-		   is_raw = 0
+		# is_raw = 1
+		# if rect_method in input_lev0_file:
+		#    is_raw = 0
+		# if lev1_stem_suffix in input_lev0_file:
+		#    is_raw = 0
+		# if lev2_stem_suffix in input_lev0_file:
+		#    is_raw = 0
 
 		# # produce level 1 by spectral extraction if overwrite or L1 file doesn't exist
 		# if (is_raw == 1) and (overwrite or not exists(output_lev1_file)):

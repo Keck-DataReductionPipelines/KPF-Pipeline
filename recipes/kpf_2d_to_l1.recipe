@@ -7,6 +7,7 @@ from modules.wavelength_cal.src.alg import WaveInterpolation
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
 from modules.blaze.src.blaze import AddBlaze
 from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
+from modules.spectral_extraction.src.bary_corr import BaryCorrTable # barycorr is done in L1 for historical reasons.
 
 # general imports.
 from modules.Utils.string_proc import str_replace
@@ -78,6 +79,9 @@ if context.watch:
 		else:
 			do_order_trace = False
 			lev1_file_path = str_replace(file_path, '2D', 'L1')
+    # NEW conditional for L1 to L2 only recipe
+	if '2D' in file_path:
+		do_bc = True
 
 	# # do rv if L1 data is watched, do l1->l2
 	# if 'L1' in file_path:
@@ -98,7 +102,7 @@ else:
 	if '2D' in file_path:
 		do_order_trace = False
 		do_spectral_extraction = True
-		do_rv = True
+		# do_rv = True
 		# do_rv_reweighting = True
 
 	# # if including L1, do l1->l2
@@ -178,8 +182,7 @@ do_db_query_for_one_nearest_wls_master_file = config.ARGUMENT.do_db_query_for_on
 date_dir_db_query = context.date_dir
 cal_file_level = config.ARGUMENT.cal_file_level
 contentbitmask = config.ARGUMENT.contentbitmask
-cal_type_pairs = config.ARGUMENT.cal_type_pairs
-max_cal_file_age = config.ARGUMENT.max_cal_file_age
+max_cal_file_age = config.ARGUMENT.max_cal_file_age # Not obviously used.
 
 
 #    origin: origin of the image to be processed
@@ -187,10 +190,6 @@ data_row_range = [0, -1]
 data_col_range = [0, -1]
 origin = [data_col_range[0], data_row_range[0]]
 
-#    lev0_flat_pattern: input flat fits => /data/2D/<date_dir_flat>/<flat_file>
-#    output_order_trace: output path => /data/order_trace/<date_dir_flat>/
-lev0_flat_pattern = config.ARGUMENT.flat_file
-# use the full path of ourder trace files defind in config
 orderlet_gap_pixels = config.ARGUMENT.orderlet_gap_pixels
 
 if lev0_file_path:
@@ -244,24 +243,27 @@ hk_wavelength_tables = []
 for hk_w in hk_wavelength_csvs:
 	hk_wavelength_tables = hk_wavelength_tables + [input_hk_data_dir + hk_w]
 
-if "*" in lev0_flat_pattern:
-	# for masters we need to add the date_dir part in the recipe because the config
-	# doesn't know about date_dir
-	ll0 = output_dir + date_dir + lev0_flat_pattern
-else:
-	ll0 = lev0_flat_pattern
+# HTI: Not used anywhere else in the recipe. 
+# if "*" in lev0_flat_pattern:
+# 	# for masters we need to add the date_dir part in the recipe because the config
+# 	# doesn't know about date_dir
+# 	ll0 = output_dir + date_dir + lev0_flat_pattern
+# else:
+# 	ll0 = lev0_flat_pattern
 
 flat_file_date_dir = context.date_dir
-input_flat_file = output_dir + flat_file_date_dir + "/kpf_" + flat_file_date_dir + "_master_flat.fits"
-
+# input_flat_file = output_dir + flat_file_date_dir + "/kpf_" + flat_file_date_dir + "_master_flat.fits"
+# HTI: Should be: 
+input_flat_file = output_dir + 'masters/' + flat_file_date_dir + '/kpf_' + flat_file_date_dir + '_master_flat.fits'
 
 # HTI THIS IS ONE OF THE FIRST PLACES THAT AN EXTERNAL ROUTINE IS CALLED. EVERYTHING ABOVE THIS IS PREPARING THE VARIABLES.
 #  I WONDER HOW MUCH OF ABOVE HERE CAN BE MOVED TO A CONFIGURATION FILE.
+print("Input flat file: "+ str(input_flat_file)) # check that the filename is correct because calibration lookup is slow.
 if not exists(input_flat_file):
-
     # CalibrationLookup input datetime is one minute past the midnight boundary to ensure it is well past the selection threshold.
     dt_string =  date_dir[0] + date_dir[1] + date_dir[2] + date_dir[3] +\
              "-" + date_dir[4] + date_dir[5] + "-" + date_dir[6] + date_dir[7] + "T00:01:00.000000"
+    print("Using datetime string for calibration lookup: "+dt_string)
     cals = CalibrationLookup(dt_string)
     input_flat_file = cals['flat']
 
@@ -392,12 +394,13 @@ if do_spectral_extraction or do_hk or do_bc:
 		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
 
 		is_raw = 1
-		if rect_method in input_lev0_file:
-		   is_raw = 0
-		if lev1_stem_suffix in input_lev0_file:
-		   is_raw = 0
-		if lev2_stem_suffix in input_lev0_file:
-		   is_raw = 0
+		# HTI: Not sure when these are true. I think it should be true for 2d to l1.
+        #if rect_method in input_lev0_file:
+		#   is_raw = 0
+		#if lev1_stem_suffix in input_lev0_file:
+		#   is_raw = 0
+		#if lev2_stem_suffix in input_lev0_file:
+		#   is_raw = 0
 
 		# produce level 1 by spectral extraction if overwrite or L1 file doesn't exist
 		if (is_raw == 1) and (overwrite or not exists(output_lev1_file)):
@@ -433,6 +436,7 @@ if do_spectral_extraction or do_hk or do_bc:
 				else:
 					outlier_mask_file = outlier_mask_path + "/" + context.date_dir + "/" + short_lev0_file
 
+# HTI: Comments out this line to right above do_hk (line 537)to test hk and drift modules
 				for idx in ccd_idx:
 					ccd = ccd_list[idx]
 					order_names = orderlet_names[idx]
@@ -473,9 +477,10 @@ if do_spectral_extraction or do_hk or do_bc:
 					invoke_subrecipe("recipes/wls_interpolation.subrecipe") #HTI
 					output_data = interpolated_l1
 					
-					# etalon drift correction
-					invoke_subrecipe("recipes/drift_correction.subrecipe")
-					output_data = output_l1
+# HTI, removing drift corrections from 2d -> l1, moving to stand alone subrecipe
+					# # etalon drift correction
+					# invoke_subrecipe("recipes/drift_correction.subrecipe")
+					# output_data = output_l1
 
 				else:
 					for idx in ccd_idx:
@@ -506,8 +511,10 @@ if do_spectral_extraction or do_hk or do_bc:
 
 				result = to_fits(output_data, output_lev1_file)
 
-            # HTI: move to L1 to L2 recipe.
+            # HTI: Keep do_bc in 2D -> L1 for historical reasons.
 			if do_bc and exists(output_lev1_file):
+				DOING_BC = True
+				print("Doing barycentric correction on L1 data: "+output_lev1_file)
 				# add bary correction result to existing L1 file
 				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
 				t_order = 0
@@ -552,6 +559,15 @@ if do_spectral_extraction or do_hk or do_bc:
 					output_data = kpf_object
 
 					result = to_fits(output_data, output_lev1_file)
+
+# etalon drift correction
+output_data = kpf1_from_fits(output_lev1_file, data_type = data_type) #Until the cahk portion is fixed, this will be ill_defined.
+DO_DRIFT = True
+if DO_DRIFT == True:
+	print('Starting Drift Correction on L1 data: ' + output_lev1_file)
+invoke_subrecipe("recipes/drift_correction.subrecipe") # The variable output_data is used as the primary input to the drift module.
+output_data = output_l1
+result = to_fits(output_data, output_lev1_file)
 
 # HTI: THIS IS ALL L1 TO L2
 # if do_rv or do_rv_reweighting:
