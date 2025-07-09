@@ -234,6 +234,7 @@ class VarExtsFramework(KPF0_Primitive):
             self.logger.info('*** 2D file does not exist ({}); skipping...'.format(fits_filename))
             return
 
+        hdul_input = KPF0.from_fits(fits_filename,self.data_type)
         exp_time = float(fits.getheader(fits_filename,ext=0)['EXPTIME'])
 
         if debug == 1:
