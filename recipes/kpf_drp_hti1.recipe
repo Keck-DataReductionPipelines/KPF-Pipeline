@@ -13,6 +13,7 @@ from modules.order_trace.src.order_mask import OrderMask
 from modules.wavelength_cal.src.alg import WaveInterpolation          
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
 from modules.blaze.src.blaze import AddBlaze
+from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
 
 # L2 level imports
 from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
@@ -22,7 +23,6 @@ from modules.radial_velocity.src.radial_velocity_reweighting import RadialVeloci
 from modules.spectral_extraction.src.bary_corr import BaryCorrTable
 
 # general imports.
-from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
 from modules.Utils.string_proc import str_replace
 from modules.Utils.string_proc import date_from_kpffile
 from modules.Utils.data_handler import ExtCopy
@@ -189,7 +189,7 @@ date_dir_db_query = context.date_dir
 cal_file_level = config.ARGUMENT.cal_file_level
 contentbitmask = config.ARGUMENT.contentbitmask
 cal_type_pairs = config.ARGUMENT.cal_type_pairs
-max_cal_file_age = config.ARGUMENT.max_cal_file_age
+# max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
 
 #    origin: origin of the image to be processed
@@ -199,7 +199,7 @@ origin = [data_col_range[0], data_row_range[0]]
 
 #    lev0_flat_pattern: input flat fits => /data/2D/<date_dir_flat>/<flat_file>
 #    output_order_trace: output path => /data/order_trace/<date_dir_flat>/
-lev0_flat_pattern = config.ARGUMENT.flat_file
+# lev0_flat_pattern = config.ARGUMENT.flat_file #HTI deprecated
 # use the full path of ourder trace files defind in config
 orderlet_gap_pixels = config.ARGUMENT.orderlet_gap_pixels
 
@@ -254,12 +254,13 @@ hk_wavelength_tables = []
 for hk_w in hk_wavelength_csvs:
 	hk_wavelength_tables = hk_wavelength_tables + [input_hk_data_dir + hk_w]
 
-if "*" in lev0_flat_pattern:
-	# for masters we need to add the date_dir part in the recipe because the config
-	# doesn't know about date_dir
-	ll0 = output_dir + date_dir + lev0_flat_pattern
-else:
-	ll0 = lev0_flat_pattern
+# HTI. ll0 is not used anywhere else in the recipe
+# if "*" in lev0_flat_pattern:
+# 	# for masters we need to add the date_dir part in the recipe because the config
+# 	# doesn't know about date_dir
+# 	ll0 = output_dir + date_dir + lev0_flat_pattern
+# else:
+# 	ll0 = lev0_flat_pattern
 
 flat_file_date_dir = context.date_dir
 input_flat_file = output_dir + flat_file_date_dir + "/kpf_" + flat_file_date_dir + "_master_flat.fits"
