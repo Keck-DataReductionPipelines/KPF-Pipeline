@@ -68,10 +68,10 @@ class SpectralExtractionAlg:
         self.order_trace['RED_CCD'] = order_trace_red
 
         # initialize L1 object
-        self.target_L1 = KPF1.from_l0(self.target_2D)
+        self.target_l1 = KPF1.from_l0(self.target_2D)
 
 
-    def _get_orderlet_ext_from_trace_index(chip, trace_index):
+    def _get_orderlet_ext_from_trace_index(self, chip, trace_index):
         if trace_index % 5 == 0:
             drp_f_ext = f'{chip}_SKY_FLUX'
             drp_v_ext = f'{chip}_SKY_VAR'
@@ -325,7 +325,7 @@ class SpectralExtractionAlg:
         M[W == 0] = 0
 
         # initial estimates
-        f, v = self.box_extraction(D, S, V0, Q=Q, M=M, W=W)
+        f, v, _, _ = self.box_extraction(D, S, V0, Q=Q, M=M, W=W)
         
         if not static_profile:
             P = (D-S)/f
@@ -384,7 +384,7 @@ class SpectralExtractionAlg:
         return f, v, P, M
 
     
-    def extract_single_spectrum(self, method, chip, trace_index):
+    def extract_orderlet(self, method, chip, trace_index):
         """
         Extract 1D spectrum for a single orderlet
 
@@ -421,11 +421,11 @@ class SpectralExtractionAlg:
         M = np.ones_like(D, dtype='int')
 
         # box extraction
-        f_box, v_box = self.box_extraction(D, S, V0, M=M, W=W)
+        f_box, v_box, _, _ = self.box_extraction(D, S, V0, M=M, W=W)
         if method == 'box':
             return f_box, v_box
 
-        f_flat, _ = self.box_extraction(F, np.zeros_like(F), V0, M=M, W=W)
+        f_flat, v_flat, _, _ = self.box_extraction(F, np.zeros_like(F), V0, M=M, W=W)
         P = self.spatial_profile(F, 
                                  np.zeros_like(F), 
                                  W, 
@@ -449,18 +449,25 @@ class SpectralExtractionAlg:
         return f_opt, v_opt, P, M
     
 
-    def extract_all_spectra_on_ccd(self, method, chip):
+    def extract_ccd(self, method, chip):
         """
-        Returns a dictionary with all extracted 1D spectra and variance for GREEN or RED ccd
+        Extract 1D spectrum and variance for all orders/orderlets on GREEN or RED ccd
+
+        Args:
+            method (str): extraction method, can bo 'box' or 'optimal'
+            chip (str): 'GREEN' or 'RED' ccd
+
+        Returns:
+            l1_out: KPF L1 object populated with extracted 1D spectra and varaiance
         """
-        # set up container
+        # set up container for arrays
         nrow, ncol = self.target_2D[f'{chip}_CCD'].shape
         ntrace = len(self.order_trace[f'{chip}_CCD'])
         norder = ntrace // 5
 
         l1_arrays = {}
         for trace_index in range(5):
-            f_ext, v_ext = _get_orderlet_ext_from_trace_index(chip, trace_index)
+            f_ext, v_ext = self._get_orderlet_ext_from_trace_index(chip, trace_index)
 
             l1_arrays[f_ext] = np.zeros((norder,ncol))
             l1_arrays[v_ext] = np.zeros((norder,ncol))
@@ -469,10 +476,15 @@ class SpectralExtractionAlg:
         for trace_index in range(ntrace):
             order_index = trace_index // 5
                         
-            f_ext, v_ext = _get_orderlet_ext_from_trace_index(chip, trace_index)
-            f, v, _, _ = spectrum_extractor.extract_single_spectrum(method, chip, trace_index)
+            f_ext, v_ext = self._get_orderlet_ext_from_trace_index(chip, trace_index)
+            f, v, _, _ = self.extract_orderlet(method, chip, trace_index)
 
-            l1_arrays[f_ext][order_index] = f_opt.copy()
-            l1_arrays[v_ext][order_index] = v_opt.copy()
+            l1_arrays[f_ext][order_index] = f.copy()
+            l1_arrays[v_ext][order_index] = v.copy()
 
-        return l1_arrays
+        # build KPF L1 object
+        l1_out = self.target_l1
+        for key in l1_arrays.keys():
+            l1_out[key] = l1_arrays[key]
+
+        return l1_out
