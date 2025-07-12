@@ -25,7 +25,7 @@ from concurrent.futures import ProcessPoolExecutor
 from kpfpipe.models.level1 import KPF1
 from kpfpipe.logger import start_logger
 from modules.Utils.utils import DummyLogger
-from modules.Utils.kpf_parse import get_datecode
+from modules.Utils.kpf_parse import get_datecode, get_data_levels_expected
 
 DEFAULT_CFG_PATH = 'database/modules/utils/tsdb.cfg'
         
@@ -971,6 +971,13 @@ class TSDB:
         Example:
             tsdb.ingest_one_observation('/data/L0/20241020/', 'KP.20241020.12345.67.fits')
         """
+    
+        def safe_angle(value, unit, default=0.0):
+            try:
+                return Angle(value, unit=unit).degree
+            except Exception:
+                return default
+
         base_filename = L0_filename.split('.fits')[0]
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
@@ -996,29 +1003,31 @@ class TSDB:
                 extracted = self._extract_kwd(file_path, kw_types, ext)
     
             extraction_results.update(extracted)
-    
-        # the Angle code was crashing
-        def safe_angle(value, unit, default=0.0):
-            try:
-                return Angle(value, unit=unit).degree
-            except Exception:
-                return default
+            
+        source = self.get_source(extraction_results)
+        expected_data_levels = get_data_levels_expected(source)
 
         extraction_results.update({
             'ObsID': base_filename,
             'datecode': get_datecode(base_filename),
-            'Source': self.get_source(extraction_results),
+            'Source': source,
             'L0_filename': f"{base_filename}.fits",
             'D2_filename': f"{base_filename}_2D.fits",
             'L1_filename': f"{base_filename}_L1.fits",
             'L2_filename': f"{base_filename}_L2.fits",
             'L0_header_read_time': now_str,
-            'D2_header_read_time': now_str,
-            'L1_header_read_time': now_str,
-            'L2_header_read_time': now_str,
-            'RA_deg': safe_angle(extraction_results.get('RA'), unit='hourangle'),
+            'D2_header_read_time': now_str, # change to check if file exists first
+            'L1_header_read_time': now_str, # change to check if file exists first
+            'L2_header_read_time': now_str, # change to check if file exists first
+            'D2_expected': ('2D' in expected_data_levels),
+            'L1_expected': ('L1' in expected_data_levels),
+            'L2_expected': ('L2' in expected_data_levels),
+            'D2_exists': os.path.isfile(f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"),
+            'L1_exists': os.path.isfile(f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits"),
+            'L2_exists': os.path.isfile(f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits"),
+            'RA_deg':  safe_angle(extraction_results.get('RA'),  unit='hourangle'),
             'DEC_deg': safe_angle(extraction_results.get('DEC'), unit='deg')
-        })
+        })    
     
         for kw, dtype in self.kw_to_dtype.items():
             if dtype == 'float' and kw in extraction_results:
@@ -1245,6 +1254,7 @@ class TSDB:
             '_extract_telemetry_func': self._extract_telemetry,
             '_extract_rvs_func': self._extract_rvs,
             'get_source_func': self.get_source,
+            'get_data_levels_expected_func': get_data_levels_expected,
             'get_datecode_func': get_datecode
         }
     
@@ -2438,11 +2448,17 @@ class TSDB:
 def process_file(file_path, now_str,
                  extraction_plan, bool_columns, kw_to_table, keywords_by_table, kw_to_dtype,
                  _extract_kwd_func, _extract_telemetry_func, _extract_rvs_func,
-                 get_source_func, get_datecode_func, safe_float, prefix):
+                 get_source_func, get_data_levels_expected_func, get_datecode_func, safe_float, prefix):
     """
     Process a single file to extract all relevant keywords based on the 
     extraction plan.
     """    
+
+    def safe_angle(value, unit, default=0.0):
+        try:
+            return Angle(value, unit=unit).degree
+        except Exception:
+            return default
     
     base_filename = os.path.basename(file_path).replace('.fits', '')
     file_level_paths = {
@@ -2474,14 +2490,9 @@ def process_file(file_path, now_str,
 
         extraction_results.update(extracted)
 
-    # the Angle code was crashing
-    def safe_angle(value, unit, default=0.0):
-        try:
-            return Angle(value, unit=unit).degree
-        except Exception:
-            return default
+    source = get_source_func(extraction_results)
+    expected_data_levels = get_data_levels_expected_func(source)
 
-    # Mandatory metadata
     extraction_results.update({
         'ObsID': base_filename,
         'datecode': get_datecode_func(base_filename),
@@ -2494,6 +2505,12 @@ def process_file(file_path, now_str,
         'D2_header_read_time': now_str,
         'L1_header_read_time': now_str,
         'L2_header_read_time': now_str,
+        'D2_expected': ('2D' in expected_data_levels),
+        'L1_expected': ('L1' in expected_data_levels),
+        'L2_expected': ('L2' in expected_data_levels),
+        'D2_exists': os.path.isfile(file_path.replace('L0', '2D').replace('.fits', '_2D.fits')),
+        'L1_exists': os.path.isfile(file_path.replace('L0', 'L1').replace('.fits', '_L1.fits')),
+        'L2_exists': os.path.isfile(file_path.replace('L0', 'L2').replace('.fits', '_L2.fits')),
         'RA_deg': safe_angle(extraction_results.get('RA'), unit='hourangle'),
         'DEC_deg': safe_angle(extraction_results.get('DEC'), unit='deg')
     })
