@@ -6,6 +6,7 @@ from astropy.stats import mad_std
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial import polynomial as poly
+from numpy.polynomial.legendre import legval
 import pandas as pd
 from scipy.ndimage import median_filter, gaussian_filter
 from scipy.interpolate import LSQUnivariateSpline, CubicSpline
@@ -186,7 +187,13 @@ class StrayLightAlg:
     def _polyfit2d(self, data_image, polyorder, mask=None):
         # coordinate grid
         nrow, ncol = data_image.shape
-        y, x = np.mgrid[0:nrow, 0:ncol]  
+        y, x = np.mgrid[0:nrow, 0:ncol]
+
+        # map to [-1,1] for Legendre polynomial basis
+        x = 2*x/(ncol-1) - 1
+        y = 2*y/(nrow-1) - 1
+
+        # ravel arrays
         x = np.ravel(x)
         y = np.ravel(y)
         z = np.ravel(data_image)
@@ -201,34 +208,54 @@ class StrayLightAlg:
         y = y[~mask]
         z = z[~mask]
         
-        # Build design matrix
+        # build design matrix
         terms = []
         for i in range(polyorder + 1):
             for j in range(polyorder + 1 - i):
-                terms.append((x**i) * (y**j))
+                cx = np.zeros(i+1)
+                cy = np.zeros(j+1)
+                c[i] = 1
+                c[j] = 1
+                Px = legval(x,cx)
+                Py = legval(y,cy)
+                terms.append(Px*Py)
+
+        A = np.column_stack(terms)
         
-        A = np.vstack(terms).T
-        
-        # Solve least squares
+        # solve least squares
         coeffs, _, _, _ = np.linalg.lstsq(A, z, rcond=None)
     
         return coeffs
     
     
     def _polyval2d(self, coeffs, polyorder, shape):
-        nrow, ncol = shape
+        # coordinate grid
+        nrow, ncol = data_image.shape
+        y, x = np.mgrid[0:nrow, 0:ncol]
 
-        y,x = np.mgrid[0:nrow,0:ncol]
-        x = x.ravel()
-        y = y.ravel()
-    
+        # map to [-1,1] for Legendre polynomial basis
+        x = 2*x/(ncol-1) - 1
+        y = 2*y/(nrow-1) - 1
+
+        # ravel arrays
+        x = np.ravel(x)
+        y = np.ravel(y)
+
+        # build polynomial terms
         terms = []
         for i in range(polyorder + 1):
             for j in range(polyorder + 1 - i):
-                terms.append((x**i) * (y**j))
-        A = np.vstack(terms)
+                cx = np.zeros(i+1)
+                cy = np.zeros(j+1)
+                c[i] = 1
+                c[j] = 1
+                Px = legval(x,cx)
+                Py = legval(y,cy)
+                terms.append(Px*Py)
+        terms = np.array(terms)
 
-        result = np.dot(coeffs, A).reshape((nrow,ncol))
+        # calculate fitted polynomial
+        result = np.dot(coeffs, terms).reshape((nrow,ncol))
     
         return result
 
