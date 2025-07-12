@@ -214,8 +214,8 @@ class StrayLightAlg:
             for j in range(polyorder + 1 - i):
                 cx = np.zeros(i+1)
                 cy = np.zeros(j+1)
-                c[i] = 1
-                c[j] = 1
+                cx[i] = 1
+                cy[j] = 1
                 Px = legval(x,cx)
                 Py = legval(y,cy)
                 terms.append(Px*Py)
@@ -230,7 +230,7 @@ class StrayLightAlg:
     
     def _polyval2d(self, coeffs, polyorder, shape):
         # coordinate grid
-        nrow, ncol = data_image.shape
+        nrow, ncol = shape
         y, x = np.mgrid[0:nrow, 0:ncol]
 
         # map to [-1,1] for Legendre polynomial basis
@@ -247,8 +247,8 @@ class StrayLightAlg:
             for j in range(polyorder + 1 - i):
                 cx = np.zeros(i+1)
                 cy = np.zeros(j+1)
-                c[i] = 1
-                c[j] = 1
+                cx[i] = 1
+                cy[j] = 1
                 Px = legval(x,cx)
                 Py = legval(y,cy)
                 terms.append(Px*Py)
