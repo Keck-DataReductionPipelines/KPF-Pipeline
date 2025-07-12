@@ -53,8 +53,12 @@ class StrayLightAlg:
             self.log = logger
             
         cfg_params = ConfigHandler(self.config, 'PARAM')
-        self.method = cfg_params.get_config_value('method')
+        self.method = str(cfg_params.get_config_value('method'))
         self.polyorder = int(cfg_params.get_config_value('polyorder'))
+        try:
+            self.regularize = float(cfg_params.get_config_value('method'))
+        except ValueError:
+            self.regularize = str(cfg_params.get_config_value('method'))
         self.edge_clip = int(cfg_params.get_config_value('edge_clip'))
         self.mask_buffer = int(cfg_params.get_config_value('mask_buffer'))
 
@@ -93,7 +97,14 @@ class StrayLightAlg:
             header['SLRMAX']  = np.max(slr)       # COMMENT maximum of RED inter-order stray light
 
 
-    def estimate_stray_light(self, chip, method=None, polyorder=None, edge_clip=None, mask_buffer=None):
+    def estimate_stray_light(self, 
+                             chip, 
+                             method=None, 
+                             polyorder=None, 
+                             regularize=None,
+                             edge_clip=None, 
+                             mask_buffer=None
+                             ):
         """
         Main method used to estimate stray light
         Calls method defined in config file; allowed methods are 'zero', 'mean', and 'polynomial'
@@ -102,6 +113,7 @@ class StrayLightAlg:
             chip (str) : 'GREEN' or 'RED' to select which CCD to fit
             method (str) : fitting method, allowed methods are 'zero', 'mean' and 'polynomial'
             polyorder (int) : order of polynomial
+            regularize : can be 'none', 'auto', or a positive float (lambda parameter for T2-ridge regression)
             edge_clip (int) : number of pixels to ignore on each edge (default=0)
             mask_buffer (int): illuminated mask region will be widened by N=mask_buffer pixels
             
@@ -114,6 +126,8 @@ class StrayLightAlg:
             method = self.method
         if polyorder is None:
             polyorder = self.polyorder
+        if regularize is None:
+            regularize = self.regularize
         if edge_clip is None:
             edge_clip = self.edge_clip
         if mask_buffer is None:
@@ -129,6 +143,7 @@ class StrayLightAlg:
         stray_light_image, inter_order_mask = stray_light_method(chip, 
                                                                  method=method, 
                                                                  polyorder=polyorder, 
+                                                                 regularize=regularize,
                                                                  edge_clip=edge_clip, 
                                                                  mask_buffer=mask_buffer
                                                                 )
@@ -166,7 +181,7 @@ class StrayLightAlg:
         return stray_light, mask
 
     
-    def polynomial(self, chip, polyorder, edge_clip=0, mask_buffer=None, **kwargs):
+    def polynomial(self, chip, polyorder, regularize=0, edge_clip=0, mask_buffer=None, **kwargs):
         """
         Method to estimate stray light -- fits a 2D polynomial to inter-order pixels
         """
@@ -184,7 +199,7 @@ class StrayLightAlg:
         return stray_light, mask
         
 
-    def _polyfit2d(self, data_image, polyorder, mask=None):
+    def _polyfit2d(self, data_image, polyorder, mask=None, reglam=0):
         # coordinate grid
         nrow, ncol = data_image.shape
         y, x = np.mgrid[0:nrow, 0:ncol]
@@ -221,10 +236,31 @@ class StrayLightAlg:
                 terms.append(Px*Py)
 
         A = np.column_stack(terms)
-        
+
         # solve least squares
         coeffs, _, _, _ = np.linalg.lstsq(A, z, rcond=None)
-    
+
+        # apply regularization and recompute coefficients
+        if isinstance(regularize, float):
+            lam = regularize
+
+        elif isinstance(regularize, str):
+            if regularize == 'auto':
+                lam = np.var(z)/np.var(coeffs)
+            elif regularize == 'none':
+                lam = 0
+            else:
+                raise ValueError("regularize must be 'auto', 'none', or a float value")
+
+        if lam == 0:
+            pass
+        elif lam > 0:
+            ATz = np.dot(A.T,z)
+            ATA = np.dot(A.T,A) + lam*np.eye(A.shape[1])
+            coeffs = np.linalg.solve(ATA,ATz)
+        elif lam < 0:
+            raise ValueError("regularization parameter lambda must not be negative")
+            
         return coeffs
     
     
