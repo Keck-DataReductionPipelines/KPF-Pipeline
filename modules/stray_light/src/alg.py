@@ -58,7 +58,7 @@ class StrayLightAlg:
         try:
             self.regularize = float(cfg_params.get_config_value('method'))
         except ValueError:
-            self.regularize = str(cfg_params.get_config_value('method'))
+            self.regularize = str(cfg_params.get_config_value('regularize'))
         self.edge_clip = int(cfg_params.get_config_value('edge_clip'))
         self.mask_buffer = int(cfg_params.get_config_value('mask_buffer'))
 
@@ -181,7 +181,7 @@ class StrayLightAlg:
         return stray_light, mask
 
     
-    def polynomial(self, chip, polyorder, regularize=0, edge_clip=0, mask_buffer=None, **kwargs):
+    def polynomial(self, chip, polyorder, regularize='none', edge_clip=0, mask_buffer=None, **kwargs):
         """
         Method to estimate stray light -- fits a 2D polynomial to inter-order pixels
         """
@@ -192,14 +192,14 @@ class StrayLightAlg:
             d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
             m = mask[edge_clip:-edge_clip,edge_clip:-edge_clip]
 
-        coeffs = self._polyfit2d(d, polyorder, m)    
+        coeffs = self._polyfit2d(d, polyorder, regularize=regularize, mask=m)    
         stray_light = self._polyval2d(coeffs, polyorder, data.shape)
         stray_light = np.maximum(stray_light, 0)
 
         return stray_light, mask
         
 
-    def _polyfit2d(self, data_image, polyorder, mask=None, reglam=0):
+    def _polyfit2d(self, data_image, polyorder, regularize='none', mask=None):
         # coordinate grid
         nrow, ncol = data_image.shape
         y, x = np.mgrid[0:nrow, 0:ncol]
