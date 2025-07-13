@@ -2496,7 +2496,7 @@ def process_file(file_path, now_str,
     extraction_results.update({
         'ObsID': base_filename,
         'datecode': get_datecode_func(base_filename),
-        'Source': get_source_func(extraction_results),
+        'Source': source,
         'L0_filename': os.path.basename(file_level_paths['L0']),
         'D2_filename': os.path.basename(file_level_paths['2D']),
         'L1_filename': os.path.basename(file_level_paths['L1']),
