@@ -109,6 +109,16 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring guider diagnostics failed: {e}\n{traceback.format_exc()}")
 
+            # SUNALT keyword (needed for solar and stellar observations)
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_sunalt'):
+                try:
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_sunalt", style="Bold", color="Blue")}')
+                    self.kpf_object = diagnostics.add_headers_sunalt(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring SUNALT failed: {e}\n{traceback.format_exc()}")
+
             # HK
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_hk'):

@@ -62,7 +62,7 @@ class AnalyzeGuider:
             header_guider_obj = HeaderParse(L0, 'GUIDER_AVG')
             self.guider_avg = L0['GUIDER_AVG']
         else:
-            print("Guider image not in file.")
+            self.logger.info("Guider image not in file.")
         self.guider_header = header_guider_obj.header
         self.header = header_primary_obj.header
         self.name = header_primary_obj.get_name()
