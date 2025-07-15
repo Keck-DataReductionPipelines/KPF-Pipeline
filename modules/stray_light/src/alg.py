@@ -6,6 +6,7 @@ from astropy.stats import mad_std
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial import polynomial as poly
+from numpy.polynomial.legendre import legval
 import pandas as pd
 from scipy.ndimage import median_filter, gaussian_filter
 from scipy.interpolate import LSQUnivariateSpline, CubicSpline
@@ -20,8 +21,7 @@ class StrayLightAlg:
 
     Args:
         target_2D (KPF0): A KPF 2D science object
-        order_trace_green (pd.DataFrame): a pre-loaded dataframe with order trace for GREEN CCD
-        order_trace_red (pd.DataFrame): a pre-loaded dataframe with order trace for RED CCD
+        master_order_mask (KPF0): a KPF master order mask
         config (configparser.ConfigParser): Config context
         logger (logging.Logger): Instance of logging.Logger
     
@@ -31,16 +31,16 @@ class StrayLightAlg:
     """
     def __init__(self, 
                  target_2D, 
-                 masters_order_mask,
+                 master_order_mask,
                  default_config_path,
                  logger=None
                 ):
         """
-        Inits StrayLight class with raw data, order traces, config, logger.
-
+        Inits StrayLight class with raw data, order mask, config, logger.
+        
         Args:
             target_2D (KPF0): A KPF 2D science object
-            masters_order_mask (KPF0): a KPF masters order mask
+            master_order_mask (KPF0): a KPF master order mask
             config (configparser.ConfigParser): Config context
             logger (logging.Logger): Instance of logging.Logger
         """
@@ -53,16 +53,21 @@ class StrayLightAlg:
             self.log = logger
             
         cfg_params = ConfigHandler(self.config, 'PARAM')
-        self.method = cfg_params.get_config_value('method')
+        self.method = str(cfg_params.get_config_value('method'))
         self.polyorder = int(cfg_params.get_config_value('polyorder'))
+        try:
+            self.regularize = float(cfg_params.get_config_value('method'))
+        except ValueError:
+            self.regularize = str(cfg_params.get_config_value('regularize'))
         self.edge_clip = int(cfg_params.get_config_value('edge_clip'))
+        self.mask_buffer = int(cfg_params.get_config_value('mask_buffer'))
 
         self.target_2D = target_2D        
-        self.masters_order_mask = masters_order_mask
+        self.master_order_mask = master_order_mask
         self.drptag = self.target_2D.header['PRIMARY']['DRPTAG']
 
     
-    def add_keywords(self, stray_light_image, inter_order_mask):
+    def add_keywords(self, stray_light_image, inter_order_mask, chip):
         """
         Adds keywords to track basic stray light statistics (mean, rms, min, max)
         """
@@ -73,115 +78,137 @@ class StrayLightAlg:
         else:
             method = self.method
 
-        slg = stray_light_image['GREEN_CCD'][~inter_order_mask['GREEN_CCD']]
-        slr = stray_light_image['RED_CCD'][~inter_order_mask['RED_CCD']]
+        if chip == 'GREEN':
+            slg = stray_light_image[~inter_order_mask]
 
-        header['SLGMETH'] = method            # COMMENT method used to estimate stray light for GREEN
-        header['SLGMEAN'] = np.mean(slg)      # COMMENT mean of GREEN inter-order stray light
-        header['SLGRMS']  = np.std(slg)       # COMMENT standard deviation of GREEN inter-order stray light
-        header['SLGMIN']  = np.min(slg)       # COMMENT minimum of GREEN inter-order stray light
-        header['SLGMAX']  = np.max(slg)       # COMMENT maximum of GREEN inter-order stray light
-        header['SLRMETH'] = method            # COMMENT method used to estimate stray light for RED
-        header['SLRMEAN'] = np.mean(slr)      # COMMENT mean of RED inter-order stray light
-        header['SLRRMS']  = np.std(slr)       # COMMENT standard deviation of RED inter-order stray light
-        header['SLRMIN']  = np.min(slr)       # COMMENT minimum of RED inter-order stray light
-        header['SLRMAX']  = np.max(slr)       # COMMENT maximum of RED inter-order stray light
+            header['SLGMETH'] = method            # COMMENT method used to estimate stray light for GREEN
+            header['SLGMEAN'] = np.mean(slg)      # COMMENT mean of GREEN inter-order stray light
+            header['SLGRMS']  = np.std(slg)       # COMMENT standard deviation of GREEN inter-order stray light
+            header['SLGMIN']  = np.min(slg)       # COMMENT minimum of GREEN inter-order stray light
+            header['SLGMAX']  = np.max(slg)       # COMMENT maximum of GREEN inter-order stray light
+
+        elif chip == 'RED':
+            slr = stray_light_image[~inter_order_mask]
+
+            header['SLRMETH'] = method            # COMMENT method used to estimate stray light for RED
+            header['SLRMEAN'] = np.mean(slr)      # COMMENT mean of RED inter-order stray light
+            header['SLRRMS']  = np.std(slr)       # COMMENT standard deviation of RED inter-order stray light
+            header['SLRMIN']  = np.min(slr)       # COMMENT minimum of RED inter-order stray light
+            header['SLRMAX']  = np.max(slr)       # COMMENT maximum of RED inter-order stray light
 
 
-    def estimate_stray_light(self):
+    def estimate_stray_light(self, 
+                             chip, 
+                             method=None, 
+                             polyorder=None, 
+                             regularize=None,
+                             edge_clip=None, 
+                             mask_buffer=None
+                             ):
         """
         Main method used to estimate stray light
         Calls method defined in config file; allowed methods are 'zero', 'mean', and 'polynomial'
 
+        Args:
+            chip (str) : 'GREEN' or 'RED' to select which CCD to fit
+            method (str) : fitting method, allowed methods are 'zero', 'mean' and 'polynomial'
+            polyorder (int) : order of polynomial
+            regularize : can be 'none', 'auto', or a positive float (lambda parameter for T2-ridge regression)
+            edge_clip (int) : number of pixels to ignore on each edge (default=0)
+            mask_buffer (int): illuminated mask region will be widened by N=mask_buffer pixels
+            
         Returns:
             stray_light_image (dict of ndarrays): 2D stray light images for GREEN and RED ccds
             inter_order_mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
         """
+        # set parameters
+        if method is None:
+            method = self.method
+        if polyorder is None:
+            polyorder = self.polyorder
+        if regularize is None:
+            regularize = self.regularize
+        if edge_clip is None:
+            edge_clip = self.edge_clip
+        if mask_buffer is None:
+            mask_buffer = self.mask_buffer
+
+        # select method and estimate stray light
         try:
-            stray_light_method = self.__getattribute__(self.method)
+            stray_light_method = self.__getattribute__(method)
         except AttributeError:
             #self.log.error(f'Stray light method {self.method} not implemented.')
             raise(AttributeError)
 
-        stray_light_image, inter_order_mask = stray_light_method()
-        self.add_keywords(stray_light_image, inter_order_mask)
+        stray_light_image, inter_order_mask = stray_light_method(chip, 
+                                                                 method=method, 
+                                                                 polyorder=polyorder, 
+                                                                 regularize=regularize,
+                                                                 edge_clip=edge_clip, 
+                                                                 mask_buffer=mask_buffer
+                                                                )
+        
+        self.add_keywords(stray_light_image, inter_order_mask, chip)
 
         return stray_light_image, inter_order_mask
 
     
-    def zero(self):
+    def zero(self, chip, **kwargs):
         """
         Method to estimate stray light -- returns zero (i.e. no stray light)
-
-        Returns:
-            stray_light (dict of ndarrys): 2D stray light images for GREEN and RED ccds
-            mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
         """
-        mask = {}
-        stray_light = {}
-
-        for chip in ['GREEN', 'RED']:
-            mask[f'{chip}_CCD'] = self._inter_order_mask(chip).astype('bool')
-            stray_light[f'{chip}_CCD'] = np.zeros_like(self.target_2D[f'{chip}_CCD'])
+        print("zero")
+        
+        mask = self._inter_order_mask(chip).astype('bool')
+        stray_light = np.zeros_like(self.target_2D[f'{chip}_CCD'])
 
         return stray_light, mask
 
     
-    def mean(self):
+    def mean(self, chip, edge_clip=0, mask_buffer=None, **kwargs):
         """
         Method to estimate stray light -- returns mean of inter-order pixels
-
-        Returns:
-            stray_light (dict of ndarrys): 2D stray light images for GREEN and RED ccds
-            mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
         """
-        mask = {}
-        stray_light = {}
-
-        for chip in ['GREEN', 'RED']:
-            m = self._inter_order_mask(chip).astype('bool')
-            d = np.array(self.target_2D[f'{chip}_CCD'].data)
-
-            mask[f'{chip}_CCD'] = m.copy()
-            stray_light[f'{chip}_CCD'] = np.mean(d[~m])*np.ones_like(d)
+        data = np.array(self.target_2D[f'{chip}_CCD'].data)
+        mask = self._inter_order_mask(chip, mask_buffer=mask_buffer).astype('bool')
+        
+        if edge_clip > 0:
+            d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
+            m = mask[edge_clip:-edge_clip,edge_clip:-edge_clip]
+        
+        stray_light = np.mean(d[~m])*np.ones_like(d)
     
         return stray_light, mask
 
     
-    def polynomial(self):
+    def polynomial(self, chip, polyorder, regularize='none', edge_clip=0, mask_buffer=None, **kwargs):
         """
         Method to estimate stray light -- fits a 2D polynomial to inter-order pixels
-        Polynomial order can be set in the config file
-        
-        Returns:
-            stray_light (dict of ndarrys): 2D stray light images for GREEN and RED ccds
-            mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
         """
-        mask = {}
-        stray_light = {}
+        data = np.array(self.target_2D[f'{chip}_CCD'].data)
+        mask = self._inter_order_mask(chip, mask_buffer=mask_buffer).astype('bool')
 
-        for chip in ['GREEN', 'RED']:
-            m = self._inter_order_mask(chip).astype('bool')
-            d = np.array(self.target_2D[f'{chip}_CCD'].data)
+        if edge_clip > 0:
+            d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
+            m = mask[edge_clip:-edge_clip,edge_clip:-edge_clip]
 
-            clip = self.edge_clip
-            coeffs = self._polyfit2d(d[clip:-clip,clip:-clip],
-                                     self.polyorder,
-                                     m[clip:-clip,clip:-clip]
-                                    )
-    
-            stray_light[f'{chip}_CCD'] = self._polyval2d(coeffs, self.polyorder, d.shape)
-            stray_light[f'{chip}_CCD'] = np.maximum(stray_light[f'{chip}_CCD'], 0)
-
-            mask[f'{chip}_CCD'] = m.copy()
+        coeffs = self._polyfit2d(d, polyorder, regularize=regularize, mask=m)    
+        stray_light = self._polyval2d(coeffs, polyorder, data.shape)
+        stray_light = np.maximum(stray_light, 0)
 
         return stray_light, mask
         
 
-    def _polyfit2d(self, data_image, polyorder, mask=None):
+    def _polyfit2d(self, data_image, polyorder, regularize='none', mask=None):
         # coordinate grid
         nrow, ncol = data_image.shape
-        y, x = np.mgrid[0:nrow, 0:ncol]  
+        y, x = np.mgrid[0:nrow, 0:ncol]
+
+        # map to [-1,1] for Legendre polynomial basis
+        x = 2*x/(ncol-1) - 1
+        y = 2*y/(nrow-1) - 1
+
+        # ravel arrays
         x = np.ravel(x)
         y = np.ravel(y)
         z = np.ravel(data_image)
@@ -196,39 +223,103 @@ class StrayLightAlg:
         y = y[~mask]
         z = z[~mask]
         
-        # Build design matrix
+        # build design matrix
         terms = []
         for i in range(polyorder + 1):
             for j in range(polyorder + 1 - i):
-                terms.append((x**i) * (y**j))
-        
-        A = np.vstack(terms).T
-        
-        # Solve least squares
+                cx = np.zeros(i+1)
+                cy = np.zeros(j+1)
+                cx[i] = 1
+                cy[j] = 1
+                Px = legval(x,cx)
+                Py = legval(y,cy)
+                terms.append(Px*Py)
+
+        A = np.column_stack(terms)
+
+        # solve least squares
         coeffs, _, _, _ = np.linalg.lstsq(A, z, rcond=None)
-    
+
+        # apply regularization and recompute coefficients
+        if isinstance(regularize, float):
+            lam = regularize
+
+        elif isinstance(regularize, str):
+            if regularize == 'auto':
+                lam = np.var(z)/np.var(coeffs)
+            elif regularize == 'none':
+                lam = 0
+            else:
+                raise ValueError("regularize must be 'auto', 'none', or a float value")
+
+        if lam == 0:
+            pass
+        elif lam > 0:
+            ATz = np.dot(A.T,z)
+            ATA = np.dot(A.T,A) + lam*np.eye(A.shape[1])
+            coeffs = np.linalg.solve(ATA,ATz)
+        elif lam < 0:
+            raise ValueError("regularization parameter lambda must not be negative")
+            
         return coeffs
     
     
     def _polyval2d(self, coeffs, polyorder, shape):
+        # coordinate grid
         nrow, ncol = shape
+        y, x = np.mgrid[0:nrow, 0:ncol]
 
-        y,x = np.mgrid[0:nrow,0:ncol]
-        x = x.ravel()
-        y = y.ravel()
-    
+        # map to [-1,1] for Legendre polynomial basis
+        x = 2*x/(ncol-1) - 1
+        y = 2*y/(nrow-1) - 1
+
+        # ravel arrays
+        x = np.ravel(x)
+        y = np.ravel(y)
+
+        # build polynomial terms
         terms = []
         for i in range(polyorder + 1):
             for j in range(polyorder + 1 - i):
-                terms.append((x**i) * (y**j))
-        A = np.vstack(terms)
+                cx = np.zeros(i+1)
+                cy = np.zeros(j+1)
+                cx[i] = 1
+                cy[j] = 1
+                Px = legval(x,cx)
+                Py = legval(y,cy)
+                terms.append(Px*Py)
+        terms = np.array(terms)
 
-        result = np.dot(coeffs, A).reshape((nrow,ncol))
+        # calculate fitted polynomial
+        result = np.dot(coeffs, terms).reshape((nrow,ncol))
     
         return result
 
 
-    def _inter_order_mask(self, chip):
-        # TODO: incorporate buffer to mask inter-orderlet pixels
-        mask = self.masters_order_mask[f'{chip}_CCD'] > 0
+    def _inter_order_mask(self, chip, dark_fibers=None, mask_buffer=None):
+        """
+        Args:
+          dark_fibers (list) : list of integers 1-5 indicating any non-illuminated fibers
+          mask_buffer (int) : number of pixels to expand intra-order region of mask
+        """
+        mask = self.master_order_mask[f'{chip}_CCD'] > 0
+
+        if dark_fibers is not None:
+            for fiber in dark_fibers:
+                mask &= self.master_order_mask[f'{chip}_CCD'] != fiber
+
+        if mask_buffer is not None:
+            for i in range(mask_buffer):
+                buffer = np.zeros_like(mask)
+            
+                row_diff = mask[:-1,:] != mask[1:,:]
+                col_diff = mask[:,:-1] != mask[:,1:]
+            
+                buffer[:-1,:] |= row_diff
+                buffer[1:,:] |= row_diff
+                buffer[:,:-1] |= col_diff
+                buffer[:,1:] |= col_diff
+        
+                mask |= buffer
+
         return mask
