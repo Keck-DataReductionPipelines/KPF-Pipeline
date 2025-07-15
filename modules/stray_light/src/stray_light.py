@@ -32,7 +32,7 @@ class EstimateStrayLight(KPF0_Primitive):
         exit_code = 0
         try:
             straylight = StrayLightAlg(self.target_2D, 
-                                       self.masters_order_mask,
+                                       self.master_order_mask,
                                        self.config_path
                                       )
             
