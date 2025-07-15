@@ -1,0 +1,17 @@
+from modules.stray_light.src.stray_light import EstimateStrayLight
+from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
+from modules.Utils.data_handler import GetHeaderValue
+
+test_file = '/data/2D/20241022/KP.20241022.48910.02_2D.fits'
+D2_obj = kpf0_from_fits(test_file)  # recipe language, automatically imports I/O
+
+
+obs_date_time = GetHeaderValue(D2_obj,'DATE-MID')
+cals = CalibrationLookup(obs_date_time, subset=['ordermask'])
+ordermask = kpf0_from_fits(cals['ordermask'])
+
+stray_light_output_list = EstimateStrayLight(D2_obj, ordermask)
+
+exit_code = stray_light_output_list[0]
+stray_light_image = stray_light_output_list[1]
+inter_order_mask = stray_light_output_list[2]
