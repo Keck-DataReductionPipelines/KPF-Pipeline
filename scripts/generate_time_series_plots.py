@@ -291,13 +291,13 @@ if __name__ == "__main__":
     args = parser.parse_args()   
 
     tasks = [
-        {"proc_name": "Today Process",       "interval":     300, "time_range_type": "day",    "date_range": 'this_day'},
-        {"proc_name": "This Month Process",  "interval":     600, "time_range_type": "month",  "date_range": 'this_month'},
-        {"proc_name": "This Year Process",   "interval":  2*3600, "time_range_type": "year",   "date_range": 'this_year'},
+        {"proc_name": "Today Process",       "interval":     600, "time_range_type": "day",    "date_range": 'this_day'},
+        {"proc_name": "This Month Process",  "interval":    1200, "time_range_type": "month",  "date_range": 'this_month'},
+        {"proc_name": "This Year Process",   "interval":  3*3600, "time_range_type": "year",   "date_range": 'this_year'},
         {"proc_name": "All Days Process",    "interval": 48*3600, "time_range_type": "day",    "date_range": 'all_days'},
-        {"proc_name": "All Months Process",  "interval":  3*3600, "time_range_type": "month",  "date_range": 'all_months'},
-        {"proc_name": "All Years Process",   "interval":  3*3600, "time_range_type": "year",   "date_range": 'all_years'},
-        {"proc_name": "All Decades Process", "interval": 24*3600, "time_range_type": "decade", "date_range": (None, None)},
+        {"proc_name": "All Months Process",  "interval":  6*3600, "time_range_type": "month",  "date_range": 'all_months'},
+        {"proc_name": "All Years Process",   "interval":  6*3600, "time_range_type": "year",   "date_range": 'all_years'},
+        {"proc_name": "All Decades Process", "interval": 48*3600, "time_range_type": "decade", "date_range": (None, None)},
     ]
 
     processes = {}

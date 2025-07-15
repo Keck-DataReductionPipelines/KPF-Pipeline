@@ -337,11 +337,6 @@ def add_headers_guider(D2, logger=None):
     except Exception as e:
         logger.error(f"Problem with moon separation: {e}\n{traceback.format_exc()}")
     try: 
-        D2.header['PRIMARY']['SUNALT']  = (round(get_sun_alt(myGuider.date_mid), 1),
-                                           'Altitude of Sun [deg]; negative = below horizon')
-    except Exception as e:
-        logger.error(f"Problem with Sun altitude: {e}\n{traceback.format_exc()}")
-    try: 
         if myGuider.good_fit:
             D2.header['PRIMARY']['GDRSEEJZ'] = (round(myGuider.seeing*myGuider.pixel_scale, 3),
                                                'Seeing [arcsec] in J+Z-band from Moffat fit')
@@ -352,6 +347,36 @@ def add_headers_guider(D2, logger=None):
                                            
     return D2
 
+def add_headers_sunalt(D2, logger=None):
+    """
+    Adds SUNALT to the header of a 2D object (works for solar and stellar observations)
+    
+    Keywords:
+        SUNALT - Altitude of Sun (deg)
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    # Check that the input object is of the right type
+    if (str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>"):
+        logger.info('2D file not valid.')
+        return D2
+
+    try:
+        date_mid = Time(HeaderParse(D2, 'PRIMARY').header['DATE-MID'])
+        D2.header['PRIMARY']['SUNALT'] = (round(get_sun_alt(date_mid), 5),
+                                          'Altitude of Sun [deg]; negative = below horizon')
+    except Exception as e:
+        logger.error(f"Problem with Sun altitude: {e}\n{traceback.format_exc()}")
+                                           
+    return D2
 
 def add_headers_hk(D2, logger=None):
     """

@@ -176,6 +176,20 @@ GAIAMAG   9.28                                        GAIA G band magnitude
 TARGTEFF  5398.0                                      Target effective temperature (K)
 OCTAGON   EtalonFiber                                 Selected octagon calibration source (not necessarily powered on)
 TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide              Cameras that were sent triggers
+SRCSHTTR  SciSelect,SkySelect,SoCalSci                Source shutters commanded
+TIMSHTTR  Scrambler,SimulCal                          Timed shutters commanded
+OTIMSHTR  Scrambler,SimulCal                          Timed shutters open exp. midpoint
+SCISEL    open                                        Science Select shutter at exp. midpoint
+SKYSEL    open                                        Sky Select Shutter at exp. midpoint
+FFSHTR    closed                                      Flat field fiber shutter at exp. midpoint
+SCRAMSHT  open                                        Scrambler shutter at exp. midpoint
+SIMCALSH  open                                        Simult Cal shutter at exp. midpoint
+CAHKSHT   closed                                      CaHK shutter at exp. midpoint
+SOLSCISH  open                                        SoCal Sci shutter at exp. midpoint
+SOLCALSH  closed                                      SoCal Cal shutter at exp. midpoint
+CALSSSHT  closed                                      Cal SciSky shutter at exp. midpoint
+AOHATCH   False                                       AO hatch at exp. midpoint
+FIUHTCH   False                                       FIU hatch at exp. midpoint
 IMTYPE    Object                                      Image Type
 TARGNAME  42813                                       KPF Target Name
 DCSNAME   42813                                       DCS Target Name
@@ -240,6 +254,7 @@ EMSAT     1                                           QC: 1 = Exp Meter not satu
 EMNEG     1                                           QC: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
 DATAPR2D  1                                           QC: 1 = 2D data products present with non-zero array sizes
 CAHKPR2D  1                                           QC: 1 = 2D CaHK data present with non-zero array sizes
+TELEPRL0  1                                           QC: 1 = TELEMETRY extension present in L0
 GOODREAD  1                                           QC: 1 = Exposure time not consistent with CCD readout error (~6 sec)
 POS2DSNR  1                                           QC: 1 = 2D Red and Green SNR (data/var^0.5) not significantly negative
 LOWBIAS   1                                           QC: 1 = 2D bias flux not low
@@ -253,6 +268,8 @@ GUIDGOOD  1                                           QC: 1 = Guider RMS and bia
 GUIDSAT   1                                           QC: 1 = Guider avg frame not saturated and <10% of frames have a sat pixel
 TARGPLAU  1                                           QC: 1 = TARG kwds present with plausible values
 AGITOK    1                                           QC: 1 = Agitator running with speed above minimum
+NOTVIGN   1                                           QC: 1 = Telescope not vignetted by dome
+GOODEL    1                                           QC: 1 = Telescope elevation above 30 deg (for ADC)
 ETASTEMP  1                                           QC: 1 = Etalon inner chamber temps near set points
 ISGOOD    1                                           QC: 1 = all other QC tests passed
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
@@ -350,6 +367,11 @@ XDSPSYG1  0.00133                                     Uncertainty [pix] in XDSPD
 XDSPSYR1  0.00217                                     Uncertainty [pix] in XDSPDYR1
 XDSPSYG2  0.00144                                     Uncertainty [pix] in XDSPDYG2
 XDSPSYR2  0.00058                                     Uncertainty [pix] in XDSPDYR2
+CLEARSKY  1                                           Indicates clear-sky conditions for SoCal [to be added in future DRP version]
+DNIMEAS   500.0                                       Mean DNI from pyrheliometer during the exposure [to be added in future DRP version]
+DNICLR    500.0                                       Theoretical DNI in perfect conditions [to be added in future DRP version]
+DNIRMS    1.0                                         RMS of DNIMEAS during the exposure [to be added in future DRP version]
+CLEARIDX  3.0                                         SoCal clearness index (<4==CLEARSKY) [to be added in future DRP version]
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
@@ -396,6 +418,12 @@ ETALINES  1                                                                     
 WILDWSCI  1                                                                        QC: 1 = SCI WLS not wild (stdev compared to reference < 5 pixels)
 WILDWSKY  1                                                                        QC: 1 = SKY WLS not wild (stdev compared to reference < 5 pixels)
 WILDWCAL  1                                                                        QC: 1 = CAL WLS not wild (stdev compared to reference < 5 pixels)
+NSATGS2   23                                                                       Number of saturated lines in Green SCI2
+NSATGC    23                                                                       Number of saturated lines in Green CAL
+NSATGK    23                                                                       Number of saturated lines in Green SKY
+NSATRS2   23                                                                       Number of saturated lines in Red SCI2
+NSATRC    23                                                                       Number of saturated lines in Red CAL
+NSATRK    23                                                                       Number of saturated lines in Red SKY
 SNRSC452  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRSK452  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRCL452  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
@@ -897,12 +925,6 @@ STDWRC28  0.01379038876707553                                                   
 STDWRC29  0.00914032555395159                                                      stddev(WLS-ref) [pix], Red CAL order 29         
 STDWRC30  0.01440898205622853                                                      stddev(WLS-ref) [pix], Red CAL order 30         
 STDWRC31  0.00899757354138056                                                      stddev(WLS-ref) [pix], Red CAL order 31         
-NSATGS2   23                                                                       Number of saturated lines in Green SCI2
-NSATGC    23                                                                       Number of saturated lines in Green CAL
-NSATGK    23                                                                       Number of saturated lines in Green SKY
-NSATRS2   23                                                                       Number of saturated lines in Red SCI2
-NSATRC    23                                                                       Number of saturated lines in Red CAL
-NSATRK    23                                                                       Number of saturated lines in Red SKY
 ========  =======================================================================  =========
 
 The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
@@ -927,25 +949,29 @@ Keyword   Value (example)                             Comment
 ========  ==========================================  =========
 DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used to make L2 (in the time series database, DRPTAG is listed as DRPTAGL2 for L2 files)
 DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make L2 (in the time series database, DRPHSH is listed as DRPHSHL2 for L2 files)
+TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
+DATAPRL2  1                                           QC: 1 = L2 data is present
+QCPCBCV   1                                           QC: 1 = PCBCV values within acceptable range
 CCFRV     19.4247572623                               Average of CCD1RV and CCD2RV using weights from RV table
 CCFERV    0.001175044                                 Error on CCFRV
 CCFRVC    19.4247572623                               Average of CCD1RVC and CCD2RVC using weights from RV table
 CCFERVC   0.001175044                                 Error on CCFRVC
-CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders
+CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders (for solar observations, HJD is used)
 CCFBCV    21.751977696646478                          Weighted average of barycentric RV (km/s) for spectral orders
-BJDSTD    41.66004757176901                           Weighted stddev of BJD for spectral orders (sec)        
-BJDRNG    147.1386909484863                           Range(BJD) for non-zero-weight spectral orders (sec)    
-BCVSTD    0.7123626558325037                          Weighted stddev of BCV for spectral orders (m/s)        
-BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (m/s)    
+BJDSTD    41.66004757176901                           Weighted stddev of BJD for spectral orders (sec) (for solar observations, HJD is used)
+BJDRNG    147.1386909484863                           Range(BJD) for non-zero-weight spectral orders (sec)
+BCVSTD    0.7123626558325037                          Weighted stddev of BCV for spectral orders (m/s)
+BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (m/s)
 MAXPCBCV  0.6894375932041458                          Maximum % change from CCFBCV for non-zero-weight spectral orders (%)
 MINPCBCV  -0.47031634755679774                        Minimum % change from CCFBCV for non-zero-weight spectral orders (%)
-TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
-DATAPRL2  1                                           QC: 1 = L2 data is present
-QCPCBCV   1                                           QC: 1 = PCBCV values within acceptable range
+DRFTOBS   KP.20250708.20189.17                        ObsID of 1st reference drift observation
+DRFTOBS2  KP.20250708.20189.17                        ObsID of 2nd reference drift observation
+DRFTDEL   1.2114297222222221                          Time to 1st drift correction observation (hr)
+DRFTDEL2  1.2114297222222221                          Time to 2nd drift correction observation (hr)
+DRFTCOR   1                                           Drift correction applied (true/false)
+DRFTRV    0.2738220612333333                          Drift correction RV (m/s)
+DRFTMETH  nearest_interpolation                       Drift correction method name
 ========  ==========================================  =========
-
-Radial Velocities
------------------
 
 L2 RV Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -977,7 +1003,7 @@ CCD1RVS        18.2490292404      RV (km/s) of SKY (all orders, Green CCD); corr
 CCD1ERVS       0.0                Error on CCD1RVS
 CCD1RV         19.395608349       RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Green CCD); corrected for barycentric RV
 CCD1ERV        0.0007214256       Error on CCD1RV  
-CCD1BJD        2460237.787166463  Photon-weighted mid-time (BJD) for CCD1RV
+CCD1BJD        2460237.787166463  Photon-weighted mid-time (BJD) for CCD1RV (for solar observations, HJD is used)
 CCD2ROW        35                 Row number in the RV table (below) of the bluest order on the Red CCD
 CCD2RV1        19.4423673077      RV (km/s) of SCI1 (all orders, Red CCD); corrected for barycentric RV
 CCD2ERV1       0.004087698        Error on CCD2RV1
@@ -991,7 +1017,7 @@ CCD2RVS        51.9730319697      RV (km/s) of SKY (all orders, Red CCD); correc
 CCD2ERVS       0.0                Error on CCD2RVS
 CCD2RV         19.4069470745      RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Red CCD); corrected for barycentric RV
 CCD2ERV        0.0021111409       Error on CCD2RV  
-CCD2BJD        2460237.787150946  Photon-weighted mid-time (BJD) for CCD2RV
+CCD2BJD        2460237.787150946  Photon-weighted mid-time (BJD) for CCD2RV (for solar observations, HJD is used)
 =============  =================  =========
 
 L2 RV Extension
@@ -1015,7 +1041,7 @@ CAL RV         0.0                RV (km/s) of CAL (Green CCD); corrected for ba
 CAL error      0.0                error on 'CAL RV'
 SKY RV         0.0                RV (km/s) of sKY (Green CCD); corrected for barycentric RV
 SKY error      0.0                error on 'SKY RV'
-CCFBJD         2.460238e+06       Photon-weighted mid-time (BJD) for CCD1RV
+CCFBJD         2.460238e+06       Photon-weighted mid-time (BJD) for CCD1RV (for solar observations, HJD is used)
 Bary_RVC       -8.729925          Barycentric RV (km/s)
 source1        GREEN_SCI_FLUX1    name of array for orderlet1 (SCI1)
 source2        GREEN_SCI_FLUX2    name of array for orderlet2 (SCI2)
