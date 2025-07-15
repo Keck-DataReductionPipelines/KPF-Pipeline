@@ -46,10 +46,6 @@ class SpectralExtractionAlg:
             self.log = logger
             
         cfg_params = ConfigHandler(self.config, 'PARAM')
-        self.stray_light_method = str(cfg_params.get_config_value('stray_light_method'))
-        self.stray_light_polyorder = int(cfg_params.get_config_value('stray_light_polyorder'))
-        self.stray_light_edge_clip = int(cfg_params.get_config_value('stray_light_edge_clip'))
-        self.stray_light_mask_buffer = int(cfg_params.get_config_value('stray_light_mask_buffer'))
 
         self.extraction_method = cfg_params.get_config_value('extraction_method')
         self.extraction_sigma_clip = float(cfg_params.get_config_value('extraction_sigma_clip'))
@@ -168,7 +164,16 @@ class SpectralExtractionAlg:
         return D, W
 
 
-    def spatial_profile(self, D, S, W, f, filter_size=101, sigma_clip_x=3.0, num_knots=32, do_plot=False):
+    def spatial_profile(self, 
+                        D, 
+                        S, 
+                        W, 
+                        f, 
+                        filter_size=None, 
+                        num_knots=None, 
+                        sigma_clip=None, 
+                        do_plot=False
+                       ):
         """
         Estimate the spatial profile of a 2D data array (typical use is for a single orderlet)
         Applies a spline along detector rows, interpolating over outlier pixels
@@ -179,10 +184,18 @@ class SpectralExtractionAlg:
             W (np.ndarray): 2D weight array to handle order curvature/tilt
             f (np.ndarray): 1D spectrum
             filter_size (int): filter size for median filter, used to identify outliers
-            sigma_clip_x (float): sigma clipping threshold, used to identify outliers
             num_knots (int): number of knots for spline
+            sigma_clip (float): sigma clipping threshold, used to identify outliers
 
         """
+        # populate kwargs
+        if filter_size is None:
+            filter_size = self.profile_filter_size
+        if num_knots is None:
+            num_knots = self.profile_num_knots
+        if sigma_clip is None:
+            sigma_clip = self.profile_sigma_clip
+
         P = (D-S)/f
 
         nrow, ncol = np.shape(P)
@@ -191,7 +204,7 @@ class SpectralExtractionAlg:
 
         for i in range(nrow):
             med = median_filter(P[i], size=filter_size)
-            out = np.abs(P[i]-med)/mad_std(P[i]-med) > sigma_clip_x
+            out = np.abs(P[i]-med)/mad_std(P[i]-med) > sigma_clip
 
             try:
                 knots = np.linspace(x[~out].min()+1, x[~out].max()-1, num_knots)[1:-1]
@@ -216,7 +229,15 @@ class SpectralExtractionAlg:
         return P
 
 
-    def box_extraction(self, D, S, V0, Q=None, M=None, W=None, do_plot=False):
+    def box_extraction(self, 
+                       D, 
+                       S, 
+                       V0, 
+                       Q=1.0, 
+                       M=None, 
+                       W=None, 
+                       do_plot=False
+                      ):
         """
         Box extraction on a data array D (typical use case is a single orderlet)
         Variable names follow Horne 1986
@@ -229,25 +250,22 @@ class SpectralExtractionAlg:
             M: mask (1 = good pixel, 0=bad)
             W: weights, typically to define order trace
         """
-        # ensure mask and weight arrays exist
-        if Q is None:
-            Q = np.ones_like(D, dtype='float')
-        if W is None:
-            W = np.ones_like(D, dtype='float')/D.shape[0]
-        if M is None:
-            M = np.ones_like(D, dtype='int')
-
         # sanitize inputs
         D = np.asarray(D)
         S = np.asarray(S)
+        V0 = np.asarray(V0)
         Q = np.asarray(Q)
-        M = np.asarray(M)
-        W = np.asarray(W)
+
+        # ensure mask and weight arrays exist
+        if M is None:
+            M = np.ones_like(D, dtype='int')
+        if W is None:
+            W = np.ones_like(D, dtype='float')/D.shape[0]
         
         # 2D variance array
         V = V0 + np.abs(D)/Q
     
-        # 1D sum extraction of spectrum and variance
+        # 1D box extraction of spectrum and variance
         f = np.sum((D-S)*W,axis=0)
         v = np.sum(V*W, axis=0)
     
@@ -265,15 +283,15 @@ class SpectralExtractionAlg:
                            D, 
                            S, 
                            V0, 
-                           Q=None, 
+                           Q=1.0, 
                            M=None, 
                            W=None, 
                            P=None,
-                           filter_size=101,
-                           sigma_clip_x=3.0,
-                           sigma_clip_y=5.0,
-                           num_knots=32,
-                           max_iter=20, 
+                           max_iter=None, 
+                           profile_filter_size=None,
+                           profile_num_knots=None,
+                           profile_sigma_clip=None,
+                           extraction_sigma_clip=None,
                            verbose=False, 
                            do_plot=False
                           ):
@@ -292,21 +310,38 @@ class SpectralExtractionAlg:
             M: mask (1 = good pixel, 0=bad)
             W: weights, typically to define order trace
             P: pre-computed spatial profile
-            filter_size (int): filter size for median filter, used to identify outliers in spatial profile
-            sigma_clip_x (float): sigma clipping used to identify outliers during profile modeling 
-            sigma_clip_y (float): sigma clipping used to identify cosmic rays and pixel defects
-            num_knots (int): number of knots in smoothing spline for profile modeling
             max_iter (int): maximum number of iterations of algorithm
+            profile_filter_size (int): filter size for median filter, used to identify outliers in spatial profile
+            profile_num_knots (int): number of knots in smoothing spline for profile modeling
+            profile_sigma_clip (float): sigma clipping used to identify outliers during profile modeling 
+            extraction_sigma_clip (float): sigma clipping used to identify cosmic rays and pixel defects
         """
+        # populate kwargs
+        if max_iter is None:
+            max_iter = self.extraction_max_iter
+        if profile_filter_size is None:
+            profile_filter_size = self.profile_filter_size
+        if profile_num_knots is None:
+            profile_num_knots = self.profile_num_knots
+        if profile_sigma_clip is None:
+            profile_sigma_clip = self.profile_sigma_clip
+        if extraction_sigma_clip is None:
+            extraction_sigma_clip = self.extraction_sigma_clip
+
+        # get data image shape
         nrow, ncol = np.shape(D)
         
-        # ensure all arrays exist
-        if Q is None:
-            Q = np.ones_like(D, dtype='float')
-        if W is None:
-            W = np.ones_like(D, dtype='float')/nrow
+        # sanitize inputs
+        D = np.asarray(D)
+        S = np.asarray(S)
+        V0 = np.asarray(V0)
+        Q = np.asarray(Q)
+        
+        # ensure mask and weight arrays exist
         if M is None:
             M = np.ones_like(D, dtype='int')
+        if W is None:
+            W = np.ones_like(D, dtype='float')/nrow
 
         # check for pre-computed spatial profile
         if P is not None:
@@ -314,13 +349,6 @@ class SpectralExtractionAlg:
         else:
             static_profile = False
     
-        # sanitize inputs
-        D = np.asarray(D)
-        S = np.asarray(S)
-        Q = np.asarray(Q)
-        M = np.asarray(M)
-        W = np.asarray(W)
-
         # mask inter-order pixels
         M[W == 0] = 0
 
@@ -341,7 +369,14 @@ class SpectralExtractionAlg:
         
             # profile
             if not static_profile:
-                P = self.spatial_profile(D, S, W, f, filter_size, sigma_clip_x, num_knots)
+                P = self.spatial_profile(D, 
+                                         S, 
+                                         W, 
+                                         f,
+                                         filter_size=profile_filter_size,
+                                         num_knots=profile_num_knots,
+                                         sigma_clip=profile_sigma_clip
+                                        )
             
             # variance
             V = V0 + np.abs(f*P + S)/Q
@@ -366,7 +401,7 @@ class SpectralExtractionAlg:
             for col in range(ncol):
                 row = worst_pixel_row[col]
             
-                if R[row,col] > sigma_clip_y**2:
+                if R[row,col] > extraction_sigma_clip**2:
                     M[row,col] = 0
     
                     if do_plot:
@@ -384,12 +419,21 @@ class SpectralExtractionAlg:
         return f, v, P, M
 
     
-    def extract_orderlet(self, method, chip, trace_index):
+    def extract_orderlet(self, 
+                         chip, 
+                         trace_index, 
+                         method=None,
+                         max_iter=None,
+                         profile_filter_size=None,
+                         profile_num_knots=None,
+                         profile_sigma_clip=None,
+                         extraction_sigma_clip=None
+                        ):
         """
         Extract 1D spectrum for a single orderlet
 
         Args:
-            method (str): extraction method, can bo 'box' or 'optimal'
+            method (str): extraction method, can be 'box' or 'optimal'
             chip (str): 'GREEN' or 'RED' ccd
             trace_index (int): integer identifying ordelet in order_trace
 
@@ -399,6 +443,20 @@ class SpectralExtractionAlg:
             P (ndarray): 2D spatial profile (if 'optimal' extraction is used)
             M (ndarray): 2D boolean bad pixel mask (if 'optimal' extraction is used)
         """
+        # populate kwargs
+        if method is None:
+            method = self.extraction_method
+        if max_iter is None:
+            max_iter = self.extraction_max_iter
+        if profile_filter_size is None:
+            profile_filter_size = self.profile_filter_size
+        if profile_num_knots is None:
+            profile_num_knots = self.profile_num_knots
+        if profile_sigma_clip is None:
+            profile_sigma_clip = self.profile_sigma_clip
+        if extraction_sigma_clip is None:
+            extraction_sigma_clip = self.extraction_sigma_clip
+
         # target data
         D, W = self._orderlet_box(self.target_2D[f'{chip}_CCD'].data,
                                   self.order_trace[f'{chip}_CCD'],
@@ -430,10 +488,10 @@ class SpectralExtractionAlg:
                                  np.zeros_like(F), 
                                  W, 
                                  f_flat, 
-                                 filter_size=self.profile_filter_size, 
-                                 sigma_clip_x=self.profile_sigma_clip, 
-                                 num_knots=self.profile_num_knots
-                                 )
+                                 filter_size=profile_filter_size, 
+                                 sigma_clip=profile_sigma_clip, 
+                                 num_knots=profile_num_knots
+                                )
 
         f_opt, v_opt, P, M = self.optimal_extraction(D, 
                                                      S, 
@@ -441,25 +499,48 @@ class SpectralExtractionAlg:
                                                      M=M, 
                                                      W=W, 
                                                      P=P,
-                                                     sigma_clip_y=self.extraction_sigma_clip,
-                                                     max_iter=self.extraction_max_iter, 
+                                                     max_iter=max_iter, 
+                                                     sigma_clip=extraction_sigma_clip,
                                                      verbose=False, 
                                                      do_plot=False
                                                     )
         return f_opt, v_opt, P, M
     
 
-    def extract_ccd(self, method, chip):
+    def extract_ccd(self, 
+                    chip, 
+                    method=None,
+                    max_iter=None,
+                    profile_filter_size=None,
+                    profile_num_knots=None,
+                    profile_sigma_clip=None,
+                    extraction_sigma_clip=None
+                   ):
+
         """
         Extract 1D spectrum and variance for all orders/orderlets on GREEN or RED ccd
 
         Args:
-            method (str): extraction method, can bo 'box' or 'optimal'
             chip (str): 'GREEN' or 'RED' ccd
+            method (str): extraction method, can bo 'box' or 'optimal'
 
         Returns:
             l1_out: KPF L1 object populated with extracted 1D spectra and varaiance
         """
+        # populate kwargs
+        if method is None:
+            method = self.extraction_method
+        if max_iter is None:
+            max_iter = self.extraction_max_iter
+        if profile_filter_size is None:
+            profile_filter_size = self.profile_filter_size
+        if profile_num_knots is None:
+            profile_num_knots = self.profile_num_knots
+        if profile_sigma_clip is None:
+            profile_sigma_clip = self.profile_sigma_clip
+        if extraction_sigma_clip is None:
+            extraction_sigma_clip = self.extraction_sigma_clip
+
         # set up container for arrays
         nrow, ncol = self.target_2D[f'{chip}_CCD'].shape
         ntrace = len(self.order_trace[f'{chip}_CCD'])
@@ -477,7 +558,15 @@ class SpectralExtractionAlg:
             order_index = trace_index // 5
                         
             f_ext, v_ext = self._get_orderlet_ext_from_trace_index(chip, trace_index)
-            f, v, _, _ = self.extract_orderlet(method, chip, trace_index)
+            f, v, _, _ = self.extract_orderlet(chip, 
+                                               trace_index, 
+                                               method=method,
+                                               max_iter=max_iter,
+                                               profile_filter_size=profile_filter_size,
+                                               profile_num_knots=profile_num_knots,
+                                               profile_sigma_clip=profile_sigma_clip,
+                                               extraction_sigma_clip=extraction_sigma_clip
+                                              ):
 
             l1_arrays[f_ext][order_index] = f.copy()
             l1_arrays[v_ext][order_index] = v.copy()

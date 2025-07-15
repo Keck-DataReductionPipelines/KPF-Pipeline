@@ -8,9 +8,9 @@ from keckdrpframework.models.arguments import Arguments
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/stray_light/configs/default.cfg'
 
-class EstimateStrayLight(KPF0_Primitive):
+class StrayLight(KPF0_Primitive):
     """
-    Docstring
+    Primitive for stray light module
     """
     def __init__(self, action, context):
         
@@ -18,7 +18,7 @@ class EstimateStrayLight(KPF0_Primitive):
         KPF0_Primitive.__init__(self, action, context)
         
         # Input arguments
-        self.target_2D = self.action.args[0]           # KPF 2D object
+        self.target_2D = self.action.args[0]
         self.masters_order_mask = self.action.args[1]
         
         # Input configuration

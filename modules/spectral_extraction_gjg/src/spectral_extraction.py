@@ -10,7 +10,7 @@ DEFAULT_CFG_PATH = 'modules/spectral_extraction_gjg/configs/default.cfg'
 
 class SpectralExtraction(KPF0_Primitive):
     """
-    Docstring
+    Primitive for spectral extraction module
     """
     def __init__(self, action, context):
         
@@ -18,7 +18,7 @@ class SpectralExtraction(KPF0_Primitive):
         KPF0_Primitive.__init__(self, action, context)
         
         # Input arguments
-        self.target_2D = self.action.args[0]           # KPF 2D object
+        self.target_2D = self.action.args[0]
         self.master_flat_2D = self.action.args[1]
         self.stray_light_image = self.action.args[2]
         self.order_trace_green = self.action.args[3]
@@ -38,16 +38,17 @@ class SpectralExtraction(KPF0_Primitive):
                                                        self.master_flat_2D,
                                                        self.stray_light_image,
                                                        self.order_trace_green,
-                                                       self.order_trace_red
+                                                       self.order_trace_red,
+                                                       self.config_path
                                                       )
             
-            out_l1 = spectralextraction.do_everything()
-            out_l1.header['PRIMARY']['KEYWORD'] = self.attribute
+            for chip in ['GREEN', 'RED']:
+                spectralextraction.target_l1 = spectralextraction.extract_ccd(chip)
             exit_code = 1
-            return Arguments([exit_code, out_l1])
+            return Arguments([exit_code, spectralextraction.target_l1])
         except Exception as e:
-            self.logger.error(f"StrayLight algorithm failed: {e}\n{traceback.format_exc()}")
-            return Arguments([exit_code, None, None])
+            self.logger.error(f"SpectralExtraction algorithm failed: {e}\n{traceback.format_exc()}")
+            return Arguments([exit_code, None])
 
     def _pre(self):
         pass
