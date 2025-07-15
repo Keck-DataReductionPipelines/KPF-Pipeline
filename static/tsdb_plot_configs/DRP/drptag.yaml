@@ -31,7 +31,17 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: DRP Version - L2
-      title: KPF-Pipeline Version Number
+      not_junk: true
+      legend_frac_size: 0.15
+
+  - panelvars:
+      - col: DRFTCOR
+        plot_type: state
+        plot_attr:
+          label: Drift Correction Applied
+          marker: .
+    paneldict:
+      ylabel: Drift Correction Applied
       not_junk: true
       legend_frac_size: 0.15
 
