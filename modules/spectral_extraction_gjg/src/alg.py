@@ -500,7 +500,7 @@ class SpectralExtractionAlg:
                                                      W=W, 
                                                      P=P,
                                                      max_iter=max_iter, 
-                                                     sigma_clip=extraction_sigma_clip,
+                                                     extraction_sigma_clip=extraction_sigma_clip,
                                                      verbose=False, 
                                                      do_plot=False
                                                     )
@@ -566,7 +566,7 @@ class SpectralExtractionAlg:
                                                profile_num_knots=profile_num_knots,
                                                profile_sigma_clip=profile_sigma_clip,
                                                extraction_sigma_clip=extraction_sigma_clip
-                                              ):
+                                              )
 
             l1_arrays[f_ext][order_index] = f.copy()
             l1_arrays[v_ext][order_index] = v.copy()
