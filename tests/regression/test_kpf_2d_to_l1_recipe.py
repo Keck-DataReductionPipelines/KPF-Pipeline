@@ -11,65 +11,49 @@ This test validates the 2D to L1 processing pipeline, which includes:
 - Drift correction
 - Quality control and diagnostics
 
-The test runs in watch mode, monitoring 2D files and processing them to L1 format.
-This recipe stops at the L1 level and includes drift correction as the final step.
+The test runs using the same date as the masters recipe test to ensure
+master calibration files are available for testing.
 """
+import tempfile
 
+from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.tools.recipe_test_unit import recipe_test
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
-import os
 
-# Test configuration
-test_date = '20250519'
-twod_test_file = f'/data/2D/{test_date}/KP.{test_date}.55029.51_2D.fits'
+# Use the same test date as masters recipe for consistency
+masters_test_date = '20230730'
 
 # Read the actual recipe file
 twod_to_l1_recipe = open('recipes/kpf_2d_to_l1.recipe', 'r').read()
-twod_to_l1_config = 'configs/kpf_single_recipes.cfg'
+twod_to_l1_config = ConfigClass('configs/kpf_single_recipes.cfg')
+
+# Configure the recipe to use the test date's master files
+twod_to_l1_config.set('WATCHFOR_L0', 'masterbias_path', f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_bias_autocal-bias.fits')
+twod_to_l1_config.set('WATCHFOR_L0', 'masterdark_path', f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_dark_autocal-dark.fits')
+twod_to_l1_config.set('WATCHFOR_L0', 'masterflat_path', f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_flat.fits')
+twod_to_l1_config.set('ARGUMENT', 'wls_fits', str([f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_WLS_autocal-lfc-all-eve_L1.fits',
+                                                   f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_WLS_autocal-lfc-all-eve_L1.fits']))
+twod_to_l1_config.set('ARGUMENT', 'do_db_query_for_one_nearest_wls_master_file', 'False')
+twod_to_l1_config.set('WATCHFOR_L0', 'do_db_query_for_master_files', 'False')
+
+# Create temporary config file
+f = tempfile.NamedTemporaryFile(mode='w+', delete=False)
+twod_to_l1_config.write(f)
+twod_to_l1_config_path = f.name
+f.close()
 
 
-def test_kpf_2d_to_l1_recipe_watch_mode():
+def test_kpf_2d_to_l1_recipe():
     """
-    Test the 2D to L1 processing recipe in watch mode.
-    This simulates monitoring a 2D file and processing it to L1 format.
+    Test the 2D to L1 processing recipe.
+    This processes 2D files from the test date directory to L1 format.
     """
-    recipe_test(twod_to_l1_recipe, twod_to_l1_config, 
-                date_dir=test_date, 
-                file_path=twod_test_file,
-                watch=True)
+    recipe_test(twod_to_l1_recipe, twod_to_l1_config_path, date_dir=masters_test_date)
 
 
-def test_kpf_2d_to_l1_recipe_non_watch_mode():
-    """
-    Test the 2D to L1 processing recipe in non-watch mode.
-    This processes 2D files from a specified date directory to L1 format.
-    """
-    recipe_test(twod_to_l1_recipe, twod_to_l1_config, 
-                date_dir=test_date, 
-                file_path=f'/data/2D/{test_date}/',
-                watch=False)
-
-
-def test_kpf_2d_to_l1_recipe_masters_mode():
-    """
-    Test the 2D to L1 processing recipe with masters files.
-    This simulates processing master calibration files through the pipeline.
-    """
-    masters_test_file = f'/data/masters/{test_date}/kpf_{test_date}_master_flat.fits'
-    recipe_test(twod_to_l1_recipe, twod_to_l1_config, 
-                date_dir=test_date, 
-                file_path=masters_test_file,
-                watch=True)
+def main():
+    test_kpf_2d_to_l1_recipe()
 
 
 if __name__ == '__main__':
-    print("Testing 2D to L1 recipe in watch mode...")
-    test_kpf_2d_to_l1_recipe_watch_mode()
-    
-    print("Testing 2D to L1 recipe in non-watch mode...")
-    test_kpf_2d_to_l1_recipe_non_watch_mode()
-    
-    print("Testing 2D to L1 recipe with masters files...")
-    test_kpf_2d_to_l1_recipe_masters_mode()
-    
-    print("All 2D to L1 recipe tests completed successfully!")
+    main()

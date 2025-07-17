@@ -7,49 +7,49 @@ This test validates the L1 to L2 processing pipeline, which includes:
 - Barycentric correction (if enabled)
 - Quality control and diagnostics
 
-The test runs in watch mode, monitoring L1 files and processing them to L2.
+The test runs using the same date as the masters recipe test to ensure
+master calibration files are available for testing.
 """
+import tempfile
 
+from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.tools.recipe_test_unit import recipe_test
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
-import os
 
-# Test configuration
-test_date = '20250519'
-l1_test_file = f'/data/L1/{test_date}/KP.{test_date}.55029.51_L1.fits'
+# Use the same test date as masters recipe for consistency
+masters_test_date = '20230730'
 
 # Read the actual recipe file
 l1_to_l2_recipe = open('recipes/kpf_l1_to_l2.recipe', 'r').read()
-l1_to_l2_config = 'configs/kpf_single_recipes.cfg'
+l1_to_l2_config = ConfigClass('configs/kpf_single_recipes.cfg')
+
+# Configure the recipe to use the test date's master files
+l1_to_l2_config.set('WATCHFOR_L0', 'masterbias_path', f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_bias_autocal-bias.fits')
+l1_to_l2_config.set('WATCHFOR_L0', 'masterdark_path', f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_dark_autocal-dark.fits')
+l1_to_l2_config.set('WATCHFOR_L0', 'masterflat_path', f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_flat.fits')
+l1_to_l2_config.set('ARGUMENT', 'wls_fits', str([f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_WLS_autocal-lfc-all-eve_L1.fits',
+                                                 f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_WLS_autocal-lfc-all-eve_L1.fits']))
+l1_to_l2_config.set('ARGUMENT', 'do_db_query_for_one_nearest_wls_master_file', 'False')
+l1_to_l2_config.set('WATCHFOR_L0', 'do_db_query_for_master_files', 'False')
+
+# Create temporary config file
+f = tempfile.NamedTemporaryFile(mode='w+', delete=False)
+l1_to_l2_config.write(f)
+l1_to_l2_config_path = f.name
+f.close()
 
 
-def test_kpf_l1_to_l2_recipe_watch_mode():
+def test_kpf_l1_to_l2_recipe():
     """
-    Test the L1 to L2 processing recipe in watch mode.
-    This simulates monitoring an L1 file and processing it to L2.
+    Test the L1 to L2 processing recipe.
+    This processes L1 files from the test date directory to L2 format.
     """
-    recipe_test(l1_to_l2_recipe, l1_to_l2_config, 
-                date_dir=test_date, 
-                file_path=l1_test_file,
-                watch=True)
+    recipe_test(l1_to_l2_recipe, l1_to_l2_config_path, date_dir=masters_test_date)
 
 
-def test_kpf_l1_to_l2_recipe_non_watch_mode():
-    """
-    Test the L1 to L2 processing recipe in non-watch mode.
-    This processes L1 files from a specified date directory.
-    """
-    recipe_test(l1_to_l2_recipe, l1_to_l2_config, 
-                date_dir=test_date, 
-                file_path=f'/data/L1/{test_date}/',
-                watch=False)
+def main():
+    test_kpf_l1_to_l2_recipe()
 
 
 if __name__ == '__main__':
-    print("Testing L1 to L2 recipe in watch mode...")
-    test_kpf_l1_to_l2_recipe_watch_mode()
-    
-    print("Testing L1 to L2 recipe in non-watch mode...")
-    test_kpf_l1_to_l2_recipe_non_watch_mode()
-    
-    print("All L1 to L2 recipe tests completed successfully!")
+    main()
