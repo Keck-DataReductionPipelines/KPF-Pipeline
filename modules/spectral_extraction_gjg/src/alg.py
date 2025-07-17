@@ -24,8 +24,9 @@ class SpectralExtractionAlg:
         target_2D (KPF0): A KPF 2D science object
         master_flat_2D (KPF0): A KPF 2D master flat
         stray_light_image (dict of ndarray): 2D stray light arrays for the GREEN and RED ccds
-        order_trace_green (pd.DataFrame): a pre-loaded dataframe with order trace for GREEN ccd
-        order_trace_red (pd.DataFrame): a pre-loaded dataframe with order trace for RED ccd
+        order_trace_green (str): path to csv with order trace for GREEN ccd
+        order_trace_red (str): path to csv with order trace for RED ccd
+        start_order (tuple): index to start order trace, see caldates/start_order.csv
         config (configparser.ConfigParser): Config context
         logger (logging.Logger): Instance of logging.Logger
     """
@@ -35,6 +36,7 @@ class SpectralExtractionAlg:
                  stray_light_image,
                  order_trace_green, 
                  order_trace_red,
+                 start_order,
                  default_config_path,
                  logger=None
                  ):
@@ -60,14 +62,29 @@ class SpectralExtractionAlg:
         self.master_flat_2D = master_flat_2D
         self.stray_light_image = stray_light_image
         self.order_trace = {}
-        self.order_trace['GREEN_CCD'] = order_trace_green
-        self.order_trace['RED_CCD'] = order_trace_red
+        self.order_trace['GREEN_CCD'] = pd.read_csv(order_trace_green, index_col=0)
+        self.order_trace['RED_CCD'] = pd.read_csv(order_trace_red, index_col=0)
+        self.start_order = {}
+        self.start_order['GREEN_CCD'] = int(start_order[0])
+        self.start_order['RED_CCD'] = int(start_order[1])
+
+        # fix order trace indexing
+        for chip in ['GREEN', 'RED']:
+            if self.start_order[f'{chip}_CCD'] > 0:
+                self.order_trace['f{chip}_CCD'] = self.order_trace['f{chip}_CCD'].drop(index=0).reset_index(drop=True)
+            elif self.start_order[f'{chip}_CCD'] < 0:
+                n = np.abs(self.start_order[f'{chip}_CCD'])
+                df = self.order_trace['f{chip}_CCD']
+                nan_rows = pd.DataFrame(np.nan, index=range(n), columns=df.columns)
+                self.order_trace['f{chip}_CCD'] = pd.concat([nan_rows, df], ignore_index=True)
+            elif self.start_order[f'{chip}_CCD'] == 0:
+                pass
 
         # initialize L1 object
         self.target_l1 = KPF1.from_l0(self.target_2D)
 
 
-    def _get_orderlet_ext_from_trace_index(self, chip, trace_index):
+    def _get_orderlet_ext_from_trace_index(self, chip, trace_index, start_order=None):
         if trace_index % 5 == 0:
             drp_f_ext = f'{chip}_SKY_FLUX'
             drp_v_ext = f'{chip}_SKY_VAR'
@@ -554,19 +571,24 @@ class SpectralExtractionAlg:
             l1_arrays[v_ext] = np.zeros((norder,ncol))
 
         # extract spectra
-        for trace_index in range(ntrace):
-            order_index = trace_index // 5
-                        
+        for trace_index in range(ntrace):                      
+            if any(np.isnan(self.order_trace[f'{chip}_CCD'].iloc[trace_index])):
+                f = np.nan*np.ones(ncol)
+                v = np.nan*np.ones(ncol)
+
+            else:
+                f, v, _, _ = self.extract_orderlet(chip, 
+                                                   trace_index, 
+                                                   method=method,
+                                                   max_iter=max_iter,
+                                                   profile_filter_size=profile_filter_size,
+                                                   profile_num_knots=profile_num_knots,
+                                                   profile_sigma_clip=profile_sigma_clip,
+                                                   extraction_sigma_clip=extraction_sigma_clip
+                                                  )
+
             f_ext, v_ext = self._get_orderlet_ext_from_trace_index(chip, trace_index)
-            f, v, _, _ = self.extract_orderlet(chip, 
-                                               trace_index, 
-                                               method=method,
-                                               max_iter=max_iter,
-                                               profile_filter_size=profile_filter_size,
-                                               profile_num_knots=profile_num_knots,
-                                               profile_sigma_clip=profile_sigma_clip,
-                                               extraction_sigma_clip=extraction_sigma_clip
-                                              )
+            order_index = trace_index // 5
 
             l1_arrays[f_ext][order_index] = f.copy()
             l1_arrays[v_ext][order_index] = v.copy()
