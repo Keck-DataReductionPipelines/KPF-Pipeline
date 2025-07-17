@@ -10,7 +10,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Angle (deg)
+      ylabel: "Moon-Star Separation (deg)"
       narrow_xlim_daily: true
       ylim: (0,180)
       axhspan:
@@ -28,11 +28,11 @@ panel_arr:
         plot_type: scatter
         unit: deg
         plot_attr:
-          label: Altitude of Sun
+          label: Altitude of Sun (deg)
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Angle (deg)
+      ylabel: "Altitude of Sun (deg)"
       title: Separation of Sun and Moon from Target
       narrow_xlim_daily: true
       ylim: (-90,0)
