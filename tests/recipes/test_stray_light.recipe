@@ -1,4 +1,4 @@
-from modules.stray_light.src.stray_light import EstimateStrayLight
+from modules.stray_light.src.stray_light import StrayLight
 from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 from modules.Utils.data_handler import GetHeaderValue
 
