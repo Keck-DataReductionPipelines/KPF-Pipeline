@@ -20,11 +20,11 @@ inter_order_mask = stray_light_output_list[2]
 
 spectral_extraction_output_list = SpectralExtraction(target_2D, 
                                                      masterflat, 
-                                                    stray_light_image, 
-                                                    trace_green, 
-                                                    trace_red, 
-                                                    start_order[0], 
-                                                    start_order[1]
-                                                   )
+                                                     stray_light_image, 
+                                                     trace_green, 
+                                                     trace_red, 
+                                                     start_order[0], 
+                                                     start_order[1]
+                                                    )
 exit_code = spectral_extraction_output_list[0]
 target_l1 = spectral_extraction_output_list[1]
