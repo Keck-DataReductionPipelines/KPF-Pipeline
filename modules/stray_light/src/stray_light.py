@@ -19,7 +19,7 @@ class StrayLight(KPF0_Primitive):
         
         # Input arguments
         self.target_2D = self.action.args[0]
-        self.masters_order_mask = self.action.args[1]
+        self.master_order_mask = self.action.args[1]
         
         # Input configuration
         self.config = configparser.ConfigParser()
@@ -35,10 +35,12 @@ class StrayLight(KPF0_Primitive):
                                        self.master_order_mask,
                                        self.config_path
                                       )
-            
-            stray_light_image, inter_order_mask = straylight.estimate_stray_light()
+            image = {}
+            mask = {}
+            for chip in ['GREEN', 'RED']:
+                image[f'{chip}_CCD'], mask[f'{chip}_CCD'] = straylight.estimate_stray_light(chip)
             exit_code = 1
-            return Arguments([exit_code, stray_light_image, inter_order_mask])
+            return Arguments([exit_code, image, mask])
         except Exception as e:
             self.logger.error(f"StrayLight algorithm failed: {e}\n{traceback.format_exc()}")
             return Arguments([exit_code, None, None])

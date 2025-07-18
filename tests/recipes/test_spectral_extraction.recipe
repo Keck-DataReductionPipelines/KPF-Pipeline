@@ -1,21 +1,23 @@
 from modules.stray_light.src.stray_light import StrayLight
-from modules.spectral_extraction_gjg.src.spectal_extraction import SpectralExtraction
+from modules.spectral_extraction_gjg.src.spectral_extraction import SpectralExtraction
 from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 from modules.Utils.data_handler import GetHeaderValue
 
 target_2D_file = '/data/2D/20241022/KP.20241022.48910.02_2D.fits'
-target_2D_obj = kpf0_from_fits(target_2D_file)  # recipe language, automatically imports I/O
+target_2D = kpf0_from_fits(target_2D_file)  # recipe language, automatically imports I/O
 
-obs_date_time = GetHeaderValue(D2_obj,'DATE-MID')
-cals = CalibrationLookup(obs_date_time, subset=['masterflat', 'ordermask', 'ordertrace', 'start_order'])
-masterflat = kp0_from_fits(cals['masterflat])
+obs_date_time = GetHeaderValue(target_2D,'DATE-MID')
+cals = CalibrationLookup(obs_date_time, subset=['smoothlamp', 'ordermask', 'ordertrace', 'start_order'])
+masterflat = kpf0_from_fits(cals['smoothlamp'])
 ordermask = kpf0_from_fits(cals['ordermask'])
 trace_green = cals['ordertrace'][0]              # this is a filepath
 trace_red = cals['ordertrace'][1]
 start_order = cals['start_order']
 
-stray_light_image, stray_light_mask = StrayLight(target_2D_obj, ordermask)
-spectral_extraction_output_list = SpectralExtraction(target_2D_obj, masterflat, stray_light_image, trace_green, trace_red, start_order)
+stray_light_output_list = StrayLight(target_2D, ordermask)
+stray_light_image = stray_light_output_list[1]
+inter_order_mask = stray_light_output_list[2]
 
+spectral_extraction_output_list = SpectralExtraction(target_2D, masterflat, stray_light_image, trace_green, trace_red, start_order)
 exit_code = spectral_extraction_output_list[0]
 target_l1 = spectral_extraction_output_list[1]

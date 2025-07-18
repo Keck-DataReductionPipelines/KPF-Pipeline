@@ -23,6 +23,7 @@ class SpectralExtraction(KPF0_Primitive):
         self.stray_light_image = self.action.args[2]
         self.order_trace_green = self.action.args[3]
         self.order_trace_red = self.action.args[4]
+        self.start_order = self.action.args[5]
         
         # Input configuration
         self.config = configparser.ConfigParser()
@@ -30,6 +31,8 @@ class SpectralExtraction(KPF0_Primitive):
             self.config_path = context.config_path['spectral_extraction_gjg']
         except:
             self.config_path = DEFAULT_CFG_PATH
+
+        print(self.config_path)
             
     def _perform(self):
         exit_code = 0
@@ -39,6 +42,7 @@ class SpectralExtraction(KPF0_Primitive):
                                                        self.stray_light_image,
                                                        self.order_trace_green,
                                                        self.order_trace_red,
+                                                       self.start_order,
                                                        self.config_path
                                                       )
             
