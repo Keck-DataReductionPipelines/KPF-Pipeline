@@ -23,7 +23,8 @@ class SpectralExtraction(KPF0_Primitive):
         self.stray_light_image = self.action.args[2]
         self.order_trace_green = self.action.args[3]
         self.order_trace_red = self.action.args[4]
-        self.start_order = self.action.args[5]
+        self.start_order_green = self.action.args[5]
+        self.start_order_red = self.action.args[6]
         
         # Input configuration
         self.config = configparser.ConfigParser()
@@ -42,7 +43,8 @@ class SpectralExtraction(KPF0_Primitive):
                                                        self.stray_light_image,
                                                        self.order_trace_green,
                                                        self.order_trace_red,
-                                                       self.start_order,
+                                                       self.start_order_green,
+                                                       self.start_order_red,
                                                        self.config_path
                                                       )
             

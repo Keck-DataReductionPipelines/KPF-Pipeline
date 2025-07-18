@@ -37,7 +37,8 @@ class SpectralExtractionAlg:
                  stray_light_image,
                  order_trace_green, 
                  order_trace_red,
-                 start_order,
+                 start_order_green,
+                 start_order_red,
                  default_config_path,
                  logger=None
                  ):
@@ -65,34 +66,14 @@ class SpectralExtractionAlg:
         self.order_trace = {}
         self.order_trace['GREEN_CCD'] = pd.read_csv(order_trace_green, index_col=0)
         self.order_trace['RED_CCD'] = pd.read_csv(order_trace_red, index_col=0)
-        self._set_start_order(start_order)
-        self._fix_order_trace_indexing()
+        self.start_order = {}
+        self.start_order['GREEN_CCD'] = start_order_green
+        self.start_order['RED_CCD'] = start_order_red
+        self.order_trace = self._fix_order_trace_indexing()
 
         # initialize L1 object
         self.target_l1 = KPF1.from_l0(self.target_2D)
         
-
-    def _set_start_order(self, start_order):
-        datecode = datetime.strptime(self.target_2D.header['PRIMARY']['DATE-OBS'], '%Y-%m-%d').strftime('%Y%m%d')
-        df = pd.read_csv(start_order)
-        
-        df.columns = df.columns.str.strip()
-        df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-        
-        df['UT_start_date'] = df['UT_start_date'].apply(lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S').strftime('%Y%m%d')).astype(int)
-        df['UT_end_date'] = df['UT_end_date'].apply(lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S').strftime('%Y%m%d')).astype(int)
-        
-        df['CALPATH'] = df['CALPATH'].str.replace(r'[^0-9\-]', '', regex=True).astype(int)
-        df['comment'] = df['comment'].str.replace(r'[^0-9\-]', '', regex=True).astype(int)
-        
-        df = df.rename(columns={'CALPATH':'GREEN_offset', 'comment':'RED_offset'})
-        
-        idx = df[(df['UT_start_date'] <= int(datecode)) & (df['UT_end_date'] >= int(datecode))].index
-    
-        self.start_order = {}
-        self.start_order['GREEN_CCD'] = int(df.iloc[idx]['GREEN_offset'])
-        self.start_order['RED_CCD'] = int(df.iloc[idx]['RED_offset'])
-
     
     def _fix_order_trace_indexing(self):
         for chip in ['GREEN', 'RED']:
@@ -105,6 +86,8 @@ class SpectralExtractionAlg:
                 self.order_trace[f'{chip}_CCD'] = pd.concat([nan_rows, df], ignore_index=True)
             elif self.start_order[f'{chip}_CCD'] == 0:
                 pass
+
+        return self.order_trace
 
 
     def _get_orderlet_ext_from_trace_index(self, chip, trace_index, start_order=None):
