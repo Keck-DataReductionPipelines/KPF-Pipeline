@@ -5,6 +5,7 @@ import warnings
 
 from astropy.io import fits
 from astropy.stats import mad_std
+from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial import polynomial as poly
@@ -64,24 +65,46 @@ class SpectralExtractionAlg:
         self.order_trace = {}
         self.order_trace['GREEN_CCD'] = pd.read_csv(order_trace_green, index_col=0)
         self.order_trace['RED_CCD'] = pd.read_csv(order_trace_red, index_col=0)
-        self.start_order = {}
-        self.start_order['GREEN_CCD'] = int(start_order[0])
-        self.start_order['RED_CCD'] = int(start_order[1])
-
-        # fix order trace indexing
-        for chip in ['GREEN', 'RED']:
-            if self.start_order[f'{chip}_CCD'] > 0:
-                self.order_trace['f{chip}_CCD'] = self.order_trace['f{chip}_CCD'].drop(index=0).reset_index(drop=True)
-            elif self.start_order[f'{chip}_CCD'] < 0:
-                n = np.abs(self.start_order[f'{chip}_CCD'])
-                df = self.order_trace['f{chip}_CCD']
-                nan_rows = pd.DataFrame(np.nan, index=range(n), columns=df.columns)
-                self.order_trace['f{chip}_CCD'] = pd.concat([nan_rows, df], ignore_index=True)
-            elif self.start_order[f'{chip}_CCD'] == 0:
-                pass
+        self._set_start_order(start_order)
+        self._fix_order_trace_indexing()
 
         # initialize L1 object
         self.target_l1 = KPF1.from_l0(self.target_2D)
+        
+
+    def _set_start_order(self, start_order):
+        datecode = datetime.strptime(self.target_2D.header['PRIMARY']['DATE-OBS'], '%Y-%m-%d').strftime('%Y%m%d')
+        df = pd.read_csv(start_order)
+        
+        df.columns = df.columns.str.strip()
+        df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+        
+        df['UT_start_date'] = df['UT_start_date'].apply(lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S').strftime('%Y%m%d')).astype(int)
+        df['UT_end_date'] = df['UT_end_date'].apply(lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S').strftime('%Y%m%d')).astype(int)
+        
+        df['CALPATH'] = df['CALPATH'].str.replace(r'[^0-9\-]', '', regex=True).astype(int)
+        df['comment'] = df['comment'].str.replace(r'[^0-9\-]', '', regex=True).astype(int)
+        
+        df = df.rename(columns={'CALPATH':'GREEN_offset', 'comment':'RED_offset'})
+        
+        idx = df[(df['UT_start_date'] <= int(datecode)) & (df['UT_end_date'] >= int(datecode))].index
+    
+        self.start_order = {}
+        self.start_order['GREEN_CCD'] = int(df.iloc[idx]['GREEN_offset'])
+        self.start_order['RED_CCD'] = int(df.iloc[idx]['RED_offset'])
+
+    
+    def _fix_order_trace_indexing(self):
+        for chip in ['GREEN', 'RED']:
+            if self.start_order[f'{chip}_CCD'] > 0:
+                self.order_trace[f'{chip}_CCD'] = self.order_trace[f'{chip}_CCD'].drop(index=0).reset_index(drop=True)
+            elif self.start_order[f'{chip}_CCD'] < 0:
+                n = np.abs(self.start_order[f'{chip}_CCD'])
+                df = self.order_trace[f'{chip}_CCD']
+                nan_rows = pd.DataFrame(np.nan, index=range(n), columns=df.columns)
+                self.order_trace[f'{chip}_CCD'] = pd.concat([nan_rows, df], ignore_index=True)
+            elif self.start_order[f'{chip}_CCD'] == 0:
+                pass
 
 
     def _get_orderlet_ext_from_trace_index(self, chip, trace_index, start_order=None):
