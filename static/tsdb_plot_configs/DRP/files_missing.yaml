@@ -5,7 +5,7 @@ panel_arr:
       - col: D2_missing
         plot_type: state
         plot_attr:
-          label: File missing - 2D
+          label: "File missing - 2D\nTrue = missing"
           marker: .
     paneldict:
       ylabel: File missing - 2D
@@ -16,7 +16,7 @@ panel_arr:
       - col: L1_missing
         plot_type: state
         plot_attr:
-          label: File missing - L1
+          label: "File missing - L1\nTrue = missing"
           marker: .
     paneldict:
       ylabel: File missing - L1
@@ -27,7 +27,7 @@ panel_arr:
       - col: L2_missing
         plot_type: state
         plot_attr:
-          label: File missing - L2
+          label: "File missing - L2\nTrue = missing"
           marker: .
     paneldict:
       ylabel: File missing - L2
