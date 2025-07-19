@@ -94,48 +94,102 @@ class AnalyzeTimeSeries:
                                     fig_path=None, show_plot=False, 
                                     log_savefig_timing=False):
         """
-        Generate a multi-panel plot of data in a KPF TSDB.  The data to be 
-        plotted and attributes are stored in an array of dictionaries, which 
-        can be read from YAML configuration files.  
+        Generate a multi-panel time series plot using data retrieved from a KPF time series database (TSDB).
+        Each subplot (panel) is configured via a dictionary (or YAML file path), allowing fine-grained control
+        over data selection, filtering, formatting, and plotting attributes.
 
-        Args:
-            panel_dict makes panel_arr ...
-            panel_arr (array of dictionaries) - each dictionary in the array has keys:
-                panelvars: a dictionary of matplotlib attributes including:
-                    ylabel - text for y-axis label
-                paneldict: a dictionary containing:
-                    col: name of DB column to plot
-                    plot_type: 'plot' (points with connecting lines), 
-                               'scatter' (points), 
-                               'step' (steps), 
-                               'state' (for non-floats, like DRPTAG)
-                    plot_attr: a dictionary containing plot attributes for a scatter plot, 
-                        including 'label', 'marker', 'color'
-                    not_junk: if set to 'True', only files with NOTJUNK=1 are included; 
-                              if set to 'False', only files with NOTJUNK=0 are included
-                    on_sky: if set to 'True', only on-sky observations will be included; 
-                            if set to 'False', only calibrations will be included
-                    only_object (not implemented yet): if set, only object names in the keyword's value will be queried
-                    object_like (not implemented yet): if set, partial object names matching the keyword's value will be queried
-            start_date (datetime object) - start date for plot
-            end_date (datetime object) - end date for plot
-            fig_path (string) - set to the path for the file to be generated
-            show_plot (boolean) - show the plot in the current environment
-            These are now part of the dictionaries:
-                only_object (string or list of strings) - object names to include in query
-                object_like (string or list of strings) - partial object names to search for
-                on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
+        Parameters
+        ----------
+        plotdict : str or dict
+            Either a path-like string corresponding to a named YAML configuration file,
+            or a dictionary with a key `'panel_arr'` which contains a list of panel dictionaries.
+            Each dictionary defines the contents and layout of an individual subplot.
 
-        Returns:
-            PNG plot in fig_path or shows the plot it the current environment
-            (e.g., in a Jupyter Notebook).
+        start_date : datetime.datetime, optional
+            Start of the time range to query and plot. Defaults to 2020-01-01 if None.
+
+        end_date : datetime.datetime, optional
+            End of the time range to query and plot. Defaults to 2040-01-01 if None.
+
+        clean : bool, default=False
+            If True, applies outlier removal to the data (via `self.db.clean_df()`).
+
+        fig_path : str, optional
+            If provided, the full path (including filename) where the final PNG image will be saved.
+
+        show_plot : bool, default=False
+            If True, the plot will be displayed interactively (e.g., in a Jupyter Notebook).
+
+        log_savefig_timing : bool, default=False
+            If True, logs the CPU time spent during `savefig()`.
+
+        Plot Configuration (via panel_dict or YAML)
+        -------------------------------------------
+        plotdict['panel_arr'] : list of dicts
+            Each element defines a panel (subplot). Each panel can include:
             
-        To do:
-            * Make a standard plot type that excludes outliers using ranges set 
-              to, say, +/- 4-sigma where sigma is determined by aggressive outlier
-              rejection.  This should be in Delta values.
-            * Make standard correlation plots.
-            * Make standard phased plots (by day)
+            - 'paneldict' : dict
+                Configuration for panel-level behavior and filters:
+                - 'col' : str — Column name in the database to plot.
+                - 'plot_type' : str — One of {'plot', 'scatter', 'step', 'state', 'errorbar'}.
+                - 'plot_attr' : dict — Matplotlib attributes like marker, color, label, etc.
+                - 'not_junk' : bool or str ('True' or 'False') — If set, filters by NOTJUNK field.
+                - 'on_sky' : bool or str — If True, filters for FIUMODE == 'Observing'.
+                - 'only_object' : str or list[str] — Exact object names to filter by.
+                - 'object_like' : str or list[str] — LIKE-matching object names.
+                - 'only_source' : str — Filter by OBJECT.
+                - 'narrow_xlim_daily' : bool — Restrict x-axis to min/max of data on short timescales.
+                - 'ylabel' : str — Y-axis label for the panel.
+                - 'ylim' : tuple — Explicit y-axis range as (ymin, ymax).
+                - 'yscale' : str — e.g., 'log' to apply logarithmic scaling.
+                - 'subtractmedian' : bool — Subtract median from the plotted data.
+                - 'nolegend' : bool — Suppress legend.
+                - 'legend_frac_size' : float — Legend offset scale.
+                - 'axhspan' : dict — Optional shaded region(s) to overlay (keys: ymin, ymax, color, alpha).
+                - 'title' : str — Per-panel title string prepended to date range info.
+
+            - 'panelvars' : list of dicts
+                Defines the variables to be plotted in this panel. Each dictionary can include:
+                - 'col' : str — Main data column name.
+                - 'col_err' : str — Optional column for error bars.
+                - 'col_subtract' : str — Column to subtract from `col` before plotting.
+                - 'col_multiply' : float — Scalar to multiply data.
+                - 'col_offset' : float — Scalar to add to data.
+                - 'normalize' : bool — If True, normalize data by its median.
+                - 'plot_type' : str — Plot type (overrides the panel-level setting).
+                - 'plot_attr' : dict — Matplotlib styling keywords.
+                - 'unit' : str — Unit label for legends/statistics (e.g., "m/s").
+
+        Returns
+        -------
+        None
+            Saves the figure to `fig_path` (if specified), displays it (if `show_plot=True`),
+            and logs timing or errors as appropriate. Does not return the figure or axes explicitly.
+
+        Notes
+        -----
+        - The function handles various time axis labeling strategies based on time span:
+            • Hourly for single-day plots
+            • Days since start for <32-day plots
+            • Month/day for full-year plots
+            • ISO date labels for long-term plots
+        - For `plot_type='state'`, categorical values (e.g., DRPTAG) are color-coded and mapped to strings.
+        - The function attempts to detect empty data and annotates 'No Data' in panels accordingly.
+        - Internally calls `self.db.dataframe_from_db()` to query the database using provided filters.
+
+        To Do
+        -----
+        - Add standardized plot styles for delta-value diagnostics with robust sigma-clipping.
+        - Implement automated correlation plots between parameters.
+        - Implement phased plots (e.g., folding by sidereal day).
+
+        Examples
+        --------
+        >>> self.plot_time_series_multipanel('kpf_qlp_diagnostics.yaml', 
+                                             start_date=datetime(2025, 1, 1),
+                                             end_date=datetime(2025, 1, 31),
+                                             fig_path='monthly_plot.png',
+                                             show_plot=True)
         """
         import warnings
         warnings.filterwarnings("ignore", message=".*tight_layout.*")
