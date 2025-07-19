@@ -2037,11 +2037,17 @@ class TSDB:
 
     @require_role(['admin', 'operations', 'readonly'])
     def dataframe_from_db(self, columns=None, 
-                          start_date=None, end_date=None, 
-                          only_object=None, only_source=None, object_like=None, 
-                          on_sky=None, not_junk=None, 
-                          QC_pass=None, QC_fail=None, 
-                          QC_not_pass=None, QC_not_fail=None, 
+                          start_date=None, 
+                          end_date=None, 
+                          only_object=None, 
+                          only_source=None, 
+                          object_like=None, 
+                          on_sky=None, 
+                          not_junk=None, 
+                          qc_pass=None, 
+                          qc_fail=None, 
+                          qc_not_pass=None, 
+                          qc_not_fail=None, 
                           extra_conditions=None,
                           extra_conditions_logic='AND',
                           verbose=False):
@@ -2073,16 +2079,16 @@ class TSDB:
                 E.g., object_like = ['autocal-etalon', 'autocal-bias']
             on_sky (bool, optional): Filter by on-sky (True) or calibration 
                 (False) observations. Defaults to None.
-            QC_pass (str or list of str, optional): Column names where rows 
+            qc_pass (str or list of str, optional): Column names where rows 
                 must have True. Defaults to None.
-            QC_fail (str or list of str, optional): Column names where rows 
+            qc_fail (str or list of str, optional): Column names where rows 
                 must have False. Defaults to None.
-            QC_not_pass (str or list of str, optional): Column names where rows 
+            qc_not_pass (str or list of str, optional): Column names where rows 
                 are not True; allowable values are False and Null. A Null entry 
                 can happen when an observation is ingested for which a QC test 
                 has not been performed (e.g., because the QC was recently 
                 developed). Defaults to None.
-            QC_not_fail (str or list of str, optional): Column names where rows 
+            qc_not_fail (str or list of str, optional): Column names where rows 
                 are not False; allowable values are True and Null. A Null entry 
                 can happen when an observation is ingested for which a QC test 
                 has not been performed (e.g., because the QC was recently 
@@ -2103,14 +2109,14 @@ class TSDB:
             only_source = [only_source]
         if isinstance(object_like, str):
             object_like = [object_like]
-        if isinstance(QC_pass, str):
-            QC_pass = [QC_pass]
-        if isinstance(QC_fail, str):
-            QC_fail = [QC_fail]
-        if isinstance(QC_not_pass, str):
-            QC_not_pass = [QC_not_pass]
-        if isinstance(QC_not_fail, str):
-            QC_not_fail = [QC_not_fail]
+        if isinstance(qc_pass, str):
+            qc_pass = [qc_pass]
+        if isinstance(qc_fail, str):
+            qc_fail = [qc_fail]
+        if isinstance(qc_not_pass, str):
+            qc_not_pass = [qc_not_pass]
+        if isinstance(qc_not_fail, str):
+            qc_not_fail = [qc_not_fail]
     
         quote = '"' if self.backend == 'psql' else '"'  # SQLite uses " for quoting as well
         placeholder = '%s' if self.backend == 'psql' else '?'
@@ -2127,14 +2133,14 @@ class TSDB:
             else:
                 columns_requested = [columns] if isinstance(columns, str) else columns
                 columns_needed = columns_requested.copy()
-                if QC_pass is not None:
-                    columns_needed.extend(QC_pass)
-                if QC_fail is not None:
-                    columns_needed.extend(QC_fail)
-                if QC_not_pass is not None:
-                    columns_needed.extend(QC_not_pass)
-                if QC_not_fail is not None:
-                    columns_needed.extend(QC_not_fail)
+                if qc_pass is not None:
+                    columns_needed.extend(qc_pass)
+                if qc_fail is not None:
+                    columns_needed.extend(qc_fail)
+                if qc_not_pass is not None:
+                    columns_needed.extend(qc_not_pass)
+                if qc_not_fail is not None:
+                    columns_needed.extend(qc_not_fail)
                 placeholders = ','.join([placeholder] * len(columns_needed))
                 metadata_query = f'SELECT keyword, table_name FROM {self.prefix}metadata WHERE keyword IN ({placeholders});'
                 self._execute_sql_command(metadata_query, params=columns_needed)
@@ -2202,25 +2208,25 @@ class TSDB:
                 conditions.append(f'{self.prefix}l0.{quote}FIUMODE{quote} = {placeholder}')
                 params.append(mode)
 
-            if QC_pass is not None:
-                for col in QC_pass:
+            if qc_pass is not None:
+                for col in qc_pass:
                     conditions.append(f"{quote}{col}{quote} = {placeholder}")
                     params.append(True)
         
-            if QC_fail is not None:
-                for col in QC_fail:
+            if qc_fail is not None:
+                for col in qc_fail:
                     conditions.append(f"{quote}{col}{quote} = {placeholder}")
                     params.append(False)
     
-            if QC_not_pass is not None:
-                for col in QC_not_pass:
+            if qc_not_pass is not None:
+                for col in qc_not_pass:
                     conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
                     params.append(False)
         
-            if QC_not_fail is not None:
-                for col in QC_not_pass:
+            if qc_not_fail is not None:
+                for col in qc_not_fail:
                     conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
-                    params.append(False)
+                    params.append(True)
     
             if start_date:
                 date_str = pd.to_datetime(start_date).strftime("%Y%m%d")
@@ -2278,12 +2284,19 @@ class TSDB:
 
 
     @require_role(['admin', 'operations', 'readonly'])
-    def display_data(self, df=None, columns=None, 
-                           start_date=None, end_date=None, 
-                           only_object=None, object_like=None, only_source=None, 
-                           on_sky=None, not_junk=None,
-                           QC_pass=None, QC_fail=None, 
-                           QC_not_pass=None, QC_not_fail=None, 
+    def display_data(self, df=None, 
+    					   columns=None, 
+                           start_date=None, 
+                           end_date=None, 
+                           only_object=None, 
+                           object_like=None, 
+                           only_source=None, 
+                           on_sky=None, 
+                           not_junk=None,
+                           qc_pass=None, 
+                           qc_fail=None, 
+                           qc_not_pass=None, 
+                           qc_not_fail=None, 
                            max_height_px=600, # in pixels
                            url_stub='https://jump.caltech.edu/observing-logs/kpf/',
                            verbose=False):
@@ -2316,10 +2329,10 @@ class TSDB:
                 only_source=only_source,
                 on_sky=on_sky, 
                 not_junk=not_junk,
-                QC_pass=QC_pass, 
-                QC_fail=QC_fail, 
-                QC_not_pass=QC_not_pass, 
-                QC_not_fail=QC_not_fail, 
+                qc_pass=qc_pass, 
+                qc_fail=qc_fail, 
+                qc_not_pass=qc_not_pass, 
+                qc_not_fail=qc_not_fail, 
                 start_date=start_date,
                 end_date=end_date,
                 verbose=verbose

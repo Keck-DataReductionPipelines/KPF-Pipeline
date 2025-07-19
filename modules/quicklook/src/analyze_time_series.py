@@ -73,7 +73,6 @@ class AnalyzeTimeSeries:
         * For time series state plots, include the number of points in each state 
           in the legend.
         * Specify the yrange in the yaml files
-        * Add qc_pass and qc_fail parameters to yaml files -- only include rows where certain QCs (specified by keywords) pass or fail
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', credentials=None, logger=None, verbose=False):
@@ -133,11 +132,15 @@ class AnalyzeTimeSeries:
                 - 'col' : str — Column name in the database to plot.
                 - 'plot_type' : str — One of {'plot', 'scatter', 'step', 'state', 'errorbar'}.
                 - 'plot_attr' : dict — Matplotlib attributes like marker, color, label, etc.
-                - 'not_junk' : bool or str ('True' or 'False') — If set, filters by NOTJUNK field.
-                - 'on_sky' : bool or str — If True, filters for FIUMODE == 'Observing'.
                 - 'only_object' : str or list[str] — Exact object names to filter by.
                 - 'object_like' : str or list[str] — LIKE-matching object names.
                 - 'only_source' : str — Filter by OBJECT.
+                - 'not_junk' : bool or str ('True' or 'False') — If set, filters by NOTJUNK field.
+                - 'QC_pass' : str or list[str] — Column names where rows must have True.
+                - 'QC_fail' : str or list[str] — Column names where rows must have False.
+                - 'QC_not_pass' : str or list[str] — Column names where rows must have not True (Null allowed).
+                - 'QC_not_fail' : str or list[str] — Column names where rows must have not False (Null allowed).
+                - 'on_sky' : bool or str — If True, filters for FIUMODE == 'Observing'.
                 - 'narrow_xlim_daily' : bool — Restrict x-axis to min/max of data on short timescales.
                 - 'ylabel' : str — Y-axis label for the panel.
                 - 'ylim' : tuple — Explicit y-axis range as (ymin, ymax).
@@ -189,7 +192,7 @@ class AnalyzeTimeSeries:
                                              start_date=datetime(2025, 1, 1),
                                              end_date=datetime(2025, 1, 31),
                                              fig_path='monthly_plot.png',
-                                             show_plot=True)
+                                             show_plot=False)
         """
         import warnings
         warnings.filterwarnings("ignore", message=".*tight_layout.*")
@@ -210,6 +213,21 @@ class AnalyzeTimeSeries:
         def format_func(value, tick_number):
             """ For formatting of log plots """
             return num_fmt(value, sf=2)
+
+        def normalize_list_input(value):
+            if value is None:
+                return None
+            if isinstance(value, str):
+                return [value]
+            elif isinstance(value, list):
+                flattened = []
+                for item in value:
+                    if isinstance(item, list):
+                        flattened.extend(item)
+                    else:
+                        flattened.append(item)
+                return flattened
+            return [value]
 
         # Retrieve the appropriate standard plot dictionary
         if type(plotdict) == type('str'):
@@ -241,16 +259,12 @@ class AnalyzeTimeSeries:
                     unique_cols.add(d['col_err'])
                 if 'col_subtract' in d:
                     unique_cols.add(d['col_subtract'])
-        # add this?
-        #if 'only_object' in thispanel['paneldict']:
-        #if 'object_like' in thispanel['paneldict']:
 
         fig, axs = plt.subplots(npanels, 1, sharex=True, figsize=(15, npanels*2.5+1), tight_layout=True)
         if npanels == 1:
             axs = [axs]  # Make axs iterable even when there's only one panel
         if npanels > 1:
             plt.subplots_adjust(hspace=0)
-        #plt.tight_layout() # this caused a core dump in scripts/generate_time_series_plots.py
 
         overplot_night_box = False
         no_data = True # for now; will be set to False when data is detected
@@ -260,6 +274,7 @@ class AnalyzeTimeSeries:
             if isinstance(not_junk, str):
                 not_junk = True if not_junk.lower() == 'true' else False if not_junk.lower() == 'false' else not_junk
             only_object = thispanel['paneldict'].get('only_object', plotdict.get('only_object', None))
+            only_source = thispanel['paneldict'].get('only_source', plotdict.get('only_source', None))
             object_like = thispanel['paneldict'].get('object_like', plotdict.get('object_like', None))
             if object_like is not None:
                 if isinstance(object_like, str):
@@ -272,8 +287,20 @@ class AnalyzeTimeSeries:
                         else:
                             flattened.append(item)
                     object_like = flattened
-            only_source = thispanel['paneldict'].get('only_source', plotdict.get('only_source', None))
 
+            qc_pass      = thispanel['paneldict'].get('qc_pass', None)
+            qc_fail      = thispanel['paneldict'].get('qc_fail', None)
+            qc_not_pass  = thispanel['paneldict'].get('qc_not_pass', None)
+            qc_not_fail  = thispanel['paneldict'].get('qc_not_fail', None)
+#            print(qc_pass)
+#            print(type(qc_pass))
+#            print(qc_not_pass)
+#            print(type(qc_not_pass))
+#            print(qc_fail)
+#            print(type(qc_fail))
+#            print(qc_not_fail)
+#            print(type(qc_not_fail))
+            
             if start_date == None:
                 start_date = datetime(2020, 1,  1)
                 start_date_was_none = True
@@ -293,6 +320,10 @@ class AnalyzeTimeSeries:
                                            only_object=only_object, 
                                            object_like=object_like,
                                            only_source=only_source, 
+                                           qc_pass=qc_pass,
+                                           qc_fail=qc_fail,
+                                           qc_not_pass=qc_not_pass,
+                                           qc_not_fail=qc_not_fail,
                                            verbose=False)
 
         	# Check if the resulting dataframe has any rows
@@ -316,6 +347,7 @@ class AnalyzeTimeSeries:
                     elif str(thispanel['paneldict']['on_sky']).lower() == 'false':
                         df = df[df['FIUMODE'] == 'Calibration']
                     
+            # Determine how to display time
             thistitle = ''
             if ((end_date - start_date).days <= 1.05) and ((end_date - start_date).days >= 0.95):
                 if not empty_df:
@@ -432,6 +464,23 @@ class AnalyzeTimeSeries:
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
             axs[p].grid(color='lightgray')        
+
+            # Annotate panel with QC filters
+            y_offset = 2  # starting vertical offset in points
+            for label, qc_value in [('QC_pass', qc_pass), ('QC_fail', qc_fail), 
+                                    ('QC_not_pass', qc_not_pass), ('QC_not_fail', qc_not_fail)]:
+                if qc_value is not None:
+                    axs[p].annotate(f"{label}: {qc_value} ", xy=(1, 0), xycoords='axes fraction',
+                                    fontsize=7, color='lightcoral', ha='right', va='bottom',
+                                    xytext=(0, y_offset), textcoords='offset points')
+                    y_offset += 10  # stack next line above
+            
+            # Add note about junk exclusion
+            if not_junk is True:
+                axs[p].annotate("Junk excluded ", xy=(1, 0), xycoords='axes fraction',
+                                fontsize=7, color='lightcoral', ha='right', va='bottom',
+                                xytext=(0, y_offset), textcoords='offset points')
+                    
             if 'yscale' in thispanel['paneldict']:
                 if thispanel['paneldict']['yscale'] == 'log':
                     formatter = FuncFormatter(format_func)  # this doesn't seem to be working
@@ -443,16 +492,20 @@ class AnalyzeTimeSeries:
                     axs[p].yaxis.set_major_formatter(formatter)
             else:
                 axs[p].grid(color='lightgray')        
+
+            # Set y-axis limits
             ylim=False
             if 'ylim' in thispanel['paneldict']:
                 if type(ast.literal_eval(thispanel['paneldict']['ylim'])) == type((1,2)):
                     ylim = ast.literal_eval(thispanel['paneldict']['ylim'])
 
+            # Determine if legend should be made
             makelegend = True
             if 'nolegend' in thispanel['paneldict']:
                 if str(thispanel['paneldict']['nolegend']).lower() == 'true':
                     makelegend = False
 
+            # Subtract median from data
             subtractmedian = False
             if 'subtractmedian' in thispanel['paneldict']:
                 if str(thispanel['paneldict']['subtractmedian']).lower() == 'true':
@@ -475,6 +528,7 @@ class AnalyzeTimeSeries:
                     col_data = df[col_name]
                     col_data_replaced = col_data  # default, no subtraction
                     
+                    # Subtract one column from another
                     if 'col_subtract' in thispanel['panelvars'][i]:
                         col_subtract_name = thispanel['panelvars'][i]['col_subtract']
                         # Now filter out invalid values in col_subtract_name,
@@ -485,12 +539,15 @@ class AnalyzeTimeSeries:
                         col_subtract_data = df[col_subtract_name]
                         col_data_replaced = col_data - col_subtract_data
     
+                    # Multiply one column by a common factor
                     if 'col_multiply' in thispanel['panelvars'][i]:
                         col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') * thispanel['panelvars'][i]['col_multiply']
     
+                    # Add a common offset to a column
                     if 'col_offset' in thispanel['panelvars'][i]:
                         col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') + thispanel['panelvars'][i]['col_offset']
     
+                    # Use error bars
                     if 'col_err' in thispanel['panelvars'][i]:
                         col_data_err = df[thispanel['panelvars'][i]['col_err']]
                         col_data_err_replaced = col_data_err.replace('NaN',  np.nan)
