@@ -1006,6 +1006,15 @@ class TSDB:
             
         source = self.get_source(extraction_results)
         expected_data_levels = get_data_levels_expected(source)
+        D2_expected = ('2D' in expected_data_levels)
+        L1_expected = ('L1' in expected_data_levels)
+        L2_expected = ('L2' in expected_data_levels)
+        D2_exists = os.path.isfile(f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits")
+        L1_exists = os.path.isfile(f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits")
+        L2_exists = os.path.isfile(f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits")
+        D2_missing = D2_expected and (not D2_exists)
+        L1_missing = L1_expected and (not L1_exists)
+        L2_missing = L2_expected and (not L2_exists)
 
         extraction_results.update({
             'ObsID': base_filename,
@@ -1019,12 +1028,15 @@ class TSDB:
             'D2_header_read_time': now_str, # change to check if file exists first
             'L1_header_read_time': now_str, # change to check if file exists first
             'L2_header_read_time': now_str, # change to check if file exists first
-            'D2_expected': ('2D' in expected_data_levels),
-            'L1_expected': ('L1' in expected_data_levels),
-            'L2_expected': ('L2' in expected_data_levels),
-            'D2_exists': os.path.isfile(f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"),
-            'L1_exists': os.path.isfile(f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits"),
-            'L2_exists': os.path.isfile(f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits"),
+            'D2_expected': D2_expected,
+            'L1_expected': L1_expected,
+            'L2_expected': L2_expected,
+            'D2_exists': D2_exists,
+            'L1_exists': L1_exists,
+            'L2_exists': L2_exists,
+            'D2_missing': D2_missing,
+            'L1_missing': L1_missing,
+            'L2_missing': L2_missing,
             'RA_deg':  safe_angle(extraction_results.get('RA'),  unit='hourangle'),
             'DEC_deg': safe_angle(extraction_results.get('DEC'), unit='deg')
         })    
@@ -2492,6 +2504,15 @@ def process_file(file_path, now_str,
 
     source = get_source_func(extraction_results)
     expected_data_levels = get_data_levels_expected_func(source)
+    D2_expected = ('2D' in expected_data_levels)
+    L1_expected = ('L1' in expected_data_levels)
+    L2_expected = ('L2' in expected_data_levels)
+    D2_exists = os.path.isfile(file_path.replace('L0', '2D').replace('.fits', '_2D.fits'))
+    L1_exists = os.path.isfile(file_path.replace('L0', 'L1').replace('.fits', '_L1.fits'))
+    L2_exists = os.path.isfile(file_path.replace('L0', 'L2').replace('.fits', '_L2.fits'))
+    D2_missing = D2_expected and (not D2_exists)
+    L1_missing = L1_expected and (not L1_exists)
+    L2_missing = L2_expected and (not L2_exists)
 
     extraction_results.update({
         'ObsID': base_filename,
@@ -2505,12 +2526,15 @@ def process_file(file_path, now_str,
         'D2_header_read_time': now_str,
         'L1_header_read_time': now_str,
         'L2_header_read_time': now_str,
-        'D2_expected': ('2D' in expected_data_levels),
-        'L1_expected': ('L1' in expected_data_levels),
-        'L2_expected': ('L2' in expected_data_levels),
-        'D2_exists': os.path.isfile(file_path.replace('L0', '2D').replace('.fits', '_2D.fits')),
-        'L1_exists': os.path.isfile(file_path.replace('L0', 'L1').replace('.fits', '_L1.fits')),
-        'L2_exists': os.path.isfile(file_path.replace('L0', 'L2').replace('.fits', '_L2.fits')),
+        'D2_expected': D2_expected,
+        'L1_expected': L1_expected,
+        'L2_expected': L2_expected,
+        'D2_exists': D2_exists,
+        'L1_exists': L1_exists,
+        'L2_exists': L2_exists,
+        'D2_missing': D2_missing,
+        'L1_missing': L1_missing,
+        'L2_missing': L2_missing,
         'RA_deg': safe_angle(extraction_results.get('RA'), unit='hourangle'),
         'DEC_deg': safe_angle(extraction_results.get('DEC'), unit='deg')
     })
