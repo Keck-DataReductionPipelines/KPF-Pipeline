@@ -93,8 +93,9 @@ class AnalyzeTimeSeries:
                                     fig_path=None, show_plot=False, 
                                     log_savefig_timing=False):
         """
-        Generate a multi-panel time series plot using data retrieved from a KPF time series database (TSDB).
-        Each subplot (panel) is configured via a dictionary (or YAML file path), allowing fine-grained control
+        Generate a multi-panel time series plot using data retrieved from a KPF 
+        time series database (TSDB). Each subplot (panel) is configured via a 
+        dictionary (or YAML file path), allowing fine-grained control
         over data selection, filtering, formatting, and plotting attributes.
 
         Parameters
@@ -218,15 +219,9 @@ class AnalyzeTimeSeries:
             if value is None:
                 return None
             if isinstance(value, str):
-                return [value]
-            elif isinstance(value, list):
-                flattened = []
-                for item in value:
-                    if isinstance(item, list):
-                        flattened.extend(item)
-                    else:
-                        flattened.append(item)
-                return flattened
+                return [v.strip() for v in value.split(',')]
+            if isinstance(value, list):
+                return value
             return [value]
 
         # Retrieve the appropriate standard plot dictionary
@@ -288,18 +283,10 @@ class AnalyzeTimeSeries:
                             flattened.append(item)
                     object_like = flattened
 
-            qc_pass      = thispanel['paneldict'].get('qc_pass', None)
-            qc_fail      = thispanel['paneldict'].get('qc_fail', None)
-            qc_not_pass  = thispanel['paneldict'].get('qc_not_pass', None)
-            qc_not_fail  = thispanel['paneldict'].get('qc_not_fail', None)
-#            print(qc_pass)
-#            print(type(qc_pass))
-#            print(qc_not_pass)
-#            print(type(qc_not_pass))
-#            print(qc_fail)
-#            print(type(qc_fail))
-#            print(qc_not_fail)
-#            print(type(qc_not_fail))
+            qc_pass      = normalize_list_input(thispanel['paneldict'].get('qc_pass', None))
+            qc_fail      = normalize_list_input(thispanel['paneldict'].get('qc_fail', None))
+            qc_not_pass  = normalize_list_input(thispanel['paneldict'].get('qc_not_pass', None))
+            qc_not_fail  = normalize_list_input(thispanel['paneldict'].get('qc_not_fail', None))
             
             if start_date == None:
                 start_date = datetime(2020, 1,  1)
@@ -466,21 +453,23 @@ class AnalyzeTimeSeries:
             axs[p].grid(color='lightgray')        
 
             # Annotate panel with QC filters
+            x_offset = -2  # starting horizontal offset in points
             y_offset = 2  # starting vertical offset in points
             for label, qc_value in [('QC_pass', qc_pass), ('QC_fail', qc_fail), 
                                     ('QC_not_pass', qc_not_pass), ('QC_not_fail', qc_not_fail)]:
                 if qc_value is not None:
                     axs[p].annotate(f"{label}: {qc_value} ", xy=(1, 0), xycoords='axes fraction',
-                                    fontsize=7, color='lightcoral', ha='right', va='bottom',
-                                    xytext=(0, y_offset), textcoords='offset points')
+                                    fontsize=8, color='darkslategray', ha='right', va='bottom',
+                                    xytext=(x_offset, y_offset), textcoords='offset points',
+                                    bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.5, edgecolor='none'))
                     y_offset += 10  # stack next line above
-            
-            # Add note about junk exclusion
             if not_junk is True:
-                axs[p].annotate("Junk excluded ", xy=(1, 0), xycoords='axes fraction',
-                                fontsize=7, color='lightcoral', ha='right', va='bottom',
-                                xytext=(0, y_offset), textcoords='offset points')
+                axs[p].annotate("Junk excluded", xy=(1, 0), xycoords='axes fraction',
+                                fontsize=8, color='darkslategray', ha='right', va='bottom',
+                                xytext=(x_offset, y_offset), textcoords='offset points',
+                                bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.5, edgecolor='none'))
                     
+
             if 'yscale' in thispanel['paneldict']:
                 if thispanel['paneldict']['yscale'] == 'log':
                     formatter = FuncFormatter(format_func)  # this doesn't seem to be working

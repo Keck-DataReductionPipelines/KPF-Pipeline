@@ -2102,7 +2102,7 @@ class TSDB:
             The resulting dataframe.
 
         """
-    
+
         if isinstance(only_object, str):
             only_object = [only_object]
         if isinstance(only_source, str):

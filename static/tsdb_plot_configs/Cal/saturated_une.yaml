@@ -33,6 +33,7 @@ panel_arr:
         - autocal-une-sky
         - autocal-une-cal
       not_junk: true
+      QC_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -68,4 +69,5 @@ panel_arr:
         - autocal-une-sky
         - autocal-une-cal
       not_junk: true
+      QC_not_fail: 'GOODREAD'
       legend_frac_size: 0.25

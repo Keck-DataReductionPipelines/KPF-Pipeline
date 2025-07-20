@@ -19,6 +19,7 @@ panel_arr:
     paneldict:
       ylabel: "Max/Min Good Orders\n(Etalon Green - SCI)"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.30
       only_object: 
         - autocal-etalon-all-night
@@ -52,6 +53,7 @@ panel_arr:
     paneldict:
       ylabel: "Max/Min Good Orders\n(Etalon Green - CAL)"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.30
       only_object: 
         - autocal-etalon-all-night
@@ -85,6 +87,7 @@ panel_arr:
     paneldict:
       ylabel: "Max/Min Good Orders\n(Etalon Green - CAL)"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.30
       only_object: 
         - autocal-etalon-all-night
@@ -118,6 +121,7 @@ panel_arr:
     paneldict:
       ylabel: "Max/Min Good Orders\n(Etalon Red - SCI)"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.30
       title: Good Orders - Etalon
       only_object: 
@@ -152,6 +156,7 @@ panel_arr:
     paneldict:
       ylabel: "Max/Min Good Orders\n(Etalon Red - CAL)"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.30
       title: Good Orders - Etalon
       only_object: 
@@ -186,6 +191,7 @@ panel_arr:
     paneldict:
       ylabel: "Max/Min Good Orders\n(Etalon Red - SKY)"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.30
       title: Good Orders - Etalon
       only_object: 
