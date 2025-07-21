@@ -504,7 +504,7 @@ class SpectralExtractionAlg:
         # box extraction
         f_box, v_box, _, _ = self.box_extraction(D, S, V0, M=M, W=W)
         if method == 'box':
-            return f_box, v_box
+            return f_box, v_box, None, None
 
         f_flat, v_flat, _, _ = self.box_extraction(F, np.zeros_like(F), V0, M=M, W=W)
         P = self.spatial_profile(F, 
