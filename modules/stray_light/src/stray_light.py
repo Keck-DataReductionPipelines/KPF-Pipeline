@@ -35,15 +35,15 @@ class StrayLight(KPF0_Primitive):
                                        self.master_order_mask,
                                        self.config_path
                                       )
-            image = {}
-            mask = {}
+            
+            out_2D = straylight.target_2D
             for chip in ['GREEN', 'RED']:
-                image[f'{chip}_CCD'], mask[f'{chip}_CCD'] = straylight.estimate_stray_light(chip)
+                out_2D[f'{chip}_CCD'] = straylight.remove_stray_light(chip)
             exit_code = 1
-            return Arguments([exit_code, image, mask])
+            return Arguments([exit_code, out_2D])
         except Exception as e:
             self.logger.error(f"StrayLight algorithm failed: {e}\n{traceback.format_exc()}")
-            return Arguments([exit_code, None, None])
+            return Arguments([exit_code, None])
 
     def _pre(self):
         pass

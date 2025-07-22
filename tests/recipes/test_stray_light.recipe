@@ -12,5 +12,4 @@ ordermask = kpf0_from_fits(cals['ordermask'])
 stray_light_output_list = StrayLight(D2_obj, ordermask)
 
 exit_code = stray_light_output_list[0]
-stray_light_image = stray_light_output_list[1]
-inter_order_mask = stray_light_output_list[2]
+D2_out = stray_light_output_list[1]
