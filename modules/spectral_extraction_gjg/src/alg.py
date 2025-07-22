@@ -264,7 +264,7 @@ class SpectralExtractionAlg:
     def box_extraction(self, 
                        D, 
                        S, 
-                       V0, 
+                       V, 
                        Q=1.0, 
                        M=None, 
                        W=None, 
@@ -277,7 +277,7 @@ class SpectralExtractionAlg:
         Args
             D: data array
             S: sky/scattered/stray light background array
-            V0: variance array from detector (i.e. read noise)
+            V: variance array
             Q: quantum scaling (electrons/photons/ADU)
             M: mask (1 = good pixel, 0=bad)
             W: weights, typically to define order trace
@@ -285,7 +285,7 @@ class SpectralExtractionAlg:
         # sanitize inputs
         D = np.asarray(D)
         S = np.asarray(S)
-        V0 = np.asarray(V0)
+        V = np.asarray(V)
         Q = np.asarray(Q)
 
         # ensure mask and weight arrays exist
@@ -294,9 +294,6 @@ class SpectralExtractionAlg:
         if W is None:
             W = np.ones_like(D, dtype='float')/D.shape[0]
         
-        # 2D variance array
-        V = V0 + np.abs(D)/Q
-    
         # 1D box extraction of spectrum and variance
         f = np.sum((D-S)*W,axis=0)
         v = np.sum(V*W, axis=0)
@@ -314,7 +311,7 @@ class SpectralExtractionAlg:
     def optimal_extraction(self, 
                            D, 
                            S, 
-                           V0, 
+                           V, 
                            Q=1.0, 
                            M=None, 
                            W=None, 
@@ -337,7 +334,7 @@ class SpectralExtractionAlg:
         Args
             D: data array
             S: sky/scattered/stray light background array
-            V0: variance array from detector (i.e. read noise)
+            V: variance array
             Q: quantum scaling (electrons/photons/ADU)
             M: mask (1 = good pixel, 0=bad)
             W: weights, typically to define order trace
@@ -366,7 +363,7 @@ class SpectralExtractionAlg:
         # sanitize inputs
         D = np.asarray(D)
         S = np.asarray(S)
-        V0 = np.asarray(V0)
+        V = np.asarray(V)
         Q = np.asarray(Q)
         
         # ensure mask and weight arrays exist
@@ -384,14 +381,16 @@ class SpectralExtractionAlg:
         # mask inter-order pixels
         M[W == 0] = 0
 
-        # initial estimates
-        f, v, _, _ = self.box_extraction(D, S, V0, Q=Q, M=M, W=W)
-        
+        # box extraction
+        f, v, _, _ = self.box_extraction(D, S, V, Q=Q, M=M, W=W)
+
+        # spatial profile
         if not static_profile:
             P = (D-S)/f
         
-        V = V0 + np.abs(D)/Q
-    
+        # variance from non-photon sources
+        V0 = V - np.abs(D)/Q
+
         # optimal extraction loop
         loop = 0
         while loop < max_iter:
@@ -495,8 +494,8 @@ class SpectralExtractionAlg:
                                   trace_index
                                  )
 
-        # master flat
-        F, _ = self._orderlet_box(self.master_flat_2D[f'{chip}_CCD_STACK'].data,
+        # target variance
+        D, V = self._orderlet_box(self.target_2D[f'{chip}_VAR'].data,
                                   self.order_trace[f'{chip}_CCD'],
                                   trace_index
                                  )
@@ -507,17 +506,26 @@ class SpectralExtractionAlg:
                                   trace_index
                                  )
 
-        V0 = float(np.mean([self.target_2D.header['PRIMARY'][f'RN{chip}1'],self.target_2D.header['PRIMARY'][f'RN{chip}2']]))
+        # flat frame
+        F, _ = self._orderlet_box(self.master_flat_2D[f'{chip}_CCD_STACK'].data,
+                                  self.order_trace[f'{chip}_CCD'],
+                                  trace_index
+                                 )
+        
+        # zero frame
+        Z = np.zeros_like(F)
+        
+        # mask (currently a placeholder)
         M = np.ones_like(D, dtype='int')
 
         # box extraction
-        f_box, v_box, _, _ = self.box_extraction(D, S, V0, M=M, W=W)
+        f_box, v_box, _, _ = self.box_extraction(D, S, V, M=M, W=W)
         if method == 'box':
             return f_box, v_box, None, None
 
-        f_flat, v_flat, _, _ = self.box_extraction(F, np.zeros_like(F), V0, M=M, W=W)
+        f_flat, v_flat, _, _ = self.box_extraction(F, Z, V, M=M, W=W)
         P = self.spatial_profile(F, 
-                                 np.zeros_like(F), 
+                                 Z, 
                                  W, 
                                  f_flat, 
                                  filter_size=profile_filter_size, 
@@ -527,7 +535,7 @@ class SpectralExtractionAlg:
 
         f_opt, v_opt, P, M = self.optimal_extraction(D, 
                                                      S, 
-                                                     V0, 
+                                                     V, 
                                                      M=M, 
                                                      W=W, 
                                                      P=P,
