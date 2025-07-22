@@ -7,12 +7,20 @@ target_2D_file = '/data/2D/20241022/KP.20241022.48910.02_2D.fits'
 target_2D = kpf0_from_fits(target_2D_file)  # recipe language, automatically imports I/O
 
 obs_date_time = GetHeaderValue(target_2D,'DATE-MID')
-cals = CalibrationLookup(obs_date_time, subset=['smoothlamp', 'ordermask', 'ordertrace', 'start_order'])
-masterflat = kpf0_from_fits(cals['smoothlamp'])
-ordermask = kpf0_from_fits(cals['ordermask'])
-trace_green = cals['ordertrace'][0]              # this is a filepath
-trace_red = cals['ordertrace'][1]
-start_order = cals['start_order']
+
+# these masters correspond to 20241022
+# update these if you want to change the target_2D file
+
+masterflat_file = '/data/masters/20241022/kpf_20241022_smooth_lamp.fits'
+masterflat = kpf0_from_fits(masterflat_file)
+
+ordermask_file = '/data/masters/20241022/kpf_20241022_order_mask.fits'
+ordermask = kpf0_from_fits(ordermask_file)
+
+trace_green = '/data/masters/20241022/kpf_20241022_master_flat_GREEN_CCD.csv'
+trace_red = 'data/masters/20241022/kpf_20241022_master_flat_RED_CCD.csv'
+
+start_order = [0,1]
 
 stray_light_output_list = StrayLight(target_2D, ordermask)
 stray_light_image = stray_light_output_list[1]
