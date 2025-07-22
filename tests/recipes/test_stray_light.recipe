@@ -1,4 +1,4 @@
-from modules.stray_light.src.stray_light import EstimateStrayLight
+from modules.stray_light.src.stray_light import StrayLight
 from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 from modules.Utils.data_handler import GetHeaderValue
 
@@ -9,8 +9,7 @@ obs_date_time = GetHeaderValue(D2_obj,'DATE-MID')
 cals = CalibrationLookup(obs_date_time, subset=['ordermask'])
 ordermask = kpf0_from_fits(cals['ordermask'])
 
-stray_light_output_list = EstimateStrayLight(D2_obj, ordermask)
+stray_light_output_list = StrayLight(D2_obj, ordermask)
 
 exit_code = stray_light_output_list[0]
-stray_light_image = stray_light_output_list[1]
-inter_order_mask = stray_light_output_list[2]
+D2_out = stray_light_output_list[1]
