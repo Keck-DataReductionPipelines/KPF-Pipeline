@@ -19,16 +19,13 @@ ordermask = kpf0_from_fits(ordermask_file)
 
 trace_green = '/data/masters/20241022/kpf_20241022_master_flat_GREEN_CCD.csv'
 trace_red = 'data/masters/20241022/kpf_20241022_master_flat_RED_CCD.csv'
-
 start_order = [0,1]
 
 stray_light_output_list = StrayLight(target_2D, ordermask)
-stray_light_image = stray_light_output_list[1]
-inter_order_mask = stray_light_output_list[2]
+target_2D = stray_light_output_list[1]
 
 spectral_extraction_output_list = SpectralExtraction(target_2D, 
                                                      masterflat, 
-                                                     stray_light_image, 
                                                      trace_green, 
                                                      trace_red, 
                                                      start_order[0], 

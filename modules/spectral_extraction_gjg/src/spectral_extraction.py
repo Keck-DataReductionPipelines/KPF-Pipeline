@@ -20,11 +20,10 @@ class SpectralExtraction(KPF0_Primitive):
         # Input arguments
         self.target_2D = self.action.args[0]
         self.master_flat_2D = self.action.args[1]
-        self.stray_light_image = self.action.args[2]
-        self.order_trace_green = self.action.args[3]
-        self.order_trace_red = self.action.args[4]
-        self.start_order_green = self.action.args[5]
-        self.start_order_red = self.action.args[6]
+        self.order_trace_green = self.action.args[2]
+        self.order_trace_red = self.action.args[3]
+        self.start_order_green = self.action.args[4]
+        self.start_order_red = self.action.args[5]
         
         # Input configuration
         self.config = configparser.ConfigParser()
@@ -40,7 +39,6 @@ class SpectralExtraction(KPF0_Primitive):
         try:
             spectralextraction = SpectralExtractionAlg(self.target_2D,
                                                        self.master_flat_2D,
-                                                       self.stray_light_image,
                                                        self.order_trace_green,
                                                        self.order_trace_red,
                                                        self.start_order_green,

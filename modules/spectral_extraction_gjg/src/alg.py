@@ -24,7 +24,6 @@ class SpectralExtractionAlg:
     Args:
         target_2D (KPF0): A KPF 2D science object
         master_flat_2D (KPF0): A KPF 2D master flat
-        stray_light_image (dict of ndarray): 2D stray light arrays for the GREEN and RED ccds
         order_trace_green (str): path to csv with order trace for GREEN ccd
         order_trace_red (str): path to csv with order trace for RED ccd
         start_order (tuple): index to start order trace, see caldates/start_order.csv
@@ -34,13 +33,14 @@ class SpectralExtractionAlg:
     def __init__(self, 
                  target_2D, 
                  master_flat_2D, 
-                 stray_light_image,
                  order_trace_green, 
                  order_trace_red,
                  start_order_green,
                  start_order_red,
                  default_config_path,
-                 logger=None
+                 background_image_green=None,
+                 background_image_red=None,
+                 logger=None,
                  ):
         # config inputs
         self.config = ConfigClass(default_config_path)
@@ -62,7 +62,6 @@ class SpectralExtractionAlg:
         # data inputs
         self.target_2D = target_2D
         self.master_flat_2D = master_flat_2D
-        self.stray_light_image = stray_light_image
         self.order_trace = {}
         self.order_trace['GREEN_CCD'] = pd.read_csv(order_trace_green, index_col=0)
         self.order_trace['RED_CCD'] = pd.read_csv(order_trace_red, index_col=0)
@@ -70,6 +69,16 @@ class SpectralExtractionAlg:
         self.start_order['GREEN_CCD'] = start_order_green
         self.start_order['RED_CCD'] = start_order_red
         self.order_trace = self._fix_order_trace_indexing()
+
+        self.background_image = {}
+        if background_image_green is not None:
+            self.background_image['GREEN_CCD'] = background_image_green
+        else:
+            self.background_image['GREEN_CCD'] = np.zeros_like(self.target_2D['GREEN_CCD'])
+        if background_image_red is not None:
+            self.background_image['RED_CCD'] = background_image_red
+        else:
+            self.background_image['RED_CCD'] = np.zeros_like(self.target_2D['RED_CCD'])
 
         # initialize L1 object
         self.target_l1 = KPF1.from_l0(self.target_2D)
@@ -203,7 +212,7 @@ class SpectralExtractionAlg:
     
         Args:
             D (np.ndarray): 2D data array, bias corrected and flat fielded
-            S (np.ndarray): 2D stray light (sky/scattered/stray light background)
+            S (np.ndarray): 2D sky/scattered/stray light background
             W (np.ndarray): 2D weight array to handle order curvature/tilt
             f (np.ndarray): 1D spectrum
             filter_size (int): filter size for median filter, used to identify outliers
@@ -267,7 +276,7 @@ class SpectralExtractionAlg:
     
         Args
             D: data array
-            S: sky/scattered/stray light array
+            S: sky/scattered/stray light background array
             V0: variance array from detector (i.e. read noise)
             Q: quantum scaling (electrons/photons/ADU)
             M: mask (1 = good pixel, 0=bad)
@@ -327,7 +336,7 @@ class SpectralExtractionAlg:
     
         Args
             D: data array
-            S: sky/scattered/stray light array
+            S: sky/scattered/stray light background array
             V0: variance array from detector (i.e. read noise)
             Q: quantum scaling (electrons/photons/ADU)
             M: mask (1 = good pixel, 0=bad)
@@ -450,7 +459,7 @@ class SpectralExtractionAlg:
                          profile_filter_size=None,
                          profile_num_knots=None,
                          profile_sigma_clip=None,
-                         extraction_sigma_clip=None
+                         extraction_sigma_clip=None,
                         ):
         """
         Extract 1D spectrum for a single orderlet
@@ -486,14 +495,14 @@ class SpectralExtractionAlg:
                                   trace_index
                                  )
 
-        # master flat data
+        # master flat
         F, _ = self._orderlet_box(self.master_flat_2D[f'{chip}_CCD_STACK'].data,
                                   self.order_trace[f'{chip}_CCD'],
                                   trace_index
                                  )
 
-        # stray light
-        S, _ = self._orderlet_box(self.stray_light_image[f'{chip}_CCD'].data,
+        # sky/scattered/stray light background
+        S, _ = self._orderlet_box(self.background_image[f'{chip}_CCD'].data,
                                   self.order_trace[f'{chip}_CCD'],
                                   trace_index
                                  )
