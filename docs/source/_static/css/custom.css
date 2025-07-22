@@ -9,3 +9,9 @@ div.highlight pre {
     white-space: pre-wrap; /* Allows line wrapping if you prefer */
     overflow: auto; /* Ensures horizontal scrolling if content overflows */
 }
+
+/* Wrap table */
+.wrap-table td {
+    white-space: normal !important;
+    word-wrap: break-word;
+}
