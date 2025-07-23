@@ -97,8 +97,8 @@ class SpectralExtractionAlg:
         else:
             self.bad_pixel_mask['RED_CCD'] = np.ones_like(self.target_2D['RED_CCD'], dtype='bool')
 
-        for chip in ['GREEN', 'RED']:
-            self.bad_pixel_mask[f'{chip}_CCD'] &= self._make_bad_pixel_mask(chip)
+        #for chip in ['GREEN', 'RED']:
+        #    self.bad_pixel_mask[f'{chip}_CCD'] &= self._make_bad_pixel_mask(chip)
 
         # initialize L1 object
         self.target_l1 = KPF1.from_l0(self.target_2D)
@@ -116,7 +116,7 @@ class SpectralExtractionAlg:
     
         # check for variance outliers
         V0 = np.abs(V-D)
-        M &= np.abs(V0 - np.median(V0))/mad_std(V0) < sigma_cut
+        M &= np.abs(V0 - np.median(V0))/mad_std(V0, ignore_nan=True) < sigma_cut
 
         return M
 
@@ -273,7 +273,7 @@ class SpectralExtractionAlg:
 
         for i in range(nrow):
             med = median_filter(P[i], size=filter_size)
-            out = np.abs(P[i]-med)/mad_std(P[i]-med) > sigma_clip
+            out = np.abs(P[i]-med)/mad_std(P[i]-med, ignore_nan=True) > sigma_clip
 
             try:
                 knots = np.linspace(x[~out].min()+1, x[~out].max()-1, num_knots)[1:-1]
@@ -318,18 +318,20 @@ class SpectralExtractionAlg:
             M: mask (1 = good pixel, 0=bad)
             W: weights, typically to define order trace, assumed to be normalized
         """
+        # ensure mask and weight arrays exist
+        if M is None:
+            M = np.ones_like(D, dtype=int)
+        if W is None:
+            W = np.ones_like(D, dtype=float)/D.shape[0]
+
         # sanitize inputs
         D = np.asarray(D)
         S = np.asarray(S)
         V = np.asarray(V)
         Q = np.asarray(Q)
+        M = np.asarray(M, dtype=int)
+        W = np.asarray(W, dtype=float)
 
-        # ensure mask and weight arrays exist
-        if M is None:
-            M = np.ones_like(D, dtype='int')
-        if W is None:
-            W = np.ones_like(D, dtype='float')/D.shape[0]
-        
         # 1D box extraction of spectrum and variance
         f = np.sum(M*(D-S)*W,axis=0)
         v = np.sum(M*V*W,axis=0)
@@ -375,6 +377,18 @@ class SpectralExtractionAlg:
             profile_sigma_clip (float): sigma clipping used to identify outliers during profile modeling 
             extraction_sigma_clip (float): sigma clipping used to identify cosmic rays and pixel defects
         """
+        # check for pre-computed spatial profile
+        if P is not None:
+            static_profile = True
+        else:
+            static_profile = False
+        
+        # ensure mask and weight arrays exist
+        if M is None:
+            M = np.ones_like(D, dtype=int)
+        if W is None:
+            W = np.ones_like(D, dtype=float)/nrow
+
         # populate kwargs
         if max_iter is None:
             max_iter = self.extraction_max_iter
@@ -395,19 +409,9 @@ class SpectralExtractionAlg:
         S = np.asarray(S)
         V = np.asarray(V)
         Q = np.asarray(Q)
+        M = np.asarray(M,dtype=int)
+        W = np.asarray(W,dtype=float)
         
-        # ensure mask and weight arrays exist
-        if M is None:
-            M = np.ones_like(D, dtype='int')
-        if W is None:
-            W = np.ones_like(D, dtype='float')/nrow
-
-        # check for pre-computed spatial profile
-        if P is not None:
-            static_profile = True
-        else:
-            static_profile = False
-    
         # mask inter-order pixels
         M[W == 0] = 0
 
@@ -529,17 +533,17 @@ class SpectralExtractionAlg:
         V = self.target_2D[f'{chip}_VAR'].data[ymin:ymax]
 
         # sky/scattered/stray light background
-        S = self.background_image[f'{chip}_CCD'].data[ymin:ymax]
+        S = self.background_image[f'{chip}_CCD'][ymin:ymax]
 
         # mask
-        M = None
+        #M = np.ones_like(D, dtype=int)
+        M = self.bad_pixel_mask[f'{chip}_CCD'].astype(int)[ymin:ymax]
 
         # flat frame
         F = self.master_flat_2D[f'{chip}_CCD_STACK'][ymin:ymax]
         
         # zero frame
         Z = np.zeros_like(F)
-
         
         # box extraction
         f_box, v_box, _, _ = self.box_extraction(D, S, V, M=M, W=W)
