@@ -403,7 +403,7 @@ if do_order_trace:
 			if b_lev0_rect:
 				result = to_fits(lev0_flat_rect, output_lev0_flat_rect)
 
-## do spectral extraction including background subtracton and build BARY_CORR and do CA-HK extraction after spectral extraction.
+## do spectral extraction including stray light subtracton and build BARY_CORR and do CA-HK extraction after spectral extraction.
 #  description: do spectrum extraction based on extraction method (summ or optimal) per fiber per ccd and
 #               spectral extraction from CA-HK spectrometer fibers.
 #               copy wavelength solution data from wls sample files to produced L1 data.
@@ -470,76 +470,16 @@ if do_spectral_extraction or do_hk or do_bc:
 		order_trace_flat = cals['traceflat']
 		smooth_lamp_file = str_replace(cals['smoothlamp'], '.fits', '_L1.fits')
 
-		# prepare trace files and rectified L0 flat data for spectral extraction
-		if do_spectral_extraction:
-			# existence of flat and trace files
-			# output_lev0_flat_rect = output_order_trace + flat_stem + flat_rect + fits_ext
-			output_lev0_flat_rect = str_replace(order_trace_flat, fits_ext, flat_rect+fits_ext)
-			if exists(output_lev0_flat_rect):
-				lev0_flat_rect = kpf0_from_fits(output_lev0_flat_rect, data_type=data_type)
-
-			if not trace_list:
-				b_all_traces = True
-				for idx in ccd_idx:
-					lev0_trace_csv = output_order_trace[idx]
-					trace_list = trace_list + [lev0_trace_csv]
-					b_all_traces = b_all_traces and exists(lev0_trace_csv)
-
-
-		# this used to denote the level 0 data before background subtraction
-		lev0_data_no_bk = kpf0_from_fits(input_lev0_file, data_type=data_type)
-
-		_, short_lev0_file = split(input_lev0_file)
-		lev1_stem, lev1_ext = splitext(short_lev0_file)
-
-		# lev1_stem is w/o "_2D" suffix
-		if lev0_stem_suffix != None:
-			if lev0_stem_suffix in lev1_stem:
-				lev1_stem = str_replace(lev1_stem, lev0_stem_suffix, "")
-		output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
-
-		is_raw = 1
-		if rect_method in input_lev0_file:
-		   is_raw = 0
-		if lev1_stem_suffix in input_lev0_file:
-		   is_raw = 0
-		if lev2_stem_suffix in input_lev0_file:
-		   is_raw = 0
-
 		# produce level 1 by spectral extraction if overwrite or L1 file doesn't exist
 		if (is_raw == 1) and (overwrite or not exists(output_lev1_file)):
 			b_level1_sp = False
 
 			# do spectral extraction if do_spectral_extraction, rectified flat data existing and all trace results exist.
-			if do_spectral_extraction and (lev0_flat_rect != None) and b_all_traces:
+			if do_spectral_extraction and b_all_traces:
 				b_level1_sp = True
 
-			# loop through ccd to do spectral extraction
+			# do spectral extraction
 			if b_level1_sp:
-				# do background subtraction
-				if do_bk_subtraction:
-					order_mask = None
-					# create order mask for background subtraction
-					for idx in ccd_idx:
-						if orderlet_widths_ccds:
-							orderlet_widths = orderlet_widths_ccds[idx]
-						else:
-							orderlet_widths = []
-						order_mask = OrderMask(lev0_data, order_mask, orderlet_names=orderlet_names[idx],
-								start_order=start_order[idx], trace_file=trace_list[idx],
-								data_extension=ccd_list[idx],
-								orderlet_widths=orderlet_widths, full_coverage=1)
-					# update L0 by background subtraction
-					#if order_mask != None:
-						#lev0_data = ImageProcessing(lev0_data, order_mask, ccd_list, data_type, None)
-						#output_lev0_bk = input_2d_dir + '/bk/' + lev1_stem + fits_ext
-						#to_fits(lev0_data, output_lev0_bk)
-				op_data = None
-				if outlier_mask_path == None:
-					outlier_mask_file = ''
-				else:
-					outlier_mask_file = outlier_mask_path + "/" + context.date_dir + "/" + short_lev0_file
-
 				stray_light_output_list = StrayLight(lev0_data, order_mask)
 				lev0_data = stray_light_output_list[1]
 				
@@ -554,7 +494,6 @@ if do_spectral_extraction or do_hk or do_bc:
 				op_data = spectral_extraction_output_list[1]
 
 				if op_data != None:
-				
 					# Quality Control & Diagnostics - L1 level
 					# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
 					data_level_str = 'L1'
