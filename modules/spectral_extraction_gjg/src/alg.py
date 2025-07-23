@@ -38,6 +38,8 @@ class SpectralExtractionAlg:
                  start_order_green,
                  start_order_red,
                  default_config_path,
+                 bad_pixel_mask_green=None,
+                 bad_pixel_mask_red=None,
                  background_image_green=None,
                  background_image_red=None,
                  logger=None,
@@ -59,7 +61,7 @@ class SpectralExtractionAlg:
         self.profile_sigma_clip = float(cfg_params.get_config_value('profile_sigma_clip'))
         self.profile_num_knots = int(cfg_params.get_config_value('profile_num_knots'))
 
-        # data inputs
+        # required data inputs
         self.target_2D = target_2D
         self.master_flat_2D = master_flat_2D
         self.order_trace = {}
@@ -70,20 +72,55 @@ class SpectralExtractionAlg:
         self.start_order['RED_CCD'] = start_order_red
         self.order_trace = self._fix_order_trace_indexing()
 
+        # By default the KPF DRP subracts stray light from the data image
+        # Only supply background_image if you suspect some additional contamination
         self.background_image = {}
         if background_image_green is not None:
             self.background_image['GREEN_CCD'] = background_image_green
         else:
             self.background_image['GREEN_CCD'] = np.zeros_like(self.target_2D['GREEN_CCD'])
+        
         if background_image_red is not None:
             self.background_image['RED_CCD'] = background_image_red
         else:
             self.background_image['RED_CCD'] = np.zeros_like(self.target_2D['RED_CCD'])
 
+        # bad pixel mask
+        self.bad_pixel_mask = {}
+        if bad_pixel_mask_green is not None:
+            self.bad_pixel_mask['GREEN_CCD'] = bad_pixel_mask_green
+        else:
+            self.bad_pixel_mask['GREEN_CCD'] = np.ones_like(self.target_2D['GREEN_CCD'], dtype='bool')
+
+        if bad_pixel_mask_red is not None:
+            self.bad_pixel_mask['RED_CCD'] = bad_pixel_mask_red
+        else:
+            self.bad_pixel_mask['RED_CCD'] = np.ones_like(self.target_2D['RED_CCD'], dtype='bool')
+
+        for chip in ['GREEN', 'RED']:
+            self.bad_pixel_mask[f'{chip}_CCD'] &= self._make_bad_pixel_mask(chip)
+
         # initialize L1 object
         self.target_l1 = KPF1.from_l0(self.target_2D)
+
         
+    def _make_bad_pixel_mask(self, chip, sigma_cut=5.0):
+        # data, variance, mask
+        D = self.target_2D[f'{chip}_CCD']
+        V = self.target_2D[f'{chip}_VAR']
+        M = np.ones(D.shape, dtype='bool')
+        
+        # check for NaN and inf
+        M &= np.isfinite(D)
+        M &= np.isfinite(V)
     
+        # check for variance outliers
+        V0 = np.abs(V-D)
+        M &= np.abs(V0 - np.median(V0))/mad_std(V0) < sigma_cut
+
+        return M
+
+        
     def _fix_order_trace_indexing(self):
         for chip in ['GREEN', 'RED']:
             if self.start_order[f'{chip}_CCD'] > 0:
@@ -192,7 +229,7 @@ class SpectralExtractionAlg:
         W[mask_bot] = frac_bot[mask_bot]
 
         if return_box_coords:
-            return D, W, (box_zeropt, box_zeropt+box_height)
+            return D, W, box_zeropt, box_zeropt+box_height
         return D, W
 
 
@@ -267,8 +304,7 @@ class SpectralExtractionAlg:
                        V, 
                        Q=1.0, 
                        M=None, 
-                       W=None, 
-                       do_plot=False
+                       W=None
                       ):
         """
         Box extraction on a data array D (typical use case is a single orderlet)
@@ -280,7 +316,7 @@ class SpectralExtractionAlg:
             V: variance array
             Q: quantum scaling (electrons/photons/ADU)
             M: mask (1 = good pixel, 0=bad)
-            W: weights, typically to define order trace
+            W: weights, typically to define order trace, assumed to be normalized
         """
         # sanitize inputs
         D = np.asarray(D)
@@ -295,15 +331,9 @@ class SpectralExtractionAlg:
             W = np.ones_like(D, dtype='float')/D.shape[0]
         
         # 1D box extraction of spectrum and variance
-        f = np.sum((D-S)*W,axis=0)
-        v = np.sum(V*W, axis=0)
-    
-        if do_plot:
-            plt.figure(figsize=(20,4))
-            plt.plot(f)
-            plt.plot(v)
-            plt.show()
-            
+        f = np.sum(M*(D-S)*W,axis=0)
+        v = np.sum(M*V*W,axis=0)
+                        
         # return four values to match optimal extraction
         return f, v, None, None
 
@@ -395,8 +425,8 @@ class SpectralExtractionAlg:
         loop = 0
         while loop < max_iter:
             # spectrum
-            f = np.sum(M*P*(D-S)*(W/V),axis=0)/np.sum(M*P**2*(W/V), axis=0)
-            v = np.sum(M*P*W,axis=0)/np.sum(M*P**2*(W/V), axis=0)
+            f = np.sum(M*P*(D-S)*(W/V),axis=0)/np.sum(M*P**2*(W/V),axis=0)
+            v = np.sum(M*P*W,axis=0)/np.sum(M*P**2*(W/V),axis=0)
         
             # profile
             if not static_profile:
@@ -446,7 +476,7 @@ class SpectralExtractionAlg:
                 break
         
             loop += 1
-    
+        
         return f, v, P, M
 
     
@@ -488,42 +518,36 @@ class SpectralExtractionAlg:
         if extraction_sigma_clip is None:
             extraction_sigma_clip = self.extraction_sigma_clip
 
-        # target data
-        D, W = self._orderlet_box(self.target_2D[f'{chip}_CCD'].data,
-                                  self.order_trace[f'{chip}_CCD'],
-                                  trace_index
-                                 )
+        # data image
+        D, W, ymin, ymax = self._orderlet_box(self.target_2D[f'{chip}_CCD'].data,
+                                              self.order_trace[f'{chip}_CCD'],
+                                              trace_index,
+                                              return_box_coords=True
+                                             )
 
-        # target variance
-        D, V = self._orderlet_box(self.target_2D[f'{chip}_VAR'].data,
-                                  self.order_trace[f'{chip}_CCD'],
-                                  trace_index
-                                 )
+        # variance
+        V = self.target_2D[f'{chip}_VAR'].data[ymin:ymax]
 
         # sky/scattered/stray light background
-        S, _ = self._orderlet_box(self.background_image[f'{chip}_CCD'].data,
-                                  self.order_trace[f'{chip}_CCD'],
-                                  trace_index
-                                 )
+        S = self.background_image[f'{chip}_CCD'].data[ymin:ymax]
+
+        # mask
+        M = None
 
         # flat frame
-        F, _ = self._orderlet_box(self.master_flat_2D[f'{chip}_CCD_STACK'].data,
-                                  self.order_trace[f'{chip}_CCD'],
-                                  trace_index
-                                 )
+        F = self.master_flat_2D[f'{chip}_CCD_STACK'][ymin:ymax]
         
         # zero frame
         Z = np.zeros_like(F)
-        
-        # mask (currently a placeholder)
-        M = np.ones_like(D, dtype='int')
 
+        
         # box extraction
         f_box, v_box, _, _ = self.box_extraction(D, S, V, M=M, W=W)
         if method == 'box':
             return f_box, v_box, None, None
 
         f_flat, v_flat, _, _ = self.box_extraction(F, Z, V, M=M, W=W)
+        
         P = self.spatial_profile(F, 
                                  Z, 
                                  W, 
@@ -556,7 +580,6 @@ class SpectralExtractionAlg:
                     profile_sigma_clip=None,
                     extraction_sigma_clip=None
                    ):
-
         """
         Extract 1D spectrum and variance for all orders/orderlets on GREEN or RED ccd
 
