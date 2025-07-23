@@ -1,7 +1,8 @@
 ## primitives from modules.
 from modules.order_trace.src.order_trace import OrderTrace
 from modules.spectral_extraction.src.order_rectification import OrderRectification
-from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
+from modules.stray_light.src.stray_light import StrayLight
+from modules.spectral_extraction_gjg.src.spectral_extraction import SpectralExtraction
 from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
@@ -32,6 +33,7 @@ from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 from modules.wavelength_cal.src.alg import WaveInterpolation          
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
 from modules.blaze.src.blaze import AddBlaze
+
 
 # set the flags for each process
 # note: no rv reweighting is made here.
@@ -538,25 +540,18 @@ if do_spectral_extraction or do_hk or do_bc:
 				else:
 					outlier_mask_file = outlier_mask_path + "/" + context.date_dir + "/" + short_lev0_file
 
-				for idx in ccd_idx:
-					ccd = ccd_list[idx]
-					order_names = orderlet_names[idx]
-					trace_file = trace_list[idx]
-					var_ccd = str_replace(ccd, '_CCD', '_VAR')
-					clip_file = None
-
-					op_data = SpectralExtraction(lev0_data, lev0_flat_rect, op_data,
-								orderlet_names=order_names,
-								orderlets_on_image=order_names,
-								total_order_per_ccd=orders_per_ccd,
-								start_order=start_order[idx],
-								ccd_index = idx,
-								rectification_method=rect_method, extraction_method=extract_method,
-								clip_file=clip_file, data_extension=ccd, trace_file=trace_file,
-								flat_extension=ccd+ccd_stack,
-								do_outlier_rejection=do_outlier, outlier_file=outlier_mask_file,
-								var_extension=var_ccd,
-								spec_no_bk = lev0_data_no_bk)
+				stray_light_output_list = StrayLight(lev0_data, order_mask)
+				lev0_data = stray_light_output_list[1]
+				
+				spectral_extraction_output_list = SpectralExtraction(lev0_data, 
+																	 cals['flat'], 
+																	 cals['ordertrace'][0], 
+																	 cals['ordertrace'][1], 
+																	 cals['start_order'][0], 
+																	 cals['start_order'][1]
+																	)
+				
+				op_data = spectral_extraction_output_list[1]
 
 				if op_data != None:
 				
