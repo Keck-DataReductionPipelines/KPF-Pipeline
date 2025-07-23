@@ -37,6 +37,8 @@ class SpectralExtraction(KPF0_Primitive):
     def _perform(self):
         exit_code = 0
         try:
+            dummy = self.target_2D['GREEN_CCD'].shape
+
             spectralextraction = SpectralExtractionAlg(self.target_2D,
                                                        self.master_flat_2D,
                                                        self.order_trace_green,

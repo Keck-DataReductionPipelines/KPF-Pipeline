@@ -37,7 +37,7 @@ class StrayLight(KPF0_Primitive):
                                       )
             
             for chip in ['GREEN', 'RED']:
-                straylight.target_2D[f'{chip}_CCD'] = straylight.remove_stray_light(chip)
+                straylight.target_2D = straylight.remove_stray_light(chip)
             exit_code = 1
             return Arguments([exit_code, straylight.target_2D])
         except Exception as e:
