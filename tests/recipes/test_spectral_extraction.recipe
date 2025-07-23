@@ -18,7 +18,8 @@ ordermask_file = '/data/masters/20241022/kpf_20241022_order_mask.fits'
 ordermask = kpf0_from_fits(ordermask_file)
 
 trace_green = '/data/masters/20241022/kpf_20241022_master_flat_GREEN_CCD.csv'
-trace_red = 'data/masters/20241022/kpf_20241022_master_flat_RED_CCD.csv'
+trace_red = '/data/masters/20241022/kpf_20241022_master_flat_RED_CCD.csv'
+
 start_order = [0,1]
 
 stray_light_output_list = StrayLight(target_2D, ordermask)
