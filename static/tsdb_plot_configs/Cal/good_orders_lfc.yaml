@@ -17,6 +17,8 @@ panel_arr:
           linewidth: 0.5
           color: green
     paneldict:
+      ymin: -2.5
+      ymax: 34.5
       ylabel: "Max/Min Good Orders\n(LFC Green - SCI)"
       not_junk: true
       qc_not_fail: 'GOODREAD'

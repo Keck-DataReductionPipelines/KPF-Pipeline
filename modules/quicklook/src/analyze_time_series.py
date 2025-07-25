@@ -72,7 +72,6 @@ class AnalyzeTimeSeries:
           rejection.  This should be in Delta values.
         * For time series state plots, include the number of points in each state 
           in the legend.
-        * Specify the yrange in the yaml files
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', credentials=None, logger=None, verbose=False):
@@ -145,6 +144,8 @@ class AnalyzeTimeSeries:
                 - 'narrow_xlim_daily' : bool — Restrict x-axis to min/max of data on short timescales.
                 - 'ylabel' : str — Y-axis label for the panel.
                 - 'ylim' : tuple — Explicit y-axis range as (ymin, ymax).
+                - 'ymin' : float — Explicit y-axis minimum (overrides ylim).
+                - 'ymax' : float — Explicit y-axis maximum (overrides ylim).
                 - 'yscale' : str — e.g., 'log' to apply logarithmic scaling.
                 - 'subtractmedian' : bool — Subtract median from the plotted data.
                 - 'nolegend' : bool — Suppress legend.
@@ -487,6 +488,11 @@ class AnalyzeTimeSeries:
             if 'ylim' in thispanel['paneldict']:
                 if type(ast.literal_eval(thispanel['paneldict']['ylim'])) == type((1,2)):
                     ylim = ast.literal_eval(thispanel['paneldict']['ylim'])
+            if ('ymin' in thispanel['paneldict']) or ('ymax' in thispanel['paneldict']):
+                ymin_current, ymax_current = axs[p].get_ylim()
+                ymin = thispanel['paneldict'].get('ymin', ymin_current)
+                ymax = thispanel['paneldict'].get('ymax', ymax_current)
+                ylim = (ymin, ymax)
 
             # Determine if legend should be made
             makelegend = True
@@ -696,8 +702,6 @@ class AnalyzeTimeSeries:
                 # This is needed so that ylim autoscaling is based on data and not the boxes below
                 axs[p].relim()            
                 axs[p].autoscale_view()   
-#                ymin, ymax = axs[p].get_ylim()
-#                axs[p].set_ylim(ymin, ymax)
                 axs[p].set_autoscale_on(False)
                 # Draw boxes
                 for key, axh in thispanel['paneldict']['axhspan'].items():
@@ -706,8 +710,6 @@ class AnalyzeTimeSeries:
                      clr  = axh['color']
                      alp  = axh['alpha']
                      axs[p].axhspan(ymin, ymax, color=clr, alpha=alp)
-                
-
 
             # Make legend
             if makelegend:
@@ -722,7 +724,7 @@ class AnalyzeTimeSeries:
                         handles, labels = zip(*sorted_pairs)
                         axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
 
-            # Set y limits
+            # Set y-axis limits
             if ylim:
                 axs[p].set_ylim(ylim)
 
