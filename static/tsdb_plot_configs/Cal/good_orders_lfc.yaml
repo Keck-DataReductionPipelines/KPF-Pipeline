@@ -18,7 +18,7 @@ panel_arr:
           color: green
     paneldict:
       ymin: -2.5
-      ymax: 34.5
+      ymax: 35.5
       ylabel: "Max/Min Good Orders\n(LFC Green - SCI)"
       not_junk: true
       qc_not_fail: 'GOODREAD'
@@ -38,7 +38,12 @@ panel_arr:
           ymin: -0.7
           ymax: -2.5
           color: red
-          alpha: 0.2
+          alpha: 0.05
+        2:
+          ymin: -0.7
+          ymax: 34.7
+          color: green
+          alpha: 0.05
       
   - panelvars:
       - col: LFCLGC1
@@ -56,6 +61,8 @@ panel_arr:
           linewidth: 0.5
           color: green
     paneldict:
+      ymin: -2.5
+      ymax: 35.5
       ylabel: "Max/Min Good Orders\n(LFC Green - CAL)"
       not_junk: true
       qc_not_fail: 'GOODREAD'
@@ -75,8 +82,13 @@ panel_arr:
           ymin: -0.7
           ymax: -2.5
           color: red
-          alpha: 0.2
-      
+          alpha: 0.05
+        2:
+          ymin: -0.7
+          ymax: 34.7
+          color: green
+          alpha: 0.05
+
   - panelvars:
       - col: LFCLGK1
         plot_type: plot
@@ -93,6 +105,8 @@ panel_arr:
           linewidth: 0.5
           color: green
     paneldict:
+      ymin: -2.5
+      ymax: 35.5
       ylabel: "Max/Min Good Orders\n(LFC Green - CAL)"
       not_junk: true
       qc_not_fail: 'GOODREAD'
@@ -112,7 +126,12 @@ panel_arr:
           ymin: -0.7
           ymax: -2.5
           color: red
-          alpha: 0.2
+          alpha: 0.05
+        2:
+          ymin: -0.7
+          ymax: 34.7
+          color: green
+          alpha: 0.05
 
   - panelvars:
       - col: LFCLRS1
@@ -130,6 +149,8 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
+      ymin: -2.5
+      ymax: 32.5
       ylabel: "Max/Min Good Orders\n(LFC Red - SCI)"
       not_junk: true
       qc_not_fail: 'GOODREAD'
@@ -150,7 +171,12 @@ panel_arr:
           ymin: -0.7
           ymax: -2.5
           color: red
-          alpha: 0.2
+          alpha: 0.05
+        2:
+          ymin: -0.7
+          ymax: 31.7
+          color: green
+          alpha: 0.05
 
   - panelvars:
       - col: LFCLRC1
@@ -168,6 +194,8 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
+      ymin: -2.5
+      ymax: 32.5
       ylabel: "Max/Min Good Orders\n(LFC Red - CAL)"
       not_junk: true
       qc_not_fail: 'GOODREAD'
@@ -188,7 +216,12 @@ panel_arr:
           ymin: -0.7
           ymax: -2.5
           color: red
-          alpha: 0.2
+          alpha: 0.05
+        2:
+          ymin: -0.7
+          ymax: 31.7
+          color: green
+          alpha: 0.05
 
   - panelvars:
       - col: LFCLRK1
@@ -206,6 +239,8 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
+      ymin: -2.5
+      ymax: 32.5
       ylabel: "Max/Min Good Orders\n(LFC Red - SKY)"
       not_junk: true
       qc_not_fail: 'GOODREAD'
@@ -226,4 +261,9 @@ panel_arr:
           ymin: -0.7
           ymax: -2.5
           color: red
-          alpha: 0.2
+          alpha: 0.05
+        2:
+          ymin: -0.7
+          ymax: 31.7
+          color: green
+          alpha: 0.05
