@@ -2133,14 +2133,17 @@ class TSDB:
             else:
                 columns_requested = [columns] if isinstance(columns, str) else columns
                 columns_needed = columns_requested.copy()
-                if qc_pass is not None:
-                    columns_needed.extend(qc_pass)
-                if qc_fail is not None:
-                    columns_needed.extend(qc_fail)
-                if qc_not_pass is not None:
-                    columns_needed.extend(qc_not_pass)
-                if qc_not_fail is not None:
-                    columns_needed.extend(qc_not_fail)
+
+                def safe_extend_columns(columns_list):
+                    if columns_list:
+                        for col in columns_list:
+                            if col not in columns_needed:
+                                columns_needed.append(col)                
+
+                safe_extend_columns(qc_pass)
+                safe_extend_columns(qc_fail)
+                safe_extend_columns(qc_not_pass)
+                safe_extend_columns(qc_not_fail)
                 placeholders = ','.join([placeholder] * len(columns_needed))
                 metadata_query = f'SELECT keyword, table_name FROM {self.prefix}metadata WHERE keyword IN ({placeholders});'
                 self._execute_sql_command(metadata_query, params=columns_needed)
@@ -2183,7 +2186,8 @@ class TSDB:
             ]
 
             conditions, params = [], []
-    
+            existing_cols = set(kw_table_map.keys())
+
             if only_object:
                 placeholders = ','.join([placeholder] * len(only_object))
                 conditions.append(f'{self.prefix}l0.{quote}OBJECT{quote} IN ({placeholders})')
@@ -2208,25 +2212,29 @@ class TSDB:
                 conditions.append(f'{self.prefix}l0.{quote}FIUMODE{quote} = {placeholder}')
                 params.append(mode)
 
-            if qc_pass is not None:
+            if qc_pass:
                 for col in qc_pass:
-                    conditions.append(f"{quote}{col}{quote} = {placeholder}")
-                    params.append(True)
-        
-            if qc_fail is not None:
+                    if col in existing_cols:
+                        conditions.append(f"{quote}{col}{quote} = {placeholder}")
+                        params.append(True)
+            
+            if qc_fail:
                 for col in qc_fail:
-                    conditions.append(f"{quote}{col}{quote} = {placeholder}")
-                    params.append(False)
-    
-            if qc_not_pass is not None:
+                    if col in existing_cols:
+                        conditions.append(f"{quote}{col}{quote} = {placeholder}")
+                        params.append(False)
+            
+            if qc_not_pass:
                 for col in qc_not_pass:
-                    conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
-                    params.append(False)
-        
-            if qc_not_fail is not None:
+                    if col in existing_cols:
+                        conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
+                        params.append(False)
+            
+            if qc_not_fail:
                 for col in qc_not_fail:
-                    conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
-                    params.append(True)
+                    if col in existing_cols:
+                        conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
+                        params.append(True)
     
             if start_date:
                 date_str = pd.to_datetime(start_date).strftime("%Y%m%d")

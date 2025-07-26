@@ -144,8 +144,8 @@ class AnalyzeTimeSeries:
                 - 'narrow_xlim_daily' : bool — Restrict x-axis to min/max of data on short timescales.
                 - 'ylabel' : str — Y-axis label for the panel.
                 - 'ylim' : tuple — Explicit y-axis range as (ymin, ymax).
-                - 'ymin' : float — Explicit y-axis minimum (overrides ylim).
-                - 'ymax' : float — Explicit y-axis maximum (overrides ylim).
+                - 'ymin' : float — Explicit y-axis minimum (overrides ylim value).
+                - 'ymax' : float — Explicit y-axis maximum (overrides ylim value).
                 - 'yscale' : str — e.g., 'log' to apply logarithmic scaling.
                 - 'subtractmedian' : bool — Subtract median from the plotted data.
                 - 'nolegend' : bool — Suppress legend.
@@ -164,6 +164,7 @@ class AnalyzeTimeSeries:
                 - 'plot_type' : str — Plot type (overrides the panel-level setting).
                 - 'plot_attr' : dict — Matplotlib styling keywords.
                 - 'unit' : str — Unit label for legends/statistics (e.g., "m/s").
+                - 'vline_pt_color' : str - color of points in vline plots
 
         Returns
         -------
@@ -250,11 +251,16 @@ class AnalyzeTimeSeries:
         unique_cols.add('NOTJUNK')
         for panel in panel_arr:
             for d in panel['panelvars']:
-                unique_cols.add(d['col'])
+                if 'col' in d:
+                    unique_cols.add(d['col'])
                 if 'col_err' in d:
                     unique_cols.add(d['col_err'])
                 if 'col_subtract' in d:
                     unique_cols.add(d['col_subtract'])
+                if 'col_min' in d:
+                    unique_cols.add(d['col_min'])
+                if 'col_max' in d:
+                    unique_cols.add(d['col_max'])
 
         fig, axs = plt.subplots(npanels, 1, sharex=True, figsize=(15, npanels*2.5+1), tight_layout=True)
         if npanels == 1:
@@ -522,6 +528,12 @@ class AnalyzeTimeSeries:
                     df = df[~df[col_name].isin(['NaN', 'null', 'nan', 'None', None, np.nan])]
                     col_data = df[col_name]
                     col_data_replaced = col_data  # default, no subtraction
+                    # for vlines plots:
+                    if 'col_min' in thispanel['panelvars'][i]:
+                        col_name_min = thispanel['panelvars'][i]['col_min']
+                        col_name_max = thispanel['panelvars'][i]['col_max']
+                        col_data_min = df[col_name_min]
+                        col_data_max = df[col_name_max]
                     
                     # Subtract one column from another
                     if 'col_subtract' in thispanel['panelvars'][i]:
@@ -556,6 +568,12 @@ class AnalyzeTimeSeries:
                     
                     if plot_type == 'state':
                         states = np.array(col_data_replaced)
+
+                    if plot_type == 'vlines':
+                        data_min = np.array(col_data_min, dtype='float')
+                        data_max = np.array(col_data_max, dtype='float')
+                        data = data_min # so that some logic below works
+
                     else:
                         data = np.array(col_data_replaced, dtype='float')
                         if plot_type == 'errorbar':
@@ -570,7 +588,6 @@ class AnalyzeTimeSeries:
                     elif 360 <= (end_date - start_date).days <= 370:
                         if not empty_df:
                             t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
-
                     else:
                         t = df['DATE-MID'] # dates
     
@@ -628,6 +645,34 @@ class AnalyzeTimeSeries:
                     # Plot type: stepped lines
                     if plot_type == 'step':
                         axs[p].step(t, data, **plot_attributes)
+                    
+                    # Plot type: vertical lines
+                    if plot_type == 'vlines':
+                        if 'vline_pt_color' in thispanel['panelvars'][i]:
+                            vline_pt_color = thispanel['panelvars'][i]['vline_pt_color']
+                        else:
+                            vline_pt_color = plot_attributes.pop('color', 'black')
+                        lw = 0.5
+                        sz = 5
+                        if not empty_df:
+                            if abs((end_date - start_date).days) <= 3:
+                                lw = 1
+                                sz = 15
+                            elif abs((end_date - start_date).days) < 32:
+                                lw = 2
+                                sz = 10
+                        # sanitize unsupported attributes
+                        for k in ['marker', 'markersize', 'linestyle']:
+                            plot_attributes.pop(k, None)
+                        plot_attributes.setdefault('colors', vline_pt_color)
+                        plot_attributes.setdefault('linewidths', lw)
+                        axs[p].vlines(t, data_min, data_max, **plot_attributes)
+
+                        # Add points to the tops of the lines
+                        axs[p].scatter(t, data_max, color=plot_attributes.get('colors', 'black'), s=sz, zorder=3)
+                        
+                        # Optionally add points to the bottoms of the lines
+                        axs[p].scatter(t, data_min, color=plot_attributes.get('colors', 'black'), s=sz, zorder=3)
                     
                     # Plot type: scatter plots for non-float 'states'
                     if plot_type == 'state':
