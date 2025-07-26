@@ -1911,7 +1911,7 @@ class QCL0(QC):
             Texp_desired = L0.header['PRIMARY']['EXPTIME'] # desired exptime
             Texp_actual  = L0.header['PRIMARY']['ELAPSED'] # actual exposure time
 
-            if (Texp_desired >= 7) and (6.0 < Texp_actual <= 6.6):
+            if (Texp_desired >= 7) and (6.0 <= Texp_actual <= 6.7):
                 QC_pass = False
             else:
                 QC_pass = True
