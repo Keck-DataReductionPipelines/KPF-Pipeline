@@ -521,7 +521,7 @@ class Analyze2D:
 
     def measure_flux_stats_in_out_ordertrace(self, 
                                              chips=['green', 'red'], 
-                                             percentiles=[10, 50, 95, 99],
+                                             percentiles=[10, 50, 90, 95, 98, 99, 99.5],
                                              order_trace_file='auto',
                                              ordermask_buffer=1):
         """
