@@ -9,6 +9,12 @@ L0_header_read_time|string|Last modification of L0 file|None
 D2_header_read_time|string|Last modification of 2D file|None
 L1_header_read_time|string|Last modification of L1 file|None
 L2_header_read_time|string|Last modification of L2 file|None
+D2_expected|bool|2D file is expected based on exposure type|None
+L1_expected|bool|L1 file is expected based on exposure type|None
+L2_expected|bool|L2 file is expected based on exposure type|None
+D2_exists|bool|2D file exists in expected directory|None
+L1_exists|bool|L1 file exists in expected directory|None
+L2_exists|bool|L2 file exists in expected directory|None
 Source|string|Source type (e.g., 'Star' or 'Flat')|None
 RA_deg|float|right ascension (e.g., 5.272777)|deg
 DEC_deg|float|declination (e.g., 188.736249)|deg
