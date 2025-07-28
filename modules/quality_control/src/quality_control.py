@@ -938,14 +938,14 @@ class QCDefinitions:
         name36 = 'L2_barycentric_rv_percent_change'
         self.names.append(name36)
         self.kpf_data_levels[name36] = ['L2']
-        self.descriptions[name36] = 'Check non-zero-weight orders PCBCV values are within an acceptable range.'
+        self.descriptions[name36] = 'Non-zero-weight orders percent BCV values within an acceptable range.'
         self.data_types[name36] = 'int'
         self.spectrum_types[name36] = ['Star', ]
         self.master_types[name36] = []
         self.drift_types[name36] = []
         self.required_data_products[name36] = ['Green', 'Red']
         self.fits_keywords[name36] = 'QCPCBCV'
-        self.fits_comments[name36] = 'QC: PCBCV values within acceptable range'
+        self.fits_comments[name36] = 'QC: Percent BCV values within acceptable range'
         self.db_columns[name36] = None
         self.fits_keyword_fail_value[name36] = 0
 
@@ -2686,9 +2686,10 @@ class QC2D(QC):
             debug
 
         Returns:
-            QC_pass (bool): True if the time of exposure for the files going
-                            into the master dark file were taken more than a
-                            certain number of days from the exposure itself.
+            QC_pass (bool): True if the flux measurements inside and outside of 
+                            the order trace regions are consistent with an 
+                            exposure from a particular source that is not 
+                            smeared out due to CCD readout problems.
         """
 
         QC_pass = False

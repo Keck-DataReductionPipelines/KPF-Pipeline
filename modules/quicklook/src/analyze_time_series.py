@@ -569,7 +569,7 @@ class AnalyzeTimeSeries:
                     if plot_type == 'state':
                         states = np.array(col_data_replaced)
 
-                    if plot_type == 'vlines':
+                    elif plot_type == 'vlines':
                         data_min = np.array(col_data_min, dtype='float')
                         data_max = np.array(col_data_max, dtype='float')
                         data = data_min # so that some logic below works
