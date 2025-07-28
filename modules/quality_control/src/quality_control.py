@@ -1174,7 +1174,7 @@ class QCDefinitions:
         This method checks if each QC keyword is listed in two places and
         prints the results with green and red highlighting.  The two places
         are: 1) .yaml plot configuration files for the time series database,
-        2) .csv files that define the time series database structure, and xxx.
+        2) .csv files that define the time series database structure.
         It is best used in an interactive environment, e.g., in a Jupyter
         notebook.
         """
@@ -1187,7 +1187,7 @@ class QCDefinitions:
                 search_directory = '/code/KPF-Pipeline/static/tsdb_plot_configs/'
                 file_ext = '.yaml'
             if case == 'database':
-                search_directory = '/code/KPF-Pipeline/static/tsdb_keywords/'
+                search_directory = '/code/KPF-Pipeline/static/tsdb_tables/'
                 file_ext = '.csv'
 
             print(styled_text(f"Searching for *{file_ext} files in {search_directory} for QC keywords.", style="Bold"))
