@@ -3797,6 +3797,9 @@ class QCL1(QC):
             L1 = self.kpf_object
             myL1 = AnalyzeL1(L1, logger=self.logger)
             age_master_file = myL1.measure_master_age(kwd='TRACFILE', verbose=debug)
+            
+            if debug:
+                self.logger.debug(f'trace_age(): age_master_file = {age_master_file}')
 
             QC_pass = True
             if abs(age_master_file) > maxage:
@@ -3828,6 +3831,9 @@ class QCL1(QC):
             L1 = self.kpf_object
             myL1 = AnalyzeL1(L1, logger=self.logger)
             age_master_file = myL1.measure_master_age(kwd='LAMPFILE', verbose=debug)
+            
+            if debug:
+                self.logger.debug(f'trace_age(): age_master_file = {age_master_file}')
 
             QC_pass = True
             if abs(age_master_file) > maxage:
