@@ -149,10 +149,10 @@ for raw_file_path in file_list:
                                                                     kpf_object)
                 
                 # Test: Check if QueryDBL0FileFramework added headers to the kpf_object, yes they do
-                dbrid_value = GetHeaderValue(kpf_object, 'DBRID')
-                print("SUCCESS: DBRID header found:" + str(dbrid_value))
-                l0qcbits_value = GetHeaderValue(kpf_object, 'L0QCBITS')
-                print("SUCCESS: L0QCBITS header found:" + str(l0qcbits_value))
+                # dbrid_value = GetHeaderValue(kpf_object, 'DBRID')
+                # print("SUCCESS: DBRID header found:" + str(dbrid_value))
+                # l0qcbits_value = GetHeaderValue(kpf_object, 'L0QCBITS')
+                # print("SUCCESS: L0QCBITS header found:" + str(l0qcbits_value))
 
         do_read_noise = True
         if do_read_noise:
