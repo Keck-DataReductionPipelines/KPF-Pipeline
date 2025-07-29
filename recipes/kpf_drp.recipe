@@ -56,8 +56,52 @@ from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 # # do L0->2D conversion for watch mode
 do_l0_to_2d = True # add to config later.
 
-# # do L0->2D conversion for watch mode
-do_l0_to_2d = True # add to config later.
+# Add the file_list at the top level and redefine if needed
+if context.watch:
+    l0_file_list = find_files(context.file_path)
+    lev0_file_path = context.file_path
+    levd2_file_path = str_replace(lev0_file_path, 'L0', '2D')
+    lev1_file_path = str_replace(lev0_file_path, 'L0', 'L1')
+    lev2_file_path = str_replace(lev0_file_path, 'L0', 'L2')    
+
+    # Derive corresponding file paths for other levels
+    d2_file_list = []
+    l1_file_list = []
+    l2_file_list = []
+    
+    for l0_file in l0_file_list:
+        # 2D -> L1 conversion
+        d2_file = str_replace(l0_file, '/L0/', '/2D/')
+        d2_file = str_replace(d2_file, '.fits', '_2D.fits')
+        d2_file_list = d2_file_list + [d2_file]
+
+        # L1 -> L2 conversion
+        l1_file = str_replace(l0_file, '/L0/', '/L1/')
+        l1_file = str_replace(l1_file, '.fits', '_L1.fits')
+        l1_file_list = l1_file_list + [l1_file]
+        
+        # L2 -> L2 reweighting
+        l2_file = str_replace(l0_file, '/L0/', '/L2/')
+        l2_file = str_replace(l2_file, '.fits', '_L2.fits')
+        l2_file_list = l2_file_list + [l2_file]
+
+else:
+    # search_string = config.WATCHFOR_L0.input_dir + "/" + date_dir + '/*.fits'
+    # file_path = find_files(search_string)
+
+    # Batch mode: find all files for the date
+    date_dir = context.date_dir
+    
+    # Define search patterns for each level
+    l0_pattern = config.WATCHFOR_L0.input_dir + "/" + date_dir + '/*.fits'
+    d2_pattern = config.WATCHFOR_2D.input_dir + "/" + date_dir + '/*_2D.fits'
+    l1_pattern = config.WATCHFOR_L1.input_dir + "/" + date_dir + '/*_L1.fits'
+
+    # Find files for each level
+    l0_file_list = find_files(l0_pattern)
+    d2_file_list = find_files(d2_pattern)
+    l1_file_list = find_files(l1_pattern)
+
 if do_l0_to_2d:
     # invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 	invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") # Which calls the watchfor_kpf_l0.recipe
