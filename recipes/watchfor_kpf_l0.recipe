@@ -135,19 +135,21 @@ for raw_file_path in file_list:
         bpm_applied = kpf_object
 
         # Write file
-        recipe_complete = to_fits(bpm_applied, output_file_name)
+        # recipe_complete = to_fits(bpm_applied, output_file_name)
 
-        # Query database for QC information and update header of 2D FITS file.
+        # Query database for QC information and update headers in-memory
         rid = quality_control_rid
         verbose = config.WATCHFOR_L0.verbose
 
         do_query_l0_file = True
         if do_query_l0_file:
             if rid > 0:
+                # Pass bpm_applied KPF0 object as 5th argument for in-memory header updates
                 do_query_l0_file_exit_code = QueryDBL0FileFramework(data_type,
                                                                     rid,
                                                                     output_file_name,
-                                                                    verbose)
+                                                                    verbose,
+                                                                    bpm_applied)
 
         do_read_noise = True
         if do_read_noise:
@@ -166,3 +168,5 @@ for raw_file_path in file_list:
                                                       masterdark_path,
                                                       masterflat_path,
                                                       rid)
+
+        recipe_complete = to_fits(bpm_applied, output_file_name)

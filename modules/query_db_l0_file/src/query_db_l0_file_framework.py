@@ -43,6 +43,12 @@ class QueryDBL0FileFramework(KPF0_Primitive):
         self.rId = self.action.args[1]
         self.fits_filename = self.action.args[2]
         self.verbose = self.action.args[3]
+        
+        # Check if a KPF0 object was passed as 5th argument
+        if len(self.action.args) > 4:
+            self.fits_obj = self.action.args[4]
+        else:
+            self.fits_obj = None
 
         if self.verbose != 1:
             self.verbose = 0
@@ -257,7 +263,11 @@ class QueryDBL0FileFramework(KPF0_Primitive):
 
         # Update FITS header.
 
-        fits_obj = KPF0.from_fits(self.fits_filename,self.data_type)
+        # Use passed KPF0 object if available, otherwise read from file
+        if self.fits_obj is not None:
+            fits_obj = self.fits_obj
+        else:
+            fits_obj = KPF0.from_fits(self.fits_filename, self.data_type)
         fits_obj.header['PRIMARY']['DBRID'] = (rId,'DB raw image ID')
         fits_obj.header['PRIMARY']['L0QCBITS'] = (infobits,'L0 QC bitwise flags (see defs below)')
 
@@ -343,7 +353,10 @@ class QueryDBL0FileFramework(KPF0_Primitive):
             value = defs[i]
             fits_obj.header['PRIMARY'][keyword] = value
 
-        fits_obj.to_fits(self.fits_filename)
+        # Only write to disk if no KPF0 object was passed (backward compatibility)
+        # When KPF0 object is passed, headers are updated in-memory and recipe handles file output
+        if self.fits_obj is None:
+            fits_obj.to_fits(self.fits_filename)
 
 
         # Return with arguments.
