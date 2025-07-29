@@ -15,6 +15,9 @@ L2_expected|bool|L2 file is expected based on exposure type|None
 D2_exists|bool|2D file exists in expected directory|None
 L1_exists|bool|L1 file exists in expected directory|None
 L2_exists|bool|L2 file exists in expected directory|None
+D2_missing|bool|2D file expected but not in directory|None
+L1_missing|bool|L1 file expected but not in directory|None
+L2_missing|bool|L2 file expected but not in directory|None
 Source|string|Source type (e.g., 'Star' or 'Flat')|None
 RA_deg|float|right ascension (e.g., 5.272777)|deg
 DEC_deg|float|declination (e.g., 188.736249)|deg

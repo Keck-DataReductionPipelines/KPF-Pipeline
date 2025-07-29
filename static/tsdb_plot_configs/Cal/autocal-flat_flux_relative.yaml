@@ -17,6 +17,7 @@ panel_arr:
       only_object: autocal-flat-all
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'GOODREAD,TIMCHKL0'
       legend_frac_size: 0.30
 
   - panelvars:
@@ -34,6 +35,7 @@ panel_arr:
       only_object: autocal-flat-all
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'GOODREAD,TIMCHKL0'
       legend_frac_size: 0.30
 
   - panelvars:
@@ -51,6 +53,7 @@ panel_arr:
       only_object: autocal-flat-all
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'GOODREAD,TIMCHKL0'
       legend_frac_size: 0.30
 
   - panelvars:
@@ -64,8 +67,9 @@ panel_arr:
           color: red
     paneldict:
       ylabel: "Relative Flux Ratio\n(SCI2)"
+      not_junk: true
+      qc_not_fail: 'GOODREAD,TIMCHKL0'
       title: autocal-flat-all Relative Flux ((Flux Ratio)/median(Flux Ratio))
       only_object: autocal-flat-all
       narrow_xlim_daily: true
-      not_junk: true
       legend_frac_size: 0.30

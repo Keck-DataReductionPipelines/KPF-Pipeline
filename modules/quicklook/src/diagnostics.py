@@ -162,6 +162,141 @@ def add_headers_2D_flux(D2, logger=None):
     return D2
 
 
+def add_headers_2D_flux_stats_in_out_ordertrace(D2, logger=None):
+    """
+    Adds keywords to the 2D object header for measurements of Flux [e-] inside 
+    and outside of the order trace (padded by one pixel up and down).
+    
+    Keywords:
+        FINTRG9F - Flux [e-] inside padded order trace regions (Green, 99.5th %ile)
+        FOUTRG9F - Flux [e-] outside padded order trace regions (Green, 99.5th %ile)
+        FRATRG9F - Flux in/out padded order trace regions (Green, 99.5th %ile)
+        FINTRG99 - Flux [e-] inside padded order trace regions (Green, 99th %ile)
+        FOUTRG99 - Flux [e-] outside padded order trace regions (Green, 99th %ile)
+        FRATRG99 - Flux in/out padded order trace regions (Green, 99th %ile)
+        FINTRG98 - Flux [e-] inside padded order trace regions (Green, 98th %ile)
+        FOUTRG98 - Flux [e-] outside padded order trace regions (Green, 98th %ile)
+        FRATRG98 - Flux in/out padded order trace regions (Green, 98th %ile)
+        FINTRG95 - Flux [e-] inside padded order trace regions (Green, 95th %ile)
+        FOUTRG95 - Flux [e-] outside padded order trace regions (Green, 95th %ile)
+        FRATRG95 - Flux in/out padded order trace regions (Green, 95th %ile)
+        FINTRG90 - Flux [e-] inside padded order trace regions (Green, 90th %ile)
+        FOUTRG90 - Flux [e-] outside padded order trace regions (Green, 90th %ile)
+        FRATRG90 - Flux in/out padded order trace regions (Green, 90th %ile)
+        FINTRG50 - Flux [e-] inside padded order trace regions (Green, median)
+        FOUTRG50 - Flux [e-] outside padded order trace regions (Green, median)
+        FRATRG50 - Flux in/out padded order trace regions (Green, median)
+        FINTRG10 - Flux [e-] inside padded order trace regions (Green, 10th %ile)
+        FOUTRG10 - Flux [e-] outside padded order trace regions (Green, 10th %ile)
+        FRATRG10 - Flux in/out padded order trace regions (Green, 10th %ile)
+        FINTRR9F - Flux [e-] inside padded order trace regions (Red, 99.5th %ile)
+        FOUTRR9F - Flux [e-] outside padded order trace regions (Red, 99.5th %ile)
+        FRATRR9F - Flux in/out padded order trace regions (Red, 99.5th %ile)
+        FINTRR99 - Flux [e-] inside padded order trace regions (Red, 99th %ile)
+        FOUTRR99 - Flux [e-] outside padded order trace regions (Red, 99th %ile)
+        FRATRR99 - Flux in/out padded order trace regions (Red, 99th %ile)
+        FINTRR98 - Flux [e-] inside padded order trace regions (Red, 98th %ile)
+        FOUTRR98 - Flux [e-] outside padded order trace regions (Red, 98th %ile)
+        FRATRR98 - Flux in/out padded order trace regions (Red, 98th %ile)
+        FINTRR95 - Flux [e-] inside padded order trace regions (Red, 95th %ile)
+        FOUTRR95 - Flux [e-] outside padded order trace regions (Red, 95th %ile)
+        FRATRR95 - Flux in/out padded order trace regions (Red, 95th %ile)
+        FINTRR90 - Flux [e-] inside padded order trace regions (Red, 90th %ile)
+        FOUTRR90 - Flux [e-] outside padded order trace regions (Red, 90th %ile)
+        FRATRR90 - Flux in/out padded order trace regions (Red, 90th %ile)
+        FINTRR50 - Flux [e-] inside padded order trace regions (Red, median)
+        FOUTRR50 - Flux [e-] outside padded order trace regions (Red, median)
+        FRATRR50 - Flux in/out padded order trace regions (Red, median)
+        FINTRR10 - Flux [e-] inside padded order trace regions (Red, 10th %ile)
+        FOUTRR10 - Flux [e-] outside padded order trace regions (Red, 10th %ile)
+        FRATRR10 - Flux in/out padded order trace regions (Red, 10th %ile)
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_2D(D2)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        print('Not a valid 2D or no Gree/Red CCD data.')
+        return D2
+    
+    myD2 = Analyze2D(D2, logger=logger)
+    fluxes = myD2.measure_flux_stats_in_out_ordertrace(chips=chips, 
+                                                       percentiles=[10, 50, 90, 95, 98, 99, 99.5],
+                                                       order_trace_file='auto',
+                                                       ordermask_buffer=1)
+
+    if 'green' in chips:
+        try:
+            green_in    = fluxes['green']['in']
+            green_out   = fluxes['green']['out']
+            green_ratio = fluxes['green']['ratio']
+            D2.header['PRIMARY']['FINTRG9F'] = (float(green_in[6]), 'Flux [e-] in order trace (Green, 99.5th %ile)')
+            D2.header['PRIMARY']['FINTRG99'] = (float(green_in[5]), 'Flux [e-] in order trace (Green, 99th %ile)')
+            D2.header['PRIMARY']['FINTRG98'] = (float(green_in[4]), 'Flux [e-] in order trace (Green, 98th %ile)')
+            D2.header['PRIMARY']['FINTRG95'] = (float(green_in[3]), 'Flux [e-] in order trace (Green, 95th %ile)')
+            D2.header['PRIMARY']['FINTRG90'] = (float(green_in[2]), 'Flux [e-] in order trace (Green, 90th %ile)')
+            D2.header['PRIMARY']['FINTRG50'] = (float(green_in[1]), 'Flux [e-] in order trace (Green, 50th %ile)')
+            D2.header['PRIMARY']['FINTRG10'] = (float(green_in[0]), 'Flux [e-] in order trace (Green, 10th %ile)')
+            D2.header['PRIMARY']['FOUTRG9F'] = (float(green_out[6]), 'Flux [e-] out order trace (Green, 99.5th %ile)')
+            D2.header['PRIMARY']['FOUTRG99'] = (float(green_out[5]), 'Flux [e-] out order trace (Green, 99th %ile)')
+            D2.header['PRIMARY']['FOUTRG98'] = (float(green_out[4]), 'Flux [e-] out order trace (Green, 98th %ile)')
+            D2.header['PRIMARY']['FOUTRG95'] = (float(green_out[3]), 'Flux [e-] out order trace (Green, 95th %ile)')
+            D2.header['PRIMARY']['FOUTRG90'] = (float(green_out[2]), 'Flux [e-] out order trace (Green, 90th %ile)')
+            D2.header['PRIMARY']['FOUTRG50'] = (float(green_out[1]), 'Flux [e-] out order trace (Green, 50th %ile)')
+            D2.header['PRIMARY']['FOUTRG10'] = (float(green_out[0]), 'Flux [e-] out order trace (Green, 10th %ile)')
+            D2.header['PRIMARY']['FRATRG9F'] = (float(green_ratio[6]), 'Flux in/out order trace (Green, 99.5th %ile)')
+            D2.header['PRIMARY']['FRATRG99'] = (float(green_ratio[5]), 'Flux in/out order trace (Green, 99th %ile)')
+            D2.header['PRIMARY']['FRATRG98'] = (float(green_ratio[4]), 'Flux in/out order trace (Green, 98th %ile)')
+            D2.header['PRIMARY']['FRATRG95'] = (float(green_ratio[3]), 'Flux in/out order trace (Green, 95th %ile)')
+            D2.header['PRIMARY']['FRATRG90'] = (float(green_ratio[2]), 'Flux in/out order trace (Green, 90th %ile)')
+            D2.header['PRIMARY']['FRATRG50'] = (float(green_ratio[1]), 'Flux in/out order trace (Green, 50th %ile)')
+            D2.header['PRIMARY']['FRATRG10'] = (float(green_ratio[0]), 'Flux in/out order trace (Green, 10th %ile)')
+        except Exception as e:
+            logger.error(f"Problem with Green 2D flux measurements in/out of order trace: {e}\n{traceback.format_exc()}")
+    if 'red' in chips:
+        try:
+            red_in    = fluxes['red']['in']
+            red_out   = fluxes['red']['out']
+            red_ratio = fluxes['red']['ratio']
+            D2.header['PRIMARY']['FINTRR9F'] = (float(red_in[6]), 'Flux [e-] in order trace (Red, 99.5th %ile)')
+            D2.header['PRIMARY']['FINTRR99'] = (float(red_in[5]), 'Flux [e-] in order trace (Red, 99th %ile)')
+            D2.header['PRIMARY']['FINTRR98'] = (float(red_in[4]), 'Flux [e-] in order trace (Red, 98th %ile)')
+            D2.header['PRIMARY']['FINTRR95'] = (float(red_in[3]), 'Flux [e-] in order trace (Red, 95th %ile)')
+            D2.header['PRIMARY']['FINTRR90'] = (float(red_in[2]), 'Flux [e-] in order trace (Red, 90th %ile)')
+            D2.header['PRIMARY']['FINTRR50'] = (float(red_in[1]), 'Flux [e-] in order trace (Red, 50th %ile)')
+            D2.header['PRIMARY']['FINTRR10'] = (float(red_in[0]), 'Flux [e-] in order trace (Red, 10th %ile)')
+            D2.header['PRIMARY']['FOUTRR9F'] = (float(red_out[6]), 'Flux [e-] out order trace (Red, 99.5th %ile)')
+            D2.header['PRIMARY']['FOUTRR99'] = (float(red_out[5]), 'Flux [e-] out order trace (Red, 99th %ile)')
+            D2.header['PRIMARY']['FOUTRR98'] = (float(red_out[4]), 'Flux [e-] out order trace (Red, 98th %ile)')
+            D2.header['PRIMARY']['FOUTRR95'] = (float(red_out[3]), 'Flux [e-] out order trace (Red, 95th %ile)')
+            D2.header['PRIMARY']['FOUTRR90'] = (float(red_out[2]), 'Flux [e-] out order trace (Red, 90th %ile)')
+            D2.header['PRIMARY']['FOUTRR50'] = (float(red_out[1]), 'Flux [e-] out order trace (Red, 50th %ile)')
+            D2.header['PRIMARY']['FOUTRR10'] = (float(red_out[0]), 'Flux [e-] out order trace (Red, 10th %ile)')
+            D2.header['PRIMARY']['FRATRR9F'] = (float(red_ratio[6]), 'Flux in/out order trace (Red, 99.5th %ile)')
+            D2.header['PRIMARY']['FRATRR99'] = (float(red_ratio[5]), 'Flux in/out order trace (Red, 99th %ile)')
+            D2.header['PRIMARY']['FRATRR98'] = (float(red_ratio[4]), 'Flux in/out order trace (Red, 98th %ile)')
+            D2.header['PRIMARY']['FRATRR95'] = (float(red_ratio[3]), 'Flux in/out order trace (Red, 95th %ile)')
+            D2.header['PRIMARY']['FRATRR90'] = (float(red_ratio[2]), 'Flux in/out order trace (Red, 90th %ile)')
+            D2.header['PRIMARY']['FRATRR50'] = (float(red_ratio[1]), 'Flux in/out order trace (Red, 50th %ile)')
+            D2.header['PRIMARY']['FRATRR10'] = (float(red_ratio[0]), 'Flux in/out order trace (Red, 10th %ile)')
+        except Exception as e:
+            logger.error(f"Problem with Red 2D flux measurements in/out of order trace: {e}\n{traceback.format_exc()}")
+
+    return D2
+
+
 def add_headers_dark_current_2D(D2, logger=None):
     """
     Compute the dark current for dark files and adds keywords to the 2D object header
@@ -565,7 +700,7 @@ def add_headers_2D_xdisp_offset(D2, logger=None):
     
     # Check that the input object is of the right type
     if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
-        print('Not a valid 2D.')
+        print('Not a valid 2D or no Gree/Red CCD data.')
         return D2
         
     # Compute cross-dispersion offsets with two references: global and in era
@@ -608,6 +743,8 @@ def add_headers_2D_xdisp_offset(D2, logger=None):
                 except Exception as e:
                     logger.error(f"Problem with Red 2D cross-dispersion offset measurements: {e}\n{traceback.format_exc()}")
     return D2
+
+
 
 
 def add_headers_masters_age_L1(L1, logger=None, verbose=False):

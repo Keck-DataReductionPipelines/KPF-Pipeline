@@ -43,6 +43,7 @@ panel_arr:
       on_sky: true
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.30
 
   - panelvars:
@@ -81,4 +82,5 @@ panel_arr:
       on_sky: true
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.30
