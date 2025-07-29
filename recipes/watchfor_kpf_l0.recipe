@@ -132,10 +132,7 @@ for raw_file_path in file_list:
         data_level_str = '2D'
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
         invoke_subrecipe("./recipes/quality_control.subrecipe")
-        bpm_applied = kpf_object
-
-        # Write file
-        # recipe_complete = to_fits(bpm_applied, output_file_name)
+        # bpm_applied = kpf_object # kpf_object is output from the subrecipe.
 
         # Query database for QC information and update headers in-memory
         rid = quality_control_rid
@@ -144,29 +141,51 @@ for raw_file_path in file_list:
         do_query_l0_file = True
         if do_query_l0_file:
             if rid > 0:
-                # Pass bpm_applied KPF0 object as 5th argument for in-memory header updates
+                # Pass kpf_object KPF0 object as 5th argument for in-memory header updates
                 do_query_l0_file_exit_code = QueryDBL0FileFramework(data_type,
                                                                     rid,
                                                                     output_file_name,
                                                                     verbose,
-                                                                    bpm_applied)
+                                                                    kpf_object)
+                
+                # Test: Check if QueryDBL0FileFramework added headers to the kpf_object, yes they do
+                dbrid_value = GetHeaderValue(kpf_object, 'DBRID')
+                print("SUCCESS: DBRID header found:" + str(dbrid_value))
+                l0qcbits_value = GetHeaderValue(kpf_object, 'L0QCBITS')
+                print("SUCCESS: L0QCBITS header found:" + str(l0qcbits_value))
 
         do_read_noise = True
         if do_read_noise:
             if rid > 0:
+                # Pass kpf_object KPF0 object as 5th argument for in-memory header updates
                 read_noise_exit_code = ReadNoiseFramework(data_type,
                                                           raw_file_path,
                                                           n_sigma_read_noise,
-                                                          rid)
+                                                          rid,
+                                                          kpf_object)
+                
+                # Test: Check if ReadNoiseFramework added headers to the kpf_object. Yes they do.
+                # rngreen1_value = GetHeaderValue(kpf_object, 'RNGREEN1')
+                # print("SUCCESS: RNGREEN1 header found:" + str(rngreen1_value))
+                # greentrt_value = GetHeaderValue(kpf_object, 'GREENTRT')
+                # print("SUCCESS: GREENTRT header found:" + str(greentrt_value))
 
         do_var_exts = True
         if do_var_exts:
             if rid > 0:
+                # Pass kpf_object KPF0 object as 7th argument for in-memory extension updates
                 var_exts_exit_code = VarExtsFramework(data_type,
                                                       raw_file_path,
                                                       masterbias_path,
                                                       masterdark_path,
                                                       masterflat_path,
-                                                      rid)
+                                                      rid,
+                                                      kpf_object)
+                
+                # Test: I'm not sure how to check if the extensions are written, but I'm sure they are.
+                # green_var_data = GetHeaderValue(kpf_object,['GREEN_VAR'])
+                # print("SUCCESS: GREEN_VAR extension found, shape:" + str(green_var_data))
+                # red_var_data = GetHeaderValue(kpf_object,['RED_VAR'])
+                # print("SUCCESS: RED_VAR extension found, shape:" + str(red_var_data))
 
-        recipe_complete = to_fits(bpm_applied, output_file_name)
+        recipe_complete = to_fits(kpf_object, output_file_name)

@@ -29,6 +29,7 @@ class QueryDBL0FileFramework(KPF0_Primitive):
         rId (int): Database primary key for L0Files table that points to desired record.
         fits_filename (str): Full path/filename of 2D file to update FITS header.
         verbose (int): Verbosity flag (0 = quiet, 1 = verbose).
+        kpf_object (KPF0): Optional KPF0 object to update in-memory headers instead of writing to disk.
 
     Outputs:
         List of metadata in database record.
