@@ -858,8 +858,18 @@ class TSDB:
                         self.logger.debug(f"Created index: {index_name} on table {tbl}({column})")
     
             # Check if the column 'indexed' exists in tsdb_metadata
-            self._execute_sql_command(f"PRAGMA table_info({self.prefix}metadata);")
-            existing_columns = [row[1] for row in self.cursor.fetchall()]
+            if self.backend == 'sqlite':
+                pragma_query = f"PRAGMA table_info({self.prefix}metadata);"
+                self._execute_sql_command(pragma_query)
+                existing_columns = [row[1] for row in self.cursor.fetchall()]
+            elif self.backend == 'psql':
+                check_column_sql = """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name = %s AND column_name = %s AND table_schema = 'public';
+                """
+                self._execute_sql_command(check_column_sql, params=(f"{self.prefix}metadata", 'indexed'))
+                existing_columns = [row[0] for row in self.cursor.fetchall()]
     
             if 'indexed' not in existing_columns:
                 update_indexed_sql = f"""
@@ -2036,7 +2046,8 @@ class TSDB:
 
 
     @require_role(['admin', 'operations', 'readonly'])
-    def dataframe_from_db(self, columns=None, 
+    def dataframe_from_db(self, 
+                          columns=None, 
                           start_date=None, 
                           end_date=None, 
                           only_object=None, 
