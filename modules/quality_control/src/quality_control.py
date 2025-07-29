@@ -826,16 +826,30 @@ class QCDefinitions:
         name28 = 'L1_LFC_lines'
         self.names.append(name28)
         self.kpf_data_levels[name28] = ['L1']
-        self.descriptions[name28] = 'Number and distribution of LFC lines sufficient'
+        self.descriptions[name28] = 'Number and distribution of LFC lines sufficient in full set of orders (2-34,1-31)'
         self.data_types[name28] = 'int'
         self.spectrum_types[name28] = ['LFC', ]
         self.master_types[name28] = []
-        self.drift_types[name28] = ['LFC', ]
+        self.drift_types[name28] = []
         self.required_data_products[name28] = [] # no required data products
         self.fits_keywords[name28] = 'LFCLINES'
-        self.fits_comments[name28] = 'QC: Number and dist of LFC lines sufficient'
+        self.fits_comments[name28] = 'QC: Num/dist of LFC lines ok (ord 2-34,0-31)'
         self.db_columns[name28] = None
         self.fits_keyword_fail_value[name28] = 0
+
+        name28b = 'L1_LFC_lines_partial'
+        self.names.append(name28b)
+        self.kpf_data_levels[name28b] = ['L1']
+        self.descriptions[name28b] = 'Number and distribution of LFC lines sufficient in partial set of orders (15-34,1-31)'
+        self.data_types[name28b] = 'int'
+        self.spectrum_types[name28b] = ['LFC', ]
+        self.master_types[name28b] = []
+        self.drift_types[name28b] = ['LFC', ]
+        self.required_data_products[name28b] = [] # no required data products
+        self.fits_keywords[name28b] = 'LFCLINEP'
+        self.fits_comments[name28b] = 'QC: Num/dist of LFC lines ok (ord 15-34,1-31)'
+        self.db_columns[name28b] = None
+        self.fits_keyword_fail_value[name28b] = 0
 
         name29 = 'L1_Etalon_lines'
         self.names.append(name29)
@@ -3336,7 +3350,9 @@ class QCL1(QC):
         return QC_pass
 
 
-    def L1_LFC_lines(self, intensity_thresh=40**2, min_lines=100, divisions_per_order=8, debug=False):
+    def L1_LFC_lines(self, intensity_thresh=40**2, min_lines=100, 
+                           divisions_per_order=8, partial_order_coverage=False, 
+                           debug=False):
         """
         Checks the quality of LFC spectra by examining the number and distribution 
         of emissions lines per chip/order/orderlet.  It checks that each order 
@@ -3350,7 +3366,9 @@ class QCL1(QC):
                                       order for it to be considered good
             divisions_per_order (int): number of contiguous subregions each order 
                                        must have at least one peak in
-            debug: if True, log debugging statements
+            partial_order_coverage (bool): if True, the orders tested are restricted 
+                                           a limited set (Green orders 15-34, not 2-34)
+            debug (bool): if True, log debugging statements
 
         Returns:
             QC_pass (bool): True if each order and orderlet for the 
@@ -3386,8 +3404,12 @@ class QCL1(QC):
 
             # usable orders are copied from modules/wavelength_cal/confits/LFC_KPF_{green,red}.cfg
             # a future version of this code would use GetCalibrations for this
-            usable_orders_g = [2, 34]
-            usable_orders_r = [0, 31]
+            if not partial_order_coverage:
+                usable_orders_g = [ 2, 34]
+                usable_orders_r = [ 0, 31]
+            else:
+                usable_orders_g = [15, 34]
+                usable_orders_r = [ 0, 31]
             
             # Determine which fibers are illuminated by LFC
             use_CAL, use_SCI, use_SKY = False, False, False
@@ -3470,6 +3492,23 @@ class QCL1(QC):
 
         return QC_pass
 
+
+    def L1_LFC_lines_partial(self, intensity_thresh=40**2, min_lines=100, 
+                           divisions_per_order=8, 
+                           debug=False):
+        """
+        Same as L1_LFC_lines(), but executed over a partial set of spectral orders
+        (Green orders 15-34 instead of 2-34).  This method creates the keyword 
+        LFCLINEP (the P indicates partial coverage of spectral orders) while 
+        the method L1_LFC_lines() creates LFCLINES (full coverage).
+        """
+        QC_pass = self.L1_LFC_lines(intensity_thresh=intensity_thresh, 
+                                    min_lines=min_lines, 
+                                    divisions_per_order=divisions_per_order, 
+                                    partial_order_coverage=True,
+                                    debug=debug)
+        return QC_pass
+        
 
     def L1_Etalon_lines(self, intensity_thresh=40**2, min_lines=100, divisions_per_order=4, debug=False):
         """
