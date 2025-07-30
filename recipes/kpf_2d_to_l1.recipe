@@ -30,6 +30,9 @@
 
 # set the CONFIGURATION flags for each process ------------------------------------
 # L0 level flags
+from kpfpipe.models.level0 import KPF0
+
+
 do_l0_to_2d = config.ARGUMENT.do_l0_to_2d # This needs cleaned up. 
 do_order_trace = config.ARGUMENT.do_order_trace
 
@@ -162,23 +165,23 @@ if lev1_file_path:
 	input_lev1_pattern = lev1_file_path
 else:
 	input_lev1_pattern = output_extraction + '*' + lev1_stem_suffix + fits_ext
-output_rv = output_dir + config.ARGUMENT.output_rv + date_dir
-output_rv_rw = output_rv + config.ARGUMENT.output_rv_reweighting
-bc_path = output_dir + config.ARGUMENT.output_barycorr
-lev2_pattern = output_rv + '*' + lev2_stem_suffix + fits_ext
+# output_rv = output_dir + config.ARGUMENT.output_rv + date_dir
+# output_rv_rw = output_rv + config.ARGUMENT.output_rv_reweighting
+# bc_path = output_dir + config.ARGUMENT.output_barycorr
+# lev2_pattern = output_rv + '*' + lev2_stem_suffix + fits_ext
 
-reweighting_method = config.ARGUMENT.reweighting_method
-reweighting_masks = config.ARGUMENT.reweighting_enable_masks
-data_ext_rv = config.ARGUMENT.orderlet_names_rv
-ccf_ext_names = config.ARGUMENT.ccf_ext
-rv_ext = config.ARGUMENT.rv_ext
-is_rv_cal = config.ARGUMENT.rv_correct_by_cal
-if 'static' in reweighting_method:
-	static_ccf_ratio = config.ARGUMENT.static_ccf_ratio
-else:
-	static_ccf_ratio = None
-rv_start_x = config.ARGUMENT.rv_start_x
-rv_end_x = config.ARGUMENT.rv_end_x
+# reweighting_method = config.ARGUMENT.reweighting_method
+# reweighting_masks = config.ARGUMENT.reweighting_enable_masks
+# data_ext_rv = config.ARGUMENT.orderlet_names_rv
+# ccf_ext_names = config.ARGUMENT.ccf_ext
+# rv_ext = config.ARGUMENT.rv_ext
+# is_rv_cal = config.ARGUMENT.rv_correct_by_cal
+# if 'static' in reweighting_method:
+	# static_ccf_ratio = config.ARGUMENT.static_ccf_ratio
+# else:
+# 	static_ccf_ratio = None
+# rv_start_x = config.ARGUMENT.rv_start_x
+# rv_end_x = config.ARGUMENT.rv_end_x
 
 # input_hk_pattern = lev0_science_pattern
 
@@ -200,21 +203,21 @@ input_flat_file = output_dir + 'masters/' + flat_file_date_dir + '/kpf_' + flat_
 
 # HTI THIS IS ONE OF THE FIRST PLACES THAT AN EXTERNAL ROUTINE IS CALLED. EVERYTHING ABOVE THIS IS PREPARING THE VARIABLES.
 #  I WONDER HOW MUCH OF ABOVE HERE CAN BE MOVED TO A CONFIGURATION FILE.
-print("Input flat file: "+ str(input_flat_file)) # check that the filename is correct because calibration lookup is slow.
-if not exists(input_flat_file):
-    # CalibrationLookup input datetime is one minute past the midnight boundary to ensure it is well past the selection threshold.
-    dt_string =  date_dir[0] + date_dir[1] + date_dir[2] + date_dir[3] +\
-             "-" + date_dir[4] + date_dir[5] + "-" + date_dir[6] + date_dir[7] + "T00:01:00.000000"
-    print("Using datetime string for calibration lookup: "+dt_string)
-    cals = CalibrationLookup(dt_string)
-    input_flat_file = cals['flat']
 
-_, short_flat_file = split(input_flat_file)
-flat_stem, flat_ext = splitext(short_flat_file)
+# if not exists(input_flat_file):
+#     # CalibrationLookup input datetime is one minute past the midnight boundary to ensure it is well past the selection threshold.
+#     dt_string =  date_dir[0] + date_dir[1] + date_dir[2] + date_dir[3] +\
+#              "-" + date_dir[4] + date_dir[5] + "-" + date_dir[6] + date_dir[7] + "T00:01:00.000000"
+#     print("Using datetime string for calibration lookup: "+dt_string)
+#     cals = CalibrationLookup(dt_string)
+#     input_flat_file = cals['flat']
+
+# _, short_flat_file = split(input_flat_file)
+# flat_stem, flat_ext = splitext(short_flat_file)
 
 
 # lev0_flat_rect = None # HTI: INitialized, but can be re-defined later.
-ccd_stack = '_STACK'
+# ccd_stack = '_STACK'
 
 lev1_list = []
 outlier_mask_path = config.ARGUMENT.outlier_mask_path
@@ -256,8 +259,6 @@ outlier_mask_path = config.ARGUMENT.outlier_mask_path
 
 if do_spectral_extraction or do_hk or do_bc:
 
-	# lev0_flat_rect = None
-
 	# prepare bias, dark data for ca_hk
 	if do_hk:
 		hk_dark_data = config.ARGUMENT.hk_dark_fits
@@ -272,11 +273,11 @@ if do_spectral_extraction or do_hk or do_bc:
 		else:
 			hk_bias_data = None
 
+	# Initialize order_mask variable, check below for existence to avoid re-opening
+	order_mask = None
+
 	# loop through ccd and L0 to do spectral extraction
-	# lev0_files = find_files(lev0_science_pattern)
-	# for input_lev0_file in lev0_files:
-	print(d2_file_list)
-	for input_lev0_file in d2_file_list: #HTI is this supposed to be 2D or L0?
+	for input_lev0_file in d2_file_list: 
 		# lev0_data is KPF0 instance for input_lev0_file
 		TMP = input_lev0_file
 		print(TMP)
@@ -308,8 +309,14 @@ if do_spectral_extraction or do_hk or do_bc:
 
 
 		# produce level 1 by spectral extraction if overwrite or L1 file doesn't exist
-		if (overwrite or not exists(output_lev1_file)):
+		if (overwrite or not exists(output_lev1_file)):		# Define the order mask - load from CalibrationLookup result
+			order_mask_file = cals['ordermask']
+			# Load order_mask if not already loaded from file loop
+			#  If multiple dates are called in this loop, this will load the wrong mask.
+			if order_mask == None:
+				order_mask = kpf0_from_fits(order_mask_file, data_type)
 
+# ONLY COMMENT OUT STRAY LIGHT WHEN TESTING!!!!!!		
 			# stray_light_output_list = StrayLight(lev0_data, order_mask)
 			# lev0_data = stray_light_output_list[1]
 			TMP2 = input_lev0_file
@@ -330,7 +337,8 @@ if do_spectral_extraction or do_hk or do_bc:
 			# 										cals['start_order'][1]
 			# 									   )
 			
-			op_data = spectral_extraction_output_list[1]
+			# op_data = spectral_extraction_output_list[1]
+			output_data= spectral_extraction_output_list[1]
 			# if op_data != None:
 			# 	# Quality Control & Diagnostics - L1 level
 			# 	# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
@@ -343,8 +351,8 @@ if do_spectral_extraction or do_hk or do_bc:
 			# 	result = to_fits(op_data, output_lev1_file)
 
 			# copy wls to the proper extension of lev1 data
-			if do_sp_wavecopy and exists(output_lev1_file):
-				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+			if do_sp_wavecopy:# and exists(output_lev1_file): output_lev1 only exists in memory
+				# output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
 				obs_date_time = GetHeaderValue(output_data,'DATE-MID')
 				if do_db_query_for_before_after_master_files == True:
 					invoke_subrecipe("recipes/wls_interpolation.subrecipe") 
@@ -360,7 +368,7 @@ if do_spectral_extraction or do_hk or do_bc:
 
 				# Add blaze extensions
 				if exists(smooth_lamp_file):
-					smooth_lamp_l1 = kpf1_from_fits(smooth_lamp_file, data_type=data_type)
+					smooth_lamp_l1 = kpf1_from_fits(smooth_lamp_file, data_type=data_type) #smooth lamp file
 					blaze_output_list = AddBlaze(output_data, smooth_lamp_l1)
 
 					exit_code = blaze_output_list[0]
@@ -378,7 +386,7 @@ if do_spectral_extraction or do_hk or do_bc:
 				# result = to_fits(output_data, output_lev1_file) #remove extra to fits #1
 
             # HTI: Keep do_bc in 2D -> L1 for historical reasons.
-			if do_bc and exists(output_lev1_file):
+			if do_bc:# and exists(output_lev1_file): # output_lev1 only exists in memory
 				DOING_BC = True
 				print("Doing barycentric correction on L1 data: "+output_lev1_file)
 				# add bary correction result to existing L1 file
@@ -406,10 +414,11 @@ if do_spectral_extraction or do_hk or do_bc:
 			# do ca_hk extraction
 			if do_hk:
 				# add ca_hk extraction result to existing L1 file or create a new L1 file if L1 file doesn't exist
-				if not exists(output_lev1_file):
-					output_data = None
-				else:
-					output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+				# if not exists(output_lev1_file):
+				# 	output_data = None
+				# else:
+				# 	output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
+				# 7/2025: output_data exists only in memory here.
 
 				output_data = CaHKExtraction(lev0_data, hk_trace_table, hk_fiber_list, output_data, output_exts=hk_spec_exts,
 						output_wave_exts=hk_wave_exts,

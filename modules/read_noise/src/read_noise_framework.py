@@ -50,12 +50,6 @@ class ReadNoiseFramework(KPF0_Primitive):
         self.n_sigma = self.action.args[2]
         self.rId = self.action.args[3]
         
-        # Check if a KPF0 object was passed as 5th argument
-        if len(self.action.args) > 4:
-            self.fits_obj = self.action.args[4]
-        else:
-            self.fits_obj = None
-        
         self.gain_dict = {
             'GREEN_AMP1': 5.175,
             'GREEN_AMP2': 5.208,
@@ -257,7 +251,6 @@ class ReadNoiseFramework(KPF0_Primitive):
         try:
             gain = hdul_input.header[ext]["CCDGAIN"]
         except:
-            # this error is thrown for the cahk extension. How is the cahk gain being defined?
             self.logger.info("*** Error: GAIN keyword not found in header ({}); defaulting to dictionary ({})...".\
                 format(fname_input,self.gain_dict[ext]))
             gain = self.gain_dict[ext]
@@ -508,23 +501,16 @@ class ReadNoiseFramework(KPF0_Primitive):
 
         if self.backfill_repopulate_db_recs_cfg == 0:
 
-            # Use passed KPF0 object if available, otherwise read from file
-            if self.fits_obj is not None:
-                fits_obj = self.fits_obj
-                fits_filename_exists = True  # Object already exists in memory
-                fits_filename = "in-memory KPF0 object"  # For logging purposes
-            else:
-                fits_filename = input_filename
-                fits_filename = fits_filename.replace('L0', '2D')
-                fits_filename = fits_filename.replace('.fits', '_2D.fits')
+            fits_filename = input_filename
+            fits_filename = fits_filename.replace('L0', '2D')
+            fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
-                fits_filename_exists = exists(fits_filename)
-                if fits_filename_exists:
-                    fits_obj = KPF0.from_fits(fits_filename, self.data_type)
-
+            fits_filename_exists = exists(fits_filename)
             if not fits_filename_exists:
                 self.logger.info('*** File does not exist ({}); skipping...'.format(fits_filename))
             else:
+
+                fits_obj = KPF0.from_fits(fits_filename,self.data_type)
 
                 for ffi in lev0_ffi_exts:
 
@@ -545,10 +531,7 @@ class ReadNoiseFramework(KPF0_Primitive):
             fits_obj.header['PRIMARY']["REDTRT"] = (redreadtime,'RED chip total read time [seconds]')
             fits_obj.header['PRIMARY']["READSPED"] = (readspeed,'Categorization of read speed')
 
-            # Only write to disk if no KPF0 object was passed (backward compatibility)
-            # When KPF0 object is passed, headers are updated in-memory and recipe handles file output
-            if self.fits_obj is None:
-                fits_obj.to_fits(fits_filename)
+            fits_obj.to_fits(fits_filename)
 
         return read_noise_exit_code
 

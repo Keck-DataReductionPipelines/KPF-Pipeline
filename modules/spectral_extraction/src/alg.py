@@ -529,8 +529,11 @@ class SpectralExtractionAlg:
                                               return_box_coords=True
                                              )
 
+        # get the correct flux and variance extension names for this trace index
+        _, drp_v_ext = self._get_orderlet_ext_from_trace_index(chip, trace_index)
+        
         # variance
-        V = self.target_2D[f'{chip}_VAR'].data[ymin:ymax]
+        V = self.target_2D[drp_v_ext].data[ymin:ymax]
 
         # sky/scattered/stray light background
         S = self.background_image[f'{chip}_CCD'][ymin:ymax]

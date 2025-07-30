@@ -2,11 +2,12 @@ import configparser
 import traceback
 
 from kpfpipe.primitives.level0 import KPF0_Primitive
-from modules.spectral_extraction_gjg.src.alg import SpectralExtractionAlg
+from kpfpipe.models.level0 import KPF0
+from modules.spectral_extraction.src.alg import SpectralExtractionAlg
 from keckdrpframework.models.arguments import Arguments
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/spectral_extraction_gjg/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/spectral_extraction/configs/default.cfg'
 
 class SpectralExtraction(KPF0_Primitive):
     """
@@ -25,10 +26,16 @@ class SpectralExtraction(KPF0_Primitive):
         self.start_order_green = self.action.args[4]
         self.start_order_red = self.action.args[5]
         
+        # Handle master_flat_2D conversion if needed
+        # CalibrationLookup returns file paths, but algorithm expects KPF0 objects
+        if isinstance(self.master_flat_2D, str):
+            # It's a file path, load it as KPF0 object
+            self.master_flat_2D = KPF0.from_fits(self.master_flat_2D, data_type='KPF')
+        
         # Input configuration
         self.config = configparser.ConfigParser()
         try:
-            self.config_path = context.config_path['spectral_extraction_gjg']
+            self.config_path = context.config_path['spectral_extraction']
         except:
             self.config_path = DEFAULT_CFG_PATH
 

@@ -29,7 +29,6 @@ class QueryDBL0FileFramework(KPF0_Primitive):
         rId (int): Database primary key for L0Files table that points to desired record.
         fits_filename (str): Full path/filename of 2D file to update FITS header.
         verbose (int): Verbosity flag (0 = quiet, 1 = verbose).
-        kpf_object (KPF0): Optional KPF0 object to update in-memory headers instead of writing to disk.
 
     Outputs:
         List of metadata in database record.
@@ -44,12 +43,6 @@ class QueryDBL0FileFramework(KPF0_Primitive):
         self.rId = self.action.args[1]
         self.fits_filename = self.action.args[2]
         self.verbose = self.action.args[3]
-        
-        # Check if a KPF0 object was passed as 5th argument
-        if len(self.action.args) > 4:
-            self.fits_obj = self.action.args[4]
-        else:
-            self.fits_obj = None
 
         if self.verbose != 1:
             self.verbose = 0
@@ -264,11 +257,7 @@ class QueryDBL0FileFramework(KPF0_Primitive):
 
         # Update FITS header.
 
-        # Use passed KPF0 object if available, otherwise read from file
-        if self.fits_obj is not None:
-            fits_obj = self.fits_obj
-        else:
-            fits_obj = KPF0.from_fits(self.fits_filename, self.data_type)
+        fits_obj = KPF0.from_fits(self.fits_filename,self.data_type)
         fits_obj.header['PRIMARY']['DBRID'] = (rId,'DB raw image ID')
         fits_obj.header['PRIMARY']['L0QCBITS'] = (infobits,'L0 QC bitwise flags (see defs below)')
 
@@ -354,10 +343,7 @@ class QueryDBL0FileFramework(KPF0_Primitive):
             value = defs[i]
             fits_obj.header['PRIMARY'][keyword] = value
 
-        # Only write to disk if no KPF0 object was passed (backward compatibility)
-        # When KPF0 object is passed, headers are updated in-memory and recipe handles file output
-        if self.fits_obj is None:
-            fits_obj.to_fits(self.fits_filename)
+        fits_obj.to_fits(self.fits_filename)
 
 
         # Return with arguments.

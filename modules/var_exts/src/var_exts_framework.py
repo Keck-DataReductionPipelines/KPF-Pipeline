@@ -35,7 +35,6 @@ class VarExtsFramework(KPF0_Primitive):
         masterdark_path (str): Input master dark.
         masterflat_path (str): Input master flat.
         rId (int): Primary database key of L0 FITS file in L0Files database record.
-        kpf_object (KPF0): Optional KPF0 object to update in-memory headers instead of writing to disk.
     """
 
     def __init__(self, action, context):
@@ -48,12 +47,7 @@ class VarExtsFramework(KPF0_Primitive):
         self.masterdark_path = self.action.args[3]
         self.masterflat_path = self.action.args[4]
         self.rId = self.action.args[5]
-
-        # Check if a KPF0 object was passed as 7th argument
-        if len(self.action.args) > 6:
-            self.fits_obj = self.action.args[6]
-        else:
-            self.fits_obj = None
+        self.fits_obj = self.action.args[6] if len(self.action.args) > 6 else None
 
         try:
             self.module_config_path = context.config_path['var_exts']
@@ -61,7 +55,16 @@ class VarExtsFramework(KPF0_Primitive):
         except:
             self.module_config_path = DEFAULT_CFG_PATH
 
+        print("{} class: self.module_config_path = {}".format(self.__class__.__name__,self.module_config_path))
+
+        print("Starting logger...")
         self.logger = start_logger(self.__class__.__name__, self.module_config_path)
+
+        if self.logger is not None:
+            print("--->self.logger is not None...")
+        else:
+            print("--->self.logger is None...")
+
         self.logger.info('Started {}'.format(self.__class__.__name__))
         self.logger.debug('module_config_path = {}'.format(self.module_config_path))
 
@@ -219,26 +222,24 @@ class VarExtsFramework(KPF0_Primitive):
         else:
             num_amps_red = 4
 
-        # Use passed KPF0 object if available, otherwise read from file
-        if self.fits_obj is not None:
-            hdul_input = self.fits_obj
-            fits_filename_exists = True
-            fits_filename = "in-memory KPF0 object"  # For logging purposes
-        else:
-            fits_filename = self.l0_filename
-            fits_filename = fits_filename.replace('L0', '2D')
-            fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
-            fits_filename_exists = exists(fits_filename)
-            if not fits_filename_exists:
-                self.logger.info('*** 2D file does not exist ({}); skipping...'.format(fits_filename))
-                return
-            
-            hdul_input = KPF0.from_fits(fits_filename, self.data_type)
 
-        # Get exposure time from header
-        exp_time = float(hdul_input.header['PRIMARY']['EXPTIME'])
+        # Read image data object from 2D FITS file.
 
+        fits_filename = self.l0_filename
+        fits_filename = fits_filename.replace('L0', '2D')
+        fits_filename = fits_filename.replace('.fits', '_2D.fits')
+
+        fits_filename_exists = exists(fits_filename)
+        if not fits_filename_exists:
+            self.logger.info('*** 2D file does not exist ({}); skipping...'.format(fits_filename))
+            return
+
+        hdul_input = KPF0.from_fits(fits_filename,self.data_type)
+        exp_time = float(fits.getheader(fits_filename,ext=0)['EXPTIME'])
+
+        if debug == 1:
+            print("exp_time = {}".format(exp_time))
 
         exts = ['GREEN_CCD','RED_CCD']
         rngreenvarimg = None
@@ -247,22 +248,12 @@ class VarExtsFramework(KPF0_Primitive):
         for ext in exts:
 
             try:
-                if self.fits_obj is not None:
-                    # Use header from passed KPF0 object
-                    naxis1 = hdul_input.header[ext]['NAXIS1']
-                else:
-                    # Use astropy fits for file-based access
-                    naxis1 = fits.getheader(fits_filename, ext=ext)['NAXIS1']
+                naxis1 = fits.getheader(fits_filename,ext=ext)['NAXIS1']
             except:
                 continue
 
             try:
-                if self.fits_obj is not None:
-                    # Use header from passed KPF0 object
-                    naxis2 = hdul_input.header[ext]['NAXIS2']
-                else:
-                    # Use astropy fits for file-based access
-                    naxis2 = fits.getheader(fits_filename, ext=ext)['NAXIS2']
+                naxis2 = fits.getheader(fits_filename,ext=ext)['NAXIS2'] #HTI
             except:
                 continue
 
@@ -349,21 +340,18 @@ class VarExtsFramework(KPF0_Primitive):
 
     def assemble_ccd_images(self):
 
-        # Use passed KPF0 object if available, otherwise read from file
-        if self.fits_obj is not None:
-            hdul_input = self.fits_obj
-            fits_filename_exists = True
-        else:
-            fits_filename = self.l0_filename
-            fits_filename = fits_filename.replace('L0', '2D')
-            fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        # Read image data object from 2D FITS file.
 
-            fits_filename_exists = exists(fits_filename)
-            if not fits_filename_exists:
-                self.logger.info('*** 2D file does not exist ({}); skipping...'.format(fits_filename))
-                return
+        fits_filename = self.l0_filename
+        fits_filename = fits_filename.replace('L0', '2D')
+        fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
-            hdul_input = KPF0.from_fits(fits_filename, self.data_type)
+        fits_filename_exists = exists(fits_filename)
+        if not fits_filename_exists:
+            self.logger.info('*** 2D file does not exist ({}); skipping...'.format(fits_filename))
+            return
+
+        hdul_input = KPF0.from_fits(fits_filename,self.data_type)
 
         exts = ['GREEN_CCD','RED_CCD']
         greenccdimg = None
@@ -388,23 +376,16 @@ class VarExtsFramework(KPF0_Primitive):
 
     def write_var_exts(self,greenvarimg,redvarimg):
 
-        # Use passed KPF0 object if available, otherwise read from file
-        if self.fits_obj is not None:
-            fits_obj = self.fits_obj
-            fits_filename_exists = True  # Object already exists in memory
-            fits_filename = "in-memory KPF0 object"  # For logging purposes
-        else:
-            fits_filename = self.l0_filename
-            fits_filename = fits_filename.replace('L0', '2D')
-            fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        fits_filename = self.l0_filename
+        fits_filename = fits_filename.replace('L0', '2D')
+        fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
-            fits_filename_exists = exists(fits_filename)
-            if fits_filename_exists:
-                fits_obj = KPF0.from_fits(fits_filename, self.data_type)
-
+        fits_filename_exists = exists(fits_filename)
         if not fits_filename_exists:
             self.logger.info('*** 2D File does not exist ({}); skipping...'.format(fits_filename))
             return
+
+        fits_obj = KPF0.from_fits(fits_filename,self.data_type)
 
         exts = ['GREEN_VAR','RED_VAR']
 
@@ -436,10 +417,7 @@ class VarExtsFramework(KPF0_Primitive):
             except:
                 pass
 
-        # Only write to disk if no KPF0 object was passed (backward compatibility)
-        # When KPF0 object is passed, extensions are added in-memory and recipe handles file output
-        if self.fits_obj is None:
-            fits_obj.to_fits(fits_filename)
+        fits_obj.to_fits(fits_filename)
 
         return
 

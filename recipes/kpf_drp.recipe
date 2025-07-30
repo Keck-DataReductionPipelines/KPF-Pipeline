@@ -12,10 +12,10 @@ from modules.Utils.amplifier_mask import AmplifierMask
 from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 
 # 2D -> l1 level imports, copied from kpf_drp.recipe.
-from modules.order_trace.src.order_trace import OrderTrace
+# from modules.order_trace.src.order_trace import OrderTrace
 from modules.spectral_extraction.src.order_rectification import OrderRectification
 from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
-from modules.order_trace.src.order_mask import OrderMask
+# from modules.order_trace.src.order_mask import OrderMask
 from modules.wavelength_cal.src.alg import WaveInterpolation          
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
 from modules.blaze.src.blaze import AddBlaze
@@ -103,15 +103,14 @@ else:
     l1_file_list = find_files(l1_pattern)
 
 if do_l0_to_2d:
-    # invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 	invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") # Which calls the watchfor_kpf_l0.recipe
 	
-# BEGIN 2D to L1     
-do_2d_to_l1 = True # add to config later.
-if do_2d_to_l1:
-    invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
+# # BEGIN 2D to L1     
+# do_2d_to_l1 = True # add to config later.
+# if do_2d_to_l1:
+#     invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
 	
-# BEGIN L1 to L2
-do_l1_to_l2 = True # add to config later.
-if do_l1_to_l2:
-    invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
+# # BEGIN L1 to L2
+# do_l1_to_l2 = True # add to config later.
+# if do_l1_to_l2:
+#     invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
