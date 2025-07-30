@@ -36,6 +36,7 @@ panel_arr:
         - lfc_all
         - LFC
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -74,4 +75,5 @@ panel_arr:
         - lfc_all
         - LFC
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25

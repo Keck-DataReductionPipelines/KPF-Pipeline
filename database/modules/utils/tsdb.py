@@ -859,8 +859,18 @@ class TSDB:
                         self.logger.debug(f"Created index: {index_name} on table {tbl}({column})")
     
             # Check if the column 'indexed' exists in tsdb_metadata
-            self._execute_sql_command(f"PRAGMA table_info({self.prefix}metadata);")
-            existing_columns = [row[1] for row in self.cursor.fetchall()]
+            if self.backend == 'sqlite':
+                pragma_query = f"PRAGMA table_info({self.prefix}metadata);"
+                self._execute_sql_command(pragma_query)
+                existing_columns = [row[1] for row in self.cursor.fetchall()]
+            elif self.backend == 'psql':
+                check_column_sql = """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name = %s AND column_name = %s AND table_schema = 'public';
+                """
+                self._execute_sql_command(check_column_sql, params=(f"{self.prefix}metadata", 'indexed'))
+                existing_columns = [row[0] for row in self.cursor.fetchall()]
     
             if 'indexed' not in existing_columns:
                 update_indexed_sql = f"""
@@ -1007,6 +1017,15 @@ class TSDB:
             
         source = self.get_source(extraction_results)
         expected_data_levels = get_data_levels_expected(source)
+        D2_expected = ('2D' in expected_data_levels)
+        L1_expected = ('L1' in expected_data_levels)
+        L2_expected = ('L2' in expected_data_levels)
+        D2_exists = os.path.isfile(f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits")
+        L1_exists = os.path.isfile(f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits")
+        L2_exists = os.path.isfile(f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits")
+        D2_missing = D2_expected and (not D2_exists)
+        L1_missing = L1_expected and (not L1_exists)
+        L2_missing = L2_expected and (not L2_exists)
 
         extraction_results.update({
             'ObsID': base_filename,
@@ -1020,12 +1039,15 @@ class TSDB:
             'D2_header_read_time': now_str, # change to check if file exists first
             'L1_header_read_time': now_str, # change to check if file exists first
             'L2_header_read_time': now_str, # change to check if file exists first
-            'D2_expected': ('2D' in expected_data_levels),
-            'L1_expected': ('L1' in expected_data_levels),
-            'L2_expected': ('L2' in expected_data_levels),
-            'D2_exists': os.path.isfile(f"{dir_path.replace('L0', '2D')}/{base_filename}_2D.fits"),
-            'L1_exists': os.path.isfile(f"{dir_path.replace('L0', 'L1')}/{base_filename}_L1.fits"),
-            'L2_exists': os.path.isfile(f"{dir_path.replace('L0', 'L2')}/{base_filename}_L2.fits"),
+            'D2_expected': D2_expected,
+            'L1_expected': L1_expected,
+            'L2_expected': L2_expected,
+            'D2_exists': D2_exists,
+            'L1_exists': L1_exists,
+            'L2_exists': L2_exists,
+            'D2_missing': D2_missing,
+            'L1_missing': L1_missing,
+            'L2_missing': L2_missing,
             'RA_deg':  safe_angle(extraction_results.get('RA'),  unit='hourangle'),
             'DEC_deg': safe_angle(extraction_results.get('DEC'), unit='deg')
         })    
@@ -2056,12 +2078,19 @@ class TSDB:
 
 
     @require_role(['admin', 'operations', 'readonly'])
-    def dataframe_from_db(self, columns=None, 
-                          start_date=None, end_date=None, 
-                          only_object=None, only_source=None, object_like=None, 
-                          on_sky=None, not_junk=None, 
-                          QC_pass=None, QC_fail=None, 
-                          QC_not_pass=None, QC_not_fail=None, 
+    def dataframe_from_db(self, 
+                          columns=None, 
+                          start_date=None, 
+                          end_date=None, 
+                          only_object=None, 
+                          only_source=None, 
+                          object_like=None, 
+                          on_sky=None, 
+                          not_junk=None, 
+                          qc_pass=None, 
+                          qc_fail=None, 
+                          qc_not_pass=None, 
+                          qc_not_fail=None, 
                           extra_conditions=None,
                           extra_conditions_logic='AND',
                           verbose=False):
@@ -2093,16 +2122,16 @@ class TSDB:
                 E.g., object_like = ['autocal-etalon', 'autocal-bias']
             on_sky (bool, optional): Filter by on-sky (True) or calibration 
                 (False) observations. Defaults to None.
-            QC_pass (str or list of str, optional): Column names where rows 
+            qc_pass (str or list of str, optional): Column names where rows 
                 must have True. Defaults to None.
-            QC_fail (str or list of str, optional): Column names where rows 
+            qc_fail (str or list of str, optional): Column names where rows 
                 must have False. Defaults to None.
-            QC_not_pass (str or list of str, optional): Column names where rows 
+            qc_not_pass (str or list of str, optional): Column names where rows 
                 are not True; allowable values are False and Null. A Null entry 
                 can happen when an observation is ingested for which a QC test 
                 has not been performed (e.g., because the QC was recently 
                 developed). Defaults to None.
-            QC_not_fail (str or list of str, optional): Column names where rows 
+            qc_not_fail (str or list of str, optional): Column names where rows 
                 are not False; allowable values are True and Null. A Null entry 
                 can happen when an observation is ingested for which a QC test 
                 has not been performed (e.g., because the QC was recently 
@@ -2116,21 +2145,21 @@ class TSDB:
             The resulting dataframe.
 
         """
-    
+
         if isinstance(only_object, str):
             only_object = [only_object]
         if isinstance(only_source, str):
             only_source = [only_source]
         if isinstance(object_like, str):
             object_like = [object_like]
-        if isinstance(QC_pass, str):
-            QC_pass = [QC_pass]
-        if isinstance(QC_fail, str):
-            QC_fail = [QC_fail]
-        if isinstance(QC_not_pass, str):
-            QC_not_pass = [QC_not_pass]
-        if isinstance(QC_not_fail, str):
-            QC_not_fail = [QC_not_fail]
+        if isinstance(qc_pass, str):
+            qc_pass = [qc_pass]
+        if isinstance(qc_fail, str):
+            qc_fail = [qc_fail]
+        if isinstance(qc_not_pass, str):
+            qc_not_pass = [qc_not_pass]
+        if isinstance(qc_not_fail, str):
+            qc_not_fail = [qc_not_fail]
     
         quote = '"' if self.backend == 'psql' else '"'  # SQLite uses " for quoting as well
         placeholder = '%s' if self.backend == 'psql' else '?'
@@ -2147,14 +2176,17 @@ class TSDB:
             else:
                 columns_requested = [columns] if isinstance(columns, str) else columns
                 columns_needed = columns_requested.copy()
-                if QC_pass is not None:
-                    columns_needed.extend(QC_pass)
-                if QC_fail is not None:
-                    columns_needed.extend(QC_fail)
-                if QC_not_pass is not None:
-                    columns_needed.extend(QC_not_pass)
-                if QC_not_fail is not None:
-                    columns_needed.extend(QC_not_fail)
+
+                def safe_extend_columns(columns_list):
+                    if columns_list:
+                        for col in columns_list:
+                            if col not in columns_needed:
+                                columns_needed.append(col)                
+
+                safe_extend_columns(qc_pass)
+                safe_extend_columns(qc_fail)
+                safe_extend_columns(qc_not_pass)
+                safe_extend_columns(qc_not_fail)
                 placeholders = ','.join([placeholder] * len(columns_needed))
                 metadata_query = f'SELECT keyword, table_name FROM {self.prefix}metadata WHERE keyword IN ({placeholders});'
                 self._execute_sql_command(metadata_query, params=columns_needed)
@@ -2197,7 +2229,8 @@ class TSDB:
             ]
 
             conditions, params = [], []
-    
+            existing_cols = set(kw_table_map.keys())
+
             if only_object:
                 placeholders = ','.join([placeholder] * len(only_object))
                 conditions.append(f'{self.prefix}l0.{quote}OBJECT{quote} IN ({placeholders})')
@@ -2222,25 +2255,29 @@ class TSDB:
                 conditions.append(f'{self.prefix}l0.{quote}FIUMODE{quote} = {placeholder}')
                 params.append(mode)
 
-            if QC_pass is not None:
-                for col in QC_pass:
-                    conditions.append(f"{quote}{col}{quote} = {placeholder}")
-                    params.append(True)
-        
-            if QC_fail is not None:
-                for col in QC_fail:
-                    conditions.append(f"{quote}{col}{quote} = {placeholder}")
-                    params.append(False)
-    
-            if QC_not_pass is not None:
-                for col in QC_not_pass:
-                    conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
-                    params.append(False)
-        
-            if QC_not_fail is not None:
-                for col in QC_not_fail:
-                    conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
-                    params.append(True)
+            if qc_pass:
+                for col in qc_pass:
+                    if col in existing_cols:
+                        conditions.append(f"{quote}{col}{quote} = {placeholder}")
+                        params.append(True)
+            
+            if qc_fail:
+                for col in qc_fail:
+                    if col in existing_cols:
+                        conditions.append(f"{quote}{col}{quote} = {placeholder}")
+                        params.append(False)
+            
+            if qc_not_pass:
+                for col in qc_not_pass:
+                    if col in existing_cols:
+                        conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
+                        params.append(False)
+            
+            if qc_not_fail:
+                for col in qc_not_fail:
+                    if col in existing_cols:
+                        conditions.append(f"({quote}{col}{quote} IS NULL OR {quote}{col}{quote} = {placeholder})")
+                        params.append(True)
     
             if start_date:
                 date_str = pd.to_datetime(start_date).strftime("%Y%m%d")
@@ -2298,12 +2335,19 @@ class TSDB:
 
 
     @require_role(['admin', 'operations', 'readonly'])
-    def display_data(self, df=None, columns=None, 
-                           start_date=None, end_date=None, 
-                           only_object=None, object_like=None, only_source=None, 
-                           on_sky=None, not_junk=None,
-                           QC_pass=None, QC_fail=None, 
-                           QC_not_pass=None, QC_not_fail=None, 
+    def display_data(self, df=None, 
+    					   columns=None, 
+                           start_date=None, 
+                           end_date=None, 
+                           only_object=None, 
+                           object_like=None, 
+                           only_source=None, 
+                           on_sky=None, 
+                           not_junk=None,
+                           qc_pass=None, 
+                           qc_fail=None, 
+                           qc_not_pass=None, 
+                           qc_not_fail=None, 
                            max_height_px=600, # in pixels
                            url_stub='https://jump.caltech.edu/observing-logs/kpf/',
                            verbose=False):
@@ -2336,10 +2380,10 @@ class TSDB:
                 only_source=only_source,
                 on_sky=on_sky, 
                 not_junk=not_junk,
-                QC_pass=QC_pass, 
-                QC_fail=QC_fail, 
-                QC_not_pass=QC_not_pass, 
-                QC_not_fail=QC_not_fail, 
+                qc_pass=qc_pass, 
+                qc_fail=qc_fail, 
+                qc_not_pass=qc_not_pass, 
+                qc_not_fail=qc_not_fail, 
                 start_date=start_date,
                 end_date=end_date,
                 verbose=verbose
@@ -2532,6 +2576,15 @@ def process_file(file_path, now_str,
 
     source = get_source_func(extraction_results)
     expected_data_levels = get_data_levels_expected_func(source)
+    D2_expected = ('2D' in expected_data_levels)
+    L1_expected = ('L1' in expected_data_levels)
+    L2_expected = ('L2' in expected_data_levels)
+    D2_exists = os.path.isfile(file_path.replace('L0', '2D').replace('.fits', '_2D.fits'))
+    L1_exists = os.path.isfile(file_path.replace('L0', 'L1').replace('.fits', '_L1.fits'))
+    L2_exists = os.path.isfile(file_path.replace('L0', 'L2').replace('.fits', '_L2.fits'))
+    D2_missing = D2_expected and (not D2_exists)
+    L1_missing = L1_expected and (not L1_exists)
+    L2_missing = L2_expected and (not L2_exists)
 
     extraction_results.update({
         'ObsID': base_filename,
@@ -2545,12 +2598,15 @@ def process_file(file_path, now_str,
         'D2_header_read_time': now_str,
         'L1_header_read_time': now_str,
         'L2_header_read_time': now_str,
-        'D2_expected': ('2D' in expected_data_levels),
-        'L1_expected': ('L1' in expected_data_levels),
-        'L2_expected': ('L2' in expected_data_levels),
-        'D2_exists': os.path.isfile(file_path.replace('L0', '2D').replace('.fits', '_2D.fits')),
-        'L1_exists': os.path.isfile(file_path.replace('L0', 'L1').replace('.fits', '_L1.fits')),
-        'L2_exists': os.path.isfile(file_path.replace('L0', 'L2').replace('.fits', '_L2.fits')),
+        'D2_expected': D2_expected,
+        'L1_expected': L1_expected,
+        'L2_expected': L2_expected,
+        'D2_exists': D2_exists,
+        'L1_exists': L1_exists,
+        'L2_exists': L2_exists,
+        'D2_missing': D2_missing,
+        'L1_missing': L1_missing,
+        'L2_missing': L2_missing,
         'RA_deg': safe_angle(extraction_results.get('RA'), unit='hourangle'),
         'DEC_deg': safe_angle(extraction_results.get('DEC'), unit='deg')
     })

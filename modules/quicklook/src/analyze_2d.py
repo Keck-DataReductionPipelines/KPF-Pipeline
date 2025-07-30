@@ -10,6 +10,8 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Rectangle
 from scipy.stats import norm
 from scipy.stats import median_abs_deviation
+from scipy.ndimage import binary_dilation
+from modules.calibration_lookup.src.alg import GetCalibrations
 from modules.Utils.kpf_parse import HeaderParse, get_datecode_from_filename
 from modules.Utils.kpf_parse import get_datetime_obsid
 from modules.Utils.utils import DummyLogger
@@ -93,7 +95,7 @@ class Analyze2D:
         try:
             self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
         except:
-            self.logger.error('Problem computing SNR for Green 2D image')
+            self.logger.error('Problem computing SNR for Red 2D image')
 
 
     def measure_master_age(self, kwd='BIASFILE', verbose=False):
@@ -106,7 +108,7 @@ class Analyze2D:
                   'BIASFILE', 'DARKFILE', or 'FLATFILE')
     
         Returns:
-            master_wls_file - number of days between the observation and the
+            age_master_file - number of days between the observation and the
                               date of observations for master file
         '''
         
@@ -515,6 +517,122 @@ class Analyze2D:
             if show_plot == True:
                 plt.show()
             plt.close('all')
+
+
+    def measure_flux_stats_in_out_ordertrace(self, 
+                                             chips=['green', 'red'], 
+                                             percentiles=[10, 50, 90, 95, 98, 99, 99.5],
+                                             order_trace_file='auto',
+                                             ordermask_buffer=1):
+        """
+        Compute percentile-based flux statistics for regions inside and outside the 
+        order trace mask in 2D CCD flux arrays for specified chips.
+    
+        This method compares the flux distribution inside the spectral order traces
+        to the flux outside them. It uses a binary ordermask file to identify in-order 
+        pixels, and optionally dilates that mask vertically by a specified number of pixels.
+        
+        This method is used to compute statistics for the Diagnostics module
+        and a Quality Control test, both of which end up in keywords.
+    
+        Parameters
+        ----------
+        chips : str or list of str, default ['green', 'red']
+            CCD chips to process. Valid options are 'green', 'red', or both.
+    
+        percentiles : list of float, default [10, 50, 95, 99]
+            List of percentiles (between 0 and 100) to compute for the flux values
+            inside and outside the order trace region.
+    
+        order_trace_file : str, default 'auto'
+            Path to the ordermask FITS file. If set to 'auto', the appropriate file
+            is automatically determined based on the DATE-MID header in the 2D data.
+    
+        ordermask_buffer : int, default 1
+            Number of vertical pixels to expand the binary order trace mask (above
+            and below) via morphological dilation. Set to 0 for no expansion.
+    
+        Returns
+        -------
+        dict
+            Dictionary with one entry per chip (e.g., 'green', 'red'). 
+            Each entry is itself a dictionary with keys:
+                - 'in':    NumPy array of flux percentiles inside the ordermask region.
+                - 'out':   NumPy array of flux percentiles outside the ordermask region.
+                - 'ratio': Element-wise ratio of 'in' to 'out' percentiles.
+            
+            Example:
+                {
+                    'green': {
+                        'in':    array([...]),
+                        'out':   array([...]),
+                        'ratio': array([...])
+                    },
+                    'red': { ... }
+                }
+    
+        Notes
+        -----
+        - Any NaN values in the CCD arrays are ignored when computing percentiles.
+        - The returned arrays have the same length as `percentiles`.
+        """        
+        default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+        D2 = self.D2
+        if isinstance(chips, str):
+            chips = [chips]
+            
+        header = HeaderParse(D2, 'PRIMARY')
+        source = header.get_name()
+        datemid = header.header['DATE-MID']
+        dt = datetime.strptime(datemid, '%Y-%m-%dT%H:%M:%S.%f').strftime('%Y-%m-%dT%H:%M:%S.%f')
+        GC = GetCalibrations(dt, default_config_path)
+        cal_dict = GC.lookup(subset=['ordermask'])
+        ordermask_file = cal_dict['ordermask']
+        mask = KPF0.from_fits(ordermask_file)
+
+        npercentiles = len(percentiles)
+        dict_out = {}
+        green_tuple = (np.full(npercentiles, np.nan), np.full(npercentiles, np.nan), np.full(npercentiles, np.nan))
+        red_tuple   = (np.full(npercentiles, np.nan), np.full(npercentiles, np.nan), np.full(npercentiles, np.nan))
+        for chip in chips:
+            mask_bin = mask[f'{chip.upper()}_CCD'] > 0
+            if ordermask_buffer > 0:
+                structure = np.ones((2 * ordermask_buffer + 1, 1), dtype=bool)  # convolution kernel
+                mask_bin = binary_dilation(mask_bin, structure=structure)
+            flux_in_at_percentiles    = np.nanpercentile(D2[f'{chip.upper()}_CCD'][mask_bin], percentiles)
+            flux_out_at_percentiles   = np.nanpercentile(D2[f'{chip.upper()}_CCD'][~mask_bin], percentiles)
+            flux_ratio_at_percentiles = flux_in_at_percentiles/flux_out_at_percentiles
+            if chip.lower() == 'green':
+                dict_out['green'] = {'in':flux_in_at_percentiles, 'out': flux_out_at_percentiles, 'ratio': flux_ratio_at_percentiles}
+            if chip.lower() == 'red':
+                dict_out['red'] = {'in':flux_in_at_percentiles, 'out': flux_out_at_percentiles, 'ratio': flux_ratio_at_percentiles}
+        
+        return dict_out
+
+
+    def compare_wave_to_reference(self):
+        '''
+
+        This method compares the WAVE arrays of the L1 object to the WAVE arrays
+        of a reference L1.  The comparisons are: 1) the median difference in 
+        wavelength or pixels between L1 and L1_ref per order and per orderlet, 
+        2) the stddev of the difference in wavelength and pixel, 3) 
+        the difference evaluate and the first, middle, or last pixel.
+        The reference can be from a file whose name is given or is automatically 
+        set using GetCalibrations.  The method does note return anything, but it 
+        sets a set of attributes (below).
+        '''
+        
+        # Load reference wavelength solution
+        if order_trace_file == 'auto':
+            dt = get_datetime_obsid(self.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
+            default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+            GC = GetCalibrations(dt, default_config_path, use_db=False)
+            cal_dict = GC.lookup(subset=['order_trace'])
+            self.order_trace_file = cal_dict['order_trace']
+        else:
+            self.order_trace_file = order_trace_file
+        D2_order_trace = KPF0.from_fits(self.order_trace_file)
 
 
     def plot_2D_image(self, chip=None, variance=False, data_over_sqrt_variance=False,

@@ -1,0 +1,95 @@
+description: CCD Read Noise Statistics
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: RNGREEN1
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: GREEN_AMP1 RN
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: RNGREEN2
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: GREEN_AMP2 RN
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      ylabel: "Green CCD\nRead Noise [e-]\n(std(overscan))"
+      not_junk: true
+      qc_not_fail: 'GOODREAD'
+      legend_frac_size: 0.2
+
+  - panelvars:
+      - col: RNRED1
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: RED_AMP1 RN
+          marker: .
+          linewidth: 0.5
+          color: darkred
+      - col: RNRED2
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: RED_AMP2 RN
+          marker: .
+          linewidth: 0.5
+          color: firebrick
+    paneldict:
+      ylabel: "Red CCD\nRead Noise [e-]\n(std(overscan))"
+      not_junk: true
+      qc_not_fail: 'GOODREAD'
+      legend_frac_size: 0.2
+
+  - panelvars:
+      - col: RNNGGR1
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: GREEN_AMP1 Non-Gaussian Metric
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: RNNGGR2
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: GREEN_AMP2 Non-Gaussian Metric
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      ylabel: "Non-Gaussian\nNoise Metric (Green)\n0.8*std/mad = f*(s^2-1)\n=1 for Gaussian noise"
+      not_junk: true
+      qc_not_fail: 'GOODREAD'
+      legend_frac_size: 0.2
+
+  - panelvars:
+      - col: RNNGRD1
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: RED_AMP1 Non-Gaussian Metric
+          marker: .
+          linewidth: 0.5
+          color: darkgreen
+      - col: RNNGRD2
+        plot_type: plot
+        unit: e-
+        plot_attr:
+          label: RED_AMP2 Non-Gaussian Metric
+          marker: .
+          linewidth: 0.5
+          color: forestgreen
+    paneldict:
+      ylabel: "Non-Gaussian\nNoise Metric (Red)\n0.8*std/mad = f*(s^2-1)\n=1 for Gaussian noise"
+      not_junk: true
+      qc_not_fail: 'GOODREAD'
+      legend_frac_size: 0.2
+      title: CCD Read Noise Statistics
