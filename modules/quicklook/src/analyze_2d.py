@@ -108,7 +108,7 @@ class Analyze2D:
                   'BIASFILE', 'DARKFILE', or 'FLATFILE')
     
         Returns:
-            master_wls_file - number of days between the observation and the
+            age_master_file - number of days between the observation and the
                               date of observations for master file
         '''
         

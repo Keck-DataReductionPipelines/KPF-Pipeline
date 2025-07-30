@@ -455,7 +455,8 @@ OLDWLS2   1                                                                     
 OLDTRAC   1                                                                        QC: 1 = TRACFILE within 5 days of this obs
 OLDLAMP   1                                                                        QC: 1 = LAMPFILE within 5 days of this obs
 FLATSNR   1                                                                        QC: 1 = SNR of flat greater minimum threshold and less than maximum threshold
-LFCLINES  1                                                                        QC: 1 = Number and distribution of LFC lines above threshold ampltidue is sufficient for all orders/orderlets available
+LFCLINES  1                                                                        QC: 1 = Number and distribution of LFC lines above threshold ampltidue is sufficient for all orders 2-34 (Green), 1-31 (Red)
+LFCLINEP  1                                                                        QC: 1 = Number and distribution of LFC lines above threshold ampltidue is sufficient for all orders 15-34 (Green), 1-31 (Red) - partial wavelength coverage
 ETALINES  1                                                                        QC: 1 = Number and distribution of Etalon lines above threshold ampltidue is sufficient for all orders/orderlets available
 WILDWSCI  1                                                                        QC: 1 = SCI WLS not wild (stdev compared to reference < 5 pixels)
 WILDWSKY  1                                                                        QC: 1 = SKY WLS not wild (stdev compared to reference < 5 pixels)
