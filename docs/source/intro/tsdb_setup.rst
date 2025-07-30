@@ -1,5 +1,53 @@
 
-Installing/Configuring the Time Series Database
-===============================================
+Installing/Configuring the Time Series Database for Production
+==============================================================
 
-To-do: add instructions.  This page should mirror the Pipeline Operations Database.
+The Time Series Database (TSDB) tracks hundreds of parameters from the headers and 
+extensions of L0/2D/L1/L2 files, including basic parameters of the observations 
+(exposure times, telescope pointing coordinates, etc.), telemetry, reduced RVs, 
+Quality Control keywords, and diagnostic information.  
+The TSDB has multiple uses including in production processin g(the installation 
+of which is described here), for testing, and to package and transmit a 
+information about a small set of observations (e.g., the RVs for a single star 
+or for an observing program).  The production version of the TSDB ingests 
+data from the L0/2D/L1/L2 files primarily through 
+``scripts/ingest_dates_kpf_tsdb.py``, triggered by file creation or modification 
+events.  An extensive set of plots are genreated by 
+``scripts/generate_time_series_plots.py``.
+
+Setting up the Postgres server
+------------------------------
+
+To-do: add instructions for setting up the Postgres server.  
+This page should mirror the Pipeline Operations Database.
+
+Regenerating TSDB Tables
+------------------------
+
+The standard practice for many databases when new columns are added to the 
+schema is to alter the scheme with the data in place.  The TSDB code is written 
+in a way that makes it easier to drop the tables, create them, and reingest all 
+data.  This is possible because the TSDB only ingests from L0/2D/L1/L2 files 
+and is not written to during data processing by the DRP. The TSDB schema is 
+defined by the contents of the ``.csv`` files in ``static/tsdb_tables/``.  
+Thus, updating the schema involves changes to the .csv files, dropping the 
+database table, recreating them, and reingesting all data.  (Data ingestion 
+can take a few hours for years of KPF data.)
+
+To drop tables, recreate them, and reingest data, the following commands should 
+be executed in a notebook or other environment.  Note that the `drop_tables()` 
+should be executed with care and is only avaiable for database users with 
+'superuser' or 'operaitons' roles:: 
+
+    from database.modules.utils.tsdb import TSDB
+    myDB =  TSDB(backend='psql')
+    myDB.drop_tables()
+    myDB =  TSDB(backend='psql')
+    start_date = '20250701'
+    end_date   = '20250705'
+    myDB.ingest_dates_to_db(start_date, end_date)
+    myDB.print_db_status()
+    
+The example shows reingestion over a date range July 1-5, 2025.  Those dates 
+can be modified and/or the script ``scripts/ingest_dates_kpf_tsdb.py`` will 
+pick up the full set of available KPF files.
