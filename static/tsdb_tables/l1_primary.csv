@@ -11,8 +11,9 @@ OLDWLS2|bool|QC: WLSFILE2 within 2 days of this obs|None
 OLDTRAC|bool|QC: Trace file within 5 days of this obs|None
 OLDLAMP|bool|QC: Smooth lamp file within 5 days of this obs|None
 FLATSNR|bool|QC: SNR of flat >min and <max|None
-LFCLINES|bool|QC: Number and dist of LFC lines sufficient|None
-ETALINES|bool|QC: Number and dist of Etalon lines sufficient|None
+LFCLINES|bool|QC: Num and dist of LFC lines ok (orders 2-34,1-31)|None
+LFCLINEP|bool|QC: Num and dist of LFC lines ok (orders 15-34,1-31)|None
+ETALINES|bool|QC: Num and dist of Etalon lines ok|None
 WILDWSCI|bool|QC: SCI WLS not wild (stdev < 5 pix)|None
 WILDWSKY|bool|QC: SKY WLS not wild (stdev < 5 pix)|None
 WILDWCAL|bool|QC: CAL WLS not wild (stdev < 5 pix)|None

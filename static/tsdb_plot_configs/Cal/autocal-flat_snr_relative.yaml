@@ -15,6 +15,7 @@ panel_arr:
       only_object: autocal-flat-all
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'GOODREAD,TIMCHKL0'
       legend_frac_size: 0.30
 
   - panelvars:
@@ -31,6 +32,7 @@ panel_arr:
       only_object: autocal-flat-all
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'GOODREAD,TIMCHKL0'
       legend_frac_size: 0.30
 
   - panelvars:
@@ -47,6 +49,7 @@ panel_arr:
       only_object: autocal-flat-all
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'GOODREAD,TIMCHKL0'
       legend_frac_size: 0.30
 
   - panelvars:
@@ -63,6 +66,7 @@ panel_arr:
       only_object: autocal-flat-all
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'GOODREAD,TIMCHKL0'
       legend_frac_size: 0.30
 
   - panelvars:
@@ -80,4 +84,5 @@ panel_arr:
       only_object: autocal-flat-all
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'GOODREAD,TIMCHKL0'
       legend_frac_size: 0.30

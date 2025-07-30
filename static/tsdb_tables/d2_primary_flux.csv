@@ -1,0 +1,96 @@
+keyword|datatype|description|unit
+MEDGRN1|float|Median for GREEN_AMP1 in L0 (incl. overscan)|DN
+P16GRN1|float|16th-percentile for GREEN_AMP1 in L0 (incl. overscan)|DN
+P84GRN1|float|84th-percentile for GREEN_AMP1 in L0 (incl. overscan)|DN
+MEDGRN2|float|Median for GREEN_AMP2 in L0 (incl. overscan)|DN
+P16GRN2|float|16th-percentile for GREEN_AMP2 in L0 (incl. overscan)|DN
+P84GRN2|float|84th-percentile for GREEN_AMP2 in L0 (incl. overscan)|DN
+MEDGRN3|float|Median for GREEN_AMP3 in L0 (incl. overscan)|DN
+P16GRN3|float|16th-percentile for GREEN_AMP3 in L0 (incl. overscan)|DN
+P84GRN3|float|84th-percentile for GREEN_AMP3 in L0 (incl. overscan)|DN
+MEDGRN4|float|Median for GREEN_AMP4 in L0 (incl. overscan)|DN
+P16GRN4|float|16th-percentile for GREEN_AMP4 in L0 (incl. overscan)|DN
+P84GRN4|float|84th-percentile for GREEN_AMP4 in L0 (incl. overscan)|DN
+MEDRED1|float|Median for RED_AMP1 in L0 (incl. overscan)|DN
+P16RED1|float|16th-percentile for RED_AMP1 in L0 (incl. overscan)|DN
+P84RED1|float|84th-percentile for RED_AMP1 in L0 (incl. overscan)|DN
+MEDRED2|float|Median for RED_AMP2 in L0 [e-] (includes overscan region, excludes NaNs explicitly)
+P16RED2|float|16th-percentile for RED_AMP2 in L0 (incl. overscan)|DN
+P84RED2|float|84th-percentile for RED_AMP2 in L0 (incl. overscan)|DN
+MEDCAHK|float|Median for CA_HK_AMP in L0 (incl. overscan)|DN
+P16CAHK|float|16th-percentile for CA_HK_AMP in L0 (incl. overscan)|DN
+P84CAHK|float|84th-percentile for CA_HK_AMP in L0 (incl. overscan)|DN
+FLXREG1G|float|Dark curr, Green region 1 = [1690:1990,1690:1990]|e-/hr
+FLXREG2G|float|Dark curr, Green region 2 = [1690:1990,2090:2390]|e-/hr
+FLXREG3G|float|Dark curr, Green region 3 = [2090:2390,1690:1990]|e-/hr
+FLXREG4G|float|Dark curr, Green region 4 = [2090:2390,2090:2390]|e-/hr
+FLXREG5G|float|Dark curr, Green region 5 = [80:380,3080:3380]|e-/hr
+FLXREG6G|float|Dark curr, Green region 6 = [1690:1990,1690:1990]|e-/hr
+FLXAMP1G|float|Dark curr, Green amp region 1 = [3700:4000,700:1000]|e-/hr
+FLXAMP2G|float|Dark curr, Green amp region 2 = [3700:4000,3080:3380]|e-/hr
+FLXCOLLG|float|Dark curr, Green coll-side region = [3700:4000,700:1000]|e-/hr
+FLXECHG|float|Dark curr, Green ech-side region = [3700:4000,700:1000]|e-/hr
+FLXREG1R|float|Dark curr, Red region 1 = [1690:1990,1690:1990]|e-/hr
+FLXREG2R|float|Dark curr, Red region 2 = [1690:1990,2090:2390]|e-/hr
+FLXREG3R|float|Dark curr, Red region 3 = [2090:2390,1690:1990]|e-/hr
+FLXREG4R|float|Dark curr, Red region 4 = [2090:2390,2090:2390]|e-/hr
+FLXREG5R|float|Dark curr, Red region 5 = [80:380,3080:3380]|e-/hr
+FLXREG6R|float|Dark curr, Red region 6 = [1690:1990,1690:1990]|e-/hr
+FLXAMP1R|float|Dark curr, Red amp region 1 = [3700:4000,700:1000]|e-/hr
+FLXAMP2R|float|Dark curr, Red amp region 2 = [3700:4000,3080:3380]|e-/hr
+FLXCOLLR|float|Dark curr, Red coll-side region = [3700:4000,700:1000]|e-/hr
+FLXECHR|float|Dark curr, Red ech-side region = [3700:4000,700:1000]|e-/hr
+GR2DF99P|float|Flux in 2D Green image (99th %ile)|e-
+GR2DF90P|float|Flux in 2D Green image (90th %ile)|e-
+GR2DF50P|float|Flux in 2D Green image (50th %ile)|e-
+GR2DF10P|float|Flux in 2D Green image (10th %ile)|e-
+RD2DF99P|float|Flux in 2D Red image (99th %ile)|e-
+RD2DF90P|float|Flux in 2D Red image (90th %ile)|e-
+RD2DF50P|float|Flux in 2D Red image (50th %ile)|e-
+RD2DF10P|float|Flux in 2D Red image (10th %ile)|e-
+HK2DF99P|float|Flux in 2D HK image (99th %ile)|e-
+HK2DF90P|float|Flux in 2D HK image (90th %ile)|e-
+HK2DF50P|float|Flux in 2D HK image (50th %ile)|e-
+HK2DF10P|float|Flux in 2D HK image (10th %ile)|e-
+FINTRG9F|float|Flux inside padded order trace regions (Green, 99.5th %ile)|e-
+FOUTRG9F|float|Flux outside padded order trace regions (Green, 99.5th %ile)|e-
+FRATRG9F|float|Flux in/out padded order trace regions (Green, 99.5th %ile)|None
+FINTRG99|float|Flux inside padded order trace regions (Green, 99th %ile)|e-
+FOUTRG99|float|Flux outside padded order trace regions (Green, 99th %ile)|e-
+FRATRG99|float|Flux in/out padded order trace regions (Green, 99th %ile)|None
+FINTRG98|float|Flux inside padded order trace regions (Green, 98th %ile)|e-
+FOUTRG98|float|Flux outside padded order trace regions (Green, 98th %ile)|e-
+FRATRG98|float|Flux in/out padded order trace regions (Green, 98th %ile)|None
+FINTRG95|float|Flux inside padded order trace regions (Green, 95th %ile)|e-
+FOUTRG95|float|Flux outside padded order trace regions (Green, 95th %ile)|e-
+FRATRG95|float|Flux in/out padded order trace regions (Green, 95th %ile)|None
+FINTRG90|float|Flux inside padded order trace regions (Green, 90th %ile)|e-
+FOUTRG90|float|Flux outside padded order trace regions (Green, 90th %ile)|e-
+FRATRG90|float|Flux in/out padded order trace regions (Green, 90th %ile)|None
+FINTRG50|float|Flux inside padded order trace regions (Green, median)|e-
+FOUTRG50|float|Flux outside padded order trace regions (Green, median)|e-
+FRATRG50|float|Flux in/out padded order trace regions (Green, median)|None
+FINTRG10|float|Flux inside padded order trace regions (Green, 10th %ile)|e-
+FOUTRG10|float|Flux outside padded order trace regions (Green, 10th %ile)|e-
+FRATRG10|float|Flux in/out padded order trace regions (Green, 10th %ile)|None
+FINTRR9F|float|Flux inside padded order trace regions (Red, 99.5th %ile)|e-
+FOUTRR9F|float|Flux outside padded order trace regions (Red, 99.5th %ile)|e-
+FRATRR9F|float|Flux in/out padded order trace regions (Red, 99.5th %ile)|None
+FINTRR99|float|Flux inside padded order trace regions (Red, 99th %ile)|e-
+FOUTRR99|float|Flux outside padded order trace regions (Red, 99th %ile)|e-
+FRATRR99|float|Flux in/out padded order trace regions (Red, 99th %ile)|None
+FINTRR98|float|Flux inside padded order trace regions (Red, 98th %ile)|e-
+FOUTRR98|float|Flux outside padded order trace regions (Red, 98th %ile)|e-
+FRATRR98|float|Flux in/out padded order trace regions (Red, 98th %ile)|None
+FINTRR95|float|Flux inside padded order trace regions (Red, 95th %ile)|e-
+FOUTRR95|float|Flux outside padded order trace regions (Red, 95th %ile)|e-
+FRATRR95|float|Flux in/out padded order trace regions (Red, 95th %ile)|None
+FINTRR90|float|Flux inside padded order trace regions (Red, 90th %ile)|e-
+FOUTRR90|float|Flux outside padded order trace regions (Red, 90th %ile)|e-
+FRATRR90|float|Flux in/out padded order trace regions (Red, 90th %ile)|None
+FINTRR50|float|Flux inside padded order trace regions (Red, median)|e-
+FOUTRR50|float|Flux outside padded order trace regions (Red, median)|e-
+FRATRR50|float|Flux in/out padded order trace regions (Red, median)|None
+FINTRR10|float|Flux inside padded order trace regions (Red, 10th %ile)|e-
+FOUTRR10|float|Flux outside padded order trace regions (Red, 10th %ile)|e-
+FRATRR10|float|Flux in/out padded order trace regions (Red, 10th %ile)|None
