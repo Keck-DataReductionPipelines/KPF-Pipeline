@@ -47,7 +47,7 @@ In the current implementation, there isn't a script that checks if L0/2D/L1/L2
 files have been removed and then updates the TSDB.
 
 To drop tables, recreate them, and reingest data, the following commands should 
-be executed in a notebook or other environment.  Note that the `drop_tables()` 
+be executed in a notebook or other environment.  Note that the ``drop_tables()`` 
 should be executed with care and is only avaiable for database users with 
 'superuser' or 'operations' roles:: 
 
