@@ -537,8 +537,8 @@ class VarExtsFramework(KPF0_Primitive):
                 flat_greenvarimg * greenccdimg +\
                 greenccdimg
         except Exception as e:
-            print("Exception raised [",e,"]; continuing...")
-            greenvarimg = None
+            print("Exception raised [",e,"]; continuing with variance image of ones...")
+            greenvarimg = np.ones_like(greenccdimg, dtype=float)
 
         # RED
         try:
@@ -548,8 +548,9 @@ class VarExtsFramework(KPF0_Primitive):
                 flat_redvarimg * redccdimg +\
                 redccdimg
         except Exception as e:
-            print("Exception raised [",e,"]; continuing...")
-            redvarimg = None
+            print("Exception raised [",e,"]; continuing with variance image of ones...")
+            redvarimg = np.ones_like(redccdimg, dtype=float)
+            # replaced returning None with the above on 7/30/25
 
         # Write variance FITS-extensions.
 
