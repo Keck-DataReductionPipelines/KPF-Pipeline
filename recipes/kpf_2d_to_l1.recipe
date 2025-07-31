@@ -74,7 +74,6 @@ if not d2_file_list:
 		# do_l0_to_2d = False
 		# do_order_trace = False
 		lev1_file_path = str_replace(file_path, '2D', 'L1')		
-		do_bc = True
 		d2_file_list = find_files(file_path)
 
 	else:
@@ -275,6 +274,7 @@ if do_spectral_extraction or do_hk or do_bc:
 
 	# Initialize order_mask variable, check below for existence to avoid re-opening
 	order_mask = None
+	master_flat = None
 
 	# loop through ccd and L0 to do spectral extraction
 	for input_lev0_file in d2_file_list: 
@@ -298,6 +298,7 @@ if do_spectral_extraction or do_hk or do_bc:
 				lev1_stem = str_replace(lev1_stem, lev0_stem_suffix, "")
 		# output_lev1_file = output_extraction + lev1_stem + lev1_stem_suffix + fits_ext
 		output_lev1_file = str_replace(input_lev0_file, '2D', 'L1') 
+		output_lev1_file_temp = str_replace(input_lev0_file, '2D', 'L1_temp') 
 
 		is_raw = 1
 		# if rect_method in input_lev0_file:
@@ -315,30 +316,27 @@ if do_spectral_extraction or do_hk or do_bc:
 			#  If multiple dates are called in this loop, this will load the wrong mask.
 			if order_mask == None:
 				order_mask = kpf0_from_fits(order_mask_file, data_type)
+			stray_light_output_list = StrayLight(lev0_data, order_mask)
+			lev0_data = stray_light_output_list[1]
+			if master_flat == None:
+				master_flat = kpf0_from_fits(cals['flat'])
+			print("SPECTRALEXTRACTION STARTING FOR: "+input_lev0_file)
 
-# ONLY COMMENT OUT STRAY LIGHT WHEN TESTING!!!!!!		
-			# stray_light_output_list = StrayLight(lev0_data, order_mask)
-			# lev0_data = stray_light_output_list[1]
-			TMP2 = input_lev0_file
-			print(TMP2)
+
 			spectral_extraction_output_list = SpectralExtraction(lev0_data, 
-																 cals['flat'], 
+																 master_flat, 
 																 cals['ordertrace'][0], 
 																 cals['ordertrace'][1], 
 																 cals['start_order'][0], 
 																 cals['start_order'][1]
 																)
 			# SpectralExtraction returns [exit_code, op_data, ...other values...]
-			# exit_code, op_data = SpectralExtraction(lev0_data, 
-			# 										cals['flat'], 
-			# 										cals['ordertrace'][0], 
-			# 										cals['ordertrace'][1], 
-			# 										cals['start_order'][0], 
-			# 										cals['start_order'][1]
-			# 									   )
-			
-			# op_data = spectral_extraction_output_list[1]
 			output_data= spectral_extraction_output_list[1]
+
+#TESTIN			output_data = kpf1_from_fits(output_lev1_file, data_type = data_type) #remove when done with testing
+			result = to_fits(output_data, output_lev1_file_temp) # REMOVE WHEN DONE WITH TESTING.
+
+			# Remove this conditional. Do quality control only at the very end
 			# if op_data != None:
 			# 	# Quality Control & Diagnostics - L1 level
 			# 	# (this should be moved below CaHK, but there are several to_fits calls for L1 -- let's fix this)
@@ -355,6 +353,7 @@ if do_spectral_extraction or do_hk or do_bc:
 				# output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
 				obs_date_time = GetHeaderValue(output_data,'DATE-MID')
 				if do_db_query_for_before_after_master_files == True:
+					# There is a call to calibration lookup in this sub-recipe. Maybe we don't need it.
 					invoke_subrecipe("recipes/wls_interpolation.subrecipe") 
 					output_data = interpolated_l1
 				else:
@@ -387,18 +386,17 @@ if do_spectral_extraction or do_hk or do_bc:
 
             # HTI: Keep do_bc in 2D -> L1 for historical reasons.
 			if do_bc:# and exists(output_lev1_file): # output_lev1 only exists in memory
-				DOING_BC = True
 				print("Doing barycentric correction on L1 data: "+output_lev1_file)
 				# add bary correction result to existing L1 file
-				if not output_data:
-					output_data = kpf1_from_fits(output_lev1_file, data_type = data_type) 
-				t_order = 0
+				# if not output_data:
+				# 	output_data = kpf1_from_fits(output_lev1_file, data_type = data_type) 
+				total_orders = 0
 				for idx in ccd_idx:
-					t_order = t_order + orders_per_ccd[idx]
+					total_orders = total_orders + orders_per_ccd[idx]
 
 				# all extensions of same ccd in wls has the same data
 				for idx in ccd_idx:
-					output_data = BaryCorrTable(lev0_data, output_data, t_order, orders_per_ccd[idx],
+					output_data = BaryCorrTable(lev0_data, output_data, total_orders, orders_per_ccd[idx],
 								start_bary_index=s_bary_idx[idx], wls_ext=wave_to_ext[idx][0])
 
 				# Quality Control - L1 level
@@ -420,26 +418,28 @@ if do_spectral_extraction or do_hk or do_bc:
 				# 	output_data = kpf1_from_fits(output_lev1_file, data_type = data_type)
 				# 7/2025: output_data exists only in memory here.
 
-				output_data = CaHKExtraction(lev0_data, hk_trace_table, hk_fiber_list, output_data, output_exts=hk_spec_exts,
+				output_data_cahk = CaHKExtraction(lev0_data, hk_trace_table, hk_fiber_list, output_data, output_exts=hk_spec_exts,
 						output_wave_exts=hk_wave_exts,
 						dark=hk_dark_data, wave_files=hk_wavelength_tables)
+				if output_data_cahk != None:
+					output_data = output_data_cahk
 
-			if output_data != None:
-				# Quality Control - L1 level
-				# (this should be consolidated with QC above, but there are several to fits calls for L1 -- let's fix this)
-				data_level_str = 'L1'
-				kpf_object = output_data
-				obj = GetHeaderValue(kpf_object, 'OBJECT')
-				invoke_subrecipe("./recipes/quality_control.subrecipe")
-				invoke_subrecipe("./recipes/diagnostics.subrecipe")
-				output_data = kpf_object
-				# result = to_fits(output_data, output_lev1_file) # PRIMARY SAVE
-
-				# etalon drift correction
-				output_data = kpf1_from_fits(output_lev1_file, data_type = data_type) #Until the cahk portion is fixed, the output_data needs to be redefined.
-				DO_DRIFT = True
-				if DO_DRIFT == True:
-					print('Starting Drift Correction on L1 data: ' + output_lev1_file)
+			# etalon drift correction
+			# output_data = kpf1_from_fits(output_lev1_file, data_type = data_type) #Until the cahk portion is fixed, the output_data needs to be redefined.
+			DO_DRIFT = True
+			if DO_DRIFT == True:
+				print('Starting Drift Correction on L1 data: ' + output_lev1_file)
 				invoke_subrecipe("recipes/drift_correction.subrecipe") # The variable output_data is used as the primary input to the drift module.
-				output_data = output_l1
-				result = to_fits(output_data, output_lev1_file)
+				output_data = output_l1 # output_l1 is newly defined in the drift correction subrecipe.
+
+
+			# Quality Control - L1 level
+			# (this should be consolidated with QC above, but there are several to fits calls for L1 -- let's fix this)
+			data_level_str = 'L1'
+			kpf_object = output_data
+			obj = GetHeaderValue(kpf_object, 'OBJECT')
+			invoke_subrecipe("./recipes/quality_control.subrecipe")
+			invoke_subrecipe("./recipes/diagnostics.subrecipe")
+			output_data = kpf_object
+			# result = to_fits(output_data, output_lev1_file) # PRIMARY SAVE
+			result = to_fits(output_data, output_lev1_file)

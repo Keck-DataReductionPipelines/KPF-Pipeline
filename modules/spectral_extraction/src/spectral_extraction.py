@@ -2,12 +2,11 @@ import configparser
 import traceback
 
 from kpfpipe.primitives.level0 import KPF0_Primitive
-from kpfpipe.models.level0 import KPF0
 from modules.spectral_extraction.src.alg import SpectralExtractionAlg
 from keckdrpframework.models.arguments import Arguments
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/spectral_extraction/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/spectral_extraction/src/configs/default.cfg'
 
 class SpectralExtraction(KPF0_Primitive):
     """
@@ -26,12 +25,6 @@ class SpectralExtraction(KPF0_Primitive):
         self.start_order_green = self.action.args[4]
         self.start_order_red = self.action.args[5]
         
-        # Handle master_flat_2D conversion if needed
-        # CalibrationLookup returns file paths, but algorithm expects KPF0 objects
-        if isinstance(self.master_flat_2D, str):
-            # It's a file path, load it as KPF0 object
-            self.master_flat_2D = KPF0.from_fits(self.master_flat_2D, data_type='KPF')
-        
         # Input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -44,8 +37,6 @@ class SpectralExtraction(KPF0_Primitive):
     def _perform(self):
         exit_code = 0
         try:
-            dummy = self.target_2D['GREEN_CCD'].shape
-
             spectralextraction = SpectralExtractionAlg(self.target_2D,
                                                        self.master_flat_2D,
                                                        self.order_trace_green,
@@ -56,6 +47,7 @@ class SpectralExtraction(KPF0_Primitive):
                                                       )
             
             for chip in ['GREEN', 'RED']:
+                print("SpectralExtraction: Processing chip: " + chip)
                 spectralextraction.target_l1 = spectralextraction.extract_ccd(chip)
             exit_code = 1
             return Arguments([exit_code, spectralextraction.target_l1])

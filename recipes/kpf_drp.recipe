@@ -20,7 +20,8 @@ from modules.wavelength_cal.src.alg import WaveInterpolation
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
 from modules.blaze.src.blaze import AddBlaze
 from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
-from modules.spectral_extraction.src.bary_corr import BaryCorrTable # barycorr is done in L1 for historical reasons.
+# from modules.spectral_extraction.src.bary_corr import BaryCorrTable # barycorr is done in L1 for historical reasons.
+from modules.spectral_extraction_legacy.src.bary_corr import BaryCorrTable # LETS MOVE THIS TO ITS OWN MODULE SOMEDAY.
 from modules.stray_light.src.stray_light import StrayLight
 
 # L1 to L2 imports, copied from kpf_drp.recipe.
@@ -28,11 +29,11 @@ from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
 from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
-from modules.spectral_extraction.src.bary_corr import BaryCorrTable
+from modules.spectral_extraction_legacy.src.bary_corr import BaryCorrTable # LETS MOVE THIS TO ITS OWN MODULE SOMEDAY.
 
 # general imports.
 from modules.Utils.amplifier_mask import AmplifierMask # Needed in L0 and L2
-from modules.spectral_extraction.src.bary_corr import BaryCorrTable
+from modules.spectral_extraction_legacy.src.bary_corr import BaryCorrTable # LETS MOVE THIS TO ITS OWN MODULE SOMEDAY.
 
 # general imports.
 from modules.Utils.amplifier_mask import AmplifierMask # Needed in L0 and L2
@@ -102,13 +103,13 @@ else:
     d2_file_list = find_files(d2_pattern)
     l1_file_list = find_files(l1_pattern)
 
-if do_l0_to_2d:
-	invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") # Which calls the watchfor_kpf_l0.recipe
+# if do_l0_to_2d:
+# 	invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") # Which calls the watchfor_kpf_l0.recipe
 	
-# # BEGIN 2D to L1     
-# do_2d_to_l1 = True # add to config later.
-# if do_2d_to_l1:
-#     invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
+# BEGIN 2D to L1     
+do_2d_to_l1 = True # add to config later.
+if do_2d_to_l1:
+    invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
 	
 # # BEGIN L1 to L2
 # do_l1_to_l2 = True # add to config later.

@@ -26,14 +26,6 @@ n_sigma_read_noise = config.WATCHFOR_L0.n_sigma_read_noise
 
 date_dir = context.date_dir + '/'
 
-
-
-# if context.watch:
-#     file_list = find_files(context.file_path)
-# else:
-#     search_string = config.WATCHFOR_L0.input_dir + "/" + date_dir + '/*.fits'
-#     file_list = find_files(search_string)
-
 # file_path = context.file_path
 lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
 lev0_ffi_exts_subbed = lev0_ffi_ext_red + lev0_ffi_ext_green + lev0_ffi_ext_cahk
@@ -57,7 +49,6 @@ if do_quality_control:
         quality_control_exit_code = quality_control_list[0]
         quality_control_rid = quality_control_list[1]
 
-
 # Generate the 2D FITS file.  Subtract overscan, master bias, master dark, and apply master flat and bad-pixel masks.
 for raw_file_path in file_list:
     td_output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
@@ -80,8 +71,8 @@ for raw_file_path in file_list:
         # Quality Control & Diagnostics - L0 level
         data_level_str = 'L0'
         kpf_object = l0
-        # invoke_subrecipe("./recipes/quality_control.subrecipe")
-        # invoke_subrecipe("./recipes/diagnostics.subrecipe")
+        invoke_subrecipe("./recipes/quality_control.subrecipe")
+        invoke_subrecipe("./recipes/diagnostics.subrecipe")
         l0 = kpf_object
 
         # compute red-chip ffi
@@ -130,8 +121,8 @@ for raw_file_path in file_list:
         # Diagnostics & Quality Control - 2D level
         kpf_object = bpm_applied
         data_level_str = '2D'
-        # invoke_subrecipe("./recipes/diagnostics.subrecipe")
-        # invoke_subrecipe("./recipes/quality_control.subrecipe")
+        invoke_subrecipe("./recipes/diagnostics.subrecipe")
+        invoke_subrecipe("./recipes/quality_control.subrecipe")
         bpm_applied = kpf_object # kpf_object is output from the subrecipe.
         recipe_complete = to_fits(bpm_applied, output_file_name)
         # Query database for QC information and update headers in-memory

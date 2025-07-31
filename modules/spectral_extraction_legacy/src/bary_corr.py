@@ -82,11 +82,12 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.spectral_extraction.src.alg_bary_corr import BaryCorrTableAlg
+# from modules.spectral_extraction.src.alg_bary_corr import BaryCorrTableAlg
+from modules.spectral_extraction_legacy.src.alg_bary_corr import BaryCorrTableAlg
 import numpy as np
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/spectral_extraction/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/spectral_extraction_legacy/configs/default.cfg'
 
 
 class BaryCorrTable(KPF0_Primitive):
@@ -115,11 +116,12 @@ class BaryCorrTable(KPF0_Primitive):
         ext_expmeter_sci = self.get_args_value('ext_expmeter_sci_table', action.args, args_keys)
         self.start_index = self.get_args_value('start_bary_index', action.args, args_keys)
         self.is_overwrite = self.get_args_value('overwrite', action.args, args_keys)
-
+        print('ext_expmeter_sci',ext_expmeter_sci)
         df_em = self.lev0_obj[ext_expmeter_sci] \
             if self.lev0_obj is not None and hasattr(self.lev0_obj, ext_expmeter_sci) else None  # expmeter_sci from lev0
         self.df_bc = self.lev1_obj[self.ext_bary] \
             if self.lev1_obj is not None and hasattr(self.lev1_obj, self.ext_bary) else None   # bary_corr from lev 1
+        print('df_em', df_em)
 
         wls_ext = self.get_args_value('wls_ext', action.args, args_keys)
         if wls_ext is not None and self.lev1_obj and hasattr(self.lev1_obj, wls_ext):
@@ -130,7 +132,7 @@ class BaryCorrTable(KPF0_Primitive):
             self.wls_data = None
 
         p_header = self.lev0_obj.header['PRIMARY'] if self.lev0_obj is not None else None  # primary header
-
+        print('len of p_header',len(p_header))
         # input configuration
         self.config = configparser.ConfigParser()
         try:
@@ -145,11 +147,13 @@ class BaryCorrTable(KPF0_Primitive):
         if not self.logger:
             self.logger = self.context.logger
         self.logger.info('Loading config from: {}'.format(config_path))
-
+        print('checkout 1')
         try:
             if self.lev1_obj is None:
+                print('checkout 2')
                 self.alg_table = None
             else:
+                print('checkout 3')
                 self.alg_table = BaryCorrTableAlg(df_em, self.df_bc, p_header, self.wls_data,
                                           self.total_orders, self.ccd_orders,
                                           start_bary_index=self.start_index,
@@ -157,6 +161,7 @@ class BaryCorrTable(KPF0_Primitive):
                                           logger=self.logger)
         except Exception as e:
             self.alg_table = None
+            print('checkout 4')
 
     def _pre_condition(self) -> bool:
         """
@@ -164,7 +169,7 @@ class BaryCorrTable(KPF0_Primitive):
         """
         # input argument must be KPF0
         success = isinstance(self.lev0_obj, KPF0) and isinstance(self.lev1_obj, KPF1)
-
+        print('success', success)
         return success
 
     def _post_condition(self) -> bool:
@@ -193,12 +198,12 @@ class BaryCorrTable(KPF0_Primitive):
             return Arguments(self.lev1_obj)
 
         bc_table = self.alg_table.build_bary_corr_table()
-
+        print('len of bc_table', len(bc_table))
         if bc_table is not None:
             self.lev1_obj[self.ext_bary] = bc_table
             if 'BCV_UNIT' in bc_table.attrs:
                 self.lev1_obj.header[self.ext_bary]['BCV_UNIT'] = bc_table.attrs['BCV_UNIT']
-        # print(bc_table)
+        print(bc_table)
         s_idx, e_idx = self.alg_table.get_index_range()
         self.lev1_obj.receipt_add_entry('BaryCorrTable', self.__module__,
                                              f'bary correction table from {s_idx} to {e_idx} is computed', 'PASS')

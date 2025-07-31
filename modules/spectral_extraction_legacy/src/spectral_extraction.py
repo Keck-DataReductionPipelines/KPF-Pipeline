@@ -127,10 +127,10 @@ from keckdrpframework.models.arguments import Arguments
 from keckdrpframework.models.processing_context import ProcessingContext
 
 # Local dependencies
-from modules.spectral_extraction.src.alg import SpectralExtractionAlg
+from modules.spectral_extraction_legacy.src.alg import SpectralExtractionAlg
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/spectral_extraction/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/spectral_extraction_legacy/configs/default.cfg'
 
 
 class SpectralExtraction(KPF0_Primitive):
