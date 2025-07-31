@@ -1,4 +1,3 @@
-from astropy.io import fits
 import os
 from os.path import exists
 import numpy as np
@@ -47,7 +46,6 @@ class VarExtsFramework(KPF0_Primitive):
         self.masterdark_path = self.action.args[3]
         self.masterflat_path = self.action.args[4]
         self.rId = self.action.args[5]
-        self.fits_obj = self.action.args[6] if len(self.action.args) > 6 else None
 
         try:
             self.module_config_path = context.config_path['var_exts']
@@ -236,7 +234,7 @@ class VarExtsFramework(KPF0_Primitive):
             return
 
         hdul_input = KPF0.from_fits(fits_filename,self.data_type)
-        exp_time = float(fits.getheader(fits_filename,ext=0)['EXPTIME'])
+        exp_time = float(hdul_input.header['PRIMARY']['EXPTIME'])
 
         if debug == 1:
             print("exp_time = {}".format(exp_time))
@@ -248,12 +246,12 @@ class VarExtsFramework(KPF0_Primitive):
         for ext in exts:
 
             try:
-                naxis1 = fits.getheader(fits_filename,ext=ext)['NAXIS1']
+                naxis1 = hdul_input.header[ext]["NAXIS1"]
             except:
                 continue
 
             try:
-                naxis2 = fits.getheader(fits_filename,ext=ext)['NAXIS2'] #HTI
+                naxis2 = hdul_input.header[ext]["NAXIS2"]
             except:
                 continue
 
@@ -537,8 +535,8 @@ class VarExtsFramework(KPF0_Primitive):
                 flat_greenvarimg * greenccdimg +\
                 greenccdimg
         except Exception as e:
-            print("Exception raised [",e,"]; continuing with variance image of ones...")
-            greenvarimg = np.ones_like(greenccdimg, dtype=float)
+            print("Exception raised [",e,"]; continuing...")
+            greenvarimg = None
 
         # RED
         try:
@@ -548,9 +546,8 @@ class VarExtsFramework(KPF0_Primitive):
                 flat_redvarimg * redccdimg +\
                 redccdimg
         except Exception as e:
-            print("Exception raised [",e,"]; continuing with variance image of ones...")
-            redvarimg = np.ones_like(redccdimg, dtype=float)
-            # replaced returning None with the above on 7/30/25
+            print("Exception raised [",e,"]; continuing...")
+            redvarimg = None
 
         # Write variance FITS-extensions.
 
