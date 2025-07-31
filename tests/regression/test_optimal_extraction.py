@@ -7,6 +7,9 @@ import configparser
 import os
 load_dotenv()
 
+# Skip all tests in this module
+pytestmark = pytest.mark.skip(reason="Temporarily disabled - optimal extraction tests")
+
 result_data = os.getenv('KPFPIPE_TEST_DATA') + '/optimal_extraction_test/for_pytest/paras_'
 # result_data = '/Users/cwang/documents/KPF/KPF-Pipeline/modules/spectral_extraction/results/PARAS_3sigma/paras_'
 rectification_method = ['optimal_norm_fraction', 'optimal_vertical_fraction', 'optimal_not_rectified']

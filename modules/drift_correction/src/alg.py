@@ -54,6 +54,8 @@ class ModifyWLS:
         end_date   = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) + timedelta(days=60)
         cols=['ObsID', 'OBJECT', 'DATE-MID', 'DRPTAGL1','WLSFILE','WLSFILE2', 'CCFRV', 'CCD1RV', 'CCD2RV', 'NOTJUNK','READSPED','SNRSC548', 'SCIMPATH']
         self.df = myTS.db.dataframe_from_db(start_date=start_date, end_date=end_date, columns=cols)
+        # print out the length of the dataframe
+        self.log.info(f"Drift correction dataframe length: {len(self.df)}")
         self.df = self.prepare_table()
 
     def apply_drift(self, method):
@@ -81,6 +83,8 @@ class ModifyWLS:
 
     def prepare_table(self):
         df = self.df
+        # Print a log notice showing the length of the df
+        self.log.info(f"Drift correction dataframe length before filtering: {len(df)}")
 
         # df = df[(df['WLSFILE'] != df['WLSFILE2'])]
         df = df[(df['NOTJUNK'] == True)]
@@ -113,7 +117,11 @@ class ModifyWLS:
         df = df[df['date_code_wls_file'] == df['etalon_mask_date']] #This forces the WLS and Mask to be from the same date but this should never happen.
 
         df['datetime'] = pd.to_datetime(df['DATE-MID'])
-        df = df[(df['ObsID'] != self.l1_obj.filename.split('_')[0])]         # don't allow it to choose itself as the drift correction
+        # Check if filename exists before using it
+        if self.l1_obj.filename is not None:
+            df = df[(df['ObsID'] != self.l1_obj.filename.split('_')[0])]         # don't allow it to choose itself as the drift correction
+        else:
+            self.log.warning("DRIFT MODULE: L1 object filename is None, Drift dataframe is empty.")
         if df.empty:
             self.log.warning("DRIFT MODULE, prepare_table4: Filtered to empty DataFrame. Exiting early.")
             return df

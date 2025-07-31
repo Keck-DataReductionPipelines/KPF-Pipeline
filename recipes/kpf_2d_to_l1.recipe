@@ -38,7 +38,7 @@ do_l0_to_2d = config.ARGUMENT.do_l0_to_2d # This needs cleaned up.
 do_order_trace = config.ARGUMENT.do_order_trace
 
 # L1 level flags
-do_spectral_extraction = config.ARGUMENT.do_spectral_extraction
+do_spectral_extraction = config.WATCHFOR_2D.do_spectral_extraction
 # if copy wavelength solution data to L1 from file samples with wls data.
 do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
 # Peroform wavelength interpolation
@@ -335,7 +335,7 @@ if do_spectral_extraction or do_hk or do_bc:
 			# SpectralExtraction returns [exit_code, op_data, ...other values...]
 			output_data= spectral_extraction_output_list[1]
 
-			output_data = kpf1_from_fits(output_lev1_file, data_type = data_type) #remove when done with testing
+			# output_data = kpf1_from_fits(output_lev1_file, data_type = data_type) #remove when done with testing
 
 			# Remove this conditional. Do quality control only at the very end
 			# if output_data != None:
@@ -352,14 +352,16 @@ if do_spectral_extraction or do_hk or do_bc:
 			# The wavelength solution extensions are not copied into L1 by the new Spectral Extraction. 
 			# Copy them here manually.
 			# HTI: I added this for loop of copying the WLS but this may be old code that should never be used.
-			for idx in ccd_idx:
-				if wave_fits[idx] != None and exists(wave_fits[idx]):
-				# wavecal_data will be replaced by wavelength interpolation.
-					wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
-					for ext in wave_to_ext[idx]:
-						ExtCopy(wavecal_data, ext, ext, to_data_model=output_data) # only this needs changed.
-			SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
-			print("Copying WLS files into L1")
+
+# HTI TEST. Does the WLS interpolation write these? maybe we don't need these.
+			# for idx in ccd_idx:
+			# 	if wave_fits[idx] != None and exists(wave_fits[idx]):
+			# 	# wavecal_data will be replaced by wavelength interpolation.
+			# 		wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
+			# 		for ext in wave_to_ext[idx]:
+			# 			ExtCopy(wavecal_data, ext, ext, to_data_model=output_data) # only this needs changed.
+			# SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
+			# print("Copying WLS files into L1")
 
 
 			# result = to_fits(output_data, output_lev1_file_temp) # REMOVE WHEN DONE WITH TESTING.
