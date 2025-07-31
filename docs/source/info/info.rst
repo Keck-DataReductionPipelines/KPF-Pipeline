@@ -11,4 +11,5 @@ The sections below describe the data products and data reduction pipeline (DRP) 
    data_format.rst
    masters_format.rst
    calibrations.rst
+   kpferas.rst
    data_faq.rst

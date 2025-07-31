@@ -3,6 +3,7 @@ DRPTAGL2|string|Git version number of KPF-Pipeline used to make L2|None
 DRPHSHL2|string|Git commit hash version of KPF-Pipeline used to make L2|None
 DATAPRL2|bool|QC: L2 data present|None
 TIMCHKL2|bool|QC: Consistent times in L2 file|None
+QCPCBCV|bool|QC: Percent BCV values within acceptable range|None
 CCFRV|float|Average of CCD1RV and CCD2RV using weights from RV table|km/s
 CCFERV|float|Error on CCFRV|km/s
 CCFRVC|float|Average of CCD1RVC and CCD2RVC using weights from RV table|km/s
@@ -13,8 +14,8 @@ BJDSTD|float|Weighted stddev (over orders) of BJD times|sec
 BJDRNG|float|Range(BJD) for non-zero-weight spectral orders|sec    
 BCVSTD|float|Weighted stddev (over orders) of BCV|m/s
 BCVRNG|float|Range(BCV) for non-zero-weight spectral orders|m/s
-MAXPCBCV|float|Maximum percent change from CCFBCV for non-zero-weight orders|None
-MINPCBCV|float|Minimum percent change from CCFBCV for non-zero-weight orders|None
+MAXPCBCV|float|Max percent change from CCFBCV for non-zero-weight orders|None
+MINPCBCV|float|Min percent change from CCFBCV for non-zero-weight orders|None
 DRFTOBS|string|ObsID of 1st reference drift observation|None
 DRFTOBS2|string|ObsID of 2nd reference drift observation|None
 DRFTDEL|float|Time to 1st drift correction observation|hours

@@ -39,6 +39,7 @@ panel_arr:
     paneldict:
       ylabel: "Green CCD\nDark Current [e-/hr]"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.35
 
   # 2) redpanel
@@ -78,6 +79,7 @@ panel_arr:
     paneldict:
       ylabel: "Red CCD\nDark Current [e-/hr]"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.35
 
   # 3) greenpanel_ionpump
@@ -94,6 +96,7 @@ panel_arr:
       ylabel: "Green CCD\nIon Pump Current [A]"
       yscale: log
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.35
 
   - panelvars:
@@ -109,6 +112,7 @@ panel_arr:
       ylabel: "Green CCD\nIon Pump Current [A]"
       yscale: log
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.35
 
   # 4) redpanel_ionpump
@@ -125,6 +129,7 @@ panel_arr:
       ylabel: "Red CCD\nIon Pump Current [A]"
       yscale: log
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.35
 
   - panelvars:
@@ -140,6 +145,7 @@ panel_arr:
       ylabel: "Red CCD\nIon Pump Current [A]"
       yscale: log
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.35
 
   # 5) amppanel
@@ -179,5 +185,6 @@ panel_arr:
     paneldict:
       ylabel: "CCD Amplifier Dark\nCurrent (Edge Glow) [e-/hr]"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       title: CCD Dark Current
       legend_frac_size: 0.35
