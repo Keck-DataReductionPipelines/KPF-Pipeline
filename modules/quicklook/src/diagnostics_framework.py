@@ -81,6 +81,16 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring 2D flux failed: {e}\n{traceback.format_exc()}")
 
+            # 2D flux - inside and outside of order trace regions
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_2D_flux_stats_in_out_ordertrace'):
+                try:
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_flux_stats_in_out_ordertrace", style="Bold", color="Blue")}')
+                    self.kpf_object = diagnostics.add_headers_2D_flux_stats_in_out_ordertrace(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring 2D flux inside and outside of order trace failed: {e}\n{traceback.format_exc()}")
+
             # Dark Current
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_dark_current_2D'):

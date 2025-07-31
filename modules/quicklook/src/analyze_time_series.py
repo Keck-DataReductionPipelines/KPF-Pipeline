@@ -72,8 +72,6 @@ class AnalyzeTimeSeries:
           rejection.  This should be in Delta values.
         * For time series state plots, include the number of points in each state 
           in the legend.
-        * Specify the yrange in the yaml files
-        * Add qc_pass and qc_fail parameters to yaml files -- only include rows where certain QCs (specified by keywords) pass or fail
     """
 
     def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', credentials=None, logger=None, verbose=False):
@@ -94,48 +92,110 @@ class AnalyzeTimeSeries:
                                     fig_path=None, show_plot=False, 
                                     log_savefig_timing=False):
         """
-        Generate a multi-panel plot of data in a KPF TSDB.  The data to be 
-        plotted and attributes are stored in an array of dictionaries, which 
-        can be read from YAML configuration files.  
+        Generate a multi-panel time series plot using data retrieved from a KPF 
+        time series database (TSDB). Each subplot (panel) is configured via a 
+        dictionary (or YAML file path), allowing fine-grained control
+        over data selection, filtering, formatting, and plotting attributes.
 
-        Args:
-            panel_dict makes panel_arr ...
-            panel_arr (array of dictionaries) - each dictionary in the array has keys:
-                panelvars: a dictionary of matplotlib attributes including:
-                    ylabel - text for y-axis label
-                paneldict: a dictionary containing:
-                    col: name of DB column to plot
-                    plot_type: 'plot' (points with connecting lines), 
-                               'scatter' (points), 
-                               'step' (steps), 
-                               'state' (for non-floats, like DRPTAG)
-                    plot_attr: a dictionary containing plot attributes for a scatter plot, 
-                        including 'label', 'marker', 'color'
-                    not_junk: if set to 'True', only files with NOTJUNK=1 are included; 
-                              if set to 'False', only files with NOTJUNK=0 are included
-                    on_sky: if set to 'True', only on-sky observations will be included; 
-                            if set to 'False', only calibrations will be included
-                    only_object (not implemented yet): if set, only object names in the keyword's value will be queried
-                    object_like (not implemented yet): if set, partial object names matching the keyword's value will be queried
-            start_date (datetime object) - start date for plot
-            end_date (datetime object) - end date for plot
-            fig_path (string) - set to the path for the file to be generated
-            show_plot (boolean) - show the plot in the current environment
-            These are now part of the dictionaries:
-                only_object (string or list of strings) - object names to include in query
-                object_like (string or list of strings) - partial object names to search for
-                on_sky (True, False, None) - using FIUMODE, select observations that are on-sky (True), off-sky (False), or don't care (None)
+        Parameters
+        ----------
+        plotdict : str or dict
+            Either a path-like string corresponding to a named YAML configuration file,
+            or a dictionary with a key `'panel_arr'` which contains a list of panel dictionaries.
+            Each dictionary defines the contents and layout of an individual subplot.
 
-        Returns:
-            PNG plot in fig_path or shows the plot it the current environment
-            (e.g., in a Jupyter Notebook).
+        start_date : datetime.datetime, optional
+            Start of the time range to query and plot. Defaults to 2020-01-01 if None.
+
+        end_date : datetime.datetime, optional
+            End of the time range to query and plot. Defaults to 2040-01-01 if None.
+
+        clean : bool, default=False
+            If True, applies outlier removal to the data (via `self.db.clean_df()`).
+
+        fig_path : str, optional
+            If provided, the full path (including filename) where the final PNG image will be saved.
+
+        show_plot : bool, default=False
+            If True, the plot will be displayed interactively (e.g., in a Jupyter Notebook).
+
+        log_savefig_timing : bool, default=False
+            If True, logs the CPU time spent during `savefig()`.
+
+        Plot Configuration (via panel_dict or YAML)
+        -------------------------------------------
+        plotdict['panel_arr'] : list of dicts
+            Each element defines a panel (subplot). Each panel can include:
             
-        To do:
-            * Make a standard plot type that excludes outliers using ranges set 
-              to, say, +/- 4-sigma where sigma is determined by aggressive outlier
-              rejection.  This should be in Delta values.
-            * Make standard correlation plots.
-            * Make standard phased plots (by day)
+            - 'paneldict' : dict
+                Configuration for panel-level behavior and filters:
+                - 'col' : str — Column name in the database to plot.
+                - 'plot_type' : str — One of {'plot', 'scatter', 'step', 'state', 'errorbar'}.
+                - 'plot_attr' : dict — Matplotlib attributes like marker, color, label, etc.
+                - 'only_object' : str or list[str] — Exact object names to filter by.
+                - 'object_like' : str or list[str] — LIKE-matching object names.
+                - 'only_source' : str — Filter by OBJECT.
+                - 'not_junk' : bool or str ('True' or 'False') — If set, filters by NOTJUNK field.
+                - 'QC_pass' : str or list[str] — Column names where rows must have True.
+                - 'QC_fail' : str or list[str] — Column names where rows must have False.
+                - 'QC_not_pass' : str or list[str] — Column names where rows must have not True (Null allowed).
+                - 'QC_not_fail' : str or list[str] — Column names where rows must have not False (Null allowed).
+                - 'on_sky' : bool or str — If True, filters for FIUMODE == 'Observing'.
+                - 'narrow_xlim_daily' : bool — Restrict x-axis to min/max of data on short timescales.
+                - 'ylabel' : str — Y-axis label for the panel.
+                - 'ylim' : tuple — Explicit y-axis range as (ymin, ymax).
+                - 'ymin' : float — Explicit y-axis minimum (overrides ylim value).
+                - 'ymax' : float — Explicit y-axis maximum (overrides ylim value).
+                - 'yscale' : str — e.g., 'log' to apply logarithmic scaling.
+                - 'subtractmedian' : bool — Subtract median from the plotted data.
+                - 'nolegend' : bool — Suppress legend.
+                - 'legend_frac_size' : float — Legend offset scale.
+                - 'axhspan' : dict — Optional shaded region(s) to overlay (keys: ymin, ymax, color, alpha).
+                - 'title' : str — Per-panel title string prepended to date range info.
+
+            - 'panelvars' : list of dicts
+                Defines the variables to be plotted in this panel. Each dictionary can include:
+                - 'col' : str — Main data column name.
+                - 'col_err' : str — Optional column for error bars.
+                - 'col_subtract' : str — Column to subtract from `col` before plotting.
+                - 'col_multiply' : float — Scalar to multiply data.
+                - 'col_offset' : float — Scalar to add to data.
+                - 'normalize' : bool — If True, normalize data by its median.
+                - 'plot_type' : str — Plot type (overrides the panel-level setting).
+                - 'plot_attr' : dict — Matplotlib styling keywords.
+                - 'unit' : str — Unit label for legends/statistics (e.g., "m/s").
+                - 'vline_pt_color' : str - color of points in vline plots
+
+        Returns
+        -------
+        None
+            Saves the figure to `fig_path` (if specified), displays it (if `show_plot=True`),
+            and logs timing or errors as appropriate. Does not return the figure or axes explicitly.
+
+        Notes
+        -----
+        - The function handles various time axis labeling strategies based on time span:
+            • Hourly for single-day plots
+            • Days since start for <32-day plots
+            • Month/day for full-year plots
+            • ISO date labels for long-term plots
+        - For `plot_type='state'`, categorical values (e.g., DRPTAG) are color-coded and mapped to strings.
+        - The function attempts to detect empty data and annotates 'No Data' in panels accordingly.
+        - Internally calls `self.db.dataframe_from_db()` to query the database using provided filters.
+
+        To Do
+        -----
+        - Add standardized plot styles for delta-value diagnostics with robust sigma-clipping.
+        - Implement automated correlation plots between parameters.
+        - Implement phased plots (e.g., folding by sidereal day).
+
+        Examples
+        --------
+        >>> self.plot_time_series_multipanel('kpf_qlp_diagnostics.yaml', 
+                                             start_date=datetime(2025, 1, 1),
+                                             end_date=datetime(2025, 1, 31),
+                                             fig_path='monthly_plot.png',
+                                             show_plot=False)
         """
         import warnings
         warnings.filterwarnings("ignore", message=".*tight_layout.*")
@@ -156,6 +216,15 @@ class AnalyzeTimeSeries:
         def format_func(value, tick_number):
             """ For formatting of log plots """
             return num_fmt(value, sf=2)
+
+        def normalize_list_input(value):
+            if value is None:
+                return None
+            if isinstance(value, str):
+                return [v.strip() for v in value.split(',')]
+            if isinstance(value, list):
+                return value
+            return [value]
 
         # Retrieve the appropriate standard plot dictionary
         if type(plotdict) == type('str'):
@@ -182,21 +251,22 @@ class AnalyzeTimeSeries:
         unique_cols.add('NOTJUNK')
         for panel in panel_arr:
             for d in panel['panelvars']:
-                unique_cols.add(d['col'])
+                if 'col' in d:
+                    unique_cols.add(d['col'])
                 if 'col_err' in d:
                     unique_cols.add(d['col_err'])
                 if 'col_subtract' in d:
                     unique_cols.add(d['col_subtract'])
-        # add this?
-        #if 'only_object' in thispanel['paneldict']:
-        #if 'object_like' in thispanel['paneldict']:
+                if 'col_min' in d:
+                    unique_cols.add(d['col_min'])
+                if 'col_max' in d:
+                    unique_cols.add(d['col_max'])
 
         fig, axs = plt.subplots(npanels, 1, sharex=True, figsize=(15, npanels*2.5+1), tight_layout=True)
         if npanels == 1:
             axs = [axs]  # Make axs iterable even when there's only one panel
         if npanels > 1:
             plt.subplots_adjust(hspace=0)
-        #plt.tight_layout() # this caused a core dump in scripts/generate_time_series_plots.py
 
         overplot_night_box = False
         no_data = True # for now; will be set to False when data is detected
@@ -206,6 +276,7 @@ class AnalyzeTimeSeries:
             if isinstance(not_junk, str):
                 not_junk = True if not_junk.lower() == 'true' else False if not_junk.lower() == 'false' else not_junk
             only_object = thispanel['paneldict'].get('only_object', plotdict.get('only_object', None))
+            only_source = thispanel['paneldict'].get('only_source', plotdict.get('only_source', None))
             object_like = thispanel['paneldict'].get('object_like', plotdict.get('object_like', None))
             if object_like is not None:
                 if isinstance(object_like, str):
@@ -218,8 +289,12 @@ class AnalyzeTimeSeries:
                         else:
                             flattened.append(item)
                     object_like = flattened
-            only_source = thispanel['paneldict'].get('only_source', plotdict.get('only_source', None))
 
+            qc_pass      = normalize_list_input(thispanel['paneldict'].get('qc_pass', None))
+            qc_fail      = normalize_list_input(thispanel['paneldict'].get('qc_fail', None))
+            qc_not_pass  = normalize_list_input(thispanel['paneldict'].get('qc_not_pass', None))
+            qc_not_fail  = normalize_list_input(thispanel['paneldict'].get('qc_not_fail', None))
+            
             if start_date == None:
                 start_date = datetime(2020, 1,  1)
                 start_date_was_none = True
@@ -239,6 +314,10 @@ class AnalyzeTimeSeries:
                                            only_object=only_object, 
                                            object_like=object_like,
                                            only_source=only_source, 
+                                           qc_pass=qc_pass,
+                                           qc_fail=qc_fail,
+                                           qc_not_pass=qc_not_pass,
+                                           qc_not_fail=qc_not_fail,
                                            verbose=False)
 
         	# Check if the resulting dataframe has any rows
@@ -262,6 +341,7 @@ class AnalyzeTimeSeries:
                     elif str(thispanel['paneldict']['on_sky']).lower() == 'false':
                         df = df[df['FIUMODE'] == 'Calibration']
                     
+            # Determine how to display time
             thistitle = ''
             if ((end_date - start_date).days <= 1.05) and ((end_date - start_date).days >= 0.95):
                 if not empty_df:
@@ -378,6 +458,25 @@ class AnalyzeTimeSeries:
             if 'ylabel' in thispanel['paneldict']:
                 axs[p].set_ylabel(thispanel['paneldict']['ylabel'], fontsize=14)
             axs[p].grid(color='lightgray')        
+
+            # Annotate panel with QC filters
+            x_offset = -2  # starting horizontal offset in points
+            y_offset = 2  # starting vertical offset in points
+            for label, qc_value in [('QC_pass', qc_pass), ('QC_fail', qc_fail), 
+                                    ('QC_not_pass', qc_not_pass), ('QC_not_fail', qc_not_fail)]:
+                if qc_value is not None:
+                    axs[p].annotate(f"{label}: {qc_value} ", xy=(1, 0), xycoords='axes fraction',
+                                    fontsize=8, color='darkslategray', ha='right', va='bottom',
+                                    xytext=(x_offset, y_offset), textcoords='offset points',
+                                    bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.5, edgecolor='none'))
+                    y_offset += 10  # stack next line above
+            if not_junk is True:
+                axs[p].annotate("Junk excluded", xy=(1, 0), xycoords='axes fraction',
+                                fontsize=8, color='darkslategray', ha='right', va='bottom',
+                                xytext=(x_offset, y_offset), textcoords='offset points',
+                                bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.5, edgecolor='none'))
+                    
+
             if 'yscale' in thispanel['paneldict']:
                 if thispanel['paneldict']['yscale'] == 'log':
                     formatter = FuncFormatter(format_func)  # this doesn't seem to be working
@@ -389,16 +488,25 @@ class AnalyzeTimeSeries:
                     axs[p].yaxis.set_major_formatter(formatter)
             else:
                 axs[p].grid(color='lightgray')        
+
+            # Set y-axis limits
             ylim=False
             if 'ylim' in thispanel['paneldict']:
                 if type(ast.literal_eval(thispanel['paneldict']['ylim'])) == type((1,2)):
                     ylim = ast.literal_eval(thispanel['paneldict']['ylim'])
+            if ('ymin' in thispanel['paneldict']) or ('ymax' in thispanel['paneldict']):
+                ymin_current, ymax_current = axs[p].get_ylim()
+                ymin = thispanel['paneldict'].get('ymin', ymin_current)
+                ymax = thispanel['paneldict'].get('ymax', ymax_current)
+                ylim = (ymin, ymax)
 
+            # Determine if legend should be made
             makelegend = True
             if 'nolegend' in thispanel['paneldict']:
                 if str(thispanel['paneldict']['nolegend']).lower() == 'true':
                     makelegend = False
 
+            # Subtract median from data
             subtractmedian = False
             if 'subtractmedian' in thispanel['paneldict']:
                 if str(thispanel['paneldict']['subtractmedian']).lower() == 'true':
@@ -420,7 +528,14 @@ class AnalyzeTimeSeries:
                     df = df[~df[col_name].isin(['NaN', 'null', 'nan', 'None', None, np.nan])]
                     col_data = df[col_name]
                     col_data_replaced = col_data  # default, no subtraction
+                    # for vlines plots:
+                    if 'col_min' in thispanel['panelvars'][i]:
+                        col_name_min = thispanel['panelvars'][i]['col_min']
+                        col_name_max = thispanel['panelvars'][i]['col_max']
+                        col_data_min = df[col_name_min]
+                        col_data_max = df[col_name_max]
                     
+                    # Subtract one column from another
                     if 'col_subtract' in thispanel['panelvars'][i]:
                         col_subtract_name = thispanel['panelvars'][i]['col_subtract']
                         # Now filter out invalid values in col_subtract_name,
@@ -431,12 +546,15 @@ class AnalyzeTimeSeries:
                         col_subtract_data = df[col_subtract_name]
                         col_data_replaced = col_data - col_subtract_data
     
+                    # Multiply one column by a common factor
                     if 'col_multiply' in thispanel['panelvars'][i]:
                         col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') * thispanel['panelvars'][i]['col_multiply']
     
+                    # Add a common offset to a column
                     if 'col_offset' in thispanel['panelvars'][i]:
                         col_data_replaced = pd.to_numeric(col_data_replaced, errors='coerce') + thispanel['panelvars'][i]['col_offset']
     
+                    # Use error bars
                     if 'col_err' in thispanel['panelvars'][i]:
                         col_data_err = df[thispanel['panelvars'][i]['col_err']]
                         col_data_err_replaced = col_data_err.replace('NaN',  np.nan)
@@ -450,6 +568,12 @@ class AnalyzeTimeSeries:
                     
                     if plot_type == 'state':
                         states = np.array(col_data_replaced)
+
+                    elif plot_type == 'vlines':
+                        data_min = np.array(col_data_min, dtype='float')
+                        data_max = np.array(col_data_max, dtype='float')
+                        data = data_min # so that some logic below works
+
                     else:
                         data = np.array(col_data_replaced, dtype='float')
                         if plot_type == 'errorbar':
@@ -464,7 +588,6 @@ class AnalyzeTimeSeries:
                     elif 360 <= (end_date - start_date).days <= 370:
                         if not empty_df:
                             t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
-
                     else:
                         t = df['DATE-MID'] # dates
     
@@ -522,6 +645,34 @@ class AnalyzeTimeSeries:
                     # Plot type: stepped lines
                     if plot_type == 'step':
                         axs[p].step(t, data, **plot_attributes)
+                    
+                    # Plot type: vertical lines
+                    if plot_type == 'vlines':
+                        if 'vline_pt_color' in thispanel['panelvars'][i]:
+                            vline_pt_color = thispanel['panelvars'][i]['vline_pt_color']
+                        else:
+                            vline_pt_color = plot_attributes.pop('color', 'black')
+                        lw = 0.5
+                        sz = 5
+                        if not empty_df:
+                            if abs((end_date - start_date).days) <= 3:
+                                lw = 1
+                                sz = 15
+                            elif abs((end_date - start_date).days) < 32:
+                                lw = 2
+                                sz = 10
+                        # sanitize unsupported attributes
+                        for k in ['marker', 'markersize', 'linestyle']:
+                            plot_attributes.pop(k, None)
+                        plot_attributes.setdefault('colors', vline_pt_color)
+                        plot_attributes.setdefault('linewidths', lw)
+                        axs[p].vlines(t, data_min, data_max, **plot_attributes)
+
+                        # Add points to the tops of the lines
+                        axs[p].scatter(t, data_max, color=plot_attributes.get('colors', 'black'), s=sz, zorder=3)
+                        
+                        # Optionally add points to the bottoms of the lines
+                        axs[p].scatter(t, data_min, color=plot_attributes.get('colors', 'black'), s=sz, zorder=3)
                     
                     # Plot type: scatter plots for non-float 'states'
                     if plot_type == 'state':
@@ -596,8 +747,6 @@ class AnalyzeTimeSeries:
                 # This is needed so that ylim autoscaling is based on data and not the boxes below
                 axs[p].relim()            
                 axs[p].autoscale_view()   
-#                ymin, ymax = axs[p].get_ylim()
-#                axs[p].set_ylim(ymin, ymax)
                 axs[p].set_autoscale_on(False)
                 # Draw boxes
                 for key, axh in thispanel['paneldict']['axhspan'].items():
@@ -606,8 +755,6 @@ class AnalyzeTimeSeries:
                      clr  = axh['color']
                      alp  = axh['alpha']
                      axs[p].axhspan(ymin, ymax, color=clr, alpha=alp)
-                
-
 
             # Make legend
             if makelegend:
@@ -622,7 +769,7 @@ class AnalyzeTimeSeries:
                         handles, labels = zip(*sorted_pairs)
                         axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
 
-            # Set y limits
+            # Set y-axis limits
             if ylim:
                 axs[p].set_ylim(ylim)
 

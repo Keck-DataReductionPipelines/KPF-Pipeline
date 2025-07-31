@@ -252,6 +252,7 @@ panel_arr:
     paneldict:
       ylabel: "Green SCI\nstdev(WLS-ref) [pix]"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
 # Green CAL      
@@ -504,6 +505,7 @@ panel_arr:
     paneldict:
       ylabel: "Green CAL\nstdev(WLS-ref) [pix]"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
 # Green SKY      
@@ -756,6 +758,7 @@ panel_arr:
     paneldict:
       ylabel: "Green SKY\nstdev(WLS-ref) [pix]"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
 # Red SCI      
@@ -987,6 +990,7 @@ panel_arr:
     paneldict:
       ylabel: "Red SCI\nstdev(WLS-ref) [pix]"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
 # Red CAL      
@@ -1218,6 +1222,7 @@ panel_arr:
     paneldict:
       ylabel: "Red CAL\nstdev(WLS-ref) [pix]"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
 # Red SKY      
@@ -1449,5 +1454,6 @@ panel_arr:
     paneldict:
       ylabel: "Red SKY\nstdev(WLS-ref) [pix]"
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       title: WLS Median Difference (L1 - L1_ref)
       legend_frac_size: 0.25

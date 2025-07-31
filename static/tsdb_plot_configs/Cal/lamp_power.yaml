@@ -12,6 +12,7 @@ panel_arr:
     paneldict:
       ylabel: ThAr Daily Power (W)
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -25,6 +26,7 @@ panel_arr:
     paneldict:
       ylabel: ThAr Gold Power (W)
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -38,6 +40,7 @@ panel_arr:
     paneldict:
       ylabel: UNe Daily Power (W)
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -51,6 +54,7 @@ panel_arr:
     paneldict:
       ylabel: UNe Gold Power (W)
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -64,6 +68,7 @@ panel_arr:
     paneldict:
       ylabel: LFC Power (W)
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -77,6 +82,7 @@ panel_arr:
     paneldict:
       ylabel: Etalon Power (W)
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -90,5 +96,6 @@ panel_arr:
     paneldict:
       ylabel: Broadband Power (W)
       not_junk: true
+      qc_not_fail: 'GOODREAD'
       title: Power Meter Measurements of Lamp Brightness
       legend_frac_size: 0.25
