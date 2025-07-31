@@ -1,5 +1,6 @@
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
+max_cal_file_age = config.ARGUMENT.max_cal_file_age
 channel_datasec_ncols_green = config.WATCHFOR_L0.channel_datasec_ncols_green
 channel_datasec_nrows_green = config.WATCHFOR_L0.channel_datasec_nrows_green
 channel_datasec_ncols_red = config.WATCHFOR_L0.channel_datasec_ncols_red
@@ -124,7 +125,7 @@ for raw_file_path in file_list:
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
         invoke_subrecipe("./recipes/quality_control.subrecipe")
         bpm_applied = kpf_object # kpf_object is output from the subrecipe.
-        recipe_complete = to_fits(bpm_applied, output_file_name)
+        recipe_complete = to_fits(bpm_applied, output_file_name) # The 2D needs to be written for the following routines to call it and find it.
         # Query database for QC information and update headers in-memory
         rid = quality_control_rid
         verbose = config.WATCHFOR_L0.verbose
@@ -165,6 +166,7 @@ for raw_file_path in file_list:
         if do_var_exts:
             if rid > 0:
                 # Pass kpf_object KPF0 object as 7th argument for in-memory extension updates
+                #   passed object not yet implemented.
                 var_exts_exit_code = VarExtsFramework(data_type,
                                                       raw_file_path,
                                                       masterbias_path,

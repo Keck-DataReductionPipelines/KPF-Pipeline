@@ -59,7 +59,7 @@ do_only_drift = config.ARGUMENT.do_only_drift
 # General config flags
 data_type = config.ARGUMENT.data_type 
 overwrite = config.ARGUMENT.overwrite # if overwrite the existing data
-
+max_cal_file_age = config.ARGUMENT.max_cal_file_age
 
 # file path for lev0 and lev1 data
 lev0_file_path = ""

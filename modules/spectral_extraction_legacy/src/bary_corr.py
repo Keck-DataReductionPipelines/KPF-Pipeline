@@ -136,11 +136,13 @@ class BaryCorrTable(KPF0_Primitive):
         # input configuration
         self.config = configparser.ConfigParser()
         try:
-            config_path = context.config_path['spectral_extraction']
+            # config_path = context.config_path['spectral_extraction'] # not sure what this should be
+            config_path = context.config_path['spectral_extraction_legacy']
+            print("CONFIG PATH IN BARYCORRTABLE:", config_path)
 
         except Exception as e:
             config_path = DEFAULT_CFG_PATH
-
+        print("CONFIG PATH IN BARYCORRTABLE:", config_path)
         self.config.read(config_path)
         # start a logger
         self.logger = None
