@@ -333,8 +333,7 @@ if do_spectral_extraction or do_hk or do_bc:
 			# SpectralExtraction returns [exit_code, op_data, ...other values...]
 			output_data= spectral_extraction_output_list[1]
 
-#TESTIN			output_data = kpf1_from_fits(output_lev1_file, data_type = data_type) #remove when done with testing
-			result = to_fits(output_data, output_lev1_file_temp) # REMOVE WHEN DONE WITH TESTING.
+#TESTING			output_data = kpf1_from_fits(output_lev1_file, data_type = data_type) #remove when done with testing
 
 			# Remove this conditional. Do quality control only at the very end
 			# if op_data != None:
@@ -347,6 +346,28 @@ if do_spectral_extraction or do_hk or do_bc:
 			# 	invoke_subrecipe("./recipes/diagnostics.subrecipe")
 			# 	op_data = kpf_object
 			# 	result = to_fits(op_data, output_lev1_file)
+
+			# The wavelength solution extensions are not copied into L1 by the new Spectral Extraction. 
+			# Copy them here manually.
+			for idx in ccd_idx:
+				if wave_fits[idx] != None and exists(wave_fits[idx]):
+				# wavecal_data will be replaced by wavelength interpolation.
+					wavecal_data = kpf1_from_fits(wave_fits[idx], data_type=data_type)
+					for ext in wave_to_ext[idx]:
+						ExtCopy(wavecal_data, ext, ext, to_data_model=output_data) # only this needs changed.
+			SetHeaderValue(output_data, 'WLSFILE', wave_fits[0])
+			print("Copying WLS files into L1")
+
+
+			# result = to_fits(output_data, output_lev1_file_temp) # REMOVE WHEN DONE WITH TESTING.
+# You can comment out here up to before StrayLight for testing BC.
+			# You can read in a file that was created with the main DRP here: 
+			#    This allows testing the code below here quickly.
+
+			# Use output_lev1_file_temp to use a file created with this DRP, but skip the parts that take along time.
+			# output_data = kpf1_from_fits(output_lev1_file_temp, data_type=data_type) # REMOVE WHEN DONE WITH TESTING.
+			# Use this output_lev1_file to use a file created with the master branch drp (copy it to here).
+			# output_data = kpf1_from_fits(output_lev1_file, data_type=data_type) # REMOVE WHEN DONE WITH TESTING.
 
 			# copy wls to the proper extension of lev1 data
 			if do_sp_wavecopy:# and exists(output_lev1_file): output_lev1 only exists in memory
@@ -368,10 +389,12 @@ if do_spectral_extraction or do_hk or do_bc:
 				# Add blaze extensions
 				if exists(smooth_lamp_file):
 					smooth_lamp_l1 = kpf1_from_fits(smooth_lamp_file, data_type=data_type) #smooth lamp file
-					blaze_output_list = AddBlaze(output_data, smooth_lamp_l1)
-
+					input_lev_1d_to_addblaze = output_data
+					blaze_output_list = AddBlaze(input_lev_1d_to_addblaze, smooth_lamp_l1)
 					exit_code = blaze_output_list[0]
 					new_l1_obj = blaze_output_list[1]
+					print("exit_code from add blaze")
+					print(exit_code)
 					if exit_code == 1:
 						output_data = new_l1_obj 
 

@@ -103,8 +103,8 @@ else:
     d2_file_list = find_files(d2_pattern)
     l1_file_list = find_files(l1_pattern)
 
-# if do_l0_to_2d:
-# 	invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") # Which calls the watchfor_kpf_l0.recipe
+if do_l0_to_2d:
+	invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") # Which calls the watchfor_kpf_l0.recipe
 	
 # BEGIN 2D to L1     
 do_2d_to_l1 = True # add to config later.
@@ -112,6 +112,6 @@ if do_2d_to_l1:
     invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
 	
 # # BEGIN L1 to L2
-# do_l1_to_l2 = True # add to config later.
-# if do_l1_to_l2:
-#     invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
+do_l1_to_l2 = True # add to config later.
+if do_l1_to_l2:
+    invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    

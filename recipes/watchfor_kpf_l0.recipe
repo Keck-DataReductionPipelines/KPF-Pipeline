@@ -140,10 +140,10 @@ for raw_file_path in file_list:
                                                                     kpf_object)
                 
                 # Test: Check if QueryDBL0FileFramework added headers to the kpf_object, yes they do
-                dbrid_value = GetHeaderValue(kpf_object, 'DBRID')
-                print("CHECK: DBRID header found:" + str(dbrid_value))
-                l0qcbits_value = GetHeaderValue(kpf_object, 'L0QCBITS')
-                print("CHECK: L0QCBITS header found:" + str(l0qcbits_value))
+                # dbrid_value = GetHeaderValue(kpf_object, 'DBRID')
+                # print("CHECK: DBRID header found:" + str(dbrid_value))
+                # l0qcbits_value = GetHeaderValue(kpf_object, 'L0QCBITS')
+                # print("CHECK: L0QCBITS header found:" + str(l0qcbits_value))
 
         do_read_noise = True
         if do_read_noise:
@@ -156,11 +156,11 @@ for raw_file_path in file_list:
                                                           kpf_object)
                 
                 # Test: Check if ReadNoiseFramework added headers to the kpf_object. Yes they do.
-                rngreen1_value = GetHeaderValue(kpf_object, 'RNGREEN1')
-                print("CHECK: RNGREEN1 header found:" + str(rngreen1_value))
-                greentrt_value = GetHeaderValue(kpf_object, 'GREENTRT')
-                print("CHECK: GREENTRT header found:" + str(greentrt_value))
-        recipe_complete = to_fits(kpf_object, output_file_name)
+                # rngreen1_value = GetHeaderValue(kpf_object, 'RNGREEN1')
+                # print("CHECK: RNGREEN1 header found:" + str(rngreen1_value))
+                # greentrt_value = GetHeaderValue(kpf_object, 'GREENTRT')
+                # print("CHECK: GREENTRT header found:" + str(greentrt_value))
+        # recipe_complete = to_fits(kpf_object, output_file_name)
         do_var_exts = True
         if do_var_exts:
             if rid > 0:
@@ -180,4 +180,4 @@ for raw_file_path in file_list:
                 # print("SUCCESS: RED_VAR extension found, shape:" + str(red_var_data))
         TEST = "TEST"
         print("TEST: VarExtsFramework executed successfully.")
-        recipe_complete = to_fits(kpf_object, output_file_name)
+        # recipe_complete = to_fits(kpf_object, output_file_name)
