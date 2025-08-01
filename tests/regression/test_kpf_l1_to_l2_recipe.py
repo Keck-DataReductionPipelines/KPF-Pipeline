@@ -21,7 +21,7 @@ masters_test_date = '20230730'
 
 # Read the actual recipe file
 l1_to_l2_recipe = open('recipes/kpf_l1_to_l2.recipe', 'r').read()
-l1_to_l2_config = ConfigClass('configs/kpf_single_recipes.cfg')
+l1_to_l2_config = ConfigClass('configs/kpf.cfg')
 
 # Configure the recipe to use the test date's master files
 l1_to_l2_config.set('WATCHFOR_L0', 'masterbias_path', f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_bias_autocal-bias.fits')
