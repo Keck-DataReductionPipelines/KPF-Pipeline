@@ -288,7 +288,7 @@ class TSDB:
                     else:
                         allowed_str = ', '.join(allowed_roles) if allowed_roles else 'No roles'
                         raise PermissionError(
-                            f"Method '{method_name}' not allowed for role '{self.user_role}'. "
+                            f"Method '{func.__name__}' not allowed for role '{self.user_role}'. "
                             f"Allowed roles: {allowed_str}"
                         )
     
