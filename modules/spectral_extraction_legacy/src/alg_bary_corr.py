@@ -83,13 +83,14 @@ class BaryCorrTableAlg(ModuleAlgBase):
             raise TypeError('ccd orders error, cannot construct object from BaryCorrTableAlg')
 
         ModuleAlgBase.__init__(self, self.name, config, logger)
-        print("DEBUG: self.config_param =", self.config_param)
-        print("DEBUG: config =", config)
         ins = self.config_param.get_config_value('instrument', '') if self.config_param is not None else ''
-        print("DEBUG: ins from config =", repr(ins))
-        print("DEBUG: pheader['INSTRUME'] =", pheader.get('INSTRUME', 'NOT_FOUND'))
-        self.instrument = ins.lower() if ins else (pheader['INSTRUME'].lower() if 'INSTRUME' in pheader else '')
-        print("SELF.INSTRUMENT",self.instrument)
+        self.instrument = ins.lower() if ins else (pheader['INSTRUME'] if 'INSTRUME' in pheader else '')
+        
+        # hardcoding this. Nothing is defined in the config file.
+        #  It's not clear how to define this since it is referenced from a different module.
+        #  I think this would be solved if the bary portions of the spectral_extraction_legacy were moved to the new module.
+        self.instrument = 'kpf'
+        self.logger.info("Hard coding instrument to kpf")
         self.config_ins = ConfigHandler(config, ins, self.config_param)  # section of instrument or 'PARAM'
         self.df_EM = df_em
         self.lev_header = pheader
