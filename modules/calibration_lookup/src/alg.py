@@ -92,10 +92,15 @@ class GetCalibrations:
                         if not use_defaults:
                             output_cals[cal_type[0].lower()] = multi_results
                     else:
-                        db_results = self.db.get_nearest_master(self.datetime, lvl, cal_type_lookup)
-                        if db_results[0] == 0:
-                            output_cals[cal_type[0].lower()] = db_results[1]
-                        else:
+                        try:
+                            db_results = self.db.get_nearest_master(self.datetime, lvl, cal_type_lookup)
+                            if db_results[0] == 0:
+                                output_cals[cal_type[0].lower()] = db_results[1]
+                            else:
+                                self.log.warning(f"Database lookup failed for {cal_type[0]} (exit code {db_results[0]}), using default")
+                                output_cals[cal_type[0].lower()] = self.defaults[cal_type[0].lower()]
+                        except Exception as e:
+                            self.log.warning(f"Exception during database lookup for {cal_type[0]}: {e}, using default")
                             output_cals[cal_type[0].lower()] = self.defaults[cal_type[0].lower()]
             elif lookup == 'wls' or lookup == 'etalon':
                 for cal_type in self.wls_cal_types:
