@@ -47,7 +47,7 @@ class SpectralExtraction(KPF0_Primitive):
                                                       )
             
             for chip in ['GREEN', 'RED']:
-                print("SpectralExtraction: Processing chip: " + chip)
+                self.logger.info("SpectralExtraction: Processing chip: " + chip)
                 spectralextraction.target_l1 = spectralextraction.extract_ccd(chip)
             exit_code = 1
             return Arguments([exit_code, spectralextraction.target_l1])
