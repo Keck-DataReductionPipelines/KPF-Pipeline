@@ -273,9 +273,7 @@ class BaryCorrTableAlg(ModuleAlgBase):
             str: UTC in string format.
 
         """
-        print('in get_obs_utc')
         if self.instrument == 'kpf' and BaryCorrTableAlg.DATE_MID in self.lev_header:
-            print("In conditional1")
             return self.lev_header[BaryCorrTableAlg.DATE_MID]
         return default
 
@@ -316,15 +314,11 @@ class BaryCorrTableAlg(ModuleAlgBase):
                 * barycentric velocity(m/sec)
 
         """
-        print('trying build_bary_cor_table')
         if self.bary_corr_table is None:
             return None
 
         # fill in "GEOMID_UTC" and "GEOMID_JD" columns
-        print("HERE1")
         mid_utc = self.get_obs_utc()
-        print("HERE2")
-        print("BCT: ", mid_utc)
 
         if mid_utc is None:
             return pd.DataFrame(self.bary_corr_table)
@@ -335,7 +329,6 @@ class BaryCorrTableAlg(ModuleAlgBase):
             self.bary_corr_table[BaryCorrTableAlg.BC_col4][self.start_bary_index:self.end_bary_index+1] = GEOMID_BJD
 
         df_em = self.get_expmeter_science()
-        print('BCT: df_em', df_em)
         is_single_mid = False
 
         # key_sets = ['IMTYPE', 'TARGFRAM', 'TARGNAME', 'TARGEPOC', 'SCI-OBJ', 'SKY-OBJ', 'CAL-OBJ']
