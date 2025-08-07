@@ -333,6 +333,7 @@ class SpectralExtractionAlg:
         W = np.asarray(W, dtype=float)
 
         # 1D box extraction of spectrum and variance
+        self.log.debug(f"Box extraction: D shape: "+str(D.shape)+ " S shape: "+str(S.shape)+ " V shape: "+str(V.shape)+ " M shape: "+str(M.shape)+ " W shape: "+str(W.shape))
         f = np.sum(M*(D-S)*W,axis=0)
         v = np.sum(M*V*W,axis=0)
                         
@@ -529,8 +530,21 @@ class SpectralExtractionAlg:
                                               return_box_coords=True
                                              )
 
-        # variance
-        V = self.target_2D[f'{chip}_VAR'].data[ymin:ymax]
+        # variance: The variance is not currently populated for masters.
+        var_ext_name = f'{chip}_VAR'
+        if var_ext_name in self.target_2D.extensions:
+            V_full = self.target_2D[var_ext_name].data[ymin:ymax]
+            # Check if dimensions of V and D match
+            if V_full.shape == D.shape:
+                V = V_full
+                self.log.debug(f"Using variance extension {var_ext_name} with matching dimensions")
+            else:
+                self.log.warning(f"Variance extension {var_ext_name} has mismatched dimensions {V_full.shape} vs {D.shape}, creating array of ones")
+                V = np.ones_like(D)
+        else:
+            self.log.warning(f"Variance extension {var_ext_name} not found, creating array of ones")
+            # Create variance array with ones matching the dimensions of data
+            V = np.ones_like(D)
 
         # sky/scattered/stray light background
         S = self.background_image[f'{chip}_CCD'][ymin:ymax]
