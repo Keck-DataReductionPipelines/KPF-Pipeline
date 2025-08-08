@@ -4,8 +4,7 @@ from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.amplifier_mask import AmplifierMask
 from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 
-# 2D -> l1 level imports, copied from kpf_drp.recipe.
-# L2 to 2D imports
+# 2D -> l1 level imports
 from modules.Utils.orientation_ref_reader import OrientationReference
 from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.amplifier_mask import AmplifierMask
@@ -13,10 +12,10 @@ from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0Fil
 
 # 2D -> l1 level imports, copied from kpf_drp.recipe.
 # from modules.order_trace.src.order_trace import OrderTrace
-from modules.spectral_extraction.src.order_rectification import OrderRectification
+# from modules.spectral_extraction.src.order_rectification import OrderRectification
 from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
 
-# from modules.order_trace.src.order_mask import OrderMask
+from modules.order_trace.src.order_mask import OrderMask
 from modules.wavelength_cal.src.alg import WaveInterpolation          
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
 from modules.blaze.src.blaze import AddBlaze
@@ -34,7 +33,10 @@ from modules.spectral_extraction_legacy.src.bary_corr import BaryCorrTable # LET
 
 # general imports.
 from modules.Utils.amplifier_mask import AmplifierMask # Needed in L0 and L2
-from modules.spectral_extraction_legacy.src.bary_corr import BaryCorrTable # LETS MOVE THIS TO ITS OWN MODULE SOMEDAY.
+
+# masters:
+masters_data_dir = config.ARGUMENT.masters_dir
+run_masters = config.ARGUMENT.run_masters
 
 # general imports.
 from modules.Utils.amplifier_mask import AmplifierMask # Needed in L0 and L2
@@ -55,37 +57,39 @@ from modules.var_exts.src.var_exts_framework import VarExtsFramework
 from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
 from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 
-# # do L0->2D conversion for watch mode
-do_l0_to_2d = True # add to config later.
-
 # Add the file_list at the top level and redefine if needed
 if context.watch:
-    l0_file_list = find_files(context.file_path)
-    lev0_file_path = context.file_path
-    levd2_file_path = str_replace(lev0_file_path, 'L0', '2D')
-    lev1_file_path = str_replace(lev0_file_path, 'L0', 'L1')
-    lev2_file_path = str_replace(lev0_file_path, 'L0', 'L2')    
+    # l0_file_list = find_files(context.file_path)
+    l0_file_list = context.file_path
+    # lev0_file_path = context.file_path
 
     # Derive corresponding file paths for other levels
     d2_file_list = []
     l1_file_list = []
     l2_file_list = []
     
-    for l0_file in l0_file_list:
+    # for l0_file in l0_file_list:
         # 2D -> L1 conversion
-        d2_file = str_replace(l0_file, '/L0/', '/2D/')
-        d2_file = str_replace(d2_file, '.fits', '_2D.fits')
-        d2_file_list = d2_file_list + [d2_file]
+        # masters filenames should not have 2D prefixes at this point
 
-        # L1 -> L2 conversion
-        l1_file = str_replace(l0_file, '/L0/', '/L1/')
-        l1_file = str_replace(l1_file, '.fits', '_L1.fits')
-        l1_file_list = l1_file_list + [l1_file]
-        
-        # L2 -> L2 reweighting
-        l2_file = str_replace(l0_file, '/L0/', '/L2/')
-        l2_file = str_replace(l2_file, '.fits', '_L2.fits')
-        l2_file_list = l2_file_list + [l2_file]
+    if run_masters:
+         d2_file_list = l0_file_list # masters run here have no suffix.
+    else:
+        d2_file = str_replace(l0_file_list, '/L0/', '/2D/')
+        d2_file = str_replace(d2_file, '.fits', '_2D.fits')
+        # d2_file_list = d2_file_list + [d2_file]             
+        d2_file_list = d2_file # Run as single value.
+    # L1 -> L2 conversion
+    l1_file = str_replace(l0_file_list, '/L0/', '/L1/')
+    l1_file = str_replace(l1_file, '.fits', '_L1.fits')
+    # l1_file_list = l1_file_list + [l1_file]
+    l1_file_list = l1_file # Run as single value.
+    
+    # L2 -> L2             
+    l2_file = str_replace(l0_file_list, '/L0/', '/L2/')
+    l2_file = str_replace(l2_file, '.fits', '_L2.fits')
+    # l2_file_list = l2_file_list + [l2_file]
+    l2_file_list = l2_file # Run as single value.
 
 else:
     # search_string = config.WATCHFOR_L0.input_dir + "/" + date_dir + '/*.fits'
@@ -104,15 +108,17 @@ else:
     d2_file_list = find_files(d2_pattern)
     l1_file_list = find_files(l1_pattern)
 
+# Masters runs with only L1 and L2 files with config kpf_masters_l1.cfg
+do_l0_to_2d = config.ARGUMENT.do_l0_to_2d
 if do_l0_to_2d:
-	invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") # Which calls the watchfor_kpf_l0.recipe
-	
-# BEGIN 2D to L1     
-do_2d_to_l1 = True # add to config later.
+	invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") 
+
+# BEGIN 2D to L1. Set desired levels from configs and redefine the level specific keywords in the conditionals.
+do_2d_to_l1 = config.ARGUMENT.do_2d_to_l1
 if do_2d_to_l1:
     invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
 	
-# # BEGIN L1 to L2
-do_l1_to_l2 = True # add to config later.
+# Level 1 to level 2 processing.
+do_l1_to_l2 = config.ARGUMENT.do_l1_to_l2
 if do_l1_to_l2:
     invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
