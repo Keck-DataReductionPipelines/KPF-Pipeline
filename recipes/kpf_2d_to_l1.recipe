@@ -446,14 +446,15 @@ if do_spectral_extraction or do_hk or do_bc:
 			# 	clip_file = None
 
 			op_data = None
-			order_mask_file = cals['ordermask']
-			print("ORDER MASK FILE: "+order_mask_file)
+			# order_mask_file = cals['ordermask']
+			# print("ORDER MASK FILE: "+order_mask_file)
 			# Load order_mask if not already loaded from file loop
 			#  If multiple dates are called in this loop, this will load the wrong mask.
-			if order_mask == None:
-				order_mask = kpf0_from_fits(order_mask_file, data_type)
-				stray_light_output_list = StrayLight(lev0_data, order_mask)
-				lev0_data = stray_light_output_list[1]
+			# if order_mask == None:
+# I think the order mask needs to always be calculated rather than the file opened.
+#				order_mask = kpf0_from_fits(order_mask_file, data_type)
+			stray_light_output_list = StrayLight(lev0_data, order_mask)
+			lev0_data = stray_light_output_list[1]
 			if master_flat == None:
 				master_flat = kpf0_from_fits(cals['flat'])
 			print("SPECTRALEXTRACTION STARTING FOR: "+input_lev0_file)
