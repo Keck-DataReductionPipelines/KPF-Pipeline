@@ -142,7 +142,10 @@ if do_2d_to_l1 and ('_2D.fits' in current_file or (run_masters and ('.fits' in c
 # Level 1 to level 2 processing.
 # observations with 'slewcal' or etalon in the name should not get processed in this next step
 do_l1_to_l2 = config.ARGUMENT.do_l1_to_l2
-if do_l1_to_l2 and '_L1.fits' in current_file and 'slewcal' not in current_file and 'etalon' not in current_file:
-    print("RUNNING L1->L2 PROCESSING")
-    invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
+if do_l1_to_l2 and '_L1.fits' in current_file:
+    if  'slewcal' in current_file or 'etalon' in current_file:
+        print("SKIPPING L1->L2 PROCESSING FOR: " + current_file)
+    else:
+        print("RUNNING L1->L2 PROCESSING")
+        invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
 
