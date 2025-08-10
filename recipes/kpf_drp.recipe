@@ -139,9 +139,9 @@ if do_2d_to_l1 and ('_2D.fits' in current_file or (run_masters and ('.fits' in c
     print("RUNNING 2D->L1 PROCESSING")
     invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
 
-# # Level 1 to level 2 processing.
-# do_l1_to_l2 = config.ARGUMENT.do_l1_to_l2
-# if do_l1_to_l2 and '_L1.fits' in current_file:
-#     print("RUNNING L1->L2 PROCESSING")
-#     invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
+# Level 1 to level 2 processing.
+do_l1_to_l2 = config.ARGUMENT.do_l1_to_l2
+if do_l1_to_l2 and '_L1.fits' in current_file:
+    print("RUNNING L1->L2 PROCESSING")
+    invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
 
