@@ -60,7 +60,6 @@ lev1_file_path = ""
 if context.watch:
 	sel_obsid = context.date_dir
 	file_path = context.file_path
-
 	# do spectral extraction if 2D data is watched, do 2D->l1->l2
 	# assume masters is operating on 2D files
 	if '2D' in file_path or 'masters' in file_path:

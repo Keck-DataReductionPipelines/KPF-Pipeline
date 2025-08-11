@@ -118,7 +118,7 @@ class KPFDB:
 
         return results
 
-    def get_nearest_master(self, obs_date, cal_file_level, cal_type_pair, contentbitmask=3, max_cal_delta_time='1000 days'):
+    def get_nearest_master(self, obs_date, cal_file_level, cal_type_pair, contentbitmask=3, max_cal_delta_time='90 days'):
         """Get the master file closest in time to obs_date of the specified calibration type
         
         Args:
@@ -241,7 +241,7 @@ ORDER BY startdate;"""
         return [before_code, fname_before, after_code, fname_after]
 
 
-    def get_nearest_master_file(self,obs_date,cal_file_level,contentbitmask,cal_type_pair,max_cal_file_age='1000 days'):
+    def get_nearest_master_file(self,obs_date,cal_file_level,contentbitmask,cal_type_pair,max_cal_file_age='90 days'):
 
         '''
         Get nearest master file for the specified set of input parameters.

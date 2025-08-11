@@ -333,7 +333,8 @@ def main():
                 if args.masters and ('L1' in fname or 'L2' in fname):
                     framework.pipeline.logger.info("Skipping reduced file {}.".format(fname))
                     continue
-                arg = arg
+                arg = Arguments(name='action_args')
+                arg.recipe = recipe
                 arg.date_dir = datestr
                 arg.file_path = fname
                 arg.watch = True
