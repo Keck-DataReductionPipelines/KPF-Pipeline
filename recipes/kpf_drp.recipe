@@ -73,10 +73,10 @@ if context.watch:
     l2_filename_science = ''
 
     if run_masters:
-        # Step 1: L0 -> L1  file paths
+        # L0 -> L1  file paths
         l0_filename_masters = input_filename # masters run here have no suffix.
     else:
-        # Step 1: L0 -> 2D  file paths
+        # L0 -> 2D  file paths
         l0_filename_science = input_filename  
         d2_filename_temp = str_replace(input_filename, '/L0/', '/2D/')
         if not '_2D.fits' in d2_filename_temp:  # Only if not already 2D
@@ -85,18 +85,27 @@ if context.watch:
         else:
             print("d2_filename_science already has _2D.fits suffix: " + d2_filename_temp)
 
-    # Step 2: 2D -> L1 file paths (derived from 2D files, not L0)
+    # 2D -> L1 file paths (derived from 2D files, not L0)
     if run_masters:
         # For masters, L1 files are derived from L0 files
         if not '_L1.fits' in input_filename:  # Only if not already L1
             l1_filename_temp = str_replace(input_filename, '/L0/', '/L1/')
             l1_filename_masters = str_replace(l1_filename_temp, '.fits', '_L1.fits')
+            print("l1_filename_masters: " + l1_filename_masters)
     else:
         # For non-masters, L1 files are always derived from 2D files
         l1_filename_science = str_replace(d2_filename_science, '2D', 'L1') # Replaces both instances
-
+        
     # Step 3: L1 -> L2 file paths (derived from L1 files)
-    l2_filename_science = str_replace(l1_filename_science, 'L1', 'L2')
+    if run_masters:
+        l2_filename_masters = str_replace(l1_filename_masters, 'L1', 'L2')
+    else:
+        # Science
+        l2_filename_science = str_replace(l1_filename_science, 'L1', 'L2')
+    print("---------l1_filename_science: " + str(l1_filename_science))
+    print("----------l1_filename_masters: " + str(l1_filename_masters))
+    print("---------l2_filename_science: " + str(l2_filename_science))
+    print("----------l2_filename_masters: " + str(l2_filename_masters))
     # l2_filename = str_replace(l2_filename, '_L1.fits', '_L2.fits')
 
 
