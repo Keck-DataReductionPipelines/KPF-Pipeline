@@ -4,6 +4,9 @@ This should be the same night as the masters recipe test so that changes to mast
 are tested.
 """
 import tempfile
+import os
+from glob import glob
+import concurrent.futures
 
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.tools.recipe_test_unit import recipe_test
@@ -28,8 +31,24 @@ drp_config.write(f)
 drp_config_path = f.name
 f.close()
 
-def test_kpf_night():
-    recipe_test(drp_recipe, drp_config_path, date_dir=masters_test_date)
+
+# Emulate --reprocess <nightdir>
+nightdir = f"/data/L0/{masters_test_date}/"  # Adjust path as needed
+fits_files = sorted(glob(os.path.join(nightdir, "*.fits")), reverse=True)
+
+
+# Must be at module level for multiprocessing
+
+def run_one(args):
+    file_path, drp_recipe, drp_config_path, masters_test_date = args
+    recipe_test(drp_recipe, drp_config_path, date_dir=masters_test_date, file_path=file_path, watch=True)
+
+def test_kpf_night(ncpus=8):
+    # Prepare args for map
+    args = [(file_path, drp_recipe, drp_config_path, masters_test_date) for file_path in fits_files]
+    with concurrent.futures.ProcessPoolExecutor(max_workers=ncpus) as executor:
+        list(executor.map(run_one, args))
+
 
 def main():
     test_kpf_night()
