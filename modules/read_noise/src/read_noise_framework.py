@@ -502,8 +502,9 @@ class ReadNoiseFramework(KPF0_Primitive):
         if self.backfill_repopulate_db_recs_cfg == 0:
 
             fits_filename = input_filename
-            fits_filename = fits_filename.replace('L0', '2D')
-            fits_filename = fits_filename.replace('.fits', '_2D.fits')
+            # HTI commented out these lines Aug 11 2025, filename now handled in kpf_drp.recipe.
+            # fits_filename = fits_filename.replace('L0', '2D')
+            # fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
             fits_filename_exists = exists(fits_filename)
             if not fits_filename_exists:
