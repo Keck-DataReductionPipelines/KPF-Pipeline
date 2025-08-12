@@ -70,6 +70,15 @@ class TSDB:
         In a the standard Docker environment, the first three are set by the 
         Docker configuration and TSDBUSER and TSDBPASS are set by environment 
         variables outside of Docker (KPFPIPE_TSDB_USER and KPFPIPE_TSDB_PASS).
+        
+        Database roles (for PostgreSQL backend):
+            kpfadminrole - Database administrator; usually with user 
+                           timeseriesdba
+            kpfporole    - Operations role for ingestion and plot generation 
+                           and database creation; usually with user 
+                           timeseriesopsuser
+            kpfreadrole  - Readonly role; usually with user 
+                           timeseriesreadonlyuser
 
     Arguments:
         backend (str):
@@ -702,6 +711,21 @@ class TSDB:
                 );
             """
             self._execute_sql_command(create_sql)
+
+            # PostgreSQL-specific permission and ownership settings
+            if self.backend == 'psql':
+                permission_sql = f"""
+                    ALTER TABLE {self.prefix}metadata OWNER TO kpfadminrole;
+                    REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfreadrole;
+                    GRANT SELECT ON TABLE {self.prefix}metadata TO GROUP kpfreadrole;
+                    REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfadminrole;
+                    GRANT ALL ON TABLE {self.prefix}metadata TO GROUP kpfadminrole;
+                    REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfporole;
+                    GRANT INSERT,UPDATE,SELECT,DELETE,REFERENCES ON TABLE {self.prefix}metadata TO kpfporole;
+                """
+                for stmt in permission_sql.strip().split(";"):
+                    if stmt.strip():
+                        self._execute_sql_command(stmt + ";")
     
             # Prepare insert SQL (SQLite and PostgreSQL compatible)
             insert_sql = f"""
@@ -769,7 +793,7 @@ class TSDB:
         self.logger.info("Metadata table read.")
 
 
-    @require_role(['admin'])
+    @require_role(['admin', 'operations'])
     def _create_data_tables(self):
         """
         Create TSDB data tables from metadata definitions, with ObsID as 
