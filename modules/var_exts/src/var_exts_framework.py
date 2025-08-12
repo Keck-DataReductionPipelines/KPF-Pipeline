@@ -225,8 +225,8 @@ class VarExtsFramework(KPF0_Primitive):
         # Read image data object from 2D FITS file.
 
         fits_filename = self.l0_filename
-        fits_filename = fits_filename.replace('L0', '2D')
-        fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        # fits_filename = fits_filename.replace('L0', '2D')
+        # fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
         fits_filename_exists = exists(fits_filename)
         if not fits_filename_exists:
@@ -341,8 +341,8 @@ class VarExtsFramework(KPF0_Primitive):
         # Read image data object from 2D FITS file.
 
         fits_filename = self.l0_filename
-        fits_filename = fits_filename.replace('L0', '2D')
-        fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        # fits_filename = fits_filename.replace('L0', '2D')
+        # fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
         fits_filename_exists = exists(fits_filename)
         if not fits_filename_exists:
@@ -375,8 +375,8 @@ class VarExtsFramework(KPF0_Primitive):
     def write_var_exts(self,greenvarimg,redvarimg):
 
         fits_filename = self.l0_filename
-        fits_filename = fits_filename.replace('L0', '2D')
-        fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        # fits_filename = fits_filename.replace('L0', '2D')
+        # fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
         fits_filename_exists = exists(fits_filename)
         if not fits_filename_exists:
