@@ -246,6 +246,9 @@ Keyword   Value (example)                             Comment
 ========  ==========================================  =========
 DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used to make 2D (in the time series database, DRPTAG is listed as DRPTAG2D)
 DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make 2D (in the time series database, DRPHSH is listed as DRPHSH2D)
+DRPTAGMF  v2.5.2                                      DRPTAG of master flat file used to make 2D
+DRPTAGMB  v2.5.2                                      DRPTAG of master bias file used to make 2D
+DRPTAGMD  v2.5.2                                      DRPTAG of master dark file used to make 2D
 NOTJUNK   1                                           QC: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
 DATAPRL0  1                                           QC: 1 = L0 data products present with non-zero array sizes
 KWRDPRL0  1                                           QC: 1 = L0 expected keywords present 
@@ -398,6 +401,12 @@ FRATRR10  2.843978536330172                           Flux ratio (in/out) in 2D 
 BIASFILE  kpf_20250510_master_bias_autocal-bias.fits  Master bias file used to process this 2D file
 DARKFILE  kpf_20250510_master_dark_autocal-dark.fits  Master dark file used to process this 2D file
 FLATFILE  kpf_20250510_master_flat.fits               Master flat file used to process this 2D file
+BIASDIR   '/data/masters/20250510/'                   Directory for BIASFILE
+DARKDIR   '/data/masters/20250510/'                   Directory for DARKFILE
+FLATDIR   '/data/masters/20250510/'                   Directory for FLATFILE
+BIASDONE  1                                           Bias subtracted
+DARKDONE  1                                           Dark subtracted
+FLATDONE  1                                           Flat divided
 AGEBIAS   0                                           Age of master bias file compared to this file (whole days)
 AGEDARK   0                                           Age of master dark file compared to this file (whole days)
 AGEFLAT   0                                           Age of master flat file compared to this file (whole days)
