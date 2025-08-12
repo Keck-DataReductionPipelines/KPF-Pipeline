@@ -2,7 +2,7 @@ from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.tools.recipe_test_unit import recipe_test
 
 recipe = open('tests/recipes/test_spectral_extraction.recipe', 'r').read()
-config = 'tests/configs/test_spectral_extraction_light.cfg'
+config = 'tests/configs/test_spectral_extraction.cfg'
 date_dir = '20241022'
 
 def test_spectral_extraction_recipe():

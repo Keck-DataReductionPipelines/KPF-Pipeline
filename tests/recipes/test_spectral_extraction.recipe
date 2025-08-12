@@ -1,5 +1,5 @@
 from modules.stray_light.src.stray_light import StrayLight
-from modules.spectral_extraction_gjg.src.spectral_extraction import SpectralExtraction
+from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
 from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 from modules.Utils.data_handler import GetHeaderValue
 
