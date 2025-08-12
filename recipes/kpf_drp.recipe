@@ -59,93 +59,143 @@ from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 
 # Add the file_list at the top level and redefine if needed
 if context.watch:
-    # l0_file_list = find_files(context.file_path)
-    l0_file_list = context.file_path
-    # lev0_file_path = context.file_path
+    input_filename = context.file_path
 
-    # Derive corresponding file paths for other levels
-    d2_file_list = []
-    l1_file_list = []
-    l2_file_list = []
     
-    # for l0_file in l0_file_list:
-        # 2D -> L1 conversion
-        # masters filenames should not have 2D prefixes at this point
+    # Initialize so the conditionals work downstream
+    l0_filename_masters = ''
+    l1_filename_masters = ''
+    l2_filename_masters = ''
 
-    # Step 1: L0 -> 2D file paths
+    l0_filename_science = ''
+    d2_filename_science = ''
+    l1_filename_science = ''
+    l2_filename_science = ''
+
     if run_masters:
-         d2_file_list = l0_file_list # masters run here have no suffix.
+        # Step 1: L0 -> L1  file paths
+        l0_filename_masters = input_filename # masters run here have no suffix.
     else:
-        d2_file = str_replace(l0_file_list, '/L0/', '/2D/')
-        d2_file = str_replace(d2_file, '.fits', '_2D.fits')
-        d2_file_list = d2_file # Run as single value.
-    
+        # Step 1: L0 -> 2D  file paths
+        l0_filename_science = input_filename  
+        d2_filename_temp = str_replace(input_filename, '/L0/', '/2D/')
+        if not '_2D.fits' in d2_filename_temp:  # Only if not already 2D
+            d2_filename_science = str_replace(d2_filename_temp, '.fits', '_2D.fits')
+            print("d2_filename_science: " + d2_filename_science)
+        else:
+            print("d2_filename_science already has _2D.fits suffix: " + d2_filename_temp)
+
     # Step 2: 2D -> L1 file paths (derived from 2D files, not L0)
     if run_masters:
         # For masters, L1 files are derived from L0 files
-        l1_file = str_replace(l0_file_list, '/L0/', '/L1/')
-        l1_file = str_replace(l1_file, '.fits', '_L1.fits')
+        if not '_L1.fits' in input_filename:  # Only if not already L1
+            l1_filename_temp = str_replace(input_filename, '/L0/', '/L1/')
+            l1_filename_masters = str_replace(l1_filename_temp, '.fits', '_L1.fits')
     else:
-        # For non-masters, L1 files are derived from 2D files
-        l1_file = str_replace(d2_file_list, '/2D/', '/L1/')
-        l1_file = str_replace(l1_file, '_2D.fits', '_L1.fits')
-    l1_file_list = l1_file # Run as single value.
-    
-    # Step 3: L1 -> L2 file paths (derived from L1 files)             
-    l2_file = str_replace(l1_file_list, '/L1/', '/L2/')
-    l2_file = str_replace(l2_file, '_L1.fits', '_L2.fits')
-    l2_file_list = l2_file # Run as single value.
+        # For non-masters, L1 files are always derived from 2D files
+        l1_filename_science = str_replace(d2_filename_science, '2D', 'L1') # Replaces both instances
 
-else:
-    # search_string = config.WATCHFOR_L0.input_dir + "/" + date_dir + '/*.fits'
-    # file_path = find_files(search_string)
+    # Step 3: L1 -> L2 file paths (derived from L1 files)
+    l2_filename_science = str_replace(l1_filename_science, 'L1', 'L2')
+    # l2_filename = str_replace(l2_filename, '_L1.fits', '_L2.fits')
 
-    # Batch mode: find all files for the date
-    date_dir = context.date_dir
-    
-    # Define search patterns for each level
-    l0_pattern = config.WATCHFOR_L0.input_dir + "/" + date_dir + '/*.fits'
-    d2_pattern = config.WATCHFOR_2D.input_dir + "/" + date_dir + '/*_2D.fits'
-    l1_pattern = config.WATCHFOR_L1.input_dir + "/" + date_dir + '/*_L1.fits'
 
-    # Find files for each level
-    l0_file_list = find_files(l0_pattern)
-    d2_file_list = find_files(d2_pattern)
-    l1_file_list = find_files(l1_pattern)
+#else: # When would we even use this else statement?
 
 # Get the current input file to determine what processing should run
-current_file = str(context.file_path)
-print("CURRENT INPUT FILE: " + current_file)
+# current_file = str(context.file_path)
+# print("CURRENT INPUT FILE: " + current_file)
 
 # File type detection for conditional processing using basic string operations
 # Directly use the conditions in the if statements to avoid unused variables
 
-print("FILE TYPE DETECTION:")
-print("  has_2d_suffix: " + str('_2D.fits' in current_file))
-print("  has_l1_suffix: " + str('_L1.fits' in current_file))
-print("  has_l2_suffix: " + str('_L2.fits' in current_file))
-print("  has_fits_ext: " + str('.fits' in current_file))
-
 # Masters runs with only L1 and L2 files with config kpf_masters_l1.cfg
-do_l0_to_2d = config.ARGUMENT.do_l0_to_2d# masters is no, science is yes.
+#do_l0_to_2d = config.ARGUMENT.do_l0_to_2d # masters is False, science is True
+do_l0_to_2d_science = True #config.ARGUMENT.do_l0_to_2d_science 
+do_2d_to_l1_science = True #config.ARGUMENT.do_2d_to_l1_science
+do_l1_to_l2_science = True #config.ARGUMENT.do_l1_to_l2_science
+
+#do_l0_to_2d_masters = False # config.ARGUMENT.do_l0_to_2d_masters
+do_l0_to_l1_masters = True  # Specify in each config
+#do_2d_to_l1_masters = False # config.ARGUMENT.do_l0_to_2d_masters
+do_l1_to_l2_masters = True # config.ARGUMENT.do_l0_to_2d_masters
+
 # L0 files: have .fits but no level suffixes
-if do_l0_to_2d and (('.fits' in current_file and not '_2D.fits' in current_file and not '_L1.fits' in current_file and not '_L2.fits' in current_file) or run_masters):
-    print("RUNNING L0->2D PROCESSING")
-    invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") 
 
-# BEGIN 2D to L1. Set desired levels from configs and redefine the level specific keywords in the conditionals.
-do_2d_to_l1 = config.ARGUMENT.do_2d_to_l1
-if do_2d_to_l1 and ('_2D.fits' in current_file or (run_masters and ('.fits' in current_file and not '_2D.fits' in current_file and not '_L1.fits' in current_file and not '_L2.fits' in current_file))):
-    print("RUNNING 2D->L1 PROCESSING")
-    invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
+# SCIENCE
+if not run_masters:
+    if do_l0_to_2d_science:# and (not '_2D.fits' in d2_filename_science and not '_L1.fits' in d2_filename_science and not '_L2.fits' in d2_filename_science):
+        print("RUNNING L0->2D PROCESSING for " + str(input_filename))
+        # Silent inputs are input_filename and d2_filename_science
+        invoke_subrecipe("./recipes/kpf_l0_to_2d_science.recipe")
 
-# Level 1 to level 2 processing.
-# observations with 'slewcal' or etalon in the name should not get processed in this next step
-do_l1_to_l2 = config.ARGUMENT.do_l1_to_l2
-if do_l1_to_l2 and '_L1.fits' in current_file:
-    if  'slewcal' in current_file or 'etalon' in current_file:
-        print("SKIPPING L1->L2 PROCESSING FOR: " + current_file)
-    else:
-        print("RUNNING L1->L2 PROCESSING")
-        invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
+    if do_2d_to_l1_science and '_2D.fits' in d2_filename_science:
+        print("RUNNING 2D->L1 PROCESSING for " + str(d2_filename_science))
+        # Silent inputs are d2_filename_science and l1_filename_science
+        invoke_subrecipe("./recipes/kpf_2d_to_l1_science.recipe")
+
+    if do_l1_to_l2_science and '_L1.fits' in l1_filename_science:
+        print("RUNNING L1->L2 PROCESSING for " + str(l1_filename_science))
+        # Silent inputs are  l1_filename_science and l2_filename_science
+        invoke_subrecipe("./recipes/kpf_l1_to_l2_science.recipe")
+
+
+# MASTERS
+if run_masters:
+    if do_l0_to_l1_masters and (not '_L1.fits' in l0_filename_masters and not '_L2.fits' in l0_filename_masters):
+        print("RUNNING L0->L1 PROCESSING for " + str(l0_filename_masters))
+        # invoke_subrecipe("./recipes/kpf_l0_to_l1_masters.recipe") # LETS MAKE IT THIS!
+        invoke_subrecipe("./recipes/kpf_2d_to_l1_science.recipe") 
+
+    if do_l1_to_l2_masters and '_L1.fits' in l1_filename_masters:
+        print("RUNNING L1->L2 PROCESSING for " + str(l1_filename_masters))
+        # invoke_subrecipe("./recipes/kpf_l1_to_l2_masters.recipe") # LETS MAKE IT THIS!
+        invoke_subrecipe("./recipes/kpf_l1_to_l2_science.recipe") 
+
+
+
+# OLD BELOW HERE
+
+
+# if do_l0_to_2d and (not '_2D.fits' in current_file and not '_L1.fits' in current_file and not '_L2.fits' in current_file):
+#     print("RUNNING L0->2D PROCESSING")
+#     invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") 
+
+# # BEGIN 2D to L1. Set desired levels from configs and redefine the level specific keywords in the conditionals.
+# do_2d_to_l1 = config.ARGUMENT.do_2d_to_l1 # masters sets this to False, science sets it to True.
+# if run_masters:
+#     # This takes d2_filename as the main filename.
+#     if do_2d_to_l1 and (not '_2D.fits' in current_file and not '_L1.fits' in current_file and not '_L2.fits' in current_file):
+#         print("RUNNING masters L0->L1 PROCESSING")
+#         invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
+# else:
+#     if do_2d_to_l1 and ('_2D.fits' in current_file):# and not '_L1.fits' in current_file and not '_L2.fits' in current_file):
+#         print("RUNNING science 2D->L1 PROCESSING")
+#         invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
+
+
+# # Level 1 to level 2 processing.
+# # observations with 'slewcal' or etalon are not being processed correctly. Needs attention.
+# do_l1_to_l2 = config.ARGUMENT.do_l1_to_l2
+# if do_l1_to_l2 and '_L1.fits' in current_file:
+#     print("RUNNING L1->L2 PROCESSING")
+#     invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
+
+
+
+
+
+# Let's put this on hold until the regression tests pass on this version
+# # The Drift correction should be able to be called here via subrecipe.
+# #   This will be utilized in a reprocessing that will do only drift correction plus L1 to L2.
+# do_l1_to_l2_with_drift = True # Set in config appropriately. False for science and masters, true for drift only.
+# if do_l1_to_l2_with_drift and not run_masters and '_L1.fits' in current_file:
+#     print("RUNNING L1->L2 PROCESSING WITH ONLY DRIFT CORRECTION")
+#     invoke_subrecipe("./recipes/kpf_drp_update_wls.recipe")
+
+#     print("RUNNING L1->L2 PROCESSING")
+#     invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
+
+
+
 

@@ -16,9 +16,6 @@ lev0_ffi_ext_cahk = config.WATCHFOR_L0.lev0_ffi_ext_cahk
 prescan_reg = config.WATCHFOR_L0.prescan_reg
 gain_key = config.WATCHFOR_L0.gain_keyword
 do_db_query_for_master_files = config.WATCHFOR_L0.do_db_query_for_master_files
-#masterbias_path = config.WATCHFOR_L0.masterbias_path
-#masterdark_path = config.WATCHFOR_L0.masterdark_path
-#masterflat_path = config.WATCHFOR_L0.masterflat_path
 
 bad_pixel_masks = config.WATCHFOR_L0.bad_pixel_masks
 quicklook = config.WATCHFOR_L0.quicklook
@@ -40,43 +37,47 @@ actual_dir = config.WATCHFOR_L0.actual_dir
 do_quality_control = True
 if do_quality_control:
 
-    for l0_filename in [file_list]:
-
-        # l0_filename = file_list # Now singluar
-
-        quality_control_list = QualityControlExposureFramework(data_type,
-                                                            l0_filename,
+    # This is the first time the L0 file is read and written. 
+    #   After this, only the 2D fil should be read or written (for science data).
+    # We want to change this to return an argument.
+    # When we do this, read in l0_filename_science
+    # kpf_object = kpf0_from_fits(l0_filename_science, data_type) 
+    quality_control_list = QualityControlExposureFramework(data_type,
+                                                            l0_filename_science,
                                                             lev0_ffi_exts_full,
                                                             actual_dir)
-        quality_control_exit_code = quality_control_list[0]
-        quality_control_rid = quality_control_list[1]
+    quality_control_exit_code = quality_control_list[0]
+    quality_control_rid = quality_control_list[1]
 
     # Generate the 2D FITS file.  Subtract overscan, master bias, master dark, and apply master flat and bad-pixel masks.
-    # for raw_file_path in file_list:
+
     # Change to single file processing.
-    raw_file_path = file_list
-    td_output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
-    _,file_name_ext = split(raw_file_path)
-    file_name,ext = splitext(file_name_ext)
-    output_file_name = td_output_dir + file_name + "_2D" + ext
-    output_file_exists = exists(output_file_name)
+    # raw_file_path = file_list
+    # td_output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
+    # _,file_name_ext = split(raw_file_path)
+    # file_name,ext = splitext(file_name_ext)
+    # output_file_name = td_output_dir + file_name + "_2D" + ext
+    
+    # This will be true if the quality_control)list writes 2D for the first time.
+    output_file_exists = exists(d2_filename_science)
     if overwrite or not output_file_exists:
         # read file
-        l0 = kpf0_from_fits(raw_file_path, data_type)
-        dt_string = GetHeaderValue(l0, 'DATE-MID')
+        # l0 = kpf0_from_fits(raw_file_path, data_type) # Remove this eventually.
+        kpf_object = kpf0_from_fits(l0_filename_science,data_type) # L0, not 2D file is input.
+        dt_string = GetHeaderValue(kpf_object, 'DATE-MID')
         cals = CalibrationLookup(dt_string)
         masterbias_path = cals['bias']
         masterdark_path = cals['dark']
         masterflat_path = cals['flat']
         # Quality Control & Diagnostics - L0 level
         data_level_str = 'L0'
-        kpf_object = l0
+        # kpf_object must be defined before invoking subrecipes.
         invoke_subrecipe("./recipes/quality_control.subrecipe")
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
-        l0 = kpf_object
+        # kpf_object is recalculated in the subrecipe and silently returned
         # compute red-chip ffi
         ref_output_red = OrientationReference(channel_orientation_ref_path_red, data_type)
-        red_ffi = OverscanSubtraction(l0,
+        red_ffi = OverscanSubtraction(kpf_object,
                                     overscan_method,
                                     order,
                                     oscan_clip,
@@ -90,7 +91,7 @@ if do_quality_control:
                                     n_sigma)
         ref_output_green = OrientationReference(channel_orientation_ref_path_green, data_type)
         # add green-chip ffi to data containing red-chip ffi
-        L0_with_ffi = OverscanSubtraction(red_ffi,
+        kpf_object_with_ffi = OverscanSubtraction(red_ffi,
                                         overscan_method,
                                         order,
                                         oscan_clip,
@@ -102,7 +103,8 @@ if do_quality_control:
                                         channel_datasec_ncols_green,
                                         channel_datasec_nrows_green,
                                         n_sigma)
-        bias_subbed = ImageProcessing(L0_with_ffi, masterbias_path, lev0_ffi_exts_subbed, data_type, quicklook)
+        # These calls to ImageProcessing do not write a file (but may adjust the headers, check)
+        bias_subbed = ImageProcessing(kpf_object_with_ffi, masterbias_path, lev0_ffi_exts_subbed, data_type, quicklook)
         dark_subbed = ImageProcessing(bias_subbed, masterdark_path, lev0_ffi_exts_subbed, data_type, quicklook)
         flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)
         # Apply bad-pixel mask(s).
@@ -117,7 +119,9 @@ if do_quality_control:
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
         invoke_subrecipe("./recipes/quality_control.subrecipe")
         bpm_applied = kpf_object # kpf_object is output from the subrecipe.
-        recipe_complete = to_fits(bpm_applied, output_file_name) # The 2D needs to be written for the following routines to call it and find it.
+        recipe_complete = to_fits(bpm_applied, d2_filename_science) # The 2D needs to be written for the following routines to call it and find it.
+        # Get rid of this file write once QueryDB, ReadNoise, and VarExts are updated to work with in-memory objects.
+
         # Query database for QC information and update headers in-memory
         rid = quality_control_rid
         verbose = config.WATCHFOR_L0.verbose
@@ -127,50 +131,35 @@ if do_quality_control:
                 # Pass kpf_object KPF0 object as 5th argument for in-memory header updates
                 do_query_l0_file_exit_code = QueryDBL0FileFramework(data_type,
                                                                     rid,
-                                                                    output_file_name,
+                                                                    d2_filename_science,
                                                                     verbose,
                                                                     kpf_object)
                 
-                # Test: Check if QueryDBL0FileFramework added headers to the kpf_object, yes they do
-                # dbrid_value = GetHeaderValue(kpf_object, 'DBRID')
-                # print("CHECK: DBRID header found:" + str(dbrid_value))
-                # l0qcbits_value = GetHeaderValue(kpf_object, 'L0QCBITS')
-                # print("CHECK: L0QCBITS header found:" + str(l0qcbits_value))
         do_read_noise = True
         if do_read_noise:
             if rid > 0:
                 # Pass kpf_object KPF0 object as 5th argument for in-memory header updates
+                print("d2_filename_science1: " + d2_filename_science)
                 read_noise_exit_code = ReadNoiseFramework(data_type,
-                                                        raw_file_path,
+                                                        d2_filename_science,
                                                         n_sigma_read_noise,
                                                         rid,
                                                         kpf_object)
+                print("d2_filename_science1: " + d2_filename_science)
                 
-                # Test: Check if ReadNoiseFramework added headers to the kpf_object. Yes they do.
-                # rngreen1_value = GetHeaderValue(kpf_object, 'RNGREEN1')
-                # print("CHECK: RNGREEN1 header found:" + str(rngreen1_value))
-                # greentrt_value = GetHeaderValue(kpf_object, 'GREENTRT')
-                # print("CHECK: GREENTRT header found:" + str(greentrt_value))
-        # recipe_complete = to_fits(kpf_object, output_file_name)
         do_var_exts = True
         if do_var_exts:
             if rid > 0:
                 # Pass kpf_object KPF0 object as 7th argument for in-memory extension updates
                 #   passed object not yet implemented.
                 var_exts_exit_code = VarExtsFramework(data_type,
-                                                    raw_file_path,
+                                                    d2_filename_science,
                                                     masterbias_path,
                                                     masterdark_path,
                                                     masterflat_path,
                                                     rid,
                                                     kpf_object)
                 
-                # Test: I'm not sure how to check if the extensions are written, but I'm sure they are.
-                # green_var_data = GetHeaderValue(kpf_object,['GREEN_VAR'])
-                # print("SUCCESS: GREEN_VAR extension found, shape:" + str(green_var_data))
-                # red_var_data = GetHeaderValue(kpf_object,['RED_VAR'])
-                # print("SUCCESS: RED_VAR extension found, shape:" + str(red_var_data))
-        TEST = "TEST"
         print("TEST: VarExtsFramework executed successfully.")
         # 2D file is currently saved inside VarExtsFramework.
-        # recipe_complete = to_fits(kpf_object, output_file_name)
+        # recipe_complete = to_fits(kpf_object, d2_filename_science)
