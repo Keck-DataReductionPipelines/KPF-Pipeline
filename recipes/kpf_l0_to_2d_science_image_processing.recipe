@@ -50,13 +50,6 @@ if do_quality_control:
     quality_control_rid = quality_control_list[1]
 
     # Generate the 2D FITS file.  Subtract overscan, master bias, master dark, and apply master flat and bad-pixel masks.
-
-    # Change to single file processing.
-    # raw_file_path = file_list
-    # td_output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
-    # _,file_name_ext = split(raw_file_path)
-    # file_name,ext = splitext(file_name_ext)
-    # output_file_name = td_output_dir + file_name + "_2D" + ext
     
     # This will be true if the quality_control)list writes 2D for the first time.
     output_file_exists = exists(d2_filename_science)
@@ -120,9 +113,11 @@ if do_quality_control:
             
         # Diagnostics & Quality Control - 2D level
         kpf_object = bpm_applied
-        data_level_str = '2D'
+        data_level_str = '2D' # input to qc
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
         invoke_subrecipe("./recipes/quality_control.subrecipe")
+        
+        
         bpm_applied = kpf_object # kpf_object is output from the subrecipe.
 
         # The 2D needs to be written for the following routines to call it and find it.
@@ -130,42 +125,47 @@ if do_quality_control:
         recipe_complete = to_fits(bpm_applied, d2_filename_science) 
 
         # Query database for QC information and update headers in-memory
+        rid = quality_control_rid
+        print("RID: " + str(rid))
         verbose = config.WATCHFOR_L0.verbose
         do_query_l0_file = True
         if do_query_l0_file:
-            if quality_control_rid > 0:
+            if rid > 0:
                 # Pass kpf_object KPF0 object as 5th argument for in-memory header updates
+                # rid is silently returned.
                 do_query_l0_file_exit_code = QueryDBL0FileFramework(data_type,
-                                                                    quality_control_rid,
+                                                                    rid,
                                                                     d2_filename_science,
                                                                     verbose,
                                                                     kpf_object)
-                
+
         do_read_noise = True
         if do_read_noise:
-            if quality_control_rid > 0:
+            if rid > 0:
                 # Pass kpf_object KPF0 object as 5th argument for in-memory header updates
                 print("d2_filename_science1: " + d2_filename_science)
+                # rid is silently returned.
+                print("RID: " + str(rid))
                 read_noise_exit_code = ReadNoiseFramework(data_type,
                                                         d2_filename_science,
                                                         n_sigma_read_noise,
-                                                        quality_control_rid,
+                                                        rid,
                                                         kpf_object)
                 print("d2_filename_science1: " + d2_filename_science)
-                
+
         do_var_exts = True
         if do_var_exts:
-            if quality_control_rid > 0:
+            if rid > 0:
                 # Pass kpf_object KPF0 object as 7th argument for in-memory extension updates
                 #   passed object not yet implemented.
+                # rid is silently returned.
+                print("RID: " + str(rid))
                 var_exts_exit_code = VarExtsFramework(data_type,
                                                     d2_filename_science,
                                                     masterbias_path,
                                                     masterdark_path,
                                                     masterflat_path,
-                                                    quality_control_rid,
+                                                    rid,
                                                     kpf_object)
-                
-        print("TEST: VarExtsFramework executed successfully.")
-        # 2D file is currently saved inside VarExtsFramework.
-        # recipe_complete = to_fits(kpf_object, d2_filename_science)
+                print("RID: " + str(rid))
+            print("TEST: VarExtsFramework executed successfully.")

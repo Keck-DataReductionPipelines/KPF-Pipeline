@@ -86,9 +86,9 @@ masters_data_dir = config.ARGUMENT.masters_dir
 
 ## general purpose variables
 ccd_list = config.ARGUMENT.ccd_list
-lev0_stem_suffix = config.ARGUMENT.output_lev0_suffix
-lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
-lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
+# lev0_stem_suffix = config.ARGUMENT.output_lev0_suffix
+# lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
+# lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
 
 poly_degree = config.ARGUMENT.fitting_poly_degree
 ccd_idx=config.ARGUMENT.ccd_idx
