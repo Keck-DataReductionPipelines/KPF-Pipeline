@@ -545,6 +545,9 @@ class SpectralExtractionAlg:
             self.log.warning(f"Variance extension {var_ext_name} not found, creating array of ones")
             # Create variance array with ones matching the dimensions of data
             V = np.ones_like(D)
+        if V.size == 0:
+            self.log.warning(f"Variance array is empty, using ones with shape [forcing] {D.shape}")
+            V = np.ones_like(D)
 
         # sky/scattered/stray light background
         S = self.background_image[f'{chip}_CCD'][ymin:ymax]
