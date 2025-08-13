@@ -43,7 +43,7 @@ if do_quality_control:
     # When we do this, read in l0_filename_science
     # kpf_object = kpf0_from_fits(l0_filename_science, data_type) 
     quality_control_list = QualityControlExposureFramework(data_type,
-                                                            l0_filename_science,
+                                                            d2_filename_science,
                                                             lev0_ffi_exts_full,
                                                             actual_dir)
     quality_control_exit_code = quality_control_list[0]
@@ -144,7 +144,8 @@ if do_quality_control:
                 print("d2_filename_science1: " + d2_filename_science)
                 print("rid: " + str(rid))
                 read_noise_exit_code = ReadNoiseFramework(data_type,
-                                                        d2_filename_science,
+                                                        l0_filename_science,
+                                                        # d2_filename_science, # NOT CORRECT
                                                         n_sigma_read_noise,
                                                         rid,
                                                         kpf_object)
@@ -156,7 +157,8 @@ if do_quality_control:
                 # Pass kpf_object KPF0 object as 7th argument for in-memory extension updates
                 #   passed object not yet implemented.
                 var_exts_exit_code = VarExtsFramework(data_type,
-                                                    d2_filename_science,
+                                                      l0_filename_science,
+                                                    # d2_filename_science,
                                                     masterbias_path,
                                                     masterdark_path,
                                                     masterflat_path,
