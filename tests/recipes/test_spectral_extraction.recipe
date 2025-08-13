@@ -19,31 +19,6 @@ ordermask = kpf0_from_fits(ordermask_file)
 trace_green = '/data/masters/20241022/kpf_20241022_master_flat_GREEN_CCD.csv'
 trace_red = '/data/masters/20241022/kpf_20241022_master_flat_RED_CCD.csv'
 
-ccd_list = ['GREEN_CCD', 'RED_CCD']
-orderlet_names = [['GREEN_SKY_FLUX', 'GREEN_SCI_FLUX1', 'GREEN_SCI_FLUX2', 'GREEN_SCI_FLUX3', 'GREEN_CAL_FLUX'], ['RED_SKY_FLUX', 'RED_SCI_FLUX1', 'RED_SCI_FLUX2', 'RED_SCI_FLUX3', 'RED_CAL_FLUX']]
-
-orderlet_widths_ccds = [[-1, -1, -1, 1, -1],[-1, -1, -1, -1, -1]]
-trace_list = []
-order_mask = None
-start_order = [0,1]
-
-for idx in ccd_list:
-    ccd = ccd_list[idx]
-    output_lev0_trace_csv = str_replace(input_flat_file, fits_ext, '_' + ccd + '.csv')
-    trace_list = trace_list + [output_lev0_trace_csv]
-    trace_file = trace_list[idx]
-
-    if orderlet_widths_ccds:
-        orderlet_widths = orderlet_widths_ccds[idx]
-    else:
-        orderlet_widths = []
-    
-    order_mask = OrderMask(target_2D, order_mask, orderlet_names=orderlet_names[idx],
-            start_order=start_order[idx], trace_file=trace_list[idx],
-            data_extension=ccd_list[idx],
-            orderlet_widths=orderlet_widths, full_coverage=1)
-
-
 stray_light_output_list = StrayLight(target_2D, ordermask)
 target_2D = stray_light_output_list[1]
 
