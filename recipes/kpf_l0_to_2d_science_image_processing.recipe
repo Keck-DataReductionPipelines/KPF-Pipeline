@@ -69,6 +69,11 @@ if do_quality_control:
         masterbias_path = cals['bias']
         masterdark_path = cals['dark']
         masterflat_path = cals['flat']
+        # The regression test requires inputting these three master file names via config
+        if cals ==None:
+            masterbias_path = config.WATCHFOR_L0.master_bias
+            masterdark_path = config.WATCHFOR_L0.master_dark
+            masterflat_path = config.WATCHFOR_L0.master_flat
         # Quality Control & Diagnostics - L0 level
         data_level_str = 'L0'
         # kpf_object must be defined before invoking subrecipes.
