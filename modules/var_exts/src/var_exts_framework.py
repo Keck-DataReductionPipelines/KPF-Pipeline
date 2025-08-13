@@ -1,3 +1,4 @@
+from astropy.io import fits
 import os
 from os.path import exists
 import numpy as np
@@ -225,8 +226,8 @@ class VarExtsFramework(KPF0_Primitive):
         # Read image data object from 2D FITS file.
 
         fits_filename = self.l0_filename
-        # fits_filename = fits_filename.replace('L0', '2D')
-        # fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        fits_filename = fits_filename.replace('L0', '2D')
+        fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
         fits_filename_exists = exists(fits_filename)
         if not fits_filename_exists:
@@ -234,7 +235,7 @@ class VarExtsFramework(KPF0_Primitive):
             return
 
         hdul_input = KPF0.from_fits(fits_filename,self.data_type)
-        exp_time = float(hdul_input.header['PRIMARY']['EXPTIME'])
+        exp_time = float(fits.getheader(fits_filename,ext=0)['EXPTIME'])
 
         if debug == 1:
             print("exp_time = {}".format(exp_time))
@@ -246,12 +247,12 @@ class VarExtsFramework(KPF0_Primitive):
         for ext in exts:
 
             try:
-                naxis1 = hdul_input.header[ext]["NAXIS1"]
+                naxis1 = fits.getheader(fits_filename,ext=ext)['NAXIS1']
             except:
                 continue
 
             try:
-                naxis2 = hdul_input.header[ext]["NAXIS2"]
+                naxis2 = fits.getheader(fits_filename,ext=ext)['NAXIS2'] #HTI
             except:
                 continue
 
@@ -341,8 +342,8 @@ class VarExtsFramework(KPF0_Primitive):
         # Read image data object from 2D FITS file.
 
         fits_filename = self.l0_filename
-        # fits_filename = fits_filename.replace('L0', '2D')
-        # fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        fits_filename = fits_filename.replace('L0', '2D')
+        fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
         fits_filename_exists = exists(fits_filename)
         if not fits_filename_exists:
@@ -375,8 +376,8 @@ class VarExtsFramework(KPF0_Primitive):
     def write_var_exts(self,greenvarimg,redvarimg):
 
         fits_filename = self.l0_filename
-        # fits_filename = fits_filename.replace('L0', '2D')
-        # fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        fits_filename = fits_filename.replace('L0', '2D')
+        fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
         fits_filename_exists = exists(fits_filename)
         if not fits_filename_exists:
