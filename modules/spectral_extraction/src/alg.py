@@ -85,6 +85,10 @@ class SpectralExtractionAlg:
         else:
             self.background_image['RED_CCD'] = np.zeros_like(self.target_2D['RED_CCD'])
 
+        # variance: The variance is not currently populated for masters.
+        for chip in ['GREEN', 'RED']:
+            self._check_for_variance_frame(chip)
+        
         # bad pixel mask
         self.bad_pixel_mask = {}
         if bad_pixel_mask_green is not None:
@@ -104,6 +108,17 @@ class SpectralExtractionAlg:
         self.target_l1 = KPF1.from_l0(self.target_2D)
 
         
+    def _check_for_variance_frame(self, chip):
+        var_ext_name = f'{chip}_VAR'
+        if var_ext_name not in self.target_2D.extensions:
+            self.log.warning(f"Variance extension {var_ext_name} not found, setting variance equal to photon noise")
+            self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+
+        elif np.shape(self.target_2D[var_ext_name]) != np.shape(self.target_2D[f'{chip}_CCD']):
+            self.log.warning(f"Variance extension {var_ext_name} has mismatched dimensions {np.shape(self.target_2D[var_ext_name])} vs {np.shape(self.target_2D[f'{chip}_CCD'])}, setting variance equal to photon noise")
+            self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+
+    
     def _make_bad_pixel_mask(self, chip, sigma_cut=5.0):
         # data, variance, mask
         D = self.target_2D[f'{chip}_CCD']
@@ -530,24 +545,8 @@ class SpectralExtractionAlg:
                                               return_box_coords=True
                                              )
 
-        # variance: The variance is not currently populated for masters.
-        var_ext_name = f'{chip}_VAR'
-        if var_ext_name in self.target_2D.extensions:
-            V_full = self.target_2D[var_ext_name].data[ymin:ymax]
-            # Check if dimensions of V and D match
-            if V_full.shape == D.shape:
-                V = V_full
-                self.log.debug(f"Using variance extension {var_ext_name} with matching dimensions")
-            else:
-                self.log.warning(f"Variance extension {var_ext_name} has mismatched dimensions {V_full.shape} vs {D.shape}, creating array of ones")
-                V = np.ones_like(D)
-        else:
-            self.log.warning(f"Variance extension {var_ext_name} not found, creating array of ones")
-            # Create variance array with ones matching the dimensions of data
-            V = np.ones_like(D)
-        if V.size == 0:
-            self.log.warning(f"Variance array is empty, using ones with shape [forcing] {D.shape}")
-            V = np.ones_like(D)
+        # sky/scattered/stray light background
+        V = self.target_2D[f'{chip}_VAR'][ymin:ymax]
 
         # sky/scattered/stray light background
         S = self.background_image[f'{chip}_CCD'][ymin:ymax]
