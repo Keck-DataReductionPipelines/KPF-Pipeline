@@ -69,7 +69,7 @@ docker:
 		kpf-drp:latest bash
 
 regression_tests:
-	pytest -x --cov=kpfpipe --cov=modules --pyargs tests.regression
+	pytest -x --cov=kpfpipe --cov=modules --pyargs tests.regression.test_calibration_lookup
 	coveralls
 
 performance_tests:

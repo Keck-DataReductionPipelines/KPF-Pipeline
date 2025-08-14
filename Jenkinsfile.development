@@ -12,7 +12,7 @@ pipeline {
     CI_DATA_DIR      = "${env.WORKSPACE}/ci-data"
     KPFPIPE_TEST_DATA = "/data/KPF-Pipeline-TestData"
     KPFPIPE_DATA      = "${env.CI_DATA_DIR}"
-  }
+}
 
   stages {
     stage('Clean & Checkout') {
@@ -28,8 +28,9 @@ pipeline {
         sh '''
           rm -rvf "${CI_DATA_DIR}"
           mkdir -p "${CI_DATA_DIR}"
-          cp -rv /data/kpf/ci-data/* "${CI_DATA_DIR}/"
-          cp -rv /data/kpf/reference_fits "${CI_DATA_DIR}/"
+          cp -urv /data/kpf/masters/20240228 "${CI_DATA_DIR}/masters/"
+          cp -urv /data/kpf/ci-data/* "${CI_DATA_DIR}/"
+          cp -urv /data/kpf/reference_fits "${CI_DATA_DIR}/"
         '''
       }
     }
@@ -60,15 +61,20 @@ pipeline {
 
         // build & run your tests, mounting only this workspace dir
         sh """
-          docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
+          docker build --cache-from kpf-drp-ci:latest --tag kpf-drp-ci:latest .
           docker run --rm \
             --network=host \
-            -e COVERALLS_REPO_TOKEN=VQhy1molIcAo0rTz2geFOhucmvkBiEPFc \
-            -e CI_PULL_REQUEST=\$ghprbPullId \
             -v \"\${PWD}:/code/KPF-Pipeline\" \
             -v \"${CI_DATA_DIR}:/data" \
             -v \"${CI_DATA_DIR}/masters:/masters" \
             -v \"${KPFPIPE_TEST_DATA}:/testdata" \
+            -e COVERALLS_REPO_TOKEN=VQhy1molIcAo0rTz2geFOhucmvkBiEPFc \
+            -e CI_PULL_REQUEST=\$ghprbPullId \
+            		-e DBPORT=6125 \
+            -e DBNAME=kpfopsdb \
+            -e DBUSER=${KPFPIPE_DB_USER} \
+            -e DBPASS="${KPFPIPE_DB_PASS}" \
+            -e DBSERVER=127.0.0.1 \
             -e TSDBSERVER=127.0.0.1 \
             -e TSDBPORT=6127 \
             -e TSDBNAME=timeseriesopsdb \

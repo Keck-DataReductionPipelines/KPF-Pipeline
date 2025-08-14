@@ -10,7 +10,7 @@ from kpfpipe.tools.recipe_test_unit import recipe_test
 from kpfpipe.pipelines.kpf_parse_ast import RecipeError
 # from .test_masters_recipe import masters_test_date
 
-masters_test_date = '20230730'
+masters_test_date = '20240228'
 
 drp_recipe = open('recipes/kpf_drp.recipe', 'r').read()
 drp_config = ConfigClass('configs/kpf_drp.cfg')
