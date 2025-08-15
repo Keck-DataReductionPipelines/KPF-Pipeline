@@ -87,9 +87,5 @@ def test_calibration_lookup_caching():
     
     print("\n=== Test Completed Successfully ===")
 
-if __name__ == "__main__":
-    test_redis_caching()
-
-
 if __name__ == '__main__':
-    test_calibration_lookup()
+    test_calibration_lookup_caching()

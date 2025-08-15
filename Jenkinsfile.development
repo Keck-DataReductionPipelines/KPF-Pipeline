@@ -30,10 +30,8 @@ pipeline {
           mkdir -p "${CI_DATA_DIR}"
           mkdir -p "${CI_DATA_DIR}/masters/20240228"
           mkdir -p "${CI_DATA_DIR}/masters/20240122"
-          mkdir -p "${CI_DATA_DIR}/masters/20240219"
           cp -urv /data/kpf/masters/20240228/* "${CI_DATA_DIR}/masters/20240228/"
           cp -urv /data/kpf/masters/20240122/kpf_20240122_master_WLS_autocal-lfc-all-morn_L1.fits "${CI_DATA_DIR}/masters/20240122/"
-          cp -urv /data/kpf/masters/20240219/kpf_20240219_master_WLS_autocal-lfc-all-morn_L1.fits "${CI_DATA_DIR}/masters/20240219/"
           cp -urv /data/kpf/ci-data/* "${CI_DATA_DIR}/"
           cp -urv /data/kpf/reference_fits "${CI_DATA_DIR}/"
         '''
