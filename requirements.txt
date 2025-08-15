@@ -20,6 +20,7 @@ tqdm
 dataclasses
 pyyaml
 seaborn
+redis
 # The following is required by polly.
 pyfonts
 

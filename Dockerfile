@@ -27,7 +27,8 @@ RUN apt-get update && \
         nano \
         gnupg \
         python3-distutils \
-        dirmngr && \
+        dirmngr \
+        redis-server && \
     apt-get install -y --fix-missing sysstat || apt-get install -y --fix-broken && \
     # Reconfigure packages if necessary
     dpkg --configure -a && \
@@ -44,3 +45,15 @@ RUN git config --global --add safe.directory /code/KPF-Pipeline
 # Copy requirements and install Python dependencies
 COPY requirements.txt /code/KPF-Pipeline/
 RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Create Redis configuration
+RUN mkdir -p /etc/redis
+COPY redis.conf /etc/redis/redis.conf
+
+# Copy and set up startup script
+COPY start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
+
+# Set the default command to start Redis and then run Python
+ENTRYPOINT ["/usr/local/bin/start.sh"]
+CMD ["python"]
