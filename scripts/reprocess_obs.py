@@ -100,7 +100,7 @@ def main():
         ]
 
         cmd_kpf = [
-            'kpf', '--ncpu', str(args.ncpu), '--watch', f'/data/L0/{datecode}/', '--reprocess',
+            'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L0/{datecode}/',
             '-c', 'configs/kpf_drp.cfg', '-r', 'recipes/kpf_drp.recipe'
         ]
 

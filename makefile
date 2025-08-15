@@ -68,6 +68,29 @@ docker:
 		-v ${KPFPIPE_DATA}/masters:/masters \
 		kpf-drp:latest bash
 
+test_env:
+	docker build --cache-from kpf-drp-ci:latest --tag kpf-drp-ci:latest .
+	docker run -it --rm \
+		--network=host \
+		-v "$${PWD}:/code/KPF-Pipeline" \
+		-v "$${CI_DATA_DIR}:/data" \
+		-v "$${CI_DATA_DIR}/masters:/masters" \
+		-v "$${KPFPIPE_TEST_DATA}:/testdata" \
+		-e COVERALLS_REPO_TOKEN=VQhy1molIcAo0rTz2geFOhucmvkBiEPFc \
+		-e CI_PULL_REQUEST=$$ghprbPullId \
+		-e DBPORT=6125 \
+		-e DBNAME=kpfopsdb \
+		-e DBUSER=$${KPFPIPE_DB_USER} \
+		-e DBPASS="$${KPFPIPE_DB_PASS}" \
+		-e DBSERVER=127.0.0.1 \
+		-e TSDBSERVER=127.0.0.1 \
+		-e TSDBPORT=6127 \
+		-e TSDBNAME=timeseriesopsdb \
+		-e TSDBUSER=$${KPFPIPE_TSDB_USER} \
+		-e TSDBPASS=$${KPFPIPE_TSDB_PASS} \
+		kpf-drp:latest \
+		bash
+
 regression_tests:
 	pytest -x --cov=kpfpipe --cov=modules --pyargs tests.regression
 	coveralls
