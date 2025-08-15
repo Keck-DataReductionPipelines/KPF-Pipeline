@@ -3,6 +3,7 @@ import re
 import glob
 import json
 import copy
+import fnmatch
 import sqlite3
 import hashlib
 import psycopg2
@@ -226,6 +227,10 @@ class TSDB:
         
         # Read list of tables and columns from files
         self.tables_metadata_df = pd.read_csv(self.tables_metadata_filepath).fillna('')
+        # Prepend prefix to table_name values if not already present
+        self.tables_metadata_df['table_name'] = self.tables_metadata_df['table_name'].apply(
+            lambda t: f"{self.prefix}{t}" if t and not str(t).startswith(self.prefix) else t
+        )
         tables = {}
         for _, row in self.tables_metadata_df.iterrows():
             table_name = row['table_name']
@@ -523,17 +528,45 @@ class TSDB:
 
 
     @require_role(['admin', 'operations'])
-    def drop_tables(self, tables = 'all'):
+    def drop_tables(self, tables='all'):
         """
-        Start over on the database by dropping all data and metadata tables.
+        Drop tables from the database.
+    
+        Args:
+            tables (str, list):
+                - 'all': drop all tables in self.tables
+                - str with wildcards (*, ?) to match table names in self.tables
+                - list of table names to drop
         """
+        # Normalize table list from argument
         if tables == 'all':
-            tables = self.tables
-        
+            table_list = list(self.tables.keys())
+        elif isinstance(tables, str):
+            if '*' in tables or '?' in tables:
+                # wildcard pattern match
+                table_list = [t for t in self.tables if fnmatch.fnmatch(t, tables)]
+            else:
+                table_list = [tables]
+        elif isinstance(tables, (list, tuple, set)):
+            expanded = []
+            for pattern in tables:
+                if isinstance(pattern, str) and ('*' in pattern or '?' in pattern):
+                    expanded.extend([t for t in self.tables if fnmatch.fnmatch(t, pattern)])
+                else:
+                    expanded.append(pattern)
+            table_list = list(set(expanded))  # remove duplicates
+        else:
+            raise ValueError("tables must be 'all', a table name, a wildcard pattern, or a list of them.")
+    
+        if not table_list:
+            self.logger.warning("No matching tables to drop.")
+            return
+    
         self._open_connection()
         try:
-            for tbl in tables:
+            for tbl in table_list:
                 self._execute_sql_command(f"DROP TABLE IF EXISTS {tbl}")
+                self.logger.info(f"Dropped table: {tbl}")
         finally:
             self._close_connection()
 
@@ -584,59 +617,96 @@ class TSDB:
         finally:
             self._close_connection()
 
- 
+
     @require_role(['admin', 'operations', 'readonly'])
-    def print_db_status(self):
+    def print_db_status(self, query_db_for_tables=False):
         """
         Prints a formatted summary table of the database status for each table,
         ensuring tables exist first, and handling both SQLite and PostgreSQL.
-        """
-        tables = [table for table in self.tables if table != self.prefix + 'metadata']
     
+        Args:
+            query_db_for_tables (bool, optional):
+                If True, query the DB to determine the list of tables instead of using self.tables.
+        """
         self._open_connection()
     
-        summary_data = []
-    
         try:
-            for table in tables:
-                # Verify table existence first
-                table_exists = False
-    
+            # 1) Determine table list
+            if query_db_for_tables:
                 if self.backend == 'sqlite':
-                    self._execute_sql_command(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
-                        params=(table,)
+                    rows = self._execute_sql_command(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';",
+                        fetch=True
                     )
-                    table_exists = bool(self.cursor.fetchone())
+                    all_tables = [r[0] for r in rows]
                 elif self.backend == 'psql':
-                    self._execute_sql_command(
+                    rows = self._execute_sql_command(
+                        """
+                        SELECT table_name
+                        FROM information_schema.tables
+                        WHERE table_schema='public' AND table_type='BASE TABLE';
+                        """,
+                        fetch=True
+                    )
+                    all_tables = [r[0] for r in rows]
+                else:
+                    all_tables = []
+            else:
+                all_tables = list(self.tables.keys())
+    
+            # 2) Remove metadata table from the list
+            if not query_db_for_tables:
+                tables = [t for t in all_tables if t != self.prefix + 'metadata']
+            else:
+                tables = all_tables
+    
+            summary_data = []
+    
+            # 3) Iterate and gather stats
+            for table in tables:
+                # Sanity-check existence (fast and uniform)
+                if self.backend == 'sqlite':
+                    exists_rows = self._execute_sql_command(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?;",
+                        params=(table,), fetch=True
+                    )
+                    table_exists = bool(exists_rows)
+                elif self.backend == 'psql':
+                    exists_rows = self._execute_sql_command(
                         """
                         SELECT EXISTS (
                             SELECT 1 FROM information_schema.tables
-                            WHERE table_name=%s
+                            WHERE table_schema='public' AND table_name=%s
                         );
-                        """, params=(table,)
+                        """,
+                        params=(table,), fetch=True
                     )
-                    table_exists = self.cursor.fetchone()[0]
+                    table_exists = exists_rows[0][0]
+                else:
+                    table_exists = False
     
                 if not table_exists:
                     self.logger.warning(f"Table '{table}' does not exist; skipping.")
                     continue
     
+                # Row count
                 self._execute_sql_command(f'SELECT COUNT(*) FROM {table}')
                 nrows = self.cursor.fetchone()[0]
     
+                # Column count
                 if self.backend == 'sqlite':
-                    self._execute_sql_command(f'PRAGMA table_info({table})')
-                    ncolumns = len(self.cursor.fetchall())
+                    cols = self._execute_sql_command(f'PRAGMA table_info({table})', fetch=True)
+                    ncolumns = len(cols)
                 elif self.backend == 'psql':
-                    self._execute_sql_command(
+                    col_rows = self._execute_sql_command(
                         """
-                        SELECT COUNT(*) FROM information_schema.columns
-                        WHERE table_name=%s;
-                        """, params=(table,)
+                        SELECT COUNT(*)
+                        FROM information_schema.columns
+                        WHERE table_schema='public' AND table_name=%s;
+                        """,
+                        params=(table,), fetch=True
                     )
-                    ncolumns = self.cursor.fetchone()[0]
+                    ncolumns = col_rows[0][0]
     
                 summary_data.append((table, ncolumns, nrows))
     
@@ -644,22 +714,18 @@ class TSDB:
                 self.logger.info("No tables exist.")
                 return
     
-            # Fetch additional stats if 'tsdb_base' exists
-            if self.prefix + 'base' in [t[0] for t in summary_data]:
-                query_time_col = 'L0_header_read_time' if self.backend == 'sqlite' else '"L0_header_read_time"'
-                query_datecode_col = 'datecode' if self.backend == 'sqlite' else '"datecode"'
+            # 4) Additional stats from base table (if present)
+            if any(t[0] == self.prefix + 'base' for t in summary_data):
+                time_col = 'L0_header_read_time' if self.backend == 'sqlite' else '"L0_header_read_time"'
+                datecode_col = 'datecode' if self.backend == 'sqlite' else '"datecode"'
     
-                self._execute_sql_command(
-                    f'SELECT MAX({query_time_col}) FROM {self.prefix}base'
-                )
-
+                self._execute_sql_command(f'SELECT MAX({time_col}) FROM {self.prefix}base')
                 most_recent_read_time = self.cursor.fetchone()[0] or 'N/A'
     
                 self._execute_sql_command(
-                    f'SELECT MIN({query_datecode_col}), MAX({query_datecode_col}), COUNT(DISTINCT {query_datecode_col}) FROM {self.prefix}base'
+                    f'SELECT MIN({datecode_col}), MAX({datecode_col}), COUNT(DISTINCT {datecode_col}) FROM {self.prefix}base'
                 )
                 earliest_datecode, latest_datecode, unique_datecodes_count = self.cursor.fetchone()
-    
                 earliest_datecode = earliest_datecode or 'N/A'
                 latest_datecode = latest_datecode or 'N/A'
                 unique_datecodes_count = unique_datecodes_count or 0
@@ -667,14 +733,13 @@ class TSDB:
                 most_recent_read_time = earliest_datecode = latest_datecode = 'N/A'
                 unique_datecodes_count = 0
     
-            # Print the summary table
+            # 5) Print summary
             self.logger.info("Database Table Summary:")
-            self.logger.info(f"{'Table':<15} {'Columns':>7} {'Rows':>10}")
-            self.logger.info("-" * 35)
+            self.logger.info(f"{'Table':<30} {'Columns':>8} {'Rows':>12}")
+            self.logger.info("-" * 55)
             for table, cols, rows in summary_data:
-                self.logger.info(f"{table:<15} {cols:>7} {rows:>10}")
+                self.logger.info(f"{table:<30} {cols:>8} {rows:>12}")
     
-            # Print additional stats
             self.logger.info(f"Dates: {unique_datecodes_count} days from {earliest_datecode} to {latest_datecode}")
             self.logger.info(f"Last update: {most_recent_read_time}")
     
@@ -752,7 +817,7 @@ class TSDB:
             for _, row in tables_metadata_df.iterrows():
                 csv_filename = row['csv']
                 source = row['label']
-                table_name = row['table_name']
+                table_name = self.prefix + row['table_name']
     
                 if not csv_filename:
                     continue
@@ -773,7 +838,12 @@ class TSDB:
                         insert_sql,
                         params=(keyword, source, datatype, units, description, table_name, is_indexed)
                     )
-    
+
+            # verify metadata table exists and has rows
+            check = self._execute_sql_command(f"SELECT COUNT(*) FROM {self.prefix}metadata;", fetch=True)
+            if not check or check[0][0] == 0:
+                self.logger.warning(f"{self.prefix}metadata created but empty.")
+
             self.logger.info("Metadata table created correctly with indexed columns.")
     
         finally:
@@ -2438,6 +2508,7 @@ class TSDB:
         display(HTML(styled_html))
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def print_log_error_report(self, df, log_dir='/data/logs/', aggregated_summary=False):
         '''
         For each ObsID in the dataframe, open the corresponding log file,
