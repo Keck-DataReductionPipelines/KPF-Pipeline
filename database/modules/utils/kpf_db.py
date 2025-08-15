@@ -124,16 +124,24 @@ def _get_cached_result(cache_key):
         return None
         
     try:
+        start_time = time.time()
         cached_data = redis_client.get(cache_key)
+        redis_time = time.time() - start_time
+        
         if cached_data is not None:
             # Unpickle the cached result
+            unpickle_start = time.time()
             result = pickle.loads(cached_data)
+            unpickle_time = time.time() - unpickle_start
+            
             if not _is_test_env:
                 print(f"DEBUG: Redis cache HIT for key: {cache_key}")
+                print(f"DEBUG: Redis GET time: {redis_time*1000:.2f}ms, Unpickle time: {unpickle_time*1000:.2f}ms")
             return result
         else:
             if not _is_test_env:
                 print(f"DEBUG: Redis cache MISS for key: {cache_key}")
+                print(f"DEBUG: Redis GET time: {redis_time*1000:.2f}ms")
     except Exception as e:
         if not _is_test_env:
             print(f"DEBUG: Redis cache error: {e}")
@@ -153,10 +161,17 @@ def _set_cached_result(cache_key, result):
         
     try:
         # Pickle the result for storage
+        pickle_start = time.time()
         pickled_result = pickle.dumps(result)
+        pickle_time = time.time() - pickle_start
+        
+        redis_start = time.time()
         redis_client.setex(cache_key, _cache_ttl, pickled_result)
+        redis_time = time.time() - redis_start
+        
         if not _is_test_env:
             print(f"DEBUG: Redis cached result for key: {cache_key} with TTL {_cache_ttl}s")
+            print(f"DEBUG: Pickle time: {pickle_time*1000:.2f}ms, Redis SET time: {redis_time*1000:.2f}ms")
     except Exception as e:
         if not _is_test_env:
             print(f"DEBUG: Redis cache storage error: {e}")
@@ -171,17 +186,26 @@ def clear_cache():
         return
         
     try:
-        # Get all keys with our prefix and delete them
-        keys = redis_client.keys("calibration_lookup:*")
-        if keys:
-            redis_client.delete(*keys)
+        # Get all keys with our prefixes and delete them
+        keys1 = redis_client.keys("calibration_lookup:*")
+        keys2 = redis_client.keys("calibration_lookup_complete:*")
+        all_keys = keys1 + keys2
+        
+        if all_keys:
+            redis_client.delete(*all_keys)
             if not _is_test_env:
-                print(f"DEBUG: Cleared {len(keys)} cache entries")
+                print(f"DEBUG: Cleared {len(all_keys)} cache entries")
+            else:
+                print(f"DEBUG: Cleared {len(all_keys)} cache entries ({len(keys1)} individual + {len(keys2)} complete)")
         else:
             if not _is_test_env:
                 print("DEBUG: No cache entries to clear")
+            else:
+                print("DEBUG: No cache entries to clear")
     except Exception as e:
         if not _is_test_env:
+            print(f"DEBUG: Error clearing cache: {e}")
+        else:
             print(f"DEBUG: Error clearing cache: {e}")
 
 def clear_cache_for_timestamp(obs_date):
@@ -649,12 +673,8 @@ ORDER BY startdate;"""
             
         start_time = time.time()
         
-        # Check cache first
-        cache_key = _get_cache_key(obs_date, cal_requests)
-        cached_result = _get_cached_result(cache_key)
-        if cached_result is not None:
-            self.log.debug(f"Cache hit for batch query with key: {cache_key}")
-            return cached_result
+        # Don't cache individual batch results - they're already cached in the complete result cache
+        # This prevents cache key inconsistencies when cal_requests change between runs
         
         # Build a single optimized query for all calibration types
         query_parts = []
@@ -747,8 +767,5 @@ ORDER BY startdate;"""
         
         query_time = time.time() - start_time
         self.log.info(f"Batch query completed in {query_time:.3f}s for {len(cal_requests)} calibration types")
-        
-        # Cache the result
-        _set_cached_result(cache_key, results)
         
         return results

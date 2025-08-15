@@ -2,8 +2,21 @@
 
 # Configure kernel settings to eliminate Redis warnings
 echo "Configuring kernel settings for Redis..."
-echo 1 > /proc/sys/vm/overcommit_memory 2>/dev/null || true
-echo madvise > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+# Try to set overcommit_memory (requires root or proper permissions)
+if [ -w /proc/sys/vm/overcommit_memory ]; then
+    echo 1 > /proc/sys/vm/overcommit_memory
+    echo "✅ Set overcommit_memory = 1"
+else
+    echo "⚠️  Cannot set overcommit_memory (requires root permissions)"
+fi
+
+# Try to disable transparent huge pages
+if [ -w /sys/kernel/mm/transparent_hugepage/enabled ]; then
+    echo madvise > /sys/kernel/mm/transparent_hugepage/enabled
+    echo "✅ Set THP = madvise"
+else
+    echo "⚠️  Cannot set THP (requires root permissions)"
+fi
 
 # Start Redis in the background
 echo "Starting Redis server..."
@@ -20,10 +33,11 @@ else
     echo "Redis server started successfully (PID: $REDIS_PID)"
 fi
 
-make init
-
 # Handle different command types
-if [ "$1" = "bash" ]; then
+if [ "$1" = "make" ]; then
+    # If make is requested, run it directly
+    exec "$@"
+elif [ "$1" = "bash" ]; then
     # If bash is requested, just run it
     exec "$@"
 elif [ "$1" = "sh" ]; then

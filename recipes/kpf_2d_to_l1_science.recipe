@@ -212,7 +212,7 @@ if do_spectral_extraction or do_hk or do_bc:# HTI: I think we do not need this c
 	
 	start_order = cals['start_order']
 	output_order_trace = cals['ordertrace']
-	order_trace_flat = cals['traceflat']
+	order_trace_flat = cals['flat']
 	smooth_lamp_file = str_replace(cals['smoothlamp'], '.fits', '_L1.fits')
 
 	# produce level 1 by spectral extraction if overwrite or L1 file doesn't exist

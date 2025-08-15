@@ -56,4 +56,3 @@ RUN chmod +x /usr/local/bin/start.sh
 
 # Set the default command to start Redis and then run Python
 ENTRYPOINT ["/usr/local/bin/start.sh"]
-CMD ["python"]
