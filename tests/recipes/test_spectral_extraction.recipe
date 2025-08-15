@@ -22,6 +22,8 @@ trace_red = '/data/masters/20241022/kpf_20241022_master_flat_RED_CCD.csv'
 stray_light_output_list = StrayLight(target_2D, ordermask)
 target_2D = stray_light_output_list[1]
 
+start_order = [0,1]
+
 spectral_extraction_output_list = SpectralExtraction(target_2D, 
                                                      masterflat, 
                                                      trace_green, 
