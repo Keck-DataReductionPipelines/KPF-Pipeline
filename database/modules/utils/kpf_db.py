@@ -27,7 +27,7 @@ def md5(fname):
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
     except:
-        self.log.error("*** Error: Failed to compute checksum =",fname,"; quitting...")
+        print("*** Error: Failed to compute checksum =",fname,"; quitting...")
         return 68
 
 
