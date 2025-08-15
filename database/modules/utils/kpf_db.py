@@ -32,21 +32,33 @@ def _get_redis_client():
     if _redis_client is None:
         try:
             import redis
-            _redis_client = redis.Redis(
-                host='127.0.0.1',
-                port=6379,
-                db=0,
-                decode_responses=False,  # Keep as bytes for pickle
-                socket_connect_timeout=1,
-                socket_timeout=1
-            )
-            # Test connection
-            _redis_client.ping()
-            print("DEBUG: Redis connection established")
-        except Exception as e:
-            print(f"DEBUG: Redis connection failed: {e}, falling back to no cache")
+            # Try default port first, then alternative port
+            ports_to_try = [6379, 6380]
             _redis_client = None
-            _cache_enabled = False
+            
+            for port in ports_to_try:
+                try:
+                    _redis_client = redis.Redis(
+                        host='127.0.0.1',
+                        port=port,
+                        db=0,
+                        decode_responses=False,  # Keep as bytes for pickle
+                        socket_connect_timeout=1,
+                        socket_timeout=1
+                    )
+                    # Test connection
+                    _redis_client.ping()
+                    print(f"DEBUG: Redis connection established on port {port}")
+                    break
+                except Exception as e:
+                    print(f"DEBUG: Redis connection failed on port {port}: {e}")
+                    _redis_client = None
+                    continue
+            
+            if _redis_client is None:
+                print("DEBUG: Redis connection failed on all ports, falling back to no cache")
+                _cache_enabled = False
+                
         except ImportError:
             print("DEBUG: Redis Python client not available, falling back to no cache")
             _redis_client = None

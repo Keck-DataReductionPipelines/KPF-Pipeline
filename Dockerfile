@@ -37,14 +37,14 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and set up the project structure
-RUN /usr/local/bin/python -m pip install --upgrade pip
+RUN /usr/local/bin/python -m pip install --upgrade pip --quiet --no-warn-script-location
 
 # Configure git to allow operations in this directory
 RUN git config --global --add safe.directory /code/KPF-Pipeline
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt /code/KPF-Pipeline/
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir --quiet --no-warn-script-location -r requirements.txt
 
 # Create Redis configuration
 RUN mkdir -p /etc/redis

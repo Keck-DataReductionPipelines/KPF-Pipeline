@@ -191,9 +191,8 @@ class GetCalibrations:
                             if db_results[0] == 0:
                                 if isinstance(cal_type[1], list):
                                     # Handle multi-results (like ordertrace)
-                                    if original_name not in output_cals:
-                                        output_cals[original_name] = []
-                                    output_cals[original_name].append(db_results[1])
+                                    # db_results[1] is already a list, don't wrap it in another list
+                                    output_cals[original_name] = db_results[1]
                                 else:
                                     output_cals[original_name] = db_results[1]
                                 print(f"DEBUG: Successfully set {original_name} = {output_cals[original_name]}")
@@ -219,9 +218,8 @@ class GetCalibrations:
                             db_results = db.get_nearest_master(self.datetime, lvl, cal_type)
                             if db_results[0] == 0:
                                 if isinstance(cal_type[1], list):
-                                    if original_name not in output_cals:
-                                        output_cals[original_name] = []
-                                    output_cals[original_name].append(db_results[1])
+                                    # db_results[1] is already a list, don't wrap it in another list
+                                    output_cals[original_name] = db_results[1]
                                 else:
                                     output_cals[original_name] = db_results[1]
                             else:

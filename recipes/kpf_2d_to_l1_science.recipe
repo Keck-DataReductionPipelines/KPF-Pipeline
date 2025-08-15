@@ -256,6 +256,15 @@ if do_spectral_extraction or do_hk or do_bc:# HTI: I think we do not need this c
 		if master_flat == None:
 			master_flat = kpf0_from_fits(cals['flat'])
 		# The spectral extraction operates on both CCDs simultaneously.
+		
+		print("=== CALIBRATION VALUES FOR SPECTRAL EXTRACTION ===")
+		print(f"ordertrace[0]: {cals['ordertrace'][0]}")
+		print(f"ordertrace[1]: {cals['ordertrace'][1]}")
+		print(f"start_order[0]: {cals['start_order'][0]}")
+		print(f"start_order[1]: {cals['start_order'][1]}")
+		print(f"master_flat: {master_flat}")
+		print("================================================")
+		
 		spectral_extraction_output_list = SpectralExtraction(lev0_data, 
 															 master_flat, 
 															 cals['ordertrace'][0], 

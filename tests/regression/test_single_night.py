@@ -23,8 +23,8 @@ drp_config.set('WATCHFOR_L0', 'masterdark_path', f'/masters/{masters_test_date}/
 drp_config.set('WATCHFOR_L0', 'masterflat_path', f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_flat.fits')
 drp_config.set('ARGUMENT', 'wls_fits', str([f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_WLS_autocal-lfc-all-eve_L1.fits',
                                         f'/masters/{masters_test_date}/kpf_{masters_test_date}_master_WLS_autocal-lfc-all-eve_L1.fits']))
-drp_config.set('ARGUMENT', 'do_db_query_for_one_nearest_wls_master_file', 'False')
-drp_config.set('WATCHFOR_L0', 'do_db_query_for_master_files', 'False')
+drp_config.set('ARGUMENT', 'do_db_query_for_one_nearest_wls_master_file', 'True')
+drp_config.set('WATCHFOR_L0', 'do_db_query_for_master_files', 'True')
 
 f = tempfile.NamedTemporaryFile(mode='w+', delete=False)
 drp_config.write(f)
@@ -43,7 +43,7 @@ def run_one(args):
     file_path, drp_recipe, drp_config_path, masters_test_date = args
     recipe_test(drp_recipe, drp_config_path, date_dir=masters_test_date, file_path=file_path, watch=True)
 
-def test_kpf_night(ncpus=8):
+def test_kpf_night(ncpus=10):
     # Prepare args for map
     args = [(file_path, drp_recipe, drp_config_path, masters_test_date) for file_path in fits_files]
     with concurrent.futures.ProcessPoolExecutor(max_workers=ncpus) as executor:
@@ -51,7 +51,7 @@ def test_kpf_night(ncpus=8):
 
 
 def main():
-    test_kpf_night()
+    test_kpf_night(ncpus=1)
 
 if __name__ == '__main__':
     main()

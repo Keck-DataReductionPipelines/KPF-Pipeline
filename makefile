@@ -1,11 +1,11 @@
 CCF_C = modules/CLib/CCF
 
 init:
-	pip3 install -e .
+	pip3 install -e . --quiet --no-warn-script-location
 	$(MAKE) C -C ${CCF_C}
 
 update:
-	pip3 install -r requirements.txt --upgrade
+	pip3 install -r requirements.txt --upgrade --quiet --no-warn-script-location
 
 clear:
 	rm -f -r *.log
@@ -24,49 +24,20 @@ clean: clear
 	find . -name '*.pyo' -exec rm -f {} +
 
 notebook:
-	pip3 install jupyter
+	pip3 install jupyter --quiet --no-warn-script-location
 	jupyter notebook --port ${KPFPIPE_PORT} --allow-root --ip=0.0.0.0 ""
 
 docker:
-	docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
+	@echo "Building Docker image..."
+	@DOCKER_BUILDKIT=1 docker build --cache-from kpf-drp:latest --tag kpf-drp:latest . --progress=plain --quiet
 
 	$(if $(KPFPIPE_DATA),,$(error Must set KPFPIPE_DATA))
 	$(if $(KPFPIPE_PORT),, \
-		docker run -it \
-			-v ${PWD}:/code/KPF-Pipeline \
-			-v ${KPFPIPE_TEST_DATA}:/testdata \
-			-v ${KPFPIPE_DATA}:/data \
-			-v ${KPFPIPE_DATA}/masters:/masters \
-			--network=host \
-			-e DBPORT=6125 \
-			-e DBNAME=kpfopsdb \
-			-e DBUSER=${KPFPIPE_DB_USER} \
-			$(if $(KPFPIPE_DB_PASS),-e DBPASS="${KPFPIPE_DB_PASS}") \
-			-e TSDBSERVER=127.0.0.1 \
-			-e TSDBPORT=6127 \
-			-e TSDBNAME=timeseriesopsdb \
-			$(if $(KPFPIPE_TSDB_USER),-e TSDBUSER="${KPFPIPE_TSDB_USER}") \
-			$(if $(KPFPIPE_TSDB_PASS),-e TSDBPASS="${KPFPIPE_TSDB_PASS}") \
-			-e DBSERVER_TSDB=127.0.0.1 \
-			kpf-drp:latest bash)
+		@echo "Starting Docker container (no port specified)..."
+		@./docker-run.sh)
 
-	docker run -it -p ${KPFPIPE_PORT}:${KPFPIPE_PORT} --network=host \
-		-e KPFPIPE_PORT=${KPFPIPE_PORT} \
-		-e DBPORT=6125 \
-		-e DBNAME=kpfopsdb \
-		-e DBUSER=${KPFPIPE_DB_USER} \
-		$(if $(KPFPIPE_DB_PASS),-e DBPASS="${KPFPIPE_DB_PASS}") \
-		-e DBSERVER=127.0.0.1 \
-		-e TSDBPORT=6127 \
-		-e TSDBNAME=timeseriesopsdb \
-		$(if $(KPFPIPE_TSDB_USER),-e TSDBUSER="${KPFPIPE_TSDB_USER}") \
-		$(if $(KPFPIPE_TSDB_PASS),-e TSDBPASS="${KPFPIPE_TSDB_PASS}") \
-		-e TSDBSERVER=127.0.0.1 \
-		-v ${PWD}:/code/KPF-Pipeline \
-		-v ${KPFPIPE_TEST_DATA}:/testdata \
-		-v ${KPFPIPE_DATA}:/data \
-		-v ${KPFPIPE_DATA}/masters:/masters \
-		kpf-drp:latest bash
+	@echo "Starting Docker container on port ${KPFPIPE_PORT}..."
+	@KPFPIPE_PORT=${KPFPIPE_PORT} ./docker-run.sh
 
 test_env:
 	docker build --cache-from kpf-drp-ci:latest --tag kpf-drp-ci:latest .
