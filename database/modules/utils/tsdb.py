@@ -75,9 +75,8 @@ class TSDB:
         Database roles (for PostgreSQL backend):
             kpfadminrole - Database administrator; usually with user 
                            timeseriesdba
-            kpfporole    - Operations role for ingestion and plot generation 
-                           and database creation; usually with user 
-                           timeseriesopsuser
+            kpfporole    - Operations role for ingestion and plot generation; 
+                           usually with user timeseriesopsuser
             kpfreadrole  - Readonly role; usually with user 
                            timeseriesreadonlyuser
 
@@ -473,16 +472,23 @@ class TSDB:
         if self.backend != 'psql':
             raise ValueError("get_user_role only supported with PostgreSQL backend")
     
-        schema_perms = self._check_user_schema_permissions()
-    
-        if schema_perms['SUPERUSER']:
+        if self.dbuser == 'timeseriesdba':
             return 'admin'
-        elif schema_perms['CREATE'] and schema_perms['USAGE']:
+        elif self.dbuser == 'timeseriesopsuser':
             return 'operations'
-        elif schema_perms['USAGE']:
+        elif self.dbuser == 'timeseriesreadonlyuser':
             return 'readonly'
         else:
-            return 'none'
+            schema_perms = self._check_user_schema_permissions()
+        
+            if schema_perms['SUPERUSER']:
+                return 'admin'
+            elif schema_perms['CREATE'] and schema_perms['USAGE']:
+                return 'operations'
+            elif schema_perms['USAGE']:
+                return 'readonly'
+            else:
+                return 'none'
 
 
     def _check_user_schema_permissions(self, schema_name='public'):
@@ -527,7 +533,7 @@ class TSDB:
         return permissions
 
 
-    @require_role(['admin', 'operations'])
+    @require_role(['admin'])
     def drop_tables(self, tables='all'):
         """
         Drop tables from the database.
@@ -747,7 +753,7 @@ class TSDB:
             self._close_connection()
 
 
-    @require_role(['admin', 'operations'])
+    @require_role(['admin'])
     def _create_metadata_table(self):
         """
         Create the tsdb_metadata table, tracking whether each column is 
@@ -780,7 +786,6 @@ class TSDB:
             # PostgreSQL-specific permission and ownership settings
             if self.backend == 'psql':
                 permission_sql = f"""
-                    ALTER TABLE {self.prefix}metadata OWNER TO kpfadminrole;
                     REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfreadrole;
                     GRANT SELECT ON TABLE {self.prefix}metadata TO GROUP kpfreadrole;
                     REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfadminrole;
@@ -863,7 +868,7 @@ class TSDB:
         self.logger.info("Metadata table read.")
 
 
-    @require_role(['admin', 'operations'])
+    @require_role(['admin'])
     def _create_data_tables(self):
         """
         Create TSDB data tables from metadata definitions, with ObsID as 
@@ -924,7 +929,6 @@ class TSDB:
                 # PostgreSQL-specific permission and ownership settings
                 if self.backend == 'psql':
                     permission_sql = f"""
-                        ALTER TABLE {tbl} OWNER TO kpfadminrole;
                         REVOKE ALL ON TABLE {tbl} FROM kpfreadrole;
                         GRANT SELECT ON TABLE {tbl} TO GROUP kpfreadrole;
                         REVOKE ALL ON TABLE {tbl} FROM kpfadminrole;
@@ -983,7 +987,7 @@ class TSDB:
         self.logger.info("Data tables and indices created successfully.")
 
 
-    @require_role(['admin', 'operations'])
+    @require_role(['admin'])
     def create_test_table(self, tablename, schema='public'):
         """
         Create a table to test database functionality.
