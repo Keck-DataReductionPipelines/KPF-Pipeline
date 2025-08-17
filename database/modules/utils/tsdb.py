@@ -256,24 +256,32 @@ class TSDB:
         metadata_table = self.prefix + 'metadata'
         if not self.check_if_table_exists(tablename=metadata_table):
             self.logger.info("Metadata table does not exist.  Attempting to create.")
-            self._create_metadata_table()
+            if self.user_role == 'admin':
+                self._create_metadata_table()
+            else:
+                self.logger.info(f"Cannot create metadata table as user: {self.user_role}")
         else:
             self.logger.info("Metadata table exists.")
-        self._read_metadata_table()
-        self._set_boolean_columns()
-        self.kw_to_table = {keyword: table_name for keyword, _, table_name in self.metadata_rows}
-        self.kw_to_dtype = {keyword: datatype   for keyword, datatype, _   in self.metadata_rows}
-        self.keywords_by_table = {}
-        for keyword, table in self.kw_to_table.items():
-            self.keywords_by_table.setdefault(table, []).append(keyword)
+        if self.check_if_table_exists(tablename=metadata_table):
+            self._read_metadata_table()
+            self._set_boolean_columns()
+            self.kw_to_table = {keyword: table_name for keyword, _, table_name in self.metadata_rows}
+            self.kw_to_dtype = {keyword: datatype   for keyword, datatype, _   in self.metadata_rows}
+            self.keywords_by_table = {}
+            for keyword, table in self.kw_to_table.items():
+                self.keywords_by_table.setdefault(table, []).append(keyword)
 
         # Create the data tables using metadata
         primary_table = self.prefix + 'base'
         if not self.check_if_table_exists(tablename=primary_table):
             self.logger.info("Data tables do not exist.  Attempting to create.")
-            self._create_data_tables()
+            if self.user_role == 'admin':
+                self._create_data_tables()
+            else:
+                self.logger.info(f"Cannot create data tables as user: {self.user_role}")
         else:
             self.logger.info("Data tables exist.")
+            self.logger.info("Additional database functions will not work.")
 
 
     def require_role(allowed_roles=None):
@@ -301,7 +309,7 @@ class TSDB:
                     else:
                         allowed_str = ', '.join(allowed_roles) if allowed_roles else 'No roles'
                         raise PermissionError(
-                            f"Method '{method_name}' not allowed for role '{self.user_role}'. "
+                            f"Method '{func.__name__}' not allowed for role '{self.user_role}'. "
                             f"Allowed roles: {allowed_str}"
                         )
     
@@ -792,6 +800,9 @@ class TSDB:
                     GRANT ALL ON TABLE {self.prefix}metadata TO GROUP kpfadminrole;
                     REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfporole;
                     GRANT INSERT,UPDATE,SELECT,DELETE,REFERENCES ON TABLE {self.prefix}metadata TO kpfporole;
+                    ALTER TABLE {self.prefix}metadata OWNER TO kpfadminrole;
+                    REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfadminrole;
+                    GRANT ALL ON TABLE {self.prefix}metadata TO GROUP kpfadminrole;
                 """
                 for stmt in permission_sql.strip().split(";"):
                     if stmt.strip():
@@ -935,6 +946,9 @@ class TSDB:
                         GRANT ALL ON TABLE {tbl} TO GROUP kpfadminrole;
                         REVOKE ALL ON TABLE {tbl} FROM kpfporole;
                         GRANT INSERT,UPDATE,SELECT,DELETE,REFERENCES ON TABLE {tbl} TO kpfporole;
+                        ALTER TABLE {tbl} OWNER TO kpfadminrole;
+                        REVOKE ALL ON TABLE {tbl} FROM kpfadminrole;
+                        GRANT ALL ON TABLE {tbl} TO GROUP kpfadminrole;
                     """
                     for stmt in permission_sql.strip().split(";"):
                         if stmt.strip():
