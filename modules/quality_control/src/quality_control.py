@@ -2189,6 +2189,9 @@ class QCL0(QC):
                 setpoint = float(header['ETAV1C3S'])
             else:
                 setpoint = 23.6
+#            print(f"abs(float(header['ETAV1C3T']) - setpoint) > ETAV1C3T_thresh = {abs(float(header['ETAV1C3T']) - setpoint) > ETAV1C3T_thresh}")
+#            print(f'setpoint = {setpoint}')
+#            print(f"float(header['ETAV1C3T']) = {float(header['ETAV1C3T'])}")
             if abs(float(header['ETAV1C3T']) - setpoint) > ETAV1C3T_thresh:
                 QC_pass = False
 
