@@ -29,15 +29,10 @@ notebook:
 
 docker:
 	@echo "Building Docker image..."
-	@DOCKER_BUILDKIT=1 docker build --cache-from kpf-drp:latest --tag kpf-drp:latest . --progress=plain --quiet
-
+	@DOCKER_BUILDKIT=1 docker build --cache-from kpf-drp:latest --tag kpf-drp:latest . --quiet
 	$(if $(KPFPIPE_DATA),,$(error Must set KPFPIPE_DATA))
-	$(if $(KPFPIPE_PORT),, \
-		@echo "Starting Docker container (no port specified)..."
-		@./docker-run.sh)
-
-	@echo "Starting Docker container on port ${KPFPIPE_PORT}..."
-	@KPFPIPE_PORT=${KPFPIPE_PORT} ./docker-run.sh
+	$(if $(KPFPIPE_PORT),, @echo "Starting Docker container (no port specified)..." && ./docker-run.sh)
+	$(if $(KPFPIPE_PORT), @echo "Starting Docker container on port ${KPFPIPE_PORT}..." && KPFPIPE_PORT=${KPFPIPE_PORT} ./docker-run.sh)
 
 test_env:
 	docker build --cache-from kpf-drp-ci:latest --tag kpf-drp-ci:latest .
