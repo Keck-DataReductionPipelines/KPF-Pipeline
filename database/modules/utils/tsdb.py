@@ -1112,6 +1112,7 @@ class TSDB:
     
             extraction_results.update(extracted)
             
+        observer = self.get_observer(extraction_results)
         source = self.get_source(extraction_results)
         expected_data_levels = get_data_levels_expected(source)
         D2_expected = ('2D' in expected_data_levels)
@@ -1127,6 +1128,7 @@ class TSDB:
         extraction_results.update({
             'ObsID': base_filename,
             'datecode': get_datecode(base_filename),
+            'Observer': observer,
             'Source': source,
             'L0_filename': f"{base_filename}.fits",
             'D2_filename': f"{base_filename}_2D.fits",
@@ -1373,6 +1375,7 @@ class TSDB:
             '_extract_kwd_func': self._extract_kwd,
             '_extract_telemetry_func': self._extract_telemetry,
             '_extract_rvs_func': self._extract_rvs,
+            'get_observer_func': self.get_observer,
             'get_source_func': self.get_source,
             'get_data_levels_expected_func': get_data_levels_expected,
             'get_datecode_func': get_datecode
@@ -1475,6 +1478,20 @@ class TSDB:
             }.get(dtype, 'TEXT')
         else:
             raise ValueError(f"Unsupported backend: {self.backend}")
+
+
+    def get_observer(self, L0_dict):
+        """
+        Returns the observers of the observation.
+        """
+        try: 
+            if ('GROBSERV' in L0_dict): 
+                return L0_dict['GROBSERV']
+            elif ('RDOBSERV' in L0_dict): 
+                return L0_dict['RDOBSERV']
+            return 'Unknown'
+        except:
+            return 'Unknown'
 
 
     def get_source(self, L0_dict):
@@ -2591,7 +2608,8 @@ class TSDB:
 def process_file(file_path, now_str,
                  extraction_plan, bool_columns, kw_to_table, keywords_by_table, kw_to_dtype,
                  _extract_kwd_func, _extract_telemetry_func, _extract_rvs_func,
-                 get_source_func, get_data_levels_expected_func, get_datecode_func, safe_float, prefix):
+                 get_observer_func, get_source_func, get_data_levels_expected_func, 
+                 get_datecode_func, safe_float, prefix):
     """
     Process a single file to extract all relevant keywords based on the 
     extraction plan.
@@ -2633,6 +2651,7 @@ def process_file(file_path, now_str,
 
         extraction_results.update(extracted)
 
+    observer = get_observer_func(extraction_results)
     source = get_source_func(extraction_results)
     expected_data_levels = get_data_levels_expected_func(source)
     D2_expected = ('2D' in expected_data_levels)
@@ -2648,6 +2667,7 @@ def process_file(file_path, now_str,
     extraction_results.update({
         'ObsID': base_filename,
         'datecode': get_datecode_func(base_filename),
+        'Observer': observer,
         'Source': source,
         'L0_filename': os.path.basename(file_level_paths['L0']),
         'D2_filename': os.path.basename(file_level_paths['2D']),
