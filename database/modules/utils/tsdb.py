@@ -171,6 +171,7 @@ class TSDB:
         if self.backend == 'sqlite':
             self.db_path = db_path
             self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
+            self.user_role = 'na' # not applicable
         elif backend == 'psql':
             creds = credentials if isinstance(credentials, dict) else {}
             # ----- TSDBPORT ------------------------------------------------------------
@@ -256,7 +257,7 @@ class TSDB:
         metadata_table = self.prefix + 'metadata'
         if not self.check_if_table_exists(tablename=metadata_table):
             self.logger.info("Metadata table does not exist.  Attempting to create.")
-            if self.user_role == 'admin':
+            if self.user_role == 'admin' or self.backend == 'sqlite':
                 self._create_metadata_table()
             else:
                 self.logger.info(f"Cannot create metadata table as user: {self.user_role}")
@@ -275,7 +276,7 @@ class TSDB:
         primary_table = self.prefix + 'base'
         if not self.check_if_table_exists(tablename=primary_table):
             self.logger.info("Data tables do not exist.  Attempting to create.")
-            if self.user_role == 'admin':
+            if self.user_role == 'admin' or self.backend == 'sqlite':
                 self._create_data_tables()
             else:
                 self.logger.info(f"Cannot create data tables as user: {self.user_role}")
