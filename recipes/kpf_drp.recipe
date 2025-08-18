@@ -60,7 +60,6 @@ from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 # Add the file_list at the top level and redefine if needed
 if context.watch:
     input_filename = context.file_path
-
     
     # Initialize so the conditionals work downstream
     l0_filename_masters = ''
@@ -107,27 +106,19 @@ if context.watch:
     print("---------l2_filename_science: " + str(l2_filename_science))
     print("----------l2_filename_masters: " + str(l2_filename_masters))
     # l2_filename = str_replace(l2_filename, '_L1.fits', '_L2.fits')
-
-
 #else: # When would we even use this else statement?
 
-# Get the current input file to determine what processing should run
-# current_file = str(context.file_path)
-# print("CURRENT INPUT FILE: " + current_file)
-
-# File type detection for conditional processing using basic string operations
-# Directly use the conditions in the if statements to avoid unused variables
+# Set in kpf_drp.cfg
+do_l0_to_2d_science = config.ARGUMENT.do_l0_to_2d_science 
+do_2d_to_l1_science = config.ARGUMENT.do_2d_to_l1_science
+do_only_drift       = config.ARGUMENT.do_only_drift
+do_l1_to_l2_science = config.ARGUMENT.do_l1_to_l2_science
 
 # Masters runs with only L1 and L2 files with config kpf_masters_l1.cfg
-#do_l0_to_2d = config.ARGUMENT.do_l0_to_2d # masters is False, science is True
-do_l0_to_2d_science = True #config.ARGUMENT.do_l0_to_2d_science 
-do_2d_to_l1_science = True #config.ARGUMENT.do_2d_to_l1_science
-do_l1_to_l2_science = True #config.ARGUMENT.do_l1_to_l2_science
-
 #do_l0_to_2d_masters = False # config.ARGUMENT.do_l0_to_2d_masters
-do_l0_to_l1_masters = True  # Specify in each config
-#do_2d_to_l1_masters = False # config.ARGUMENT.do_l0_to_2d_masters
-do_l1_to_l2_masters = True # config.ARGUMENT.do_l0_to_2d_masters
+do_l0_to_l1_masters = config.ARGUMENT.do_l0_to_l1_masters
+#do_2d_to_l1_masters = False # config.ARGUMENT.do_0_to_2d_masters
+do_l1_to_l2_masters = config.ARGUMENT.do_l1_to_l2_masters
 
 # L0 files: have .fits but no level suffixes
 
@@ -142,6 +133,13 @@ if not run_masters:
         print("RUNNING 2D->L1 PROCESSING for " + str(d2_filename_science))
         # Silent inputs are d2_filename_science and l1_filename_science
         invoke_subrecipe("./recipes/kpf_2d_to_l1_science.recipe")
+
+    # Set in config appropriately. False for science and masters, true for drift only.
+    #  Use kpf_drp_do_only_drift.cfg to run drift correction only.
+    if do_only_drift and '_L1.fits' in l1_filename_science:
+        print("RUNNING L1->L2 PROCESSING WITH ONLY DRIFT CORRECTION for L1 file, updating L2 file. ")
+        # Silent inputs are l1_filename_science and l2_filename_science
+        invoke_subrecipe("./recipes/kpf_drp_update_wls.recipe")
 
     if do_l1_to_l2_science and '_L1.fits' in l1_filename_science:
         print("RUNNING L1->L2 PROCESSING for " + str(l1_filename_science))
@@ -160,50 +158,6 @@ if run_masters:
         print("RUNNING L1->L2 PROCESSING for " + str(l1_filename_masters))
         # invoke_subrecipe("./recipes/kpf_l1_to_l2_masters.recipe") # LETS MAKE IT THIS!
         invoke_subrecipe("./recipes/kpf_l1_to_l2_science.recipe") 
-
-
-
-# OLD BELOW HERE
-
-
-# if do_l0_to_2d and (not '_2D.fits' in current_file and not '_L1.fits' in current_file and not '_L2.fits' in current_file):
-#     print("RUNNING L0->2D PROCESSING")
-#     invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") 
-
-# # BEGIN 2D to L1. Set desired levels from configs and redefine the level specific keywords in the conditionals.
-# do_2d_to_l1 = config.ARGUMENT.do_2d_to_l1 # masters sets this to False, science sets it to True.
-# if run_masters:
-#     # This takes d2_filename as the main filename.
-#     if do_2d_to_l1 and (not '_2D.fits' in current_file and not '_L1.fits' in current_file and not '_L2.fits' in current_file):
-#         print("RUNNING masters L0->L1 PROCESSING")
-#         invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
-# else:
-#     if do_2d_to_l1 and ('_2D.fits' in current_file):# and not '_L1.fits' in current_file and not '_L2.fits' in current_file):
-#         print("RUNNING science 2D->L1 PROCESSING")
-#         invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
-
-
-# # Level 1 to level 2 processing.
-# # observations with 'slewcal' or etalon are not being processed correctly. Needs attention.
-# do_l1_to_l2 = config.ARGUMENT.do_l1_to_l2
-# if do_l1_to_l2 and '_L1.fits' in current_file:
-#     print("RUNNING L1->L2 PROCESSING")
-#     invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
-
-
-
-
-
-# Let's put this on hold until the regression tests pass on this version
-# # The Drift correction should be able to be called here via subrecipe.
-# #   This will be utilized in a reprocessing that will do only drift correction plus L1 to L2.
-# do_l1_to_l2_with_drift = True # Set in config appropriately. False for science and masters, true for drift only.
-# if do_l1_to_l2_with_drift and not run_masters and '_L1.fits' in current_file:
-#     print("RUNNING L1->L2 PROCESSING WITH ONLY DRIFT CORRECTION")
-#     invoke_subrecipe("./recipes/kpf_drp_update_wls.recipe")
-
-#     print("RUNNING L1->L2 PROCESSING")
-#     invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
 
 
 
