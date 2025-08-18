@@ -49,15 +49,7 @@ if do_quality_control:
     quality_control_exit_code = quality_control_list[0]
     quality_control_rid = quality_control_list[1]
 
-    # Generate the 2D FITS file.  Subtract overscan, master bias, master dark, and apply master flat and bad-pixel masks.
-
-    # Change to single file processing.
-    # raw_file_path = file_list
-    # td_output_dir = config.WATCHFOR_L0.output_dir + "/" + date_dir + "/"
-    # _,file_name_ext = split(raw_file_path)
-    # file_name,ext = splitext(file_name_ext)
-    # output_file_name = td_output_dir + file_name + "_2D" + ext
-    
+    # Generate the 2D FITS file.  Subtract overscan, master bias, master dark, and apply master flat and bad-pixel masks.    
     # This will be true if the quality_control)list writes 2D for the first time.
     output_file_exists = exists(d2_filename_science)
     if overwrite or not output_file_exists:
@@ -166,5 +158,6 @@ if do_quality_control:
                                                     kpf_object)
                 print("rid: " + str(rid))
         print("TEST: VarExtsFramework executed successfully.")
+        # Can we safely move QC here?
         # 2D file is currently saved inside VarExtsFramework.
-        # recipe_complete = to_fits(kpf_object, d2_filename_science)
+        # recipe_complete = to_fits(kpf_object, d2_filename_science) 

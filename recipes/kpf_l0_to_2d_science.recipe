@@ -34,12 +34,10 @@
 # from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
 # from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 
-
 # set the CONFIGURATION flags for each process ------------------------------------
-# L0 level flags
-do_l0_to_2d = config.WATCHFOR_L0.do_l0_to_2d
-do_2d_to_l1 = config.WATCHFOR_L0.do_2d_to_l1
-do_l1_to_l2 = config.WATCHFOR_L0.do_l1_to_l2
+do_l0_to_2d_science = config.ARGUMENT.do_l0_to_2d_science
+do_2d_to_l1_science = config.ARGUMENT.do_2d_to_l1_science
+do_l1_to_l2_science = config.ARGUMENT.do_l1_to_l2_science
 
 do_order_trace = config.ARGUMENT.do_order_trace
 
@@ -49,9 +47,6 @@ do_spectral_extraction = config.WATCHFOR_2D.do_spectral_extraction
 do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
 # Peroform wavelength interpolation
 do_db_query_for_before_after_master_files = config.WLS_INTERPOLATION.do_db_query_for_before_after_master_files 
-
-# spectral extraction config used for BC
-
 
 # L2 level flags
 do_rv = config.ARGUMENT.do_rv
@@ -71,7 +66,6 @@ max_cal_file_age = config.ARGUMENT.max_cal_file_age
 lev0_file_path = ""
 lev1_file_path = ""
 
-
 # file_list = l0_filename	# defined in kpf_drp.recipe		
 sel_obsid = context.date_dir
 
@@ -86,13 +80,8 @@ masters_data_dir = config.ARGUMENT.masters_dir
 
 ## general purpose variables
 ccd_list = config.ARGUMENT.ccd_list
-# lev0_stem_suffix = config.ARGUMENT.output_lev0_suffix
-# lev1_stem_suffix = config.ARGUMENT.output_lev1_suffix
-# lev2_stem_suffix = config.ARGUMENT.output_lev2_suffix
-
 poly_degree = config.ARGUMENT.fitting_poly_degree
 ccd_idx=config.ARGUMENT.ccd_idx
-
 rect_method = config.ARGUMENT.rectification_method
 extract_method = config.ARGUMENT.extraction_method
 orderlet_names = config.ARGUMENT.orderlet_names
@@ -101,16 +90,7 @@ flat_rect = '_'+rect_method
 ## full path for wavelength solution sample files for each fiber
 wls_list = config.ARGUMENT.wls_fits
 
-# BEGIN MISCELLANEOUS VARIABLES ------------------------------------
-fits_ext = '.fits'
-csv_ext = '.csv'
-
-# IS WAVE_FITS DEPRECATED DUE TO THE DATABASE QUERY FOR NEAREST MASTER FILES? WHAT ABOUT A DEFAULT WLS?
-wave_fits = []
-for wls in wls_list:
-	wave_fits = wave_fits + [output_dir + wls]
-
 # do L0->2D conversion for watch mode
-if do_l0_to_2d:
+if do_l0_to_2d_science:
     # invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
 	invoke_subrecipe("./recipes/kpf_l0_to_2d_science_image_processing.recipe")
