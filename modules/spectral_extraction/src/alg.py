@@ -52,7 +52,6 @@ class SpectralExtractionAlg:
             self.log = logger
             
         cfg_params = ConfigHandler(self.config, 'PARAM')
-        print(f"In spectral extraction")
         self.extraction_method = cfg_params.get_config_value('extraction_method')
         self.extraction_sigma_clip = float(cfg_params.get_config_value('extraction_sigma_clip'))
         self.extraction_max_iter = int(cfg_params.get_config_value('extraction_max_iter'))
