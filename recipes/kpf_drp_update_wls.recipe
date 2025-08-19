@@ -2,10 +2,15 @@
 
 print('Starting Drift Correction on L1 data: ' + l1_filename_science)
 data_type = 'KPF'
-print("DATA TYPE: " + data_type)
 l1_data = kpf1_from_fits(l1_filename_science, data_type)
 
-output_data = l1_data # output_data is required by the drift correction subrecipe.
+# Retrive time stamp from header to find nearest WLS files. Populate WLS extensions.
+obs_date_time = GetHeaderValue(l1_data,'DATE-MID')
+output_data = l1_data # output_data is required by the WLS_interpolation subrecipe.
+invoke_subrecipe("recipes/wls_interpolation.subrecipe") 
+output_data = interpolated_l1
+
+# Drift correction algorithm, input is variable: output_data
 invoke_subrecipe("recipes/drift_correction.subrecipe") # The variable output_data is used as the primary input to the drift module.
 output_data = output_l1 # output_l1 is newly defined in the drift correction subrecipe.
 
