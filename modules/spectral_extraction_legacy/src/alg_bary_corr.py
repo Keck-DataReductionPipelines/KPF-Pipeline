@@ -85,6 +85,12 @@ class BaryCorrTableAlg(ModuleAlgBase):
         ModuleAlgBase.__init__(self, self.name, config, logger)
         ins = self.config_param.get_config_value('instrument', '') if self.config_param is not None else ''
         self.instrument = ins.lower() if ins else (pheader['INSTRUME'] if 'INSTRUME' in pheader else '')
+        
+        # hardcoding this. Nothing is defined in the config file.
+        #  It's not clear how to define this since it is referenced from a different module.
+        #  I think this would be solved if the bary portions of the spectral_extraction_legacy were moved to the new module.
+        self.instrument = 'kpf'
+        self.logger.info("Hard coding instrument to kpf")
         self.config_ins = ConfigHandler(config, ins, self.config_param)  # section of instrument or 'PARAM'
         self.df_EM = df_em
         self.lev_header = pheader
@@ -323,7 +329,6 @@ class BaryCorrTableAlg(ModuleAlgBase):
             self.bary_corr_table[BaryCorrTableAlg.BC_col4][self.start_bary_index:self.end_bary_index+1] = GEOMID_BJD
 
         df_em = self.get_expmeter_science()
-
         is_single_mid = False
 
         # key_sets = ['IMTYPE', 'TARGFRAM', 'TARGNAME', 'TARGEPOC', 'SCI-OBJ', 'SKY-OBJ', 'CAL-OBJ']

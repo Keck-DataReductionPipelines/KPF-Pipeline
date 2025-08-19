@@ -1,0 +1,24 @@
+# This recipe will open an L1 file, and apply the drift correction. That's it.
+
+print('Starting Drift Correction on L1 data: ' + l1_filename_science)
+data_type = 'KPF'
+l1_data = kpf1_from_fits(l1_filename_science, data_type)
+
+# Retrive time stamp from header to find nearest WLS files. Populate WLS extensions.
+obs_date_time = GetHeaderValue(l1_data,'DATE-MID')
+output_data = l1_data # output_data is required by the WLS_interpolation subrecipe.
+invoke_subrecipe("recipes/wls_interpolation.subrecipe") 
+output_data = interpolated_l1
+
+# Drift correction algorithm, input is variable: output_data
+invoke_subrecipe("recipes/drift_correction.subrecipe") # The variable output_data is used as the primary input to the drift module.
+output_data = output_l1 # output_l1 is newly defined in the drift correction subrecipe.
+
+# Quality Control - L1 level
+data_level_str = 'L1'
+kpf_object = output_data
+obj = GetHeaderValue(kpf_object, 'OBJECT')
+invoke_subrecipe("./recipes/quality_control.subrecipe")
+invoke_subrecipe("./recipes/diagnostics.subrecipe")
+output_data = kpf_object
+result = to_fits(output_data, l1_filename_science)
