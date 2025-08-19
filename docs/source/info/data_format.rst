@@ -274,6 +274,12 @@ AGITOK    1                                           QC: 1 = Agitator running w
 NOTVIGN   1                                           QC: 1 = Telescope not vignetted by dome
 GOODEL    1                                           QC: 1 = Telescope elevation above 30 deg (for ADC)
 ETASTEMP  1                                           QC: 1 = Etalon inner chamber temps near set points
+FLXSTATS  1                                           QC: 1 = Flux stats in/out of order trace as expected
+HKSHTOPN  1                                           QC: 1 = HK shutter open and HK image requested; not bias/dark exposure
+GRCCD10T  1                                           QC: 1 = Green CCD > 10 mK from temp set point
+GRCCD1T   1                                           QC: 1 = Green CCD > 1000 mK (1 C) from temp set point
+RDCCD10T  1                                           QC: 1 = Red CCD > 10 mK from temp set point
+RDCCD1T   1                                           QC: 1 = Red CCD > 1000 mK (1 C) from temp set point
 ISGOOD    1                                           QC: 1 = all other QC tests passed
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)

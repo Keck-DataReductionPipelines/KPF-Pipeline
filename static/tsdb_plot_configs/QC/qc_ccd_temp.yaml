@@ -1,0 +1,41 @@
+description: QC - CCD Temperature Set Points
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: GRCCDT10
+        plot_type: state
+        plot_attr:
+          label: "Green CCD > 10 mK\nfrom set point"
+          marker: .
+    paneldict:
+      ylabel: "Green CCD > 10 mK\nfrom set point"
+      legend_frac_size: 0.15
+  - panelvars:
+      - col: GRCCDT1
+        plot_type: state
+        plot_attr:
+          label: "Green CCD > 1000 mK\nfrom set point"
+          marker: .
+    paneldict:
+      ylabel: "Green CCD > 1000 mK\nfrom set point"
+      legend_frac_size: 0.15
+  - panelvars:
+      - col: RDCCDT10
+        plot_type: state
+        plot_attr:
+          label: "Red CCD > 10 mK\nfrom set point"
+          marker: .
+    paneldict:
+      ylabel: "Red CCD > 10 mK\nfrom set point"
+      legend_frac_size: 0.15
+  - panelvars:
+      - col: RDCCDT1
+        plot_type: state
+        plot_attr:
+          label: "Red CCD > 1000 mK\nfrom set point"
+          marker: .
+    paneldict:
+      ylabel: "Red CCD > 1000 mK\nfrom set point"
+      title: QC - CCD Temperature Set Points
+      legend_frac_size: 0.15
+
