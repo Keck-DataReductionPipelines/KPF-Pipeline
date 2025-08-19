@@ -1067,7 +1067,7 @@ class TSDB:
                 for kw in data:
                     if kw in self.bool_columns:
                         val = data[kw]
-                        data[kw] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y']
+                        data[kw] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y', 'open']
                 data['ObsID'] = base_filename
     
             for tbl, data in table_data.items():
