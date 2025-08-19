@@ -1,6 +1,7 @@
 keyword|datatype|description|unit
 datecode|string|8-digit YYYYMMDD date code (e.g., 20240101)|None
 ObsID|string|Observation ID (e.g., KP.20240101.12345.67)|None
+Observer|string|Observers|None
 L0_filename|string|Full path to L0 file|None
 D2_filename|string|Full path to 2D file|None
 L1_filename|string|Full path to L1 file|None

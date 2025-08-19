@@ -33,6 +33,10 @@ SOLCALSH|bool|SoCal Cal shutter at exp. midpoint|None
 CALSSSHT|bool|Cal SciSky shutter at exp. midpoint|None
 AOHATCH|bool|AO hatch at exp. midpoint|None
 FIUHTCH|bool|FIU hatch at exp. midpoint|None
+GROBSERV|string|Observers, Green camera|None
+RDOBSERV|string|Observers, Red camera|None
+GRELAPS|float|Actual exposure time, Green camera|sec
+RDELAPS|float|Actual exposure time, Red camera|sec
 IMTYPE|string|Image type|None
 FFFB|string|Flat field fiber on (Yes/No)|None
 GREEN|bool|Green camera found (Yes/No)|None
