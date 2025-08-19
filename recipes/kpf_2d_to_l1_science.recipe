@@ -33,11 +33,6 @@
 # L0 level flags
 from kpfpipe.models.level0 import KPF0
 
-
-# do_l0_to_2d = config.WATCHFOR_2D.do_l0_to_2d
-# do_2d_to_l1 = config.WATCHFOR_2D.do_2d_to_l1
-# do_l1_to_l2 = config.WATCHFOR_2D.do_l1_to_l2
-
 # Set differently for regular and masters processing
 do_order_trace = config.ARGUMENT.do_order_trace
 
