@@ -20,91 +20,16 @@ DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../ca
 DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
 
 """
-This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
-class QCDefinitions.  Other classes QCL0, QC2D, QCL1, and QCL2 contain methods to compute QC values,
-which are with the QC metrics, for specific data products, and then store them in the primary header
-of the corresponding KPF object (which will be saved to a FITS file).  Normally QC values are stored
-headers, but storage in the KPF pipeline-operations database may be set up later by the database
-administrator, depending upon the special requirements for some QC metrics.
-"""
-
-iam = 'quality_control'
-version = '1.3'
-
-"""
-The following are methods common across data levels, which are given at the beginning
-of this module, before the QC classes are defined.
-
-Includes helper functions that compute statistics of data of arbitrary shape.
+This module contains classes for KPF data quality control (QC).  Various QC 
+metrics are defined in class QCDefinitions.  Other classes QCL0, QC2D, QCL1, 
+and QCL2 contain methods to compute QC values, which are with the QC metrics, 
+for specific data products, and then store them in the primary header of the 
+corresponding KPF object (which will be saved to a FITS file).
 """
 
 #####################################
-# Module helper functions.
+# Helper functions.
 #####################################
-
-def what_am_i():
-    print('Software version:',iam + ' ' + version)
-
-def compute_clip_corr(n_sigma):
-
-    """
-    Compute a correction factor to properly reinflate the variance after it is
-    naturally diminished via data-clipping.  Employ a simple Monte Carlo method
-    and standard normal deviates to simulate the data-clipping and obtain the
-    correction factor.
-    """
-
-    var_trials = []
-    for x in range(0,10):
-        a = np.random.normal(0.0, 1.0, 1000000)
-        med = np.median(a, axis=0)
-        p16 = np.percentile(a, 16, axis=0)
-        p84 = np.percentile(a, 84, axis=0)
-        sigma = 0.5 * (p84 - p16)
-        mdmsg = med - n_sigma * sigma
-        b = np.less(a,mdmsg)
-        mdpsg = med + n_sigma * sigma
-        c = np.greater(a,mdpsg)
-        mask = np.any([b,c],axis=0)
-        mx = ma.masked_array(a, mask)
-        var = ma.getdata(mx.var(axis=0))
-        var_trials.append(var)
-
-    np_var_trials = np.array(var_trials)
-    avg_var_trials = np.mean(np_var_trials)
-    std_var_trials = np.std(np_var_trials)
-    corr_fact = 1.0 / avg_var_trials
-
-    return corr_fact
-
-def avg_data_with_clipping(data_array,n_sigma = 3.0):
-
-    """
-    Statistics with outlier rejection (n-sigma data-trimming), ignoring NaNs, across all data array dimensions.
-    """
-
-    cf = compute_clip_corr(n_sigma)
-    sqrtcf = np.sqrt(cf)
-
-    a = np.array(data_array)
-
-    med = np.nanmedian(a)
-    p16 = np.nanpercentile(a,16)
-    p84 = np.nanpercentile(a,84)
-    sigma = 0.5 * (p84 - p16)
-    mdmsg = med - n_sigma * sigma
-    b = np.less(a,mdmsg)
-    mdpsg = med + n_sigma * sigma
-    c = np.greater(a,mdpsg)
-    d = np.where(np.isnan(a),True,False)
-    mask = b | c | d
-    mx = ma.masked_array(a, mask)
-    avg = ma.getdata(mx.mean())
-    std = ma.getdata(mx.std()) * sqrtcf
-    cnt = ma.getdata(mx.count())
-
-    return avg,std,cnt
-
 
 def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
 
@@ -123,11 +48,8 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
     logger = logger if logger is not None else DummyLogger()
 
     qc_fail = False
-
     qc_definitions = QCDefinitions()
-
     dict_keys_list = qc_definitions.fits_keywords.keys()
-
     for dict_key in dict_keys_list:
 
         kw = qc_definitions.fits_keywords[dict_key]
@@ -1488,8 +1410,6 @@ class QCL0(QC):
     Example python code to illustrate usage of this module in calling program:
 
         import modules.quality_control.src.quality_control as qc
-
-        qc.what_am_i()
 
         in_file = '/code/KPF-Pipeline/KP.20230828.40579.55.fits'
         out_file = '/code/KPF-Pipeline/junk.fits'
