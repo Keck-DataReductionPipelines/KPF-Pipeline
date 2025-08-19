@@ -226,7 +226,7 @@ class VarExtsFramework(KPF0_Primitive):
         # Read image data object from 2D FITS file.
 
         fits_filename = self.l0_filename
-        fits_filename = fits_filename.replace('L0', '2D')
+        fits_filename = fits_filename.replace('L0', '2D') # I hate this!
         fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
         fits_filename_exists = exists(fits_filename)
@@ -235,7 +235,7 @@ class VarExtsFramework(KPF0_Primitive):
             return
 
         hdul_input = KPF0.from_fits(fits_filename,self.data_type)
-        exp_time = float(fits.getheader(fits_filename,ext=0)['EXPTIME'])
+        exp_time = float(hdul_input.header['PRIMARY']['EXPTIME'])
 
         if debug == 1:
             print("exp_time = {}".format(exp_time))
@@ -247,12 +247,12 @@ class VarExtsFramework(KPF0_Primitive):
         for ext in exts:
 
             try:
-                naxis1 = fits.getheader(fits_filename,ext=ext)['NAXIS1']
+                naxis1 = hdul_input.header[ext]["NAXIS1"]
             except:
                 continue
 
             try:
-                naxis2 = fits.getheader(fits_filename,ext=ext)['NAXIS2'] #HTI
+                naxis2 = hdul_input.header[ext]["NAXIS2"]
             except:
                 continue
 
@@ -529,6 +529,8 @@ class VarExtsFramework(KPF0_Primitive):
         # 5. Photon-noise variance
 
         # GREEN
+        # print("types of variables:",rn_greenvarimg,bias_greenvarimg,dark_greenvarimg,flat_greenvarimg,greenccdimg)
+        # import pdb; pdb.set_trace()
         try:
             greenvarimg = rn_greenvarimg +\
                 bias_greenvarimg +\

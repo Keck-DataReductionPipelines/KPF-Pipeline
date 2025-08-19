@@ -97,16 +97,17 @@ class StrayLightAlg:
             header['SLRMAX']  = np.max(slr)       # COMMENT maximum of RED inter-order stray light
 
 
-    def estimate_stray_light(self, 
+    def remove_stray_light(self, 
                              chip, 
                              method=None, 
                              polyorder=None, 
                              regularize=None,
                              edge_clip=None, 
-                             mask_buffer=None
+                             mask_buffer=None,
+                             return_model=False
                              ):
         """
-        Main method used to estimate stray light
+        Main method used to estimate and remove stray light
         Calls method defined in config file; allowed methods are 'zero', 'mean', and 'polynomial'
 
         Args:
@@ -116,10 +117,13 @@ class StrayLightAlg:
             regularize : can be 'none', 'auto', or a positive float (lambda parameter for T2-ridge regression)
             edge_clip (int) : number of pixels to ignore on each edge (default=0)
             mask_buffer (int): illuminated mask region will be widened by N=mask_buffer pixels
+            return_model (bool): True to return ndarrays for smooth stray light model and inter-order mask
             
         Returns:
-            stray_light_image (dict of ndarrays): 2D stray light images for GREEN and RED ccds
-            inter_order_mask (dict of ndarrays): 2D boolean mask of inter-order pixels for GREEN and RED ccds
+            out_2D (KPF0): level 2D object with stray light removed from CCD image
+            if return_model=True:
+                stray_light_image (dict of ndarrays): stray light images for GREEN and RED ccds
+                inter_order_mask (dict of ndarrays): boolean masks of inter-order pixels for GREEN and RED ccds
         """
         # set parameters
         if method is None:
@@ -150,7 +154,14 @@ class StrayLightAlg:
         
         self.add_keywords(stray_light_image, inter_order_mask, chip)
 
-        return stray_light_image, inter_order_mask
+        # remove stray light from science image
+        out_2D = self.target_2D
+        out_2D[f'{chip}_CCD'] -= stray_light_image
+
+        if return_model:
+            return out_2D, stray_light_image, inter_order_mask
+
+        return out_2D
 
     
     def zero(self, chip, **kwargs):
