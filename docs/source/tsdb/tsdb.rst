@@ -12,5 +12,6 @@ Using the Time Series Database
     tsdb_keywords.rst
     all_plots.rst
     debugging_with_tsdb.rst
+    rebuilding_tsdb.rst
 
 The links above provide explanations and tutorials on using the time series database.
