@@ -20,91 +20,16 @@ DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../ca
 DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
 
 """
-This module contains classes for KPF data quality control (QC).  Various QC metrics are defined in
-class QCDefinitions.  Other classes QCL0, QC2D, QCL1, and QCL2 contain methods to compute QC values,
-which are with the QC metrics, for specific data products, and then store them in the primary header
-of the corresponding KPF object (which will be saved to a FITS file).  Normally QC values are stored
-headers, but storage in the KPF pipeline-operations database may be set up later by the database
-administrator, depending upon the special requirements for some QC metrics.
-"""
-
-iam = 'quality_control'
-version = '1.3'
-
-"""
-The following are methods common across data levels, which are given at the beginning
-of this module, before the QC classes are defined.
-
-Includes helper functions that compute statistics of data of arbitrary shape.
+This module contains classes for KPF data quality control (QC).  Various QC 
+metrics are defined in class QCDefinitions.  Other classes QCL0, QC2D, QCL1, 
+and QCL2 contain methods to compute QC values, which are with the QC metrics, 
+for specific data products, and then store them in the primary header of the 
+corresponding KPF object (which will be saved to a FITS file).
 """
 
 #####################################
-# Module helper functions.
+# Helper functions.
 #####################################
-
-def what_am_i():
-    print('Software version:',iam + ' ' + version)
-
-def compute_clip_corr(n_sigma):
-
-    """
-    Compute a correction factor to properly reinflate the variance after it is
-    naturally diminished via data-clipping.  Employ a simple Monte Carlo method
-    and standard normal deviates to simulate the data-clipping and obtain the
-    correction factor.
-    """
-
-    var_trials = []
-    for x in range(0,10):
-        a = np.random.normal(0.0, 1.0, 1000000)
-        med = np.median(a, axis=0)
-        p16 = np.percentile(a, 16, axis=0)
-        p84 = np.percentile(a, 84, axis=0)
-        sigma = 0.5 * (p84 - p16)
-        mdmsg = med - n_sigma * sigma
-        b = np.less(a,mdmsg)
-        mdpsg = med + n_sigma * sigma
-        c = np.greater(a,mdpsg)
-        mask = np.any([b,c],axis=0)
-        mx = ma.masked_array(a, mask)
-        var = ma.getdata(mx.var(axis=0))
-        var_trials.append(var)
-
-    np_var_trials = np.array(var_trials)
-    avg_var_trials = np.mean(np_var_trials)
-    std_var_trials = np.std(np_var_trials)
-    corr_fact = 1.0 / avg_var_trials
-
-    return corr_fact
-
-def avg_data_with_clipping(data_array,n_sigma = 3.0):
-
-    """
-    Statistics with outlier rejection (n-sigma data-trimming), ignoring NaNs, across all data array dimensions.
-    """
-
-    cf = compute_clip_corr(n_sigma)
-    sqrtcf = np.sqrt(cf)
-
-    a = np.array(data_array)
-
-    med = np.nanmedian(a)
-    p16 = np.nanpercentile(a,16)
-    p84 = np.nanpercentile(a,84)
-    sigma = 0.5 * (p84 - p16)
-    mdmsg = med - n_sigma * sigma
-    b = np.less(a,mdmsg)
-    mdpsg = med + n_sigma * sigma
-    c = np.greater(a,mdpsg)
-    d = np.where(np.isnan(a),True,False)
-    mask = b | c | d
-    mx = ma.masked_array(a, mask)
-    avg = ma.getdata(mx.mean())
-    std = ma.getdata(mx.std()) * sqrtcf
-    cnt = ma.getdata(mx.count())
-
-    return avg,std,cnt
-
 
 def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
 
@@ -123,11 +48,8 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
     logger = logger if logger is not None else DummyLogger()
 
     qc_fail = False
-
     qc_definitions = QCDefinitions()
-
     dict_keys_list = qc_definitions.fits_keywords.keys()
-
     for dict_key in dict_keys_list:
 
         kw = qc_definitions.fits_keywords[dict_key]
@@ -1066,7 +988,7 @@ class QCDefinitions:
         self.kpf_data_levels[name44] = ['L0']
         self.descriptions[name44] = 'TELEMETRY extension present in L0'
         self.data_types[name44] = 'int'
-        self.spectrum_types[name44] = []
+        self.spectrum_types[name44] = ['all',]
         self.master_types[name44] = []
         self.drift_types[name44] = []
         self.required_data_products[name44] = []
@@ -1088,6 +1010,76 @@ class QCDefinitions:
         self.fits_comments[name45] = 'QC: 2D flux not smeared in and out of order trace [not yet reliable]'
         self.db_columns[name45] = None
         self.fits_keyword_fail_value[name45] = 0
+
+        name46 = 'hk_shutter_open'
+        self.names.append(name46)
+        self.kpf_data_levels[name46] = ['L0']
+        self.descriptions[name46] = 'HK shutter open and HK image requested; not bias/dark exposure'
+        self.data_types[name46] = 'int'
+        self.spectrum_types[name46] = ['ThAr', 'UNe', 'Etalon', 'LFC', 'Flat', 'Star', 'Sun'] # not bias or dark frames, which will have a closed shutter
+        self.master_types[name46] = []
+        self.drift_types[name46] = []
+        self.required_data_products[name46] = ['CaHK']
+        self.fits_keywords[name46] = 'HKSHTOPN'
+        self.fits_comments[name46] = 'QC: HK requested/shutter open; not bias/dark'
+        self.db_columns[name46] = None
+        self.fits_keyword_fail_value[name46] = 0
+
+        name47 = 'green_ccd_10mK'
+        self.names.append(name47)
+        self.kpf_data_levels[name47] = ['L0']
+        self.descriptions[name47] = 'Green CCD > 10 mK from temp set point'
+        self.data_types[name47] = 'int'
+        self.spectrum_types[name47] = ['all',] 
+        self.master_types[name47] = []
+        self.drift_types[name47] = []
+        self.required_data_products[name47] = ['Green']
+        self.fits_keywords[name47] = 'GRCCDT10'
+        self.fits_comments[name47] = 'QC: Green CCD > 10 mK from temp set point'
+        self.db_columns[name47] = None
+        self.fits_keyword_fail_value[name47] = 0
+
+        name48 = 'green_ccd_1000mK'
+        self.names.append(name48)
+        self.kpf_data_levels[name48] = ['L0']
+        self.descriptions[name48] = 'Green CCD > 1000 mK (1 C) from temp set point'
+        self.data_types[name48] = 'int'
+        self.spectrum_types[name48] = ['all',] 
+        self.master_types[name48] = []
+        self.drift_types[name48] = []
+        self.required_data_products[name48] = ['Green']
+        self.fits_keywords[name48] = 'GRCCDT1'
+        self.fits_comments[name48] = 'QC: Green CCD > 1000 mK from temp set point'
+        self.db_columns[name48] = None
+        self.fits_keyword_fail_value[name48] = 0
+
+        name49 = 'red_ccd_10mK'
+        self.names.append(name49)
+        self.kpf_data_levels[name49] = ['L0']
+        self.descriptions[name49] = 'Red CCD > 10 mK from temp set point'
+        self.data_types[name49] = 'int'
+        self.spectrum_types[name49] = ['all',] 
+        self.master_types[name49] = []
+        self.drift_types[name49] = []
+        self.required_data_products[name49] = ['Green']
+        self.fits_keywords[name49] = 'RDCCDT10'
+        self.fits_comments[name49] = 'QC: Red CCD > 10 mK from temp set point'
+        self.db_columns[name49] = None
+        self.fits_keyword_fail_value[name49] = 0
+
+        name50 = 'red_ccd_1000mK'
+        self.names.append(name50)
+        self.kpf_data_levels[name50] = ['L0']
+        self.descriptions[name50] = 'Red CCD > 1000 mK (1 C) from temp set point'
+        self.data_types[name50] = 'int'
+        self.spectrum_types[name50] = ['all',] 
+        self.master_types[name50] = []
+        self.drift_types[name50] = []
+        self.required_data_products[name50] = ['Green']
+        self.fits_keywords[name50] = 'RDCCDT1'
+        self.fits_comments[name50] = 'QC: Red CCD > 1000 mK from temp set point'
+        self.db_columns[name50] = None
+        self.fits_keyword_fail_value[name50] = 0
 
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
@@ -1418,8 +1410,6 @@ class QCL0(QC):
     Example python code to illustrate usage of this module in calling program:
 
         import modules.quality_control.src.quality_control as qc
-
-        qc.what_am_i()
 
         in_file = '/code/KPF-Pipeline/KP.20230828.40579.55.fits'
         out_file = '/code/KPF-Pipeline/junk.fits'
@@ -2280,6 +2270,161 @@ class QCL0(QC):
                     if debug:
                         self.logger.debug(f"Elevation ({header['EL']}) > 30 degrees")
 
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def hk_shutter_open(self, debug=False):
+        """
+        This Quality Control method checks that the HK shutter is open when an 
+        HK image is requested.  This method is run on exposures that are not 
+        bias or dark frames.
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - HK Shutter open HK requested and not bias/dark 
+             (True = pass)
+        """
+
+        try:
+            QC_pass = True
+            L0 = self.kpf_object
+            header = L0.header['PRIMARY']
+            if 'CA_HK' in header:  # The CaHK camera was selected.
+                if 'CAHKSHT' in header: # The CaHK shutter was open.
+                     if ('yes' in header['CA_HK'].lower()) and not ('open' in header['CAHKSHT'].lower()):
+                         QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+
+        return QC_pass
+
+
+    def CCD_not_at_temp(self, L0, chip, target_temp, temp_tolerance, debug=False):
+        """
+        This method is used by four QC methods to determine if the CCD 
+        temperature is different than the set point by some amount.
+
+        Args:
+             debug - an optional flag.
+             chip - 'Green' or 'Red'
+             target_temp - target temperature (deg C)
+             temp_tolerance - temperature tolerance (+- deg C) for pass/fail of QC
+
+        Returns:
+             QC_pass - HK Shutter open HK requested and not bias/dark 
+             (True = pass)
+        """
+
+        QC_pass = False
+        
+        if hasattr(L0, 'TELEMETRY'):
+            if chip == 'Green':
+                kwd = 'kpfgreen.STA_CCD_T'
+            elif chip == 'Red':
+                kwd = 'kpfred.STA_CCD_T'
+            temp = float(L0['TELEMETRY'].loc[kwd, 'average'])
+            if abs(temp - target_temp) < temp_tolerance:
+                QC_pass = True
+            
+        return QC_pass
+
+
+    def green_ccd_10mK(self, debug=False):
+        """
+        This Quality Control method checks that the Green CCD is within 10 mK 
+        of its set point.
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - a boolean signifying that the Green CCD is within 10 mK 
+                       of its set point.
+        """
+
+        QC_pass = False
+        
+        try:
+            QC_pass = self.CCD_not_at_temp(self.kpf_object, 'Green', -100, 0.01, debug=debug)
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def green_ccd_1000mK(self, debug=False):
+        """
+        This Quality Control method checks that the Green CCD is within 1000 mK 
+        (1 deg C) of its set point.
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - a boolean signifying that the Green CCD is within 1000 mK 
+                       (1 deg C) of its set point.
+        """
+
+        QC_pass = False
+        
+        try:
+            QC_pass = self.CCD_not_at_temp(self.kpf_object, 'Green', -100, 1, debug=debug)
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def red_ccd_10mK(self, debug=False):
+        """
+        This Quality Control method checks that the Red CCD is within 10 mK 
+        of its set point.
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - a boolean signifying that the Red CCD is within 10 mK of 
+                       its set point.
+        """
+
+        QC_pass = False
+        
+        try:
+            QC_pass = self.CCD_not_at_temp(self.kpf_object, 'Red', -100, 0.01, debug=debug)
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def red_ccd_1000mK(self, debug=False):
+        """
+        This Quality Control method checks that the Red CCD is within 1000 mK 
+        (1 deg C) of its set point.
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - a boolean signifying that the Red CCD is within 1000 mK 
+                       (1 deg C) of its set point.
+        """
+
+        QC_pass = False
+        
+        try:
+            QC_pass = self.CCD_not_at_temp(self.kpf_object, 'Red', -100, 1, debug=debug)
         except Exception as e:
             self.logger.info(f"Exception: {e}")
             QC_pass = False

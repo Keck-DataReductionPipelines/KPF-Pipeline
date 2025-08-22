@@ -54,11 +54,12 @@ class ModifyWLS:
         end_date   = datetime(int(date[:4]), int(date[4:6]), int(date[6:8])) + timedelta(days=60)
         cols=['ObsID', 'OBJECT', 'DATE-MID', 'DRPTAGL1','WLSFILE','WLSFILE2', 'CCFRV', 'CCD1RV', 'CCD2RV', 'NOTJUNK','READSPED','SNRSC548', 'SCIMPATH']
         self.df = myTS.db.dataframe_from_db(start_date=start_date, end_date=end_date, columns=cols)
+        # print out the length of the dataframe
+        self.log.info(f"Drift correction dataframe length: {len(self.df)}")
         self.df = self.prepare_table()
 
     def apply_drift(self, method):
         self.method = method
-
         if self.df.empty:
             self.log.warning("DRIFT MODULE, apply_drift: Drift DataFrame is empty. Exiting early.")
             return self.l1_obj
@@ -75,7 +76,6 @@ class ModifyWLS:
             raise(AttributeError)
 
         out_l1 = clsmethod()
-
         return out_l1
 
 
@@ -111,15 +111,25 @@ class ModifyWLS:
 
         df['etalon_mask_date'] = df['SCIMPATH'].str.split('/').str[-1].str.slice(0, 8) # SCIMPATH for etalon is the etalon mask date.
         df = df[df['date_code_wls_file'] == df['etalon_mask_date']] #This forces the WLS and Mask to be from the same date but this should never happen.
+        if df.empty:
+            self.log.warning("DRIFT MODULE, prepare_table3: Etalon mask date does not match date_code_wls_file. Exiting early.")
+            self.log.warning("date code wls file: " + str(df['date_code_wls_file'].unique()))
+            self.log.warning("etalon mask date: " + str(df['etalon_mask_date'].unique()))
+            self.log.warning("WLSFILE: " + str(df['WLSFILE'].unique()))
+            return df
 
         df['datetime'] = pd.to_datetime(df['DATE-MID'])
-        df = df[(df['ObsID'] != self.l1_obj.filename.split('_')[0])]         # don't allow it to choose itself as the drift correction
+        
+        # Only filter out self if filename is available
+        if hasattr(self.l1_obj, 'filename') and self.l1_obj.filename is not None:
+            obsid_from_filename = self.l1_obj.filename.split('_')[0]
+            df = df[(df['ObsID'] != obsid_from_filename)]         # don't allow it to choose itself as the drift correction
+        
         if df.empty:
             self.log.warning("DRIFT MODULE, prepare_table4: Filtered to empty DataFrame. Exiting early.")
             return df
 
         return df
-
 
     def adjust_wls(self, drift_rv):
         is_science = self.l1_obj.header['PRIMARY']['SCI-OBJ'].startswith('Target')
@@ -131,12 +141,36 @@ class ModifyWLS:
                 if 'WAVE' in ext.upper() and 'CA_HK' not in ext.upper():
                     self.l1_obj[ext] = self.l1_obj[ext] * (1 - drift_rv/c.to('km/s').value)
 
-
-
     def add_keywords(self, drift_rv):
         header = self.l1_obj.header['PRIMARY']
         header['DRFTCOR'] = 1
-        header['DRFTRV'] = np.median(drift_rv)
+        
+        # Robust check for None, NaN, or invalid values
+        if drift_rv is None or (hasattr(drift_rv, '__len__') and len(drift_rv) == 0):
+            self.log.warning("Drift RV is None or empty, setting DRFTRV to 0.")
+            header['DRFTRV'] = 0
+            header['DRFTMETH'] = self.method
+            return
+        
+        # Handle scalar or array-like drift_rv
+        try:
+            if np.isscalar(drift_rv):
+                rv_value = drift_rv
+            else:
+                rv_value = np.median(drift_rv)
+            
+            # Check for NaN or infinite values
+            if np.isnan(rv_value) or np.isinf(rv_value):
+                self.log.warning(f"Drift RV value is NaN/Inf ({rv_value}), setting DRFTRV to 0.")
+                header['DRFTRV'] = 0
+            else:
+                # Convert to Python float to avoid FITS header issues with numpy types
+                header['DRFTRV'] = float(rv_value)
+                
+        except (TypeError, ValueError) as e:
+            self.log.warning(f"Error processing drift RV value: {e}, setting DRFTRV to 0.")
+            header['DRFTRV'] = 0
+
         header['DRFTMETH'] = self.method
 
 

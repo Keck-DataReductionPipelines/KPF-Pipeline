@@ -8,9 +8,9 @@ from keckdrpframework.models.arguments import Arguments
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/stray_light/configs/default.cfg'
 
-class EstimateStrayLight(KPF0_Primitive):
+class StrayLight(KPF0_Primitive):
     """
-    Docstring
+    Primitive for stray light module
     """
     def __init__(self, action, context):
         
@@ -18,8 +18,8 @@ class EstimateStrayLight(KPF0_Primitive):
         KPF0_Primitive.__init__(self, action, context)
         
         # Input arguments
-        self.target_2D = self.action.args[0]           # KPF 2D object
-        self.masters_order_mask = self.action.args[1]
+        self.target_2D = self.action.args[0]
+        self.master_order_mask = self.action.args[1]
         
         # Input configuration
         self.config = configparser.ConfigParser()
@@ -36,12 +36,13 @@ class EstimateStrayLight(KPF0_Primitive):
                                        self.config_path
                                       )
             
-            stray_light_image, inter_order_mask = straylight.estimate_stray_light()
+            for chip in ['GREEN', 'RED']:
+                straylight.target_2D = straylight.remove_stray_light(chip)
             exit_code = 1
-            return Arguments([exit_code, stray_light_image, inter_order_mask])
+            return Arguments([exit_code, straylight.target_2D])
         except Exception as e:
             self.logger.error(f"StrayLight algorithm failed: {e}\n{traceback.format_exc()}")
-            return Arguments([exit_code, None, None])
+            return Arguments([exit_code, None])
 
     def _pre(self):
         pass
