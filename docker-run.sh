@@ -19,12 +19,12 @@ run_docker() {
             -e KPFPIPE_PORT="$port" \
             -e DBPORT=6125 \
             -e DBNAME=kpfopsdb \
-            -e DBUSER="${KPFPIPE_DB_USER:-bfulton}" \
+            -e DBUSER="${KPFPIPE_DB_USER:-}" \
             -e DBPASS="${KPFPIPE_DB_PASS:-}" \
             -e DBSERVER=127.0.0.1 \
             -e TSDBPORT=6127 \
             -e TSDBNAME=timeseriesopsdb \
-            -e TSDBUSER="${KPFPIPE_TSDB_USER:-timeseriesopsuser}" \
+            -e TSDBUSER="${KPFPIPE_TSDB_USER:-}" \
             -e TSDBPASS="${KPFPIPE_TSDB_PASS:-}" \
             -e TSDBSERVER=127.0.0.1 \
             -v "${PWD}:/code/KPF-Pipeline" \
@@ -38,12 +38,12 @@ run_docker() {
             --network=host \
             -e DBPORT=6125 \
             -e DBNAME=kpfopsdb \
-            -e DBUSER="${KPFPIPE_DB_USER:-bfulton}" \
+            -e DBUSER="${KPFPIPE_DB_USER:-}" \
             -e DBPASS="${KPFPIPE_DB_PASS:-}" \
             -e TSDBSERVER=127.0.0.1 \
             -e TSDBPORT=6127 \
             -e TSDBNAME=timeseriesopsdb \
-            -e TSDBUSER="${KPFPIPE_TSDB_USER:-timeseriesopsuser}" \
+            -e TSDBUSER="${KPFPIPE_TSDB_USER:-}" \
             -e TSDBPASS="${KPFPIPE_TSDB_PASS:-}" \
             -e DBSERVER_TSDB=127.0.0.1 \
             -v "${PWD}:/code/KPF-Pipeline" \
