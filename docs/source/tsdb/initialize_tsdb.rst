@@ -114,7 +114,7 @@ Add Group Roles For Inheritance
 ****************************************
 
 Different levels of privileges to be granted later to each group role (as appropriate for the name of the role):
-The group roles to be added are `kpfadminrole`, `kpfreadrole`, and `kpfporole`.
+The group roles to be added are ``kpfadminrole``, ``kpfreadrole``, and ``kpfporole``.
 The latter is group role for routine pipeline operations.
 
 .. code-block::
@@ -146,11 +146,10 @@ Add User Roles
 ****************************************
 
 The user roles inherit the group roles.
-The user roles to be added are `timeseriesdba`, `timeseriesreadonlyuser`, and `timeseriesopsuser`.
+The user roles to be added are ``timeseriesdba``, ``timeseriesreadonlyuser``, and ``timeseriesopsuser``.
 The latter is user role for routine pipeline operations.
 Enter a password for the user role (twice), then a password for the database administrator.
 The appropriate user-role passwords can be added to the .pgpass file in home directories of the assigned TSDB users.
-
 
 .. code-block::
 
@@ -194,4 +193,20 @@ The appropriate user-role passwords can be added to the .pgpass file in home dir
 
     psql -d timeseriesopsdb -h localhost -p 6127 -U timeseriesopsuser
     timeseriesopsdb=>
+
+
+
+Apply Superuser Grants to Group Admin Role
+********************************************
+
+.. code-block::
+
+    $ psql -p 6127 -d timeseriesopsdb
+
+    timeseriesopsdb=# GRANT ALL PRIVILEGES ON SCHEMA public TO kpfadminrole;
+    GRANT
+    timeseriesopsdb=# GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO kpfadminrole;
+    GRANT
+    timeseriesopsdb=# GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO kpfadminrole;
+    GRANT
 
