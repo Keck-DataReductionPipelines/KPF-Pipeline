@@ -101,11 +101,41 @@ Create the time-series database (call it `timeseriesopsdb`) with createdb comman
      timeseriesopsdb | rlaher | UTF8     | en_US.UTF-8 | en_US.UTF-8 |            | libc            |
     (4 rows)
 
-    For convenience, add entry to .pgpass file in home directory:
+For convenience, add entry to .pgpass file in home directory:
 
 .. code-block::
 
     $ vi /data/user/rlaher/.pgpass
     (insert the following line)
     localhost:6127:timeseriesopsdb:rlaher:My#Complex!Password&1234
+
+
+Add Group Roles For Inheritance
+****************************************
+
+Different levels of privileges to be granted later to each group role (as appropriate for the name of the role):
+
+.. code-block::
+
+    $ psql -p 6127 -d timeseriesopsdb
+
+    timeseriesopsdb=> create role kpfadminrole LOGIN SUPERUSER CREATEDB CREATEROLE;
+    timeseriesopsdb=> create role kpfporole;
+    timeseriesopsdb=> create role kpfreadrole;
+
+    timeseriesopsdb=> select * from pg_roles where rolname in ('rlaher', 'kpfadminrole', 'kpfporole', 'kpfreadrole');
+
+       rolname    | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolconnlimit | rolpassword | rolvaliduntil | rolbypassrls | rolc
+    onfig |  oid
+    --------------+----------+------------+---------------+-------------+-------------+----------------+--------------+-------------+---------------+--------------+-----
+    ------+-------
+     rlaher       | t        | t          | t             | t           | t           | t              |           -1 | ********    |               | t            |
+          |    10
+     kpfadminrole | t        | t          | t             | t           | t           | f              |           -1 | ********    |               | f            |
+          | 16392
+     kpfporole    | f        | t          | f             | f           | f           | f              |           -1 | ********    |               | f            |
+          | 16393
+     kpfreadrole  | f        | t          | f             | f           | f           | f              |           -1 | ********    |               | f            |
+          | 16394
+    (4 rows)
 
