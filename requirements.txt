@@ -20,6 +20,8 @@ tqdm
 dataclasses
 pyyaml
 seaborn
+pvlib
+astroplan
 # The following is required by polly.
 pyfonts
 

@@ -12,10 +12,10 @@ from astroplan import Observer
 from astropy.time import Time
 from astropy import units as u
 
-from multiprocessing import Pool
-from utils import isot_to_date
+#from multiprocessing import Pool
+#from utils import isot_to_date
 
-import warnings
+#import warnings
 from datetime import datetime, timedelta
 
 import astropy.constants as apc
@@ -39,11 +39,7 @@ class Socal:
         none
 
     """
-    def __init__(self, 
-                 kpfobject, 
-                 default_config_path,
-                 logger=None
-                ):
+    def __init__(self):
         """
         Inits Socal class with raw data, order mask, config, logger.
         
@@ -63,20 +59,14 @@ class Socal:
         cfg_params = ConfigHandler(self.config, 'PARAM')
 
         self.kpfobject = kpfobject        
+    
 
-
-   
-
-
-        
-        
-
-mpl.rc('font', family='sans serif', size=16)
+#mpl.rc('font', family='sans serif', size=16)
 
 _second = 1/86400
 _minute = 60/86400
 
-BASEDIR = os.environ.get('BASEDIR')
+BASEDIR = '/data/pyr/' # os.environ.get('BASEDIR')
 
 wmko = coord.EarthLocation.of_site('Keck Observatory')
 kpf = pv.location.Location(wmko.lat.to(u.deg).value, wmko.lon.to(u.deg).value,
@@ -84,7 +74,7 @@ kpf = pv.location.Location(wmko.lat.to(u.deg).value, wmko.lon.to(u.deg).value,
 
 kittpeak = coord.EarthLocation.of_site('Kitt Peak')
 neid = pv.location.Location(kittpeak.lat.to(u.deg).value, kittpeak.lon.to(u.deg).value,
-                            altitude=kittpeak.height.to(u.m).value, tz='UTC', name='KPF SoCal')
+                            altitude=kittpeak.height.to(u.m).value, tz='UTC', name='NEID')
 
 locations = {'kpf': kpf, 'neid': neid}
 observers = {'kpf': Observer(latitude=wmko.lat, longitude=wmko.lon, elevation=wmko.height),
@@ -98,7 +88,7 @@ def dateformat(ax):
     ax.xaxis.set_major_formatter(formatter)
 
 
-def compute_clearness_on_date(date, inst='kpf', plot=False, save_output=True, **kwargs):
+def compute_clearness_on_date(date, inst='kpf', plot=False, save_output=False, **kwargs):
     '''
     For a specificied date (in %Y%m%d format), 
     compute the clearness index from the pyrheliometer data
@@ -109,7 +99,7 @@ def compute_clearness_on_date(date, inst='kpf', plot=False, save_output=True, **
     utc_offset = utc_offsets[inst]
     
     # Get irradiance timeseries
-    pyrdata = get_irrad_for_date(date, inst)
+    pyrdata = read_irrad_for_date(date, inst)
     if pyrdata is None:
         print(f'No Pyrheliometer data for {inst} on {date}')
         return None
@@ -170,7 +160,7 @@ def compute_clearness_on_date(date, inst='kpf', plot=False, save_output=True, **
         datestr = date.replace('-', '')
         df.to_csv(f'{savedir}/{datestr}_clearsky_metrics.csv', index=False)
 
-def get_irrad_for_date(date, inst='kpf'):
+def read_irrad_for_date(date, inst='kpf'):
     '''
     Return dataframe for table of pyrheliometer irradiance
     measurements for the given instrument on the given date
@@ -196,10 +186,12 @@ def compute_clearness_index(jd, dni, time_window_size=300, time_slide_size=60, s
     time_window_size [float]: window size in seconds
     time_slide_size [float] : length of time to slide windows by [sec] 
 
-    Assume in a short time window (e.g., <30 min), DNI varies smoothly and slowly (i.e., quadratic polynomial). 
-    DNI variations should follow this smooth variation, up to some statistical noise. A quality factor computed 
-    for that time window can be determined by fitting a quadratic model, and then comparing either the chi^2 
-    of the fit or the residual RMS to the expected systematic noise floor (estimated from pre-sunrise data).
+    Assume in a short time window (e.g., <30 min), DNI varies smoothly and 
+    slowly (i.e., quadratic polynomial). DNI variations should follow this 
+    smooth variation, up to some statistical noise. A quality factor computed 
+    for that time window can be determined by fitting a quadratic model, and 
+    then comparing either the chi^2 of the fit or the residual RMS to the 
+    expected systematic noise floor (estimated from pre-sunrise data).
     '''
 
     num_sub_windows = int(time_window_size/time_slide_size)
@@ -242,44 +234,45 @@ def compute_clearness_index(jd, dni, time_window_size=300, time_slide_size=60, s
             clearness_values[n][chunk] = QF
 
     clearness_index = np.min(clearness_values, axis=0)
+    
     return clearness_index
 
 
-def make_clearness_plot(jd, dni, dni0, clearness_index, clear_flag,
-                        very_clear_flag=None, ax=None, sun_up=None,
-                        dni_extra=0, savefile=None, **kwargs):
-
-    dts = Time(jd, format='jd').to_datetime()
-    pldts = mpl.dates.date2num(dts)-10/24 # for plotting in HST
-    if ax is None:
-        fig, ax = plt.subplots(1,1, figsize=(15,5))
-
-    # Measured irradiance 
-    ax.plot(pldts, dni - dni_extra, zorder=2)
-
-    # Clear sky irradiance
-    ax.plot(pldts, dni0, zorder=5)
-
-    # Shade clear/cloudy times
-    ax2 = plt.gca().twinx()
-    ax2.plot(pldts, clearness_index, color='k', ls=':', lw=1, zorder=0)
-    notclear = (~clear_flag & sun_up) if not sun_up is None else ~clear_flag
-    ax.fill_between(pldts, 0, 1200, where=notclear,   alpha=0.1, color='r', zorder=-1)
-    ax.fill_between(pldts, 0, 1200, where=clear_flag, alpha=0.1, color='g', zorder=-1)
-    if not very_clear_flag is None:
-        ax.fill_between(pldts, 0, 1200, where=very_clear_flag,  alpha=0.1, color='g', zorder=-1)
-
-    # Color sunrise/sets
-    if not sun_up is None:
-        ax.fill_between(pldts, 0, 1200, where=~sun_up, color='grey', alpha=1.0, zorder=-2)
-
-    # Plot settings
-    dateformat(ax)
-    ax.set(xlim=[pldts.min(), pldts.max()], ylim=[0,1200],
-           xlabel='Time [HST]', ylabel='Irradiance [W/m$^2$]');
-    ax2.set(**kwargs, ylabel='Clearness index');
-    if not savefile is None:
-        plt.savefig(savefile, dpi=300, bbox_inches='tight', format=savefile.split('.')[-1])
+#def make_clearness_plot(jd, dni, dni0, clearness_index, clear_flag,
+#                        very_clear_flag=None, ax=None, sun_up=None,
+#                        dni_extra=0, savefile=None, **kwargs):
+#
+#    dts = Time(jd, format='jd').to_datetime()
+#    pldts = mpl.dates.date2num(dts)-10/24 # for plotting in HST
+#    if ax is None:
+#        fig, ax = plt.subplots(1,1, figsize=(15,5))
+#
+#    # Measured irradiance 
+#    ax.plot(pldts, dni - dni_extra, zorder=2)
+#
+#    # Clear sky irradiance
+#    ax.plot(pldts, dni0, zorder=5)
+#
+#    # Shade clear/cloudy times
+#    ax2 = plt.gca().twinx()
+#    ax2.plot(pldts, clearness_index, color='k', ls=':', lw=1, zorder=0)
+#    notclear = (~clear_flag & sun_up) if not sun_up is None else ~clear_flag
+#    ax.fill_between(pldts, 0, 1200, where=notclear,   alpha=0.1, color='r', zorder=-1)
+#    ax.fill_between(pldts, 0, 1200, where=clear_flag, alpha=0.1, color='g', zorder=-1)
+#    if not very_clear_flag is None:
+#        ax.fill_between(pldts, 0, 1200, where=very_clear_flag,  alpha=0.1, color='g', zorder=-1)
+#
+#    # Color sunrise/sets
+#    if not sun_up is None:
+#        ax.fill_between(pldts, 0, 1200, where=~sun_up, color='grey', alpha=1.0, zorder=-2)
+#
+#    # Plot settings
+#    dateformat(ax)
+#    ax.set(xlim=[pldts.min(), pldts.max()], ylim=[0,1200],
+#           xlabel='Time [HST]', ylabel='Irradiance [W/m$^2$]');
+#    ax2.set(**kwargs, ylabel='Clearness index');
+#    if not savefile is None:
+#        plt.savefig(savefile, dpi=300, bbox_inches='tight', format=savefile.split('.')[-1])
 
 
 def match_clearness_to_timestamps(jd, exptime, date, inst, logger):
@@ -365,45 +358,43 @@ def match_clearness_to_timestamps(jd, exptime, date, inst, logger):
     return clear, dni, dni0, dnirms, clearidx
 
 
-if __name__ == '__main__':
-
-    p = argparse.ArgumentParser(description="Process SoCal data for a given date")
-    p.add_argument("-d", "--date", dest="date", type=str, required=False,
-                    default=None,   help="Date to run SoCal pipeline on")
-    p.add_argument("-s", "--datestart", dest="datestart", type=str, required=False,
-                    default=None,   help="Start date for reprocess")
-    p.add_argument("-e", "--dateend", dest="dateend", type=str, required=False,
-                    default=None,   help="End date for reprocess")
-    p.add_argument("-p", "--doplots",dest="doplots", action=argparse.BooleanOptionalAction,
-                    default=False,   help="Whether to create and save clearness plots")
-    p.add_argument("-i", "--inst",dest="inst", type=str, required=False,
-                    default='kpf',   help="Which instrument to run the calculation on [kpf, neid]")
-    args = p.parse_args()
-
-    #################  Dates to run  #################
-    if args.date is None:
-        ds = args.datestart if not args.datestart is None else '20230425' # SoCal first light and Ryan's birthday
-        de = args.dateend   if not args.dateend   is None else isot_to_date(Time.now().isot)
-        date_start = Time(ds[:4]+'-'+ds[4:6]+'-'+ds[6:8], format='isot')
-        date_end   = Time(de[:4]+'-'+de[4:6]+'-'+de[6:8], format='isot')
-        all_dates = [isot_to_date(d) for d in Time(np.arange(date_start.jd, date_end.jd, 1), format='jd').isot]
-    
-        # parallelize
-        ncores = min(16, len(all_dates))
-        def wrapper(date):
-            compute_clearness_on_date(date, inst=args.inst, plot=args.doplots)
-        with Pool(ncores) as p:
-            p.map(wrapper, all_dates)
-   
-        # for date in all_dates:
-        #     #################  Compute clearness metrics during date  #################
-        #     try:
-        #         compute_clearness_on_date(date, inst=args.inst, plot=args.doplots)
-        #     except Exception as e:
-        #         print(e)
-    
-    else:
-        try:
-            compute_clearness_on_date(args.date, inst=args.inst, plot=args.doplots)
-        except Exception as e:
-            print(e)
+#if __name__ == '__main__':
+#
+#    p = argparse.ArgumentParser(description="Process SoCal data for a given date")
+#    p.add_argument("-d", "--date", dest="date", type=str, required=False, default=None,   help="Date to run SoCal pipeline on")
+#    p.add_argument("-s", "--datestart", dest="datestart", type=str, required=False, default=None,   help="Start date for reprocess")
+#    p.add_argument("-e", "--dateend", dest="dateend", type=str, required=False, default=None,   help="End date for reprocess")
+#    p.add_argument("-p", "--doplots",dest="doplots", action=argparse.BooleanOptionalAction, default=False,   help="Whether to create and save clearness plots")
+#    p.add_argument("-i", "--inst",dest="inst", type=str, required=False, default='kpf',   help="Which instrument to run the calculation on [kpf, neid]")
+#    args = p.parse_args()
+#
+#    #################  Dates to run  #################
+#    if args.date is None:
+#        ds = args.datestart if not args.datestart is None else '20230425' # SoCal first light and Ryan's birthday
+#        de = args.dateend   if not args.dateend   is None else datetime.utcnow().strftime("%Y%m%d")
+#        
+#        isot_to_date(Time.now().isot)
+#        date_start = Time(ds[:4]+'-'+ds[4:6]+'-'+ds[6:8], format='isot')
+#        date_end   = Time(de[:4]+'-'+de[4:6]+'-'+de[6:8], format='isot')
+#        all_dates = [isot_to_date(d) for d in Time(np.arange(date_start.jd, date_end.jd, 1), format='jd').isot]
+#    
+#        # parallelize
+#        ncores = min(16, len(all_dates))
+#        def wrapper(date):
+#            compute_clearness_on_date(date, inst=args.inst, plot=args.doplots)
+#        with Pool(ncores) as p:
+#            p.map(wrapper, all_dates)
+#   
+#        # for date in all_dates:
+#        #     #################  Compute clearness metrics during date  #################
+#        #     try:
+#        #         compute_clearness_on_date(date, inst=args.inst, plot=args.doplots)
+#        #     except Exception as e:
+#        #         print(e)
+#    
+#    else:
+#        try:
+#            compute_clearness_on_date(args.date, inst=args.inst, plot=args.doplots)
+#        except Exception as e:
+#            print(e)
+#
