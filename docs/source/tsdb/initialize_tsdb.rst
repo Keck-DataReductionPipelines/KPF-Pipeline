@@ -70,6 +70,8 @@ Start up the database server:
     waiting for server to start.... done
     server started
 
+    $ ps -ef | grep postgres | grep 6127 | grep -v grep
+    rlaher    524244       1  0 Jul30 ?        02:17:19 /data/user/rlaher/db/pg15.2/bin/postgres -D /data/user/rlaher/timeseriesdb/dbdata -p 6127
 
 Here is one way to stop the database server if a restart is needed to boot up a new configuration.
 
@@ -78,9 +80,6 @@ Here is one way to stop the database server if a restart is needed to boot up a 
     $ pg_ctl -D $TIMESERIESDB/dbdata -l $TIMESERIESDB/dblogs/log -o "-p 6127" -m smart stop
     waiting for server to shut down.... done
     server stopped
-
-    $ ps -ef | grep postgres | grep 6127 | grep -v grep
-    rlaher    524244       1  0 Jul30 ?        02:17:19 /data/user/rlaher/db/pg15.2/bin/postgres -D /data/user/rlaher/timeseriesdb/dbdata -p 6127
 
 Create the time-series database (call it `timeseriesopsdb`) with createdb command (and enter password):
 
