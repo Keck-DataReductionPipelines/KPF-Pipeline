@@ -1,4 +1,4 @@
-Initializing the Time-Series PostgreSQL Database
+Initializing Time-Series PostgreSQL Database
 ####################################################
 
 Introduction
@@ -19,7 +19,7 @@ terminal-window environment:
 
 Although the above example uses PostgreSQL version 15.2, the latest PostgreSQL version may be used.
 
-The Linux account that performs the steps below "owns" the Postgres database (USER environment variable).
+The Linux account that performs the steps below "owns" the Postgres database as administrator (USER environment variable).
 
 
 Initialize and Start PostgreSQL Server
@@ -114,14 +114,16 @@ Add Group Roles For Inheritance
 ****************************************
 
 Different levels of privileges to be granted later to each group role (as appropriate for the name of the role):
+The group roles to be added are `kpfadminrole`, `kpfreadrole`, and `kpfporole`.
+The latter is group role for routine pipeline operations.
 
 .. code-block::
 
     $ psql -p 6127 -d timeseriesopsdb
 
     timeseriesopsdb=> create role kpfadminrole LOGIN SUPERUSER CREATEDB CREATEROLE;
-    timeseriesopsdb=> create role kpfporole;
     timeseriesopsdb=> create role kpfreadrole;
+    timeseriesopsdb=> create role kpfporole;
 
     timeseriesopsdb=> select * from pg_roles where rolname in ('rlaher', 'kpfadminrole', 'kpfporole', 'kpfreadrole');
 
@@ -138,4 +140,58 @@ Different levels of privileges to be granted later to each group role (as approp
      kpfreadrole  | f        | t          | f             | f           | f           | f              |           -1 | ********    |               | f            |
           | 16394
     (4 rows)
+
+
+Add User Roles
+****************************************
+
+The user roles inherit the group roles.
+The user roles to be added are `timeseriesdba`, `timeseriesreadonlyuser`, and `timeseriesopsuser`.
+The latter is user role for routine pipeline operations.
+Enter a password for the user role (twice), then a password for the database administrator.
+The appropriate user-role passwords can be added to the .pgpass file in home directories of the assigned TSDB users.
+
+
+.. code-block::
+
+    $ createuser -h localhost -p 6127 --connection-limit=10 --echo --role=kpfadminrole --pwprompt timeseriesdba -W
+    Enter password for new role:
+    Enter it again:
+    Password:
+    SELECT pg_catalog.set_config('search_path', '', false);
+    CREATE ROLE timeseriesdba PASSWORD 'md5328138f2dfe618c37b96de28ecb91649' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT LOGIN CONNECTION LIMIT 10 IN ROLE kpfadminrole;
+
+    $ echo $?
+    0
+
+    $ psql -d timeseriesopsdb -h localhost -p 6127 -U timeseriesdba
+    timeseriesopsdb=#
+
+
+    $ createuser -h localhost -p 6127 --connection-limit=100 --echo --role=kpfreadrole --pwprompt timeseriesreadonlyuser -W
+    Enter password for new role:
+    Enter it again:
+    Password:
+    SELECT pg_catalog.set_config('search_path', '', false);
+    CREATE ROLE timeseriesreadonlyuser PASSWORD 'md5a477f1f215d6ab77e67d1228034a7529' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT LOGIN CONNECTION LIMIT 100 IN ROLE kpfreadrole;
+
+    $ echo $?
+    0
+
+    $ psql -d timeseriesopsdb -h localhost -p 6127 -U timeseriesreadonlyuser
+    timeseriesopsdb=>
+
+
+    $ createuser -h localhost -p 6127 --connection-limit=100 --echo --role=kpfporole --pwprompt timeseriesopsuser -W
+    Enter password for new role:
+    Enter it again:
+    Password:
+    SELECT pg_catalog.set_config('search_path', '', false);
+    CREATE ROLE timeseriesopsuser PASSWORD 'md54cf91a5a9fa1c099fb7231024d23dc88' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT LOGIN CONNECTION LIMIT 100 IN ROLE kpfporole;
+
+    $ echo $?
+    0
+
+    psql -d timeseriesopsdb -h localhost -p 6127 -U timeseriesopsuser
+    timeseriesopsdb=>
 
