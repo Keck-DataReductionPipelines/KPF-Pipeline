@@ -137,7 +137,7 @@ if (! (defined $tsdbpass)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l1.pl';
-my $version = '2.2';
+my $version = '2.3';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -216,7 +216,7 @@ my $script = "#! /bin/bash\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
              "mkdir -p /data/masters/${procdate}\n" .
              "cp -pr /masters/${procdate}/kpf_${procdate}*.fits /data/masters/${procdate}\n" .
-             "kpf --ncpus 32 --watch /data/masters/${procdate}/ --reprocess --masters -r $recipe  -c $config \n" .
+             "kpf --ncpus 32 --reprocess /data/masters/${procdate}/ --masters -r $recipe  -c $config \n" .
              "cp -p /data/masters/${procdate}/* /masters/${procdate}\n" .
              "mkdir -p /masters/${procdate}/${logssubdir}\n" .
              "cp -p /data/logs/${procdate}/kpf_${procdate}_*.log /masters/${procdate}/${logssubdir}\n" .

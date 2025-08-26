@@ -39,11 +39,11 @@ GRELAPS|float|Actual exposure time, Green camera|sec
 RDELAPS|float|Actual exposure time, Red camera|sec
 IMTYPE|string|Image type|None
 FFFB|string|Flat field fiber on (Yes/No)|None
-GREEN|string|Green camera found (Yes/No)|None
-RED|string|Red camera found (Yes/No)|None
-CA_HK|string|Ca HK camera found (Yes/No)|None
-EXPMETER|string|Exposure meter camera found (Yes/No)|None
-GUIDE|string|Guide camera found (Yes/No)|None
+GREEN|bool|Green camera found (Yes/No)|None
+RED|bool|Red camera found (Yes/No)|None
+CA_HK|bool|Ca HK camera found (Yes/No)|None
+EXPMETER|bool|Exposure meter camera found (Yes/No)|None
+GUIDE|bool|Guide camera found (Yes/No)|None
 CAL-OBJ|string|Cal fiber source|None
 SKY-OBJ|string|Sky fiber source|None
 SCI-OBJ|string|Science fiber source|None

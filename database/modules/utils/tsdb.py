@@ -3,6 +3,7 @@ import re
 import glob
 import json
 import copy
+import math
 import fnmatch
 import sqlite3
 import hashlib
@@ -161,6 +162,7 @@ class TSDB:
         self.backend = backend 
         self.logger.info(f'Base data directory: {self.base_dir}')
         self.logger.info(f'Backend: {backend}')
+        self.logger.info(f'Table prefix: {tables_prefix}')
         if self.backend != 'sqlite' and self.backend != 'psql':
             self.logger.info("Invalid entry for backend.  Must be 'sqlite' or 'psql'.")
             return
@@ -280,9 +282,9 @@ class TSDB:
                 self._create_data_tables()
             else:
                 self.logger.info(f"Cannot create data tables as user: {self.user_role}")
+                self.logger.info("Additional database functions will not work.")
         else:
             self.logger.info("Data tables exist.")
-            self.logger.info("Additional database functions will not work.")
 
 
     def require_role(allowed_roles=None):
@@ -1177,12 +1179,11 @@ class TSDB:
                 table_name = self.kw_to_table.get(kw)
                 if table_name:
                     table_data.setdefault(table_name, {})[kw] = value
-    
+
             for tbl, data in table_data.items():
-                for kw in data:
+                for kw in list(data):
                     if kw in self.bool_columns:
-                        val = data[kw]
-                        data[kw] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y']
+                        data[kw] = self.normalize_bool_or_none(data[kw])
                 data['ObsID'] = base_filename
     
             for tbl, data in table_data.items():
@@ -1432,8 +1433,7 @@ class TSDB:
                 for data in structured_data.values():
                     for kw in data:
                         if kw in self.bool_columns:
-                            val = data[kw]
-                            data[kw] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y']
+                            data[kw] = self.normalize_bool_or_none(data[kw])
     
                 columns = list(next(iter(structured_data.values())).keys())
                 col_str = ', '.join(f'"{col}"' for col in columns)
@@ -2415,6 +2415,9 @@ class TSDB:
             self._execute_sql_command(query, params)
             fetched_data = self.cursor.fetchall()
             col_names = [desc[0] for desc in self.cursor.description]
+            if verbose:
+                self.logger.debug("Fetched Data:")
+                self.logger.debug(fetched_data)
     
             df = pd.DataFrame(fetched_data, columns=col_names)
     
@@ -2492,6 +2495,11 @@ class TSDB:
             df['ObsID'] = df['ObsID'].apply(
                 lambda obsid: f'<a href="{url_stub}{obsid}" target="_blank">{obsid}</a>'
             )
+
+        # Coerce boolean-like columns to pandas nullable boolean so they print as True/False/<NA>
+        for col in getattr(self, "bool_columns", []):
+            if col in df.columns:
+                df[col] = df[col].map(lambda v: None if pd.isna(v) else bool(v)).astype("boolean")
 
         # Generate HTML table with scrolling and sortable columns
         html = df.to_html(escape=False, index=False, classes='sortable')
@@ -2620,6 +2628,84 @@ class TSDB:
                 print("No [ERROR] lines found across all logs.")
 
 
+    TRUE_TOKENS  = frozenset({'1','true','t','yes','y','open'})
+    FALSE_TOKENS = frozenset({'0','false','f','no','n','closed'})
+
+    @staticmethod
+    def normalize_bool_or_none(val):
+        """
+        Normalize heterogeneous “boolean-like” values to True/False/None.
+    
+        This helper converts common representations seen in FITS headers, telemetry,
+        and CSVs to a canonical boolean while preserving missing/unknown as None.
+    
+        Rules:
+          * Missing values (None, NaN, NaT, pandas/NumPy NA) → None
+          * Booleans or integers → bool(val)    (0 → False, non-zero → True)
+          * Strings (case/whitespace-insensitive):
+              - in TSDB.TRUE_TOKENS  → True
+              - in TSDB.FALSE_TOKENS → False
+              - "", "nan", "none", "null" → None
+              - anything else → None
+          * Non-integer numerics (e.g., 0.0, 1.0) are treated as unknown → None
+            (except NaN, which is considered missing)
+    
+        Args:
+            val (Any): Input value to normalize.
+    
+        Returns:
+            Optional[bool]: True, False, or None if missing/unknown.
+    
+        Notes:
+            The token sets are defined on the class as:
+            TSDB.TRUE_TOKENS  = {'1','true','t','yes','y','open'}
+            TSDB.FALSE_TOKENS = {'0','false','f','no','n','closed'}
+    
+        Examples:
+            >>> TSDB.normalize_bool_or_none(True)
+            True
+            >>> TSDB.normalize_bool_or_none(0)
+            False
+            >>> TSDB.normalize_bool_or_none(7)
+            True
+            >>> TSDB.normalize_bool_or_none("  YES ")
+            True
+            >>> TSDB.normalize_bool_or_none("no")
+            False
+            >>> TSDB.normalize_bool_or_none("maybe")
+            None
+            >>> import numpy as np, pandas as pd
+            >>> TSDB.normalize_bool_or_none(np.nan)
+            None
+            >>> TSDB.normalize_bool_or_none(pd.NA)
+            None
+            >>> TSDB.normalize_bool_or_none(0.0)
+            None
+        """
+        # Missing
+        if val is None:
+            return None
+        if isinstance(val, float) and math.isnan(val):
+            return None
+        if pd.isna(val):
+            return None
+
+        # Already boolean-ish
+        if isinstance(val, (bool, np.bool_)):
+            return bool(val)
+        if isinstance(val, (int, np.integer)):
+            return bool(val)
+
+        # Strings
+        if isinstance(val, str):
+            s = val.strip().lower()
+            if s in TSDB.TRUE_TOKENS:  return True
+            if s in TSDB.FALSE_TOKENS: return False
+            if s in {"", "nan", "none", "null"}: return None
+
+        # Unknown token → treat as missing
+        return None
+
 def process_file(file_path, now_str,
                  extraction_plan, bool_columns, kw_to_table, keywords_by_table, kw_to_dtype,
                  _extract_kwd_func, _extract_telemetry_func, _extract_rvs_func,
@@ -2708,8 +2794,7 @@ def process_file(file_path, now_str,
     # Convert boolean columns explicitly
     for col in bool_columns:
         if col in extraction_results:
-            val = extraction_results[col]
-            extraction_results[col] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y', 'open']
+            extraction_results[col] = TSDB.normalize_bool_or_none(extraction_results[col])
 
     # Apply safe_float explicitly to all float columns
     for kw, dtype in kw_to_dtype.items():

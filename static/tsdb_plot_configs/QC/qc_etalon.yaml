@@ -23,7 +23,7 @@ panel_arr:
       - col: ETASTEMP
         plot_type: state
         plot_attr:
-          label: "Etalon at set temp"
+          label: "Etalon at Set Temp"
           marker: .
     paneldict:
       ylabel: "Etalon at set temp\n(ETASTEMP)"

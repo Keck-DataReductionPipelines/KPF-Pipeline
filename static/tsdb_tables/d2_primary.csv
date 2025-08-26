@@ -31,6 +31,11 @@ NOTVIGN|bool|QC: Telescope not vignetted by dome|None
 GOODEL|bool|QC: Telescope elevation above 30 deg (for ADC)|None
 ETASTEMP|bool|QC: Etalon at set temperature|None
 FLXSTATS|bool|QC: Flux stats in/out of order trace as expected|None
+HKSHTOPN|bool|QC: HK shutter open and HK requested; not bias/dark|None
+GRCCDT10|bool|QC: Green CCD > 10 mK from temp set point|None
+GRCCDT1|bool|QC: Green CCD > 1000 mK (1 C) from temp set point|None
+RDCCDT10|bool|QC: Red CCD > 10 mK from temp set point|None
+RDCCDT1|bool|QC: Red CCD > 1000 mK (1 C) from temp set point|None
 BIASFILE|string|Master bias file used (except for bias exposures)|None
 DARKFILE|string|Master dark file used (except for dark exposures)|None
 FLATFILE|string|Master flat file used (except for flat exposures)|None
