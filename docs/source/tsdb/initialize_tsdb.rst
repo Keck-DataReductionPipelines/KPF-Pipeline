@@ -22,7 +22,7 @@ Although the above example uses PostgreSQL version 15.2, the latest PostgreSQL v
 The Linux account that performs the steps below "owns" the Postgres database as administrator (USER environment variable).
 
 
-Initialize and Start PostgreSQL Server
+Initialize And Start PostgreSQL Server
 ****************************************
 
 Make separate directories for the database data and logs:
@@ -196,7 +196,7 @@ The appropriate user-role passwords can be added to the .pgpass file in home dir
 
 
 
-Apply Superuser Grants to Group Admin Role
+Apply Superuser Grants To Group Admin Role
 ********************************************
 
 .. code-block::
@@ -210,3 +210,34 @@ Apply Superuser Grants to Group Admin Role
     timeseriesopsdb=# GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO kpfadminrole;
     GRANT
 
+
+
+Changes To Default Database Configuration
+********************************************
+
+Below are additional configuration changes that have been implemented:
+
+.. code-block::
+
+    $ vi postgresql.conf
+
+    listen_addresses = '*'
+    shared_buffers = 128GB
+    max_connections=300
+    logging_collector = on
+    log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+    log_file_mode = 0640
+    log_rotation_age = 7d
+
+
+The database server must be stopped and restarted for the changes to take effect:
+
+.. code-block::
+
+    $ pg_ctl -D $TIMESERIESDB/dbdata -l $TIMESERIESDB/dblogs/log -o "-p 6127" -m smart stop
+    waiting for server to shut down.... done
+    server stopped
+
+    $ pg_ctl -D $TIMESERIESDB/dbdata -l $TIMESERIESDB/dblogs/log -o "-p 6127" start
+    waiting for server to start.... done
+    server started
