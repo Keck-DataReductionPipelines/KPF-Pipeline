@@ -162,6 +162,7 @@ class TSDB:
         self.backend = backend 
         self.logger.info(f'Base data directory: {self.base_dir}')
         self.logger.info(f'Backend: {backend}')
+        self.logger.info(f'Table prefix: {tables_prefix}')
         if self.backend != 'sqlite' and self.backend != 'psql':
             self.logger.info("Invalid entry for backend.  Must be 'sqlite' or 'psql'.")
             return

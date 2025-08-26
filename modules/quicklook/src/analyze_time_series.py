@@ -82,7 +82,7 @@ class AnalyzeTimeSeries:
         self.db = TSDB(backend=backend, 
                        db_path=db_path, 
                        base_dir=base_dir, 
-                       tables_prefix='tsdb_', 
+                       tables_prefix=tables_prefix, 
                        credentials=credentials, 
                        logger=logger, 
                        verbose=verbose)
