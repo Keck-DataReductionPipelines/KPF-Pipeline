@@ -1,9 +1,10 @@
-import time
 import os
+import time
 import datetime
 import pvlib as pv
 import numpy as np
 import pandas as pd
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from modules.Utils.utils import DummyLogger
 from astroplan import Observer
@@ -12,6 +13,12 @@ from astropy import units as u
 from datetime import datetime
 import astropy.coordinates as coord
 from modules.Utils.kpf_parse import HeaderParse
+
+def dateformat(ax):
+    locator   = mpl.dates.AutoDateLocator()
+    formatter = mpl.dates.ConciseDateFormatter(locator)
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
 
 class AnalyzePyr:
 
@@ -34,7 +41,7 @@ class AnalyzePyr:
         self.verbose = verbose
         self.irr_fn = f'{self.basedir}/irradiance/{self.datecode[:4]}/pyr_irrad_{self.datecode}.csv'
         self.clearsky_dir = f'{self.basedir}/clearness/{self.datecode[:4]}'
-        self.clearsky_fn = f'{self.clearsky_dir}/{self.datecode}_clearsky_metrics_TEST.csv'
+        self.clearsky_fn = f'{self.clearsky_dir}/{self.datecode}_clearsky_metrics.csv'
 
         wmko = coord.EarthLocation.of_site('Keck Observatory')
         kpf = pv.location.Location(wmko.lat.to(u.deg).value, wmko.lon.to(u.deg).value,
@@ -161,8 +168,9 @@ class AnalyzePyr:
                 ichunk = self.dni[chunk]
     
                 if len(ichunk) < 100:
-                    print('[{}] '.format(Time(np.mean(tchunk), format='jd').isot +\
-                          'Irradiance chunk fewer than 100 points.  Declaring this chunk "not clear."'))
+                    if verbose:
+                        self.logger.debug('[{}] '.format(Time(np.mean(tchunk), format='jd').isot +\
+                              'Irradiance chunk fewer than 100 points.  Declaring this chunk "not clear."'))
                     continue
     
                 t = (tchunk - tchunk.min()) * 86400
@@ -191,3 +199,60 @@ class AnalyzePyr:
         df.to_csv(self.clearsky_fn, index=False)
         if self.verbose:
             self.logger.debug(f'Clearsky metrics file written: {self.clearsky_fn}')
+
+
+    def plot_clearness(self, very_clear_flag=None, sun_up=None, dni_extra=0,
+                             fig_path=None, show_plot=False):
+        """
+        Generate a plot of observed and computed irradiance as well as the 
+        clearness metric for a given date.
+
+        Args:
+            fig_path (string) - set to the path for a SNR vs. wavelength file
+                to be generated.
+            show_plot (boolean) - show the plot in the current environment.
+
+        Returns:
+            PNG plot in fig_path or shows the plot it the current environment
+            (e.g., in a Jupyter Notebook).
+        """
+    
+        pldts = mpl.dates.date2num(self.dts)-10/24 # for plotting in HST
+        fig, ax = plt.subplots(1,1, figsize=(15,5))
+    
+        # Measured irradiance 
+        ax.plot(pldts, self.dni - dni_extra, lw=3, zorder=2)
+    
+        # Clear sky irradiance
+        ax.plot(pldts, self.dni0, lw=3, zorder=5)
+    
+        # Shade clear/cloudy times
+        ax2 = plt.gca().twinx()
+        ax2.plot(pldts, self.clearness_index, color='k', ls=':', lw=1, zorder=0)
+        notclear = (~self.clear_flag & sun_up) if not sun_up is None else ~self.clear_flag
+        ax.fill_between(pldts, 0, 1200, where=notclear,   alpha=0.1, color='r', zorder=-1)
+        ax.fill_between(pldts, 0, 1200, where=self.clear_flag, alpha=0.1, color='g', zorder=-1)
+        if not very_clear_flag is None:
+            ax.fill_between(pldts, 0, 1200, where=very_clear_flag,  alpha=0.1, color='g', zorder=-1)
+    
+        # Color sunrise/sets
+        if not sun_up is None:
+            ax.fill_between(pldts, 0, 1200, where=~sun_up, color='grey', alpha=1.0, zorder=-2)
+    
+        # Plot settings
+        dateformat(ax)
+        ax.set(xlim=[pldts.min(), pldts.max()], ylim=[0,1200],
+               xlabel='Time [HST]', ylabel='Irradiance [W/m$^2$]');
+        ax2.set(ylabel='Clearness index');
+        ax.tick_params(labelsize=12)
+        ax.xaxis.label.set_size(18)
+        ax.yaxis.label.set_size(18)
+        ax2.xaxis.label.set_size(12)
+        ax2.yaxis.label.set_size(18)
+        
+        # Display the plot
+        if fig_path != None:
+            plt.savefig(fig_path, dpi=200, facecolor='w')
+        if show_plot == True:
+            plt.show()
+        plt.close('all')
