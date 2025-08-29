@@ -202,7 +202,7 @@ class AnalyzePyr:
 
 
     def plot_clearness(self, very_clear_flag=None, sun_up=None, dni_extra=0,
-                             fig_path=None, show_plot=False):
+                             overplot_clearness=False, fig_path=None, show_plot=False):
         """
         Generate a plot of observed and computed irradiance as well as the 
         clearness metric for a given date.
@@ -225,12 +225,15 @@ class AnalyzePyr:
     
         # Clear sky irradiance
         ax.plot(pldts, self.dni0, lw=3, zorder=5)
+
+        # Clearness index
+        if overplot_clearness:
+            ax2 = plt.gca().twinx()
+            ax2.plot(pldts, self.clearness_index, color='k', ls=':', lw=1, zorder=0)
     
         # Shade clear/cloudy times
-        ax2 = plt.gca().twinx()
-        ax2.plot(pldts, self.clearness_index, color='k', ls=':', lw=1, zorder=0)
         notclear = (~self.clear_flag & sun_up) if not sun_up is None else ~self.clear_flag
-        ax.fill_between(pldts, 0, 1200, where=notclear,   alpha=0.1, color='r', zorder=-1)
+        ax.fill_between(pldts, 0, 1200, where=notclear, alpha=0.1, color='r', zorder=-1)
         ax.fill_between(pldts, 0, 1200, where=self.clear_flag, alpha=0.1, color='g', zorder=-1)
         if not very_clear_flag is None:
             ax.fill_between(pldts, 0, 1200, where=very_clear_flag,  alpha=0.1, color='g', zorder=-1)
@@ -240,15 +243,21 @@ class AnalyzePyr:
             ax.fill_between(pldts, 0, 1200, where=~sun_up, color='grey', alpha=1.0, zorder=-2)
     
         # Plot settings
+        if overplot_clearness:
+            title = f'Measured and Computed Irradiance + Clearness Index on {self.datecode}'
+        else:
+            title = f'Measured and Computed Irradiance on {self.datecode}'
+        ax.set_title(title, fontsize=16)
         dateformat(ax)
         ax.set(xlim=[pldts.min(), pldts.max()], ylim=[0,1200],
                xlabel='Time [HST]', ylabel='Irradiance [W/m$^2$]');
-        ax2.set(ylabel='Clearness index');
         ax.tick_params(labelsize=12)
         ax.xaxis.label.set_size(18)
         ax.yaxis.label.set_size(18)
-        ax2.xaxis.label.set_size(12)
-        ax2.yaxis.label.set_size(18)
+        if overplot_clearness:
+            ax2.set(ylabel='Clearness index');
+            ax2.xaxis.label.set_size(12)
+            ax2.yaxis.label.set_size(14)
         
         # Display the plot
         if fig_path != None:
