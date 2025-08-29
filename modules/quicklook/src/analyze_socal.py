@@ -25,7 +25,9 @@ class AnalyzePyr:
     """
     Description:
         This class contains functions to analyze irradiance time series and 
-        compute the clearsky index.
+        compute the clearsky index, which is described in:
+        R. Rubenzahl et al, Publications of the Astronomical Society of the Pacific, Volume 135, Issue 1054, id.125002, 19 pp. 
+        https://ui.adsabs.harvard.edu/abs/2023PASP..135l5002R/abstract
 
     Arguments:
         L0 - an L0 object
