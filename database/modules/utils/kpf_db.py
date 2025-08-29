@@ -26,7 +26,7 @@ _cache_ttl = 300  # 5 minutes TTL
 # Detect test environment
 _is_test_env = os.getenv('CI') == 'true' or os.getenv('TESTING') == 'true'
 
-def _get_redis_client(verbose=False):
+def _get_redis_client(verbose=True):
     """Get Redis client, creating it if needed"""
     global _redis_client, _cache_enabled
     if _redis_client is None:
@@ -92,14 +92,14 @@ def _load_cache_config():
 _cache_enabled, _cache_ttl, _cache_rounding = _load_cache_config()
 
 # Debug: Print cache configuration
-verbose=False
+verbose=True
 if verbose:
     print(f"DEBUG: Cache configuration loaded:")
     print(f"DEBUG:   enabled: {_cache_enabled}")
     print(f"DEBUG:   ttl_seconds: {_cache_ttl}")
     print(f"DEBUG:   timestamp_rounding_minutes: {_cache_rounding}")
 
-def _get_cache_key(obs_date, cal_requests, verbose=False):
+def _get_cache_key(obs_date, cal_requests, verbose=True):
     """Create a cache key that rounds timestamps to avoid microsecond differences"""
     # Round timestamp based on configurable rounding
     dt = datetime.strptime(obs_date, "%Y-%m-%dT%H:%M:%S.%f")
@@ -127,7 +127,7 @@ def _get_cache_key(obs_date, cal_requests, verbose=False):
     
     return cache_key
 
-def _get_cached_result(cache_key, verbose=False):
+def _get_cached_result(cache_key, verbose=True):
     """Get cached result from Redis if it exists and is not expired"""
     if not _cache_enabled:
         if _is_test_env:
@@ -167,7 +167,7 @@ def _get_cached_result(cache_key, verbose=False):
     
     return None
 
-def _set_cached_result(cache_key, result, verbose=False):
+def _set_cached_result(cache_key, result, verbose=True):
     """Store result in Redis cache with TTL"""
     if not _cache_enabled:
         if not _is_test_env:
@@ -196,7 +196,7 @@ def _set_cached_result(cache_key, result, verbose=False):
     except Exception as e:
         print(f"DEBUG: Redis cache storage error: {e}")
 
-def clear_cache(verbose=False):
+def clear_cache(verbose=True):
     """Clear all Redis cache entries for this application"""
     if not _cache_enabled:
         return
@@ -232,7 +232,7 @@ def clear_cache(verbose=False):
         else:
             print(f"DEBUG: Error clearing cache: {e}")
 
-def clear_cache_for_timestamp(obs_date, verbose=False):
+def clear_cache_for_timestamp(obs_date, verbose=True):
     """Clear cache entries for a specific timestamp"""
     if not _cache_enabled:
         return
