@@ -747,53 +747,52 @@ def add_headers_2D_xdisp_offset(D2, logger=None):
     return D2
 
 
-
-def add_headers_2D_socal_irradiance(D2, logger=None):
-    """
-    Adds keywords to the 2D object header for measurements of solar irradiance
-    
-    Keywords:
-        CLEARSKY - Clear-sky conditions for SoCal [bool]
-        DNIMEAS  - Mean DNI from pyrheliometer during exp [W/m^2]
-        DNICLR   - Theoretical DNI in perfect conditions [W/m^2]
-        DNIRMS   - RMS of DNIMEAS during the exp [W/m^2]
-        CLEARIDX - SoCal clearness index (<4==CLEARSKY) [float]
-    Args:
-        D2 - a KPF 2D object 
-
-    Returns:
-        D2 - a 2D file with header keywords added
-    """
-
-    if logger == None:
-        logger = DummyLogger()
-
-    try:
-        primary_header = HeaderParse(D2, 'PRIMARY')
-        ObsID = primary_header.get_obsid()
-        datecode = get_datecode(ObsID)
-        myPyr = AnalyzePyr(datecode, verbose=True)
-        if myPyr.irr_fn_exists:
-            myPyr.compute_clearness_on_date()
-            date_mid_str = primary_header.header['DATE-MID']
-            elapsed_sec  = primary_header.header['ELAPSED']  # total duration in seconds
-            midtime = datetime.strptime(date_mid_str, "%Y-%m-%dT%H:%M:%S.%f")
-            half_duration = timedelta(seconds=elapsed_sec / 2.0)
-            starttime = midtime - half_duration
-            endtime   = midtime + half_duration
-            CLEARSKY, DNIMEAS, DNICLR, DNIRMS, CLEARIDX = myPyr.return_clearsky_statistics(starttime, endtime)
-            D2.header['PRIMARY']['CLEARSKY'] = (int(CLEARSKY), 'Clear-sky conditions for SoCal [bool]')
-            D2.header['PRIMARY']['DNIMEAS']  = (DNIMEAS, 'Mean DNI from pyrheliometer during exp [W/m^2]')
-            D2.header['PRIMARY']['DNICLR']   = (DNICLR, 'Theoretical DNI in perfect conditions [W/m^2]')
-            D2.header['PRIMARY']['DNIRMS']   = (DNIRMS, 'RMS of DNIMEAS during the exp [W/m^2]')
-            D2.header['PRIMARY']['CLEARIDX'] = (CLEARIDX, 'SoCal clearness index (<4==CLEARSKY) [float]')
-        else:
-            self.logger.info(f'Pyrheliometer irradiance data not available for {datecode}.')
-
-    except Exception as e:
-        logger.error(f"Problem computing Clearsky Index: {e}\n{traceback.format_exc()}")
-
-    return D2
+#def add_headers_2D_socal_irradiance(D2, logger=None):
+#    """
+#    Adds keywords to the 2D object header for measurements of solar irradiance
+#    
+#    Keywords:
+#        CLEARSKY - Clear-sky conditions for SoCal [bool]
+#        DNIMEAS  - Mean DNI from pyrheliometer during exp [W/m^2]
+#        DNICLR   - Theoretical DNI in perfect conditions [W/m^2]
+#        DNIRMS   - RMS of DNIMEAS during the exp [W/m^2]
+#        CLEARIDX - SoCal clearness index (<4==CLEARSKY) [float]
+#    Args:
+#        D2 - a KPF 2D object 
+#
+#    Returns:
+#        D2 - a 2D file with header keywords added
+#    """
+#
+#    if logger == None:
+#        logger = DummyLogger()
+#
+#    try:
+#        primary_header = HeaderParse(D2, 'PRIMARY')
+#        ObsID = primary_header.get_obsid()
+#        datecode = get_datecode(ObsID)
+#        myPyr = AnalyzePyr(datecode, verbose=True)
+#        if myPyr.irr_fn_exists:
+#            myPyr.compute_clearness_on_date()
+#            date_mid_str = primary_header.header['DATE-MID']
+#            elapsed_sec  = primary_header.header['ELAPSED']  # total duration in seconds
+#            midtime = datetime.strptime(date_mid_str, "%Y-%m-%dT%H:%M:%S.%f")
+#            half_duration = timedelta(seconds=elapsed_sec / 2.0)
+#            starttime = midtime - half_duration
+#            endtime   = midtime + half_duration
+#            CLEARSKY, DNIMEAS, DNICLR, DNIRMS, CLEARIDX = myPyr.return_clearsky_statistics(starttime, endtime)
+#            D2.header['PRIMARY']['CLEARSKY'] = (int(CLEARSKY), 'Clear-sky conditions for SoCal [bool]')
+#            D2.header['PRIMARY']['DNIMEAS']  = (DNIMEAS, 'Mean DNI from pyrheliometer during exp [W/m^2]')
+#            D2.header['PRIMARY']['DNICLR']   = (DNICLR, 'Theoretical DNI in perfect conditions [W/m^2]')
+#            D2.header['PRIMARY']['DNIRMS']   = (DNIRMS, 'RMS of DNIMEAS during the exp [W/m^2]')
+#            D2.header['PRIMARY']['CLEARIDX'] = (CLEARIDX, 'SoCal clearness index (<4==CLEARSKY) [float]')
+#        else:
+#            self.logger.info(f'Pyrheliometer irradiance data not available for {datecode}.')
+#
+#    except Exception as e:
+#        logger.error(f"Problem computing Clearsky Index statistics: {e}\n{traceback.format_exc()}")
+#
+#    return D2
 
 
 def add_headers_masters_age_L1(L1, logger=None, verbose=False):
