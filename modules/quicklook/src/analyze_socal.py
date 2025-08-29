@@ -10,7 +10,7 @@ from modules.Utils.utils import DummyLogger
 from astroplan import Observer
 from astropy.time import Time
 from astropy import units as u
-from datetime import datetime
+from datetime import datetime, timedelta
 import astropy.coordinates as coord
 from modules.Utils.kpf_parse import HeaderParse
 
@@ -59,41 +59,47 @@ class AnalyzePyr:
         self.observer = observers[self.inst]
         self.utc_offset = utc_offsets[inst]
         
+        self.irr_fn_exists = None # this is set to True/False by self.read_irradiance()
         self.pyrdata = self.read_irradiance()
         if type(self.pyrdata) == type(None):
             pass
         
 
     def read_irradiance(self):
-        '''
+        """
         Return dataframe for table of pyrheliometer irradiance
         measurements for the given instrument on the given date 
         in the file self.irr_fn.
-        '''
+        """
 
         if self.verbose:
             self.logger.debug(f'Irradiance file read: {self.irr_fn}')
         try:
-            pyrdata = pd.read_csv(self.irr_fn, comment='#')
-            pyrdata = pyrdata.rename(columns={'       Date-Time        ': 'time', 'PYRIRRAD': 'irrad'})
-            strfmt = '%Y-%m-%dT%H:%M:%S' # https://strftime.org/
-            # old, non-vectorized and slow method:
-            #dts = [(Time(timestr)-self.utc_offset).to_datetime() for timestr in pyrdata['time'].values] # this step takes some time
-            # faster, vectorized method below
-            arr = np.array(pyrdata['time'].values, dtype='U')   # or dtype='S' for bytes
-            t = Time(arr, format='isot', scale='utc') - self.utc_offset
-            dts = t.to_datetime()
-            pyrdata['datetime'] = dts
-            return pyrdata
+            if os.path.isfile(self.irr_fn):
+                self.irr_fn_exists = True
+                pyrdata = pd.read_csv(self.irr_fn, comment='#')
+                pyrdata = pyrdata.rename(columns={'       Date-Time        ': 'time', 'PYRIRRAD': 'irrad'})
+                strfmt = '%Y-%m-%dT%H:%M:%S' # https://strftime.org/
+                # old, non-vectorized and slow method:
+                #dts = [(Time(timestr)-self.utc_offset).to_datetime() for timestr in pyrdata['time'].values] # this step takes some time
+                # faster, vectorized method:
+                arr = np.array(pyrdata['time'].values, dtype='U')   # or dtype='S' for bytes
+                t = Time(arr, format='isot', scale='utc') - self.utc_offset
+                dts = t.to_datetime()
+                pyrdata['datetime'] = dts
+                return pyrdata
+            else:
+                self.irr_fn = False
+                return None
         except FileNotFoundError:
             self.logger.error(f'Irradiance file not found: {self.irr_fn}')
             return None
 
 
     def compute_clearness_on_date(self, plot=False, save_output=True, **kwargs):
-        '''
-        Compute the clearness index from the pyrheliometer data/
-        '''
+        """
+        Compute the clearness index from the pyrheliometer data.
+        """
                 
         # to-do: add checks to make sure that data is present.
         self.dni = self.pyrdata.irrad.values
@@ -126,7 +132,7 @@ class AnalyzePyr:
  
  
     def compute_clearness_index(self, time_window_size=300, time_slide_size=60, skip_times=None):
-        '''
+        """
         time_window_size [float]: window size in seconds
         time_slide_size [float] : length of time to slide windows by [sec] 
 
@@ -139,7 +145,7 @@ class AnalyzePyr:
         for that time window can be determined by fitting a quadratic model, and 
         then comparing either the chi^2 of the fit or the residual RMS to the 
         expected systematic noise floor (estimated from pre-sunrise data).
-        '''
+        """
     
         num_sub_windows = int(time_window_size/time_slide_size)
         clearness_values = np.zeros((num_sub_windows, len(self.jd))) + 9999
@@ -185,20 +191,51 @@ class AnalyzePyr:
         return clearness_index
 
 
-    def save_clearsky_metrics_file(self):
-        '''
+    def return_clearsky_statistics(self, starttime, endtime):
+        """
+        Returns a tuple of the keywords below for an observation with that 
+        starts on starttime and ends on stoptime (both are datetime objects).:
+            CLEARSKY - Indicates clear-sky conditions for SoCal [bool]
+            DNIMEAS  - Mean DNI from pyrheliometer during the exposure [W/m^s]
+            DNICLR   - Theoretical DNI in perfect conditions [W/m^2]
+            DNIRMS   - RMS of DNIMEAS during the exposure [W/m^2]
+            CLEARIDX - SoCal clearness index (<4==CLEARSKY) [bool]
+        """
+
+        # Find timesteps between startime and stoptime
+        mask = (self.pyrdata['datetime'] >= starttime) & (self.pyrdata['datetime'] <= endtime)
+
+        # Get indices where condition is True
+        indices = np.where(mask)[0]
+        
+        df = pd.DataFrame(np.array([self.jd, self.dni, self.dni0, self.clearness_index, self.sunalt, self.clear_flag]).T,
+                          columns=['time', 'dni', 'dni0', 'clearness_index', 'sunalt', 'clearsky'])
+        
+        CLEARSKY = bool(np.prod(self.clear_flag[(indices)]))
+        DNIMEAS  = float(np.mean(self.dni[(indices)]))
+        DNICLR   = float(np.mean(self.dni0[(indices)]))
+        DNIRMS   = float(np.std(self.dni[(indices)]))
+        CLEARIDX = float(np.mean(self.clearness_index[(indices)]))
+        return (CLEARSKY, DNIMEAS, DNICLR, DNIRMS, CLEARIDX)
+    
+    
+    def save_clearsky_metrics_file(self, filename='auto'):
+        """
         Save the clearsky_metrics file for self.datecode with the filename 
         self.clearsky_fn.  The columns are:
         'time', 'dni', 'dni0', 'clearness_index', 'sunalt', 'clearsky'
-        '''
+        """
+        if filename == 'auto':
+            filename = self.clearsky_fn
+        
         df = pd.DataFrame(np.array([self.jd, self.dni, self.dni0, self.clearness_index, self.sunalt, self.clear_flag]).T,
                           columns=['time', 'dni', 'dni0', 'clearness_index', 'sunalt', 'clearsky'])
 
-        if not os.path.exists(self.clearsky_dir):
-            os.makedirs(self.clearsky_dir)
-        df.to_csv(self.clearsky_fn, index=False)
+        if not os.path.exists(os.path.dirname(filename)):
+            os.makedirs(os.path.dirname(filename))
+        df.to_csv(filename, index=False)
         if self.verbose:
-            self.logger.debug(f'Clearsky metrics file written: {self.clearsky_fn}')
+            self.logger.debug(f'Clearsky metrics file written: {filename}')
 
 
     def plot_clearness(self, very_clear_flag=None, sun_up=None, dni_extra=0,

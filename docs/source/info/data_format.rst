@@ -424,11 +424,11 @@ XDSPSYG1  0.00133                                     Uncertainty [pix] in XDSPD
 XDSPSYR1  0.00217                                     Uncertainty [pix] in XDSPDYR1
 XDSPSYG2  0.00144                                     Uncertainty [pix] in XDSPDYG2
 XDSPSYR2  0.00058                                     Uncertainty [pix] in XDSPDYR2
-CLEARSKY  1                                           Indicates clear-sky conditions for SoCal [to be added in future DRP version]
-DNIMEAS   500.0                                       Mean DNI from pyrheliometer during the exposure [to be added in future DRP version]
-DNICLR    500.0                                       Theoretical DNI in perfect conditions [to be added in future DRP version]
-DNIRMS    1.0                                         RMS of DNIMEAS during the exposure [to be added in future DRP version]
-CLEARIDX  3.0                                         SoCal clearness index (<4==CLEARSKY) [to be added in future DRP version]
+CLEARSKY  1                                           Indicates clear-sky conditions for SoCal
+DNIMEAS   500.0                                       Mean DNI from pyrheliometer during the exposure [W/m^2]
+DNICLR    500.0                                       Theoretical DNI in perfect conditions [W/m^2]
+DNIRMS    1.0                                         RMS of DNIMEAS during the exposure [W/m^2]
+CLEARIDX  3.0                                         SoCal clearness index (<4==CLEARSKY)
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
