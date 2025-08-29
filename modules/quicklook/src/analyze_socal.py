@@ -204,19 +204,16 @@ class AnalyzePyr:
 
         # Find timesteps between startime and stoptime
         mask = (self.pyrdata['datetime'] >= starttime) & (self.pyrdata['datetime'] <= endtime)
-
-        # Get indices where condition is True
         indices = np.where(mask)[0]
-        
-        df = pd.DataFrame(np.array([self.jd, self.dni, self.dni0, self.clearness_index, self.sunalt, self.clear_flag]).T,
-                          columns=['time', 'dni', 'dni0', 'clearness_index', 'sunalt', 'clearsky'])
-        
-        CLEARSKY = bool(np.prod(self.clear_flag[(indices)]))
-        DNIMEAS  = float(np.mean(self.dni[(indices)]))
-        DNICLR   = float(np.mean(self.dni0[(indices)]))
-        DNIRMS   = float(np.std(self.dni[(indices)]))
-        CLEARIDX = float(np.mean(self.clearness_index[(indices)]))
-        return (CLEARSKY, DNIMEAS, DNICLR, DNIRMS, CLEARIDX)
+        if len(indices) == 0:
+            return None
+        else:
+            CLEARSKY = bool(np.prod(self.clear_flag[(indices)]))
+            DNIMEAS  = float(np.mean(self.dni[(indices)]))
+            DNICLR   = float(np.mean(self.dni0[(indices)]))
+            DNIRMS   = float(np.std(self.dni[(indices)]))
+            CLEARIDX = float(np.mean(self.clearness_index[(indices)]))
+            return (CLEARSKY, DNIMEAS, DNICLR, DNIRMS, CLEARIDX)
     
     
     def save_clearsky_metrics_file(self, filename='auto'):
