@@ -89,7 +89,7 @@ class AnalyzePyr:
                 pyrdata['datetime'] = dts
                 return pyrdata
             else:
-                self.irr_fn = False
+                self.irr_fn_exists = False
                 return None
         except FileNotFoundError:
             self.logger.error(f'Irradiance file not found: {self.irr_fn}')
@@ -174,7 +174,7 @@ class AnalyzePyr:
                 ichunk = self.dni[chunk]
     
                 if len(ichunk) < 100:
-                    if verbose:
+                    if self.verbose:
                         self.logger.debug('[{}] '.format(Time(np.mean(tchunk), format='jd').isot +\
                               'Irradiance chunk fewer than 100 points.  Declaring this chunk "not clear."'))
                     continue

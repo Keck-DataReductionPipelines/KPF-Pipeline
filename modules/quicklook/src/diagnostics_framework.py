@@ -11,7 +11,8 @@ from keckdrpframework.models.arguments import Arguments
 # Local dependencies
 import modules.quicklook.src.diagnostics as diagnostics
 from modules.Utils.utils import styled_text
-from modules.Utils.kpf_parse import HeaderParse, get_datecode
+from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import get_datecode
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
 from modules.Utils.kpf_parse import get_data_products_L2
