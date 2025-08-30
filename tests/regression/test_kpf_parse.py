@@ -22,20 +22,3 @@ datecode = get_datecode_from_filename(fn, datetime_out=False)
 
 # get_datetime_obsid() method
 dt = get_datetime_obsid(ObsID)
-
-
-
-#from modules.Utils.kpf_parse import KPFParse
-#from modules.Utils.kpf_parse import HeaderParse
-#
-#get_data_products_expected
-#get_data_products_L0
-#get_data_products_2D
-#get_data_products_L1
-#get_data_products_L2
-#get_data_levels_expected
-#hasattr_with_wildcard
-#get_kpf_level
-#get_kpf_data
-#get_latest_receipt_time
-#

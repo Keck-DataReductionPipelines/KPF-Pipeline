@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 
 from modules.Utils.kpf_parse import *
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
+from modules.quicklook.src.alg import QuicklookAlg
+from modules.quicklook.src.quick_prim import Quicklook
 from database.modules.utils.tsdb import convert_to_list_if_array
 
 # Generate a unique DB filename and plot directory
@@ -71,8 +73,9 @@ def test_analyze_time_series():
     myTS.plot_time_series_multipanel('junk_status', fig_path=temp_plot_dir + '/temp.png')
     
     # test methods in kpf_parse.py that depend on having access to files.
-    df = myTS.db.dataframe_from_db(columns=['ObsID', 'Object', 'Source'], start_date=start_date, end_date=end_date, only_source='Bias')  
+    df = myTS.db.dataframe_from_db(columns=['ObsID', 'Object', 'Source'], start_date=start_date, end_date=end_date)  
     spectrum_types = ['Bias', 'Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
+    QL = QuicklookAlg()
     for stype in spectrum_types:
         mask = df['Source'] == stype
         if mask.any():  # Checks if at least one row matches
@@ -88,6 +91,7 @@ def test_analyze_time_series():
                     lev = get_kpf_level(L0)
                     primary_header = HeaderParse(L0, 'PRIMARY')
                     name = primary_header.get_name()
+                    QL.qlp_L0(L0, temp_plot_dir)
                 if '2D' in data_levels_exp:
                     D2_fn = get_kpf_data(first_obsid, 'D2', return_kpf_object=False)
                     D2    = get_kpf_data(first_obsid, 'D2', return_kpf_object=True)
@@ -98,6 +102,7 @@ def test_analyze_time_series():
                     name = primary_header.get_name()
                     last_time = get_latest_receipt_time(D2)
                     test_output = hasattr_with_wildcard(D2, '*WAVE*')
+                    QL.qlp_2D(D2, temp_plot_dir)
                 if 'L1' in data_levels_exp:
                     L1_fn = get_kpf_data(first_obsid, 'L1', return_kpf_object=False)
                     L1    = get_kpf_data(first_obsid, 'L1', return_kpf_object=True)
@@ -106,6 +111,7 @@ def test_analyze_time_series():
                     lev = get_kpf_level(L1)
                     primary_header = HeaderParse(L1, 'PRIMARY')
                     name = primary_header.get_name()
+                    QL.qlp_L1(L1, temp_plot_dir)
                 if 'L2' in data_levels_exp:
                     L2_fn = get_kpf_data(first_obsid, 'L2', return_kpf_object=False)
                     L2    = get_kpf_data(first_obsid, 'L2', return_kpf_object=True)
@@ -114,9 +120,10 @@ def test_analyze_time_series():
                     lev = get_kpf_level(L2)
                     primary_header = HeaderParse(L2, 'PRIMARY')
                     name = primary_header.get_name()
+                    QL.qlp_L2(L2, temp_plot_dir)
                 
         else:
-            print("No rows with Source = {stype}")    
+            print(f"No rows with Source = {stype}")    
     
     # Test miscellaneous methods
     columns = ['ObsID','GDRXRMS','FIUMODE']
