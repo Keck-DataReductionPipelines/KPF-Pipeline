@@ -8,5 +8,4 @@
 from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
 
 diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
-exit_code = diagnostics_output_list[0]
 kpf_object = diagnostics_output_list[1]

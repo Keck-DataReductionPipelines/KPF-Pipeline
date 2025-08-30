@@ -101,18 +101,10 @@ for raw_file_path in file_list:
         #invoke_subrecipe("./recipes/diagnostics.subrecipe")
 
         qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
-        exit_code      = qc_output_list[0]
-        new_kpf_object = qc_output_list[1]
-        # exit_code = 1 is good.
-        if exit_code == 1:
-            kpf_object = new_kpf_object
+        kpf_object = qc_output_list[1]
 
         diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
-        exit_code = diagnostics_output_list[0]
-        new_kpf_object = diagnostics_output_list[1]
-        # exit_code = 1 is good.
-        if exit_code == 1:
-            kpf_object = new_kpf_object
+        kpf_object = diagnostics_output_list[1]
         l0 = kpf_object
 
         #---------
@@ -165,19 +157,10 @@ for raw_file_path in file_list:
         #invoke_subrecipe("./recipes/diagnostics.subrecipe")
 
         qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
-        exit_code      = qc_output_list[0]
-        new_kpf_object = qc_output_list[1]
-        # exit_code = 1 is good.
-        if exit_code == 1:
-            kpf_object = new_kpf_object
+        kpf_object = qc_output_list[1]
 
         diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
-        exit_code = diagnostics_output_list[0]
-        new_kpf_object = diagnostics_output_list[1]
-        # exit_code = 1 is good.
-        if exit_code == 1:
-            kpf_object = new_kpf_object
-
+        kpf_object = diagnostics_output_list[1]
         L0_with_ffi = kpf_object
 
         #---------
