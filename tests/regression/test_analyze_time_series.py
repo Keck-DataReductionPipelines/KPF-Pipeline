@@ -20,7 +20,7 @@ from database.modules.utils.tsdb import convert_to_list_if_array
 characters = string.ascii_letters + string.digits
 random_char = ''.join(random.choice(characters) for _ in range(12))
 temp_db_path  = 'temp_kpf_ts_'       + random_char + '.db'
-temp_plot_dir = 'temp_kpf_ts_plots_' + random_char
+temp_plot_dir = 'temp_kpf_ts_plots_' + random_char + '/'
 os.mkdir(temp_plot_dir)
 
 # Define path
@@ -38,88 +38,114 @@ def test_analyze_time_series():
     
     # Generate a Time Series Database
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir, backend='sqlite')
+    print("***** GOT TO #1 *****")
     
     # Test metadata table capabilities
+    print("***** GOT TO #2 *****")
     myTS.db.print_metadata_table()
     df = myTS.db.metadata_table_to_df()
     myTS.db.print_db_status()
+    print("***** GOT TO #3 *****")
     
     # Test file ingestion methods
+    print("***** GOT TO #4 *****")
     df_ObsIDs = pd.read_csv(ObsID_filename)
     ObsID_list = df_ObsIDs['observation_id'].tolist()
+    print("***** GOT TO #5 *****")
     myTS.db.ingest_one_observation(base_dir, ObsID_list[0] + '.fits')
     myTS.db.print_db_status()
     myTS.db.drop_tables()
+    print("***** GOT TO #6 *****")
     
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
     start_date = datetime(2025,1,12)
     end_date = datetime(2025,1,13)
     myTS.db.ingest_dates_to_db(start_date, end_date)
+    print("***** GOT TO #7 *****")
     myTS.db.print_db_status()
     myTS.db.drop_tables()
+    print("***** GOT TO #8 *****")
 
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
     myTS.db.add_ObsIDs_to_db(ObsID_list)
+    print("***** GOT TO #9 *****")
     myTS.db.print_db_status()
     myTS.db.drop_tables()
+    print("***** GOT TO #10 *****")
     
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
     myTS.db.add_ObsID_list_to_db(ObsID_filename)
     myTS.db.print_db_status()
+    print("***** GOT TO #11 *****")
 
     # Test plotting
     start_date = datetime(2025,1,12)
+    print("***** GOT TO #12 *****")
     myTS.plot_all_quicklook(start_date=start_date, interval='day', fig_dir=temp_plot_dir)
+    print("***** GOT TO #13 *****")
     myTS.plot_time_series_multipanel('junk_status', fig_path=temp_plot_dir + '/temp.png')
+    print("***** GOT TO #14 *****")
     
     # test methods in kpf_parse.py that depend on having access to files.
-    df = myTS.db.dataframe_from_db(columns=['ObsID', 'Object', 'Source'], start_date=start_date, end_date=end_date)  
+    df = myTS.db.dataframe_from_db(columns=['ObsID', 'Object', 'Source', 'DATE-MID'], start_date=start_date, end_date=end_date)  
     spectrum_types = ['Bias', 'Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
     QL = QuicklookAlg()
+    print("***** GOT TO #15 *****")
     for stype in spectrum_types:
         mask = df['Source'] == stype
         if mask.any():  # Checks if at least one row matches
             first_obsid = df.loc[mask, 'ObsID'].iloc[0]
             print(f"First ObsID with Source = {stype}:", first_obsid)
+            print("***** GOT TO #16 *****")
             data_levels_exp = get_data_levels_expected(stype)
-            if stype == 'Star':
-                if 'L0' in data_levels_exp:
-                    L0_fn = get_kpf_data(first_obsid, 'L0', return_kpf_object=False)
-                    L0    = get_kpf_data(first_obsid, 'L0', return_kpf_object=True)
-                    data_products_L0 = get_data_products_L0(L0)
-                    data_products_arr = get_data_products_expected(L0, 'L0')
-                    lev = get_kpf_level(L0)
-                    primary_header = HeaderParse(L0, 'PRIMARY')
-                    name = primary_header.get_name()
-                    QL.qlp_L0(L0, temp_plot_dir)
-                if '2D' in data_levels_exp:
-                    D2_fn = get_kpf_data(first_obsid, 'D2', return_kpf_object=False)
-                    D2    = get_kpf_data(first_obsid, 'D2', return_kpf_object=True)
-                    data_products_2D = get_data_products_2D(D2)
-                    data_products_arr = get_data_products_expected(D2, '2D')
-                    lev = get_kpf_level(D2)
-                    primary_header = HeaderParse(D2, 'PRIMARY')
-                    name = primary_header.get_name()
-                    last_time = get_latest_receipt_time(D2)
-                    test_output = hasattr_with_wildcard(D2, '*WAVE*')
+            if 'L0' in data_levels_exp:
+                print("***** GOT TO #17 *****")
+                L0_fn = get_kpf_data(first_obsid, 'L0', return_kpf_object=False)
+                L0    = get_kpf_data(first_obsid, 'L0', return_kpf_object=True)
+                print("***** GOT TO #18 *****")
+                data_products_L0  = get_data_products_L0(L0)
+                data_products_arr = get_data_products_expected(L0, 'L0')
+                print("***** GOT TO #19 *****")
+                lev = get_kpf_level(L0)
+                print("***** GOT TO #20 *****")
+                primary_header = HeaderParse(L0, 'PRIMARY')
+                print("***** GOT TO #21 *****")
+                name = primary_header.get_name()
+                print("***** GOT TO #22 *****")
+                if (stype == 'Star'):
+                   print("***** GOT TO #23 *****")
+                   QL.qlp_L0(L0, temp_plot_dir)
+            if '2D' in data_levels_exp:
+                D2_fn = get_kpf_data(first_obsid, '2D', return_kpf_object=False)
+                D2    = get_kpf_data(first_obsid, '2D', return_kpf_object=True)
+                data_products_2D  = get_data_products_2D(D2)
+                data_products_arr = get_data_products_expected(D2, '2D')
+                lev = get_kpf_level(D2)
+                primary_header = HeaderParse(D2, 'PRIMARY')
+                name = primary_header.get_name()
+                last_time = get_latest_receipt_time(D2)
+                #test_output = hasattr_with_wildcard(D2, '*WAVE*')
+                if (stype == 'Star') or (stype == 'Dark') or (stype == 'Bias'):
                     QL.qlp_2D(D2, temp_plot_dir)
-                if 'L1' in data_levels_exp:
-                    L1_fn = get_kpf_data(first_obsid, 'L1', return_kpf_object=False)
-                    L1    = get_kpf_data(first_obsid, 'L1', return_kpf_object=True)
-                    data_products_L1 = get_data_products_L1(L1)
-                    data_products_arr = get_data_products_expected(L1, 'L1')
-                    lev = get_kpf_level(L1)
-                    primary_header = HeaderParse(L1, 'PRIMARY')
-                    name = primary_header.get_name()
+            if 'L1' in data_levels_exp:
+                L1_fn = get_kpf_data(first_obsid, 'L1', return_kpf_object=False)
+                L1    = get_kpf_data(first_obsid, 'L1', return_kpf_object=True)
+                data_products_L1  = get_data_products_L1(L1)
+                data_products_arr = get_data_products_expected(L1, 'L1')
+                lev = get_kpf_level(L1)
+                primary_header = HeaderParse(L1, 'PRIMARY')
+                name = primary_header.get_name()
+                if stype == 'Star':
                     QL.qlp_L1(L1, temp_plot_dir)
-                if 'L2' in data_levels_exp:
-                    L2_fn = get_kpf_data(first_obsid, 'L2', return_kpf_object=False)
-                    L2    = get_kpf_data(first_obsid, 'L2', return_kpf_object=True)
-                    data_products_L2 = get_data_products_L2(L2)
-                    data_products_arr = get_data_products_expected(L2, 'L2')
-                    lev = get_kpf_level(L2)
-                    primary_header = HeaderParse(L2, 'PRIMARY')
-                    name = primary_header.get_name()
+            if 'L2' in data_levels_exp:
+                L2_fn = get_kpf_data(first_obsid, 'L2', return_kpf_object=False)
+                L2    = get_kpf_data(first_obsid, 'L2', return_kpf_object=True)
+                data_products_L2  = get_data_products_L2(L2)
+                data_products_arr = get_data_products_expected(L2, 'L2')
+                lev = get_kpf_level(L2)
+                primary_header = HeaderParse(L2, 'PRIMARY')
+                name = primary_header.get_name()
+                if stype == 'Star':
                     QL.qlp_L2(L2, temp_plot_dir)
                 
         else:
