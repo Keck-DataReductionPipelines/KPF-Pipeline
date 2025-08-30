@@ -752,11 +752,14 @@ def add_headers_2D_socal_irradiance(D2, logger=None, verbose=True):
     Adds keywords to the 2D object header for measurements of solar irradiance.
     
     Keywords:
-        CLEARSKY - Clear-sky conditions for SoCal [bool]
         DNIMEAS  - Mean DNI from pyrheliometer during exp [W/m^2]
         DNICLR   - Theoretical DNI in perfect conditions [W/m^2]
         DNIRMS   - RMS of DNIMEAS during the exp [W/m^2]
         CLEARIDX - SoCal clearness index (<4==CLEARSKY) [float]
+        
+    Keywords (related; produced in QualityControl)
+        CLEARSKY - Clear sky conditions for SoCal [bool]
+    
     Args:
         D2 - a KPF 2D object 
 
@@ -785,7 +788,7 @@ def add_headers_2D_socal_irradiance(D2, logger=None, verbose=True):
                 logger.info(f'Pyrheliometer irradiance data available for {datecode}, but not between {starttime} and {endtime}.  No keywords added.')
             else:    
                 CLEARSKY, DNIMEAS, DNICLR, DNIRMS, CLEARIDX = myPyr.return_clearsky_statistics(starttime, endtime)
-                D2.header['PRIMARY']['CLEARSKY'] = (int(CLEARSKY), 'Clear-sky conditions for SoCal [bool]')
+                #D2.header['PRIMARY']['CLEARSKY'] = (int(CLEARSKY), 'Clear-sky conditions for SoCal [bool]')
                 D2.header['PRIMARY']['DNIMEAS']  = (DNIMEAS, 'Mean DNI from pyrheliometer during exp [W/m^2]')
                 D2.header['PRIMARY']['DNICLR']   = (DNICLR, 'Theoretical DNI in perfect conditions [W/m^2]')
                 D2.header['PRIMARY']['DNIRMS']   = (DNIRMS, 'RMS of DNIMEAS during the exp [W/m^2]')
