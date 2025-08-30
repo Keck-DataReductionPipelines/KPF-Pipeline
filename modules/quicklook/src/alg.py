@@ -2,6 +2,7 @@ import numpy as np
 import astropy.io.fits as fits
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from modules.Utils.utils import DummyLogger
 from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.models.level1 import KPF1
@@ -81,7 +82,7 @@ class QuicklookAlg:
     def __init__(self,config=None,logger=None):
 
         self.config=config
-        self.logger=logger
+        self.logger = logger if logger is not None else DummyLogger()
 
     #######################
     ##### QLP Level 0 #####
