@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
+from modules.Utils.kpf_parse import *
 from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 from database.modules.utils.tsdb import convert_to_list_if_array
 
@@ -49,8 +50,8 @@ def test_analyze_time_series():
     myTS.db.drop_tables()
     
     myTS = AnalyzeTimeSeries(db_path=temp_db_path, base_dir=base_dir)
-    start_date = datetime.datetime(2025,1,12)
-    end_date = datetime.datetime(2025,1,13)
+    start_date = datetime(2025,1,12)
+    end_date = datetime(2025,1,13)
     myTS.db.ingest_dates_to_db(start_date, end_date)
     myTS.db.print_db_status()
     myTS.db.drop_tables()
@@ -65,9 +66,57 @@ def test_analyze_time_series():
     myTS.db.print_db_status()
 
     # Test plotting
-    start_date = datetime.datetime(2025,1,12)
+    start_date = datetime(2025,1,12)
     myTS.plot_all_quicklook(start_date=start_date, interval='day', fig_dir=temp_plot_dir)
     myTS.plot_time_series_multipanel('junk_status', fig_path=temp_plot_dir + '/temp.png')
+    
+    # test methods in kpf_parse.py that depend on having access to files.
+    df = myTS.db.dataframe_from_db(columns=['ObsID', 'Object', 'Source'], start_date=start_date, end_date=end_date, only_source='Bias')  
+    spectrum_types = ['Bias', 'Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
+    for stype in spectrum_types:
+        mask = df['Source'] == stype
+        if mask.any():  # Checks if at least one row matches
+            first_obsid = df.loc[mask, 'ObsID'].iloc[0]
+            print(f"First ObsID with Source = {stype}:", first_obsid)
+            data_levels_exp = get_data_levels_expected(stype)
+            if stype == 'Star':
+                if 'L0' in data_levels_exp:
+                    L0_fn = get_kpf_data(first_obsid, 'L0', return_kpf_object=False)
+                    L0    = get_kpf_data(first_obsid, 'L0', return_kpf_object=True)
+                    data_products_L0 = get_data_products_L0(L0)
+                    data_products_arr = get_data_products_expected(L0, 'L0')
+                    lev = get_kpf_level(L0)
+                    primary_header = HeaderParse(L0, 'PRIMARY')
+                    name = primary_header.get_name()
+                if '2D' in data_levels_exp:
+                    D2_fn = get_kpf_data(first_obsid, 'D2', return_kpf_object=False)
+                    D2    = get_kpf_data(first_obsid, 'D2', return_kpf_object=True)
+                    data_products_2D = get_data_products_2D(D2)
+                    data_products_arr = get_data_products_expected(D2, '2D')
+                    lev = get_kpf_level(D2)
+                    primary_header = HeaderParse(D2, 'PRIMARY')
+                    name = primary_header.get_name()
+                    last_time = get_latest_receipt_time(D2)
+                    test_output = hasattr_with_wildcard(D2, '*WAVE*')
+                if 'L1' in data_levels_exp:
+                    L1_fn = get_kpf_data(first_obsid, 'L1', return_kpf_object=False)
+                    L1    = get_kpf_data(first_obsid, 'L1', return_kpf_object=True)
+                    data_products_L1 = get_data_products_L1(L1)
+                    data_products_arr = get_data_products_expected(L1, 'L1')
+                    lev = get_kpf_level(L1)
+                    primary_header = HeaderParse(L1, 'PRIMARY')
+                    name = primary_header.get_name()
+                if 'L2' in data_levels_exp:
+                    L2_fn = get_kpf_data(first_obsid, 'L2', return_kpf_object=False)
+                    L2    = get_kpf_data(first_obsid, 'L2', return_kpf_object=True)
+                    data_products_L2 = get_data_products_L2(L2)
+                    data_products_arr = get_data_products_expected(L2, 'L2')
+                    lev = get_kpf_level(L2)
+                    primary_header = HeaderParse(L2, 'PRIMARY')
+                    name = primary_header.get_name()
+                
+        else:
+            print("No rows with Source = {stype}")    
     
     # Test miscellaneous methods
     columns = ['ObsID','GDRXRMS','FIUMODE']
@@ -76,7 +125,7 @@ def test_analyze_time_series():
     myTS.db.ObsIDlist_from_db('autocal-bias')
     myTS.db.print_db_status()
     myTS.db.drop_tables()
-    
+        
     # Remove the temporary database file and plot directory
     os.remove(temp_db_path)
     shutil.rmtree(temp_plot_dir)
