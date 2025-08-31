@@ -36,6 +36,7 @@ GRCCDT10|bool|QC: Green CCD > 10 mK from temp set point|None
 GRCCDT1|bool|QC: Green CCD > 1000 mK (1 C) from temp set point|None
 RDCCDT10|bool|QC: Red CCD > 10 mK from temp set point|None
 RDCCDT1|bool|QC: Red CCD > 1000 mK (1 C) from temp set point|None
+CLEARSKY|bool|QC: Clear sky conditions for SoCal|None
 BIASFILE|string|Master bias file used (except for bias exposures)|None
 DARKFILE|string|Master dark file used (except for dark exposures)|None
 FLATFILE|string|Master flat file used (except for flat exposures)|None
@@ -88,7 +89,6 @@ XDSPSYG1|float|Uncertainty in XDSPDYG1|pixels
 XDSPSYR1|float|Uncertainty in XDSPDYR1|pixels
 XDSPSYG2|float|Uncertainty in XDSPDYG2|pixels
 XDSPSYR2|float|Uncertainty in XDSPDYR2|pixels
-CLEARSKY|bool|Indicates clear-sky conditions for SoCal|None
 DNIMEAS|float|Mean DNI from pyrheliometer during the exposure|W/m^2
 DNICLR|float|Theoretical DNI in perfect conditions|W/m^2
 DNIRMS|float|RMS of DNIMEAS during the exposure|W/m^2

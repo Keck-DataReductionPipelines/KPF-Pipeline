@@ -26,7 +26,8 @@ panel_arr:
           label: "Etalon at Set Temp"
           marker: .
     paneldict:
-      ylabel: "Etalon at Set Temp\n(ETASTEMP)"
+      ylabel: "Etalon at set temp\n(ETASTEMP)"
+      title: QC - Etalon
       legend_frac_size: 0.30
       qc_not_fail: 'GOODREAD'
       only_object: 

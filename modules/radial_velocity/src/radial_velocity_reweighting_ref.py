@@ -168,7 +168,7 @@ class RadialVelocityReweightingRef(KPF2_Primitive):
             if is_ratio:
                 assert isinstance(f, str), msg + ':' + 'ratio file type is wrong'
                 assert os.path.exists(f) == 1, msg + ':' + f + " doesn't exist"
-                r_ccf = pd.read_csv(f, sep='\s+')
+                r_ccf = pd.read_csv(f, sep=r'\s+')
             else:
                 r_ccf = f[hdu_idx_name]
 
