@@ -331,7 +331,7 @@ class WaveCalibration:
                 continue
 
             if self.cal_type == 'Etalon':  # For etalon
-                etalon_mask = pd.read_csv(self.etalon_mask_in, names=['wave','weight'], sep='\s+')
+                etalon_mask = pd.read_csv(self.etalon_mask_in, names=['wave','weight'], sep=r'\s+')
                 wls, fitted_peak_pixels = self.find_etalon_peaks(order_flux,rough_wls_order,etalon_mask) # returns original mask and new mask positions for one order.
                 wls=wls.tolist()
 
