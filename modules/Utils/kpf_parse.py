@@ -45,10 +45,11 @@ class HeaderParse:
         (to-do: add list based on attributes below)
     """
 
-    def __init__(self, KPF, extension_name, logger=None):
+    def __init__(self, KPF, extension_name, logger=None, verbose=False):
         if logger:
             self.logger = logger
-            self.logger.debug('Initializing HeaderParse object')
+            if verbose:
+                self.logger.debug('Initializing HeaderParse object')
         else:
             self.logger = None
         try: 
