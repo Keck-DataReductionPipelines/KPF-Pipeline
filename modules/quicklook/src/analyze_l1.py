@@ -863,7 +863,8 @@ class AnalyzeL1:
         flux = np.concatenate((flux_green,flux_red), axis = 0)
 
         # Set up figure
-        cm = plt.cm.get_cmap('rainbow')
+        #cm = plt.cm.get_cmap('rainbow')
+        cm = plt.get_cmap('rainbow')
         gs = gridspec.GridSpec(n_orders_per_panel, 1 , height_ratios=np.ones(n_orders_per_panel))
         fig, ax = plt.subplots(int(np.shape(wav)[0]/n_orders_per_panel)+1,1, sharey=False, 
                                figsize=(20,16), tight_layout=True)
@@ -979,7 +980,8 @@ class AnalyzeL1:
         
         fig, axes = plt.subplots(norderlets, 1, sharex=True, figsize=(20, 0.5+norderlets/5*15.5*(1+2*tall)), squeeze=False)
         axes = axes.flatten()
-        cm = plt.cm.get_cmap('rainbow')
+        #cm = plt.cm.get_cmap('rainbow')
+        cm = plt.get_cmap('rainbow')
 
         for ax, orderlet in zip(axes, orderlets):
 

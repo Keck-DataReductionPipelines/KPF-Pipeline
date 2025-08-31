@@ -195,14 +195,17 @@ class QuicklookAlg:
                 os.makedirs(savedir, exist_ok=True) # make directories if needed    
         
                 # Exposure Meter image plot    
-                trace_file = self.config['CaHK']['trace_file']    
-                wavesoln_file = self.config['CaHK']['cahk_wav']    
-                myHK = AnalyzeHK(kpf0, trace_file = trace_file,     
-                                       wavesoln_file = wavesoln_file,     
-                                       logger=self.logger)    
-                filename = savedir + self.ObsID + '_HK_image_L0_zoomable.png'    
-                self.logger.info('Generating QLP image ' + filename)    
-                myHK.plot_HK_image_2D(fig_path=filename, show_plot=False)    
+                # The config references be stored in the calibration database.
+                # The if statement below is so that this method works in continuous integration.    
+                if not self.config is None:
+                    trace_file = self.config['CaHK']['trace_file']    
+                    wavesoln_file = self.config['CaHK']['cahk_wav']    
+                    myHK = AnalyzeHK(kpf0, trace_file = trace_file,     
+                                           wavesoln_file = wavesoln_file,     
+                                           logger=self.logger)    
+                    filename = savedir + self.ObsID + '_HK_image_L0_zoomable.png'    
+                    self.logger.info('Generating QLP image ' + filename)    
+                    myHK.plot_HK_image_2D(fig_path=filename, show_plot=False)    
 
             except Exception as e:    
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
@@ -264,31 +267,34 @@ class QuicklookAlg:
                 os.makedirs(savedir, exist_ok=True) # make directories if needed    
         
                 # Exposure Meter spectrum plot    
-                trace_file = self.config['CaHK']['trace_file']    
-                wavesoln_file = self.config['CaHK']['cahk_wav']    
-                myHK = AnalyzeHK(kpf2d, trace_file = trace_file,     
-                                       wavesoln_file = wavesoln_file,     
-                                       logger=self.logger)    
-                filename = savedir + self.ObsID + '_HK_image_2D_zoomable.png'    
-                self.logger.info('Generating QLP image ' + filename)    
-                myHK.plot_HK_image_2D(fig_path=filename, kpftype='2D', show_plot=False)    
+                # The config references be stored in the calibration database.
+                # The if statement below is so that this method works in continuous integration.    
+                if not self.config is None:
+                    trace_file = self.config['CaHK']['trace_file']    
+                    wavesoln_file = self.config['CaHK']['cahk_wav']
+                    myHK = AnalyzeHK(kpf2d, trace_file = trace_file,     
+                                           wavesoln_file = wavesoln_file,     
+                                           logger=self.logger)    
+                    filename = savedir + self.ObsID + '_HK_image_2D_zoomable.png'    
+                    self.logger.info('Generating QLP image ' + filename)    
+                    myHK.plot_HK_image_2D(fig_path=filename, kpftype='2D', show_plot=False)    
 
-                # Exposure Meter spectra plots    
-                filename = savedir + self.ObsID + '_HK_spectrum_sci_zoomable.png'    
-                self.logger.info('Generating QLP image ' + filename)    
-                myHK.plot_HK_spectrum_1D(trace='sci', fig_path=filename, show_plot=False)    
-                filename = savedir + self.ObsID + '_HK_spectrum_sky_zoomable.png'    
-                self.logger.info('Generating QLP image ' + filename)    
-                myHK.plot_HK_spectrum_1D(trace='sky', fig_path=filename, show_plot=False)    
-                filename = savedir + self.ObsID + '_HK_spectrum_sci_zoom_zoomable.png'    
-                self.logger.info('Generating QLP image ' + filename)    
-                myHK.plot_HK_spectrum_1D_zoom(trace='sci', fig_path=filename, show_plot=False)    
-                filename = savedir + self.ObsID + '_HK_spectrum_sky_zoom_zoomable.png'    
-                self.logger.info('Generating QLP image ' + filename)    
-                myHK.plot_HK_spectrum_1D_zoom(trace='sky', fig_path=filename, show_plot=False)    
-                filename = savedir + self.ObsID + '_HK_column_cut_zoomable.png'    
-                self.logger.info('Generating QLP image ' + filename)    
-                myHK.plot_HK_2D_column_cut(fig_path=filename, kpftype='2D', show_plot=False)    
+                    # Exposure Meter spectra plots    
+                    filename = savedir + self.ObsID + '_HK_spectrum_sci_zoomable.png'    
+                    self.logger.info('Generating QLP image ' + filename)    
+                    myHK.plot_HK_spectrum_1D(trace='sci', fig_path=filename, show_plot=False)    
+                    filename = savedir + self.ObsID + '_HK_spectrum_sky_zoomable.png'    
+                    self.logger.info('Generating QLP image ' + filename)    
+                    myHK.plot_HK_spectrum_1D(trace='sky', fig_path=filename, show_plot=False)    
+                    filename = savedir + self.ObsID + '_HK_spectrum_sci_zoom_zoomable.png'    
+                    self.logger.info('Generating QLP image ' + filename)    
+                    myHK.plot_HK_spectrum_1D_zoom(trace='sci', fig_path=filename, show_plot=False)    
+                    filename = savedir + self.ObsID + '_HK_spectrum_sky_zoom_zoomable.png'    
+                    self.logger.info('Generating QLP image ' + filename)    
+                    myHK.plot_HK_spectrum_1D_zoom(trace='sky', fig_path=filename, show_plot=False)    
+                    filename = savedir + self.ObsID + '_HK_column_cut_zoomable.png'    
+                    self.logger.info('Generating QLP image ' + filename)    
+                    myHK.plot_HK_2D_column_cut(fig_path=filename, kpftype='2D', show_plot=False)    
 
             except Exception as e:    
                 self.logger.error(f"Failure in CaHK quicklook pipeline: {e}\n{traceback.format_exc()}")
