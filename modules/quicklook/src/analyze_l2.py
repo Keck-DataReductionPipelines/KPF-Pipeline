@@ -1,11 +1,15 @@
 import copy
+import time
 import numpy as np
-from datetime import datetime
+import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.ticker import MaxNLocator
 from matplotlib.lines import Line2D
-from modules.Utils.kpf_parse import HeaderParse, get_data_products_L2
+from datetime import datetime, timedelta
+from modules.Utils.utils import DummyLogger
+from database.modules.utils.tsdb import TSDB
+from modules.Utils.kpf_parse import HeaderParse, get_data_products_L2, get_kpf_data, get_datetime_obsid
 from astropy.table import Table
 
 class AnalyzeL2:
@@ -30,11 +34,7 @@ class AnalyzeL2:
     """
 
     def __init__(self, L2, logger=None):
-        if logger:
-            self.logger = logger
-            self.logger.debug('Initializing AnalyzeL2 object')
-        else:
-            self.logger = None
+        self.logger = logger if logger is not None else DummyLogger()
         self.L2 = copy.deepcopy(L2)
         self.df_RV = self.L2['RV']
         self.n_green_orders = 35
@@ -102,6 +102,62 @@ class AnalyzeL2:
         self.Max_Perc_Delta_Bary_RV = x[nonzero_mask].max()
         self.Min_Perc_Delta_Bary_RV = x[nonzero_mask].min()
 
+
+    def measure_days_since_last_good_cal(self, cal_source='LFC', 
+                                               qc_pass='auto',
+                                               search_range_days = 90, 
+                                               backend='psql',
+                                               verbose=False):
+        """
+        Compute days since last good LFC or Etalon calibration.
+        This method uses the TSDB and requires that QC keywords be ingested
+        prior to running the method.  Thus, it is best run on reprocessing.
+        """
+        
+        if qc_pass == 'auto':
+            if cal_source == 'LFC':
+                qc_pass = ['DATAPRL0', 'KWRDPRL0', 'GOODREAD', 'LFC2DFOK', 'LFCSAT', 'LFCLINES'] # , 'FLXSTATS' # add later
+            elif cal_source == 'Etalon':
+                qc_pass = ['DATAPRL0', 'KWRDPRL0', 'GOODREAD', 'ETALINES'] # , 'ETASTEMP', 'FLXSTATS' # add later
+        dt_ObsID = get_datetime_obsid(self.ObsID)
+        myDB = TSDB(backend=backend)
+                
+        min_date = dt_ObsID - timedelta(days=search_range_days)
+        max_date = dt_ObsID + timedelta(days=search_range_days)
+        cols = ['ObsID', 'OBJECT', 'DATE-MID', 'CAL-OBJ', 'SCI-OBJ']
+        cols.extend(qc_pass)
+        if verbose:             
+            t0 = time.process_time()
+        df = myDB.dataframe_from_db(columns=cols, 
+                                    start_date=min_date, 
+                                    end_date=max_date, 
+                                    only_source=cal_source, 
+                                    not_junk=True,
+                                    qc_pass=qc_pass, 
+                                    verbose=False)
+        df['delta_time'] = dt_ObsID - df['DATE-MID']
+        if verbose:             
+            self.logger.info(f'Milliseconds to execute DB query: {(time.process_time()-t0)*1000:.1f}')
+            self.logger.info(f'Exposures within {search_range_days} days of {dt_ObsID}: {len(df)}')
+        
+        # Days Since: minimum value where delta_time > 0, else None
+        min_after = df.loc[df['delta_time'] > pd.Timedelta(0), 'delta_time']
+        min_after_days = min_after.min() / pd.Timedelta(days=1) if not min_after.empty else None
+        df['min_after_days'] = min_after / pd.Timedelta(days=1)
+        
+        # Days Until: maximum value where delta_time < 0, else None
+        max_before = df.loc[df['delta_time'] < pd.Timedelta(0), 'delta_time']
+        max_before_days = - max_before.max() / pd.Timedelta(days=1) if not max_before.empty else None
+        df['max_before_days'] = - max_before / pd.Timedelta(days=1)
+        
+        if verbose:             
+            self.logger.info(f'Days since last good LFC frame: {max_before_days}')
+            self.logger.info(f'Days until next good LFC frame: {min_after_days}') 
+            self.logger.info(f'Dataframe:')
+            myDB.display_data(df=df)
+            
+        return max_before_days, min_after_days
+        
 
     def plot_CCF_grid(self, chip=None, annotate=False, 
                       zoom=False, fig_path=None, show_plot=False):
