@@ -1,3 +1,11 @@
+# ---------- Config ----------
+APP_IMAGE ?= kpf-drp
+CI_IMAGE  ?= kpf-drp-ci
+TAG       ?= latest
+
+# Cache-busting when requirements.txt changes
+REQS_SHA  := $(shell sha256sum requirements.txt | cut -d ' ' -f1)
+
 CCF_C = modules/CLib/CCF
 
 init:
@@ -28,14 +36,20 @@ notebook:
 	jupyter notebook --port ${KPFPIPE_PORT} --allow-root --ip=0.0.0.0 ""
 
 docker:
-	@echo "Building Docker image..."
-	@DOCKER_BUILDKIT=1 docker build --cache-from kpf-drp:latest --tag kpf-drp:latest . --quiet
+	@echo "Building Docker image $(APP_IMAGE):$(TAG)…"
+	@DOCKER_BUILDKIT=1 docker build \
+		--cache-from $(APP_IMAGE):$(TAG) \
+		--build-arg REQS_SHA=$(REQS_SHA) \
+		--tag $(APP_IMAGE):$(TAG) . --quiet
 	$(if $(KPFPIPE_DATA),,$(error Must set KPFPIPE_DATA))
 	$(if $(KPFPIPE_PORT),, @echo "Starting Docker container (no port specified)..." && ./docker-run.sh)
 	$(if $(KPFPIPE_PORT), @echo "Starting Docker container on port ${KPFPIPE_PORT}..." && KPFPIPE_PORT=${KPFPIPE_PORT} ./docker-run.sh)
 
+# Build the CI image and run a dev shell with the same tag.
 test_env:
-	docker build --cache-from kpf-drp-ci:latest --tag kpf-drp-ci:latest .
+	docker build --cache-from $(CI_IMAGE):$(TAG) \
+		--build-arg REQS_SHA=$(REQS_SHA) \
+		--tag $(CI_IMAGE):$(TAG) .
 	docker run -it --rm \
 		--network=host \
 		-v "$${PWD}:/code/KPF-Pipeline" \
@@ -53,9 +67,21 @@ test_env:
 		-e TSDBPORT=6127 \
 		-e TSDBNAME=timeseriesopsdb \
 		-e TSDBUSER=$${KPFPIPE_TSDB_USER} \
-		-e TSDBPASS=$${KPFPIPE_TSDB_PASS} \
-		kpf-drp:latest \
+		-e TSDBPASS="$${KPFPIPE_TSDB_PASS}" \
+		$(CI_IMAGE):$(TAG) \
 		bash
+
+# Dependency smoke test inside the current Python env
+sanity:
+	@python - <<'PY'
+try:
+	import pvlib, pandas, numpy
+	print("pvlib:", pvlib.__version__)
+	print("pandas:", pandas.__version__)
+	print("numpy:", numpy.__version__)
+except Exception as e:
+	raise SystemExit(f"Dependency check failed: {e}")
+PY
 
 regression_tests:
 	pytest -x --cov=kpfpipe --cov=modules --pyargs tests.regression
@@ -67,4 +93,4 @@ performance_tests:
 validation_tests:
 	pytest -x --pyargs tests.validation
 
-.PHONY: init update clear clean notebook docker regression_tests performance_tests validation_tests
+.PHONY: init update clear clean notebook docker test_env sanity regression_tests performance_tests validation_tests
