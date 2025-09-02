@@ -36,6 +36,7 @@ class AnalyzeL2:
     def __init__(self, L2, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
         self.L2 = copy.deepcopy(L2)
+        #self.L2 = L2
         self.df_RV = self.L2['RV']
         self.n_green_orders = 35
         self.n_red_orders   = 32
@@ -54,13 +55,22 @@ class AnalyzeL2:
         self.red_present = 'Red' in self.data_products
         self.texp = self.header['ELAPSED']
 
-        self.compute_statistics()
+        #self.compute_statistics()
         
         
     def compute_statistics(self):
         """
         Compute various metrics of dispersion of the per-order BJD values
         """
+        # Required columns
+        required_cols = ['Bary_RVC', 'CCF Weights', 'CCFBJD']
+    
+        # Check if all required columns are present
+        if not all(col in self.df_RV.columns for col in required_cols):
+            missing = [col for col in required_cols if col not in self.df_RV.columns]
+            print(f"Skipping compute_statistics: missing columns {missing}")
+            return
+
         # compute weighted Barycentric RV correction
         x = self.df_RV['Bary_RVC']
         w = self.df_RV['CCF Weights']
@@ -103,11 +113,11 @@ class AnalyzeL2:
         self.Min_Perc_Delta_Bary_RV = x[nonzero_mask].min()
 
 
-    def measure_days_since_last_good_cal(self, cal_source='LFC', 
-                                               qc_pass='auto',
-                                               search_range_days = 90, 
-                                               backend='psql',
-                                               verbose=False):
+    def measure_days_since_last_good_wave_cal(self, cal_source='LFC', 
+                                                    qc_pass='auto',
+                                                    search_range_days=90, 
+                                                    backend='psql',
+                                                    verbose=False):
         """
         Compute days since last good LFC or Etalon calibration.
         This method uses the TSDB and requires that QC keywords be ingested
