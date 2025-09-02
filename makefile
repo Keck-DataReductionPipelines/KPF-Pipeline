@@ -3,8 +3,14 @@ APP_IMAGE ?= kpf-drp
 CI_IMAGE  ?= kpf-drp-ci
 TAG       ?= latest
 
-# Cache-busting when requirements.txt changes
+# Cache-busting when requirements.txt changes (safe even if Dockerfile ignores it)
 REQS_SHA  := $(shell sha256sum requirements.txt | cut -d ' ' -f1)
+
+# test_env behavior controls:
+# - Local default: interactive shell in the CI image
+# - Jenkins: DOCKER_RUN_TTY= (empty) and RUN="make init regression_tests"
+DOCKER_RUN_TTY ?= -it
+RUN ?= bash
 
 CCF_C = modules/CLib/CCF
 
@@ -45,12 +51,12 @@ docker:
 	$(if $(KPFPIPE_PORT),, @echo "Starting Docker container (no port specified)..." && ./docker-run.sh)
 	$(if $(KPFPIPE_PORT), @echo "Starting Docker container on port ${KPFPIPE_PORT}..." && KPFPIPE_PORT=${KPFPIPE_PORT} ./docker-run.sh)
 
-# Build the CI image and run a dev shell with the same tag.
+# Build the CI image and run inside it (interactive by default, non-interactive in Jenkins)
 test_env:
-	docker build --cache-from $(CI_IMAGE):$(TAG) \
+	DOCKER_BUILDKIT=1 docker build --cache-from $(CI_IMAGE):$(TAG) \
 		--build-arg REQS_SHA=$(REQS_SHA) \
 		--tag $(CI_IMAGE):$(TAG) .
-	docker run -it --rm \
+	docker run $(DOCKER_RUN_TTY) --rm \
 		--network=host \
 		-v "$${PWD}:/code/KPF-Pipeline" \
 		-v "$${CI_DATA_DIR}:/data" \
@@ -69,19 +75,19 @@ test_env:
 		-e TSDBUSER=$${KPFPIPE_TSDB_USER} \
 		-e TSDBPASS="$${KPFPIPE_TSDB_PASS}" \
 		$(CI_IMAGE):$(TAG) \
-		bash
+		$(RUN)
 
-# Dependency smoke test inside the current Python env
+# Dependency smoke test inside the current Python env (not Docker)
 sanity:
-	@python - <<'PY'
-try:
-	import pvlib, pandas, numpy
-	print("pvlib:", pvlib.__version__)
-	print("pandas:", pandas.__version__)
-	print("numpy:", numpy.__version__)
-except Exception as e:
-	raise SystemExit(f"Dependency check failed: {e}")
-PY
+	@python -c "import sys; \
+try: \
+    import pvlib, pandas, numpy; \
+    print('pvlib:', pvlib.__version__); \
+    print('pandas:', pandas.__version__); \
+    print('numpy:', numpy.__version__); \
+except Exception as e: \
+    print(f'Dependency check failed: {e}', file=sys.stderr); \
+    sys.exit(1)"
 
 regression_tests:
 	pytest -x --cov=kpfpipe --cov=modules --pyargs tests.regression
