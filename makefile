@@ -3,12 +3,12 @@ APP_IMAGE ?= kpf-drp
 CI_IMAGE  ?= kpf-drp-ci
 TAG       ?= latest
 
-# Cache-busting when requirements.txt changes (safe even if Dockerfile ignores it)
+# Cache-busting when requirements.txt changes (Dockerfile must consume REQS_SHA)
 REQS_SHA  := $(shell sha256sum requirements.txt | cut -d ' ' -f1)
 
-# test_env behavior controls:
+# test_env behavior:
 # - Local default: interactive shell in the CI image
-# - Jenkins: DOCKER_RUN_TTY= (empty) and RUN="make init regression_tests"
+# - Jenkins: set DOCKER_RUN_TTY= (empty) and RUN="make init regression_tests"
 DOCKER_RUN_TTY ?= -it
 RUN ?= bash
 
@@ -51,7 +51,7 @@ docker:
 	$(if $(KPFPIPE_PORT),, @echo "Starting Docker container (no port specified)..." && ./docker-run.sh)
 	$(if $(KPFPIPE_PORT), @echo "Starting Docker container on port ${KPFPIPE_PORT}..." && KPFPIPE_PORT=${KPFPIPE_PORT} ./docker-run.sh)
 
-# Build the CI image and run inside it (interactive by default, non-interactive in Jenkins)
+# Build the CI image and run inside it (interactive by default; Jenkins overrides RUN/tty)
 test_env:
 	DOCKER_BUILDKIT=1 docker build --cache-from $(CI_IMAGE):$(TAG) \
 		--build-arg REQS_SHA=$(REQS_SHA) \

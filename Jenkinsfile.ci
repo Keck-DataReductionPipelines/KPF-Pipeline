@@ -16,7 +16,8 @@ pipeline {
       }
       steps {
         echo "🏗️  Running KPF CI on ${env.BRANCH_NAME} (PR #${env.CHANGE_ID} → ${env.CHANGE_TARGET})"
-        // …your build steps here…
+        // Build CI image and run tests inside it via Makefile (non-interactive)
+        sh 'make test_env DOCKER_RUN_TTY= RUN="make init regression_tests" CI_IMAGE=kpf-drp-ci TAG=latest'
       }
     }
   }
