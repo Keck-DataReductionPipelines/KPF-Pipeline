@@ -123,6 +123,7 @@ panel_arr:
       ymin: -2.5
       ymax: 32.5
       ylabel: "Max/Min Good Orders\n(Etalon Red - SCI)"
+      title: Good Orders - Etalon
       not_junk: true
       qc_not_fail: 'GOODREAD,TIMCHKL0'
       nolegend: true

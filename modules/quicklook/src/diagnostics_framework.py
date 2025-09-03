@@ -359,6 +359,19 @@ class DiagnosticsFramework(KPF0_Primitive):
                         self.logger.info("Green/Red not in L2 file. BCV and BJD diagnostics not computed.")
                 except Exception as e:
                     self.logger.error(f"Measuring L2 BCV/BJD failed: {e}\n{traceback.format_exc()}")
+
+            # L2 - Days since last good LFC/Etalon exposures
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_days_since_last_wave_cal'):
+                try:
+                    print(f"type(self.kpf_object) = {type(self.kpf_object)}")
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_days_since_last_wave_cal", style="Bold", color="Blue")}')
+                    self.kpf_object = diagnostics.add_headers_days_since_last_wave_cal(self.kpf_object, cal_source='LFC', logger=self.logger)
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_days_since_last_wave_cal", style="Bold", color="Blue")}')
+                    self.kpf_object = diagnostics.add_headers_days_since_last_wave_cal(self.kpf_object, cal_source='Etalon', logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring time since last LFC/Etalon failed: {e}\n{traceback.format_exc()}")
             
         # Add RECEIPT entry
         self.kpf_object.receipt_add_entry('Diagnostics', self.__module__, f'data_level_str={self.data_level_str}, diagnostics_name={self.diagnostics_name}', 'PASS')

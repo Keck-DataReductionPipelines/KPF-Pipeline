@@ -1029,6 +1029,10 @@ DRFTDEL2  1.2114297222222221                          Time to 2nd drift correcti
 DRFTCOR   1                                           Drift correction applied (true/false)
 DRFTRV    0.2738220612333333                          Drift correction RV (m/s)
 DRFTMETH  nearest_interpolation                       Drift correction method name
+AGESLFC   0.621                                       Days since last good LFC frame (depends on processing order)
+AGEULFC   0.621                                       Days until next good LFC frame (depends on processing order)
+AGESETA   0.621                                       Days since last good Etalon frame (depends on processing order)
+AGEUETA   0.621                                       Days until next good Etalon frame (depends on processing order)
 ========  ==========================================  =========
 
 L2 RV Extension Header
