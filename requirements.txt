@@ -19,6 +19,9 @@ tqdm>=4.64.0
 pyyaml>=6.0
 seaborn>=0.11.0
 redis>=4.0.0
+# The following are required to estimate the clearsky metric.
+pvlib
+astroplan
 # The following is required by polly.
 pyfonts>=0.0.3
 
