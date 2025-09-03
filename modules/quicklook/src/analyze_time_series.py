@@ -50,6 +50,7 @@ class AnalyzeTimeSeries:
     Arguments:
         db_path (string) - path to database file
         base_dir (string) - L0 directory
+        tables_prefix (str) - prefix of the table names; default = 'tsdb_'.
         backend (string; 'sqlite' or 'psql') - database format 
         credentials (dictionary or None; optional) - optionally pass credentials for a PostgreSQL database
         logger (logger object) - a logger object can be passed, or one will be created
@@ -74,13 +75,14 @@ class AnalyzeTimeSeries:
           in the legend.
     """
 
-    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', credentials=None, logger=None, verbose=False):
+    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', tables_prefix='tsdb_', backend='sqlite', credentials=None, logger=None, verbose=False):
        
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting AnalyzeTimeSeries')
         self.db = TSDB(backend=backend, 
                        db_path=db_path, 
                        base_dir=base_dir, 
+                       tables_prefix=tables_prefix, 
                        credentials=credentials, 
                        logger=logger, 
                        verbose=verbose)

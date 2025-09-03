@@ -1,5 +1,14 @@
 .. _label-tsdb:
 
+Initializing the Time Series Database
+==============================
+
+.. toctree::
+    :maxdepth: 2
+    :titlesonly:
+
+    initialize_tsdb.rst
+
 Using the Time Series Database
 ==============================
 
