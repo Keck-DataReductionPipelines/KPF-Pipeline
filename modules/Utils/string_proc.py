@@ -93,8 +93,8 @@ class date_from_kpffile(KPF_Primitive):
 
 class days_since_observation(KPF_Primitive):
     """
-    This primitive returns the number of days (float) since the time encoded 
-    in the ObsID of a KPF filename (e.g., 'KP.20240101.10214.08.fits' or 
+    This primitive returns the number of days (float) since the time encoded
+    in the ObsID of a KPF filename (e.g., 'KP.20240101.10214.08.fits' or
     '/data/L1/20240101/KP.20240101.10214.08_L1.fits')
 
     Description:
@@ -136,13 +136,13 @@ class days_since_observation(KPF_Primitive):
             if len(date_parts) == 3:
                 try:
                     yyyymmdd = date_parts[0]
-                    year = yyyymmdd[0:4]   
-                    month = yyyymmdd[4:6]  
+                    year = yyyymmdd[0:4]
+                    month = yyyymmdd[4:6]
                     day = yyyymmdd[6:8]
                     sec = date_parts[1]
                     then = datetime(int(year), int(month), int(day)) + timedelta(seconds=int(sec))
                     now = datetime.now()
-                    days_since = (now - then).total_seconds() / 86400 
+                    days_since = (now - then).total_seconds() / 86400
                 except:
                     self.logger.info("Error computing time difference.")
 
@@ -158,7 +158,7 @@ class days_since_observation(KPF_Primitive):
 
 class date_from_path(KPF_Primitive):
     """
-    This primitive determines the datecode (YYYYMMDD) from a path 
+    This primitive determines the datecode (YYYYMMDD) from a path
     (e.g., '/data/masters/20230711/kpf_20230711_master_arclamp_autocal-etalon-all-eve.fits').
 
     Description:
@@ -196,7 +196,7 @@ class date_from_path(KPF_Primitive):
             else:
                 digit_count = 0
                 potential_match = ""
-                
+
         return Arguments('99999999') # Error code indicating that no match was found
 
 
@@ -205,8 +205,8 @@ class level_from_kpffile(KPF_Primitive):
     This primitive determines the KPF data level (L0, 2D, L1, L2, None) of a KPF file.
 
     Description:
-        - `action (keckdrpframework.models.action.Action)`: `action.args` contains 
-                  positional arguments and  keyword arguments passed by the 
+        - `action (keckdrpframework.models.action.Action)`: `action.args` contains
+                  positional arguments and  keyword arguments passed by the
                   `level_from_kpffile` event issued in the recipe:
 
             - `action.args[0] (string)`: filename in kpf format
@@ -244,7 +244,7 @@ class level_from_kpffile(KPF_Primitive):
                     format_type = suffix[1]
         else:
             format_type = None
-        
+
         return Arguments(format_type) # returns 'L0', '2D', 'L1', 'L2', None
 
 
@@ -254,8 +254,8 @@ class filename_from_fullfile(KPF_Primitive):
     This primitive determines the file name from a full path.
 
     Description:
-        - `action (keckdrpframework.models.action.Action)`: `action.args` contains 
-                  positional arguments and  keyword arguments passed by the 
+        - `action (keckdrpframework.models.action.Action)`: `action.args` contains
+                  positional arguments and  keyword arguments passed by the
                   `file_from_kpffile` event issued in the recipe:
 
             - `action.args[0] (string)`: filename in kpf format
@@ -278,5 +278,79 @@ class filename_from_fullfile(KPF_Primitive):
     def _perform(self):
         fullpath = self.action.args[0]  # e.g. '/data/L0/20230724/KP.20230720.12345.67.fits'
         filename = fullpath.rsplit('/', 1)[-1]  # e.g., 'KP.20230720.12345.67.fits'
-        
-        return Arguments(filename) 
+
+        return Arguments(filename)
+
+def print_shell_script_docstring(script_path):
+    """
+    Extracts and prints the docstring of a shell script.
+    """
+    try:
+        with open(script_path, "r") as file:
+            script_lines = file.readlines()
+
+        # Define the start and end markers for the docstring
+        docstring_start = "read -r -d '' SCRIPT_DOC <<'EOF'"
+        docstring_end = "EOF"
+
+        # Initialize variables
+        in_docstring = False
+        docstring = []
+
+        # Parse lines to find the docstring
+        for line in script_lines:
+            if docstring_start in line:
+                in_docstring = True
+                continue
+            if docstring_end in line:
+                in_docstring = False
+                continue
+            if in_docstring:
+                docstring.append(line.rstrip())
+
+        # Print the docstring
+        if docstring:
+            print("\n".join(docstring))
+        else:
+            print("No docstring found in the script.")
+
+    except FileNotFoundError:
+        print(f"Error: File not found at {script_path}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+class text_file_line_count(KPF_Primitive):
+    """
+    This primitive determines the number of lines in a text file,
+    and returns the number as an integer.
+
+    Description:
+        - `action (keckdrpframework.models.action.Action)`: `action.args` contains
+                  positional arguments and  keyword arguments passed by the
+                  `file_from_kpffile` event issued in the recipe:
+
+            - `action.args[0] (string)`: filename in kpf format
+    """
+
+    def __init__(self,
+                 action: Action,
+                 context: ProcessingContext) -> None:
+        KPF_Primitive.__init__(self, action, context)
+        args_keys = [item for item in action.args.iter_kw() if item != "name"]
+        self.logger = self.context.logger
+
+    def _pre_condition(self) -> bool:
+        success = len(self.action.args) == 1 and isinstance(self.action.args[0], str)
+        return success
+
+    def _post_condition(self) -> bool:
+        return True
+
+    def _perform(self):
+        filename = self.action.args[0]  # e.g. '/data/masters/20250101/kpf_20250101_master_flat_GREEN_CCD.csv'
+        with open(filename, "r") as file:
+            lines = file.readlines()
+            num_lines = len(lines)
+
+        return Arguments(num_lines)

@@ -16,10 +16,13 @@ class AnalyzeHK:
         Some of the functions need to be filled in.
 
     Arguments:
-        L0 - a KPF L0 object
+        L0 - a KPF L0 or 2D object
 
     Attributes:
-        TBD
+        percentile_99 - 99th percentile flux of 2D image (e-)
+        percentile_90 - 90th percentile flux of 2D image (e-)
+        percentile_50 - 50th percentile flux of 2D image (e-)
+        percentile_10 - 10th percentile flux of 2D image (e-)
     """
 
 #[pipeline_20230720.log][INFO]:/data/masters/kpfMaster_HKwave20220909_sci.csv
@@ -36,6 +39,7 @@ class AnalyzeHK:
         self.wavesoln_file = wavesoln_file
         self.offset = offset
         self.image = np.array(L0['CA_HK'].data)
+        self.percentile_99, self.percentile_90, self.percentile_50, self.percentile_10 = np.nanpercentile(self.image, [99,90,50,10]) # this will be bias-subtracted for 2D, but not L0
         primary_header = HeaderParse(L0, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
@@ -226,7 +230,7 @@ class AnalyzeHK:
      
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -50), textcoords='offset points')
@@ -311,7 +315,7 @@ class AnalyzeHK:
      
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -50), textcoords='offset points')
@@ -425,7 +429,7 @@ class AnalyzeHK:
      
         # Create a timestamp and annotate in the lower right corner
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f"KPF QLP: {current_time}"
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=8, color="darkgray", ha="right", va="bottom",
                     xytext=(0, -50), textcoords='offset points')

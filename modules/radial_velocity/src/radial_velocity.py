@@ -329,14 +329,14 @@ class RadialVelocity(KPF1_Primitive):
                 if hkey in p_header:
                     self.input.header[sci][hkey] = p_header[hkey]
 
-            mod, mtype = RadialVelocityAlgInit.MASK_ORDERLET, RadialVelocityAlgInit.MASK_TYPE
+            mod, mtype, mpath = RadialVelocityAlgInit.MASK_ORDERLET, RadialVelocityAlgInit.MASK_TYPE, RadialVelocityAlgInit.MASK_PATH
             self.input.header[sci]['MASK'] = None
             if not self.rv_init['data'][mod]:
                 self.input.header[sci]['MASK'] = self.rv_init['data'][mtype]
             elif self.ins is not None:
                 self.input.header[sci]['MASK'] = \
                     self.rv_init['data'][mod][RadialVelocityAlg.get_fiber_object_in_header(self.ins, sci)][mtype]
-
+                
         self.total_orderlet = len(self.spectrum_data_set)
 
         do_rv_corr = False
@@ -631,6 +631,9 @@ class RadialVelocity(KPF1_Primitive):
                 if ccf_key not in self.output_level2.header[ext]:
                     self.output_level2.header[ext][ccf_key] = \
                         RadialVelocityAlg.get_orderlet_masktype(self.ins, self.od_names[i], self.rv_init['data'])
+                    self.output_level2.header[ext][ccf_key.replace('_mask', 'mpath')] = \
+                        RadialVelocityAlg.get_orderlet_maskpath(self.ins, self.od_names[i], self.rv_init['data'])
+                    
         return True
 
     def make_rv_table(self, output_df):

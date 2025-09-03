@@ -781,6 +781,13 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 return
         elif not getattr(node, 'kpf_completed', False):
             if not self.returning_from_call:
+                #  SPECIAL CASE: allow   print()   with zero args 
+                # If the callee is our recipe print and there are no
+                # positional arguments, inject a constant "" so the
+                # one-arg arity check passes.
+                if node.func.id == "print" and len(node.args) == 0:
+                    node.args.append(_ast.Constant(value=""))
+                # ----------------------------------------------------
                 # Build and queue up the called function and arguments
                 # as a pipeline event.
                 # The "next_event" item in the event_table, populated
@@ -998,6 +1005,48 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self.pipeline.logger.debug(f"Str: {node.s}")
         # ctx of Str is always Load
         self._load.append(node.s)
+
+    # -----------------------------------------------------------------
+    #    F-string (JoinedStr) support  
+    # -----------------------------------------------------------------
+    def visit_JoinedStr(self, node):
+        """
+        Evaluate a Python f-string (ast.JoinedStr) and push the resulting
+        string onto the _load stack so that built-ins like print() can use it.
+
+        Only simple `{expr}` interpolation is supported; conversion flags
+        (!s, !r, !a) and format specs (':…') are ignored. That is enough for
+        recipe logging.
+        """
+        # -------- Reset-state pass (e.g. inside loops) --------
+        if self._reset_visited_states:
+            for part in node.values:
+                # Walk sub-expressions so their states reset, too
+                if isinstance(part, _ast.FormattedValue):
+                    self.visit(part.value)
+            return
+
+        # -------- Normal execution pass --------
+        pieces = []
+
+        for part in node.values:
+            if isinstance(part, _ast.Constant):          # literal text
+                pieces.append(part.value)
+
+            elif isinstance(part, _ast.FormattedValue):  # {expr}
+                # Evaluate the expression; its value is now on _load
+                self.visit(part.value)
+                expr_val = self._load.pop()
+                pieces.append(str(expr_val))
+
+            else:  # something exotic we don't support
+                raise RecipeError(
+                    f"Unsupported component in f-string: {type(part).__name__}"
+                )
+
+        # Push the fully-assembled string back for the caller (e.g. print)
+        self._load.append("".join(pieces))
+
 
     def visit_Expr(self, node):
         """

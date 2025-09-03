@@ -98,7 +98,6 @@ class CaHKExtraction(KPF0_Primitive):
         else:
             img = None
         self.input_img = img[CAHK_EXT] if hasattr(img, CAHK_EXT) else None
-
         # trace path
         self.trace_path = action.args[1]
         # fiber list
@@ -122,7 +121,6 @@ class CaHKExtraction(KPF0_Primitive):
         else:
             img = None
         self.dark_img = img[CAHK_EXT] if hasattr(img, CAHK_EXT) else None
-
         if "bias" in args_keys:
             if isinstance(action.args['bias'], str):
                 img = KPF0.from_fits(action.args['bias'])
@@ -283,4 +281,4 @@ class CaHKExtraction(KPF0_Primitive):
         if wave_table is not None:
             out_lev1[wave_ext] = wave_table
             if self.logger:
-                self.logger.warning("CaHkExtraction: write wls to "+wave_ext)
+                self.logger.info("CaHkExtraction: write wls to "+wave_ext)

@@ -17,27 +17,12 @@ from kpfpipe.primitives.level0 import KPF0_Primitive
 from kpfpipe.pipelines.fits_primitives import to_fits
 from keckdrpframework.models.arguments import Arguments
 
+import database.modules.utils.kpf_db as db
+
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/read_noise/configs/default.cfg'
 
 debug = 0
-
-
-#
-# Global methods
-#
-
-def md5(fname):
-    hash_md5 = hashlib.md5()
-
-    try:
-        with open(fname, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest()
-    except:
-        self.logger.info('*** Error: Cannot open file ({}); quitting...'.format(fname))
-        exit(65)
 
 
 class ReadNoiseFramework(KPF0_Primitive):
@@ -203,7 +188,7 @@ class ReadNoiseFramework(KPF0_Primitive):
         """
         Compute read noise for given read-out channel.
         """
-
+        debug=1
         try:
             data_input = np.array(hdul_input[ext])
         except:
@@ -309,7 +294,7 @@ class ReadNoiseFramework(KPF0_Primitive):
 
 
         # Read image data object from L0 FITS file.
-
+        print("read noise framwork opening input file: {}".format(input_filename))
         hdul_input = KPF0.from_fits(input_filename,self.data_type)
 
         read_noise_dict = {}
@@ -517,6 +502,7 @@ class ReadNoiseFramework(KPF0_Primitive):
         if self.backfill_repopulate_db_recs_cfg == 0:
 
             fits_filename = input_filename
+            # HTI commented out these lines Aug 11 2025, filename now handled in kpf_drp.recipe.
             fits_filename = fits_filename.replace('L0', '2D')
             fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
@@ -755,7 +741,7 @@ class ReadNoiseFramework(KPF0_Primitive):
 
                 # Compute checksum and compare with database value.
 
-                cksum = md5(filename)
+                cksum = db.md5(filename)
 
                 if debug == 1:
                     print('cksum = {}'.format(cksum))

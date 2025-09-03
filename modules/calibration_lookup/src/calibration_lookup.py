@@ -48,6 +48,10 @@ class CalibrationLookup(KPF0_Primitive):
 
         #Input arguments
         self.datetime = self.action.args[0]   # ISO datetime string
+        try:
+            self.subset = self.action.args["subset"]
+        except KeyError:
+            self.subset = None
 
         # input configuration
         self.config = configparser.ConfigParser()
@@ -63,7 +67,7 @@ class CalibrationLookup(KPF0_Primitive):
     def _perform(self):
 
         cal_look = GetCalibrations(self.datetime, self.config_path)
-        output_cals = cal_look.lookup()
+        output_cals = cal_look.lookup(subset=self.subset)
 
         return Arguments(output_cals)
 

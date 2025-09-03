@@ -1,0 +1,23 @@
+pipeline {
+  agent any
+  stages {
+    stage('Build & Test') {
+      when {
+        anyOf {
+          // 1a) A PR from develop → master
+          allOf {
+            changeRequest()
+            branch 'develop'
+            expression { env.CHANGE_TARGET == 'master' }
+          }
+          // 1b) Any direct commit to master
+          branch 'master'
+        }
+      }
+      steps {
+        echo "🏗️  Running KPF CI on ${env.BRANCH_NAME} (PR #${env.CHANGE_ID} → ${env.CHANGE_TARGET})"
+        // …your build steps here…
+      }
+    }
+  }
+}

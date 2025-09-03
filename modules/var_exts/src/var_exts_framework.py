@@ -1,3 +1,4 @@
+from astropy.io import fits
 import os
 from os.path import exists
 import numpy as np
@@ -225,7 +226,7 @@ class VarExtsFramework(KPF0_Primitive):
         # Read image data object from 2D FITS file.
 
         fits_filename = self.l0_filename
-        fits_filename = fits_filename.replace('L0', '2D')
+        fits_filename = fits_filename.replace('L0', '2D') # I hate this!
         fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
         fits_filename_exists = exists(fits_filename)
@@ -404,7 +405,16 @@ class VarExtsFramework(KPF0_Primitive):
             self.logger.info('--->ext,img_shape = {},{}'.format(ext,img_shape))
 
             fits_obj[ext] = img.astype(np.float32)
-            fits_obj.header[ext]['BUNIT'] = ('electrons','Units of variance')
+            fits_obj.header[ext]['BUNIT'] = ('electrons squared','Units of variance')
+
+        # Remove any AMP extensions (which are automatically re-added as empty extensions for L0 FITS objects).
+
+        del_ext_list = ['GREEN_AMP1','GREEN_AMP2','GREEN_AMP3','GREEN_AMP4','RED_AMP1','RED_AMP2','RED_AMP3','RED_AMP4']
+        for ext in del_ext_list:
+            try:
+                fits_obj.del_extension(ext)
+            except:
+                pass
 
         fits_obj.to_fits(fits_filename)
 
@@ -510,7 +520,7 @@ class VarExtsFramework(KPF0_Primitive):
         dark_greenvarimg,dark_redvarimg = self.assemble_var_images(self.masterdark_path)
         flat_greenvarimg,flat_redvarimg = self.assemble_var_images(self.masterflat_path)
 
-        # Sum the variances for GREEN and RED chips, after converting all terms to electrons.
+        # Sum the variances for GREEN and RED chips, after converting all terms to electrons squared.
         # The terms in the following formulas are, respectively:
         # 1. Read-noise variance
         # 2. Master-bias variance
@@ -519,6 +529,8 @@ class VarExtsFramework(KPF0_Primitive):
         # 5. Photon-noise variance
 
         # GREEN
+        # print("types of variables:",rn_greenvarimg,bias_greenvarimg,dark_greenvarimg,flat_greenvarimg,greenccdimg)
+        # import pdb; pdb.set_trace()
         try:
             greenvarimg = rn_greenvarimg +\
                 bias_greenvarimg +\

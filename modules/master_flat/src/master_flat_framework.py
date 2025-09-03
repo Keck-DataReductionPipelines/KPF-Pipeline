@@ -12,6 +12,7 @@ import re
 import pandas as pd
 
 import database.modules.utils.kpf_db as db
+import modules.quality_control.src.quality_control as qc
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
 
@@ -25,6 +26,7 @@ from kpfpipe.config.pipeline_config import ConfigClass
 
 # Global read-only variables
 DEFAULT_CFG_PATH = 'modules/master_flat/configs/default.cfg'
+
 
 class MasterFlatFramework(KPF0_Primitive):
 
@@ -48,7 +50,7 @@ class MasterFlatFramework(KPF0_Primitive):
         3. Further modifications to this recipe are needed in order to use
            a master flat-lamp pattern from a prior night.
         4. Low-light pixels cannot be reliably used to
-           compute the flat-field correction (e.g., less than 5 DN/sec).
+           compute the flat-field correction (e.g., less than 5 electrons/sec).
         5. Currently makes master flats for GREEN_CCD, RED_CCD, and CA_HK.
 
         Algorithm:
@@ -91,7 +93,7 @@ class MasterFlatFramework(KPF0_Primitive):
         module_config_path (str): Location of default config file (modules/master_flat/configs/default.cfg)
         logger (object): Log messages written to log_path specified in default config file.
         gaussian_filter_sigma (float): 2-D Gaussian-blur sigma for smooth lamp pattern calculation (default = 2.0 pixels)
-        low_light_limit = Low-light limit where flat is set to unity (default = 5.0 DN/sec)
+        low_light_limit = Low-light limit where flat is set to unity (default = 5.0 electrons/sec)
 
     Outputs:
         Full-frame-image FITS extensions in output master flat:
@@ -178,6 +180,7 @@ class MasterFlatFramework(KPF0_Primitive):
 
         master_flat_exit_code = 0
         master_flat_infobits = 0
+        input_master_type = 'Flat'
 
 
         # Filter flat files with IMTYPE=‘flatlamp’ and that match the input object specification with OBJECT.
@@ -385,13 +388,14 @@ class MasterFlatFramework(KPF0_Primitive):
                 path = all_flat_files[i]
                 obj = KPF0.from_fits(path)
 
-                try:
-                    obj_not_junk = obj.header['PRIMARY']['NOTJUNK']
-                    self.logger.debug('----========-------========------>path,obj_not_junk = {},{}'.format(path,obj_not_junk))
-                    if obj_not_junk != 1:
-                        continue
-                except KeyError as err:
-                    pass
+
+                # Check QC keywords and skip image if it does not pass QC checking.
+
+                skip = qc.check_all_qc_keywords(obj,path,input_master_type,self.logger)
+                self.logger.debug('After calling qc.check_all_qc_keywords: i,path,skip = {},{},{}'.format(i,path,skip))
+                if skip:
+                    continue
+
 
                 np_obj_ffi = np.array(obj[ffi])
                 np_obj_ffi_shape = np.shape(np_obj_ffi)
@@ -469,8 +473,8 @@ class MasterFlatFramework(KPF0_Primitive):
             # to "flatten" of all stacked-image data for the current observation date within the orderlet mask.
             # The fixed lamp pattern is made from a stacked image from a specific observation date
             # (e.g., 100 Flatlamp frames, 30-second exposures each, were acquired on 20230628). The fixed lamp
-            # pattern is smoothed with a sliding-window kernel 15-pixels wide (along dispersion dimension)
-            # by 3-pixels high (along cross-dispersion dimension) by computing the clipped mean
+            # pattern is smoothed with a sliding-window kernel 200-pixels wide (along dispersion dimension)
+            # by 1-pixel high (along cross-dispersion dimension) by computing the clipped mean
             # with 3-sigma double-sided outlier rejection.   The fixed smooth lamp pattern enables the flat-field
             # correction to remove dust and debris signatures on the optics of the instrument and telescope.
             # The local median filtering smooths, yet minimizes undesirable effects at the orderlet edges.
@@ -518,12 +522,25 @@ class MasterFlatFramework(KPF0_Primitive):
                         fname = 'vals_for_mode_' + ffi + '_orderlet' + str(orderlet_val) + '.txt'
                         np.savetxt(fname, vals_for_mode_calc.flatten(), fmt = '%10.5f', newline = '\n', header = 'value')
 
-                    normalization_factor = mode_vals[0] / 100.0      # Divide by 100 to account for above binning.
+
+                    self.logger.debug('type(mode_vals),type(mode_counts) = {},{}'.format(type(mode_vals),type(mode_counts)))
+
+                    # Try if mod_vals is returned as array; upon failure, try if mod_vals is returned as just one value.
+
+                    try:
+                        normalization_factor = mode_vals[0] / 100.0      # Divide by 100 to account for above binning.
+                    except:
+                        try:
+                            normalization_factor = mode_vals / 100.0      # Divide by 100 to account for above binning.
+                        except:
+                            normalization_factor = unnormalized_flat_mean
+
+                    self.logger.debug('orderlet_val,unnormalized_flat_mean,normalization_factor,mode_vals,mode_counts = {},{},{},{},{}'.\
+                        format(orderlet_val,unnormalized_flat_mean,normalization_factor,mode_vals,mode_counts))
+
 
                     flat = np.where(np_om_ffi_bool == True, flat / normalization_factor, flat)
                     flat_unc = np.where(np_om_ffi_bool == True, flat_unc / normalization_factor, flat_unc)
-
-                    self.logger.debug('orderlet_val,unnormalized_flat_mean,normalization_factor,mode_count = {},{},{},{}'.format(orderlet_val,unnormalized_flat_mean,normalization_factor,mode_counts[0]))
 
                 # Set unity flat values for unmasked pixels.
                 np_om_ffi_bool_all_orderlets = np.where(np_om_ffi > 0.5, True, False)
@@ -600,9 +617,14 @@ class MasterFlatFramework(KPF0_Primitive):
             del master_holder.header['GREEN_CCD']['OSCANV2']
             del master_holder.header['GREEN_CCD']['OSCANV3']
             del master_holder.header['GREEN_CCD']['OSCANV4']
+        except KeyError as err:
+            pass
+
+        try:
             del master_holder.header['RED_CCD']['OSCANV1']
             del master_holder.header['RED_CCD']['OSCANV2']
-
+            del master_holder.header['RED_CCD']['OSCANV3']
+            del master_holder.header['RED_CCD']['OSCANV4']
         except KeyError as err:
             pass
 
@@ -611,7 +633,7 @@ class MasterFlatFramework(KPF0_Primitive):
             master_holder.header[ffi]['BUNIT'] = ('Dimensionless','Units of master flat')
             master_holder.header[ffi]['NFRAMES'] = (n_frames_kept[ffi],'Number of frames in input stack')
             master_holder.header[ffi]['GAUSSSIG'] = (self.gaussian_filter_sigma,'2-D Gaussian-smoother sigma (pixels)')
-            master_holder.header[ffi]['LOWLTLIM'] = (self.low_light_limit,'Low-light limit (DN)')
+            master_holder.header[ffi]['LOWLTLIM'] = (self.low_light_limit,'Low-light limit (electrons)')
             master_holder.header[ffi]['NSIGMA'] = (self.n_sigma,'Number of sigmas for data-clipping')
             master_holder.header[ffi]['MINMJD'] = (mjd_obs_min[ffi],'Minimum MJD of flat observations')
             master_holder.header[ffi]['MAXMJD'] = (mjd_obs_max[ffi],'Maximum MJD of flat observations')
@@ -656,10 +678,10 @@ class MasterFlatFramework(KPF0_Primitive):
             master_holder.header[ffi_cnt_ext_name]['BUNIT'] = ('Count','Number of stack samples')
 
             ffi_stack_ext_name = ffi + '_STACK'
-            master_holder.header[ffi_stack_ext_name]['BUNIT'] = ('DN/sec','Stacked-data mean per exposure time')
+            master_holder.header[ffi_stack_ext_name]['BUNIT'] = ('electrons/sec','Stacked-data mean per exposure time')
 
             ffi_lamp_ext_name = ffi + '_LAMP'
-            master_holder.header[ffi_lamp_ext_name]['BUNIT'] = ('DN/sec','Lamp pattern per exposure time')
+            master_holder.header[ffi_lamp_ext_name]['BUNIT'] = ('electrons/sec','Lamp pattern per exposure time')
 
             if (ffi == 'GREEN_CCD' or ffi == 'RED_CCD'):
                 master_holder.header[ffi]['ORDRMASK'] = self.ordermask_path

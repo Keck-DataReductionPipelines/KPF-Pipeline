@@ -1,0 +1,40 @@
+description: QC - Wavelength Solution Metrics
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: WLSL1
+        plot_type: state
+        plot_attr:
+          label: "L1 WLS\nFiles Pass Sanity Checks"
+          marker: .
+    paneldict:
+      ylabel: "L1 WLS\nFiles Pass Sanity Checks\n(WLSL1)"
+      legend_frac_size: 0.15
+  - panelvars:
+      - col: WILDWSCI
+        plot_type: state
+        plot_attr:
+          label: "SCI WLS not wild\n(stdev < 5 pix)"
+          marker: .
+    paneldict:
+      ylabel: "SCI WLS not wild\n(stdev < 5 pix)\n(WILDLSCI)"
+      legend_frac_size: 0.15
+  - panelvars:
+      - col: WILDWCAL
+        plot_type: state
+        plot_attr:
+          label: "CAL WLS not wild\n(stdev < 5 pix)"
+          marker: .
+    paneldict:
+      ylabel: "CAL WLS not wild\n(stdev < 5 pix)\n(WILDLCAL)"
+      legend_frac_size: 0.15
+  - panelvars:
+      - col: WILDWSKY
+        plot_type: state
+        plot_attr:
+          label: "SKY WLS not wild\n(stdev < 5 pix)"
+          marker: .
+    paneldict:
+      ylabel: "SKY WLS not wild\n(stdev < 5 pix)\n(WILDLSKY)"
+      title: QC - Wavelength Solution Checks
+      legend_frac_size: 0.15

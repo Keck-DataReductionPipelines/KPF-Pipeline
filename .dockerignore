@@ -5,3 +5,6 @@ build
 kpfpipe.egg-info
 *.pyc
 *.so
+core.*
+.Trash
+**/.Trash

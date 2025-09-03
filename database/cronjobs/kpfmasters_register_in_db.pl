@@ -1,4 +1,4 @@
-#! /usr/local/bin/perl
+#! /usr/bin/perl
 
 ##########################################################################
 # Pipeline Perl script to registerCalFilesForDate.py from within a
@@ -111,7 +111,7 @@ if (! (defined $procdate)) {
 my $pythonscript = 'database/scripts/registerCalFilesForDate.py';
 my $dockercmdscript = 'jobs/kpfmasters_register_in_db';            # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'kpf-drp:latest';
+my $containerimage = 'russkpfmasters:latest';
 
 my ($pylogfileDir, $pylogfileBase) = $pythonscript =~ /(.+)\/(.+)\.py/;
 my $pylogfile = $pylogfileBase . '_' . $procdate . '.out';

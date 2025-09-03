@@ -41,12 +41,20 @@ extensions = ['sphinx.ext.autodoc',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
     'sphinx_rtd_theme',
-    'sphinxcontrib.napoleon',
+    'sphinx.ext.napoleon',
     'nbsphinx',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
+
+# Add _static to the static path list if not present
+html_static_path = ['_static']
+
+# Add the custom CSS file to the HTML build
+html_css_files = [
+    'css/custom.css',
+]
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
@@ -59,7 +67,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'KPFPipeline'
-copyright = u'2020-2024, BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
+copyright = u'2020-2025, BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
 author = u'BJ Fulton, Andrew Howard, Sam Halverson, Aprita Roy, Cindy Wang, Russ Laher, and others on the KPF Team'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -77,7 +85,7 @@ release = kpfpipe.__version__
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = 'en'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -183,4 +191,6 @@ autodoc_mock_imports = ['keckdrpframework']
 
 
 # Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {'https://docs.python.org/': None}
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+}

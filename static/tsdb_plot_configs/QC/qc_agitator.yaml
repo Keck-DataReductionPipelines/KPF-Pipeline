@@ -1,0 +1,13 @@
+description: QC - Agitator Running
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: AGITOK
+        plot_type: state
+        plot_attr:
+          label: "Agitator running with\nspeed above minimum"
+          marker: .
+    paneldict:
+      ylabel: "Agitator running with\nspeed above minimum"
+      title: QC - Agitator Running
+      legend_frac_size: 0.15

@@ -40,16 +40,16 @@ class GetDataProductsFramework(KPF_Primitive):
 
     def _perform(self):
         kpf_object = self.action.args[0]
-        data_level_str = self.action.args[1] # L0, 2D, L1, or 2D
+        data_level_str = self.action.args[1] # L0, D2, L1, or 2D
 
         if data_level_str == 'L0':
-            data_products = get_dp_L0(L0)
+            data_products = get_dp_L0(kpf_object)
         elif data_level_str == '2D':
-            data_products = get_dp_2D(2D)
+            data_products = get_dp_2D(kpf_object)
         elif data_level_str == 'L1':
-            data_products = get_dp_L1(L1)
+            data_products = get_dp_L1(kpf_object)
         elif data_level_str == 'L2':
-            data_products = get_dp_L2(L2)
+            data_products = get_dp_L2(kpf_object)
         else:
             data_prodcts = ['None']
 

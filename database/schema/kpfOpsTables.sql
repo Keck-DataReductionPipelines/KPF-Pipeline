@@ -9,9 +9,10 @@
 
 -----------------------------
 -- TABLE: CalFiles
+-- Put the CalFiles table and its indexes on a fast storage device.
 -----------------------------
 
-SET default_tablespace = pipeline_data_01;
+SET default_tablespace = pipeline_data_02;
 
 CREATE TABLE calfiles (
     cid integer NOT NULL,                         -- Primary key
@@ -25,6 +26,7 @@ CREATE TABLE calfiles (
     infobits integer,                             -- FITS-header keyword: INFOBITS
     startdate date NOT NULL,                      -- Start date for application of master (for earliest-in-time selection)
     enddate date NOT NULL,                        -- End date for application of master (may not be used)
+    cidparent integer,                            -- cid of parent file source of nframes, minmjd, and maxmjd, if applicable
     filename character varying(255) NOT NULL,     -- Path and filename of master calibration file.
     checksum character varying(32) NOT NULL,      -- MD5 checksum
     status smallint DEFAULT 0 NOT NULL,           -- Set to zero if bad and one if good
@@ -46,7 +48,7 @@ ALTER SEQUENCE calfiles_cid_seq OWNER TO kpfadminrole;
 
 ALTER TABLE calfiles ALTER COLUMN cid SET DEFAULT nextval('calfiles_cid_seq'::regclass);
 
-SET default_tablespace = pipeline_indx_01;
+SET default_tablespace = pipeline_indx_02;
 
 ALTER TABLE ONLY calfiles ADD CONSTRAINT calfiles_pkey PRIMARY KEY (cid);
 
@@ -54,6 +56,8 @@ CREATE INDEX calfiles_caltype_idx ON calfiles (caltype);
 CREATE INDEX calfiles_startdate_idx ON calfiles (startdate);
 CREATE INDEX calfiles_enddate_idx ON calfiles (enddate);
 CREATE INDEX calfiles_status_idx ON calfiles (status);
+CREATE INDEX calfiles_level_idx ON calfiles (level);
+CREATE INDEX calfiles_object_idx ON calfiles ("object");
 
 
 -----------------------------

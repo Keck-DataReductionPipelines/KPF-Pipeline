@@ -1,0 +1,13 @@
+description: QC - Network Time Protocol (NTP)
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: NTPGOOD
+        plot_type: state
+        plot_attr:
+          label: NTP time within 100 ms
+          marker: .
+    paneldict:
+      ylabel: "NTP time within 100 ms\n(NTPGOOD)"
+      title: QC - Network Time Protocol (NTP)
+      legend_frac_size: 0.15

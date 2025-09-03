@@ -1,4 +1,4 @@
-#! /usr/local/bin/perl
+#! /usr/bin/perl
 
 ##########################################################################
 # Pipeline Perl script to do detached docker run.  Can run this script
@@ -101,10 +101,43 @@ if (! (defined $dbname)) {
 }
 
 
+# Set up time-series database connection.
+
+my $tsdbport = $ENV{TSDBPORT};
+
+if (! (defined $tsdbport)) {
+    die "*** Env. var. TSDBPORT not set; quitting...\n";
+}
+
+my $tsdbname = $ENV{TSDBNAME};
+
+if (! (defined $tsdbname)) {
+    die "*** Env. var. TSDBNAME not set; quitting...\n";
+}
+
+my $tsdbserver = $ENV{TSDBSERVER};
+
+if (! (defined $tsdbserver)) {
+    die "*** Env. var. TSDBSERVER not set; quitting...\n";
+}
+
+my $tsdbuser = $ENV{TSDBUSER};
+
+if (! (defined $tsdbuser)) {
+    die "*** Env. var. TSDBUSER not set; quitting...\n";
+}
+
+my $tsdbpass = $ENV{TSDBPASS};
+
+if (! (defined $tsdbpass)) {
+    die "*** Env. var. TSDBPASS not set; quitting...\n";
+}
+
+
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l1.pl';
-my $version = '2.0';
+my $version = '2.3';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -114,9 +147,10 @@ if (! (defined $procdate)) {
 
 my $dockercmdscript = 'jobs/kpfmasterscmd_l1';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'kpf-drp:latest';
+my $containerimage = 'russkpfmasters:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_l1.cfg';
+
 
 my ($dbport, $dbpass);
 my @op = `cat ~/.pgpass`;
@@ -139,6 +173,7 @@ my $dbenvfileinside = "/code/KPF-Pipeline/jobs/" . $dbenvfilename;
 `chmod 600 $dbenvfile`;
 open(OUT,">$dbenvfile") or die "Could not open $dbenvfile ($!); quitting...\n";
 print OUT "export DBPASS=\"$dbpass\"\n";
+print OUT "export TSDBPASS=\"$tsdbpass\"\n";
 close(OUT) or die "Could not close $dbenvfile ($!); quitting...\n";
 
 
@@ -161,11 +196,17 @@ print "dbport=$dbport\n";
 print "dbenvfile=$dbenvfile\n";
 print "dbenvfileinside=$dbenvfileinside\n";
 print "Docker container name = $containername\n";
+print "tsdbport=$tsdbport\n";
+print "tsdbname=$tsdbname\n";
+print "tsdbserver=$tsdbserver\n";
+print "tsdbuser=$tsdbuser\n";
 
 
 # Change directory to where the Dockerfile is located.
 
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
+
+my $logssubdir = "pipeline_masters_drp_l1_${procdate}.log";
 
 my $script = "#! /bin/bash\n" .
              "source $dbenvfileinside\n" .
@@ -175,10 +216,10 @@ my $script = "#! /bin/bash\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
              "mkdir -p /data/masters/${procdate}\n" .
              "cp -pr /masters/${procdate}/kpf_${procdate}*.fits /data/masters/${procdate}\n" .
-             "rm /data/masters/${procdate}/kpf_${procdate}_smooth_lamp.fits\n" .
-             "kpf -r $recipe  -c $config --date ${procdate}\n" .
+             "kpf --ncpus 32 --reprocess /data/masters/${procdate}/ --masters -r $recipe  -c $config \n" .
              "cp -p /data/masters/${procdate}/* /masters/${procdate}\n" .
-             "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l1_${procdate}.log\n" .
+             "mkdir -p /masters/${procdate}/${logssubdir}\n" .
+             "cp -p /data/logs/${procdate}/kpf_${procdate}_*.log /masters/${procdate}/${logssubdir}\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
@@ -187,6 +228,7 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 my $dockerruncmd = "docker run -d --name $containername " .
                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
                    "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
+                   "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;

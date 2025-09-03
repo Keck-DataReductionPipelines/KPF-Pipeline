@@ -1,0 +1,31 @@
+description: Junk Status
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: NOTJUNK
+        plot_type: state
+        plot_attr:
+          label: "Junk State\n(NOTJUNK)"
+          marker: .
+    paneldict:
+      ylabel: Junk Status
+      legend_frac_size: 0.15
+  - panelvars:
+      - col: GOODREAD
+        plot_type: state
+        plot_attr:
+          label: "CCD read properly\n(GOODREAD)"
+          marker: .
+    paneldict:
+      ylabel: "CCD read properly\n(Texp !≈ 6 sec and\nTexp_desired > 7 sec)"
+      legend_frac_size: 0.15
+  - panelvars:
+      - col: FLXSTATS
+        plot_type: state
+        plot_attr:
+          label: "2D flux not smeared\n(FLXSTATS)"
+          marker: .
+    paneldict:
+      ylabel: "2D flux not smeared\nin and out of order trace\nusing flux distributions"
+      title: Junk Status
+      legend_frac_size: 0.15

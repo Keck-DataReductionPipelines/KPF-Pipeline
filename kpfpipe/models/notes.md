@@ -4,6 +4,7 @@
 
 - Contain a single 2D image and variance array (2 extensions).
 - Image and variance can be empty.
+- contain "telemetry" extension as ASCII table (exist in memory as pandas)
 - contain "receipt" extension as ASCII table (exist in memory as pandas)
 - support adding/removing auxillary HDUs
 
@@ -11,13 +12,17 @@
 
 - Data identified by fibers
 - Each fiber have flux, wavelength, variance
-- contain "receipt" extension
+- contain "telemetry" extension, inherited from Level 0
+- contain "receipt" extension, inherited and extended from Level 0
 - contains a "segment" extension that specifies all
 - inherit all headers keywords from level 0
 
 ## Level 2 data
 
+- contain "telemetry" extension, inherited from Level 1
+- contain "receipt" extension, inherited and extended from Level 1
 - data stored in table. Each row is identified by a segment.
+- inherit all headers keywords from level 1
 
 ## Demo
 

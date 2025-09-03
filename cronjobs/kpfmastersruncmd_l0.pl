@@ -1,4 +1,4 @@
-#! /usr/local/bin/perl
+#! /usr/bin/perl
 
 ##########################################################################
 # Pipeline Perl script to do detached docker run.  Can run this script
@@ -104,10 +104,43 @@ if (! (defined $dbname)) {
 }
 
 
+# Set up time-series database connection.
+
+my $tsdbport = $ENV{TSDBPORT};
+
+if (! (defined $tsdbport)) {
+    die "*** Env. var. TSDBPORT not set; quitting...\n";
+}
+
+my $tsdbname = $ENV{TSDBNAME};
+
+if (! (defined $tsdbname)) {
+    die "*** Env. var. TSDBNAME not set; quitting...\n";
+}
+
+my $tsdbserver = $ENV{TSDBSERVER};
+
+if (! (defined $tsdbserver)) {
+    die "*** Env. var. TSDBSERVER not set; quitting...\n";
+}
+
+my $tsdbuser = $ENV{TSDBUSER};
+
+if (! (defined $tsdbuser)) {
+    die "*** Env. var. TSDBUSER not set; quitting...\n";
+}
+
+my $tsdbpass = $ENV{TSDBPASS};
+
+if (! (defined $tsdbpass)) {
+    die "*** Env. var. TSDBPASS not set; quitting...\n";
+}
+
+
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '2.2';
+my $version = '3.1';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -122,7 +155,7 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/kpfmasterscmd_l0';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'kpf-drp:latest';
+my $containerimage = 'russkpfmasters:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
 
@@ -136,6 +169,21 @@ my $pythonscript = 'scripts/make_smooth_lamp_pattern_new.py';
 
 my ($pylogfileDir, $pylogfileBase) = $pythonscript =~ /(.+)\/(.+)\.py/;
 my $pylogfile = $pylogfileBase . '_' . $procdate . '.out';
+
+my $pythonscript2 = 'scripts/reformat_smooth_lamp_fitsfile_for_kpf_drp.py';
+
+my ($pylogfileDir2, $pylogfileBase2) = $pythonscript2 =~ /(.+)\/(.+)\.py/;
+my $pylogfile2 = $pylogfileBase2 . '_' . $procdate . '.out';
+
+my $pythonscript3 = 'database/scripts/cleanupMastersOnDiskAndDatabaseForDate.py';
+
+my ($pylogfileDir3, $pylogfileBase3) = $pythonscript3 =~ /(.+)\/(.+)\.py/;
+my $pylogfile3 = $pylogfileBase3 . '_' . $procdate . '.out';
+
+my $pythonscript4 = 'database/scripts/registerCalFilesForDate.py';
+
+my ($pylogfileDir4, $pylogfileBase4) = $pythonscript4 =~ /(.+)\/(.+)\.py/;
+my $pylogfile4 = $pylogfileBase4 . '_' . $procdate . '_2D.out';
 
 
 # Get database parameters from ~/.pgpass file.
@@ -161,6 +209,7 @@ my $dbenvfileinside = "/code/KPF-Pipeline/jobs/" . $dbenvfilename;
 `chmod 600 $dbenvfile`;
 open(OUT,">$dbenvfile") or die "Could not open $dbenvfile ($!); quitting...\n";
 print OUT "export DBPASS=\"$dbpass\"\n";
+print OUT "export TSDBPASS=\"$tsdbpass\"\n";
 close(OUT) or die "Could not close $dbenvfile ($!); quitting...\n";
 
 
@@ -173,6 +222,14 @@ print "dockercmdscript=$dockercmdscript\n";
 print "containerimage=$containerimage\n";
 print "recipe=$recipe\n";
 print "config=$config\n";
+print "pythonscript=$pythonscript\n";
+print "pylogfile=$pylogfile\n";
+print "pythonscript2=$pythonscript2\n";
+print "pylogfile2=$pylogfile2\n";
+print "pythonscript3=$pythonscript3\n";
+print "pylogfile3=$pylogfile3\n";
+print "pythonscript4=$pythonscript4\n";
+print "pylogfile4=$pylogfile4\n";
 print "KPFPIPE_MASTERS_BASE_DIR=$mastersdir\n";
 print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
@@ -183,6 +240,10 @@ print "dbport=$dbport\n";
 print "dbenvfile=$dbenvfile\n";
 print "dbenvfileinside=$dbenvfileinside\n";
 print "Docker container name = $containername\n";
+print "tsdbport=$tsdbport\n";
+print "tsdbname=$tsdbname\n";
+print "tsdbserver=$tsdbserver\n";
+print "tsdbuser=$tsdbuser\n";
 
 
 # Change directory to where the Dockerfile is located.
@@ -195,28 +256,40 @@ my $script = "#! /bin/bash\n" .
              "export PYTHONUNBUFFERED=1\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
              "rm -rf /data/masters/${procdate}\n" .
+             "rm -rf /data/masters/wlpixelfiles/*kpf_${procdate}*\n" .
+             "rm -rf /data/analysis/${procdate}\n" .
+             "rm -rf /data/masters/pool/kpf_${procdate}*\n" .
              "find /data/masters/pool/kpf_????????_master_*fits -mtime +7 -exec rm {} +\n" .
              "kpf -r $recipe  -c $config --date ${procdate}\n" .
-             "python $pythonscript /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp.fits >& ${pylogfile}\n" .
+             "python $pythonscript /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits >& ${pylogfile}\n" .
+             "python $pythonscript2 /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp.fits >& ${pylogfile2}\n" .
+             "rm /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits\n" .
+             "python $pythonscript3 $procdate >& ${pylogfile3}\n" .
              "mkdir -p /masters/${procdate}\n" .
              "sleep 3\n" .
              "cp -p /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
              "chown root:root /masters/${procdate}/*\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log\n" .
+             "python $pythonscript4 $procdate >& ${pylogfile4}\n" .
              "cp -p /code/KPF-Pipeline/${pylogfile} /masters/${procdate}\n" .
+             "cp -p /code/KPF-Pipeline/${pylogfile2} /masters/${procdate}\n" .
+             "cp -p /code/KPF-Pipeline/${pylogfile3} /masters/${procdate}\n" .
+             "cp -p /code/KPF-Pipeline/${pylogfile4} /masters/${procdate}\n" .
              "rm /code/KPF-Pipeline/${pylogfile}\n" .
+             "rm /code/KPF-Pipeline/${pylogfile2}\n" .
+             "rm /code/KPF-Pipeline/${pylogfile3}\n" .
+             "rm /code/KPF-Pipeline/${pylogfile4}\n" .
              "exit\n";
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
 
-`mkdir -p $sandbox/L0/$procdate`;
 `mkdir -p $sandbox/2D/$procdate`;
-`cp -pr /data/kpf/L0/$procdate/*.fits $sandbox/L0/$procdate`;
 
 my $dockerruncmd = "docker run -d --name $containername " .
-                   "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
+                   "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters -v /data/kpf:/data_kpf " .
                    "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
+                   "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;

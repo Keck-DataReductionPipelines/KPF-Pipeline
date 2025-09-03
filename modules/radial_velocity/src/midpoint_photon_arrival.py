@@ -71,8 +71,6 @@ class MidpointPhotonArrival:
         clip (boolean): This switch turns on (True) and off (False) the sigma clipping feature, which interpolates over
         	outliers. Defaults to True.
 
-    
-
     Notes:
         Currently, each wavelength is calculated independently.
     """
@@ -105,8 +103,7 @@ class MidpointPhotonArrival:
         self.segmentMax=segmentMax
         self.orderMid=orderMid
         self.midPhoto=midPhoto
-
- 
+        
 
     def sigmaClip(self,exposures):
         """This function replaces outliers that significantly deviate from the nearest neighbor flux values with the average of the neighboring values. 
@@ -172,66 +169,75 @@ class MidpointPhotonArrival:
         return(exposures)
 
 
+    def CalcCDF(self, x, exposures, expBeg, expEnd):
+        """Calculates the cumulative number of photons received up to time x.
 
-
-    def CalcCDF(self,x,exposures,expBeg,expEnd):
-        """Calculates the photon cumulative distribution function at a given point in time (x).
-    
         Args:
-            x (datetime): The end time for the CDF calculation.
-            exposures (float): An array of exposure meter flux values ordered chronologically.
-            expBeg (datetime): An array of times that mark the begining of the exposure meter inetgrations.
-            expEnd (datetime): An array of times that indicate the end of the exposure meter inetgrations.      
-                    
+            x (numpy.datetime64): The time up to which to calculate the cumulative photon count.
+            exposures (numpy.ndarray): Exposure meter flux values.
+            expBeg (numpy.ndarray): Start times of exposures.
+            expEnd (numpy.ndarray): End times of exposures.
+
         Returns:
-            datetime: The estimated number of photons recieved up to time x.
-
-        Notes:
-            It is essential that exposures, expBeg, and expEnd all be arrays of the same length.            
+            float: Cumulative number of photons received up to time x.
         """
-    
-        cdfTot=0
-        i=0
-        while x > expEnd[i]:
-            cdfTot+=exposures[i]
-        
-        
-            ####Interpolation between exposures
-            if i>1:
-                rateRight=exposures[i]/((expEnd[i]-expBeg[i]).astype(float)+EMReadCorrection)
-                rateLeft=exposures[i-1]/((expEnd[i-1]-expBeg[i-1]).astype(float)+EMReadCorrection)
-                averRate=(rateRight+rateLeft)/2
-                cdfTot+=averRate*((expBeg[i]-expEnd[i-1]).astype(float)-EMReadCorrection)
-        
-            elif i==1:
-                rateRight=exposures[i]/((expEnd[i]-expBeg[i]).astype(float)+EMReadCorrection)
-                rateLeft=exposures[i-1]/(expEnd[i-1]-expBeg[i-1]).astype(float)
-                averRate=(rateRight+rateLeft)/2
-                cdfTot+=averRate*((expBeg[i]-expEnd[i-1]).astype(float)-EMReadCorrection)    
-            i+=1
-    
-    
-        ####Calculate the number of photons within exposures 
-        if x >= (expBeg[i]-np.timedelta64(int(EMReadCorrection),'ms')) :
-            rateRight=exposures[i]/((expEnd[i]-expBeg[i]).astype(float)+EMReadCorrection)
+        # Convert datetime64 to float (milliseconds since epoch)
+        expBeg_f = expBeg.astype('datetime64[ms]').astype(float)
+        expEnd_f = expEnd.astype('datetime64[ms]').astype(float)
+        x_f = x.astype('datetime64[ms]').astype(float)
 
-            if i>0:
-                rateLeft=exposures[i-1]/((expEnd[i-1]-expBeg[i-1]).astype(float)+EMReadCorrection)
-                averRate=(rateRight+rateLeft)/2
-                cdfTot+=averRate*((expBeg[i]-expEnd[i-1]).astype(float)-EMReadCorrection)
-                cdfTot+=rateRight*((x.astype(float)-expBeg[i].astype(float)).astype(float)-EMReadCorrection)
+        # Calculate exposure durations
+        exposure_durations = expEnd_f - expBeg_f + EMReadCorrection
+
+        # Calculate photon rates
+        rates = exposures / exposure_durations
+
+        # Initialize cumulative photon count
+        cdfTot = 0.0
+        i = 0
+        N = len(exposures)
+
+        # Loop over exposures
+        while i < N and x_f > expEnd_f[i]:
+            cdfTot += exposures[i]
+
+            # Interpolation between exposures
+            if i > 0:
+                rateRight = rates[i]
+                if i == 1:
+                    # For i == 1, rateLeft calculated without EMReadCorrection
+                    rateLeft = exposures[i - 1] / (expEnd_f[i - 1] - expBeg_f[i - 1])
+                else:
+                    rateLeft = rates[i - 1]
+                averRate = (rateRight + rateLeft) / 2
+                gap_time = expBeg_f[i] - expEnd_f[i - 1] - (EMReadCorrection if i > 1 else 0)
+                cdfTot += averRate * gap_time
+            i += 1
+
+        # Handle the exposure containing time x
+        if i < N:
+            if x_f >= expBeg_f[i] - EMReadCorrection:
+                rateRight = rates[i]
+                if i > 0:
+                    rateLeft = rates[i - 1]
+                    averRate = (rateRight + rateLeft) / 2
+                    gap_time = expBeg_f[i] - expEnd_f[i - 1] - EMReadCorrection
+                    cdfTot += averRate * gap_time
+                    time_in_current = x_f - expBeg_f[i] - EMReadCorrection
+                    cdfTot += rateRight * time_in_current
+                else:
+                    time_in_current = x_f - expBeg_f[i]
+                    cdfTot += rateRight * time_in_current
             else:
-                cdfTot+=rateRight*((x.astype(float)-expBeg[i].astype(float)).astype(float))
+                if i > 0:
+                    rateRight = rates[i]
+                    rateLeft = rates[i - 1]
+                    averRate = (rateRight + rateLeft) / 2
+                    time_in_gap = x_f - expEnd_f[i - 1]
+                    cdfTot += averRate * time_in_gap
 
-    
-        ####Calculate the number of photons between exposures   
-        else:
-            rateRight=exposures[i]/((expEnd[i]-expBeg[i]).astype(float)+EMReadCorrection)
-            rateLeft=exposures[i-1]/((expEnd[i-1]-expBeg[i-1]).astype(float)+EMReadCorrection)
-            averRate=(rateRight+rateLeft)/2
-            cdfTot+=averRate*((x-expEnd[i-1]).astype(float))
-        
-        return(cdfTot)
+        return cdfTot
+
 
     def binOrder(self,EMdataFrame,orderMin,orderMax):
         """bin the flux measurements by order
@@ -266,7 +272,6 @@ class MidpointPhotonArrival:
 
         return(EMdataFrameBin)
 
-    
 
     def midPoint(self,start,finish,exposures,expBeg,expEnd,clip=True):
         """This function calculates the photon midpoint arrival time.
@@ -293,7 +298,8 @@ class MidpointPhotonArrival:
     
         if clip:
             ##Apply sigma clipping filter
-            exposures=self.sigmaClip(exposures)
+            if len(exposures) > 2:
+                exposures=self.sigmaClip(exposures)
     
     
         #extrapolate edges
@@ -347,6 +353,7 @@ class MidpointPhotonArrival:
     
         
         return(outTime)
+    
     
     def orderedMidPoint(self):
         """This function calculates the photon midpoint arrival time for each user defined segment. If none are provided
