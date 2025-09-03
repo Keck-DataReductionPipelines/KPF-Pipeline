@@ -93,7 +93,9 @@ class ImageProcessingAlg():
             return
         else:
             header['BIASDONE'] = 1
-
+            if 'DRPTAG' in masterbias.header['PRIMARY']:
+                header['DRPTAGMB'] = masterbias.header['PRIMARY']['DRPTAG']
+    
         for ffi in self.ffi_exts:
             try:
                 self.rawimage[ffi] = self.rawimage[ffi] - masterbias[ffi]
@@ -126,6 +128,8 @@ class ImageProcessingAlg():
             return
         else:
             header['FLATDONE'] = 1
+            if 'DRPTAG' in flat_frame.header['PRIMARY']:
+                header['DRPTAGMF'] = flat_frame.header['PRIMARY']['DRPTAG']
 
         for ffi in self.ffi_exts:
             try:
@@ -163,6 +167,8 @@ class ImageProcessingAlg():
             return
         else:
             header['DARKDONE'] = 1
+            if 'DRPTAG' in dark_frame.header['PRIMARY']:
+                header['DRPTAGMD'] = dark_frame.header['PRIMARY']['DRPTAG']
 
         for ffi in self.ffi_exts:
             try:

@@ -1,8 +1,11 @@
 keyword|datatype|description|unit
 KPFERA|string|The era during which the observation was made, e.g. '2.0'|None
 NOTJUNK|bool|Not in the list of junk files check|None
-DRPTAG2D|string|Git version number of KPF-Pipeline used to make 2D|None
+DRPTAG2D|string|Git tag of KPF-Pipeline used to make 2D|None
 DRPHSH2D|string|Git commit hash version of KPF-Pipeline used to make 2D|None
+DRPTAGMF|string|DRPTAG of master flat file used to make 2D|None
+DRPTAGMB|string|DRPTAG of master bias file used to make 2D|None
+DRPTAGMD|string|DRPTAG of master dark file used to make 2D|None
 DATAPRL0|bool|QC: L0 data products present with non-zero array sizes|None
 DATAPR2D|bool|QC: 2D red and green data present|None
 CAHKPR2D|bool|QC: 2D CaHK data present|None
@@ -28,12 +31,20 @@ NOTVIGN|bool|QC: Telescope not vignetted by dome|None
 GOODEL|bool|QC: Telescope elevation above 30 deg (for ADC)|None
 ETASTEMP|bool|QC: Etalon at set temperature|None
 FLXSTATS|bool|QC: Flux stats in/out of order trace as expected|None
+HKSHTOPN|bool|QC: HK shutter open and HK requested; not bias/dark|None
+GRCCDT10|bool|QC: Green CCD > 10 mK from temp set point|None
+GRCCDT1|bool|QC: Green CCD > 1000 mK (1 C) from temp set point|None
+RDCCDT10|bool|QC: Red CCD > 10 mK from temp set point|None
+RDCCDT1|bool|QC: Red CCD > 1000 mK (1 C) from temp set point|None
 BIASFILE|string|Master bias file used (except for bias exposures)|None
 DARKFILE|string|Master dark file used (except for dark exposures)|None
 FLATFILE|string|Master flat file used (except for flat exposures)|None
-BIASDIR|string|Directory for BIASDIR|None
-DARKDIR|string|Directory for DARKDIR|None
-FLATDIR|string|Directory for FLATDIR|None
+BIASDIR|string|Directory for BIASFILE|None
+DARKDIR|string|Directory for DARKFILE|None
+FLATDIR|string|Directory for FLATFILE|None
+BIASDONE|bool|Bias subtracted|None
+DARKDONE|bool|Dark subtracted|None
+FLATDONE|bool|Flat divided|None
 RNRED1|float|Read noise for RED_AMP1 (first amp region on Red)|e-
 RNRED2|float|Read noise for RED_AMP2 (second amp region on Red)|e-
 RNGREEN1|float|Read noise for GREEN_AMP1 (first amp region on Green)|e-

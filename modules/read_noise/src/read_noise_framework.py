@@ -188,7 +188,7 @@ class ReadNoiseFramework(KPF0_Primitive):
         """
         Compute read noise for given read-out channel.
         """
-
+        debug=1
         try:
             data_input = np.array(hdul_input[ext])
         except:
@@ -294,7 +294,7 @@ class ReadNoiseFramework(KPF0_Primitive):
 
 
         # Read image data object from L0 FITS file.
-
+        print("read noise framwork opening input file: {}".format(input_filename))
         hdul_input = KPF0.from_fits(input_filename,self.data_type)
 
         read_noise_dict = {}
@@ -502,6 +502,7 @@ class ReadNoiseFramework(KPF0_Primitive):
         if self.backfill_repopulate_db_recs_cfg == 0:
 
             fits_filename = input_filename
+            # HTI commented out these lines Aug 11 2025, filename now handled in kpf_drp.recipe.
             fits_filename = fits_filename.replace('L0', '2D')
             fits_filename = fits_filename.replace('.fits', '_2D.fits')
 

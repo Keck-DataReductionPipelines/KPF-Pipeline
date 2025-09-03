@@ -3,6 +3,8 @@ import re
 import glob
 import json
 import copy
+import math
+import fnmatch
 import sqlite3
 import hashlib
 import psycopg2
@@ -71,6 +73,14 @@ class TSDB:
         In a the standard Docker environment, the first three are set by the 
         Docker configuration and TSDBUSER and TSDBPASS are set by environment 
         variables outside of Docker (KPFPIPE_TSDB_USER and KPFPIPE_TSDB_PASS).
+        
+        Database roles (for PostgreSQL backend):
+            kpfadminrole - Database administrator; usually with user 
+                           timeseriesdba
+            kpfporole    - Operations role for ingestion and plot generation; 
+                           usually with user timeseriesopsuser
+            kpfreadrole  - Readonly role; usually with user 
+                           timeseriesreadonlyuser
 
     Arguments:
         backend (str):
@@ -153,6 +163,7 @@ class TSDB:
         self.backend = backend 
         self.logger.info(f'Base data directory: {self.base_dir}')
         self.logger.info(f'Backend: {backend}')
+        self.logger.info(f'Table prefix: {tables_prefix}')
         if self.backend != 'sqlite' and self.backend != 'psql':
             self.logger.info("Invalid entry for backend.  Must be 'sqlite' or 'psql'.")
             return
@@ -163,6 +174,7 @@ class TSDB:
         if self.backend == 'sqlite':
             self.db_path = db_path
             self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
+            self.user_role = 'na' # not applicable
         elif backend == 'psql':
             creds = credentials if isinstance(credentials, dict) else {}
             # ----- TSDBPORT ------------------------------------------------------------
@@ -218,6 +230,10 @@ class TSDB:
         
         # Read list of tables and columns from files
         self.tables_metadata_df = pd.read_csv(self.tables_metadata_filepath).fillna('')
+        # Prepend prefix to table_name values if not already present
+        self.tables_metadata_df['table_name'] = self.tables_metadata_df['table_name'].apply(
+            lambda t: f"{self.prefix}{t}" if t and not str(t).startswith(self.prefix) else t
+        )
         tables = {}
         for _, row in self.tables_metadata_df.iterrows():
             table_name = row['table_name']
@@ -244,22 +260,30 @@ class TSDB:
         metadata_table = self.prefix + 'metadata'
         if not self.check_if_table_exists(tablename=metadata_table):
             self.logger.info("Metadata table does not exist.  Attempting to create.")
-            self._create_metadata_table()
+            if self.user_role == 'admin' or self.backend == 'sqlite':
+                self._create_metadata_table()
+            else:
+                self.logger.info(f"Cannot create metadata table as user: {self.user_role}")
         else:
             self.logger.info("Metadata table exists.")
-        self._read_metadata_table()
-        self._set_boolean_columns()
-        self.kw_to_table = {keyword: table_name for keyword, _, table_name in self.metadata_rows}
-        self.kw_to_dtype = {keyword: datatype   for keyword, datatype, _   in self.metadata_rows}
-        self.keywords_by_table = {}
-        for keyword, table in self.kw_to_table.items():
-            self.keywords_by_table.setdefault(table, []).append(keyword)
+        if self.check_if_table_exists(tablename=metadata_table):
+            self._read_metadata_table()
+            self._set_boolean_columns()
+            self.kw_to_table = {keyword: table_name for keyword, _, table_name in self.metadata_rows}
+            self.kw_to_dtype = {keyword: datatype   for keyword, datatype, _   in self.metadata_rows}
+            self.keywords_by_table = {}
+            for keyword, table in self.kw_to_table.items():
+                self.keywords_by_table.setdefault(table, []).append(keyword)
 
         # Create the data tables using metadata
         primary_table = self.prefix + 'base'
         if not self.check_if_table_exists(tablename=primary_table):
             self.logger.info("Data tables do not exist.  Attempting to create.")
-            self._create_data_tables()
+            if self.user_role == 'admin' or self.backend == 'sqlite':
+                self._create_data_tables()
+            else:
+                self.logger.info(f"Cannot create data tables as user: {self.user_role}")
+                self.logger.info("Additional database functions will not work.")
         else:
             self.logger.info("Data tables exist.")
 
@@ -289,7 +313,7 @@ class TSDB:
                     else:
                         allowed_str = ', '.join(allowed_roles) if allowed_roles else 'No roles'
                         raise PermissionError(
-                            f"Method '{method_name}' not allowed for role '{self.user_role}'. "
+                            f"Method '{func.__name__}' not allowed for role '{self.user_role}'. "
                             f"Allowed roles: {allowed_str}"
                         )
     
@@ -460,16 +484,23 @@ class TSDB:
         if self.backend != 'psql':
             raise ValueError("get_user_role only supported with PostgreSQL backend")
     
-        schema_perms = self._check_user_schema_permissions()
-    
-        if schema_perms['SUPERUSER']:
+        if self.dbuser == 'timeseriesdba':
             return 'admin'
-        elif schema_perms['CREATE'] and schema_perms['USAGE']:
+        elif self.dbuser == 'timeseriesopsuser':
             return 'operations'
-        elif schema_perms['USAGE']:
+        elif self.dbuser == 'timeseriesreadonlyuser':
             return 'readonly'
         else:
-            return 'none'
+            schema_perms = self._check_user_schema_permissions()
+        
+            if schema_perms['SUPERUSER']:
+                return 'admin'
+            elif schema_perms['CREATE'] and schema_perms['USAGE']:
+                return 'operations'
+            elif schema_perms['USAGE']:
+                return 'readonly'
+            else:
+                return 'none'
 
 
     def _check_user_schema_permissions(self, schema_name='public'):
@@ -514,18 +545,46 @@ class TSDB:
         return permissions
 
 
-    @require_role(['admin', 'operations'])
-    def drop_tables(self, tables = 'all'):
+    @require_role(['admin'])
+    def drop_tables(self, tables='all'):
         """
-        Start over on the database by dropping all data and metadata tables.
+        Drop tables from the database.
+    
+        Args:
+            tables (str, list):
+                - 'all': drop all tables in self.tables
+                - str with wildcards (*, ?) to match table names in self.tables
+                - list of table names to drop
         """
+        # Normalize table list from argument
         if tables == 'all':
-            tables = self.tables
-        
+            table_list = list(self.tables.keys())
+        elif isinstance(tables, str):
+            if '*' in tables or '?' in tables:
+                # wildcard pattern match
+                table_list = [t for t in self.tables if fnmatch.fnmatch(t, tables)]
+            else:
+                table_list = [tables]
+        elif isinstance(tables, (list, tuple, set)):
+            expanded = []
+            for pattern in tables:
+                if isinstance(pattern, str) and ('*' in pattern or '?' in pattern):
+                    expanded.extend([t for t in self.tables if fnmatch.fnmatch(t, pattern)])
+                else:
+                    expanded.append(pattern)
+            table_list = list(set(expanded))  # remove duplicates
+        else:
+            raise ValueError("tables must be 'all', a table name, a wildcard pattern, or a list of them.")
+    
+        if not table_list:
+            self.logger.warning("No matching tables to drop.")
+            return
+    
         self._open_connection()
         try:
-            for tbl in tables:
+            for tbl in table_list:
                 self._execute_sql_command(f"DROP TABLE IF EXISTS {tbl}")
+                self.logger.info(f"Dropped table: {tbl}")
         finally:
             self._close_connection()
 
@@ -576,59 +635,96 @@ class TSDB:
         finally:
             self._close_connection()
 
- 
+
     @require_role(['admin', 'operations', 'readonly'])
-    def print_db_status(self):
+    def print_db_status(self, query_db_for_tables=False):
         """
         Prints a formatted summary table of the database status for each table,
         ensuring tables exist first, and handling both SQLite and PostgreSQL.
-        """
-        tables = [table for table in self.tables if table != self.prefix + 'metadata']
     
+        Args:
+            query_db_for_tables (bool, optional):
+                If True, query the DB to determine the list of tables instead of using self.tables.
+        """
         self._open_connection()
     
-        summary_data = []
-    
         try:
-            for table in tables:
-                # Verify table existence first
-                table_exists = False
-    
+            # 1) Determine table list
+            if query_db_for_tables:
                 if self.backend == 'sqlite':
-                    self._execute_sql_command(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
-                        params=(table,)
+                    rows = self._execute_sql_command(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';",
+                        fetch=True
                     )
-                    table_exists = bool(self.cursor.fetchone())
+                    all_tables = [r[0] for r in rows]
                 elif self.backend == 'psql':
-                    self._execute_sql_command(
+                    rows = self._execute_sql_command(
+                        """
+                        SELECT table_name
+                        FROM information_schema.tables
+                        WHERE table_schema='public' AND table_type='BASE TABLE';
+                        """,
+                        fetch=True
+                    )
+                    all_tables = [r[0] for r in rows]
+                else:
+                    all_tables = []
+            else:
+                all_tables = list(self.tables.keys())
+    
+            # 2) Remove metadata table from the list
+            if not query_db_for_tables:
+                tables = [t for t in all_tables if t != self.prefix + 'metadata']
+            else:
+                tables = all_tables
+    
+            summary_data = []
+    
+            # 3) Iterate and gather stats
+            for table in tables:
+                # Sanity-check existence (fast and uniform)
+                if self.backend == 'sqlite':
+                    exists_rows = self._execute_sql_command(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?;",
+                        params=(table,), fetch=True
+                    )
+                    table_exists = bool(exists_rows)
+                elif self.backend == 'psql':
+                    exists_rows = self._execute_sql_command(
                         """
                         SELECT EXISTS (
                             SELECT 1 FROM information_schema.tables
-                            WHERE table_name=%s
+                            WHERE table_schema='public' AND table_name=%s
                         );
-                        """, params=(table,)
+                        """,
+                        params=(table,), fetch=True
                     )
-                    table_exists = self.cursor.fetchone()[0]
+                    table_exists = exists_rows[0][0]
+                else:
+                    table_exists = False
     
                 if not table_exists:
                     self.logger.warning(f"Table '{table}' does not exist; skipping.")
                     continue
     
+                # Row count
                 self._execute_sql_command(f'SELECT COUNT(*) FROM {table}')
                 nrows = self.cursor.fetchone()[0]
     
+                # Column count
                 if self.backend == 'sqlite':
-                    self._execute_sql_command(f'PRAGMA table_info({table})')
-                    ncolumns = len(self.cursor.fetchall())
+                    cols = self._execute_sql_command(f'PRAGMA table_info({table})', fetch=True)
+                    ncolumns = len(cols)
                 elif self.backend == 'psql':
-                    self._execute_sql_command(
+                    col_rows = self._execute_sql_command(
                         """
-                        SELECT COUNT(*) FROM information_schema.columns
-                        WHERE table_name=%s;
-                        """, params=(table,)
+                        SELECT COUNT(*)
+                        FROM information_schema.columns
+                        WHERE table_schema='public' AND table_name=%s;
+                        """,
+                        params=(table,), fetch=True
                     )
-                    ncolumns = self.cursor.fetchone()[0]
+                    ncolumns = col_rows[0][0]
     
                 summary_data.append((table, ncolumns, nrows))
     
@@ -636,22 +732,18 @@ class TSDB:
                 self.logger.info("No tables exist.")
                 return
     
-            # Fetch additional stats if 'tsdb_base' exists
-            if self.prefix + 'base' in [t[0] for t in summary_data]:
-                query_time_col = 'L0_header_read_time' if self.backend == 'sqlite' else '"L0_header_read_time"'
-                query_datecode_col = 'datecode' if self.backend == 'sqlite' else '"datecode"'
+            # 4) Additional stats from base table (if present)
+            if any(t[0] == self.prefix + 'base' for t in summary_data):
+                time_col = 'L0_header_read_time' if self.backend == 'sqlite' else '"L0_header_read_time"'
+                datecode_col = 'datecode' if self.backend == 'sqlite' else '"datecode"'
     
-                self._execute_sql_command(
-                    f'SELECT MAX({query_time_col}) FROM {self.prefix}base'
-                )
-
+                self._execute_sql_command(f'SELECT MAX({time_col}) FROM {self.prefix}base')
                 most_recent_read_time = self.cursor.fetchone()[0] or 'N/A'
     
                 self._execute_sql_command(
-                    f'SELECT MIN({query_datecode_col}), MAX({query_datecode_col}), COUNT(DISTINCT {query_datecode_col}) FROM {self.prefix}base'
+                    f'SELECT MIN({datecode_col}), MAX({datecode_col}), COUNT(DISTINCT {datecode_col}) FROM {self.prefix}base'
                 )
                 earliest_datecode, latest_datecode, unique_datecodes_count = self.cursor.fetchone()
-    
                 earliest_datecode = earliest_datecode or 'N/A'
                 latest_datecode = latest_datecode or 'N/A'
                 unique_datecodes_count = unique_datecodes_count or 0
@@ -659,14 +751,13 @@ class TSDB:
                 most_recent_read_time = earliest_datecode = latest_datecode = 'N/A'
                 unique_datecodes_count = 0
     
-            # Print the summary table
+            # 5) Print summary
             self.logger.info("Database Table Summary:")
-            self.logger.info(f"{'Table':<15} {'Columns':>7} {'Rows':>10}")
-            self.logger.info("-" * 35)
+            self.logger.info(f"{'Table':<30} {'Columns':>8} {'Rows':>12}")
+            self.logger.info("-" * 55)
             for table, cols, rows in summary_data:
-                self.logger.info(f"{table:<15} {cols:>7} {rows:>10}")
+                self.logger.info(f"{table:<30} {cols:>8} {rows:>12}")
     
-            # Print additional stats
             self.logger.info(f"Dates: {unique_datecodes_count} days from {earliest_datecode} to {latest_datecode}")
             self.logger.info(f"Last update: {most_recent_read_time}")
     
@@ -674,7 +765,7 @@ class TSDB:
             self._close_connection()
 
 
-    @require_role(['admin', 'operations'])
+    @require_role(['admin'])
     def _create_metadata_table(self):
         """
         Create the tsdb_metadata table, tracking whether each column is 
@@ -703,6 +794,23 @@ class TSDB:
                 );
             """
             self._execute_sql_command(create_sql)
+
+            # PostgreSQL-specific permission and ownership settings
+            if self.backend == 'psql':
+                permission_sql = f"""
+                    REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfreadrole;
+                    GRANT SELECT ON TABLE {self.prefix}metadata TO GROUP kpfreadrole;
+                    REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfadminrole;
+                    GRANT ALL ON TABLE {self.prefix}metadata TO GROUP kpfadminrole;
+                    REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfporole;
+                    GRANT INSERT,UPDATE,SELECT,DELETE,REFERENCES ON TABLE {self.prefix}metadata TO kpfporole;
+                    ALTER TABLE {self.prefix}metadata OWNER TO kpfadminrole;
+                    REVOKE ALL ON TABLE {self.prefix}metadata FROM kpfadminrole;
+                    GRANT ALL ON TABLE {self.prefix}metadata TO GROUP kpfadminrole;
+                """
+                for stmt in permission_sql.strip().split(";"):
+                    if stmt.strip():
+                        self._execute_sql_command(stmt + ";")
     
             # Prepare insert SQL (SQLite and PostgreSQL compatible)
             insert_sql = f"""
@@ -729,7 +837,7 @@ class TSDB:
             for _, row in tables_metadata_df.iterrows():
                 csv_filename = row['csv']
                 source = row['label']
-                table_name = row['table_name']
+                table_name = self.prefix + row['table_name']
     
                 if not csv_filename:
                     continue
@@ -750,7 +858,12 @@ class TSDB:
                         insert_sql,
                         params=(keyword, source, datatype, units, description, table_name, is_indexed)
                     )
-    
+
+            # verify metadata table exists and has rows
+            check = self._execute_sql_command(f"SELECT COUNT(*) FROM {self.prefix}metadata;", fetch=True)
+            if not check or check[0][0] == 0:
+                self.logger.warning(f"{self.prefix}metadata created but empty.")
+
             self.logger.info("Metadata table created correctly with indexed columns.")
     
         finally:
@@ -831,13 +944,15 @@ class TSDB:
                 # PostgreSQL-specific permission and ownership settings
                 if self.backend == 'psql':
                     permission_sql = f"""
-                        ALTER TABLE {tbl} OWNER TO kpfadminrole;
                         REVOKE ALL ON TABLE {tbl} FROM kpfreadrole;
                         GRANT SELECT ON TABLE {tbl} TO GROUP kpfreadrole;
                         REVOKE ALL ON TABLE {tbl} FROM kpfadminrole;
                         GRANT ALL ON TABLE {tbl} TO GROUP kpfadminrole;
                         REVOKE ALL ON TABLE {tbl} FROM kpfporole;
                         GRANT INSERT,UPDATE,SELECT,DELETE,REFERENCES ON TABLE {tbl} TO kpfporole;
+                        ALTER TABLE {tbl} OWNER TO kpfadminrole;
+                        REVOKE ALL ON TABLE {tbl} FROM kpfadminrole;
+                        GRANT ALL ON TABLE {tbl} TO GROUP kpfadminrole;
                     """
                     for stmt in permission_sql.strip().split(";"):
                         if stmt.strip():
@@ -890,7 +1005,7 @@ class TSDB:
         self.logger.info("Data tables and indices created successfully.")
 
 
-    @require_role(['admin', 'operations'])
+    @require_role(['admin'])
     def create_test_table(self, tablename, schema='public'):
         """
         Create a table to test database functionality.
@@ -1015,6 +1130,7 @@ class TSDB:
     
             extraction_results.update(extracted)
             
+        observer = self.get_observer(extraction_results)
         source = self.get_source(extraction_results)
         expected_data_levels = get_data_levels_expected(source)
         D2_expected = ('2D' in expected_data_levels)
@@ -1030,6 +1146,7 @@ class TSDB:
         extraction_results.update({
             'ObsID': base_filename,
             'datecode': get_datecode(base_filename),
+            'Observer': observer,
             'Source': source,
             'L0_filename': f"{base_filename}.fits",
             'D2_filename': f"{base_filename}_2D.fits",
@@ -1063,12 +1180,11 @@ class TSDB:
                 table_name = self.kw_to_table.get(kw)
                 if table_name:
                     table_data.setdefault(table_name, {})[kw] = value
-    
+
             for tbl, data in table_data.items():
-                for kw in data:
+                for kw in list(data):
                     if kw in self.bool_columns:
-                        val = data[kw]
-                        data[kw] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y']
+                        data[kw] = self.normalize_bool_or_none(data[kw])
                 data['ObsID'] = base_filename
     
             for tbl, data in table_data.items():
@@ -1276,6 +1392,7 @@ class TSDB:
             '_extract_kwd_func': self._extract_kwd,
             '_extract_telemetry_func': self._extract_telemetry,
             '_extract_rvs_func': self._extract_rvs,
+            'get_observer_func': self.get_observer,
             'get_source_func': self.get_source,
             'get_data_levels_expected_func': get_data_levels_expected,
             'get_datecode_func': get_datecode
@@ -1317,8 +1434,7 @@ class TSDB:
                 for data in structured_data.values():
                     for kw in data:
                         if kw in self.bool_columns:
-                            val = data[kw]
-                            data[kw] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y']
+                            data[kw] = self.normalize_bool_or_none(data[kw])
     
                 columns = list(next(iter(structured_data.values())).keys())
                 col_str = ', '.join(f'"{col}"' for col in columns)
@@ -1378,6 +1494,20 @@ class TSDB:
             }.get(dtype, 'TEXT')
         else:
             raise ValueError(f"Unsupported backend: {self.backend}")
+
+
+    def get_observer(self, L0_dict):
+        """
+        Returns the observers of the observation.
+        """
+        try: 
+            if ('GROBSERV' in L0_dict): 
+                return L0_dict['GROBSERV']
+            elif ('RDOBSERV' in L0_dict): 
+                return L0_dict['RDOBSERV']
+            return 'Unknown'
+        except:
+            return 'Unknown'
 
 
     def get_source(self, L0_dict):
@@ -2317,6 +2447,9 @@ class TSDB:
             self._execute_sql_command(query, params)
             fetched_data = self.cursor.fetchall()
             col_names = [desc[0] for desc in self.cursor.description]
+            if verbose:
+                self.logger.debug("Fetched Data:")
+                self.logger.debug(fetched_data)
     
             df = pd.DataFrame(fetched_data, columns=col_names)
     
@@ -2395,6 +2528,11 @@ class TSDB:
                 lambda obsid: f'<a href="{url_stub}{obsid}" target="_blank">{obsid}</a>'
             )
 
+        # Coerce boolean-like columns to pandas nullable boolean so they print as True/False/<NA>
+        for col in getattr(self, "bool_columns", []):
+            if col in df.columns:
+                df[col] = df[col].map(lambda v: None if pd.isna(v) else bool(v)).astype("boolean")
+
         # Generate HTML table with scrolling and sortable columns
         html = df.to_html(escape=False, index=False, classes='sortable')
 
@@ -2446,6 +2584,7 @@ class TSDB:
         display(HTML(styled_html))
 
 
+    @require_role(['admin', 'operations', 'readonly'])
     def print_log_error_report(self, df, log_dir='/data/logs/', aggregated_summary=False):
         '''
         For each ObsID in the dataframe, open the corresponding log file,
@@ -2529,10 +2668,89 @@ class TSDB:
                 print("No [ERROR] lines found across all logs.")
 
 
+    TRUE_TOKENS  = frozenset({'1','true','t','yes','y','open'})
+    FALSE_TOKENS = frozenset({'0','false','f','no','n','closed'})
+
+    @staticmethod
+    def normalize_bool_or_none(val):
+        """
+        Normalize heterogeneous “boolean-like” values to True/False/None.
+    
+        This helper converts common representations seen in FITS headers, telemetry,
+        and CSVs to a canonical boolean while preserving missing/unknown as None.
+    
+        Rules:
+          * Missing values (None, NaN, NaT, pandas/NumPy NA) → None
+          * Booleans or integers → bool(val)    (0 → False, non-zero → True)
+          * Strings (case/whitespace-insensitive):
+              - in TSDB.TRUE_TOKENS  → True
+              - in TSDB.FALSE_TOKENS → False
+              - "", "nan", "none", "null" → None
+              - anything else → None
+          * Non-integer numerics (e.g., 0.0, 1.0) are treated as unknown → None
+            (except NaN, which is considered missing)
+    
+        Args:
+            val (Any): Input value to normalize.
+    
+        Returns:
+            Optional[bool]: True, False, or None if missing/unknown.
+    
+        Notes:
+            The token sets are defined on the class as:
+            TSDB.TRUE_TOKENS  = {'1','true','t','yes','y','open'}
+            TSDB.FALSE_TOKENS = {'0','false','f','no','n','closed'}
+    
+        Examples:
+            >>> TSDB.normalize_bool_or_none(True)
+            True
+            >>> TSDB.normalize_bool_or_none(0)
+            False
+            >>> TSDB.normalize_bool_or_none(7)
+            True
+            >>> TSDB.normalize_bool_or_none("  YES ")
+            True
+            >>> TSDB.normalize_bool_or_none("no")
+            False
+            >>> TSDB.normalize_bool_or_none("maybe")
+            None
+            >>> import numpy as np, pandas as pd
+            >>> TSDB.normalize_bool_or_none(np.nan)
+            None
+            >>> TSDB.normalize_bool_or_none(pd.NA)
+            None
+            >>> TSDB.normalize_bool_or_none(0.0)
+            None
+        """
+        # Missing
+        if val is None:
+            return None
+        if isinstance(val, float) and math.isnan(val):
+            return None
+        if pd.isna(val):
+            return None
+
+        # Already boolean-ish
+        if isinstance(val, (bool, np.bool_)):
+            return bool(val)
+        if isinstance(val, (int, np.integer)):
+            return bool(val)
+
+        # Strings
+        if isinstance(val, str):
+            s = val.strip().lower()
+            if s in TSDB.TRUE_TOKENS:  return True
+            if s in TSDB.FALSE_TOKENS: return False
+            if s in {"", "nan", "none", "null"}: return None
+
+        # Unknown token → treat as missing
+        return None
+
 def process_file(file_path, now_str,
                  extraction_plan, bool_columns, kw_to_table, keywords_by_table, kw_to_dtype,
                  _extract_kwd_func, _extract_telemetry_func, _extract_rvs_func,
-                 get_source_func, get_data_levels_expected_func, get_datecode_func, safe_float, prefix):
+                 get_observer_func, get_source_func, get_data_levels_expected_func, 
+                 get_datecode_func, safe_float, prefix):
     """
     Process a single file to extract all relevant keywords based on the 
     extraction plan.
@@ -2574,6 +2792,7 @@ def process_file(file_path, now_str,
 
         extraction_results.update(extracted)
 
+    observer = get_observer_func(extraction_results)
     source = get_source_func(extraction_results)
     expected_data_levels = get_data_levels_expected_func(source)
     D2_expected = ('2D' in expected_data_levels)
@@ -2589,6 +2808,7 @@ def process_file(file_path, now_str,
     extraction_results.update({
         'ObsID': base_filename,
         'datecode': get_datecode_func(base_filename),
+        'Observer': observer,
         'Source': source,
         'L0_filename': os.path.basename(file_level_paths['L0']),
         'D2_filename': os.path.basename(file_level_paths['2D']),
@@ -2614,8 +2834,7 @@ def process_file(file_path, now_str,
     # Convert boolean columns explicitly
     for col in bool_columns:
         if col in extraction_results:
-            val = extraction_results[col]
-            extraction_results[col] = bool(val) if isinstance(val, (bool, int)) else str(val).strip().lower() in ['1', 'true', 't', 'yes', 'y', 'open']
+            extraction_results[col] = TSDB.normalize_bool_or_none(extraction_results[col])
 
     # Apply safe_float explicitly to all float columns
     for kw, dtype in kw_to_dtype.items():

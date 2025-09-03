@@ -101,7 +101,6 @@ class ImageProcessing(KPF0_Primitive):
         #Input arguments
         self.raw_file = self.action.args[0]
         self.correcting_file_or_action = self.action.args[1]
-        #self.masterbias = self.action.args[1]
         self.ffi_exts = self.action.args[2]
         self.data_type = self.action.args[3]
         self.quicklook = self.action.args[4]

@@ -49,6 +49,7 @@ class AnalyzeTimeSeries:
     Arguments:
         db_path (string) - path to database file
         base_dir (string) - L0 directory
+        tables_prefix (str) - prefix of the table names; default = 'tsdb_'.
         backend (string; 'sqlite' or 'psql') - database format 
         credentials (dictionary or None; optional) - optionally pass credentials for a PostgreSQL database
         logger (logger object) - a logger object can be passed, or one will be created
@@ -73,13 +74,14 @@ class AnalyzeTimeSeries:
           in the legend.
     """
 
-    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', backend='sqlite', credentials=None, logger=None, verbose=False):
+    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', tables_prefix='tsdb_', backend='sqlite', credentials=None, logger=None, verbose=False):
        
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting AnalyzeTimeSeries')
         self.db = TSDB(backend=backend, 
                        db_path=db_path, 
                        base_dir=base_dir, 
+                       tables_prefix=tables_prefix, 
                        credentials=credentials, 
                        logger=logger, 
                        verbose=verbose)
@@ -87,6 +89,7 @@ class AnalyzeTimeSeries:
 
     def plot_time_series_multipanel(self, plotdict, 
                                     start_date=None, end_date=None, 
+                                    hatch_service_missions=True,
                                     clean=False, 
                                     fig_path=None, show_plot=False, 
                                     log_savefig_timing=False):
@@ -108,6 +111,10 @@ class AnalyzeTimeSeries:
 
         end_date : datetime.datetime, optional
             End of the time range to query and plot. Defaults to 2040-01-01 if None.
+
+        hatch_service_missions : bool, default=True
+            If True, overlay hatched vertical spans for each service mission interval
+            returned by `self.get_service_mission_df()` (columns: `UT_start_date`, `UT_end_date`).
 
         clean : bool, default=False
             If True, applies outlier removal to the data (via `self.db.clean_df()`).
@@ -224,6 +231,15 @@ class AnalyzeTimeSeries:
             if isinstance(value, list):
                 return value
             return [value]
+
+        # Helper: convert absolute datetimes to current axis coordinates
+        def _to_axis_x(dt, mode):
+            if mode == 'hours':
+                return (dt - start_date).total_seconds() / 3600.0
+            elif mode in ('days', 'days32', 'year'):
+                return (dt - start_date).total_seconds() / 86400.0
+            else:  # 'datetime'
+                return dt
 
         # Retrieve the appropriate standard plot dictionary
         if type(plotdict) == type('str'):
@@ -360,6 +376,7 @@ class AnalyzeTimeSeries:
                         return ''
                 axs[p].xaxis.set_major_formatter(ticker.FuncFormatter(format_HHMM))
                 overplot_night_box = True
+                time_mode = 'hours'
                 
                 sunrise, sunset = get_sunrise_sunset_ut("2025-04-12")
                 sunrise_h = sunrise.hour + sunrise.minute/60 + sunrise.second/3600
@@ -382,6 +399,7 @@ class AnalyzeTimeSeries:
                             if len(t) > 1:
                                 axs[p].set_xlim(min(t), max(t))
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
+                time_mode = 'hours'
             elif abs((end_date - start_date).days) <= 3:
                 if not empty_df:
                     t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
@@ -390,6 +408,7 @@ class AnalyzeTimeSeries:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d %H:%M') + " to " + end_date.strftime('%Y-%m-%d %H:%M')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=4, prune=None))
+                time_mode = 'days'
             elif 28 <= (end_date - start_date).days <= 31:
                 if not empty_df:
                     t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
@@ -399,6 +418,7 @@ class AnalyzeTimeSeries:
                 
                 axs[p].set_xlim(0, (end_date - start_date).days)
                 axs[p].xaxis.set_major_locator(ticker.MultipleLocator(1))  # tick every 1 day
+                time_mode = 'days'
             
                 # Custom formatter to convert "days since start" into actual calendar labels
                 def format_mmdd(x, pos):
@@ -416,6 +436,7 @@ class AnalyzeTimeSeries:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
                 axs[p].set_xlim(0, (end_date - start_date).total_seconds() / 86400)
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(nbins=12, min_n_ticks=3, prune=None))
+                time_mode = 'days32'
             elif 360 <= (end_date - start_date).days <= 370:
                 if not empty_df:
                     t = [(date - start_date).total_seconds() / 86400 for date in df['DATE-MID']]
@@ -423,6 +444,7 @@ class AnalyzeTimeSeries:
                 if 'title' in thispanel['paneldict']:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
                 axs[p].set_xlim(0, (end_date - start_date).days)
+                time_mode = 'year'
 
                 # Set major ticks at month boundaries
                 month_starts = []
@@ -451,6 +473,7 @@ class AnalyzeTimeSeries:
                     thistitle = thispanel['paneldict']['title'] + ": " + start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d')
                 axs[p].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
                 axs[p].xaxis.set_major_locator(ticker.MaxNLocator(7, prune=None))
+                time_mode = 'datetime'
             if p == npanels-1: 
                 axs[p].set_xlabel(xtitle, fontsize=14)
                 axs[0].set_title(thistitle, fontsize=18)
@@ -740,6 +763,35 @@ class AnalyzeTimeSeries:
     
                     axs[p].xaxis.set_tick_params(labelsize=10)
                     axs[p].yaxis.set_tick_params(labelsize=10)
+
+            # Hatch service mission intervals on the x-axis 
+            if hatch_service_missions:
+                try:
+                    df_sm = self.get_service_mission_df()
+                except Exception as _e:
+                    df_sm = None
+                if df_sm is not None and len(df_sm) > 0:
+                    # Clip to visible window and draw spans
+                    for _, row in df_sm.iterrows():
+                        s = pd.to_datetime(row['UT_start_date'])
+                        e = pd.to_datetime(row['UT_end_date'])
+                        # clip to axis window
+                        s_clip = max(s, start_date)
+                        e_clip = min(e, end_date)
+                        if e_clip <= s_clip:
+                            continue
+                        x0 = _to_axis_x(s_clip, time_mode)
+                        x1 = _to_axis_x(e_clip, time_mode)
+                        # Hatched vertical span
+                        axs[p].axvspan(
+                            x0, x1,
+                            facecolor='none',           # keep data visible
+                            hatch='////',
+                            edgecolor='dimgray',
+                            linewidth=0.0,
+                            alpha=0.4,
+                            zorder=0.2
+                        )
 
             # Draw translucent boxes
             if 'axhspan' in thispanel['paneldict']:
@@ -1225,7 +1277,30 @@ class AnalyzeTimeSeries:
             plotdict = yaml.safe_load(yaml_or_path)
     
         return plotdict
-    
+
+
+    def get_service_mission_df(self, sm_csv='/code/KPF-Pipeline/static/service_mission_definitions.csv', debug=False):
+        """
+        Return a dataframe with start and stop times of the service missions.
+        This is used to make hatched regions in time series plots.
+        """
+
+        if os.path.exists(sm_csv):
+            try:
+                df_sm = pd.read_csv(sm_csv)
+                if debug:
+                    self.logger.debug(f'Read the Service Missions file {sm_csv}.')
+                df_sm['UT_start_date'] = pd.to_datetime(df_sm['UT_start_date'])
+                df_sm['UT_end_date']   = pd.to_datetime(df_sm['UT_end_date'])
+                return df_sm
+
+            except Exception as e:
+                self.logger.error(f"Exception: {e}")
+                return None
+        else:
+            self.logger.error(f"The file {sm_csv} does not exist.")
+            return None
+
     
     def plot_all_quicklook(self, start_date=None, interval=None, clean=True, 
                            last_n_days=None, 
@@ -1347,8 +1422,6 @@ class AnalyzeTimeSeries:
                 except Exception as e:
                     self.logger.error(f"Error while plotting {plot_name}: {e}")
                     continue  # Skip to the next plot
-
-
 
 
 def add_one_month(inputdate):

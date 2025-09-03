@@ -4,23 +4,39 @@ from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.Utils.amplifier_mask import AmplifierMask
 from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 
+# 2D -> l1 level imports
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.Utils.overscan_subtract import OverscanSubtraction
+from modules.Utils.amplifier_mask import AmplifierMask
+from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
+
 # 2D -> l1 level imports, copied from kpf_drp.recipe.
-from modules.order_trace.src.order_trace import OrderTrace
-from modules.spectral_extraction.src.order_rectification import OrderRectification
+# from modules.order_trace.src.order_trace import OrderTrace
+# from modules.spectral_extraction.src.order_rectification import OrderRectification
 from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
+
 from modules.order_trace.src.order_mask import OrderMask
 from modules.wavelength_cal.src.alg import WaveInterpolation          
 from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
 from modules.blaze.src.blaze import AddBlaze
 from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
-from modules.spectral_extraction.src.bary_corr import BaryCorrTable # barycorr is done in L1 for historical reasons.
+# from modules.spectral_extraction.src.bary_corr import BaryCorrTable # barycorr is done in L1 for historical reasons.
+from modules.spectral_extraction_legacy.src.bary_corr import BaryCorrTable # LETS MOVE THIS TO ITS OWN MODULE SOMEDAY.
+from modules.stray_light.src.stray_light import StrayLight
 
 # L1 to L2 imports, copied from kpf_drp.recipe.
 from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
 from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
-from modules.spectral_extraction.src.bary_corr import BaryCorrTable
+from modules.spectral_extraction_legacy.src.bary_corr import BaryCorrTable # LETS MOVE THIS TO ITS OWN MODULE SOMEDAY.
+
+# general imports.
+from modules.Utils.amplifier_mask import AmplifierMask # Needed in L0 and L2
+
+# masters:
+masters_data_dir = config.ARGUMENT.masters_dir
+run_masters = config.ARGUMENT.run_masters
 
 # general imports.
 from modules.Utils.amplifier_mask import AmplifierMask # Needed in L0 and L2
@@ -41,19 +57,108 @@ from modules.var_exts.src.var_exts_framework import VarExtsFramework
 from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
 from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 
-# # do L0->2D conversion for watch mode
-do_l0_to_2d = True # add to config later.
-if do_l0_to_2d:
-    # invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
-	invoke_subrecipe("./recipes/kpf_l0_to_2D_only.recipe") # Which calls the watchfor_kpf_l0.recipe
-	
-# BEGIN 2D to L1     
-do_2d_to_l1 = True # add to config later.
-if do_2d_to_l1:
-    invoke_subrecipe("./recipes/kpf_2d_to_l1.recipe")
-	
-# BEGIN L1 to L2
-do_l1_to_l2 = True # add to config later.
-if do_l1_to_l2:
-    invoke_subrecipe("./recipes/kpf_l1_to_l2.recipe")    
+# Add the file_list at the top level and redefine if needed
+if context.watch:
+    input_filename = context.file_path
+    
+    # Initialize so the conditionals work downstream
+    l0_filename_masters = ''
+    l1_filename_masters = ''
+    l2_filename_masters = ''
+
+    l0_filename_science = ''
+    d2_filename_science = ''
+    l1_filename_science = ''
+    l2_filename_science = ''
+
+    if run_masters:
+        # L0 -> L1  file paths
+        l0_filename_masters = input_filename # masters run here have no suffix.
+    else:
+        # L0 -> 2D  file paths
+        l0_filename_science = input_filename  
+        d2_filename_temp = str_replace(input_filename, '/L0/', '/2D/')
+        if not '_2D.fits' in d2_filename_temp:  # Only if not already 2D
+            d2_filename_science = str_replace(d2_filename_temp, '.fits', '_2D.fits')
+            print("d2_filename_science: " + d2_filename_science)
+        else:
+            print("d2_filename_science already has _2D.fits suffix: " + d2_filename_temp)
+
+    # 2D -> L1 file paths (derived from 2D files, not L0)
+    if run_masters:
+        # For masters, L1 files are derived from L0 files
+        if not '_L1.fits' in input_filename and not '_L2.fits' in input_filename:  # Only if not already L1
+            l1_filename_temp = str_replace(input_filename, '/L0/', '/L1/')
+            l1_filename_masters = str_replace(l1_filename_temp, '.fits', '_L1.fits')
+            print("l1_filename_masters: " + l1_filename_masters)
+    else:
+        # For non-masters, L1 files are always derived from 2D files
+        l1_filename_science = str_replace(d2_filename_science, '2D', 'L1') # Replaces both instances
+        
+    # Step 3: L1 -> L2 file paths (derived from L1 files)
+    if run_masters:
+        l2_filename_masters = str_replace(l1_filename_masters, 'L1', 'L2')
+    else:
+        # Science
+        l2_filename_science = str_replace(l1_filename_science, 'L1', 'L2')
+    print("---------l1_filename_science: " + str(l1_filename_science))
+    print("----------l1_filename_masters: " + str(l1_filename_masters))
+    print("---------l2_filename_science: " + str(l2_filename_science))
+    print("----------l2_filename_masters: " + str(l2_filename_masters))
+    # l2_filename = str_replace(l2_filename, '_L1.fits', '_L2.fits')
+#else: # When would we even use this else statement?
+
+# Set in kpf_drp.cfg
+do_l0_to_2d_science = config.ARGUMENT.do_l0_to_2d_science 
+do_2d_to_l1_science = config.ARGUMENT.do_2d_to_l1_science
+do_only_drift       = config.ARGUMENT.do_only_drift
+do_l1_to_l2_science = config.ARGUMENT.do_l1_to_l2_science
+
+# Masters runs with only L1 and L2 files with config kpf_masters_l1.cfg
+#do_l0_to_2d_masters = False # config.ARGUMENT.do_l0_to_2d_masters
+do_l0_to_l1_masters = config.ARGUMENT.do_l0_to_l1_masters
+#do_2d_to_l1_masters = False # config.ARGUMENT.do_0_to_2d_masters
+do_l1_to_l2_masters = config.ARGUMENT.do_l1_to_l2_masters
+
+# L0 files: have .fits but no level suffixes
+
+# SCIENCE
+if not run_masters:
+    if do_l0_to_2d_science:# and (not '_2D.fits' in d2_filename_science and not '_L1.fits' in d2_filename_science and not '_L2.fits' in d2_filename_science):
+        print("RUNNING L0->2D PROCESSING for " + str(input_filename))
+        # Silent inputs are input_filename and d2_filename_science
+        invoke_subrecipe("./recipes/kpf_l0_to_2d_science.recipe")
+
+    if do_2d_to_l1_science and '_2D.fits' in d2_filename_science:
+        print("RUNNING 2D->L1 PROCESSING for " + str(d2_filename_science))
+        # Silent inputs are d2_filename_science and l1_filename_science
+        invoke_subrecipe("./recipes/kpf_2d_to_l1_science.recipe")
+
+    # Set in config appropriately. False for science and masters, true for drift only.
+    #  Use kpf_drp_do_only_drift.cfg to run drift correction only.
+    if do_only_drift and '_L1.fits' in l1_filename_science:
+        print("RUNNING L1->L2 PROCESSING WITH ONLY DRIFT CORRECTION for L1 file, updating L2 file. ")
+        # Silent inputs are l1_filename_science and l2_filename_science
+        invoke_subrecipe("./recipes/kpf_drp_update_wls.recipe")
+
+    if do_l1_to_l2_science and '_L1.fits' in l1_filename_science:
+        print("RUNNING L1->L2 PROCESSING for " + str(l1_filename_science))
+        # Silent inputs are  l1_filename_science and l2_filename_science
+        invoke_subrecipe("./recipes/kpf_l1_to_l2_science.recipe")
+
+
+# MASTERS
+if run_masters:
+    if do_l0_to_l1_masters and (not '_L1.fits' in l0_filename_masters and not '_L2.fits' in l0_filename_masters):
+        print("RUNNING L0->L1 PROCESSING for " + str(l0_filename_masters))
+        # invoke_subrecipe("./recipes/kpf_l0_to_l1_masters.recipe") # LETS MAKE IT THIS!
+        invoke_subrecipe("./recipes/kpf_2d_to_l1_science.recipe") 
+
+    if do_l1_to_l2_masters and '_L1.fits' in l1_filename_masters:
+        print("RUNNING L1->L2 PROCESSING for " + str(l1_filename_masters))
+        # invoke_subrecipe("./recipes/kpf_l1_to_l2_masters.recipe") # LETS MAKE IT THIS!
+        invoke_subrecipe("./recipes/kpf_l1_to_l2_science.recipe") 
+
+
+
 
