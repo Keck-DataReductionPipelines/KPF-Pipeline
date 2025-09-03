@@ -104,33 +104,33 @@ if (! (defined $dbname)) {
 # Set up time-series database connection.
 
 my $tsdbport = $ENV{TSDBPORT};
-
 if (! (defined $tsdbport)) {
-    die "*** Env. var. TSDBPORT not set; quitting...\n";
+    $tsdbport = '6127';
+    print "*** Using default TSDBPORT=6127 (env var not set)\n";
 }
 
 my $tsdbname = $ENV{TSDBNAME};
-
 if (! (defined $tsdbname)) {
-    die "*** Env. var. TSDBNAME not set; quitting...\n";
+    $tsdbname = 'timeseriesopsdb';
+    print "*** Using default TSDBNAME=timeseriesopsdb (env var not set)\n";
 }
 
 my $tsdbserver = $ENV{TSDBSERVER};
-
 if (! (defined $tsdbserver)) {
-    die "*** Env. var. TSDBSERVER not set; quitting...\n";
+    $tsdbserver = '127.0.0.1';
+    print "*** Using default TSDBSERVER=127.0.0.1 (env var not set)\n";
 }
 
-my $tsdbuser = $ENV{TSDBUSER};
+my $tsdbuser = $ENV{KPFPIPE_TSDB_USER};
 
 if (! (defined $tsdbuser)) {
-    die "*** Env. var. TSDBUSER not set; quitting...\n";
+    die "*** Env. var. KPFPIPE_TSDB_USER not set; quitting...\n";
 }
 
-my $tsdbpass = $ENV{TSDBPASS};
+my $tsdbpass = $ENV{KPFPIPE_TSDB_PASS};
 
 if (! (defined $tsdbpass)) {
-    die "*** Env. var. TSDBPASS not set; quitting...\n";
+    die "*** Env. var. KPFPIPE_TSDB_PASS not set; quitting...\n";
 }
 
 
