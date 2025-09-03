@@ -79,5 +79,5 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "L2 Data Present\n(DATAPRL2)"
-      title: QC - Tests For Data Present With Correct Array Sizes
+      title: QC - Data Present With Correct Array Sizes
       legend_frac_size: 0.15

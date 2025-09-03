@@ -281,6 +281,7 @@ GRCCD1T   1                                           QC: 1 = Green CCD > 1000 m
 RDCCD10T  1                                           QC: 1 = Red CCD > 10 mK from temp set point
 RDCCD1T   1                                           QC: 1 = Red CCD > 1000 mK (1 C) from temp set point
 ISGOOD    1                                           QC: 1 = all other QC tests passed
+CLEARSKY  1                                           QC: 1 = Clear sky conditions for SoCal
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
@@ -424,11 +425,10 @@ XDSPSYG1  0.00133                                     Uncertainty [pix] in XDSPD
 XDSPSYR1  0.00217                                     Uncertainty [pix] in XDSPDYR1
 XDSPSYG2  0.00144                                     Uncertainty [pix] in XDSPDYG2
 XDSPSYR2  0.00058                                     Uncertainty [pix] in XDSPDYR2
-CLEARSKY  1                                           Indicates clear-sky conditions for SoCal [to be added in future DRP version]
-DNIMEAS   500.0                                       Mean DNI from pyrheliometer during the exposure [to be added in future DRP version]
-DNICLR    500.0                                       Theoretical DNI in perfect conditions [to be added in future DRP version]
-DNIRMS    1.0                                         RMS of DNIMEAS during the exposure [to be added in future DRP version]
-CLEARIDX  3.0                                         SoCal clearness index (<4==CLEARSKY) [to be added in future DRP version]
+DNIMEAS   500.0                                       Mean DNI from pyrheliometer during the exposure [W/m^2]
+DNICLR    500.0                                       Theoretical DNI in perfect conditions [W/m^2]
+DNIRMS    1.0                                         RMS of DNIMEAS during the exposure [W/m^2]
+CLEARIDX  3.0                                         SoCal clearness index (<4==CLEARSKY)
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
