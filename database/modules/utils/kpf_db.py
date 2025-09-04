@@ -20,7 +20,7 @@ DEFAULT_CFG_PATH = 'database/modules/utils/kpf_db.cfg'
 
 # Redis cache configuration
 _redis_client = None
-_cache_enabled = True
+_cache_enabled = False
 _cache_ttl = 300  # 5 minutes TTL
 
 # Detect test environment
