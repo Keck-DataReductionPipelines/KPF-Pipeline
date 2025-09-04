@@ -20,7 +20,7 @@ DEFAULT_CFG_PATH = 'database/modules/utils/kpf_db.cfg'
 
 # Redis cache configuration
 _redis_client = None
-_cache_enabled = False
+_cache_enabled = True
 _cache_ttl = 300  # 5 minutes TTL
 
 # Detect test environment
@@ -79,7 +79,7 @@ def _load_cache_config():
             timestamp_rounding_minutes = cache_cfg.getint('timestamp_rounding_minutes', 1)
         else:
             # Default values if no CACHE section exists
-            enabled = True
+            enabled = False
             ttl_seconds = 300
             timestamp_rounding_minutes = 1
             
