@@ -71,7 +71,7 @@ class QualityControlFramework(KPF0_Primitive):
         """
  
         quality_control_exit_code = 0
-        return Arguments([quality_control_exit_code, self.kpf_object])
+        return quality_control_exit_code
 
         # Execute appropriate QC tests
         self.kpf_object = execute_all_QCs(self.kpf_object, self.data_level_str, logger=self.logger)
