@@ -1,7 +1,6 @@
 import ast
 import configparser as cp
 from modules.Utils.kpf_parse import HeaderParse
-import pdb; pdb.set_trace()
 
 import modules.quality_control.src.quality_control as qc
 from modules.quality_control.src.quality_control import execute_all_QCs
@@ -73,7 +72,6 @@ class QualityControlFramework(KPF0_Primitive):
         """
  
         quality_control_exit_code = 0
-        return Arguments([quality_control_exit_code, self.kpf_object])
 
         # Execute appropriate QC tests
         self.kpf_object = execute_all_QCs(self.kpf_object, self.data_level_str, logger=self.logger)
