@@ -64,7 +64,7 @@ pipeline {
 
         // build & run your tests, mounting only this workspace dir
         sh """
-          docker build --cache-from kpf-drp-ci:latest --tag kpf-drp-ci:latest .
+          docker build --no-cache --tag kpf-drp-ci:latest .
           docker run --rm \
             --network=host \
             -v \"\${PWD}:/code/KPF-Pipeline\" \
