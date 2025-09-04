@@ -71,6 +71,7 @@ def _load_cache_config():
     try:
         config_obj = cp.ConfigParser()
         config_obj.read(DEFAULT_CFG_PATH)
+        print(DEFAULT_CFG_PATH)
         
         if 'CACHE' in config_obj:
             cache_cfg = config_obj['CACHE']
