@@ -28,39 +28,39 @@ class QualityControlFramework(KPF0_Primitive):
 
         KPF0_Primitive.__init__(self, action, context)
 
-        # self.data_type = self.action.args[0]
-        # self.data_level_str = self.action.args[1]
-        # self.kpf_object = self.action.args[2]
-        # self.qc_list_flag = self.action.args[3]
+        self.data_type = self.action.args[0]
+        self.data_level_str = self.action.args[1]
+        self.kpf_object = self.action.args[2]
+        self.qc_list_flag = self.action.args[3]
 
-        # try:
-        #     self.module_config_path = context.config_path['quality_control']
-        #     print("--->",self.__class__.__name__,": self.module_config_path =",self.module_config_path)
-        # except:
-        #     self.module_config_path = DEFAULT_CFG_PATH
+        try:
+            self.module_config_path = context.config_path['quality_control']
+            print("--->",self.__class__.__name__,": self.module_config_path =",self.module_config_path)
+        except:
+            self.module_config_path = DEFAULT_CFG_PATH
 
-        # print("{} class: self.module_config_path = {}".format(self.__class__.__name__,self.module_config_path))
+        print("{} class: self.module_config_path = {}".format(self.__class__.__name__,self.module_config_path))
 
-        # print("Starting logger...")
-        # self.logger = start_logger(self.__class__.__name__, self.module_config_path)
+        print("Starting logger...")
+        self.logger = start_logger(self.__class__.__name__, self.module_config_path)
 
-        # if self.logger is not None:
-        #     print("--->self.logger is not None...")
-        # else:
-        #     print("--->self.logger is None...")
+        if self.logger is not None:
+            print("--->self.logger is not None...")
+        else:
+            print("--->self.logger is None...")
 
-        # self.logger.info('Started {}'.format(self.__class__.__name__))
-        # self.logger.debug('module_config_path = {}'.format(self.module_config_path))
+        self.logger.info('Started {}'.format(self.__class__.__name__))
+        self.logger.debug('module_config_path = {}'.format(self.module_config_path))
 
-        # module_config_obj = cp.ConfigParser()
-        # res = module_config_obj.read(self.module_config_path)
-        # if res == []:
-        #     raise IOError('failed to read {}'.format(self.module_config_path))
+        module_config_obj = cp.ConfigParser()
+        res = module_config_obj.read(self.module_config_path)
+        if res == []:
+            raise IOError('failed to read {}'.format(self.module_config_path))
 
-        # module_param_cfg = module_config_obj['PARAM']
-        # debug_level_cfg_str = module_param_cfg.get('debug_level')
-        # self.debug_level_cfg = ast.literal_eval(debug_level_cfg_str)
-        # self.logger.info('Type of self.debug_level_cfg = {}'.format(type(self.debug_level_cfg)))
+        module_param_cfg = module_config_obj['PARAM']
+        debug_level_cfg_str = module_param_cfg.get('debug_level')
+        self.debug_level_cfg = ast.literal_eval(debug_level_cfg_str)
+        self.logger.info('Type of self.debug_level_cfg = {}'.format(type(self.debug_level_cfg)))
 
 
     def _perform(self):
