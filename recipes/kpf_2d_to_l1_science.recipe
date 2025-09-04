@@ -342,6 +342,7 @@ if do_spectral_extraction or do_hk or do_bc:# HTI: I think we do not need this c
 		data_level_str = 'L1'
 		kpf_object = output_data
 		obj = GetHeaderValue(kpf_object, 'OBJECT')
+		break
 		invoke_subrecipe("./recipes/quality_control.subrecipe")
 		invoke_subrecipe("./recipes/diagnostics.subrecipe")
 		output_data = kpf_object
