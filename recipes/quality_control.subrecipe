@@ -11,5 +11,5 @@ if context.watch:
     data_level_str = 'L0'
     kpf_object = kpf0_from_fits(context.file_path, data_type='KPF')
 
-# qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
-# kpf_object = qc_output_list[1]
+qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
+kpf_object = qc_output_list[1]
