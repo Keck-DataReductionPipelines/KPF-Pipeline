@@ -1,9 +1,10 @@
 import ast
 import configparser as cp
 from modules.Utils.kpf_parse import HeaderParse
+import pdb; pdb.set_trace()
+
 import modules.quality_control.src.quality_control as qc
 from modules.quality_control.src.quality_control import execute_all_QCs
-import pdb; pdb.set_trace()
 
 # Pipeline dependencies
 from kpfpipe.logger import *
