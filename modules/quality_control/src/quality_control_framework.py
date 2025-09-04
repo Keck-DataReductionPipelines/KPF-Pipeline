@@ -28,10 +28,10 @@ class QualityControlFramework(KPF0_Primitive):
 
         KPF0_Primitive.__init__(self, action, context)
 
-        self.data_type = self.action.args[0]
-        self.data_level_str = self.action.args[1]
-        self.kpf_object = self.action.args[2]
-        self.qc_list_flag = self.action.args[3]
+        # self.data_type = self.action.args[0]
+        # self.data_level_str = self.action.args[1]
+        # self.kpf_object = self.action.args[2]
+        # self.qc_list_flag = self.action.args[3]
 
         # try:
         #     self.module_config_path = context.config_path['quality_control']
