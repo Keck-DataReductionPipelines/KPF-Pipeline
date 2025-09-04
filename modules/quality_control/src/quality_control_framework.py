@@ -1,4 +1,6 @@
 import ast
+import pdb; pdb.set_trace()
+
 import configparser as cp
 from modules.Utils.kpf_parse import HeaderParse
 import modules.quality_control.src.quality_control as qc
@@ -26,7 +28,6 @@ class QualityControlFramework(KPF0_Primitive):
 
     def __init__(self, action, context):
 
-        import pdb; pdb.set_trace()
         KPF0_Primitive.__init__(self, action, context)
 
         self.data_type = self.action.args[0]
