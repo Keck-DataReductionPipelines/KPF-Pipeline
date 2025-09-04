@@ -73,6 +73,7 @@ class QualityControlFramework(KPF0_Primitive):
         quality_control_exit_code = 0
 
         # Execute appropriate QC tests
+        import pdb; pdb.set_trace()
         self.kpf_object = execute_all_QCs(self.kpf_object, self.data_level_str, logger=self.logger)
         
         # Optionally list QC metrics.
