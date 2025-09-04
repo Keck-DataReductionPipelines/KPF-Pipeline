@@ -16,7 +16,7 @@ import pickle
 from kpfpipe.models.level1 import KPF1
 from kpfpipe.logger import start_logger
 
-DEFAULT_CFG_PATH = 'database/modules/utils/kpf_db.cfg'
+DEFAULT_CFG_PATH = '/code/KPF-Pipeline/database/modules/utils/kpf_db.cfg'
 
 # Redis cache configuration
 _redis_client = None
