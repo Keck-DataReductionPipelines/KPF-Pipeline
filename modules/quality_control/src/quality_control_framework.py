@@ -26,6 +26,7 @@ class QualityControlFramework(KPF0_Primitive):
 
     def __init__(self, action, context):
 
+        import pdb; pdb.set_trace()
         KPF0_Primitive.__init__(self, action, context)
 
         self.data_type = self.action.args[0]
