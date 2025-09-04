@@ -5,8 +5,8 @@
 #     data_level_str - 'L0' or '2D' or 'L1' or 'L2'
 #     kpf_object - a KPF object of the level specified by data_level_str
 
-break
 from modules.quality_control.src.quality_control_framework import QualityControlFramework
+break
 
 qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
 kpf_object = qc_output_list[1]
