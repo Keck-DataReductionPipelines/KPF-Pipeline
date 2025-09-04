@@ -3892,8 +3892,9 @@ class QCL1(QC):
             data_products = get_data_products_L1(L1)
             
             # Get reference wavelength solution
+            print("========================= HERE ==========================")
             dt = get_datetime_obsid(myL1.ObsID).strftime('%Y-%m-%dT%H:%M:%S.%f')
-            if debug:
+            if True or debug:
                 self.logger.debug(f'DEFAULT_CALIBRATION_CFG_PATH = ' + DEFAULT_CALIBRATION_CFG_PATH)
             GC = GetCalibrations(dt, DEFAULT_CALIBRATION_CFG_PATH, use_db=False)
             wls_filename = GC.lookup(subset=['rough_wls']) 
