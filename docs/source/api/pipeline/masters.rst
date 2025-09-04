@@ -128,7 +128,7 @@ Daily Operations
             Prefix of docker container name for this Perl script, a unique name so it can be monitored by docker ps command.
             E.g., russkpfmastersregisterindb
 
-        KPFCRONJOB_DOCKER_CONTAINER_NAME
+        KPFCRONJOB_DOCKER_IMAGE_NAME
             Docker image name to use for all cronjob scripts. This allows flexibility in choosing which Docker image to run.
             E.g., russkpfmasters:latest
 

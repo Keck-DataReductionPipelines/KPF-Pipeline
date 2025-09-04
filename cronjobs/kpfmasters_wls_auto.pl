@@ -82,10 +82,24 @@ $containername .= '_' . $$ . '_' . $trunctime;           # Augment container nam
 
 # Docker container image name for this Perl script.
 # E.g., russkpfmasters:latest
-my $containerimage = $ENV{KPFCRONJOB_DOCKER_CONTAINER_NAME};
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE_NAME};
 
 if (! (defined $containerimage)) {
-    die "*** Env. var. KPFCRONJOB_DOCKER_CONTAINER_NAME not set; quitting...\n";
+    die "*** Env. var. KPFCRONJOB_DOCKER_IMAGE_NAME not set; quitting...\n";
+}
+
+# Check if Docker image exists
+my $image_check = `docker images -q $containerimage 2>/dev/null`;
+chomp $image_check;
+if (!$image_check) {
+    print "*** Error: Docker image '$containerimage' not found!\n";
+    print "*** To build this image, run the following command from the KPF-Pipeline root directory:\n";
+    print "***   docker build -t $containerimage .\n";
+    print "*** Or if you want to use the existing kpf-drp image, set:\n";
+    print "***   export KPFCRONJOB_DOCKER_IMAGE_NAME=kpf-drp:latest\n";
+    die "*** Quitting due to missing Docker image...\n";
+} else {
+    print "*** Docker image '$containerimage' found (ID: $image_check)\n";
 }
 
 
