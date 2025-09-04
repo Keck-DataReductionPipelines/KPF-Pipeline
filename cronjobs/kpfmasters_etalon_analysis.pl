@@ -75,6 +75,14 @@ if (! (defined $containername)) {
 my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number of seconds in 53 years (since 00:00:00 on January 1, 1970, UTC).
 $containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
 
+# Docker container image name for this Perl script.
+# E.g., russkpfmasters:latest
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_CONTAINER_NAME};
+
+if (! (defined $containerimage)) {
+    die "*** Env. var. KPFCRONJOB_DOCKER_CONTAINER_NAME not set; quitting...\n";
+}
+
 
 # Database user for connecting to the database to run this script and query CalFiles database table.
 # E.g., kpfporuss
@@ -111,7 +119,6 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/kpfmasters_etalon_analysis';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';              # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'russkpfmasters:latest';
 
 
 # Ensure PYTHONPATH or equivalent is set; e.g., $ENV{PYTHONPATH} = "/data/user/rlaher/git/KPF-Pipeline"

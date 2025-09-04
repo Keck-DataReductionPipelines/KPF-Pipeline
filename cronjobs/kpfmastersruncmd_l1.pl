@@ -83,6 +83,14 @@ if (! (defined $containername)) {
 my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number of seconds in 53 years (since 00:00:00 on January 1, 1970, UTC).
 $containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
 
+# Docker container image name for this Perl script.
+# E.g., russkpfmasters:latest
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_CONTAINER_NAME};
+
+if (! (defined $containerimage)) {
+    die "*** Env. var. KPFCRONJOB_DOCKER_CONTAINER_NAME not set; quitting...\n";
+}
+
 
 # Database user for connecting to the database to run this script and insert records into the CalFiles table.
 # E.g., kpfporuss
@@ -147,7 +155,6 @@ if (! (defined $procdate)) {
 
 my $dockercmdscript = 'jobs/kpfmasterscmd_l1';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'russkpfmasters:latest';
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_l1.cfg';
 
