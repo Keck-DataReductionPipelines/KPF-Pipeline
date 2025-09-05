@@ -5,7 +5,7 @@ from astropy.time import Time
 import yaml
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import matplotlib
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 matplotlib.use("Agg")
@@ -1426,14 +1426,25 @@ class AnalyzeTimeSeries:
                     continue  # Skip to the next plot
 
 
-    def plot_time_series_rv(self, starname=None,
+    def plot_rv_time_series(self, starname=None,
                                   start_date=None, end_date=None, 
                                   hatch_service_missions=True,
                                   qc_not_fail='auto', not_junk=True, clean=False, 
+                                  log_savefig_timing=False, plot_timestamp=False,
                                   fig_path=None, show_plot=False):
-    
+
+        def _midnight_if_date(x):
+            if x is None:
+                return None
+            if isinstance(x, date) and not isinstance(x, datetime):
+                return datetime.combine(x, datetime.min.time())
+            return x
+
+        start_date = _midnight_if_date(start_date)
+        end_date   = _midnight_if_date(end_date)
         if (end_date == None) and not (start_date == None):
-            end_date = start_date + timedelta(days=1)
+            end_date = start_date
+        
         if qc_not_fail == 'auto':
             qc_not_fail = ['GOODREAD']
         cols = ['OBJECT', 'DATE-MID', 'CCFRV', 'CCFERV', 'CCD1BJD', 'CCD1RV', 'CCD2RV', 'CCD1ERV', 'CCD2ERV']
@@ -1492,8 +1503,8 @@ class AnalyzeTimeSeries:
         else:
             date_str = f"{date_start.isoformat()} - {date_end.isoformat()} UT"
         
-        title = f"{starname} RVs: {date_str}" if starname else f"RVs: {date_str}"
-        fig.suptitle(title, fontsize=14)
+        title = f"{starname}: {date_str}" if starname else f"RVs: {date_str}"
+        fig.suptitle(title, fontsize=12)
 
         # ---- Draw each panel ----
         for i, panel in enumerate(selected_panels):
@@ -1505,7 +1516,7 @@ class AnalyzeTimeSeries:
                     d["rv_centered_ms"],
                     yerr=d["err_ms"],
                     fmt="o",
-                    ms=2,
+                    ms=2.5,
                     capsize=2,
                     elinewidth=0.75,   # keep your current thickness
                     capthick=0.75,
@@ -1522,6 +1533,14 @@ class AnalyzeTimeSeries:
             if i == npanels - 1:
                 ax.set_xlabel("Time (UTC)", fontsize=12)
     
+                # Create a timestamp and annotate in the lower right corner
+                if plot_timestamp:
+                    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    timestamp_label = f"Plotted {current_time} UT"
+                    ax.annotate(timestamp_label, xy=(0, 0), xycoords='axes fraction', 
+                                fontsize=8, color="darkgray", ha="left", va="bottom",
+                                xytext=(0, -30), textcoords='offset points')
+
         # Save/show
         try:
             if fig_path is not None:
