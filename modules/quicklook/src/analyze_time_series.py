@@ -1,6 +1,7 @@
 import os
 import ast
 import time
+from astropy.time import Time
 import yaml
 import numpy as np
 import pandas as pd
@@ -1260,7 +1261,7 @@ class AnalyzeTimeSeries:
         if show_plot:
             plt.show()
         plt.close('all')
-
+    
 
     def yaml_to_dict(self, yaml_or_path):
         """
@@ -1425,6 +1426,116 @@ class AnalyzeTimeSeries:
                     continue  # Skip to the next plot
 
 
+    def plot_time_series_rv(self, starname=None,
+                                  start_date=None, end_date=None, 
+                                  hatch_service_missions=True,
+                                  qc_not_fail='auto', not_junk=True, clean=False, 
+                                  fig_path=None, show_plot=False):
+    
+        if (end_date == None) and not (start_date == None):
+            end_date = start_date + timedelta(days=1)
+        if qc_not_fail == 'auto':
+            qc_not_fail = ['GOODREAD']
+        cols = ['OBJECT', 'DATE-MID', 'CCFRV', 'CCFERV', 'CCD1BJD', 'CCD1RV', 'CCD2RV', 'CCD1ERV', 'CCD2ERV']
+    
+        # Retrieve data
+        time_col = "CCD1BJD"
+        rv_col   = "CCFRV"
+        err_col  = "CCFERV"
+        d = self.db.dataframe_from_db(columns=cols, 
+                                      start_date=start_date, 
+                                      end_date=end_date, 
+                                      only_object=starname, 
+                                      not_junk=not_junk,
+                                      qc_not_fail=qc_not_fail)
+    
+        # Clean data
+        for c in (time_col, rv_col, err_col):
+            d[c] = pd.to_numeric(d[c], errors="coerce")
+        d = d.dropna(subset=[time_col, rv_col, err_col]).sort_values(time_col)
+        if d.empty:
+            raise ValueError("No valid rows after cleaning. Check NaNs and column names.")
+    
+        # ---- Time conversion: BJD(TDB) → UTC datetimes ----
+        tvals = d[time_col].to_numpy(np.float64)
+        med = float(np.nanmedian(tvals))  # reserved if you add heuristics later
+        t = Time(tvals, format="jd", scale="tdb")
+        d["time_utc"] = pd.to_datetime(t.utc.to_datetime())
+    
+        # ---- Units & median subtraction (km/s → m/s, then center) ----
+        d["rv_ms"]  = d[rv_col].astype(np.float64)  * 1000.0
+        d["err_ms"] = d[err_col].astype(np.float64) * 1000.0
+        rv_median_ms = float(np.nanmedian(d["rv_ms"]))
+        d["rv_centered_ms"] = d["rv_ms"] - rv_median_ms
+    
+        # ---- Panels & figure sizing ----
+        panel_heights = {'rv': 2.5}
+        selected_panels = ['rv']
+        npanels = len(selected_panels)
+        total_height = 0.5 + sum(panel_heights.get(p, 3) for p in selected_panels)
+    
+        fig, axs = plt.subplots(
+            npanels, 1, sharex=True,
+            figsize=(8, total_height),
+            constrained_layout=True,
+            squeeze=False,
+        )
+        axs = axs.ravel()
+    
+        # ---- Figure-level title using displayed (plotted) time range ----
+        dates = d["time_utc"].dt.date
+        date_start = dates.min()
+        date_end   = dates.max()
+        
+        if date_start == date_end:
+            date_str = f"{date_start.isoformat()} UT"
+        else:
+            date_str = f"{date_start.isoformat()} - {date_end.isoformat()} UT"
+        
+        title = f"{starname} RVs: {date_str}" if starname else f"RVs: {date_str}"
+        fig.suptitle(title, fontsize=14)
+
+        # ---- Draw each panel ----
+        for i, panel in enumerate(selected_panels):
+            ax = axs[i]
+    
+            if panel == 'rv':
+                ax.errorbar(
+                    d["time_utc"],
+                    d["rv_centered_ms"],
+                    yerr=d["err_ms"],
+                    fmt="o",
+                    ms=2,
+                    capsize=2,
+                    elinewidth=0.75,   # keep your current thickness
+                    capthick=0.75,
+                    alpha=0.9,
+                )
+                ax.set_ylabel(r"RV ($\mathrm{m\,s^{-1}}$)", fontsize=12)
+    
+            ax.grid(True, alpha=0.3)
+            ax.tick_params(axis='both', which='both', labelsize=10)
+            locator = mdates.AutoDateLocator()
+            ax.xaxis.set_major_locator(locator)
+            ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
+    
+            if i == npanels - 1:
+                ax.set_xlabel("Time (UTC)", fontsize=12)
+    
+        # Save/show
+        try:
+            if fig_path is not None:
+                t0 = time.process_time()
+                plt.savefig(fig_path, dpi=300, facecolor='w')
+                if log_savefig_timing:
+                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+            if show_plot:
+                plt.show()
+            plt.close('all')
+        except Exception as e:
+            self.logger.info(f"Error saving file or showing plot: {e}")
+
+
 def add_one_month(inputdate):
     """
     Add one month to a datetime object, accounting for the number of days per month.
@@ -1456,3 +1567,76 @@ def is_numeric(value):
         return True
     except (ValueError, TypeError):
         return False
+
+def timebin(time, meas, meas_err, binsize):
+    """Bin in equal sized time bins
+
+    This routine bins a set of times, measurements, and measurement errors
+    into time bins. All inputs and outputs should be floats or double.
+    binsize should have the same units as the time array.
+    (from Andrew Howard, ported to Python by BJ Fulton)
+
+    Args:
+        time (array): array of times, can be datetime or numeric
+        meas (array): array of measurements to be combined
+        meas_err (array): array of measurement uncertainties
+        binsize (float): width of bins in the same units as time array (fractional days)
+
+    Returns:
+        tuple: (bin centers, binned measurements, binned uncertainties) in Series format if inputs are Series
+    """
+    
+    # Convert time to numeric (days since epoch) while preserving precision
+    if isinstance(time, pd.Series) and pd.api.types.is_datetime64_any_dtype(time):
+        time_numeric = (time.astype('datetime64[ns]').view('int64') / 1e9 / 86400.0)  # Convert to days
+    else:
+        time_numeric = np.array(time)
+
+    # Create a DataFrame to sort and keep track of original indices
+    data = pd.DataFrame({'time': time_numeric, 'meas': meas, 'meas_err': meas_err})
+    data.sort_values(by='time', inplace=True)
+
+    # Use sorted values for calculations
+    time_numeric_sorted = data['time'].values
+    meas_sorted = data['meas'].values
+    meas_err_sorted = data['meas_err'].values
+
+    time_out = []
+    meas_out = []
+    meas_err_out = []
+
+    ct = 0
+    while ct < len(time_numeric_sorted):
+        ind = np.where((time_numeric_sorted >= time_numeric_sorted[ct]) & 
+                       (time_numeric_sorted < time_numeric_sorted[ct] + binsize))[0]
+        num = len(ind)
+        if num == 0:  # No measurements in this bin
+            ct += 1
+            continue
+            
+        wt = (1. / meas_err_sorted[ind]) ** 2.  # weights based on errors
+        wt /= np.sum(wt)               # normalized weights
+        
+        # Calculate weighted averages and errors
+        bin_center_numeric = np.sum(wt * time_numeric_sorted[ind])
+        binned_meas = np.sum(wt * meas_sorted[ind])
+        binned_err = 1. / np.sqrt(np.sum(1. / (meas_err_sorted[ind]) ** 2))
+
+        time_out.append(bin_center_numeric)
+        meas_out.append(binned_meas)
+        meas_err_out.append(binned_err)
+
+        ct += num
+
+    # Convert bin centers back to pandas datetime if the input was a pandas datetime
+    if isinstance(time, pd.Series) and pd.api.types.is_datetime64_any_dtype(time):
+        # Convert back from days since epoch to datetime with full precision
+        time_out = pd.to_datetime(np.array(time_out) * 86400 * 1e9)  # Convert days back to nanoseconds
+
+    # Return results as Series if input was Series
+    if isinstance(time, pd.Series):
+        return (pd.Series(time_out), 
+                pd.Series(meas_out), 
+                pd.Series(meas_err_out))
+
+    return time_out, meas_out, meas_err_out
