@@ -188,7 +188,11 @@ texinfo_documents = [
 
 autodoc_mock_imports = ['keckdrpframework']
 
-
+# Added by AWH - 20250908
+# nbsphinx: don't execute notebooks on Read the Docs
+nbsphinx_execute = 'never'           # <- stops it from starting a kernel
+# optional, to keep the build going even if a notebook has errors in outputs:
+nbsphinx_allow_errors = True
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
