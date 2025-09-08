@@ -2021,6 +2021,7 @@ class AnalyzeTimeSeries:
                                                        start_date=UT_date, 
                                                        panels=['rv', 'snr', 'guiding', 'seeing', 'el', 'sun', 'moon'], 
                                                        annotate = ['rv_rms'], 
+                                                       plot_timestamp=True,
                                                        show_plot=show_plot, 
                                                        fig_path=fig_path)
 
