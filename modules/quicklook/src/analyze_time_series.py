@@ -1438,20 +1438,22 @@ class AnalyzeTimeSeries:
     
         Panels (top→bottom in the order provided via `panels`):
           - 'rv'      : CCFRV ± CCFERV (km/s → m/s), median-subtracted.
-          - 'guiding' : GDRXRMS & GDRYRMS (scatter), labels: "RMS Guiding X-errors", "RMS Guiding Y-errors".
+          - 'guiding' : GDRXRMS & GDRYRMS (scatter), labels: "X-errors", "Y-errors".
           - 'seeing'  : GDRSEEV (scatter), label: "Seeing (V-band)".
-          - 'snr'     : SNRSC452/548/652/747/852 (scatter), labels: "SNR (452 nm)", ..., "SNR (852 nm)".
+          - 'snr'     : SNRSC452/548/652/747/852 (scatter), labels: "452 nm", ..., "852 nm".
           - 'sun'     : SUNALT (scatter), y fixed to [-90, 0] deg; background bands:
                            -12..0  red (alpha 0.3),  -18..-12 orange (alpha 0.3).
           - 'moon'    : MOONSEP (scatter), y fixed to [0, 180] deg; background band:
                             0..30  orange (alpha 0.3).
+          - 'el'      : EL (scatter), y fixed to [0, 90] deg; background band:
+                            0..30  orange (alpha 0.1).
     
         Colors:
           rv='tab:blue'; guiding_x='mediumslateblue'; guiding_y='cornflowerblue';
           seeing='mediumseagreen';
           snr_452='royalblue', snr_548='forestgreen', snr_652='crimson',
           snr_747='darkorange', snr_852='goldenrod';
-          sun='slategray'; moon='tab:blue'.
+          sun='slategray'; moon='tab:blue'; el='tab:purple'.
     
         Date handling:
           - `start_date`/`end_date` accept str/date/datetime/None.
@@ -1486,7 +1488,7 @@ class AnalyzeTimeSeries:
         start_date, end_date : str | datetime.date | datetime.datetime | None
             See “Date handling” above.
         panels : list[str] | str
-            Any combination of: 'rv','guiding','seeing','snr','sun','moon'.
+            Any combination of: 'rv','guiding','seeing','snr','sun','moon','el'.
             List order controls vertical order. Unknown names are ignored.
             Default = ['rv'].
         hatch_service_missions : bool
@@ -1521,6 +1523,7 @@ class AnalyzeTimeSeries:
             'snr_852': 'goldenrod',
             'sun': 'slategray',   # neutral marker/line; background bands carry meaning
             'moon': 'tab:blue',
+            'el': 'tab:purple',
         }
     
         # ---------- Start/end normalization (mirror if only one bound is given) ----------
@@ -1559,10 +1562,10 @@ class AnalyzeTimeSeries:
         if qc_not_fail == 'auto':
             qc_not_fail = ['GOODREAD']
     
-        # Columns (include guiding/seeing/SNR/sun/moon fields)
+        # Columns (include guiding/seeing/SNR/sun/moon/el fields)
         cols = ['OBJECT', 'DATE-MID',
                 'CCFRV', 'CCFERV', 'CCD1BJD', 'CCD1RV', 'CCD2RV', 'CCD1ERV', 'CCD2ERV',
-                'GDRXRMS', 'GDRYRMS', 'GDRSEEV', 'SUNALT', 'MOONSEP',
+                'GDRXRMS', 'GDRYRMS', 'GDRSEEV', 'SUNALT', 'MOONSEP', 'EL',
                 'SNRSC452', 'SNRSC548', 'SNRSC652', 'SNRSC747', 'SNRSC852']
     
         # Retrieve data
@@ -1591,9 +1594,10 @@ class AnalyzeTimeSeries:
         # Panels registry & selection (heights are real, proportional axes heights)
         panel_heights = {
             'rv': 2.5,
-            'guiding': 1.25,
-            'seeing': 1.25,
             'snr': 1.25,
+            'seeing': 1.25,
+            'guiding': 1.25,
+            'el': 1.25,
             'sun': 1.25,
             'moon': 1.25,
         }
@@ -1655,16 +1659,23 @@ class AnalyzeTimeSeries:
             d["MOONSEP"] = pd.to_numeric(d["MOONSEP"], errors="coerce")
             d_moon = d.dropna(subset=["MOONSEP"]).copy()
     
+        d_el = None
+        if 'el' in selected_panels:
+            d["EL"] = pd.to_numeric(d["EL"], errors="coerce")
+            d_el = d.dropna(subset=["EL"]).copy()
+    
         # At least one panel has usable data?
         panels_with_data = []
         if 'rv' in selected_panels and d_rv is not None and not d_rv.empty:
             panels_with_data.append('rv')
-        if 'guiding' in selected_panels and ((d_gx is not None and not d_gx.empty) or (d_gy is not None and not d_gy.empty)):
-            panels_with_data.append('guiding')
-        if 'seeing' in selected_panels and d_see is not None and not d_see.empty:
-            panels_with_data.append('seeing')
         if 'snr' in selected_panels and any(k in d_snr for k in [k for _,_,k in snr_specs]):
             panels_with_data.append('snr')
+        if 'seeing' in selected_panels and d_see is not None and not d_see.empty:
+            panels_with_data.append('seeing')
+        if 'guiding' in selected_panels and ((d_gx is not None and not d_gx.empty) or (d_gy is not None and not d_gy.empty)):
+            panels_with_data.append('guiding')
+        if 'el' in selected_panels and d_el is not None and not d_el.empty:
+            panels_with_data.append('el')
         if 'sun' in selected_panels and d_sun is not None and not d_sun.empty:
             panels_with_data.append('sun')
         if 'moon' in selected_panels and d_moon is not None and not d_moon.empty:
@@ -1673,9 +1684,7 @@ class AnalyzeTimeSeries:
             raise ValueError("No valid rows for the selected panels after cleaning.")
     
         # -------- Figure sizing with true per-panel heights --------
-        # Height ratios exactly follow panel_heights for the requested panels.
         height_ratios = [panel_heights[p] for p in selected_panels]
-        # Extra vertical padding (title + x-label).
         EXTRA_PAD_INCH = 0.7
         fig_height = EXTRA_PAD_INCH + sum(height_ratios)
     
@@ -1720,6 +1729,37 @@ class AnalyzeTimeSeries:
                     )
                     ax.set_ylabel(r"RV ($\mathrm{m\,s^{-1}}$)", fontsize=12)
     
+            elif panel == 'snr':
+                plotted_any = False
+                for col, label, key in snr_specs:
+                    if key in d_snr:
+                        dfc = d_snr[key]
+                        ax.scatter(
+                            dfc["time_utc"], dfc[col],
+                            s=8, alpha=0.9,
+                            color=COLORS[key],
+                            label=label
+                        )
+                        plotted_any = True
+                if not plotted_any:
+                    ax.text(0.5, 0.5, "No SNR data", transform=ax.transAxes, ha='center', va='center')
+                else:
+                    ax.set_ylabel("SNR", fontsize=12)
+                    ax.legend(loc="upper right", fontsize=8, ncol=5, handletextpad=0.1, columnspacing=0.3)
+    
+            elif panel == 'seeing':
+                if d_see is None or d_see.empty:
+                    ax.text(0.5, 0.5, "No seeing data", transform=ax.transAxes, ha='center', va='center')
+                else:
+                    ax.scatter(
+                        d_see["time_utc"], d_see["GDRSEEV"],
+                        s=10, alpha=0.9,
+                        color=COLORS['seeing'],
+                        label="Seeing (V-band)"
+                    )
+                    ax.set_ylabel("Seeing\n(V band, as)", fontsize=12)
+                    #ax.legend(loc="upper right", fontsize=8, handletextpad=0.1, columnspacing=0.3)
+    
             elif panel == 'guiding':
                 plotted_any = False
                 if d_gx is not None and not d_gx.empty:
@@ -1741,39 +1781,26 @@ class AnalyzeTimeSeries:
                 if not plotted_any:
                     ax.text(0.5, 0.5, "No guiding data", transform=ax.transAxes, ha='center', va='center')
                 else:
-                    ax.set_ylabel(f"Guiding\n(mas, RMS)", fontsize=12)
-                    ax.legend(loc="upper right", fontsize=9, ncol=2)
+                    ax.set_ylabel("Guiding\n(RMS, mas)", fontsize=12)
+                    ax.legend(loc="upper right", fontsize=8, ncol=2, handletextpad=0.1, columnspacing=0.3)
     
-            elif panel == 'seeing':
-                if d_see is None or d_see.empty:
-                    ax.text(0.5, 0.5, "No seeing data", transform=ax.transAxes, ha='center', va='center')
+            elif panel == 'el':
+                if d_el is None or d_el.empty:
+                    ax.text(0.5, 0.5, "No elevation data", transform=ax.transAxes, ha='center', va='center')
                 else:
                     ax.scatter(
-                        d_see["time_utc"], d_see["GDRSEEV"],
-                        s=10, alpha=0.9,
-                        color=COLORS['seeing'],
-                        label="Seeing (V-band)"
+                        d_el["time_utc"], d_el["EL"],
+                        s=8, alpha=0.9,
+                        color=COLORS['el'],
+                        label="Elevation (deg)"
                     )
-                    ax.set_ylabel(f"Seeing\n(as)", fontsize=12)
-                    ax.legend(loc="upper right", fontsize=9)
-    
-            elif panel == 'snr':
-                plotted_any = False
-                for col, label, key in snr_specs:
-                    if key in d_snr:
-                        dfc = d_snr[key]
-                        ax.scatter(
-                            dfc["time_utc"], dfc[col],
-                            s=8, alpha=0.9,
-                            color=COLORS[key],
-                            label=label
-                        )
-                        plotted_any = True
-                if not plotted_any:
-                    ax.text(0.5, 0.5, "No SNR data", transform=ax.transAxes, ha='center', va='center')
-                else:
-                    ax.set_ylabel("SNR", fontsize=12)
-                    ax.legend(loc="upper right", fontsize=9, ncol=3)
+                    # Background band: 0..30 (orange, subtle)
+                    ax.axhspan( 0, 30, facecolor='orange', alpha=0.2,  zorder=0)
+                    ax.axhspan(29, 30, facecolor='orange', alpha=0.25, zorder=1)
+                    ax.set_ylim(0, 90)
+                    ax.set_autoscaley_on(False)
+                    ax.set_ylabel("Elevation\n(deg)", fontsize=12)
+                    #ax.legend(loc="upper right", fontsize=8, handletextpad=0.1, columnspacing=0.3)
     
             elif panel == 'sun':
                 if d_sun is None or d_sun.empty:
@@ -1785,14 +1812,14 @@ class AnalyzeTimeSeries:
                         color=COLORS['sun'],
                         label="Altitude of Sun (deg)"
                     )
-                    # Background bands: -12..0 (red), -18..-12 (orange)
-                    ax.axhspan(-12, 0, facecolor='red', alpha=0.3, zorder=0)
-                    ax.axhspan(-18, -12, facecolor='orange', alpha=0.3, zorder=0)
-                    # Fixed y-range, no autoscaling
+                    ax.axhspan(-12,   0, facecolor='red',    alpha=0.2,  zorder=0)
+                    ax.axhspan(-18, -12, facecolor='orange', alpha=0.2,  zorder=0)
+                    ax.axhspan(-12, -11, facecolor='red',    alpha=0.25, zorder=1)
+                    ax.axhspan(-18, -17, facecolor='orange', alpha=0.25, zorder=1)
                     ax.set_ylim(-90, 0)
                     ax.set_autoscaley_on(False)
-                    ax.set_ylabel(f"Sun Alt\n(deg)", fontsize=12)
-                    ax.legend(loc="upper right", fontsize=9)
+                    ax.set_ylabel("Sun Altitude\n(deg)", fontsize=12)
+                    #ax.legend(loc="upper right", fontsize=8, handletextpad=0.1, columnspacing=0.3)
     
             elif panel == 'moon':
                 if d_moon is None or d_moon.empty:
@@ -1804,13 +1831,12 @@ class AnalyzeTimeSeries:
                         color=COLORS['moon'],
                         label="Moon Sep (deg)"
                     )
-                    # Background band: 0..30 (orange)
-                    ax.axhspan(0, 30, facecolor='orange', alpha=0.3, zorder=0)
-                    # Fixed y-range, no autoscaling
+                    ax.axhspan(0,  30, facecolor='orange', alpha=0.2,  zorder=0)
+                    ax.axhspan(29, 30, facecolor='orange', alpha=0.25, zorder=1)
                     ax.set_ylim(0, 180)
                     ax.set_autoscaley_on(False)
-                    ax.set_ylabel(f"Moon Sep\n(deg)", fontsize=12)
-                    ax.legend(loc="upper right", fontsize=9)
+                    ax.set_ylabel("Moon Sep\n(deg)", fontsize=12)
+                    #ax.legend(loc="upper right", fontsize=8, handletextpad=0.1, columnspacing=0.3)
     
             # Common formatting
             ax.grid(True, alpha=0.3)
@@ -1819,7 +1845,7 @@ class AnalyzeTimeSeries:
             ax.xaxis.set_major_locator(locator)
             ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
     
-            # Optional hatching (may extend beyond the day; we will fix xlim after)
+            # Optional hatching to highlight service missions
             if hatch_service_missions:
                 try:
                     df_sm = self.get_service_mission_df()
@@ -1863,14 +1889,59 @@ class AnalyzeTimeSeries:
         try:
             if fig_path is not None:
                 t0 = time.process_time()
-                plt.savefig(fig_path, dpi=300, facecolor='w')
+                plt.savefig(fig_path, dpi=150, facecolor='w')
                 if log_savefig_timing:
                     self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
-            if show_plot:
+            if show_plot is not None:
                 plt.show()
             plt.close('all')
         except Exception as e:
             self.logger.info(f"Error saving file or showing plot: {e}")
+
+
+    def plot_nightly_campaigns(UT_date, Nobs_min=2, show_plot=None, fig_dir='plots/'):
+        """
+        Plot time-series “campaign” figures for all targets with at least
+        Nobs_min observations on UT_date. If the night has ≤ 1 total 
+        observation, no plots are produced. Figures are optionally saved with 
+        filenames of the form ``{OBJECT}_{YYYYMMDD}.png``.
+    
+        Parameters
+        ----------
+        UT_date : datetime.date or datetime.datetime
+            The UTC date to analyze. Observations are fetched with
+            ``start_date=UT_date`` and ``end_date=UT_date``.
+        Nobs_min : int, optional
+            Minimum number of rows (observations) for a target (``OBJECT``) on
+            the given night to be considered “campaign-worthy”. Default is 2.
+        show_plot : bool or None, optional
+            Passed through to ``myTS.plot_observing_rv_time_series``. If True, show
+            the figure(s); if False, do not show; if None, defer to the plotting
+            function’s default behavior. Default is None.
+        fig_dir : str or None, optional
+            Directory to which figures are saved. If ``None``, figures are not
+            written to disk. If a string, the path must exist (this function does
+            not create directories). Default is ``'plots/'``.
+    
+        Returns
+        -------
+        None
+            This function is called for its side effects (plotting and optional
+            file output).
+        """
+        cols = ['DATE-BEG', 'DATE-MID', 'DATE-END', 'EXPTIME', 'UT DATE', 'OBJECT', 'PROGNAME']
+        df = self.db.dataframe_from_db(columns=cols, start_date=UT_date, end_date=UT_date, on_sky=True)
+        Nobs_night = df.shape[0]
+        if Nobs_night > 1:
+            eligible = df['OBJECT'].dropna().value_counts()
+            stars = eligible[eligible >= N].index.tolist()
+            if len(stars) > 0:
+                for starname in stars:
+                    if fig_dir is None:
+                        fig_path = None
+                    else:
+                        fig_path = os.path.join(fig_dir, f"{starname}_{UT_date:%Y%m%d}.png")
+                    self.plot_observing_rv_time_series(starname=starname, start_date=UT_date, panels=['rv', 'snr', 'guiding', 'seeing', 'el', 'sun', 'moon'], show_plot=show_plot, fig_path=fig_path)
 
 
 def add_one_month(inputdate):
