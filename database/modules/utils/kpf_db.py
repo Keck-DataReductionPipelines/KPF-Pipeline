@@ -26,7 +26,7 @@ _cache_ttl = 300  # 5 minutes TTL
 # Detect test environment
 _is_test_env = os.getenv('CI') == 'true' or os.getenv('TESTING') == 'true'
 
-def _get_redis_client():
+def _get_redis_client(verbose=True):
     """Get Redis client, creating it if needed"""
     global _redis_client, _cache_enabled
     if _redis_client is None:
@@ -48,7 +48,8 @@ def _get_redis_client():
                     )
                     # Test connection
                     _redis_client.ping()
-                    print(f"DEBUG: Redis connection established on port {port}")
+                    if verbose:
+                        print(f"DEBUG: Redis connection established on port {port}")
                     break
                 except Exception as e:
                     print(f"DEBUG: Redis connection failed on port {port}: {e}")
@@ -91,12 +92,14 @@ def _load_cache_config():
 _cache_enabled, _cache_ttl, _cache_rounding = _load_cache_config()
 
 # Debug: Print cache configuration
-print(f"DEBUG: Cache configuration loaded:")
-print(f"DEBUG:   enabled: {_cache_enabled}")
-print(f"DEBUG:   ttl_seconds: {_cache_ttl}")
-print(f"DEBUG:   timestamp_rounding_minutes: {_cache_rounding}")
+verbose=True
+if verbose:
+    print(f"DEBUG: Cache configuration loaded:")
+    print(f"DEBUG:   enabled: {_cache_enabled}")
+    print(f"DEBUG:   ttl_seconds: {_cache_ttl}")
+    print(f"DEBUG:   timestamp_rounding_minutes: {_cache_rounding}")
 
-def _get_cache_key(obs_date, cal_requests):
+def _get_cache_key(obs_date, cal_requests, verbose=True):
     """Create a cache key that rounds timestamps to avoid microsecond differences"""
     # Round timestamp based on configurable rounding
     dt = datetime.strptime(obs_date, "%Y-%m-%dT%H:%M:%S.%f")
@@ -116,19 +119,21 @@ def _get_cache_key(obs_date, cal_requests):
     cache_key = f"calibration_lookup:{rounded_obs_date}_{requests_hash}"
     
     # Debug logging
-    print(f"DEBUG: Original timestamp: {obs_date}")
-    print(f"DEBUG: Rounded timestamp: {rounded_obs_date}")
-    print(f"DEBUG: Requests hash: {requests_hash}")
-    print(f"DEBUG: Final cache key: {cache_key}")
+    if verbose:
+        print(f"DEBUG: Original timestamp: {obs_date}")
+        print(f"DEBUG: Rounded timestamp: {rounded_obs_date}")
+        print(f"DEBUG: Requests hash: {requests_hash}")
+        print(f"DEBUG: Final cache key: {cache_key}")
     
     return cache_key
 
-def _get_cached_result(cache_key):
+def _get_cached_result(cache_key, verbose=True):
     """Get cached result from Redis if it exists and is not expired"""
     if not _cache_enabled:
         if _is_test_env:
             return None  # Less verbose in test environment
-        print(f"DEBUG: Cache disabled, returning None")
+        if verbose:
+            print(f"DEBUG: Cache disabled, returning None")
         return None
         
     redis_client = _get_redis_client()
@@ -147,24 +152,27 @@ def _get_cached_result(cache_key):
             unpickle_time = time.time() - unpickle_start
             
             if not _is_test_env:
-                print(f"DEBUG: Redis cache HIT for key: {cache_key}")
-                print(f"DEBUG: Redis GET time: {redis_time*1000:.2f}ms, Unpickle time: {unpickle_time*1000:.2f}ms")
+                if verbose:
+                    print(f"DEBUG: Redis cache HIT for key: {cache_key}")
+                    print(f"DEBUG: Redis GET time: {redis_time*1000:.2f}ms, Unpickle time: {unpickle_time*1000:.2f}ms")
             return result
         else:
             if not _is_test_env:
-                print(f"DEBUG: Redis cache MISS for key: {cache_key}")
-                print(f"DEBUG: Redis GET time: {redis_time*1000:.2f}ms")
+                if verbose:
+                    print(f"DEBUG: Redis cache MISS for key: {cache_key}")
+                    print(f"DEBUG: Redis GET time: {redis_time*1000:.2f}ms")
     except Exception as e:
         if not _is_test_env:
             print(f"DEBUG: Redis cache error: {e}")
     
     return None
 
-def _set_cached_result(cache_key, result):
+def _set_cached_result(cache_key, result, verbose=True):
     """Store result in Redis cache with TTL"""
     if not _cache_enabled:
         if not _is_test_env:
-            print(f"DEBUG: Cache disabled, not storing result")
+            if verbose:
+                print(f"DEBUG: Cache disabled, not storing result")
         return
         
     redis_client = _get_redis_client()
@@ -182,13 +190,13 @@ def _set_cached_result(cache_key, result):
         redis_time = time.time() - redis_start
         
         if not _is_test_env:
-            print(f"DEBUG: Redis cached result for key: {cache_key} with TTL {_cache_ttl}s")
-            print(f"DEBUG: Pickle time: {pickle_time*1000:.2f}ms, Redis SET time: {redis_time*1000:.2f}ms")
+            if verbose:
+                print(f"DEBUG: Redis cached result for key: {cache_key} with TTL {_cache_ttl}s")
+                print(f"DEBUG: Pickle time: {pickle_time*1000:.2f}ms, Redis SET time: {redis_time*1000:.2f}ms")
     except Exception as e:
-        if not _is_test_env:
-            print(f"DEBUG: Redis cache storage error: {e}")
+        print(f"DEBUG: Redis cache storage error: {e}")
 
-def clear_cache():
+def clear_cache(verbose=True):
     """Clear all Redis cache entries for this application"""
     if not _cache_enabled:
         return
@@ -206,21 +214,25 @@ def clear_cache():
         if all_keys:
             redis_client.delete(*all_keys)
             if not _is_test_env:
-                print(f"DEBUG: Cleared {len(all_keys)} cache entries")
+                if verbose:
+                    print(f"DEBUG: Cleared {len(all_keys)} cache entries")
             else:
-                print(f"DEBUG: Cleared {len(all_keys)} cache entries ({len(keys1)} individual + {len(keys2)} complete)")
+                if verbose:
+                    print(f"DEBUG: Cleared {len(all_keys)} cache entries ({len(keys1)} individual + {len(keys2)} complete)")
         else:
             if not _is_test_env:
-                print("DEBUG: No cache entries to clear")
+                if verbose:
+                    print("DEBUG: No cache entries to clear")
             else:
-                print("DEBUG: No cache entries to clear")
+                if verbose:
+                    print("DEBUG: No cache entries to clear")
     except Exception as e:
         if not _is_test_env:
             print(f"DEBUG: Error clearing cache: {e}")
         else:
             print(f"DEBUG: Error clearing cache: {e}")
 
-def clear_cache_for_timestamp(obs_date):
+def clear_cache_for_timestamp(obs_date, verbose=True):
     """Clear cache entries for a specific timestamp"""
     if not _cache_enabled:
         return
@@ -246,7 +258,8 @@ def clear_cache_for_timestamp(obs_date):
         if keys:
             redis_client.delete(*keys)
             if not _is_test_env:
-                print(f"DEBUG: Cleared {len(keys)} cache entries for timestamp {rounded_obs_date}")
+                if verbose:
+                    print(f"DEBUG: Cleared {len(keys)} cache entries for timestamp {rounded_obs_date}")
     except Exception as e:
         if not _is_test_env:
             print(f"DEBUG: Error clearing cache for timestamp: {e}")

@@ -168,7 +168,7 @@ class WaveCalibration:
 
                     ax[0].set_title('Derived WLS - Approx WLS')
                     ax[0].set_xlabel('Pixel')
-                    ax[0].set_ylabel('[$\\rm \AA$]')
+                    ax[0].set_ylabel(r'[$\\rm \AA$]')
                     ax[1].set_xlabel('Pixel')
                     ax[1].set_ylabel('[Pixel]')
                     plt.tight_layout()
@@ -331,7 +331,7 @@ class WaveCalibration:
                 continue
 
             if self.cal_type == 'Etalon':  # For etalon
-                etalon_mask = pd.read_csv(self.etalon_mask_in, names=['wave','weight'], sep='\s+')
+                etalon_mask = pd.read_csv(self.etalon_mask_in, names=['wave','weight'], sep=r'\s+')
                 wls, fitted_peak_pixels = self.find_etalon_peaks(order_flux,rough_wls_order,etalon_mask) # returns original mask and new mask positions for one order.
                 wls=wls.tolist()
 
@@ -483,7 +483,7 @@ class WaveCalibration:
                     fig, ax = plt.subplots(2, 1, figsize=(12,5))
                     ax[0].set_title('Precise WLS - Rough WLS')
                     ax[0].plot(np.arange(n_pixels), leg_out(np.arange(n_pixels)) - rough_wls_order, color='k')
-                    ax[0].set_ylabel('[$\\rm \AA$]')
+                    ax[0].set_ylabel(r'[$\\rm \AA$]')
                     pixel_sizes = rough_wls_order[1:] - rough_wls_order[:-1]
                     ax[1].plot(np.arange(n_pixels - 1),   
                               (leg_out(np.arange(n_pixels - 1)) - rough_wls_order[:-1]) / pixel_sizes, color='k')
@@ -1254,7 +1254,7 @@ class WaveCalibration:
             plt.vlines(comb_lines_angstrom, ymin=0, ymax=5000, color='r', label='Comb Lines')
             plt.xlim(np.nanmin(rough_wls_order), np.nanmin(rough_wls_order) + 6)
             plt.yscale('symlog')
-            plt.xlabel('Wavelength [$\\rm \AA$]', fontsize=14)
+            plt.xlabel(r'Wavelength [$\\rm \AA$]', fontsize=14)
             plt.ylabel('Flux', fontsize=14)
             plt.title('Rough Solution and LFC Lines', fontsize=18)
             plt.savefig('{}/rough_sol_and_lfc_lines.png'.format(plot_path), dpi=250)
@@ -1539,7 +1539,7 @@ class WaveCalibration:
             plt.plot(x, res, 'k.')
             plt.axhline(0, color='b', lw=2)
             plt.xlabel('Pixel')
-            plt.ylabel('Fit residuals [$\AA$]')
+            plt.ylabel(r'Fit residuals [$\AA$]')
             plt.tight_layout()
             #plt.savefig('{}/polyfit.png'.format(plot_path))
             plt.close()

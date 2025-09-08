@@ -4,16 +4,18 @@ import yaml
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from scipy.ndimage import convolve1d
 from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger, styled_text
-from modules.Utils.kpf_parse import HeaderParse, get_latest_receipt_time, get_datetime_obsid, get_kpf_level, get_data_products_expected, get_ObsID
+from modules.Utils.kpf_parse import HeaderParse, get_datecode
+from modules.Utils.kpf_parse import get_latest_receipt_time, get_datetime_obsid, get_kpf_level, get_data_products_expected, get_ObsID
 from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_2D, get_data_products_L1, get_data_products_L2
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
+from modules.quicklook.src.analyze_socal import AnalyzePyr
 from modules.calibration_lookup.src.alg import GetCalibrations
 
 DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../calibration_lookup/configs/default.cfg')
@@ -1061,7 +1063,7 @@ class QCDefinitions:
         self.spectrum_types[name49] = ['all',] 
         self.master_types[name49] = []
         self.drift_types[name49] = []
-        self.required_data_products[name49] = ['Green']
+        self.required_data_products[name49] = ['Red']
         self.fits_keywords[name49] = 'RDCCDT10'
         self.fits_comments[name49] = 'QC: Red CCD > 10 mK from temp set point'
         self.db_columns[name49] = None
@@ -1075,11 +1077,25 @@ class QCDefinitions:
         self.spectrum_types[name50] = ['all',] 
         self.master_types[name50] = []
         self.drift_types[name50] = []
-        self.required_data_products[name50] = ['Green']
+        self.required_data_products[name50] = ['Red']
         self.fits_keywords[name50] = 'RDCCDT1'
         self.fits_comments[name50] = 'QC: Red CCD > 1000 mK from temp set point'
         self.db_columns[name50] = None
         self.fits_keyword_fail_value[name50] = 0
+
+        name51 = 'clearsky'
+        self.names.append(name51)
+        self.kpf_data_levels[name51] = ['L0']
+        self.descriptions[name51] = 'Clear sky conditions from SoCal Pyrheliometer irradiance measurements'
+        self.data_types[name51] = 'int'
+        self.spectrum_types[name51] = ['Sun',] 
+        self.master_types[name51] = []
+        self.drift_types[name51] = []
+        self.required_data_products[name51] = []
+        self.fits_keywords[name51] = 'CLEARSKY'
+        self.fits_comments[name51] = 'QC: Clear sky conditions for SoCal'
+        self.db_columns[name51] = None
+        self.fits_keyword_fail_value[name51] = 0
 
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
@@ -2431,6 +2447,48 @@ class QCL0(QC):
 
         return QC_pass
 
+
+    def clearsky(self, debug=False):
+        """
+        This Quality Control method checks solar irradiance from the 
+        Pyrheliometer on SoCal to determine if solar observations are in clear
+        skies.
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - a boolean signifying clear sky conditions for SoCal.
+        """
+
+        QC_pass = False
+        
+        try:
+            primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
+            ObsID = primary_header.get_obsid()
+            datecode = get_datecode(ObsID)
+            myPyr = AnalyzePyr(datecode)
+            if myPyr.irr_fn_exists:
+                myPyr.compute_clearness_on_date()
+                date_mid_str = primary_header.header['DATE-MID']
+                elapsed_sec  = primary_header.header['ELAPSED']  # total duration in seconds
+                midtime = datetime.strptime(date_mid_str, "%Y-%m-%dT%H:%M:%S.%f")
+                half_duration = timedelta(seconds=elapsed_sec / 2.0)
+                starttime = midtime - half_duration
+                endtime   = midtime + half_duration
+                result = myPyr.return_clearsky_statistics(starttime, endtime)
+                if result is None:
+                    logger.info(f'Pyrheliometer irradiance data available for {datecode}, but not between {starttime} and {endtime}.  CLEARSKY QC keyword not added.')
+                else:    
+                    CLEARSKY_OUT, _, _, _, _ = myPyr.return_clearsky_statistics(starttime, endtime)
+                    if int(CLEARSKY_OUT):
+                        QC_pass = True
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
 
 #####################################################################
 

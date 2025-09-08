@@ -233,7 +233,7 @@ class RadialVelocity(KPF1_Primitive):
             if isinstance(action.args['input_ref'], np.ndarray) or isinstance(action.args['input_ref'], pd.DataFrame):
                 self.ref_ccf = action.args['input_ref']
             elif isinstance(action.args['input_ref'], str) and os.path.exists(action.args['input_ref']):
-                self.ref_ccf = pd.read_csv(action.args['input_ref'], sep='\s+')
+                self.ref_ccf = pd.read_csv(action.args['input_ref'], sep=r'\s+')
 
         self.ccf_engine = action.args['ccf_engine'].lower() \
             if 'ccf_engine' in args_keys and action.args['ccf_engine'] is not None \
@@ -876,7 +876,7 @@ class RadialVelocity(KPF1_Primitive):
     @staticmethod
     def load_csv(filepath, header=None):
         if filepath is not None and os.path.isfile(filepath):
-            df = pd.read_csv(filepath, header=header, sep='\s+|\t+|\s+\t+|\t+\s+', engine='python')
+            df = pd.read_csv(filepath, header=header, sep=r'\s+|\t+|\s+\t+|\t+\s+', engine='python')
             return df.values
         else:
             return None

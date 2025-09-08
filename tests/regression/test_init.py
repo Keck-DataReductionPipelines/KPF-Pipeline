@@ -4,6 +4,7 @@ from kpfpipe.config.pipeline_config import ConfigClass, Struct
 
 def test_config_parse():
     config_file = "examples/default_kpf.cfg"
+    config_file = "configs/kpf_drp.cfg"
 
     cfg = ConfigClass(config_file)
 

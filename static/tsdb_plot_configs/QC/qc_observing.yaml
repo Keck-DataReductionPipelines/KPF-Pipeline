@@ -36,9 +36,9 @@ panel_arr:
       - col: GOODEL
         plot_type: state
         plot_attr:
-          label: "Telescope elevation > 30 deg"
+          label: "Telescope elev. > 30 deg"
           marker: .
     paneldict:
-      ylabel: "Telescope elevation > 30 deg\n(GUIDSAT)"
+      ylabel: "Telescope elev. > 30 deg\n(GUIDSAT)"
       title: QC - Observing
       legend_frac_size: 0.15

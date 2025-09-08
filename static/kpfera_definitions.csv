@@ -6,4 +6,5 @@ KPFERA, UT_start_date,       UT_end_date,         comment
 2.5,    2024-11-01 12:00:00, 2025-01-01 00:00:00, Service Mission #2 (SM2 - engineering) which extended into on-sky science observations because of quasi-fixed pattern noise.  SM2 tasks included: installation of closed-cycle refridgerator (CCR) on Green cryostat (replacing LN2-based cooling); installation of thermal enclosure.
 2.6,    2025-01-01 12:00:00, 2025-03-28 23:00:00, After a full Green-side warmup after a closed-cycle cooler pressure issue
 2.7,    2025-03-28 23:00:01, 2025-04-23 00:22:00, Service Mission #3 (SM3 - engineering).  SM3 tasks included: installation of closed-cycle refridgerator on Red cryostat (replacing LN2-based cooling); extensive testing of the electical environment to assess and mitigate quasi-fixed pattern noise. The Green CCR continued to show signs of intermittent and reduced cooling capacity.
-3.0,    2025-04-23 00:22:01, 3000-01-01 00:00:00, Third science era: after Service Mission #3 with quasi-fixed pattern noise reduced but still elevated at ~12 electons per CCD pixel.
+3.0,    2025-04-23 00:22:01, 2025-08-29 20:30:00, Third science era: after Service Mission #3 with quasi-fixed pattern noise reduced but still elevated at ~12 electons per CCD pixel.
+3.5     2025-08-29 20:30:00, 2040-01-01 00:00:00, Service Misssion #4 (SM4 - engineering).  SM4 tasks includeded: 
