@@ -1,7 +1,7 @@
 .. _label-tsdb:
 
 Initializing the Time Series Database
-==============================
+=====================================
 
 .. toctree::
     :maxdepth: 2
