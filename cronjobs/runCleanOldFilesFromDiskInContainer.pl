@@ -65,11 +65,17 @@ if (! (defined $containername)) {
 my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number of seconds in 53 years (since 00:00:00 on January 1, 1970, UTC).
 $containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
 
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE};
+if (! (defined $containerimage)) {
+    $containerimage = 'russkpfmasters:latest';
+    print "*** Using default KPFCRONJOB_DOCKER_IMAGE=$containerimage (env var not set)\n";
+}
+
 
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'runCleanOldFilesFromDiskInContainer.pl';
-my $version = '1.0';
+my $version = '1.1';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -84,7 +90,7 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/runCleanOldFilesFromDiskInContainer';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'russkpfmasters:latest';
+
 my $insidecontainersandbox = '/sbx';
 my $insidecontainercode = '/code/KPF-Pipeline';
 
