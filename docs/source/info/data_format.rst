@@ -290,6 +290,14 @@ RNRED1    4.0376                                      Read noise for RED_AMP1 [e
 RNRED2    4.12717                                     Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
 RNRED3    4.0376                                      Read noise for RED_AMP3 [e-] (third amplifier region on Red CCD)
 RNRED4    4.12717                                     Read noise for RED_AMP4 [e-] (fourth amplifier region on Red CCD)
+RNNGGR1   1.0                                         Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan
+RNNGGR2   1.0                                         Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan
+RNNGGR3   1.0                                         Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan
+RNNGGR4   1.0                                         Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan
+RNNGRD1   1.0                                         Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan
+RNNGRD2   1.0                                         Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan
+RNNGRD3   1.0                                         Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan
+RNNGRD4   1.0                                         Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan
 GREENTRT  46.804                                      Green CCD read time [sec]
 REDTRT    46.839                                      Red CCD read time [sec]
 READSPED  'regular '                                  Categorization of CCD read speed ('regular' or 'fast')
@@ -1029,6 +1037,10 @@ DRFTDEL2  1.2114297222222221                          Time to 2nd drift correcti
 DRFTCOR   1                                           Drift correction applied (true/false)
 DRFTRV    0.2738220612333333                          Drift correction RV (m/s)
 DRFTMETH  nearest_interpolation                       Drift correction method name
+AGESLFC   0.621                                       Days since last good LFC frame (depends on processing order)
+AGEULFC   0.621                                       Days until next good LFC frame (depends on processing order)
+AGESETA   0.621                                       Days since last good Etalon frame (depends on processing order)
+AGEUETA   0.621                                       Days until next good Etalon frame (depends on processing order)
 ========  ==========================================  =========
 
 L2 RV Extension Header

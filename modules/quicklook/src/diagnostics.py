@@ -1613,6 +1613,7 @@ def add_headers_L2_barycentric(L2, logger=None):
             
         # Use the AnalyzeL2 class to compute BCV
         myL2 = AnalyzeL2(L2, logger=logger)
+        myL2.compute_statistics()
     
         # Add values to header
         if hasattr(myL2, 'CCFBCV'):
@@ -1640,3 +1641,51 @@ def add_headers_L2_barycentric(L2, logger=None):
 
     return L2
 
+
+def add_headers_days_since_last_wave_cal(L2, cal_source='LFC', logger=None, verbose=False):
+    """
+    Adds Barycentric RV correction and BJD to the L2 primary header
+    
+    Keywords:
+        AGESLFC - Days since last good LFC frame (depends on processing order)
+        AGEULFC - Days until next good LFC frame (depends on processing order)
+        AGESETA - Days since last good Etalon frame (depends on processing order)
+        AGEUETA - Days until next good Etalon frame (depends on processing order)
+
+    Args:
+        L2 - a KPF L2 object 
+
+    Returns:
+        L2 - a L2 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    try:
+        myL2 = AnalyzeL2(L2, logger=logger)
+        days_before, days_after = myL2.measure_days_since_last_good_wave_cal(cal_source=cal_source, search_range_days=365)
+
+        if cal_source=='LFC':
+            if not (days_before is None):
+                L2.header['PRIMARY']['AGESLFC'] = (days_before, 'Days since last good LFC frame (depends on processing order)')
+                if verbose:
+                    self.logger.info(f'AGESETA = {days_before}')
+            if not (days_after is None):
+                L2.header['PRIMARY']['AGEULFC'] = (days_after, 'Days until next good LFC frame (depends on processing order)')
+                if verbose:
+                    self.logger.info(f'AGEUETA = {days_after}')
+        if cal_source=='Etalon':
+            if not (days_before is None):
+                L2.header['PRIMARY']['AGESETA'] = (days_before, 'Days since last good Etalon frame (depends on processing order)')
+                if verbose:
+                    self.logger.info(f'AGESETA = {days_before}')
+            if not (days_after is None):
+                L2.header['PRIMARY']['AGEUETA'] = (days_after, 'Days until next good Etalon frame (depends on processing order)')
+                if verbose:
+                    self.logger.info(f'AGEUETA = {days_after}')
+
+    except Exception as e:
+        logger.error(f"Problem computing days since last good {cal_source}: {e}\n{traceback.format_exc()}")
+
+    return L2
