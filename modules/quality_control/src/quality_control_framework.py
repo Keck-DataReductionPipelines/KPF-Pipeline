@@ -1,6 +1,7 @@
 import ast
 import configparser as cp
 from modules.Utils.kpf_parse import HeaderParse
+
 import modules.quality_control.src.quality_control as qc
 from modules.quality_control.src.quality_control import execute_all_QCs
 
@@ -74,7 +75,7 @@ class QualityControlFramework(KPF0_Primitive):
 
         # Execute appropriate QC tests
         self.kpf_object = execute_all_QCs(self.kpf_object, self.data_level_str, logger=self.logger)
-        
+
         # Optionally list QC metrics.
         if self.qc_list_flag == 1:
             qc_obj.qcdefinitions.list_qc_metrics()

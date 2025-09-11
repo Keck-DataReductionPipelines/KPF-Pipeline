@@ -276,7 +276,7 @@ def styled_text(message, style="", color="", background=""):
     return styled_message
 
 
-def latex_number(number, sigfigs, min_exp=-2, max_exp=2):
+def latex_number(number, sigfigs, min_exp=-2, max_exp=2, return_latex=True):
     """
     Formats numbers into LaTeX-formatted strings, using scientific notation
     if the exponent is outside the specified range. Supports single floats and array inputs.
@@ -325,7 +325,10 @@ def latex_number(number, sigfigs, min_exp=-2, max_exp=2):
             final_number = round(num, sigfigs - 1 - exponent)
             return f'{final_number}'
         else:
-            return fr'${normalized} \times 10^{{{exponent}}}$'
+            if return_latex:
+                return fr'${normalized} \times 10^{{{exponent}}}$'
+            else:
+                return f'{normalized * 10**exponent}'
 
     if np.isscalar(number):
         return format_single(number)
