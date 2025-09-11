@@ -16,7 +16,7 @@ import pickle
 from kpfpipe.models.level1 import KPF1
 from kpfpipe.logger import start_logger
 
-DEFAULT_CFG_PATH = 'database/modules/utils/kpf_db.cfg'
+DEFAULT_CFG_PATH = '/code/KPF-Pipeline/database/modules/utils/kpf_db.cfg'
 
 # Redis cache configuration
 _redis_client = None
@@ -79,7 +79,7 @@ def _load_cache_config():
             timestamp_rounding_minutes = cache_cfg.getint('timestamp_rounding_minutes', 1)
         else:
             # Default values if no CACHE section exists
-            enabled = True
+            enabled = False
             ttl_seconds = 300
             timestamp_rounding_minutes = 1
             
