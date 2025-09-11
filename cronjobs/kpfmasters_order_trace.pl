@@ -117,11 +117,17 @@ if (! (defined $dbname)) {
     die "*** Env. var. KPFDBNAME not set; quitting...\n";
 }
 
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE};
+if (! (defined $containerimage)) {
+    $containerimage = 'russkpfmasters:latest';
+    print "*** Using default KPFCRONJOB_DOCKER_IMAGE=$containerimage (env var not set)\n";
+}
+
 
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_order_trace.pl';
-my $version = '1.0';
+my $version = '1.1';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -131,6 +137,7 @@ if (! (defined $procdate)) {
 
 my $dockercmdscript = 'jobs/kpfmasters_order_trace';               # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
+
 my $recipe = '/code/KPF-Pipeline/recipes/create_order_trace_files.recipe';
 my $config = '/code/KPF-Pipeline/configs/create_order_trace_files.cfg';
 my $recipe2 = '/code/KPF-Pipeline/recipes/create_order_rectification_file.recipe';

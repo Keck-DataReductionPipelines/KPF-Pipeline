@@ -106,7 +106,7 @@ if (!$image_check) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_wls_auto.pl';
-my $version = '1.9';
+my $version = '2.0';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -116,6 +116,7 @@ if (! (defined $procdate)) {
 
 my $dockercmdscript = 'jobs/kpfmasters_wls_auto';                  # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
+
 my $recipe = '/code/KPF-Pipeline/recipes/wls_auto.recipe';
 my $config = '/code/KPF-Pipeline/configs/wls_auto.cfg';
 my $sbxdir = "${sandbox}/masters/$procdate";

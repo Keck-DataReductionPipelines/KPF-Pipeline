@@ -66,10 +66,10 @@ if (! (defined $logdir)) {
 
 # Docker container name for this Perl script, a known name so it can be monitored by docker ps command.
 # E.g., russkpfmastersdrpl0
-my $containername = $ENV{KPFCRONJOB_DOCKER_NAME_L0};
+my $containername = $ENV{KPFCRONJOB_DOCKER_NAME_ETALON};
 
 if (! (defined $containername)) {
-    die "*** Env. var. KPFCRONJOB_DOCKER_NAME_L0 not set; quitting...\n";
+    die "*** Env. var. KPFCRONJOB_DOCKER_NAME_ETALON not set; quitting...\n";
 }
 
 my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number of seconds in 53 years (since 00:00:00 on January 1, 1970, UTC).
@@ -114,11 +114,17 @@ if (! (defined $dbname)) {
     die "*** Env. var. KPFDBNAME not set; quitting...\n";
 }
 
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE};
+if (! (defined $containerimage)) {
+    $containerimage = 'russkpfmasters:latest';
+    print "*** Using default KPFCRONJOB_DOCKER_IMAGE=$containerimage (env var not set)\n";
+}
+
 
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_etalon_analysis.pl';
-my $version = '1.0';
+my $version = '1.1';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 

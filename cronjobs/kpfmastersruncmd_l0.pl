@@ -158,11 +158,17 @@ if (! (defined $tsdbpass)) {
     die "*** Env. var. KPFPIPE_TSDB_PASS not set; quitting...\n";
 }
 
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE};
+if (! (defined $containerimage)) {
+    $containerimage = 'russkpfmasters:latest';
+    print "*** Using default KPFCRONJOB_DOCKER_IMAGE=$containerimage (env var not set)\n";
+}
+
 
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '3.1';
+my $version = '3.2';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -177,6 +183,7 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/kpfmasterscmd_l0';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
+
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
 
