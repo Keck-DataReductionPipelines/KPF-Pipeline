@@ -9,7 +9,7 @@ pipeline {
 
   environment {
     // We’ll copy the host’s ci-data into WORKSPACE/ci-data
-    CI_DATA_DIR      = "${env.WORKSPACE}/ci-data"
+    CI_DATA_DIR       = "${env.WORKSPACE}/ci-data"
     KPFPIPE_TEST_DATA = "/data/KPF-Pipeline-TestData"
     KPFPIPE_DATA      = "${env.CI_DATA_DIR}"
   }
@@ -28,8 +28,12 @@ pipeline {
         sh '''
           rm -rvf "${CI_DATA_DIR}"
           mkdir -p "${CI_DATA_DIR}"
-          cp -rv /data/kpf/ci-data/* "${CI_DATA_DIR}/"
-          cp -rv /data/kpf/reference_fits "${CI_DATA_DIR}/"
+          mkdir -p "${CI_DATA_DIR}/masters/20240228"
+          mkdir -p "${CI_DATA_DIR}/masters/20240122"
+          cp -urv /data/kpf/masters/20240228/* "${CI_DATA_DIR}/masters/20240228/"
+          cp -urv /data/kpf/masters/20240122/kpf_20240122_master_WLS_autocal-lfc-all-morn_L1.fits "${CI_DATA_DIR}/masters/20240122/"
+          cp -urv /data/kpf/ci-data/* "${CI_DATA_DIR}/"
+          cp -urv /data/kpf/reference_fits "${CI_DATA_DIR}/"
         '''
       }
     }
@@ -55,28 +59,10 @@ pipeline {
         }
       }
       steps {
-        // sanity‑check
+        // sanity-check
         sh 'ls -R "${CI_DATA_DIR}"'
-
-        // build & run your tests, mounting only this workspace dir
-        sh """
-          docker build --cache-from kpf-drp:latest --tag kpf-drp:latest .
-          docker run --rm \
-            --network=host \
-            -e COVERALLS_REPO_TOKEN=VQhy1molIcAo0rTz2geFOhucmvkBiEPFc \
-            -e CI_PULL_REQUEST=\$ghprbPullId \
-            -v \"\${PWD}:/code/KPF-Pipeline\" \
-            -v \"${CI_DATA_DIR}:/data" \
-            -v \"${CI_DATA_DIR}/masters:/masters" \
-            -v \"${KPFPIPE_TEST_DATA}:/testdata" \
-            -e TSDBSERVER=127.0.0.1 \
-            -e TSDBPORT=6127 \
-            -e TSDBNAME=timeseriesopsdb \
-            -e \"TSDBUSER=${KPFPIPE_TSDB_USER}\" \
-            -e \"TSDBPASS=${KPFPIPE_TSDB_PASS}\" \
-            kpf-drp:latest \
-            make init regression_tests
-        """
+        // Build CI image and run tests inside it via Makefile (non-interactive)
+        sh 'make test_env DOCKER_RUN_TTY= RUN="make init regression_tests" CI_IMAGE=kpf-drp-ci TAG=latest'
       }
     }
   }

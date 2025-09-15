@@ -12,6 +12,7 @@ from keckdrpframework.models.arguments import Arguments
 import modules.quicklook.src.diagnostics as diagnostics
 from modules.Utils.utils import styled_text
 from modules.Utils.kpf_parse import HeaderParse
+from modules.Utils.kpf_parse import get_datecode
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
 from modules.Utils.kpf_parse import get_data_products_L2
@@ -28,7 +29,8 @@ class DiagnosticsFramework(KPF0_Primitive):
         kpf_object (obj):
         data_level_str (str): L0, 2D, L1, L2 are possible choices.
         diagnostics_name (str): 'all' or name of diagnostics to add to headers; 
-                                if 'all', then all diagnostics associated with data level are computed
+                                if 'all', then all diagnostics associated with 
+                                data level are computed
     """
 
     def __init__(self, action, context):
@@ -81,6 +83,16 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring 2D flux failed: {e}\n{traceback.format_exc()}")
 
+            # 2D flux - inside and outside of order trace regions
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_2D_flux_stats_in_out_ordertrace'):
+                try:
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_flux_stats_in_out_ordertrace", style="Bold", color="Blue")}')
+                    self.kpf_object = diagnostics.add_headers_2D_flux_stats_in_out_ordertrace(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring 2D flux inside and outside of order trace failed: {e}\n{traceback.format_exc()}")
+
             # Dark Current
             if (self.diagnostics_name == 'all') or \
                (self.diagnostics_name == 'add_headers_dark_current_2D'):
@@ -108,6 +120,16 @@ class DiagnosticsFramework(KPF0_Primitive):
                     exit_code = 1
                 except Exception as e:
                     self.logger.error(f"Measuring guider diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # SUNALT keyword (needed for solar and stellar observations)
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_sunalt'):
+                try:
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_sunalt", style="Bold", color="Blue")}')
+                    self.kpf_object = diagnostics.add_headers_sunalt(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring SUNALT failed: {e}\n{traceback.format_exc()}")
 
             # HK
             if (self.diagnostics_name == 'all') or \
@@ -153,6 +175,23 @@ class DiagnosticsFramework(KPF0_Primitive):
                         self.logger.info("Observation type {} != 'Flat'.  Cross-disperion offset not computed.".format(name))
                 except Exception as e:
                     self.logger.error(f"Measuring Cross-disperion offset failed: {e}\n{traceback.format_exc()}")
+
+            # SoCal Irradiance Statistics
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_2D_socal_irradiance'):
+                try:
+                    primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
+                    name = primary_header.get_name()
+                    if name == 'Sun':
+                        ObsID = primary_header.get_obsid()
+                        datecode = get_datecode(ObsID)
+                        self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_socal_irradiance", style="Bold", color="Blue")}')
+                        self.kpf_object = diagnostics.add_headers_2D_socal_irradiance(self.kpf_object, logger=self.logger)
+                        exit_code = 1
+                    else: 
+                        self.logger.info("Observation type {} != 'Sun'.  SoCal Irradiance Statistics not computed.".format(name))
+                except Exception as e:
+                    self.logger.error(f"Measuring SoCal irradiance statistics failed: {e}\n{traceback.format_exc()}")
 
                         
         elif 'L1' in self.data_level_str:
@@ -320,6 +359,19 @@ class DiagnosticsFramework(KPF0_Primitive):
                         self.logger.info("Green/Red not in L2 file. BCV and BJD diagnostics not computed.")
                 except Exception as e:
                     self.logger.error(f"Measuring L2 BCV/BJD failed: {e}\n{traceback.format_exc()}")
+
+            # L2 - Days since last good LFC/Etalon exposures
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_days_since_last_wave_cal'):
+                try:
+                    print(f"type(self.kpf_object) = {type(self.kpf_object)}")
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_days_since_last_wave_cal", style="Bold", color="Blue")}')
+                    self.kpf_object = diagnostics.add_headers_days_since_last_wave_cal(self.kpf_object, cal_source='LFC', logger=self.logger)
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_days_since_last_wave_cal", style="Bold", color="Blue")}')
+                    self.kpf_object = diagnostics.add_headers_days_since_last_wave_cal(self.kpf_object, cal_source='Etalon', logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring time since last LFC/Etalon failed: {e}\n{traceback.format_exc()}")
             
         # Add RECEIPT entry
         self.kpf_object.receipt_add_entry('Diagnostics', self.__module__, f'data_level_str={self.data_level_str}, diagnostics_name={self.diagnostics_name}', 'PASS')

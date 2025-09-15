@@ -45,10 +45,11 @@ class HeaderParse:
         (to-do: add list based on attributes below)
     """
 
-    def __init__(self, KPF, extension_name, logger=None):
+    def __init__(self, KPF, extension_name, logger=None, verbose=False):
         if logger:
             self.logger = logger
-            self.logger.debug('Initializing HeaderParse object')
+            if verbose:
+                self.logger.debug('Initializing HeaderParse object')
         else:
             self.logger = None
         try: 
@@ -583,19 +584,19 @@ def get_data_levels_expected(spectrum_type):
 
     Args:
         spectrum_type - possible values: 
-            'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe',
-            'Sun', 'Star'
+            'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', 
+            'HK-Bias', 'HK-Dark', 'HK-ThAr', 'HK-UNe', 'HK-Star'
 
     Returns:
         list of data expected data levels, e.g. ['L0', '2D', 'L1', 'L2']
     """
     data_products = ['L0']
     
-    if spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+    if spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', 'HK-Bias', 'HK-Dark', 'HK-ThAr', 'HK-UNe', 'HK-Star']:
         data_products.append('2D')
-    if spectrum_type in ['Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+    if spectrum_type in ['Bias', 'Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', 'HK-Bias', 'HK-Dark', 'HK-ThAr', 'HK-UNe', 'HK-Star']:
         data_products.append('L1')
-    if spectrum_type in ['Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
+    if spectrum_type in ['Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']:
         data_products.append('L2')
 
     return data_products
@@ -625,7 +626,7 @@ def get_kpf_level(kpf_object):
         return 'L2'
 
     # elif L1 if there's an extension that includes 'WAVE'
-    if hasattr_with_wildcard(kpf_object, r'.*WAVE.*'):
+    if hasattr_with_wildcard(kpf_object, r'.*WAVE.*') or hasattr_with_wildcard(kpf_object, r'CA_HK_.*WAVE'):
         return 'L1'
 
     # elif 2D if GREEN_CCD or RED_CCD has non-zero size
@@ -635,6 +636,7 @@ def get_kpf_level(kpf_object):
     if hasattr(kpf_object, 'RED_CCD'):
         if kpf_object['RED_CCD'].size > 1:
             return '2D'
+    # not sure how to determine if an HK-only observation is from a 2D file (same as L0?)
 
     # elif L0 if one of the standard extensions is present with non-zero size
     L0_attrs = ['GREEN_AMP1', 'RED_AMP1', 'CA_HK', 'EXPMETER_SCI', 'GUIDER_AVG', 'GUIDER_CUBE_ORIGINS', 'guider_avg', 'guider_cube_origins']

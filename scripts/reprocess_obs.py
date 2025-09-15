@@ -100,7 +100,7 @@ def main():
         ]
 
         cmd_kpf = [
-            'kpf', '--ncpu', str(args.ncpu), '--watch', f'/data/L0/{datecode}/', '--reprocess',
+            'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L0/{datecode}/',
             '-c', 'configs/kpf_drp.cfg', '-r', 'recipes/kpf_drp.recipe'
         ]
 
@@ -127,6 +127,21 @@ def main():
                 text=True,
                 check=False
             )
+
+            if result.returncode == 0:
+                # now do drift correction only since the initial L2s should be ingested into the TSDB by this point.
+                cmd_kpf = [
+                    'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L0/{datecode}/',
+                    '-c', 'configs/kpf_drp_do_only_drift.cfg', '-r', 'recipes/kpf_drp.recipe'
+                ]
+
+                result = subprocess.run(
+                    nice_prefix + cmd_kpf,
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.DEVNULL, 
+                    text=True,
+                    check=False
+                )
 
             end_time = datetime.datetime.now(local_tz)
             compute_time = end_time - start_time

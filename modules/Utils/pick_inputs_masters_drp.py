@@ -60,28 +60,53 @@ class PickInputsMastersDRP(KPF0_Primitive):
     def _perform(self):
 
         """
-        Returns list of input FITS files for all master-calibration pipelines.
-
+        Returns list of input L0 FITS files for all master-calibration pipelines.
+        Filter out any FITS files that have a dash in the filename (which have been
+        replaced by a redelivery from the mountain).
         """
 
         # Filter bias files with IMTYPE='Bias' and EXPTIME= 0.0.
-        
+
         fh = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.bias_imtype_values_str,self.logger)
         all_bias_files,all_bias_objects = fh.get_good_biases()
+
+        ret_bias_files = []
+        for bias_file in all_bias_files:
+            if "-" in bias_file:
+                continue
+            ret_bias_files.append(bias_file)
 
         # Filter dark files with IMTYPE=‘Dark’ and the specified minimum exposure time.
 
         fh2 = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.dark_imtype_values_str,self.logger)
         all_dark_files,all_dark_objects = fh2.get_good_darks(self.exptime_minimum)
 
+        ret_dark_files = []
+        for dark_file in all_dark_files:
+            if "-" in dark_file:
+                continue
+            ret_dark_files.append(dark_file)
+
         # Filter flat files with IMTYPE=‘flatlamp’ and specified OBJECT.
 
         fh3 = FitsHeaders(self.all_fits_files_path,self.flat_imtype_keywords,self.flat_imtype_values_str,self.logger)
         all_flat_files = fh3.match_headers_string_lower()
 
-        # Filter arclamp files with IMTYPE=‘arclamp’. 
+        ret_flat_files = []
+        for flat_file in all_flat_files:
+            if "-" in flat_file:
+                continue
+            ret_flat_files.append(flat_file)
+
+        # Filter arclamp files with IMTYPE=‘arclamp’.
 
         fh4 = FitsHeaders(self.all_fits_files_path,self.imtype_keywords,self.arclamp_imtype_values_str,self.logger)
         all_arclamp_files,all_arclamp_objects = fh4.get_good_arclamps()
 
-        return Arguments(all_bias_files,all_dark_files,all_flat_files,all_arclamp_files,all_bias_objects,all_dark_objects,all_arclamp_objects)
+        ret_arclamp_files = []
+        for arclamp_file in all_arclamp_files:
+            if "-" in arclamp_file:
+                continue
+            ret_arclamp_files.append(arclamp_file)
+
+        return Arguments(ret_bias_files,ret_dark_files,ret_flat_files,ret_arclamp_files,all_bias_objects,all_dark_objects,all_arclamp_objects)

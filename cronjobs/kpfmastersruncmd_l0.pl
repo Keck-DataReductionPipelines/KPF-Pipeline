@@ -86,6 +86,28 @@ if (! (defined $containername)) {
 my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number of seconds in 53 years (since 00:00:00 on January 1, 1970, UTC).
 $containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
 
+# Docker container image name for this Perl script.
+# E.g., russkpfmasters:latest
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE_NAME};
+
+if (! (defined $containerimage)) {
+    die "*** Env. var. KPFCRONJOB_DOCKER_IMAGE_NAME not set; quitting...\n";
+}
+
+# Check if Docker image exists
+my $image_check = `docker images -q $containerimage 2>/dev/null`;
+chomp $image_check;
+if (!$image_check) {
+    print "*** Error: Docker image '$containerimage' not found!\n";
+    print "*** To build this image, run the following command from the KPF-Pipeline root directory:\n";
+    print "***   docker build -t $containerimage .\n";
+    print "*** Or if you want to use the existing kpf-drp image, set:\n";
+    print "***   export KPFCRONJOB_DOCKER_IMAGE_NAME=kpf-drp:latest\n";
+    die "*** Quitting due to missing Docker image...\n";
+} else {
+    print "*** Docker image '$containerimage' found (ID: $image_check)\n";
+}
+
 
 # Database user for connecting to the database to run this script and query CalFiles database table.
 # E.g., kpfporuss
@@ -104,10 +126,49 @@ if (! (defined $dbname)) {
 }
 
 
+# Set up time-series database connection.
+
+my $tsdbport = $ENV{TSDBPORT};
+if (! (defined $tsdbport)) {
+    $tsdbport = '6127';
+    print "*** Using default TSDBPORT=6127 (env var not set)\n";
+}
+
+my $tsdbname = $ENV{TSDBNAME};
+if (! (defined $tsdbname)) {
+    $tsdbname = 'timeseriesopsdb';
+    print "*** Using default TSDBNAME=timeseriesopsdb (env var not set)\n";
+}
+
+my $tsdbserver = $ENV{TSDBSERVER};
+if (! (defined $tsdbserver)) {
+    $tsdbserver = '127.0.0.1';
+    print "*** Using default TSDBSERVER=127.0.0.1 (env var not set)\n";
+}
+
+my $tsdbuser = $ENV{KPFPIPE_TSDB_USER};
+
+if (! (defined $tsdbuser)) {
+    die "*** Env. var. KPFPIPE_TSDB_USER not set; quitting...\n";
+}
+
+my $tsdbpass = $ENV{KPFPIPE_TSDB_PASS};
+
+if (! (defined $tsdbpass)) {
+    die "*** Env. var. KPFPIPE_TSDB_PASS not set; quitting...\n";
+}
+
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE};
+if (! (defined $containerimage)) {
+    $containerimage = 'russkpfmasters:latest';
+    print "*** Using default KPFCRONJOB_DOCKER_IMAGE=$containerimage (env var not set)\n";
+}
+
+
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '2.9';
+my $version = '3.2';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -122,7 +183,7 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/kpfmasterscmd_l0';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'russkpfmasters:latest';
+
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
 
@@ -176,6 +237,7 @@ my $dbenvfileinside = "/code/KPF-Pipeline/jobs/" . $dbenvfilename;
 `chmod 600 $dbenvfile`;
 open(OUT,">$dbenvfile") or die "Could not open $dbenvfile ($!); quitting...\n";
 print OUT "export DBPASS=\"$dbpass\"\n";
+print OUT "export TSDBPASS=\"$tsdbpass\"\n";
 close(OUT) or die "Could not close $dbenvfile ($!); quitting...\n";
 
 
@@ -206,6 +268,10 @@ print "dbport=$dbport\n";
 print "dbenvfile=$dbenvfile\n";
 print "dbenvfileinside=$dbenvfileinside\n";
 print "Docker container name = $containername\n";
+print "tsdbport=$tsdbport\n";
+print "tsdbname=$tsdbname\n";
+print "tsdbserver=$tsdbserver\n";
+print "tsdbuser=$tsdbuser\n";
 
 
 # Change directory to where the Dockerfile is located.
@@ -246,14 +312,12 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
 
-`mkdir -p $sandbox/L0/$procdate`;
 `mkdir -p $sandbox/2D/$procdate`;
-`cp -pr /data/kpf/L0/$procdate/*.fits $sandbox/L0/$procdate`;
-`rm -f $sandbox/L0/$procdate/*-*fits`;
 
 my $dockerruncmd = "docker run -d --name $containername " .
-                   "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
-                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
+                   "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters -v /data/kpf:/data_kpf " .
+                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 -e DBPASS=\"$dbpass\" " .
+                   "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver -e TSDBPASS=\"$tsdbpass\" " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;

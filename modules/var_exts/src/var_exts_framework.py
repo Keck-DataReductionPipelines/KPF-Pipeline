@@ -1,3 +1,4 @@
+from astropy.io import fits
 import os
 from os.path import exists
 import numpy as np
@@ -225,7 +226,7 @@ class VarExtsFramework(KPF0_Primitive):
         # Read image data object from 2D FITS file.
 
         fits_filename = self.l0_filename
-        fits_filename = fits_filename.replace('L0', '2D')
+        fits_filename = fits_filename.replace('L0', '2D') # I hate this!
         fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
         fits_filename_exists = exists(fits_filename)
@@ -528,6 +529,8 @@ class VarExtsFramework(KPF0_Primitive):
         # 5. Photon-noise variance
 
         # GREEN
+        # print("types of variables:",rn_greenvarimg,bias_greenvarimg,dark_greenvarimg,flat_greenvarimg,greenccdimg)
+        # import pdb; pdb.set_trace()
         try:
             greenvarimg = rn_greenvarimg +\
                 bias_greenvarimg +\

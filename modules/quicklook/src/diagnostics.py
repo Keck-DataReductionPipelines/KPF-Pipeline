@@ -17,11 +17,13 @@ from modules.quicklook.src.analyze_em import AnalyzeEM
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l1 import uncertainty_median
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
+from modules.quicklook.src.analyze_socal import AnalyzePyr
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
 from modules.Utils.kpf_parse import get_data_products_L2
 from modules.Utils.kpf_parse import get_datecode_from_filename
-from modules.Utils.kpf_parse import HeaderParse, get_datetime_obsid, get_kpf_level, get_data_products_expected
+from modules.Utils.kpf_parse import HeaderParse, get_datecode
+from modules.Utils.kpf_parse import get_datetime_obsid, get_kpf_level, get_data_products_expected
 from modules.Utils.utils import get_moon_sep, get_sun_alt
 from modules.calibration_lookup.src.alg import GetCalibrations
 
@@ -159,6 +161,141 @@ def add_headers_2D_flux(D2, logger=None):
                 D2.header['PRIMARY']['RD2DF10P'] = (round(my2D.red_percentile_10, 3), '10th percentile flux in 2D Red image (e-)')
             except Exception as e:
                 logger.error(f"Problem with Red 2D flux measurements: {e}\n{traceback.format_exc()}")
+    return D2
+
+
+def add_headers_2D_flux_stats_in_out_ordertrace(D2, logger=None):
+    """
+    Adds keywords to the 2D object header for measurements of Flux [e-] inside 
+    and outside of the order trace (padded by one pixel up and down).
+    
+    Keywords:
+        FINTRG9F - Flux [e-] inside padded order trace regions (Green, 99.5th %ile)
+        FOUTRG9F - Flux [e-] outside padded order trace regions (Green, 99.5th %ile)
+        FRATRG9F - Flux in/out padded order trace regions (Green, 99.5th %ile)
+        FINTRG99 - Flux [e-] inside padded order trace regions (Green, 99th %ile)
+        FOUTRG99 - Flux [e-] outside padded order trace regions (Green, 99th %ile)
+        FRATRG99 - Flux in/out padded order trace regions (Green, 99th %ile)
+        FINTRG98 - Flux [e-] inside padded order trace regions (Green, 98th %ile)
+        FOUTRG98 - Flux [e-] outside padded order trace regions (Green, 98th %ile)
+        FRATRG98 - Flux in/out padded order trace regions (Green, 98th %ile)
+        FINTRG95 - Flux [e-] inside padded order trace regions (Green, 95th %ile)
+        FOUTRG95 - Flux [e-] outside padded order trace regions (Green, 95th %ile)
+        FRATRG95 - Flux in/out padded order trace regions (Green, 95th %ile)
+        FINTRG90 - Flux [e-] inside padded order trace regions (Green, 90th %ile)
+        FOUTRG90 - Flux [e-] outside padded order trace regions (Green, 90th %ile)
+        FRATRG90 - Flux in/out padded order trace regions (Green, 90th %ile)
+        FINTRG50 - Flux [e-] inside padded order trace regions (Green, median)
+        FOUTRG50 - Flux [e-] outside padded order trace regions (Green, median)
+        FRATRG50 - Flux in/out padded order trace regions (Green, median)
+        FINTRG10 - Flux [e-] inside padded order trace regions (Green, 10th %ile)
+        FOUTRG10 - Flux [e-] outside padded order trace regions (Green, 10th %ile)
+        FRATRG10 - Flux in/out padded order trace regions (Green, 10th %ile)
+        FINTRR9F - Flux [e-] inside padded order trace regions (Red, 99.5th %ile)
+        FOUTRR9F - Flux [e-] outside padded order trace regions (Red, 99.5th %ile)
+        FRATRR9F - Flux in/out padded order trace regions (Red, 99.5th %ile)
+        FINTRR99 - Flux [e-] inside padded order trace regions (Red, 99th %ile)
+        FOUTRR99 - Flux [e-] outside padded order trace regions (Red, 99th %ile)
+        FRATRR99 - Flux in/out padded order trace regions (Red, 99th %ile)
+        FINTRR98 - Flux [e-] inside padded order trace regions (Red, 98th %ile)
+        FOUTRR98 - Flux [e-] outside padded order trace regions (Red, 98th %ile)
+        FRATRR98 - Flux in/out padded order trace regions (Red, 98th %ile)
+        FINTRR95 - Flux [e-] inside padded order trace regions (Red, 95th %ile)
+        FOUTRR95 - Flux [e-] outside padded order trace regions (Red, 95th %ile)
+        FRATRR95 - Flux in/out padded order trace regions (Red, 95th %ile)
+        FINTRR90 - Flux [e-] inside padded order trace regions (Red, 90th %ile)
+        FOUTRR90 - Flux [e-] outside padded order trace regions (Red, 90th %ile)
+        FRATRR90 - Flux in/out padded order trace regions (Red, 90th %ile)
+        FINTRR50 - Flux [e-] inside padded order trace regions (Red, median)
+        FOUTRR50 - Flux [e-] outside padded order trace regions (Red, median)
+        FRATRR50 - Flux in/out padded order trace regions (Red, median)
+        FINTRR10 - Flux [e-] inside padded order trace regions (Red, 10th %ile)
+        FOUTRR10 - Flux [e-] outside padded order trace regions (Red, 10th %ile)
+        FRATRR10 - Flux in/out padded order trace regions (Red, 10th %ile)
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_2D(D2)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        print('Not a valid 2D or no Gree/Red CCD data.')
+        return D2
+    
+    myD2 = Analyze2D(D2, logger=logger)
+    fluxes = myD2.measure_flux_stats_in_out_ordertrace(chips=chips, 
+                                                       percentiles=[10, 50, 90, 95, 98, 99, 99.5],
+                                                       order_trace_file='auto',
+                                                       ordermask_buffer=1)
+
+    if 'green' in chips:
+        try:
+            green_in    = fluxes['green']['in']
+            green_out   = fluxes['green']['out']
+            green_ratio = fluxes['green']['ratio']
+            D2.header['PRIMARY']['FINTRG9F'] = (float(green_in[6]), 'Flux [e-] in order trace (Green, 99.5th %ile)')
+            D2.header['PRIMARY']['FINTRG99'] = (float(green_in[5]), 'Flux [e-] in order trace (Green, 99th %ile)')
+            D2.header['PRIMARY']['FINTRG98'] = (float(green_in[4]), 'Flux [e-] in order trace (Green, 98th %ile)')
+            D2.header['PRIMARY']['FINTRG95'] = (float(green_in[3]), 'Flux [e-] in order trace (Green, 95th %ile)')
+            D2.header['PRIMARY']['FINTRG90'] = (float(green_in[2]), 'Flux [e-] in order trace (Green, 90th %ile)')
+            D2.header['PRIMARY']['FINTRG50'] = (float(green_in[1]), 'Flux [e-] in order trace (Green, 50th %ile)')
+            D2.header['PRIMARY']['FINTRG10'] = (float(green_in[0]), 'Flux [e-] in order trace (Green, 10th %ile)')
+            D2.header['PRIMARY']['FOUTRG9F'] = (float(green_out[6]), 'Flux [e-] out order trace (Green, 99.5th %ile)')
+            D2.header['PRIMARY']['FOUTRG99'] = (float(green_out[5]), 'Flux [e-] out order trace (Green, 99th %ile)')
+            D2.header['PRIMARY']['FOUTRG98'] = (float(green_out[4]), 'Flux [e-] out order trace (Green, 98th %ile)')
+            D2.header['PRIMARY']['FOUTRG95'] = (float(green_out[3]), 'Flux [e-] out order trace (Green, 95th %ile)')
+            D2.header['PRIMARY']['FOUTRG90'] = (float(green_out[2]), 'Flux [e-] out order trace (Green, 90th %ile)')
+            D2.header['PRIMARY']['FOUTRG50'] = (float(green_out[1]), 'Flux [e-] out order trace (Green, 50th %ile)')
+            D2.header['PRIMARY']['FOUTRG10'] = (float(green_out[0]), 'Flux [e-] out order trace (Green, 10th %ile)')
+            D2.header['PRIMARY']['FRATRG9F'] = (float(green_ratio[6]), 'Flux in/out order trace (Green, 99.5th %ile)')
+            D2.header['PRIMARY']['FRATRG99'] = (float(green_ratio[5]), 'Flux in/out order trace (Green, 99th %ile)')
+            D2.header['PRIMARY']['FRATRG98'] = (float(green_ratio[4]), 'Flux in/out order trace (Green, 98th %ile)')
+            D2.header['PRIMARY']['FRATRG95'] = (float(green_ratio[3]), 'Flux in/out order trace (Green, 95th %ile)')
+            D2.header['PRIMARY']['FRATRG90'] = (float(green_ratio[2]), 'Flux in/out order trace (Green, 90th %ile)')
+            D2.header['PRIMARY']['FRATRG50'] = (float(green_ratio[1]), 'Flux in/out order trace (Green, 50th %ile)')
+            D2.header['PRIMARY']['FRATRG10'] = (float(green_ratio[0]), 'Flux in/out order trace (Green, 10th %ile)')
+        except Exception as e:
+            logger.error(f"Problem with Green 2D flux measurements in/out of order trace: {e}\n{traceback.format_exc()}")
+    if 'red' in chips:
+        try:
+            red_in    = fluxes['red']['in']
+            red_out   = fluxes['red']['out']
+            red_ratio = fluxes['red']['ratio']
+            D2.header['PRIMARY']['FINTRR9F'] = (float(red_in[6]), 'Flux [e-] in order trace (Red, 99.5th %ile)')
+            D2.header['PRIMARY']['FINTRR99'] = (float(red_in[5]), 'Flux [e-] in order trace (Red, 99th %ile)')
+            D2.header['PRIMARY']['FINTRR98'] = (float(red_in[4]), 'Flux [e-] in order trace (Red, 98th %ile)')
+            D2.header['PRIMARY']['FINTRR95'] = (float(red_in[3]), 'Flux [e-] in order trace (Red, 95th %ile)')
+            D2.header['PRIMARY']['FINTRR90'] = (float(red_in[2]), 'Flux [e-] in order trace (Red, 90th %ile)')
+            D2.header['PRIMARY']['FINTRR50'] = (float(red_in[1]), 'Flux [e-] in order trace (Red, 50th %ile)')
+            D2.header['PRIMARY']['FINTRR10'] = (float(red_in[0]), 'Flux [e-] in order trace (Red, 10th %ile)')
+            D2.header['PRIMARY']['FOUTRR9F'] = (float(red_out[6]), 'Flux [e-] out order trace (Red, 99.5th %ile)')
+            D2.header['PRIMARY']['FOUTRR99'] = (float(red_out[5]), 'Flux [e-] out order trace (Red, 99th %ile)')
+            D2.header['PRIMARY']['FOUTRR98'] = (float(red_out[4]), 'Flux [e-] out order trace (Red, 98th %ile)')
+            D2.header['PRIMARY']['FOUTRR95'] = (float(red_out[3]), 'Flux [e-] out order trace (Red, 95th %ile)')
+            D2.header['PRIMARY']['FOUTRR90'] = (float(red_out[2]), 'Flux [e-] out order trace (Red, 90th %ile)')
+            D2.header['PRIMARY']['FOUTRR50'] = (float(red_out[1]), 'Flux [e-] out order trace (Red, 50th %ile)')
+            D2.header['PRIMARY']['FOUTRR10'] = (float(red_out[0]), 'Flux [e-] out order trace (Red, 10th %ile)')
+            D2.header['PRIMARY']['FRATRR9F'] = (float(red_ratio[6]), 'Flux in/out order trace (Red, 99.5th %ile)')
+            D2.header['PRIMARY']['FRATRR99'] = (float(red_ratio[5]), 'Flux in/out order trace (Red, 99th %ile)')
+            D2.header['PRIMARY']['FRATRR98'] = (float(red_ratio[4]), 'Flux in/out order trace (Red, 98th %ile)')
+            D2.header['PRIMARY']['FRATRR95'] = (float(red_ratio[3]), 'Flux in/out order trace (Red, 95th %ile)')
+            D2.header['PRIMARY']['FRATRR90'] = (float(red_ratio[2]), 'Flux in/out order trace (Red, 90th %ile)')
+            D2.header['PRIMARY']['FRATRR50'] = (float(red_ratio[1]), 'Flux in/out order trace (Red, 50th %ile)')
+            D2.header['PRIMARY']['FRATRR10'] = (float(red_ratio[0]), 'Flux in/out order trace (Red, 10th %ile)')
+        except Exception as e:
+            logger.error(f"Problem with Red 2D flux measurements in/out of order trace: {e}\n{traceback.format_exc()}")
+
     return D2
 
 
@@ -337,11 +474,6 @@ def add_headers_guider(D2, logger=None):
     except Exception as e:
         logger.error(f"Problem with moon separation: {e}\n{traceback.format_exc()}")
     try: 
-        D2.header['PRIMARY']['SUNALT']  = (round(get_sun_alt(myGuider.date_mid), 1),
-                                           'Altitude of Sun [deg]; negative = below horizon')
-    except Exception as e:
-        logger.error(f"Problem with Sun altitude: {e}\n{traceback.format_exc()}")
-    try: 
         if myGuider.good_fit:
             D2.header['PRIMARY']['GDRSEEJZ'] = (round(myGuider.seeing*myGuider.pixel_scale, 3),
                                                'Seeing [arcsec] in J+Z-band from Moffat fit')
@@ -352,6 +484,36 @@ def add_headers_guider(D2, logger=None):
                                            
     return D2
 
+def add_headers_sunalt(D2, logger=None):
+    """
+    Adds SUNALT to the header of a 2D object (works for solar and stellar observations)
+    
+    Keywords:
+        SUNALT - Altitude of Sun (deg)
+
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    # Check that the input object is of the right type
+    if (str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>"):
+        logger.info('2D file not valid.')
+        return D2
+
+    try:
+        date_mid = Time(HeaderParse(D2, 'PRIMARY').header['DATE-MID'])
+        D2.header['PRIMARY']['SUNALT'] = (round(get_sun_alt(date_mid), 5),
+                                          'Altitude of Sun [deg]; negative = below horizon')
+    except Exception as e:
+        logger.error(f"Problem with Sun altitude: {e}\n{traceback.format_exc()}")
+                                           
+    return D2
 
 def add_headers_hk(D2, logger=None):
     """
@@ -540,7 +702,7 @@ def add_headers_2D_xdisp_offset(D2, logger=None):
     
     # Check that the input object is of the right type
     if str(type(D2)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
-        print('Not a valid 2D.')
+        print('Not a valid 2D or no Gree/Red CCD data.')
         return D2
         
     # Compute cross-dispersion offsets with two references: global and in era
@@ -582,6 +744,61 @@ def add_headers_2D_xdisp_offset(D2, logger=None):
                     D2.header['PRIMARY']['XDSPSYR'+keyword_suffix] = (keyword_sigma, '[pix] uncertainty in XDSPDYR'+keyword_suffix)
                 except Exception as e:
                     logger.error(f"Problem with Red 2D cross-dispersion offset measurements: {e}\n{traceback.format_exc()}")
+    return D2
+
+
+def add_headers_2D_socal_irradiance(D2, logger=None, verbose=True):
+    """
+    Adds keywords to the 2D object header for measurements of solar irradiance.
+    
+    Keywords:
+        DNIMEAS  - Mean DNI from pyrheliometer during exp [W/m^2]
+        DNICLR   - Theoretical DNI in perfect conditions [W/m^2]
+        DNIRMS   - RMS of DNIMEAS during the exp [W/m^2]
+        CLEARIDX - SoCal clearness index (<4==CLEARSKY) [float]
+        
+    Keywords (related; produced in QualityControl)
+        CLEARSKY - Clear sky conditions for SoCal [bool]
+    
+    Args:
+        D2 - a KPF 2D object 
+
+    Returns:
+        D2 - a 2D file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    try:
+        primary_header = HeaderParse(D2, 'PRIMARY')
+        ObsID = primary_header.get_obsid()
+        datecode = get_datecode(ObsID)
+        myPyr = AnalyzePyr(datecode, verbose=verbose)
+        if myPyr.irr_fn_exists:
+            myPyr.compute_clearness_on_date()
+            date_mid_str = primary_header.header['DATE-MID']
+            elapsed_sec  = primary_header.header['ELAPSED']  # total duration in seconds
+            midtime = datetime.strptime(date_mid_str, "%Y-%m-%dT%H:%M:%S.%f")
+            half_duration = timedelta(seconds=elapsed_sec / 2.0)
+            starttime = midtime - half_duration
+            endtime   = midtime + half_duration
+            result = myPyr.return_clearsky_statistics(starttime, endtime)
+            if result is None:
+                logger.info(f'Pyrheliometer irradiance data available for {datecode}, but not between {starttime} and {endtime}.  No keywords added.')
+            else:    
+                CLEARSKY, DNIMEAS, DNICLR, DNIRMS, CLEARIDX = myPyr.return_clearsky_statistics(starttime, endtime)
+                #D2.header['PRIMARY']['CLEARSKY'] = (int(CLEARSKY), 'Clear-sky conditions for SoCal [bool]')
+                D2.header['PRIMARY']['DNIMEAS']  = (DNIMEAS, 'Mean DNI from pyrheliometer during exp [W/m^2]')
+                D2.header['PRIMARY']['DNICLR']   = (DNICLR, 'Theoretical DNI in perfect conditions [W/m^2]')
+                D2.header['PRIMARY']['DNIRMS']   = (DNIRMS, 'RMS of DNIMEAS during the exp [W/m^2]')
+                D2.header['PRIMARY']['CLEARIDX'] = (CLEARIDX, 'SoCal clearness index (<4==CLEARSKY) [float]')
+        else:
+            logger.info(f'Pyrheliometer irradiance data not available for {datecode}.  No keywords added.')
+
+    except Exception as e:
+        logger.error(f"Problem computing Clearsky Index statistics: {e}\n{traceback.format_exc()}")
+
     return D2
 
 
@@ -1396,6 +1613,7 @@ def add_headers_L2_barycentric(L2, logger=None):
             
         # Use the AnalyzeL2 class to compute BCV
         myL2 = AnalyzeL2(L2, logger=logger)
+        myL2.compute_statistics()
     
         # Add values to header
         if hasattr(myL2, 'CCFBCV'):
@@ -1423,3 +1641,51 @@ def add_headers_L2_barycentric(L2, logger=None):
 
     return L2
 
+
+def add_headers_days_since_last_wave_cal(L2, cal_source='LFC', logger=None, verbose=False):
+    """
+    Adds Barycentric RV correction and BJD to the L2 primary header
+    
+    Keywords:
+        AGESLFC - Days since last good LFC frame (depends on processing order)
+        AGEULFC - Days until next good LFC frame (depends on processing order)
+        AGESETA - Days since last good Etalon frame (depends on processing order)
+        AGEUETA - Days until next good Etalon frame (depends on processing order)
+
+    Args:
+        L2 - a KPF L2 object 
+
+    Returns:
+        L2 - a L2 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    try:
+        myL2 = AnalyzeL2(L2, logger=logger)
+        days_before, days_after = myL2.measure_days_since_last_good_wave_cal(cal_source=cal_source, search_range_days=365)
+
+        if cal_source=='LFC':
+            if not (days_before is None):
+                L2.header['PRIMARY']['AGESLFC'] = (days_before, 'Days since last good LFC frame (depends on processing order)')
+                if verbose:
+                    self.logger.info(f'AGESETA = {days_before}')
+            if not (days_after is None):
+                L2.header['PRIMARY']['AGEULFC'] = (days_after, 'Days until next good LFC frame (depends on processing order)')
+                if verbose:
+                    self.logger.info(f'AGEUETA = {days_after}')
+        if cal_source=='Etalon':
+            if not (days_before is None):
+                L2.header['PRIMARY']['AGESETA'] = (days_before, 'Days since last good Etalon frame (depends on processing order)')
+                if verbose:
+                    self.logger.info(f'AGESETA = {days_before}')
+            if not (days_after is None):
+                L2.header['PRIMARY']['AGEUETA'] = (days_after, 'Days until next good Etalon frame (depends on processing order)')
+                if verbose:
+                    self.logger.info(f'AGEUETA = {days_after}')
+
+    except Exception as e:
+        logger.error(f"Problem computing days since last good {cal_source}: {e}\n{traceback.format_exc()}")
+
+    return L2

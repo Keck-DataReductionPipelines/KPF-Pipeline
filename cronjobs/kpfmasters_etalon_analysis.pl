@@ -66,14 +66,36 @@ if (! (defined $logdir)) {
 
 # Docker container name for this Perl script, a known name so it can be monitored by docker ps command.
 # E.g., russkpfmastersdrpl0
-my $containername = $ENV{KPFCRONJOB_DOCKER_NAME_L0};
+my $containername = $ENV{KPFCRONJOB_DOCKER_NAME_ETALON};
 
 if (! (defined $containername)) {
-    die "*** Env. var. KPFCRONJOB_DOCKER_NAME_L0 not set; quitting...\n";
+    die "*** Env. var. KPFCRONJOB_DOCKER_NAME_ETALON not set; quitting...\n";
 }
 
 my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number of seconds in 53 years (since 00:00:00 on January 1, 1970, UTC).
 $containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
+
+# Docker container image name for this Perl script.
+# E.g., russkpfmasters:latest
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE_NAME};
+
+if (! (defined $containerimage)) {
+    die "*** Env. var. KPFCRONJOB_DOCKER_IMAGE_NAME not set; quitting...\n";
+}
+
+# Check if Docker image exists
+my $image_check = `docker images -q $containerimage 2>/dev/null`;
+chomp $image_check;
+if (!$image_check) {
+    print "*** Error: Docker image '$containerimage' not found!\n";
+    print "*** To build this image, run the following command from the KPF-Pipeline root directory:\n";
+    print "***   docker build -t $containerimage .\n";
+    print "*** Or if you want to use the existing kpf-drp image, set:\n";
+    print "***   export KPFCRONJOB_DOCKER_IMAGE_NAME=kpf-drp:latest\n";
+    die "*** Quitting due to missing Docker image...\n";
+} else {
+    print "*** Docker image '$containerimage' found (ID: $image_check)\n";
+}
 
 
 # Database user for connecting to the database to run this script and query CalFiles database table.
@@ -92,11 +114,17 @@ if (! (defined $dbname)) {
     die "*** Env. var. KPFDBNAME not set; quitting...\n";
 }
 
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE};
+if (! (defined $containerimage)) {
+    $containerimage = 'russkpfmasters:latest';
+    print "*** Using default KPFCRONJOB_DOCKER_IMAGE=$containerimage (env var not set)\n";
+}
+
 
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_etalon_analysis.pl';
-my $version = '1.0';
+my $version = '1.1';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -111,7 +139,6 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/kpfmasters_etalon_analysis';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';              # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'russkpfmasters:latest';
 
 
 # Ensure PYTHONPATH or equivalent is set; e.g., $ENV{PYTHONPATH} = "/data/user/rlaher/git/KPF-Pipeline"

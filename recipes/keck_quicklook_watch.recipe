@@ -1,0 +1,29 @@
+# This recipe is used to watch a [L0/2D/L1/L2/masters] directory for modified 
+# files and then to run the appropriate section of the QLP 
+# (L0/2D/L1/L2/masters) to generate standard data products.  It must be run 
+# in watch mode.  Separate instances should to be run for L0, 2D, L1, L2, 
+# and masters data directories.
+#
+# Example:
+#    > kpf --ncpus=2 --watch /data/L1/20240118/ -c configs/quicklook_watch.cfg -r recipes/quicklook_watch.recipe
+
+from modules.keck_alert_rti.src.keck_alert_rti import SendRTIHttp
+from modules.Utils.string_proc import date_from_path
+from modules.Utils.string_proc import level_from_kpffile
+
+file_path = context.file_path # from context in watch mode, e.g.  
+                              # /data/2D/20230711/KP.20230711.00415.52_2D.fits
+datecode = date_from_path(file_path)
+
+# Invoke the quicklook watch recipe
+invoke_subrecipe("recipes/quicklook_watch.recipe")
+
+if 'masters' in file_path: # Masters
+    output_dir= '/data/QLP/' + datecode + '/Masters/'
+    level= ''
+else: # L0/2D/L1/L2
+    output_dir= '/data/QLP/' + datecode + '/'
+    level = level_from_kpffile(file_path)
+
+
+SendRTIHttp(file_path, output_dir, level)

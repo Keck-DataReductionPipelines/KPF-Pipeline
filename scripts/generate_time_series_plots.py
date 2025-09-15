@@ -138,9 +138,6 @@ def generate_plots(start_date=None, end_date=None,
     Returns:
         PNG plots in the output directory.
         
-    To-do: 
-        Add argument for backend.
-        Add to CI.
     """
     
     if start_date == None or end_date == None:
@@ -181,6 +178,9 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = None
                 myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
                 myTS.plot_all_quicklook(day, interval='day', fig_dir=savedir)
+                if time_range_type == 'day':
+                    savedir = base_dir + day.strftime("%Y%m%d") + '/Time_Series/RV/'
+                    myTS.plot_nightly_campaigns(day, fig_dir=savedir)
                 del myTS # free up memory
             except Exception as e:
                 print(e)
@@ -291,13 +291,13 @@ if __name__ == "__main__":
     args = parser.parse_args()   
 
     tasks = [
-        {"proc_name": "Today Process",       "interval":     300, "time_range_type": "day",    "date_range": 'this_day'},
-        {"proc_name": "This Month Process",  "interval":     600, "time_range_type": "month",  "date_range": 'this_month'},
-        {"proc_name": "This Year Process",   "interval":  2*3600, "time_range_type": "year",   "date_range": 'this_year'},
+        {"proc_name": "Today Process",       "interval":     600, "time_range_type": "day",    "date_range": 'this_day'},
+        {"proc_name": "This Month Process",  "interval":    1200, "time_range_type": "month",  "date_range": 'this_month'},
+        {"proc_name": "This Year Process",   "interval":  3*3600, "time_range_type": "year",   "date_range": 'this_year'},
         {"proc_name": "All Days Process",    "interval": 48*3600, "time_range_type": "day",    "date_range": 'all_days'},
-        {"proc_name": "All Months Process",  "interval":  3*3600, "time_range_type": "month",  "date_range": 'all_months'},
-        {"proc_name": "All Years Process",   "interval":  3*3600, "time_range_type": "year",   "date_range": 'all_years'},
-        {"proc_name": "All Decades Process", "interval": 24*3600, "time_range_type": "decade", "date_range": (None, None)},
+        {"proc_name": "All Months Process",  "interval":  6*3600, "time_range_type": "month",  "date_range": 'all_months'},
+        {"proc_name": "All Years Process",   "interval":  6*3600, "time_range_type": "year",   "date_range": 'all_years'},
+        {"proc_name": "All Decades Process", "interval": 48*3600, "time_range_type": "decade", "date_range": (None, None)},
     ]
 
     processes = {}

@@ -8,6 +8,15 @@ L0_filename
 D2_filename
 L1_filename
 L2_filename
+D2_expected
+L1_expected
+L2_expected
+D2_exists
+L1_exists
+L2_exists
+D2_missing
+L1_missing
+L2_missing
 datecode
 Source
 RA_deg

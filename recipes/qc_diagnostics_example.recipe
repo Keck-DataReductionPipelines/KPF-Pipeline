@@ -19,13 +19,9 @@ if exists(input_fits_filename):
         kpf_object = kpf2_from_fits(input_fits_filename, data_type = data_type)
 
     qc_return_list = QualityControlFramework(data_type, data_level_str, kpf_object, 0)
-    exit_code = qc_return_list[0]
-    if exit_code == 1:
-        kpf_object = qc_return_list[1]
+    kpf_object = qc_return_list[1]
 
     diag_return_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
-    exit_code = diag_return_list[0]
-    if exit_code == 1:
-        kpf_object = diag_return_list[1]
+    kpf_object = diag_return_list[1]
 
     result = to_fits(kpf_object, output_fits_filename)

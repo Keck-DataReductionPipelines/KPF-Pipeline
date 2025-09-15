@@ -176,6 +176,20 @@ GAIAMAG   9.28                                        GAIA G band magnitude
 TARGTEFF  5398.0                                      Target effective temperature (K)
 OCTAGON   EtalonFiber                                 Selected octagon calibration source (not necessarily powered on)
 TRIGTARG  Green,Red,Ca_HK,ExpMeter,Guide              Cameras that were sent triggers
+SRCSHTTR  SciSelect,SkySelect,SoCalSci                Source shutters commanded
+TIMSHTTR  Scrambler,SimulCal                          Timed shutters commanded
+OTIMSHTR  Scrambler,SimulCal                          Timed shutters open exp. midpoint
+SCISEL    open                                        Science Select shutter at exp. midpoint
+SKYSEL    open                                        Sky Select Shutter at exp. midpoint
+FFSHTR    closed                                      Flat field fiber shutter at exp. midpoint
+SCRAMSHT  open                                        Scrambler shutter at exp. midpoint
+SIMCALSH  open                                        Simult Cal shutter at exp. midpoint
+CAHKSHT   closed                                      CaHK shutter at exp. midpoint
+SOLSCISH  open                                        SoCal Sci shutter at exp. midpoint
+SOLCALSH  closed                                      SoCal Cal shutter at exp. midpoint
+CALSSSHT  closed                                      Cal SciSky shutter at exp. midpoint
+AOHATCH   False                                       AO hatch at exp. midpoint
+FIUHTCH   False                                       FIU hatch at exp. midpoint
 IMTYPE    Object                                      Image Type
 TARGNAME  42813                                       KPF Target Name
 DCSNAME   42813                                       DCS Target Name
@@ -188,11 +202,16 @@ FIUMODE   Observing                                   FIU operating mode
 FFFB      Yes                                         Flatfield fiber on
 TOTCNTS   1.1299e+08 1.959e+08 1.8185e+08 1.1561e+08  Total Exp. Meter counts (DN) - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
 TOTCORR   2.3994e+08 4.1319e+08 3.8088e+08 2.403e+08  Total Exp. Meter counts (DN), corrected for dead time - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
-ETAV1C1T  23.990154                                   Etalon Vescent 1 Channel 1 temperature
-ETAV1C2T  23.79949                                    Etalon Vescent 1 Channel 2 temperature
-ETAV1C3T  23.599987                                   Etalon Vescent 1 Channel 3 temperature
-ETAV1C4T  23.900118                                   Etalon Vescent 1 Channel 4 temperature
-ETAV2C3T  24.000668                                   Etalon Vescent 2 Channel 3 temperature
+ETAV1C1T  23.990154                                   Etalon Vescent 1 Ch 1 temp (Housing)
+ETAV1C2T  23.79949                                    Etalon Vescent 1 Ch 2 temp (Inner Side Shield)
+ETAV1C3T  23.599987                                   Etalon Vescent 1 Ch 3 temp (Inner Bottom Lid)
+ETAV1C4T  23.900118                                   Etalon Vescent 1 Ch 4 temp (Outer Etalon Chamber)
+ETAV2C3T  24.000668                                   Etalon Vescent 2 Ch 3 temp (Inner Top Lid Temp)
+ETAV1C1S  24.000000                                   Etalon Vescent 1 Ch 1 temp set point (Housing)
+ETAV1C2S  23.800000                                   Etalon Vescent 1 Ch 2 temp set point (Inner Side Shield)
+ETAV1C3S  23.600000                                   Etalon Vescent 1 Ch 3 temp set point (Inner Bottom Lid)
+ETAV1C4S  23.900000                                   Etalon Vescent 1 Ch 4 temp set point (Outer Etalon Chamber)
+ETAV2C3S  24.000000                                   Etalon Vescent 2 Ch 3 temp set point (Inner Top Lid Temp)
 PTHDAY    1.422E-05                                   Last ThAr Daily power meter measurement (Watts)
 PTHAU     1.422E-05                                   Last ThAr Gold power meter measurement (Watts)
 PUDAY     1.422E-05                                   Last UNe Daily power meter measurement (Watts)
@@ -227,6 +246,9 @@ Keyword   Value (example)                             Comment
 ========  ==========================================  =========
 DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used to make 2D (in the time series database, DRPTAG is listed as DRPTAG2D)
 DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make 2D (in the time series database, DRPHSH is listed as DRPHSH2D)
+DRPTAGMF  v2.5.2                                      DRPTAG of master flat file used to make 2D
+DRPTAGMB  v2.5.2                                      DRPTAG of master bias file used to make 2D
+DRPTAGMD  v2.5.2                                      DRPTAG of master dark file used to make 2D
 NOTJUNK   1                                           QC: 1 = not in the list of junk files check; this QC is rerun on L1 and L2
 DATAPRL0  1                                           QC: 1 = L0 data products present with non-zero array sizes
 KWRDPRL0  1                                           QC: 1 = L0 expected keywords present 
@@ -235,6 +257,7 @@ EMSAT     1                                           QC: 1 = Exp Meter not satu
 EMNEG     1                                           QC: 1 = Exp Meter not negative flux; 0 = 20+ consecutive pixels in summed spectra with negative flux 
 DATAPR2D  1                                           QC: 1 = 2D data products present with non-zero array sizes
 CAHKPR2D  1                                           QC: 1 = 2D CaHK data present with non-zero array sizes
+TELEPRL0  1                                           QC: 1 = TELEMETRY extension present in L0
 GOODREAD  1                                           QC: 1 = Exposure time not consistent with CCD readout error (~6 sec)
 POS2DSNR  1                                           QC: 1 = 2D Red and Green SNR (data/var^0.5) not significantly negative
 LOWBIAS   1                                           QC: 1 = 2D bias flux not low
@@ -248,7 +271,17 @@ GUIDGOOD  1                                           QC: 1 = Guider RMS and bia
 GUIDSAT   1                                           QC: 1 = Guider avg frame not saturated and <10% of frames have a sat pixel
 TARGPLAU  1                                           QC: 1 = TARG kwds present with plausible values
 AGITOK    1                                           QC: 1 = Agitator running with speed above minimum
+NOTVIGN   1                                           QC: 1 = Telescope not vignetted by dome
+GOODEL    1                                           QC: 1 = Telescope elevation above 30 deg (for ADC)
+ETASTEMP  1                                           QC: 1 = Etalon inner chamber temps near set points
+FLXSTATS  1                                           QC: 1 = Flux stats in/out of order trace as expected
+HKSHTOPN  1                                           QC: 1 = HK shutter open and HK image requested; not bias/dark exposure
+GRCCD10T  1                                           QC: 1 = Green CCD > 10 mK from temp set point
+GRCCD1T   1                                           QC: 1 = Green CCD > 1000 mK (1 C) from temp set point
+RDCCD10T  1                                           QC: 1 = Red CCD > 10 mK from temp set point
+RDCCD1T   1                                           QC: 1 = Red CCD > 1000 mK (1 C) from temp set point
 ISGOOD    1                                           QC: 1 = all other QC tests passed
+CLEARSKY  1                                           QC: 1 = Clear sky conditions for SoCal
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
@@ -257,6 +290,14 @@ RNRED1    4.0376                                      Read noise for RED_AMP1 [e
 RNRED2    4.12717                                     Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
 RNRED3    4.0376                                      Read noise for RED_AMP3 [e-] (third amplifier region on Red CCD)
 RNRED4    4.12717                                     Read noise for RED_AMP4 [e-] (fourth amplifier region on Red CCD)
+RNNGGR1   1.0                                         Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan
+RNNGGR2   1.0                                         Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan
+RNNGGR3   1.0                                         Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan
+RNNGGR4   1.0                                         Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan
+RNNGRD1   1.0                                         Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan
+RNNGRD2   1.0                                         Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan
+RNNGRD3   1.0                                         Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan
+RNNGRD4   1.0                                         Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan
 GREENTRT  46.804                                      Green CCD read time [sec]
 REDTRT    46.839                                      Red CCD read time [sec]
 READSPED  'regular '                                  Categorization of CCD read speed ('regular' or 'fast')
@@ -297,27 +338,27 @@ GDRFRSAT  0.0                                         Guider: frac of frames w/i
 GDRNSAT   10                                          Guider: number of 90% saturated pix in co-added image
 MOONSEP   55.0                                        Separation between Moon and target star (deg)
 SUNALT    -45.0                                       Altitude of Sun (deg); negative = below horizon
-MEDGRN1   3.9642348e+07                               Median for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
-P16GRN1   3.9340188e+07                               16th-percentile for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
-P84GRN1   3.9340188e+07                               84th-percentile for GREEN_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
-MEDGRN2   3.9642348e+07                               Median for GREEN_AMP2 [DN] (includes overscan region, excludes NaNs explicitly)
-P16GRN2   3.9340188e+07                               16th-percentile for GREEN_AMP2 [DN] (includes overscan region, excludes NaNs explicitly)
-P84GRN2   3.9340188e+07                               84th-percentile for GREEN_AMP2 [DN] (includes overscan region, excludes NaNs explicitly)
-MEDGRN3   3.9642348e+07                               Median for GREEN_AMP3 [DN] (includes overscan region, excludes NaNs explicitly)
-P16GRN3   3.9340188e+07                               16th-percentile for GREEN_AMP3 [DN] (includes overscan region, excludes NaNs explicitly)
-P84GRN3   3.9340188e+07                               84th-percentile for GREEN_AMP3 [DN] (includes overscan region, excludes NaNs explicitly)
-MEDGRN4   3.9642348e+07                               Median for GREEN_AMP4 [DN] (includes overscan region, excludes NaNs explicitly)
-P16GRN4   3.9340188e+07                               16th-percentile for GREEN_AMP4 [DN] (includes overscan region, excludes NaNs explicitly)
-P84GRN4   3.9340188e+07                               84th-percentile for GREEN_AMP4 [DN] (includes overscan region, excludes NaNs explicitly)
-MEDRED1   3.9642348e+07                               Median for RED_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
-P16RED1   3.9340188e+07                               16th-percentile for RED_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
-P84RED1   3.9340188e+07                               84th-percentile for RED_AMP1 [DN] (includes overscan region, excludes NaNs explicitly)
-MEDRED2   3.9642348e+07                               Median for RED_AMP2 [e-] (includes overscan region, excludes NaNs explicitly)
-P16RED2   3.9340188e+07                               16th-percentile for RED_AMP2 [DN] (includes overscan region, excludes NaNs explicitly)
-P84RED2   3.9340188e+07                               84th-percentile for RED_AMP2 [DN] (includes overscan region, excludes NaNs explicitly)
-MEDCAHK   3.9642348e+07                               Median for CA_HK_AMP [DN] (includes overscan region, excludes NaNs explicitly)
-P16CAHK   3.9340188e+07                               16th-percentile for CA_HK_AMP [DN] (includes overscan region, excludes NaNs explicitly)
-P84CAHK   3.9340188e+07                               84th-percentile for CA_HK_AMP [DN] (includes overscan region, excludes NaNs explicitly)
+MEDGRN1   3.9642348e+07                               Median for GREEN_AMP1 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P16GRN1   3.9340188e+07                               16th-percentile for GREEN_AMP1 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P84GRN1   3.9340188e+07                               84th-percentile for GREEN_AMP1 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDGRN2   3.9642348e+07                               Median for GREEN_AMP2 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P16GRN2   3.9340188e+07                               16th-percentile for GREEN_AMP2 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P84GRN2   3.9340188e+07                               84th-percentile for GREEN_AMP2 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDGRN3   3.9642348e+07                               Median for GREEN_AMP3 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P16GRN3   3.9340188e+07                               16th-percentile for GREEN_AMP3 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P84GRN3   3.9340188e+07                               84th-percentile for GREEN_AMP3 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDGRN4   3.9642348e+07                               Median for GREEN_AMP4 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P16GRN4   3.9340188e+07                               16th-percentile for GREEN_AMP4 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P84GRN4   3.9340188e+07                               84th-percentile for GREEN_AMP4 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDRED1   3.9642348e+07                               Median for RED_AMP1 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P16RED1   3.9340188e+07                               16th-percentile for RED_AMP1 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P84RED1   3.9340188e+07                               84th-percentile for RED_AMP1 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDRED2   3.9642348e+07                               Median for RED_AMP2 in L0 [e-] (includes overscan region, excludes NaNs explicitly)
+P16RED2   3.9340188e+07                               16th-percentile for RED_AMP2 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P84RED2   3.9340188e+07                               84th-percentile for RED_AMP2 in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+MEDCAHK   3.9642348e+07                               Median for CA_HK_AMP in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P16CAHK   3.9340188e+07                               16th-percentile for CA_HK_AMP in L0 [DN] (includes overscan region, excludes NaNs explicitly)
+P84CAHK   3.9340188e+07                               84th-percentile for CA_HK_AMP in L0 [DN] (includes overscan region, excludes NaNs explicitly)
 GR2DF99P  30552.46                                    99th percentile flux in 2D Green image (e-)
 GR2DF90P  14860.21                                    90th percentile flux in 2D Green image (e-)
 GR2DF50P  234.62                                      50th percentile flux in 2D Green image (e-)
@@ -326,13 +367,61 @@ RD2DF99P  62520.97                                    99th percentile flux in 2D
 RD2DF90P  40589.16                                    90th percentile flux in 2D Red image (e-)
 RD2DF50P  613.23                                      50th percentile flux in 2D Red image (e-)
 RD2DF10P  128.83                                      10th percentile flux in 2D Red image (e-)
-HK2DF99P  62520.97                                    99th percentile flux in the 2D header (e-)
-HK2DF90P  40589.16                                    90th percentile flux in the 2D header (e-)
-HK2DF50P  613.23                                      50th percentile flux in the 2D header (e-)
-HK2DF10P  128.83                                      10th percentile flux in the 2D header (e-)
+HK2DF99P  62520.97                                    99th percentile flux in HK image (e-)
+HK2DF90P  40589.16                                    90th percentile flux in HK image (e-)
+HK2DF50P  613.23                                      50th percentile flux in HK image (e-)
+HK2DF10P  128.83                                      10th percentile flux in HK image (e-)
+FINTRG9F  44792.59462213099                           Flux inside 2D padded order trace regions (Green, 99.5th %ile, e-)
+FOUTRG9F  42712.30999372024                           Flux outside 2D padded order trace regions (Green, 99.5th %ile, e-)
+FRATRG9F  39266.75287925928                           Flux ratio (in/out) in 2D padded order trace regions (Green, 99.5th %ile)
+FINTRG99  32499.71441714234                           Flux inside 2D padded order trace regions (Green, 99th %ile, e-)
+FOUTRG99  24305.818315405733                          Flux outside 2D padded order trace regions (Green, 99th %ile, e-)
+FRATRG99  2111.0515642358464                          Flux ratio (in/out) in 2D padded order trace regions (Green, 99th %ile)
+FINTRG98  112.77464436023686                          Flux inside 2D padded order trace regions (Green, 98th %ile, e-)
+FOUTRG98  269.6901086358044                           Flux outside 2D padded order trace regions (Green, 98th %ile, e-)
+FRATRG98  255.33818562687816                          Flux ratio (in/out) in 2D padded order trace regions (Green, 98th %ile)
+FINTRG95  242.61130151516446                          Flux inside 2D padded order trace regions (Green, 95th %ile, e-)
+FOUTRG95  225.50535785752024                          Flux outside 2D padded order trace regions (Green, 95th %ile, e-)
+FRATRG95  210.497150778097                            Flux ratio (in/out) in 2D padded order trace regions (Green, 95th %ile)
+FINTRG90  139.25304642797374                          Flux inside 2D padded order trace regions (Green, 90th %ile, e-)
+FOUTRG90  52.17332932663871                           Flux outside 2D padded order trace regions (Green, 90th %ile, e-)
+FRATRG90  166.0891266969673                           Flux ratio (in/out) in 2D padded order trace regions (Green, 90th %ile)
+FINTRG50  167.27740854293958                          Flux inside 2D padded order trace regions (Green, median, e-)
+FOUTRG50  161.85046877053625                          Flux outside 2D padded order trace regions (Green, median, e-)
+FRATRG50  144.119477807159                            Flux ratio (in/out) in 2D padded order trace regions (Green, median)
+FINTRG10  115.4686333071965                           Flux inside 2D padded order trace regions (Green, 10th %ile, e-)
+FOUTRG10  15.15982320234374                           Flux outside 2D padded order trace regions (Green, 10th %ile, e-)
+FRATRG10  2.161538199990934                           Flux ratio (in/out) in 2D padded order trace regions (Green, 10th %ile)
+FINTRR9F  95470.82761046116                           Flux inside 2D padded order trace regions (Red, 99.5th %ile, e-)
+FOUTRR9F  92136.58954051501                           Flux outside 2D padded order trace regions (Red, 99.5th %ile, e-)
+FRATRR9F  88512.13858512425                           Flux ratio (in/out) in 2D padded order trace regions (Red, 99.5th %ile)
+FINTRR99  79526.37170911182                           Flux inside 2D padded order trace regions (Red, 99th %ile, e-)
+FOUTRR99  67332.19863683594                           Flux outside 2D padded order trace regions (Red, 99th %ile, e-)
+FRATRR99  12250.720295831863                          Flux ratio (in/out) in 2D padded order trace regions (Red, 99th %ile)
+FINTRR98  448.7579839841067                           Flux inside 2D padded order trace regions (Red, 98th %ile, e-)
+FOUTRR98  659.4143686055465                           Flux outside 2D padded order trace regions (Red, 98th %ile, e-)
+FRATRR98  573.7167008946659                           Flux ratio (in/out) in 2D padded order trace regions (Red, 98th %ile)
+FINTRR95  536.7420868538279                           Flux inside 2D padded order trace regions (Red, 95th %ile, e-)
+FOUTRR95  492.4004219159836                           Flux outside 2D padded order trace regions (Red, 95th %ile, e-)
+FRATRR95  449.5952349484368                           Flux ratio (in/out) in 2D padded order trace regions (Red, 95th %ile)
+FINTRR90  275.84219353528556                          Flux inside 2D padded order trace regions (Red, 90th %ile, e-)
+FOUTRR90  157.7923244678131                           Flux outside 2D padded order trace regions (Red, 90th %ile, e-)
+FRATRR90  144.78123643613023                          Flux ratio (in/out) in 2D padded order trace regions (Red, 90th %ile)
+FINTRR50  160.59596905029133                          Flux inside 2D padded order trace regions (Red, median, e-)
+FOUTRR50  164.9062757570359                           Flux outside 2D padded order trace regions (Red, median, e-()
+FRATRR50  161.50752145919384                          Flux ratio (in/out) in 2D padded order trace regions (Red, median)
+FINTRR10  149.7618155240416                           Flux inside 2D padded order trace regions (Red, 10th %ile, e-)
+FOUTRR10  44.41206089185467                           Flux outside 2D padded order trace regions (Red, 10th %ile, e-)
+FRATRR10  2.843978536330172                           Flux ratio (in/out) in 2D padded order trace regions (Red, 10th %ile)
 BIASFILE  kpf_20250510_master_bias_autocal-bias.fits  Master bias file used to process this 2D file
 DARKFILE  kpf_20250510_master_dark_autocal-dark.fits  Master dark file used to process this 2D file
 FLATFILE  kpf_20250510_master_flat.fits               Master flat file used to process this 2D file
+BIASDIR   '/data/masters/20250510/'                   Directory for BIASFILE
+DARKDIR   '/data/masters/20250510/'                   Directory for DARKFILE
+FLATDIR   '/data/masters/20250510/'                   Directory for FLATFILE
+BIASDONE  1                                           Bias subtracted
+DARKDONE  1                                           Dark subtracted
+FLATDONE  1                                           Flat divided
 AGEBIAS   0                                           Age of master bias file compared to this file (whole days)
 AGEDARK   0                                           Age of master dark file compared to this file (whole days)
 AGEFLAT   0                                           Age of master flat file compared to this file (whole days)
@@ -344,6 +433,10 @@ XDSPSYG1  0.00133                                     Uncertainty [pix] in XDSPD
 XDSPSYR1  0.00217                                     Uncertainty [pix] in XDSPDYR1
 XDSPSYG2  0.00144                                     Uncertainty [pix] in XDSPDYG2
 XDSPSYR2  0.00058                                     Uncertainty [pix] in XDSPDYR2
+DNIMEAS   500.0                                       Mean DNI from pyrheliometer during the exposure [W/m^2]
+DNICLR    500.0                                       Theoretical DNI in perfect conditions [W/m^2]
+DNIRMS    1.0                                         RMS of DNIMEAS during the exposure [W/m^2]
+CLEARIDX  3.0                                         SoCal clearness index (<4==CLEARSKY)
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
@@ -385,11 +478,18 @@ OLDWLS2   1                                                                     
 OLDTRAC   1                                                                        QC: 1 = TRACFILE within 5 days of this obs
 OLDLAMP   1                                                                        QC: 1 = LAMPFILE within 5 days of this obs
 FLATSNR   1                                                                        QC: 1 = SNR of flat greater minimum threshold and less than maximum threshold
-LFCLINES  1                                                                        QC: 1 = Number and distribution of LFC lines above threshold ampltidue is sufficient for all orders/orderlets available
+LFCLINES  1                                                                        QC: 1 = Number and distribution of LFC lines above threshold ampltidue is sufficient for all orders 2-34 (Green), 1-31 (Red)
+LFCLINEP  1                                                                        QC: 1 = Number and distribution of LFC lines above threshold ampltidue is sufficient for all orders 15-34 (Green), 1-31 (Red) - partial wavelength coverage
 ETALINES  1                                                                        QC: 1 = Number and distribution of Etalon lines above threshold ampltidue is sufficient for all orders/orderlets available
 WILDWSCI  1                                                                        QC: 1 = SCI WLS not wild (stdev compared to reference < 5 pixels)
 WILDWSKY  1                                                                        QC: 1 = SKY WLS not wild (stdev compared to reference < 5 pixels)
 WILDWCAL  1                                                                        QC: 1 = CAL WLS not wild (stdev compared to reference < 5 pixels)
+NSATGS2   23                                                                       Number of saturated lines in Green SCI2
+NSATGC    23                                                                       Number of saturated lines in Green CAL
+NSATGK    23                                                                       Number of saturated lines in Green SKY
+NSATRS2   23                                                                       Number of saturated lines in Red SCI2
+NSATRC    23                                                                       Number of saturated lines in Red CAL
+NSATRK    23                                                                       Number of saturated lines in Red SKY
 SNRSC452  250.0                                                                    SNR of L1 SCI spectrum (SCI1+SCI2+SCI3; 95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRSK452  250.0                                                                    SNR of L1 SKY spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
 SNRCL452  250.0                                                                    SNR of L1 CAL spectrum (95th %ile) near 452 nm (second bluest order); on Green CCD
@@ -891,12 +991,6 @@ STDWRC28  0.01379038876707553                                                   
 STDWRC29  0.00914032555395159                                                      stddev(WLS-ref) [pix], Red CAL order 29         
 STDWRC30  0.01440898205622853                                                      stddev(WLS-ref) [pix], Red CAL order 30         
 STDWRC31  0.00899757354138056                                                      stddev(WLS-ref) [pix], Red CAL order 31         
-NSATGS2   23                                                                       Number of saturated lines in Green SCI2
-NSATGC    23                                                                       Number of saturated lines in Green CAL
-NSATGK    23                                                                       Number of saturated lines in Green SKY
-NSATRS2   23                                                                       Number of saturated lines in Red SCI2
-NSATRC    23                                                                       Number of saturated lines in Red CAL
-NSATRK    23                                                                       Number of saturated lines in Red SKY
 ========  =======================================================================  =========
 
 The keywords above related to the signal-to-noise ratio in L1 spectra all start with 'SNR'.  These measurements were made using modules/quicklook/src/analyze_l1.py.  The image below (click to enlarge) shows the spectral orders and wavelengths at which SNR is measured.
@@ -921,25 +1015,33 @@ Keyword   Value (example)                             Comment
 ========  ==========================================  =========
 DRPTAG    v2.5.2                                      Git version number of KPF-Pipeline used to make L2 (in the time series database, DRPTAG is listed as DRPTAGL2 for L2 files)
 DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'  Git commit hash version of KPF-Pipeline used to make L2 (in the time series database, DRPHSH is listed as DRPHSHL2 for L2 files)
+TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
+DATAPRL2  1                                           QC: 1 = L2 data is present
+QCPCBCV   1                                           QC: 1 = PCBCV values within acceptable range
 CCFRV     19.4247572623                               Average of CCD1RV and CCD2RV using weights from RV table
 CCFERV    0.001175044                                 Error on CCFRV
 CCFRVC    19.4247572623                               Average of CCD1RVC and CCD2RVC using weights from RV table
 CCFERVC   0.001175044                                 Error on CCFRVC
-CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders
+CCFBJD    2460662.094073044                           Weighted average of BJD times for spectral orders (for solar observations, HJD is used)
 CCFBCV    21.751977696646478                          Weighted average of barycentric RV (km/s) for spectral orders
-BJDSTD    41.66004757176901                           Weighted stddev of BJD for spectral orders (sec)        
-BJDRNG    147.1386909484863                           Range(BJD) for non-zero-weight spectral orders (sec)    
-BCVSTD    0.7123626558325037                          Weighted stddev of BCV for spectral orders (m/s)        
-BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (m/s)    
+BJDSTD    41.66004757176901                           Weighted stddev of BJD for spectral orders (sec) (for solar observations, HJD is used)
+BJDRNG    147.1386909484863                           Range(BJD) for non-zero-weight spectral orders (sec)
+BCVSTD    0.7123626558325037                          Weighted stddev of BCV for spectral orders (m/s)
+BCVRNG    2.516760888678249                           Range(BCV) for non-zero-weight spectral orders (m/s)
 MAXPCBCV  0.6894375932041458                          Maximum % change from CCFBCV for non-zero-weight spectral orders (%)
 MINPCBCV  -0.47031634755679774                        Minimum % change from CCFBCV for non-zero-weight spectral orders (%)
-TIMCHKL2  1                                           QC: 1 = consistent times in L2 file
-DATAPRL2  1                                           QC: 1 = L2 data is present
-QCPCBCV   1                                           QC: 1 = PCBCV values within acceptable range
+DRFTOBS   KP.20250708.20189.17                        ObsID of 1st reference drift observation
+DRFTOBS2  KP.20250708.20189.17                        ObsID of 2nd reference drift observation
+DRFTDEL   1.2114297222222221                          Time to 1st drift correction observation (hr)
+DRFTDEL2  1.2114297222222221                          Time to 2nd drift correction observation (hr)
+DRFTCOR   1                                           Drift correction applied (true/false)
+DRFTRV    0.2738220612333333                          Drift correction RV (m/s)
+DRFTMETH  nearest_interpolation                       Drift correction method name
+AGESLFC   0.621                                       Days since last good LFC frame (depends on processing order)
+AGEULFC   0.621                                       Days until next good LFC frame (depends on processing order)
+AGESETA   0.621                                       Days since last good Etalon frame (depends on processing order)
+AGEUETA   0.621                                       Days until next good Etalon frame (depends on processing order)
 ========  ==========================================  =========
-
-Radial Velocities
------------------
 
 L2 RV Extension Header
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -971,7 +1073,7 @@ CCD1RVS        18.2490292404      RV (km/s) of SKY (all orders, Green CCD); corr
 CCD1ERVS       0.0                Error on CCD1RVS
 CCD1RV         19.395608349       RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Green CCD); corrected for barycentric RV
 CCD1ERV        0.0007214256       Error on CCD1RV  
-CCD1BJD        2460237.787166463  Photon-weighted mid-time (BJD) for CCD1RV
+CCD1BJD        2460237.787166463  Photon-weighted mid-time (BJD) for CCD1RV (for solar observations, HJD is used)
 CCD2ROW        35                 Row number in the RV table (below) of the bluest order on the Red CCD
 CCD2RV1        19.4423673077      RV (km/s) of SCI1 (all orders, Red CCD); corrected for barycentric RV
 CCD2ERV1       0.004087698        Error on CCD2RV1
@@ -985,7 +1087,7 @@ CCD2RVS        51.9730319697      RV (km/s) of SKY (all orders, Red CCD); correc
 CCD2ERVS       0.0                Error on CCD2RVS
 CCD2RV         19.4069470745      RV (km/s) of average of SCI1/SCI2/SCI3 (all orders, Red CCD); corrected for barycentric RV
 CCD2ERV        0.0021111409       Error on CCD2RV  
-CCD2BJD        2460237.787150946  Photon-weighted mid-time (BJD) for CCD2RV
+CCD2BJD        2460237.787150946  Photon-weighted mid-time (BJD) for CCD2RV (for solar observations, HJD is used)
 =============  =================  =========
 
 L2 RV Extension
@@ -1009,7 +1111,7 @@ CAL RV         0.0                RV (km/s) of CAL (Green CCD); corrected for ba
 CAL error      0.0                error on 'CAL RV'
 SKY RV         0.0                RV (km/s) of sKY (Green CCD); corrected for barycentric RV
 SKY error      0.0                error on 'SKY RV'
-CCFBJD         2.460238e+06       Photon-weighted mid-time (BJD) for CCD1RV
+CCFBJD         2.460238e+06       Photon-weighted mid-time (BJD) for CCD1RV (for solar observations, HJD is used)
 Bary_RVC       -8.729925          Barycentric RV (km/s)
 source1        GREEN_SCI_FLUX1    name of array for orderlet1 (SCI1)
 source2        GREEN_SCI_FLUX2    name of array for orderlet2 (SCI2)

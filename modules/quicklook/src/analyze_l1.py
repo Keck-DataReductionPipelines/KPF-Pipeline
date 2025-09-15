@@ -209,6 +209,56 @@ class AnalyzeL1:
             return None
 
 
+    def measure_master_age(self, kwd='TRACFILE', verbose=False):
+        '''
+        Computes the number of whole days between the observation and a master file 
+        listed in the PRIMARY header.  
+
+        Arguments:
+            kwd - keyword name of master file (usually 'TRACFILE' or 'LAMPFILE')
+    
+        Returns:
+            age_master_file - number of days between the observation and the
+                              date of observations for master file
+        '''
+        
+        try:
+            date_obs_str = self.header['DATE-MID']
+            date_obs_datetime = datetime.strptime(date_obs_str, "%Y-%m-%dT%H:%M:%S.%f").date()        
+    
+            if verbose:
+                self.logger.info(f'Date of observation: {date_obs_str}')
+
+            if kwd in self.header:
+                master_filename = self.header[kwd]
+                if master_filename != 0:
+                    master_filename_datetime = get_datecode_from_filename(master_filename, datetime_out=True)
+                    master_filename_datetime = master_filename_datetime.replace(hour=0, minute=0, second=0, microsecond=0).date()
+                    if verbose:
+                        self.logger.info(f'Date of {kwd}: {master_filename_datetime.strftime("%Y-%m-%d")}')
+                    
+                    age_master_file = (master_filename_datetime - date_obs_datetime).days
+                    if verbose:
+                        self.logger.info(f'Time between observation and {kwd}: {age_master_file}')
+        
+                    return age_master_file
+                else:
+                  age_master_file = -99 # standard value indicating keyword not available
+                  return age_master_file
+                
+            else:
+                age_master_file = -99 # standard value indicating keyword not available
+                return age_master_file
+
+        except KeyError as e:
+            self.logger.info(f"KeyError: {e}")
+            pass
+
+        except Exception as e:
+            self.logger.error(f"Problem with determining age of {kwd}: {e}\n{traceback.format_exc()}")
+            return None
+
+
     def measure_good_comb_orders(self, chip='green', 
                                        intensity_thresh=40**2, 
                                        min_lines=100, 
@@ -569,7 +619,7 @@ class AnalyzeL1:
         ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
 
         # Set titles and labels for each subplot
-        ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=16)
+        ax1.set_title(fr"{self.ObsID} - {self.name}: $\mathrm{{SNR}}_{{{self.snr_percentile}}}$ = {self.snr_percentile}th percentile (Signal / $\sqrt{{\mathrm{{Variance}}}}$)", fontsize=16)
         ax3.set_xlabel('Wavelength [Ang]', fontsize=14)
         ax1.set_ylabel(r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ - SCI', fontsize=14)
         ax2.set_ylabel(r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ - SKY', fontsize=14)
@@ -652,7 +702,7 @@ class AnalyzeL1:
         ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
 
         # Set titles and labels for each subplot
-        ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal)', fontsize=16)
+        ax1.set_title(fr"{self.ObsID} - {self.name}: $\mathrm{{FLUX}}_{{{self.snr_percentile}}}$ = {self.snr_percentile}th percentile (Signal)", fontsize=16)
         ax3.set_xlabel('Wavelength [Ang]', fontsize=14)
         ax1.set_ylabel(r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ - SCI', fontsize=14)
         ax2.set_ylabel(r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ - SKY', fontsize=14)
@@ -813,7 +863,8 @@ class AnalyzeL1:
         flux = np.concatenate((flux_green,flux_red), axis = 0)
 
         # Set up figure
-        cm = plt.cm.get_cmap('rainbow')
+        #cm = plt.cm.get_cmap('rainbow')
+        cm = plt.get_cmap('rainbow')
         gs = gridspec.GridSpec(n_orders_per_panel, 1 , height_ratios=np.ones(n_orders_per_panel))
         fig, ax = plt.subplots(int(np.shape(wav)[0]/n_orders_per_panel)+1,1, sharey=False, 
                                figsize=(20,16), tight_layout=True)
@@ -904,8 +955,10 @@ class AnalyzeL1:
         return source
 
 
-    def plot_L1_spectrum_one_row(self, variance=False, data_over_sqrt_variance=False, 
-                                       xlog=True, fig_path=None, show_plot=False):
+    def plot_L1_spectrum_one_row(self, orderlets=['cal', 'sci1', 'sci2', 'sci3', 'sky'],
+                                       variance=False, data_over_sqrt_variance=False, 
+                                       xlog=True, tall=False, 
+                                       fig_path=None, show_plot=False):
         """
         Generate a rainbow-colored plot L1 spectrum of all orders (separate panels) 
         in a single row.
@@ -923,11 +976,13 @@ class AnalyzeL1:
         """
         
         self.measure_orderlet_flux_ratios()
+        norderlets = len(orderlets)
         
-        fig, axes = plt.subplots(5, 1, sharex=True, figsize=(20, 16))
-        cm = plt.cm.get_cmap('rainbow')
+        fig, axes = plt.subplots(norderlets, 1, sharex=True, figsize=(20, 0.5+norderlets/5*15.5*(1+2*tall)), squeeze=False)
+        axes = axes.flatten()
+        #cm = plt.cm.get_cmap('rainbow')
+        cm = plt.get_cmap('rainbow')
 
-        orderlets = ['cal', 'sci1', 'sci2', 'sci3', 'sky']
         for ax, orderlet in zip(axes, orderlets):
 
             # Define wavelength and flux arrays
@@ -989,7 +1044,7 @@ class AnalyzeL1:
                 xlabels = np.linspace(4500, 8500, 9) # np.logspace(np.log10(4450), np.log10(8700), num=10)
                 ax.set_xticks(xlabels)
                 ax.set_xticklabels([f'{label:.0f}' for label in xlabels])
-            ax.yaxis.set_tick_params(labelsize=16)
+            ax.yaxis.set_tick_params(labelsize=15)
 
             ylabel = orderlet.upper()
             if variance:
@@ -1030,7 +1085,7 @@ class AnalyzeL1:
 
         # Set common X-axis label
         axes[-1].set_xlabel('Wavelength (Ang)', fontsize = 20)
-        axes[-1].xaxis.set_tick_params(labelsize=16)
+        axes[-1].xaxis.set_tick_params(labelsize=15)
 
         # Add overall title to array of plots
         ax = fig.add_subplot(111, frame_on=False)
