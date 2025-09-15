@@ -91,7 +91,7 @@ if (!$image_check) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'runCleanOldFilesFromDiskInContainer.pl';
-my $version = '1.0';
+my $version = '1.1';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -106,6 +106,7 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/runCleanOldFilesFromDiskInContainer';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
+
 my $insidecontainersandbox = '/sbx';
 my $insidecontainercode = '/code/KPF-Pipeline';
 
