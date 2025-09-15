@@ -129,7 +129,23 @@ def main():
             )
 
             if result.returncode == 0:
-                # now do drift correction only since the initial L2s should be ingested into the TSDB by this point.
+                # Make quicklook plots for L0 and Masters since they were deleted 
+                # (above) and won't be picked up for processing by new file events.
+                cmd_quicklook = [
+                    'scripts/qlp_parallel.py', '--ncpu', str(args.ncpu), '--l0', '--master',
+                    f'{datecode}', f'{datecode}'
+                ]
+
+                result = subprocess.run(
+                    nice_prefix + cmd_quicklook,
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.DEVNULL, 
+                    text=True,
+                    check=False
+                )
+                
+                # Now do drift correction only since the initial L2s should be 
+                # ingested into the TSDB by this point.
                 cmd_kpf = [
                     'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L0/{datecode}/',
                     '-c', 'configs/kpf_drp_do_only_drift.cfg', '-r', 'recipes/kpf_drp.recipe'
