@@ -28,9 +28,13 @@ def main(start_date, end_date, db_path, force):
       add backend as an argument
     """
 
-    myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
+    if db_path:
+        backend = 'sqlite'
+    else:
+        backend = 'psql'
+    myTS = AnalyzeTimeSeries(db_path=db_path, backend=backend)
     myTS.db.print_db_status()
-    myTS.db.ingest_dates_to_db(start_date, end_date, reverse=True, force=force)
+    myTS.db.ingest_dates_to_db(start_date, end_date, reverse=True, force_ingest=force)
     myTS.db.print_db_status()
 
 
