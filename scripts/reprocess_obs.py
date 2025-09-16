@@ -84,73 +84,42 @@ def main():
 
     nice_prefix = [] if args.not_nice else ['nice', '-n', '15']
 
-    for single_date in tqdm(valid_dates, desc="Reprocessing Dates", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}"):
-        datecode = single_date.strftime('%Y%m%d')
-
-        if datecode in processed_dates:
-            tqdm.write(f"Skipping previously processed datecode: {datecode}")
-            continue
-
-        tqdm.write(f"Reprocessing {datecode} at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} with {git_tag} (branch: {git_branch})")
-
-        dirs_to_remove = [
-            f'/data/2D/{datecode}/', f'/data/L1/{datecode}/', f'/data/L2/{datecode}/',
-            f'/data/QLP/{datecode}/', f'/data/outliers/{datecode}/',
-            f'/data/logs/{datecode}/', f'/data/logs_QLP/{datecode}/'
-        ]
-
-        cmd_kpf = [
-            'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L0/{datecode}/',
-            '-c', 'configs/kpf_drp.cfg', '-r', 'recipes/kpf_drp.recipe'
-        ]
-
-        if args.dry_run:
-            if args.delete:
-                for directory in dirs_to_remove:
-                    print(f'find {directory} -mindepth 1 -delete')
-            print(' '.join(nice_prefix + cmd_kpf))
-        else:
-            if args.delete:
-                for directory in dirs_to_remove:
-                    if os.path.exists(directory):
-                        result = subprocess.run(['find', directory, '-mindepth', '1', '-delete', '-print'], capture_output=True, text=True)
-                        deleted_files = result.stdout.strip().split('\n') if result.stdout else []
-                        if args.verbose:
-                            print(f"Deleted {len(deleted_files)} files from {directory}")
-
-            start_time = datetime.datetime.now(local_tz)
-
-            result = subprocess.run(
-                nice_prefix + cmd_kpf,
-                stdout=subprocess.DEVNULL, 
-                stderr=subprocess.DEVNULL, 
-                text=True,
-                check=False
-            )
-
-            if result.returncode == 0:
-                # Make quicklook plots for L0 and Masters since they were deleted 
-                # (above) and won't be picked up for processing by new file events.
-                cmd_quicklook = [
-                    'scripts/qlp_parallel.py', '--ncpu', str(args.ncpu), '--l0', '--master',
-                    f'{datecode}', f'{datecode}'
-                ]
-
-                result = subprocess.run(
-                    nice_prefix + cmd_quicklook,
-                    stdout=subprocess.DEVNULL, 
-                    stderr=subprocess.DEVNULL, 
-                    text=True,
-                    check=False
-                )
-                
-                # Now do drift correction only since the initial L2s should be 
-                # ingested into the TSDB by this point.
-                cmd_kpf = [
-                    'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L0/{datecode}/',
-                    '-c', 'configs/kpf_drp_do_only_drift.cfg', '-r', 'recipes/kpf_drp.recipe'
-                ]
-
+    with tqdm(valid_dates, desc="Reprocessing Dates", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]") as pbar:
+        for single_date in pbar:
+            datecode = single_date.strftime('%Y%m%d')
+            if datecode in processed_dates:
+                tqdm.write(f"Skipping previously processed datecode: {datecode}")
+                continue
+    
+            tqdm.write(f"Reprocessing {datecode} at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} with {git_tag} (branch: {git_branch})")
+    
+            dirs_to_remove = [
+                f'/data/2D/{datecode}/', f'/data/L1/{datecode}/', f'/data/L2/{datecode}/',
+                f'/data/QLP/{datecode}/', f'/data/outliers/{datecode}/',
+                f'/data/logs/{datecode}/', f'/data/logs_QLP/{datecode}/'
+            ]
+    
+            cmd_kpf = [
+                'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L0/{datecode}/',
+                '-c', 'configs/kpf_drp.cfg', '-r', 'recipes/kpf_drp.recipe'
+            ]
+    
+            if args.dry_run:
+                if args.delete:
+                    for directory in dirs_to_remove:
+                        print(f'find {directory} -mindepth 1 -delete')
+                print(' '.join(nice_prefix + cmd_kpf))
+            else:
+                if args.delete:
+                    for directory in dirs_to_remove:
+                        if os.path.exists(directory):
+                            result = subprocess.run(['find', directory, '-mindepth', '1', '-delete', '-print'], capture_output=True, text=True)
+                            deleted_files = result.stdout.strip().split('\n') if result.stdout else []
+                            if args.verbose:
+                                print(f"Deleted {len(deleted_files)} files from {directory}")
+    
+                start_time = datetime.datetime.now(local_tz)
+    
                 result = subprocess.run(
                     nice_prefix + cmd_kpf,
                     stdout=subprocess.DEVNULL, 
@@ -158,20 +127,35 @@ def main():
                     text=True,
                     check=False
                 )
-
-            end_time = datetime.datetime.now(local_tz)
-            compute_time = end_time - start_time
-            compute_time_str = str(compute_time).split('.')[0]
-
-            if result.returncode != 0:
-                error_message = f"Error processing date {datecode}\nError details:\n{result.stderr}"
-                print(error_message, file=sys.stderr)
-                with open(f"{datecode}_error.log", "w") as err_log:
-                    err_log.write(error_message)
-
-            status = "" if result.returncode == 0 else " FAILED"
-            logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {git_tag:<10}{status}")
-            os.chmod(args.logfile, 0o666)
+    
+                if result.returncode == 0:
+                    # now do drift correction only since the initial L2s should be ingested into the TSDB by this point.
+                    cmd_kpf_drift = [
+                        'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L0/{datecode}/',
+                        '-c', 'configs/kpf_drp_do_only_drift.cfg', '-r', 'recipes/kpf_drp.recipe'
+                    ]
+    
+                    result = subprocess.run(
+                        nice_prefix + cmd_kpf_drift,
+                        stdout=subprocess.DEVNULL, 
+                        stderr=subprocess.DEVNULL, 
+                        text=True,
+                        check=False
+                    )
+    
+                end_time = datetime.datetime.now(local_tz)
+                compute_time = end_time - start_time
+                compute_time_str = str(compute_time).split('.')[0]
+    
+                if result.returncode != 0:
+                    error_message = f"Error processing date {datecode}\nError details:\n{result.stderr}"
+                    print(error_message, file=sys.stderr)
+                    with open(f"{datecode}_error.log", "w") as err_log:
+                        err_log.write(error_message)
+    
+                status = "" if result.returncode == 0 else " FAILED"
+                logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {git_tag:<10}{status}")
+                os.chmod(args.logfile, 0o666)
 
 
 if __name__ == '__main__':
