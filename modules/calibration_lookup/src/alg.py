@@ -9,8 +9,6 @@ import pandas as pd
 from datetime import datetime
 import time
 
-import os
-from modules.Utils.utils import DummyLogger
 from database.modules.utils.kpf_db import KPFDB
 from keckdrpframework.models.arguments import Arguments
 from kpfpipe.config.pipeline_config import ConfigClass
@@ -46,11 +44,7 @@ class GetCalibrations:
         if self.verbose:
             logger_start = time.time()
         if logger == None:
-            if os.path.exists(filename):
-            	self.log = start_logger('GetCalibrations', default_config_path)
-            else:
-                self.log = DummyLogger()
-
+            self.log = start_logger('GetCalibrations', default_config_path)
         else:
             self.log = logger
         if self.verbose:
