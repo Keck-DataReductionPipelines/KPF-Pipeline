@@ -9,6 +9,7 @@ import sys
 import pytz
 from tqdm import tqdm
 from kpfpipe.tools.git_tools import get_git_tag, get_git_branch
+from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
 
 
 def parse_args():
@@ -94,9 +95,13 @@ def main():
         tqdm.write(f"Reprocessing {datecode} at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} with {git_tag} (branch: {git_branch})")
 
         dirs_to_remove = [
-            f'/data/2D/{datecode}/', f'/data/L1/{datecode}/', f'/data/L2/{datecode}/',
-            f'/data/QLP/{datecode}/', f'/data/outliers/{datecode}/',
-            f'/data/logs/{datecode}/', f'/data/logs_QLP/{datecode}/'
+            f'/data/2D/{datecode}/', 
+            f'/data/L1/{datecode}/', 
+            f'/data/L2/{datecode}/',
+            f'/data/QLP/{datecode}/', 
+            f'/data/outliers/{datecode}/',
+            f'/data/logs/{datecode}/', 
+            f'/data/logs_QLP/{datecode}/'
         ]
 
         cmd_kpf = [
@@ -129,7 +134,8 @@ def main():
             )
 
             if result.returncode == 0:
-                # now do drift correction only since the initial L2s should be ingested into the TSDB by this point.
+                # Now do drift correction only since the initial L2s should be 
+                # ingested into the TSDB by this point.
                 cmd_kpf = [
                     'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L0/{datecode}/',
                     '-c', 'configs/kpf_drp_do_only_drift.cfg', '-r', 'recipes/kpf_drp.recipe'
@@ -142,6 +148,28 @@ def main():
                     text=True,
                     check=False
                 )
+                
+                if args.delete:
+                    # Make quicklook plots for L0 and Masters since they were deleted 
+                    # (above) and won't be picked up for processing by new file events.
+                    cmd_quicklook = [
+                        'scripts/qlp_parallel.py', '--ncpu', str(args.ncpu), '--l0', '--master',
+                        f'{datecode}', f'{datecode}'
+                    ]
+    
+                    result = subprocess.run(
+                        nice_prefix + cmd_quicklook,
+                        stdout=subprocess.DEVNULL, 
+                        stderr=subprocess.DEVNULL, 
+                        text=True,
+                        check=False
+                    )
+                                    
+                    # Regenerate time series plots for this datecode
+                    day = datetime.strptime(datecode, "%Y%m%d")
+                    savedir = f'/data/QLP/{datecode}/Time_Series/'
+                    myTS = AnalyzeTimeSeries(backend='psql')
+                    myTS.plot_all_quicklook(day, interval='day', fig_dir=savedir)
 
             end_time = datetime.datetime.now(local_tz)
             compute_time = end_time - start_time
