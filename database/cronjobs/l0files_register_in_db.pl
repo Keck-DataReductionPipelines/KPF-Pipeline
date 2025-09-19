@@ -84,10 +84,10 @@ if (! (defined $dbname)) {
     die "*** Env. var. KPFDBNAME not set; quitting...\n";
 }
 
-my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE};
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE_NAME};
 if (! (defined $containerimage)) {
     $containerimage = 'russkpfmasters:latest';
-    print "*** Using default KPFCRONJOB_DOCKER_IMAGE=$containerimage (env var not set)\n";
+    print "*** Using default KPFCRONJOB_DOCKER_IMAGE_NAME=$containerimage (env var not set)\n";
 }
 
 
