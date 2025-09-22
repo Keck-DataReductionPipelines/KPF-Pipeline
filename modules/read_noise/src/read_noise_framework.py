@@ -5,7 +5,6 @@ import numpy.ma as ma
 import configparser as cp
 import psycopg2
 import re
-import hashlib
 import ast
 
 from modules.quicklook.src.analyze_l0 import AnalyzeL0
