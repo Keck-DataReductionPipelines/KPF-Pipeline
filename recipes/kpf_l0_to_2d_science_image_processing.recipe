@@ -1,7 +1,10 @@
-from modules.quality_control.src.quality_control_framework import QualityControlFramework
+# from modules.quality_control.src.quality_control_framework import QualityControlFramework
 from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
 from modules.var_exts.src.var_exts_framework import VarExtsFramework
-from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
+from modules.image_processing.src.image_process import ImageProcessing
+from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
+from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
+from modules.var_exts.src.var_exts_framework import VarExtsFramework
 
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
