@@ -70,8 +70,26 @@ class DiagnosticsFramework(KPF0_Primitive):
         
         # Measure Diagnostics.
         if 'L0' in self.data_level_str:
-            pass
-            
+            # Read speed
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_L0_read_speed'):
+                try:
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L0_read_speed", style="Bold", color="Blue")}')
+                    self.kpf_object = diagnostics.add_headers_L0_read_speed(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring read speed failed: {e}\n{traceback.format_exc()}")
+            # Non-Gaussian read noise
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_L0_nonGaussian_read_noise'):
+                try:
+                    self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L0_nonGaussian_read_noise", style="Bold", color="Blue")}')
+                    self.kpf_object = diagnostics.add_headers_L0_read_speed(self.kpf_object, logger=self.logger)
+                    exit_code = 1
+                except Exception as e:
+                    self.logger.error(f"Measuring non-Gaussian read noise failed: {e}\n{traceback.format_exc()}")
+
+
         elif '2D' in self.data_level_str:
             # 2D flux
             if (self.diagnostics_name == 'all') or \
@@ -339,7 +357,6 @@ class DiagnosticsFramework(KPF0_Primitive):
 
                 except Exception as e:
                     self.logger.error(f"Measuring stdev WLS diagnostics failed: {e}\n{traceback.format_exc()}")
-
 
 
         elif 'L2' in self.data_level_str:
