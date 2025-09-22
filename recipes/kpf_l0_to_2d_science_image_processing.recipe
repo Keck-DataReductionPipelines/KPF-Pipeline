@@ -1,3 +1,8 @@
+from modules.quality_control.src.quality_control_framework import QualityControlFramework
+from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
+from modules.var_exts.src.var_exts_framework import VarExtsFramework
+from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
+
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
 max_cal_file_age = config.ARGUMENT.max_cal_file_age
