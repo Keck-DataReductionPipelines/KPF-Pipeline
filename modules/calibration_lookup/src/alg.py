@@ -14,6 +14,7 @@ from keckdrpframework.models.arguments import Arguments
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.logger import start_logger
 from astropy.io.fits import getheader
+from modules.Utils.utils import DummyLogger
 
 class GetCalibrations:
     """This utility looks up the associated calibrations for a given datetime and
@@ -44,7 +45,9 @@ class GetCalibrations:
         if self.verbose:
             logger_start = time.time()
         if logger == None:
-            self.log = start_logger('GetCalibrations', default_config_path)
+            # the line below crashes the code in a notebook environment
+            #self.log = start_logger('GetCalibrations', default_config_path)
+            self.log = DummyLogger()
         else:
             self.log = logger
         if self.verbose:

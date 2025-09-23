@@ -299,7 +299,7 @@ class KPFDB:
         68 = Failed to compute checksum
     """
 
-    def __init__(self, logger=None):
+    def __init__(self, logger=None, verbose=False):
         if logger == None:
             self.log = start_logger('KPFDB', DEFAULT_CFG_PATH)
         else:
@@ -353,15 +353,18 @@ class KPFDB:
         # Select database version.
 
         q1 = 'SELECT version();'
-        self.log.debug('q1 = {}'.format(q1))
+        if self.verbose:
+            self.log.debug('q1 = {}'.format(q1))
         self.cur.execute(q1)
         db_version = self.cur.fetchone()
-        self.log.debug('PostgreSQL database version = {}'.format(db_version))
+        if self.verbose:
+            self.log.debug('PostgreSQL database version = {}'.format(db_version))
 
         # Check database current_user.
 
         q2 = 'SELECT current_user;'
-        self.log.debug('q2 = {}'.format(q2))
+        if self.verbose:
+            self.log.debug('q2 = {}'.format(q2))
         self.cur.execute(q2)
         for record in self.cur:
             self.log.debug('record = {}'.format(record))
@@ -379,7 +382,8 @@ class KPFDB:
             try:
                 self.conn = psycopg2.connect(host=dbserver,database=dbname,port=dbport,user=dbuser,password=dbpass)
                 self.cur = self.conn.cursor()
-                self.log.debug("Reconnected to database")
+                if self.verbose:
+                    self.log.debug("Reconnected to database")
             except Exception as e:
                 self.log.error(f"Failed to reconnect to database: {e}")
                 return False
@@ -577,9 +581,10 @@ ORDER BY startdate;"""
 
         # Query database for all cal_types.
 
-        self.log.debug('----> cal_file_level = {}'.format(cal_file_level))
-        self.log.debug('----> contentbitmask = {}'.format(contentbitmask))
-        self.log.debug('----> cal_type_pair = {}'.format(cal_type_pair))
+        if self.verbose:
+            self.log.debug('----> cal_file_level = {}'.format(cal_file_level))
+            self.log.debug('----> contentbitmask = {}'.format(contentbitmask))
+            self.log.debug('----> cal_type_pair = {}'.format(cal_type_pair))
 
         levelstr = str(cal_file_level)
         cal_type = cal_type_pair[0]
@@ -597,7 +602,8 @@ ORDER BY startdate;"""
         pattern = re.compile("|".join(rep.keys()))
         query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
 
-        self.log.debug('query = {}'.format(query))
+        if self.verbose:
+            self.log.debug('query = {}'.format(query))
 
 
         # Execute query.
@@ -622,9 +628,10 @@ ORDER BY startdate;"""
             checksum = record[5]
             infobits = record[6]
 
-            self.log.debug('cId = {}'.format(cId))
-            self.log.debug('filename = {}'.format(filename))
-            self.log.debug('checksum = {}'.format(checksum))
+            if self.verbose:
+                self.log.debug('cId = {}'.format(cId))
+                self.log.debug('filename = {}'.format(filename))
+                self.log.debug('checksum = {}'.format(checksum))
 
             self.verify_checksum(filename, checksum)
 
@@ -637,10 +644,12 @@ ORDER BY startdate;"""
     def verify_checksum(self, filename, checksum):
         # See if file exists.
         isExist = os.path.exists(filename)
-        self.log.debug('File existence = {}'.format(isExist))
+        if self.verbose:
+            self.log.debug('File existence = {}'.format(isExist))
 
         if isExist is True:
-            self.log.debug("File exists...")
+            if self.verbose:
+                self.log.debug("File exists...")
         else:
             self.log.error("*** Error: File does not exist; quitting...")
             self.exit_code = 65
@@ -650,14 +659,16 @@ ORDER BY startdate;"""
         # Compute checksum and compare with database value.
 
         cksum = md5(filename)
-        self.log.debug('cksum = {}'.format(cksum))
+        if self.verbose:
+            self.log.debug('cksum = {}'.format(cksum))
 
         if  cksum == 68:
             self.exit_code = 68
             return
 
         if cksum == checksum:
-            self.log.debug("File checksum is correct ({})...".format(filename))
+            if self.verbose:
+                self.log.debug("File checksum is correct ({})...".format(filename))
             self.filename = filename
             self.exit_code = 0
         else:
@@ -680,7 +691,8 @@ ORDER BY startdate;"""
         finally:
             if self.conn is not None:
                 self.conn.close()
-                self.log.debug('Database connection closed.')
+                if self.verbose:
+                    self.log.debug('Database connection closed.')
 
     def get_nearest_master_batch(self, obs_date, cal_requests, max_cal_delta_time='1000 days'):
         """Get multiple master files in a single database query for better performance
@@ -742,7 +754,8 @@ ORDER BY startdate;"""
         """
         
         # Add query optimization hints
-        self.log.debug(f"Executing batch query for {len(cal_requests)} calibration types")
+        if self.verbose:
+            self.log.debug(f"Executing batch query for {len(cal_requests)} calibration types")
         df = self.query_to_pandas(query)
         
         # Process results and match back to original requests
