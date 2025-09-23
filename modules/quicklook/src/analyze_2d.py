@@ -576,7 +576,7 @@ class Analyze2D:
         - Any NaN values in the CCD arrays are ignored when computing percentiles.
         - The returned arrays have the same length as `percentiles`.
         """        
-        default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+        cals_default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
         D2 = self.D2
         if isinstance(chips, str):
             chips = [chips]
@@ -585,7 +585,7 @@ class Analyze2D:
         source = header.get_name()
         datemid = header.header['DATE-MID']
         dt = datetime.strptime(datemid, '%Y-%m-%dT%H:%M:%S.%f').strftime('%Y-%m-%dT%H:%M:%S.%f')
-        GC = GetCalibrations(dt, default_config_path)
+        GC = GetCalibrations(dt, cals_default_config_path)
         cal_dict = GC.lookup(subset=['ordermask'])
         ordermask_file = cal_dict['ordermask']
         mask = KPF0.from_fits(ordermask_file)
@@ -1143,6 +1143,17 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
         """
         chip = chip.lower()
+
+
+
+
+        header = HeaderParse(D2, 'PRIMARY')
+        datemid = header.header['DATE-MID']
+        dt = datetime.strptime(datemid, '%Y-%m-%dT%H:%M:%S.%f').strftime('%Y-%m-%dT%H:%M:%S.%f')
+        GC = GetCalibrations(dt, cals_default_config_path)
+        cal_dict = GC.lookup(subset=['ordertrace'])
+        order_trace_files = cal_dict['ordertrace']
+
         
         # Set parameters based on the chip selected
         obs_date = Time(self.header['DATE-MID'])
