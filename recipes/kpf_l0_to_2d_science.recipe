@@ -1,7 +1,4 @@
 # L0 to 2D imports
-from modules.Utils.orientation_ref_reader import OrientationReference
-from modules.Utils.overscan_subtract import OverscanSubtraction
-from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 
 # set the CONFIGURATION flags for each process ------------------------------------
 do_l0_to_2d_science = config.ARGUMENT.do_l0_to_2d_science
@@ -54,7 +51,7 @@ ccd_idx=config.ARGUMENT.ccd_idx
 rect_method = config.ARGUMENT.rectification_method
 extract_method = config.ARGUMENT.extraction_method
 orderlet_names = config.ARGUMENT.orderlet_names
-flat_rect = '_'+rect_method
+# flat_rect = '_'+rect_method
 
 ## full path for wavelength solution sample files for each fiber
 wls_list = config.ARGUMENT.wls_fits

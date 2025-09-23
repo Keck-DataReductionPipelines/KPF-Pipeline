@@ -1,10 +1,14 @@
 # from modules.quality_control.src.quality_control_framework import QualityControlFramework
+from kpfpipe.pipelines.fits_primitives import kpf0_from_fits
 from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
 from modules.var_exts.src.var_exts_framework import VarExtsFramework
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
 from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
 from modules.var_exts.src.var_exts_framework import VarExtsFramework
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.Utils.overscan_subtract import OverscanSubtraction
+from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
@@ -145,7 +149,6 @@ if do_quality_control:
                 print("rid: " + str(rid))
                 read_noise_exit_code = ReadNoiseFramework(data_type,
                                                         l0_filename_science,
-                                                        # d2_filename_science, # NOT CORRECT
                                                         n_sigma_read_noise,
                                                         rid,
                                                         kpf_object)
