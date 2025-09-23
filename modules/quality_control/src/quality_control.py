@@ -2511,7 +2511,7 @@ class QC2D(QC):
 
     def data_2D_red_green(self, debug=False):
         """
-        This Quality Control function checks if the 2D data exists for both
+        This Quality Control function checks if the 2D data and var arrays exists for both
         the red and green chips and checks that the sizes of the arrays are as expected.
 
         Args:
@@ -2535,7 +2535,6 @@ class QC2D(QC):
             extensions = D2.extensions
 
             if 'GREEN_CCD' in extensions:
-
                 if debug:
                     self.logger.debug("GREEN_CCD exists")
                     self.logger.debug("data_shape =", np.shape(D2["GREEN_CCD"]))
@@ -2543,19 +2542,30 @@ class QC2D(QC):
                 if np.shape(D2["GREEN_CCD"]) != (4080, 4080):
                     QC_pass = False
 
+                if 'GREEN_VAR' in extensions:
+                    if np.shape(D2["GREEN_VAR"]) != (4080, 4080):
+                        QC_pass = False
+                else:
+                    QC_pass = False 
+
             else:
                 if debug:
                     self.logger.debug("GREEN_CCD does not exist")
                 QC_pass = False
 
             if 'RED_CCD' in extensions:
-
                 if debug:
                     self.logger.debug("RED_CCD exists")
                     self.logger.debug("data_shape =", np.shape(D2["RED_CCD"]))
 
                 if np.shape(D2["RED_CCD"]) != (4080, 4080):
                     QC_pass = False
+
+                if 'RED_VAR' in extensions:
+                    if np.shape(D2["RED_VAR"]) != (4080, 4080):
+                        QC_pass = False
+                else:
+                    QC_pass = False 
 
             else:
                 if debug:
