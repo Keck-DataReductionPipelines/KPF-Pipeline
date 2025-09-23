@@ -11,6 +11,7 @@ panel_arr:
       ylabel: "Telescope Not Vignetted\n(NOTVIGN)"
       title: QC - Observing
       legend_frac_size: 0.15
+      not_junk: true
 
   - panelvars:
       - col: GUIDGOOD
@@ -21,6 +22,7 @@ panel_arr:
     paneldict:
       ylabel: "Guider RMS and bias\nwithin 50 mas RMS\n(GUIDGOOD)"
       legend_frac_size: 0.15
+      not_junk: true
 
   - panelvars:
       - col: GUIDSAT
@@ -31,6 +33,7 @@ panel_arr:
     paneldict:
       ylabel: "Guider Not Saturated\n(GUIDSAT)"
       legend_frac_size: 0.15
+      not_junk: true
 
   - panelvars:
       - col: GOODEL
@@ -42,3 +45,4 @@ panel_arr:
       ylabel: "Telescope elev. > 30 deg\n(GUIDSAT)"
       title: QC - Observing
       legend_frac_size: 0.15
+      not_junk: true

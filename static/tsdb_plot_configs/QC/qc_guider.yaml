@@ -10,6 +10,8 @@ panel_arr:
     paneldict:
       ylabel: "Guider RMS and bias\nwithin 50 mas RMS\n(GUIDGOOD)"
       legend_frac_size: 0.15
+      not_junk: true
+      qc_not_fail: '=DATAPRL0, KWRDPRL0'
   - panelvars:
       - col: GUIDSAT
         plot_type: state
@@ -20,3 +22,5 @@ panel_arr:
       ylabel: "Guider Not Saturated\n(GUIDSAT)"
       title: QC - Guider Performance
       legend_frac_size: 0.15
+      not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0'

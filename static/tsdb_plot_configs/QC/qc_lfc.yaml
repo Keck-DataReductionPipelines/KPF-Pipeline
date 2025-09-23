@@ -21,6 +21,8 @@ panel_arr:
         - LFC_all
         - lfc_all
         - LFC
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
 
   - panelvars:
       - col: LFC2DFOK
@@ -42,6 +44,8 @@ panel_arr:
         - LFC_all
         - lfc_all
         - LFC
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
 
   - panelvars:
       - col: LFCLINEP
@@ -63,6 +67,8 @@ panel_arr:
         - LFC_all
         - lfc_all
         - LFC
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
 
   - panelvars:
       - col: LFCLINES
@@ -85,3 +91,5 @@ panel_arr:
         - LFC_all
         - lfc_all
         - LFC
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
