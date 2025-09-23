@@ -9,5 +9,15 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "Good Read of Green/Red\nCCDs (GOODREAD)"
-      title: "QC - Good Read Metric (T$_{exp}$ !$\\approx$ 6 sec)"
       legend_frac_size: 0.15
+  - panelvars:
+      - col: FLXSTATS
+        plot_type: state
+        plot_attr:
+          label: Flux not smeared 
+          marker: .
+    paneldict:
+      ylabel: "Flux Not Smeared in\ninter-order regions\n(FLXSTATS)"
+      title: "QC - Good Read Metric (T$_{exp}$ !$\\approx$ 6 sec) and Flux not Smeared"
+      legend_frac_size: 0.15
+
