@@ -10,7 +10,7 @@ panel_arr:
     paneldict:
       ylabel: "EM Not Saturated\n(EMSAT)"
       legend_frac_size: 0.15
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: EMNEG
@@ -23,4 +23,4 @@ panel_arr:
       title: QC - Exposure Meter
       legend_frac_size: 0.15
       not_junk: true
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'

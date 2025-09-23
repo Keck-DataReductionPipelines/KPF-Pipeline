@@ -12,7 +12,7 @@ panel_arr:
       ylabel: "Master Bias File (2D)\nYounger than 5 Days\n(OLDBIAS)"
       legend_frac_size: 0.12
       not_junk: true
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: OLDDARK
@@ -24,7 +24,7 @@ panel_arr:
       ylabel: "Master Dark File (2D)\nYounger than 5 Days\n(OLDDARK)"
       legend_frac_size: 0.12
       not_junk: true
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: OLDFLAT
@@ -36,7 +36,7 @@ panel_arr:
       ylabel: "Master Flat File (2D)\nYounger than 5 Days\n(OLDFLAT)"
       legend_frac_size: 0.12
       not_junk: true
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: OLDLAMP
@@ -48,7 +48,7 @@ panel_arr:
       ylabel: "Smooth Lamp File \nYounger than 5 Days\n(OLDLAMP)"
       legend_frac_size: 0.12
       not_junk: true
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: OLDTRAC
@@ -60,7 +60,7 @@ panel_arr:
       ylabel: "Order Trace File \nYounger than 5 Days\n(OLDTRAC)"
       legend_frac_size: 0.12
       not_junk: true
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: OLDWLS
@@ -72,7 +72,7 @@ panel_arr:
       ylabel: "WLSFILE (2D)\nYounger than 2 Days\n(OLDWLS)"
       legend_frac_size: 0.12
       not_junk: true
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: OLDWLS2
@@ -85,4 +85,4 @@ panel_arr:
       title: QC - Master File Ages
       legend_frac_size: 0.12
       not_junk: true
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'

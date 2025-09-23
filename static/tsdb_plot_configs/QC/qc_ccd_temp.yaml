@@ -10,7 +10,7 @@ panel_arr:
     paneldict:
       ylabel: "Green CCD > 10 mK\nfrom set point"
       legend_frac_size: 0.15
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: GRCCDT1
@@ -21,7 +21,7 @@ panel_arr:
     paneldict:
       ylabel: "Green CCD > 1000 mK\nfrom set point"
       legend_frac_size: 0.15
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: RDCCDT10
@@ -32,7 +32,7 @@ panel_arr:
     paneldict:
       ylabel: "Red CCD > 10 mK\nfrom set point"
       legend_frac_size: 0.15
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: RDCCDT1
@@ -44,4 +44,4 @@ panel_arr:
       ylabel: "Red CCD > 1000 mK\nfrom set point"
       title: QC - CCD Temperature Set Points
       legend_frac_size: 0.15
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'

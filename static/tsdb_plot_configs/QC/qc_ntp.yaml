@@ -12,4 +12,4 @@ panel_arr:
       title: QC - Network Time Protocol (NTP)
       legend_frac_size: 0.15
       not_junk: true
-      qc_not_fail: 'DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'

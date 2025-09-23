@@ -11,7 +11,7 @@ panel_arr:
       ylabel: "L1 WLS\nFiles Pass Sanity Checks\n(WLSL1)"
       legend_frac_size: 0.15
       not_junk: true
-      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
   - panelvars:
       - col: WILDWSCI
         plot_type: state
@@ -22,7 +22,7 @@ panel_arr:
       ylabel: "SCI WLS not wild\n(stdev < 5 pix)\n(WILDLSCI)"
       legend_frac_size: 0.15
       not_junk: true
-      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
   - panelvars:
       - col: WILDWCAL
         plot_type: state
@@ -33,7 +33,7 @@ panel_arr:
       ylabel: "CAL WLS not wild\n(stdev < 5 pix)\n(WILDLCAL)"
       legend_frac_size: 0.15
       not_junk: true
-      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
   - panelvars:
       - col: WILDWSKY
         plot_type: state
@@ -44,5 +44,5 @@ panel_arr:
       ylabel: "SKY WLS not wild\n(stdev < 5 pix)\n(WILDLSKY)"
       title: QC - Wavelength Solution Checks
       not_junk: true
-      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.15

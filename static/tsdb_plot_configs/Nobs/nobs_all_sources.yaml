@@ -3,7 +3,6 @@ plot_type: nobs_histogram
 panel_arr:
   - panelvars:
     paneldict:
-      ylabel: "Number of Observations"
-      not_junk: true
+      ylabel: "Number of Observations (All)"
       plot_source: true
 

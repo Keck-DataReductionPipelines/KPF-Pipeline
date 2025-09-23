@@ -9,7 +9,6 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "LFC Not Saturated\n(LFCSAT)"
-      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.15
       only_object: 
         - autocal-lfc-all-morn
@@ -22,7 +21,7 @@ panel_arr:
         - lfc_all
         - LFC
       not_junk: true
-      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: LFC2DFOK
@@ -32,7 +31,6 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "2D LFC Flux Meets Threshold\nof 4000 Counts\n(LFC2DFOK)"
-      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.15
       only_object: 
         - autocal-lfc-all-morn
@@ -45,7 +43,7 @@ panel_arr:
         - lfc_all
         - LFC
       not_junk: true
-      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: LFCLINEP
@@ -56,7 +54,6 @@ panel_arr:
     paneldict:
       ylabel: "Number and dist of\nLFC lines sufficient\n(SCI orders 15-34, 1-31)\n(LFCLINEP)"
       legend_frac_size: 0.15
-      qc_not_fail: 'GOODREAD'
       only_object: 
         - autocal-lfc-all-morn
         - autocal-lfc-all-eve
@@ -68,7 +65,7 @@ panel_arr:
         - lfc_all
         - LFC
       not_junk: true
-      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: LFCLINES
@@ -79,7 +76,6 @@ panel_arr:
     paneldict:
       ylabel: "Number and dist of\nLFC lines sufficient\n(SCI orders 2-34, 1-31)\n(LFCLINES)"
       title: QC - LFC Metrics
-      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.15
       only_object: 
         - autocal-lfc-all-morn
@@ -92,4 +88,4 @@ panel_arr:
         - lfc_all
         - LFC
       not_junk: true
-      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
