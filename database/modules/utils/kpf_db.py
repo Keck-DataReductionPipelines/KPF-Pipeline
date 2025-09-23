@@ -305,6 +305,7 @@ class KPFDB:
         else:
             self.log = logger
 
+        self.verbose = verbose
         self.exit_code = 0
         self.cId = None
         self.db_level = None
@@ -367,7 +368,8 @@ class KPFDB:
             self.log.debug('q2 = {}'.format(q2))
         self.cur.execute(q2)
         for record in self.cur:
-            self.log.debug('record = {}'.format(record))
+            if self.verbose:
+                self.log.debug('record = {}'.format(record))
 
     def _get_connection(self):
         """Get a database connection, reusing existing ones when possible"""
@@ -804,6 +806,7 @@ ORDER BY startdate;"""
                 results[cal_type] = [self.exit_code, fname]
         
         query_time = time.time() - start_time
-        self.log.info(f"Batch query completed in {query_time:.3f}s for {len(cal_requests)} calibration types")
+        if verbose:
+            self.log.info(f"Batch query completed in {query_time:.3f}s for {len(cal_requests)} calibration types")
         
         return results
