@@ -559,7 +559,7 @@ class SpectralExtractionAlg:
         
         # zero frame
         Z = np.zeros_like(F)
-        
+
         # box extraction
         f_box, v_box, _, _ = self.box_extraction(D, S, V, M=M, W=W)
         if method == 'box':

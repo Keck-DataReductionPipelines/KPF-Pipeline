@@ -437,10 +437,11 @@ class AnalyzeL1:
 
     def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):
         """
-        Compute the signal-to-noise ratio (SNR) for each spectral order and
+        Estimate the signal-to-noise ratio (SNR) for each spectral order and
         orderlet in an L1 spectrum from KPF.
         SNR is defined as signal / sqrt(abs(variance)) and can be negative.
-        Also, compute the 
+        Compare this method to measure_L1_snr_from_rms(), which uses spectral
+        smoothness.
 
         Args:
             snr_percentile: percentile in the SNR distribution for each 
@@ -574,6 +575,29 @@ class AnalyzeL1:
         self.RED_PEAK_FLUX   = RED_PEAK_FLUX
         self.GREEN_SNR_WAV   = GREEN_SNR_WAV
         self.RED_SNR_WAV     = RED_SNR_WAV
+
+
+    def measure_L1_snr_rms(self, chip, order, orderlet):
+        """
+        Measure the signal-to-noise ratio (SNR) of an L1 spectrum from KPF for
+        a certain order/orderlet on a particular chip.
+        SNR is definied as 1/stdev in a narrow spectral region after subtracing
+        out a continuum model
+
+        Args:
+            [add args]
+
+
+        Returns:
+            [add return]
+        """
+
+        L1 = self.L1
+        CHIP = chip.upper()
+        ORDERLET_SHORT = orderlet[:3] 
+        SCI_NUM = "".join(ch for ch in orderlet if ch.isdigit())
+        flux = L1[f'{CHIP}_{ORDERLET_SHORT}_FLUX{SCI_NUM}'][order]
+        wav  = L1[f'{CHIP}_{ORDERLET_SHORT}_WAVE{SCI_NUM}'][order]
 
 
     def plot_L1_snr(self, fig_path=None, show_plot=False):
