@@ -69,7 +69,7 @@ class SpectralExtractionAlg:
         self.start_order = {}
         self.start_order['GREEN_CCD'] = start_order_green
         self.start_order['RED_CCD'] = start_order_red
-        self.order_trace = self._fix_order_trace_indexing()
+        #self.order_trace = self._fix_order_trace_indexing()
 
         # By default the KPF DRP subracts stray light from the data image
         # Only supply background_image if you suspect some additional contamination
@@ -130,7 +130,7 @@ class SpectralExtractionAlg:
     
         # check for variance outliers
         V0 = np.abs(V-D)
-        M &= np.abs(V0 - np.median(V0))/mad_std(V0, ignore_nan=True) < sigma_cut
+        M &= np.abs(V0 - np.nanmedian(V0))/mad_std(V0, ignore_nan=True) < sigma_cut
 
         return M
 
@@ -307,7 +307,7 @@ class SpectralExtractionAlg:
             P[i] = 1.0*spline(x)
 
         P = np.maximum(P,0)
-        P /= np.sum(P*W,axis=0)
+        P /= np.nansum(P*W,axis=0)
     
         return P
 
@@ -348,8 +348,8 @@ class SpectralExtractionAlg:
 
         # 1D box extraction of spectrum and variance
         self.log.debug(f"Box extraction: D shape: "+str(D.shape)+ " S shape: "+str(S.shape)+ " V shape: "+str(V.shape)+ " M shape: "+str(M.shape)+ " W shape: "+str(W.shape))
-        f = np.sum(M*(D-S)*W,axis=0)
-        v = np.sum(M*V*W,axis=0)
+        f = np.nansum(M*(D-S)*W,axis=0)
+        v = np.nansum(M*V*W,axis=0)
                         
         # return four values to match optimal extraction
         return f, v, None, None
@@ -392,6 +392,9 @@ class SpectralExtractionAlg:
             profile_sigma_clip (float): sigma clipping used to identify outliers during profile modeling 
             extraction_sigma_clip (float): sigma clipping used to identify cosmic rays and pixel defects
         """
+        # get data image shape
+        nrow, ncol = np.shape(D)
+
         # check for pre-computed spatial profile
         if P is not None:
             static_profile = True
@@ -415,9 +418,6 @@ class SpectralExtractionAlg:
             profile_sigma_clip = self.profile_sigma_clip
         if extraction_sigma_clip is None:
             extraction_sigma_clip = self.extraction_sigma_clip
-
-        # get data image shape
-        nrow, ncol = np.shape(D)
         
         # sanitize inputs
         D = np.asarray(D)
@@ -444,8 +444,9 @@ class SpectralExtractionAlg:
         loop = 0
         while loop < max_iter:
             # spectrum
-            f = np.sum(M*P*(D-S)*(W/V),axis=0)/np.sum(M*P**2*(W/V),axis=0)
-            v = np.sum(M*P*W,axis=0)/np.sum(M*P**2*(W/V),axis=0)
+            f = np.nansum(M*P*(D-S)*(W/V),axis=0)/np.nansum(M*P**2*(W/V),axis=0)
+            v = np.nansum(M*P*W,axis=0)/np.nansum(M*P**2*(W/V),axis=0)
+
         
             # profile
             if not static_profile:
@@ -460,16 +461,16 @@ class SpectralExtractionAlg:
             
             # variance
             V = V0 + np.abs(f*P + S)/Q
-        
+            
             # residuals
-            R = (D - f*P - S)**2/V
+            R = (D - f*P - S)**2/V * W
             
             # mask cosmic rays
-            bad_pixel_count = np.sum(M==0)
+            bad_pixel_count = np.nansum(M==0)
             worst_pixel_row = np.argmax(R*M, axis=0)
     
             if verbose:
-                print(f"loop {loop} | {bad_pixel_count - np.sum(W==0)} pixels flagged")
+                print(f"loop {loop} | {bad_pixel_count - np.nansum(W==0)} pixels flagged")
         
             # plot spectrum
             if do_plot:
@@ -485,13 +486,15 @@ class SpectralExtractionAlg:
                     M[row,col] = 0
     
                     if do_plot:
-                        plt.figure(figsize=(4,3))
-                        plt.step(np.arange(nrow), R[:,col], color='k', where='mid')
-                        plt.plot(row, R[row,col], 'rx')
-                        plt.title(f"Column {col}", fontsize=14)
+                        fig, ax = plt.subplots(1,2, figsize=(8,3))
+                        ax[0].step(np.arange(nrow), R[:,col], color='k', where='mid')
+                        ax[0].plot(row, R[row,col], 'rx')
+                        ax[0].set_title(f"Column {col}", fontsize=14)
+                        ax[1].step(np.arange(nrow), D[:,col], color='k', where='mid')
+                        ax[1].set_title(f"Column {col}", fontsize=14)
                         plt.show()
         
-            if np.sum(M==0) == bad_pixel_count:
+            if np.nansum(M==0) == bad_pixel_count:
                 break
         
             loop += 1
@@ -626,7 +629,7 @@ class SpectralExtractionAlg:
         # set up container for arrays
         nrow, ncol = self.target_2D[f'{chip}_CCD'].shape
         ntrace = len(self.order_trace[f'{chip}_CCD'])
-        norder = ntrace // 5
+        norder = int(np.ceil(ntrace / 5))
 
         l1_arrays = {}
         for trace_index in range(5):
@@ -636,7 +639,7 @@ class SpectralExtractionAlg:
             l1_arrays[v_ext] = np.zeros((norder,ncol))
 
         # extract spectra
-        for trace_index in range(ntrace):                      
+        for trace_index in range(ntrace):
             if any(np.isnan(self.order_trace[f'{chip}_CCD'].iloc[trace_index])):
                 f = np.nan*np.ones(ncol)
                 v = np.nan*np.ones(ncol)
