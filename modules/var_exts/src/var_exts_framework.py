@@ -1,4 +1,4 @@
-from astropy.io import fits
+#from astropy.io import fits
 import os
 from os.path import exists
 import numpy as np
@@ -10,7 +10,7 @@ import ast
 from kpfpipe.logger import *
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
-from kpfpipe.pipelines.fits_primitives import to_fits
+# from kpfpipe.pipelines.fits_primitives import to_fits
 from keckdrpframework.models.arguments import Arguments
 
 # Global read-only variables
@@ -47,6 +47,15 @@ class VarExtsFramework(KPF0_Primitive):
         self.masterdark_path = self.action.args[3]
         self.masterflat_path = self.action.args[4]
         self.rId = self.action.args[5]
+        self.kpf_object_2d = self.action.args[6]
+
+        # Print the 'naaxis2' keyword in the 3rd element of the kpf_object_2d
+        try:
+            naxis2 = self.kpf_object_2d.header['GREEN_CCD']['NAXIS2']
+            print("naxis2 in GREEN_CCD extension of kpf_object_2d = {}".format(naxis2))
+        except:
+            print("naxis2 in GREEN_CCD extension of kpf_object_2d not found...")
+            pass
 
         try:
             self.module_config_path = context.config_path['var_exts']
@@ -225,16 +234,19 @@ class VarExtsFramework(KPF0_Primitive):
 
         # Read image data object from 2D FITS file.
 
-        fits_filename = self.l0_filename
-        fits_filename = fits_filename.replace('L0', '2D') # I hate this!
-        fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        # fits_filename = self.l0_filename
+        # fits_filename = fits_filename.replace('L0', '2D') # I hate this!
+        # fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
-        fits_filename_exists = exists(fits_filename)
-        if not fits_filename_exists:
-            self.logger.info('*** 2D file does not exist ({}); skipping...'.format(fits_filename))
-            return
+        # fits_filename_exists = exists(fits_filename)
+        # if not fits_filename_exists:
+        #     self.logger.info('*** 2D file does not exist ({}); skipping...'.format(fits_filename))
+        #     return
 
-        hdul_input = KPF0.from_fits(fits_filename,self.data_type)
+        # hdul_input = KPF0.from_fits(fits_filename,self.data_type)
+        hdul_input = self.kpf_object_2d
+        hdul_input.info()  # --- IGNORE ---
+        debug = 1
         exp_time = float(hdul_input.header['PRIMARY']['EXPTIME'])
 
         if debug == 1:
@@ -314,6 +326,7 @@ class VarExtsFramework(KPF0_Primitive):
             self.logger.info('*** Master file does not exist ({}); skipping...'.format(fits_filename))
             return
 
+        # Read in the master file.
         hdul_input = KPF0.from_fits(fits_filename,self.data_type)
 
         exts = ['GREEN_CCD_UNC','RED_CCD_UNC']
@@ -334,23 +347,26 @@ class VarExtsFramework(KPF0_Primitive):
             else:
                 redvarimg = var_img
 
+        print("YYY length of greenvarimg,redvarimg = {},{}".format(len(greenvarimg),len(redvarimg)))
+        # import pdb; pdb.set_trace()
         return greenvarimg,redvarimg
 
 
     def assemble_ccd_images(self):
 
-        # Read image data object from 2D FITS file.
+        # Read image data object from 2D FITS science file.
 
-        fits_filename = self.l0_filename
-        fits_filename = fits_filename.replace('L0', '2D')
-        fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        # fits_filename = self.l0_filename
+        # fits_filename = fits_filename.replace('L0', '2D')
+        # fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
-        fits_filename_exists = exists(fits_filename)
-        if not fits_filename_exists:
-            self.logger.info('*** 2D file does not exist ({}); skipping...'.format(fits_filename))
-            return
+        # fits_filename_exists = exists(fits_filename)
+        # if not fits_filename_exists:
+        #     self.logger.info('*** 2D file does not exist ({}); skipping...'.format(fits_filename))
+        #     return
 
-        hdul_input = KPF0.from_fits(fits_filename,self.data_type)
+        # hdul_input = KPF0.from_fits(fits_filename,self.data_type)
+        hdul_input = self.kpf_object_2d
 
         exts = ['GREEN_CCD','RED_CCD']
         greenccdimg = None
@@ -370,21 +386,24 @@ class VarExtsFramework(KPF0_Primitive):
             else:
                 redccdimg = ccd_img
 
+        # Check the dimensions of the CCD images.
+        print("length of greenccdimg,redccdimg test YYY= {},{}".format(len(greenccdimg),len(redccdimg)))
         return greenccdimg,redccdimg
 
 
     def write_var_exts(self,greenvarimg,redvarimg):
 
-        fits_filename = self.l0_filename
-        fits_filename = fits_filename.replace('L0', '2D')
-        fits_filename = fits_filename.replace('.fits', '_2D.fits')
+        # fits_filename = self.l0_filename
+        # fits_filename = fits_filename.replace('L0', '2D')
+        # fits_filename = fits_filename.replace('.fits', '_2D.fits')
 
-        fits_filename_exists = exists(fits_filename)
-        if not fits_filename_exists:
-            self.logger.info('*** 2D File does not exist ({}); skipping...'.format(fits_filename))
-            return
+        # fits_filename_exists = exists(fits_filename)
+        # if not fits_filename_exists:
+        #     self.logger.info('*** 2D File does not exist ({}); skipping...'.format(fits_filename))
+        #     return
 
-        fits_obj = KPF0.from_fits(fits_filename,self.data_type)
+        # fits_obj = KPF0.from_fits(fits_filename,self.data_type)
+        fits_obj = self.kpf_object_2d
 
         exts = ['GREEN_VAR','RED_VAR']
 
@@ -416,9 +435,9 @@ class VarExtsFramework(KPF0_Primitive):
             except:
                 pass
 
-        fits_obj.to_fits(fits_filename)
+        # fits_obj.to_fits(fits_filename)
 
-        return
+        return fits_obj
 
 
     def _perform(self):
@@ -487,7 +506,6 @@ class VarExtsFramework(KPF0_Primitive):
         # Perform calculation for read noise.
         ###########################################################################
 
-
         if self.rn_flag_cfg == 0:
 
             # Select read noise for a single L0 FITS file via database query.
@@ -505,8 +523,7 @@ class VarExtsFramework(KPF0_Primitive):
             rnred3 = 4.0
             rnred4 = 4.0
 
-        # Assemble CCD images.
-
+        # Assemble CCD science images.
         greenccdimg,redccdimg = self.assemble_ccd_images()
 
         # Assemble read-noise variance images.
@@ -530,7 +547,19 @@ class VarExtsFramework(KPF0_Primitive):
 
         # GREEN
         # print("types of variables:",rn_greenvarimg,bias_greenvarimg,dark_greenvarimg,flat_greenvarimg,greenccdimg)
-        # import pdb; pdb.set_trace()
+
+        # Check if any of the following variables are None:
+        if (rn_greenvarimg is None):
+            print("rn_greenvarimg is None")
+        if (bias_greenvarimg is None):
+            print("bias_greenvarimg is None")
+        if (dark_greenvarimg is None):
+            print("dark_greenvarimg is None")
+        if (flat_greenvarimg is None):
+            print("flat_greenvarimg is None")
+        if (greenccdimg is None):
+            print("greenccdimg is None")
+
         try:
             greenvarimg = rn_greenvarimg +\
                 bias_greenvarimg +\
@@ -555,9 +584,12 @@ class VarExtsFramework(KPF0_Primitive):
         # Write variance FITS-extensions.
 
         if (greenvarimg is not None) or (redvarimg is not None):
-
-            self.write_var_exts(greenvarimg,redvarimg)
+            fits_obj_out = self.write_var_exts(greenvarimg,redvarimg)
+        else:
+            self.logger.info('No variance images to write; skipping...')
+            # self.logger.info("Len of greenvarimg,redvarimg = {},{}".format(len(greenvarimg),len(redvarimg)))
+            # fits_obj_out = self.kpf_object_2d  # Return the original 2D object when no variance images to write
 
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 
-        return Arguments(var_exts_exit_code)
+        return Arguments([var_exts_exit_code,fits_obj_out])

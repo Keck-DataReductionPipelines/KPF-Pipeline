@@ -11,9 +11,7 @@ from modules.quicklook.src.analyze_l0 import AnalyzeL0
 
 # Pipeline dependencies
 from kpfpipe.logger import *
-from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
-from kpfpipe.pipelines.fits_primitives import to_fits
 from keckdrpframework.models.arguments import Arguments
 
 import database.modules.utils.kpf_db as db
@@ -48,6 +46,8 @@ class ReadNoiseFramework(KPF0_Primitive):
         self.l0_filename = self.action.args[1]
         self.n_sigma = self.action.args[2]
         self.rId = self.action.args[3]
+        self.kpf_object_l0 = self.action.args[4]
+        self.kpf_object_2d = self.action.args[5]
         
         self.gain_dict = {
             'GREEN_AMP1': 5.175,
@@ -270,18 +270,6 @@ class ReadNoiseFramework(KPF0_Primitive):
 
         read_noise_exit_code = 0
 
-
-        # See if file exists.
-
-        isExist = os.path.exists(input_filename)
-        #self.logger.info('File existence = {}'.format(isExist))
-
-        if isExist is False:
-            self.logger.info('Input file does not exist...')
-            read_noise_exit_code = 65
-            return read_noise_exit_code
-
-
         ###########################################################################
 
         # There is no point having the following list as a configuration parameter because it is closely tied to the database schema.
@@ -292,10 +280,8 @@ class ReadNoiseFramework(KPF0_Primitive):
         read_noise_kwd_dict = dict(zip(lev0_ffi_exts, read_noise_kwds))
 
 
-        # Read image data object from L0 FITS file.
-        print("read noise framwork opening input file: {}".format(input_filename))
-        hdul_input = KPF0.from_fits(input_filename,self.data_type)
-
+        # Use the in-memory argument, the L0 object here.
+        hdul_input = self.kpf_object_l0
         read_noise_dict = {}
         for ffi in lev0_ffi_exts:
             rn = self.compute_read_noise(ffi,input_filename,hdul_input,n_sigma,cf)
@@ -369,7 +355,6 @@ class ReadNoiseFramework(KPF0_Primitive):
         self.logger.info('readspeed = {}'.format(readspeed))
 
         ###########################################################################
-
 
 
         try:
@@ -500,40 +485,29 @@ class ReadNoiseFramework(KPF0_Primitive):
 
         if self.backfill_repopulate_db_recs_cfg == 0:
 
-            fits_filename = input_filename
-            # HTI commented out these lines Aug 11 2025, filename now handled in kpf_drp.recipe.
-            fits_filename = fits_filename.replace('L0', '2D')
-            fits_filename = fits_filename.replace('.fits', '_2D.fits')
+            # fits_filename = input_filename
+            # The input_filename is the L0 file, but we want the 2D, in-memory object here:
+            fits_obj = self.kpf_object_2d
+            for ffi in lev0_ffi_exts:
 
-            fits_filename_exists = exists(fits_filename)
-            if not fits_filename_exists:
-                self.logger.info('*** File does not exist ({}); skipping...'.format(fits_filename))
-            else:
+                rn = read_noise_dict[ffi]
 
-                fits_obj = KPF0.from_fits(fits_filename,self.data_type)
+                if rn == None:
+                    continue
 
-                for ffi in lev0_ffi_exts:
+                kwd = read_noise_kwd_dict[ffi]
 
-                    rn = read_noise_dict[ffi]
-
-                    if rn == None:
-                        continue
-
-                    kwd = read_noise_kwd_dict[ffi]
-
-                    try:
-                        fits_obj.header['PRIMARY'][kwd] = (rn,'Instantaneous ' + ffi + ' read noise [electrons]')
-                        self.logger.info('ffi,kwd,rn = {},{},{}'.format(ffi,kwd,rn))
-                    except KeyError:
-                        pass
+                try:
+                    fits_obj.header['PRIMARY'][kwd] = (rn,'Instantaneous ' + ffi + ' read noise [electrons]')
+                    self.logger.info('ffi,kwd,rn = {},{},{}'.format(ffi,kwd,rn))
+                except KeyError:
+                    pass
 
             fits_obj.header['PRIMARY']["GREENTRT"] = (greenreadtime,'GREEN chip total read time [seconds]')
             fits_obj.header['PRIMARY']["REDTRT"] = (redreadtime,'RED chip total read time [seconds]')
             fits_obj.header['PRIMARY']["READSPED"] = (readspeed,'Categorization of read speed')
 
-            fits_obj.to_fits(fits_filename)
-
-        return read_noise_exit_code
+        return [read_noise_exit_code,fits_obj]
 
 
     def _perform(self):
@@ -626,8 +600,9 @@ class ReadNoiseFramework(KPF0_Primitive):
 
             # Compute read noise for a single L0 FITS file.
 
-            read_noise_exit_code = self.computeReadNoiseForSingleL0File(self.rId,self.l0_filename,n_sigma,cf,cur)
-
+            read_noise_exit_code_vars = self.computeReadNoiseForSingleL0File(self.rId,self.l0_filename,n_sigma,cf,cur)
+            read_noise_exit_code = read_noise_exit_code_vars[0]
+            kpf_object_2d = read_noise_exit_code_vars[1]
 
             # Commit transaction.
 
@@ -727,7 +702,6 @@ class ReadNoiseFramework(KPF0_Primitive):
 
                 
                 # See if file exists.
-
                 isExist = os.path.exists(filename)
 
                 if debug == 1:
@@ -737,9 +711,7 @@ class ReadNoiseFramework(KPF0_Primitive):
                     self.logger.info('*** Error: File does not exist ({}); skipping...'.format(filename))
                     continue
 
-
                 # Compute checksum and compare with database value.
-
                 cksum = db.md5(filename)
 
                 if debug == 1:
@@ -799,4 +771,4 @@ class ReadNoiseFramework(KPF0_Primitive):
 
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 
-        return Arguments(read_noise_exit_code)
+        return Arguments([read_noise_exit_code,kpf_object_2d])
