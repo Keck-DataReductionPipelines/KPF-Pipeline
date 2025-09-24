@@ -170,16 +170,38 @@ class SpectralExtractionAlg:
         return drp_f_ext, drp_v_ext
 
 
-    def _orderlet_box(self, data_image, order_trace, trace_index, return_box_coords=False, verbose=False, do_plot=False):
+    def _get_orderlet_ext_from_fiber_name(self, chip, fiber):
+        flux_dict = {'SKY': f'{chip}_SKY_FLUX',
+                    'SCI1': f'{chip}_SCI_FLUX1',
+                    'SCI2': f'{chip}_SCI_FLUX2',
+                    'SCI3': f'{chip}_SCI_FLUX3',
+                    'CAL': f'{chip}_CAL_FLUX'
+                    }
+
+        var_dict = {'SKY': f'{chip}_SKY_VAR',
+                    'SCI1': f'{chip}_SCI_VAR1',
+                    'SCI2': f'{chip}_SCI_VAR2',
+                    'SCI3': f'{chip}_SCI_VAR3',
+                    'CAL': f'{chip}_CAL_VAR'
+                }
+
+        return flux_dict[fiber], var_dict[fiber]
+
+
+    def _orderlet_box(self, data_image, trace, order, fiber, return_box_coords=False, verbose=False, do_plot=False):
         nrow, ncol = data_image.shape
     
         # polynomial order trace
-        coeffs = np.array([float(order_trace[f'Coeff{i}'][trace_index]) for i in range(4)])
-    
+        _trace = trace[(trace.FIBER == fiber) & (trace.ORDER == order)].squeeze()
+
+        assert _trace.ndim == 1, f"unexpected trace dimensions: {_trace.ndim}"
+
+        coeffs = np.array(_trace[[f'Coeff{i}' for i in range(4)]], dtype=float)
+
         # trace in pixel coorrdinates on detector
         trace_center = poly.polyval(np.arange(ncol), coeffs)
-        trace_top    = trace_center + order_trace.TopEdge[trace_index]
-        trace_bottom = trace_center - order_trace.BottomEdge[trace_index]
+        trace_top    = trace_center + _trace.TopEdge
+        trace_bottom = trace_center - _trace.BottomEdge
 
         # track where trace goes off detector
         off_detector = (trace_top > nrow-1) | (trace_bottom < 0)
@@ -504,7 +526,8 @@ class SpectralExtractionAlg:
     
     def extract_orderlet(self, 
                          chip, 
-                         trace_index, 
+                         order,
+                         fiber, 
                          method=None,
                          max_iter=None,
                          profile_filter_size=None,
@@ -518,7 +541,8 @@ class SpectralExtractionAlg:
         Args:
             method (str): extraction method, can be 'box' or 'optimal'
             chip (str): 'GREEN' or 'RED' ccd
-            trace_index (int): integer identifying ordelet in order_trace
+            order (int): integer identifying order (GREEN: 0-34, RED:0-31)
+            fiber (str): can be 'SKY', 'SCI1', 'SCI2', 'SCI3', 'CAL'
 
         Returns:
             f (ndarray): extracted 1D spectrum
@@ -543,7 +567,8 @@ class SpectralExtractionAlg:
         # data image
         D, W, ymin, ymax = self._orderlet_box(self.target_2D[f'{chip}_CCD'].data,
                                               self.order_trace[f'{chip}_CCD'],
-                                              trace_index,
+                                              order,
+                                              fiber,
                                               return_box_coords=True
                                              )
 
@@ -594,7 +619,8 @@ class SpectralExtractionAlg:
     
 
     def extract_ccd(self, 
-                    chip, 
+                    chip,
+                    fibers=None,
                     method=None,
                     max_iter=None,
                     profile_filter_size=None,
@@ -613,6 +639,8 @@ class SpectralExtractionAlg:
             l1_out: KPF L1 object populated with extracted 1D spectra and varaiance
         """
         # populate kwargs
+        if fibers is None:
+            fibers = 'SKY SCI1 SCI2 SCI3 CAL'.split()
         if method is None:
             method = self.extraction_method
         if max_iter is None:
@@ -628,25 +656,28 @@ class SpectralExtractionAlg:
 
         # set up container for arrays
         nrow, ncol = self.target_2D[f'{chip}_CCD'].shape
-        ntrace = len(self.order_trace[f'{chip}_CCD'])
-        norder = int(np.ceil(ntrace / 5))
+        #ntrace = len(self.order_trace[f'{chip}_CCD'])
+        
+        if chip == 'GREEN':
+            norder = 35
+        if chip == 'RED':
+            norder = 32
 
         l1_arrays = {}
-        for trace_index in range(5):
-            f_ext, v_ext = self._get_orderlet_ext_from_trace_index(chip, trace_index)
+        for fiber in fibers:
+            f_ext, v_ext = self._get_orderlet_ext_from_fiber_name(chip, fiber)
 
             l1_arrays[f_ext] = np.zeros((norder,ncol))
             l1_arrays[v_ext] = np.zeros((norder,ncol))
 
         # extract spectra
-        for trace_index in range(ntrace):
-            if any(np.isnan(self.order_trace[f'{chip}_CCD'].iloc[trace_index])):
-                f = np.nan*np.ones(ncol)
-                v = np.nan*np.ones(ncol)
+        for order in range(1,norder+1):
+            for fiber in fibers:
+                print(chip, order, fiber)
 
-            else:
                 f, v, _, _ = self.extract_orderlet(chip, 
-                                                   trace_index, 
+                                                   order,
+                                                   fiber, 
                                                    method=method,
                                                    max_iter=max_iter,
                                                    profile_filter_size=profile_filter_size,
@@ -655,11 +686,10 @@ class SpectralExtractionAlg:
                                                    extraction_sigma_clip=extraction_sigma_clip
                                                   )
 
-            f_ext, v_ext = self._get_orderlet_ext_from_trace_index(chip, trace_index)
-            order_index = trace_index // 5
+                f_ext, v_ext = self._get_orderlet_ext_from_fiber_name(chip, fiber)
 
-            l1_arrays[f_ext][order_index] = f.copy()
-            l1_arrays[v_ext][order_index] = v.copy()
+                l1_arrays[f_ext][order-1] = f.copy()
+                l1_arrays[v_ext][order-1] = v.copy()
 
         # build KPF L1 object
         l1_out = self.target_l1
