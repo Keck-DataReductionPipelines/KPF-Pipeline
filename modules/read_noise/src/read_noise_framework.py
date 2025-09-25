@@ -34,7 +34,7 @@ class ReadNoiseFramework(KPF0_Primitive):
         l0_filename (str): Full path and filename of L0 FITS file within container.
         n_sigma (float): Number of sigmas for overscan-value outlier rejection (e.g., 3.0).
         rId (float): Primary database key of L0 FITS file in L0Files database record.
-
+        kpf_object_l0 (kpf0 object): In-memory kpf0 object of L0 FITS file.
 
     """
 
