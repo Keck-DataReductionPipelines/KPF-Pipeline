@@ -2,25 +2,32 @@ description: Seeing
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
-      - col: GDRSEEJZ
-        plot_type: scatter
-        unit: as
+      - col: CLEARSKY
+        plot_type: state
         plot_attr:
-          label: Seeing in J+Z band
-          marker: .
-          linewidth: 0.5
-      - col: GDRSEEV
-        plot_type: scatter
-        unit: as
-        plot_attr:
-          label: Seeing in V band
+          label: CLEARSKY Metric
           marker: .
           linewidth: 0.5
     paneldict:
       ylabel: Seeing (arcsec)
       yscale: log
       narrow_xlim_daily: true
-      title: Seeing
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
+      on_sky: true
+      legend_frac_size: 0.30
+  - panelvars:
+      - col: CLEARIDX
+        plot_type: scatter
+        plot_attr:
+          label: Clearness Index (CLEARIDX)
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: Seeing (arcsec)
+      yscale: log
+      narrow_xlim_daily: true
+      title: Clearsky Index
       not_junk: true
       qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       on_sky: true

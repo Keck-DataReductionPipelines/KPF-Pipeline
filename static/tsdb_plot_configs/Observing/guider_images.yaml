@@ -20,6 +20,7 @@ panel_arr:
       ylabel: Median(flux) [ADU]
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
       on_sky: true
       legend_frac_size: 0.25
 
@@ -35,6 +36,7 @@ panel_arr:
       ylabel: "Fraction of frames\nw/in 90% saturated"
       narrow_xlim_daily: true
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
       on_sky: true
       legend_frac_size: 0.25
 
@@ -51,5 +53,6 @@ panel_arr:
       narrow_xlim_daily: true
       title: Guider Images
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
       on_sky: true
       legend_frac_size: 0.25
