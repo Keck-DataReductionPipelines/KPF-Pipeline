@@ -466,18 +466,18 @@ class ReadNoiseFramework(KPF0_Primitive):
 
         # Execute query.
 
-        try:
-            cur.execute(query)
+        # try:
+        #     cur.execute(query)
 
-            try:
-                for record in cur:
-                    self.logger.info(record)
-            except:
-                    self.logger.info("Nothing returned from database stored function; continuing...")
+        #     try:
+        #         for record in cur:
+        #             self.logger.info(record)
+        #     except:
+        #             self.logger.info("Nothing returned from database stored function; continuing...")
 
-        except (Exception, psycopg2.DatabaseError) as error:
-            self.logger.info('*** Error inserting record ({}); skipping...'.format(error))
-            read_noise_exit_code = 66
+        # except (Exception, psycopg2.DatabaseError) as error:
+        #     self.logger.info('*** Error inserting record ({}); skipping...'.format(error))
+        #     read_noise_exit_code = 66
 
 
         # If and only if running the code for a single frame:

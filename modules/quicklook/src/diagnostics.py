@@ -75,6 +75,10 @@ def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
         return L0
         
     # Use the AnalyzeL0 class measure non-Gaussian read noise
+    # HTI: Add the 'READSPED' KEYWORD  and any other keyowrds that are written by read_noise_framework.py so we can get rid of it.
+    # HTI: Find the NAXIS2 keyword. This is supposed to be automatically by astropy, but it is not.
+    #      Every time is written, make sure it is correct, especially in creating the variance extensions.
+    #      Try copying those extensions instead od creating an empty array.
     try:
         myL0 = AnalyzeL0(L0, logger=logger)
         for chip in chips:

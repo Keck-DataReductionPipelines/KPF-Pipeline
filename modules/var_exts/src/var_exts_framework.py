@@ -261,6 +261,8 @@ class VarExtsFramework(KPF0_Primitive):
             try:
                 naxis1 = hdul_input.header[ext]["NAXIS1"]
             except:
+                print("ext {} not found...".format(ext))
+                print(" or NAXIS1 keyword not found...")
                 continue
 
             try:
@@ -347,7 +349,7 @@ class VarExtsFramework(KPF0_Primitive):
             else:
                 redvarimg = var_img
 
-        print("YYY length of greenvarimg,redvarimg = {},{}".format(len(greenvarimg),len(redvarimg)))
+        print("YYY length of masters' variance greenvarimg,redvarimg = {},{}".format(len(greenvarimg),len(redvarimg)))
         # import pdb; pdb.set_trace()
         return greenvarimg,redvarimg
 
