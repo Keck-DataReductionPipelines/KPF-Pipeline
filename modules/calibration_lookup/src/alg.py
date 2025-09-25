@@ -14,13 +14,14 @@ from keckdrpframework.models.arguments import Arguments
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.logger import start_logger
 from astropy.io.fits import getheader
+from modules.Utils.utils import DummyLogger
 
 class GetCalibrations:
     """This utility looks up the associated calibrations for a given datetime and
        returns a dictionary with all calibration types.
 
     """
-    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=True):
+    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=False):
         """
         use_db (boolean) - to disable db access, set to False (e.g., when looking up file-based keywords only)
         """
@@ -44,7 +45,9 @@ class GetCalibrations:
         if self.verbose:
             logger_start = time.time()
         if logger == None:
-            self.log = start_logger('GetCalibrations', default_config_path)
+            # the line below crashes the code in a notebook environment
+            #self.log = start_logger('GetCalibrations', default_config_path)
+            self.log = DummyLogger()
         else:
             self.log = logger
         if self.verbose:
@@ -90,7 +93,7 @@ class GetCalibrations:
         
         try:
             from database.modules.utils.kpf_db import _get_cached_result
-            cached_result = _get_cached_result(cache_key)
+            cached_result = _get_cached_result(cache_key, verbose=self.verbose)
             if cached_result is not None:
                 # Check if all requested keys are in the cached result
                 missing_keys = [key for key in subset if key not in cached_result]
@@ -193,7 +196,7 @@ class GetCalibrations:
             # Execute single batch query for all database calibrations
             if db_requests and self.use_db:
                 if db is None:
-                    db = KPFDB(logger=self.log)
+                    db = KPFDB(logger=self.log, verbose=self.verbose)
                 if self.verbose:
                     db_start = time.time()
                 try:
@@ -286,7 +289,7 @@ class GetCalibrations:
                     
                 elif lookup == 'wls' or lookup == 'etalon':
                     if self.use_db and db is None:
-                        db = KPFDB(logger=self.log)
+                        db = KPFDB(logger=self.log, verbose=self.verbose)
                     if self.verbose:
                         wls_start = time.time()
                     wls_files = None  # Initialize wls_files
@@ -396,7 +399,7 @@ class GetCalibrations:
                 if self.verbose:
                     self.log.debug(f"Caching complete new result with {len(output_cals)} keys")
             
-            _set_cached_result(cache_key, complete_result)
+            _set_cached_result(cache_key, complete_result, verbose=self.verbose)
             if self.verbose:
                 self.log.debug(f"Cached complete result for key: {cache_key}")
         except Exception as e:
@@ -426,7 +429,7 @@ class GetCalibrations:
         """Clear the Redis cache for this calibration lookup"""
         try:
             from database.modules.utils.kpf_db import clear_cache
-            clear_cache()
+            clear_cache(verbose=self.verbose)
             if self.verbose:
                 self.log.debug("Redis cache cleared successfully")
         except Exception as e:

@@ -36,7 +36,7 @@ panel_arr:
         - lfc_all
         - LFC
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -75,5 +75,5 @@ panel_arr:
         - lfc_all
         - LFC
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.25
