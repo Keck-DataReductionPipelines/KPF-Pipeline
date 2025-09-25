@@ -13,3 +13,4 @@ panel_arr:
       ylabel: "Hallway\n Temperature ($^{\\circ}$C)"
       title: KPF Hallway Temperature
       legend_frac_size: 0.3
+      qc_not_fail: 'TELEPRL0'
