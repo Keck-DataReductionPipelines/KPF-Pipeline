@@ -14,10 +14,12 @@ from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_hk import AnalyzeHK
 from modules.quicklook.src.analyze_em import AnalyzeEM
+from modules.quicklook.src.analyze_l0 import AnalyzeL0
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l1 import uncertainty_median
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
 from modules.quicklook.src.analyze_socal import AnalyzePyr
+from modules.Utils.kpf_parse import get_data_products_L0
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
 from modules.Utils.kpf_parse import get_data_products_L2
@@ -75,10 +77,6 @@ def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
         return L0
         
     # Use the AnalyzeL0 class measure non-Gaussian read noise
-    # HTI: Add the 'READSPED' KEYWORD  and any other keyowrds that are written by read_noise_framework.py so we can get rid of it.
-    # HTI: Find the NAXIS2 keyword. This is supposed to be automatically by astropy, but it is not.
-    #      Every time is written, make sure it is correct, especially in creating the variance extensions.
-    #      Try copying those extensions instead od creating an empty array.
     try:
         myL0 = AnalyzeL0(L0, logger=logger)
         for chip in chips:
@@ -86,6 +84,8 @@ def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
                 try:
                     if 'GREEN_AMP1' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGGR1'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP1'],5), 'Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan')
+                        L0.header['PRIMARY']['GREENTRT'] = (round(myL0.green_read_time,3),'GREEN chip total read time [seconds]')
+                        L0.header['PRIMARY']['READSPED'] = (myL0.read_speed,'Categorization of read speed')
                     if 'GREEN_AMP2' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGGR2'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP2'],5), 'Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan')
                     if 'GREEN_AMP3' in myL0.std_mad_norm_ratio_overscan:
@@ -98,6 +98,8 @@ def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
                 try:
                     if 'RED_AMP1' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGRD1'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP1'],5), 'Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan')
+                        L0.header['PRIMARY']['REDTRT'] = (round(myL0.red_read_time,3),'RED chip total read time [seconds]')
+                        L0.header['PRIMARY']['READSPED'] = (myL0.read_speed,'Categorization of read speed')
                     if 'RED_AMP2' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGRD2'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP2'],5), 'Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan')
                     if 'RED_AMP3' in myL0.std_mad_norm_ratio_overscan:
