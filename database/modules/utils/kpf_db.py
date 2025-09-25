@@ -26,7 +26,7 @@ _cache_ttl = 300  # 5 minutes TTL
 # Detect test environment
 _is_test_env = os.getenv('CI') == 'true' or os.getenv('TESTING') == 'true'
 
-def _get_redis_client(verbose=True):
+def _get_redis_client(verbose=False):
     """Get Redis client, creating it if needed"""
     global _redis_client, _cache_enabled
     if _redis_client is None:
@@ -92,14 +92,14 @@ def _load_cache_config():
 _cache_enabled, _cache_ttl, _cache_rounding = _load_cache_config()
 
 # Debug: Print cache configuration
-verbose=True
+verbose=False
 if verbose:
     print(f"DEBUG: Cache configuration loaded:")
     print(f"DEBUG:   enabled: {_cache_enabled}")
     print(f"DEBUG:   ttl_seconds: {_cache_ttl}")
     print(f"DEBUG:   timestamp_rounding_minutes: {_cache_rounding}")
 
-def _get_cache_key(obs_date, cal_requests, verbose=True):
+def _get_cache_key(obs_date, cal_requests, verbose=False):
     """Create a cache key that rounds timestamps to avoid microsecond differences"""
     # Round timestamp based on configurable rounding
     dt = datetime.strptime(obs_date, "%Y-%m-%dT%H:%M:%S.%f")
@@ -127,7 +127,7 @@ def _get_cache_key(obs_date, cal_requests, verbose=True):
     
     return cache_key
 
-def _get_cached_result(cache_key, verbose=True):
+def _get_cached_result(cache_key, verbose=False):
     """Get cached result from Redis if it exists and is not expired"""
     if not _cache_enabled:
         if _is_test_env:
@@ -167,7 +167,7 @@ def _get_cached_result(cache_key, verbose=True):
     
     return None
 
-def _set_cached_result(cache_key, result, verbose=True):
+def _set_cached_result(cache_key, result, verbose=False):
     """Store result in Redis cache with TTL"""
     if not _cache_enabled:
         if not _is_test_env:
@@ -196,7 +196,7 @@ def _set_cached_result(cache_key, result, verbose=True):
     except Exception as e:
         print(f"DEBUG: Redis cache storage error: {e}")
 
-def clear_cache(verbose=True):
+def clear_cache(verbose=False):
     """Clear all Redis cache entries for this application"""
     if not _cache_enabled:
         return
@@ -232,7 +232,7 @@ def clear_cache(verbose=True):
         else:
             print(f"DEBUG: Error clearing cache: {e}")
 
-def clear_cache_for_timestamp(obs_date, verbose=True):
+def clear_cache_for_timestamp(obs_date, verbose=False):
     """Clear cache entries for a specific timestamp"""
     if not _cache_enabled:
         return
@@ -299,12 +299,13 @@ class KPFDB:
         68 = Failed to compute checksum
     """
 
-    def __init__(self, logger=None):
+    def __init__(self, logger=None, verbose=False):
         if logger == None:
             self.log = start_logger('KPFDB', DEFAULT_CFG_PATH)
         else:
             self.log = logger
 
+        self.verbose = verbose
         self.exit_code = 0
         self.cId = None
         self.db_level = None
@@ -353,18 +354,22 @@ class KPFDB:
         # Select database version.
 
         q1 = 'SELECT version();'
-        self.log.debug('q1 = {}'.format(q1))
+        if self.verbose:
+            self.log.debug('q1 = {}'.format(q1))
         self.cur.execute(q1)
         db_version = self.cur.fetchone()
-        self.log.debug('PostgreSQL database version = {}'.format(db_version))
+        if self.verbose:
+            self.log.debug('PostgreSQL database version = {}'.format(db_version))
 
         # Check database current_user.
 
         q2 = 'SELECT current_user;'
-        self.log.debug('q2 = {}'.format(q2))
+        if self.verbose:
+            self.log.debug('q2 = {}'.format(q2))
         self.cur.execute(q2)
         for record in self.cur:
-            self.log.debug('record = {}'.format(record))
+            if self.verbose:
+                self.log.debug('record = {}'.format(record))
 
     def _get_connection(self):
         """Get a database connection, reusing existing ones when possible"""
@@ -379,7 +384,8 @@ class KPFDB:
             try:
                 self.conn = psycopg2.connect(host=dbserver,database=dbname,port=dbport,user=dbuser,password=dbpass)
                 self.cur = self.conn.cursor()
-                self.log.debug("Reconnected to database")
+                if self.verbose:
+                    self.log.debug("Reconnected to database")
             except Exception as e:
                 self.log.error(f"Failed to reconnect to database: {e}")
                 return False
@@ -577,9 +583,10 @@ ORDER BY startdate;"""
 
         # Query database for all cal_types.
 
-        self.log.debug('----> cal_file_level = {}'.format(cal_file_level))
-        self.log.debug('----> contentbitmask = {}'.format(contentbitmask))
-        self.log.debug('----> cal_type_pair = {}'.format(cal_type_pair))
+        if self.verbose:
+            self.log.debug('----> cal_file_level = {}'.format(cal_file_level))
+            self.log.debug('----> contentbitmask = {}'.format(contentbitmask))
+            self.log.debug('----> cal_type_pair = {}'.format(cal_type_pair))
 
         levelstr = str(cal_file_level)
         cal_type = cal_type_pair[0]
@@ -597,7 +604,8 @@ ORDER BY startdate;"""
         pattern = re.compile("|".join(rep.keys()))
         query = pattern.sub(lambda m: rep[re.escape(m.group(0))], query_template)
 
-        self.log.debug('query = {}'.format(query))
+        if self.verbose:
+            self.log.debug('query = {}'.format(query))
 
 
         # Execute query.
@@ -622,9 +630,10 @@ ORDER BY startdate;"""
             checksum = record[5]
             infobits = record[6]
 
-            self.log.debug('cId = {}'.format(cId))
-            self.log.debug('filename = {}'.format(filename))
-            self.log.debug('checksum = {}'.format(checksum))
+            if self.verbose:
+                self.log.debug('cId = {}'.format(cId))
+                self.log.debug('filename = {}'.format(filename))
+                self.log.debug('checksum = {}'.format(checksum))
 
             self.verify_checksum(filename, checksum)
 
@@ -637,10 +646,12 @@ ORDER BY startdate;"""
     def verify_checksum(self, filename, checksum):
         # See if file exists.
         isExist = os.path.exists(filename)
-        self.log.debug('File existence = {}'.format(isExist))
+        if self.verbose:
+            self.log.debug('File existence = {}'.format(isExist))
 
         if isExist is True:
-            self.log.debug("File exists...")
+            if self.verbose:
+                self.log.debug("File exists...")
         else:
             self.log.error("*** Error: File does not exist; quitting...")
             self.exit_code = 65
@@ -650,14 +661,16 @@ ORDER BY startdate;"""
         # Compute checksum and compare with database value.
 
         cksum = md5(filename)
-        self.log.debug('cksum = {}'.format(cksum))
+        if self.verbose:
+            self.log.debug('cksum = {}'.format(cksum))
 
         if  cksum == 68:
             self.exit_code = 68
             return
 
         if cksum == checksum:
-            self.log.debug("File checksum is correct ({})...".format(filename))
+            if self.verbose:
+                self.log.debug("File checksum is correct ({})...".format(filename))
             self.filename = filename
             self.exit_code = 0
         else:
@@ -680,7 +693,8 @@ ORDER BY startdate;"""
         finally:
             if self.conn is not None:
                 self.conn.close()
-                self.log.debug('Database connection closed.')
+                if self.verbose:
+                    self.log.debug('Database connection closed.')
 
     def get_nearest_master_batch(self, obs_date, cal_requests, max_cal_delta_time='1000 days'):
         """Get multiple master files in a single database query for better performance
@@ -742,7 +756,8 @@ ORDER BY startdate;"""
         """
         
         # Add query optimization hints
-        self.log.debug(f"Executing batch query for {len(cal_requests)} calibration types")
+        if self.verbose:
+            self.log.debug(f"Executing batch query for {len(cal_requests)} calibration types")
         df = self.query_to_pandas(query)
         
         # Process results and match back to original requests
@@ -791,6 +806,7 @@ ORDER BY startdate;"""
                 results[cal_type] = [self.exit_code, fname]
         
         query_time = time.time() - start_time
-        self.log.info(f"Batch query completed in {query_time:.3f}s for {len(cal_requests)} calibration types")
+        if verbose:
+            self.log.info(f"Batch query completed in {query_time:.3f}s for {len(cal_requests)} calibration types")
         
         return results
