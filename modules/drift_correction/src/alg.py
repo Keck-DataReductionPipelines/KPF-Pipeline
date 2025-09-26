@@ -33,7 +33,7 @@ class ModifyWLS:
         self.dt = datetime.strptime(self.date_mid, "%Y-%m-%dT%H:%M:%S.%f")
         self.wls_file1 = self.l1_obj.header['PRIMARY']['WLSFILE']
         self.drptag = self.l1_obj.header['PRIMARY']['DRPTAG']
-
+        print(f"DriftCorrection initialized for WLSFILE: {self.wls_file1}, DRPTAG: {self.drptag}")
         try:
             self.readmode = self.l1_obj.header['PRIMARY']['READSPED']
         except KeyError:
@@ -62,6 +62,7 @@ class ModifyWLS:
         self.df = self.prepare_table()
 
     def apply_drift(self, method):
+        print("DRIFT: apply_drift called")
         self.method = method
         if self.df.empty:
             self.log.warning("DRIFT MODULE, apply_drift: Drift DataFrame is empty. Exiting early.")
@@ -88,19 +89,49 @@ class ModifyWLS:
 
         # df = df[(df['WLSFILE'] != df['WLSFILE2'])]
         df = df[(df['NOTJUNK'] == True)]
+        
+        # Check if DataFrame is empty after filtering
+        if df.empty:
+            self.log.warning("DataFrame is empty after NOTJUNK filtering. No data to process.")
+            return df
+            
+        # test_file = 'KP.20241003.80735.57'
+        # if test_file in df['ObsID'].values:
+        #     test_snr = df[df['ObsID'] == test_file]['SNRSC548'].values[0]
+        #     print(f"Drift correction SNRSC548 for test file {test_file}: {test_snr}")
+        #     # print out the entire test file row
+        #     print(f"Drift correction test file row: {df[df['ObsID'] == test_file]}")
+        #     #loop over all of the columns and print them and their values
+        #     print("Columns in the dataframe:")
+        #     for col in df.columns:
+        #         print(f"  {col}: {df[df['ObsID'] == test_file][col].values[0]}")
+
+        # else: #print out the same but for the first element in df
+        #     print(f"Drift correction SNRSC548 for first file {df.iloc[0]['ObsID']}: {df.iloc[0]['SNRSC548']}")
+        #     print(f"Drift correction first file row: {df.iloc[0]}")
 
         # All fibers illuminated:
+        print(f"DriftCorrection: {len(df)} rows before filtering by OBJECT")
         df = df[df['OBJECT'].str.contains(r'etalon-all|slewcal', na=False)]
+        print(f"DriftCorrection: {len(df)} rows after filtering by OBJECT")
         current_drp_tag = self.drptag
         df = df[(df['DRPTAGL1'] == current_drp_tag)]
+        print(f"DriftCorrection: {len(df)} rows after filtering by DRPTAGL1: {current_drp_tag}")
         if df.empty:
-            self.log.warning("DRIFT MODULE, prepare_table1: Filtered to empty DataFrame. Exiting early.")
+            self.log.warning("DRIFT MODULE, prepare_table1: Filtered DRPTAGL1 to empty DataFrame. Exiting early.")
             return df
-        df = df[(df['READSPED'] == self.readmode)]
+        # df = df[(df['READSPED'] == self.readmode)] # 19 Sep 2025 READSPED IS NOT POPULATED IN THE DB OR HEADER
+        # print the number of elements in the dataframe
+        print(f"Drift correction dataframe length after filtering by READSPED: {len(df)}")
+        # Filter by WLS session
         snr_low_lim548  = 500 # needs double checked
         snr_high_lim548 = 2500 # needs double checked
+
+        # If the dataframe contains the following testfile, then print out the snr
         df = df[(df['SNRSC548'] > snr_low_lim548)]
+        print(f"DriftCorrection: {len(df)} rows after filtering by --- SNRSC548 > {snr_low_lim548}")
         df = df[(df['SNRSC548'] <= snr_high_lim548)]
+        print(f"DriftCorrection: {len(df)} rows after filtering by SNRSC548 <= {snr_high_lim548}")
         # Extract date from DATE-MID, remove dashes without treating pattern as regex
         if df.empty:
             self.log.warning("DRIFT MODULE, prepare_table2: Filtered to empty DataFrame. Exiting early.")
