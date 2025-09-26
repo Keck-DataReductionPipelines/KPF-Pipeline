@@ -9,9 +9,7 @@ import ast
 
 # Pipeline dependencies
 from kpfpipe.logger import *
-from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
-from kpfpipe.pipelines.fits_primitives import to_fits
 from keckdrpframework.models.arguments import Arguments
 
 # Global read-only variables
@@ -67,6 +65,7 @@ class QualityControlExposureFramework(KPF0_Primitive):
         self.l0_filename = self.action.args[1]
         self.lev0_ffi_exts = self.action.args[2]
         self.actual_dir = self.action.args[3]
+        self.kpf_object_l0 = self.action.args[4]
 
         try:
             self.module_config_path = context.config_path['quality_control_exposure']
@@ -76,17 +75,9 @@ class QualityControlExposureFramework(KPF0_Primitive):
 
         print("{} class: self.module_config_path = {}".format(self.__class__.__name__,self.module_config_path))
 
-        #print("Starting logger...")
-        #self.logger = start_logger(self.__class__.__name__, self.module_config_path)
-        #Start logger
         self.logger=None
         if not self.logger:
             self.logger=self.context.logger
-
-        #if self.logger is not None:
-        #    print("--->self.logger is not None...")
-        #else:
-        #    print("--->self.logger is None...")
 
         self.logger.info('Started {}'.format(self.__class__.__name__))
         self.logger.debug('module_config_path = {}'.format(self.module_config_path))
@@ -201,10 +192,8 @@ class QualityControlExposureFramework(KPF0_Primitive):
                 p2_bits.append(record[1])
 
 
-        # Read image data object from FITS file.
-
-        l0_file = KPF0.from_fits(self.l0_filename,self.data_type)
-
+        # Use kpf object passed in as argument
+        l0_file = self.kpf_object_l0 # Use the in-memory object passed from the calling recipe.
         infobits = 0
 
         for ffi in self.lev0_ffi_exts:
@@ -667,11 +656,9 @@ class QualityControlExposureFramework(KPF0_Primitive):
             quality_control_exposure_exit_code = 66
 
             # Rollback transaction.
-
             conn.rollback()
 
             # Try looking up rid of record.
-
             qrid = "SELECT rid from L0Files where dateobs = '" + date_obs + "' and ut = '" + ut + "';"
             self.logger.info('qrid = {}'.format(qrid))
             cur.execute(qrid)
@@ -683,14 +670,10 @@ class QualityControlExposureFramework(KPF0_Primitive):
             else:
                 rid = 0
 
-
         # Commit transaction.
-
         conn.commit()
 
-
         # Close database cursor and then connection.
-
         try:
             cur.close()
         except (Exception, psycopg2.DatabaseError) as error:

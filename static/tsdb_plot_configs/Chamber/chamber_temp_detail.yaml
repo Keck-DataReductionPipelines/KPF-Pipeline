@@ -63,6 +63,7 @@ panel_arr:
     paneldict:
       ylabel: "Bench\n$\\Delta$Temperature (K)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       nolegend: false
       axhspan:
         1:
@@ -133,6 +134,7 @@ panel_arr:
     paneldict:
       ylabel: "Green Camera\n$\\Delta$Temperature (K)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       nolegend: false
       axhspan:
         1:
@@ -203,6 +205,7 @@ panel_arr:
     paneldict:
       ylabel: "Red Camera\n$\\Delta$Temperature (K)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       nolegend: false
       axhspan:
         1:
@@ -252,6 +255,7 @@ panel_arr:
     paneldict:
       ylabel: "Echelle Grating\n$\\Delta$Temperature (K)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       nolegend: false
       title: KPF Spectrometer Temperatures
       axhspan:

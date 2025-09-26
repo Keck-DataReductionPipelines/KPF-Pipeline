@@ -80,7 +80,7 @@ panel_arr:
         - lfc_all
         - LFC
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.30
 
   # 2) thar_erv_panel
@@ -156,7 +156,7 @@ panel_arr:
         - autocal-thar-all-eve
         - autocal-thar-all-morn
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.30
 
   # 3) etalon_erv_panel
@@ -236,5 +236,5 @@ panel_arr:
         - Etalon_cal
         - etalon-sequence
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.30
