@@ -61,6 +61,7 @@ panel_arr:
     paneldict:
       ylabel: "Spectrometer\nTemperature ($^{\\circ}$C)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       nolegend: false
       legend_frac_size: 0.3
 
@@ -153,6 +154,7 @@ panel_arr:
           color: green
           alpha: 0.2
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.3
 
   - panelvars:
@@ -166,6 +168,7 @@ panel_arr:
     paneldict:
       ylabel: "Hallway\n Temperature ($^{\\circ}$C)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.3
 
   - panelvars:
@@ -195,6 +198,7 @@ panel_arr:
     paneldict:
       ylabel: "Exterior\n Temperatures ($^{\\circ}$C)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.3
 
   - panelvars:
@@ -224,6 +228,7 @@ panel_arr:
     paneldict:
       ylabel: "Exterior\n $\\Delta$Temperature (K)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       title: KPF Hallway Temperatures
       subtractmedian: true
       legend_frac_size: 0.3

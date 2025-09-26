@@ -3,8 +3,9 @@ plot_type: nobs_histogram
 panel_arr:
   - panelvars:
     paneldict:
-      ylabel: "Number of Observations"
+      ylabel: "Number of Good Bias"
       not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       plot_source: true
       only_sources:
         - Bias

@@ -12,7 +12,7 @@ panel_arr:
           color: darkgreen
     paneldict:
       ylabel: "Green CCD Temp (C)\nSTA sensor (controlled)"
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.25
       axhspan:
         1:
@@ -52,7 +52,7 @@ panel_arr:
           color: darkred
     paneldict:
       ylabel: "Red CCD Temp (C)\nSTA sensor (controlled)"
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.25
       axhspan:
         1:
@@ -92,7 +92,7 @@ panel_arr:
           color: forestgreen
     paneldict:
       ylabel: "Green CCD Temp (C)\nSSL sensor"
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -107,5 +107,5 @@ panel_arr:
     paneldict:
       ylabel: "Red CCD Temp (C)\nSSL sensor"
       title: CCD Temperatures
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.25
