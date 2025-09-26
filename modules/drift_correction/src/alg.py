@@ -46,6 +46,9 @@ class ModifyWLS:
             if session in self.l1_obj.header['PRIMARY']['WLSFILE']:
                 self.wls_session = session
 
+        #initalize the drift keyword
+        header = self.l1_obj.header['PRIMARY']
+        header['DRFTCOR'] = 0
         # Connect to TS DB
         myTS = AnalyzeTimeSeries(backend=self.backend)
 
@@ -82,6 +85,7 @@ class ModifyWLS:
 
     def prepare_table(self):
         df = self.df
+        header = self.l1_obj.header['PRIMARY']
 
         # df = df[(df['WLSFILE'] != df['WLSFILE2'])]
         df = df[(df['NOTJUNK'] == True)]
