@@ -45,6 +45,7 @@ panel_arr:
     paneldict:
       ylabel: Temperature (C)
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -76,6 +77,7 @@ panel_arr:
     paneldict:
       ylabel: "$\\Delta$Temperature (mK)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       subtractmedian: true
       legend_frac_size: 0.25
 
@@ -93,6 +95,7 @@ panel_arr:
       ylabel: "$\\Delta$Temperature (mK)"
       title: Etalon Temperatures
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       subtractmedian: true
       legend_frac_size: 0.25
 
@@ -109,6 +112,7 @@ panel_arr:
     paneldict:
       ylabel: "$\\Delta$Temperature (mK)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       subtractmedian: true
       legend_frac_size: 0.25
 
@@ -126,5 +130,6 @@ panel_arr:
       ylabel: "$\\Delta$Temperature (mK)"
       title: Etalon Temperatures
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       subtractmedian: true
       legend_frac_size: 0.25

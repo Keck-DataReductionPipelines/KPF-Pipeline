@@ -43,6 +43,7 @@ panel_arr:
     paneldict:
       ylabel: Drift Correction Applied
       not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.15
 
   - panelvars:
@@ -54,5 +55,4 @@ panel_arr:
     paneldict:
       ylabel: KPF ERA
       title: KPF-Pipeline Version Number
-      not_junk: true
       legend_frac_size: 0.15

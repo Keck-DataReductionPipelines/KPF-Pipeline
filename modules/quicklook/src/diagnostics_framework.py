@@ -70,7 +70,9 @@ class DiagnosticsFramework(KPF0_Primitive):
         
         # Measure Diagnostics.
         if 'L0' in self.data_level_str:
-            pass
+            self.kpf_object = diagnostics.add_headers_L0_nonGaussian_read_noise(self.kpf_object)
+            self.logger.info("--- L0 non-Gaussian read noise measured and added to headers.")
+            # pass
             
         elif '2D' in self.data_level_str:
             # 2D flux

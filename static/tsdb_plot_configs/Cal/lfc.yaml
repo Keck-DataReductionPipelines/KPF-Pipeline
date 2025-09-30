@@ -12,7 +12,7 @@ panel_arr:
     paneldict:
       ylabel: Intensity (counts)
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.25
       only_object: 
         - autocal-lfc-all-morn
@@ -36,7 +36,7 @@ panel_arr:
     paneldict:
       ylabel: Intensity (counts)
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.25
       only_object: 
         - autocal-lfc-all-morn
@@ -61,7 +61,7 @@ panel_arr:
       ylabel: Current (A)
       title: LFC Diagnostics
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.25
       only_object: 
         - autocal-lfc-all-morn
