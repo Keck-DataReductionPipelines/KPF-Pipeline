@@ -66,10 +66,9 @@ class SpectralExtractionAlg:
         self.order_trace = {}
         self.order_trace['GREEN_CCD'] = pd.read_csv(order_trace_green, index_col=0)
         self.order_trace['RED_CCD'] = pd.read_csv(order_trace_red, index_col=0)
-        self.start_order = {}
-        self.start_order['GREEN_CCD'] = start_order_green
-        self.start_order['RED_CCD'] = start_order_red
-        #self.order_trace = self._fix_order_trace_indexing()
+        #self.start_order = {}
+        #self.start_order['GREEN_CCD'] = start_order_green
+        #self.start_order['RED_CCD'] = start_order_red
 
         # By default the KPF DRP subracts stray light from the data image
         # Only supply background_image if you suspect some additional contamination
@@ -100,6 +99,10 @@ class SpectralExtractionAlg:
         else:
             self.bad_pixel_mask['RED_CCD'] = np.ones_like(self.target_2D['RED_CCD'], dtype='bool')
 
+        # hardcoded fix for order trace
+        # GJG needs to be moved to calibrations lookup
+        self.order_trace = self._fix_order_trace_indexing()
+
         #for chip in ['GREEN', 'RED']:
         #    self.bad_pixel_mask[f'{chip}_CCD'] &= self._make_bad_pixel_mask(chip)
 
@@ -107,17 +110,57 @@ class SpectralExtractionAlg:
         self.target_l1 = KPF1.from_l0(self.target_2D)
 
         
-    def _check_for_variance_frame(self, chip):
+    def _check_for_variance_frame(self, chip, do_patch=True):
         var_ext_name = f'{chip}_VAR'
         if var_ext_name not in self.target_2D.extensions:
             self.log.warning(f"Variance extension {var_ext_name} not found, setting variance equal to photon noise")
-            self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+            if do_patch:
+                self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+            else:
+                raise ValueError(f"Variance extension {var_ext_name} not found")
 
         elif np.shape(self.target_2D[var_ext_name]) != np.shape(self.target_2D[f'{chip}_CCD']):
             self.log.warning(f"Variance extension {var_ext_name} has mismatched dimensions {np.shape(self.target_2D[var_ext_name])} vs {np.shape(self.target_2D[f'{chip}_CCD'])}, setting variance equal to photon noise")
-            self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+            if do_patch:
+                self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+            else:
+                raise ValueError(f"Variance extension {var_ext_name} not found")
 
     
+    def _fix_order_trace_indexing(self):
+        datecode = self.target_2D.header['PRIMARY']['DATE-OBS'].replace('-', '')
+        
+        for chip in ['GREEN', 'RED']:
+            ntrace = len(self.order_trace[f'{chip}_CCD'])
+
+            # start is the dataframe index of the first sky fiber trace
+            # this can be negative if the trace does not fall on the chip
+            # use KPFERA keyword
+            if (int(datecode) < 20240203) and (chip == 'GREEN'):
+                start = -1
+            elif (int(datecode) < 20240203) and (chip == 'RED'):
+                start = -1
+            elif (int(datecode) >= 20240203) and (chip == 'GREEN'):
+               start = 0
+            elif (int(datecode) >= 20240203) and (chip == 'RED'):
+                start = 1
+
+            print(int(datecode), chip, start)
+                    
+            fibers = 'SKY SCI1 SCI2 SCI3 CAL'.split()
+            trace_fiber = [None]*ntrace
+            for i in range(ntrace):
+                trace_fiber[i] = fibers[(i-start)%5]
+            
+            trace_index = np.array(self.order_trace[f'{chip}_CCD'].index, dtype=int)
+            trace_order = np.array(np.ceil((trace_index - start + 1) / 5), dtype=int)
+        
+            self.order_trace[f'{chip}_CCD']['FIBER'] = trace_fiber.copy()
+            self.order_trace[f'{chip}_CCD']['ORDER'] = trace_order.copy()
+            
+        return self.order_trace
+
+
     def _make_bad_pixel_mask(self, chip, sigma_cut=5.0):
         # data, variance, mask
         D = self.target_2D[f'{chip}_CCD']
@@ -133,41 +176,6 @@ class SpectralExtractionAlg:
         M &= np.abs(V0 - np.nanmedian(V0))/mad_std(V0, ignore_nan=True) < sigma_cut
 
         return M
-
-        
-    def _fix_order_trace_indexing(self):
-        for chip in ['GREEN', 'RED']:
-            if self.start_order[f'{chip}_CCD'] > 0:
-                self.order_trace[f'{chip}_CCD'] = self.order_trace[f'{chip}_CCD'].drop(index=0).reset_index(drop=True)
-            elif self.start_order[f'{chip}_CCD'] < 0:
-                n = np.abs(self.start_order[f'{chip}_CCD'])
-                df = self.order_trace[f'{chip}_CCD']
-                nan_rows = pd.DataFrame(np.nan, index=range(n), columns=df.columns)
-                self.order_trace[f'{chip}_CCD'] = pd.concat([nan_rows, df], ignore_index=True)
-            elif self.start_order[f'{chip}_CCD'] == 0:
-                pass
-
-        return self.order_trace
-
-
-    def _get_orderlet_ext_from_trace_index(self, chip, trace_index, start_order=None):
-        if trace_index % 5 == 0:
-            drp_f_ext = f'{chip}_SKY_FLUX'
-            drp_v_ext = f'{chip}_SKY_VAR'
-        elif trace_index % 5 == 1:
-            drp_f_ext = f'{chip}_SCI_FLUX1'
-            drp_v_ext = f'{chip}_SCI_VAR1'
-        elif trace_index % 5 == 2:
-            drp_f_ext = f'{chip}_SCI_FLUX2'
-            drp_v_ext = f'{chip}_SCI_VAR2'
-        elif trace_index % 5 == 3:
-            drp_f_ext = f'{chip}_SCI_FLUX3'
-            drp_v_ext = f'{chip}_SCI_VAR3'
-        elif trace_index % 5 == 4:
-            drp_f_ext = f'{chip}_CAL_FLUX'
-            drp_v_ext = f'{chip}_CAL_VAR'
-
-        return drp_f_ext, drp_v_ext
 
 
     def _get_orderlet_ext_from_fiber_name(self, chip, fiber):
@@ -465,11 +473,13 @@ class SpectralExtractionAlg:
         # optimal extraction loop
         loop = 0
         while loop < max_iter:
-            # spectrum
-            f = np.nansum(M*P*(D-S)*(W/V),axis=0)/np.nansum(M*P**2*(W/V),axis=0)
-            v = np.nansum(M*P*W,axis=0)/np.nansum(M*P**2*(W/V),axis=0)
+            # plot spectrum
+            if do_plot:
+                plt.figure(figsize=(20,4))
+                plt.plot(f)
+                plt.plot(v)
+                plt.show()
 
-        
             # profile
             if not static_profile:
                 P = self.spatial_profile(D, 
@@ -485,21 +495,14 @@ class SpectralExtractionAlg:
             V = V0 + np.abs(f*P + S)/Q
             
             # residuals
-            R = (D - f*P - S)**2/V * W
+            R = (D - f*P - S)**2/V
             
             # mask cosmic rays
             bad_pixel_count = np.nansum(M==0)
-            worst_pixel_row = np.argmax(R*M, axis=0)
+            worst_pixel_row = np.nanargmax(R*M, axis=0)
     
             if verbose:
                 print(f"loop {loop} | {bad_pixel_count - np.nansum(W==0)} pixels flagged")
-        
-            # plot spectrum
-            if do_plot:
-                plt.figure(figsize=(20,4))
-                plt.plot(f)
-                plt.plot(v)
-                plt.show()
         
             for col in range(ncol):
                 row = worst_pixel_row[col]
@@ -516,11 +519,16 @@ class SpectralExtractionAlg:
                         ax[1].set_title(f"Column {col}", fontsize=14)
                         plt.show()
         
+            # 1D spectrum and variance
+            f = np.nansum(M*P*(D-S)*(W/V),axis=0)/np.nansum(M*P**2*(W/V),axis=0)
+            v = np.nansum(M*P*W,axis=0)/np.nansum(M*P**2*(W/V),axis=0)
+
+            # stopping condition
             if np.nansum(M==0) == bad_pixel_count:
                 break
         
             loop += 1
-        
+
         return f, v, P, M
 
     
@@ -656,7 +664,6 @@ class SpectralExtractionAlg:
 
         # set up container for arrays
         nrow, ncol = self.target_2D[f'{chip}_CCD'].shape
-        #ntrace = len(self.order_trace[f'{chip}_CCD'])
         
         if chip == 'GREEN':
             norder = 35
@@ -673,18 +680,21 @@ class SpectralExtractionAlg:
         # extract spectra
         for order in range(1,norder+1):
             for fiber in fibers:
-                print(chip, order, fiber)
-
-                f, v, _, _ = self.extract_orderlet(chip, 
-                                                   order,
-                                                   fiber, 
-                                                   method=method,
-                                                   max_iter=max_iter,
-                                                   profile_filter_size=profile_filter_size,
-                                                   profile_num_knots=profile_num_knots,
-                                                   profile_sigma_clip=profile_sigma_clip,
-                                                   extraction_sigma_clip=extraction_sigma_clip
-                                                  )
+                try:
+                    f, v, _, _ = self.extract_orderlet(chip, 
+                                                       order,
+                                                       fiber, 
+                                                       method=method,
+                                                       max_iter=max_iter,
+                                                       profile_filter_size=profile_filter_size,
+                                                       profile_num_knots=profile_num_knots,
+                                                       profile_sigma_clip=profile_sigma_clip,
+                                                       extraction_sigma_clip=extraction_sigma_clip
+                                                      )
+                except AssertionError:
+                    self.log.warning(f"Skipping {chip} CCD, ORDER {order}, {fiber} FIBER")
+                    f = np.nan*np.ones(ncol)
+                    v = np.nan*np.ones(ncol)
 
                 f_ext, v_ext = self._get_orderlet_ext_from_fiber_name(chip, fiber)
 
