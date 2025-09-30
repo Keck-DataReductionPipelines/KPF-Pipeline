@@ -197,7 +197,7 @@ class StrayLightAlg:
         Method to estimate stray light -- fits a 2D polynomial to inter-order pixels
         """
         data = np.array(self.target_2D[f'{chip}_CCD'].data)
-        mask = self._inter_order_mask(chip, mask_buffer=mask_buffer).astype('bool')
+        mask = self._inter_order_mask(chip, mask_buffer=mask_buffer).astype(bool)
 
         if edge_clip > 0:
             d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
