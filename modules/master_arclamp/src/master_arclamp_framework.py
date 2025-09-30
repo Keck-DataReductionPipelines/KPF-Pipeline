@@ -196,11 +196,19 @@ class MasterArclampFramework(KPF0_Primitive):
                     self.masterbias_path = dbh.filename
                 else:
                      self.logger.info('Master bias file cannot be queried from database; returning...')
+                     try:
+                         dbh.close()
+                     except:
+                         pass
                      master_arclamp_exit_code = 5
                      exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
                      return Arguments(exit_list)
             else:
                 self.logger.info('Observation date not available so master bias file cannot be queried from database; returning...')
+                try:
+                    dbh.close()
+                except:
+                    pass
                 master_arclamp_exit_code = 10
                 exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
                 return Arguments(exit_list)
@@ -220,11 +228,19 @@ class MasterArclampFramework(KPF0_Primitive):
                      self.masterdark_path = dbh.filename
                 else:
                      self.logger.info('Master dark file cannot be queried from database; returning...')
+                     try:
+                         dbh.close()
+                     except:
+                         pass
                      master_arclamp_exit_code = 5
                      exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
                      return Arguments(exit_list)
             else:
                 self.logger.info('Observation date not available so master dark file cannot be queried from database; returning...')
+                try:
+                    dbh.close()
+                except:
+                    pass
                 master_arclamp_exit_code = 10
                 exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
                 return Arguments(exit_list)
@@ -245,18 +261,33 @@ class MasterArclampFramework(KPF0_Primitive):
                         self.masterflat_path = dbh.filename
                     else:
                         self.logger.info('Master flat file cannot be queried from database; returning...')
+                        try:
+                            dbh.close()
+                        except:
+                            pass
                         master_arclamp_exit_code = 5
                         exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
                         return Arguments(exit_list)
                 else:
                     self.logger.info('Observation date not available so master flat file cannot be queried from database; returning...')
+                    try:
+                        dbh.close()
+                    except:
+                        pass
                     master_arclamp_exit_code = 10
                     exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
                     return Arguments(exit_list)
 
             self.logger.info('self.masterflat_path = {}'.format(self.masterflat_path))
 
-        dbh.close()      # Close database connection.
+        # Close database connection with error handling
+        try:
+            self.logger.debug('Closing database connection...')
+            dbh.close()
+            self.logger.debug('Database connection closed successfully.')
+        except Exception as e:
+            self.logger.warning('Error closing database connection: {}'.format(str(e)))
+            # Continue execution even if close fails
 
         master_bias_data = KPF0.from_fits(self.masterbias_path,self.data_type)
         master_dark_data = KPF0.from_fits(self.masterdark_path,self.data_type)

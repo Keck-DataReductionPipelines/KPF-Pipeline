@@ -302,43 +302,41 @@ class MasterFlatFramework(KPF0_Primitive):
         mjd_obs_list = []
         exp_time_list = []
         for flat_file_path in (all_flat_files):
-            flat_file = KPF0.from_fits(flat_file_path,self.data_type)
-            mjd_obs = float(flat_file.header['PRIMARY']['MJD-OBS'])
+            # Optimized: Read only header instead of full file for MJD-OBS and EXPTIME           
+            mjd_obs = float(fits.getval(flat_file_path, 'MJD-OBS'))
             mjd_obs_list.append(mjd_obs)
-            exp_time = float(flat_file.header['PRIMARY']['EXPTIME'])
+            exp_time = float(fits.getval(flat_file_path, 'EXPTIME'))
             exp_time_list.append(exp_time)
             self.logger.debug('flat_file_path,exp_time = {},{}'.format(flat_file_path,exp_time))
-
 
         # Ensure prototype FITS header for product file has matching OBJECT and contains both
         # GRNAMPS and REDAMPS keywords (indicating that the data exist).
 
+        tester = None
+        date_obs = None
         for flat_file_path in (all_flat_files):
-
-            tester = KPF0.from_fits(flat_file_path)
-            tester_object = tester.header['PRIMARY']['OBJECT']
+            
+            tester_object = fits.getval(flat_file_path, 'OBJECT')
 
             if tester_object == self.flat_object:
 
                 try:
-                    tester_grnamps = tester.header['PRIMARY']['GRNAMPS']
+                    tester_grnamps = fits.getval(flat_file_path, 'GRNAMPS')
                 except KeyError as err:
                     continue
 
                 try:
-                    tester_redamps = tester.header['PRIMARY']['REDAMPS']
+                    tester_redamps = fits.getval(flat_file_path, 'REDAMPS')
                 except KeyError as err:
                     continue
 
                 self.logger.info('Prototype FITS header from {}'.format(flat_file_path))
 
-                date_obs = tester.header['PRIMARY']['DATE-OBS']
+                date_obs = fits.getval(flat_file_path, 'DATE-OBS')
+                # Load the full file only ONE TIME for the selected prototype
+                tester = KPF0.from_fits(flat_file_path)
 
                 break
-
-            else:
-
-                tester = None
 
         if tester is None:
             master_flat_exit_code = 6
@@ -352,64 +350,102 @@ class MasterFlatFramework(KPF0_Primitive):
                 del_ext_list.append(i)
         master_holder = tester
 
+        # Restructured to process files first, then extensions to eliminate redundant KPF0.from_fits calls
         filenames_kept = {}
         n_frames_kept = {}
         mjd_obs_min = {}
         mjd_obs_max = {}
+        
+        # Initialize data storage dictionaries for each extension
+        extension_data = {}
         for ffi in self.lev0_ffi_exts:
-
-            self.logger.debug('Loading flat data, ffi = {}'.format(ffi))
-            keep_ffi = 0
-
-            filenames_kept_list = []
-            frames_data = []
-            frames_data_exptimes = []
-            frames_data_mjdobs = []
-            frames_data_path = []
-            n_all_flat_files = len(all_flat_files)
-            for i in range(0, n_all_flat_files):
-
-                exp_time = exp_time_list[i]
-                mjd_obs = mjd_obs_list[i]
-                self.logger.debug('i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,all_flat_files[i],ffi,exp_time))
-
+            extension_data[ffi] = {
+                'filenames_kept_list': [],
+                'frames_data': [],
+                'frames_data_exptimes': [],
+                'frames_data_mjdobs': [],
+                'frames_data_path': [],
+                'keep_ffi': 0
+            }
+        
+        n_all_flat_files = len(all_flat_files)
+        for i in range(0, n_all_flat_files):
+            exp_time = exp_time_list[i]
+            mjd_obs = mjd_obs_list[i]
+            path = all_flat_files[i]
+            
+            self.logger.debug('Processing file: i,fitsfile,exp_time = {},{},{}'.format(i,path,exp_time))
+            
+            # Check exposure time limits for all extensions first - skip entire file if any fail
+            skip_file = False
+            for ffi in self.lev0_ffi_exts:
                 if not (ffi == 'GREEN_CCD' or ffi == 'RED_CCD' or ffi == 'CA_HK'):
                     raise NameError('FITS extension {} not supported; check recipe config file.'.format(ffi))
-
+                
                 if ffi == 'GREEN_CCD' and exp_time > self.green_ccd_flat_exptime_maximum:
-                    self.logger.debug('---->ffi,exp_time,self.green_ccd_flat_exptime_maximum = {},{},{}'.format(ffi,exp_time,self.green_ccd_flat_exptime_maximum))
-                    continue
+                    self.logger.debug('---->Skipping file for GREEN_CCD: ffi,exp_time,limit = {},{},{}'.format(ffi,exp_time,self.green_ccd_flat_exptime_maximum))
+                    skip_file = True
+                    break
                 if ffi == 'RED_CCD' and exp_time > self.red_ccd_flat_exptime_maximum:
-                    self.logger.debug('---->ffi,exp_time,self.red_ccd_flat_exptime_maximum = {},{},{}'.format(ffi,exp_time,self.red_ccd_flat_exptime_maximum))
-                    continue
+                    self.logger.debug('---->Skipping file for RED_CCD: ffi,exp_time,limit = {},{},{}'.format(ffi,exp_time,self.red_ccd_flat_exptime_maximum))
+                    skip_file = True
+                    break
                 if ffi == 'CA_HK' and exp_time > self.ca_hk_flat_exptime_maximum:
+                    self.logger.debug('---->Skipping file for CA_HK: ffi,exp_time,limit = {},{},{}'.format(ffi,exp_time,self.ca_hk_flat_exptime_maximum))
+                    skip_file = True
+                    break
+            
+            if skip_file:
+                continue
+            
+            # Load file only once for all extensions
+            obj = KPF0.from_fits(path)
+            
+            # Check QC keywords once per file
+            skip = qc.check_all_qc_keywords(obj,path,input_master_type,self.logger)
+            self.logger.debug('After calling qc.check_all_qc_keywords: i,path,skip = {},{},{}'.format(i,path,skip))
+            if skip:
+                continue
+            
+            # Process each extension for this file
+            for ffi in self.lev0_ffi_exts:
+                self.logger.debug('Processing extension: i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,path,ffi,exp_time))
+                
+                try:
+                    np_obj_ffi = np.array(obj[ffi])
+                    np_obj_ffi_shape = np.shape(np_obj_ffi)
+                    n_dims = len(np_obj_ffi_shape)
+                    self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
+                    
+                    if n_dims == 2:       # Check if valid data extension
+                        extension_data[ffi]['keep_ffi'] = 1
+                        extension_data[ffi]['filenames_kept_list'].append(all_flat_files[i])
+                        extension_data[ffi]['frames_data'].append(obj[ffi])
+                        extension_data[ffi]['frames_data_exptimes'].append(exp_time)
+                        extension_data[ffi]['frames_data_mjdobs'].append(mjd_obs)
+                        extension_data[ffi]['frames_data_path'].append(path)
+                        self.logger.debug('Keeping flat image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,all_flat_files[i],ffi,mjd_obs,exp_time))
+                        
+                except Exception as e:
+                    self.logger.debug('Extension {} not found or invalid in file {}: {}'.format(ffi, path, str(e)))
                     continue
+        
+        # Now process each extension's collected data
+        for ffi in self.lev0_ffi_exts:
+            self.logger.debug('Processing collected data for ffi = {}'.format(ffi))
+            
+            keep_ffi = extension_data[ffi]['keep_ffi']
+            filenames_kept_list = extension_data[ffi]['filenames_kept_list']
+            frames_data = extension_data[ffi]['frames_data']
+            frames_data_exptimes = extension_data[ffi]['frames_data_exptimes']
+            frames_data_mjdobs = extension_data[ffi]['frames_data_mjdobs']
+            frames_data_path = extension_data[ffi]['frames_data_path']
 
-                path = all_flat_files[i]
-                obj = KPF0.from_fits(path)
-
-
-                # Check QC keywords and skip image if it does not pass QC checking.
-
-                skip = qc.check_all_qc_keywords(obj,path,input_master_type,self.logger)
-                self.logger.debug('After calling qc.check_all_qc_keywords: i,path,skip = {},{},{}'.format(i,path,skip))
-                if skip:
-                    continue
-
-
-                np_obj_ffi = np.array(obj[ffi])
-                np_obj_ffi_shape = np.shape(np_obj_ffi)
-                n_dims = len(np_obj_ffi_shape)
-                self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
-                if n_dims == 2:       # Check if valid data extension
-                     keep_ffi = 1
-                     filenames_kept_list.append(all_flat_files[i])
-                     frames_data.append(obj[ffi])
-                     frames_data_exptimes.append(exp_time)
-                     frames_data_mjdobs.append(mjd_obs)
-                     frames_data_path.append(path)
-                     self.logger.debug('Keeping flat image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,all_flat_files[i],ffi,mjd_obs,exp_time))
-
+            if keep_ffi == 0 or len(frames_data) == 0:
+                self.logger.debug('No valid data for ffi = {}, skipping'.format(ffi))
+                del_ext_list.append(ffi)
+                continue
+                
             np_frames_data = np.array(frames_data)
             np_bias_data = np.array(master_bias_data[ffi])
 
@@ -728,6 +764,8 @@ class MasterFlatFramework(KPF0_Primitive):
 
         master_holder.header['PRIMARY']['IMTYPE'] = ('Flat','Master flat')
 
+        # log the file writing
+        self.logger.info('Writing master-flat FITS file: {}'.format(self.masterflat_path))
         master_holder.to_fits(self.masterflat_path)
 
 

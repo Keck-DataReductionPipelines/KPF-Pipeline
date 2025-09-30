@@ -5,6 +5,7 @@ import configparser as cp
 from datetime import datetime, timezone
 from scipy.ndimage import gaussian_filter
 from scipy.stats import mode
+from astropy.io import fits
 
 from modules.Utils.kpf_fits import FitsHeaders
 from modules.Utils.frame_stacker import FrameStacker
@@ -188,69 +189,115 @@ class MasterSuperFlatFramework(KPF0_Primitive):
         mjd_obs_list = []
         exp_time_list = []
         for flat_file_path in (all_flat_files):
-            flat_file = KPF0.from_fits(flat_file_path,self.data_type)
-            mjd_obs = float(flat_file.header['PRIMARY']['MJD-OBS'])
+            # Optimized: Read only header instead of full file for MJD-OBS and ELAPSED
+            mjd_obs = float(fits.getval(flat_file_path, 'MJD-OBS'))
             mjd_obs_list.append(mjd_obs)
-            exp_time = float(flat_file.header['PRIMARY']['ELAPSED'])
+            exp_time = float(fits.getval(flat_file_path, 'ELAPSED'))
             exp_time_list.append(exp_time)
             self.logger.debug('flat_file_path,exp_time = {},{}'.format(flat_file_path,exp_time))
 
-        tester = KPF0.from_fits(all_flat_files[0])
+        # Optimized: Use header-only approach to find a good prototype
+        tester = None
+        for flat_file_path in all_flat_files:
+            try:
+                # Check if file has required extensions using header-only access
+                with fits.open(flat_file_path) as hdul:
+                    ext_names = [hdu.name for hdu in hdul]
+                    if any(ext in ext_names for ext in ['GREEN_CCD', 'RED_CCD', 'CA_HK']):
+                        # Load this file as prototype since it has needed extensions
+                        tester = KPF0.from_fits(flat_file_path)
+                        break
+            except:
+                continue
+        
+        if tester is None:
+            tester = KPF0.from_fits(all_flat_files[0])  # Fallback to first file
+        
         del_ext_list = []
         for i in tester.extensions.keys():
             if i != 'GREEN_CCD' and i != 'RED_CCD' and i != 'CA_HK' and i != 'PRIMARY' and i != 'RECEIPT' and i != 'CONFIG':
                 del_ext_list.append(i)
         master_holder = tester
 
+        # Optimized: Conservative approach - filter files first, then process extensions
+        # Pre-filter files based on exposure time constraints and extension validity
+        filtered_files_per_ext = {}
+        for ffi in self.lev0_ffi_exts:
+            if not (ffi == 'GREEN_CCD' or ffi == 'RED_CCD' or ffi == 'CA_HK'):
+                raise NameError('FITS extension {} not supported; check recipe config file.'.format(ffi))
+            filtered_files_per_ext[ffi] = []
+        
+        n_all_flat_files = len(all_flat_files)
+        for i in range(0, n_all_flat_files):
+            exp_time = exp_time_list[i]
+            mjd_obs = mjd_obs_list[i]
+            path = all_flat_files[i]
+            
+            # Check exposure time constraints for each extension
+            valid_for_extensions = []
+            for ffi in self.lev0_ffi_exts:
+                if ffi == 'GREEN_CCD' and exp_time <= self.green_ccd_flat_exptime_maximum:
+                    valid_for_extensions.append(ffi)
+                elif ffi == 'RED_CCD' and exp_time <= self.red_ccd_flat_exptime_maximum:
+                    valid_for_extensions.append(ffi)
+                elif ffi == 'CA_HK' and exp_time <= self.ca_hk_flat_exptime_maximum:
+                    valid_for_extensions.append(ffi)
+            
+            # Add file to valid extensions
+            for ffi in valid_for_extensions:
+                filtered_files_per_ext[ffi].append({
+                    'path': path,
+                    'exp_time': exp_time,
+                    'mjd_obs': mjd_obs,
+                    'index': i
+                })
+
+        # Now process each extension with file-first approach
         n_frames_kept = {}
         mjd_obs_min = {}
         mjd_obs_max = {}
+        
         for ffi in self.lev0_ffi_exts:
-
             self.logger.debug('Loading flat data, ffi = {}'.format(ffi))
-            keep_ffi = 0
-
+            
+            valid_files = filtered_files_per_ext[ffi]
+            if len(valid_files) == 0:
+                self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi, 0))
+                del_ext_list.append(ffi)
+                continue
+            
+            # File-first processing - load each file only once
             frames_data = []
             frames_data_exptimes = []
             frames_data_mjdobs = []
             frames_data_path = []
-            n_all_flat_files = len(all_flat_files)
-            for i in range(0, n_all_flat_files):
-
-                exp_time = exp_time_list[i]
-                mjd_obs = mjd_obs_list[i]
-                self.logger.debug('i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,all_flat_files[i],ffi,exp_time))
-
-                if not (ffi == 'GREEN_CCD' or ffi == 'RED_CCD' or ffi == 'CA_HK'):
-                    raise NameError('FITS extension {} not supported; check recipe config file.'.format(ffi))
-
-                if ffi == 'GREEN_CCD' and exp_time > self.green_ccd_flat_exptime_maximum:
-                    self.logger.debug('---->ffi,exp_time,self.green_ccd_flat_exptime_maximum = {},{},{}'.format(ffi,exp_time,self.green_ccd_flat_exptime_maximum))
-                    continue
-                if ffi == 'RED_CCD' and exp_time > self.red_ccd_flat_exptime_maximum:
-                    self.logger.debug('---->ffi,exp_time,self.red_ccd_flat_exptime_maximum = {},{},{}'.format(ffi,exp_time,self.red_ccd_flat_exptime_maximum))
-                    continue
-                if ffi == 'CA_HK' and exp_time > self.ca_hk_flat_exptime_maximum:
-                    continue
-
-                path = all_flat_files[i]
+            
+            for file_info in valid_files:
+                path = file_info['path']
+                exp_time = file_info['exp_time']
+                mjd_obs = file_info['mjd_obs']
+                i = file_info['index']
+                
+                self.logger.debug('i,fitsfile,ffi,exp_time = {},{},{},{}'.format(i,path,ffi,exp_time))
+                
+                # Load file once and check extension validity
                 obj = KPF0.from_fits(path)
-                np_obj_ffi = np.array(obj[ffi])
-                np_obj_ffi_shape = np.shape(np_obj_ffi)
-                n_dims = len(np_obj_ffi_shape)
-                self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
-                if n_dims == 2:       # Check if valid data extension
-                     keep_ffi = 1
-                     frames_data.append(obj[ffi])
-                     frames_data_exptimes.append(exp_time)
-                     frames_data_mjdobs.append(mjd_obs)
-                     frames_data_path.append(path)
-                     self.logger.debug('Keeping flat image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,all_flat_files[i],ffi,mjd_obs,exp_time))
-
-            if keep_ffi == 0:
-                self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi,keep_ffi))
+                if ffi in obj.extensions:
+                    np_obj_ffi = np.array(obj[ffi])
+                    np_obj_ffi_shape = np.shape(np_obj_ffi)
+                    n_dims = len(np_obj_ffi_shape)
+                    self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
+                    if n_dims == 2:       # Check if valid data extension
+                        frames_data.append(obj[ffi])
+                        frames_data_exptimes.append(exp_time)
+                        frames_data_mjdobs.append(mjd_obs)
+                        frames_data_path.append(path)
+                        self.logger.debug('Keeping flat image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,path,ffi,mjd_obs,exp_time))
+            
+            if len(frames_data) == 0:
+                self.logger.debug('ffi,keep_ffi = {},{}'.format(ffi, 0))
                 del_ext_list.append(ffi)
-                break
+                continue
 
             frames_data = np.array(frames_data) - np.array(master_bias_data[ffi])      # Subtract master bias.
 
