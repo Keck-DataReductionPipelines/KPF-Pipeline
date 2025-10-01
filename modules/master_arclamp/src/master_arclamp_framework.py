@@ -288,6 +288,11 @@ class MasterArclampFramework(KPF0_Primitive):
         except Exception as e:
             self.logger.warning('Error closing database connection: {}'.format(str(e)))
             # Continue execution even if close fails
+        finally:
+            # Ensure we always move past this point
+            dbh = None
+            
+        self.logger.debug('Starting to load master calibration files...')
 
         master_bias_data = KPF0.from_fits(self.masterbias_path,self.data_type)
         master_dark_data = KPF0.from_fits(self.masterdark_path,self.data_type)
@@ -299,12 +304,12 @@ class MasterArclampFramework(KPF0_Primitive):
         exp_time_list = []
         arclamp_object_list = []
         for arclamp_file_path in (all_arclamp_files):
-            arclamp_file = KPF0.from_fits(arclamp_file_path,self.data_type)
-            mjd_obs = float(arclamp_file.header['PRIMARY']['MJD-OBS'])
+            # Optimized: Read only header instead of full file for MJD-OBS, ELAPSED, and OBJECT
+            mjd_obs = float(fits.getval(arclamp_file_path, 'MJD-OBS'))
             mjd_obs_list.append(mjd_obs)
-            exp_time = float(arclamp_file.header['PRIMARY']['ELAPSED'])
+            exp_time = float(fits.getval(arclamp_file_path, 'ELAPSED'))
             exp_time_list.append(exp_time)
-            header_object = arclamp_file.header['PRIMARY']['OBJECT']
+            header_object = fits.getval(arclamp_file_path, 'OBJECT')
             arclamp_object_list.append(header_object)
             #self.logger.debug('arclamp_file_path,exp_time,header_object = {},{},{}'.format(arclamp_file_path,exp_time,header_object))
 
@@ -312,32 +317,36 @@ class MasterArclampFramework(KPF0_Primitive):
         # Ensure prototype FITS header for product file has matching OBJECT and contains both
         # GRNAMPS and REDAMPS keywords (indicating that the data exist).
 
+        tester = None
         for arclamp_file_path in (all_arclamp_files):
 
-            tester = KPF0.from_fits(arclamp_file_path)
-            tester_object = tester.header['PRIMARY']['OBJECT']
+            # Optimized: Use header-only reads to check conditions before loading full file
+            try:
+                tester_object = fits.getval(arclamp_file_path, 'OBJECT')
+                
+                if tester_object == self.arclamp_object:
+                    # Check for required keywords using header-only access
+                    try:
+                        tester_grnamps = fits.getval(arclamp_file_path, 'GRNAMPS')
+                    except KeyError as err:
+                        continue
 
-            if tester_object == self.arclamp_object:
+                    try:
+                        tester_redamps = fits.getval(arclamp_file_path, 'REDAMPS')
+                    except KeyError as err:
+                        continue
 
-                try:
-                    tester_grnamps = tester.header['PRIMARY']['GRNAMPS']
-                except KeyError as err:
-                    continue
-
-                try:
-                    tester_redamps = tester.header['PRIMARY']['REDAMPS']
-                except KeyError as err:
-                    continue
-
-                self.logger.info('Prototype FITS header from {}'.format(arclamp_file_path))
-
-                date_obs = tester.header['PRIMARY']['DATE-OBS']
-
-                break
-
-            else:
-
-                tester = None
+                    # All conditions met - now load the full file for use as prototype
+                    tester = KPF0.from_fits(arclamp_file_path)
+                    date_obs = tester.header['PRIMARY']['DATE-OBS']
+                    
+                    self.logger.info('Prototype FITS header from {}'.format(arclamp_file_path))
+                    break
+                    
+            except Exception as e:
+                # Skip files that can't be read
+                self.logger.debug('Could not read header from {}: {}'.format(arclamp_file_path, str(e)))
+                continue
 
         if tester is None:
             master_arclamp_exit_code = 6
@@ -351,62 +360,89 @@ class MasterArclampFramework(KPF0_Primitive):
                 del_ext_list.append(i)
         master_holder = tester
 
+        # Initialize data structures for each extension
         filenames_kept = {}
         n_frames_kept = {}
         mjd_obs_min = {}
         mjd_obs_max = {}
+        frames_data_by_ffi = {}
+        frames_data_exptimes_by_ffi = {}
+        frames_data_mjdobs_by_ffi = {}
+        frames_data_path_by_ffi = {}
+        keep_ffi_flags = {}
+        
         for ffi in self.lev0_ffi_exts:
+            filenames_kept[ffi] = []
+            frames_data_by_ffi[ffi] = []
+            frames_data_exptimes_by_ffi[ffi] = []
+            frames_data_mjdobs_by_ffi[ffi] = []
+            frames_data_path_by_ffi[ffi] = []
+            keep_ffi_flags[ffi] = 0
 
-            self.logger.debug('Loading arclamp data, ffi = {}'.format(ffi))
-            keep_ffi = 0
+        # File-first processing: load each file once and process for both chips
+        files_processed = 0
+        for i in range(0, n_all_arclamp_files):
+            exp_time = exp_time_list[i]
+            mjd_obs = mjd_obs_list[i]
+            header_object = arclamp_object_list[i]
 
-            filenames_kept_list = []
-            frames_data = []
-            frames_data_exptimes = []
-            frames_data_mjdobs = []
-            frames_data_path = []
-            n = 0
-            for i in range(0, n_all_arclamp_files):
-                exp_time = exp_time_list[i]
-                mjd_obs = mjd_obs_list[i]
-                header_object = arclamp_object_list[i]
+            # Skip files that don't match the target object
+            if header_object != self.arclamp_object:
+                continue
 
-                #self.logger.debug('i,fitsfile,ffi,exp_time,arclamp_object_list[i] = {},{},{},{},{}'.format(i,all_arclamp_files[i],ffi,exp_time,arclamp_object_list[i]))
+            # Check if we've reached the maximum number of frames
+            if files_processed >= self.max_num_frames_to_stack:
+                continue
 
+            path = all_arclamp_files[i]
+            
+            # Load the file once for both chips
+            obj = KPF0.from_fits(path)
+
+            # Check QC keywords once per file (applies to both chips)
+            skip = qc.check_all_qc_keywords(obj,path,input_master_type,self.logger)
+            self.logger.debug('After calling qc.check_all_qc_keywords: i,path,skip = {},{},{}'.format(i,path,skip))
+            if skip:
+                continue
+
+            # Process both chips for this file
+            file_valid_for_any_chip = False
+            for ffi in self.lev0_ffi_exts:
                 if not (ffi == 'GREEN_CCD' or ffi == 'RED_CCD'):
                     raise NameError('FITS extension {} not supported; check recipe config file.'.format(ffi))
 
-                if header_object != self.arclamp_object:
-                    #self.logger.debug('---->ffi,header_object,self.arclamp_object = {},{},{}'.format(ffi,header_object,self.arclamp_object))
+                # Check if this extension has valid 2D data
+                try:
+                    np_obj_ffi = np.array(obj[ffi])
+                    np_obj_ffi_shape = np.shape(np_obj_ffi)
+                    n_dims = len(np_obj_ffi_shape)
+                    
+                    if n_dims == 2:       # Valid data extension
+                        keep_ffi_flags[ffi] = 1
+                        filenames_kept[ffi].append(all_arclamp_files[i])
+                        frames_data_by_ffi[ffi].append(obj[ffi])
+                        frames_data_exptimes_by_ffi[ffi].append(exp_time)
+                        frames_data_mjdobs_by_ffi[ffi].append(mjd_obs)
+                        frames_data_path_by_ffi[ffi].append(path)
+                        file_valid_for_any_chip = True
+                        #self.logger.debug('Keeping arclamp image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,all_arclamp_files[i],ffi,mjd_obs,exp_time))
+                except Exception as e:
+                    self.logger.debug('Could not process extension {} for file {}: {}'.format(ffi, path, str(e)))
                     continue
 
-                path = all_arclamp_files[i]
-                obj = KPF0.from_fits(path)
+            # Only increment counter if file was valid for at least one chip
+            if file_valid_for_any_chip:
+                files_processed += 1
 
-
-                # Check QC keywords and skip image if it does not pass QC checking.
-
-                skip = qc.check_all_qc_keywords(obj,path,input_master_type,self.logger)
-                self.logger.debug('After calling qc.check_all_qc_keywords: i,path,skip = {},{},{}'.format(i,path,skip))
-                if skip:
-                    continue
-
-
-                np_obj_ffi = np.array(obj[ffi])
-                np_obj_ffi_shape = np.shape(np_obj_ffi)
-                n_dims = len(np_obj_ffi_shape)
-                #self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
-                if n_dims == 2:       # Check if valid data extension
-                    keep_ffi = 1
-                    filenames_kept_list.append(all_arclamp_files[i])
-                    frames_data.append(obj[ffi])
-                    frames_data_exptimes.append(exp_time)
-                    frames_data_mjdobs.append(mjd_obs)
-                    frames_data_path.append(path)
-                    #self.logger.debug('Keeping arclamp image: i,fitsfile,ffi,mjd_obs,exp_time = {},{},{},{},{}'.format(i,all_arclamp_files[i],ffi,mjd_obs,exp_time))
-                    if n >= self.max_num_frames_to_stack:
-                        continue
-                    n += 1
+        # Process each extension's collected data
+        for ffi in self.lev0_ffi_exts:
+            self.logger.debug('Processing collected arclamp data, ffi = {}'.format(ffi))
+            
+            frames_data = frames_data_by_ffi[ffi]
+            frames_data_exptimes = frames_data_exptimes_by_ffi[ffi]
+            frames_data_mjdobs = frames_data_mjdobs_by_ffi[ffi]
+            frames_data_path = frames_data_path_by_ffi[ffi]
+            keep_ffi = keep_ffi_flags[ffi]
 
             n_frames = (np.shape(frames_data))[0]
             self.logger.debug('Number of frames in stack = {}'.format(n_frames))
@@ -431,7 +467,7 @@ class MasterArclampFramework(KPF0_Primitive):
 
             normalized_frames_data = []
 
-            filenames_kept[ffi] = filenames_kept_list
+            # filenames_kept[ffi] already populated above
             n_frames_kept[ffi] = n_frames
             mjd_obs_min[ffi] = min(frames_data_mjdobs)
             mjd_obs_max[ffi] = max(frames_data_mjdobs)
@@ -623,7 +659,8 @@ class MasterArclampFramework(KPF0_Primitive):
         # Add informational to FITS header.  This is the only way I know of to keep the keyword comment.
 
         master_holder.header['PRIMARY']['IMTYPE'] = ('Arclamp','Master arclamp')
-
+        # log the file writing
+        self.logger.info('Writing master arclamp to {}'.format(self.masterarclamp_path))
         master_holder.to_fits(self.masterarclamp_path)
 
 
