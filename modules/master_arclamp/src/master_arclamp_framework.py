@@ -23,6 +23,9 @@ DEFAULT_CFG_PATH = 'modules/master_arclamp/configs/default.cfg'
 
 class MasterArclampFramework(KPF0_Primitive):
 
+    # Class-level logger cache to avoid creating multiple loggers
+    _logger_cache = {}
+
     """
     Description:
         This class works within the Keck pipeline framework to compute the master arclamp,
@@ -95,14 +98,21 @@ class MasterArclampFramework(KPF0_Primitive):
 
         try:
             self.module_config_path = context.config_path['master_arclamp']
-            print("--->MasterFlatFramework class: self.module_config_path =",self.module_config_path)
+            print("--->MasterArclampFramework class: self.module_config_path =",self.module_config_path)
         except:
             self.module_config_path = DEFAULT_CFG_PATH
 
         print("{} class: self.module_config_path = {}".format(self.__class__.__name__,self.module_config_path))
 
-        print("Starting logger...")
-        self.logger = start_logger(self.__class__.__name__, self.module_config_path)
+        # Use cached logger to avoid creating multiple loggers for different arc lamp types
+        logger_key = (self.__class__.__name__, self.module_config_path)
+        if logger_key in MasterArclampFramework._logger_cache:
+            self.logger = MasterArclampFramework._logger_cache[logger_key]
+            print("Reusing cached logger...")
+        else:
+            print("Starting new logger...")
+            self.logger = start_logger(self.__class__.__name__, self.module_config_path)
+            MasterArclampFramework._logger_cache[logger_key] = self.logger
 
         if self.logger is not None:
             print("--->self.logger is not None...")
