@@ -79,8 +79,6 @@ class FitsHeaders:
         matched_fits_files = []
         for fits_file in self.input_fits_files:
 
-            hdul = fits.open(fits_file)
-
             match_count = 0
             for i in range(self.n_header_keywords):
 
@@ -88,7 +86,7 @@ class FitsHeaders:
 
                 try:
 
-                    val = hdul[0].header[self.header_keywords[i]]
+                    val = fits.getval(fits_file, self.header_keywords[i])
                     fits_value = (val).lower()
                     if (fits_value == input_value):
                         match_count += 1
@@ -109,8 +107,6 @@ class FitsHeaders:
 
             if match_count == self.n_header_keywords:
                 matched_fits_files.append(fits_file)
-
-            hdul.close()
 
         if self.logger:
              self.logger.info('FitsHeaders.match_headers_string_lower(): matched_fits_files = {}'.\
@@ -240,8 +236,6 @@ class FitsHeaders:
         all_dark_objects = []
         for fits_file in matched_fits_files:
 
-            hdul = fits.open(fits_file)
-
             flag = 'remove'
 
             try:
@@ -251,7 +245,7 @@ class FitsHeaders:
                 if (val4 >= exptime_minimum):
                     flag = 'keep'
                     filtered_matched_fits_files.append(fits_file)
-                    obj = hdul[0].header['OBJECT']
+                    obj = fits.getval(fits_file, 'OBJECT')
                     if obj not in all_dark_objects:
                         all_dark_objects.append(obj)
 
@@ -268,8 +262,6 @@ class FitsHeaders:
                     self.logger.info('Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
                 else:
                     print('---->Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
-
-            hdul.close()
 
         if self.logger:
              self.logger.info('FitsHeaders.get_good_darks(): filtered_matched_fits_files = {}'.\
@@ -290,7 +282,6 @@ class FitsHeaders:
         all_arclamp_objects = []
         for fits_file in self.input_fits_files:
 
-            hdul = fits.open(fits_file)
             match_count = 0
             for i in range(self.n_header_keywords):
 
@@ -298,7 +289,7 @@ class FitsHeaders:
 
                 try:
 
-                    val = hdul[0].header[self.header_keywords[i]]
+                    val = fits.getval(fits_file, self.header_keywords[i])
                     fits_value = (val).lower()
                     if (fits_value == input_value):
                         match_count += 1
@@ -321,7 +312,7 @@ class FitsHeaders:
 
                 try:
 
-                    obj = hdul[0].header['OBJECT']
+                    obj = fits.getval(fits_file, 'OBJECT')
                     matched_fits_files.append(fits_file)
                     if obj not in all_arclamp_objects:
                         all_arclamp_objects.append(obj)
@@ -332,9 +323,6 @@ class FitsHeaders:
                         self.logger.info('KeyError: {} ({}); skipping...'.format(err,fits_file))
                     else:
                         print('---->KeyError: {} ({}); skipping...'.format(err,fits_file))
-
-
-            hdul.close()
 
         if self.logger:
              self.logger.info('FitsHeaders.get_good_arclamps(): matched_fits_files = {}'.\
@@ -360,8 +348,6 @@ class FitsHeaders:
         all_bias_objects = []
         for fits_file in matched_fits_files:
 
-            hdul = fits.open(fits_file)
-
             flag = 'remove'
 
             try:
@@ -373,13 +359,13 @@ class FitsHeaders:
                 # SCRAMSHT= 'closed ' / Scrambler shutter at exp. midpoint
                 # SIMCALSH= 'closed ' / Simult Cal shutter at exp. midpoint
 
-                SCISEL = hdul[0].header['SCISEL']
-                SKYSEL = hdul[0].header['SKYSEL']
-                FFSHTR = hdul[0].header['FFSHTR']
-                SCRAMSHT = hdul[0].header['SCRAMSHT']
-                SIMCALSH = hdul[0].header['SIMCALSH']
+                SCISEL = fits.getval(fits_file, 'SCISEL')
+                SKYSEL = fits.getval(fits_file, 'SKYSEL')
+                FFSHTR = fits.getval(fits_file, 'FFSHTR')
+                SCRAMSHT = fits.getval(fits_file, 'SCRAMSHT')
+                SIMCALSH = fits.getval(fits_file, 'SIMCALSH')
 
-                ELAPSED = hdul[0].header['ELAPSED']
+                ELAPSED = fits.getval(fits_file, 'ELAPSED')
 
                 if 'closed' in SCISEL and \
                    'closed' in SKYSEL and \
@@ -390,7 +376,7 @@ class FitsHeaders:
                     if (ELAPSED <= exptime_maximum):
                         flag = 'keep'
                         filtered_matched_fits_files.append(fits_file)
-                        obj = hdul[0].header['OBJECT']
+                        obj = fits.getval(fits_file, 'OBJECT')
                         if obj not in all_bias_objects:
                             all_bias_objects.append(obj)
 
@@ -407,8 +393,6 @@ class FitsHeaders:
                     self.logger.info('Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
                 else:
                     print('---->Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
-
-            hdul.close()
 
         if self.logger:
              self.logger.info('FitsHeaders.get_good_biases(): filtered_matched_fits_files = {}'.\

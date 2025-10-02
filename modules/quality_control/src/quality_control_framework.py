@@ -36,21 +36,25 @@ class QualityControlFramework(KPF0_Primitive):
 
         try:
             self.module_config_path = context.config_path['quality_control']
-            print("--->",self.__class__.__name__,": self.module_config_path =",self.module_config_path)
         except:
             self.module_config_path = DEFAULT_CFG_PATH
 
-        print("{} class: self.module_config_path = {}".format(self.__class__.__name__,self.module_config_path))
-
-        print("Starting logger...")
-        self.logger = start_logger(self.__class__.__name__, self.module_config_path)
-
-        if self.logger is not None:
-            print("--->self.logger is not None...")
+        # Only start logger if it doesn't already exist for this class
+        logger_name = self.__class__.__name__
+        existing_logger = logging.getLogger(logger_name)
+        
+        if not existing_logger.handlers or not hasattr(self.__class__, '_class_logger'):
+            # Logger doesn't exist or has no handlers, create it
+            print("Starting logger for {}...".format(logger_name))
+            self.logger = start_logger(logger_name, self.module_config_path)
+            # Cache the logger at class level to reuse
+            self.__class__._class_logger = self.logger
+            print("Logger started for {}.".format(logger_name))
         else:
-            print("--->self.logger is None...")
+            # Reuse existing logger
+            self.logger = getattr(self.__class__, '_class_logger', existing_logger)
 
-        self.logger.info('Started {}'.format(self.__class__.__name__))
+        self.logger.info('Started {} instance'.format(self.__class__.__name__))
         self.logger.debug('module_config_path = {}'.format(self.module_config_path))
 
         module_config_obj = cp.ConfigParser()

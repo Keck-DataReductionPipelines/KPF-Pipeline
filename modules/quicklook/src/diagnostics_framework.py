@@ -51,11 +51,33 @@ class DiagnosticsFramework(KPF0_Primitive):
 
         self.config.read(self.config_path)
 
-        # Start logger
-        self.logger=None
-        if not self.logger:
-            self.logger=self.context.logger
-        self.logger.info('Started {}'.format(self.__class__.__name__))
+        # Start logger - check if already available
+        self.logger = None
+        
+        # First check if context has a valid logger
+        if hasattr(self.context, 'logger') and self.context.logger is not None:
+            try:
+                # Test if the logger is functional
+                self.context.logger.handlers
+                self.logger = self.context.logger
+            except (AttributeError, Exception):
+                # Context logger is not valid, will create new one below
+                pass
+        
+        # If no valid context logger, check for existing class logger or create new one
+        if self.logger is None:
+            logger_name = self.__class__.__name__
+            existing_logger = logging.getLogger(logger_name)
+            
+            if existing_logger.handlers and hasattr(self.__class__, '_class_logger'):
+                # Reuse existing class logger
+                self.logger = self.__class__._class_logger
+            else:
+                # Create new logger and cache it
+                self.logger = start_logger(logger_name, self.config_path)
+                self.__class__._class_logger = self.logger
+        
+        self.logger.info('Started {} instance'.format(self.__class__.__name__))
         self.logger.info('self.diagnostics_name = {}'.format(self.diagnostics_name))
 
 
