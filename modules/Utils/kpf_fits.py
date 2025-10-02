@@ -40,10 +40,6 @@ class FitsHeaders:
         if not file_paths:
             return {}
             
-        # Try subprocess first, with timing for debugging
-        import time
-        start_time = time.time()
-        
         # Build fitsheader command
         cmd = ["fitsheader", "-e", str(extension)]
         for key in keys:
@@ -52,35 +48,18 @@ class FitsHeaders:
         
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            subprocess_time = time.time() - start_time
-            
-            # Debug: Show what fitsheader actually returned
-            print(f"DEBUG: fitsheader command: {' '.join(cmd)}")
-            print(f"DEBUG: fitsheader stdout length: {len(result.stdout)} chars")
-            print(f"DEBUG: fitsheader stderr: {result.stderr}")
-            print(f"DEBUG: fitsheader first 500 chars of stdout:")
-            print(repr(result.stdout[:500]))
-            
             parsed_result = FitsHeaders._parse_fitsheader_output(result.stdout, file_paths, keys)
             
             # If parsing failed or returned empty, fallback
             if not parsed_result:
-                print(f"DEBUG: fitsheader subprocess succeeded but parsing failed, fallback after {subprocess_time:.3f}s")
-                print(f"DEBUG: parsed_result is empty or None: {parsed_result}")
                 return FitsHeaders._fallback_header_extraction(file_paths, keys, extension)
             
-            print(f"DEBUG: fitsheader subprocess succeeded in {subprocess_time:.3f}s for {len(file_paths)} files, {len(keys)} keys")
-            print(f"DEBUG: parsed_result has {len(parsed_result)} files")
             return parsed_result
             
-        except subprocess.CalledProcessError as e:
-            subprocess_time = time.time() - start_time
-            print(f"DEBUG: fitsheader subprocess failed after {subprocess_time:.3f}s: {e}")
+        except subprocess.CalledProcessError:
             # Fallback to individual fits.getval calls if fitsheader fails
             return FitsHeaders._fallback_header_extraction(file_paths, keys, extension)
         except FileNotFoundError:
-            subprocess_time = time.time() - start_time
-            print(f"DEBUG: fitsheader command not found after {subprocess_time:.3f}s, using fallback")
             # fitsheader command not found, fallback to astropy
             return FitsHeaders._fallback_header_extraction(file_paths, keys, extension)
     
@@ -89,14 +68,8 @@ class FitsHeaders:
         """Parse fitsheader output into structured dictionary."""
         result = {}
         current_file = None
-        lines_processed = 0
-        files_found = 0
-        keywords_found = 0
-        
-        print(f"DEBUG: Parsing output with {len(file_paths)} expected files and {len(keys)} expected keys")
         
         for line in output.strip().split('\n'):
-            lines_processed += 1
             line = line.strip()
             if not line:
                 continue
@@ -113,9 +86,7 @@ class FitsHeaders:
                         if filename_part == path or path.endswith(filename_part) or filename_part.endswith(path):
                             current_file = path
                             result[current_file] = {}
-                            files_found += 1
                             filename_match = True
-                            print(f"DEBUG: Found file: {current_file} from line: {line}")
                             break
             
             if filename_match:
@@ -148,36 +119,22 @@ class FitsHeaders:
                             value = value_str
                         
                         result[current_file][key] = value
-                        keywords_found += 1
-                        print(f"DEBUG: Found keyword {key} = {value} for {current_file}")
-                except Exception as e:
-                    print(f"DEBUG: Failed to parse line '{line}': {e}")
+                except Exception:
                     continue
         
-        print(f"DEBUG: Processed {lines_processed} lines, found {files_found} files, {keywords_found} keywords")
-        print(f"DEBUG: Final result keys: {list(result.keys())}")
         return result
     
     @staticmethod
     def _fallback_header_extraction(file_paths, keys, extension):
         """Fallback to astropy fits.getval if fitsheader fails."""
-        import time
-        start_time = time.time()
-        
         result = {}
-        total_calls = 0
         for file_path in file_paths:
             result[file_path] = {}
             for key in keys:
                 try:
                     result[file_path][key] = fits.getval(file_path, key, ext=extension)
-                    total_calls += 1
                 except Exception:
                     result[file_path][key] = None
-                    total_calls += 1
-        
-        fallback_time = time.time() - start_time
-        print(f"DEBUG: fallback fits.getval took {fallback_time:.3f}s for {total_calls} individual calls ({len(file_paths)} files × {len(keys)} keys)")
         return result
 
 
@@ -255,7 +212,7 @@ class FitsHeaders:
                     if val is None:
                         raise KeyError(self.header_keywords[i])
                     
-                    fits_value = str(val).lower()
+                    fits_value = str(val).lower().strip()
                     if (fits_value == input_value):
                         match_count += 1
 
@@ -344,13 +301,6 @@ class FitsHeaders:
             if match_count == self.n_header_keywords:
                 matched_fits_files.append(fits_file)
 
-        if self.logger:
-             self.logger.info('FitsHeaders.match_headers_float_le(): matched_fits_files = {}'.\
-                   format(matched_fits_files))
-        else:
-            print('---->FitsHeaders.match_headers_float_le(): matched_fits_files = {}'.\
-                format(matched_fits_files))
-
         return matched_fits_files
 
     def get_good_flats(self):
@@ -408,12 +358,6 @@ class FitsHeaders:
                 else:
                     print('---->Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
 
-        if self.logger:
-             self.logger.info('FitsHeaders.get_good_flats(): filtered_matched_fits_files = {}'.\
-                   format(filtered_matched_fits_files))
-        else:
-            print('---->FitsHeaders.get_good_flats(): filtered_matched_fits_files = {}'.\
-                format(filtered_matched_fits_files))
 
         return filtered_matched_fits_files
 
@@ -470,13 +414,6 @@ class FitsHeaders:
                 else:
                     print('---->Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
 
-        if self.logger:
-             self.logger.info('FitsHeaders.get_good_darks(): filtered_matched_fits_files = {}'.\
-                   format(filtered_matched_fits_files))
-        else:
-            print('---->FitsHeaders.get_good_darks(): filtered_matched_fits_files = {}'.\
-                format(filtered_matched_fits_files))
-
         return filtered_matched_fits_files,all_dark_objects
 
     def get_good_arclamps(self):
@@ -510,7 +447,7 @@ class FitsHeaders:
                     if val is None:
                         raise KeyError(self.header_keywords[i])
                     
-                    fits_value = str(val).lower()
+                    fits_value = str(val).lower().strip()
                     if (fits_value == input_value):
                         match_count += 1
 
@@ -548,13 +485,6 @@ class FitsHeaders:
                         self.logger.info('KeyError: {} ({}); skipping...'.format(err,fits_file))
                     else:
                         print('---->KeyError: {} ({}); skipping...'.format(err,fits_file))
-
-        if self.logger:
-             self.logger.info('FitsHeaders.get_good_arclamps(): matched_fits_files = {}'.\
-                   format(matched_fits_files))
-        else:
-            print('---->FitsHeaders.get_good_arclamps(): matched_fits_files = {}'.\
-                format(matched_fits_files))
 
         return matched_fits_files,all_arclamp_objects
 
@@ -630,12 +560,5 @@ class FitsHeaders:
                     self.logger.info('Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
                 else:
                     print('---->Exception caught: {} for FITS file {}; skipping...'.format(err,fits_file))
-
-        if self.logger:
-             self.logger.info('FitsHeaders.get_good_biases(): filtered_matched_fits_files = {}'.\
-                   format(filtered_matched_fits_files))
-        else:
-            print('---->FitsHeaders.get_good_biases(): filtered_matched_fits_files = {}'.\
-                format(filtered_matched_fits_files))
 
         return filtered_matched_fits_files,all_bias_objects
