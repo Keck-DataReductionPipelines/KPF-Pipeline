@@ -1,5 +1,6 @@
 import glob
 import numpy as np
+import subprocess
 from astropy.io import fits
 from kpfpipe.logger import start_logger
 
@@ -22,6 +23,162 @@ class FitsHeaders:
         n_header_keywords (int): Number of FITS keyword(s) of interest.
         input_fits_files (list of str): Individual FITS filename(s) that will be searched.
     """
+
+    @staticmethod
+    def fitsheader_batch(file_paths, keys, extension=0):
+        """
+        Extract multiple header keywords from multiple FITS files using fitsheader subprocess.
+        
+        Args:
+            file_paths (list): List of FITS file paths
+            keys (list): List of header keywords to extract
+            extension (int): FITS extension number (default: 0 for primary)
+            
+        Returns:
+            dict: {file_path: {keyword: value, ...}, ...}
+        """
+        if not file_paths:
+            return {}
+            
+        # Try subprocess first, with timing for debugging
+        import time
+        start_time = time.time()
+        
+        # Build fitsheader command
+        cmd = ["fitsheader", "-e", str(extension)]
+        for key in keys:
+            cmd += ["-k", key]
+        cmd += list(file_paths)
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess_time = time.time() - start_time
+            
+            # Debug: Show what fitsheader actually returned
+            print(f"DEBUG: fitsheader command: {' '.join(cmd)}")
+            print(f"DEBUG: fitsheader stdout length: {len(result.stdout)} chars")
+            print(f"DEBUG: fitsheader stderr: {result.stderr}")
+            print(f"DEBUG: fitsheader first 500 chars of stdout:")
+            print(repr(result.stdout[:500]))
+            
+            parsed_result = FitsHeaders._parse_fitsheader_output(result.stdout, file_paths, keys)
+            
+            # If parsing failed or returned empty, fallback
+            if not parsed_result:
+                print(f"DEBUG: fitsheader subprocess succeeded but parsing failed, fallback after {subprocess_time:.3f}s")
+                print(f"DEBUG: parsed_result is empty or None: {parsed_result}")
+                return FitsHeaders._fallback_header_extraction(file_paths, keys, extension)
+            
+            print(f"DEBUG: fitsheader subprocess succeeded in {subprocess_time:.3f}s for {len(file_paths)} files, {len(keys)} keys")
+            print(f"DEBUG: parsed_result has {len(parsed_result)} files")
+            return parsed_result
+            
+        except subprocess.CalledProcessError as e:
+            subprocess_time = time.time() - start_time
+            print(f"DEBUG: fitsheader subprocess failed after {subprocess_time:.3f}s: {e}")
+            # Fallback to individual fits.getval calls if fitsheader fails
+            return FitsHeaders._fallback_header_extraction(file_paths, keys, extension)
+        except FileNotFoundError:
+            subprocess_time = time.time() - start_time
+            print(f"DEBUG: fitsheader command not found after {subprocess_time:.3f}s, using fallback")
+            # fitsheader command not found, fallback to astropy
+            return FitsHeaders._fallback_header_extraction(file_paths, keys, extension)
+    
+    @staticmethod
+    def _parse_fitsheader_output(output, file_paths, keys):
+        """Parse fitsheader output into structured dictionary."""
+        result = {}
+        current_file = None
+        lines_processed = 0
+        files_found = 0
+        keywords_found = 0
+        
+        print(f"DEBUG: Parsing output with {len(file_paths)} expected files and {len(keys)} expected keys")
+        
+        for line in output.strip().split('\n'):
+            lines_processed += 1
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Check if this line contains a filename in the format "# HDU X in filename:"
+            filename_match = False
+            if line.startswith('# HDU') and ' in ' in line and line.endswith(':'):
+                # Extract filename from "# HDU 0 in /path/to/file.fits:"
+                parts = line.split(' in ')
+                if len(parts) >= 2:
+                    filename_part = parts[-1].rstrip(':')  # Remove trailing colon
+                    # Find matching file path
+                    for path in file_paths:
+                        if filename_part == path or path.endswith(filename_part) or filename_part.endswith(path):
+                            current_file = path
+                            result[current_file] = {}
+                            files_found += 1
+                            filename_match = True
+                            print(f"DEBUG: Found file: {current_file} from line: {line}")
+                            break
+            
+            if filename_match:
+                continue
+            
+            # Parse keyword = value lines
+            if '=' in line and current_file:
+                try:
+                    parts = line.split('=', 1)
+                    if len(parts) == 2:
+                        key = parts[0].strip()
+                        value_comment = parts[1].strip()
+                        
+                        # Extract value (before any comment starting with /)
+                        if '/' in value_comment:
+                            value_str = value_comment.split('/', 1)[0].strip()
+                        else:
+                            value_str = value_comment.strip()
+                        
+                        # Remove quotes and convert to appropriate type
+                        value_str = value_str.strip("'\"")
+                        
+                        # Try to convert to number if possible
+                        try:
+                            if '.' in value_str:
+                                value = float(value_str)
+                            else:
+                                value = int(value_str)
+                        except ValueError:
+                            value = value_str
+                        
+                        result[current_file][key] = value
+                        keywords_found += 1
+                        print(f"DEBUG: Found keyword {key} = {value} for {current_file}")
+                except Exception as e:
+                    print(f"DEBUG: Failed to parse line '{line}': {e}")
+                    continue
+        
+        print(f"DEBUG: Processed {lines_processed} lines, found {files_found} files, {keywords_found} keywords")
+        print(f"DEBUG: Final result keys: {list(result.keys())}")
+        return result
+    
+    @staticmethod
+    def _fallback_header_extraction(file_paths, keys, extension):
+        """Fallback to astropy fits.getval if fitsheader fails."""
+        import time
+        start_time = time.time()
+        
+        result = {}
+        total_calls = 0
+        for file_path in file_paths:
+            result[file_path] = {}
+            for key in keys:
+                try:
+                    result[file_path][key] = fits.getval(file_path, key, ext=extension)
+                    total_calls += 1
+                except Exception:
+                    result[file_path][key] = None
+                    total_calls += 1
+        
+        fallback_time = time.time() - start_time
+        print(f"DEBUG: fallback fits.getval took {fallback_time:.3f}s for {total_calls} individual calls ({len(file_paths)} files × {len(keys)} keys)")
+        return result
 
 
     @staticmethod
@@ -76,6 +233,12 @@ class FitsHeaders:
         to all input FITS kewords/values of interest.
         """
 
+        if not self.input_fits_files:
+            return []
+
+        # Batch extract all required header keywords using fitsheader subprocess
+        headers_data = self.fitsheader_batch(self.input_fits_files, self.header_keywords)
+
         matched_fits_files = []
         for fits_file in self.input_fits_files:
 
@@ -85,9 +248,14 @@ class FitsHeaders:
                 input_value = (self.header_values[i]).lower()
 
                 try:
-
-                    val = fits.getval(fits_file, self.header_keywords[i])
-                    fits_value = (val).lower()
+                    # Get header value from batch extraction
+                    file_headers = headers_data.get(fits_file, {})
+                    val = file_headers.get(self.header_keywords[i])
+                    
+                    if val is None:
+                        raise KeyError(self.header_keywords[i])
+                    
+                    fits_value = str(val).lower()
                     if (fits_value == input_value):
                         match_count += 1
 
@@ -125,6 +293,12 @@ class FitsHeaders:
         all input FITS kewords/values of interest.
         """
 
+        if not self.input_fits_files:
+            return []
+
+        # Batch extract all required header keywords using fitsheader subprocess
+        headers_data = self.fitsheader_batch(self.input_fits_files, self.header_keywords)
+
         matched_fits_files = []
         for fits_file in self.input_fits_files:
 
@@ -134,8 +308,12 @@ class FitsHeaders:
                 input_value = float(self.header_values[i])
 
                 try:
-
-                    val = fits.getval(fits_file, self.header_keywords[i])
+                    # Get header value from batch extraction
+                    file_headers = headers_data.get(fits_file, {})
+                    val = file_headers.get(self.header_keywords[i])
+                    
+                    if val is None:
+                        raise KeyError(self.header_keywords[i])
 
                     if self.logger:
                         self.logger.info('FitsHeaders.match_headers_float_le(): file,i,keyword,input_value,header_value = {},{},{},{},{}'.\
@@ -184,29 +362,44 @@ class FitsHeaders:
         """
 
         matched_fits_files = self.match_headers_string_lower()
+        
+        if not matched_fits_files:
+            return []
+
+        # Batch extract all required header keywords using fitsheader subprocess
+        required_keys = ['SCI-OBJ', 'CAL-OBJ', 'SKY-OBJ', 'ELAPSED']
+        headers_data = self.fitsheader_batch(matched_fits_files, required_keys)
 
         filtered_matched_fits_files = []
+        
         for fits_file in matched_fits_files:
 
             flag = 'remove'
 
             try:
+                # Get header values from batch extraction
+                file_headers = headers_data.get(fits_file, {})
+                val1 = file_headers.get('SCI-OBJ')
+                val2 = file_headers.get('CAL-OBJ') 
+                val3 = file_headers.get('SKY-OBJ')
+                val4 = file_headers.get('ELAPSED')        # Require EXPTIME <= 11.0 seconds to avoid saturation.
 
-                val1 = fits.getval(fits_file, 'SCI-OBJ')
-                val2 = fits.getval(fits_file, 'CAL-OBJ')
-                val3 = fits.getval(fits_file, 'SKY-OBJ')
-                val4 = fits.getval(fits_file, 'ELAPSED')        # Require EXPTIME <= 11.0 seconds to avoid saturation.
+                # Handle None values (missing headers)
+                if val1 is None or val2 is None or val3 is None or val4 is None:
+                    raise KeyError("Missing required header keywords")
 
-                if ((val1 == val2) and (val2 == val3) and (val1 != '') and (val1.lower() != 'none') and (val4 <= 11.0)):
+                # Apply filtering logic (handle string conversion safely)
+                val1_str = str(val1) if val1 is not None else ''
+                if ((val1 == val2) and (val2 == val3) and (val1 != '') and (val1_str.lower() != 'none') and (val4 <= 11.0)):
                     flag = 'keep'
                     filtered_matched_fits_files.append(fits_file)
 
                 if self.logger:
                     self.logger.info('flag,val1,val2,val3,val1.lower(),val4 = {},{},{},{},[{}],{}'.\
-                        format(flag,val1,val2,val3,val1.lower(),val4))
+                        format(flag,val1,val2,val3,val1_str.lower(),val4))
                 else:
                     print('---->flag,val1,val2,val3,val1.lower(),val4 = {},{},{},{},[{}],{}'.\
-                        format(flag,val1,val2,val3,val1.lower(),val4))
+                        format(flag,val1,val2,val3,val1_str.lower(),val4))
 
             except Exception as err:
 
@@ -232,6 +425,13 @@ class FitsHeaders:
         """
         matched_fits_files = self.match_headers_string_lower()
 
+        if not matched_fits_files:
+            return [], []
+
+        # Batch extract all required header keywords using fitsheader subprocess
+        required_keys = ['ELAPSED', 'OBJECT']
+        headers_data = self.fitsheader_batch(matched_fits_files, required_keys)
+
         filtered_matched_fits_files = []
         all_dark_objects = []
         for fits_file in matched_fits_files:
@@ -239,14 +439,21 @@ class FitsHeaders:
             flag = 'remove'
 
             try:
+                # Get header values from batch extraction
+                file_headers = headers_data.get(fits_file, {})
+                val4 = file_headers.get('ELAPSED')
+                obj = file_headers.get('OBJECT')
 
-                val4 = float(fits.getval(fits_file, 'ELAPSED'))
+                # Handle None values (missing headers)
+                if val4 is None:
+                    raise KeyError("Missing ELAPSED header keyword")
+
+                val4 = float(val4)
 
                 if (val4 >= exptime_minimum):
                     flag = 'keep'
                     filtered_matched_fits_files.append(fits_file)
-                    obj = fits.getval(fits_file, 'OBJECT')
-                    if obj not in all_dark_objects:
+                    if obj is not None and obj not in all_dark_objects:
                         all_dark_objects.append(obj)
 
                 if self.logger:
@@ -278,6 +485,14 @@ class FitsHeaders:
         Return list of arclamp files defined by IMTYPE=‘arclamp’, and a list of the various OBJECT keyword settings.
         """
 
+        if not self.input_fits_files:
+            return [], []
+
+        # Batch extract all required header keywords using fitsheader subprocess
+        # Include both the class header keywords and OBJECT
+        all_keywords = self.header_keywords + ['OBJECT']
+        headers_data = self.fitsheader_batch(self.input_fits_files, all_keywords)
+
         matched_fits_files = []
         all_arclamp_objects = []
         for fits_file in self.input_fits_files:
@@ -288,9 +503,14 @@ class FitsHeaders:
                 input_value = (self.header_values[i]).lower()
 
                 try:
-
-                    val = fits.getval(fits_file, self.header_keywords[i])
-                    fits_value = (val).lower()
+                    # Get header value from batch extraction
+                    file_headers = headers_data.get(fits_file, {})
+                    val = file_headers.get(self.header_keywords[i])
+                    
+                    if val is None:
+                        raise KeyError(self.header_keywords[i])
+                    
+                    fits_value = str(val).lower()
                     if (fits_value == input_value):
                         match_count += 1
 
@@ -311,11 +531,16 @@ class FitsHeaders:
             if match_count == self.n_header_keywords:
 
                 try:
-
-                    obj = fits.getval(fits_file, 'OBJECT')
-                    matched_fits_files.append(fits_file)
-                    if obj not in all_arclamp_objects:
-                        all_arclamp_objects.append(obj)
+                    # Get OBJECT value from batch extraction
+                    file_headers = headers_data.get(fits_file, {})
+                    obj = file_headers.get('OBJECT')
+                    
+                    if obj is not None:
+                        matched_fits_files.append(fits_file)
+                        if obj not in all_arclamp_objects:
+                            all_arclamp_objects.append(obj)
+                    else:
+                        raise KeyError('OBJECT')
 
                 except KeyError as err:
 
@@ -344,6 +569,13 @@ class FitsHeaders:
 
         matched_fits_files = self.match_headers_string_lower()
 
+        if not matched_fits_files:
+            return [], []
+
+        # Batch extract all required header keywords using fitsheader subprocess
+        required_keys = ['SCISEL', 'SKYSEL', 'FFSHTR', 'SCRAMSHT', 'SIMCALSH', 'ELAPSED', 'OBJECT']
+        headers_data = self.fitsheader_batch(matched_fits_files, required_keys)
+
         filtered_matched_fits_files = []
         all_bias_objects = []
         for fits_file in matched_fits_files:
@@ -351,7 +583,9 @@ class FitsHeaders:
             flag = 'remove'
 
             try:
-
+                # Get header values from batch extraction
+                file_headers = headers_data.get(fits_file, {})
+                
                 # These keyword must indicate closed shutters:
                 # SCISEL = 'closed ' / Science Select shutter at exp. midpoint
                 # SKYSEL = 'closed ' / Sky Select Shutter at exp. midpoint
@@ -359,25 +593,28 @@ class FitsHeaders:
                 # SCRAMSHT= 'closed ' / Scrambler shutter at exp. midpoint
                 # SIMCALSH= 'closed ' / Simult Cal shutter at exp. midpoint
 
-                SCISEL = fits.getval(fits_file, 'SCISEL')
-                SKYSEL = fits.getval(fits_file, 'SKYSEL')
-                FFSHTR = fits.getval(fits_file, 'FFSHTR')
-                SCRAMSHT = fits.getval(fits_file, 'SCRAMSHT')
-                SIMCALSH = fits.getval(fits_file, 'SIMCALSH')
+                SCISEL = file_headers.get('SCISEL')
+                SKYSEL = file_headers.get('SKYSEL')
+                FFSHTR = file_headers.get('FFSHTR')
+                SCRAMSHT = file_headers.get('SCRAMSHT')
+                SIMCALSH = file_headers.get('SIMCALSH')
+                ELAPSED = file_headers.get('ELAPSED')
+                obj = file_headers.get('OBJECT')
 
-                ELAPSED = fits.getval(fits_file, 'ELAPSED')
+                # Handle None values (missing headers)
+                if any(val is None for val in [SCISEL, SKYSEL, FFSHTR, SCRAMSHT, SIMCALSH, ELAPSED]):
+                    raise KeyError("Missing required header keywords")
 
-                if 'closed' in SCISEL and \
-                   'closed' in SKYSEL and \
-                   'closed' in FFSHTR and \
-                   'closed' in SCRAMSHT and \
-                   'closed' in SIMCALSH:
+                if 'closed' in str(SCISEL) and \
+                   'closed' in str(SKYSEL) and \
+                   'closed' in str(FFSHTR) and \
+                   'closed' in str(SCRAMSHT) and \
+                   'closed' in str(SIMCALSH):
 
                     if (ELAPSED <= exptime_maximum):
                         flag = 'keep'
                         filtered_matched_fits_files.append(fits_file)
-                        obj = fits.getval(fits_file, 'OBJECT')
-                        if obj not in all_bias_objects:
+                        if obj is not None and obj not in all_bias_objects:
                             all_bias_objects.append(obj)
 
                 if self.logger:
