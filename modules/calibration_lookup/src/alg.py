@@ -302,8 +302,7 @@ class GetCalibrations:
                             if wls_files[1] == None:
                                 wls_files[1] = wls_files[0]
                             
-                            # Ensure deterministic file selection by sorting file paths
-                            wls_files = sorted(wls_files)
+                            # Keep temporal order: wls_files[0] = before file, wls_files[1] = after file
                             output_cals[cal] = wls_files
                             
                             if self.verbose:
