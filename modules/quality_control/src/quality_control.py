@@ -1,6 +1,7 @@
 import os
 import re
 import yaml
+import time
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
@@ -82,7 +83,7 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
     return qc_fail
 
 
-def execute_all_QCs(kpf_object, data_level, logger=None):
+def execute_all_QCs(kpf_object, data_level, logger=None, log_timing=False):
     """
     Method to loop over all QC tests for the data level of the input KPF object
     (an L0, 2D, L1, or L2 object).  This method is useful for testing (e.g.,
@@ -91,7 +92,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
 
     Args:
         kpf_object - a KPF object (L0, 2D, L1, or L2)
-        data_type -
+        data_type - 'L0', '2D', 'L1', or 'L2'
 
     Attributes:
         None
@@ -145,6 +146,13 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         text_qc_keyword = styled_text(qc_obj.qcdefinitions.fits_keywords[qc_name], style="Bold", color="Blue")
                         logger.info(f'{text_running_qc}: {text_qc_name} ({text_qc_keyword}; {qc_obj.qcdefinitions.descriptions[qc_name]})')
                         method = getattr(qc_obj, qc_name) # get method with the name 'qc_name'
+                        if log_timing:
+                            t0 = time.perf_counter()
+                        try:
+                            qc_value = method()  # evaluate method
+                        finally:
+                            if log_timing:
+                                logger.info(f"Timing: {qc_name} took {(time.perf_counter()-t0):.3f} seconds")
                         qc_value = method() # evaluate method
                         if qc_value == True:
                             text_qc_value = styled_text(qc_value, style="Bold", color="Green")

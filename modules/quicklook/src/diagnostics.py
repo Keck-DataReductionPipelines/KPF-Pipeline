@@ -27,11 +27,387 @@ from modules.Utils.kpf_parse import get_data_products_L2
 from modules.Utils.kpf_parse import get_datecode_from_filename
 from modules.Utils.kpf_parse import HeaderParse, get_datecode
 from modules.Utils.kpf_parse import get_datetime_obsid, get_kpf_level, get_data_products_expected
-from modules.Utils.utils import get_moon_sep, get_sun_alt
+from modules.Utils.utils import get_moon_sep, get_sun_alt, styled_text
 from modules.calibration_lookup.src.alg import GetCalibrations
 
 DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../calibration_lookup/configs/default.cfg')
 DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
+
+def execute_all_diagnostics(kpf_object, data_level, diagnostics_name, logger=None, log_timing=False):
+    """
+    Method to loop over all Diagnostics modules for the data level of the input 
+    KPF object (an L0, 2D, L1, or L2 object).  
+
+    Args:
+        kpf_object - a KPF object (L0, 2D, L1, or L2)
+        data_type - 'L0', '2D', 'L1', or 'L2'
+        diagnostics_name - 'all' or the name of a diagnostics method
+
+    Attributes:
+        None
+
+    Returns:
+        kpf_object - the input kpf_object with Diagnostics keywords added
+    """
+
+    logger = logger if logger is not None else DummyLogger()
+
+    #data_level = get_kpf_level(kpf_object)
+
+    # Define Diagnostics object
+#    if data_level == 'L0':
+#        diag_obj = DiagnosticsL0(kpf_object)
+#    elif data_level == '2D':
+#        diag_obj = Diagnostics2D(kpf_object)
+#    elif data_level == 'L1':
+#        diag_obj = DiagnosticsL1(kpf_object)
+#    elif data_level == 'L2':
+#        diag_obj = DiagnosticsL2(kpf_object)
+#    else:
+#        logger.info('data_level is not L0, 2D, L1, or L2.  Exiting.')
+
+    # Measure Diagnostics
+    if data_level != None:
+        if 'L0' in data_level:
+            # Read speed
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L0_read_speed'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L0_read_speed", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_L0_read_speed(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring read speed failed: {e}\n{traceback.format_exc()}")
+            # Non-Gaussian read noise
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L0_nonGaussian_read_noise'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L0_nonGaussian_read_noise", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_L0_nonGaussian_read_noise(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring non-Gaussian read noise failed: {e}\n{traceback.format_exc()}")
+            kpf_object = add_headers_L0_nonGaussian_read_noise(kpf_object)
+            logger.info("--- L0 non-Gaussian read noise measured and added to headers.")
+            # pass
+            
+        if '2D' in data_level:
+            # 2D flux
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_2D_flux'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_flux", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_2D_flux(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring 2D flux failed: {e}\n{traceback.format_exc()}")
+
+            # 2D flux - inside and outside of order trace regions
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_2D_flux_stats_in_out_ordertrace'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_flux_stats_in_out_ordertrace", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_2D_flux_stats_in_out_ordertrace(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring 2D flux inside and outside of order trace failed: {e}\n{traceback.format_exc()}")
+
+            # Dark Current
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_dark_current_2D'):
+                try:
+                    primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                    name = primary_header.get_name()
+                    if name == 'Dark':
+                        #data_products = get_data_products_2D(kpf_object)
+                        #if (('Green' in data_products) or ('Red' in data_products)) and ('Telemetry' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_dark_current_2D", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_dark_current_2D(kpf_object, logger=logger)
+                            exit_code = 1
+                    else: 
+                        logger.info("Observation type {} != 'Dark'.  Dark current not computed.".format(name))
+                except Exception as e:
+                    logger.error(f"Measuring dark current failed: {e}\n{traceback.format_exc()}")
+
+            # Guider
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_guider'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_guider", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_guider(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring guider diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # SUNALT keyword (needed for solar and stellar observations)
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_sunalt'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_sunalt", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_sunalt(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring SUNALT failed: {e}\n{traceback.format_exc()}")
+
+            # HK
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_hk'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_hk", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_hk(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring HK diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # Exposure Meter
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_exposure_meter'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_exposure_meter", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_exposure_meter(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring exposure meter diagnostics failed: {e}\n{traceback.format_exc()}")
+                        
+            # Masters Age - Bias, Dark, Flat
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_masters_age_2D'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_masters_age_2D", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_masters_age_2D(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Age of masters for Bias/Dark/Flat not computed: {e}\n{traceback.format_exc()}")
+
+            # Cross-dispersion offset
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_2D_xdisp_offset'):
+                try:
+                    primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                    name = primary_header.get_name()
+                    if name == 'Flat':
+                        logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_xdisp_offset", style="Bold", color="Blue")}')
+                        kpf_object = add_headers_2D_xdisp_offset(kpf_object, logger=logger)
+                        exit_code = 1
+                    else: 
+                        logger.info("Observation type {} != 'Flat'.  Cross-disperion offset not computed.".format(name))
+                except Exception as e:
+                    logger.error(f"Measuring Cross-disperion offset failed: {e}\n{traceback.format_exc()}")
+
+            # SoCal Irradiance Statistics
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_2D_socal_irradiance'):
+                try:
+                    primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                    name = primary_header.get_name()
+                    if name == 'Sun':
+                        ObsID = primary_header.get_obsid()
+                        datecode = get_datecode(ObsID)
+                        logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_socal_irradiance", style="Bold", color="Blue")}')
+                        kpf_object = add_headers_2D_socal_irradiance(kpf_object, logger=logger)
+                        exit_code = 1
+                    else: 
+                        logger.info("Observation type {} != 'Sun'.  SoCal Irradiance Statistics not computed.".format(name))
+                except Exception as e:
+                    logger.error(f"Measuring SoCal irradiance statistics failed: {e}\n{traceback.format_exc()}")
+
+                        
+        if 'L1' in data_level:
+            # WLS Age
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_masters_age_L1'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_masters_age_L1", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_masters_age_L1(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("Age of masters for wavelength solution not computed.")
+                    else: 
+                        logger.info("Green/Red not in L1 file. Age of masters for wavelength solution not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring L1 master age failed: {e}\n{traceback.format_exc()}")
+
+            # Order Trace and Smooth Lamp Age
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_trace_lamp_age_L1'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_trace_lamp_age_L1", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_trace_lamp_age_L1(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("Age of smooth lamp and order trace not computed.")
+                    else: 
+                        logger.info("Green/Red not in L1 file. Age of smooth lamp and order trace not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring L1 order trace/smooth lamp failed: {e}\n{traceback.format_exc()}")
+
+            # L1 SNR
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_SNR'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_SNR", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_SNR(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("L1 SNR diagnostics not computed.")
+                    else: 
+                        logger.info("Green/Red not in L1 file. SNR diagnostics not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring L1 SNR failed: {e}\n{traceback.format_exc()}")
+            
+            # L1 Order Flux Ratios
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_order_flux_ratios'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_order_flux_ratios", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_order_flux_ratios(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("L1 SNR diagnostics not computed.")
+                    else: 
+                        logger.info("Green/Red not in L1 file. Flux ratio diagnostics not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
+
+            # L1 Orderlet Flux Ratios
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_orderlet_flux_ratios'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_orderlet_flux_ratios", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_orderlet_flux_ratios(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("L1 SNR diagnostics not computed.")
+                    else: 
+                        logger.info("Green/Red not in L1 file. Flux ratio diagnostics not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
+
+            # L1 LFC and first/last spectral orders with good lines
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_cal_line_quality'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                        name = primary_header.get_name()
+                        if name == 'LFC':
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_cal_line_quality(kpf_object, cal='LFC', logger=logger)
+                            exit_code = 1
+                        elif name == 'Etalon':
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_cal_line_quality(kpf_object, cal='Etalon', logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("Observation type {} != 'LFC' or 'Etalon'.  Line diagnostics not computed.".format(name))
+                    else: 
+                        logger.info("Green/Red not in L1 file. LFC/Etalon line diagnostics not computed.")
+
+                except Exception as e:
+                    logger.error(f"Measuring LFC/Etalon line diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # L1 count saturated lines for Cal lamps
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_saturated_lines'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                        name = primary_header.get_name()
+                        if name in ['LFC', 'Etalon', 'ThAr', 'UNe']:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_saturated_lines", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_saturated_lines(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("Observation type {} not in ['LFC', 'Etalon', 'ThAr', 'UNe'].  Saturated lines not counted.".format(name))
+                    else: 
+                        logger.info("Green/Red not in L1 file. Saturated lines not counted.")
+
+                except Exception as e:
+                    logger.error(f"Counting saturated lines failed: {e}\n{traceback.format_exc()}")
+
+            # L1 standard deviation of WLS compared to WLS_ref
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_std_wls'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                        logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_std_wls", style="Bold", color="Blue")}')
+                        kpf_object = add_headers_L1_std_wls(kpf_object, logger=logger)
+                        exit_code = 1
+                    else: 
+                        logger.info("Green/Red not in L1 file. Stdev of WLS - WLS_ref diagnostics not computed.")
+
+                except Exception as e:
+                    logger.error(f"Measuring stdev WLS diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # L1 - number of NaN values
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_nans'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                        logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_nans", style="Bold", color="Blue")}')
+                        kpf_object = add_headers_L1_nans(kpf_object, logger=logger)
+                        exit_code = 1
+                    else: 
+                        logger.info("Green/Red not in L1 file. Number of NaN values not computed.")
+
+                except Exception as e:
+                    logger.error(f"Measuring number of L1 NaN values failed: {e}\n{traceback.format_exc()}")
+
+
+        elif 'L2' in data_level:
+            # L2 - Barycentric correction
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L2_barycentric'):
+                try:
+                    data_products = get_data_products_L2(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L2_barycentric", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L2_barycentric(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("L2 BCV and BJD diagnostics not computed.")
+                    else: 
+                        logger.info("Green/Red not in L2 file. BCV and BJD diagnostics not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring L2 BCV/BJD failed: {e}\n{traceback.format_exc()}")
+
+            # L2 - Days since last good LFC/Etalon exposures
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_days_since_last_wave_cal'):
+                try:
+                    print(f"type(kpf_object) = {type(kpf_object)}")
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_days_since_last_wave_cal", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_days_since_last_wave_cal(kpf_object, cal_source='LFC', logger=logger)
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_days_since_last_wave_cal", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_days_since_last_wave_cal(kpf_object, cal_source='Etalon', logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring time since last LFC/Etalon failed: {e}\n{traceback.format_exc()}")
+
+    return kpf_object
 
 
 def add_headers_L0_read_speed(L0, logger=None):
@@ -1156,7 +1532,7 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
     chips = []
     if 'Green' in data_products: chips.append('green')
     if 'Red'   in data_products: chips.append('red')
-    
+
     # Check that the input object is of the right type
     if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
         print('Not a valid L1.')
@@ -1284,7 +1660,7 @@ def add_headers_L1_cal_line_quality(L1, intensity_thresh=40**2, min_lines=100,
         name = 'Etalon'
         prefix = 'ETA'
     else:
-        self.logger.error('Calibration type not specified.')
+        logger.error('Calibration type not specified.')
         return L1
     if 'CAL-OBJ' in myL1.L1.header['PRIMARY']:
         if myL1.L1.header['PRIMARY']['CAL-OBJ'] == cal_fiber:
@@ -1445,7 +1821,7 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
 
     # Check that the input object is of the right type
     if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
-        self.logger.error('Not a valid L1.')
+        logger.error('Not a valid L1.')
         return L1
 
     # Get reference wavelength solution
@@ -1713,20 +2089,20 @@ def add_headers_days_since_last_wave_cal(L2, cal_source='LFC', logger=None, verb
             if not (days_before is None):
                 L2.header['PRIMARY']['AGESLFC'] = (days_before, 'Days since last good LFC frame (depends on processing order)')
                 if verbose:
-                    self.logger.info(f'AGESETA = {days_before}')
+                    logger.info(f'AGESETA = {days_before}')
             if not (days_after is None):
                 L2.header['PRIMARY']['AGEULFC'] = (days_after, 'Days until next good LFC frame (depends on processing order)')
                 if verbose:
-                    self.logger.info(f'AGEUETA = {days_after}')
+                    logger.info(f'AGEUETA = {days_after}')
         if cal_source=='Etalon':
             if not (days_before is None):
                 L2.header['PRIMARY']['AGESETA'] = (days_before, 'Days since last good Etalon frame (depends on processing order)')
                 if verbose:
-                    self.logger.info(f'AGESETA = {days_before}')
+                    logger.info(f'AGESETA = {days_before}')
             if not (days_after is None):
                 L2.header['PRIMARY']['AGEUETA'] = (days_after, 'Days until next good Etalon frame (depends on processing order)')
                 if verbose:
-                    self.logger.info(f'AGEUETA = {days_after}')
+                    logger.info(f'AGEUETA = {days_after}')
 
     except Exception as e:
         logger.error(f"Problem computing days since last good {cal_source}: {e}\n{traceback.format_exc()}")
