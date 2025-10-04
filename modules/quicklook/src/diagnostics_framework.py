@@ -382,6 +382,22 @@ class DiagnosticsFramework(KPF0_Primitive):
                 except Exception as e:
                     self.logger.error(f"Measuring stdev WLS diagnostics failed: {e}\n{traceback.format_exc()}")
 
+            # L1 - number of NaN values
+            if (self.diagnostics_name == 'all') or \
+               (self.diagnostics_name == 'add_headers_L1_nans'):
+                try:
+                    data_products = get_data_products_L1(self.kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
+                        self.logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_nans", style="Bold", color="Blue")}')
+                        self.kpf_object = diagnostics.add_headers_L1_nans(self.kpf_object, logger=self.logger)
+                        exit_code = 1
+                    else: 
+                        self.logger.info("Green/Red not in L1 file. Number of NaN values not computed.")
+
+                except Exception as e:
+                    self.logger.error(f"Measuring number of L1 NaN values failed: {e}\n{traceback.format_exc()}")
+
 
         elif 'L2' in self.data_level_str:
             # L2 - Barycentric correction

@@ -589,6 +589,16 @@ AGEWLS2   0.14193433333333330                                                   
 AGETRAC   -0.2205656666666667                                                      Approx age of TRACFILE compared to this file (days)
 AGELAMP   0.14193433333333330                                                      Approx age of LAMPFILE compared to this file (days)
 STATWREF  /data/reference_fits/430LFCWLS.fits                                      filename of ref for median/stdev(WLS-ref)
+NANL1GS1  0                                                                        Number of NaNs in all orders of L1 Green SCI1
+NANL1GS2  0                                                                        Number of NaNs in all orders of L1 Green SCI2
+NANL1GS3  0                                                                        Number of NaNs in all orders of L1 Green SCI3
+NANL1GCL  0                                                                        Number of NaNs in all orders of L1 Green CAL
+NANL1GSK  0                                                                        Number of NaNs in all orders of L1 Green SKY
+NANL1RS1  0                                                                        Number of NaNs in all orders of L1 Red SCI1
+NANL1RS2  0                                                                        Number of NaNs in all orders of L1 Red SCI2
+NANL1RS3  0                                                                        Number of NaNs in all orders of L1 Red SCI3
+NANL1RCL  0                                                                        Number of NaNs in all orders of L1 Red CAL
+NANL1RSK  0                                                                        Number of NaNs in all orders of L1 Red SKY
 MEDWGS00  0.09425503797584399                                                      median(WLS-ref) [pix], Green SCI order 00       
 MEDWGS01  0.08849442069640202                                                      median(WLS-ref) [pix], Green SCI order 01       
 MEDWGS02  0.08371697673720710                                                      median(WLS-ref) [pix], Green SCI order 02       

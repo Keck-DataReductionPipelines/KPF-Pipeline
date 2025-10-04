@@ -1620,6 +1620,53 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
     return L1
 
 
+def add_headers_L1_nans(L1, logger=None, debug=False):
+    """
+    Computes the number of NaNs in each of the L1 extensions.
+    
+    Keywords:
+        NANL1GS1 - Number of NaNs in all orders of L1 Green SCI1
+        NANL1GS2 - Number of NaNs in all orders of L1 Green SCI2
+        NANL1GS3 - Number of NaNs in all orders of L1 Green SCI3
+        NANL1GCL - Number of NaNs in all orders of L1 Green CAL
+        NANL1GSK - Number of NaNs in all orders of L1 Green SKY
+        NANL1RS1 - Number of NaNs in all orders of L1 Red SCI1
+        NANL1RS2 - Number of NaNs in all orders of L1 Red SCI2
+        NANL1RS3 - Number of NaNs in all orders of L1 Red SCI3
+        NANL1RCL - Number of NaNs in all orders of L1 Red CAL
+        NANL1RSK - Number of NaNs in all orders of L1 Red SKY
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with header keywords added
+    """
+    if logger == None:
+        logger = DummyLogger()
+
+    myL1 = AnalyzeL1(L1, logger=logger)
+    data_products = get_data_products_L1(L1)
+    if 'Green' in data_products: 
+        green_nans = myL1.count_nans(chip='green')
+        (NANL1GS1, NANL1GS2, NANL1GS3, NANL1GCL, NANL1GSK) = green_nans
+        L1.header['PRIMARY']['NANL1GS1'] = (NANL1GS1, 'Number of NaNs in all orders of L1 Green SCI1')
+        L1.header['PRIMARY']['NANL1GS2'] = (NANL1GS2, 'Number of NaNs in all orders of L1 Green SCI2')
+        L1.header['PRIMARY']['NANL1GS3'] = (NANL1GS3, 'Number of NaNs in all orders of L1 Green SCI3')
+        L1.header['PRIMARY']['NANL1GCL'] = (NANL1GCL, 'Number of NaNs in all orders of L1 Green CAL')
+        L1.header['PRIMARY']['NANL1GSK'] = (NANL1GSK, 'Number of NaNs in all orders of L1 Green SKY')
+    if 'Red' in data_products: 
+        red_nans = myL1.count_nans(chip='red')
+        (NANL1RS1, NANL1RS2, NANL1RS3, NANL1RCL, NANL1RSK) = red_nans
+        L1.header['PRIMARY']['NANL1RS1'] = (NANL1RS1, 'Number of NaNs in all orders of L1 Red SCI1')
+        L1.header['PRIMARY']['NANL1RS2'] = (NANL1RS2, 'Number of NaNs in all orders of L1 Red SCI2')
+        L1.header['PRIMARY']['NANL1RS3'] = (NANL1RS3, 'Number of NaNs in all orders of L1 Red SCI3')
+        L1.header['PRIMARY']['NANL1RCL'] = (NANL1RCL, 'Number of NaNs in all orders of L1 Red CAL')
+        L1.header['PRIMARY']['NANL1RSK'] = (NANL1RSK, 'Number of NaNs in all orders of L1 Red SKY')
+
+    return L1
+
+
 def add_headers_L2_barycentric(L2, logger=None):
     """
     Adds Barycentric RV correction and BJD to the L2 primary header
