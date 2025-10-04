@@ -10,6 +10,7 @@ from astropy.time import Time
 # Local dependencies
 from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger
+from modules.quicklook.src.analyze_l0 import AnalyzeL0
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_hk import AnalyzeHK
@@ -31,6 +32,55 @@ from modules.calibration_lookup.src.alg import GetCalibrations
 
 DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../calibration_lookup/configs/default.cfg')
 DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
+
+
+def add_headers_L0_read_speed(L0, logger=None):
+    """
+    Adds keywords to the object header for readspeed
+    
+    Keywords:
+        READSPED - Categorization of read speed: 'regular' or 'fast'
+        GREENTRT - GREEN chip total read time [seconds]
+        REDTRT - RED chip total read time [seconds]
+
+    Args:
+        L0 - a KPF L0 object 
+
+    Returns:
+        L0 - a L0 file with header keywords added
+    """
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L0(L0)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L0)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        logger.info('Not a valid L0 or no Gree/Red CCD data.')
+        return L0
+        
+    # Use the AnalyzeL0 class to measure read speed
+    try:
+        myL0 = AnalyzeL0(L0, logger=logger)
+        L0.header['PRIMARY']['READSPED'] = (myL0.read_speed, "Categorization of read speed: 'regular' or 'fast'")
+        for chip in chips:
+            if chip == 'green':
+                try:
+                    L0.header['PRIMARY']['GREENTRT'] = (round(myL0.green_read_time, 3), 'GREEN chip total read time [seconds]')
+                except Exception as e:
+                    logger.error(f"Problem with determining read speed for Green CCD: {e}\n{traceback.format_exc()}")
+            if chip == 'red':
+                try:
+                    L0.header['PRIMARY']['REDTRT'] = (round(myL0.red_read_time, 3), 'RED chip total read time [seconds]')
+                except Exception as e:
+                    logger.error(f"Problem with determining read speed for Red CCD: {e}\n{traceback.format_exc()}")
+    except:
+        logger.error(f"Problem determining read speed: {e}\n{traceback.format_exc()}")
+
+    return L0
 
 
 def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
