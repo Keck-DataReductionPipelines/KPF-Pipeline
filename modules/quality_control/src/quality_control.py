@@ -629,7 +629,7 @@ class QCDefinitions:
         self.db_columns[name17] = None
         self.fits_keyword_fail_value[name17] = -1
 
-        name19 = 'L1_check_snr_lfc'
+        name19 = 'L1_lfc_saturated'
         self.names.append(name19)
         self.kpf_data_levels[name19] = ['L1']
         self.descriptions[name19] = 'LFC not saturated'
@@ -657,7 +657,7 @@ class QCDefinitions:
         self.db_columns[name18] = None
         self.fits_keyword_fail_value[name18] = 0
 
-        name20 = 'L1_correct_wls_check'
+        name20 = 'L1_correct_wls'
         self.names.append(name20)
         self.kpf_data_levels[name20] = ['L1']
         self.descriptions[name20] = 'WLS files exist, are not the same, and bracket the observation'
@@ -3320,7 +3320,7 @@ class QCL1(QC):
         return QC_pass
 
 
-    def L1_check_snr_lfc(self, SNR_limit=2800):
+    def L1_lfc_saturated(self, SNR_limit=2800):
         """
         This Quality Control function checks checks the SNR of
         LFC frames, marking satured frames as failing the test.
@@ -3353,7 +3353,7 @@ class QCL1(QC):
         return QC_pass
 
 
-    def L1_correct_wls_check(self, debug=False):
+    def L1_correct_wls(self, debug=False):
         """
         This Quality Control function checks if the WLS files used by a given L1
         file are correct. Failure states are as follows:
