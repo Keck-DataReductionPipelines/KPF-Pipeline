@@ -139,7 +139,7 @@ def main():
                 # Now do drift correction only since the initial L2s should be 
                 # ingested into the TSDB by this point.
                 cmd_kpf = [
-                    'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L0/{datecode}/',
+                    'kpf', '--ncpu', str(args.ncpu), '--reprocess', f'/data/L1/{datecode}/',
                     '-c', 'configs/kpf_drp_do_only_drift.cfg', '-r', 'recipes/kpf_drp.recipe'
                 ]
 

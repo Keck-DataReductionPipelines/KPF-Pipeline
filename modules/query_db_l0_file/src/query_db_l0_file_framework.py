@@ -3,14 +3,12 @@ import configparser as cp
 from datetime import datetime, timezone
 import psycopg2
 import re
-import hashlib
 import ast
 
 # Pipeline dependencies
 from kpfpipe.logger import *
 from kpfpipe.models.level0 import KPF0
 from kpfpipe.primitives.level0 import KPF0_Primitive
-from kpfpipe.pipelines.fits_primitives import to_fits
 from keckdrpframework.models.arguments import Arguments
 
 # Global read-only variables
@@ -43,7 +41,7 @@ class QueryDBL0FileFramework(KPF0_Primitive):
         self.rId = self.action.args[1]
         self.fits_filename = self.action.args[2]
         self.verbose = self.action.args[3]
-
+        self.kpf_object_2d = self.action.args[4]
         if self.verbose != 1:
             self.verbose = 0
 
@@ -254,10 +252,8 @@ class QueryDBL0FileFramework(KPF0_Primitive):
 
         self.logger.info('Finished {}'.format(self.__class__.__name__))
 
-
-        # Update FITS header.
-
-        fits_obj = KPF0.from_fits(self.fits_filename,self.data_type)
+        # Update FITS header in memory
+        fits_obj = self.kpf_object_2d
         fits_obj.header['PRIMARY']['DBRID'] = (rId,'DB raw image ID')
         fits_obj.header['PRIMARY']['L0QCBITS'] = (infobits,'L0 QC bitwise flags (see defs below)')
 
@@ -343,11 +339,9 @@ class QueryDBL0FileFramework(KPF0_Primitive):
             value = defs[i]
             fits_obj.header['PRIMARY'][keyword] = value
 
-        fits_obj.to_fits(self.fits_filename)
-
-
+        print('not saving to file:',self.fits_filename,'returning with updated kpf_object_2d')
         # Return with arguments.
 
-        exit_list = [exit_code,db_record]
+        exit_list = [exit_code,db_record,fits_obj]
 
         return Arguments(exit_list)

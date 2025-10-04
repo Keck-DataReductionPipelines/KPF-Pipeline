@@ -12,6 +12,7 @@ panel_arr:
     paneldict:
       ylabel: "Days Since Last\nGood LFC frame"
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.20
   - panelvars:
       - col: AGEULFC
@@ -24,6 +25,7 @@ panel_arr:
     paneldict:
       ylabel: "Days Until Next\nGood LFC frame"
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.20
   - panelvars:
       - col: AGESETA
@@ -36,6 +38,7 @@ panel_arr:
     paneldict:
       ylabel: "Days Since Last\nGood Etalon frame"
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.20
   - panelvars:
       - col: AGEUETA
@@ -49,5 +52,6 @@ panel_arr:
       ylabel: "Days Until Next\nGood Etalon frame"
       title: Last Good LFC and Etalon Calibrations
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.20
  
