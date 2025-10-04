@@ -1,44 +1,12 @@
-## primitives from modules.
-# L0 level imports
-# from modules.Utils.orientation_ref_reader import OrientationReference
-# from modules.Utils.overscan_subtract import OverscanSubtraction
-from modules.Utils.amplifier_mask import AmplifierMask # Needed in L0 and L2
-# from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
-
-# # L1 level imports
-# from modules.order_trace.src.order_trace import OrderTrace
-# from modules.spectral_extraction.src.order_rectification import OrderRectification
-# from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
-# from modules.order_trace.src.order_mask import OrderMask
-# from modules.wavelength_cal.src.alg import WaveInterpolation          
-# from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
-# from modules.blaze.src.blaze import AddBlaze
-# from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
-
-# L2 level imports
+# L1 to L2 imports, copied from kpf_drp.recipe.
 from modules.radial_velocity.src.radial_velocity_init import RadialVelocityInit
 from modules.radial_velocity.src.radial_velocity import RadialVelocity
 from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVelocityReweightingRef
 from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
-from modules.spectral_extraction.src.bary_corr import BaryCorrTable
 
 # general imports.
-from modules.Utils.string_proc import str_replace
-from modules.Utils.string_proc import date_from_kpffile
-from modules.Utils.data_handler import ExtCopy
-from modules.Utils.data_handler import FromCSV
-from modules.Utils.data_handler import GetHeaderValue
-from modules.Utils.data_handler import SetHeaderValue
+from modules.Utils.amplifier_mask import AmplifierMask # Needed in L0 and L2
 from modules.Utils.data_handler import SelectObs
-from modules.image_processing.src.image_process import ImageProcessing
-from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
-from database.modules.query_db_one_nearest_master_file.src.query_db_one_nearest_master_file_framework import QueryDBOneNearestMasterFileFramework
-from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
-from modules.quality_control.src.quality_control_framework import QualityControlFramework
-from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
-from modules.var_exts.src.var_exts_framework import VarExtsFramework
-from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
-from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
 
 # L2 level flags
 do_rv = config.ARGUMENT.do_rv
@@ -51,11 +19,6 @@ do_only_drift = config.ARGUMENT.do_only_drift
 data_type = config.ARGUMENT.data_type 
 overwrite = config.ARGUMENT.overwrite # if overwrite the existing data
 
-# file path for lev0 and lev1 data
-lev0_file_path = ""
-lev1_file_path = ""
-
-# BEGIN SET ARGUMENTS FROM CONFIGURATION FILE ------------------------------------
 
 ## set path to output and input (for 2D, flat and masters) data
 # date dir for 2D, masters input and L1 and L2 output.

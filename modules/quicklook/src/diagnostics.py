@@ -15,10 +15,12 @@ from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_hk import AnalyzeHK
 from modules.quicklook.src.analyze_em import AnalyzeEM
+from modules.quicklook.src.analyze_l0 import AnalyzeL0
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l1 import uncertainty_median
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
 from modules.quicklook.src.analyze_socal import AnalyzePyr
+from modules.Utils.kpf_parse import get_data_products_L0
 from modules.Utils.kpf_parse import get_data_products_2D
 from modules.Utils.kpf_parse import get_data_products_L1
 from modules.Utils.kpf_parse import get_data_products_L2
@@ -132,6 +134,8 @@ def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
                 try:
                     if 'GREEN_AMP1' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGGR1'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP1'],5), 'Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan')
+                        L0.header['PRIMARY']['GREENTRT'] = (round(myL0.green_read_time,3),'GREEN chip total read time [seconds]')
+                        L0.header['PRIMARY']['READSPED'] = (myL0.read_speed,'Categorization of read speed')
                     if 'GREEN_AMP2' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGGR2'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP2'],5), 'Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan')
                     if 'GREEN_AMP3' in myL0.std_mad_norm_ratio_overscan:
@@ -144,6 +148,8 @@ def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
                 try:
                     if 'RED_AMP1' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGRD1'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP1'],5), 'Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan')
+                        L0.header['PRIMARY']['REDTRT'] = (round(myL0.red_read_time,3),'RED chip total read time [seconds]')
+                        L0.header['PRIMARY']['READSPED'] = (myL0.read_speed,'Categorization of read speed')
                     if 'RED_AMP2' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGRD2'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP2'],5), 'Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan')
                     if 'RED_AMP3' in myL0.std_mad_norm_ratio_overscan:
@@ -1166,19 +1172,19 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
                 o=1
                 imin = 2040-250
                 imax = 2040+250
-                L1.header['PRIMARY']['FR12M452'] = (np.median(myL1.f_g_sci1_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FR12M452'] = (np.nanmedian(myL1.f_g_sci1_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'median(SCI1/SCI2) near 452 nm')
                 L1.header['PRIMARY']['FR12U452'] = (uncertainty_median(myL1.f_g_sci1_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'unc. of median(SCI1/SCI2) near 452 nm')
-                L1.header['PRIMARY']['FR32M452'] = (np.median(myL1.f_g_sci3_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FR32M452'] = (np.nanmedian(myL1.f_g_sci3_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'median(SCI3/SCI2) near 452 nm')
                 L1.header['PRIMARY']['FR32U452'] = (uncertainty_median(myL1.f_g_sci3_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'unc. of median(SCI3/SCI2) near 452 nm')
-                L1.header['PRIMARY']['FRS2M452'] = (np.median(myL1.f_g_sky_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FRS2M452'] = (np.nanmedian(myL1.f_g_sky_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'median(SKY/SCI2) near 452 nm')
                 L1.header['PRIMARY']['FRS2U452'] = (uncertainty_median(myL1.f_g_sky_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'unc. of median(SKY/SCI2) near 452 nm')
-                L1.header['PRIMARY']['FRC2M452'] = (np.median(myL1.f_g_cal_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FRC2M452'] = (np.nanmedian(myL1.f_g_cal_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'median(CAL/SCI2) near 452 nm')
                 L1.header['PRIMARY']['FRC2U452'] = (uncertainty_median(myL1.f_g_cal_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'unc. of median(CAL/SCI2) near 452 nm')
@@ -1186,19 +1192,19 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
                 o=25
                 imin = 2040-250
                 imax = 2040+250
-                L1.header['PRIMARY']['FR12M548'] = (np.median(myL1.f_g_sci1_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FR12M548'] = (np.nanmedian(myL1.f_g_sci1_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'median(SCI1/SCI2) near 548 nm')
                 L1.header['PRIMARY']['FR12U548'] = (uncertainty_median(myL1.f_g_sci1_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'unc. of median(SCI1/SCI2) near 548 nm')
-                L1.header['PRIMARY']['FR32M548'] = (np.median(myL1.f_g_sci3_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FR32M548'] = (np.nanmedian(myL1.f_g_sci3_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'median(SCI3/SCI2) near 548 nm')
                 L1.header['PRIMARY']['FR32U548'] = (uncertainty_median(myL1.f_g_sci3_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'unc. of median(SCI3/SCI2) near 548 nm')
-                L1.header['PRIMARY']['FRS2M548'] = (np.median(myL1.f_g_sky_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FRS2M548'] = (np.nanmedian(myL1.f_g_sky_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'median(SKY/SCI2) near 548 nm')
                 L1.header['PRIMARY']['FRS2U548'] = (uncertainty_median(myL1.f_g_sky_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'unc. of median(SKY/SCI2) near 548 nm')
-                L1.header['PRIMARY']['FRC2M548'] = (np.median(myL1.f_g_cal_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FRC2M548'] = (np.nanmedian(myL1.f_g_cal_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'median(CAL/SCI2) near 548 nm')
                 L1.header['PRIMARY']['FRC2U548'] = (uncertainty_median(myL1.f_g_cal_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
                                                     'unc. of median(CAL/SCI2) near 548 nm')
@@ -1210,19 +1216,19 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
                 o=8
                 imin = 2040-250
                 imax = 2040+250
-                L1.header['PRIMARY']['FR12M652'] = (np.median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FR12M652'] = (np.nanmedian(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(SCI1/SCI2) near 652 nm')
                 L1.header['PRIMARY']['FR12U652'] = (uncertainty_median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(SCI1/SCI2) near 652 nm')
-                L1.header['PRIMARY']['FR32M652'] = (np.median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FR32M652'] = (np.nanmedian(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(SCI3/SCI2) near 652 nm')
                 L1.header['PRIMARY']['FR32U652'] = (uncertainty_median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(SCI3/SCI2) near 652 nm')
-                L1.header['PRIMARY']['FRS2M652'] = (np.median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FRS2M652'] = (np.nanmedian(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(SKY/SCI2) near 652 nm')
                 L1.header['PRIMARY']['FRS2U652'] = (uncertainty_median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(SKY/SCI2) near 652 nm')
-                L1.header['PRIMARY']['FRC2M652'] = (np.median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FRC2M652'] = (np.nanmedian(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(CAL/SCI2) near 652 nm')
                 L1.header['PRIMARY']['FRC2U652'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(CAL/SCI2) near 652 nm')
@@ -1230,19 +1236,19 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
                 o=20
                 imin = 2040-250
                 imax = 2040+250
-                L1.header['PRIMARY']['FR12M747'] = (np.median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FR12M747'] = (np.nanmedian(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(SCI1/SCI2) near 747 nm')
                 L1.header['PRIMARY']['FR12U747'] = (uncertainty_median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(SCI1/SCI2) near 747 nm')
-                L1.header['PRIMARY']['FR32M747'] = (np.median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FR32M747'] = (np.nanmedian(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(SCI3/SCI2) near 747 nm')
                 L1.header['PRIMARY']['FR32U747'] = (uncertainty_median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(SCI3/SCI2) near 747 nm')
-                L1.header['PRIMARY']['FRS2M747'] = (np.median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FRS2M747'] = (np.nanmedian(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(SKY/SCI2) near 747 nm')
                 L1.header['PRIMARY']['FRS2U747'] = (uncertainty_median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(SKY/SCI2) near 747 nm')
-                L1.header['PRIMARY']['FRC2M747'] = (np.median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FRC2M747'] = (np.nanmedian(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(CAL/SCI2) near 747 nm')
                 L1.header['PRIMARY']['FRC2U747'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(CAL/SCI2) near 747 nm')
@@ -1250,19 +1256,19 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
                 o=20
                 imin = 2040-250
                 imax = 2040+250
-                L1.header['PRIMARY']['FR12M852'] = (np.median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FR12M852'] = (np.nanmedian(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(SCI1/SCI2) near 852 nm')
                 L1.header['PRIMARY']['FR12U852'] = (uncertainty_median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(SCI1/SCI2) near 852 nm')
-                L1.header['PRIMARY']['FR32M852'] = (np.median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FR32M852'] = (np.nanmedian(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(SCI3/SCI2) near 852 nm')
                 L1.header['PRIMARY']['FR32U852'] = (uncertainty_median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(SCI3/SCI2) near 852 nm')
-                L1.header['PRIMARY']['FRS2M852'] = (np.median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FRS2M852'] = (np.nanmedian(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(SKY/SCI2) near 852 nm')
                 L1.header['PRIMARY']['FRS2U852'] = (uncertainty_median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(SKY/SCI2) near 852 nm')
-                L1.header['PRIMARY']['FRC2M852'] = (np.median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
+                L1.header['PRIMARY']['FRC2M852'] = (np.nanmedian(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'median(CAL/SCI2) near 852 nm')
                 L1.header['PRIMARY']['FRC2U852'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
                                                     'unc. of median(CAL/SCI2) near 852 nm')

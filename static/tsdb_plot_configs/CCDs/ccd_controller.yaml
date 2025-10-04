@@ -83,6 +83,7 @@ panel_arr:
       ylabel: Temperatures (C)
       title: CCD Controllers
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0, TELEPRL0'
       legend_frac_size: 0.30
 
   - panelvars:
@@ -167,5 +168,6 @@ panel_arr:
       ylabel: "$\\Delta$Temperature (K)"
       title: CCD Controllers
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0, TELEPRL0'
       subtractmedian: true
       legend_frac_size: 0.30

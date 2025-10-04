@@ -11,7 +11,7 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: "Hallway\nTemperature (C)"
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.20
 
   - panelvars:
@@ -45,6 +45,6 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: "Cal Lamp\nTemperatures (C)"
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       title: Hollow-Cathode Lamp Temperatures
       legend_frac_size: 0.20

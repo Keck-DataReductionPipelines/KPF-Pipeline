@@ -11,3 +11,5 @@ panel_arr:
       ylabel: "HK requested and HK shutter open\n(bias/dark excluded)"
       title: QC - CaHK Shutter
       legend_frac_size: 0.15
+      not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'

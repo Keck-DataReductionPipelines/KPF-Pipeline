@@ -22,5 +22,6 @@ panel_arr:
       narrow_xlim_daily: true
       title: Seeing
       not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       on_sky: true
       legend_frac_size: 0.30
