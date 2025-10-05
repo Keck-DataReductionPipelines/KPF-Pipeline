@@ -13,12 +13,12 @@ Ways to provide filenames (any combination works):
 Date range mode (Docker only):
   If you pass exactly two positional arguments that are valid datecodes
   (YYYYMMDD) and you do NOT use -f/--csv or -d/--dir, the script switches to
-  'date range mode'. This mode is available **only when running inside a Docker
-  container**. In date range mode it:
+  'date range mode'. This mode is available only when running inside a Docker
+  container. In date range mode it:
     • Validates the two YYYYMMDD values and sorts them into start_date/end_date.
     • Uses the time series database (TSDB) to query for ObsIDs in that date window,
       optionally filtering by:
-        --only-object <name>   (exact match or DB-implemented rule for OBJECT)
+        --only-object <name>   (e.g., autocal-bias)
         --only-source <name>   (e.g., Star, Etalon, Dark, etc.)
     • Touches each matched ObsID's L0 file under the resolved L0 base path.
 
