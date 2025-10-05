@@ -562,7 +562,7 @@ class TSDB:
         datecode_col = '"datecode"'
         obsid_col    = '"ObsID"'
     
-        # ---------- Preflight checks (these open/close *internally*) ----------
+        # ---------- Preflight checks ----------
         # 1) Base table must exist
         if not self.check_if_table_exists(tablename=base_tbl):
             self.logger.warning(f"Base table '{base_tbl}' does not exist.")
@@ -587,7 +587,7 @@ class TSDB:
             self.logger.info(f"No rows found for datecode {datecode}; nothing to delete.")
             return {"TOTAL": 0}
     
-        # ---------- Deletions (single open connection) ----------
+        # ---------- Deletions ----------
         self._open_connection()
         try:
             deleted_counts = {}
