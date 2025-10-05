@@ -124,6 +124,13 @@ def main():
                         deleted_files = result.stdout.strip().split('\n') if result.stdout else []
                         if args.verbose:
                             print(f"Deleted {len(deleted_files)} files from {directory}")
+            if args.delete:
+                # Remove TSDB rows for this datecode.  
+                # They will be added back when the data is regenerated.
+                myTS = AnalyzeTimeSeries(backend='psql')
+                null = myTS.db.delete_by_datecode(datecode)
+                if args.verbose:
+                    print(f"Deleted {null['tsdb_base']} observations from the TSDB.")
 
             start_time = datetime.datetime.now(local_tz)
 
