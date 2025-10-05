@@ -17,6 +17,7 @@ ETALINES|bool|QC: Num and dist of Etalon lines ok|None
 WILDWSCI|bool|QC: SCI WLS not wild (stdev < 5 pix)|None
 WILDWSKY|bool|QC: SKY WLS not wild (stdev < 5 pix)|None
 WILDWCAL|bool|QC: CAL WLS not wild (stdev < 5 pix)|None
+NANL1OK|bool|QC: NaNs in L1 (all orders, both chips) < 50|None
 SNRSC452|float|SNR of L1 SCI1+SCI2+SCI3 (95th %ile) near 452 nm|None
 SNRSK452|float|SNR of L1 SKY (95th %ile) near 452 nm|None
 SNRCL452|float|SNR of L1 CAL (95th %ile) near 452 nm|None

@@ -484,6 +484,8 @@ ETALINES  1                                                                     
 WILDWSCI  1                                                                        QC: 1 = SCI WLS not wild (stdev compared to reference < 5 pixels)
 WILDWSKY  1                                                                        QC: 1 = SKY WLS not wild (stdev compared to reference < 5 pixels)
 WILDWCAL  1                                                                        QC: 1 = CAL WLS not wild (stdev compared to reference < 5 pixels)
+WILDWCAL  1                                                                        QC: 1 = CAL WLS not wild (stdev compared to reference < 5 pixels)
+NANL1OK   1                                                                        QC: 1 = Number of NaNs in L1 (all orders, both chips) < 50
 NSATGS2   23                                                                       Number of saturated lines in Green SCI2
 NSATGC    23                                                                       Number of saturated lines in Green CAL
 NSATGK    23                                                                       Number of saturated lines in Green SKY

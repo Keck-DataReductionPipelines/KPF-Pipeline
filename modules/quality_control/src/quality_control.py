@@ -1105,6 +1105,20 @@ class QCDefinitions:
         self.db_columns[name51] = None
         self.fits_keyword_fail_value[name51] = 0
 
+        name52 = 'l1_nan'
+        self.names.append(name52)
+        self.kpf_data_levels[name52] = ['L1']
+        self.descriptions[name52] = 'NaNs in L1 (all orders, both chips) < 50'
+        self.data_types[name52] = 'int'
+        self.spectrum_types[name52] = ['all',] 
+        self.master_types[name52] = []
+        self.drift_types[name52] = []
+        self.required_data_products[name52] = []
+        self.fits_keywords[name52] = 'CLEARSKY'
+        self.fits_comments[name52] = 'QC: NaNs in L1 (all orders, both chips) < 50'
+        self.db_columns[name52] = None
+        self.fits_keyword_fail_value[name52] = 0
+
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
 #        self.kpf_data_levels[name36] = ['L1']
@@ -4091,6 +4105,54 @@ class QCL1(QC):
             QC_pass = True
             if abs(age_master_file) > maxage:
                 QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def l1_nan(self, max_nans=50, debug=False):
+        """
+        This Quality Control function determines if the total number of NaNs 
+        in an L1 spectrum (all orders in Green and Red) is less than a 
+        threshold set by the input max_nan.
+
+        Args:
+            debug
+            max_nans - maximum number of NaNs allowed for QC to pass
+
+        Returns:
+            QC_pass (bool): True if the total number of NaNs 
+        in an L1 spectrum (all orders in Green and Red) is less than a 
+        threshold set by the input max_nan.
+        """
+
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            data_products = get_data_products_L1(L1)
+
+            total_nans = 0
+            if 'Green' in data_products: 
+                green_nans = myL1.count_nans(chip='green')
+                if debug:
+                    self.logger.debug(f'NaNs in Green SCI1, SCI2, SCI3, CAL, SKY = {green_nans}')
+                total_nans += sum(green_nans)
+            if 'Red' in data_products: 
+                red_nans = myL1.count_nans(chip='red')
+                if debug:
+                    self.logger.debug(f'NaNs in Red SCI1, SCI2, SCI3, CAL, SKY = {red_nans}')
+                total_nans += sum(red_nans)
+
+            QC_pass = True
+            if total_nans > max_nans:
+                QC_pass = False
+                if not debug: # if not already printed
+                    self.logger.debug(f'NaNs in Green SCI1, SCI2, SCI3, CAL, SKY = {green_nans}')
+                    self.logger.debug(f'NaNs in Red SCI1, SCI2, SCI3, CAL, SKY = {red_nans}')
+
 
         except Exception as e:
             self.logger.info(f"Exception: {e}")
