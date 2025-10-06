@@ -27,7 +27,7 @@ Here's the docstring showing all of the options.::
     options:
       -h, --help           show this help message and exit
       --ncpu NCPU          Number of CPUs to use
-      --delete             Delete existing 2D/L1/L2/QLP files before reprocessing
+      --delete             Delete existing 2D/L1/L2/QLP (but not L0/masters) files before reprocessing
       --verbose            Verbose stdout
       --force              Process even if datecode/version are listed in the logfile
       --logfile LOGFILE    Log file path
@@ -118,8 +118,65 @@ The full description is here::
       ./scripts/qlp_parallel.py 20230101.12345.67 20230101.17 --ncpu 50 --l0 --2d
       ./scripts/qlp_parallel.py 20240501 20240505 --ncpu 150 --load 90
 
+**Reprocess specific observations -- slowtouch.py:**
 
-**Reprocess specific observations -- kpf_slowtouch.sh:**
+Individual observations can be reprocessed by touching the L0 files. To reprocess a set 
+of files, use the script `slowtouch.sh`.  Files are touched slowly 
+(usually with 0.2 sec between touching individual files) to avoid overloading 
+the file event triggers system that initiate reprocessing of specific files.::
+
+    ./scripts/slowtouch.py
+
+This script is used to touch a list of KPF L0 files that have names like 
+KP.20230623.12345.67.fits.  This is useful to initiate reprocessing 
+using the KPF DRP.  The full descriptio is here::
+
+    Script name: slowtouch.py
+    
+    This script 'touches' a list of KPF L0 files with names like
+    KP.YYYYMMDD.12345.67.fits to trigger reprocessing in the KPF DRP.
+    
+    Ways to provide filenames (any combination works):
+      1) As positional arguments on the command line.
+      2) With -f <csv>, reading the first column (quotes removed; header 'observation_id' skipped).
+      3) With -d <dir>, adding every file name in that directory.
+    
+    Date range mode (Docker only):
+      If you pass exactly two positional arguments that are valid datecodes
+      (YYYYMMDD) and you do NOT use -f/--csv or -d/--dir, the script switches to
+      'date range mode'. This mode is available only when running inside a Docker
+      container. In date range mode it:
+        • Validates the two YYYYMMDD values and sorts them into start_date/end_date.
+        • Uses the time series database (TSDB) to query for ObsIDs in that date window,
+          optionally filtering by:
+            --only-object <name>   (e.g., autocal-bias)
+            --only-source <name>   (e.g., Star, Etalon, Dark, etc.)
+        • Touches each matched ObsID's L0 file under the resolved L0 base path.
+
+      If you attempt date range mode outside Docker, the script prints an error and exits.
+    
+    Options (all optional):
+      -f, --csv <filename>       CSV with L0 filenames in the first column (can be used multiple times)
+      -d, --dir <directory>      Directory to scan for filenames (can be used multiple times)
+      -p, --path <path>          L0 base path (default: automatic)
+                                 automatic -> /data/L0 when in Docker, /data/kpf/L0 otherwise
+      -s, --sleep <seconds>      Sleep interval between touches (default: 0.2)
+      -e, --echo                 Echo touch commands instead of executing
+          --only-object <name>   (Date range mode) filter TSDB rows to this OBJECT (e.g., autocal-bias)
+          --only-source <name>   (Date range mode) filter TSDB rows to this SOURCE (e.g., Star, Etalon, Dark)
+    
+    Examples:
+      slowtouch.py KP.20230623.12345.67.fits KP.20230623.12345.68.fits # touch two files (matched to L0 dir by ObsID)
+      slowtouch.py -f filenames.csv                                    # touch files in first col of csv
+      slowtouch.py -d /path/to/directory                               # touch files in dir (matched to L0 dir by ObsID)
+      slowtouch.py KP.20230623.12345.67.fits -p /new/L0/path -s 0.5    # specify L0 path and sleep interval 
+      slowtouch.py KP.20230623.12345.67.fits -e                        # echo touch commands
+      slowtouch.py 20241001 20241015 --only-object autocal-dark        # touch matching object name in date range
+      slowtouch.py 20241001 20241015 --only-source Star                # touch matching source type in date range
+      slowtouch.py 20241001 20241015 --only-source Etalon              # touch matching source type in date range
+
+
+**Reprocess specific observations -- kpf_slowtouch.sh (deprecated; use slowtouch.py instead):**
 
 Individual observations can be reprocessed by touching the L0 files, or touching
 the 2D/L1/L2 files to start reprocessing at a later stage. To reprocess a set 

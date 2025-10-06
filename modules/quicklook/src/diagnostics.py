@@ -10,6 +10,7 @@ from astropy.time import Time
 # Local dependencies
 from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger
+from modules.quicklook.src.analyze_l0 import AnalyzeL0
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_hk import AnalyzeHK
@@ -26,11 +27,436 @@ from modules.Utils.kpf_parse import get_data_products_L2
 from modules.Utils.kpf_parse import get_datecode_from_filename
 from modules.Utils.kpf_parse import HeaderParse, get_datecode
 from modules.Utils.kpf_parse import get_datetime_obsid, get_kpf_level, get_data_products_expected
-from modules.Utils.utils import get_moon_sep, get_sun_alt
+from modules.Utils.utils import get_moon_sep, get_sun_alt, styled_text
 from modules.calibration_lookup.src.alg import GetCalibrations
 
 DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../calibration_lookup/configs/default.cfg')
 DEFAULT_CALIBRATION_CFG_PATH = os.path.normpath(DEFAULT_CALIBRATION_CFG_PATH)
+
+def execute_all_diagnostics(kpf_object, data_level, diagnostics_name, logger=None, log_timing=False):
+    """
+    Method to loop over all Diagnostics modules for the data level of the input 
+    KPF object (an L0, 2D, L1, or L2 object).  
+
+    Args:
+        kpf_object - a KPF object (L0, 2D, L1, or L2)
+        data_type - 'L0', '2D', 'L1', or 'L2'
+        diagnostics_name - 'all' or the name of a diagnostics method
+
+    Attributes:
+        None
+
+    Returns:
+        kpf_object - the input kpf_object with Diagnostics keywords added
+    """
+
+    logger = logger if logger is not None else DummyLogger()
+
+    #data_level = get_kpf_level(kpf_object)
+
+    # Define Diagnostics object
+#    if data_level == 'L0':
+#        diag_obj = DiagnosticsL0(kpf_object)
+#    elif data_level == '2D':
+#        diag_obj = Diagnostics2D(kpf_object)
+#    elif data_level == 'L1':
+#        diag_obj = DiagnosticsL1(kpf_object)
+#    elif data_level == 'L2':
+#        diag_obj = DiagnosticsL2(kpf_object)
+#    else:
+#        logger.info('data_level is not L0, 2D, L1, or L2.  Exiting.')
+
+    # Measure Diagnostics
+    if data_level != None:
+        if 'L0' in data_level:
+            # Read speed
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L0_read_speed'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L0_read_speed", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_L0_read_speed(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring read speed failed: {e}\n{traceback.format_exc()}")
+            # Non-Gaussian read noise
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L0_nonGaussian_read_noise'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L0_nonGaussian_read_noise", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_L0_nonGaussian_read_noise(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring non-Gaussian read noise failed: {e}\n{traceback.format_exc()}")
+            kpf_object = add_headers_L0_nonGaussian_read_noise(kpf_object)
+            logger.info("--- L0 non-Gaussian read noise measured and added to headers.")
+            # pass
+            
+        if '2D' in data_level:
+            # 2D flux
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_2D_flux'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_flux", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_2D_flux(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring 2D flux failed: {e}\n{traceback.format_exc()}")
+
+            # 2D flux - inside and outside of order trace regions
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_2D_flux_stats_in_out_ordertrace'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_flux_stats_in_out_ordertrace", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_2D_flux_stats_in_out_ordertrace(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring 2D flux inside and outside of order trace failed: {e}\n{traceback.format_exc()}")
+
+            # Dark Current
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_dark_current_2D'):
+                try:
+                    primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                    name = primary_header.get_name()
+                    if name == 'Dark':
+                        #data_products = get_data_products_2D(kpf_object)
+                        #if (('Green' in data_products) or ('Red' in data_products)) and ('Telemetry' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_dark_current_2D", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_dark_current_2D(kpf_object, logger=logger)
+                            exit_code = 1
+                    else: 
+                        logger.info("Observation type {} != 'Dark'.  Dark current not computed.".format(name))
+                except Exception as e:
+                    logger.error(f"Measuring dark current failed: {e}\n{traceback.format_exc()}")
+
+            # Guider
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_guider'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_guider", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_guider(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring guider diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # SUNALT keyword (needed for solar and stellar observations)
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_sunalt'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_sunalt", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_sunalt(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring SUNALT failed: {e}\n{traceback.format_exc()}")
+
+            # HK
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_hk'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_hk", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_hk(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring HK diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # Exposure Meter
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_exposure_meter'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_exposure_meter", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_exposure_meter(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring exposure meter diagnostics failed: {e}\n{traceback.format_exc()}")
+                        
+            # Masters Age - Bias, Dark, Flat
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_masters_age_2D'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_masters_age_2D", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_masters_age_2D(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Age of masters for Bias/Dark/Flat not computed: {e}\n{traceback.format_exc()}")
+
+            # Cross-dispersion offset
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_2D_xdisp_offset'):
+                try:
+                    primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                    name = primary_header.get_name()
+                    if name == 'Flat':
+                        logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_xdisp_offset", style="Bold", color="Blue")}')
+                        kpf_object = add_headers_2D_xdisp_offset(kpf_object, logger=logger)
+                        exit_code = 1
+                    else: 
+                        logger.info("Observation type {} != 'Flat'.  Cross-disperion offset not computed.".format(name))
+                except Exception as e:
+                    logger.error(f"Measuring Cross-disperion offset failed: {e}\n{traceback.format_exc()}")
+
+            # SoCal Irradiance Statistics
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_2D_socal_irradiance'):
+                try:
+                    primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                    name = primary_header.get_name()
+                    if name == 'Sun':
+                        ObsID = primary_header.get_obsid()
+                        datecode = get_datecode(ObsID)
+                        logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_2D_socal_irradiance", style="Bold", color="Blue")}')
+                        kpf_object = add_headers_2D_socal_irradiance(kpf_object, logger=logger)
+                        exit_code = 1
+                    else: 
+                        logger.info("Observation type {} != 'Sun'.  SoCal Irradiance Statistics not computed.".format(name))
+                except Exception as e:
+                    logger.error(f"Measuring SoCal irradiance statistics failed: {e}\n{traceback.format_exc()}")
+
+                        
+        if 'L1' in data_level:
+            # WLS Age
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_masters_age_L1'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_masters_age_L1", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_masters_age_L1(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("Age of masters for wavelength solution not computed.")
+                    else: 
+                        logger.info("Green/Red not in L1 file. Age of masters for wavelength solution not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring L1 master age failed: {e}\n{traceback.format_exc()}")
+
+            # Order Trace and Smooth Lamp Age
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_trace_lamp_age_L1'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_trace_lamp_age_L1", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_trace_lamp_age_L1(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("Age of smooth lamp and order trace not computed.")
+                    else: 
+                        logger.info("Green/Red not in L1 file. Age of smooth lamp and order trace not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring L1 order trace/smooth lamp failed: {e}\n{traceback.format_exc()}")
+
+            # L1 SNR
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_SNR'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_SNR", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_SNR(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("L1 SNR diagnostics not computed.")
+                    else: 
+                        logger.info("Green/Red not in L1 file. SNR diagnostics not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring L1 SNR failed: {e}\n{traceback.format_exc()}")
+            
+            # L1 Order Flux Ratios
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_order_flux_ratios'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_order_flux_ratios", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_order_flux_ratios(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("L1 SNR diagnostics not computed.")
+                    else: 
+                        logger.info("Green/Red not in L1 file. Flux ratio diagnostics not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
+
+            # L1 Orderlet Flux Ratios
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_orderlet_flux_ratios'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_orderlet_flux_ratios", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_orderlet_flux_ratios(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("L1 SNR diagnostics not computed.")
+                    else: 
+                        logger.info("Green/Red not in L1 file. Flux ratio diagnostics not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring orderlet flux ratios failed: {e}\n{traceback.format_exc()}")
+
+            # L1 LFC and first/last spectral orders with good lines
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_cal_line_quality'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                        name = primary_header.get_name()
+                        if name == 'LFC':
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_cal_line_quality(kpf_object, cal='LFC', logger=logger)
+                            exit_code = 1
+                        elif name == 'Etalon':
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_cal_line_quality", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_cal_line_quality(kpf_object, cal='Etalon', logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("Observation type {} != 'LFC' or 'Etalon'.  Line diagnostics not computed.".format(name))
+                    else: 
+                        logger.info("Green/Red not in L1 file. LFC/Etalon line diagnostics not computed.")
+
+                except Exception as e:
+                    logger.error(f"Measuring LFC/Etalon line diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # L1 count saturated lines for Cal lamps
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_saturated_lines'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                        name = primary_header.get_name()
+                        if name in ['LFC', 'Etalon', 'ThAr', 'UNe']:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_saturated_lines", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L1_saturated_lines(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("Observation type {} not in ['LFC', 'Etalon', 'ThAr', 'UNe'].  Saturated lines not counted.".format(name))
+                    else: 
+                        logger.info("Green/Red not in L1 file. Saturated lines not counted.")
+
+                except Exception as e:
+                    logger.error(f"Counting saturated lines failed: {e}\n{traceback.format_exc()}")
+
+            # L1 standard deviation of WLS compared to WLS_ref
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_std_wls'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                        logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_std_wls", style="Bold", color="Blue")}')
+                        kpf_object = add_headers_L1_std_wls(kpf_object, logger=logger)
+                        exit_code = 1
+                    else: 
+                        logger.info("Green/Red not in L1 file. Stdev of WLS - WLS_ref diagnostics not computed.")
+
+                except Exception as e:
+                    logger.error(f"Measuring stdev WLS diagnostics failed: {e}\n{traceback.format_exc()}")
+
+            # L1 - number of NaN values
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L1_nans'):
+                try:
+                    data_products = get_data_products_L1(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        primary_header = HeaderParse(kpf_object, 'PRIMARY')
+                        logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L1_nans", style="Bold", color="Blue")}')
+                        kpf_object = add_headers_L1_nans(kpf_object, logger=logger)
+                        exit_code = 1
+                    else: 
+                        logger.info("Green/Red not in L1 file. Number of NaN values not computed.")
+
+                except Exception as e:
+                    logger.error(f"Measuring number of L1 NaN values failed: {e}\n{traceback.format_exc()}")
+
+
+        elif 'L2' in data_level:
+            # L2 - Barycentric correction
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L2_barycentric'):
+                try:
+                    data_products = get_data_products_L2(kpf_object )
+                    if ('Green' in data_products) or ('Red' in data_products): 
+                        if True:
+                            logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L2_barycentric", style="Bold", color="Blue")}')
+                            kpf_object = add_headers_L2_barycentric(kpf_object, logger=logger)
+                            exit_code = 1
+                        else: 
+                            logger.info("L2 BCV and BJD diagnostics not computed.")
+                    else: 
+                        logger.info("Green/Red not in L2 file. BCV and BJD diagnostics not computed.")
+                except Exception as e:
+                    logger.error(f"Measuring L2 BCV/BJD failed: {e}\n{traceback.format_exc()}")
+
+            # L2 - Days since last good LFC/Etalon exposures
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_days_since_last_wave_cal'):
+                try:
+                    print(f"type(kpf_object) = {type(kpf_object)}")
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_days_since_last_wave_cal", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_days_since_last_wave_cal(kpf_object, cal_source='LFC', logger=logger)
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_days_since_last_wave_cal", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_days_since_last_wave_cal(kpf_object, cal_source='Etalon', logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring time since last LFC/Etalon failed: {e}\n{traceback.format_exc()}")
+
+    return kpf_object
+
+
+def add_headers_L0_read_speed(L0, logger=None):
+    """
+    Adds keywords to the object header for readspeed
+    
+    Keywords:
+        READSPED - Categorization of read speed: 'regular' or 'fast'
+        GREENTRT - GREEN chip total read time [seconds]
+        REDTRT - RED chip total read time [seconds]
+
+    Args:
+        L0 - a KPF L0 object 
+
+    Returns:
+        L0 - a L0 file with header keywords added
+    """
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L0(L0)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L0)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        logger.info('Not a valid L0 or no Gree/Red CCD data.')
+        return L0
+        
+    # Use the AnalyzeL0 class to measure read speed
+    try:
+        myL0 = AnalyzeL0(L0, logger=logger)
+        L0.header['PRIMARY']['READSPED'] = (myL0.read_speed, "Categorization of read speed: 'regular' or 'fast'")
+        for chip in chips:
+            if chip == 'green':
+                try:
+                    L0.header['PRIMARY']['GREENTRT'] = (round(myL0.green_read_time, 3), 'GREEN chip total read time [seconds]')
+                except Exception as e:
+                    logger.error(f"Problem with determining read speed for Green CCD: {e}\n{traceback.format_exc()}")
+            if chip == 'red':
+                try:
+                    L0.header['PRIMARY']['REDTRT'] = (round(myL0.red_read_time, 3), 'RED chip total read time [seconds]')
+                except Exception as e:
+                    logger.error(f"Problem with determining read speed for Red CCD: {e}\n{traceback.format_exc()}")
+    except:
+        logger.error(f"Problem determining read speed: {e}\n{traceback.format_exc()}")
+
+    return L0
 
 
 def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
@@ -1106,7 +1532,7 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
     chips = []
     if 'Green' in data_products: chips.append('green')
     if 'Red'   in data_products: chips.append('red')
-    
+
     # Check that the input object is of the right type
     if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
         print('Not a valid L1.')
@@ -1115,115 +1541,55 @@ def add_headers_L1_orderlet_flux_ratios(L1, logger=None):
     # Use the AnalyzeL1 class to compute flux ratios between orderlets
     myL1 = AnalyzeL1(L1, logger=logger)
     myL1.measure_orderlet_flux_ratios()
+
+    # pixel index range
+    imin = 2040-250
+    imax = 2040+250
+
+    # orders and wavelengths to measure
+    orders = {
+        "green": [(1, 452), (25, 548)],
+        "red":   [(8, 652), (20, 747), (30, 852)],  # (fix: 30 really uses order=30)
+    }
+    
+    # ratio families: (header code prefix, numerator, denominator, human label)
+    ratios = [
+        ("FR12", "sci1", "sci2", "SCI1/SCI2"),
+        ("FR32", "sci3", "sci2", "SCI3/SCI2"),
+        ("FRS2", "sky",  "sci2", "SKY/SCI2"),
+        ("FRC2", "cal",  "sci2", "CAL/SCI2"),
+    ]
+    
+    # map short names to attribute suffixes on myL1 (note: sci2 has no interpolated version "_int")
+    name_to_attr = {"sci1": "sci1_int", "sci2": "sci2", "sci3": "sci3_int", "sky": "sky_int", "cal": "cal_int"}
+    
+    def set_ratio_hdr(chip, o, wl, code, num, den, label):
+        pre = "g" if chip == "green" else "r"
+        a = getattr(myL1, f"f_{pre}_{name_to_attr[num]}")[o, imin:imax].astype(float, copy=False)
+        b = getattr(myL1, f"f_{pre}_{name_to_attr[den]}")[o, imin:imax].astype(float, copy=False)
+    
+        with np.errstate(invalid="ignore", divide="ignore"):
+            m = np.isfinite(a) & np.isfinite(b) & (b != 0)
+            if not m.any():
+                return
+            q = a[m] / b[m]
+            med = np.nanmedian(q)
+    
+        if np.isfinite(med):
+            L1.header["PRIMARY"][f"{code}M{wl}"] = (med, f"median({label}) near {wl} nm")
+            # Uncertainty is optional; only set if it computes cleanly and is finite
+            try:
+                unc = uncertainty_median(q)
+                if np.isfinite(unc):
+                    L1.header["PRIMARY"][f"{code}U{wl}"] = (unc, f"unc. of median({label}) near {wl} nm")
+            except Exception:
+                pass
+    
     for chip in chips:
-        if chip == 'green':
-            try:
-                # Order 1 (Green) - 452 nm
-                o=1
-                imin = 2040-250
-                imax = 2040+250
-                L1.header['PRIMARY']['FR12M452'] = (np.nanmedian(myL1.f_g_sci1_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'median(SCI1/SCI2) near 452 nm')
-                L1.header['PRIMARY']['FR12U452'] = (uncertainty_median(myL1.f_g_sci1_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI1/SCI2) near 452 nm')
-                L1.header['PRIMARY']['FR32M452'] = (np.nanmedian(myL1.f_g_sci3_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'median(SCI3/SCI2) near 452 nm')
-                L1.header['PRIMARY']['FR32U452'] = (uncertainty_median(myL1.f_g_sci3_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI3/SCI2) near 452 nm')
-                L1.header['PRIMARY']['FRS2M452'] = (np.nanmedian(myL1.f_g_sky_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'median(SKY/SCI2) near 452 nm')
-                L1.header['PRIMARY']['FRS2U452'] = (uncertainty_median(myL1.f_g_sky_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'unc. of median(SKY/SCI2) near 452 nm')
-                L1.header['PRIMARY']['FRC2M452'] = (np.nanmedian(myL1.f_g_cal_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'median(CAL/SCI2) near 452 nm')
-                L1.header['PRIMARY']['FRC2U452'] = (uncertainty_median(myL1.f_g_cal_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'unc. of median(CAL/SCI2) near 452 nm')
-                # Order 25 (Green) - 548 nm
-                o=25
-                imin = 2040-250
-                imax = 2040+250
-                L1.header['PRIMARY']['FR12M548'] = (np.nanmedian(myL1.f_g_sci1_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'median(SCI1/SCI2) near 548 nm')
-                L1.header['PRIMARY']['FR12U548'] = (uncertainty_median(myL1.f_g_sci1_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI1/SCI2) near 548 nm')
-                L1.header['PRIMARY']['FR32M548'] = (np.nanmedian(myL1.f_g_sci3_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'median(SCI3/SCI2) near 548 nm')
-                L1.header['PRIMARY']['FR32U548'] = (uncertainty_median(myL1.f_g_sci3_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI3/SCI2) near 548 nm')
-                L1.header['PRIMARY']['FRS2M548'] = (np.nanmedian(myL1.f_g_sky_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'median(SKY/SCI2) near 548 nm')
-                L1.header['PRIMARY']['FRS2U548'] = (uncertainty_median(myL1.f_g_sky_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'unc. of median(SKY/SCI2) near 548 nm')
-                L1.header['PRIMARY']['FRC2M548'] = (np.nanmedian(myL1.f_g_cal_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'median(CAL/SCI2) near 548 nm')
-                L1.header['PRIMARY']['FRC2U548'] = (uncertainty_median(myL1.f_g_cal_int[o,imin:imax] / myL1.f_g_sci2[o,imin:imax]), 
-                                                    'unc. of median(CAL/SCI2) near 548 nm')
-            except Exception as e:
-                logger.error(f"Problem with green L1 SNR measurements: {e}\n{traceback.format_exc()}")
-        if chip == 'red':
-            try:
-                # Order 8 (Red) - 652 nm
-                o=8
-                imin = 2040-250
-                imax = 2040+250
-                L1.header['PRIMARY']['FR12M652'] = (np.nanmedian(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SCI1/SCI2) near 652 nm')
-                L1.header['PRIMARY']['FR12U652'] = (uncertainty_median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI1/SCI2) near 652 nm')
-                L1.header['PRIMARY']['FR32M652'] = (np.nanmedian(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SCI3/SCI2) near 652 nm')
-                L1.header['PRIMARY']['FR32U652'] = (uncertainty_median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI3/SCI2) near 652 nm')
-                L1.header['PRIMARY']['FRS2M652'] = (np.nanmedian(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SKY/SCI2) near 652 nm')
-                L1.header['PRIMARY']['FRS2U652'] = (uncertainty_median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SKY/SCI2) near 652 nm')
-                L1.header['PRIMARY']['FRC2M652'] = (np.nanmedian(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(CAL/SCI2) near 652 nm')
-                L1.header['PRIMARY']['FRC2U652'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(CAL/SCI2) near 652 nm')
-                # Order 20 (Red) - 747 nm
-                o=20
-                imin = 2040-250
-                imax = 2040+250
-                L1.header['PRIMARY']['FR12M747'] = (np.nanmedian(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SCI1/SCI2) near 747 nm')
-                L1.header['PRIMARY']['FR12U747'] = (uncertainty_median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI1/SCI2) near 747 nm')
-                L1.header['PRIMARY']['FR32M747'] = (np.nanmedian(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SCI3/SCI2) near 747 nm')
-                L1.header['PRIMARY']['FR32U747'] = (uncertainty_median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI3/SCI2) near 747 nm')
-                L1.header['PRIMARY']['FRS2M747'] = (np.nanmedian(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SKY/SCI2) near 747 nm')
-                L1.header['PRIMARY']['FRS2U747'] = (uncertainty_median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SKY/SCI2) near 747 nm')
-                L1.header['PRIMARY']['FRC2M747'] = (np.nanmedian(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(CAL/SCI2) near 747 nm')
-                L1.header['PRIMARY']['FRC2U747'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(CAL/SCI2) near 747 nm')
-                # Order 30 (Red) - 852 nm
-                o=20
-                imin = 2040-250
-                imax = 2040+250
-                L1.header['PRIMARY']['FR12M852'] = (np.nanmedian(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SCI1/SCI2) near 852 nm')
-                L1.header['PRIMARY']['FR12U852'] = (uncertainty_median(myL1.f_r_sci1_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI1/SCI2) near 852 nm')
-                L1.header['PRIMARY']['FR32M852'] = (np.nanmedian(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SCI3/SCI2) near 852 nm')
-                L1.header['PRIMARY']['FR32U852'] = (uncertainty_median(myL1.f_r_sci3_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SCI3/SCI2) near 852 nm')
-                L1.header['PRIMARY']['FRS2M852'] = (np.nanmedian(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(SKY/SCI2) near 852 nm')
-                L1.header['PRIMARY']['FRS2U852'] = (uncertainty_median(myL1.f_r_sky_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(SKY/SCI2) near 852 nm')
-                L1.header['PRIMARY']['FRC2M852'] = (np.nanmedian(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'median(CAL/SCI2) near 852 nm')
-                L1.header['PRIMARY']['FRC2U852'] = (uncertainty_median(myL1.f_r_cal_int[o,imin:imax] / myL1.f_r_sci2[o,imin:imax]), 
-                                                    'unc. of median(CAL/SCI2) near 852 nm')
-            except Exception as e:
-                logger.error(f"Problem with red L1 SNR measurements: {e}\n{traceback.format_exc()}")
+        for o, wl in orders.get(chip, []):
+            for code, num, den, label in ratios:
+                set_ratio_hdr(chip, o, wl, code, num, den, label)
+
     return L1
 
 
@@ -1294,7 +1660,7 @@ def add_headers_L1_cal_line_quality(L1, intensity_thresh=40**2, min_lines=100,
         name = 'Etalon'
         prefix = 'ETA'
     else:
-        self.logger.error('Calibration type not specified.')
+        logger.error('Calibration type not specified.')
         return L1
     if 'CAL-OBJ' in myL1.L1.header['PRIMARY']:
         if myL1.L1.header['PRIMARY']['CAL-OBJ'] == cal_fiber:
@@ -1455,7 +1821,7 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
 
     # Check that the input object is of the right type
     if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
-        self.logger.error('Not a valid L1.')
+        logger.error('Not a valid L1.')
         return L1
 
     # Get reference wavelength solution
@@ -1570,6 +1936,53 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
     return L1
 
 
+def add_headers_L1_nans(L1, logger=None, debug=False):
+    """
+    Computes the number of NaNs in each of the L1 extensions.
+    
+    Keywords:
+        NANL1GS1 - Number of NaNs in all orders of L1 Green SCI1
+        NANL1GS2 - Number of NaNs in all orders of L1 Green SCI2
+        NANL1GS3 - Number of NaNs in all orders of L1 Green SCI3
+        NANL1GCL - Number of NaNs in all orders of L1 Green CAL
+        NANL1GSK - Number of NaNs in all orders of L1 Green SKY
+        NANL1RS1 - Number of NaNs in all orders of L1 Red SCI1
+        NANL1RS2 - Number of NaNs in all orders of L1 Red SCI2
+        NANL1RS3 - Number of NaNs in all orders of L1 Red SCI3
+        NANL1RCL - Number of NaNs in all orders of L1 Red CAL
+        NANL1RSK - Number of NaNs in all orders of L1 Red SKY
+
+    Args:
+        L1 - a KPF L1 object 
+
+    Returns:
+        L1 - a L1 file with header keywords added
+    """
+    if logger == None:
+        logger = DummyLogger()
+
+    myL1 = AnalyzeL1(L1, logger=logger)
+    data_products = get_data_products_L1(L1)
+    if 'Green' in data_products: 
+        green_nans = myL1.count_nans(chip='green')
+        (NANL1GS1, NANL1GS2, NANL1GS3, NANL1GCL, NANL1GSK) = green_nans
+        L1.header['PRIMARY']['NANL1GS1'] = (NANL1GS1, 'Number of NaNs in all orders of L1 Green SCI1')
+        L1.header['PRIMARY']['NANL1GS2'] = (NANL1GS2, 'Number of NaNs in all orders of L1 Green SCI2')
+        L1.header['PRIMARY']['NANL1GS3'] = (NANL1GS3, 'Number of NaNs in all orders of L1 Green SCI3')
+        L1.header['PRIMARY']['NANL1GCL'] = (NANL1GCL, 'Number of NaNs in all orders of L1 Green CAL')
+        L1.header['PRIMARY']['NANL1GSK'] = (NANL1GSK, 'Number of NaNs in all orders of L1 Green SKY')
+    if 'Red' in data_products: 
+        red_nans = myL1.count_nans(chip='red')
+        (NANL1RS1, NANL1RS2, NANL1RS3, NANL1RCL, NANL1RSK) = red_nans
+        L1.header['PRIMARY']['NANL1RS1'] = (NANL1RS1, 'Number of NaNs in all orders of L1 Red SCI1')
+        L1.header['PRIMARY']['NANL1RS2'] = (NANL1RS2, 'Number of NaNs in all orders of L1 Red SCI2')
+        L1.header['PRIMARY']['NANL1RS3'] = (NANL1RS3, 'Number of NaNs in all orders of L1 Red SCI3')
+        L1.header['PRIMARY']['NANL1RCL'] = (NANL1RCL, 'Number of NaNs in all orders of L1 Red CAL')
+        L1.header['PRIMARY']['NANL1RSK'] = (NANL1RSK, 'Number of NaNs in all orders of L1 Red SKY')
+
+    return L1
+
+
 def add_headers_L2_barycentric(L2, logger=None):
     """
     Adds Barycentric RV correction and BJD to the L2 primary header
@@ -1676,20 +2089,20 @@ def add_headers_days_since_last_wave_cal(L2, cal_source='LFC', logger=None, verb
             if not (days_before is None):
                 L2.header['PRIMARY']['AGESLFC'] = (days_before, 'Days since last good LFC frame (depends on processing order)')
                 if verbose:
-                    self.logger.info(f'AGESETA = {days_before}')
+                    logger.info(f'AGESETA = {days_before}')
             if not (days_after is None):
                 L2.header['PRIMARY']['AGEULFC'] = (days_after, 'Days until next good LFC frame (depends on processing order)')
                 if verbose:
-                    self.logger.info(f'AGEUETA = {days_after}')
+                    logger.info(f'AGEUETA = {days_after}')
         if cal_source=='Etalon':
             if not (days_before is None):
                 L2.header['PRIMARY']['AGESETA'] = (days_before, 'Days since last good Etalon frame (depends on processing order)')
                 if verbose:
-                    self.logger.info(f'AGESETA = {days_before}')
+                    logger.info(f'AGESETA = {days_before}')
             if not (days_after is None):
                 L2.header['PRIMARY']['AGEUETA'] = (days_after, 'Days until next good Etalon frame (depends on processing order)')
                 if verbose:
-                    self.logger.info(f'AGEUETA = {days_after}')
+                    logger.info(f'AGEUETA = {days_after}')
 
     except Exception as e:
         logger.error(f"Problem computing days since last good {cal_source}: {e}\n{traceback.format_exc()}")

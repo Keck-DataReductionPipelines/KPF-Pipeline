@@ -78,7 +78,10 @@ class QualityControlFramework(KPF0_Primitive):
         quality_control_exit_code = 0
 
         # Execute appropriate QC tests
-        self.kpf_object = execute_all_QCs(self.kpf_object, self.data_level_str, logger=self.logger)
+        self.kpf_object = execute_all_QCs(self.kpf_object, 
+                                          self.data_level_str, 
+                                          logger=self.logger, 
+                                          log_timing=True)
 
         # Optionally list QC metrics.
         if self.qc_list_flag == 1:
