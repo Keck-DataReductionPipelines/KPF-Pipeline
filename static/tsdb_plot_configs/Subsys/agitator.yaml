@@ -11,7 +11,7 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: "Agitator Speed\n(counts/sec)"
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -24,7 +24,7 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: Motor Torque (V)
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -37,7 +37,7 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: Motor Temp. (C)
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -50,7 +50,7 @@ panel_arr:
           linewidth: 0.5
     paneldict:
       ylabel: Ambient Temp. (C)
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.25
 
   - panelvars:
@@ -64,5 +64,5 @@ panel_arr:
     paneldict:
       ylabel: "Agitator Power (mA)"
       title: KPF Agitator
-      not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.25

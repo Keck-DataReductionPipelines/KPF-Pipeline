@@ -61,9 +61,11 @@ class DriftCorrection(KPF1_Primitive):
         # self.ts_db = self.config['PARAM']['ts_db_path']
 
     def _perform(self):
-
+        print("Performing Drift Correction...")
         dc = ModifyWLS(self.l1_obj, self.config_path)
+        print(f"Applying drift correction method: {self.method}")
         out_l1 = dc.apply_drift(method=self.method)
+        print("Drift Correction completed.")
 
         return Arguments(out_l1)
 

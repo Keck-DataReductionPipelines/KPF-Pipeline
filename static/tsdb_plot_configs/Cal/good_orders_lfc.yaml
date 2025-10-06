@@ -16,7 +16,7 @@ panel_arr:
       ymax: 35.5
       ylabel: "Max/Min Good Orders\n(LFC Green - CAL)"
       not_junk: true
-      qc_not_fail: 'GOODREAD,TIMCHKL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       nolegend: true
       only_object: 
         - autocal-lfc-all-morn
@@ -60,7 +60,7 @@ panel_arr:
       ymax: 32.5
       ylabel: "Max/Min Good Orders\n(LFC Red - CAL)"
       not_junk: true
-      qc_not_fail: 'GOODREAD,TIMCHKL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       nolegend: true
       only_object: 
         - autocal-lfc-all-morn
@@ -99,7 +99,7 @@ panel_arr:
       ymax: 35.5
       ylabel: "Max/Min Good Orders\n(LFC Green - SCI)"
       not_junk: true
-      qc_not_fail: 'GOODREAD,TIMCHKL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       nolegend: true
       only_object: 
         - autocal-lfc-all-morn
@@ -144,7 +144,7 @@ panel_arr:
       ylabel: "Max/Min Good Orders\n(LFC Red - SCI)"
       title: Good Orders - LFC
       not_junk: true
-      qc_not_fail: 'GOODREAD,TIMCHKL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       nolegend: true
       only_object: 
         - autocal-lfc-all-morn
