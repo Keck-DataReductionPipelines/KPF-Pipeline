@@ -516,6 +516,8 @@ ORDER BY startdate;"""
         after_df = df[df['meanmjd'] >= obs_jd]
 
         try:
+            if len(before_df) == 0:
+                raise ValueError("No files found before observation time")
             best_before = before_df.loc[before_df['delta'].idxmin()]
             fname_before = os.path.join('/', best_before['filename'])
             if not os.path.exists(fname_before):
@@ -526,6 +528,8 @@ ORDER BY startdate;"""
             fname_before = None
             before_code = 1
         try:
+            if len(after_df) == 0:
+                raise ValueError("No files found after observation time")
             best_after = after_df.loc[after_df['delta'].idxmin()]
             fname_after = os.path.join('/', best_after['filename'])
             if not os.path.exists(fname_after):
