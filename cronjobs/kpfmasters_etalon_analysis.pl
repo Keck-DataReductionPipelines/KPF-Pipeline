@@ -135,13 +135,15 @@ my $dockercmdscript = 'jobs/kpfmasters_etalon_analysis';                     # A
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';              # Augment with unique numbers (process ID and truncated seconds).
 
 
-# Ensure PYTHONPATH or equivalent is set; e.g., $ENV{PYTHONPATH} = "/data/user/rlaher/git/KPF-Pipeline"
+# Ensure PYTHONPATH or equivalent is set for INSIDE Docker container.
+# E.g., $ENV{PYTHONPATH} = "/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src"
 my $pythonpath = $ENV{PYTHONPATH};
 if (defined $pythonpath) {
     print "PYTHONPATH=$pythonpath\n";
 } else {
-    $ENV{PYTHONPATH} = '/data/user/rlaher/git/KPF-Pipeline/polly/src';
-    print "PYTHONPATH not defined; reset to PYTHONPATH=$ENV{PYTHONPATH}\n";
+    $ENV{PYTHONPATH} = '/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src';
+    $pythonpath = $ENV{PYTHONPATH};
+    print "PYTHONPATH not defined; reset to PYTHONPATH=$pythonpath\n";
 }
 
 my $pythonscript = 'cronjobs/run_analysis_for_masters.py';
@@ -199,11 +201,17 @@ print "Docker container name = $containername\n";
 
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
+
+# Make output directory and the run Jake Pember's etalon-analysis script (run_analysis_for_masters.py).
+
 my $script = "#! /bin/bash\n" .
              "source $dbenvfileinside\n" .
              "make init\n" .
              "export PYTHONUNBUFFERED=1\n" .
+             "export PYTHONPATH=$pythonpath\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
+             "mkdir -p /data/analysis/${procdate}\n" .
+             "python $pythonscript $procdate >& ${pylogfile}\n" .
              "cp -pr /data/analysis/${procdate}/* /masters/${procdate}\n" .
              "cp -p /code/KPF-Pipeline/${pylogfile} /masters/${procdate}\n" .
              "chown root:root /masters/${procdate}/*\n" .
@@ -213,15 +221,6 @@ my $script = "#! /bin/bash\n" .
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
-
-
-# Make output directory and the run Jake Pember's etalon-analysis script (run_analysis_for_masters.py).
-
-`mkdir -p $sandbox/analysis/$procdate`;
-
-my $analysiscmd = "python $pythonscript $procdate >& $pylogfile";
-print "Executing $analysiscmd\n";
-`$analysiscmd`;
 
 
 # Launch container with root to copy products to permanent location.
