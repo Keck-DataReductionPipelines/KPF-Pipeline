@@ -48,6 +48,8 @@ all_bias_files_list,\
     dark_objects_auto,\
     arclamp_objects_auto = PickInputsMastersDRP(data_type,search_string,exptime_minimum,standard_flat_object)
 
+#test = all_arclamp_files_list
+# 
 channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
 channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
 channel_datasec_ncols_red = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_red
@@ -72,6 +74,7 @@ file_list = all_bias_files_list + all_dark_files_list + all_flat_files_list + al
 
 nlen_file_list = len(file_list)
 
+overwrite = True
 for raw_file_path in file_list:
 
     _,file_name_ext = split(raw_file_path)
