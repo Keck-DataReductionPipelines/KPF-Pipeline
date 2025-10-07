@@ -1821,7 +1821,7 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
 
     # Check that the input object is of the right type
     if str(type(L1)) != "<class 'kpfpipe.models.level1.KPF1'>" or chips == []:
-        logger.error('Not a valid L1.')
+        logger.error('Not a valid L1 or Green or Red not present.')
         return L1
 
     # Get reference wavelength solution
