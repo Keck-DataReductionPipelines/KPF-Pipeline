@@ -10,6 +10,7 @@ panel_arr:
     paneldict:
       ylabel: "L0 Data Present\n(DATAPRL0)"
       legend_frac_size: 0.15
+      not_junk: true
 
   - panelvars:
       - col: KWRDPRL0
@@ -20,6 +21,7 @@ panel_arr:
     paneldict:
       ylabel: "L0 Keywords Present\n(KWRDPRL0)"
       legend_frac_size: 0.15
+      not_junk: true
 
   - panelvars:
       - col: TELEPRL0
@@ -30,6 +32,7 @@ panel_arr:
     paneldict:
       ylabel: "TELEMETRY Extension\nPresent (TELEPRL0)"
       legend_frac_size: 0.15
+      not_junk: true
 
   - panelvars:
       - col: CAHKPR2D
@@ -40,6 +43,7 @@ panel_arr:
     paneldict:
       ylabel: "2D CaHK Data Present\n(CAHKPR2D)"
       legend_frac_size: 0.15
+      not_junk: true
 
   - panelvars:
       - col: CAHKPRL1
@@ -50,6 +54,7 @@ panel_arr:
     paneldict:
       ylabel: "L1 CaHK Data Present\n(CAHKPRL1)"
       legend_frac_size: 0.15
+      not_junk: true
 
   - panelvars:
       - col: DATAPR2D
@@ -60,6 +65,7 @@ panel_arr:
     paneldict:
       ylabel: "2D Data Present\n(DATAPR2D)"
       legend_frac_size: 0.15
+      not_junk: true
 
   - panelvars:
       - col: DATAPRL1
@@ -70,6 +76,7 @@ panel_arr:
     paneldict:
       ylabel: "L1 Data Present\n(DATAPRL1)"
       legend_frac_size: 0.15
+      not_junk: true
 
   - panelvars:
       - col: DATAPRL2
@@ -79,5 +86,6 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "L2 Data Present\n(DATAPRL2)"
-      title: QC - Tests For Data Present With Correct Array Sizes
+      title: QC - Data Present With Correct Array Sizes
       legend_frac_size: 0.15
+      not_junk: true

@@ -11,6 +11,8 @@ panel_arr:
       ylabel: "Telescope Not Vignetted\n(NOTVIGN)"
       title: QC - Observing
       legend_frac_size: 0.15
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: GUIDGOOD
@@ -21,6 +23,8 @@ panel_arr:
     paneldict:
       ylabel: "Guider RMS and bias\nwithin 50 mas RMS\n(GUIDGOOD)"
       legend_frac_size: 0.15
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: GUIDSAT
@@ -31,14 +35,18 @@ panel_arr:
     paneldict:
       ylabel: "Guider Not Saturated\n(GUIDSAT)"
       legend_frac_size: 0.15
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: GOODEL
         plot_type: state
         plot_attr:
-          label: "Telescope elevation > 30 deg"
+          label: "Telescope elev. > 30 deg"
           marker: .
     paneldict:
-      ylabel: "Telescope elevation > 30 deg\n(GUIDSAT)"
+      ylabel: "Telescope elev. > 30 deg\n(GUIDSAT)"
       title: QC - Observing
       legend_frac_size: 0.15
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'

@@ -7,7 +7,7 @@
 # Usage:
 # ./l0files_register_in_db 202306?? (file glob)
 #
-# For the given date on the command line (or file glob that 
+# For the given date on the command line (or file glob that
 # covers a range of dates), ingest all L0 files in
 # /data/kpf/L0/202306??/KP*fits on the shrek machine.
 #
@@ -84,11 +84,17 @@ if (! (defined $dbname)) {
     die "*** Env. var. KPFDBNAME not set; quitting...\n";
 }
 
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE_NAME};
+if (! (defined $containerimage)) {
+    $containerimage = 'russkpfmasters:latest';
+    print "*** Using default KPFCRONJOB_DOCKER_IMAGE_NAME=$containerimage (env var not set)\n";
+}
+
 
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'l0files_register_in_db.pl';
-my $version = '1.0';
+my $version = '1.1';
 my $verbose = 1;
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
@@ -99,7 +105,10 @@ if (! (defined $procdate)) {
 
 my $dockercmdscript = 'jobs/l0registerdbcmd';                      # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'kpf-drp:latest';
+
+
+
+
 my $recipe = '/code/KPF-Pipeline/recipes/quality_control_exposure.recipe';
 my $inputconfig = $codedir . '/configs/quality_control_exposure.cfg';
 my $config = 'quality_control_exposure';

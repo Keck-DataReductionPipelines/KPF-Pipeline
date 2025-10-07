@@ -1,3 +1,13 @@
+from kpfpipe.pipelines.fits_primitives import kpf0_from_fits
+from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
+from modules.var_exts.src.var_exts_framework import VarExtsFramework
+from modules.image_processing.src.image_process import ImageProcessing
+from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
+from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.Utils.overscan_subtract import OverscanSubtraction
+from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
+
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
 max_cal_file_age = config.ARGUMENT.max_cal_file_age
@@ -32,42 +42,48 @@ lev0_ffi_exts_subbed = lev0_ffi_ext_red + lev0_ffi_ext_green + lev0_ffi_ext_cahk
 
 lev0_ffi_exts_full = config.WATCHFOR_L0.lev0_ffi_exts_full
 actual_dir = config.WATCHFOR_L0.actual_dir
+verbose = config.WATCHFOR_L0.verbose
 
 # Exposure Quality Control (not regular QC)
 do_quality_control = True
 if do_quality_control:
 
-    # This is the first time the L0 file is read and written. 
-    #   After this, only the 2D fil should be read or written (for science data).
-    # We want to change this to return an argument.
-    # When we do this, read in l0_filename_science
-    # kpf_object = kpf0_from_fits(l0_filename_science, data_type) 
+    # Read in L0. Be careful not to modify this object.
+    kpf_object_l0 = kpf0_from_fits(l0_filename_science,data_type) # L0, Only read this variable.
+
+    # The 2D kpf object is not modified and the 2D file is not written in this routine.
     quality_control_list = QualityControlExposureFramework(data_type,
-                                                            d2_filename_science,
+                                                            # d2_filename_science,
+                                                            l0_filename_science,
                                                             lev0_ffi_exts_full,
-                                                            actual_dir)
+                                                            actual_dir,
+                                                            kpf_object_l0)
     quality_control_exit_code = quality_control_list[0]
     quality_control_rid = quality_control_list[1]
 
     # Generate the 2D FITS file.  Subtract overscan, master bias, master dark, and apply master flat and bad-pixel masks.    
-    # This will be true if the quality_control)list writes 2D for the first time.
-    output_file_exists = exists(d2_filename_science)
-    if overwrite or not output_file_exists:
-        # read file
-        # l0 = kpf0_from_fits(raw_file_path, data_type) # Remove this eventually.
-        kpf_object = kpf0_from_fits(l0_filename_science,data_type) # L0, not 2D file is input.
+
+    if overwrite: 
+        # read l0 file. Modify this object throughout the routine.
+
+        kpf_object = kpf0_from_fits(l0_filename_science,data_type) # L0, not 2D file is input
         dt_string = GetHeaderValue(kpf_object, 'DATE-MID')
         cals = CalibrationLookup(dt_string)
         masterbias_path = cals['bias']
         masterdark_path = cals['dark']
         masterflat_path = cals['flat']
+
         # Quality Control & Diagnostics - L0 level
         data_level_str = 'L0'
-        # kpf_object must be defined before invoking subrecipes.
+        # kpf_object with that name must be defined before invoking subrecipes.
         invoke_subrecipe("./recipes/quality_control.subrecipe")
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
-        # kpf_object is recalculated in the subrecipe and silently returned
-        # compute red-chip ffi
+        # Silently returns modified kpf_object
+
+        # Construct the full frame images one at a time.
+        # These routines combine the 2D image from the raw file based on the channel orientation reference file.
+        # Then, overscan subtraction is performed.
+        # The kpf object is modified, and not saved to disk, but returned.
         ref_output_red = OrientationReference(channel_orientation_ref_path_red, data_type)
         red_ffi = OverscanSubtraction(kpf_object,
                                     overscan_method,
@@ -81,6 +97,11 @@ if do_quality_control:
                                     channel_datasec_ncols_red,
                                     channel_datasec_nrows_red,
                                     n_sigma)
+
+        # Construct the Green full frame image.
+        # These routines combine the 2D image from the raw file based on the channel orientation reference file.
+        # Then, overscan subtraction is performed.
+        # The kpf object is modified, and not saved to disk, but returned.
         ref_output_green = OrientationReference(channel_orientation_ref_path_green, data_type)
         # add green-chip ffi to data containing red-chip ffi
         kpf_object_with_ffi = OverscanSubtraction(red_ffi,
@@ -95,7 +116,10 @@ if do_quality_control:
                                         channel_datasec_ncols_green,
                                         channel_datasec_nrows_green,
                                         n_sigma)
+        # recipe_complete = to_fits(kpf_object_with_ffi, d2_filename_science) 
         # These calls to ImageProcessing do not write a file (but may adjust the headers, check)
+
+        
         bias_subbed = ImageProcessing(kpf_object_with_ffi, masterbias_path, lev0_ffi_exts_subbed, data_type, quicklook)
         dark_subbed = ImageProcessing(bias_subbed, masterdark_path, lev0_ffi_exts_subbed, data_type, quicklook)
         flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)
@@ -106,58 +130,37 @@ if do_quality_control:
             bpm_applied = pixels_masked
             
         # Diagnostics & Quality Control - 2D level
+        # These need to stay in this position in the recipe.
+        # Important header values are inserted into the 2D object.
         kpf_object = bpm_applied
         data_level_str = '2D'
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
         invoke_subrecipe("./recipes/quality_control.subrecipe")
-        bpm_applied = kpf_object # kpf_object is output from the subrecipe.
-        recipe_complete = to_fits(bpm_applied, d2_filename_science) # The 2D needs to be written for the following routines to call it and find it.
-        # Get rid of this file write once QueryDB, ReadNoise, and VarExts are updated to work with in-memory objects.
-
+        kpf_object_2d = kpf_object # The variable kpf_object is both the input and output of diag and qc.
         # Query database for QC information and update headers in-memory
-        rid = quality_control_rid
-        verbose = config.WATCHFOR_L0.verbose
-        do_query_l0_file = True
-        if do_query_l0_file:
-            if rid > 0:
-                # Pass kpf_object KPF0 object as 5th argument for in-memory header updates
-                # rid is silently returned.
-                print("rid: " + str(rid))
-                do_query_l0_file_exit_code = QueryDBL0FileFramework(data_type,
-                                                                    rid,
-                                                                    d2_filename_science,
-                                                                    verbose,
-                                                                    kpf_object)
-                
-        do_read_noise = True
-        if do_read_noise:
-            if rid > 0:
-                # Pass kpf_object KPF0 object as 5th argument for in-memory header updates
-                print("d2_filename_science1: " + d2_filename_science)
-                print("rid: " + str(rid))
-                read_noise_exit_code = ReadNoiseFramework(data_type,
-                                                        l0_filename_science,
-                                                        # d2_filename_science, # NOT CORRECT
-                                                        n_sigma_read_noise,
-                                                        rid,
-                                                        kpf_object)
-                print("d2_filename_science1: " + d2_filename_science)
-                print("rid: " + str(rid))
-        do_var_exts = True
-        if do_var_exts:
-            if rid > 0:
-                # Pass kpf_object KPF0 object as 7th argument for in-memory extension updates
-                #   passed object not yet implemented.
-                var_exts_exit_code = VarExtsFramework(data_type,
-                                                      l0_filename_science,
-                                                    # d2_filename_science,
-                                                    masterbias_path,
-                                                    masterdark_path,
-                                                    masterflat_path,
-                                                    rid,
-                                                    kpf_object)
-                print("rid: " + str(rid))
-        print("TEST: VarExtsFramework executed successfully.")
+        rid = quality_control_rid # Also returned from QC above.
+
+        if rid > 0:
+            # Pass kpf_object KPF0 object as 5th argument for in-memory header updates
+            do_query_l0_file_exit_vars = QueryDBL0FileFramework(
+                        data_type, 
+                        rid, 
+                        d2_filename_science, 
+                        verbose, 
+                        kpf_object_2d )
+            kpf_object_from_qdbff = do_query_l0_file_exit_vars[2]
+
+        # The read noise is calculated by analyze_l0.py and stored in the header in diagnostics.py
+        # The ReadNoiseFramework is now deprecated.
+
+        # Pass kpf_object KPF0 object as 7th argument for in-memory extension updates
+        var_exts_exit_codes = VarExtsFramework(data_type,
+                                            l0_filename_science,
+                                            masterbias_path,
+                                            masterdark_path,
+                                            masterflat_path,
+                                            kpf_object_from_qdbff)
+        var_exts_exit_code = var_exts_exit_codes[0]
+        kpf_object_from_var_exts = var_exts_exit_codes[1]
         # Can we safely move QC here?
-        # 2D file is currently saved inside VarExtsFramework.
-        # recipe_complete = to_fits(kpf_object, d2_filename_science) 
+        recipe_complete = to_fits(kpf_object_from_var_exts, d2_filename_science) 

@@ -9,7 +9,6 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "LFC Not Saturated\n(LFCSAT)"
-      qc_not_fail: 'GOODREAD'
       legend_frac_size: 0.15
       only_object: 
         - autocal-lfc-all-morn
@@ -21,16 +20,17 @@ panel_arr:
         - LFC_all
         - lfc_all
         - LFC
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: LFC2DFOK
         plot_type: state
         plot_attr:
-          label: "LFC Flux Meets Threshold\nof 4000 Counts"
+          label: "2D LFC Flux Meets\nThreshold of 4000 Counts"
           marker: .
     paneldict:
-      ylabel: "LFC Flux Meets Threshold\nof 4000 Counts\n(LFC2DFOK)"
-      qc_not_fail: 'GOODREAD'
+      ylabel: "2D LFC Flux Meets Threshold\nof 4000 Counts\n(LFC2DFOK)"
       legend_frac_size: 0.15
       only_object: 
         - autocal-lfc-all-morn
@@ -42,27 +42,8 @@ panel_arr:
         - LFC_all
         - lfc_all
         - LFC
-
-  - panelvars:
-      - col: LFCLINES
-        plot_type: state
-        plot_attr:
-          label: "Number and dist of\nLFC lines sufficient\n(SCI orders 2-34, 1-31)"
-          marker: .
-    paneldict:
-      ylabel: "Number and dist of\nLFC lines sufficient\n(SCI orders 2-34, 1-31)\n(LFCLINES)"
-      qc_not_fail: 'GOODREAD'
-      legend_frac_size: 0.15
-      only_object: 
-        - autocal-lfc-all-morn
-        - autocal-lfc-all-eve
-        - autocal-lfc-all-night
-        - cal-LFC
-        - cal-LFC-morn
-        - cal-LFC-eve
-        - LFC_all
-        - lfc_all
-        - LFC
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
 
   - panelvars:
       - col: LFCLINEP
@@ -73,8 +54,6 @@ panel_arr:
     paneldict:
       ylabel: "Number and dist of\nLFC lines sufficient\n(SCI orders 15-34, 1-31)\n(LFCLINEP)"
       legend_frac_size: 0.15
-      qc_not_fail: 'GOODREAD'
-      title: QC - LFC Metrics
       only_object: 
         - autocal-lfc-all-morn
         - autocal-lfc-all-eve
@@ -85,3 +64,28 @@ panel_arr:
         - LFC_all
         - lfc_all
         - LFC
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
+
+  - panelvars:
+      - col: LFCLINES
+        plot_type: state
+        plot_attr:
+          label: "Number and dist of\nLFC lines sufficient\n(SCI orders 2-34, 1-31)"
+          marker: .
+    paneldict:
+      ylabel: "Number and dist of\nLFC lines sufficient\n(SCI orders 2-34, 1-31)\n(LFCLINES)"
+      title: QC - LFC Metrics
+      legend_frac_size: 0.15
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'

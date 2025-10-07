@@ -105,6 +105,7 @@ The basic steps are as follows.
     export KPFCRONJOB_DOCKER_NAME_L1=russkpfmastersdrpl1
     export KPFCRONJOB_DOCKER_NAME_WLS=russkpfmasterswlsauto
     export KPFCRONJOB_DOCKER_NAME_DBSCRIPT=russkpfmastersregisterindb
+    export KPFCRONJOB_DOCKER_IMAGE_NAME=russkpfmasters:latest
     export KPFPIPE_L0_BASE_DIR=/data/kpf/L0
     export KPFPIPE_TEST_DATA=/KPF-Pipeline-TestData
     export KPFPIPE_MASTERS_BASE_DIR=/data/kpf/masters
@@ -173,6 +174,7 @@ The basic steps are as follows.
     vi ~/.bash_profile
     export KPFCRONJOB_DOCKER_NAME_WLS=russkpfmasterswlsauto
     export KPFCRONJOB_DOCKER_NAME_DBSCRIPT=russkpfmastersregisterindb
+    export KPFCRONJOB_DOCKER_IMAGE_NAME=russkpfmasters:latest
     export KPFPIPE_L0_BASE_DIR=/data/kpf/L0
     export KPFPIPE_TEST_DATA=/KPF-Pipeline-TestData
     export KPFPIPE_MASTERS_BASE_DIR=/data/kpf/masters

@@ -86,6 +86,28 @@ if (! (defined $containername)) {
 my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number of seconds in 53 years (since 00:00:00 on January 1, 1970, UTC).
 $containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
 
+# Docker container image name for this Perl script.
+# E.g., russkpfmasters:latest
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE_NAME};
+
+if (! (defined $containerimage)) {
+    die "*** Env. var. KPFCRONJOB_DOCKER_IMAGE_NAME not set; quitting...\n";
+}
+
+# Check if Docker image exists
+my $image_check = `docker images -q $containerimage 2>/dev/null`;
+chomp $image_check;
+if (!$image_check) {
+    print "*** Error: Docker image '$containerimage' not found!\n";
+    print "*** To build this image, run the following command from the KPF-Pipeline root directory:\n";
+    print "***   docker build -t $containerimage .\n";
+    print "*** Or if you want to use the existing kpf-drp image, set:\n";
+    print "***   export KPFCRONJOB_DOCKER_IMAGE_NAME=kpf-drp:latest\n";
+    die "*** Quitting due to missing Docker image...\n";
+} else {
+    print "*** Docker image '$containerimage' found (ID: $image_check)\n";
+}
+
 
 # Database user for connecting to the database to run this script and query CalFiles database table.
 # E.g., kpfporuss
@@ -107,40 +129,40 @@ if (! (defined $dbname)) {
 # Set up time-series database connection.
 
 my $tsdbport = $ENV{TSDBPORT};
-
 if (! (defined $tsdbport)) {
-    die "*** Env. var. TSDBPORT not set; quitting...\n";
+    $tsdbport = '6127';
+    print "*** Using default TSDBPORT=6127 (env var not set)\n";
 }
 
 my $tsdbname = $ENV{TSDBNAME};
-
 if (! (defined $tsdbname)) {
-    die "*** Env. var. TSDBNAME not set; quitting...\n";
+    $tsdbname = 'timeseriesopsdb';
+    print "*** Using default TSDBNAME=timeseriesopsdb (env var not set)\n";
 }
 
 my $tsdbserver = $ENV{TSDBSERVER};
-
 if (! (defined $tsdbserver)) {
-    die "*** Env. var. TSDBSERVER not set; quitting...\n";
+    $tsdbserver = '127.0.0.1';
+    print "*** Using default TSDBSERVER=127.0.0.1 (env var not set)\n";
 }
 
-my $tsdbuser = $ENV{TSDBUSER};
+my $tsdbuser = $ENV{KPFPIPE_TSDB_USER};
 
 if (! (defined $tsdbuser)) {
-    die "*** Env. var. TSDBUSER not set; quitting...\n";
+    die "*** Env. var. KPFPIPE_TSDB_USER not set; quitting...\n";
 }
 
-my $tsdbpass = $ENV{TSDBPASS};
+my $tsdbpass = $ENV{KPFPIPE_TSDB_PASS};
 
 if (! (defined $tsdbpass)) {
-    die "*** Env. var. TSDBPASS not set; quitting...\n";
+    die "*** Env. var. KPFPIPE_TSDB_PASS not set; quitting...\n";
 }
 
 
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmastersruncmd_l0.pl';
-my $version = '3.1';
+my $version = '3.2';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -155,7 +177,7 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/kpfmasterscmd_l0';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'russkpfmasters:latest';
+
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
 
@@ -288,8 +310,8 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 
 my $dockerruncmd = "docker run -d --name $containername " .
                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters -v /data/kpf:/data_kpf " .
-                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
-                   "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver " .
+                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 -e DBPASS=\"$dbpass\" " .
+                   "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver -e TSDBPASS=\"$tsdbpass\" " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;

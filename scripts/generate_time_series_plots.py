@@ -138,9 +138,6 @@ def generate_plots(start_date=None, end_date=None,
     Returns:
         PNG plots in the output directory.
         
-    To-do: 
-        Add argument for backend.
-        Add to CI.
     """
     
     if start_date == None or end_date == None:
@@ -181,6 +178,9 @@ def generate_plots(start_date=None, end_date=None,
                     savedir = None
                 myTS = AnalyzeTimeSeries(db_path=db_path, backend='psql')
                 myTS.plot_all_quicklook(day, interval='day', fig_dir=savedir)
+                if time_range_type == 'day':
+                    savedir = base_dir + day.strftime("%Y%m%d") + '/Time_Series/RV/'
+                    myTS.plot_nightly_campaigns(day, fig_dir=savedir)
                 del myTS # free up memory
             except Exception as e:
                 print(e)

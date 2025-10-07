@@ -1,4 +1,5 @@
 # Find the nearest wavelength solutions in time and generate an interpolated wavelength solution.
+from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
 
 # cals is defined in the primary recipe
 cals_wls      = CalibrationLookup(obs_date_time, subset=['wls']) 

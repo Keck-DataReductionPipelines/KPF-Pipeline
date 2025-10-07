@@ -400,7 +400,9 @@ class AnalyzeL1:
                                        must have at least one peak in
     
         Returns:
-            SCI_fl, CAL_fl, SKY_fl where, e.g., SCI_fl = [first_good_order, last_good_order]
+            SCI1_sat_lines, SCI2_sat_lines, SCI3_sat_lines, CAL_sat_lines, SKY_sat_lines
+                 where, e.g., SCI1_sat_lines is the number of saturated lines 
+                 in SCI1
         """
         
         chip = chip.lower()
@@ -433,6 +435,28 @@ class AnalyzeL1:
         SKY_sat_lines  = int(np.sum(lines[:, 4]))                   
     
         return (SCI1_sat_lines, SCI2_sat_lines, SCI3_sat_lines, CAL_sat_lines, SKY_sat_lines)
+
+    def count_nans(self, chip='green'):
+        """
+        This returns the number of NaN values in ach.
+    
+        Args:
+            chip (str): CCD name ('green' or 'red')
+
+        Returns:
+            SCI1_nans, SCI2_nans, SCI3_nans, CAL_nans, SKY_nans 
+                where, e.g., SCI1_nans = number of NaN values in all orders of SCI1
+        """
+        L1 = self.L1
+        CHIP = chip.upper()
+        fields = ["SCI_FLUX1","SCI_FLUX2","SCI_FLUX3","SKY_FLUX","CAL_FLUX"]
+        
+        SCI1_nans, SCI2_nans, SCI3_nans, SKY_nans, CAL_nans = [
+            int((np.isnan(L1[f"{CHIP}_{f}"]).sum(axis=1)).sum()) if hasattr(L1, f"{CHIP}_{f}") else 0
+            for f in fields
+        ]
+
+        return (SCI1_nans, SCI2_nans, SCI3_nans, CAL_nans, SKY_nans)
 
 
     def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):
@@ -619,7 +643,7 @@ class AnalyzeL1:
         ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
 
         # Set titles and labels for each subplot
-        ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal / $\sqrt{\mathrm{Variance}}$)', fontsize=16)
+        ax1.set_title(fr"{self.ObsID} - {self.name}: $\mathrm{{SNR}}_{{{self.snr_percentile}}}$ = {self.snr_percentile}th percentile (Signal / $\sqrt{{\mathrm{{Variance}}}}$)", fontsize=16)
         ax3.set_xlabel('Wavelength [Ang]', fontsize=14)
         ax1.set_ylabel(r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ - SCI', fontsize=14)
         ax2.set_ylabel(r'$\mathrm{SNR}_{'+str(self.snr_percentile)+'}$ - SKY', fontsize=14)
@@ -702,7 +726,7 @@ class AnalyzeL1:
         ax1.legend(["SCI1+SCI2+SCI3","SCI1","SCI2","SCI3"], ncol=4)
 
         # Set titles and labels for each subplot
-        ax1.set_title(self.ObsID + ' - ' + self.name + ': ' + r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ = '+str(self.snr_percentile)+'th percentile (Signal)', fontsize=16)
+        ax1.set_title(fr"{self.ObsID} - {self.name}: $\mathrm{{FLUX}}_{{{self.snr_percentile}}}$ = {self.snr_percentile}th percentile (Signal)", fontsize=16)
         ax3.set_xlabel('Wavelength [Ang]', fontsize=14)
         ax1.set_ylabel(r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ - SCI', fontsize=14)
         ax2.set_ylabel(r'$\mathrm{FLUX}_{'+str(self.snr_percentile)+'}$ - SKY', fontsize=14)
@@ -863,7 +887,8 @@ class AnalyzeL1:
         flux = np.concatenate((flux_green,flux_red), axis = 0)
 
         # Set up figure
-        cm = plt.cm.get_cmap('rainbow')
+        #cm = plt.cm.get_cmap('rainbow')
+        cm = plt.get_cmap('rainbow')
         gs = gridspec.GridSpec(n_orders_per_panel, 1 , height_ratios=np.ones(n_orders_per_panel))
         fig, ax = plt.subplots(int(np.shape(wav)[0]/n_orders_per_panel)+1,1, sharey=False, 
                                figsize=(20,16), tight_layout=True)
@@ -979,7 +1004,8 @@ class AnalyzeL1:
         
         fig, axes = plt.subplots(norderlets, 1, sharex=True, figsize=(20, 0.5+norderlets/5*15.5*(1+2*tall)), squeeze=False)
         axes = axes.flatten()
-        cm = plt.cm.get_cmap('rainbow')
+        #cm = plt.cm.get_cmap('rainbow')
+        cm = plt.get_cmap('rainbow')
 
         for ax, orderlet in zip(axes, orderlets):
 

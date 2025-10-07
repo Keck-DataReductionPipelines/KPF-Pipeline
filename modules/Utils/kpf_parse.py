@@ -45,10 +45,11 @@ class HeaderParse:
         (to-do: add list based on attributes below)
     """
 
-    def __init__(self, KPF, extension_name, logger=None):
+    def __init__(self, KPF, extension_name, logger=None, verbose=False):
         if logger:
             self.logger = logger
-            self.logger.debug('Initializing HeaderParse object')
+            if verbose:
+                self.logger.debug('Initializing HeaderParse object')
         else:
             self.logger = None
         try: 
@@ -184,6 +185,7 @@ class HeaderParse:
                 dt2 = datetime.strptime(self.header['GRDATE-E'], datetime_format) # shutter-close time
                 deltat = dt1-dt2
                 green_read_time = deltat.total_seconds()
+                self.green_read_time = green_read_time
             except:
                 pass
             # Red CCD Read Time
@@ -192,6 +194,7 @@ class HeaderParse:
                 dt2 = datetime.strptime(self.header['RDDATE-E'], datetime_format) # shutter-close time
                 deltat = dt1-dt2
                 red_read_time = deltat.total_seconds()
+                self.red_read_time = red_read_time
             except:
                 pass
             # ACF file for Green CCD

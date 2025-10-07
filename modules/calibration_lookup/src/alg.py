@@ -14,18 +14,21 @@ from keckdrpframework.models.arguments import Arguments
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.logger import start_logger
 from astropy.io.fits import getheader
+from modules.Utils.utils import DummyLogger
 
 class GetCalibrations:
     """This utility looks up the associated calibrations for a given datetime and
        returns a dictionary with all calibration types.
 
     """
-    def __init__(self, datetime, default_config_path, use_db=True, logger=None):
+    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=False):
         """
         use_db (boolean) - to disable db access, set to False (e.g., when looking up file-based keywords only)
         """
-        import time
-        init_start = time.time()
+        self.verbose = verbose
+        if self.verbose:
+            import time
+            init_start = time.time()
         
         # Initialize DB class
         # self.db_lookup = QueryDBNearestMasterFilesFramework(self.action, self.context)
@@ -33,18 +36,25 @@ class GetCalibrations:
         #Input arguments
         self.datetime = datetime   # ISO datetime string
         
-        config_start = time.time()
+        if self.verbose:
+            config_start = time.time()
         self.config = ConfigClass(default_config_path)
-        config_time = time.time() - config_start
+        if self.verbose:
+            config_time = time.time() - config_start
         
-        logger_start = time.time()
+        if self.verbose:
+            logger_start = time.time()
         if logger == None:
-            self.log = start_logger('GetCalibrations', default_config_path)
+            # the line below crashes the code in a notebook environment
+            #self.log = start_logger('GetCalibrations', default_config_path)
+            self.log = DummyLogger()
         else:
             self.log = logger
-        logger_time = time.time() - logger_start
+        if self.verbose:
+            logger_time = time.time() - logger_start
         
-        eval_start = time.time()
+        if self.verbose:
+            eval_start = time.time()
         self.caldate_files = eval(self.config['PARAM']['date_files'])
         self.lookup_map = eval(self.config['PARAM']['lookup_map'])
         self.db_cal_types = eval(self.config['PARAM']['db_cal_types'])
@@ -52,19 +62,22 @@ class GetCalibrations:
         self.wls_cal_types = eval(self.config['PARAM']['wls_cal_types'])
         self.max_age = eval(self.config['PARAM']['max_cal_age'])
         self.defaults = eval(self.config['PARAM']['defaults'])
-        eval_time = time.time() - eval_start
+        if self.verbose:
+            eval_time = time.time() - eval_start
         
         self.use_db = use_db
         
-        total_init_time = time.time() - init_start
-        print(f"DEBUG: GetCalibrations init timing:")
-        print(f"  Config loading: {config_time*1000:.2f}ms")
-        print(f"  Logger setup: {logger_time*1000:.2f}ms")
-        print(f"  Config eval: {eval_time*1000:.2f}ms")
-        print(f"  Total init: {total_init_time*1000:.2f}ms")
+        if self.verbose:
+            total_init_time = time.time() - init_start
+            self.log.debug(f"GetCalibrations init timing:")
+            self.log.debug(f"  Config loading: {config_time*1000:.2f}ms")
+            self.log.debug(f"  Logger setup: {logger_time*1000:.2f}ms")
+            self.log.debug(f"  Config eval: {eval_time*1000:.2f}ms")
+            self.log.debug(f"  Total init: {total_init_time*1000:.2f}ms")
 
     def lookup(self, subset=None):
-        start_time = time.time()
+        if self.verbose:
+            start_time = time.time()
         
         # Check cache first for the complete result
         # Apply timestamp rounding to avoid microsecond differences in cache keys
@@ -80,43 +93,49 @@ class GetCalibrations:
         
         try:
             from database.modules.utils.kpf_db import _get_cached_result
-            cached_result = _get_cached_result(cache_key)
+            cached_result = _get_cached_result(cache_key, verbose=self.verbose)
             if cached_result is not None:
                 # Check if all requested keys are in the cached result
                 missing_keys = [key for key in subset if key not in cached_result]
-                print(f"DEBUG: Cache check - cached_result keys: {sorted(cached_result.keys())}")
-                print(f"DEBUG: Cache check - requested subset: {subset}")
-                print(f"DEBUG: Cache check - missing_keys: {missing_keys}")
+                if self.verbose:
+                    self.log.debug(f"Cache check - cached_result keys: {sorted(cached_result.keys())}")
+                    self.log.debug(f"Cache check - requested subset: {subset}")
+                    self.log.debug(f"Cache check - missing_keys: {missing_keys}")
                 
                 if not missing_keys:
-                    print(f"DEBUG: Complete cache HIT - all {len(subset)} keys found")
+                    if self.verbose:
+                         self.log.debug(f"Complete cache HIT - all {len(subset)} keys found")
                     return {key: cached_result[key] for key in subset}
                 else:
-                    print(f"DEBUG: Partial cache HIT - {len(subset) - len(missing_keys)}/{len(subset)} keys found, missing: {missing_keys}")
+                    if self.verbose:
+                        self.log.debug(f"Partial cache HIT - {len(subset) - len(missing_keys)}/{len(subset)} keys found, missing: {missing_keys}")
                     # Start with cached results for keys we have
                     output_cals = {key: cached_result[key] for key in subset if key in cached_result}
                     # We'll need to query for missing keys
             else:
-                print(f"DEBUG: Complete cache MISS for key: {cache_key}")
+                if self.verbose:
+                    self.log.debug(f"Complete cache MISS for key: {cache_key}")
                 output_cals = {}
                 missing_keys = list(subset)
         except Exception as e:
-            print(f"DEBUG: Cache check failed: {e}")
+            if self.verbose:
+                self.log.debug(f"Cache check failed: {e}")
             output_cals = {}
             missing_keys = list(subset)
         
-        # Time the datetime parsing
-        dt_start = time.time()
+        # Parse datetime once and reuse
+        dt_start = time.time() if self.verbose else None
         dt = datetime.strptime(self.datetime, "%Y-%m-%dT%H:%M:%S.%f")
         date_str = datetime.strftime(dt, "%Y%m%d")
-        dt_time = time.time() - dt_start
+        if self.verbose:
+            dt_time = time.time() - dt_start
         
         # Don't overwrite output_cals if we had cached results
         if 'output_cals' not in locals() or not output_cals:
             output_cals = {}
         
         db_results = None
-        if subset == None:
+        if subset is None:
             subset = self.lookup_map.keys()
         
         # Track timing for each lookup type
@@ -124,8 +143,9 @@ class GetCalibrations:
         database_lookup_time = 0
         wls_lookup_time = 0
         
-        print(f"DEBUG: Lookup method timing:")
-        print(f"  Datetime parsing: {dt_time*1000:.2f}ms")
+        if self.verbose:
+            self.log.debug(f"Lookup method timing:")
+            self.log.debug(f"  Datetime parsing: {dt_time*1000:.2f}ms")
         
         # Collect all database calibration requests for batch processing
         db_requests = []
@@ -145,7 +165,8 @@ class GetCalibrations:
                         if cal_type[0].lower() == 'flat':
                             cal_type_lookup = cal_type.copy()
                             cal_type_mapping['flat'] = 'flat'
-                            print(f"DEBUG: Found special flat -> Flat database mapping (level {lvl})")
+                            if self.verbose:
+                                self.log.debug(f"Found special flat -> Flat database mapping (level {lvl})")
                             db_requests.append((lvl, cal_type_lookup))
                             found_mapping = True
                             break
@@ -157,13 +178,15 @@ class GetCalibrations:
                             # Map the database result back to the original calibration name
                             cal_type_mapping[cal_type[0].lower()] = cal
                             
-                            print(f"DEBUG: Found database mapping for {cal} -> {cal_type[0]} (level {lvl})")
+                            if self.verbose:
+                                self.log.debug(f"Found database mapping for {cal} -> {cal_type[0]} (level {lvl})")
                             db_requests.append((lvl, cal_type))
                             found_mapping = True
                             break
                 
                 if not found_mapping:
-                    print(f"DEBUG: No database mapping found for {cal}")
+                    if self.verbose:
+                        self.log.debug(f"No database mapping found for {cal}")
         
         # Determine if we need a DB connection at all
         needs_db = any(self.lookup_map.get(cal) in ('database', 'wls', 'etalon') for cal in subset)
@@ -173,8 +196,9 @@ class GetCalibrations:
             # Execute single batch query for all database calibrations
             if db_requests and self.use_db:
                 if db is None:
-                    db = KPFDB(logger=self.log)
-                db_start = time.time()
+                    db = KPFDB(logger=self.log, verbose=self.verbose)
+                if self.verbose:
+                    db_start = time.time()
                 try:
                     # Use batch query for better performance
                     batch_results = db.get_nearest_master_batch(self.datetime, db_requests)
@@ -184,7 +208,8 @@ class GetCalibrations:
                         cal_type_name = cal_type[0].lower()
                         original_name = cal_type_mapping[cal_type_name]
                         
-                        print(f"DEBUG: Processing batch result for {cal_type_name} -> {original_name}")
+                        if self.verbose:
+                            self.log.debug(f"Processing batch result for {cal_type_name} -> {original_name}")
                         
                         if cal_type_name in batch_results:
                             db_results = batch_results[cal_type_name]
@@ -195,19 +220,21 @@ class GetCalibrations:
                                     output_cals[original_name] = db_results[1]
                                 else:
                                     output_cals[original_name] = db_results[1]
-                                print(f"DEBUG: Successfully set {original_name} = {output_cals[original_name]}")
+                                if self.verbose:
+                                    self.log.debug(f"Successfully set {original_name} = {output_cals[original_name]}")
                             else:
                                 self.log.warning(f"Database lookup failed for {cal_type[0]} (exit code {db_results[0]}), using default")
                                 output_cals[original_name] = self.defaults[original_name]
-                                print(f"DEBUG: Using default for {original_name} = {output_cals[original_name]}")
+                                if self.verbose:
+                                    self.log.debug(f"Using default for {original_name} = {output_cals[original_name]}")
                         else:
                             output_cals[original_name] = self.defaults[original_name]
-                            print(f"DEBUG: No batch result for {cal_type_name}, using default for {original_name} = {output_cals[original_name]}")
+                            if self.verbose:
+                                self.log.debug(f"No batch result for {cal_type_name}, using default for {original_name} = {output_cals[original_name]}")
                     
-
-                    
-                    database_lookup_time += time.time() - db_start
-                    self.log.info(f"Batch database lookup completed in {time.time() - db_start:.3f}s for {len(db_requests)} calibration types")
+                    if self.verbose:
+                        database_lookup_time += time.time() - db_start
+                        self.log.debug(f"Batch database lookup completed in {time.time() - db_start:.3f}s for {len(db_requests)} calibration types")
                     
                 except Exception as e:
                     self.log.warning(f"Exception during batch database lookup: {e}, falling back to individual lookups")
@@ -229,16 +256,20 @@ class GetCalibrations:
                             output_cals[original_name] = self.defaults[original_name]
             
             # Process remaining calibration types (file, WLS, etalon)
-            print(f"DEBUG: Processing remaining calibration types, missing_keys: {missing_keys}")
+            if self.verbose:
+                self.log.debug(f"Processing remaining calibration types, missing_keys: {missing_keys}")
             for cal,lookup in self.lookup_map.items():
                 if cal not in missing_keys:  # Only process missing keys
-                    print(f"DEBUG: Skipping {cal} (not in missing_keys)")
+                    if self.verbose:
+                        self.log.debug(f"Skipping {cal} (not in missing_keys)")
                     continue
                     
-                cal_start_time = time.time()
+                if self.verbose:
+                    cal_start_time = time.time()
                 
                 if lookup == 'file':
-                    file_start = time.time()
+                    if self.verbose:
+                        file_start = time.time()
                     filename = self.caldate_files[cal]
                     fndir, fn = filename.split("/", 1)
                     # Use resources.open_text() to read the .csv because it has a relative path within repo
@@ -252,28 +283,34 @@ class GetCalibrations:
                                 output_cals[cal] = eval(row['CALPATH'])
                             except SyntaxError:
                                 output_cals[cal] = row['CALPATH']
-                    file_lookup_time += time.time() - file_start
-                    self.log.info(f"File lookup for {cal}: {time.time() - file_start:.3f}s")
+                    if self.verbose:
+                        file_lookup_time += time.time() - file_start
+                        self.log.debug(f"File lookup for {cal}: {time.time() - file_start:.3f}s")
                     
                 elif lookup == 'wls' or lookup == 'etalon':
                     if self.use_db and db is None:
-                        db = KPFDB(logger=self.log)
-                    wls_start = time.time()
+                        db = KPFDB(logger=self.log, verbose=self.verbose)
+                    if self.verbose:
+                        wls_start = time.time()
                     wls_files = None  # Initialize wls_files
+                    if not self.use_db:
+                        # If database is disabled, use default
+                        output_cals[cal] = self.defaults[cal]
+                        continue
                     for cal_type in self.wls_cal_types:
                         wls_results = db.get_bracketing_wls(self.datetime, cal_type[1], max_cal_delta_time=self.max_age)
-                        if len(wls_results) > 1 and (wls_results[0] == 0 or wls_results[2] == 0):
+                        if len(wls_results) >= 4 and (wls_results[0] == 0 or wls_results[2] == 0):
                             wls_files = [wls_results[1], wls_results[3]]
                             if wls_files[0] == None:
                                 wls_files[0] = wls_files[1]
                             if wls_files[1] == None:
                                 wls_files[1] = wls_files[0]
                             
-                            # Ensure deterministic file selection by sorting file paths
-                            wls_files = sorted(wls_files)
+                            # Keep temporal order: wls_files[0] = before file, wls_files[1] = after file
                             output_cals[cal] = wls_files
                             
-                            print(f"DEBUG: Selected WLS files for {cal}: {wls_files}")
+                            if self.verbose:
+                                self.log.debug(f"Selected WLS files for {cal}: {wls_files}")
                             break
                     
                     # If no WLS files found, set default
@@ -284,10 +321,12 @@ class GetCalibrations:
                         try:
                             new_dt = getheader(wls_files[0])['DATE-BEG']
                             etalon_datetime = new_dt
-                            print(f"DEBUG: Using etalon_datetime from WLS file: {etalon_datetime}")
+                            if self.verbose:
+                                self.log.debug(f"Using etalon_datetime from WLS file: {etalon_datetime}")
                         except:  # no DB available
                             etalon_datetime = self.datetime
-                            print(f"DEBUG: Using fallback etalon_datetime: {etalon_datetime}")
+                            if self.verbose:
+                                self.log.debug(f"Using fallback etalon_datetime: {etalon_datetime}")
                         
                         # Look up etalonmask using the INPUT timestamp (self.datetime), not the WLS file timestamp
                         # The WLS file timestamp is unrelated to when we need the etalonmask
@@ -317,14 +356,18 @@ class GetCalibrations:
                         # Remove etalonmask from missing_keys so it doesn't get processed again in the main loop
                         if 'etalonmask' in missing_keys:
                             missing_keys.remove('etalonmask')
-                            print(f"DEBUG: Removed etalonmask from missing_keys, remaining: {missing_keys}")
+                            if self.verbose:
+                                self.log.debug(f"Removed etalonmask from missing_keys, remaining: {missing_keys}")
                         else:
-                            print(f"DEBUG: etalonmask not in missing_keys: {missing_keys}")
+                            if self.verbose:
+                                self.log.debug(f"etalonmask not in missing_keys: {missing_keys}")
                     
-                    wls_lookup_time += time.time() - wls_start
-                    self.log.info(f"WLS/Etalon lookup for {cal}: {time.time() - wls_start:.3f}s")
+                    if self.verbose:
+                        wls_lookup_time += time.time() - wls_start
+                        self.log.debug(f"WLS/Etalon lookup for {cal}: {time.time() - wls_start:.3f}s")
                 
-                self.log.info(f"Total time for {cal} ({lookup}): {time.time() - cal_start_time:.3f}s")
+                if self.verbose:
+                    self.log.debug(f"Total time for {cal} ({lookup}): {time.time() - cal_start_time:.3f}s")
         finally:
             if db is not None:
                 try:
@@ -332,17 +375,19 @@ class GetCalibrations:
                 except Exception:
                     pass
 
-        total_time = time.time() - start_time
-        self.log.info(f"=== LOOKUP TIMING SUMMARY ===")
-        self.log.info(f"Total lookup time: {total_time:.3f}s")
-        self.log.info(f"File lookups: {file_lookup_time:.3f}s")
-        self.log.info(f"Database lookups: {database_lookup_time:.3f}s")
-        self.log.info(f"WLS/Etalon lookups: {wls_lookup_time:.3f}s")
-        self.log.info(f"Other overhead: {total_time - file_lookup_time - database_lookup_time - wls_lookup_time:.3f}s")
+        if self.verbose:
+            total_time = time.time() - start_time
+            self.log.debug(f"=== LOOKUP TIMING SUMMARY ===")
+            self.log.debug(f"Total lookup time: {total_time:.3f}s")
+            self.log.debug(f"File lookups: {file_lookup_time:.3f}s")
+            self.log.debug(f"Database lookups: {database_lookup_time:.3f}s")
+            self.log.debug(f"WLS/Etalon lookups: {wls_lookup_time:.3f}s")
+            self.log.debug(f"Other overhead: {total_time - file_lookup_time - database_lookup_time - wls_lookup_time:.3f}s")
 
-        # Debug: Check what's in output_cals before caching
-        print(f"DEBUG: output_cals before caching: {sorted(output_cals.keys())}")
-        print(f"DEBUG: output_cals values: {output_cals}")
+        if self.verbose:
+            # Debug: Check what's in output_cals before caching
+            self.log.debug(f"output_cals before caching: {sorted(output_cals.keys())}")
+            self.log.debug(f"output_cals values: {output_cals}")
         
         # Cache the complete result (including any new keys we just looked up)
         try:
@@ -350,15 +395,19 @@ class GetCalibrations:
             # Merge with existing cached results if we had a partial hit
             if 'cached_result' in locals() and cached_result is not None:
                 complete_result = {**cached_result, **output_cals}
-                print(f"DEBUG: Merging cached results: {len(cached_result)} existing + {len(output_cals)} new = {len(complete_result)} total")
+                if self.verbose:
+                    self.log.debug(f"Merging cached results: {len(cached_result)} existing + {len(output_cals)} new = {len(complete_result)} total")
             else:
                 complete_result = output_cals
-                print(f"DEBUG: Caching complete new result with {len(output_cals)} keys")
+                if self.verbose:
+                    self.log.debug(f"Caching complete new result with {len(output_cals)} keys")
             
-            _set_cached_result(cache_key, complete_result)
-            print(f"DEBUG: Cached complete result for key: {cache_key}")
+            _set_cached_result(cache_key, complete_result, verbose=self.verbose)
+            if self.verbose:
+                self.log.debug(f"Cached complete result for key: {cache_key}")
         except Exception as e:
-            print(f"DEBUG: Failed to cache complete result: {e}")
+            if self.verbose:
+                self.log.debug(f"Failed to cache complete result: {e}")
 
         # Ensure we return exactly the keys requested in subset, in the same order
         final_result = {}
@@ -366,14 +415,16 @@ class GetCalibrations:
             if key in output_cals:
                 final_result[key] = output_cals[key]
             else:
-                # This shouldn't happen, but provide a fallback
-                print(f"WARNING: Key {key} not found in output_cals, using default")
-                final_result[key] = self.defaults.get(key, None)
+                if self.verbose:
+                    # This shouldn't happen, but provide a fallback
+                    self.log.debug(f"WARNING: Key {key} not found in output_cals, using default")
+                    final_result[key] = self.defaults.get(key, None)
         
-        # Debug: Print the results for comparison
-        print(f"DEBUG: Requested subset: {subset}")
-        print(f"DEBUG: Final result keys: {sorted(final_result.keys())}")
-        print(f"DEBUG: Final result values: {final_result}")
+        if self.verbose:
+            # Debug: Print the results for comparison
+            self.log.debug(f"Requested subset: {subset}")
+            self.log.debug(f"Final result keys: {sorted(final_result.keys())}")
+            self.log.debug(f"Final result values: {final_result}")
         
         return final_result
     
@@ -381,8 +432,9 @@ class GetCalibrations:
         """Clear the Redis cache for this calibration lookup"""
         try:
             from database.modules.utils.kpf_db import clear_cache
-            clear_cache()
-            self.log.info("Redis cache cleared successfully")
+            clear_cache(verbose=self.verbose)
+            if self.verbose:
+                self.log.debug("Redis cache cleared successfully")
         except Exception as e:
             self.log.warning(f"Could not clear Redis cache: {e}")
 

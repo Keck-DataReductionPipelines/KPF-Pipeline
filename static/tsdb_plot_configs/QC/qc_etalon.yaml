@@ -10,7 +10,8 @@ panel_arr:
     paneldict:
       ylabel: "Number and dist of\nEtalon lines ok\n(ETALINES)"
       legend_frac_size: 0.30
-      qc_not_fail: 'GOODREAD'
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       only_object: 
         - autocal-etalon-all-night
         - autocal-etalon-all-eve
@@ -26,9 +27,10 @@ panel_arr:
           label: "Etalon at Set Temp"
           marker: .
     paneldict:
-      ylabel: "Etalon at Set Temp\n(ETASTEMP)"
+      ylabel: "Etalon at set temp\n(ETASTEMP)"
+      title: QC - Etalon
       legend_frac_size: 0.30
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0'
       only_object: 
         - autocal-etalon-all-night
         - autocal-etalon-all-eve

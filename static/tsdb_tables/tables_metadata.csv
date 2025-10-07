@@ -4,6 +4,7 @@ l0,l0_primary.csv,L0 PRIMARY Header,L0,PRIMARY,L0 PRIMARY keywords
 2d,d2_primary.csv,2D PRIMARY Header,2D,PRIMARY,2D PRIMARY keywords
 2d_flux,d2_primary_flux.csv,2D PRIMARY Header,2D,PRIMARY,2D PRIMARY keywords related to flux
 l1,l1_primary.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords
+l1_lines,l1_primary_lines.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords related to lines
 l1_medg,l1_primary_medg.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords of the form MEDWGKnn (Green; nn=order)
 l1_medr,l1_primary_medr.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords of the form MEDWRKnn (Red; nn=order)
 l1_stdg,l1_primary_stdg.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords of the form STDWGKnn (Green; nn=order)

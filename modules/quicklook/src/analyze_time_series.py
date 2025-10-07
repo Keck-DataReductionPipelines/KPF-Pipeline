@@ -1,10 +1,11 @@
 import os
 import ast
 import time
+from astropy.time import Time
 import yaml
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import matplotlib
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 matplotlib.use("Agg")
@@ -135,41 +136,41 @@ class AnalyzeTimeSeries:
             
             - 'paneldict' : dict
                 Configuration for panel-level behavior and filters:
-                - 'col' : str — Column name in the database to plot.
-                - 'plot_type' : str — One of {'plot', 'scatter', 'step', 'state', 'errorbar'}.
-                - 'plot_attr' : dict — Matplotlib attributes like marker, color, label, etc.
-                - 'only_object' : str or list[str] — Exact object names to filter by.
-                - 'object_like' : str or list[str] — LIKE-matching object names.
-                - 'only_source' : str — Filter by OBJECT.
-                - 'not_junk' : bool or str ('True' or 'False') — If set, filters by NOTJUNK field.
-                - 'QC_pass' : str or list[str] — Column names where rows must have True.
-                - 'QC_fail' : str or list[str] — Column names where rows must have False.
-                - 'QC_not_pass' : str or list[str] — Column names where rows must have not True (Null allowed).
-                - 'QC_not_fail' : str or list[str] — Column names where rows must have not False (Null allowed).
-                - 'on_sky' : bool or str — If True, filters for FIUMODE == 'Observing'.
-                - 'narrow_xlim_daily' : bool — Restrict x-axis to min/max of data on short timescales.
-                - 'ylabel' : str — Y-axis label for the panel.
-                - 'ylim' : tuple — Explicit y-axis range as (ymin, ymax).
-                - 'ymin' : float — Explicit y-axis minimum (overrides ylim value).
-                - 'ymax' : float — Explicit y-axis maximum (overrides ylim value).
-                - 'yscale' : str — e.g., 'log' to apply logarithmic scaling.
-                - 'subtractmedian' : bool — Subtract median from the plotted data.
-                - 'nolegend' : bool — Suppress legend.
-                - 'legend_frac_size' : float — Legend offset scale.
-                - 'axhspan' : dict — Optional shaded region(s) to overlay (keys: ymin, ymax, color, alpha).
-                - 'title' : str — Per-panel title string prepended to date range info.
+                - 'col' : str  Column name in the database to plot.
+                - 'plot_type' : str  One of {'plot', 'scatter', 'step', 'state', 'errorbar'}.
+                - 'plot_attr' : dict  Matplotlib attributes like marker, color, label, etc.
+                - 'only_object' : str or list[str]  Exact object names to filter by.
+                - 'object_like' : str or list[str]  LIKE-matching object names.
+                - 'only_source' : str  Filter by OBJECT.
+                - 'not_junk' : bool or str ('True' or 'False')  If set, filters by NOTJUNK field.
+                - 'QC_pass' : str or list[str]  Column names where rows must have True.
+                - 'QC_fail' : str or list[str]  Column names where rows must have False.
+                - 'QC_not_pass' : str or list[str]  Column names where rows must have not True (Null allowed).
+                - 'QC_not_fail' : str or list[str]  Column names where rows must have not False (Null allowed).
+                - 'on_sky' : bool or str  If True, filters for FIUMODE == 'Observing'.
+                - 'narrow_xlim_daily' : bool  Restrict x-axis to min/max of data on short timescales.
+                - 'ylabel' : str  Y-axis label for the panel.
+                - 'ylim' : tuple  Explicit y-axis range as (ymin, ymax).
+                - 'ymin' : float  Explicit y-axis minimum (overrides ylim value).
+                - 'ymax' : float  Explicit y-axis maximum (overrides ylim value).
+                - 'yscale' : str  e.g., 'log' to apply logarithmic scaling.
+                - 'subtractmedian' : bool  Subtract median from the plotted data.
+                - 'nolegend' : bool  Suppress legend.
+                - 'legend_frac_size' : float  Legend offset scale.
+                - 'axhspan' : dict  Optional shaded region(s) to overlay (keys: ymin, ymax, color, alpha).
+                - 'title' : str  Per-panel title string prepended to date range info.
 
             - 'panelvars' : list of dicts
                 Defines the variables to be plotted in this panel. Each dictionary can include:
-                - 'col' : str — Main data column name.
-                - 'col_err' : str — Optional column for error bars.
-                - 'col_subtract' : str — Column to subtract from `col` before plotting.
-                - 'col_multiply' : float — Scalar to multiply data.
-                - 'col_offset' : float — Scalar to add to data.
-                - 'normalize' : bool — If True, normalize data by its median.
-                - 'plot_type' : str — Plot type (overrides the panel-level setting).
-                - 'plot_attr' : dict — Matplotlib styling keywords.
-                - 'unit' : str — Unit label for legends/statistics (e.g., "m/s").
+                - 'col' : str  Main data column name.
+                - 'col_err' : str  Optional column for error bars.
+                - 'col_subtract' : str  Column to subtract from `col` before plotting.
+                - 'col_multiply' : float  Scalar to multiply data.
+                - 'col_offset' : float  Scalar to add to data.
+                - 'normalize' : bool  If True, normalize data by its median.
+                - 'plot_type' : str  Plot type (overrides the panel-level setting).
+                - 'plot_attr' : dict  Matplotlib styling keywords.
+                - 'unit' : str  Unit label for legends/statistics (e.g., "m/s").
                 - 'vline_pt_color' : str - color of points in vline plots
 
         Returns
@@ -181,10 +182,10 @@ class AnalyzeTimeSeries:
         Notes
         -----
         - The function handles various time axis labeling strategies based on time span:
-            • Hourly for single-day plots
-            • Days since start for <32-day plots
-            • Month/day for full-year plots
-            • ISO date labels for long-term plots
+             Hourly for single-day plots
+             Days since start for <32-day plots
+             Month/day for full-year plots
+             ISO date labels for long-term plots
         - For `plot_type='state'`, categorical values (e.g., DRPTAG) are color-coded and mapped to strings.
         - The function attempts to detect empty data and annotates 'No Data' in panels accordingly.
         - Internally calls `self.db.dataframe_from_db()` to query the database using provided filters.
@@ -1259,7 +1260,7 @@ class AnalyzeTimeSeries:
         if show_plot:
             plt.show()
         plt.close('all')
-
+    
 
     def yaml_to_dict(self, yaml_or_path):
         """
@@ -1424,6 +1425,606 @@ class AnalyzeTimeSeries:
                     continue  # Skip to the next plot
 
 
+    def plot_observing_rv_time_series(self, starname=None,
+                                      start_date=None, end_date=None, 
+                                      panels=['rv'], annotate=None,
+                                      hatch_service_missions=True,
+                                      qc_not_fail='auto', not_junk=True, clean=False, 
+                                      log_savefig_timing=False, plot_timestamp=False,
+                                      fig_path=None, show_plot=False):
+        """
+        Plot observing-time RV series with optional auxiliary panels on a shared UTC x-axis.
+    
+        Panels (top->bottom in the order provided via `panels`):
+          - 'rv'      : CCFRV  CCFERV (km/s -> m/s), median-subtracted.
+          - 'guiding' : GDRXRMS & GDRYRMS (scatter), labels: "X-errors", "Y-errors".
+          - 'seeing'  : GDRSEEV (scatter), label: "Seeing (V-band)".
+          - 'snr'     : SNRSC452/548/652/747/852 (scatter), labels: "452 nm", ..., "852 nm".
+          - 'sun'     : SUNALT (scatter), y fixed to [-90, 0] deg; background bands:
+                           -12..0  red (alpha 0.3),  -18..-12 orange (alpha 0.3).
+          - 'moon'    : MOONSEP (scatter), y fixed to [0, 180] deg; background band:
+                            0..30  orange (alpha 0.3).
+          - 'el'      : EL (scatter), y fixed to [0, 90] deg; background band:
+                            0..30  orange (alpha 0.1).
+    
+        Colors:
+          rv='tab:blue'; guiding_x='mediumslateblue'; guiding_y='cornflowerblue';
+          seeing='mediumseagreen';
+          snr_452='royalblue', snr_548='forestgreen', snr_652='crimson',
+          snr_747='darkorange', snr_852='goldenrod';
+          sun='slategray'; moon='tab:blue'; el='tab:purple'.
+    
+        Date handling:
+          - `start_date`/`end_date` accept str/date/datetime/None.
+          - If only one bound is supplied, the other is mirrored to the same value
+            (so the DB is asked for that single day/instant; see your DB semantics).
+          - date-only -> UT midnight; tz-aware datetimes -> converted to naive UTC.
+          - If start > end, they are swapped.
+    
+        X-axis bounds:
+          - Locked to the min/max of the returned datas `time_utc` (with a small pad),
+            so decorative spans (e.g., service missions) do not stretch the view.
+          - If there is only one timestamp, 12 hours are shown.
+    
+        Panel heights:
+          - `panel_heights` defines *actual* relative axes heights (gridspec height_ratios).
+          - Figure height is computed as: sum(height_ratios) + EXTRA_PAD_INCH,
+            where EXTRA_PAD_INCH0.7 provides room for title and bottom x-label.
+    
+        Other:
+          - `hatch_service_missions=True` shades service windows using
+            `self.get_service_mission_df()` (expects UT_start_date/UT_end_date).
+          - Title shows either a single UT date or startend date range derived
+            from the data actually plotted.
+          - Saves to `fig_path` if provided; optionally shows the figure.
+          - Dependencies expected: pandas as pd, numpy as np, matplotlib.pyplot as plt,
+            matplotlib.dates as mdates, astropy.time.Time, and Pythons datetime/time modules.
+    
+        Parameters
+        ----------
+        starname : str or None
+            Object filter for DB and string shown in title.
+        start_date, end_date : str | datetime.date | datetime.datetime | None
+            See Date handling above.
+        panels : list[str] | str
+            Any combination of: 'rv','guiding','seeing','snr','sun','moon','el'.
+            List order controls vertical order. Unknown names are ignored.
+            Default = ['rv'].
+        annotate : list[str] or None, optional
+            If a non-empty list, adds a small annotation box in the upper-right.
+            Recognized keys:
+              - 'rv_rms' : standard deviation of the RVs (m/s), computed from the
+                           median-centered series.
+        hatch_service_missions : bool
+            If True, hatch service-mission intervals.
+        qc_not_fail, not_junk, clean : misc
+            Passed to the DB accessor as-is.
+        log_savefig_timing : bool
+            If True, logs time spent in savefig using time.process_time().
+        plot_timestamp : bool
+            If True, annotates "Plotted <UTC>" at the bottom-left of the final panel.
+        fig_path : str | Path | None
+            If not None, path to save the figure (dpi=300).
+        show_plot : bool
+            If True, calls plt.show().
+    
+        Returns
+        -------
+        None
+            (Side effects: saves/shows a matplotlib figure.)
+        """
+    
+        # ---- Standard colors ----
+        COLORS = {
+            'rv': 'tab:blue',
+            'guiding_x': 'mediumslateblue',
+            'guiding_y': 'cornflowerblue',
+            'seeing': 'mediumseagreen',
+            'snr_452': 'royalblue',
+            'snr_548': 'forestgreen',
+            'snr_652': 'crimson',
+            'snr_747': 'darkorange',
+            'snr_852': 'goldenrod',
+            'sun': 'slategray',   # neutral marker/line; background bands carry meaning
+            'moon': 'tab:blue',
+            'el': 'tab:purple',
+        }
+    
+        def _expand_ylim_to_fit_overlays(ax, artists, min_extra_frac=0.02):
+            """
+            Expand the top of ax's y-limits by the combined vertical size of artists.
+            Sizes are measured in display coords then converted to an axes-fraction
+            height and finally to data units. Skips panels with autoscale disabled.
+            """
+            if not artists or not ax.get_autoscaley_on():
+                return
+            fig = ax.figure
+            # Ensure artists have a layout and real sizes
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            axbox = ax.get_window_extent(renderer=renderer)
+            if axbox.height <= 0:
+                return
+        
+            # Sum overlay heights in axes fraction
+            total_frac = 0.0
+            for art in artists:
+                try:
+                    bbox_disp = art.get_window_extent(renderer=renderer)
+                    total_frac += bbox_disp.height / axbox.height
+                except Exception:
+                    continue
+        
+            if total_frac <= 0:
+                return
+        
+            # Convert to data-units and expand top limit
+            y0, y1 = ax.get_ylim()
+            dy = (y1 - y0) * max(min_extra_frac, total_frac + 0.01)  # small cushion
+            ax.set_ylim(y0, y1 + dy)
+
+        # ---------- Start/end normalization (mirror if only one bound is given) ----------
+        def _coerce_datetime_like(x):
+            """Return a naive UTC datetime from string/date/datetime, or None."""
+            if x is None:
+                return None
+            if isinstance(x, str):
+                ts = pd.to_datetime(x, utc=True, errors='coerce')
+                if pd.isna(ts):
+                    return None
+                if ts.tzinfo is not None:
+                    return ts.tz_convert('UTC').tz_localize(None).to_pydatetime()
+                return ts.to_pydatetime()
+            if isinstance(x, date) and not isinstance(x, datetime):
+                return datetime.combine(x, datetime.min.time())
+            if isinstance(x, datetime) and x.tzinfo is not None:
+                return x.astimezone(timezone.utc).replace(tzinfo=None)
+            return x  # already a naive datetime
+    
+        start_date = _coerce_datetime_like(start_date)
+        end_date   = _coerce_datetime_like(end_date)
+    
+        # If exactly one bound is provided, mirror it
+        if (start_date is None) ^ (end_date is None):
+            if start_date is None:
+                start_date = end_date
+            else:
+                end_date = start_date
+    
+        # Ensure start <= end
+        if start_date is not None and end_date is not None and start_date > end_date:
+            start_date, end_date = end_date, start_date
+        # -------------------------------------------------------------------------------
+    
+        if qc_not_fail == 'auto':
+            qc_not_fail = ['GOODREAD']
+    
+        # Columns (include guiding/seeing/SNR/sun/moon/el fields)
+        cols = ['OBJECT', 'DATE-MID',
+                'CCFRV', 'CCFERV', 'CCD1BJD', 'CCD1RV', 'CCD2RV', 'CCD1ERV', 'CCD2ERV',
+                'GDRXRMS', 'GDRYRMS', 'GDRSEEV', 'SUNALT', 'MOONSEP', 'EL',
+                'SNRSC452', 'SNRSC548', 'SNRSC652', 'SNRSC747', 'SNRSC852']
+    
+        # Retrieve data
+        time_col = "CCD1BJD"
+        rv_col   = "CCFRV"
+        err_col  = "CCFERV"
+    
+        d = self.db.dataframe_from_db(columns=cols, 
+                                      start_date=start_date, 
+                                      end_date=end_date, 
+                                      only_object=starname, 
+                                      not_junk=not_junk,
+                                      qc_not_fail=qc_not_fail)
+    
+        # Time column to numeric & sort
+        d[time_col] = pd.to_numeric(d[time_col], errors="coerce")
+        d = d.dropna(subset=[time_col]).sort_values(time_col)
+        if d.empty:
+            raise ValueError("No rows after time parsing. Check CCD1BJD values.")
+    
+        # BJD(TDB) -> UTC datetimes
+        tvals = d[time_col].to_numpy(np.float64)
+        t = Time(tvals, format="jd", scale="tdb")
+        d["time_utc"] = pd.to_datetime(t.utc.to_datetime())
+    
+        # Panels registry & selection (heights are real, proportional axes heights)
+        panel_heights = {
+            'rv': 2.5,
+            'snr': 1.25,
+            'seeing': 1.25,
+            'guiding': 1.25,
+            'el': 1.25,
+            'sun': 1.25,
+            'moon': 1.25,
+        }
+    
+        if panels is None:
+            selected_panels = ['rv']  # default and on top
+        else:
+            if isinstance(panels, str):
+                selected_panels = [p.strip().lower() for p in panels.replace('|', ',').replace(';', ',').split(',') if p.strip()]
+            else:
+                selected_panels = [str(p).lower() for p in panels]
+            selected_panels = [p for p in selected_panels if p in panel_heights] or ['rv']
+    
+        # Panel-specific prep
+        d_rv = None
+        if 'rv' in selected_panels:
+            d[[rv_col, err_col]] = d[[rv_col, err_col]].apply(pd.to_numeric, errors="coerce")
+            d_rv = d.dropna(subset=[rv_col, err_col]).copy()
+            if not d_rv.empty:
+                d_rv["rv_ms"]  = d_rv[rv_col].astype(np.float64)  * 1000.0
+                d_rv["err_ms"] = d_rv[err_col].astype(np.float64) * 1000.0
+                rv_median_ms = float(np.nanmedian(d_rv["rv_ms"]))
+                d_rv["rv_centered_ms"] = d_rv["rv_ms"] - rv_median_ms
+    
+        d_gx = d_gy = None
+        if 'guiding' in selected_panels:
+            d["GDRXRMS"] = pd.to_numeric(d["GDRXRMS"], errors="coerce")
+            d["GDRYRMS"] = pd.to_numeric(d["GDRYRMS"], errors="coerce")
+            d_gx = d.dropna(subset=["GDRXRMS"]).copy()
+            d_gy = d.dropna(subset=["GDRYRMS"]).copy()
+    
+        d_see = None
+        if 'seeing' in selected_panels:
+            d["GDRSEEV"] = pd.to_numeric(d["GDRSEEV"], errors="coerce")
+            d_see = d.dropna(subset=["GDRSEEV"]).copy()
+    
+        snr_specs = [
+            ("SNRSC452", "452 nm", "snr_452"),
+            ("SNRSC548", "548 nm", "snr_548"),
+            ("SNRSC652", "652 nm", "snr_652"),
+            ("SNRSC747", "747 nm", "snr_747"),
+            ("SNRSC852", "852 nm", "snr_852"),
+        ]
+        d_snr = {}
+        if 'snr' in selected_panels:
+            for col, _, key in snr_specs:
+                d[col] = pd.to_numeric(d[col], errors="coerce")
+                dfc = d.dropna(subset=[col]).copy()
+                if not dfc.empty:
+                    d_snr[key] = dfc
+    
+        d_sun = None
+        if 'sun' in selected_panels:
+            d["SUNALT"] = pd.to_numeric(d["SUNALT"], errors="coerce")
+            d_sun = d.dropna(subset=["SUNALT"]).copy()
+    
+        d_moon = None
+        if 'moon' in selected_panels:
+            d["MOONSEP"] = pd.to_numeric(d["MOONSEP"], errors="coerce")
+            d_moon = d.dropna(subset=["MOONSEP"]).copy()
+    
+        d_el = None
+        if 'el' in selected_panels:
+            d["EL"] = pd.to_numeric(d["EL"], errors="coerce")
+            d_el = d.dropna(subset=["EL"]).copy()
+    
+        # At least one panel has usable data?
+        panels_with_data = []
+        if 'rv' in selected_panels and d_rv is not None and not d_rv.empty:
+            panels_with_data.append('rv')
+        if 'snr' in selected_panels and any(k in d_snr for k in [k for _,_,k in snr_specs]):
+            panels_with_data.append('snr')
+        if 'seeing' in selected_panels and d_see is not None and not d_see.empty:
+            panels_with_data.append('seeing')
+        if 'guiding' in selected_panels and ((d_gx is not None and not d_gx.empty) or (d_gy is not None and not d_gy.empty)):
+            panels_with_data.append('guiding')
+        if 'el' in selected_panels and d_el is not None and not d_el.empty:
+            panels_with_data.append('el')
+        if 'sun' in selected_panels and d_sun is not None and not d_sun.empty:
+            panels_with_data.append('sun')
+        if 'moon' in selected_panels and d_moon is not None and not d_moon.empty:
+            panels_with_data.append('moon')
+        if not panels_with_data:
+            raise ValueError("No valid rows for the selected panels after cleaning.")
+    
+        # -------- Figure sizing with true per-panel heights --------
+        height_ratios = [panel_heights[p] for p in selected_panels]
+        EXTRA_PAD_INCH = 0.7
+        fig_height = EXTRA_PAD_INCH + sum(height_ratios)
+    
+        fig, axs = plt.subplots(
+            len(selected_panels), 1, sharex=True,
+            figsize=(8, fig_height),
+            gridspec_kw={'height_ratios': height_ratios},
+            constrained_layout=True,
+            squeeze=False
+        )
+        axs = axs.ravel()
+        annotate = [] if annotate is None else list(annotate)
+        # -----------------------------------------------------------
+    
+        # Title based on data span
+        dates = d["time_utc"].dt.date
+        date_start = dates.min()
+        date_end   = dates.max()
+        date_str = f"{date_start.isoformat()} UT" if date_start == date_end else f"{date_start.isoformat()} - {date_end.isoformat()} UT"
+        title = f"{starname}: {date_str}" if starname else f"RVs: {date_str}"
+        fig.suptitle(title, fontsize=12)
+    
+        # Draw panels
+        for i, panel in enumerate(selected_panels):
+            ax = axs[i]
+    
+            if panel == 'rv':
+                if d_rv is None or d_rv.empty:
+                    ax.text(0.5, 0.5, "No RV data", transform=ax.transAxes, ha='center', va='center')
+                else:
+                    ax.errorbar(
+                        d_rv["time_utc"],
+                        d_rv["rv_centered_ms"],
+                        yerr=d_rv["err_ms"],
+                        fmt="o",
+                        ms=2.5,
+                        capsize=2,
+                        elinewidth=0.75,
+                        capthick=0.75,
+                        alpha=0.9,
+                        color=COLORS['rv'],
+                        ecolor=COLORS['rv'],
+                    )
+                    ax.set_ylabel(r"RV ($\mathrm{m\,s^{-1}}$)", fontsize=12)
+    
+            elif panel == 'snr':
+                plotted_any = False
+                for col, label, key in snr_specs:
+                    if key in d_snr:
+                        dfc = d_snr[key]
+                        ax.scatter(
+                            dfc["time_utc"], dfc[col],
+                            s=8, alpha=0.9,
+                            color=COLORS[key],
+                            label=label
+                        )
+                        plotted_any = True
+                if not plotted_any:
+                    ax.text(0.5, 0.5, "No SNR data", transform=ax.transAxes, ha='center', va='center')
+                else:
+                    ax.set_ylabel("SNR", fontsize=12)
+                    #ax.legend(loc="upper right", fontsize=8, ncol=5, handletextpad=0.1, columnspacing=0.3)
+                    leg = ax.legend(loc="upper right", fontsize=8, ncol=5, handletextpad=0.1, columnspacing=0.3)
+                    legend_map = legend_map if 'legend_map' in locals() else {}
+                    legend_map.setdefault(ax, []).append(leg)
+    
+            elif panel == 'seeing':
+                if d_see is None or d_see.empty:
+                    ax.text(0.5, 0.5, "No seeing data", transform=ax.transAxes, ha='center', va='center')
+                else:
+                    ax.scatter(
+                        d_see["time_utc"], d_see["GDRSEEV"],
+                        s=10, alpha=0.9,
+                        color=COLORS['seeing'],
+                        label="Seeing (V-band)"
+                    )
+                    ax.set_ylabel("Seeing\n(V band, as)", fontsize=12)
+                    #ax.legend(loc="upper right", fontsize=8, handletextpad=0.1, columnspacing=0.3)
+    
+            elif panel == 'guiding':
+                plotted_any = False
+                if d_gx is not None and not d_gx.empty:
+                    ax.scatter(
+                        d_gx["time_utc"], d_gx["GDRXRMS"],
+                        s=8, alpha=0.9,
+                        color=COLORS['guiding_x'],
+                        label="X-errors"
+                    )
+                    plotted_any = True
+                if d_gy is not None and not d_gy.empty:
+                    ax.scatter(
+                        d_gy["time_utc"], d_gy["GDRYRMS"],
+                        s=8, alpha=0.9,
+                        color=COLORS['guiding_y'],
+                        label="Y-errors"
+                    )
+                    plotted_any = True
+                if not plotted_any:
+                    ax.text(0.5, 0.5, "No guiding data", transform=ax.transAxes, ha='center', va='center')
+                else:
+                    ax.set_ylabel("Guiding\n(RMS, mas)", fontsize=12)
+                    #ax.legend(loc="upper right", fontsize=8, ncol=2, handletextpad=0.1, columnspacing=0.3)
+                    leg = ax.legend(loc="upper right", fontsize=8, ncol=2, handletextpad=0.1, columnspacing=0.3)
+                    legend_map = legend_map if 'legend_map' in locals() else {}
+                    legend_map.setdefault(ax, []).append(leg)
+    
+            elif panel == 'el':
+                if d_el is None or d_el.empty:
+                    ax.text(0.5, 0.5, "No elevation data", transform=ax.transAxes, ha='center', va='center')
+                else:
+                    ax.scatter(
+                        d_el["time_utc"], d_el["EL"],
+                        s=8, alpha=0.9,
+                        color=COLORS['el'],
+                        label="Elevation (deg)"
+                    )
+                    # Background band: 0..30 (orange, subtle)
+                    ax.axhspan( 0, 30, facecolor='orange', alpha=0.2,  zorder=0)
+                    ax.axhspan(29, 30, facecolor='orange', alpha=0.25, zorder=1)
+                    ax.set_ylim(0, 90)
+                    ax.set_autoscaley_on(False)
+                    ax.set_ylabel("Elevation\n(deg)", fontsize=12)
+                    #ax.legend(loc="upper right", fontsize=8, handletextpad=0.1, columnspacing=0.3)
+    
+            elif panel == 'sun':
+                if d_sun is None or d_sun.empty:
+                    ax.text(0.5, 0.5, "No Sun-altitude data", transform=ax.transAxes, ha='center', va='center')
+                else:
+                    ax.scatter(
+                        d_sun["time_utc"], d_sun["SUNALT"],
+                        s=8, alpha=0.9,
+                        color=COLORS['sun'],
+                        label="Altitude of Sun (deg)"
+                    )
+                    ax.axhspan(-12,   0, facecolor='red',    alpha=0.2,  zorder=0)
+                    ax.axhspan(-18, -12, facecolor='orange', alpha=0.2,  zorder=0)
+                    ax.axhspan(-12, -11, facecolor='red',    alpha=0.25, zorder=1)
+                    ax.axhspan(-18, -17, facecolor='orange', alpha=0.25, zorder=1)
+                    ax.set_ylim(-90, 0)
+                    ax.set_autoscaley_on(False)
+                    ax.set_ylabel("Sun Altitude\n(deg)", fontsize=12)
+                    #ax.legend(loc="upper right", fontsize=8, handletextpad=0.1, columnspacing=0.3)
+    
+            elif panel == 'moon':
+                if d_moon is None or d_moon.empty:
+                    ax.text(0.5, 0.5, "No Moon-separation data", transform=ax.transAxes, ha='center', va='center')
+                else:
+                    ax.scatter(
+                        d_moon["time_utc"], d_moon["MOONSEP"],
+                        s=8, alpha=0.9,
+                        color=COLORS['moon'],
+                        label="Moon Sep (deg)"
+                    )
+                    ax.axhspan(0,  30, facecolor='orange', alpha=0.2,  zorder=0)
+                    ax.axhspan(29, 30, facecolor='orange', alpha=0.25, zorder=1)
+                    ax.set_ylim(0, 180)
+                    ax.set_autoscaley_on(False)
+                    ax.set_ylabel("Moon Sep\n(deg)", fontsize=12)
+                    #ax.legend(loc="upper right", fontsize=8, handletextpad=0.1, columnspacing=0.3)
+    
+            # Common formatting
+            ax.grid(True, alpha=0.3)
+            ax.tick_params(axis='both', which='both', labelsize=10)
+            locator = mdates.AutoDateLocator()
+            ax.xaxis.set_major_locator(locator)
+            ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
+    
+            # Optional hatching to highlight service missions
+            if hatch_service_missions:
+                try:
+                    df_sm = self.get_service_mission_df()
+                    if not df_sm.empty:
+                        for _, row in df_sm.iterrows():
+                            try:
+                                x0 = pd.to_datetime(row['UT_start_date'])
+                                x1 = pd.to_datetime(row['UT_end_date'])
+                                if pd.notna(x0) and pd.notna(x1):
+                                    ax.axvspan(x0, x1, facecolor='none', edgecolor='none', hatch='////', alpha=0.15)
+                            except Exception:
+                                continue
+                except Exception:
+                    pass
+    
+            if i == len(selected_panels) - 1:
+                ax.set_xlabel("Time (UTC)", fontsize=12)
+                if plot_timestamp:
+                    current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                    ax.annotate(f"Plotted {current_time} UT",
+                                xy=(0, 0), xycoords='axes fraction',
+                                fontsize=8, color="darkgray", ha="left", va="bottom",
+                                xytext=(0, -30), textcoords='offset points')
+    
+        # --- Lock x-limits strictly to the returned data range (with a small pad) ---
+        xmin = pd.to_datetime(d["time_utc"].min())
+        xmax = pd.to_datetime(d["time_utc"].max())
+        if not (pd.isna(xmin) or pd.isna(xmax)):
+            if xmin == xmax:
+                xmin_plot = xmin - pd.Timedelta(hours=12)
+                xmax_plot = xmax + pd.Timedelta(hours=12)
+            else:
+                span = xmax - xmin
+                pad  = max(pd.Timedelta(minutes=1), span * 0.02)  # 1 min, ~2% margin
+                xmin_plot = xmin - pad
+                xmax_plot = xmax + pad
+            for ax in axs:
+                ax.set_xlim(xmin_plot, xmax_plot)
+    
+        # --- Optional figure annotation (upper-right) ---
+        legend_map   = legend_map   if 'legend_map'   in locals() else {}
+        annot_map    = annot_map    if 'annot_map'    in locals() else {}
+        from modules.Utils.utils import latex_number
+        if annotate:
+            lines = []
+            if ('rv_rms' in annotate) and (d_rv is not None) and (not d_rv.empty):
+                vals = d_rv["rv_centered_ms"].to_numpy(np.float64)
+                rv_rms = float(np.nanstd(vals, ddof=1))
+                if np.isfinite(rv_rms):
+                    #lines.append(f"RV RMS: {rv_rms:.1f} m/s")  
+                    str_rms = latex_number(rv_rms, 2, return_latex=False)
+                    lines.append(f"RV RMS: {str_rms} m/s")  
+        
+            if lines:
+                idx = selected_panels.index('rv') if 'rv' in selected_panels else 0
+                ann = axs[idx].annotate(
+                    "\n".join(lines),
+                    xy=(0.99, 0.97), xycoords='axes fraction',
+                    ha='right', va='top', fontsize=9,
+                    bbox=dict(boxstyle='round,pad=0.25', facecolor='white', alpha=0.6, edgecolor='gray')
+                )
+                annot_map.setdefault(axs[idx], []).append(ann)
+        
+        # Expand y-limits to fit any legends/annotations drawn inside axes
+        # (Only affects panels with autoscale enabled; fixed-limit panels are left alone.)
+        for ax, arts in (legend_map.items() if 'legend_map' in locals() else []):
+            _expand_ylim_to_fit_overlays(ax, arts)
+        for ax, arts in (annot_map.items() if 'annot_map' in locals() else []):
+            _expand_ylim_to_fit_overlays(ax, arts)
+
+        # Save/show
+        try:
+            if fig_path is not None:
+                t0 = time.process_time()
+                plt.savefig(fig_path, dpi=150, facecolor='w')
+                if log_savefig_timing:
+                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+            if show_plot is not None:
+                plt.show()
+            plt.close('all')
+        except Exception as e:
+            self.logger.info(f"Error saving file or showing plot: {e}")
+
+
+    def plot_nightly_campaigns(self, UT_date, Nobs_min=2, show_plot=None, fig_dir=''):
+        """
+        Plot time-series campaign figures for all targets with at least
+        Nobs_min observations on UT_date. If the night has  1 total 
+        observation, no plots are produced. Figures are optionally saved with 
+        filenames of the form ``{OBJECT}_{YYYYMMDD}.png``.
+    
+        Parameters
+        ----------
+        UT_date : datetime.date or datetime.datetime
+            The UTC date to analyze. Observations are fetched with
+            ``start_date=UT_date`` and ``end_date=UT_date``.
+        Nobs_min : int, optional
+            Minimum number of rows (observations) for a target (``OBJECT``) on
+            the given night to be considered campaign-worthy. Default is 2.
+        show_plot : bool or None, optional
+            Passed through to ``myTS.plot_observing_rv_time_series``. If True, show
+            the figure(s); if False, do not show; if None, defer to the plotting
+            functions default behavior. Default is None.
+        fig_dir : str or None, optional
+            Directory to which figures are saved. If ``None``, figures are not
+            written to disk. If a string, the path must exist (this function does
+            not create directories). Default is ''.
+    
+        Returns
+        -------
+        None
+            This function is called for its side effects (plotting and optional
+            file output).
+        """
+        cols = ['DATE-BEG', 'DATE-MID', 'DATE-END', 'EXPTIME', 'UT DATE', 'OBJECT', 'PROGNAME']
+        df = self.db.dataframe_from_db(columns=cols, start_date=UT_date, end_date=UT_date, on_sky=True)
+        Nobs_night = df.shape[0]
+        if Nobs_night > 1:
+            eligible = df['OBJECT'].dropna().value_counts()
+            stars = eligible[eligible >= Nobs_min].index.tolist()
+            if len(stars) > 0:
+                for starname in stars:
+                    if fig_dir is None:
+                        fig_path = None
+                    else:
+                        fig_path = os.path.join(fig_dir, f"{starname}_{UT_date:%Y%m%d}.png")
+                    self.plot_observing_rv_time_series(starname=starname, 
+                                                       start_date=UT_date, 
+                                                       panels=['rv', 'snr', 'guiding', 'seeing', 'el', 'sun', 'moon'], 
+                                                       annotate = ['rv_rms'], 
+                                                       plot_timestamp=True,
+                                                       show_plot=show_plot, 
+                                                       fig_path=fig_path)
+
+
 def add_one_month(inputdate):
     """
     Add one month to a datetime object, accounting for the number of days per month.
@@ -1455,3 +2056,76 @@ def is_numeric(value):
         return True
     except (ValueError, TypeError):
         return False
+
+def timebin(time, meas, meas_err, binsize):
+    """Bin in equal sized time bins
+
+    This routine bins a set of times, measurements, and measurement errors
+    into time bins. All inputs and outputs should be floats or double.
+    binsize should have the same units as the time array.
+    (from Andrew Howard, ported to Python by BJ Fulton)
+
+    Args:
+        time (array): array of times, can be datetime or numeric
+        meas (array): array of measurements to be combined
+        meas_err (array): array of measurement uncertainties
+        binsize (float): width of bins in the same units as time array (fractional days)
+
+    Returns:
+        tuple: (bin centers, binned measurements, binned uncertainties) in Series format if inputs are Series
+    """
+    
+    # Convert time to numeric (days since epoch) while preserving precision
+    if isinstance(time, pd.Series) and pd.api.types.is_datetime64_any_dtype(time):
+        time_numeric = (time.astype('datetime64[ns]').view('int64') / 1e9 / 86400.0)  # Convert to days
+    else:
+        time_numeric = np.array(time)
+
+    # Create a DataFrame to sort and keep track of original indices
+    data = pd.DataFrame({'time': time_numeric, 'meas': meas, 'meas_err': meas_err})
+    data.sort_values(by='time', inplace=True)
+
+    # Use sorted values for calculations
+    time_numeric_sorted = data['time'].values
+    meas_sorted = data['meas'].values
+    meas_err_sorted = data['meas_err'].values
+
+    time_out = []
+    meas_out = []
+    meas_err_out = []
+
+    ct = 0
+    while ct < len(time_numeric_sorted):
+        ind = np.where((time_numeric_sorted >= time_numeric_sorted[ct]) & 
+                       (time_numeric_sorted < time_numeric_sorted[ct] + binsize))[0]
+        num = len(ind)
+        if num == 0:  # No measurements in this bin
+            ct += 1
+            continue
+            
+        wt = (1. / meas_err_sorted[ind]) ** 2.  # weights based on errors
+        wt /= np.sum(wt)               # normalized weights
+        
+        # Calculate weighted averages and errors
+        bin_center_numeric = np.sum(wt * time_numeric_sorted[ind])
+        binned_meas = np.sum(wt * meas_sorted[ind])
+        binned_err = 1. / np.sqrt(np.sum(1. / (meas_err_sorted[ind]) ** 2))
+
+        time_out.append(bin_center_numeric)
+        meas_out.append(binned_meas)
+        meas_err_out.append(binned_err)
+
+        ct += num
+
+    # Convert bin centers back to pandas datetime if the input was a pandas datetime
+    if isinstance(time, pd.Series) and pd.api.types.is_datetime64_any_dtype(time):
+        # Convert back from days since epoch to datetime with full precision
+        time_out = pd.to_datetime(np.array(time_out) * 86400 * 1e9)  # Convert days back to nanoseconds
+
+    # Return results as Series if input was Series
+    if isinstance(time, pd.Series):
+        return (pd.Series(time_out), 
+                pd.Series(meas_out), 
+                pd.Series(meas_err_out))
+
+    return time_out, meas_out, meas_err_out

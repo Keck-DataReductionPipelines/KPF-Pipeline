@@ -1,4 +1,4 @@
-description: Junk Status
+description: Junk Status and Smeared Readout Assessment
 plot_type: time_series_multipanel
 panel_arr:
   - panelvars:
@@ -27,5 +27,5 @@ panel_arr:
           marker: .
     paneldict:
       ylabel: "2D flux not smeared\nin and out of order trace\nusing flux distributions"
-      title: Junk Status
+      title: Junk Status and Smeared Readout Assessment
       legend_frac_size: 0.15

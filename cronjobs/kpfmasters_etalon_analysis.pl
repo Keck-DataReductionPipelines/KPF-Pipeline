@@ -66,14 +66,36 @@ if (! (defined $logdir)) {
 
 # Docker container name for this Perl script, a known name so it can be monitored by docker ps command.
 # E.g., russkpfmastersdrpl0
-my $containername = $ENV{KPFCRONJOB_DOCKER_NAME_L0};
+my $containername = $ENV{KPFCRONJOB_DOCKER_NAME_ETALON};
 
 if (! (defined $containername)) {
-    die "*** Env. var. KPFCRONJOB_DOCKER_NAME_L0 not set; quitting...\n";
+    die "*** Env. var. KPFCRONJOB_DOCKER_NAME_ETALON not set; quitting...\n";
 }
 
 my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number of seconds in 53 years (since 00:00:00 on January 1, 1970, UTC).
 $containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
+
+# Docker container image name for this Perl script.
+# E.g., russkpfmasters:latest
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE_NAME};
+
+if (! (defined $containerimage)) {
+    die "*** Env. var. KPFCRONJOB_DOCKER_IMAGE_NAME not set; quitting...\n";
+}
+
+# Check if Docker image exists
+my $image_check = `docker images -q $containerimage 2>/dev/null`;
+chomp $image_check;
+if (!$image_check) {
+    print "*** Error: Docker image '$containerimage' not found!\n";
+    print "*** To build this image, run the following command from the KPF-Pipeline root directory:\n";
+    print "***   docker build -t $containerimage .\n";
+    print "*** Or if you want to use the existing kpf-drp image, set:\n";
+    print "***   export KPFCRONJOB_DOCKER_IMAGE_NAME=kpf-drp:latest\n";
+    die "*** Quitting due to missing Docker image...\n";
+} else {
+    print "*** Docker image '$containerimage' found (ID: $image_check)\n";
+}
 
 
 # Database user for connecting to the database to run this script and query CalFiles database table.
@@ -96,7 +118,7 @@ if (! (defined $dbname)) {
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_etalon_analysis.pl';
-my $version = '1.0';
+my $version = '1.1';
 
 my $procdate = shift @ARGV;                  # YYYYMMDD command-line parameter.
 
@@ -111,16 +133,17 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 # These parameters are fixed for this Perl script.
 my $dockercmdscript = 'jobs/kpfmasters_etalon_analysis';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';              # Augment with unique numbers (process ID and truncated seconds).
-my $containerimage = 'russkpfmasters:latest';
 
 
-# Ensure PYTHONPATH or equivalent is set; e.g., $ENV{PYTHONPATH} = "/data/user/rlaher/git/KPF-Pipeline"
+# Ensure PYTHONPATH or equivalent is set for INSIDE Docker container.
+# E.g., $ENV{PYTHONPATH} = "/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src"
 my $pythonpath = $ENV{PYTHONPATH};
 if (defined $pythonpath) {
     print "PYTHONPATH=$pythonpath\n";
 } else {
-    $ENV{PYTHONPATH} = '/data/user/rlaher/git/KPF-Pipeline/polly/src';
-    print "PYTHONPATH not defined; reset to PYTHONPATH=$ENV{PYTHONPATH}\n";
+    $ENV{PYTHONPATH} = '/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src';
+    $pythonpath = $ENV{PYTHONPATH};
+    print "PYTHONPATH not defined; reset to PYTHONPATH=$pythonpath\n";
 }
 
 my $pythonscript = 'cronjobs/run_analysis_for_masters.py';
@@ -178,11 +201,17 @@ print "Docker container name = $containername\n";
 
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
+
+# Make output directory and the run Jake Pember's etalon-analysis script (run_analysis_for_masters.py).
+
 my $script = "#! /bin/bash\n" .
              "source $dbenvfileinside\n" .
              "make init\n" .
              "export PYTHONUNBUFFERED=1\n" .
+             "export PYTHONPATH=$pythonpath\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
+             "mkdir -p /data/analysis/${procdate}\n" .
+             "python $pythonscript $procdate >& ${pylogfile}\n" .
              "cp -pr /data/analysis/${procdate}/* /masters/${procdate}\n" .
              "cp -p /code/KPF-Pipeline/${pylogfile} /masters/${procdate}\n" .
              "chown root:root /masters/${procdate}/*\n" .
@@ -192,15 +221,6 @@ my $script = "#! /bin/bash\n" .
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
-
-
-# Make output directory and the run Jake Pember's etalon-analysis script (run_analysis_for_masters.py).
-
-`mkdir -p $sandbox/analysis/$procdate`;
-
-my $analysiscmd = "python $pythonscript $procdate >& $pylogfile";
-print "Executing $analysiscmd\n";
-`$analysiscmd`;
 
 
 # Launch container with root to copy products to permanent location.

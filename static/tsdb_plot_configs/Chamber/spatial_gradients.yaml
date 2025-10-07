@@ -14,6 +14,7 @@ panel_arr:
     paneldict:
       ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0, TELEPRL0'
       subtractmedian: true
       nolegend: false
       legend_frac_size: 0.3
@@ -31,6 +32,7 @@ panel_arr:
     paneldict:
       ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0, TELEPRL0'
       subtractmedian: true
       nolegend: false
       legend_frac_size: 0.3
@@ -48,6 +50,7 @@ panel_arr:
     paneldict:
       ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0, TELEPRL0'
       subtractmedian: true
       nolegend: false
       legend_frac_size: 0.3
@@ -76,6 +79,7 @@ panel_arr:
     paneldict:
       ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0, TELEPRL0'
       subtractmedian: true
       nolegend: false
       legend_frac_size: 0.3
@@ -104,6 +108,7 @@ panel_arr:
     paneldict:
       ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0, TELEPRL0'
       subtractmedian: true
       nolegend: false
       legend_frac_size: 0.3
@@ -122,6 +127,7 @@ panel_arr:
       ylabel: "$\\Delta$(Spatial Temp Grad)\n(mK)"
       title: KPF Spectrometer Spatial Temperature Gradients
       not_junk: true
+      qc_not_fail: 'DATAPRL0, KWRDPRL0, TIMCHKL0, TELEPRL0'
       subtractmedian: true
       nolegend: false
       legend_frac_size: 0.3

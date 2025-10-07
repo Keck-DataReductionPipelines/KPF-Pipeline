@@ -1,19 +1,22 @@
 import os
 import re
 import yaml
+import time
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from scipy.ndimage import convolve1d
 from kpfpipe.models.level1 import KPF1
 from modules.Utils.utils import DummyLogger, styled_text
-from modules.Utils.kpf_parse import HeaderParse, get_latest_receipt_time, get_datetime_obsid, get_kpf_level, get_data_products_expected, get_ObsID
+from modules.Utils.kpf_parse import HeaderParse, get_datecode
+from modules.Utils.kpf_parse import get_latest_receipt_time, get_datetime_obsid, get_kpf_level, get_data_products_expected, get_ObsID
 from modules.Utils.kpf_parse import get_data_products_L0, get_data_products_2D, get_data_products_L1, get_data_products_L2
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
+from modules.quicklook.src.analyze_socal import AnalyzePyr
 from modules.calibration_lookup.src.alg import GetCalibrations
 
 DEFAULT_CALIBRATION_CFG_PATH = os.path.join(os.path.dirname(__file__), '../../calibration_lookup/configs/default.cfg')
@@ -80,7 +83,7 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
     return qc_fail
 
 
-def execute_all_QCs(kpf_object, data_level, logger=None):
+def execute_all_QCs(kpf_object, data_level, logger=None, log_timing=False):
     """
     Method to loop over all QC tests for the data level of the input KPF object
     (an L0, 2D, L1, or L2 object).  This method is useful for testing (e.g.,
@@ -89,7 +92,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
 
     Args:
         kpf_object - a KPF object (L0, 2D, L1, or L2)
-        data_type -
+        data_type - 'L0', '2D', 'L1', or 'L2'
 
     Attributes:
         None
@@ -143,6 +146,13 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         text_qc_keyword = styled_text(qc_obj.qcdefinitions.fits_keywords[qc_name], style="Bold", color="Blue")
                         logger.info(f'{text_running_qc}: {text_qc_name} ({text_qc_keyword}; {qc_obj.qcdefinitions.descriptions[qc_name]})')
                         method = getattr(qc_obj, qc_name) # get method with the name 'qc_name'
+                        if log_timing:
+                            t0 = time.perf_counter()
+                        try:
+                            qc_value = method()  # evaluate method
+                        finally:
+                            if log_timing:
+                                logger.info(f"Timing: {qc_name} took {(time.perf_counter()-t0):.3f} seconds")
                         qc_value = method() # evaluate method
                         if qc_value == True:
                             text_qc_value = styled_text(qc_value, style="Bold", color="Green")
@@ -619,7 +629,7 @@ class QCDefinitions:
         self.db_columns[name17] = None
         self.fits_keyword_fail_value[name17] = -1
 
-        name19 = 'L1_check_snr_lfc'
+        name19 = 'L1_lfc_saturated'
         self.names.append(name19)
         self.kpf_data_levels[name19] = ['L1']
         self.descriptions[name19] = 'LFC not saturated'
@@ -647,7 +657,7 @@ class QCDefinitions:
         self.db_columns[name18] = None
         self.fits_keyword_fail_value[name18] = 0
 
-        name20 = 'L1_correct_wls_check'
+        name20 = 'L1_correct_wls'
         self.names.append(name20)
         self.kpf_data_levels[name20] = ['L1']
         self.descriptions[name20] = 'WLS files exist, are not the same, and bracket the observation'
@@ -1061,7 +1071,7 @@ class QCDefinitions:
         self.spectrum_types[name49] = ['all',] 
         self.master_types[name49] = []
         self.drift_types[name49] = []
-        self.required_data_products[name49] = ['Green']
+        self.required_data_products[name49] = ['Red']
         self.fits_keywords[name49] = 'RDCCDT10'
         self.fits_comments[name49] = 'QC: Red CCD > 10 mK from temp set point'
         self.db_columns[name49] = None
@@ -1075,11 +1085,39 @@ class QCDefinitions:
         self.spectrum_types[name50] = ['all',] 
         self.master_types[name50] = []
         self.drift_types[name50] = []
-        self.required_data_products[name50] = ['Green']
+        self.required_data_products[name50] = ['Red']
         self.fits_keywords[name50] = 'RDCCDT1'
         self.fits_comments[name50] = 'QC: Red CCD > 1000 mK from temp set point'
         self.db_columns[name50] = None
         self.fits_keyword_fail_value[name50] = 0
+
+        name51 = 'clearsky'
+        self.names.append(name51)
+        self.kpf_data_levels[name51] = ['L0']
+        self.descriptions[name51] = 'Clear sky conditions from SoCal Pyrheliometer irradiance measurements'
+        self.data_types[name51] = 'int'
+        self.spectrum_types[name51] = ['Sun',] 
+        self.master_types[name51] = []
+        self.drift_types[name51] = []
+        self.required_data_products[name51] = []
+        self.fits_keywords[name51] = 'CLEARSKY'
+        self.fits_comments[name51] = 'QC: Clear sky conditions for SoCal'
+        self.db_columns[name51] = None
+        self.fits_keyword_fail_value[name51] = 0
+
+        name52 = 'l1_nan'
+        self.names.append(name52)
+        self.kpf_data_levels[name52] = ['L1']
+        self.descriptions[name52] = 'NaNs in L1 (all orders, both chips) < 50'
+        self.data_types[name52] = 'int'
+        self.spectrum_types[name52] = ['all',] 
+        self.master_types[name52] = []
+        self.drift_types[name52] = []
+        self.required_data_products[name52] = []
+        self.fits_keywords[name52] = 'CLEARSKY'
+        self.fits_comments[name52] = 'QC: NaNs in L1 (all orders, both chips) < 50'
+        self.db_columns[name52] = None
+        self.fits_keyword_fail_value[name52] = 0
 
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
@@ -2432,6 +2470,48 @@ class QCL0(QC):
         return QC_pass
 
 
+    def clearsky(self, debug=False):
+        """
+        This Quality Control method checks solar irradiance from the 
+        Pyrheliometer on SoCal to determine if solar observations are in clear
+        skies.
+
+        Args:
+             debug - an optional flag.  
+
+        Returns:
+             QC_pass - a boolean signifying clear sky conditions for SoCal.
+        """
+
+        QC_pass = False
+        
+        try:
+            primary_header = HeaderParse(self.kpf_object, 'PRIMARY')
+            ObsID = primary_header.get_obsid()
+            datecode = get_datecode(ObsID)
+            myPyr = AnalyzePyr(datecode)
+            if myPyr.irr_fn_exists:
+                myPyr.compute_clearness_on_date()
+                date_mid_str = primary_header.header['DATE-MID']
+                elapsed_sec  = primary_header.header['ELAPSED']  # total duration in seconds
+                midtime = datetime.strptime(date_mid_str, "%Y-%m-%dT%H:%M:%S.%f")
+                half_duration = timedelta(seconds=elapsed_sec / 2.0)
+                starttime = midtime - half_duration
+                endtime   = midtime + half_duration
+                result = myPyr.return_clearsky_statistics(starttime, endtime)
+                if result is None:
+                    logger.info(f'Pyrheliometer irradiance data available for {datecode}, but not between {starttime} and {endtime}.  CLEARSKY QC keyword not added.')
+                else:    
+                    CLEARSKY_OUT, _, _, _, _ = myPyr.return_clearsky_statistics(starttime, endtime)
+                    if int(CLEARSKY_OUT):
+                        QC_pass = True
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
 #####################################################################
 
 class QC2D(QC):
@@ -3254,7 +3334,7 @@ class QCL1(QC):
         return QC_pass
 
 
-    def L1_check_snr_lfc(self, SNR_limit=2800):
+    def L1_lfc_saturated(self, SNR_limit=2800):
         """
         This Quality Control function checks checks the SNR of
         LFC frames, marking satured frames as failing the test.
@@ -3287,7 +3367,7 @@ class QCL1(QC):
         return QC_pass
 
 
-    def L1_correct_wls_check(self, debug=False):
+    def L1_correct_wls(self, debug=False):
         """
         This Quality Control function checks if the WLS files used by a given L1
         file are correct. Failure states are as follows:
@@ -4025,6 +4105,54 @@ class QCL1(QC):
             QC_pass = True
             if abs(age_master_file) > maxage:
                 QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def l1_nan(self, max_nans=50, debug=False):
+        """
+        This Quality Control function determines if the total number of NaNs 
+        in an L1 spectrum (all orders in Green and Red) is less than a 
+        threshold set by the input max_nan.
+
+        Args:
+            debug
+            max_nans - maximum number of NaNs allowed for QC to pass
+
+        Returns:
+            QC_pass (bool): True if the total number of NaNs 
+        in an L1 spectrum (all orders in Green and Red) is less than a 
+        threshold set by the input max_nan.
+        """
+
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            data_products = get_data_products_L1(L1)
+
+            total_nans = 0
+            if 'Green' in data_products: 
+                green_nans = myL1.count_nans(chip='green')
+                if debug:
+                    self.logger.debug(f'NaNs in Green SCI1, SCI2, SCI3, CAL, SKY = {green_nans}')
+                total_nans += sum(green_nans)
+            if 'Red' in data_products: 
+                red_nans = myL1.count_nans(chip='red')
+                if debug:
+                    self.logger.debug(f'NaNs in Red SCI1, SCI2, SCI3, CAL, SKY = {red_nans}')
+                total_nans += sum(red_nans)
+
+            QC_pass = True
+            if total_nans > max_nans:
+                QC_pass = False
+                if not debug: # if not already printed
+                    self.logger.debug(f'NaNs in Green SCI1, SCI2, SCI3, CAL, SKY = {green_nans}')
+                    self.logger.debug(f'NaNs in Red SCI1, SCI2, SCI3, CAL, SKY = {red_nans}')
+
 
         except Exception as e:
             self.logger.info(f"Exception: {e}")

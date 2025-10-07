@@ -16,7 +16,7 @@ panel_arr:
       ymax: 35.5
       ylabel: "Max/Min Good Orders\n(Etalon Green - CAL)"
       not_junk: true
-      qc_not_fail: 'GOODREAD,TIMCHKL0,ETASTEMP'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       nolegend: true
       only_object: 
         - autocal-etalon-all-night
@@ -52,7 +52,7 @@ panel_arr:
       ymax: 32.5
       ylabel: "Max/Min Good Orders\n(Etalon Red - CAL)"
       not_junk: true
-      qc_not_fail: 'GOODREAD,TIMCHKL0,ETASTEMP'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       nolegend: true
       only_object: 
         - autocal-etalon-all-night
@@ -88,7 +88,7 @@ panel_arr:
       ymax: 35.5
       ylabel: "Max/Min Good Orders\n(Etalon Green - SCI)"
       not_junk: true
-      qc_not_fail: 'GOODREAD,TIMCHKL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       nolegend: true
       only_object: 
         - autocal-etalon-all-night
@@ -123,8 +123,9 @@ panel_arr:
       ymin: -2.5
       ymax: 32.5
       ylabel: "Max/Min Good Orders\n(Etalon Red - SCI)"
+      title: Good Orders - Etalon
       not_junk: true
-      qc_not_fail: 'GOODREAD,TIMCHKL0'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       nolegend: true
       only_object: 
         - autocal-etalon-all-night

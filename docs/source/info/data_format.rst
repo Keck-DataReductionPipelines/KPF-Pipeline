@@ -281,6 +281,7 @@ GRCCD1T   1                                           QC: 1 = Green CCD > 1000 m
 RDCCD10T  1                                           QC: 1 = Red CCD > 10 mK from temp set point
 RDCCD1T   1                                           QC: 1 = Red CCD > 1000 mK (1 C) from temp set point
 ISGOOD    1                                           QC: 1 = all other QC tests passed
+CLEARSKY  1                                           QC: 1 = Clear sky conditions for SoCal
 RNGREEN1  4.85283                                     Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
 RNGREEN2  4.14966                                     Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
 RNGREEN3  4.85283                                     Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
@@ -289,6 +290,14 @@ RNRED1    4.0376                                      Read noise for RED_AMP1 [e
 RNRED2    4.12717                                     Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
 RNRED3    4.0376                                      Read noise for RED_AMP3 [e-] (third amplifier region on Red CCD)
 RNRED4    4.12717                                     Read noise for RED_AMP4 [e-] (fourth amplifier region on Red CCD)
+RNNGGR1   1.0                                         Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan
+RNNGGR2   1.0                                         Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan
+RNNGGR3   1.0                                         Non-Gaussian read noise GREEN3, 0.8*stddev/mad of overscan
+RNNGGR4   1.0                                         Non-Gaussian read noise GREEN4, 0.8*stddev/mad of overscan
+RNNGRD1   1.0                                         Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan
+RNNGRD2   1.0                                         Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan
+RNNGRD3   1.0                                         Non-Gaussian read noise RED3, 0.8*stddev/mad of overscan
+RNNGRD4   1.0                                         Non-Gaussian read noise RED4, 0.8*stddev/mad of overscan
 GREENTRT  46.804                                      Green CCD read time [sec]
 REDTRT    46.839                                      Red CCD read time [sec]
 READSPED  'regular '                                  Categorization of CCD read speed ('regular' or 'fast')
@@ -424,11 +433,10 @@ XDSPSYG1  0.00133                                     Uncertainty [pix] in XDSPD
 XDSPSYR1  0.00217                                     Uncertainty [pix] in XDSPDYR1
 XDSPSYG2  0.00144                                     Uncertainty [pix] in XDSPDYG2
 XDSPSYR2  0.00058                                     Uncertainty [pix] in XDSPDYR2
-CLEARSKY  1                                           Indicates clear-sky conditions for SoCal [to be added in future DRP version]
-DNIMEAS   500.0                                       Mean DNI from pyrheliometer during the exposure [to be added in future DRP version]
-DNICLR    500.0                                       Theoretical DNI in perfect conditions [to be added in future DRP version]
-DNIRMS    1.0                                         RMS of DNIMEAS during the exposure [to be added in future DRP version]
-CLEARIDX  3.0                                         SoCal clearness index (<4==CLEARSKY) [to be added in future DRP version]
+DNIMEAS   500.0                                       Mean DNI from pyrheliometer during the exposure [W/m^2]
+DNICLR    500.0                                       Theoretical DNI in perfect conditions [W/m^2]
+DNIRMS    1.0                                         RMS of DNIMEAS during the exposure [W/m^2]
+CLEARIDX  3.0                                         SoCal clearness index (<4==CLEARSKY)
 ========  ==========================================  =========
 
 Keywords related to read noise are only computed for the amplifiers used.  In regular read mode, two amplifiers are used (AMP1 and AMP2), while in fast read mode, four amplifiers are used (AMP1, AMP2, AMP3, and AMP4).
@@ -476,6 +484,7 @@ ETALINES  1                                                                     
 WILDWSCI  1                                                                        QC: 1 = SCI WLS not wild (stdev compared to reference < 5 pixels)
 WILDWSKY  1                                                                        QC: 1 = SKY WLS not wild (stdev compared to reference < 5 pixels)
 WILDWCAL  1                                                                        QC: 1 = CAL WLS not wild (stdev compared to reference < 5 pixels)
+NANL1OK   1                                                                        QC: 1 = Number of NaNs in L1 (all orders, both chips) < 50
 NSATGS2   23                                                                       Number of saturated lines in Green SCI2
 NSATGC    23                                                                       Number of saturated lines in Green CAL
 NSATGK    23                                                                       Number of saturated lines in Green SKY
@@ -581,6 +590,16 @@ AGEWLS2   0.14193433333333330                                                   
 AGETRAC   -0.2205656666666667                                                      Approx age of TRACFILE compared to this file (days)
 AGELAMP   0.14193433333333330                                                      Approx age of LAMPFILE compared to this file (days)
 STATWREF  /data/reference_fits/430LFCWLS.fits                                      filename of ref for median/stdev(WLS-ref)
+NANL1GS1  0                                                                        Number of NaNs in all orders of L1 Green SCI1
+NANL1GS2  0                                                                        Number of NaNs in all orders of L1 Green SCI2
+NANL1GS3  0                                                                        Number of NaNs in all orders of L1 Green SCI3
+NANL1GCL  0                                                                        Number of NaNs in all orders of L1 Green CAL
+NANL1GSK  0                                                                        Number of NaNs in all orders of L1 Green SKY
+NANL1RS1  0                                                                        Number of NaNs in all orders of L1 Red SCI1
+NANL1RS2  0                                                                        Number of NaNs in all orders of L1 Red SCI2
+NANL1RS3  0                                                                        Number of NaNs in all orders of L1 Red SCI3
+NANL1RCL  0                                                                        Number of NaNs in all orders of L1 Red CAL
+NANL1RSK  0                                                                        Number of NaNs in all orders of L1 Red SKY
 MEDWGS00  0.09425503797584399                                                      median(WLS-ref) [pix], Green SCI order 00       
 MEDWGS01  0.08849442069640202                                                      median(WLS-ref) [pix], Green SCI order 01       
 MEDWGS02  0.08371697673720710                                                      median(WLS-ref) [pix], Green SCI order 02       
@@ -1029,6 +1048,10 @@ DRFTDEL2  1.2114297222222221                          Time to 2nd drift correcti
 DRFTCOR   1                                           Drift correction applied (true/false)
 DRFTRV    0.2738220612333333                          Drift correction RV (m/s)
 DRFTMETH  nearest_interpolation                       Drift correction method name
+AGESLFC   0.621                                       Days since last good LFC frame (depends on processing order)
+AGEULFC   0.621                                       Days until next good LFC frame (depends on processing order)
+AGESETA   0.621                                       Days since last good Etalon frame (depends on processing order)
+AGEUETA   0.621                                       Days until next good Etalon frame (depends on processing order)
 ========  ==========================================  =========
 
 L2 RV Extension Header
