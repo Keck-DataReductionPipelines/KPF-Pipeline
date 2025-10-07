@@ -9,6 +9,7 @@ directory, as well as to the console.
 
 import os
 import logging
+from pathlib import Path
 
 logger = logging.getLogger("Polly")
 
