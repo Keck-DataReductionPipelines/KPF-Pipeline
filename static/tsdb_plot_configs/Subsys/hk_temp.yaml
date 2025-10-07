@@ -49,6 +49,7 @@ panel_arr:
     paneldict:
       ylabel: "HK Spectrometer\nTemperature (K)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.30
 
   # Panel 2 (hkpanel2): Delta temperatures for HK
@@ -98,6 +99,7 @@ panel_arr:
     paneldict:
       ylabel: "HK Spectrometer\n$\\Delta$Temperature (K)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       subtractmedian: true
       legend_frac_size: 0.30
 
@@ -120,6 +122,7 @@ panel_arr:
     paneldict:
       ylabel: "HK Detector\nTemperature (K)"
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       legend_frac_size: 0.30
 
   # Panel 4 (hkpanel4): Delta detector temperatures
@@ -142,5 +145,6 @@ panel_arr:
       ylabel: "HK Detector\n$\\Delta$Temperature (K)"
       title: Ca H&K Spectrometer Temperatures
       not_junk: true
+      qc_not_fail: 'TELEPRL0'
       subtractmedian: true
       legend_frac_size: 0.30
