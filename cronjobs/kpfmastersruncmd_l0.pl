@@ -330,7 +330,13 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `mkdir -p $sandbox/logs/$procdate`;
 `mkdir -p $sandbox/masters/pool`;
 
+# Get memory optimization flags
+my $memory_flags = `$codedir/scripts/get_docker_memory_flags.sh`;
+chomp($memory_flags);
+
 my $dockerruncmd = "docker run -d --name $containername " .
+                   # Memory optimization
+                   "$memory_flags " .
                    # Code
                    "-v ${codedir}:/code/KPF-Pipeline " .
                    # Map sandbox subtrees to the expected /data layout (writable)
