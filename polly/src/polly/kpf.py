@@ -18,10 +18,10 @@ TIMESOFDAY = ["morn", "eve", "night", "midnight"]
 
 MASTERS_DIR = os.getenv('KPF_POLLY_MASTERS_DIR')
 if MASTERS_DIR is None:
-    # Default directory is for execution outside of Docker container on shrek.
-    MASTERS_DIR = Path("/data/kpf/masters")
+    # Default directory is for execution inside of Docker container
+    MASTERS_DIR = Path("/data/masters")
 
 L1_DIR = os.getenv('KPF_POLLY_L1_DIR')
 if L1_DIR is None:
-    # Default directory is for execution outside of Docker container on shrek.
-    L1_DIR = Path("/data/kpf/L1")
+    # Default directory is for execution inside of Docker container
+    L1_DIR = Path("/data/L1")
