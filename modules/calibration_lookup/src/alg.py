@@ -123,11 +123,11 @@ class GetCalibrations:
             output_cals = {}
             missing_keys = list(subset)
         
+        # Parse datetime once and reuse
+        dt_start = time.time() if self.verbose else None
+        dt = datetime.strptime(self.datetime, "%Y-%m-%dT%H:%M:%S.%f")
+        date_str = datetime.strftime(dt, "%Y%m%d")
         if self.verbose:
-            # Time the datetime parsing
-            dt_start = time.time()
-            dt = datetime.strptime(self.datetime, "%Y-%m-%dT%H:%M:%S.%f")
-            date_str = datetime.strftime(dt, "%Y%m%d")
             dt_time = time.time() - dt_start
         
         # Don't overwrite output_cals if we had cached results
@@ -293,17 +293,20 @@ class GetCalibrations:
                     if self.verbose:
                         wls_start = time.time()
                     wls_files = None  # Initialize wls_files
+                    if not self.use_db:
+                        # If database is disabled, use default
+                        output_cals[cal] = self.defaults[cal]
+                        continue
                     for cal_type in self.wls_cal_types:
                         wls_results = db.get_bracketing_wls(self.datetime, cal_type[1], max_cal_delta_time=self.max_age)
-                        if len(wls_results) > 1 and (wls_results[0] == 0 or wls_results[2] == 0):
+                        if len(wls_results) >= 4 and (wls_results[0] == 0 or wls_results[2] == 0):
                             wls_files = [wls_results[1], wls_results[3]]
                             if wls_files[0] == None:
                                 wls_files[0] = wls_files[1]
                             if wls_files[1] == None:
                                 wls_files[1] = wls_files[0]
                             
-                            # Ensure deterministic file selection by sorting file paths
-                            wls_files = sorted(wls_files)
+                            # Keep temporal order: wls_files[0] = before file, wls_files[1] = after file
                             output_cals[cal] = wls_files
                             
                             if self.verbose:

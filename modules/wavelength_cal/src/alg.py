@@ -1930,11 +1930,11 @@ class WaveInterpolation:
                 tdiff = (self.wls_timestamp_objs[1] - self.wls_timestamp_objs[0]).total_seconds()
                 deltat = (self.l1_timestamp_obj - self.wls_timestamp_objs[0]).total_seconds()
             elif isJD:
-                tdiff = self.wls_timestamp[1] - self.wls_timestamp[0]
-                deltat = self.l1_timestamp - self.wls_timestamp[0]
+                tdiff = self.wls_timestamps[1] - self.wls_timestamps[0]
+                deltat = self.l1_timestamp - self.wls_timestamps[0]
             elif isDatetime:
-                tdiff = (self.wls_timestamp[1] - self.wls_timestamp[0]).total_seconds()
-                deltat = (self.l1_timestamp - self.wls_timestamp[0]).total_seconds()
+                tdiff = (self.wls_timestamps[1] - self.wls_timestamps[0]).total_seconds()
+                deltat = (self.l1_timestamp - self.wls_timestamps[0]).total_seconds()
             else:
                  self.logger.error("l1_timestamp not in a recognized format")
             if tdiff == 0:

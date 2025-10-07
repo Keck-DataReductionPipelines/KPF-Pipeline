@@ -1,6 +1,7 @@
 import os
 import re
 import yaml
+import time
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
@@ -82,7 +83,7 @@ def check_all_qc_keywords(kpf_object,fname,input_master_type='all',logger=None):
     return qc_fail
 
 
-def execute_all_QCs(kpf_object, data_level, logger=None):
+def execute_all_QCs(kpf_object, data_level, logger=None, log_timing=False):
     """
     Method to loop over all QC tests for the data level of the input KPF object
     (an L0, 2D, L1, or L2 object).  This method is useful for testing (e.g.,
@@ -91,7 +92,7 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
 
     Args:
         kpf_object - a KPF object (L0, 2D, L1, or L2)
-        data_type -
+        data_type - 'L0', '2D', 'L1', or 'L2'
 
     Attributes:
         None
@@ -145,6 +146,13 @@ def execute_all_QCs(kpf_object, data_level, logger=None):
                         text_qc_keyword = styled_text(qc_obj.qcdefinitions.fits_keywords[qc_name], style="Bold", color="Blue")
                         logger.info(f'{text_running_qc}: {text_qc_name} ({text_qc_keyword}; {qc_obj.qcdefinitions.descriptions[qc_name]})')
                         method = getattr(qc_obj, qc_name) # get method with the name 'qc_name'
+                        if log_timing:
+                            t0 = time.perf_counter()
+                        try:
+                            qc_value = method()  # evaluate method
+                        finally:
+                            if log_timing:
+                                logger.info(f"Timing: {qc_name} took {(time.perf_counter()-t0):.3f} seconds")
                         qc_value = method() # evaluate method
                         if qc_value == True:
                             text_qc_value = styled_text(qc_value, style="Bold", color="Green")
@@ -642,7 +650,7 @@ class QCDefinitions:
         self.db_columns[name17] = None
         self.fits_keyword_fail_value[name17] = -1
 
-        name19 = 'L1_check_snr_lfc'
+        name19 = 'L1_lfc_saturated'
         self.names.append(name19)
         self.kpf_data_levels[name19] = ['L1']
         self.descriptions[name19] = 'LFC not saturated'
@@ -672,7 +680,7 @@ class QCDefinitions:
         self.db_columns[name18] = None
         self.fits_keyword_fail_value[name18] = 0
 
-        name20 = 'L1_correct_wls_check'
+        name20 = 'L1_correct_wls'
         self.names.append(name20)
         self.kpf_data_levels[name20] = ['L1']
         self.descriptions[name20] = 'WLS files exist, are not the same, and bracket the observation'
@@ -1151,6 +1159,20 @@ class QCDefinitions:
         self.fits_comments[name51] = 'QC: Clear sky conditions for SoCal'
         self.db_columns[name51] = None
         self.fits_keyword_fail_value[name51] = 0
+
+        name52 = 'l1_nan'
+        self.names.append(name52)
+        self.kpf_data_levels[name52] = ['L1']
+        self.descriptions[name52] = 'NaNs in L1 (all orders, both chips) < 50'
+        self.data_types[name52] = 'int'
+        self.spectrum_types[name52] = ['all',] 
+        self.master_types[name52] = []
+        self.drift_types[name52] = []
+        self.required_data_products[name52] = []
+        self.fits_keywords[name52] = 'CLEARSKY'
+        self.fits_comments[name52] = 'QC: NaNs in L1 (all orders, both chips) < 50'
+        self.db_columns[name52] = None
+        self.fits_keyword_fail_value[name52] = 0
 
 #        name36 = 'DRP_version_equal_2D_L1'
 #        self.names.append(name36)
@@ -3377,7 +3399,7 @@ class QCL1(QC):
         return QC_pass
 
 
-    def L1_check_snr_lfc(self, SNR_limit=2800):
+    def L1_lfc_saturated(self, SNR_limit=2800):
         """
         This Quality Control function checks checks the SNR of
         LFC frames, marking satured frames as failing the test.
@@ -3410,7 +3432,7 @@ class QCL1(QC):
         return QC_pass
 
 
-    def L1_correct_wls_check(self, debug=False):
+    def L1_correct_wls(self, debug=False):
         """
         This Quality Control function checks if the WLS files used by a given L1
         file are correct. Failure states are as follows:
@@ -4148,6 +4170,54 @@ class QCL1(QC):
             QC_pass = True
             if abs(age_master_file) > maxage:
                 QC_pass = False
+
+        except Exception as e:
+            self.logger.info(f"Exception: {e}")
+            QC_pass = False
+
+        return QC_pass
+
+
+    def l1_nan(self, max_nans=50, debug=False):
+        """
+        This Quality Control function determines if the total number of NaNs 
+        in an L1 spectrum (all orders in Green and Red) is less than a 
+        threshold set by the input max_nan.
+
+        Args:
+            debug
+            max_nans - maximum number of NaNs allowed for QC to pass
+
+        Returns:
+            QC_pass (bool): True if the total number of NaNs 
+        in an L1 spectrum (all orders in Green and Red) is less than a 
+        threshold set by the input max_nan.
+        """
+
+        try:
+            L1 = self.kpf_object
+            myL1 = AnalyzeL1(L1, logger=self.logger)
+            data_products = get_data_products_L1(L1)
+
+            total_nans = 0
+            if 'Green' in data_products: 
+                green_nans = myL1.count_nans(chip='green')
+                if debug:
+                    self.logger.debug(f'NaNs in Green SCI1, SCI2, SCI3, CAL, SKY = {green_nans}')
+                total_nans += sum(green_nans)
+            if 'Red' in data_products: 
+                red_nans = myL1.count_nans(chip='red')
+                if debug:
+                    self.logger.debug(f'NaNs in Red SCI1, SCI2, SCI3, CAL, SKY = {red_nans}')
+                total_nans += sum(red_nans)
+
+            QC_pass = True
+            if total_nans > max_nans:
+                QC_pass = False
+                if not debug: # if not already printed
+                    self.logger.debug(f'NaNs in Green SCI1, SCI2, SCI3, CAL, SKY = {green_nans}')
+                    self.logger.debug(f'NaNs in Red SCI1, SCI2, SCI3, CAL, SKY = {red_nans}')
+
 
         except Exception as e:
             self.logger.info(f"Exception: {e}")

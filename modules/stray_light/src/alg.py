@@ -3,12 +3,13 @@ from datetime import datetime, timedelta
 
 import astropy.constants as apc
 from astropy.stats import mad_std
+from copy import deepcopy
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial import polynomial as poly
 from numpy.polynomial.legendre import legval
 import pandas as pd
-from scipy.ndimage import median_filter, gaussian_filter
+from scipy.ndimage import median_filter, gaussian_filter, distance_transform_edt
 from scipy.interpolate import LSQUnivariateSpline, CubicSpline
 
 from kpfpipe.config.pipeline_config import ConfigClass
@@ -203,9 +204,36 @@ class StrayLightAlg:
             d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
             m = mask[edge_clip:-edge_clip,edge_clip:-edge_clip]
 
+        else:
+            d = deepcopy(data)
+            m = deepcopy(mask)
+
         coeffs = self._polyfit2d(d, polyorder, regularize=regularize, mask=m)    
         stray_light = self._polyval2d(coeffs, polyorder, data.shape)
         stray_light = np.maximum(stray_light, 0)
+
+        return stray_light, mask
+
+
+    def columns(self, chip, polyorder, gaussian_sigma=128, edge_clip=0, mask_buffer=None, **kwargs):
+        """
+        Method to estimate stray light -- fits a 2D polynomial to inter-order pixels
+        """
+        data = np.array(self.target_2D[f'{chip}_CCD'].data)
+        mask = self._inter_order_mask(chip, mask_buffer=mask_buffer).astype(bool)
+
+        if edge_clip > 0:
+            d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
+            m = mask[edge_clip:-edge_clip,edge_clip:-edge_clip]
+
+        else:
+            d = deepcopy(data)
+            m = deepcopy(mask)
+
+        coeffs = self._polyfit_columns(d, polyorder, mask=m)
+        stray_light = self._polyval_columns(coeffs, data.shape[0])
+        stray_light = self._patch_nan_nearest(stray_light)
+        stray_light = gaussian_filter(stray_light, gaussian_sigma, mode='reflect', truncate=4.0)
 
         return stray_light, mask
         
@@ -307,6 +335,50 @@ class StrayLightAlg:
         return result
 
 
+    def _polyfit_columns(self, data_image, polyorder, mask=None):
+        nrow, ncol = data_image.shape
+        y = np.arange(nrow)
+        
+        # mask exposed pixels
+        if mask is not None:
+            mask = np.array(mask, dtype='bool')
+        else:
+            mask = np.zeros((nrow,ncol), dtype='bool')
+
+        V = np.vander(y, polyorder + 1, increasing=True)
+        coeffs = np.full((polyorder + 1, ncol), np.nan, dtype=float)
+
+        for j in range(ncol):
+            m = ~mask[:, j]
+            
+            if np.count_nonzero(m) > polyorder:
+                Vj = V[m, :]
+                yj = data_image[m, j]
+                c, *_ = np.linalg.lstsq(Vj, yj, rcond=None)
+                coeffs[:, j] = c
+        
+        return coeffs
+
+
+    def _polyval_columns(self, coeffs, nrow):
+        ncoeffs, ncol = coeffs.shape
+        y = np.arange(nrow)
+        V = np.vander(y, ncoeffs, increasing=True)
+        
+        return np.dot(V, coeffs)
+
+
+    def _patch_nan_nearest(self, data_image):
+        bad = np.isnan(data_image)
+        
+        if not np.any(bad):
+            return data_image.copy()
+
+        indices = distance_transform_edt(bad, return_distances=False, return_indices=True)
+
+        return data_image[tuple(indices)]
+    
+    
     def _inter_order_mask(self, chip, dark_fibers=None, mask_buffer=None):
         """
         Args:
