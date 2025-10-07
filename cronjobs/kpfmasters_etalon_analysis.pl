@@ -138,13 +138,10 @@ $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';              # Augment 
 # Ensure PYTHONPATH or equivalent is set for INSIDE Docker container.
 # E.g., $ENV{PYTHONPATH} = "/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src"
 my $pythonpath = $ENV{PYTHONPATH};
-if (defined $pythonpath) {
-    print "PYTHONPATH=$pythonpath\n";
-} else {
-    $ENV{PYTHONPATH} = '/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src';
-    $pythonpath = $ENV{PYTHONPATH};
-    print "PYTHONPATH not defined; reset to PYTHONPATH=$pythonpath\n";
-}
+$ENV{PYTHONPATH} = '/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src';
+$pythonpath = $ENV{PYTHONPATH};
+print "PYTHONPATH not defined; reset to PYTHONPATH=$pythonpath\n";
+
 
 my $pythonscript = 'cronjobs/run_analysis_for_masters.py';
 
