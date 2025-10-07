@@ -19,7 +19,7 @@ formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(messag
 log_file = os.getenv('KPF_POLLY_LOG_FILE')
 if log_file is None:
     # Default path is for execution outside of Docker container on shrek.
-    log_file = Path("/scr/jpember/polly_outputs/polly.log")
+    log_file = Path("/data/analysis/polly.log")
 file_handler = logging.FileHandler(log_file)
 
 file_handler.setLevel(logging.DEBUG)
