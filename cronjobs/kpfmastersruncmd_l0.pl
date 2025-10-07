@@ -291,6 +291,7 @@ my $script = "#! /bin/bash\n" .
              "find /data/masters/pool/kpf_????????_master_*fits -mtime +7 -exec rm {} +\n" .
              "\n" .
              "# Run recipe\n" .
+             "make init\n" .
              "kpf -r $recipe -c $config --date ${procdate}\n" .
              "\n" .
              "# Post-processing (logs now live in /data/logs/${procdate}, not /code)\n" .
