@@ -331,16 +331,12 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `mkdir -p $sandbox/masters/pool`;
 
 my $dockerruncmd = "docker run -d --name $containername " .
-                   # Code is read-only
+                   # Code
                    "-v ${codedir}:/code/KPF-Pipeline " .
                    # Map sandbox subtrees to the expected /data layout (writable)
-                   "-v ${sandbox}/2D:/data/2D " .
-                   "-v ${sandbox}/L1:/data/L1 " .
-                   "-v ${sandbox}/L2:/data/L2 " .
-                   "-v ${sandbox}/logs:/data/logs " .
-                   "-v ${sandbox}/masters:/data/masters " .
+                   "-v ${sandbox}:/data/ " .
                    # Mount the PRIMARY L0s read-only exactly where DRP expects them
-                   "-v /data/kpf/L0/${procdate}:/data/L0/${procdate} " .
+                   "-v /data/kpf/L0/${procdate}:/data/L0/${procdate}:ro " .
                    # Masters publication area
                    "-v ${mastersdir}:/masters " .
                    # Fast scratch (optional but recommended)
