@@ -178,7 +178,8 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 my $dockercmdscript = 'jobs/kpfmasterscmd_l0';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
 
-my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
+my $recipe_2d = '/code/KPF-Pipeline/recipes/kpf_masters_2D.recipe';
+my $recipe_stacks = '/code/KPF-Pipeline/recipes/kpf_masters_stacks.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
 
 my $configenvar = $ENV{KPFCRONJOB_CONFIG_L0};
@@ -292,7 +293,8 @@ my $script = "#! /bin/bash\n" .
              "\n" .
              "# Run recipe\n" .
              "make init\n" .
-             "kpf -r $recipe -c $config --date ${procdate}\n" .
+             "kpf --ncpus=32 --reprocess /data/L0/${procdate}/ -r $recipe_2d -c $config \n" .
+             "kpf --date ${procdate} -r $recipe_stacks -c $config \n" .
              "\n" .
              "# Post-processing (logs now live in /data/logs/${procdate}, not /code)\n" .
              "python $pythonscript /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits \\\n" .
