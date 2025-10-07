@@ -342,8 +342,8 @@ my $dockerruncmd = "docker run -d --name $containername " .
                    # Fast scratch (optional but recommended)
                    "--mount type=tmpfs,dst=/scratch,tmpfs-size=32g " .
                    # Networking and DB
-                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 -e DBPASS=\\\"$dbpass\\\" " .
-                   "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver -e TSDBPASS=\\\"$tsdbpass\\\" " .
+                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 -e DBPASS=\"$dbpass\" " .
+                   "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver -e TSDBPASS=\"$tsdbpass\" " .
                    # Deterministic math threads
                    "-e OMP_NUM_THREADS=1 -e MKL_NUM_THREADS=1 -e OPENBLAS_NUM_THREADS=1 -e NUMEXPR_NUM_THREADS=1 " .
                    "$containerimage bash ./$dockercmdscript";
