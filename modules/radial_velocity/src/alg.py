@@ -394,7 +394,7 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         obs_bjd = None
         if seg >= 0 and self.bary_corr_table is not None and not self.bary_corr_table.empty and \
-                np.shape(self.bary_corr_table.values)[0] > ord_idx:
+                len(self.bary_corr_table) > ord_idx:
             obs_time = np.array(self.bary_corr_table['PHOTON_JD'])[ord_idx+self.start_bary_index]
             obs_bjd = np.array(self.bary_corr_table['PHOTON_BJD'])[ord_idx+self.start_bary_index]
         elif 'MJD-OBS' in self.header and 'ELAPSED' in self.header:
@@ -413,7 +413,7 @@ class RadialVelocityAlg(RadialVelocityBase):
         # if self.init_data['mask_type'] in ['lfc', 'thar'] or \
             bc = 0.0
             # self.d_print("bc: ", bc)
-        elif self.bary_corr_table is not None and np.shape(self.bary_corr_table.values)[0] > ord_idx:
+        elif self.bary_corr_table is not None and len(self.bary_corr_table) > ord_idx:
             bc = self.bary_corr_table['BARYVEL'][ord_idx + self.start_bary_index]
         else:
             bc = self.get_redshift_gen(default=default, seg=seg)

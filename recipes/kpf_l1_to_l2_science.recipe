@@ -5,6 +5,9 @@ from modules.radial_velocity.src.radial_velocity_reweighting_ref import RadialVe
 from modules.radial_velocity.src.radial_velocity_reweighting import RadialVelocityReweighting
 
 # general imports.
+from kpfpipe.pipelines.fits_primitives import kpf0_from_fits
+from kpfpipe.pipelines.fits_primitives import kpf1_from_fits
+from kpfpipe.pipelines.fits_primitives import kpf2_from_fits
 from modules.Utils.amplifier_mask import AmplifierMask # Needed in L0 and L2
 from modules.Utils.data_handler import SelectObs
 
