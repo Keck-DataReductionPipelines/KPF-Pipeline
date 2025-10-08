@@ -106,7 +106,7 @@ master_stacks_config = 'configs/kpf_masters_stacks_regression_test.cfg'
 with open(master_2d_config_orig, 'r') as file:
     file_content = file.read()
 
-modified_content = file_content.replace('input_dir = /data_kpf/L0', 'input_dir = /data/L0')
+modified_content = file_content.replace('input_dir = /data/L0', 'input_dir = /data/L0')
 
 with open(master_2d_config, 'w') as file:
     file.write(modified_content)
@@ -115,7 +115,7 @@ with open(master_2d_config, 'w') as file:
 with open(master_stacks_config_orig, 'r') as file:
     file_content = file.read()
 
-modified_content = file_content.replace('input_dir = /data_kpf/L0', 'input_dir = /data/L0')
+modified_content = file_content.replace('input_dir = /data/L0', 'input_dir = /data/L0')
 
 with open(master_stacks_config, 'w') as file:
     file.write(modified_content)
