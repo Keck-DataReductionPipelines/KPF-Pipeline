@@ -93,9 +93,9 @@ master_2d_recipe = open('recipes/kpf_masters_2D.recipe', 'r').read()
 master_stacks_recipe = open('recipes/kpf_masters_stacks.recipe', 'r').read()
 
 # Config files
-master_2d_config_orig = 'configs/kpf_masters_2D.cfg'
+master_2d_config_orig = 'configs/kpf_masters.cfg'
 master_2d_config = 'configs/kpf_masters_2D_regression_test.cfg'
-master_stacks_config_orig = 'configs/kpf_masters_stacks.cfg'
+master_stacks_config_orig = 'configs/kpf_masters.cfg'
 master_stacks_config = 'configs/kpf_masters_stacks_regression_test.cfg'
 
 
