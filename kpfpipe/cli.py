@@ -236,7 +236,7 @@ def main():
     frame_config.set('DEFAULT', 'queue_manager_portnr', str(port))
     frame_config.set('DEFAULT', 'queue_manager_auth_code', str(hash(port)))
 
-    if args.reprocess:
+    if args.reprocess or (hasattr(args, 'date') and args.date):
         print(f"Setting queue manager to shutdown after reprocessing.")
         frame_config.set('DEFAULT', 'event_timeout', '10')
         frame_config.set('DEFAULT', 'no_event_event', 'exit')
@@ -355,5 +355,4 @@ def main():
 
         framework.pipeline.start(pipe_config)
         framework.append_event('start_recipe', arg)
-        framework.append_event('exit', arg)
         framework.start()

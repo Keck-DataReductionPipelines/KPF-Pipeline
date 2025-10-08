@@ -275,10 +275,7 @@ print "tsdbuser=$tsdbuser\n";
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
 my $script = "#! /bin/bash\n" .
-             "set -euo pipefail\n" .
              "source $dbenvfileinside\n" .
-             "export PYTHONUNBUFFERED=1\n" .
-             "export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
              "\n" .
              "# Safety checks: RO inputs / writable outputs\n" .
@@ -293,7 +290,7 @@ my $script = "#! /bin/bash\n" .
              "\n" .
              "# Run recipe\n" .
              "make init\n" .
-             "kpf --ncpus=32 --reprocess /data/L0/${procdate}/ -r $recipe_2d -c $config \n" .
+             "kpf --ncpus=100 --reprocess /data/L0/${procdate}/ -r $recipe_2d -c $config \n" .
              "kpf --date ${procdate} -r $recipe_stacks -c $config \n" .
              "\n" .
              "# Post-processing (logs now live in /data/logs/${procdate}, not /code)\n" .
@@ -306,14 +303,14 @@ my $script = "#! /bin/bash\n" .
              "\n" .
              "mkdir -p /masters/${procdate}\n" .
              "sleep 1\n" .
-             "cp -rv /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
+             "cp -pv /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
              "chown root:root /masters/${procdate}/* || true\n" .
-             "cp -rv /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log || true\n" .
+             "cp -pv /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log || true\n" .
              "python $pythonscript4 $procdate >& /data/logs/${procdate}/$pylogfile4\n" .
-             "cp -rv /data/logs/${procdate}/$pylogfile  /masters/${procdate}\n" .
-             "cp -rv /data/logs/${procdate}/$pylogfile2 /masters/${procdate}\n" .
-             "cp -rv /data/logs/${procdate}/$pylogfile3 /masters/${procdate}\n" .
-             "cp -rv /data/logs/${procdate}/$pylogfile4 /masters/${procdate}\n" .
+             "cp -pv /data/logs/${procdate}/$pylogfile  /masters/${procdate}\n" .
+             "cp -pv /data/logs/${procdate}/$pylogfile2 /masters/${procdate}\n" .
+             "cp -pv /data/logs/${procdate}/$pylogfile3 /masters/${procdate}\n" .
+             "cp -pv /data/logs/${procdate}/$pylogfile4 /masters/${procdate}\n" .
              "exit\n";
 
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
