@@ -306,15 +306,15 @@ my $script = "#! /bin/bash\n" .
              "python $pythonscript3 $procdate >& /data/logs/${procdate}/$pylogfile3\n" .
              "\n" .
              "mkdir -p /masters/${procdate}\n" .
-             "sleep 3\n" .
-             "cp -p /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
+             "sleep 1\n" .
+             "cp -rv /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
              "chown root:root /masters/${procdate}/* || true\n" .
-             "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log || true\n" .
+             "cp -rv /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log || true\n" .
              "python $pythonscript4 $procdate >& /data/logs/${procdate}/$pylogfile4\n" .
-             "cp -p /data/logs/${procdate}/$pylogfile  /masters/${procdate}\n" .
-             "cp -p /data/logs/${procdate}/$pylogfile2 /masters/${procdate}\n" .
-             "cp -p /data/logs/${procdate}/$pylogfile3 /masters/${procdate}\n" .
-             "cp -p /data/logs/${procdate}/$pylogfile4 /masters/${procdate}\n" .
+             "cp -rv /data/logs/${procdate}/$pylogfile  /masters/${procdate}\n" .
+             "cp -rv /data/logs/${procdate}/$pylogfile2 /masters/${procdate}\n" .
+             "cp -rv /data/logs/${procdate}/$pylogfile3 /masters/${procdate}\n" .
+             "cp -rv /data/logs/${procdate}/$pylogfile4 /masters/${procdate}\n" .
              "exit\n";
 
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
