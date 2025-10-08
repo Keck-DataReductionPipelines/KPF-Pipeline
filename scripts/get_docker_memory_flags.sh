@@ -11,4 +11,4 @@ source "$SCRIPT_DIR/docker_launch_utils.sh"
 memory_limit_gb=$(calculate_memory_limit)
 
 # Output the memory flags in a format that can be easily used in Perl
-echo "--memory=${memory_limit_gb}G --memory-swap=${memory_limit_gb}G --oom-kill-disable"
+echo "--memory=${memory_limit_gb}G --memory-swap=${memory_limit_gb}G "
