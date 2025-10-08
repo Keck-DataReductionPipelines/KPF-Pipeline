@@ -290,7 +290,6 @@ my $script = "#! /bin/bash\n" .
              "rm -rf /data/masters/wlpixelfiles/*kpf_${procdate}*\n" .
              "rm -rf /data/analysis/${procdate} 2>/dev/null || true\n" .
              "rm -rf /data/masters/pool/kpf_${procdate}*\n" .
-             "find /data/masters/pool/kpf_????????_master_*fits -mtime +7 -exec rm {} +\n" .
              "\n" .
              "# Run recipe\n" .
              "make init\n" .

@@ -58,7 +58,7 @@ class KPFPipeMastersLevel0(KPFPipeCronBase):
             ln -fs /reference_fits /data/reference_fits;
     
             # remove old masters from the pool
-            find /data/masters/pool/kpf_????????_master_*fits -mtime +7 -exec rm {{}} + >> {self.stdout_log} 2>&1;
+            rm -rf /data/masters/pool/kpf_${self.procdate}* >> {self.stdout_log} 2>&1;
     
             # run the pipeline
             kpf -r {self.recipe} -c {self.config} --date {self.procdate} >> {self.stdout_log} 2>&1; 
