@@ -112,6 +112,10 @@ class SpectralExtractionAlg:
         
     def _check_for_variance_frame(self, chip, do_patch=True):
         var_ext_name = f'{chip}_VAR'
+
+        # hard-code 2D variance fix
+        self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+
         if var_ext_name not in self.target_2D.extensions:
             self.log.warning(f"Variance extension {var_ext_name} not found, setting variance equal to photon noise")
             if do_patch:
@@ -473,13 +477,6 @@ class SpectralExtractionAlg:
         # optimal extraction loop
         loop = 0
         while loop < max_iter:
-            # plot spectrum
-            if do_plot:
-                plt.figure(figsize=(20,4))
-                plt.plot(f)
-                plt.plot(v)
-                plt.show()
-
             # profile
             if not static_profile:
                 P = self.spatial_profile(D, 
