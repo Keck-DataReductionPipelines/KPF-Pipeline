@@ -58,7 +58,7 @@ build_docker_run_cmd() {
     local memory_limit_gb=$(calculate_memory_limit)
     
     # Add memory optimization flags
-    local optimized_cmd="${base_cmd} --memory=${memory_limit_gb}G --memory-swap=${memory_limit_gb}G --oom-kill-disable"
+    local optimized_cmd="${base_cmd} --memory=${memory_limit_gb}G --memory-swap=${memory_limit_gb}G"
     
     echo "$optimized_cmd"
 }
@@ -75,7 +75,7 @@ launch_docker_container() {
     echo "Launching container '$container_name' with ${memory_limit_gb}GB RAM allocation (swap disabled)"
     
     # Build the full command
-    local full_cmd="docker run -d --name $container_name $base_args --memory=${memory_limit_gb}G --memory-swap=${memory_limit_gb}G --oom-kill-disable $image $command"
+    local full_cmd="docker run -d --name $container_name $base_args --memory=${memory_limit_gb}G --memory-swap=${memory_limit_gb}G $image $command"
     
     echo "Executing: $full_cmd"
     eval "$full_cmd"

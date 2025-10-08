@@ -15,12 +15,12 @@ def get_docker_memory_flags():
     Get memory optimization flags for Docker run commands.
     
     Returns:
-        str: Memory optimization flags (e.g., "--memory=200G --memory-swap=200G --oom-kill-disable")
+        str: Memory optimization flags (e.g., "--memory=200G --memory-swap=200G")
     """
     # Allow override via environment variable
     if 'KPFPIPE_MEMORY_LIMIT_GB' in os.environ:
         memory_limit = os.environ['KPFPIPE_MEMORY_LIMIT_GB']
-        return f"--memory={memory_limit}G --memory-swap={memory_limit}G --oom-kill-disable"
+        return f"--memory={memory_limit}G --memory-swap={memory_limit}G"
     
     # Get system memory info
     try:
@@ -39,7 +39,7 @@ def get_docker_memory_flags():
         
         if total_kb is None or available_kb is None:
             # Fallback to default
-            return "--memory=4G --memory-swap=4G --oom-kill-disable"
+            return "--memory=4G --memory-swap=4G"
         
         # Convert to GB
         total_gb = total_kb // (1024 * 1024)
@@ -62,12 +62,12 @@ def get_docker_memory_flags():
         # Minimum 4GB for basic operations
         suggested_ram = max(suggested_ram, 4)
         
-        return f"--memory={suggested_ram}G --memory-swap={suggested_ram}G --oom-kill-disable"
+        return f"--memory={suggested_ram}G --memory-swap={suggested_ram}G"
         
     except Exception as e:
         # Fallback to default on any error
         print(f"Warning: Could not determine optimal memory allocation: {e}", file=sys.stderr)
-        return "--memory=4G --memory-swap=4G --oom-kill-disable"
+        return "--memory=4G --memory-swap=4G"
 
 
 def build_docker_run_cmd(base_cmd, memory_flags=None):

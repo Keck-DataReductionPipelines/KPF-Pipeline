@@ -167,7 +167,7 @@ def test_master_stacks():
     args = [(file_path, master_2d_recipe, master_2d_config, masters_test_date) for file_path in fits_files]
     
     # Run 2D processing (can use multiprocessing for speed)
-    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=10) as executor:
         list(executor.map(run_one_2d, args))
     
     print("Step 1 complete: All L0 files processed to 2D files")
