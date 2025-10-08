@@ -25,7 +25,6 @@ run_docker() {
             --network=host \
             --memory="${memory_limit_gb}G" \
             --memory-swap="${memory_limit_gb}G" \
-            --oom-kill-disable \
             -e KPFPIPE_PORT="$port" \
             -e DBPORT=6125 \
             -e DBNAME=kpfopsdb \
@@ -48,7 +47,6 @@ run_docker() {
             --network=host \
             --memory="${memory_limit_gb}G" \
             --memory-swap="${memory_limit_gb}G" \
-            --oom-kill-disable \
             -e DBPORT=6125 \
             -e DBNAME=kpfopsdb \
             -e DBUSER="${KPFPIPE_DB_USER:-}" \
