@@ -290,7 +290,7 @@ my $script = "#! /bin/bash\n" .
              "\n" .
              "# Run recipe\n" .
              "make init\n" .
-             "kpf --ncpus=16 --reprocess /data/L0/${procdate}/ -r $recipe_2d -c $config \n" .
+             "kpf --ncpus=100 --reprocess /data/L0/${procdate}/ -r $recipe_2d -c $config \n" .
              "kpf --date ${procdate} -r $recipe_stacks -c $config \n" .
              "\n" .
              "# Post-processing (logs now live in /data/logs/${procdate}, not /code)\n" .

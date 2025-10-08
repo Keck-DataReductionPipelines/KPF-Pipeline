@@ -242,7 +242,8 @@ def main():
         frame_config.set('DEFAULT', 'no_event_event', 'exit')
         frame_config.set('DEFAULT', 'no_event_wait_time', '5')
         # For downstream logic, treat as watch mode
-        args.watch = True
+        if args.reprocess:
+            args.watch = True
     elif args.watch:
         frame_config.set('DEFAULT', 'event_timeout', '1200')
         frame_config.set('DEFAULT', 'no_event_event', 'Event("wait", None)')
