@@ -178,7 +178,8 @@ if (! ($procdate =~ /^\d\d\d\d\d\d\d\d$/)) {
 my $dockercmdscript = 'jobs/kpfmasterscmd_l0';                     # Auto-generates this shell script with multiple commands.
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
 
-my $recipe = '/code/KPF-Pipeline/recipes/kpf_masters_drp.recipe';
+my $recipe_2d = '/code/KPF-Pipeline/recipes/kpf_masters_2D.recipe';
+my $recipe_stacks = '/code/KPF-Pipeline/recipes/kpf_masters_stacks.recipe';
 my $config = '/code/KPF-Pipeline/configs/kpf_masters_drp.cfg';
 
 my $configenvar = $ENV{KPFCRONJOB_CONFIG_L0};
@@ -242,7 +243,8 @@ print "version=$version\n";
 print "procdate=$procdate\n";
 print "dockercmdscript=$dockercmdscript\n";
 print "containerimage=$containerimage\n";
-print "recipe=$recipe\n";
+print "recipe_2d=$recipe_2d\n";
+print "recipe_stacks=$recipe_stacks\n";
 print "config=$config\n";
 print "pythonscript=$pythonscript\n";
 print "pylogfile=$pylogfile\n";
@@ -274,45 +276,86 @@ chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
 my $script = "#! /bin/bash\n" .
              "source $dbenvfileinside\n" .
-             "make init\n" .
-             "export PYTHONUNBUFFERED=1\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
+             "\n" .
+             "# Safety checks: RO inputs / writable outputs\n" .
+             "test -r /data/L0/${procdate} || { echo 'ERROR: /data/L0/${procdate} not mounted'; exit 2; }\n" .
+             "mkdir -p /data/logs/${procdate} /data/masters/pool /data/2D/${procdate} /data/L1/${procdate} /data/L2/${procdate}\n" .
+             "\n" .
+             "# Clean per-date outputs/scratch in sandbox areas (NOT the RO L0s)\n" .
              "rm -rf /data/masters/${procdate}\n" .
              "rm -rf /data/masters/wlpixelfiles/*kpf_${procdate}*\n" .
-             "rm -rf /data/analysis/${procdate}\n" .
+             "rm -rf /data/analysis/${procdate} 2>/dev/null || true\n" .
              "rm -rf /data/masters/pool/kpf_${procdate}*\n" .
-             "find /data/masters/pool/kpf_????????_master_*fits -mtime +7 -exec rm {} +\n" .
-             "kpf -r $recipe  -c $config --date ${procdate}\n" .
-             "python $pythonscript /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits >& ${pylogfile}\n" .
-             "python $pythonscript2 /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp.fits >& ${pylogfile2}\n" .
-             "rm /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits\n" .
-             "python $pythonscript3 $procdate >& ${pylogfile3}\n" .
+             "\n" .
+             "# Run recipe\n" .
+             "make init\n" .
+             "kpf --ncpus=16 --reprocess /data/L0/${procdate}/ -r $recipe_2d -c $config \n" .
+             "kpf --date ${procdate} -r $recipe_stacks -c $config \n" .
+             "\n" .
+             "# Post-processing (logs now live in /data/logs/${procdate}, not /code)\n" .
+             "python $pythonscript /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits \\\n" .
+             "  >& /data/logs/${procdate}/$pylogfile\n" .
+             "python $pythonscript2 /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits /data/masters/pool/kpf_${procdate}_master_flat.fits /data/masters/pool/kpf_${procdate}_smooth_lamp.fits \\\n" .
+             "  >& /data/logs/${procdate}/$pylogfile2\n" .
+             "rm -f /data/masters/pool/kpf_${procdate}_smooth_lamp_orig.fits\n" .
+             "python $pythonscript3 $procdate >& /data/logs/${procdate}/$pylogfile3\n" .
+             "\n" .
              "mkdir -p /masters/${procdate}\n" .
-             "sleep 3\n" .
-             "cp -p /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
-             "chown root:root /masters/${procdate}/*\n" .
-             "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log\n" .
-             "python $pythonscript4 $procdate >& ${pylogfile4}\n" .
-             "cp -p /code/KPF-Pipeline/${pylogfile} /masters/${procdate}\n" .
-             "cp -p /code/KPF-Pipeline/${pylogfile2} /masters/${procdate}\n" .
-             "cp -p /code/KPF-Pipeline/${pylogfile3} /masters/${procdate}\n" .
-             "cp -p /code/KPF-Pipeline/${pylogfile4} /masters/${procdate}\n" .
-             "rm /code/KPF-Pipeline/${pylogfile}\n" .
-             "rm /code/KPF-Pipeline/${pylogfile2}\n" .
-             "rm /code/KPF-Pipeline/${pylogfile3}\n" .
-             "rm /code/KPF-Pipeline/${pylogfile4}\n" .
+             "sleep 1\n" .
+             "cp -pv /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
+             "chown root:root /masters/${procdate}/* || true\n" .
+             "cp -pv /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log || true\n" .
+             "python $pythonscript4 $procdate >& /data/logs/${procdate}/$pylogfile4\n" .
+             "cp -pv /data/logs/${procdate}/$pylogfile  /masters/${procdate}\n" .
+             "cp -pv /data/logs/${procdate}/$pylogfile2 /masters/${procdate}\n" .
+             "cp -pv /data/logs/${procdate}/$pylogfile3 /masters/${procdate}\n" .
+             "cp -pv /data/logs/${procdate}/$pylogfile4 /masters/${procdate}\n" .
              "exit\n";
+
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
 
 `mkdir -p $sandbox/2D/$procdate`;
 
+# Ensure sandbox subdirs exist on the host
+`mkdir -p $sandbox/2D/$procdate`;
+`mkdir -p $sandbox/L1/$procdate`;
+`mkdir -p $sandbox/L2/$procdate`;
+`mkdir -p $sandbox/logs/$procdate`;
+`mkdir -p $sandbox/masters/pool`;
+
+# Get memory optimization flags
+my $memory_flags = `$codedir/scripts/get_docker_memory_flags.sh`;
+chomp($memory_flags);
+
 my $dockerruncmd = "docker run -d --name $containername " .
-                   "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters -v /data/kpf:/data_kpf " .
+                   # Memory optimization
+                   "$memory_flags " .
+                   # Code
+                   "-v ${codedir}:/code/KPF-Pipeline " .
+                   # Map sandbox subtrees to the expected /data layout (writable)
+                   "-v ${sandbox}:/data/ " .
+                   # Mount the PRIMARY L0s read-only exactly where DRP expects them
+                   "-v /data/kpf/L0/${procdate}:/data/L0/${procdate}:ro " .
+                   # Masters publication area
+                   "-v ${mastersdir}:/masters " .
+                   # Fast scratch (optional but recommended)
+                   "--mount type=tmpfs,dst=/scratch,tmpfs-size=32g " .
+                   # Networking and DB
                    "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 -e DBPASS=\"$dbpass\" " .
                    "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver -e TSDBPASS=\"$tsdbpass\" " .
+                   # Deterministic math threads
+                   "-e OMP_NUM_THREADS=1 -e MKL_NUM_THREADS=1 -e OPENBLAS_NUM_THREADS=1 -e NUMEXPR_NUM_THREADS=1 " .
                    "$containerimage bash ./$dockercmdscript";
+
+
+# my $dockerruncmd = "docker run -d --name $containername " .
+#                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters -v /data/kpf:/data_kpf " .
+#                    "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 -e DBPASS=\"$dbpass\" " .
+#                    "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver -e TSDBPASS=\"$tsdbpass\" " .
+#                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;
 print "Output from dockerruncmd: $opdockerruncmd\n";

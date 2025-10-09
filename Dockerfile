@@ -5,7 +5,7 @@ FROM python:3.11-bullseye
 ENV KPFPIPE_TEST_DATA=/testdata \
     KPFPIPE_DATA=/data \
     KPFPIPE_TEST_OUTPUTS=/outputs \
-    PYTHONPATH=/code/KPF-Pipeline \
+    PYTHONPATH=/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src \
     PYTHONHASHSEED=0 \
     PYTHONUNBUFFERED=1 \
     MKL_NUM_THREADS=1 \
