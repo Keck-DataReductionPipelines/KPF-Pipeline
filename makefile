@@ -69,6 +69,7 @@ test_env:
 		--tag $(CI_IMAGE):$(TAG) .
 	docker run $(DOCKER_RUN_TTY) --rm \
 		--network=host \
+		$$(./scripts/get_docker_memory_flags.sh) \
 		-v "$${PWD}:/code/KPF-Pipeline" \
 		-v "$${CI_DATA_DIR}:/data" \
 		-v "$${CI_DATA_DIR}/masters:/masters" \
