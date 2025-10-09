@@ -222,7 +222,13 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 
 # Launch container with root to copy products to permanent location.
 
+# Get memory optimization flags
+my $memory_flags = `$codedir/scripts/get_docker_memory_flags.sh`;
+chomp($memory_flags);
+
 my $dockerruncmd = "docker run -d --name $containername " .
+                   # Memory optimization
+                   "$memory_flags " .
                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
                    "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
                    "$containerimage bash ./$dockercmdscript";

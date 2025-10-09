@@ -58,7 +58,7 @@ class KPFPipeMastersLevel0(KPFPipeCronBase):
             ln -fs /reference_fits /data/reference_fits;
     
             # remove old masters from the pool
-            find /data/masters/pool/kpf_????????_master_*fits -mtime +7 -exec rm {{}} + >> {self.stdout_log} 2>&1;
+            rm -rf /data/masters/pool/kpf_${self.procdate}* >> {self.stdout_log} 2>&1;
     
             # run the pipeline
             kpf -r {self.recipe} -c {self.config} --date {self.procdate} >> {self.stdout_log} 2>&1; 
@@ -85,8 +85,17 @@ class KPFPipeMastersLevel0(KPFPipeCronBase):
         """
         super().define_docker_cmd()
 
+        # Get memory optimization flags
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+        from docker_memory_utils import get_docker_memory_flags
+        
+        memory_flags = get_docker_memory_flags()
+        
         self.dockerruncmd = (
             f"docker run -d --name {self.containername} "
+            f"{memory_flags} "
             f"-v {self.kpfdrp_dir}:/code/KPF-Pipeline "
             f"-v {self.masters_perm_dir}:/masters "
             f"-v {self.data_workspace}:/data --network=host "

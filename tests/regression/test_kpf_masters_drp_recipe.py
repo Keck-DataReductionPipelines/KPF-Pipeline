@@ -1,7 +1,11 @@
 # test_kpf_masters_drp_recipe.py
 
 """
-Regression test for the kpf_masters_drp_recipe on a limited data set.
+Regression test for the kpf_masters_2D.recipe and kpf_masters_stacks.recipe on a limited data set.
+
+This test follows the new two-step approach:
+1. Run kpf_masters_2D.recipe on each L0 file to generate 2D files
+2. Run kpf_masters_stacks.recipe to generate master calibration files
 
 Input data are in /data/KPF-Pipeline-TestData/kpf/L0/20250307.
 There are 32 input L0 FITS files, listed as follows:
@@ -62,7 +66,11 @@ export DBPASS="?????????????"
 cd /code/KPF-Pipeline/
 pytest -s tests/regression/test_kpf_masters_drp_recipe.py
 
-The -s option is to run pytest and capture stdout from the logger and print statements in the code...
+The -s option is to run pytest and capture stdout from the logger and print statements in the code.
+
+The test now follows a two-step process:
+1. Processes all L0 files to 2D files using kpf_masters_2D.recipe (with multiprocessing)
+2. Generates master calibration files using kpf_masters_stacks.recipe
 
 """
 
@@ -71,27 +79,53 @@ from kpfpipe.pipelines.kpf_parse_ast import RecipeError
 import os
 from astropy.io import fits
 import numpy as np
+import concurrent.futures
+from glob import glob
 
 
 masters_test_date = '20250307'
 l0dir = '/data/L0/' + masters_test_date
 l2ddir = '/data/2D/' + masters_test_date
 pooldir = '/masters/pool'
-master_stacks_recipe = open('recipes/kpf_masters_drp.recipe', 'r').read()
+
+# Load the new recipes
+master_2d_recipe = open('recipes/kpf_masters_2D.recipe', 'r').read()
+master_stacks_recipe = open('recipes/kpf_masters_stacks.recipe', 'r').read()
+
+# Config files
+master_2d_config_orig = 'configs/kpf_masters_drp.cfg'
+master_2d_config = 'configs/kpf_masters_2D_regression_test.cfg'
 master_stacks_config_orig = 'configs/kpf_masters_drp.cfg'
-master_stacks_config = 'configs/kpf_masters_drp_regression_test.cfg'
+master_stacks_config = 'configs/kpf_masters_stacks_regression_test.cfg'
 
 
-# A special config file needs to be created for resetting input_dir,
-# in order to read cached set of 32 input L0 files.
+# Create special config files for regression test
+# Update input_dir paths to use test data
 
+# For 2D recipe config
+with open(master_2d_config_orig, 'r') as file:
+    file_content = file.read()
+
+modified_content = file_content.replace('input_dir = /data/L0', 'input_dir = /data/L0')
+
+with open(master_2d_config, 'w') as file:
+    file.write(modified_content)
+
+# For stacks recipe config  
 with open(master_stacks_config_orig, 'r') as file:
     file_content = file.read()
 
-modified_content = file_content.replace('input_dir = /data_kpf/L0', 'input_dir = /data/L0')
+modified_content = file_content.replace('input_dir = /data/L0', 'input_dir = /data/L0')
 
 with open(master_stacks_config, 'w') as file:
-        file.write(modified_content)
+    file.write(modified_content)
+
+
+# Must be at module level for multiprocessing
+def run_one_2d(args):
+    """Run kpf_masters_2D.recipe on a single file"""
+    file_path, master_2d_recipe, master_2d_config, masters_test_date = args
+    recipe_test(master_2d_recipe, master_2d_config, date_dir=masters_test_date, file_path=file_path)
 
 
 def computed_unclipped_statistics(input_filename,hdu_index):
@@ -118,10 +152,30 @@ def test_master_stacks():
     print("\n")
     print("l0dir =",l0dir)
     os.system(f'ls {l0dir}')
+    
+    # Clean up output directories
     os.system(f'rm -vrf {l2ddir}')
     os.system(f'mkdir -vp {l2ddir}')
     os.system(f'rm -vf {pooldir}/*')
+    
+    # Step 1: Run kpf_masters_2D.recipe on each L0 file
+    print("Step 1: Processing L0 files to 2D files...")
+    fits_files = sorted(glob(os.path.join(l0dir, "*.fits")))
+    print(f"Found {len(fits_files)} L0 files to process")
+    
+    # Prepare args for multiprocessing
+    args = [(file_path, master_2d_recipe, master_2d_config, masters_test_date) for file_path in fits_files]
+    
+    # Run 2D processing (can use multiprocessing for speed)
+    with concurrent.futures.ProcessPoolExecutor(max_workers=10) as executor:
+        list(executor.map(run_one_2d, args))
+    
+    print("Step 1 complete: All L0 files processed to 2D files")
+    
+    # Step 2: Run kpf_masters_stacks.recipe to generate master files
+    print("Step 2: Generating master calibration files...")
     recipe_test(master_stacks_recipe, master_stacks_config, date_dir=masters_test_date)
+    print("Step 2 complete: Master files generated")
 
     master_bias_filename = pooldir + '/kpf_20250307_master_bias_autocal-bias.fits'
     master_dark_filename = pooldir + '/kpf_20250307_master_dark_autocal-dark.fits'
