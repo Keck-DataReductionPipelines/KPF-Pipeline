@@ -529,11 +529,11 @@ def add_headers_L0_read_noise(L0, logger=None):
                         if 'RED_AMP1' in myL0.read_noise_overscan:
                             L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RED_AMP1'],5), 'Read noise for RED_AMP1 [e-]')
                         if 'RED_AMP2' in myL0.read_noise_overscan:
-                            L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RED_AMP2'],5), 'Read noise for RED_AMP2 [e-]')
+                            L0.header['PRIMARY']['RNRED2'] = (round(myL0.read_noise_overscan['RED_AMP2'],5), 'Read noise for RED_AMP2 [e-]')
                         if 'RED_AMP3' in myL0.read_noise_overscan:
-                            L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RED_AMP3'],5), 'Read noise for RED_AMP3 [e-]')
+                            L0.header['PRIMARY']['RNRED3'] = (round(myL0.read_noise_overscan['RED_AMP3'],5), 'Read noise for RED_AMP3 [e-]')
                         if 'RED_AMP4' in myL0.read_noise_overscan:
-                            L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RED_AMP4'],5), 'Read noise for RED_AMP4 [e-]')
+                            L0.header['PRIMARY']['RNRED4'] = (round(myL0.read_noise_overscan['RED_AMP4'],5), 'Read noise for RED_AMP4 [e-]')
                     except Exception as e:
                         logger.error(f"Problem with L0 read noise measurements Red: {e}\n{traceback.format_exc()}")
         else:
