@@ -507,31 +507,37 @@ def add_headers_L0_read_noise(L0, logger=None):
     # Use the AnalyzeL0 class measure read noise
     try:
         myL0 = AnalyzeL0(L0, logger=logger)
-        for chip in chips:
-            if chip == 'green':
-                try:
-                    if 'GREEN_AMP1' in myL0.read_noise_overscan:
-                        L0.header['PRIMARY']['RNGREEN1'] = (round(myL0.read_noise_overscan['RNGREEN1'],5), 'Read noise for GREEN_AMP1 [e-]')
-                    if 'GREEN_AMP2' in myL0.read_noise_overscan:
-                        L0.header['PRIMARY']['RNGREEN2'] = (round(myL0.read_noise_overscan['RNGREEN2'],5), 'Read noise for GREEN_AMP2 [e-]')
-                    if 'GREEN_AMP3' in myL0.read_noise_overscan:
-                        L0.header['PRIMARY']['RNGREEN3'] = (round(myL0.read_noise_overscan['RNGREEN3'],5), 'Read noise for GREEN_AMP3 [e-]')
-                    if 'GREEN_AMP4' in myL0.read_noise_overscan:
-                        L0.header['PRIMARY']['RNGREEN4'] = (round(myL0.read_noise_overscan['RNGREEN4'],5), 'Read noise for GREEN_AMP4 [e-]')
-                except Exception as e:
-                    logger.error(f"Problem with L0 read noise measurements Green: {e}\n{traceback.format_exc()}")
-            if chip == 'red':
-                try:
-                    if 'RED_AMP1' in myL0.read_noise_overscan:
-                        L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RNRED1'],5), 'Read noise for RED_AMP1 [e-]')
-                    if 'RED_AMP2' in myL0.read_noise_overscan:
-                        L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RNRED2'],5), 'Read noise for RED_AMP2 [e-]')
-                    if 'RED_AMP3' in myL0.read_noise_overscan:
-                        L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RNRED3'],5), 'Read noise for RED_AMP3 [e-]')
-                    if 'RED_AMP4' in myL0.read_noise_overscan:
-                        L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RNRED4'],5), 'Read noise for RED_AMP4 [e-]')
-                except Exception as e:
-                    logger.error(f"Problem with L0 read noise measurements Red: {e}\n{traceback.format_exc()}")
+        if hasattr(myL0, 'read_noise_overscan'):
+            print()
+            print(myL0.read_noise_overscan)
+            print()
+            for chip in chips:
+                if chip == 'green':
+                    try:
+                        if 'GREEN_AMP1' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNGREEN1'] = (round(myL0.read_noise_overscan['GREEN_AMP1'],5), 'Read noise for GREEN_AMP1 [e-]')
+                        if 'GREEN_AMP2' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNGREEN2'] = (round(myL0.read_noise_overscan['GREEN_AMP2'],5), 'Read noise for GREEN_AMP2 [e-]')
+                        if 'GREEN_AMP3' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNGREEN3'] = (round(myL0.read_noise_overscan['GREEN_AMP3'],5), 'Read noise for GREEN_AMP3 [e-]')
+                        if 'GREEN_AMP4' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNGREEN4'] = (round(myL0.read_noise_overscan['GREEN_AMP4'],5), 'Read noise for GREEN_AMP4 [e-]')
+                    except Exception as e:
+                        logger.error(f"Problem with L0 read noise measurements Green: {e}\n{traceback.format_exc()}")
+                if chip == 'red':
+                    try:
+                        if 'RED_AMP1' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RED_AMP1'],5), 'Read noise for RED_AMP1 [e-]')
+                        if 'RED_AMP2' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RED_AMP2'],5), 'Read noise for RED_AMP2 [e-]')
+                        if 'RED_AMP3' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RED_AMP3'],5), 'Read noise for RED_AMP3 [e-]')
+                        if 'RED_AMP4' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RED_AMP4'],5), 'Read noise for RED_AMP4 [e-]')
+                    except Exception as e:
+                        logger.error(f"Problem with L0 read noise measurements Red: {e}\n{traceback.format_exc()}")
+        else:
+        	logger.info(f"Read noise keywords not computed (possbily no data in L0 extensions).")
     except:
         logger.error(f"Problem with L0 read noise measurements: {e}\n{traceback.format_exc()}")
 
