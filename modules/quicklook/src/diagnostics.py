@@ -508,9 +508,6 @@ def add_headers_L0_read_noise(L0, logger=None):
     try:
         myL0 = AnalyzeL0(L0, logger=logger)
         if hasattr(myL0, 'read_noise_overscan'):
-            print()
-            print(myL0.read_noise_overscan)
-            print()
             for chip in chips:
                 if chip == 'green':
                     try:
