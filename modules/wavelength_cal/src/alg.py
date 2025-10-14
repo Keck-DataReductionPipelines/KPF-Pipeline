@@ -18,6 +18,25 @@ import modules.Utils.utils
 import warnings
 from numpy.polynomial.polynomial import Polynomial
 
+def profile_timing(method):
+    """Simple timing decorator that logs runtime if self.profile_timing is True."""
+    def wrapper(self, *args, **kwargs):
+        if getattr(self, 'profile_timing', False):
+            t0 = time.perf_counter()
+            result = method(self, *args, **kwargs)
+            dt_ms = (time.perf_counter() - t0) * 1000.0
+            msg = f"[PROFILE] {self.__class__.__name__}.{method.__name__} took {dt_ms:.2f} ms"
+            if getattr(self, 'logger', None) is not None:
+                try:
+                    self.logger.info(msg)
+                except Exception:
+                    print(msg)
+            else:
+                print(msg)
+            return result
+        return method(self, *args, **kwargs)
+    return wrapper
+
 class WaveCalibration:
     """
     This module defines 'WaveCalibration' and methods to perform the 
@@ -69,7 +88,10 @@ class WaveCalibration:
         self.fit_iterations = configpull.get_config_value('fit_iterations',5)
         self.logger = logger
         self.etalon_mask_in = configpull.get_config_value('master_etalon_file',None)
+        # Enable/disable lightweight timing logs via config
+        self.profile_timing = configpull.get_config_value('profile_timing', True)
  
+    @profile_timing
     def run_wavelength_cal(
         self, calflux, rough_wls=None, our_wavelength_solution_for_order=None,
         peak_wavelengths_ang=None, lfc_allowed_wls=None,input_filename=None):
@@ -235,6 +257,7 @@ class WaveCalibration:
 
         return mask, new_peaks
 
+    @profile_timing
     def fit_many_orders(
         self, cal_flux, order_list, rough_wls=None, comb_lines_angstrom=None,
         expected_peak_locs=None,peak_wavelengths_ang=None, our_wavelength_solution_for_order=None, plt_path=None, print_update=False):
@@ -291,6 +314,7 @@ class WaveCalibration:
 
         # Iterate over orders
         for order_num in order_list:
+            t_order_start = time.perf_counter() if self.profile_timing else None
             if print_update:
                 print('\nRunning order # {}'.format(order_num))
 
@@ -358,10 +382,15 @@ class WaveCalibration:
                         continue
 
                 try:
+                    t_sub = time.perf_counter() if self.profile_timing else None
                     fitted_peak_pixels, detected_peak_pixels, \
                         detected_peak_heights, gauss_coeffs, lines_dict = self.find_peaks_in_order(
                         order_flux, plot_path=order_plt_path
                     )
+                    if self.profile_timing:
+                        dt_ms = (time.perf_counter() - t_sub) * 1000.0
+                        msg = f"[PROFILE] order {order_num}: find_peaks_in_order took {dt_ms:.2f} ms"
+                        (self.logger.info(msg) if self.logger else print(msg))
                     orderlet_dict[order_num]['lines'] = lines_dict
                     
                 except TypeError as e:
@@ -376,22 +405,32 @@ class WaveCalibration:
                     continue
 
                 if self.clip_peaks_toggle:
+                    t_sub = time.perf_counter() if self.profile_timing else None
                     good_peak_idx = self.clip_peaks(
                         order_flux, fitted_peak_pixels, detected_peak_pixels,
                         gauss_coeffs, detected_peak_heights, 
                         clip_below_median=self.clip_below_median,
                         plot_path=order_plt_path, print_update=print_update
                     )
+                    if self.profile_timing:
+                        dt_ms = (time.perf_counter() - t_sub) * 1000.0
+                        msg = f"[PROFILE] order {order_num}: clip_peaks took {dt_ms:.2f} ms"
+                        (self.logger.info(msg) if self.logger else print(msg))
                 else:
                     good_peak_idx = np.arange(len(detected_peak_pixels))
 
                 if self.cal_type == 'LFC':
                     try:
+                        t_sub = time.perf_counter() if self.profile_timing else None
                         wls, _, good_peak_idx = self.mode_match(
                             order_flux, fitted_peak_pixels, good_peak_idx, 
                             rough_wls_order, comb_lines_angstrom, 
                             print_update=print_update, plot_path=order_plt_path
                         )
+                        if self.profile_timing:
+                            dt_ms = (time.perf_counter() - t_sub) * 1000.0
+                            msg = f"[PROFILE] order {order_num}: mode_match took {dt_ms:.2f} ms"
+                            (self.logger.info(msg) if self.logger else print(msg))
                     except:
                         poly_soln_final_array[order_num,:] = rough_wls_order
                         wavelengths_and_pixels[order_num] = {
@@ -455,10 +494,15 @@ class WaveCalibration:
                     np.arange(1, len(line_pixels_expected)) if 
                     line_pixels_expected[i] != line_pixels_expected[i-1]
                 ])
+                t_sub = time.perf_counter() if self.profile_timing else None
                 wls, gauss_coeffs, lines_dict = self.line_match(
                     order_flux, line_wavelengths, line_pixels_expected, 
                     plot_toggle, order_plt_path
                 )
+                if self.profile_timing:
+                    dt_ms = (time.perf_counter() - t_sub) * 1000.0
+                    msg = f"[PROFILE] order {order_num}: line_match took {dt_ms:.2f} ms"
+                    (self.logger.info(msg) if self.logger else print(msg))
                 
                 orderlet_dict[order_num]['lines'] = lines_dict
                 
@@ -473,10 +517,15 @@ class WaveCalibration:
                     peak_heights = fitted_peak_pixels
 
                 # calculate the wavelength solution for the order
+                t_sub = time.perf_counter() if self.profile_timing else None
                 polynomial_wls, leg_out = self.fit_polynomial(
                     wls, rough_wls_order, peak_wavelengths_ang, order_list, n_pixels, fitted_peak_pixels, peak_heights=peak_heights,
                     plot_path=order_plt_path, fit_iterations=self.fit_iterations,
                     sigma_clip=self.sigma_clip)
+                if self.profile_timing:
+                    dt_ms = (time.perf_counter() - t_sub) * 1000.0
+                    msg = f"[PROFILE] order {order_num}: fit_polynomial took {dt_ms:.2f} ms"
+                    (self.logger.info(msg) if self.logger else print(msg))
                 poly_soln_final_array[order_num,:] = polynomial_wls
 
                 if plt_path is not None:
@@ -494,10 +543,15 @@ class WaveCalibration:
                     plt.close()
 
                 # compute various RV precision values for order
+                t_sub = time.perf_counter() if self.profile_timing else None
                 rel_precision, abs_precision = self.calculate_rv_precision(
                     fitted_peak_pixels, wls, leg_out, rough_wls_order, our_wavelength_solution_for_order, rough_wls_order, plot_path=order_plt_path, 
                     print_update=print_update
                 )
+                if self.profile_timing:
+                    dt_ms = (time.perf_counter() - t_sub) * 1000.0
+                    msg = f"[PROFILE] order {order_num}: calculate_rv_precision took {dt_ms:.2f} ms"
+                    (self.logger.info(msg) if self.logger else print(msg))
                 order_precisions.append(abs_precision)
                 num_detected_peaks.append(len(fitted_peak_pixels))
 
@@ -517,6 +571,11 @@ class WaveCalibration:
                 'known_wavelengths_vac':wls, 
                 'line_positions':fitted_peak_pixels
             }
+
+            if self.profile_timing and t_order_start is not None:
+                dt_ms = (time.perf_counter() - t_order_start) * 1000.0
+                msg = f"[PROFILE] order {order_num}: total time {dt_ms:.2f} ms"
+                (self.logger.info(msg) if self.logger else print(msg))
 
         # for lamps and LFC, we can compute absolute precision across all orders
         if self.cal_type != 'Etalon':
@@ -550,6 +609,7 @@ class WaveCalibration:
                 
         return order_list
 
+    @profile_timing
     def find_peaks_in_order(self, order_flux, plot_path=None):
         """
         Runs find_peaks on successive subsections of the order_flux lines and concatenates
@@ -651,6 +711,7 @@ class WaveCalibration:
                   
         return fitted_peak_pixels, detected_peak_pixels, detected_peak_heights, gauss_coeffs, lines_dict
 
+    @profile_timing
     def find_peaks(self, order_flux, peak_height_threshold=1.5):
         """
         Finds all order_flux peaks in an array. This runs scipy.signal.find_peaks 
@@ -913,6 +974,7 @@ class WaveCalibration:
 
         return good_peak_idx
     
+    @profile_timing
     def line_match(self, flux, linelist, line_pixels_expected, plot_toggle, savefig, gaussian_fit_width=10):
         """
         Given a linelist of known wavelengths of peaks and expected pixel locations
@@ -1047,6 +1109,7 @@ class WaveCalibration:
 
         return linelist, coefs, lines_dict
 
+    @profile_timing
     def mode_match(
         self, order_flux, fitted_peak_pixels, good_peak_idx, rough_wls_order, 
         comb_lines_angstrom, print_update=False, plot_path=None, start_check=True,
@@ -1459,6 +1522,7 @@ class WaveCalibration:
 
         return (popt, line_dict)
     
+    @profile_timing
     def fit_polynomial(self, wls, rough_wls_order, peak_wavelengths_ang, order_list, n_pixels, fitted_peak_pixels, fit_iterations=5, sigma_clip=2.1, peak_heights=None, plot_path=None):
         """
         Given precise wavelengths of detected LFC order_flux lines, fits a 
@@ -1574,6 +1638,7 @@ class WaveCalibration:
 
         return our_wavelength_solution_for_order, leg_out
 
+    @profile_timing
     def calculate_rv_precision(
         self, fitted_peak_pixels, wls, leg_out, rough_wls, our_wavelength_solution_for_order, rough_wls_order, 
         print_update=True, plot_path=None
@@ -1615,9 +1680,22 @@ class WaveCalibration:
         our_wavelength_solution_for_order = leg_out(np.arange(n_pixels))
         rel_residual = (our_wavelength_solution_for_order[rough_wls>0] -  rough_wls[rough_wls>0]) * scipy.constants.c /rough_wls[rough_wls>0]
         rel_precision_cm_s = 100 * np.std(rel_residual)/np.sqrt(len(rough_wls[rough_wls>0]))
+        mean_diff = np.mean(our_wavelength_solution_for_order[rough_wls>0] - rough_wls[rough_wls>0])
+        # Calculate wavelength difference per pixel (in Angstroms)
+        angstroms_per_pixel = np.mean(np.diff(our_wavelength_solution_for_order[rough_wls>0]))
+        mean_diff_pixels = mean_diff / angstroms_per_pixel
+        
+        # Calculate velocity per pixel: v = c * Δλ/λ
+        # where Δλ is wavelength difference per pixel and λ is wavelength (both in Angstroms)
+        velocity_per_pixel = scipy.constants.c * angstroms_per_pixel / our_wavelength_solution_for_order[rough_wls>0]
+        mean_velocity_per_pixel = -np.mean(velocity_per_pixel)  # Take mean across the order
+        
         if print_update:
             print('Absolute standard error (this order): {:.2f} cm/s'.format(abs_precision_cm_s))
             print('Relative standard error (this order): {:.2f} cm/s'.format(rel_precision_cm_s))
+            print('Mean difference between rough and our wavelength solution: {:.6f} Angstroms'.format(mean_diff))
+            print('Mean difference between rough and our wavelength solution: {:.6f} pixels'.format(mean_diff_pixels))
+            print('Mean velocity per pixel: {:.2f} m/s'.format(mean_velocity_per_pixel))
         
         if plot_path is not None:
             fig, ax = plt.subplots(2,1) #figsize=(20,16), tight_layout=True
