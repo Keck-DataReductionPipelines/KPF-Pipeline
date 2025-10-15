@@ -342,7 +342,8 @@ class AnalyzeL1:
                     lines[o, oo] = len(peaks)
                 else:
                     lines[o, oo] = 0
-    
+        print(lines)
+        
         # Determine which orders are 'good' (i.e., above min_lines)
         lines_above_threshold = lines > min_lines
     
@@ -358,7 +359,7 @@ class AnalyzeL1:
             SCI_l = None
         else:
             SCI_l = min(last_indices[0], last_indices[1], last_indices[2])
-        SCI_fl = [SCI_f, SCI_l]
+        SCI_fl = [int(SCI_f), int(SCI_l)]
         # CAL Flux is the 4th column
         if first_indices[3] == None:
             CAL_f = None
@@ -368,7 +369,7 @@ class AnalyzeL1:
             CAL_l = None
         else:
             CAL_l = last_indices[3]
-        CAL_fl = [CAL_f, CAL_l]
+        CAL_fl = [int(CAL_f), int(CAL_l)]
         # SKY Flux is the 5th column
         if first_indices[4] == None:
             SKY_f = None
@@ -378,7 +379,7 @@ class AnalyzeL1:
             SKY_l = None
         else:
             SKY_l = last_indices[4]
-        SKY_fl = [SKY_f, SKY_l]
+        SKY_fl = [int(SKY_f), int(SKY_l)]
     
         return (SCI_fl, CAL_fl, SKY_fl)
 
