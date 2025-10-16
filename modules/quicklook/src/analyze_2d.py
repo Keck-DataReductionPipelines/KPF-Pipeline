@@ -690,7 +690,8 @@ class Analyze2D:
             if bias_read:
                 for extension in ['GREEN_CCD', 'RED_CCD']:
                     if extension in D2_master_bias.extensions:
-                        self.D2[extension] -= D2_master_bias[extension]
+                        if extension == chip.upper() + '_CCD':
+                            self.D2[extension] -= D2_master_bias[extension]
             else:
                 subtract_master_bias = False
         
@@ -716,7 +717,8 @@ class Analyze2D:
             if dark_read:
                 for extension in ['GREEN_CCD', 'RED_CCD']:
                     if extension in D2_master_dark.extensions:
-                        self.D2[extension] -= D2_master_dark[extension] * float(self.exptime)
+                        if extension == chip.upper() + '_CCD':
+                            self.D2[extension] -= D2_master_dark[extension] * float(self.exptime)
             else:
                 subtract_master_dark = False
         
