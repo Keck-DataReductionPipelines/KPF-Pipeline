@@ -730,19 +730,29 @@ class Analyze2D:
                 CHIP = 'GREEN'
                 chip_title = 'Green'
                 if overplot_dark_current:
+                    self.measure_2D_dark_current(chip='green')
                     reg = self.green_dark_current_regions
                     if self.green_coll_pressure_torr != None:
                         coll_pressure_torr = self.green_coll_pressure_torr
+                    else:
+                        coll_pressure_torr = None
                     if self.green_ech_pressure_torr != None:
                         ech_pressure_torr = self.green_ech_pressure_torr
+                    else:
+                        ech_pressure_torr = None
                     if self.green_coll_current_a != None:
                         coll_current_a = self.green_coll_current_a
+                    else:
+                        coll_current_a = None
                     if self.green_ech_current_a != None:
                         ech_current_a = self.green_ech_current_a
+                    else:
+                        ech_current_a = None
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
                 if overplot_dark_current:
+                    self.measure_2D_dark_current(chip='red')
                     reg = self.red_dark_current_regions
                     if self.red_coll_pressure_torr != None:
                         coll_pressure_torr = self.red_coll_pressure_torr
