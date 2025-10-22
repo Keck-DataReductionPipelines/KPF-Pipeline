@@ -25,10 +25,8 @@ class KPFParse:
         self.datecode = ''
         if logger:
             self.logger = logger
-            #self.logger.debug('KPFParse class constructor')
         else:
             self.logger = None
-            #print('---->KPFParse class constructor')
 
 class HeaderParse:
     """
