@@ -466,7 +466,12 @@ DRPTAG    v2.5.2                                                                
 DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'                               Git commit hash version of KPF-Pipeline used to make L1 (in the time series database, DRPHSH is listed as DRPHSHL1 for L1 files)
 WLSFILE   /masters/20231230/kpf_20231230_master_WLS_autocal-lfc-all-eve_L1.fits    First wavelength interpolation reference for this L1 file
 WLSFILE2  /masters/20231231/kpf_20231231_master_WLS_autocal-lfc-all-morn_L1.fits   Second wavelength interpolation reference for this L1 file
-TRACFILE  /masters/20250522/kpf_20250522_order_mask.fits                           Order trace file used to extract this L1 file
+TRACFILE	 /masters/20250522/kpf_20250522_order_mask.fits                           Order trace file used to extract this L1 file
+TRACFGRN  /masters/20250522/kpf_20250522_master_flat_GREEN_CCD.csv                 Order trace file used to extract GREEN orders for this L1 file
+TRACFGRN  /masters/20250522/kpf_20250522_master_flat_RED_CCD.csv                   Order trace file used to extract RED orders for this L1 file
+EXTMETHK  'optimal'                                                                Extraction method used for SKY fibers
+EXTMETHS  'optimal'                                                                Extraction method used for SCI fibers
+EXTMETHC  'box'                                                                    Extraction method used for CAL fibers
 LAMPFILE  /masters/20250522/kpf_20250522_smooth_lamp.fits                          Smooth lamp file used to extract this L1 file
 MONOTWLS  1                                                                        QC: 1 = L1 wavelength solution is monotonic
 DATAPRL1  1                                                                        QC: 1 = L1 red and green data present
