@@ -1,7 +1,7 @@
 table_name,csv,label,file_level,extension,comment
 base,base.csv,Base Keywords,,,Base table
 l0,l0_primary.csv,L0 PRIMARY Header,L0,PRIMARY,L0 PRIMARY keywords
-l0,l0_primary_cal.csv,L0 PRIMARY Header,L0,PRIMARY,L0 PRIMARY keywords related to cal sources
+l0_cal,l0_primary_cal.csv,L0 PRIMARY Header,L0,PRIMARY,L0 PRIMARY keywords related to cal sources
 2d,d2_primary.csv,2D PRIMARY Header,2D,PRIMARY,2D PRIMARY keywords
 2d_flux,d2_primary_flux.csv,2D PRIMARY Header,2D,PRIMARY,2D PRIMARY keywords related to flux
 l1,l1_primary.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords
