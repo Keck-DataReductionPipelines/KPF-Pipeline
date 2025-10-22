@@ -203,6 +203,9 @@ def main():
             status = "" if result.returncode == 0 else " FAILED"
             logging.info(f"{datecode:<10}  {start_time.strftime('%Y-%m-%d %H:%M:%S')}  {end_time.strftime('%Y-%m-%d %H:%M:%S')}  {compute_time_str:<11}  {git_tag:<10}{status}")
             os.chmod(args.logfile, 0o666)
+            
+            if args.verbose:
+                print(f"Processing complete for {datecode}.")
 
 
 if __name__ == '__main__':
