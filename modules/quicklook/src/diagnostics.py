@@ -15,7 +15,6 @@ from modules.quicklook.src.analyze_2d import Analyze2D
 from modules.quicklook.src.analyze_guider import AnalyzeGuider
 from modules.quicklook.src.analyze_hk import AnalyzeHK
 from modules.quicklook.src.analyze_em import AnalyzeEM
-from modules.quicklook.src.analyze_l0 import AnalyzeL0
 from modules.quicklook.src.analyze_l1 import AnalyzeL1
 from modules.quicklook.src.analyze_l1 import uncertainty_median
 from modules.quicklook.src.analyze_l2 import AnalyzeL2
@@ -78,6 +77,15 @@ def execute_all_diagnostics(kpf_object, data_level, diagnostics_name, logger=Non
                     exit_code = 1
                 except Exception as e:
                     logger.error(f"Measuring read speed failed: {e}\n{traceback.format_exc()}")
+            # Read noise
+            if (diagnostics_name == 'all') or \
+               (diagnostics_name == 'add_headers_L0_read_noise'):
+                try:
+                    logger.info(f'{styled_text("Diagnostics:", style="Bold", color="Magenta")} {styled_text("add_headers_L0_read_noise", style="Bold", color="Blue")}')
+                    kpf_object = add_headers_L0_read_noise(kpf_object, logger=logger)
+                    exit_code = 1
+                except Exception as e:
+                    logger.error(f"Measuring read noise failed: {e}\n{traceback.format_exc()}")
             # Non-Gaussian read noise
             if (diagnostics_name == 'all') or \
                (diagnostics_name == 'add_headers_L0_nonGaussian_read_noise'):
@@ -446,15 +454,88 @@ def add_headers_L0_read_speed(L0, logger=None):
             if chip == 'green':
                 try:
                     L0.header['PRIMARY']['GREENTRT'] = (round(myL0.green_read_time, 3), 'GREEN chip total read time [seconds]')
+                    L0.header['PRIMARY']['READSPED'] = (myL0.read_speed, 'Categorization of read speed')
                 except Exception as e:
                     logger.error(f"Problem with determining read speed for Green CCD: {e}\n{traceback.format_exc()}")
             if chip == 'red':
                 try:
                     L0.header['PRIMARY']['REDTRT'] = (round(myL0.red_read_time, 3), 'RED chip total read time [seconds]')
+                    L0.header['PRIMARY']['READSPED'] = (myL0.read_speed, 'Categorization of read speed')
                 except Exception as e:
                     logger.error(f"Problem with determining read speed for Red CCD: {e}\n{traceback.format_exc()}")
     except:
         logger.error(f"Problem determining read speed: {e}\n{traceback.format_exc()}")
+
+    return L0
+
+
+def add_headers_L0_read_noise(L0, logger=None):
+    """
+    Adds keywords to the L0 object header for read noise per amplifier  
+    
+    Keywords:
+        RNGREEN1 - Read noise for GREEN_AMP1 [e-] (first amplifier region on Green CCD)
+        RNGREEN2 - Read noise for GREEN_AMP2 [e-] (second amplifier region on Green CCD)
+        RNGREEN3 - Read noise for GREEN_AMP3 [e-] (third amplifier region on Green CCD)
+        RNGREEN4 - Read noise for GREEN_AMP4 [e-] (fourth amplifier region on Green CCD)
+        RNRED1 - Read noise for RED_AMP1 [e-] (first amplifier region on Red CCD)
+        RNRED2 - Read noise for RED_AMP2 [e-] (second amplifier region on Red CCD)
+        RNRED3 - Read noise for RED_AMP3 [e-] (third amplifier region on Red CCD)
+        RNRED4 - Read noise for RED_AMP4 [e-] (fourth amplifier region on Red CCD)
+
+    Args:
+        L0 - a KPF L0 object 
+
+    Returns:
+        L0 - a L0 file with header keywords added
+    """
+
+    if logger == None:
+        logger = DummyLogger()
+
+    data_products = get_data_products_L0(L0)
+    chips = []
+    if 'Green' in data_products: chips.append('green')
+    if 'Red'   in data_products: chips.append('red')
+    
+    # Check that the input object is of the right type
+    if str(type(L0)) != "<class 'kpfpipe.models.level0.KPF0'>" or chips == []:
+        logger.info('Not a valid L0 or no Gree/Red CCD data.')
+        return L0
+        
+    # Use the AnalyzeL0 class measure read noise
+    try:
+        myL0 = AnalyzeL0(L0, logger=logger)
+        if hasattr(myL0, 'read_noise_overscan'):
+            for chip in chips:
+                if chip == 'green':
+                    try:
+                        if 'GREEN_AMP1' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNGREEN1'] = (round(myL0.read_noise_overscan['GREEN_AMP1'],5), 'Read noise for GREEN_AMP1 [e-]')
+                        if 'GREEN_AMP2' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNGREEN2'] = (round(myL0.read_noise_overscan['GREEN_AMP2'],5), 'Read noise for GREEN_AMP2 [e-]')
+                        if 'GREEN_AMP3' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNGREEN3'] = (round(myL0.read_noise_overscan['GREEN_AMP3'],5), 'Read noise for GREEN_AMP3 [e-]')
+                        if 'GREEN_AMP4' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNGREEN4'] = (round(myL0.read_noise_overscan['GREEN_AMP4'],5), 'Read noise for GREEN_AMP4 [e-]')
+                    except Exception as e:
+                        logger.error(f"Problem with L0 read noise measurements Green: {e}\n{traceback.format_exc()}")
+                if chip == 'red':
+                    try:
+                        if 'RED_AMP1' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNRED1'] = (round(myL0.read_noise_overscan['RED_AMP1'],5), 'Read noise for RED_AMP1 [e-]')
+                        if 'RED_AMP2' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNRED2'] = (round(myL0.read_noise_overscan['RED_AMP2'],5), 'Read noise for RED_AMP2 [e-]')
+                        if 'RED_AMP3' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNRED3'] = (round(myL0.read_noise_overscan['RED_AMP3'],5), 'Read noise for RED_AMP3 [e-]')
+                        if 'RED_AMP4' in myL0.read_noise_overscan:
+                            L0.header['PRIMARY']['RNRED4'] = (round(myL0.read_noise_overscan['RED_AMP4'],5), 'Read noise for RED_AMP4 [e-]')
+                    except Exception as e:
+                        logger.error(f"Problem with L0 read noise measurements Red: {e}\n{traceback.format_exc()}")
+        else:
+        	logger.info(f"Read noise keywords not computed (possbily no data in L0 extensions).")
+    except:
+        logger.error(f"Problem with L0 read noise measurements: {e}\n{traceback.format_exc()}")
 
     return L0
 
@@ -510,8 +591,6 @@ def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
                 try:
                     if 'GREEN_AMP1' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGGR1'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP1'],5), 'Non-Gaussian read noise GREEN1, 0.8*stddev/mad of overscan')
-                        L0.header['PRIMARY']['GREENTRT'] = (round(myL0.green_read_time,3),'GREEN chip total read time [seconds]')
-                        L0.header['PRIMARY']['READSPED'] = (myL0.read_speed,'Categorization of read speed')
                     if 'GREEN_AMP2' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGGR2'] = (round(myL0.std_mad_norm_ratio_overscan['GREEN_AMP2'],5), 'Non-Gaussian read noise GREEN2, 0.8*stddev/mad of overscan')
                     if 'GREEN_AMP3' in myL0.std_mad_norm_ratio_overscan:
@@ -524,8 +603,6 @@ def add_headers_L0_nonGaussian_read_noise(L0, logger=None):
                 try:
                     if 'RED_AMP1' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGRD1'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP1'],5), 'Non-Gaussian read noise RED1, 0.8*stddev/mad of overscan')
-                        L0.header['PRIMARY']['REDTRT'] = (round(myL0.red_read_time,3),'RED chip total read time [seconds]')
-                        L0.header['PRIMARY']['READSPED'] = (myL0.read_speed,'Categorization of read speed')
                     if 'RED_AMP2' in myL0.std_mad_norm_ratio_overscan:
                         L0.header['PRIMARY']['RNNGRD2'] = (round(myL0.std_mad_norm_ratio_overscan['RED_AMP2'],5), 'Non-Gaussian read noise RED2, 0.8*stddev/mad of overscan')
                     if 'RED_AMP3' in myL0.std_mad_norm_ratio_overscan:
