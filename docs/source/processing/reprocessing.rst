@@ -28,6 +28,7 @@ Here's the docstring showing all of the options.::
       -h, --help           show this help message and exit
       --ncpu NCPU          Number of CPUs to use
       --delete             Delete existing 2D/L1/L2/QLP (but not L0/masters) files before reprocessing
+      --qlp-regen          Regenerate Quicklook plots (and yaml files for QC) after reprocessing
       --verbose            Verbose stdout
       --force              Process even if datecode/version are listed in the logfile
       --logfile LOGFILE    Log file path

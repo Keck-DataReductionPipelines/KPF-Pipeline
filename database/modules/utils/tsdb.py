@@ -2555,7 +2555,7 @@ class TSDB:
         """
         
         if df is None:
-            df = self.dataframe_from_db(
+            df_int = self.dataframe_from_db(
                 columns=columns,
                 only_object=only_object,
                 object_like=object_like,
@@ -2570,20 +2570,22 @@ class TSDB:
                 end_date=end_date,
                 verbose=verbose
             )
+        else:
+            df_int = copy.deepcopy(df)
 
         # Convert ObsID to clickable HTML links
-        if 'ObsID' in df.columns:
-            df['ObsID'] = df['ObsID'].apply(
+        if 'ObsID' in df_int.columns:
+            df_int['ObsID'] = df_int['ObsID'].apply(
                 lambda obsid: f'<a href="{url_stub}{obsid}" target="_blank">{obsid}</a>'
             )
 
         # Coerce boolean-like columns to pandas nullable boolean so they print as True/False/<NA>
         for col in getattr(self, "bool_columns", []):
-            if col in df.columns:
-                df[col] = df[col].map(lambda v: None if pd.isna(v) else bool(v)).astype("boolean")
+            if col in df_int.columns:
+                df_int[col] = df_int[col].map(lambda v: None if pd.isna(v) else bool(v)).astype("boolean")
 
         # Generate HTML table with scrolling and sortable columns
-        html = df.to_html(escape=False, index=False, classes='sortable')
+        html = df_int.to_html(escape=False, index=False, classes='sortable')
 
         # Wrap in styled div and JavaScript for sorting
         styled_html = f'''

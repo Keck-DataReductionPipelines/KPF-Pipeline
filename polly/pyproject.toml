@@ -1,0 +1,113 @@
+[project]
+name = "polly-kpf"
+version = "0.2.1"
+description = "Analysis code for KPF etalon data"
+keywords = [
+    "KPF",
+    "Keck Planet Finder",
+    "high-resolution spectroscopy",
+    "radial velocity",
+    "RV",
+    "data analysis",
+    "etalon",
+    "chromatic drift",
+]
+authors = [{ name = "Jake Pember", email = "jake.pember@kuleuven.be" }]
+readme = "README.md"
+license = { file = "LICENSE" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.2.0",
+    "astropy>=6.1.7",
+    "scipy>=1.14.1",
+    "matplotlib>=3.10.0",
+    "pyfonts>=0.0.2",
+    "tqdm>=4.67.1",
+]
+
+[dependency-groups]
+dev = [
+    "ipython>=8.30.0",
+    "jupyter>=1.1.1",
+    "jupyterlab>=4.3.3",
+    "pre-commit>=4.0.1",
+    "rich>=13.9.4",
+]
+
+[project.urls]
+Repository = "https://github.com/pemberj/polly"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/polly"]
+
+[tool.ruff]
+show-fixes = true
+line-length = 88
+indent-width = 4
+
+[tool.ruff.lint]
+select = [
+    "F",  # Pyflakes
+    "E4",
+    "E7",
+    "E9", # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "I",
+
+    "UP", # pyupgrade
+
+    "ANN", # flake8-annotations
+    "S",   # flake8-bandit (security)
+    "B",   # flake8-bugbear, security warnings
+    "A",   # flake8-builtins
+    "C4",  # flake8-comprehensions
+    "DTZ", # flake8-datetimez
+    "ICN", # flake8-import-conventions
+    "LOG", # flake8-logging
+    "G",   # flake8-logging-format
+    "PIE", # flake8-pie
+    "PYI", # flake8-pyi
+    "RET", # flake8-return
+    "SIM", # flake8-simplify
+    "TC",  # flake8-type-checking
+    "ARG", # flake8-unused-arguments
+    "PTH", # flake8-use-pathlib
+
+    "PLC",     # pylint-convention
+    "PLE",     # pylint-error
+    "PLR2004", # pylint magic values
+    "PLW",     # pylint-warning
+]
+
+ignore = [
+    "E722",   # do not use bare 'except'
+    "W605",   # invalid escape sequence
+    "S101",   # use of assert
+    "DTZ001", # datetime.datetime used without explicit tzinfo=
+    "DTZ005", # datetime.now() used without explicit tzinfo=
+    "SIM105", # recommends contextlib.suppress instead of try / except / pass
+]
+
+[tool.ruff.lint.per-file-ignores]
+"*.ipynb" = [
+    "E501", # line too long
+]
+
+[tool.ruff.format]
+exclude = ["*.ipynb"]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
