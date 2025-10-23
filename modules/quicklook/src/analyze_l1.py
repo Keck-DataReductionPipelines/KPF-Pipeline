@@ -342,7 +342,6 @@ class AnalyzeL1:
                     lines[o, oo] = len(peaks)
                 else:
                     lines[o, oo] = 0
-        print(lines)
         
         # Determine which orders are 'good' (i.e., above min_lines)
         lines_above_threshold = lines > min_lines

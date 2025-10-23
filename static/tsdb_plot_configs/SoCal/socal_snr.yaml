@@ -38,7 +38,7 @@ panel_arr:
           linewidth: 0.5
           color: red
     paneldict:
-      ylabel: SNR (SCI1+SCI2+SCI3; all obs)
+      ylabel: SNR - SCI1+SCI2+SCI3\n(all obs)
       only_object: SoCal
       narrow_xlim_daily: true
       not_junk: true
@@ -75,7 +75,7 @@ panel_arr:
           linewidth: 0.5
           color: red
     paneldict:
-      ylabel: Flux Ratio (SCI2; all obs) 
+      ylabel: Flux Ratio - SCI2\n(all obs) 
       only_object: SoCal
       narrow_xlim_daily: true
       not_junk: true
@@ -118,7 +118,7 @@ panel_arr:
           linewidth: 0.5
           color: red
     paneldict:
-      ylabel: SNR (SCI1+SCI2+SCI3; CLEARSKY=True)
+      ylabel: SNR - SCI1+SCI2+SCI3\n(CLEARSKY=True)
       only_object: SoCal
       narrow_xlim_daily: true
       not_junk: true
@@ -155,7 +155,7 @@ panel_arr:
           linewidth: 0.5
           color: red
     paneldict:
-      ylabel: Flux Ratio (SCI2; CLEARSKY=True) 
+      ylabel: Flux Ratio - SCI2\n(CLEARSKY=True) 
       title: SoCal SNR & Flux Ratio
       only_object: SoCal
       narrow_xlim_daily: true
