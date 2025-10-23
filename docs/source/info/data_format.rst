@@ -234,6 +234,19 @@ STVIGNE   'false '                                    Top shutter vignetting (tr
 SBVIGNE   'false '                                    Bottom shutter vignetting (true/false)
 SBELEV    23.99                                       Bottom shutter elevation (deg)
 STELEV    23.99                                       Top shutter elevation (deg)
+LFCMODE   'StandbyHigh'                               LFC Operation Mode
+AMPON     27635202.107                                LFC: Amount of time amplifier on (sec)
+LFCFO     250000000.0                                 LFC filtered Offset Freq RR Comb counted (Hz)
+LFCFREF   250000000.0                                 LFC filtered Offset Freq RR Comb setpoint (Hz)
+LFCFR     19999999999.9963                            LFC filtered Offset Freq RR Filter counted (Hz)
+LFCFRREF  20000000000.0                               LFC filtered Offset Freq RR Filter setpoint(Hz)
+LFCCEOFR  5220000000.0                                LFC CEO Filtered Setpoint Freq (Hz)
+LFCCWFRF  288005220000000.0                           LFC CW Freq Reference (Hz)
+LFCCWFRQ  288005220406302.0                           LFC CW Freq (Hz)
+LFCCWFER  406302.0                                    LFC CW Freq Error: Ref-Actual (Hz)
+LFCCWMDN  1152021                                     LFC CW mode number
+LFCBIACT  0.033                                       LFC Blue cut amp diode current (A)
+LFCBISET  0.0                                         LFC Blue cut amp diode setting (A)
 ========  ==========================================  =========
 
 2D Primary Extension Header
