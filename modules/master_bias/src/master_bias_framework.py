@@ -200,17 +200,26 @@ class MasterBiasFramework(KPF0_Primitive):
                 self.logger.debug('Processing extension: i,bias_file,ffi = {},{},{}'.format(i,path,ffi))
                 
                 try:
-                    np_obj_ffi = np.array(obj[ffi])
-                    np_obj_ffi_shape = np.shape(np_obj_ffi)
-                    n_dims = len(np_obj_ffi_shape)
-                    self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
-                    
-                    if n_dims == 2:       # Check if valid data extension
-                        extension_data[ffi]['keep_ffi'] = 1
-                        extension_data[ffi]['filenames_kept_list'].append(all_bias_files[i])
-                        extension_data[ffi]['frames_data'].append(obj[ffi])
-                        extension_data[ffi]['frames_data_mjdobs'].append(mjd_obs)
-                        extension_data[ffi]['frames_data_path'].append(path)
+                    # OPTIMIZED: Check extension exists and get shape without converting to numpy
+                    if ffi in obj.extensions:
+                        extension_data_obj = obj[ffi]
+                        # Get shape directly from the extension object (faster than np.array conversion)
+                        if hasattr(extension_data_obj, 'shape'):
+                            n_dims = len(extension_data_obj.shape)
+                        else:
+                            # Fallback: convert to numpy only for shape check
+                            np_obj_ffi = np.array(extension_data_obj)
+                            n_dims = len(np_obj_ffi.shape)
+                        
+                        self.logger.debug('path,ffi,n_dims = {},{},{}'.format(path,ffi,n_dims))
+                        
+                        if n_dims == 2:       # Check if valid data extension
+                            extension_data[ffi]['keep_ffi'] = 1
+                            extension_data[ffi]['filenames_kept_list'].append(all_bias_files[i])
+                            # OPTIMIZED: Store the extension object directly (no numpy conversion yet)
+                            extension_data[ffi]['frames_data'].append(extension_data_obj)
+                            extension_data[ffi]['frames_data_mjdobs'].append(mjd_obs)
+                            extension_data[ffi]['frames_data_path'].append(path)
                         
                 except Exception as e:
                     self.logger.debug('Extension {} not found or invalid in file {}: {}'.format(ffi, path, str(e)))

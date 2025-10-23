@@ -139,7 +139,13 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
 
+# Get memory optimization flags
+my $memory_flags = `$codedir/scripts/get_docker_memory_flags.sh`;
+chomp($memory_flags);
+
 my $dockerruncmd = "docker run -d --name $containername " .
+                   # Memory optimization
+                   "$memory_flags " .
                    "-v ${codedir}:$insidecontainercode -v $sandbox:$insidecontainersandbox " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";

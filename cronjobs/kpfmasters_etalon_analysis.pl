@@ -138,13 +138,10 @@ $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';              # Augment 
 # Ensure PYTHONPATH or equivalent is set for INSIDE Docker container.
 # E.g., $ENV{PYTHONPATH} = "/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src"
 my $pythonpath = $ENV{PYTHONPATH};
-if (defined $pythonpath) {
-    print "PYTHONPATH=$pythonpath\n";
-} else {
-    $ENV{PYTHONPATH} = '/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src';
-    $pythonpath = $ENV{PYTHONPATH};
-    print "PYTHONPATH not defined; reset to PYTHONPATH=$pythonpath\n";
-}
+$ENV{PYTHONPATH} = '/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src';
+$pythonpath = $ENV{PYTHONPATH};
+print "PYTHONPATH not defined; reset to PYTHONPATH=$pythonpath\n";
+
 
 my $pythonscript = 'cronjobs/run_analysis_for_masters.py';
 
@@ -225,7 +222,13 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 
 # Launch container with root to copy products to permanent location.
 
+# Get memory optimization flags
+my $memory_flags = `$codedir/scripts/get_docker_memory_flags.sh`;
+chomp($memory_flags);
+
 my $dockerruncmd = "docker run -d --name $containername " .
+                   # Memory optimization
+                   "$memory_flags " .
                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
                    "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
                    "$containerimage bash ./$dockercmdscript";
