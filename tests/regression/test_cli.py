@@ -15,4 +15,4 @@ def test_launch():
     streamdata = child.communicate()[0]
     rc = child.returncode
     print(rc)
-    assert rc == 1, "running command '{}' failed".format(cmd)
+    assert rc == 0, "running command '{}' failed".format(cmd)

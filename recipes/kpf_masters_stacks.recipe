@@ -24,6 +24,22 @@ ordermask_path = config.FLAT.ordermask_path
 
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
+
+channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
+channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
+channel_datasec_ncols_red = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_red
+channel_datasec_nrows_red = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_red
+channel_orientation_ref_path_red = config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_green
+overscan_method = config.OVERSCAN_SUBTRACTION.overscan_method
+order = config.OVERSCAN_SUBTRACTION.overscan_order
+oscan_clip = config.OVERSCAN_SUBTRACTION.overscan_clip
+lev0_ffi_ext_red = config.OVERSCAN_SUBTRACTION.lev0_ffi_ext_red
+lev0_ffi_ext_green = config.OVERSCAN_SUBTRACTION.lev0_ffi_ext_green
+prescan_reg = config.OVERSCAN_SUBTRACTION.prescan_reg
+gain_key = config.OVERSCAN_SUBTRACTION.gain_keyword
+n_sigma = config.OVERSCAN_SUBTRACTION.n_sigma
+
 date_dir = context.date_dir
 
 if date_dir is None:
@@ -48,20 +64,7 @@ all_bias_files_list,\
     dark_objects_auto,\
     arclamp_objects_auto = PickInputsMastersDRP(data_type,search_string,exptime_minimum,standard_flat_object)
 
-channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
-channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
-channel_datasec_ncols_red = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_red
-channel_datasec_nrows_red = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_red
-channel_orientation_ref_path_red = config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_red
-channel_orientation_ref_path_green = config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_green
-overscan_method = config.OVERSCAN_SUBTRACTION.overscan_method
-order = config.OVERSCAN_SUBTRACTION.overscan_order
-oscan_clip = config.OVERSCAN_SUBTRACTION.overscan_clip
-lev0_ffi_ext_red = config.OVERSCAN_SUBTRACTION.lev0_ffi_ext_red
-lev0_ffi_ext_green = config.OVERSCAN_SUBTRACTION.lev0_ffi_ext_green
-prescan_reg = config.OVERSCAN_SUBTRACTION.prescan_reg
-gain_key = config.OVERSCAN_SUBTRACTION.gain_keyword
-n_sigma = config.OVERSCAN_SUBTRACTION.n_sigma
+
 
 if date_dir is None:
     overscan_output_dir = config.OVERSCAN_SUBTRACTION.output_dir
@@ -71,101 +74,6 @@ else:
 file_list = all_bias_files_list + all_dark_files_list + all_flat_files_list + all_arclamp_files_list
 
 nlen_file_list = len(file_list)
-
-for raw_file_path in file_list:
-
-    _,file_name_ext = split(raw_file_path)
-    file_name,ext = splitext(file_name_ext)
-    output_file_name = overscan_output_dir + "/" + file_name + "_2D" + ext
-    output_file_exists = exists(output_file_name)
-
-    if output_file_exists:
-        file_exists = True
-    else:
-        file_exists = False
-
-    if overwrite or not output_file_exists:
-
-        # Read in FITS data.
-        l0 = kpf0_from_fits(raw_file_path, data_type)
-
-        #---------
-
-        # Diagnostics & Quality Control - L0 level
-
-        kpf_object = l0
-        data_level_str = 'L0'
-
-        # Cannot call subrecipes in a loop (does not work correctly).
-        #invoke_subrecipe("./recipes/quality_control.subrecipe")
-        #invoke_subrecipe("./recipes/diagnostics.subrecipe")
-
-        qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
-        kpf_object = qc_output_list[1]
-
-        diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
-        kpf_object = diagnostics_output_list[1]
-        l0 = kpf_object
-
-        #---------
-
-        # Overscan subtraction, first red, then green (the ordering should not matter, except
-        # how the FITS object is modified and passed on to subsequent processes in the code below).
-
-        ref_output_red = OrientationReference(channel_orientation_ref_path_red, data_type)
-
-        # compute red-chip ffi
-        red_ffi = OverscanSubtraction(l0,
-                                      overscan_method,
-                                      order,
-                                      oscan_clip,
-                                      ref_output_red,
-                                      lev0_ffi_ext_red,
-                                      data_type,
-                                      prescan_reg,
-                                      gain_key,
-                                      channel_datasec_ncols_red,
-                                      channel_datasec_nrows_red,
-                                      n_sigma)
-
-        ref_output_green = OrientationReference(channel_orientation_ref_path_green, data_type)
-
-        # add green-chip ffi to data containing red-chip ffi
-        L0_with_ffi = OverscanSubtraction(red_ffi,
-                                          overscan_method,
-                                          order,
-                                          oscan_clip,
-                                          ref_output_green,
-                                          lev0_ffi_ext_green,
-                                          data_type,
-                                          prescan_reg,
-                                          gain_key,
-                                          channel_datasec_ncols_green,
-                                          channel_datasec_nrows_green,
-                                          n_sigma)
-
-
-        #---------
-
-        # Diagnostics & Quality Control - 2D level
-
-        kpf_object = L0_with_ffi
-        data_level_str = '2D'
-
-        # Cannot call subrecipes in a loop (does not work correctly).
-        #invoke_subrecipe("./recipes/quality_control.subrecipe")
-        #invoke_subrecipe("./recipes/diagnostics.subrecipe")
-
-        qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
-        kpf_object = qc_output_list[1]
-
-        diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
-        kpf_object = diagnostics_output_list[1]
-        L0_with_ffi = kpf_object
-
-        #---------
-
-        oscan_complete = to_fits(L0_with_ffi, output_file_name)
 
 ########################
 # Get config parameters so that they are defined regardless of logic branches.

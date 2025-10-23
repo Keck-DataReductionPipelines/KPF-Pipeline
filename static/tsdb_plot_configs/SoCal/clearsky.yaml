@@ -9,7 +9,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Seeing (arcsec)
+      ylabel: Clearsky Metric
       yscale: log
       narrow_xlim_daily: true
       not_junk: true
@@ -24,7 +24,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
-      ylabel: Seeing (arcsec)
+      ylabel: Clearness Index
       yscale: log
       narrow_xlim_daily: true
       title: Clearsky Index
