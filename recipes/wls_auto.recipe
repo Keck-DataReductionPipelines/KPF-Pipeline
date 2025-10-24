@@ -15,7 +15,7 @@ fr = config.ARGUMENT.frep_key
 
 date_dir = context.date_dir
 
-for cal_type in ['ThAr', 'LFC']:#, 'Etalon']: # remove etalon for now oct2025
+for cal_type in ['ThAr', 'LFC', 'Etalon']: 
     if cal_type == 'ThAr':
         search_string = config.ARGUMENT.thar_search_string
     elif cal_type == 'Etalon':
