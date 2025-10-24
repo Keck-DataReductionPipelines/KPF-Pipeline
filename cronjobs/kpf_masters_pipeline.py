@@ -1,7 +1,6 @@
 ####################################################################
 # Python script to run complete masters pipeline inside container.
-# Input date of data to process is required:
-# export PROCDATE=yyyymmdd
+# Input date of data to process on command line (YYYYMMDD).
 ####################################################################
 
 import sys
