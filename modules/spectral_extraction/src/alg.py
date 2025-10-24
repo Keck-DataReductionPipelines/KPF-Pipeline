@@ -15,8 +15,10 @@ from scipy.interpolate import LSQUnivariateSpline
 
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.logger import start_logger
-from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level1 import KPF1
+from modules.Utils.config_parser import ConfigHandler
+from modules.Utils.kpf_parse import HeaderParse
+
 
 
 class SpectralExtractionAlg:
@@ -51,8 +53,21 @@ class SpectralExtractionAlg:
         else:
             self.log = logger
             
+        # required data inputs
+        self.target_2D = target_2D
+        self.master_flat_2D = master_flat_2D
+        self.order_trace = {}
+        self.order_trace['GREEN_CCD'] = pd.read_csv(order_trace_green, index_col=0)
+        self.order_trace['RED_CCD'] = pd.read_csv(order_trace_red, index_col=0)
+        self.tracefile_green = order_trace_green
+        self.tracefile_red = order_trace_red
+
+        # parse config
+        self.header = HeaderParse(self.target_2D, 'PRIMARY')
         cfg_params = ConfigHandler(self.config, 'PARAM')
-        self.extraction_method = cfg_params.get_config_value('extraction_method')
+
+        self.extraction_method = self._set_method(cfg_params)
+        
         self.extraction_sigma_clip = float(cfg_params.get_config_value('extraction_sigma_clip'))
         self.extraction_max_iter = int(cfg_params.get_config_value('extraction_max_iter'))
 
@@ -60,12 +75,6 @@ class SpectralExtractionAlg:
         self.profile_sigma_clip = float(cfg_params.get_config_value('profile_sigma_clip'))
         self.profile_num_knots = int(cfg_params.get_config_value('profile_num_knots'))
 
-        # required data inputs
-        self.target_2D = target_2D
-        self.master_flat_2D = master_flat_2D
-        self.order_trace = {}
-        self.order_trace['GREEN_CCD'] = pd.read_csv(order_trace_green, index_col=0)
-        self.order_trace['RED_CCD'] = pd.read_csv(order_trace_red, index_col=0)
         #self.start_order = {}
         #self.start_order['GREEN_CCD'] = start_order_green
         #self.start_order['RED_CCD'] = start_order_red
@@ -98,7 +107,7 @@ class SpectralExtractionAlg:
             self.bad_pixel_mask['RED_CCD'] = bad_pixel_mask_red
         else:
             self.bad_pixel_mask['RED_CCD'] = np.ones_like(self.target_2D['RED_CCD'], dtype='bool')
-
+        
         # hardcoded fix for order trace
         # GJG needs to be moved to calibrations lookup
         self.order_trace = self._fix_order_trace_indexing()
@@ -108,8 +117,18 @@ class SpectralExtractionAlg:
 
         # initialize L1 object
         self.target_l1 = KPF1.from_l0(self.target_2D)
+        self.add_keywords()        
 
-        
+
+    def add_keywords(self):
+        header = self.target_l1.header['PRIMARY']
+        header['TRACFGRN'] = self.tracefile_green
+        header['TRACFRED'] = self.tracefile_red
+        header['EXTMETHK'] = self.extraction_method['SKY']
+        header['EXTMETHS'] = self.extraction_method['SCI']
+        header['EXTMETHC'] = self.extraction_method['CAL']
+
+
     def _check_for_variance_frame(self, chip, do_patch=True):
         var_ext_name = f'{chip}_VAR'
 
@@ -198,6 +217,25 @@ class SpectralExtractionAlg:
                 }
 
         return flux_dict[fiber], var_dict[fiber]
+ 
+
+    def _set_method(self, cfg_params):
+        self.extraction_method = {}
+
+        force_box = 'LFC Etalon ThAr UNe Dark Bias WideFlat'.lower().split()
+        imtype = self.header.get_name(use_star_names=False).lower()
+
+        for fiber in ['SKY', 'SCI', 'CAL']:
+            if np.isin(imtype, force_box):
+                self.extraction_method[fiber] = 'box'
+
+            elif self.header.header[f'{fiber}-OBJ'] != 'BrdbandFiber':
+                self.extraction_method[fiber] = 'box'
+
+            else:
+                self.extraction_method[fiber] = cfg_params.get_config_value(f'extraction_method_{fiber.lower()}')
+
+        return self.extraction_method
 
 
     def _orderlet_box(self, data_image, trace, order, fiber, return_box_coords=False, verbose=False, do_plot=False):
@@ -533,7 +571,7 @@ class SpectralExtractionAlg:
                          chip, 
                          order,
                          fiber, 
-                         method=None,
+                         method='auto',
                          max_iter=None,
                          profile_filter_size=None,
                          profile_num_knots=None,
@@ -544,7 +582,7 @@ class SpectralExtractionAlg:
         Extract 1D spectrum for a single orderlet
 
         Args:
-            method (str): extraction method, can be 'box' or 'optimal'
+            method (str): extraction method, can be 'auto', 'box', or 'optimal'
             chip (str): 'GREEN' or 'RED' ccd
             order (int): integer identifying order (GREEN: 0-34, RED:0-31)
             fiber (str): can be 'SKY', 'SCI1', 'SCI2', 'SCI3', 'CAL'
@@ -556,8 +594,8 @@ class SpectralExtractionAlg:
             M (ndarray): 2D boolean bad pixel mask (if 'optimal' extraction is used)
         """
         # populate kwargs
-        if method is None:
-            method = self.extraction_method
+        if method == 'auto':
+            method = self.extraction_method[fiber[:3]]
         if max_iter is None:
             max_iter = self.extraction_max_iter
         if profile_filter_size is None:
@@ -647,7 +685,7 @@ class SpectralExtractionAlg:
         if fibers is None:
             fibers = 'SKY SCI1 SCI2 SCI3 CAL'.split()
         if method is None:
-            method = self.extraction_method
+            method == 'auto'
         if max_iter is None:
             max_iter = self.extraction_max_iter
         if profile_filter_size is None:
