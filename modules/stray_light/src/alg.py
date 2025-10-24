@@ -206,16 +206,11 @@ class StrayLightAlg:
             mask |= edge_mask
 
         coeffs = self._polyfit2d(data, polyorder, regularize=regularize, mask=mask)    
-        stray_light = self._polyval2d(coeffs, polyorder, data.shape)
-
-        stray_light = np.maximum(stray_light, 0)
         
-        print(np.nanmedian((data - stray_light)[~mask]))
-
+        stray_light = self._polyval2d(coeffs, polyorder, data.shape)
+        stray_light = np.maximum(stray_light, 0)
         stray_light += np.nanmedian((data - stray_light)[~mask])
         stray_light = np.maximum(stray_light, 0)
-
-        print(np.nanmedian((data - stray_light)[~mask]))
 
         return stray_light, mask
 
