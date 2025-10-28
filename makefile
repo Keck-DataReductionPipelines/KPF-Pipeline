@@ -4,6 +4,14 @@ CI_IMAGE  ?= kpf-drp-ci
 TAG       ?= latest
 MASTERS_IMAGE ?= kpfmastersdrp
 
+ifndef KPFCRONJOB_DOCKER_IMAGE
+    MASTERS_IMAGE_WITH_TAG ?= $(MASTERS_IMAGE):$(TAG)
+    $(info KPFCRONJOB_DOCKER_IMAGE is not defined)
+else
+    MASTERS_IMAGE_WITH_TAG = $(KPFCRONJOB_DOCKER_IMAGE)
+    $(info KPFCRONJOB_DOCKER_IMAGE is defined, and is set to $(KPFCRONJOB_DOCKER_IMAGE))
+endif
+
 # Cache-busting when requirements.txt changes (Dockerfile must consume REQS_SHA)
 REQS_SHA  := $(shell sha256sum requirements.txt | cut -d ' ' -f1)
 
@@ -53,11 +61,11 @@ docker:
 	$(if $(KPFPIPE_PORT), @echo "Starting Docker container on port ${KPFPIPE_PORT}..." && KPFPIPE_PORT=${KPFPIPE_PORT} ./docker-run.sh)
 
 docker_masters:
-	@echo "Building Docker image for KPF masters pipeline $(MASTERS_IMAGE):$(TAG)…"
+	@echo "Building Docker image for KPF masters pipeline $(MASTERS_IMAGE_WITH_TAG)…"
 	@DOCKER_BUILDKIT=1 docker build \
 		--no-cache \
 		--build-arg REQS_SHA=$(REQS_SHA) \
-		--tag $(MASTERS_IMAGE):$(TAG) . --quiet
+		--tag $(MASTERS_IMAGE_WITH_TAG) . --quiet
 	$(if $(KPFPIPE_DATA),,$(error Must set KPFPIPE_DATA))
 	$(if $(KPFPIPE_PORT),, @echo "Starting Docker container (no port specified)..." && ./docker-masters-run.sh)
 	$(if $(KPFPIPE_PORT), @echo "Starting Docker container on port ${KPFPIPE_PORT}..." && KPFPIPE_PORT=${KPFPIPE_PORT} ./docker-masters-run.sh)
