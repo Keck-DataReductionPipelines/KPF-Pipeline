@@ -15,19 +15,13 @@ fr = config.ARGUMENT.frep_key
 
 date_dir = context.date_dir
 
-for cal_type in ['ThAr', 'LFC', 'Etalon']:
+for cal_type in ['ThAr', 'LFC', 'Etalon']: 
     if cal_type == 'ThAr':
         search_string = config.ARGUMENT.thar_search_string
-        full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
     elif cal_type == 'Etalon':
-        full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
         search_string=config.ARGUMENT.etalon_search_string
     elif cal_type == 'LFC':
         search_string = config.ARGUMENT.lfc_search_string
-        # if exists(output_filename):
-        #     full_master_wls = kpf1_from_fits(output_filename, data_type='KPF')
-        # else:
-        full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
     
     file_list = find_files(masters_dir + date_dir + '/*' + search_string + '*.fits')
 
@@ -38,7 +32,8 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
             l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
             dt_string = GetHeaderValue(l1_obj, 'DATE-MID')
             cals = CalibrationLookup(dt_string)
-            master_wls_file = cals['rough_wls']
+            master_wls_file = cals['rough_wls'] # TRY A NEW ROUGH WLS
+#            master_wls_file = '/data/masters/20241024/kpf_20241024_master_WLS_autocal-lfc-all-eve_L1.fits' # HTI HARD CODE.
             full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
             base_path = masters_dir + date_dir
             obj_string = str_replace(L1_file, base_path + '/kpf_' + date_dir + '_master_arclamp_', '')
@@ -69,7 +64,7 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
                         orderlet_names = ['GREEN_SCI_FLUX2']
                         output_exts = ['GREEN_SCI_WAVE2']
 
-                
+                save_diagnostics_dir = 'plots'
                 if save_diagnostics_dir != None:
                     plot_dir = save_diagnostics_dir + "/" + date_dir + "/" + obj_string_short + "/"
                 else:
@@ -88,7 +83,3 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
                 )
 
             result = to_fits(l1_obj, output_filename)
-            
-            # Adopt recent ThAr as master wavelength solution for subsequent frames
-            if cal_type == 'Thar':
-                master_wls_file = output_filename
