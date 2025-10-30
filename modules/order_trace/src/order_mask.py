@@ -128,6 +128,7 @@ class OrderMask(KPF0_Primitive):
         # action.args[1] is for level 0 flat with order trace result extension
 
         input_flux = action.args[0]         # kpf0 instance for L0 data
+        self.input_flux = input_flux
         self.output_level0 = action.args[1] # kpf0 output containing order mask
         o_names = self.get_args_value('orderlet_names', action.args, args_keys)
         if o_names is not None and o_names:

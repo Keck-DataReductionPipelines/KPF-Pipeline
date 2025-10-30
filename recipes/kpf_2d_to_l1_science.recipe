@@ -169,7 +169,6 @@ if do_spectral_extraction or do_hk or do_bc:# HTI: I think we do not need this c
 					start_order=start_order[idx], trace_file=trace_list[idx],
 					data_extension=ccd_list[idx],
 					orderlet_widths=orderlet_widths, full_coverage=1)
-			break
 		
 		# Scattered light now handled with StrayLight module down below, and the order_mask is needed for that.
 		# I THINK we need this for variance extension creation.
