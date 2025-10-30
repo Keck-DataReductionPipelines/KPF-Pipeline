@@ -272,7 +272,7 @@ class OrderMask(KPF0_Primitive):
                     isinstance(order_mask_result['order_mask_result'], np.ndarray))
 
         if self.output_level0 is None:
-            self.output_level0 = KPF0()
+            self.output_level0 = self.input_flux.copy()
 
         self.output_level0[self.data_ext] = order_mask_result['order_mask_result']
         self.output_level0.header['PRIMARY']['IMTYPE'] = 'OrderMask'
