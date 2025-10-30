@@ -211,6 +211,7 @@ if do_spectral_extraction or do_hk or do_bc:# HTI: I think we do not need this c
 
 		# copy wls to the proper extension of lev1 data
 		if do_sp_wavecopy:# and exists(output_lev1_file): output_lev1 only exists in memory
+			break
 			obs_date_time = GetHeaderValue(output_data,'DATE-MID')
 			if do_db_query_for_before_after_master_files == True:
 				invoke_subrecipe("recipes/wls_interpolation.subrecipe") 
