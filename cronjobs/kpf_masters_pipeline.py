@@ -124,7 +124,7 @@ bash_cmds = [
              f"cp -pf /data/masters/{procdate}/*order_mask.fits /masters/{procdate}",
              f"cp -pf /data/logs/{procdate}/pipeline_{procdate}.log /masters/{procdate}/pipeline_order_trace_{procdate}.log",
              f"cp -pfr /masters/{procdate}/kpf_{procdate}*.fits /data/masters/{procdate}",
-             f"kpf --ncpus 32 --reprocess /data/masters/{procdate}/ --masters -r {recipe_l1} -c {config_l1} ",
+             f"kpf --ncpus 16 --reprocess /data/masters/{procdate}/ --masters -r {recipe_l1} -c {config_l1} ",
              f"sleep 10",
              f"cp -pf /data/masters/{procdate}/* /masters/{procdate}",
              f"mkdir -p /masters/{procdate}/{logssubdir}",
