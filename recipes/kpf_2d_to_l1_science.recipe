@@ -169,6 +169,7 @@ if do_spectral_extraction or do_hk or do_bc:# HTI: I think we do not need this c
 					start_order=start_order[idx], trace_file=trace_list[idx],
 					data_extension=ccd_list[idx],
 					orderlet_widths=orderlet_widths, full_coverage=1)
+			break
 		
 		# Scattered light now handled with StrayLight module down below, and the order_mask is needed for that.
 		# I THINK we need this for variance extension creation.
@@ -211,7 +212,6 @@ if do_spectral_extraction or do_hk or do_bc:# HTI: I think we do not need this c
 
 		# copy wls to the proper extension of lev1 data
 		if do_sp_wavecopy:# and exists(output_lev1_file): output_lev1 only exists in memory
-			break
 			obs_date_time = GetHeaderValue(output_data,'DATE-MID')
 			if do_db_query_for_before_after_master_files == True:
 				invoke_subrecipe("recipes/wls_interpolation.subrecipe") 
