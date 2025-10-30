@@ -82,6 +82,7 @@ import pandas as pd
 import numpy as np
 import os
 import numbers
+import copy
 
 # Pipeline dependencies
 from kpfpipe.primitives.level0 import KPF0_Primitive
@@ -273,7 +274,7 @@ class OrderMask(KPF0_Primitive):
                     isinstance(order_mask_result['order_mask_result'], np.ndarray))
 
         if self.output_level0 is None:
-            self.output_level0 = self.input_flux.copy()
+            self.output_level0 = copy(self.input_flux)
 
         self.output_level0[self.data_ext] = order_mask_result['order_mask_result']
         self.output_level0.header['PRIMARY']['IMTYPE'] = 'OrderMask'
