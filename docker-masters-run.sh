@@ -3,7 +3,7 @@
 # CAUTION: The following setting prints out the docker-run command with passwords as arguments,
 # as a debugging tool.  Ideally, passwords should not be passed as environment variables, but
 # instead sourced from an environment file with user-only read permission inside the container.
-set -x
+# set -x
 
 ##############################################################
 # Required environment variables and examples:
@@ -28,6 +28,36 @@ set -x
 # Suppress Docker warnings and run commands quietly
 export DOCKER_CLI_EXPERIMENTAL=enabled
 export DOCKER_BUILDKIT=1
+
+# Verify required environment variables before proceeding
+required_vars=(
+	KPFCRONJOB_CODE
+	KPFCRONJOB_DOCKER_IMAGE
+	KPFPIPE_MASTERS_BASE_DIR
+	KPFPIPE_L0_BASE_DIR
+	KPFCRONJOB_SBX
+	KPFPIPE_DB_PORT
+	KPFPIPE_DB_NAME
+	KPFPIPE_DB_USER
+	KPFPIPE_DB_PASS
+	KPFPIPE_TSDB_PORT
+	KPFPIPE_TSDB_NAME
+	KPFPIPE_TSDB_USER
+	KPFPIPE_TSDB_PASS
+)
+missing_vars=()
+for var in "${required_vars[@]}"; do
+	if [ -z "${!var}" ]; then
+		missing_vars+=("$var")
+	fi
+done
+if [ "${#missing_vars[@]}" -ne 0 ]; then
+	echo "Error: Missing required environment variables:" >&2
+	for mv in "${missing_vars[@]}"; do
+		printf '  - %s\n' "$mv" >&2
+	done
+	exit 1
+fi
 
 
 # Function to run docker with suppressed warnings
