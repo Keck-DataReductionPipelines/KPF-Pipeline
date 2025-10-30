@@ -152,6 +152,13 @@ class SpectralExtractionAlg:
     
     def _fix_order_trace_indexing(self):
         datecode = self.target_2D.header['PRIMARY']['DATE-OBS'].replace('-', '')
+        try:
+            datecode = int(datecode)
+        except ValueError:
+            print(self.target_2D.l1filename)
+            print(self.target_2D.l0filename)
+            print(self.target_2D.header['PRIMARY']['DATE-OBS'])
+            print(datecode)
         
         for chip in ['GREEN', 'RED']:
             ntrace = len(self.order_trace[f'{chip}_CCD'])
