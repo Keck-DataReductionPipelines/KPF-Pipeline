@@ -3,7 +3,7 @@
 # CAUTION: The following setting prints out the docker-run command with passwords as arguments,
 # as a debugging tool.  Ideally, passwords should not be passed as environment variables, but
 # instead sourced from an environment file with user-only read permission inside the container.
-set -x
+# set -x
 
 ##############################################################
 # Required environment variables and examples:
