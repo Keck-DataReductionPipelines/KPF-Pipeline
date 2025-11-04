@@ -447,6 +447,8 @@ ORDER BY startdate;"""
         if len(df) == 0:
             return [1, None]
 
+        print(df)
+
         obst = Time(obs_date)
         obs_jd = obst.mjd
         

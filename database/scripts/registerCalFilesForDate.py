@@ -542,12 +542,7 @@ def update_minmjd_maxmjd_etc_in_calfiles_table(datearg,cur):
         "where caltype = 'TEMPLATE_CALTYPE1' " +\
         "and level = TEMPLATE_LEVEL " +\
         "and startdate = 'TEMPLATE_STARTDATE' " +\
-        "and object in (" +\
-        "select regexp_replace(object,'_red|_green','') " +\
-        "from calfiles " +\
-        "where startdate='TEMPLATE_STARTDATE' " +\
-        "and caltype='TEMPLATE_CALTYPE2' " +\
-        "and object like 'autocal%');"
+        "and object like 'autocal-etalon-all-%';"
 
 
     # Define query.
