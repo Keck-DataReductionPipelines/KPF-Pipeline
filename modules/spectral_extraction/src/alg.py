@@ -152,6 +152,13 @@ class SpectralExtractionAlg:
     
     def _fix_order_trace_indexing(self):
         datecode = self.target_2D.header['PRIMARY']['DATE-OBS'].replace('-', '')
+        try:
+            datecode = int(datecode)
+        except ValueError:
+            print(self.target_2D.l1filename)
+            print(self.target_2D.l0filename)
+            print(self.target_2D.header['PRIMARY']['DATE-OBS'])
+            print(datecode)
         
         for chip in ['GREEN', 'RED']:
             ntrace = len(self.order_trace[f'{chip}_CCD'])
@@ -222,14 +229,15 @@ class SpectralExtractionAlg:
     def _set_method(self, cfg_params):
         self.extraction_method = {}
 
-        force_box = 'LFC Etalon ThAr UNe Dark Bias WideFlat'.lower().split()
+        force_box = cfg_params.get_config_value('force_box_extraction')
+        
+        if len(force_box) == 0:
+            force_box = ['none']
+
         imtype = self.header.get_name(use_star_names=False).lower()
 
         for fiber in ['SKY', 'SCI', 'CAL']:
             if np.isin(imtype, force_box):
-                self.extraction_method[fiber] = 'box'
-
-            elif self.header.header[f'{fiber}-OBJ'] != 'BrdbandFiber':
                 self.extraction_method[fiber] = 'box'
 
             else:
