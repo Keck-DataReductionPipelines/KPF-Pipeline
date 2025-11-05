@@ -96,114 +96,91 @@ class AnalyzeTimeSeries:
                                     fig_path=None, show_plot=False, 
                                     log_savefig_timing=False):
         """
-        Generate a multi-panel time series plot using data retrieved from a KPF 
-        time series database (TSDB). Each subplot (panel) is configured via a 
-        dictionary (or YAML file path), allowing fine-grained control
-        over data selection, filtering, formatting, and plotting attributes.
-
+        Generate a multi-panel time series plot from a KPF TSDB. Each subplot is configured
+        via a dict (or YAML file path), enabling control over filters, transforms, and style.
+    
         Parameters
         ----------
         plotdict : str or dict
-            Either a path-like string corresponding to a named YAML configuration file,
-            or a dictionary with a key `'panel_arr'` which contains a list of panel dictionaries.
-            Each dictionary defines the contents and layout of an individual subplot.
-
-        start_date : datetime.datetime, optional
-            Start of the time range to query and plot. Defaults to 2020-01-01 if None.
-
-        end_date : datetime.datetime, optional
-            End of the time range to query and plot. Defaults to 2040-01-01 if None.
-
+            Path to a named YAML config or a dict with key 'panel_arr' (list of panel dicts).
+        start_date, end_date : datetime, optional
+            Query window (UT). Defaults if None: start=2020-01-01, end=2040-01-01. The code
+            may tighten to the data’s min/max timestamps.
         hatch_service_missions : bool, default=True
-            If True, overlay hatched vertical spans for each service mission interval
-            returned by `self.get_service_mission_df()` (columns: `UT_start_date`, `UT_end_date`).
-
+            Overlay hatched spans from self.get_service_mission_df() (UT_start_date, UT_end_date).
         clean : bool, default=False
-            If True, applies outlier removal to the data (via `self.db.clean_df()`).
-
+            Apply self.db.clean_df() to remove outliers.
         fig_path : str, optional
-            If provided, the full path (including filename) where the final PNG image will be saved.
-
+            Full output path (PNG).
         show_plot : bool, default=False
-            If True, the plot will be displayed interactively (e.g., in a Jupyter Notebook).
-
+            Show the figure interactively.
         log_savefig_timing : bool, default=False
-            If True, logs the CPU time spent during `savefig()`.
-
+            Log CPU time for savefig().
+    
         Plot Configuration (via panel_dict or YAML)
         -------------------------------------------
-        plotdict['panel_arr'] : list of dicts
-            Each element defines a panel (subplot). Each panel can include:
-            
-            - 'paneldict' : dict
-                Configuration for panel-level behavior and filters:
-                - 'col' : str  Column name in the database to plot.
-                - 'plot_type' : str  One of {'plot', 'scatter', 'step', 'state', 'errorbar'}.
-                - 'plot_attr' : dict  Matplotlib attributes like marker, color, label, etc.
-                - 'only_object' : str or list[str]  Exact object names to filter by.
-                - 'object_like' : str or list[str]  LIKE-matching object names.
-                - 'only_source' : str  Filter by OBJECT.
-                - 'not_junk' : bool or str ('True' or 'False')  If set, filters by NOTJUNK field.
-                - 'QC_pass' : str or list[str]  Column names where rows must have True.
-                - 'QC_fail' : str or list[str]  Column names where rows must have False.
-                - 'QC_not_pass' : str or list[str]  Column names where rows must have not True (Null allowed).
-                - 'QC_not_fail' : str or list[str]  Column names where rows must have not False (Null allowed).
-                - 'on_sky' : bool or str  If True, filters for FIUMODE == 'Observing'.
-                - 'narrow_xlim_daily' : bool  Restrict x-axis to min/max of data on short timescales.
-                - 'ylabel' : str  Y-axis label for the panel.
-                - 'ylim' : tuple  Explicit y-axis range as (ymin, ymax).
-                - 'ymin' : float  Explicit y-axis minimum (overrides ylim value).
-                - 'ymax' : float  Explicit y-axis maximum (overrides ylim value).
-                - 'yscale' : str  e.g., 'log' to apply logarithmic scaling.
-                - 'subtractmedian' : bool  Subtract median from the plotted data.
-                - 'nolegend' : bool  Suppress legend.
-                - 'legend_frac_size' : float  Legend offset scale.
-                - 'axhspan' : dict  Optional shaded region(s) to overlay (keys: ymin, ymax, color, alpha).
-                - 'title' : str  Per-panel title string prepended to date range info.
-
-            - 'panelvars' : list of dicts
-                Defines the variables to be plotted in this panel. Each dictionary can include:
-                - 'col' : str  Main data column name.
-                - 'col_err' : str  Optional column for error bars.
-                - 'col_subtract' : str  Column to subtract from `col` before plotting.
-                - 'col_multiply' : float  Scalar to multiply data.
-                - 'col_offset' : float  Scalar to add to data.
-                - 'normalize' : bool  If True, normalize data by its median.
-                - 'plot_type' : str  Plot type (overrides the panel-level setting).
-                - 'plot_attr' : dict  Matplotlib styling keywords.
-                - 'unit' : str  Unit label for legends/statistics (e.g., "m/s").
-                - 'vline_pt_color' : str - color of points in vline plots
-
+        plotdict['panel_arr'] : list[dict]
+            Each element defines one panel and includes:
+    
+            - 'paneldict' : dict   # panel-level behavior/filters
+                - 'only_object' : str | list[str]          # exact OBJECT names
+                - 'object_like' : str | list[str]          # LIKE patterns (nested lists ok)
+                - 'only_source' : str                      # passed to DB filter layer
+                - 'not_junk' : bool | {'true','false'}     # filter on NOTJUNK
+                - 'qc_pass' : str | list[str]              # columns that must be True
+                - 'qc_fail' : str | list[str]              # columns that must be False
+                - 'qc_not_pass' : str | list[str]          # columns that are not True (False/NaN)
+                - 'qc_not_fail' : str | list[str]          # columns that are not False (True/NaN)
+                - 'on_sky' : bool | {'true','false'}       # True→FIUMODE=='Observing', False→'Calibration'
+                - 'ylabel' : str                           # label for vertical axis
+                - 'ylim' : tuple | str                     # (ymin, ymax) or a string that evals to that
+                - 'ymin', 'ymax' : float                   # override parts of ylim
+                - 'yscale' : str                           # e.g., 'log'
+                - 'subtractmedian' : bool                  # subtract per-variable median before plotting
+                - 'nolegend' : bool                        # suppresses legend
+                - 'legend_frac_size' : float               # legend anchor offset
+                - 'axhspan' : dict                         # {key: {'ymin','ymax','color','alpha'}}
+                - 'title' : str                            # title for a set of panels
+                - 'narrow_xlim_daily' : bool               # shrink x-limits to data for day-scale plots
+    
+            - 'panelvars' : list[dict]   # variables drawn in this panel
+                - 'col' : str                                # main data column
+                - 'col_err' : str                            # symmetric error column (optional)
+                - 'col_subtract' : str                       # subtract this column from 'col'
+                - 'col_multiply' : float                     # scalar multiplier
+                - 'col_offset' : float                       # scalar offset
+                - 'normalize' : bool                         # divide by median after transforms
+                - 'plot_type' : {                            # determine plot type
+                     'scatter',                              # scatter plot (default)
+                     'errorbar',                             # errorbar plot; must include 'col_err'
+                     'plot',                                 # line plot
+                     'step',                                 # step plot
+                     'state',                                # state value plot with distinct values, usually strings or booleans
+                     'vlines'                                # plot with vertical lines; must include 'col_min' and 'col_max'
+                     }
+                - 'plot_attr' : dict                         # matplotlib kwargs (marker, label, etc.)
+                - 'unit' : str                               # used when augmenting legend label with RMS
+                - 'col_min','col_max' : str                  # required for plot_type='vlines'
+                - 'vline_pt_color' : str                     # optional color for vline end points
+    
         Returns
         -------
         None
-            Saves the figure to `fig_path` (if specified), displays it (if `show_plot=True`),
-            and logs timing or errors as appropriate. Does not return the figure or axes explicitly.
-
+            Saves to fig_path (if given), optionally shows, and logs as configured.
+    
         Notes
         -----
-        - The function handles various time axis labeling strategies based on time span:
-             Hourly for single-day plots
-             Days since start for <32-day plots
-             Month/day for full-year plots
-             ISO date labels for long-term plots
-        - For `plot_type='state'`, categorical values (e.g., DRPTAG) are color-coded and mapped to strings.
-        - The function attempts to detect empty data and annotates 'No Data' in panels accordingly.
-        - Internally calls `self.db.dataframe_from_db()` to query the database using provided filters.
-
-        To Do
-        -----
-        - Add standardized plot styles for delta-value diagnostics with robust sigma-clipping.
-        - Implement automated correlation plots between parameters.
-        - Implement phased plots (e.g., folding by sidereal day).
-
-        Examples
-        --------
-        >>> self.plot_time_series_multipanel('kpf_qlp_diagnostics.yaml', 
-                                             start_date=datetime(2025, 1, 1),
-                                             end_date=datetime(2025, 1, 31),
-                                             fig_path='monthly_plot.png',
-                                             show_plot=False)
+        - Time axis adapts to span:
+            * ~1 day: hours since start (UT/HST labels possible), optional “Night” shading
+            * <3 days or <32 days: days since start
+            * 28–31 days: month view (day numbers)
+            * ~1 year: month tick marks with MM-DD labels
+            * longer: calendar dates (YYYY-MM-DD)
+        - 'state' plots render categorical levels; {0,1,None}→{Fail,Pass,None}. If ylabel=='Junk Status',
+          {Pass,Fail}→{Not Junk,Junk}.
+        - Empty selections are annotated “No Data”.
+        - Labels may be augmented with “(X unit rms)” when legend shown and enough points exist.
+        - Data come from self.db.dataframe_from_db(...); DATE-MID parsed and sorted; clean_df() optional.
         """
         import warnings
         warnings.filterwarnings("ignore", message=".*tight_layout.*")
