@@ -664,7 +664,7 @@ class QuicklookAlg:
         if chips != []:    
             try:
                 myL2 = AnalyzeL2(kpf2, logger=self.logger)
-                if myL2.is_star:
+                if myL2.is_star and 'Delta_CCFBJD' in myL2.df_RV.columns:
                     savedir = L2_QLP_file_base +'L2/'
                     os.makedirs(savedir, exist_ok=True) # make directories if needed
                     filename = savedir + self.ObsID + '_BJD_BCV_zoomable.png'
