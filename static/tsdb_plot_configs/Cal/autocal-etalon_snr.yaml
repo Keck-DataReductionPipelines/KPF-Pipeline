@@ -1,0 +1,51 @@
+description: autocal-etalon and slewcal SNR
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: SNRCL548
+        plot_type: scatter
+        plot_attr:
+          label: SNR (548 nm)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: SNRCL652
+        plot_type: scatter
+        plot_attr:
+          label: SNR (652 nm)
+          marker: .
+          linewidth: 0.5
+          color: red
+    paneldict:
+      ylabel: "autcal-etalon SNR (CAL)"
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
+      not_junk: true
+      legend_frac_size: 0.20
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+  - panelvars:
+      - col: SNRCL548
+        plot_type: scatter
+        plot_attr:
+          label: SNR (548 nm)
+          marker: .
+          linewidth: 0.5
+          color: green
+      - col: SNRCL652
+        plot_type: scatter
+        plot_attr:
+          label: SNR (652 nm)
+          marker: .
+          linewidth: 0.5
+          color: red
+    paneldict:
+      title: autocal-etalon and slewcal SNR (CAL) 
+      ylabel: "slewcal SNR (CAL)"
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
+      legend_frac_size: 0.20
+      only_object: 
+        - slewcal
