@@ -132,8 +132,9 @@ class SpectralExtractionAlg:
     def _check_for_variance_frame(self, chip, do_patch=True):
         var_ext_name = f'{chip}_VAR'
 
-        # hard-code 2D variance fix
-        self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+        # hard-code 2D variance fix w/ quick readnoise addition
+        readnoise = 0.5*(self.target_2D.header['PRIMARY'][f'RN{chip}1'] + self.target_2D.header['PRIMARY'][f'RN{chip}2'])
+        self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD']) + readnoise
 
         if var_ext_name not in self.target_2D.extensions:
             self.log.warning(f"Variance extension {var_ext_name} not found, setting variance equal to photon noise")
@@ -150,6 +151,8 @@ class SpectralExtractionAlg:
                 raise ValueError(f"Variance extension {var_ext_name} not found")
 
     
+
+
     def _fix_order_trace_indexing(self):
         datecode = self.target_2D.header['PRIMARY']['DATE-OBS'].replace('-', '')
         try:
