@@ -1,4 +1,5 @@
 import time
+import copy
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -28,19 +29,18 @@ class AnalyzeHK:
 #[pipeline_20230720.log][INFO]:/data/masters/kpfMaster_HKwave20220909_sci.csv
 #        plot_trace_boxes(hdulist['ca_hk'].data,trace_location,trace_location_sky)
 
-    def __init__(self, L0, trace_file=None, offset=-1, wavesoln_file=None, logger=None):
+    def __init__(self, L0, trace_file=None, offset=-1, wavesoln_file=None, logger=None, verbose=False):
 
-        if logger:
-            self.logger = logger
+        self.logger = logger if logger is not None else DummyLogger()
+        if verbose:
             self.logger.debug('Initializing AnalyzeHK object.')
-        else:
-            self.logger = None
+        self.L0 = copy.deepcopy(L0)
         self.trace_file = trace_file
         self.wavesoln_file = wavesoln_file
         self.offset = offset
-        self.image = np.array(L0['CA_HK'].data)
+        self.image = np.array(self.L0['CA_HK'].data)
         self.percentile_99, self.percentile_90, self.percentile_50, self.percentile_10 = np.nanpercentile(self.image, [99,90,50,10]) # this will be bias-subtracted for 2D, but not L0
-        primary_header = HeaderParse(L0, 'PRIMARY')
+        primary_header = HeaderParse(self.L0, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
