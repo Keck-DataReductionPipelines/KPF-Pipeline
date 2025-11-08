@@ -782,7 +782,7 @@ class QCDefinitions:
         self.required_data_products[name27] = [] # no required data products
         self.fits_keywords[name27] = 'FLATSNR'
         self.fits_comments[name27] = 'QC: Flat SNR sufficient, all orders/orderlets'
-        self.db_columns[] = None
+        self.db_columns[name27] = None
         self.fits_keyword_fail_value[name27] = 0
 
         name28 = 'L1_LFC_lines'
