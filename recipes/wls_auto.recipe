@@ -15,7 +15,7 @@ fr = config.ARGUMENT.frep_key
 
 date_dir = context.date_dir
 
-for cal_type in ['ThAr', 'LFC']:#, 'Etalon']: # remove etalon for now oct2025
+for cal_type in ['ThAr', 'LFC', 'Etalon']: 
     if cal_type == 'ThAr':
         search_string = config.ARGUMENT.thar_search_string
     elif cal_type == 'Etalon':
@@ -32,19 +32,19 @@ for cal_type in ['ThAr', 'LFC']:#, 'Etalon']: # remove etalon for now oct2025
             l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
             dt_string = GetHeaderValue(l1_obj, 'DATE-MID')
             cals = CalibrationLookup(dt_string)
-            master_wls_file = cals['rough_wls'] # TRY A NEW ROUGH WLS
-#            master_wls_file = '/data/masters/20241024/kpf_20241024_master_WLS_autocal-lfc-all-eve_L1.fits' # HTI HARD CODE.
+            # master_wls_file = cals['rough_wls'] # TRY A NEW ROUGH WLS
+            master_wls_file = '/data/reference_fits/kpf_20241010_master_WLS_autocal-lfc-all-eve_L1.fits' # HTI HARD CODE.
             full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
             base_path = masters_dir + date_dir
             obj_string = str_replace(L1_file, base_path + '/kpf_' + date_dir + '_master_arclamp_', '')
             obj_string_short = str_replace(obj_string, '_L1.fits', '')
             output_filename = output_dir + date_dir + '/kpf_' + date_dir + '_master_WLS_' + obj_string_short + '_L1.fits'
 
-            for ext in ['RED_CAL_WAVE', 'GREEN_CAL_WAVE']: # iterate over RED/GREEN CCDs
+            for ext in ['RED_SCI_WAVE2', 'GREEN_SCI_WAVE2']: # iterate over RED/GREEN CCDs
 
                 master_wls = full_master_wls[ext]
 
-                if ext == 'RED_CAL_WAVE':
+                if ext == 'RED_SCI_WAVE2':
                     output_exts = config.ARGUMENT.red_output_ext
                     orderlet_names = config.ARGUMENT.red_cal_orderlet_name
                     min_order = config.ARGUMENT.red_min_order
@@ -54,7 +54,7 @@ for cal_type in ['ThAr', 'LFC']:#, 'Etalon']: # remove etalon for now oct2025
                         orderlet_names = ['RED_SCI_FLUX2']
                         output_exts = ['RED_SCI_WAVE2']
                     
-                if ext == 'GREEN_CAL_WAVE':
+                if ext == 'GREEN_SCI_WAVE2':
                     output_exts = config.ARGUMENT.green_output_ext
                     orderlet_names = config.ARGUMENT.green_cal_orderlet_name
                     min_order = config.ARGUMENT.green_min_order
@@ -70,7 +70,7 @@ for cal_type in ['ThAr', 'LFC']:#, 'Etalon']: # remove etalon for now oct2025
                 else:
                     plot_dir = None
 
-                # save_wlpixelfiles = 1
+                save_wlpixelfiles = 1
                 l1_obj = WaveCalibrate(
                     l1_obj, cal_type, orderlet_names, save_wlpixelfiles, quicklook, min_order, max_order,
                     'KPF', output_exts,

@@ -23,6 +23,7 @@ Using the Time Series Database
     all_plots.rst
     debugging_with_tsdb.rst
     rebuilding_tsdb.rst
+    example_yaml.rst
     example_patch.rst
 
 The links above provide explanations and tutorials on using the time series database.
