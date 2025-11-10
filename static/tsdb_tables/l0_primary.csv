@@ -51,3 +51,4 @@ DEC|string|Declination|deg
 EQUINOX|float|DCS Equinox|None
 MJD-OBS|float|Modified Julian day of the observation start|days
 TIMEERR|string|NTP time server response|None
+FIUMODE|string|FIU operating mode - Observing = on-sky|None

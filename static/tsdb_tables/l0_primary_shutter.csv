@@ -25,7 +25,6 @@ CAL-OBJ|string|Cal fiber source|None
 SKY-OBJ|string|Sky fiber source|None
 SCI-OBJ|string|Science fiber source|None
 AGITSTA|string|Agigator state (Running/Stopped)|None
-FIUMODE|string|FIU operating mode - Observing = on-sky|None
 VIGNETTE|bool|Dome vignetting|None
 STVIGNE|bool|Top shutter vignetting|None
 SBVIGNE|bool|Bottom shutter vignetting|None
