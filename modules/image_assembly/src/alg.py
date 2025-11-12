@@ -32,9 +32,14 @@ class ImageAssemblyAlg:
 
         for chip in ['GREEN', 'RED']:
             self._read_orientation_reference(chip)
-            self._read_channel_datasec_config(chip)
+            #self._read_channel_datasec_config(chip)
         
         self.prescan_region = self.cfg_params.get_config_value('prescan_region')
+        self.overscan_clip = int(self.cfg_params.get_config_value('overscan_clip'))
+
+        # GJG: temporarily hard-coding number of amplifers for development
+        # GJG: need to write function to infer number of amplifers from headers/extensions
+        self.namp = {'GREEN':2, 'RED':2}
 
 
     def _read_orientation_reference(self, chip):
@@ -80,6 +85,7 @@ class ImageAssemblyAlg:
     def orient_channel(self, chip, amp_no):
         """
         Extracts and flips single-amplifier image to standardize readout orientation for overscan subtraction.
+        All transformations are flips, so a second call to this function will undo the transformation.
 
         Args:
             chip (str) : which CCD to use, 'GREEN' or 'RED'
@@ -107,9 +113,9 @@ class ImageAssemblyAlg:
         return image_reoriented
 
 
-    def make_overscan_arrays(self, image, chip, amp_no, clip=True):
+    def get_overscan_pixels(self, image, chip, amp_no, clip=True):
         """
-        Makes array of overscan pixels
+        Extracts array of overscan pixel from full amplifier region
         Assumes image orientaion: 
             - serial overscan on right
             - parallel overscan on bottom
@@ -118,10 +124,33 @@ class ImageAssemblyAlg:
             image (ndarray) : data image, oriented using ImageAssemblyAlg.orient_channel()
 
         Returns:
-            overscan_pixels_srl (np.ndarray): Array of serial overscan region pixels
-            overscan_pixels_prl (np.ndarray): Array of parallel overscan region pixels
+            oscan_pix_srl (np.ndarray): Array of serial overscan pixels
+            oscan_pix_prl (np.ndarray): Array of parallel overscan pixels
         """
-        ncol_prescan = self.prescan_reg[1] - self.prescan_reg[0]
+        ncol_prescan = self.prescan_region[1] - self.prescan_region[0]
+        
+        if self.namp[chip.upper()] == 2:
+            ncol_datasec = 2040
+            nrow_datasec = 4080
+        elif self.namp[chip.upper()] == 4:
+            ncol_datasec = 2040
+            nrow_datasec = 2040
+        else:
+            raise ValueError("Only 2-amp and 4-amp modes supported")
+
+        oscan_pix_srl = image[:,ncol_prescan+ncol_datasec:]
+        oscan_pix_prl = image[nrow_datasec:,:]
+
+        return oscan_pix_srl, oscan_pix_prl
+    
+    
+    
+    
+    def _DEPECATED_make_overscan_pixel_index_array(self, image, chip, amp_no, clip=True):
+        """
+        Makes array of overscan pixel indexes
+        """
+        ncol_prescan = self.prescan_region[1] - self.prescan_region[0]
         ncol_datasec = self.channel_datasec[f'{chip.upper()}_NCOL']
         nrow_datasec = self.channel_datasec[f'{chip.upper()}_NROW']
 
@@ -129,7 +158,7 @@ class ImageAssemblyAlg:
         overscan_pixels_prl = np.arange(nrow_datasec, image.shape[0], 1)
 
         if clip:
-            overscan_pixels_srl = overscan_pixels_srl[self.oscan_clip_no:-self.oscan_clip_no-1]
-            overscan_pixels_prl = overscan_pixels_prl[self.oscan_clip_no:-self.oscan_clip_no-1]
+            overscan_pixels_srl = overscan_pixels_srl[self.overscan_clip:-self.overscan_clip-1]
+            overscan_pixels_prl = overscan_pixels_prl[self.overscan_clip:-self.overscan_clip-1]
 
         return overscan_pixels_srl, overscan_pixels_prl
