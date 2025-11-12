@@ -218,6 +218,11 @@ class AnalyzeL2:
         for oo, orderlet in enumerate(['SCI1', 'SCI2', 'SCI3', 'CAL', 'SKY']):
             ax = axes[oo]
             
+            # Debug logging for SCI2
+            if orderlet == 'SCI2':
+                self.logger.info(f"[DEBUG] Processing orderlet SCI2 (oo={oo})")
+                self.logger.info(f"[DEBUG] SCI2: CCF_data shape={CCF_data.shape}, n_orders={n_orders}")
+            
             # Plot vertical lines for RVs and add top annotations
             if   oo == 0:
                 try:
@@ -233,10 +238,12 @@ class AnalyzeL2:
                     this_RV = self.rv_header['CCD1RV2']
                     this_RV_text = f"{this_RV:.5f}" + r' km s$^{-1}$'
                     data_present = True
+                    self.logger.info(f"[DEBUG] SCI2: Found CCD1RV2={this_RV} in header, data_present=True")
                 except:
                     this_RV = 0.
-                    this_RV_text = 'No RV reported - CCD1RV1 missing from header'
+                    this_RV_text = 'No RV reported - CCD1RV2 missing from header'
                     data_present = False
+                    self.logger.info(f"[DEBUG] SCI2: CCD1RV2 missing from header, data_present=False")
             elif oo == 2: 
                 try:
                     this_RV = self.rv_header['CCD1RV3']
@@ -280,6 +287,14 @@ class AnalyzeL2:
 
             # Iterate over orders
             for o in range(n_orders):
+                # Debug logging for SCI2, order 20
+                if orderlet == 'SCI2' and o == 20:
+                    self.logger.info(f"[DEBUG] SCI2 order 20: data_present={data_present}")
+                    ccf_sum = np.sum(CCF_data[oo, o, :])
+                    self.logger.info(f"[DEBUG] SCI2 order 20: CCF_data sum={ccf_sum}")
+                    self.logger.info(f"[DEBUG] SCI2 order 20: CCF_data shape={CCF_data[oo, o, :].shape}")
+                    self.logger.info(f"[DEBUG] SCI2 order 20: CCF_data min={np.min(CCF_data[oo, o, :])}, max={np.max(CCF_data[oo, o, :])}")
+                
                 if orderlet == 'CAL':
                     if data_present:
                         this_CCF = CCF_data[oo, o, :]
@@ -306,6 +321,11 @@ class AnalyzeL2:
                     if data_present:
                         this_CCF = CCF_data[oo, o, :]
                         norm_CCF = np.divide(this_CCF, np.nanpercentile(this_CCF,[99]))
+                        if orderlet == 'SCI2' and o == 20:
+                            self.logger.info(f"[DEBUG] SCI2 order 20: norm_CCF computed, 99th percentile={np.nanpercentile(this_CCF,[99])}")
+                else:
+                    if orderlet == 'SCI2' and o == 20:
+                        self.logger.info(f"[DEBUG] SCI2 order 20: CCF sum is zero - no CCF computed for this order")
                 # The zoom feature is not yet implemented
                 #if zoom:
                 #    middle = len(RVgrid) // 4
@@ -320,6 +340,14 @@ class AnalyzeL2:
                 if data_present:
                     if np.sum(CCF_data[oo, o, :]) != 0:
                         ax.plot(RVgrid, norm_CCF + o*0.5, color=current_color)
+                        if orderlet == 'SCI2' and o == 20:
+                            self.logger.info(f"[DEBUG] SCI2 order 20: CCF plotted successfully")
+                    else:
+                        if orderlet == 'SCI2' and o == 20:
+                            self.logger.info(f"[DEBUG] SCI2 order 20: CCF not plotted - sum is zero")
+                else:
+                    if orderlet == 'SCI2' and o == 20:
+                        self.logger.info(f"[DEBUG] SCI2 order 20: CCF not plotted - data_present is False")
                 
                 # Add additional annotations
                 ax.text(RVgrid[-1]+0.75,  1+o*0.5-0.10, str(o), color=current_color, verticalalignment='center', horizontalalignment='left', fontsize=11)
