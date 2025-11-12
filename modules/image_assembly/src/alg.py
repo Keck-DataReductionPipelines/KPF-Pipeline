@@ -61,7 +61,7 @@ class ImageAssemblyAlg:
         self.channel_datasec[f'{chip.upper()}_NROW'] = nrow
 
 
-    def perform_overscan_subtraction(self, chip, namp):
+    def perform_overscan_subtraction(self, chip):
         """
         Performs overscan subtraction steps, in order: 
             1. orient frame (positions overscan on right and bottom)
@@ -70,7 +70,6 @@ class ImageAssemblyAlg:
 
         Args:
             chip (str) : which CCD to use, 'GREEN' or 'RED'
-            namp (int) : number of amplifiers
 
         Returns:
             image_stitched (np.ndarray) : Stiched-together full frame image, with overscan subtracted and removed
@@ -85,6 +84,8 @@ class ImageAssemblyAlg:
     def orient_channel(self, chip, amp_no):
         """
         Extracts and flips single-amplifier image to standardize readout orientation for overscan subtraction.
+            - serial overscan on right
+            - parallel overscan on bottom
         All transformations are flips, so a second call to this function will undo the transformation.
 
         Args:
@@ -113,21 +114,20 @@ class ImageAssemblyAlg:
         return image_reoriented
 
 
-    def get_overscan_pixels(self, image, chip, amp_no, clip=True):
+    def get_overscan_pixels(self, chip, amp_no, clip=True):
         """
         Extracts array of overscan pixel from full amplifier region
-        Assumes image orientaion: 
-            - serial overscan on right
-            - parallel overscan on bottom
+        Assumes image orientaion has not been altered from raw L0 file. 
 
         Args:
-            image (ndarray) : data image, oriented using ImageAssemblyAlg.orient_channel()
+            chip (str) : which CCD to use, 'GREEN' or 'RED'
+            amp (int) : amplifier number
 
         Returns:
             oscan_pix_srl (np.ndarray): Array of serial overscan pixels
             oscan_pix_prl (np.ndarray): Array of parallel overscan pixels
         """
-        ncol_prescan = self.prescan_region[1] - self.prescan_region[0]
+        image = self.orient_channel(chip, amp_no)
         
         if self.namp[chip.upper()] == 2:
             ncol_datasec = 2040
@@ -138,27 +138,51 @@ class ImageAssemblyAlg:
         else:
             raise ValueError("Only 2-amp and 4-amp modes supported")
 
+        ncol_prescan = self.prescan_region[1] - self.prescan_region[0]
+
         oscan_pix_srl = image[:,ncol_prescan+ncol_datasec:]
         oscan_pix_prl = image[nrow_datasec:,:]
 
-        return oscan_pix_srl, oscan_pix_prl
-    
-    
-    
-    
-    def _DEPECATED_make_overscan_pixel_index_array(self, image, chip, amp_no, clip=True):
-        """
-        Makes array of overscan pixel indexes
-        """
-        ncol_prescan = self.prescan_region[1] - self.prescan_region[0]
-        ncol_datasec = self.channel_datasec[f'{chip.upper()}_NCOL']
-        nrow_datasec = self.channel_datasec[f'{chip.upper()}_NROW']
-
-        overscan_pixels_srl = np.arange(ncol_prescan + ncol_datasec, image.shape[1], 1)
-        overscan_pixels_prl = np.arange(nrow_datasec, image.shape[0], 1)
-
         if clip:
-            overscan_pixels_srl = overscan_pixels_srl[self.overscan_clip:-self.overscan_clip-1]
-            overscan_pixels_prl = overscan_pixels_prl[self.overscan_clip:-self.overscan_clip-1]
+            oscan_pix_srl = oscan_pix_srl[self.overscan_clip:-self.overscan_clip-1]
+            oscan_pix_prl = oscan_pix_prl[self.overscan_clip:-self.overscan_clip-1]
 
-        return overscan_pixels_srl, overscan_pixels_prl
+        return oscan_pix_srl, oscan_pix_prl
+
+
+    def zero(self, chip, amp_no, clip=True):
+        """
+        Sets overscan subtraction to zero, returns raw image
+
+        Args:
+            chip (str) : which CCD to use, 'GREEN' or 'RED'
+            amp (int) : amplifier number
+            
+        Returns:
+            np.ndarray : raw image with zero overscan subtracted
+        """
+        chip = chip.upper()
+        channel = f'{chip}_AMP{amp_no}'
+        image = deepcopy(np.array(self.target_L0[channel]))
+
+        return image
+
+    
+    def median(self, chip, amp_no, clip=True):
+        """
+        Calculates median of parallel overscan region; subtracts from raw image
+
+        Args:
+            chip (str) : which CCD to use, 'GREEN' or 'RED'
+            amp (int) : amplifier number
+            
+        Returns:
+            np.ndarray : raw image with median overscan subtracted
+        """
+        chip = chip.upper()
+        channel = f'{chip}_AMP{amp_no}'
+        image = deepcopy(np.array(self.target_L0[channel]))
+
+        oscan_pix_srl, _ = self.get_overscan_pixels(chip, amp_no, clip=clip)
+
+        return image - np.nanmedian(oscan_pix_srl)
