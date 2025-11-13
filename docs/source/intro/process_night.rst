@@ -32,4 +32,3 @@ files forever so you'll need to exit with Ctrl-C once you see that there are no 
 
 In both single-threaded and parallel modes the outputs will be saved under the appropriate date directores in ``$KPFPIPE_DATA/2D/``,
 ``$KPFPIPE_DATA/L1/``, and ``$KPFPIPE_DATA/L2/``.
-
