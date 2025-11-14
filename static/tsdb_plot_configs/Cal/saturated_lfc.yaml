@@ -6,21 +6,21 @@ panel_arr:
         plot_type: scatter
         unit: counts
         plot_attr:
-          label: 'Green SCI2'
+          label: 'Green SCI2 (NSATGS2)'
           marker: .
           linewidth: 0.5
       - col: NSATGC
         plot_type: scatter
         unit: counts
         plot_attr:
-          label: 'Green CAL'
+          label: 'Green CAL (NSATGC)'
           marker: .
           linewidth: 0.5
       - col: NSATGK
         plot_type: scatter
         unit: counts
         plot_attr:
-          label: 'Green SKY'
+          label: 'Green SKY (NSATGK)'
           marker: .
           linewidth: 0.5
     paneldict:
@@ -44,21 +44,21 @@ panel_arr:
         plot_type: scatter
         unit: counts
         plot_attr:
-          label: 'Red SCI2'
+          label: 'Red SCI2 (NSATRS2)'
           marker: .
           linewidth: 0.5
       - col: NSATRC
         plot_type: scatter
         unit: counts
         plot_attr:
-          label: 'Red CAL'
+          label: 'Red CAL (NSATRC)'
           marker: .
           linewidth: 0.5
       - col: NSATRK
         plot_type: scatter
         unit: counts
         plot_attr:
-          label: 'Red SKY'
+          label: 'Red SKY (NSATRK)'
           marker: .
           linewidth: 0.5
     paneldict:
