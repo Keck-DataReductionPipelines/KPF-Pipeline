@@ -36,11 +36,10 @@ class AnalyzeL2:
     def __init__(self, L2, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
         self.L2 = copy.deepcopy(L2)
-        #self.L2 = L2
         self.df_RV = self.L2['RV']
         self.n_green_orders = 35
         self.n_red_orders   = 32
-        primary_header = HeaderParse(L2, 'PRIMARY')
+        primary_header = HeaderParse(self.L2, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
         if primary_header.get_name(use_star_names=False) in ['Star', 'Sun']:
@@ -48,7 +47,7 @@ class AnalyzeL2:
         else:
             self.is_star = False
         self.ObsID = primary_header.get_obsid()
-        self.rv_header = HeaderParse(L2, 'RV').header
+        self.rv_header = HeaderParse(self.L2, 'RV').header
         self.df_RVs = self.L2['RV'] # Table of RVs per order and orderlet
         self.data_products = get_data_products_L2(self.L2)
         self.green_present = 'Green' in self.data_products
