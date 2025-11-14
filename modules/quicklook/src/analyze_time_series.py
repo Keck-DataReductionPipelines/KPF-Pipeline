@@ -1561,7 +1561,7 @@ class AnalyzeTimeSeries:
     
         start_date = _coerce_datetime_like(start_date)
         end_date   = _coerce_datetime_like(end_date)
-    
+
         # If exactly one bound is provided, mirror it
         if (start_date is None) ^ (end_date is None):
             if start_date is None:

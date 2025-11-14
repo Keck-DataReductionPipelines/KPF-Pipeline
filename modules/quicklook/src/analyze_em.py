@@ -51,13 +51,11 @@ class AnalyzeEM:
         flux_SKY_764p    - SKY flux array (764-870 nm; e-/nm/s) with timesteps from time_em
     """
 
-    def __init__(self, L0, logger=None):
+    def __init__(self, L0, logger=None, verbose=False):
 
-        if logger:
-            self.logger = logger
+        self.logger = logger if logger is not None else DummyLogger()
+        if verbose:
             self.logger.debug('Initializing AnalyzeEM object.')
-        else:
-            self.logger = None
         self.L0 = copy.deepcopy(L0)
         primary_header = HeaderParse(self.L0, 'PRIMARY')
         self.header = primary_header.header
