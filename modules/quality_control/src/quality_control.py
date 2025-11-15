@@ -349,6 +349,8 @@ class QCDefinitions:
             Possible strings in array: 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe'
         drift_types (dictionary of arrays of strings): Each entry specifies the types of observations where the QC check is relevant.  If the QC fails for an exposure, it is not used in wavelength drift measurements.
             Possible strings in array: 'all', 'LFC', 'Etalon', 'ThAr', 'UNe'
+        ci_types (dictionary of arrays of strings): Each entry specifies the types of observations where the QC check must pass during continuous integration.
+            Possible strings in array: 'all', 'Bias', 'Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star', <starname>
         required_data_products (dictionary of arrays of strings): specifies if data products are needed to perform check
             if = [], then no required data products; other possible values are from get_data_products_L0, etc.
         fits_keywords (dictionary of strings): Each entry specifies the FITS-header keyword for the metric.
@@ -370,6 +372,7 @@ class QCDefinitions:
         self.spectrum_types = {}
         self.master_types = {} # if = [], then the QC test is not relevant for the construction of any masters
         self.drift_types = {} # if = [], then the QC test is not relevant for drift measurements with any calibration type
+        self.ci_types = {} # if = [], then the QC test is not relevant for continuous integration tests with any calibration type
         self.required_data_products = {} # if = [], then no required data products; other possible values: Green, Red, CaHK, ExpMeter, Guider, Telemetry, Config, Receipt, Pyrheliometer
         self.fits_keywords = {}
         self.fits_comments = {}
@@ -385,6 +388,7 @@ class QCDefinitions:
         self.spectrum_types[name1] = ['all', ] # Need trailing comma to make list hashable
         self.master_types[name1] = ['all', ]
         self.drift_types[name1] = ['all', ]
+        self.ci_types[name1] = [] # not used for in any continuous integration tests
         self.required_data_products[name1] = [] # no required data products
         self.fits_keywords[name1] = 'NOTJUNK'
         self.fits_comments[name1] = 'QC: Not in list of junk files'
@@ -399,6 +403,7 @@ class QCDefinitions:
         self.spectrum_types[name2] = ['all', ]
         self.master_types[name2] = []
         self.drift_types[name2] = []
+        self.ci_types[name2] = ['Sun', 'Star'] 
         self.required_data_products[name2] = [] # no required data products
         self.fits_keywords[name2] = 'MONOTWLS'
         self.fits_comments[name2] = 'QC: Monotonic wavelength solution'
@@ -413,6 +418,7 @@ class QCDefinitions:
         self.spectrum_types[name3] = ['all', ]
         self.master_types[name3] = ['all', ]
         self.drift_types[name3] = ['all',]
+        self.ci_types[name3] = ['Bias', 'Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star'] 
         self.required_data_products[name3] = [] # no required data products
         self.fits_keywords[name3] = 'DATAPRL0'
         self.fits_comments[name3] = 'QC: L0 data present'
@@ -427,6 +433,7 @@ class QCDefinitions:
         self.spectrum_types[name4] = ['all', ]
         self.master_types[name4] = ['all', ]
         self.drift_types[name4] = ['all',]
+        self.ci_types[name4] = ['Bias', 'Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star'] 
         self.required_data_products[name4] = [] # no required data products
         self.fits_keywords[name4] = 'KWRDPRL0'
         self.fits_comments[name4] = 'QC: L0 keywords present'
@@ -441,6 +448,7 @@ class QCDefinitions:
         self.spectrum_types[name5] = ['all', ]
         self.master_types[name5] = ['all', ]
         self.drift_types[name5] = []
+        self.ci_types[name5] = [] # not used for in any continuous integration tests
         self.required_data_products[name5] = [] # no required data products
         self.fits_keywords[name5] = 'TIMCHKL0'
         self.fits_comments[name5] = 'QC: L0 times consistent'
@@ -455,6 +463,7 @@ class QCDefinitions:
         self.spectrum_types[name5b] = ['all', ]
         self.master_types[name5b] = []
         self.drift_types[name5b] = []
+        self.ci_types[name5b] = ['Sun', 'Star'] 
         self.required_data_products[name5b] = [] # no required data products
         self.fits_keywords[name5b] = 'TIMCHKL2'
         self.fits_comments[name5b] = 'QC: L2 times consistent'
@@ -469,6 +478,7 @@ class QCDefinitions:
         self.spectrum_types[name6] = ['all', ]
         self.master_types[name6] = []
         self.drift_types[name6] = []
+        self.ci_types[name6] = [] # not used for in any continuous integration tests
         self.required_data_products[name6] = ['ExpMeter']
         self.fits_keywords[name6] = 'EMSAT'
         self.fits_comments[name6] = 'QC: EM not saturated'
@@ -483,6 +493,7 @@ class QCDefinitions:
         self.spectrum_types[name7] = ['all', ]
         self.master_types[name7] = []
         self.drift_types[name7] = []
+        self.ci_types[name7] = [] # not used for in any continuous integration tests
         self.required_data_products[name7] = ['ExpMeter']
         self.fits_keywords[name7] = 'EMNEG'
         self.fits_comments[name7] = 'QC: EM not negative flux'
@@ -497,6 +508,7 @@ class QCDefinitions:
         self.spectrum_types[name8] = ['LFC', ]
         self.master_types[name8] = ['LFC', ]
         self.drift_types[name8] = ['LFC', ]
+        self.ci_types[name8] = [] # not used for in any continuous integration tests
         self.required_data_products[name8] = [] # no required data products
         self.fits_keywords[name8] = 'LFC2DFOK'
         self.fits_comments[name8] = 'QC: LFC flux meets threshold of 4000 counts'
@@ -506,28 +518,30 @@ class QCDefinitions:
         name9 = 'data_2D_bias_low_flux'
         self.names.append(name9)
         self.kpf_data_levels[name9] = ['2D']
-        self.descriptions[name9] = 'Flux is low in bias exposure'
+        self.descriptions[name9] = 'Flux is not low in bias exposure'
         self.data_types[name9] = 'int'
         self.spectrum_types[name9] = ['Bias', ]
         self.master_types[name9] = ['Bias', ]
-        self.drift_types[name9] = []
+        self.drift_types[name9] = ['Bias', ]
+        self.ci_types[name9] = [] # not used for in any continuous integration tests
         self.required_data_products[name9] = [] # no required data products
         self.fits_keywords[name9] = 'LOWBIAS'
-        self.fits_comments[name9] = 'QC: 2D bias low flux check'
+        self.fits_comments[name9] = 'QC: 2D bias not low'
         self.db_columns[name9] = None
         self.fits_keyword_fail_value[name9] = 0
 
         name10 = 'data_2D_dark_low_flux'
         self.names.append(name10)
         self.kpf_data_levels[name10] = ['2D']
-        self.descriptions[name10] = 'Flux is low in dark exposure'
+        self.descriptions[name10] = 'Flux is not low in dark exposure'
         self.data_types[name10] = 'int'
         self.spectrum_types[name10] = ['Dark', ]
         self.master_types[name10] = ['Dark', ]
-        self.drift_types[name10] = []
+        self.drift_types[name10] = ['Dark', ]
+        self.ci_types[name10] = [] # not used for in any continuous integration tests
         self.required_data_products[name10] = [] # no required data products
         self.fits_keywords[name10] = 'LOWDARK'
-        self.fits_comments[name10] = 'QC: 2D dark low flux check'
+        self.fits_comments[name10] = 'QC: 2D dark not low'
         self.db_columns[name10] = None
         self.fits_keyword_fail_value[name10] = 0
 
@@ -537,11 +551,12 @@ class QCDefinitions:
         self.data_types[name11] = 'int'
         self.spectrum_types[name11] = ['all', ]
         self.master_types[name11] = []
+        self.ci_types[name11] = ['Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star'] 
         self.drift_types[name11] = ['all', ]
         self.required_data_products[name11] = [] # no required data products
         self.descriptions[name11] = 'Green and Red data present in L1 with expected shapes'
         self.fits_keywords[name11] = 'DATAPRL1'
-        self.fits_comments[name11] = 'QC: L1 red and green data present check'
+        self.fits_comments[name11] = 'QC: L1 red and green data present'
         self.db_columns[name11] = None
         self.fits_keyword_fail_value[name11] = 0
 
@@ -553,9 +568,10 @@ class QCDefinitions:
         self.spectrum_types[name12] = ['all', ]
         self.master_types[name12] = []
         self.drift_types[name12] = []
+        self.ci_types[name12] = ['Star'] 
         self.required_data_products[name12] = ['CaHK']
         self.fits_keywords[name12] = 'CAHKPRL1'
-        self.fits_comments[name12] = 'QC: L1 CaHK present check'
+        self.fits_comments[name12] = 'QC: L1 CaHK present'
         self.db_columns[name12] = None
         self.fits_keyword_fail_value[name12] = 0
 
@@ -567,9 +583,10 @@ class QCDefinitions:
         self.spectrum_types[name13] = ['all', ]
         self.master_types[name13] = []
         self.drift_types[name13] = []
+        self.ci_types[name13] = ['Sun', 'Star'] 
         self.required_data_products[name13] = [] # no required data products
         self.fits_keywords[name13] = 'DATAPRL2'
-        self.fits_comments[name13] = 'QC: L2 data present check'
+        self.fits_comments[name13] = 'QC: L2 data present'
         self.db_columns[name13] = None
         self.fits_keyword_fail_value[name13] = 0
 
@@ -581,9 +598,10 @@ class QCDefinitions:
         self.spectrum_types[name14] = ['all', ]
         self.master_types[name14] = []
         self.drift_types[name14] = []
+        self.ci_types[name14] = ['Star'] 
         self.required_data_products[name14] = ['CaHK']
         self.fits_keywords[name14] = 'CAHKPR2D'
-        self.fits_comments[name14] = 'QC: 2D CaHK data present check'
+        self.fits_comments[name14] = 'QC: 2D CaHK data present'
         self.db_columns[name14] = None
         self.fits_keyword_fail_value[name14] = 0
 
@@ -595,9 +613,10 @@ class QCDefinitions:
         self.spectrum_types[name15] = ['all', ]
         self.master_types[name15] = ['all', ]
         self.drift_types[name15] = ['all', ]
+        self.ci_types[name15] = ['Bias', 'Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star'] 
         self.required_data_products[name15] = [] # no required data products
         self.fits_keywords[name15] = 'DATAPR2D'
-        self.fits_comments[name15] = 'QC: 2D red and green data present check'
+        self.fits_comments[name15] = 'QC: 2D red and green data present'
         self.db_columns[name15] = None
         self.fits_keyword_fail_value[name15] = 0
 
@@ -609,6 +628,7 @@ class QCDefinitions:
         self.spectrum_types[name16] = ['all', ]
         self.master_types[name16] = []
         self.drift_types[name16] = []
+        self.ci_types[name16] = ['Bias', 'Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star'] 
         self.required_data_products[name16] = [] # no required data products
         self.fits_keywords[name16] = 'POS2DSNR'
         self.fits_comments[name16] = 'QC: 2D check for > 10% data 5-sigma below zero'
@@ -623,6 +643,7 @@ class QCDefinitions:
         self.spectrum_types[name17] = ['all', ]
         self.master_types[name17] = []
         self.drift_types[name17] = []
+        self.ci_types[name17] = [] # not used for in any continuous integration tests
         self.required_data_products[name17] = [] # no required data products
         self.fits_keywords[name17] = 'KPFERA'
         self.fits_comments[name17] = 'Current era of KPF observations'
@@ -637,6 +658,7 @@ class QCDefinitions:
         self.spectrum_types[name19] = ['LFC', ]
         self.master_types[name19] = ['LFC', ]
         self.drift_types[name19] = ['LFC', ]
+        self.ci_types[name19] = [] # not used for in any continuous integration tests
         self.required_data_products[name19] = [] # no required data products
         self.fits_keywords[name19] = 'LFCSAT'
         self.fits_comments[name19] = 'QC: LFC not saturated'
@@ -651,6 +673,7 @@ class QCDefinitions:
         self.spectrum_types[name18] = ['all', ]
         self.master_types[name18] = ['all', ]
         self.drift_types[name18] = ['all', ]
+        self.ci_types[name18] = [] # not used for in any continuous integration tests
         self.required_data_products[name18] = [] # no required data products
         self.fits_keywords[name18] = 'GOODREAD'
         self.fits_comments[name18] = 'QC: CCD read properly'
@@ -665,6 +688,7 @@ class QCDefinitions:
         self.spectrum_types[name20] = ['all', ]
         self.master_types[name20] = []
         self.drift_types[name20] = []
+        self.ci_types[name20] = [] # not used for in any continuous integration tests
         self.required_data_products[name20] = [] # no required data products
         self.fits_keywords[name20] = 'WLSL1'
         self.fits_comments[name20] = 'QC: WLS files are correct in L1'
@@ -679,6 +703,7 @@ class QCDefinitions:
         self.spectrum_types[name21] = ['Dark', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name21] = []
         self.drift_types[name21] = []
+        self.ci_types[name21] = [] # not used for in any continuous integration tests
         self.required_data_products[name21] = [] # no required data products
         self.fits_keywords[name21] = 'OLDBIAS'
         self.fits_comments[name21] = 'QC: Master bias within 5 days of this obs'
@@ -693,6 +718,7 @@ class QCDefinitions:
         self.spectrum_types[name23] = ['Bias', 'Flat', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name23] = []
         self.drift_types[name23] = []
+        self.ci_types[name23] = [] # not used for in any continuous integration tests
         self.required_data_products[name23] = [] # no required data products
         self.fits_keywords[name23] = 'OLDDARK'
         self.fits_comments[name23] = 'QC: Master dark within 5 days of this obs'
@@ -707,6 +733,7 @@ class QCDefinitions:
         self.spectrum_types[name24] = ['Bias', 'Dark', 'Wide Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name24] = []
         self.drift_types[name24] = []
+        self.ci_types[name24] = [] # not used for in any continuous integration tests
         self.required_data_products[name24] = [] # no required data products
         self.fits_keywords[name24] = 'OLDFLAT'
         self.fits_comments[name24] = 'QC: Master flat within 5 days of this obs'
@@ -721,6 +748,7 @@ class QCDefinitions:
         self.spectrum_types[name25] = ['all', ]
         self.master_types[name25] = []
         self.drift_types[name25] = []
+        self.ci_types[name25] = [] # not used for in any continuous integration tests
         self.required_data_products[name25] = [] # no required data products
         self.fits_keywords[name25] = 'OLDWLS'
         self.fits_comments[name25] = 'QC: WLSFILE within 2 days of this obs'
@@ -735,6 +763,7 @@ class QCDefinitions:
         self.spectrum_types[name26] = ['all', ]
         self.master_types[name26] = []
         self.drift_types[name26] = []
+        self.ci_types[name26] = [] # not used for in any continuous integration tests
         self.required_data_products[name26] = [] # no required data products
         self.fits_keywords[name26] = 'OLDWLS2'
         self.fits_comments[name26] = 'QC: WLSFILE2 within 2 days of this obs'
@@ -749,6 +778,7 @@ class QCDefinitions:
         self.spectrum_types[name27] = ['Flat', ]
         self.master_types[name27] = []
         self.drift_types[name27] = []
+        self.ci_types[name27] = ['Flat', ] 
         self.required_data_products[name27] = [] # no required data products
         self.fits_keywords[name27] = 'FLATSNR'
         self.fits_comments[name27] = 'QC: Flat SNR sufficient, all orders/orderlets'
@@ -763,6 +793,7 @@ class QCDefinitions:
         self.spectrum_types[name28] = ['LFC', ]
         self.master_types[name28] = []
         self.drift_types[name28] = []
+        self.ci_types[name28] = [] # not used for in any continuous integration tests
         self.required_data_products[name28] = [] # no required data products
         self.fits_keywords[name28] = 'LFCLINES'
         self.fits_comments[name28] = 'QC: Num/dist of LFC lines ok (ord 2-34,0-31)'
@@ -777,6 +808,7 @@ class QCDefinitions:
         self.spectrum_types[name28b] = ['LFC', ]
         self.master_types[name28b] = []
         self.drift_types[name28b] = ['LFC', ]
+        self.ci_types[name28b] = [] # not used for in any continuous integration tests
         self.required_data_products[name28b] = [] # no required data products
         self.fits_keywords[name28b] = 'LFCLINEP'
         self.fits_comments[name28b] = 'QC: Num/dist of LFC lines ok (ord 15-34,1-31)'
@@ -791,6 +823,7 @@ class QCDefinitions:
         self.spectrum_types[name29] = ['Etalon', ]
         self.master_types[name29] = []
         self.drift_types[name29] = ['Etalon', ]
+        self.ci_types[name29] = [] # not used for in any continuous integration tests
         self.required_data_products[name29] = [] # no required data products
         self.fits_keywords[name29] = 'ETALINES'
         self.fits_comments[name29] = 'QC: Number and dist of Etalon lines sufficient'
@@ -804,7 +837,8 @@ class QCDefinitions:
         self.data_types[name30] = 'int'
         self.spectrum_types[name30] = ['all', ]
         self.master_types[name30] = []
-        self.drift_types[name30] = []
+        self.drift_types[name30] = ['Sun', 'Star'] 
+        self.ci_types[name30] = [] # not used for in any continuous integration tests
         self.required_data_products[name30] = [] # no required data products
         self.fits_keywords[name30] = 'WILDWSCI'
         self.fits_comments[name30] = 'QC: SCI wavelength solution not wild'
@@ -819,6 +853,7 @@ class QCDefinitions:
         self.spectrum_types[name31] = ['all', ]
         self.master_types[name31] = []
         self.drift_types[name31] = []
+        self.ci_types[name31] = ['Sun', 'Star'] 
         self.required_data_products[name31] = [] # no required data products
         self.fits_keywords[name31] = 'WILDWSKY'
         self.fits_comments[name31] = 'QC: SKY wavelength solution not wild'
@@ -833,6 +868,7 @@ class QCDefinitions:
         self.spectrum_types[name32] = ['all', ]
         self.master_types[name32] = []
         self.drift_types[name32] = []
+        self.ci_types[name32] = ['Bias', 'Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star'] 
         self.required_data_products[name32] = [] # no required data products
         self.fits_keywords[name32] = 'WILDWCAL'
         self.fits_comments[name32] = 'QC: CAL wavelength solution not wild'
@@ -847,6 +883,7 @@ class QCDefinitions:
         self.spectrum_types[name33] = ['all', ]
         self.master_types[name33] = []
         self.drift_types[name33] = []
+        self.ci_types[name33] = [] # not used for in any continuous integration tests
         self.required_data_products[name33] = [] # no required data products
         self.fits_keywords[name33] = 'NTPGOOD'
         self.fits_comments[name33] = 'QC: NTP time accurate to within 100 ms'
@@ -861,6 +898,7 @@ class QCDefinitions:
         self.spectrum_types[name34] = ['Star', ]
         self.master_types[name34] = []
         self.drift_types[name34] = []
+        self.ci_types[name34] = [] # not used for in any continuous integration tests
         self.required_data_products[name34] = [] # no required data products
         self.fits_keywords[name34] = 'GUIDGOOD'
         self.fits_comments[name34] = 'QC: Guider RMS and bias within 50 mas RMS'
@@ -875,6 +913,7 @@ class QCDefinitions:
         self.spectrum_types[name35] = ['Star', ]
         self.master_types[name35] = []
         self.drift_types[name35] = []
+        self.ci_types[name35] = [] # not used for in any continuous integration tests
         self.required_data_products[name35] = [] # no required data products
         self.fits_keywords[name35] = 'TARGPLAU'
         self.fits_comments[name35] = 'QC: TARG kwds present with plausible values'
@@ -889,6 +928,7 @@ class QCDefinitions:
         self.spectrum_types[name36] = ['Star', ]
         self.master_types[name36] = []
         self.drift_types[name36] = []
+        self.ci_types[name36] = [] # not used for in any continuous integration tests
         self.required_data_products[name36] = ['Green', 'Red']
         self.fits_keywords[name36] = 'QCPCBCV'
         self.fits_comments[name36] = 'QC: Percent BCV values within acceptable range'
@@ -903,6 +943,7 @@ class QCDefinitions:
         self.spectrum_types[name37] = ['Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name37] = []
         self.drift_types[name37] = []
+        self.ci_types[name37] = [] # not used for in any continuous integration tests
         self.required_data_products[name37] = [] # no required data products
         self.fits_keywords[name37] = 'OLDTRAC'
         self.fits_comments[name37] = 'QC: Trace file within 5 days of this obs'
@@ -917,6 +958,7 @@ class QCDefinitions:
         self.spectrum_types[name38] = ['Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name38] = []
         self.drift_types[name38] = []
+        self.ci_types[name38] = [] # not used for in any continuous integration tests
         self.required_data_products[name38] = [] # no required data products
         self.fits_keywords[name38] = 'OLDLAMP'
         self.fits_comments[name38] = 'QC: Smooth lamp file within 5 days of this obs'
@@ -931,6 +973,7 @@ class QCDefinitions:
         self.spectrum_types[name39] = ['Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star']
         self.master_types[name39] = []
         self.drift_types[name39] = []
+        self.ci_types[name39] = [] # not used for in any continuous integration tests
         self.required_data_products[name39] = [] # no required data products
         self.fits_keywords[name39] = 'AGITOK'
         self.fits_comments[name39] = 'QC: Agitator running with speed above minimum'
@@ -945,6 +988,7 @@ class QCDefinitions:
         self.spectrum_types[name40] = ['Star']
         self.master_types[name40] = []
         self.drift_types[name40] = []
+        self.ci_types[name40] = [] # not used for in any continuous integration tests
         self.required_data_products[name40] = ['Guider']
         self.fits_keywords[name40] = 'GUIDSAT'
         self.fits_comments[name40] = 'QC: Guider not saturated'
@@ -959,6 +1003,7 @@ class QCDefinitions:
         self.spectrum_types[name41] = ['Star']
         self.master_types[name41] = []
         self.drift_types[name41] = []
+        self.ci_types[name41] = [] # not used for in any continuous integration tests
         self.required_data_products[name41] = []
         self.fits_keywords[name41] = 'NOTVIGN'
         self.fits_comments[name41] = 'QC: Telescope not vignetted by dome'
@@ -973,6 +1018,7 @@ class QCDefinitions:
         self.spectrum_types[name42] = ['Star']
         self.master_types[name42] = []
         self.drift_types[name42] = []
+        self.ci_types[name42] = [] # not used for in any continuous integration tests
         self.required_data_products[name42] = []
         self.fits_keywords[name42] = 'GOODEL'
         self.fits_comments[name42] = 'QC: Telescope elevation above 30 deg (for ADC)'
@@ -987,6 +1033,7 @@ class QCDefinitions:
         self.spectrum_types[name43] = ['Etalon']
         self.master_types[name43] = []
         self.drift_types[name43] = []
+        self.ci_types[name43] = [] # not used for in any continuous integration tests
         self.required_data_products[name43] = []
         self.fits_keywords[name43] = 'ETASTEMP'
         self.fits_comments[name43] = 'QC: Etalon at set temperature'
@@ -1001,6 +1048,7 @@ class QCDefinitions:
         self.spectrum_types[name44] = ['all',]
         self.master_types[name44] = []
         self.drift_types[name44] = []
+        self.ci_types[name44] = ['Bias', 'Dark', 'Flat', 'LFC', 'Etalon', 'ThAr', 'UNe', 'Sun', 'Star'] 
         self.required_data_products[name44] = []
         self.fits_keywords[name44] = 'TELEPRL0'
         self.fits_comments[name44] = 'QC: TELEMETRY extension present in L0'
@@ -1015,6 +1063,7 @@ class QCDefinitions:
         self.spectrum_types[name45] = ['ThAr', 'Etalon', 'LFC', 'Flat', 'Star', 'Sun'] # not written for UNe yet
         self.master_types[name45] = []
         self.drift_types[name45] = []
+        self.ci_types[name45] = [] # not used for in any continuous integration tests
         self.required_data_products[name45] = []
         self.fits_keywords[name45] = 'FLXSTATS'
         self.fits_comments[name45] = 'QC: 2D flux not smeared in and out of order trace [not yet reliable]'
@@ -1029,6 +1078,7 @@ class QCDefinitions:
         self.spectrum_types[name46] = ['ThAr', 'UNe', 'Etalon', 'LFC', 'Flat', 'Star', 'Sun'] # not bias or dark frames, which will have a closed shutter
         self.master_types[name46] = []
         self.drift_types[name46] = []
+        self.ci_types[name46] = [] # not used for in any continuous integration tests
         self.required_data_products[name46] = ['CaHK']
         self.fits_keywords[name46] = 'HKSHTOPN'
         self.fits_comments[name46] = 'QC: HK requested/shutter open; not bias/dark'
@@ -1043,6 +1093,7 @@ class QCDefinitions:
         self.spectrum_types[name47] = ['all',] 
         self.master_types[name47] = []
         self.drift_types[name47] = []
+        self.ci_types[name47] = [] # not used for in any continuous integration tests
         self.required_data_products[name47] = ['Green']
         self.fits_keywords[name47] = 'GRCCDT10'
         self.fits_comments[name47] = 'QC: Green CCD > 10 mK from temp set point'
@@ -1057,6 +1108,7 @@ class QCDefinitions:
         self.spectrum_types[name48] = ['all',] 
         self.master_types[name48] = []
         self.drift_types[name48] = []
+        self.ci_types[name48] = [] # not used for in any continuous integration tests
         self.required_data_products[name48] = ['Green']
         self.fits_keywords[name48] = 'GRCCDT1'
         self.fits_comments[name48] = 'QC: Green CCD > 1000 mK from temp set point'
@@ -1071,6 +1123,7 @@ class QCDefinitions:
         self.spectrum_types[name49] = ['all',] 
         self.master_types[name49] = []
         self.drift_types[name49] = []
+        self.ci_types[name49] = [] # not used for in any continuous integration tests
         self.required_data_products[name49] = ['Red']
         self.fits_keywords[name49] = 'RDCCDT10'
         self.fits_comments[name49] = 'QC: Red CCD > 10 mK from temp set point'
@@ -1085,6 +1138,7 @@ class QCDefinitions:
         self.spectrum_types[name50] = ['all',] 
         self.master_types[name50] = []
         self.drift_types[name50] = []
+        self.ci_types[name50] = [] # not used for in any continuous integration tests
         self.required_data_products[name50] = ['Red']
         self.fits_keywords[name50] = 'RDCCDT1'
         self.fits_comments[name50] = 'QC: Red CCD > 1000 mK from temp set point'
@@ -1099,6 +1153,7 @@ class QCDefinitions:
         self.spectrum_types[name51] = ['Sun',] 
         self.master_types[name51] = []
         self.drift_types[name51] = []
+        self.ci_types[name51] = [] # not used for in any continuous integration tests
         self.required_data_products[name51] = []
         self.fits_keywords[name51] = 'CLEARSKY'
         self.fits_comments[name51] = 'QC: Clear sky conditions for SoCal'
@@ -2533,7 +2588,7 @@ class QC2D(QC):
 
     def data_2D_red_green(self, debug=False):
         """
-        This Quality Control function checks if the 2D data exists for both
+        This Quality Control function checks if the 2D data and var arrays exists for both
         the red and green chips and checks that the sizes of the arrays are as expected.
 
         Args:
@@ -2557,7 +2612,6 @@ class QC2D(QC):
             extensions = D2.extensions
 
             if 'GREEN_CCD' in extensions:
-
                 if debug:
                     self.logger.debug("GREEN_CCD exists")
                     self.logger.debug("data_shape =", np.shape(D2["GREEN_CCD"]))
@@ -2565,19 +2619,30 @@ class QC2D(QC):
                 if np.shape(D2["GREEN_CCD"]) != (4080, 4080):
                     QC_pass = False
 
+                if 'GREEN_VAR' in extensions:
+                    if np.shape(D2["GREEN_VAR"]) != (4080, 4080):
+                        QC_pass = False
+                else:
+                    QC_pass = False 
+
             else:
                 if debug:
                     self.logger.debug("GREEN_CCD does not exist")
                 QC_pass = False
 
             if 'RED_CCD' in extensions:
-
                 if debug:
                     self.logger.debug("RED_CCD exists")
                     self.logger.debug("data_shape =", np.shape(D2["RED_CCD"]))
 
                 if np.shape(D2["RED_CCD"]) != (4080, 4080):
                     QC_pass = False
+
+                if 'RED_VAR' in extensions:
+                    if np.shape(D2["RED_VAR"]) != (4080, 4080):
+                        QC_pass = False
+                else:
+                    QC_pass = False 
 
             else:
                 if debug:
