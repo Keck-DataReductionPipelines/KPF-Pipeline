@@ -22,6 +22,7 @@ RDOBSERV|string|Observers, Red camera|None
 GRELAPS|float|Actual exposure time, Green camera|sec
 RDELAPS|float|Actual exposure time, Red camera|sec
 IMTYPE|string|Image type|None
+FIUMODE|string|FIU operating mode - Observing = on-sky|None
 WAVEBNS|string|Wavelengths of EM bins (string of four vals)|nm
 TOTCNTS|string|Total EM counts in WAVEBINS|counts
 TOTCORR|string|Total EM counts (corrected) in WAVEBINS|counts
@@ -51,4 +52,3 @@ DEC|string|Declination|deg
 EQUINOX|float|DCS Equinox|None
 MJD-OBS|float|Modified Julian day of the observation start|days
 TIMEERR|string|NTP time server response|None
-FIUMODE|string|FIU operating mode - Observing = on-sky|None
