@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from copy import deepcopy
+from astropy.stats import mad_std
 
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.logger import start_logger
@@ -36,6 +37,7 @@ class ImageAssemblyAlg:
         
         self.prescan_region = self.cfg_params.get_config_value('prescan_region')
         self.overscan_clip = int(self.cfg_params.get_config_value('overscan_clip'))
+        self.overscan_sigma = float(self.cfg_params.get_config_value('overscan_sigma'))
 
         # GJG: temporarily hard-coding number of amplifers for development
         # GJG: need to write function to infer number of amplifers from headers/extensions
@@ -114,6 +116,7 @@ class ImageAssemblyAlg:
         return image_reoriented
 
 
+    # GJG TODO: replace clip = True --> skip_cols = (int,int)
     def get_overscan_pixels(self, chip, amp_no, clip=True):
         """
         Extracts array of overscan pixel from full amplifier region
@@ -144,8 +147,8 @@ class ImageAssemblyAlg:
         oscan_pix_prl = image[nrow_datasec:,:]
 
         if clip:
-            oscan_pix_srl = oscan_pix_srl[self.overscan_clip:-self.overscan_clip-1]
-            oscan_pix_prl = oscan_pix_prl[self.overscan_clip:-self.overscan_clip-1]
+            oscan_pix_srl = oscan_pix_srl[:,self.overscan_clip:-self.overscan_clip-1]
+            oscan_pix_prl = oscan_pix_prl[self.overscan_clip:-self.overscan_clip-1,:]
 
         return oscan_pix_srl, oscan_pix_prl
 
@@ -156,7 +159,7 @@ class ImageAssemblyAlg:
 
         Args:
             chip (str) : which CCD to use, 'GREEN' or 'RED'
-            amp (int) : amplifier number
+            amp_no (int) : amplifier number
             
         Returns:
             np.ndarray : raw image with zero overscan subtracted
@@ -168,13 +171,33 @@ class ImageAssemblyAlg:
         return image
 
     
-    def median(self, chip, amp_no, clip=True):
+    def rowmedian(self, chip, amp_no, clip=True):
         """
         Calculates median of parallel overscan region; subtracts from raw image
 
         Args:
             chip (str) : which CCD to use, 'GREEN' or 'RED'
-            amp (int) : amplifier number
+            amp_no (int) : amplifier number
+            
+        Returns:
+            np.ndarray : raw image with row-by-row median overscan subtracted
+        """
+        chip = chip.upper()
+        channel = f'{chip}_AMP{amp_no}'
+        image = deepcopy(np.array(self.target_L0[channel]))
+
+        oscan_pix_srl, _ = self.get_overscan_pixels(chip, amp_no, clip=clip)
+
+        return image - np.nanmedian(oscan_pix_srl)
+
+    
+    def clippedmean(self, chip, amp_no, clip=True, sigma=None):
+        """
+        Calculates clippedmean of parallel overscan region; subtracts from raw image
+
+        Args:
+            chip (str) : which CCD to use, 'GREEN' or 'RED'
+            amp_no (int) : amplifier number
             
         Returns:
             np.ndarray : raw image with median overscan subtracted
@@ -185,4 +208,11 @@ class ImageAssemblyAlg:
 
         oscan_pix_srl, _ = self.get_overscan_pixels(chip, amp_no, clip=clip)
 
-        return image - np.nanmedian(oscan_pix_srl)
+        if sigma is None:
+            sigma = self.overscan_sigma
+
+        p16, p50, p84 = np.nanpercentile(oscan_pix_srl, [16,50,84])
+        dispersion = 0.5 * (p84 - p16)
+        out = np.abs(oscan_pix_srl - p50)/dispersion > sigma
+
+        return image - np.nanmean(oscan_pix_srl[~out])
