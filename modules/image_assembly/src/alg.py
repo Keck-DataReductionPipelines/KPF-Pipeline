@@ -229,12 +229,10 @@ class ImageAssemblyAlg:
             sigma = self.overscan_sigma
 
         p16, p50, p84 = np.nanpercentile(oscan_pix_srl, [16,50,84])
-        
         dispersion = 0.5 * (p84 - p16)
         out = np.abs(oscan_pix_srl - p50)/dispersion > sigma
 
-        self.target_L0[channel] -= np.nanmean(oscan_pix_srl[~out])
-        self.target_L0[channel] = self.orient_channel(chip, amp_no)
+        self.target_L0[channel] = self.target_L0[channel] - np.nanmean(oscan_pix_srl[~out])
         self.target_L0[channel] = self.remove_overscan_pixels(chip, amp_no)
 
         return self.target_L0[channel]
