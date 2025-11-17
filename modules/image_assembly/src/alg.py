@@ -36,6 +36,7 @@ class ImageAssemblyAlg:
             #self._read_channel_datasec_config(chip)
         
         self.prescan_region = self.cfg_params.get_config_value('prescan_region')
+        self.overscan_method = self.cfg_params.get_config_value('overscan_method')
         self.overscan_clip = int(self.cfg_params.get_config_value('overscan_clip'))
         self.overscan_sigma = float(self.cfg_params.get_config_value('overscan_sigma'))
 
@@ -63,22 +64,18 @@ class ImageAssemblyAlg:
         self.channel_datasec[f'{chip.upper()}_NROW'] = nrow
 
 
-    def perform_overscan_subtraction(self, chip):
-        """
-        Performs overscan subtraction steps, in order: 
-            1. orient frame (positions overscan on right and bottom)
-            2. subtract overscan (method chosen by user) 
-            3. cuts off overscan region
+    def _get_datasec_ncol_nrow(self, chip):
+        if self.namp[chip.upper()] == 2:
+            ncol_datasec = 2040
+            nrow_datasec = 4080
+        elif self.namp[chip.upper()] == 4:
+            ncol_datasec = 2040
+            nrow_datasec = 2040
+        else:
+            raise ValueError("Only 2-amp and 4-amp modes supported")
 
-        Args:
-            chip (str) : which CCD to use, 'GREEN' or 'RED'
-
-        Returns:
-            image_stitched (np.ndarray) : Stiched-together full frame image, with overscan subtracted and removed
-        """
-        for amp_no in range(1,namp+1):
-            channel = f'{chip.upper()}_AMP{amp_no}'
-        
+        return ncol_datasec, nrow_datasec
+                
     
     def orient_channel(self, chip, amp_no):
         """
@@ -129,16 +126,8 @@ class ImageAssemblyAlg:
         """
         image = self.orient_channel(chip, amp_no)
         
-        if self.namp[chip.upper()] == 2:
-            ncol_datasec = 2040
-            nrow_datasec = 4080
-        elif self.namp[chip.upper()] == 4:
-            ncol_datasec = 2040
-            nrow_datasec = 2040
-        else:
-            raise ValueError("Only 2-amp and 4-amp modes supported")
-
         ncol_prescan = self.prescan_region[1] - self.prescan_region[0]
+        ncol_datasec, nrow_datasec = self._get_datasec_ncol_nrow(chip)
 
         oscan_pix_srl = image[:,ncol_prescan+ncol_datasec:]
         oscan_pix_prl = image[nrow_datasec:,:]
@@ -148,6 +137,31 @@ class ImageAssemblyAlg:
             oscan_pix_prl = oscan_pix_prl[self.overscan_clip:-self.overscan_clip-1,:]
 
         return oscan_pix_srl, oscan_pix_prl
+
+
+    def remove_overscan_pixels(self, chip, amp_no):
+        """
+        Removes overscan pixels from full amplifier region
+        Assumes image orientaion has not been altered from raw L0 file. 
+
+        Args:
+            chip (str) : which CCD to use, 'GREEN' or 'RED'
+            amp (int) : amplifier number
+
+        Returns:
+            ndarray : image with only datasec pixels
+        """
+        chip = chip.upper()
+        channel = f'{chip}_AMP{amp_no}'
+        image = self.orient_channel(chip, amp_no)
+        
+        ncol_prescan = self.prescan_region[1] - self.prescan_region[0]
+        ncol_datasec, nrow_datasec = self._get_datasec_ncol_nrow(chip)
+
+        self.target_L0[channel] = image[:nrow_datasec,ncol_prescan:ncol_prescan+ncol_datasec]
+        self.target_L0[channel] = self.orient_channel(chip, amp_no)
+        
+        return self.target_L0[channel]
 
 
     def zero(self, chip, amp_no, clip=True):
@@ -163,9 +177,11 @@ class ImageAssemblyAlg:
         """
         chip = chip.upper()
         channel = f'{chip}_AMP{amp_no}'
-        image = deepcopy(np.array(self.target_L0[channel]))
 
-        return image
+        self.target_L0[channel] = deepcopy(np.array(self.target_L0[channel]))
+        self.target_L0[channel] = self.remove_overscan_pixels(chip, amp_no)
+
+        return self.target_L0[channel]
 
     
     def rowmedian(self, chip, amp_no, clip=True):
@@ -187,6 +203,7 @@ class ImageAssemblyAlg:
 
         self.target_L0[channel] = (image.T - np.nanmedian(oscan_pix_srl, axis=1)).T
         self.target_L0[channel] = self.orient_channel(chip, amp_no)
+        self.target_L0[channel] = self.remove_overscan_pixels(chip, amp_no)
 
         return self.target_L0[channel]
 
@@ -212,45 +229,14 @@ class ImageAssemblyAlg:
             sigma = self.overscan_sigma
 
         p16, p50, p84 = np.nanpercentile(oscan_pix_srl, [16,50,84])
+        
         dispersion = 0.5 * (p84 - p16)
         out = np.abs(oscan_pix_srl - p50)/dispersion > sigma
 
-        self.target_L0[channel] - np.nanmean(oscan_pix_srl[~out])
+        self.target_L0[channel] -= np.nanmean(oscan_pix_srl[~out])
         self.target_L0[channel] = self.orient_channel(chip, amp_no)
+        self.target_L0[channel] = self.remove_overscan_pixels(chip, amp_no)
 
-        return self.target_L0[channel]
-
-
-    def remove_overscan_pixels(self, chip, amp_no):
-        """
-        Removes overscan pixels from full amplifier region
-        Assumes image orientaion has not been altered from raw L0 file. 
-
-        Args:
-            chip (str) : which CCD to use, 'GREEN' or 'RED'
-            amp (int) : amplifier number
-
-        Returns:
-            ndarray : image with only datasec pixels
-        """
-        chip = chip.upper()
-        channel = f'{chip}_AMP{amp_no}'
-        image = self.orient_channel(chip, amp_no)
-        
-        if self.namp[chip] == 2:
-            ncol_datasec = 2040
-            nrow_datasec = 4080
-        elif self.namp[chip] == 4:
-            ncol_datasec = 2040
-            nrow_datasec = 2040
-        else:
-            raise ValueError("Only 2-amp and 4-amp modes supported")
-
-        ncol_prescan = self.prescan_region[1] - self.prescan_region[0]
-
-        self.target_L0[channel] = image[:nrow_datasec,ncol_prescan:ncol_prescan+ncol_datasec]
-        self.target_L0[channel] = self.orient_channel(chip, amp_no)
-        
         return self.target_L0[channel]
 
 
@@ -259,6 +245,7 @@ class ImageAssemblyAlg:
         Stitch together all amplifier regions (i.e. channels) from a chip
         Assumes amplifier regions are already in proper orientation with overscan pre-subtracted
         Automatically checks for 2 vs 4 amplifier mode
+        Applys gain correction
         
         Args:
             chip (str) : which CCD to use, 'GREEN' or 'RED'
@@ -266,20 +253,52 @@ class ImageAssemblyAlg:
         Returns:
             ndarray : 4080 x 4080 data image with only datasec pixels
         """
-        #chip = chip.upper()
-        #channel = f'{chip}_AMP{amp_no}'
-        #image = self.orient_channel(chip, amp_no)
-
+        chip = chip.upper()
         image_ffi = np.zeros((4080,4080))
 
         if self.namp[chip] == 2:
-            image_ffi[:,:2040] = self.target_L0[f'{chip}_AMP1']
-            image_ffi[:,2040:] = self.target_L0[f'{chip}_AMP2']
+            image_ffi[:,:2040] = self.target_L0[f'{chip}_AMP1'] * self.target_L0.header[f'{chip}_AMP1']['CCDGAIN']
+            image_ffi[:,2040:] = self.target_L0[f'{chip}_AMP2'] * self.target_L0.header[f'{chip}_AMP2']['CCDGAIN']
         elif self.namp[chip] == 4:
             raise ValueError("4-amp mode not yet implemented")
         else:
             raise ValueError("Only 2-amp and 4-amp modes supported")
 
-        self.target_L0[f'{chip}_CCD'] = image_ffi
+        # flip green ccd
+        if chip == 'GREEN':
+            image_ffi = np.flip(image_ffi, axis=0)
+
+        # GJG: 2**16 correction was hard-coded in previous version -- why?
+        self.target_L0[f'{chip}_CCD'] = image_ffi / (2**16)
+
+        return self.target_L0[f'{chip}_CCD']
+
+
+    def assemble_image(self, chip, overscan_method=None):
+        """
+        Performs all image assembly steps, in order: 
+            1. subtract overscan from each channel
+            2. cuts off overscan region from each channel
+            3. orient channels and stitch together full frame image
+
+        Args:
+            chip (str) : which CCD to use, 'GREEN' or 'RED'
+            method (str) : method to use for overscan subtraction
+
+        Returns:
+            kpf_l0 : KPF L0 object with full frame extensions and keywords
+        """
+        if overscan_method is None:
+            try:
+                overscan_method = self.__getattribute__(self.overscan_method)
+            except AttributeError:
+                self.log.error(f'Overscan correction method {self.overscan_method} not implemented.')
+                raise(AttributeError)
+
+        for amp_no in range(1, 1+self.namp[chip.upper()]):
+            print(chip, amp_no)
+            self.target_L0[f'{chip.upper()}_AMP{amp_no}'] = overscan_method(chip, amp_no)
+
+        self.target_L0[f'{chip}_CCD'] = self.stitch_channels(chip)
 
         return self.target_L0[f'{chip}_CCD']
