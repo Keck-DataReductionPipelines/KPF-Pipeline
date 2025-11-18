@@ -54,14 +54,14 @@ class ImageAssemblyAlg:
             self.orientation[chip.upper()] = pd.read_csv(f, delimiter=' ')
 
 
-    def _read_channel_datasec_config(self, chip):
-        if not hasattr(self, 'channel_datasec'):
-            self.channel_datasec = {}
-
-        ncol = int(self.cfg_params.get_config_value(f'channel_datasec_ncols_{chip.lower()}'))
-        nrow = int(self.cfg_params.get_config_value(f'channel_datasec_nrows_{chip.lower()}'))
-        self.channel_datasec[f'{chip.upper()}_NCOL'] = ncol
-        self.channel_datasec[f'{chip.upper()}_NROW'] = nrow
+    #def _read_channel_datasec_config(self, chip):
+    #    if not hasattr(self, 'channel_datasec'):
+    #        self.channel_datasec = {}
+    #
+    #    ncol = int(self.cfg_params.get_config_value(f'channel_datasec_ncols_{chip.lower()}'))
+    #    nrow = int(self.cfg_params.get_config_value(f'channel_datasec_nrows_{chip.lower()}'))
+    #    self.channel_datasec[f'{chip.upper()}_NCOL'] = ncol
+    #    self.channel_datasec[f'{chip.upper()}_NROW'] = nrow
 
 
     def _get_datasec_ncol_nrow(self, chip):
