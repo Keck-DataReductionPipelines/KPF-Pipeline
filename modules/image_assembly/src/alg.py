@@ -32,6 +32,7 @@ class ImageAssemblyAlg:
         self.cfg_params = ConfigHandler(self.config, 'PARAM')
 
         for chip in ['GREEN', 'RED']:
+            self._infer_amplifier_mode(chip)
             self._read_orientation_reference(chip)
             #self._read_channel_datasec_config(chip)
         
@@ -40,9 +41,27 @@ class ImageAssemblyAlg:
         self.overscan_clip = int(self.cfg_params.get_config_value('overscan_clip'))
         self.overscan_sigma = float(self.cfg_params.get_config_value('overscan_sigma'))
 
-        # GJG: temporarily hard-coding number of amplifers for development
-        # GJG: need to write function to infer number of amplifers from headers/extensions
-        self.namp = {'GREEN':2, 'RED':2}
+
+    def _infer_amplifier_mode(self, chip):
+        if not hasattr(self, 'namp'):
+            self.namp = {}
+        
+        chip = chip.upper()
+        extensions = list(self.target_L0.extensions.keys())
+        matches = [x for x in extensions if x.startswith(f'{chip}_AMP')]
+
+        if len(matches) == 2:
+            if np.all(np.isin([f'{chip}_AMP{i}' for i in [1,2]], matches)):
+                self.namp[chip] = 2
+            else:
+                raise ValueError(f"Unexpected extensions for namp = 2 : {matches}")
+        elif len(matches) == 4:
+            if np.all(np.isin([f'{chip}_AMP{i}' for i in [1,2,3,4]], matches)):
+                self.namp[chip] = 4
+            else:
+                raise ValueError(f"Unexpected extensions for namp = 4 : {matches}")
+        else:
+            raise ValueError(f"Expected 2 or 4 amplifers, detected {len(matches)}")
 
 
     def _read_orientation_reference(self, chip):
@@ -241,10 +260,12 @@ class ImageAssemblyAlg:
     def stitch_channels(self, chip):
         """
         Stitch together all amplifier regions (i.e. channels) from a chip
-        Assumes amplifier regions are already in proper orientation with overscan pre-subtracted
         Automatically checks for 2 vs 4 amplifier mode
-        Applys gain correction
+        Applies gain correction
+        Calculates 2D variance image
         
+        Assumes amplifier regions are already in proper orientation with overscan pre-subtracted
+       
         Args:
             chip (str) : which CCD to use, 'GREEN' or 'RED'
 
@@ -253,23 +274,36 @@ class ImageAssemblyAlg:
         """
         chip = chip.upper()
         image_ffi = np.zeros((4080,4080))
+        var2d_ffi = np.zeros((4080,4080))
 
         if self.namp[chip] == 2:
             image_ffi[:,:2040] = self.target_L0[f'{chip}_AMP1'] * self.target_L0.header[f'{chip}_AMP1']['CCDGAIN']
             image_ffi[:,2040:] = self.target_L0[f'{chip}_AMP2'] * self.target_L0.header[f'{chip}_AMP2']['CCDGAIN']
+
+            try:
+                var2d_ffi[:,:2040] = np.abs(image_ffi[:,:2040]) + self.target_L0.header['PRIMARY'][f'RN{chip}1']
+                var2d_ffi[:,2040:] = np.abs(image_ffi[:,2040:]) + self.target_L0.header['PRIMARY'][f'RN{chip}2']
+            except KeyError as e:
+                self.log.debug(f"ReadNoise KeyError: {e}")
+                self.log.debug("Calculated 2D variance image without readnoise")
+                var2d_ffi = np.abs(image_ffi)
+
         elif self.namp[chip] == 4:
             raise ValueError("4-amp mode not yet implemented")
+        
         else:
             raise ValueError("Only 2-amp and 4-amp modes supported")
 
         # flip green ccd
         if chip == 'GREEN':
             image_ffi = np.flip(image_ffi, axis=0)
+            var2d_ffi = np.flip(var2d_ffi, axis=0)
 
         # GJG: 2**16 correction was hard-coded in previous version -- why?
         self.target_L0[f'{chip}_CCD'] = image_ffi / (2**16)
+        self.target_L0[f'{chip}_VAR'] = var2d_ffi / (2**16)
 
-        return self.target_L0[f'{chip}_CCD']
+        return self.target_L0[f'{chip}_CCD'], self.target_L0[f'{chip}_VAR']
 
 
     def assemble_image(self, chip, overscan_method=None):
@@ -278,6 +312,7 @@ class ImageAssemblyAlg:
             1. subtract overscan from each channel
             2. cuts off overscan region from each channel
             3. orient channels and stitch together full frame image
+            4. calculate 2D variance image
 
         Args:
             chip (str) : which CCD to use, 'GREEN' or 'RED'
@@ -297,6 +332,6 @@ class ImageAssemblyAlg:
             print(chip, amp_no)
             self.target_L0[f'{chip.upper()}_AMP{amp_no}'] = overscan_method(chip, amp_no)
 
-        self.target_L0[f'{chip}_CCD'] = self.stitch_channels(chip)
+        self.target_L0[f'{chip}_CCD'], self.target_L0[f'{chip}_VAR'] = self.stitch_channels(chip)
 
-        return self.target_L0[f'{chip}_CCD']
+        return self.target_L0
