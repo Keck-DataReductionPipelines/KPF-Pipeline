@@ -35,7 +35,7 @@ class ImageAssemblyAlg:
         
         self.prescan_region = self.cfg_params.get_config_value('prescan_region')
         self.overscan_method = self.cfg_params.get_config_value('overscan_method')
-        self.overscan_clip = int(self.cfg_params.get_config_value('overscan_clip'))
+        self.overscan_buffer = self.cfg_params.get_config_value('overscan_buffer')
         self.overscan_sigma = float(self.cfg_params.get_config_value('overscan_sigma'))
 
         # recompute readnoise
@@ -123,8 +123,7 @@ class ImageAssemblyAlg:
         return image_reoriented
 
 
-    # GJG TODO: replace clip = True --> skip_cols = (int,int)
-    def get_overscan_pixels(self, chip, amp_no, clip=True):
+    def get_overscan_pixels(self, chip, amp_no, skip_cols=None):
         """
         Extracts array of overscan pixel from full amplifier region
         Assumes image orientaion has not been altered from raw L0 file. 
@@ -145,9 +144,9 @@ class ImageAssemblyAlg:
         oscan_pix_srl = image[:,ncol_prescan+ncol_datasec:]
         oscan_pix_prl = image[nrow_datasec:,:]
 
-        if clip:
-            oscan_pix_srl = oscan_pix_srl[:,self.overscan_clip:-self.overscan_clip-1]
-            oscan_pix_prl = oscan_pix_prl[self.overscan_clip:-self.overscan_clip-1,:]
+        if skip_cols is not None:
+            oscan_pix_srl = oscan_pix_srl[:,self.overscan_buffer[0]:-self.overscan_buffer[1]-1]
+            oscan_pix_prl = oscan_pix_prl[self.overscan_buffer[0]:-self.overscan_buffer[1]-1,:]
 
         return oscan_pix_srl, oscan_pix_prl
 
@@ -177,7 +176,7 @@ class ImageAssemblyAlg:
         return self.target_l0[channel]
 
 
-    def zero(self, chip, amp_no, clip=True):
+    def zero(self, chip, amp_no, skip_cols=None):
         """
         Sets overscan subtraction to zero, returns raw image
 
@@ -197,7 +196,7 @@ class ImageAssemblyAlg:
         return self.target_l0[channel]
 
     
-    def rowmedian(self, chip, amp_no, clip=True):
+    def rowmedian(self, chip, amp_no, skip_cols=None):
         """
         Calculates median of parallel overscan region; subtracts from raw image
 
@@ -212,7 +211,7 @@ class ImageAssemblyAlg:
         channel = f'{chip}_AMP{amp_no}'
         image = self.orient_channel(chip, amp_no)
 
-        oscan_pix_srl, _ = self.get_overscan_pixels(chip, amp_no, clip=clip)
+        oscan_pix_srl, _ = self.get_overscan_pixels(chip, amp_no, skip_cols=skip_cols)
 
         self.target_l0[channel] = (image.T - np.nanmedian(oscan_pix_srl, axis=1)).T
         self.target_l0[channel] = self.orient_channel(chip, amp_no)
@@ -221,7 +220,7 @@ class ImageAssemblyAlg:
         return self.target_l0[channel]
 
     
-    def clippedmean(self, chip, amp_no, clip=True, sigma=None):
+    def clippedmean(self, chip, amp_no, skip_cols=None, sigma=None):
         """
         Calculates clippedmean of parallel overscan region; subtracts from raw image
 
@@ -236,7 +235,7 @@ class ImageAssemblyAlg:
         channel = f'{chip}_AMP{amp_no}'
         image = self.orient_channel(chip, amp_no)
 
-        oscan_pix_srl, _ = self.get_overscan_pixels(chip, amp_no, clip=clip)
+        oscan_pix_srl, _ = self.get_overscan_pixels(chip, amp_no, skip_cols=skip_cols)
 
         if sigma is None:
             sigma = self.overscan_sigma
