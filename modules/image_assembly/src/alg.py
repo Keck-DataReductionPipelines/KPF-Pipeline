@@ -13,8 +13,7 @@ class ImageAssemblyAlg:
     Docstring
     """
     def __init__(self, 
-                 target_L0,
-                 data_type,
+                 target_l0,
                  default_config_path,
                  logger=None
                  ):
@@ -25,8 +24,7 @@ class ImageAssemblyAlg:
             self.log = logger
 
         # data inputs
-        self.target_L0 = target_L0
-        self.data_type = data_type
+        self.target_l0 = target_l0
 
         # config inputs
         self.config = ConfigClass(default_config_path)
@@ -42,14 +40,16 @@ class ImageAssemblyAlg:
         self.overscan_sigma = float(self.cfg_params.get_config_value('overscan_sigma'))
 
         # recompute readnoise
-        self.target_L0 = add_headers_L0_read_noise(self.target_L0)
+        self.target_l0 = add_headers_L0_read_noise(self.target_l0)
 
+    
+    # GJG: legacy code infers amplifer mode from header['{chip}AMP{i}]['NAXIS{1,2}]
     def _infer_amplifier_mode(self, chip):
         if not hasattr(self, 'namp'):
             self.namp = {}
         
         chip = chip.upper()
-        extensions = list(self.target_L0.extensions.keys())
+        extensions = list(self.target_l0.extensions.keys())
         matches = [x for x in extensions if x.startswith(f'{chip}_AMP')]
 
         if len(matches) == 2:
@@ -64,6 +64,9 @@ class ImageAssemblyAlg:
                 raise ValueError(f"Unexpected extensions for namp = 4 : {matches}")
         else:
             raise ValueError(f"Expected 2 or 4 amplifers, detected {len(matches)}")
+
+        keyword_map = {'GREEN':'GRNAMPS', 'RED','REDAMPS'}
+        self.target_l0['PRIMARY'][keyword_map[chip]] = self.namp[chip]
 
 
     def _read_orientation_reference(self, chip):
@@ -104,7 +107,7 @@ class ImageAssemblyAlg:
         """
         chip = chip.upper()
         channel = f'{chip}_AMP{amp_no}'
-        image = deepcopy(np.array(self.target_L0[channel]))
+        image = deepcopy(np.array(self.target_l0[channel]))
 
         orientation = self.orientation[chip]
         channel_key = int(orientation.loc[orientation.CHANNEL_EXT == channel, 'CHANNEL_KEY'])
@@ -169,10 +172,10 @@ class ImageAssemblyAlg:
         ncol_prescan = self.prescan_region[1] - self.prescan_region[0]
         ncol_datasec, nrow_datasec = self._get_datasec_ncol_nrow(chip)
 
-        self.target_L0[channel] = image[:nrow_datasec,ncol_prescan:ncol_prescan+ncol_datasec]
-        self.target_L0[channel] = self.orient_channel(chip, amp_no)
+        self.target_l0[channel] = image[:nrow_datasec,ncol_prescan:ncol_prescan+ncol_datasec]
+        self.target_l0[channel] = self.orient_channel(chip, amp_no)
         
-        return self.target_L0[channel]
+        return self.target_l0[channel]
 
 
     def zero(self, chip, amp_no, clip=True):
@@ -189,10 +192,10 @@ class ImageAssemblyAlg:
         chip = chip.upper()
         channel = f'{chip}_AMP{amp_no}'
 
-        self.target_L0[channel] = deepcopy(np.array(self.target_L0[channel]))
-        self.target_L0[channel] = self.remove_overscan_pixels(chip, amp_no)
+        self.target_l0[channel] = deepcopy(np.array(self.target_l0[channel]))
+        self.target_l0[channel] = self.remove_overscan_pixels(chip, amp_no)
 
-        return self.target_L0[channel]
+        return self.target_l0[channel]
 
     
     def rowmedian(self, chip, amp_no, clip=True):
@@ -212,11 +215,11 @@ class ImageAssemblyAlg:
 
         oscan_pix_srl, _ = self.get_overscan_pixels(chip, amp_no, clip=clip)
 
-        self.target_L0[channel] = (image.T - np.nanmedian(oscan_pix_srl, axis=1)).T
-        self.target_L0[channel] = self.orient_channel(chip, amp_no)
-        self.target_L0[channel] = self.remove_overscan_pixels(chip, amp_no)
+        self.target_l0[channel] = (image.T - np.nanmedian(oscan_pix_srl, axis=1)).T
+        self.target_l0[channel] = self.orient_channel(chip, amp_no)
+        self.target_l0[channel] = self.remove_overscan_pixels(chip, amp_no)
 
-        return self.target_L0[channel]
+        return self.target_l0[channel]
 
     
     def clippedmean(self, chip, amp_no, clip=True, sigma=None):
@@ -243,10 +246,10 @@ class ImageAssemblyAlg:
         dispersion = 0.5 * (p84 - p16)
         out = np.abs(oscan_pix_srl - p50)/dispersion > sigma
 
-        self.target_L0[channel] = self.target_L0[channel] - np.nanmean(oscan_pix_srl[~out])
-        self.target_L0[channel] = self.remove_overscan_pixels(chip, amp_no)
+        self.target_l0[channel] = self.target_l0[channel] - np.nanmean(oscan_pix_srl[~out])
+        self.target_l0[channel] = self.remove_overscan_pixels(chip, amp_no)
 
-        return self.target_L0[channel]
+        return self.target_l0[channel]
 
 
     def stitch_channels(self, chip):
@@ -269,10 +272,10 @@ class ImageAssemblyAlg:
         var2d_ffi = np.zeros((4080,4080))
 
         if self.namp[chip] == 2:
-            image_ffi[:,:2040] = self.target_L0[f'{chip}_AMP1'] * self.target_L0.header[f'{chip}_AMP1']['CCDGAIN']
-            image_ffi[:,2040:] = self.target_L0[f'{chip}_AMP2'] * self.target_L0.header[f'{chip}_AMP2']['CCDGAIN']
-            var2d_ffi[:,:2040] = np.abs(image_ffi[:,:2040]) + self.target_L0.header['PRIMARY'][f'RN{chip}1']
-            var2d_ffi[:,2040:] = np.abs(image_ffi[:,2040:]) + self.target_L0.header['PRIMARY'][f'RN{chip}2']
+            image_ffi[:,:2040] = self.target_l0[f'{chip}_AMP1'] * self.target_l0.header[f'{chip}_AMP1']['CCDGAIN']
+            image_ffi[:,2040:] = self.target_l0[f'{chip}_AMP2'] * self.target_l0.header[f'{chip}_AMP2']['CCDGAIN']
+            var2d_ffi[:,:2040] = np.abs(image_ffi[:,:2040]) + self.target_l0.header['PRIMARY'][f'RN{chip}1']
+            var2d_ffi[:,2040:] = np.abs(image_ffi[:,2040:]) + self.target_l0.header['PRIMARY'][f'RN{chip}2']
 
         elif self.namp[chip] == 4:
             raise ValueError("4-amp mode not yet implemented")
@@ -286,10 +289,13 @@ class ImageAssemblyAlg:
             var2d_ffi = np.flip(var2d_ffi, axis=0)
 
         # GJG: 2**16 correction was hard-coded in previous version -- why?
-        self.target_L0[f'{chip}_CCD'] = image_ffi / (2**16)
-        self.target_L0[f'{chip}_VAR'] = var2d_ffi / (2**16)
+        self.target_l0[f'{chip}_CCD'] = image_ffi / (2**16)
+        self.target_l0[f'{chip}_VAR'] = var2d_ffi / (2**16)
 
-        return self.target_L0[f'{chip}_CCD'], self.target_L0[f'{chip}_VAR']
+        self.target_l0.header[f'{chip}_CCD']['BUNIT'] = ('electrons','Units of image data')
+        self.target_l0.header[f'{chip}_VAR']['BUNIT'] = ('electrons','Units of image data')
+
+        return self.target_l0[f'{chip}_CCD'], self.target_l0[f'{chip}_VAR']
 
 
     def assemble_image(self, chip, overscan_method=None):
@@ -316,8 +322,12 @@ class ImageAssemblyAlg:
 
         for amp_no in range(1, 1+self.namp[chip.upper()]):
             print(chip, amp_no)
-            self.target_L0[f'{chip.upper()}_AMP{amp_no}'] = overscan_method(chip, amp_no)
+            self.target_l0[f'{chip.upper()}_AMP{amp_no}'] = overscan_method(chip, amp_no)
 
-        self.target_L0[f'{chip}_CCD'], self.target_L0[f'{chip}_VAR'] = self.stitch_channels(chip)
+        self.target_l0[f'{chip}_CCD'], self.target_l0[f'{chip}_VAR'] = self.stitch_channels(chip)
 
-        return self.target_L0
+        return self.target_l0
+
+
+    def add_keywords(self):
+        self.target_l0.header[self.ffi_exts[frame]]['BUNIT'] = ('electrons','Units of image data')
