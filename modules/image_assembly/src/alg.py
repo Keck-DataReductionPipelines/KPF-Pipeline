@@ -4,8 +4,9 @@ from copy import deepcopy
 from astropy.stats import mad_std
 
 from kpfpipe.config.pipeline_config import ConfigClass
-from kpfpipe.logger import start_logger
 from modules.Utils.config_parser import ConfigHandler
+from kpfpipe.logger import start_logger
+from modules.quicklook.src.diagnostics import add_headers_L0_read_noise
 
 class ImageAssemblyAlg:
     """
@@ -34,13 +35,14 @@ class ImageAssemblyAlg:
         for chip in ['GREEN', 'RED']:
             self._infer_amplifier_mode(chip)
             self._read_orientation_reference(chip)
-            #self._read_channel_datasec_config(chip)
         
         self.prescan_region = self.cfg_params.get_config_value('prescan_region')
         self.overscan_method = self.cfg_params.get_config_value('overscan_method')
         self.overscan_clip = int(self.cfg_params.get_config_value('overscan_clip'))
         self.overscan_sigma = float(self.cfg_params.get_config_value('overscan_sigma'))
 
+        # recompute readnoise
+        self.target_L0 = add_headers_L0_read_noise(self.target_L0)
 
     def _infer_amplifier_mode(self, chip):
         if not hasattr(self, 'namp'):
@@ -71,16 +73,6 @@ class ImageAssemblyAlg:
         filepath = str(self.cfg_params.get_config_value(f'channel_orientation_ref_path_{chip.lower()}'))
         with open(filepath, 'r') as f:
             self.orientation[chip.upper()] = pd.read_csv(f, delimiter=' ')
-
-
-    #def _read_channel_datasec_config(self, chip):
-    #    if not hasattr(self, 'channel_datasec'):
-    #        self.channel_datasec = {}
-    #
-    #    ncol = int(self.cfg_params.get_config_value(f'channel_datasec_ncols_{chip.lower()}'))
-    #    nrow = int(self.cfg_params.get_config_value(f'channel_datasec_nrows_{chip.lower()}'))
-    #    self.channel_datasec[f'{chip.upper()}_NCOL'] = ncol
-    #    self.channel_datasec[f'{chip.upper()}_NROW'] = nrow
 
 
     def _get_datasec_ncol_nrow(self, chip):
@@ -279,14 +271,8 @@ class ImageAssemblyAlg:
         if self.namp[chip] == 2:
             image_ffi[:,:2040] = self.target_L0[f'{chip}_AMP1'] * self.target_L0.header[f'{chip}_AMP1']['CCDGAIN']
             image_ffi[:,2040:] = self.target_L0[f'{chip}_AMP2'] * self.target_L0.header[f'{chip}_AMP2']['CCDGAIN']
-
-            try:
-                var2d_ffi[:,:2040] = np.abs(image_ffi[:,:2040]) + self.target_L0.header['PRIMARY'][f'RN{chip}1']
-                var2d_ffi[:,2040:] = np.abs(image_ffi[:,2040:]) + self.target_L0.header['PRIMARY'][f'RN{chip}2']
-            except KeyError as e:
-                self.log.debug(f"ReadNoise KeyError: {e}")
-                self.log.debug("Calculated 2D variance image without readnoise")
-                var2d_ffi = np.abs(image_ffi)
+            var2d_ffi[:,:2040] = np.abs(image_ffi[:,:2040]) + self.target_L0.header['PRIMARY'][f'RN{chip}1']
+            var2d_ffi[:,2040:] = np.abs(image_ffi[:,2040:]) + self.target_L0.header['PRIMARY'][f'RN{chip}2']
 
         elif self.namp[chip] == 4:
             raise ValueError("4-amp mode not yet implemented")
