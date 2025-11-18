@@ -65,7 +65,7 @@ class ImageAssemblyAlg:
         else:
             raise ValueError(f"Expected 2 or 4 amplifers, detected {len(matches)}")
 
-        keyword_map = {'GREEN':'GRNAMPS', 'RED','REDAMPS'}
+        keyword_map = {'GREEN':'GRNAMPS', 'RED':'REDAMPS'}
         self.target_l0['PRIMARY'][keyword_map[chip]] = self.namp[chip]
 
 
@@ -327,7 +327,3 @@ class ImageAssemblyAlg:
         self.target_l0[f'{chip}_CCD'], self.target_l0[f'{chip}_VAR'] = self.stitch_channels(chip)
 
         return self.target_l0
-
-
-    def add_keywords(self):
-        self.target_l0.header[self.ffi_exts[frame]]['BUNIT'] = ('electrons','Units of image data')
