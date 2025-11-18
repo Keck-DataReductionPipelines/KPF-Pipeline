@@ -88,6 +88,72 @@ if (! (defined $containerimage)) {
     die "*** Env. var. KPFCRONJOB_DOCKER_IMAGE_NAME not set; quitting...\n";
 }
 
+# database specific
+
+# Get database parameters from ~/.pgpass file.
+
+# Database user for connecting to the database to run this script and query CalFiles database table.
+# E.g., kpfporuss
+my $dbuser = $ENV{KPFDBUSER};
+
+if (! (defined $dbuser)) {
+    die "*** Env. var. KPFDBUSER not set; quitting...\n";
+}
+
+# Database name of KPF operations database containing the CalFiles table.
+# E.g., kpfopsdb
+my $dbname = $ENV{KPFDBNAME};
+
+if (! (defined $dbname)) {
+    die "*** Env. var. KPFDBNAME not set; quitting...\n";
+}
+
+
+# Set up time-series database connection.
+
+my $tsdbport = $ENV{TSDBPORT};
+if (! (defined $tsdbport)) {
+    $tsdbport = '6127';
+    print "*** Using default TSDBPORT=6127 (env var not set)\n";
+}
+
+my $tsdbname = $ENV{TSDBNAME};
+if (! (defined $tsdbname)) {
+    $tsdbname = 'timeseriesopsdb';
+    print "*** Using default TSDBNAME=timeseriesopsdb (env var not set)\n";
+}
+
+my $tsdbserver = $ENV{TSDBSERVER};
+if (! (defined $tsdbserver)) {
+    $tsdbserver = '127.0.0.1';
+    print "*** Using default TSDBSERVER=127.0.0.1 (env var not set)\n";
+}
+
+my $tsdbuser = $ENV{KPFPIPE_TSDB_USER};
+
+if (! (defined $tsdbuser)) {
+    die "*** Env. var. KPFPIPE_TSDB_USER not set; quitting...\n";
+}
+
+my $tsdbpass = $ENV{KPFPIPE_TSDB_PASS};
+
+if (! (defined $tsdbpass)) {
+    die "*** Env. var. KPFPIPE_TSDB_PASS not set; quitting...\n";
+}
+
+my ($dbport, $dbpass);
+my @op = `cat ~/.pgpass`;
+foreach my $op (@op) {
+    chomp $op;
+    $op =~ s/^\s+|\s+$//g;  # strip blanks.
+    if (($op =~ /$dbuser/) and ($op =~ /$dbname/)) {
+        my (@f) = split(/\:/, $op);
+        $dbport = $f[1];
+        $dbpass = $f[4];
+    }
+}
+
+
 # Check if Docker image exists
 my $image_check = `docker images -q $containerimage 2>/dev/null`;
 chomp $image_check;
@@ -160,8 +226,11 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
 
+#
 my $dockerruncmd = "docker run -d --name $containername " .
                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
+                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 -e DBPASS=\"$dbpass\" " .
+                   "-e TSDBPORT=$tsdbport -e TSDBNAME=$tsdbname -e TSDBUSER=$tsdbuser -e TSDBSERVER=$tsdbserver -e TSDBPASS=\"$tsdbpass\" " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;

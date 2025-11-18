@@ -177,7 +177,7 @@ my $dockercmdscript = 'jobs/kpfmasterscmd_l1';                     # Auto-genera
 $dockercmdscript .= '_' . $$ . '_' . $trunctime . '.sh';           # Augment with unique numbers (process ID and truncated seconds).
 
 my $recipe = '/code/KPF-Pipeline/recipes/kpf_drp.recipe';
-my $config = '/code/KPF-Pipeline/configs/kpf_masters_l1.cfg';
+my $config = '/code/KPF-Pipeline/configs/keck_kpf_masters_l1.cfg';
 
 
 my ($dbport, $dbpass);

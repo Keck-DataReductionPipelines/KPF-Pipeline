@@ -31,11 +31,7 @@ class KPFPipeNightly(KPFPipeCronBase):
         The quicklook recipe and recipe configuration file.
         """
         self.recipe = 'recipes/kpf_drp.recipe'
-        cfg_dir = 'configs'
-        self.config = utils.get_dated_cfg(self.procdate, cfg_dir, 'keck_kpf_drp_watch')
-        if not self.config:
-            self.log.error(f'config not found for {self.procdate}, {cfg_dir}, keck_kpf_drp')
-            exit()
+        self.config = 'configs/keck_kpf_drp.cfg'
 
     def set_log_dir(self):
         """

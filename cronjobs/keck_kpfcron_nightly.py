@@ -31,11 +31,7 @@ class KPFPipeNightly(KPFPipeCronBase):
         The quicklook recipe and recipe configuration file.
         """
         self.recipe = 'recipes/kpf_drp.recipe'
-        cfg_dir = 'configs'
-        self.config = utils.get_dated_cfg(self.procdate, cfg_dir, 'keck_kpf_drp')
-        if not self.config:
-            self.log.error(f'config not found for {self.procdate}, {cfg_dir}, keck_kpf_drp')
-            exit()
+        self.config = 'configs/keck_kpf_drp.cfg'
 
     def set_log_dir(self):
         """
@@ -50,6 +46,8 @@ class KPFPipeNightly(KPFPipeCronBase):
         """
         self.docker_bash_script = f"""
             #!/bin/bash
+
+            git config --global --add safe.directory /code/KPF-Pipeline
 
             # mkdirs if they don't exist
             {self.make_directories_str()}

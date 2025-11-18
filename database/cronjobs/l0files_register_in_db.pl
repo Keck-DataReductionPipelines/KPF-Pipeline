@@ -62,7 +62,7 @@ if (! (defined $templogdir)) {
 
 # Docker container name for this Perl script, a known name so it can be monitored by docker ps command.
 # E.g., russkpfl0registerindb
-my $containername = 'russkpfl0registerindb';
+my $containername = 'registerl0filesindb';
 
 my $trunctime = time() - int(53 * 365.25 * 24 * 3600);   # Subtract off number of seconds in 53 years (since 00:00:00 on January 1, 1970, UTC).
 $containername .= '_' . $$ . '_' . $trunctime;           # Augment container name with unique numbers (process ID and truncated seconds).
@@ -86,7 +86,7 @@ if (! (defined $dbname)) {
 
 my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE};
 if (! (defined $containerimage)) {
-    $containerimage = 'russkpfmasters:latest';
+    $containerimage = 'kpf-drp:latest';
     print "*** Using default KPFCRONJOB_DOCKER_IMAGE=$containerimage (env var not set)\n";
 }
 
@@ -187,6 +187,8 @@ my $script = "#! /bin/bash\n" .
 my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
+
+print "CONTAINER IMAGE $containerimage\n";
 
 my $dockerruncmd = "docker run -d --name $containername " .
                    "-v ${codedir}:/code/KPF-Pipeline -v ${l0dir}:${basedir} " .

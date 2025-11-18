@@ -1,3 +1,23 @@
+################################################################
+# Set up to run inside Docker container.
+#
+# Requires the following changes to the polly code base:
+#
+# vi ${KPFCRONJOB_CODE}/polly/src/polly/log.py
+# Change from
+# polly/log.py:file_handler = logging.FileHandler("/scr/jpember/polly_outputs/polly.log")
+# to
+# file_handler = logging.FileHandler("/data/analysis/polly.log")
+#
+# vi ${KPFCRONJOB_CODE}/polly/src/polly/kpf.py
+# Change from
+# MASTERS_DIR = Path("/data/kpf/masters")
+# L1_DIR = Path("/data/kpf/L1")
+# to
+# MASTERS_DIR = Path("/masters")
+# L1_DIR = Path("/data/L1")
+################################################################
+
 import sys
 import os
 import subprocess
@@ -34,7 +54,7 @@ def find_L1_etalon_files(OBS_DATE: str, TIMEOFDAY: str) -> dict[str, list[str]]:
      - Use a database lookup (on shrek) to select files
     """
 
-    all_files: list[str] = glob(f"/data/kpf/masters/{OBS_DATE}/*L1.fits")
+    all_files: list[str] = glob(f"/masters/{OBS_DATE}/*L1.fits")
 
     out_files: list[str] = []
 
@@ -109,7 +129,7 @@ if __name__ == '__main__':
     ETALON_ANALYSIS_DATE = sys.argv[1]
     print("ETALON_ANALYSIS_DATE =",ETALON_ANALYSIS_DATE)
 
-    sandbox = os.environ["KPFCRONJOB_SBX"]
+    sandbox = "/data"
     outdir = f"{sandbox}/analysis/{ETALON_ANALYSIS_DATE}"
     print("outdir =",outdir)
 
@@ -131,8 +151,16 @@ if __name__ == '__main__':
 
             for orderlet in ORDERLETS:
 
-                cmd = build_command_line_args(l1_file,outdir,orderlet)
-                execute_command(cmd)
+                if os.path.exists(l1_file):
+
+                    print(f"The file '{l1_file}' exists.")
+
+                    cmd = build_command_line_args(l1_file,outdir,orderlet)
+                    execute_command(cmd)
+
+                else:
+
+                    print(f"The file '{l1_file}' does not exist.")
 
 
     exitcode = 0

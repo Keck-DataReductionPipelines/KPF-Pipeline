@@ -53,6 +53,9 @@ class KPFPipeQuickLook(KPFPipeCronBase):
             # make the symlinks
             {self.link_wrkspace_drp()}
 
+            # add safe dir for git
+            git config --global --add safe.directory /code/KPF-Pipeline
+
             # set-up the pipeline
             make init >> {self.stdout_log} 2>&1;
             

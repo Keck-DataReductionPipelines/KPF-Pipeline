@@ -158,12 +158,6 @@ if (! (defined $tsdbpass)) {
     die "*** Env. var. KPFPIPE_TSDB_PASS not set; quitting...\n";
 }
 
-my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE};
-if (! (defined $containerimage)) {
-    $containerimage = 'russkpfmasters:latest';
-    print "*** Using default KPFCRONJOB_DOCKER_IMAGE=$containerimage (env var not set)\n";
-}
-
 
 # Initialize fixed parameters and read command-line parameter.
 
@@ -296,7 +290,6 @@ my $script = "#! /bin/bash\n" .
              "mkdir -p /masters/${procdate}\n" .
              "sleep 3\n" .
              "cp -p /data/masters/pool/kpf_${procdate}* /masters/${procdate}\n" .
-             "chown root:root /masters/${procdate}/*\n" .
              "cp -p /data/logs/${procdate}/pipeline_${procdate}.log /masters/${procdate}/pipeline_masters_drp_l0_${procdate}.log\n" .
              "python $pythonscript4 $procdate >& ${pylogfile4}\n" .
              "cp -p /code/KPF-Pipeline/${pylogfile} /masters/${procdate}\n" .
