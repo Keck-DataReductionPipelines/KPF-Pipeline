@@ -16,8 +16,8 @@ def main():
     dir1_name = args.dir1
     dir2_name = args.dir2
 
-    base1 = '/data/data_workspace',
-    base2 = '/data/data_drp',
+    base1 = '/data/data_workspace'
+    base2 = '/data/data_drp'
     base_dir = {'L0': base1, '2D': base1,  'L1': base2, 'L2': base2}
 
     dir1 = os.path.join(base_dir[dir1_name], dir1_name, date_arg)
