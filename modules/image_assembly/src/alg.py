@@ -66,6 +66,9 @@ class ImageAssemblyAlg:
 
         keyword_map = {'GREEN':'GRNAMPS', 'RED':'REDAMPS'}
         self.target_l0['PRIMARY'][keyword_map[chip]] = self.namp[chip]
+        self.log.info(f"{chip} CCD: {self.namp[chip]}-amplifier mode")
+
+        print(f"{chip} CCD: {self.namp[chip]}-amplifier mode")
 
 
     def _read_orientation_reference(self, chip):
@@ -276,7 +279,10 @@ class ImageAssemblyAlg:
             var2d_ffi[:,2040:] = np.abs(image_ffi[:,2040:]) + self.target_l0.header['PRIMARY'][f'RN{chip}2']
 
         elif self.namp[chip] == 4:
-            raise ValueError("4-amp mode not yet implemented")
+            image_ffi[:2040,:2040] = self.target_l0[f'{chip}_AMP1'] * self.target_l0.header[f'{chip}_AMP1']['CCDGAIN']
+            image_ffi[:2040,2040:] = self.target_l0[f'{chip}_AMP2'] * self.target_l0.header[f'{chip}_AMP2']['CCDGAIN']
+            image_ffi[2040:,:2040] = self.target_l0[f'{chip}_AMP3'] * self.target_l0.header[f'{chip}_AMP3']['CCDGAIN']
+            image_ffi[2040:,2040:] = self.target_l0[f'{chip}_AMP4'] * self.target_l0.header[f'{chip}_AMP4']['CCDGAIN']
         
         else:
             raise ValueError("Only 2-amp and 4-amp modes supported")
@@ -306,21 +312,24 @@ class ImageAssemblyAlg:
 
         Args:
             chip (str) : which CCD to use, 'GREEN' or 'RED'
-            method (str) : method to use for overscan subtraction
+            overscan_method (str) : method to use for overscan subtraction
 
         Returns:
             kpf_l0 : KPF L0 object with full frame extensions and keywords
         """
         if overscan_method is None:
-            try:
-                overscan_method = self.__getattribute__(self.overscan_method)
-            except AttributeError:
-                self.log.error(f'Overscan correction method {self.overscan_method} not implemented.')
-                raise(AttributeError)
+            overscan_method = self.overscan_method
+
+        try:
+            overscan_subtraction = self.__getattribute__(overscan_method)
+        except AttributeError:
+            self.log.error(f'Overscan correction method {overscan_method} not implemented.')
+            raise(AttributeError)
+
+        self.log.info(f"---> subracting overscan, method = {overscan_method}")
 
         for amp_no in range(1, 1+self.namp[chip.upper()]):
-            print(chip, amp_no)
-            self.target_l0[f'{chip.upper()}_AMP{amp_no}'] = overscan_method(chip, amp_no)
+            self.target_l0[f'{chip.upper()}_AMP{amp_no}'] = overscan_subtraction(chip, amp_no)
 
         self.target_l0[f'{chip}_CCD'], self.target_l0[f'{chip}_VAR'] = self.stitch_channels(chip)
 
