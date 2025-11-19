@@ -12,7 +12,6 @@ class ImageAssembly(KPF0_Primitive):
     """
     Primitive for image assembly module
     """
-
     def __init__(self, action, context):
         
         # Initialize parent class

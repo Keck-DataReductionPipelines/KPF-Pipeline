@@ -1,0 +1,9 @@
+from modules.image_assembly.src.alg import ImageAssembly
+
+target_l0_file = '/data/L0/20240405/KP.20240405.49597.71.fits'
+target_l0 = kpf0_from_fits(target_l0_file)
+
+image_assembly_output_list = ImageAssembly(target_l0)
+
+exit_code = image_assembly_output_list[0]
+target_l1 = image_assembly_output_list[1]
