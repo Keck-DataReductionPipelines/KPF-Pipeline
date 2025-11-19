@@ -1,4 +1,4 @@
-from modules.image_assembly.src.alg import ImageAssembly
+from modules.image_assembly.src.image_assembly import ImageAssembly
 
 target_l0_file = '/data/L0/20240405/KP.20240405.49597.71.fits'
 target_l0 = kpf0_from_fits(target_l0_file)
