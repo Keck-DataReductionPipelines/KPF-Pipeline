@@ -6,4 +6,4 @@ target_l0 = kpf0_from_fits(target_l0_file)
 image_assembly_output_list = ImageAssembly(target_l0)
 
 exit_code = image_assembly_output_list[0]
-target_l1 = image_assembly_output_list[1]
+target_2D = image_assembly_output_list[1]

@@ -1,15 +1,15 @@
 # L0 to 2D imports
 from kpfpipe.pipelines.fits_primitives import kpf0_from_fits
-from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
-from modules.var_exts.src.var_exts_framework import VarExtsFramework
+#from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
+#from modules.var_exts.src.var_exts_framework import VarExtsFramework
 from modules.image_processing.src.image_process import ImageProcessing
 from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
-from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
-from modules.Utils.orientation_ref_reader import OrientationReference
-from modules.Utils.overscan_subtract import OverscanSubtraction
+#from modules.Utils.orientation_ref_reader import OrientationReference
+#from modules.Utils.overscan_subtract import OverscanSubtraction
 from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 
 # set the CONFIGURATION flags for each process ------------------------------------
+# GJG: why are L1 and L2 flags being set in the l0_to_2d_science recipe?
 do_l0_to_2d_science = config.ARGUMENT.do_l0_to_2d_science
 do_2d_to_l1_science = config.ARGUMENT.do_2d_to_l1_science
 do_l1_to_l2_science = config.ARGUMENT.do_l1_to_l2_science
@@ -67,29 +67,32 @@ wls_list = config.ARGUMENT.wls_fits
 
 
 # Howard: remove duplicates from above and below here.
+# GJG: most of these config arguments have been moved or deleted
+# GJG: moved arguments are now in modules/image_assembly/configs/default.cfg
+# GJG: deleted arguments are because we now assume all data is KPF data
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
 max_cal_file_age = config.ARGUMENT.max_cal_file_age
-channel_datasec_ncols_green = config.WATCHFOR_L0.channel_datasec_ncols_green
-channel_datasec_nrows_green = config.WATCHFOR_L0.channel_datasec_nrows_green
-channel_datasec_ncols_red = config.WATCHFOR_L0.channel_datasec_ncols_red
-channel_datasec_nrows_red = config.WATCHFOR_L0.channel_datasec_nrows_red
-channel_orientation_ref_path_red = config.WATCHFOR_L0.channel_orientation_ref_path_red
-channel_orientation_ref_path_green = config.WATCHFOR_L0.channel_orientation_ref_path_green
-overscan_method = config.WATCHFOR_L0.overscan_method
-order = config.WATCHFOR_L0.overscan_order
-oscan_clip = config.WATCHFOR_L0.overscan_clip
-lev0_ffi_ext_red = config.WATCHFOR_L0.lev0_ffi_ext_red
-lev0_ffi_ext_green = config.WATCHFOR_L0.lev0_ffi_ext_green
-lev0_ffi_ext_cahk = config.WATCHFOR_L0.lev0_ffi_ext_cahk
-prescan_reg = config.WATCHFOR_L0.prescan_reg
-gain_key = config.WATCHFOR_L0.gain_keyword
+#channel_datasec_ncols_green = config.WATCHFOR_L0.channel_datasec_ncols_green
+#channel_datasec_nrows_green = config.WATCHFOR_L0.channel_datasec_nrows_green
+#channel_datasec_ncols_red = config.WATCHFOR_L0.channel_datasec_ncols_red
+#channel_datasec_nrows_red = config.WATCHFOR_L0.channel_datasec_nrows_red
+#channel_orientation_ref_path_red = config.WATCHFOR_L0.channel_orientation_ref_path_red
+#channel_orientation_ref_path_green = config.WATCHFOR_L0.channel_orientation_ref_path_green
+#overscan_method = config.WATCHFOR_L0.overscan_method
+#order = config.WATCHFOR_L0.overscan_order
+#oscan_clip = config.WATCHFOR_L0.overscan_clip
+#lev0_ffi_ext_red = config.WATCHFOR_L0.lev0_ffi_ext_red
+#lev0_ffi_ext_green = config.WATCHFOR_L0.lev0_ffi_ext_green
+#lev0_ffi_ext_cahk = config.WATCHFOR_L0.lev0_ffi_ext_cahk
+#prescan_reg = config.WATCHFOR_L0.prescan_reg
+#gain_key = config.WATCHFOR_L0.gain_keyword
 do_db_query_for_master_files = config.WATCHFOR_L0.do_db_query_for_master_files
 
 bad_pixel_masks = config.WATCHFOR_L0.bad_pixel_masks
 quicklook = config.WATCHFOR_L0.quicklook
-n_sigma = config.WATCHFOR_L0.n_sigma
-n_sigma_read_noise = config.WATCHFOR_L0.n_sigma_read_noise
+#n_sigma = config.WATCHFOR_L0.n_sigma
+#n_sigma_read_noise = config.WATCHFOR_L0.n_sigma_read_noise
 
 date_dir = context.date_dir + '/'
 
@@ -138,6 +141,18 @@ if do_quality_control:
         invoke_subrecipe("./recipes/diagnostics.subrecipe")
         # Silently returns modified kpf_object
 
+
+        # GJG: ImageAssembly replaces and simplifies several deprecated routines
+        # ** OrientationReference
+        # ** OverscanSubtraction
+        # ** VarExtsFramework
+        # ** ReadNoiseFramework
+        image_assembly_output_list = ImageAssembly(kpf_object)
+
+        exit_code = image_assembly_output_list[0]
+        kpf_object_with_ffi = image_assembly_output_list[1]        
+
+        """
         # Construct the full frame images one at a time.
         # These routines combine the 2D image from the raw file based on the channel orientation reference file.
         # Then, overscan subtraction is performed.
@@ -186,8 +201,8 @@ if do_quality_control:
                                             kpf_object_with_ffi)
         var_exts_exit_code = var_exts_exit_codes[0]
         kpf_object_from_var_exts = var_exts_exit_codes[1]
-        
-        bias_subbed = ImageProcessing(kpf_object_from_var_exts, masterbias_path, lev0_ffi_exts_subbed, data_type, quicklook)
+        """
+        bias_subbed = ImageProcessing(kpf_object_with_ffi, masterbias_path, lev0_ffi_exts_subbed, data_type, quicklook)
         dark_subbed = ImageProcessing(bias_subbed, masterdark_path, lev0_ffi_exts_subbed, data_type, quicklook)
         flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)
         # Apply bad-pixel mask(s).
