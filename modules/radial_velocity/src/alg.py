@@ -604,8 +604,31 @@ class RadialVelocityAlg(RadialVelocityBase):
                 zb = self.get_redshift(seg=seg_idx)
                 result_ccf[seg_idx, :] = \
                         self.cross_correlate_by_mask_shift(ordered_wavecal, ordered_spec, zb)
+                
+                # Check if CCF is all zeros
+                if np.all(result_ccf[seg_idx, :] == 0.0):
+                    if self.logger is not None:
+                        self.logger.warning(f"[CCF] Segment {seg_idx} (order {ord_idx}): CCF is all zeros")
+                        self.logger.info(f"[CCF] Segment {seg_idx}: spectrum stats - min={np.min(ordered_spec):.3e}, max={np.max(ordered_spec):.3e}, mean={np.mean(ordered_spec):.3e}")
+                        self.logger.info(f"[CCF] Segment {seg_idx}: wavecal range - min={np.min(ordered_wavecal):.3f}, max={np.max(ordered_wavecal):.3f}")
+                        self.logger.info(f"[CCF] Segment {seg_idx}: pixel range - left_x={left_x}, right_x={right_x}, n_pixels={right_x-left_x}")
             else:
                 self.d_print("RadialVelocityAlg: all wavelength zero")
+                if self.logger is not None:
+                    self.logger.warning(f"[CCF] Segment {seg_idx} (order {ord_idx}): All wavelength calibration values are zero - skipping CCF")
+        
+        # Summary: count and report how many CCFs are all zeros
+        zero_ccf_count = 0
+        for seg_idx in seg_ary:
+            if np.all(result_ccf[seg_idx, :] == 0.0):
+                zero_ccf_count += 1
+        
+        if self.logger is not None:
+            if zero_ccf_count > 0:
+                self.logger.warning(f"[CCF Summary] {zero_ccf_count}/{len(seg_ary)} segments have all-zero CCFs ({100*zero_ccf_count/len(seg_ary):.1f}%)")
+            else:
+                self.logger.info(f"[CCF Summary] All {len(seg_ary)} segments have non-zero CCF data")
+        
         result_ccf[~np.isfinite(result_ccf)] = 0.
         return result_ccf, ''
 
@@ -1274,8 +1297,8 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         if self.spectrum_data is None or self.spectrum_data.size == 0:
             return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs_jd, 'msg': 'no spectral data'}
-        elif self.is_none_fiberobject(self.get_fiber_object_in_header(self.spectro, self.orderletname)):
-            return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs_jd, 'msg': 'fiber object is None'}
+        # elif self.is_none_fiberobject(self.get_fiber_object_in_header(self.spectro, self.orderletname)):
+        #     return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs_jd, 'msg': 'fiber object is None'}
 
         self.get_segment_limits()
 

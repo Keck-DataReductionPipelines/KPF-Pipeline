@@ -324,8 +324,8 @@ def execute_all_diagnostics(kpf_object, data_level, diagnostics_name, logger=Non
                             kpf_object = add_headers_L1_cal_line_quality(kpf_object, cal='Etalon', logger=logger)
                             exit_code = 1
                         else: 
-                            logger.info("Observation type {} != 'LFC' or 'Etalon'.  Line diagnostics not computed.".format(name))
-                    else: 
+                            logger.info(f"Observation type {name} != 'LFC' or 'Etalon'.  Line diagnostics not computed.")
+                    else:
                         logger.info("Green/Red not in L1 file. LFC/Etalon line diagnostics not computed.")
 
                 except Exception as e:
@@ -344,7 +344,7 @@ def execute_all_diagnostics(kpf_object, data_level, diagnostics_name, logger=Non
                             kpf_object = add_headers_L1_saturated_lines(kpf_object, logger=logger)
                             exit_code = 1
                         else: 
-                            logger.info("Observation type {} not in ['LFC', 'Etalon', 'ThAr', 'UNe'].  Saturated lines not counted.".format(name))
+                            logger.info(f"Observation type {name} not in ['LFC', 'Etalon', 'ThAr', 'UNe'].  Saturated lines not counted.")
                     else: 
                         logger.info("Green/Red not in L1 file. Saturated lines not counted.")
 

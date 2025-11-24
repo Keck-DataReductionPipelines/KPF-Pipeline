@@ -18,7 +18,6 @@ panel_arr:
           color: red
     paneldict:
       ylabel: "autcal-etalon SNR (CAL)"
-      narrow_xlim_daily: true
       not_junk: true
       qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       not_junk: true
@@ -45,7 +44,6 @@ panel_arr:
     paneldict:
       title: autocal-etalon and slewcal SNR (CAL) 
       ylabel: "slewcal SNR (CAL)"
-      narrow_xlim_daily: true
       not_junk: true
       qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.20

@@ -18,9 +18,9 @@ do_order_trace = config.ARGUMENT.do_order_trace
 
 # L1 level flags
 do_spectral_extraction = config.WATCHFOR_2D.do_spectral_extraction
-# if copy wavelength solution data to L1 from file samples with wls data.
+# if copy wavelength solution data to L1 from file samples with wls data
 do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
-# Peroform wavelength interpolation
+# perform wavelength interpolation
 do_db_query_for_before_after_master_files = config.WLS_INTERPOLATION.do_db_query_for_before_after_master_files 
 
 # L2 level flags
@@ -124,7 +124,6 @@ if do_quality_control:
 
     if overwrite: 
         # read l0 file. Modify this object throughout the routine.
-
         kpf_object = kpf0_from_fits(l0_filename_science,data_type) # L0, not 2D file is input
         dt_string = GetHeaderValue(kpf_object, 'DATE-MID')
         cals = CalibrationLookup(dt_string)

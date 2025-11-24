@@ -305,5 +305,3 @@ class ImageProcessingAlg():
             self.rawimage: The bias-corrected data.
         """
         return self.rawimage
-
-#quicklook TODO: raise flag when counts are significantly diff from master bias, identify bad pixels
