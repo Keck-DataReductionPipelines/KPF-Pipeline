@@ -5,8 +5,9 @@
 
 from modules.Utils.string_proc import str_replace, date_from_kpffile
 from modules.Utils.pick_inputs_masters_drp import PickInputsMastersDRP
-from modules.Utils.orientation_ref_reader import OrientationReference
-from modules.Utils.overscan_subtract import OverscanSubtraction
+#from modules.Utils.orientation_ref_reader import OrientationReference
+#from modules.Utils.overscan_subtract import OverscanSubtraction
+from modules.image_assembly.src.image_assembly import ImageAssembly
 from modules.master_bias.src.master_bias_framework import MasterBiasFramework
 from modules.master_dark.src.master_dark_framework import MasterDarkFramework
 from modules.master_flat.src.master_flat_framework import MasterFlatFramework
@@ -23,25 +24,26 @@ standard_flat_object = flat_objects[0]
 smoothlamppattern_path = config.FLAT.smoothlamppattern_path
 ordermask_path = config.FLAT.ordermask_path
 
-channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
-channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
-channel_datasec_ncols_red = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_red
-channel_datasec_nrows_red = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_red
-channel_orientation_ref_path_red = config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_red
-channel_orientation_ref_path_green = config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_green
-overscan_method = config.OVERSCAN_SUBTRACTION.overscan_method
-order = config.OVERSCAN_SUBTRACTION.overscan_order
-oscan_clip = config.OVERSCAN_SUBTRACTION.overscan_clip
-lev0_ffi_ext_red = config.OVERSCAN_SUBTRACTION.lev0_ffi_ext_red
-lev0_ffi_ext_green = config.OVERSCAN_SUBTRACTION.lev0_ffi_ext_green
-prescan_reg = config.OVERSCAN_SUBTRACTION.prescan_reg
-gain_key = config.OVERSCAN_SUBTRACTION.gain_keyword
-n_sigma = config.OVERSCAN_SUBTRACTION.n_sigma
-
-
+# GJG: major changes to config 2025-11-24
+# renamed config [OVERSCAN_SUBTRACTION] --> [IMAGE_ASSEMBLY]
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
 
+#channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
+#channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
+#channel_datasec_ncols_red = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_red
+#channel_datasec_nrows_red = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_red
+channel_orientation_ref_path_red = config.IMAGE_ASSEMBLY.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = config.IMAGE_ASSEMBLY.channel_orientation_ref_path_green
+prescan_region = config.IMAGE_ASSEMBLY.prescan_reg
+overscan_method = config.IMAGE_ASSEMBLY.overscan_method
+overscan_buffer = config.IMAGE_ASSEMBLY.overscan_buffer
+overscan_sigma = config.IMAGE_ASSEMBLY.overscan_sigma
+overscan_order = config.IMAGE_ASSEMBLY.overscan_order
+n_sigma_read_noise = config.IMAGE_ASSEMBLY.n_sigma_read_noise
+#gain_key = config.IMAGE_ASSEMBLY.gain_keyword
+lev0_ffi_ext_red = config.IMAGE_ASSEMBLY.lev0_ffi_ext_red
+lev0_ffi_ext_green = config.IMAGE_ASSEMBLY.lev0_ffi_ext_green
 
 raw_file_path = context.file_path
 date_dir = date_from_kpffile(raw_file_path)
@@ -80,10 +82,10 @@ file_name,ext = splitext(file_name_ext)
 output_file_name = overscan_output_dir + "/" + file_name + "_2D" + ext
 output_file_exists = exists(output_file_name)
 
-if output_file_exists:
-    file_exists = True
-else:
-    file_exists = False
+#if output_file_exists:
+#    file_exists = True
+#else:
+#    file_exists = False
 
 if (overwrite or not output_file_exists) and raw_file_path in file_list:
 

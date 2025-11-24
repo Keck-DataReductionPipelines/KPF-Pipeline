@@ -66,10 +66,7 @@ orderlet_names = config.ARGUMENT.orderlet_names
 wls_list = config.ARGUMENT.wls_fits
 
 
-# Howard: remove duplicates from above and below here.
-# GJG: most of these config arguments have been moved or deleted
-# GJG: moved arguments are now in modules/image_assembly/configs/default.cfg
-# GJG: deleted arguments are because we now assume all data is KPF data
+# GJG: major changes to config 2025-11-24
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
 max_cal_file_age = config.ARGUMENT.max_cal_file_age
@@ -77,22 +74,22 @@ max_cal_file_age = config.ARGUMENT.max_cal_file_age
 #channel_datasec_nrows_green = config.WATCHFOR_L0.channel_datasec_nrows_green
 #channel_datasec_ncols_red = config.WATCHFOR_L0.channel_datasec_ncols_red
 #channel_datasec_nrows_red = config.WATCHFOR_L0.channel_datasec_nrows_red
-#channel_orientation_ref_path_red = config.WATCHFOR_L0.channel_orientation_ref_path_red
-#channel_orientation_ref_path_green = config.WATCHFOR_L0.channel_orientation_ref_path_green
-#overscan_method = config.WATCHFOR_L0.overscan_method
-#order = config.WATCHFOR_L0.overscan_order
-#oscan_clip = config.WATCHFOR_L0.overscan_clip
-#lev0_ffi_ext_red = config.WATCHFOR_L0.lev0_ffi_ext_red
-#lev0_ffi_ext_green = config.WATCHFOR_L0.lev0_ffi_ext_green
-#lev0_ffi_ext_cahk = config.WATCHFOR_L0.lev0_ffi_ext_cahk
-#prescan_reg = config.WATCHFOR_L0.prescan_reg
+channel_orientation_ref_path_red = config.WATCHFOR_L0.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = config.WATCHFOR_L0.channel_orientation_ref_path_green
+prescan_region = config.WATCHFOR_L0.prescan_reg
+overscan_method = config.WATCHFOR_L0.overscan_method
+overscan_buffer = config.WATCHFOR_L0.overscan_buffer
+overscan_sigma = config.WATCHFOR_L0.overscan_sigma
+overscan_order = config.WATCHFOR_L0.overscan_order
+n_sigma_read_noise = config.WATCHFOR_L0.n_sigma_read_noise
 #gain_key = config.WATCHFOR_L0.gain_keyword
+lev0_ffi_ext_red = config.WATCHFOR_L0.lev0_ffi_ext_red
+lev0_ffi_ext_green = config.WATCHFOR_L0.lev0_ffi_ext_green
+lev0_ffi_ext_cahk = config.WATCHFOR_L0.lev0_ffi_ext_cahk
 do_db_query_for_master_files = config.WATCHFOR_L0.do_db_query_for_master_files
 
 bad_pixel_masks = config.WATCHFOR_L0.bad_pixel_masks
 quicklook = config.WATCHFOR_L0.quicklook
-#n_sigma = config.WATCHFOR_L0.n_sigma
-#n_sigma_read_noise = config.WATCHFOR_L0.n_sigma_read_noise
 
 date_dir = context.date_dir + '/'
 
