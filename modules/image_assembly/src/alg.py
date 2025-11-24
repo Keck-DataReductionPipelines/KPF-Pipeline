@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from copy import deepcopy
 
 from kpfpipe.config.pipeline_config import ConfigClass
 from modules.Utils.config_parser import ConfigHandler
@@ -23,7 +22,7 @@ class ImageAssemblyAlg:
             self.log = logger
 
         # data inputs
-        self.target_l0 = deepcopy(target_l0)
+        self.target_l0 = target_l0
 
         # config inputs
         self.config = ConfigClass(default_config_path)
