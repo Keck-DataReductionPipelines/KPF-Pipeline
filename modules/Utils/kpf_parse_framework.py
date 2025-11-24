@@ -1,9 +1,6 @@
-#### WARNING: this hasn't been been verified to work yet!
+#### WARNING: These classes haven't been been verified to work yet!
 
-from modules.Utils.kpf_parse import get_data_products_L0 as get_dp_L0
-from modules.Utils.kpf_parse import get_data_products_2D as get_dp_2D
-from modules.Utils.kpf_parse import get_data_products_L1 as get_dp_L1
-from modules.Utils.kpf_parse import get_data_products_L2 as get_dp_L2
+from modules.Utils.kpf_parse import HeaderParse
 from kpfpipe.primitives.core import KPF_Primitive
 
 # External dependencies
@@ -54,3 +51,42 @@ class GetDataProductsFramework(KPF_Primitive):
             data_prodcts = ['None']
 
         return Arguments(data_products)
+
+
+class GetNameFramework(KPF_Primitive):
+    """
+    This framework primative implements the HeaderParse.get_name() method 
+    from modules/Utils/kpf_parse.py
+
+    Description:
+        - `action (keckdrpframework.models.action.Action)`: `action.args` contains 
+                   positional arguments and keyword arguments passed by the 
+                   `get_data_products` event issued in the recipe:
+
+            - `action.args[0] (kpf_object)`: L0/2D/L1/L2 object to be analyzed
+    """
+
+    def __init__(self,
+                 action: Action,
+                 context: ProcessingContext) -> None:
+        KPF_Primitive.__init__(self, action, context)
+
+    def _pre_condition(self) -> bool:
+        success = len(self.action.args) >= 1
+        return success
+
+    def _post_condition(self) -> bool:
+        return True
+
+    def _perform(self):
+        kpf_object = self.action.args[0]
+
+        # Extract the "name"
+        # possible values = 'Bias', 'Dark', 'Flat', 'Wide Flat', 
+        #                   'LFC', 'Etalon', 'ThAr', 'UNe', 
+        #                   'Sun', 'Star'
+        from modules.Utils.kpf_parse import HeaderParse
+        hdr = HeaderParse(kpf_object, 'PRIMARY')
+        name = hdr.get_name(use_star_names=False)
+
+        return Arguments(name)
