@@ -177,8 +177,6 @@ class SpectralExtractionAlg:
                start = 0
             elif (int(datecode) >= 20240203) and (chip == 'RED'):
                 start = 1
-
-            print(int(datecode), chip, start)
                     
             fibers = 'SKY SCI1 SCI2 SCI3 CAL'.split()
             trace_fiber = [None]*ntrace
@@ -390,6 +388,7 @@ class SpectralExtractionAlg:
             P[i] = 1.0*spline(x)
 
         P = np.maximum(P,0)
+        P *= (W > 0)
         P /= np.nansum(P*W,axis=0)
     
         return P
