@@ -73,7 +73,7 @@ class Analyze2D:
             	self.df_telemetry = None
         except:
             self.df_telemetry = None
-        primary_header = HeaderParse(D2, 'PRIMARY')
+        primary_header = HeaderParse(self.D2, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
@@ -89,11 +89,11 @@ class Analyze2D:
         self.red_coll_current_a       = 0
         self.red_ech_current_a        = 0
         try:
-            self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(D2['GREEN_CCD'].data),[99,90,50,10])
+            self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(self.D2['GREEN_CCD'].data),[99,90,50,10])
         except:
             self.logger.error('Problem computing SNR for Green 2D image')
         try:
-            self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
+            self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(self.D2['RED_CCD'].data),[99,90,50,10])
         except:
             self.logger.error('Problem computing SNR for Red 2D image')
 

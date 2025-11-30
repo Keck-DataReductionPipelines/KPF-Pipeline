@@ -197,19 +197,19 @@ class StrayLightAlg:
         """
         Method to estimate stray light -- fits a 2D polynomial to inter-order pixels
         """
-        data = np.array(self.target_2D[f'{chip}_CCD'].data)
-        mask = self._inter_order_mask(chip, mask_buffer=mask_buffer).astype(bool)
+        data = deepcopy(np.array(self.target_2D[f'{chip}_CCD'].data))
+        mask = deepcopy(self._inter_order_mask(chip, mask_buffer=mask_buffer).astype(bool))
 
         if edge_clip > 0:
-            d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
-            m = mask[edge_clip:-edge_clip,edge_clip:-edge_clip]
+            edge_mask = np.ones_like(mask)
+            edge_mask[edge_clip:-edge_clip,edge_clip:-edge_clip] = 0
+            mask |= edge_mask
 
-        else:
-            d = deepcopy(data)
-            m = deepcopy(mask)
-
-        coeffs = self._polyfit2d(d, polyorder, regularize=regularize, mask=m)    
+        coeffs = self._polyfit2d(data, polyorder, regularize=regularize, mask=mask)    
+        
         stray_light = self._polyval2d(coeffs, polyorder, data.shape)
+        stray_light = np.maximum(stray_light, 0)
+        stray_light += np.nanmedian((data - stray_light)[~mask])
         stray_light = np.maximum(stray_light, 0)
 
         return stray_light, mask
@@ -219,21 +219,20 @@ class StrayLightAlg:
         """
         Method to estimate stray light -- fits a 2D polynomial to inter-order pixels
         """
-        data = np.array(self.target_2D[f'{chip}_CCD'].data)
-        mask = self._inter_order_mask(chip, mask_buffer=mask_buffer).astype(bool)
+        data = deepcopy(np.array(self.target_2D[f'{chip}_CCD'].data))
+        mask = deepcopy(self._inter_order_mask(chip, mask_buffer=mask_buffer).astype(bool))
 
         if edge_clip > 0:
-            d = data[edge_clip:-edge_clip,edge_clip:-edge_clip]
-            m = mask[edge_clip:-edge_clip,edge_clip:-edge_clip]
+            edge_mask = np.ones_like(mask)
+            edge_mask[edge_clip:-edge_clip,edge_clip:-edge_clip] = 0
+            mask |= edge_mask
 
-        else:
-            d = deepcopy(data)
-            m = deepcopy(mask)
-
-        coeffs = self._polyfit_columns(d, polyorder, mask=m)
+        coeffs = self._polyfit_columns(data, polyorder, mask=mask)
         stray_light = self._polyval_columns(coeffs, data.shape[0])
         stray_light = self._patch_nan_nearest(stray_light)
         stray_light = gaussian_filter(stray_light, gaussian_sigma, mode='reflect', truncate=4.0)
+        stray_light += np.nanmedian((data - stray_light)[~mask])
+        stray_light = np.maximum(stray_light, 0)
 
         return stray_light, mask
         
@@ -254,9 +253,9 @@ class StrayLightAlg:
     
         # mask exposed pixels
         if mask is not None:
-            mask = np.array(mask, dtype='bool').ravel()
+            mask = mask.astype(bool).ravel()
         else:
-            mask = np.zeros((nrow,ncol), dtype='bool').ravel()
+            mask = np.zeros((nrow,ncol), dtype=bool).ravel()
 
         x = x[~mask]
         y = y[~mask]
@@ -341,9 +340,9 @@ class StrayLightAlg:
         
         # mask exposed pixels
         if mask is not None:
-            mask = np.array(mask, dtype='bool')
+            mask = mask.astype(bool)
         else:
-            mask = np.zeros((nrow,ncol), dtype='bool')
+            mask = np.zeros((nrow,ncol), dtype=bool)
 
         V = np.vander(y, polyorder + 1, increasing=True)
         coeffs = np.full((polyorder + 1, ncol), np.nan, dtype=float)

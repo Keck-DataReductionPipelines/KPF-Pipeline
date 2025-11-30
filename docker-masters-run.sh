@@ -3,7 +3,7 @@
 # CAUTION: The following setting prints out the docker-run command with passwords as arguments,
 # as a debugging tool.  Ideally, passwords should not be passed as environment variables, but
 # instead sourced from an environment file with user-only read permission inside the container.
-set -x
+# set -x
 
 ##############################################################
 # Required environment variables and examples:
@@ -29,6 +29,36 @@ set -x
 export DOCKER_CLI_EXPERIMENTAL=enabled
 export DOCKER_BUILDKIT=1
 
+# Verify required environment variables before proceeding
+required_vars=(
+	KPFCRONJOB_CODE
+	KPFCRONJOB_DOCKER_IMAGE
+	KPFPIPE_MASTERS_BASE_DIR
+	KPFPIPE_L0_BASE_DIR
+	KPFCRONJOB_SBX
+	KPFPIPE_DB_PORT
+	KPFPIPE_DB_NAME
+	KPFPIPE_DB_USER
+	KPFPIPE_DB_PASS
+	KPFPIPE_TSDB_PORT
+	KPFPIPE_TSDB_NAME
+	KPFPIPE_TSDB_USER
+	KPFPIPE_TSDB_PASS
+)
+missing_vars=()
+for var in "${required_vars[@]}"; do
+	if [ -z "${!var}" ]; then
+		missing_vars+=("$var")
+	fi
+done
+if [ "${#missing_vars[@]}" -ne 0 ]; then
+	echo "Error: Missing required environment variables:" >&2
+	for mv in "${missing_vars[@]}"; do
+		printf '  - %s\n' "$mv" >&2
+	done
+	exit 1
+fi
+
 
 # Function to run docker with suppressed warnings
 run_docker() {
@@ -41,13 +71,8 @@ run_docker() {
         # Run with port mapping
         docker run -it \
             -p "$port:$port" \
-            -v "${KPFCRONJOB_CODE}:/code/KPF-Pipeline:ro" \
-            -v "${KPFCRONJOB_SBX}/2D:/data/2D" \
-            -v "${KPFCRONJOB_SBX}/L1:/data/L1" \
-            -v "${KPFCRONJOB_SBX}/L2:/data/L2" \
-            -v "${KPFCRONJOB_SBX}/logs:/data/logs" \
-            -v "${KPFCRONJOB_SBX}/analysis:/data/analysis" \
-            -v "${KPFCRONJOB_SBX}/masters:/data/masters" \
+            -v "${KPFCRONJOB_CODE}:/code/KPF-Pipeline" \
+            -v "${KPFCRONJOB_SBX}:/data/" \
             -v "${KPFPIPE_L0_BASE_DIR:-/data/kpf/L0}:/data/L0:ro" \
             -v "${KPFPIPE_MASTERS_BASE_DIR:-/data/kpf/masters}:/masters" \
             -e KPFPIPE_PORT="$KPFPIPE_PORT" \
@@ -58,21 +83,18 @@ run_docker() {
             -e DBPASS="${KPFPIPE_DB_PASS:-}" \
             -e DBSERVER=127.0.0.1 \
             -e TSDBPORT=$KPFPIPE_TSDB_PORT \
-            -e TSDBNAME=KPFPIPE_TSDB_NAME \
+            -e TSDBNAME=$KPFPIPE_TSDB_NAME \
             -e TSDBUSER="${KPFPIPE_TSDB_USER:-}" \
             -e TSDBPASS="${KPFPIPE_TSDB_PASS:-}" \
             -e TSDBSERVER=127.0.0.1 \
+            -e PYTHONUNBUFFERED=1 \
+            -e PYTHONPATH=/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src \
             $KPFCRONJOB_DOCKER_IMAGE bash 2>/dev/null
     else
         # Run without port mapping
         docker run -it \
-            -v "${KPFCRONJOB_CODE}:/code/KPF-Pipeline:ro" \
-            -v "${KPFCRONJOB_SBX}/2D:/data/2D" \
-            -v "${KPFCRONJOB_SBX}/L1:/data/L1" \
-            -v "${KPFCRONJOB_SBX}/L2:/data/L2" \
-            -v "${KPFCRONJOB_SBX}/logs:/data/logs" \
-            -v "${KPFCRONJOB_SBX}/analysis:/data/analysis" \
-            -v "${KPFCRONJOB_SBX}/masters:/data/masters" \
+            -v "${KPFCRONJOB_CODE}:/code/KPF-Pipeline" \
+            -v "${KPFCRONJOB_SBX}:/data/" \
             -v "${KPFPIPE_L0_BASE_DIR:-/data/kpf/L0}:/data/L0:ro" \
             -v "${KPFPIPE_MASTERS_BASE_DIR:-/data/kpf/masters}:/masters" \
             --network=host \
@@ -80,17 +102,21 @@ run_docker() {
             -e DBNAME=$KPFPIPE_DB_NAME \
             -e DBUSER="${KPFPIPE_DB_USER:-}" \
             -e DBPASS="${KPFPIPE_DB_PASS:-}" \
-            -e TSDBSERVER=127.0.0.1 \
+            -e DBSERVER=127.0.0.1 \
             -e TSDBPORT=$KPFPIPE_TSDB_PORT \
             -e TSDBNAME=$KPFPIPE_TSDB_NAME \
             -e TSDBUSER="${KPFPIPE_TSDB_USER:-}" \
             -e TSDBPASS="${KPFPIPE_TSDB_PASS:-}" \
-            -e DBSERVER_TSDB=127.0.0.1 \
+            -e TSDBSERVER=127.0.0.1 \
+            -e PYTHONUNBUFFERED=1 \
+            -e PYTHONPATH=/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src \
             $KPFCRONJOB_DOCKER_IMAGE bash 2>/dev/null
     fi
 }
 
-# Main execution
+
+# Main execution.
+
 if [ -n "$KPFPIPE_PORT" ]; then
     run_docker "$KPFPIPE_PORT" "Starting Docker container on port $KPFPIPE_PORT..."
 else

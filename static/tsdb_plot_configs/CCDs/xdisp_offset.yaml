@@ -264,6 +264,7 @@ panel_arr:
           marker: .
           linewidth: 0.5
     paneldict:
+      title: "Cross Dispersion Drift"
       ylabel: "Red Camera\n$\\Delta$Temperature (K)"
       not_junk: true
       qc_not_fail: 'FLATSNR, GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'

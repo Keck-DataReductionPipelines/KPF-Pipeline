@@ -1,0 +1,97 @@
+description: autocal-etalon Flux Ratios
+plot_type: time_series_multipanel
+panel_arr:
+  - panelvars:
+      - col: FR12M452
+        col_err: FR12U452
+        plot_type: errorbar
+        plot_attr:
+          label: 452 nm
+          marker: .
+          linewidth: 0.5
+      - col: FR12M548
+        col_err: FR12U548
+        plot_type: errorbar
+        plot_attr:
+          label: 548 nm
+          marker: .
+          linewidth: 0.5
+      - col: FR12M652
+        col_err: FR12U652
+        plot_type: errorbar
+        plot_attr:
+          label: 652 nm
+          marker: .
+          linewidth: 0.5
+      - col: FR12M747
+        col_err: FR12U747
+        plot_type: errorbar
+        plot_attr:
+          label: 747 nm
+          marker: .
+          linewidth: 0.5
+      - col: FR12M852
+        col_err: FR12U852
+        plot_type: errorbar
+        plot_attr:
+          label: 852 nm
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "autocal-etalon Flux Ratio\n(SCI1/SCI2)"
+      narrow_xlim_daily: true
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
+      not_junk: true
+      legend_frac_size: 0.20
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
+  - panelvars:
+      - col: FR32M452
+        col_err: FR32U452
+        plot_type: errorbar
+        plot_attr:
+          label: 452 nm
+          marker: .
+          linewidth: 0.5
+      - col: FR32M548
+        col_err: FR32U548
+        plot_type: errorbar
+        plot_attr:
+          label: 548 nm
+          marker: .
+          linewidth: 0.5
+      - col: FR32M652
+        col_err: FR32U652
+        plot_type: errorbar
+        plot_attr:
+          label: 652 nm
+          marker: .
+          linewidth: 0.5
+      - col: FR32M747
+        col_err: FR32U747
+        plot_type: errorbar
+        plot_attr:
+          label: 747 nm
+          marker: .
+          linewidth: 0.5
+      - col: FR32M852
+        col_err: FR32U852
+        plot_type: errorbar
+        plot_attr:
+          label: 852 nm
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "autocal-etalon Flux Ratio\n(SCI3/SCI2)"
+      narrow_xlim_daily: true
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
+      not_junk: true
+      legend_frac_size: 0.20
+      only_object: 
+        - autocal-etalon-all-night
+        - autocal-etalon-all-eve
+        - autocal-etalon-all-morn
