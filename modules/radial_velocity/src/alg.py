@@ -604,8 +604,31 @@ class RadialVelocityAlg(RadialVelocityBase):
                 zb = self.get_redshift(seg=seg_idx)
                 result_ccf[seg_idx, :] = \
                         self.cross_correlate_by_mask_shift(ordered_wavecal, ordered_spec, zb)
+                
+                # Check if CCF is all zeros
+                if np.all(result_ccf[seg_idx, :] == 0.0):
+                    if self.logger is not None:
+                        self.logger.warning(f"[CCF] Segment {seg_idx} (order {ord_idx}): CCF is all zeros")
+                        self.logger.info(f"[CCF] Segment {seg_idx}: spectrum stats - min={np.min(ordered_spec):.3e}, max={np.max(ordered_spec):.3e}, mean={np.mean(ordered_spec):.3e}")
+                        self.logger.info(f"[CCF] Segment {seg_idx}: wavecal range - min={np.min(ordered_wavecal):.3f}, max={np.max(ordered_wavecal):.3f}")
+                        self.logger.info(f"[CCF] Segment {seg_idx}: pixel range - left_x={left_x}, right_x={right_x}, n_pixels={right_x-left_x}")
             else:
                 self.d_print("RadialVelocityAlg: all wavelength zero")
+                if self.logger is not None:
+                    self.logger.warning(f"[CCF] Segment {seg_idx} (order {ord_idx}): All wavelength calibration values are zero - skipping CCF")
+        
+        # Summary: count and report how many CCFs are all zeros
+        zero_ccf_count = 0
+        for seg_idx in seg_ary:
+            if np.all(result_ccf[seg_idx, :] == 0.0):
+                zero_ccf_count += 1
+        
+        if self.logger is not None:
+            if zero_ccf_count > 0:
+                self.logger.warning(f"[CCF Summary] {zero_ccf_count}/{len(seg_ary)} segments have all-zero CCFs ({100*zero_ccf_count/len(seg_ary):.1f}%)")
+            else:
+                self.logger.info(f"[CCF Summary] All {len(seg_ary)} segments have non-zero CCF data")
+        
         result_ccf[~np.isfinite(result_ccf)] = 0.
         return result_ccf, ''
 
@@ -1011,6 +1034,18 @@ class RadialVelocityAlg(RadialVelocityBase):
                 return None, None, None
             g_x = velocities[i_cut]
             g_y = ccf[i_cut] - np.nanmedian(ccf[i_cut])
+            
+            # Filter out non-finite values before fitting
+            finite_mask = np.isfinite(g_y)
+            if not finite_mask.any():
+                return None, None, None
+            g_x = g_x[finite_mask]
+            g_y = g_y[finite_mask]
+            
+            # Check if we have enough points for fitting
+            if len(g_y) < 3:
+                return None, None, None
+                
             y_dist = abs(np.nanmax(g_y) - np.nanmin(g_y)) * 100
             amp = max(-1e7, np.nanmin(g_y) - y_dist) if ccf_dir < 0 else min(1e7, np.nanmax(g_y) + y_dist)
 
@@ -1019,8 +1054,12 @@ class RadialVelocityAlg(RadialVelocityBase):
             else:
                 g_init = models.Gaussian1D(amplitude=amp, mean=rv_mean, stddev=sd)
 
-            gaussian_fit = FIT_G(g_init, g_x, g_y)
-            return gaussian_fit, g_x, g_y
+            try:
+                gaussian_fit = FIT_G(g_init, g_x, g_y)
+                return gaussian_fit, g_x, g_y
+            except Exception as e:
+                # If fitting fails, return None to indicate failure
+                return None, None, None
 
         two_fitting = True
 
@@ -1047,7 +1086,7 @@ class RadialVelocityAlg(RadialVelocityBase):
             g_fit2 = None
 
         if vel_span_pixel is not None and vel_span_pixel != 0.0 and g_fit is not None:
-            if g_fit2 is None or math.isnan(g_fit.mean.value):
+            if g_fit2 is None or math.isnan(g_fit2.mean.value):
                 g_mean = rv_guess               # use the 1st guess if the 2nd fitting fails
                 f_wid = velocity_cut            # use the 1st vel range if the 2nd fitting fails
             else:
@@ -1070,8 +1109,16 @@ class RadialVelocityAlg(RadialVelocityBase):
         v_span = pixel_span
         mask_type =  self.get_orderlet_masktype(self.spectro, self.orderletname, self.init_data)
         for i in range(total_segments):
+            # Check if CCF segment has any finite values
+            ccf_segment = ccf[i, :]
+            if not np.isfinite(ccf_segment).any():
+                # If no finite values, set to default values
+                rv_segments[i] = 0.0
+                erv_segments[i] = 0.0
+                continue
+                
             _, rv_segments[i], _, _, erv_segments[i] = self.fit_ccf(
-                ccf[i, :], self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP],
+                ccf_segment, self.get_rv_guess(), self.init_data[RadialVelocityAlgInit.VELOCITY_LOOP],
                 mask_type,
                 rv_guess_on_ccf=(self.spectro == 'kpf'),
                 vel_span_pixel=v_span
@@ -1250,8 +1297,8 @@ class RadialVelocityAlg(RadialVelocityBase):
 
         if self.spectrum_data is None or self.spectrum_data.size == 0:
             return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs_jd, 'msg': 'no spectral data'}
-        elif self.is_none_fiberobject(self.get_fiber_object_in_header(self.spectro, self.orderletname)):
-            return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs_jd, 'msg': 'fiber object is None'}
+        # elif self.is_none_fiberobject(self.get_fiber_object_in_header(self.spectro, self.orderletname)):
+        #     return {'ccf_df': None, 'ccf_ary': None, 'jd': self.obs_jd, 'msg': 'fiber object is None'}
 
         self.get_segment_limits()
 

@@ -1,6 +1,7 @@
 import time
 import json
 import gzip
+import copy
 import numpy as np
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
@@ -35,7 +36,7 @@ class AnalyzeWLS:
             self.logger = logger
         else:
             self.logger = None
-        self.L1 = L1
+        self.L1 = copy.deepcopy(L1)
         #self.header = L1['PRIMARY'].header
         primary_header = HeaderParse(L1, 'PRIMARY')
         self.header = primary_header.header

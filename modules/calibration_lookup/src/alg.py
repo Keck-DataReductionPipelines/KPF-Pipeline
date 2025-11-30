@@ -21,7 +21,7 @@ class GetCalibrations:
        returns a dictionary with all calibration types.
 
     """
-    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=False):
+    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=False, use_cache=True):
         """
         use_db (boolean) - to disable db access, set to False (e.g., when looking up file-based keywords only)
         """
@@ -66,6 +66,7 @@ class GetCalibrations:
             eval_time = time.time() - eval_start
         
         self.use_db = use_db
+        self.use_cache = use_cache
         
         if self.verbose:
             total_init_time = time.time() - init_start
@@ -94,6 +95,8 @@ class GetCalibrations:
         try:
             from database.modules.utils.kpf_db import _get_cached_result
             cached_result = _get_cached_result(cache_key, verbose=self.verbose)
+            if not self.use_cache:
+                cached_result = None
             if cached_result is not None:
                 # Check if all requested keys are in the cached result
                 missing_keys = [key for key in subset if key not in cached_result]
@@ -328,14 +331,11 @@ class GetCalibrations:
                             if self.verbose:
                                 self.log.debug(f"Using fallback etalon_datetime: {etalon_datetime}")
                         
-                        # Look up etalonmask using the INPUT timestamp (self.datetime), not the WLS file timestamp
-                        # The WLS file timestamp is unrelated to when we need the etalonmask
                         etalonmask_found = False
                         for lvl, cal_type in zip(self.db_cal_file_levels, self.db_cal_types):
                             if cal_type[0].lower() == 'etalonmask':
                                 try:
-                                    # Use self.datetime (input timestamp) for etalonmask lookup
-                                    etalonmask_result = db.get_nearest_master(self.datetime, lvl, cal_type)
+                                    etalonmask_result = db.get_nearest_master(etalon_datetime, lvl, cal_type)
                                     if etalonmask_result[0] == 0:
                                         output_cals['etalonmask'] = etalonmask_result[1]
                                         etalonmask_found = True
