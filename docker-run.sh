@@ -4,27 +4,19 @@
 export DOCKER_CLI_EXPERIMENTAL=enabled
 export DOCKER_BUILDKIT=1
 
-# Source the shared Docker launch utilities
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/scripts/docker_launch_utils.sh"
-
 # Function to run docker with suppressed warnings
 run_docker() {
     local port="$1"
     local message="$2"
-    local memory_limit_gb=$(calculate_memory_limit)
-    
+
     echo "$message"
     echo "System: $(free -g | awk '/^Mem:/{print $2}')GB total RAM, $(free -g | awk '/^Mem:/{print $7}')GB available"
-    echo "Allocating ${memory_limit_gb}GB RAM to container (swap disabled)"
-    
+
     if [ -n "$port" ]; then
         # Run with port mapping
         docker run -it \
             -p "$port:$port" \
             --network=host \
-            --memory="${memory_limit_gb}G" \
-            --memory-swap="${memory_limit_gb}G" \
             -e KPFPIPE_PORT="$port" \
             -e DBPORT=6125 \
             -e DBNAME=kpfopsdb \
@@ -45,8 +37,6 @@ run_docker() {
         # Run without port mapping
         docker run -it \
             --network=host \
-            --memory="${memory_limit_gb}G" \
-            --memory-swap="${memory_limit_gb}G" \
             -e DBPORT=6125 \
             -e DBNAME=kpfopsdb \
             -e DBUSER="${KPFPIPE_DB_USER:-}" \

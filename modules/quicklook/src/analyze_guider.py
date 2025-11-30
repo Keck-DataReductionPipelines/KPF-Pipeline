@@ -49,18 +49,18 @@ class AnalyzeGuider:
         frac_frames_saturated - fraction of frames with 1 or more pixels within 90% of saturation
     """
 
-    def __init__(self, L0, logger=None):
+    def __init__(self, L0, logger=None, verbose=False):
         self.logger = logger if logger is not None else DummyLogger()
         self.L0 = copy.deepcopy(L0)
         self.pixel_scale = 0.056 # arcsec per pixel for the CRED-2 imager on the KPF FIU
 
-        header_primary_obj = HeaderParse(L0, 'PRIMARY')
+        header_primary_obj = HeaderParse(self.L0, 'PRIMARY')
         if hasattr(L0, 'guider_avg'):
-            header_guider_obj = HeaderParse(L0, 'guider_avg')
-            self.guider_avg = L0['guider_avg']
+            header_guider_obj = HeaderParse(self.L0, 'guider_avg')
+            self.guider_avg = self.L0['guider_avg']
         elif hasattr(L0, 'GUIDER_AVG'):
             header_guider_obj = HeaderParse(L0, 'GUIDER_AVG')
-            self.guider_avg = L0['GUIDER_AVG']
+            self.guider_avg = self.L0['GUIDER_AVG']
         else:
             self.logger.info("Guider image not in file.")
         self.guider_header = header_guider_obj.header
@@ -84,9 +84,9 @@ class AnalyzeGuider:
             print('The keyword 2MASSMAG is not a float.')
         self.gcfps = self.header['GCFPS'] # frames per second for guide camera
         self.gcgain = self.header['GCGAIN'] # detector gain setting 
-        if hasattr(L0, 'guider_cube_origins'):
+        if hasattr(self.L0, 'guider_cube_origins'):
             self.df_GUIDER = self.L0['guider_cube_origins']
-        elif hasattr(L0, 'GUIDER_CUBE_ORIGINS'):
+        elif hasattr(self.L0, 'GUIDER_CUBE_ORIGINS'):
             self.df_GUIDER = self.L0['GUIDER_CUBE_ORIGINS']
         else:
             print("Guider table not in file.")
