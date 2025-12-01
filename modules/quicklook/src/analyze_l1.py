@@ -130,7 +130,7 @@ class AnalyzeL1:
     def add_dispersion_arrays(self, smooth=False):
         '''
         Computes the dispersion (dwavlength/dpixel) for all of the WAVE 
-        extensions in self.L1 and adds DISP extensions to to self.L1.
+        extensions in self.L1 and adds DISP extensions to self.L1.
 
         Arguments:
             smooth - if True, then the dispersion is smoothed (not implemented)
@@ -359,6 +359,7 @@ class AnalyzeL1:
         else:
             SCI_l = min(last_indices[0], last_indices[1], last_indices[2])
         SCI_fl = [int(SCI_f), int(SCI_l)]
+
         # CAL Flux is the 4th column
         if first_indices[3] == None:
             CAL_f = None
@@ -369,6 +370,7 @@ class AnalyzeL1:
         else:
             CAL_l = last_indices[3]
         CAL_fl = [int(CAL_f), int(CAL_l)]
+
         # SKY Flux is the 5th column
         if first_indices[4] == None:
             SKY_f = None
