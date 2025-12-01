@@ -2273,7 +2273,8 @@ class TSDB:
                           qc_not_fail=None, 
                           extra_conditions=None,
                           extra_conditions_logic='AND',
-                          verbose=False):
+                          verbose=False, 
+                          print_timing=False):
         """
         Description:
             Return a Pandas DataFrame containing specified columns from a 
@@ -2320,10 +2321,21 @@ class TSDB:
                 (True) or junk (False). Defaults to None.
             verbose (bool, optional): Enables detailed logging of SQL queries 
                 and parameters. Defaults to False.
+            print_timing (bool, optional): Enables logger messages with 
+                performance timing. Defaults to False.
+
     
         Returns:
             The resulting dataframe.
         """
+
+        def stamp(label: str = ""):
+            '''Time stamps for performance timing.  Use '''
+            elapsed = time.perf_counter() - t0
+            if label:
+                self.logger.info(f"Performance timing: [+{elapsed:8.3f}s] {label}")
+            else:
+                self.logger.info(f"Performance timing: [+{elapsed:8.3f}s]")
 
         if isinstance(only_object, str):
             only_object = [only_object]
@@ -2343,6 +2355,9 @@ class TSDB:
         quote = '"' if self.backend == 'psql' else '"'  # SQLite uses " for quoting as well
         placeholder = '%s' if self.backend == 'psql' else '?'
     
+        if print_timing or verbose:
+            t0 = time.perf_counter()  # high-res timer
+            self.logger.info('Performance timing: [     start] opening database connection')
         self._open_connection()
     
         try:
@@ -2370,6 +2385,9 @@ class TSDB:
                 metadata_query = f'SELECT keyword, table_name FROM {self.prefix}metadata WHERE keyword IN ({placeholders});'
                 self._execute_sql_command(metadata_query, params=columns_needed)
                 metadata = pd.DataFrame(self.cursor.fetchall(), columns=['keyword', 'table_name'])
+            
+            if print_timing or verbose:
+                stamp("metadata query complete")
     
             kw_table_map = dict(zip(metadata['keyword'], metadata['table_name']))
             tables_needed = set(metadata['table_name'].dropna())
@@ -2495,12 +2513,16 @@ class TSDB:
     
             self._execute_sql_command(query, params)
             fetched_data = self.cursor.fetchall()
+            if print_timing or verbose:
+                stamp("full query complete")
             col_names = [desc[0] for desc in self.cursor.description]
             if verbose:
                 self.logger.debug("Fetched Data:")
                 self.logger.debug(fetched_data)
     
             df = pd.DataFrame(fetched_data, columns=col_names)
+            if print_timing or verbose:
+                stamp("dataframe created")
     
             # Reorder columns if explicitly requested
             if columns not in (None, '*'):
@@ -2509,9 +2531,13 @@ class TSDB:
                 if 'ObsID' in df.columns and 'ObsID' not in columns_requested:
                     df = df.drop(columns='ObsID')
                 df = df[final_column_order]
+            if print_timing or verbose:
+                stamp("dataframe sorted")
     
         finally:
             self._close_connection()
+            if print_timing or verbose:
+                stamp("database connection closed")
     
         return df
 
@@ -2532,7 +2558,8 @@ class TSDB:
                            qc_not_fail=None, 
                            max_height_px=600, # in pixels
                            url_stub='https://jump.caltech.edu/observing-logs/kpf/',
-                           verbose=False):
+                           verbose=False, 
+                           print_timing=False):
         """
         Description:
             Make a formatted printout of a pandas DataFrame containing specified 
