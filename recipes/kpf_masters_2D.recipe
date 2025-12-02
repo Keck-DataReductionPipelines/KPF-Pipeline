@@ -35,7 +35,7 @@ overwrite = config.ARGUMENT.overwrite
 #channel_datasec_nrows_red = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_red
 channel_orientation_ref_path_red = config.IMAGE_ASSEMBLY.channel_orientation_ref_path_red
 channel_orientation_ref_path_green = config.IMAGE_ASSEMBLY.channel_orientation_ref_path_green
-prescan_region = config.IMAGE_ASSEMBLY.prescan_reg
+prescan_region = config.IMAGE_ASSEMBLY.prescan_region
 overscan_method = config.IMAGE_ASSEMBLY.overscan_method
 overscan_buffer = config.IMAGE_ASSEMBLY.overscan_buffer
 overscan_sigma = config.IMAGE_ASSEMBLY.overscan_sigma
@@ -123,7 +123,7 @@ if (overwrite or not output_file_exists) and raw_file_path in file_list:
                                     ref_output_red,
                                     lev0_ffi_ext_red,
                                     data_type,
-                                    prescan_reg,
+                                    prescan_region,
                                     gain_key,
                                     channel_datasec_ncols_red,
                                     channel_datasec_nrows_red,
@@ -139,7 +139,7 @@ if (overwrite or not output_file_exists) and raw_file_path in file_list:
                                         ref_output_green,
                                         lev0_ffi_ext_green,
                                         data_type,
-                                        prescan_reg,
+                                        prescan_region,
                                         gain_key,
                                         channel_datasec_ncols_green,
                                         channel_datasec_nrows_green,
