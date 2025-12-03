@@ -100,7 +100,8 @@ master_stacks_config = 'configs/kpf_masters_stacks_regression_test.cfg'
 
 
 # Create special config files for regression test
-# Update input_dir paths to use test data
+# Update input_dir paths to use test data 
+# GJG: dummy comment to retrigger CI test
 
 # For 2D recipe config
 with open(master_2d_config_orig, 'r') as file:
