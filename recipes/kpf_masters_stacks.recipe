@@ -5,8 +5,9 @@
 
 from modules.Utils.string_proc import str_replace
 from modules.Utils.pick_inputs_masters_drp import PickInputsMastersDRP
-from modules.Utils.orientation_ref_reader import OrientationReference
-from modules.Utils.overscan_subtract import OverscanSubtraction
+#from modules.Utils.orientation_ref_reader import OrientationReference
+#from modules.Utils.overscan_subtract import OverscanSubtraction
+from modules.image_assembly.src.image_assembly import ImageAssembly
 from modules.master_bias.src.master_bias_framework import MasterBiasFramework
 from modules.master_dark.src.master_dark_framework import MasterDarkFramework
 from modules.master_flat.src.master_flat_framework import MasterFlatFramework
@@ -25,20 +26,21 @@ ordermask_path = config.FLAT.ordermask_path
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite
 
-channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
-channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
-channel_datasec_ncols_red = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_red
-channel_datasec_nrows_red = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_red
-channel_orientation_ref_path_red = config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_red
-channel_orientation_ref_path_green = config.OVERSCAN_SUBTRACTION.channel_orientation_ref_path_green
-overscan_method = config.OVERSCAN_SUBTRACTION.overscan_method
-order = config.OVERSCAN_SUBTRACTION.overscan_order
-oscan_clip = config.OVERSCAN_SUBTRACTION.overscan_clip
-lev0_ffi_ext_red = config.OVERSCAN_SUBTRACTION.lev0_ffi_ext_red
-lev0_ffi_ext_green = config.OVERSCAN_SUBTRACTION.lev0_ffi_ext_green
-prescan_reg = config.OVERSCAN_SUBTRACTION.prescan_reg
-gain_key = config.OVERSCAN_SUBTRACTION.gain_keyword
-n_sigma = config.OVERSCAN_SUBTRACTION.n_sigma
+#channel_datasec_ncols_green = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_green
+#channel_datasec_nrows_green = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_green
+#channel_datasec_ncols_red = config.OVERSCAN_SUBTRACTION.channel_datasec_ncols_red
+#channel_datasec_nrows_red = config.OVERSCAN_SUBTRACTION.channel_datasec_nrows_red
+channel_orientation_ref_path_red = config.IMAGE_ASSEMBLY.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = config.IMAGE_ASSEMBLY.channel_orientation_ref_path_green
+prescan_region = config.IMAGE_ASSEMBLY.prescan_region
+overscan_method = config.IMAGE_ASSEMBLY.overscan_method
+overscan_buffer = config.IMAGE_ASSEMBLY.overscan_buffer
+overscan_sigma = config.IMAGE_ASSEMBLY.overscan_sigma
+overscan_order = config.IMAGE_ASSEMBLY.overscan_order
+n_sigma_read_noise = config.IMAGE_ASSEMBLY.n_sigma_read_noise
+#gain_key = config.IMAGE_ASSEMBLY.gain_keyword
+lev0_ffi_ext_red = config.IMAGE_ASSEMBLY.lev0_ffi_ext_red
+lev0_ffi_ext_green = config.IMAGE_ASSEMBLY.lev0_ffi_ext_green
 
 date_dir = context.date_dir
 
@@ -67,9 +69,11 @@ all_bias_files_list,\
 
 
 if date_dir is None:
-    overscan_output_dir = config.OVERSCAN_SUBTRACTION.output_dir
+    output_dir = config.IMAGE_ASSEMBLY.output_dir
+    #overscan_output_dir = config.OVERSCAN_SUBTRACTION.output_dir
 else:
-    overscan_output_dir = config.OVERSCAN_SUBTRACTION.output_dir + "/" + date_dir
+    output_dir = config.IMAGE_ASSEMBLY.output_dir + "/" + date_dir
+    #overscan_output_dir = config.OVERSCAN_SUBTRACTION.output_dir + "/" + date_dir
 
 file_list = all_bias_files_list + all_dark_files_list + all_flat_files_list + all_arclamp_files_list
 
@@ -145,7 +149,7 @@ else:
 
 if all_bias_files_list:
 
-    bias_input_files = overscan_output_dir + "/" + "*_2D.fits"
+    bias_input_files = output_dir + "/" + "*_2D.fits"
 
     for bias_object in bias_objects:
 
@@ -174,7 +178,7 @@ new_masterbias_path = standard_masterbias_path
 
 if all_dark_files_list:
 
-    dark_input_files = overscan_output_dir + "/" + "*_2D.fits"
+    dark_input_files = output_dir + "/" + "*_2D.fits"
 
     for dark_object in dark_objects:
 
@@ -204,7 +208,7 @@ new_masterdark_path = standard_masterdark_path
 
 if all_flat_files_list:
 
-    flat_input_files = overscan_output_dir + "/" + "*_2D.fits"
+    flat_input_files = output_dir + "/" + "*_2D.fits"
 
     if date_dir:
         new_masterflat_path = str_replace(masterflat_path, '_master_flat.fits', '_' + date_dir + '_master_flat.fits')
@@ -243,7 +247,7 @@ if all_arclamp_files_list and make_arclamp_stacks:
         arclamp_objects = arclamp_objects_config
 
     masterarclamp_path = config.ARCLAMP.masterarclamp_path
-    arclamp_input_files = overscan_output_dir + "/" + "*_2D.fits"
+    arclamp_input_files = output_dir + "/" + "*_2D.fits"
 
     for arclamp_object in arclamp_objects:
 
