@@ -177,7 +177,7 @@ class SpectralExtractionAlg:
             elif (int(datecode) >= 20240203) and (int(datecode) < 20251123) and (chip == 'RED'):
                 start = 1
             elif (int(datecode) >= 20251123) and (chip == 'GREEN'):
-               start = 0
+                start = 0
             elif (int(datecode) >= 20251123) and (chip == 'RED'):
                 start = 0
                     
