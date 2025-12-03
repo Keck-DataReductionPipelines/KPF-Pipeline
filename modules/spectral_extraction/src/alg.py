@@ -28,7 +28,7 @@ class SpectralExtractionAlg:
         master_flat_2D (KPF0): A KPF 2D master flat
         order_trace_green (str): path to csv with order trace for GREEN ccd
         order_trace_red (str): path to csv with order trace for RED ccd
-        start_order (tuple): index to start order trace, see caldates/start_order.csv
+        start_order (tuple): index to start order trace, see caldates/start_order.csv [DEPRECATED]
         config (configparser.ConfigParser): Config context
         logger (logging.Logger): Instance of logging.Logger
     """
@@ -168,15 +168,18 @@ class SpectralExtractionAlg:
 
             # start is the dataframe index of the first sky fiber trace
             # this can be negative if the trace does not fall on the chip
-            # use KPFERA keyword
             if (int(datecode) < 20240203) and (chip == 'GREEN'):
                 start = -1
             elif (int(datecode) < 20240203) and (chip == 'RED'):
                 start = -1
-            elif (int(datecode) >= 20240203) and (chip == 'GREEN'):
-               start = 0
-            elif (int(datecode) >= 20240203) and (chip == 'RED'):
+            elif (int(datecode) >= 20240203) and (int(datecode) < 20251123) and (chip == 'GREEN'):
+                start = 0
+            elif (int(datecode) >= 20240203) and (int(datecode) < 20251123) and (chip == 'RED'):
                 start = 1
+            elif (int(datecode) >= 20251123) and (chip == 'GREEN'):
+               start = 0
+            elif (int(datecode) >= 20251123) and (chip == 'RED'):
+                start = 0
                     
             fibers = 'SKY SCI1 SCI2 SCI3 CAL'.split()
             trace_fiber = [None]*ntrace
