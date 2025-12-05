@@ -14,6 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.ticker as ticker
+import matplotlib.transforms as mtransforms
 from matplotlib.ticker import FuncFormatter
 from modules.Utils.utils import get_sunrise_sunset_ut
 from modules.Utils.kpf_parse import get_datecode
@@ -2117,8 +2118,9 @@ class AnalyzeTimeSeries:
         datecode_col: str = 'datecode',
         date_format: str = '%Y%m%d',
         plot_title=None,
-        ax=None,
         figsize='auto',
+        excise_serice_missions=True,
+        hatch_service_missions=True,
         plot_timestamp=False,
         fig_path=None, 
         show_plot=False,
@@ -2141,41 +2143,97 @@ class AnalyzeTimeSeries:
         date_format : str, default '%Y%m%d'
             strftime-style format string to parse datecode.
         """
+        # Remove dates during service missions
+        if excise_serice_missions:
+            df_sm = self.get_service_mission_df()
+            if not df_sm.empty:
+                dates = pd.to_datetime(summary_df['datecode'].astype(str), format='%Y%m%d')
+            
+                # Start with "keep everything"
+                keep = pd.Series(True, index=summary_df.index)
+            
+                for _, row in df_sm.iterrows():
+                    x0 = pd.to_datetime(row['UT_start_date'])
+                    x1 = pd.to_datetime(row['UT_end_date'])
+                    if pd.notna(x0) and pd.notna(x1):
+                        # Drop anything between x0 and x1 (inclusive)
+                        keep &= ~dates.between(x0, x1)
+                summary_df = summary_df[keep].copy()
+
         # Parse datecode -> datetime
         dates = pd.to_datetime(
             summary_df[datecode_col].astype(str),
             format=date_format,
             errors='coerce'
         )
-    
+
+        # Determine limits
+        start_date = dates.min()
+        end_date   = dates.max()
+        start_datecode = summary_df['datecode'].min()
+        end_datecode   = summary_df['datecode'].max()
+
         if dates.isna().any():
             bad = summary_df.loc[dates.isna(), datecode_col]
             raise ValueError(f"Could not parse some {datecode_col} values as dates: {bad.tolist()}")
-    
-        # Determine criteria columns from spec_config, in order
-        requested_names = [spec['name'] for spec in spec_config]
-        seen = set()
-        criteria_cols = []
-        for name in requested_names:
-            if name in seen:
-                continue
-            seen.add(name)
-            if name in summary_df.columns and summary_df[name].dtype == bool:
-                criteria_cols.append(name)
+
+        # Determine criteria columns from spec_config, preserving spec_config order
+        criteria_cols = [
+            spec['name']
+            for spec in spec_config
+            if spec['name'] in summary_df.columns and summary_df[spec['name']].dtype == bool
+        ]
     
         if not criteria_cols:
             raise ValueError("No valid boolean criteria columns found in summary_df for given spec_config.")
-    
+
         if figsize == 'auto':
-            figsize = (8, 1.0+len(criteria_cols)*0.2)
-        if ax is None:
-            fig, ax = plt.subplots(figsize=figsize)
-    
+            figsize = (10, 0.7 + len(criteria_cols) * 0.2)
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # x is the datetime index
+        x = dates.values  # matplotlib can plot numpy datetime64 directly
+        
+        # blended transform for right-side annotations
+        trans = mtransforms.blended_transform_factory(ax.transAxes, ax.transData)
+
         # x is the datetime index
         x = dates.values  # matplotlib can plot numpy datetime64 directly
 
+        # blended transform for right-side annotations
+        trans = mtransforms.blended_transform_factory(ax.transAxes, ax.transData)
+
+        # precompute strings & lengths for annotations 
+        row_data = []  # (crit, vals, red_str, green_str, tail_str)
+        for crit in criteria_cols:
+            vals = summary_df[crit].values
+            Nred = int(vals.sum())          # True == 1, so sum gives Nred
+            Ntotal = int(len(vals))
+            Ngreen = Ntotal - Nred
+
+            red_str   = f"{Nred}"
+            green_str = f":{Ngreen}"
+            tail_str  = f"/{Ntotal} days"
+
+            row_data.append((crit, vals, red_str, green_str, tail_str))
+
+        # Max lengths for each "column" of text
+        max_red_len   = max(len(r[2]) for r in row_data)
+        max_green_len = max(len(r[3]) for r in row_data)
+        # tail length max not strictly needed for alignment, but kept for completeness
+        max_tail_len  = max(len(r[4]) for r in row_data)
+
+        # Approximate width per character in axes coords
+        char_width = 0.012  # tweak if needed
+
+        # Fixed x-positions for each column (in axes coords)
+        x_base_red   = 1.01
+        x_base_green = x_base_red   + char_width * max_red_len
+        x_base_tail  = x_base_green + char_width * max_green_len - 0.7*char_width
+
+
         # Optional hatching to highlight service missions
-        if False: #hatch_service_missions:
+        if hatch_service_missions:
             try:
                 df_sm = self.get_service_mission_df()
                 if not df_sm.empty:
@@ -2184,17 +2242,24 @@ class AnalyzeTimeSeries:
                             x0 = pd.to_datetime(row['UT_start_date'])
                             x1 = pd.to_datetime(row['UT_end_date'])
                             if pd.notna(x0) and pd.notna(x1):
-                                ax.axvspan(x0, x1, facecolor='none', edgecolor='none', hatch='////', alpha=0.15)
+                                ax.axvspan(
+                                    x0, x1,
+                                    facecolor='none',           # keep data visible
+                                    hatch='////',
+                                    edgecolor='dimgray',
+                                    linewidth=0.0,
+                                    alpha=0.4,
+                                    zorder=0.2
+                                )
                         except Exception:
                             continue
             except Exception:
                 pass
 
-    
-        for j, crit in enumerate(criteria_cols):
-            vals = summary_df[crit].values
+        # plot rows & aligned annotations 
+        for j, (crit, vals, red_str, green_str, tail_str) in enumerate(row_data):
             y = np.full_like(x, j, dtype=float)
-    
+
             # False = small, faint green
             mask_false = ~vals
             ax.scatter(
@@ -2205,7 +2270,7 @@ class AnalyzeTimeSeries:
                 alpha=0.2,
                 edgecolor='none',
             )
-    
+
             # True = larger, bright red
             mask_true = vals
             ax.scatter(
@@ -2217,18 +2282,52 @@ class AnalyzeTimeSeries:
                 edgecolor='k',
                 linewidth=0.3,
             )
-    
+
+            # Row index in data coords
+            y_data = j
+
+            # Column 1: red Nred
+            ax.text(
+                x_base_red, y_data, red_str,
+                transform=trans,
+                va='center', ha='left',
+                fontsize=8,
+                color='red',
+                clip_on=False,
+            )
+
+            # Column 2: green :Ngreen
+            ax.text(
+                x_base_green, y_data, green_str,
+                transform=trans,
+                va='center', ha='left',
+                fontsize=8,
+                color='green',
+                clip_on=False,
+            )
+
+            # Column 3: black /Ntotal days
+            ax.text(
+                x_base_tail, y_data, tail_str,
+                transform=trans,
+                va='center', ha='left',
+                fontsize=8,
+                color='black',
+                clip_on=False,
+            )
+        
         # Y-axis: criteria labels
         ax.set_yticks(range(len(criteria_cols)))
         ax.set_yticklabels(criteria_cols, fontsize=9)
+        ax.set_ylim(len(criteria_cols) - 0.5, -0.5)  # invert so 0 is at top
     
         # X-axis: time formatting
+        ax.set_xlim(start_date - timedelta(days=1), end_date + timedelta(days=1))
         locator = mdates.AutoDateLocator()
         formatter = mdates.ConciseDateFormatter(locator)
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(formatter)
         ax.tick_params(axis='x', labelsize=9)
-
 
         ax.set_xlabel('Date')
         if plot_title:
@@ -2241,15 +2340,12 @@ class AnalyzeTimeSeries:
         try:
             if fig_path is not None:
                 t0 = time.process_time()
-                plt.savefig(fig_path, dpi=150, facecolor='w')
-                if log_savefig_timing:
-                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+                plt.savefig(fig_path, dpi=250, facecolor='w')
             if show_plot is not None:
                 plt.show()
             plt.close('all')
         except Exception as e:
             self.logger.info(f"Error saving file or showing plot: {e}")
-
 
 
 def add_one_month(inputdate):
