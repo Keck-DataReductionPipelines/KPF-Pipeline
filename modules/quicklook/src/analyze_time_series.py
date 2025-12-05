@@ -1,10 +1,12 @@
 import os
 import ast
 import time
+import copy
 from astropy.time import Time
 import yaml
 import numpy as np
 import pandas as pd
+import operator
 from datetime import datetime, timedelta, date
 import matplotlib
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
@@ -2001,6 +2003,253 @@ class AnalyzeTimeSeries:
                                                        plot_timestamp=True,
                                                        show_plot=show_plot, 
                                                        fig_path=fig_path)
+
+    def spec_check_by_datecode(
+        self,
+        df: pd.DataFrame,
+        spec_config,
+        columns_to_display=None,
+        datecode_col: str = 'datecode',
+        ignore_service_missions=True,
+    ) -> pd.DataFrame:
+        """
+        For each datecode, determine if any row violates each spec criterion.
+    
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Input dataframe with at least `datecode_col` and all columns in spec_config.
+        spec_config : list of dict
+            Each dict describes a criterion, e.g.:
+                {
+                    'col': 'kpfgreen.STA_CCD_T',
+                    'name': 'Green CCD > -99 K',
+                    'op': '>',
+                    'threshold': -99.0
+                }
+        columns_to_display : list of str, optional
+            Extra columns to propagate as "info" (first value per datecode group).
+        datecode_col : str, default 'datecode'
+            Column used to group rows (you said you now use 'datecode').
+        ignore_service_missions : boolean, optional
+            drop datecodes from service missions
+    
+        Returns
+        -------
+        summary_df : pd.DataFrame
+            One row per datecode, with:
+              - datecode
+              - (optional) info columns
+              - one boolean column per criterion (named by 'name').
+        """
+
+        _OP_MAP = {
+            '>':  operator.gt,
+            '<':  operator.lt,
+            '>=': operator.ge,
+            '<=': operator.le,
+            '==': operator.eq,
+            '!=': operator.ne,
+        }
+
+        df_work = df.copy()
+    
+        # Drop ignored datecodes
+        
+        ignore_datecodes = None
+        if ignore_service_missions:
+            pass
+        
+        if ignore_datecodes is not None and len(ignore_datecodes) > 0:
+            df_work = df_work[~df_work[datecode_col].isin(ignore_datecodes)]
+    
+        if df_work.empty:
+            base_cols = [datecode_col] + (columns_to_display or [])
+            return pd.DataFrame(columns=base_cols)
+    
+        grouped = df_work.groupby(datecode_col, sort=True)
+        group_key = df_work[datecode_col]
+    
+        out = {}
+    
+        for spec in spec_config:
+            col = spec['col']
+            name = spec['name']
+            op_str = spec['op']
+            threshold = spec['threshold']
+    
+            if col not in df_work.columns:
+                raise KeyError(f"Column '{col}' (for criterion '{name}') not found in dataframe.")
+    
+            if op_str not in _OP_MAP:
+                raise ValueError(f"Unsupported operator '{op_str}' in criterion '{name}'.")
+    
+            op_func = _OP_MAP[op_str]
+            cond = op_func(df_work[col], threshold)
+    
+            # True if ANY row for that datecode exceeds the threshold
+            out[name] = cond.groupby(group_key).any()
+    
+        # Construct out-of-spec summary frame
+        out_df = pd.DataFrame(out)
+    
+        # Add info/display columns (first value within each datecode)
+        if columns_to_display:
+            columns_to_display = list(dict.fromkeys(columns_to_display))  # de-duplicate
+            cols_present = [c for c in columns_to_display if c in df_work.columns]
+    
+            if cols_present:
+                info_df = grouped[cols_present].first()
+                summary_df = info_df.join(out_df)
+            else:
+                summary_df = out_df
+        else:
+            summary_df = out_df
+    
+        summary_df = summary_df.reset_index()  # brings datecode back as a column
+        return summary_df
+
+
+    def plot_spec_check_by_datecode(
+        self,
+        summary_df: pd.DataFrame,
+        spec_config,
+        datecode_col: str = 'datecode',
+        date_format: str = '%Y%m%d',
+        plot_title=None,
+        ax=None,
+        figsize='auto',
+        plot_timestamp=False,
+        fig_path=None, 
+        show_plot=False,
+    ):
+        """
+        Plot criteria (rows) vs time (x-axis) using datecode interpreted as YYYYMMDD.
+    
+        False  -> small, faint green dot
+        True   -> larger, red dot
+    
+        Parameters
+        ----------
+        summary_df : pd.DataFrame
+            Output of summarize_out_of_spec_by_date, one row per datecode.
+        spec_config : list of dict
+            Same spec_config used to generate summary_df. Uses spec['name']
+            to find boolean columns.
+        datecode_col : str, default 'datecode'
+            Column in summary_df giving the datecode (YYYYMMDD).
+        date_format : str, default '%Y%m%d'
+            strftime-style format string to parse datecode.
+        """
+        # Parse datecode -> datetime
+        dates = pd.to_datetime(
+            summary_df[datecode_col].astype(str),
+            format=date_format,
+            errors='coerce'
+        )
+    
+        if dates.isna().any():
+            bad = summary_df.loc[dates.isna(), datecode_col]
+            raise ValueError(f"Could not parse some {datecode_col} values as dates: {bad.tolist()}")
+    
+        # Determine criteria columns from spec_config, in order
+        requested_names = [spec['name'] for spec in spec_config]
+        seen = set()
+        criteria_cols = []
+        for name in requested_names:
+            if name in seen:
+                continue
+            seen.add(name)
+            if name in summary_df.columns and summary_df[name].dtype == bool:
+                criteria_cols.append(name)
+    
+        if not criteria_cols:
+            raise ValueError("No valid boolean criteria columns found in summary_df for given spec_config.")
+    
+        if figsize == 'auto':
+            figsize = (8, 1.0+len(criteria_cols)*0.2)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+    
+        # x is the datetime index
+        x = dates.values  # matplotlib can plot numpy datetime64 directly
+
+        # Optional hatching to highlight service missions
+        if False: #hatch_service_missions:
+            try:
+                df_sm = self.get_service_mission_df()
+                if not df_sm.empty:
+                    for _, row in df_sm.iterrows():
+                        try:
+                            x0 = pd.to_datetime(row['UT_start_date'])
+                            x1 = pd.to_datetime(row['UT_end_date'])
+                            if pd.notna(x0) and pd.notna(x1):
+                                ax.axvspan(x0, x1, facecolor='none', edgecolor='none', hatch='////', alpha=0.15)
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+
+    
+        for j, crit in enumerate(criteria_cols):
+            vals = summary_df[crit].values
+            y = np.full_like(x, j, dtype=float)
+    
+            # False = small, faint green
+            mask_false = ~vals
+            ax.scatter(
+                x[mask_false],
+                y[mask_false],
+                s=15,
+                color='green',
+                alpha=0.2,
+                edgecolor='none',
+            )
+    
+            # True = larger, bright red
+            mask_true = vals
+            ax.scatter(
+                x[mask_true],
+                y[mask_true],
+                s=30,
+                color='red',
+                alpha=0.9,
+                edgecolor='k',
+                linewidth=0.3,
+            )
+    
+        # Y-axis: criteria labels
+        ax.set_yticks(range(len(criteria_cols)))
+        ax.set_yticklabels(criteria_cols, fontsize=9)
+    
+        # X-axis: time formatting
+        locator = mdates.AutoDateLocator()
+        formatter = mdates.ConciseDateFormatter(locator)
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(formatter)
+        ax.tick_params(axis='x', labelsize=9)
+
+
+        ax.set_xlabel('Date')
+        if plot_title:
+            ax.set_title(plot_title, fontsize=10)
+        ax.grid(True, axis='x', alpha=0.2)
+    
+        plt.tight_layout()
+
+        # Save/show
+        try:
+            if fig_path is not None:
+                t0 = time.process_time()
+                plt.savefig(fig_path, dpi=150, facecolor='w')
+                if log_savefig_timing:
+                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+            if show_plot is not None:
+                plt.show()
+            plt.close('all')
+        except Exception as e:
+            self.logger.info(f"Error saving file or showing plot: {e}")
+
 
 
 def add_one_month(inputdate):
