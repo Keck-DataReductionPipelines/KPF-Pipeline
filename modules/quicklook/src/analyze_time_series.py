@@ -2188,7 +2188,9 @@ class AnalyzeTimeSeries:
             raise ValueError("No valid boolean criteria columns found in summary_df for given spec_config.")
 
         if figsize == 'auto':
-            figsize = (10, 0.7 + len(criteria_cols) * 0.2)
+            print(len(criteria_cols))
+            figsize = (10, 1.0 + len(criteria_cols) * 0.15)
+            print(figsize)
         fig, ax = plt.subplots(figsize=figsize)
         
         # x is the datetime index
@@ -2229,7 +2231,7 @@ class AnalyzeTimeSeries:
         # Fixed x-positions for each column (in axes coords)
         x_base_red   = 1.01
         x_base_green = x_base_red   + char_width * max_red_len
-        x_base_tail  = x_base_green + char_width * max_green_len - 0.7*char_width
+        x_base_tail  = x_base_green + char_width * max_green_len - 0.8*char_width
 
 
         # Optional hatching to highlight service missions
@@ -2318,7 +2320,7 @@ class AnalyzeTimeSeries:
         
         # Y-axis: criteria labels
         ax.set_yticks(range(len(criteria_cols)))
-        ax.set_yticklabels(criteria_cols, fontsize=9)
+        ax.set_yticklabels(criteria_cols, fontsize=8)
         ax.set_ylim(len(criteria_cols) - 0.5, -0.5)  # invert so 0 is at top
     
         # X-axis: time formatting
@@ -2327,7 +2329,7 @@ class AnalyzeTimeSeries:
         formatter = mdates.ConciseDateFormatter(locator)
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(formatter)
-        ax.tick_params(axis='x', labelsize=9)
+        ax.tick_params(axis='x', labelsize=8)
 
         ax.set_xlabel('Date')
         if plot_title:
