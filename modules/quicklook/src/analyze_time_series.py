@@ -141,6 +141,7 @@ class AnalyzeTimeSeries:
                 - 'yscale' : str                           # e.g., 'log'
                 - 'subtractmedian' : bool                  # subtract per-variable median before plotting
                 - 'nolegend' : bool                        # suppresses legend
+                - 'labelrms' : bool                        # add legend text like ""(0.001 C rms)"
                 - 'legend_frac_size' : float               # legend anchor offset
                 - 'axhspan' : dict                         # {key: {'ymin','ymax','color','alpha'}}
                 - 'title' : str                            # title for a set of panels
@@ -542,6 +543,12 @@ class AnalyzeTimeSeries:
                 if str(thispanel['paneldict']['nolegend']).lower() == 'true':
                     makelegend = False
 
+            # Determine if RMS values should be included in legend
+            labelrms = False
+            if 'labelrms' in thispanel['paneldict']:
+                if str(thispanel['paneldict']['labelrms']).lower() == 'true':
+                    labelrms = True
+
             # Subtract median from data
             subtractmedian = False
             if 'subtractmedian' in thispanel['paneldict']:
@@ -652,12 +659,13 @@ class AnalyzeTimeSeries:
                                                 decimal_places = 1
                                                 std_dev = 0.
                                             formatted_median = f"{median:.{decimal_places}f}"
-                                            if len(~np.isnan(data)) > 2:
-                                                formatted_std_dev = f"{std_dev:.{decimal_places}f}"
-                                                label += ' (' + formatted_std_dev 
-                                                if 'unit' in thispanel['panelvars'][i]:
-                                                    label += ' ' + str(thispanel['panelvars'][i]['unit'])
-                                                label += ' rms)'
+                                            if labelrms:
+                                                if len(~np.isnan(data)) > 2:
+                                                    formatted_std_dev = f"{std_dev:.{decimal_places}f}"
+                                                    label += ' (' + formatted_std_dev 
+                                                    if 'unit' in thispanel['panelvars'][i]:
+                                                        label += ' ' + str(thispanel['panelvars'][i]['unit'])
+                                                    label += ' rms)'
                                     except Exception as e:
                                         self.logger.error(e)
                                 plot_attributes = thispanel['panelvars'][i]['plot_attr']
