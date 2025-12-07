@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.ticker as ticker
 import matplotlib.transforms as mtransforms
-from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import FuncFormatter, LogLocator
 from modules.Utils.utils import get_sunrise_sunset_ut
 from modules.Utils.kpf_parse import get_datecode
 from collections import Counter
@@ -213,6 +213,30 @@ class AnalyzeTimeSeries:
             if isinstance(value, list):
                 return value
             return [value]
+
+        def log_tick_formatter(y, pos):
+            """
+            Format log-scale ticks:
+              - For y >= 1e-2: plain numeric (1, 0.1, 0.01)
+              - For y < 1e-2: mathtext, e.g. 10^{-4}
+            """
+            if y <= 0:
+                return ""
+        
+            exp = int(np.round(np.log10(y)))
+        
+            # If y is exactly a power of 10, use 10^{exp} notation for small values
+            if np.isclose(y, 10**exp):
+                if exp >= -2:
+                    # show as plain number (strip trailing zeros)
+                    return f"{y:g}"
+                else:
+                    # show as 10^{exp} for very small values
+                    return rf"$10^{{{exp}}}$"
+            else:
+                # For non-powers-of-10 ticks (e.g. minor ticks), usually show nothing
+                return ""
+
 
         # Helper: convert absolute datetimes to current axis coordinates
         def _to_axis_x(dt, mode):
@@ -480,18 +504,26 @@ class AnalyzeTimeSeries:
                                 xytext=(x_offset, y_offset), textcoords='offset points',
                                 bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.5, edgecolor='none'))
                     
-
             if 'yscale' in thispanel['paneldict']:
                 if thispanel['paneldict']['yscale'] == 'log':
-                    formatter = FuncFormatter(format_func)  # this doesn't seem to be working
-                    axs[p].minorticks_on()
-                    axs[p].grid(which='major', axis='x', color='darkgray',  linestyle='-', linewidth=0.5)
-                    axs[p].grid(which='both',  axis='y', color='lightgray', linestyle='-', linewidth=0.5)
                     axs[p].set_yscale('log')
-                    axs[p].yaxis.set_minor_locator(plt.AutoLocator())
-                    axs[p].yaxis.set_major_formatter(formatter)
+            
+                    # Major ticks: powers of 10
+                    axs[p].yaxis.set_major_locator(LogLocator(base=10.0))
+            
+                    # Minor ticks: 2–9 * 10^exp
+                    axs[p].yaxis.set_minor_locator(
+                        LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1)
+                    )
+            
+                    # Use the custom formatter
+                    axs[p].yaxis.set_major_formatter(FuncFormatter(log_tick_formatter))
+            
+                    axs[p].minorticks_on()
+                    axs[p].grid(which='major', axis='x', color='darkgray', linestyle='-', linewidth=0.5)
+                    axs[p].grid(which='both',  axis='y', color='lightgray', linestyle='-', linewidth=0.5)
             else:
-                axs[p].grid(color='lightgray')        
+                axs[p].grid(color='lightgray')
 
             # Set y-axis limits
             ylim=False
@@ -2016,34 +2048,29 @@ class AnalyzeTimeSeries:
         """
         For each datecode, determine if any row violates each spec criterion.
     
-        Parameters
-        ----------
-        df : pd.DataFrame
-            Input dataframe with at least `datecode_col` and all columns in spec_config.
-        spec_config : list of dict
-            Each dict describes a criterion, e.g.:
-                {
-                    'col': 'kpfgreen.STA_CCD_T',
-                    'name': 'Green CCD > -99 K',
-                    'op': '>',
-                    'threshold': -99.0
-                }
-        columns_to_display : list of str, optional
-            Extra columns to propagate as "info" (first value per datecode group).
-        datecode_col : str, default 'datecode'
-            Column used to group rows (you said you now use 'datecode').
-        ignore_service_missions : boolean, optional
-            drop datecodes from service missions
+        Supports two spec_config styles:
     
-        Returns
-        -------
-        summary_df : pd.DataFrame
-            One row per datecode, with:
-              - datecode
-              - (optional) info columns
-              - one boolean column per criterion (named by 'name').
+        1) Simple comparison (backward compatible):
+           {
+               'col': 'kpfgreen.STA_CCD_T',
+               'name': 'Green CCD > -99 K',
+               'op': '>',
+               'threshold': -99.0
+           }
+    
+        2) Expression over multiple columns:
+           {
+               "name": "|ΔT| > 10 mK AND Nobs>20",
+               "cols": ["kpfgreen.STA_CCD_T", "kpfred.STA_CCD_T", "Nobs"],
+               "bool_expr": "(abs(c0 - c1) > 0.01) & (c2 > 20)",
+           }
+    
+           where:
+             - c0, c1, c2 ... are the Series for the listed cols in order
+             - allowed functions: abs, min, max (elementwise), np (restricted)
+             - logical operators: &, |, ~ with parentheses
         """
-
+    
         _OP_MAP = {
             '>':  operator.gt,
             '<':  operator.lt,
@@ -2052,30 +2079,118 @@ class AnalyzeTimeSeries:
             '==': operator.eq,
             '!=': operator.ne,
         }
-
+    
         df_work = df.copy()
     
-        # Drop ignored datecodes
-        
-        ignore_datecodes = None
+        # Optionally drop datecodes that fall inside service missions
         if ignore_service_missions:
-            pass
-        
-        if ignore_datecodes is not None and len(ignore_datecodes) > 0:
-            df_work = df_work[~df_work[datecode_col].isin(ignore_datecodes)]
+            df_sm = self.get_service_mission_df()
+            if df_sm is not None and not df_sm.empty:
+                # assume df has a DATE-MID or similar; if not, you can adapt
+                if 'DATE-MID' in df_work.columns:
+                    dates = pd.to_datetime(df_work['DATE-MID'])
+                else:
+                    dates = None
+    
+                if dates is not None:
+                    keep = pd.Series(True, index=df_work.index)
+                    for _, row in df_sm.iterrows():
+                        x0 = pd.to_datetime(row['UT_start_date'])
+                        x1 = pd.to_datetime(row['UT_end_date'])
+                        if pd.notna(x0) and pd.notna(x1):
+                            keep &= ~dates.between(x0, x1)
+                    df_work = df_work[keep].copy()
     
         if df_work.empty:
             base_cols = [datecode_col] + (columns_to_display or [])
             return pd.DataFrame(columns=base_cols)
     
-        grouped = df_work.groupby(datecode_col, sort=True)
+        if datecode_col not in df_work.columns:
+            raise KeyError(f"datecode column '{datecode_col}' not found in dataframe.")
+    
         group_key = df_work[datecode_col]
+        grouped = df_work.groupby(datecode_col, sort=True)
     
         out = {}
     
+        # --- helpers for expression-based specs ---
+        def _eval_bool_expr(spec, df_local):
+            """
+            Evaluate spec['bool_expr'] over df_local using columns in spec['cols'].
+            Returns a boolean Series aligned with df_local.
+            """
+            cols = spec.get('cols')
+            expr = spec.get('bool_expr')
+    
+            if not cols or not isinstance(cols, (list, tuple)):
+                raise ValueError(
+                    f"Spec '{spec.get('name','<unnamed>')}' with bool_expr "
+                    f"must define a non-empty 'cols' list."
+                )
+            if not isinstance(expr, str):
+                raise ValueError(
+                    f"Spec '{spec.get('name','<unnamed>')}' must have 'bool_expr' "
+                    f"as a string."
+                )
+    
+            missing = [c for c in cols if c not in df_local.columns]
+            if missing:
+                raise KeyError(
+                    f"Columns {missing} (for criterion '{spec.get('name','<unnamed>')}') "
+                    f"not found in dataframe."
+                )
+    
+            # Build the local environment: c0, c1, ... mapped to columns
+            local_env = {}
+            for idx, col in enumerate(cols):
+                local_env[f'c{idx}'] = df_local[col]
+    
+            # Allowed functions & names inside bool_expr
+            local_env.update({
+                'abs': np.abs,
+                'min': np.minimum,   # elementwise min(series0, series1)
+                'max': np.maximum,   # elementwise max(series0, series1)
+                'np': np,
+            })
+    
+            try:
+                cond = eval(expr, {"__builtins__": {}}, local_env)
+            except Exception as e:
+                raise ValueError(
+                    f"Error evaluating bool_expr '{expr}' for criterion "
+                    f"'{spec.get('name','<unnamed>')}': {e}"
+                )
+    
+            # Normalize to boolean Series aligned with df_local
+            if isinstance(cond, pd.Series):
+                cond_series = cond
+            else:
+                cond_series = pd.Series(cond, index=df_local.index)
+    
+            cond_series = cond_series.astype(bool)
+            return cond_series
+    
+        # --- main loop over spec_config ---
         for spec in spec_config:
+            name = spec.get('name')
+            if not name:
+                raise ValueError("Each spec must have a 'name' key.")
+    
+            # Path 1: expression-based spec (bool_expr + cols)
+            if 'bool_expr' in spec:
+                cond = _eval_bool_expr(spec, df_work)
+                out[name] = cond.groupby(group_key).any()
+                continue
+    
+            # Path 2: simple comparison spec (backward compatible)
+            # expects: col, op, threshold
+            if 'col' not in spec or 'op' not in spec or 'threshold' not in spec:
+                raise ValueError(
+                    f"Spec '{name}' must define either "
+                    f"('cols' + 'bool_expr') or ('col', 'op', 'threshold')."
+                )
+    
             col = spec['col']
-            name = spec['name']
             op_str = spec['op']
             threshold = spec['threshold']
     
@@ -2088,7 +2203,7 @@ class AnalyzeTimeSeries:
             op_func = _OP_MAP[op_str]
             cond = op_func(df_work[col], threshold)
     
-            # True if ANY row for that datecode exceeds the threshold
+            # True if ANY row for that datecode meets the condition
             out[name] = cond.groupby(group_key).any()
     
         # Construct out-of-spec summary frame
@@ -2188,9 +2303,7 @@ class AnalyzeTimeSeries:
             raise ValueError("No valid boolean criteria columns found in summary_df for given spec_config.")
 
         if figsize == 'auto':
-            print(len(criteria_cols))
             figsize = (10, 1.0 + len(criteria_cols) * 0.15)
-            print(figsize)
         fig, ax = plt.subplots(figsize=figsize)
         
         # x is the datetime index
