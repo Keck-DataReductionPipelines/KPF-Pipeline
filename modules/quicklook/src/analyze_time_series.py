@@ -2045,7 +2045,7 @@ class AnalyzeTimeSeries:
                                                        show_plot=show_plot, 
                                                        fig_path=fig_path)
 
-    def spec_check_by_datecode(
+    def performance_by_datecode(
         self,
         df: pd.DataFrame,
         spec_config,
@@ -2234,7 +2234,7 @@ class AnalyzeTimeSeries:
         return summary_df
 
 
-    def plot_spec_check_by_datecode(
+    def plot_performance_by_datecode(
         self,
         summary_df: pd.DataFrame,
         spec_config,
