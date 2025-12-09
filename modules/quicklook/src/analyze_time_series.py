@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.ticker as ticker
 import matplotlib.transforms as mtransforms
+from matplotlib.lines import Line2D 
 from matplotlib.ticker import FuncFormatter, LogLocator
 from modules.Utils.utils import get_sunrise_sunset_ut
 from modules.Utils.kpf_parse import get_datecode
@@ -346,6 +347,7 @@ class AnalyzeTimeSeries:
             empty_df = (len(df) == 0) # True if the dataframe has no rows
             if not empty_df:
                 df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
+                df = df.dropna(subset=['DATE-MID'])
                 if start_date_was_none == True:
                     start_date = min(df['DATE-MID'])
                 if end_date_was_none == True:
@@ -766,7 +768,7 @@ class AnalyzeTimeSeries:
                             self.logger.info(f"Error converting to a list: {e}")
                         if len(states) != len(t):
                             # Handle the mismatch
-                            print(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
+                            self.logger.info(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
                         for state in unique_states:
                             color = color_map[state]
                             indices = [i for i, s in enumerate(states) if s == state]
@@ -839,8 +841,41 @@ class AnalyzeTimeSeries:
                             legend_frac_size = 0.20
                         handles, labels = axs[p].get_legend_handles_labels()
                         sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=True)
-                        handles, labels = zip(*sorted_pairs)
-                        axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
+                        
+                        try:
+                            # This will fail with ValueError if there are no legend entries
+                            handles, labels = zip(*sorted_pairs)
+                        
+                        except ValueError:
+                            # No legend entries: log/print a meaningful message and use a placeholder
+                            msg = (
+                                f"[plot_time_series_multipanel] No legend entries for panel {p} "
+                                f"between {start_date} and {end_date}; inserting placeholder legend."
+                            )
+                            if hasattr(self, "logger"):
+                                self.logger.warning(msg)
+                            else:
+                                print(msg)
+                        
+                            # Create a dummy (invisible) handle so the legend still appears with text
+                            placeholder_handle = Line2D(
+                                [], [], linestyle="none", marker="", label="No data in this range"
+                            )
+                        
+                            axs[p].legend(
+                                handles=[placeholder_handle],
+                                labels=["No data in this range"],
+                                loc="upper right",
+                                bbox_to_anchor=(1 + legend_frac_size, 1),
+                            )
+                        
+                        else:
+                            # Normal path: we had real legend entries
+                            axs[p].legend(
+                                handles, labels,
+                                loc="upper right",
+                                bbox_to_anchor=(1 + legend_frac_size, 1),
+                            )
 
             # Set y-axis limits
             if ylim:
