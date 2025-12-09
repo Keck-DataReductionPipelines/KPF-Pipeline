@@ -91,6 +91,9 @@ Cloning workflow
    * ``--force`` drops any existing clone for the resolved tag before
      recreating it.
    * ``--tag`` overrides the tag that defaults to ``git rev-parse --short HEAD``.
+   * If the clone databases already exist and ``--force`` is omitted, the script
+     will skip recreation and still write the dotenv file pointing at the
+     existing clones.
 
 2. The script creates both clone databases, then writes a dotenv file named
    ``.env.abtest.<tag>`` (override via ``--out``). Review the log output for
@@ -108,7 +111,10 @@ variant) so the container inherits the overridden DB settings:
    make docker
 
 Every environment variable required by the pipeline is present in the dotenv
-file, so you can use it in other shells as needed.
+file, so you can use it in other shells as needed. The generated file exports
+only the values needed for the cloned DBs (``KPFPIPE_DB_*`` and
+``KPFPIPE_TSDB_*``) and also sets ``KPFPIPE_ENV_FILE`` to its own path so that
+``docker-run.sh`` picks it up automatically.
 
 The ``make docker`` helpers automatically parse the repository ``.env`` (or the
 path supplied via ``KPFPIPE_ENV_FILE``) and export any ``KEY=VALUE`` lines before
