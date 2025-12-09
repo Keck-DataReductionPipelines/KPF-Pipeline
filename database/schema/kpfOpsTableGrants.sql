@@ -17,6 +17,7 @@ REVOKE ALL ON TABLE calfiles FROM kpfreadrole;
 GRANT SELECT ON TABLE calfiles TO GROUP kpfreadrole;
 
 REVOKE ALL ON SEQUENCE calfiles_cid_seq FROM kpfreadrole;
+GRANT USAGE,SELECT ON SEQUENCE calfiles_cid_seq TO kpfreadrole;
 
 
 -- kpfadminrole
@@ -35,7 +36,7 @@ REVOKE ALL ON TABLE calfiles FROM kpfporole;
 GRANT INSERT,UPDATE,SELECT,DELETE,REFERENCES ON TABLE calfiles TO kpfporole;
 
 REVOKE ALL ON SEQUENCE calfiles_cid_seq FROM kpfporole;
-GRANT USAGE ON SEQUENCE calfiles_cid_seq TO kpfporole;
+GRANT USAGE,SELECT ON SEQUENCE calfiles_cid_seq TO kpfporole;
 
 
 -------------------
@@ -48,6 +49,7 @@ REVOKE ALL ON TABLE l0files FROM kpfreadrole;
 GRANT SELECT ON TABLE l0files TO GROUP kpfreadrole;
 
 REVOKE ALL ON SEQUENCE l0files_rid_seq FROM kpfreadrole;
+GRANT USAGE,SELECT ON SEQUENCE l0files_rid_seq TO kpfreadrole;
 
 
 -- kpfadminrole
@@ -65,7 +67,7 @@ REVOKE ALL ON TABLE l0files FROM kpfporole;
 GRANT INSERT,UPDATE,SELECT,REFERENCES ON TABLE l0files TO kpfporole;
 
 REVOKE ALL ON SEQUENCE l0files_rid_seq FROM kpfporole;
-GRANT USAGE ON SEQUENCE l0files_rid_seq TO kpfporole;
+GRANT USAGE,SELECT ON SEQUENCE l0files_rid_seq TO kpfporole;
 
 
 -------------------
@@ -78,6 +80,7 @@ REVOKE ALL ON TABLE l0infobits FROM kpfreadrole;
 GRANT SELECT ON TABLE l0infobits TO GROUP kpfreadrole;
 
 REVOKE ALL ON SEQUENCE l0infobits_bid_seq FROM kpfreadrole;
+GRANT USAGE,SELECT ON SEQUENCE l0infobits_bid_seq TO kpfreadrole;
 
 
 -- kpfadminrole
@@ -95,7 +98,7 @@ REVOKE ALL ON TABLE l0infobits FROM kpfporole;
 GRANT INSERT,UPDATE,SELECT,REFERENCES ON TABLE l0infobits TO kpfporole;
 
 REVOKE ALL ON SEQUENCE l0infobits_bid_seq FROM kpfporole;
-GRANT USAGE ON SEQUENCE l0infobits_bid_seq TO kpfporole;
+GRANT USAGE,SELECT ON SEQUENCE l0infobits_bid_seq TO kpfporole;
 
 
 
