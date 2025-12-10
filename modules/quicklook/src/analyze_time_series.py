@@ -835,6 +835,16 @@ class AnalyzeTimeSeries:
                             continue
                         x0 = _to_axis_x(s_clip, time_mode)
                         x1 = _to_axis_x(e_clip, time_mode)
+                        mid_x = pd.to_datetime(row['UT_start_date']) + (pd.to_datetime(row['UT_end_date'])-pd.to_datetime(row['UT_start_date']))/2
+                        if ylim:
+                            ymin = ylim[0]
+                            ymax = ylim[1]
+                        else:
+                            ymin, ymax = axs[p].get_ylim()
+                        y0_9 = ymin + 0.9 * (ymax - ymin)
+                        if 'yscale' in thispanel['paneldict']:
+                            if thispanel['paneldict']['yscale'] == 'log':
+                                y0_9 = 0.6 * ymax  
                         # Hatched vertical span
                         axs[p].axvspan(
                             x0, x1,
@@ -845,6 +855,20 @@ class AnalyzeTimeSeries:
                             alpha=0.4,
                             zorder=0.2
                         )
+                        label = row.get('name', '')
+                        if pd.notna(label):
+                            axs[p].text(mid_x, y0_9, 
+                                        str(label), 
+                                        ha='center', 
+                                        va='center', 
+                                        fontsize=8, 
+                                        color='darkgray', 
+                                        zorder=0.3,
+                                        bbox=dict(facecolor='white', 
+                                                  edgecolor='none', 
+                                                  boxstyle='round,pad=0.2'
+                                        )
+                            )
 
             # Draw translucent boxes
             if 'axhspan' in thispanel['paneldict']:
@@ -1981,8 +2005,12 @@ class AnalyzeTimeSeries:
                             try:
                                 x0 = pd.to_datetime(row['UT_start_date'])
                                 x1 = pd.to_datetime(row['UT_end_date'])
+                                mid_x = x0 + (x1 - x0) / 2
+                                ymin, ymax = ax.get_ylim()
+                                y0_9 = ymin + 0.9 * (ymax - ymin)
                                 if pd.notna(x0) and pd.notna(x1):
                                     ax.axvspan(x0, x1, facecolor='none', edgecolor='none', hatch='////', alpha=0.15)
+                                ax.text(mid_x, y0_9, row('name'), ha='center', va='center', fontsize=8, color=darkgray)
                             except Exception:
                                 continue
                 except Exception:
