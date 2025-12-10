@@ -1,4 +1,5 @@
 import os
+import re
 import ast
 import time
 import copy
@@ -746,9 +747,37 @@ class AnalyzeTimeSeries:
                             colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
                             color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
                         else:
-                            unique_states = sorted(list(set(unique_states)))
+                            # Unique categories for generic state plots
+                            unique_states = list(set(unique_states))
+                        
+                            # --- Version-aware ordering for git tags like v2.10.3 ---
+                            # Handles labels that *start* with vMAJ.MIN.PATCH (ignore any trailing text)
+                            version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)")
+                        
+                            def parse_version(state):
+                                """
+                                Return (major, minor, patch) as ints if state looks like 'vX.Y.Z',
+                                otherwise return None.
+                                """
+                                s = str(state)
+                                m = version_pattern.match(s)
+                                if not m:
+                                    return None
+                                return tuple(int(part) for part in m.groups())
+                        
+                            # If *all* states look like git-style tags, sort numerically; otherwise lexicographically.
+                            if unique_states and all(parse_version(s) is not None for s in unique_states):
+                                # Numeric development order: v2.5.3 < v2.6.0 < v2.8.2 < v2.9.1 < v2.10.3 < ...
+                                unique_states = sorted(unique_states, key=parse_version)
+                            else:
+                                # Fallback: normal alphabetical order
+                                unique_states = sorted(unique_states)
+                        
+                            # Map states -> y positions according to the chosen order
                             state_to_num = {state: i for i, state in enumerate(unique_states)}
                             mapped_states = [state_to_num[state] for state in states]
+                        
+                            # Color map for generic state plots
                             colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
                             color_map = {state: colors[i] for i, state in enumerate(unique_states)}
                         try:
@@ -840,42 +869,40 @@ class AnalyzeTimeSeries:
                         else:
                             legend_frac_size = 0.20
                         handles, labels = axs[p].get_legend_handles_labels()
-                        sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=True)
+                        pairs = list(zip(labels, handles))  # (label, handle)
                         
-                        try:
-                            # This will fail with ValueError if there are no legend entries
-                            handles, labels = zip(*sorted_pairs)
+                        # Match vMAJ.MIN.PATCH at the start of the label, ignore anything after that
+                        version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)")
                         
-                        except ValueError:
-                            # No legend entries: log/print a meaningful message and use a placeholder
-                            msg = (
-                                f"[plot_time_series_multipanel] No legend entries for panel {p} "
-                                f"between {start_date} and {end_date}; inserting placeholder legend."
-                            )
-                            if hasattr(self, "logger"):
-                                self.logger.warning(msg)
-                            else:
-                                print(msg)
+                        def version_components(label):
+                            """
+                            Return (major, minor, patch) as ints if label starts with 'vX.Y.Z',
+                            otherwise return None.
+                            """
+                            m = version_pattern.match(label)
+                            if not m:
+                                return None
+                            return tuple(int(part) for part in m.groups())
                         
-                            # Create a dummy (invisible) handle so the legend still appears with text
-                            placeholder_handle = Line2D(
-                                [], [], linestyle="none", marker="", label="No data in this range"
-                            )
+                        def sort_key(label):
+                            vc = version_components(label)
+                            if vc is not None:
+                                # (0, major, minor, patch, label) → versions first, numeric order
+                                return (0, vc[0], vc[1], vc[2], label.lower())
+                            # non-version labels go after, alphabetically
+                            return (1, label.lower())
                         
-                            axs[p].legend(
-                                handles=[placeholder_handle],
-                                labels=["No data in this range"],
-                                loc="upper right",
-                                bbox_to_anchor=(1 + legend_frac_size, 1),
-                            )
+                        # Sort (label, handle) pairs using the mixed key
+                        pairs.sort(key=lambda lh: sort_key(lh[0]))
                         
-                        else:
-                            # Normal path: we had real legend entries
-                            axs[p].legend(
-                                handles, labels,
-                                loc="upper right",
-                                bbox_to_anchor=(1 + legend_frac_size, 1),
-                            )
+                        sorted_labels, sorted_handles = zip(*pairs)
+                        
+                        axs[p].legend(
+                            sorted_handles,
+                            sorted_labels,
+                            loc="upper right",
+                            bbox_to_anchor=(1 + legend_frac_size, 1),
+                        )
 
             # Set y-axis limits
             if ylim:
