@@ -15,3 +15,4 @@ Welcome! This is the documentation for the KPF Data Reduction Pipeline.
    tutorials/KPF_Data_Tutorial_Quality_Control
    analysis/analysis.rst
    tsdb/tsdb.rst
+   ab_testing/start.rst
