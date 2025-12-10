@@ -14,7 +14,7 @@ from modules.Utils.data_handler import SelectObs
 # L2 level flags
 do_rv = config.ARGUMENT.do_rv
 do_rv_reweighting = config.ARGUMENT.do_rv_reweighting
-do_bc = config.WATCHFOR_L1.do_bc
+do_bc = config.ARGUMENT.do_bc
 do_outlier = config.ARGUMENT.do_outlier_rejection
 do_only_drift = config.ARGUMENT.do_only_drift
 
