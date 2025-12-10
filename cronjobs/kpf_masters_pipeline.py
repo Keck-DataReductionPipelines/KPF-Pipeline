@@ -43,7 +43,7 @@ def form_output_file_for_python_script(pythonscript):
         output_file = filename_match.group(1) + f"_{procdate}.out"
 
     except:
-        print("*** Error: could not form output file from python script {pythonscript}; continuing...")
+        print(f"*** Error: could not form output file from python script {pythonscript}; continuing...")
 
     return output_file
 
@@ -105,7 +105,7 @@ bash_cmds = [
              f"cp -pf /data/masters/pool/kpf_{procdate}* /masters/{procdate}",
              f"cp -pf /data/logs/{procdate}/pipeline_{procdate}.log /masters/{procdate}/pipeline_masters_drp_l0_{procdate}.log || true",
              f"python {pythonscript4} {procdate}",
-             f"mv /code/KPF-Pipeline/{pylogfile_registerCalFilesForDate} /code/KPF-Pipeline/{pylogfile4}",
+             f"mv -f /code/KPF-Pipeline/{pylogfile_registerCalFilesForDate} /code/KPF-Pipeline/{pylogfile4}",
              f"cp -pf /code/KPF-Pipeline/{pylogfile}  /masters/{procdate}",
              f"cp -pf /code/KPF-Pipeline/{pylogfile2} /masters/{procdate}",
              f"cp -pf /code/KPF-Pipeline/{pylogfile3} /masters/{procdate}",
@@ -140,10 +140,10 @@ bash_cmds = [
              f"python {pythonscript_run_analysis} {procdate}",
              f"cp -pfr /data/analysis/{procdate}/* /masters/{procdate}",
              f"cp -pf /code/KPF-Pipeline/{pylogfile_run_analysis} /masters/{procdate}",
-             f"#rm /code/KPF-Pipeline/{pylogfile_run_analysis}",
+             f"rm /code/KPF-Pipeline/{pylogfile_run_analysis}",
              f"python {pythonscript_registerCalFilesForDate} {procdate}",
              f"cp -pf /code/KPF-Pipeline/{pylogfile_registerCalFilesForDate} /masters/{procdate}",
-             f"#rm /code/KPF-Pipeline/{pylogfile_registerCalFilesForDate}"
+             f"rm /code/KPF-Pipeline/{pylogfile_registerCalFilesForDate}"
             ]
 
 
