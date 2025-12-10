@@ -35,6 +35,48 @@
 export DOCKER_CLI_EXPERIMENTAL=enabled
 export DOCKER_BUILDKIT=1
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_ENV_FILE="${KPFPIPE_ENV_FILE:-${SCRIPT_DIR}/.env}"
+
+load_env_file() {
+	if [ ! -f "$1" ]; then
+		return
+	fi
+	if ! command -v python3 >/dev/null 2>&1; then
+		echo "Warning: python3 not available; skipping env file $1" >&2
+		return
+	fi
+	local exports
+	exports="$(python3 - "$1" <<'PY'
+import pathlib, shlex, sys
+path = pathlib.Path(sys.argv[1])
+try:
+    text = path.read_text()
+except FileNotFoundError:
+    sys.exit(0)
+for raw in text.splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        continue
+    if line.startswith("export "):
+        line = line[7:].strip()
+    if "=" not in line:
+        continue
+    key, _, value = line.partition("=")
+    key = key.strip()
+    value = value.strip()
+    if value and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    print(f"export {key}={shlex.quote(value)}")
+PY
+)"
+	if [ -n "$exports" ]; then
+		eval "$exports"
+	fi
+}
+
+load_env_file "$ROOT_ENV_FILE"
+
 # Verify required environment variables before proceeding
 required_vars=(
 	KPFCRONJOB_CODE
