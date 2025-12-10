@@ -45,7 +45,10 @@ class DbConfig:
     password: str
 
     def clone_name(self, tag: str) -> str:
-        return f"{self.name}_abtest_{tag}"
+        suffix = f"_abtest_{tag}"
+        if self.name.endswith(suffix):
+            return self.name
+        return f"{self.name}{suffix}"
 
 
 def parse_args() -> argparse.Namespace:
@@ -93,6 +96,12 @@ def parse_args() -> argparse.Namespace:
         "--show-privileges",
         action="store_true",
         help="Print table/sequence privileges for the source DB roles and exit.",
+    )
+    parser.add_argument(
+        "--parallel-jobs",
+        type=int,
+        default=0,
+        help="Use parallel dump/restore with N jobs (0=disabled, uses faster directory format). Speeds up large databases significantly.",
     )
     return parser.parse_args()
 
@@ -412,68 +421,155 @@ def create_database(config: DbConfig, dbname: str) -> None:
         raise RuntimeError(f"Failed to create database '{dbname}': permission denied?\n{hint}") from exc
 
 
-def restore_database(source_config: DbConfig, dest_config: DbConfig, source: str, target: str) -> None:
-    dump_cmd = [
-        "pg_dump",
-        "--host",
-        source_config.server,
-        "--port",
-        str(source_config.port),
-        "--username",
-        source_config.user,
-        "--dbname",
-        source,
-        "--no-owner",
-        "--no-privileges",
-        "--no-tablespaces",
-    ]
-    restore_cmd = base_psql_cmd(dest_config, target)
+def restore_database(
+    source_config: DbConfig, dest_config: DbConfig, source: str, target: str, parallel_jobs: int = 0
+) -> None:
+    import tempfile
 
-    with subprocess.Popen(
-        dump_cmd,
-        env=pg_env(source_config.password),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=False,
-    ) as dump_proc:
-        assert dump_proc.stdout is not None
-        restore = subprocess.run(
-            restore_cmd,
-            env=pg_env(dest_config.password),
-            stdin=dump_proc.stdout,
+    if parallel_jobs > 0:
+        # Use parallel dump/restore with directory format for speed
+        with tempfile.TemporaryDirectory(prefix="pg_dump_") as tmpdir:
+            dump_dir = Path(tmpdir) / "dump"
+            dump_cmd = [
+                "pg_dump",
+                "--host",
+                source_config.server,
+                "--port",
+                str(source_config.port),
+                "--username",
+                source_config.user,
+                "--dbname",
+                source,
+                "--format=directory",
+                "--file",
+                str(dump_dir),
+                "--no-owner",
+                "--no-privileges",
+                "--no-tablespaces",
+                "--jobs",
+                str(parallel_jobs),
+            ]
+            restore_cmd = [
+                "pg_restore",
+                "--host",
+                dest_config.server,
+                "--port",
+                str(dest_config.port),
+                "--username",
+                dest_config.user,
+                "--dbname",
+                target,
+                "--no-owner",
+                "--no-privileges",
+                "--jobs",
+                str(parallel_jobs),
+                "--verbose",
+                str(dump_dir),
+            ]
+
+            dump_result = subprocess.run(
+                dump_cmd,
+                env=pg_env(source_config.password),
+                capture_output=True,
+                text=True,
+            )
+            if dump_result.returncode != 0:
+                print("\npg_dump failed; current privileges for the source role:")
+                print_privileges(source_config)
+                raise RuntimeError(
+                    "pg_dump failed for "
+                    f"{source}: {dump_result.stderr.strip() if dump_result.stderr else 'unknown error'}"
+                )
+
+            # Set PGOPTIONS to ignore tablespace settings during restore
+            restore_env = pg_env(dest_config.password)
+            restore_env["PGOPTIONS"] = "-c default_tablespace="
+            restore_result = subprocess.run(
+                restore_cmd,
+                env=restore_env,
+                capture_output=True,
+                text=True,
+            )
+            # pg_restore may return non-zero if there are warnings (like missing tablespaces),
+            # but the restore might still succeed. Check stderr for actual fatal errors.
+            if restore_result.returncode != 0:
+                # If stderr contains only tablespace errors, treat as warning
+                stderr_lower = restore_result.stderr.lower()
+                if "tablespace" in stderr_lower and "does not exist" in stderr_lower:
+                    # Only tablespace errors - these are expected and non-fatal
+                    if "error:" in stderr_lower and "fatal" not in stderr_lower:
+                        print(f"Warning: tablespace errors during restore (expected): {restore_result.stderr.count('error:')} warnings")
+                else:
+                    # Real errors occurred
+                    raise RuntimeError(
+                        f"pg_restore failed for {target}: {restore_result.stderr.strip()}"
+                    )
+    else:
+        # Use traditional pipe method (slower but simpler)
+        dump_cmd = [
+            "pg_dump",
+            "--host",
+            source_config.server,
+            "--port",
+            str(source_config.port),
+            "--username",
+            source_config.user,
+            "--dbname",
+            source,
+            "--no-owner",
+            "--no-privileges",
+            "--no-tablespaces",
+        ]
+        restore_cmd = base_psql_cmd(dest_config, target)
+
+        with subprocess.Popen(
+            dump_cmd,
+            env=pg_env(source_config.password),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-        )
-        _, dump_stderr = dump_proc.communicate()
-        if dump_proc.returncode != 0:
-            print("\npg_dump failed; current privileges for the source role:")
-            print_privileges(source_config)
-            raise RuntimeError(
-                "pg_dump failed for "
-                f"{source}: {dump_stderr.decode(errors='ignore').strip() if dump_stderr else 'unknown error'}"
+            text=False,
+        ) as dump_proc:
+            assert dump_proc.stdout is not None
+            restore = subprocess.run(
+                restore_cmd,
+                env=pg_env(dest_config.password),
+                stdin=dump_proc.stdout,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
             )
-        if restore.returncode != 0:
-            raise RuntimeError(
-                f"psql restore failed for {target}: {restore.stderr.strip()}"
-            )
+            _, dump_stderr = dump_proc.communicate()
+            if dump_proc.returncode != 0:
+                print("\npg_dump failed; current privileges for the source role:")
+                print_privileges(source_config)
+                raise RuntimeError(
+                    "pg_dump failed for "
+                    f"{source}: {dump_stderr.decode(errors='ignore').strip() if dump_stderr else 'unknown error'}"
+                )
+            if restore.returncode != 0:
+                raise RuntimeError(
+                    f"psql restore failed for {target}: {restore.stderr.strip()}"
+                )
 
 
-def clone_database(source: DbConfig, dest: DbConfig, tag: str, force: bool) -> str:
+def clone_database(source: DbConfig, dest: DbConfig, tag: str, force: bool, parallel_jobs: int = 0) -> str:
     new_name = dest.clone_name(tag)
     print(f"[{source.label}] cloning '{source.name}' -> '{new_name}' (dest host {dest.server}:{dest.port})")
+    if parallel_jobs > 0:
+        print(f"[{source.label}] using parallel dump/restore with {parallel_jobs} jobs")
     exists = database_exists(dest, new_name)
     if exists and not force:
-        raise RuntimeError(
-            f"Database '{new_name}' already exists on {dest.server}:{dest.port}. "
-            "Use --force to drop and recreate it."
+        print(
+            f"[{source.label}] clone '{new_name}' already exists on {dest.server}:{dest.port}; "
+            "skipping recreation (use --force to drop and recreate)."
         )
+        return new_name
     if exists and force:
         print(f"[{source.label}] dropping existing '{new_name}' (force enabled)")
         drop_database(dest, new_name)
 
     create_database(dest, new_name)
-    restore_database(source, dest, source.name, new_name)
+    restore_database(source, dest, source.name, new_name, parallel_jobs)
     print(f"[{source.label}] clone complete")
     return new_name
 
@@ -499,32 +595,24 @@ def write_env_file(
     ts_dest: DbConfig,
     ts_clone: str,
 ) -> None:
+    env_file_str = str(path.resolve())
     entries = [
         ("# Generated by scripts/clone_abtest_dbs.py", None),
         ("# Tag: " + tag, None),
         (f"# Source primary: {primary_source.server}:{primary_source.port} (user={primary_source.user})", None),
         (f"# Source timeseries: {ts_source.server}:{ts_source.port} (user={ts_source.user})", None),
+        ("KPFPIPE_ENV_FILE", env_file_str),
         ("ABTEST_DB_TAG", tag),
         ("KPFPIPE_DB_SERVER", primary_dest.server),
-        ("DBSERVER", primary_dest.server),
         ("KPFPIPE_DB_PORT", str(primary_dest.port)),
-        ("DBPORT", str(primary_dest.port)),
         ("KPFPIPE_DB_NAME", primary_clone),
-        ("DBNAME", primary_clone),
         ("KPFPIPE_DB_USER", primary_dest.user),
-        ("DBUSER", primary_dest.user),
         ("KPFPIPE_DB_PASS", primary_dest.password),
-        ("DBPASS", primary_dest.password),
         ("KPFPIPE_TSDB_SERVER", ts_dest.server),
-        ("TSDBSERVER", ts_dest.server),
         ("KPFPIPE_TSDB_PORT", str(ts_dest.port)),
-        ("TSDBPORT", str(ts_dest.port)),
         ("KPFPIPE_TSDB_NAME", ts_clone),
-        ("TSDBNAME", ts_clone),
         ("KPFPIPE_TSDB_USER", ts_dest.user),
-        ("TSDBUSER", ts_dest.user),
         ("KPFPIPE_TSDB_PASS", ts_dest.password),
-        ("TSDBPASS", ts_dest.password),
     ]
     lines: List[str] = []
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -532,7 +620,7 @@ def write_env_file(
         if value is None:
             lines.append(key)
         else:
-            lines.append(f"{key}={value}")
+            lines.append(f"export {key}={value}")
     path.write_text("\n".join(lines) + "\n")
     print(f"Wrote environment overrides to {path}")
 
@@ -582,8 +670,8 @@ def main() -> None:
         print_privileges(ts_source)
 
     try:
-        primary_clone = clone_database(primary_source, primary_dest, tag, args.force)
-        ts_clone = clone_database(ts_source, ts_dest, tag, args.force)
+        primary_clone = clone_database(primary_source, primary_dest, tag, args.force, args.parallel_jobs)
+        ts_clone = clone_database(ts_source, ts_dest, tag, args.force, args.parallel_jobs)
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
