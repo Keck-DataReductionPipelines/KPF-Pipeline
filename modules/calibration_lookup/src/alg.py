@@ -16,7 +16,7 @@ class GetCalibrations:
        returns a dictionary with all calibration types.
 
     """
-    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=False, use_cache=True):
+    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=False, use_cache=False):
         """
         use_db (boolean) - to disable db access, set to False (e.g., when looking up file-based keywords only)
         """
