@@ -16,7 +16,7 @@ class GetCalibrations:
        returns a dictionary with all calibration types.
 
     """
-    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=False, use_cache=True):
+    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=True, use_cache=True):
         """
         use_db (boolean) - to disable db access, set to False (e.g., when looking up file-based keywords only)
         """
@@ -72,7 +72,6 @@ class GetCalibrations:
             self.log.debug(f"  Total init: {total_init_time*1000:.2f}ms")
 
     def lookup(self, subset=None):
-        self.verbose = True
         if self.verbose:
             start_time = time.time()
         
