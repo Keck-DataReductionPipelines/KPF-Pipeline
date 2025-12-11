@@ -72,6 +72,7 @@ class GetCalibrations:
             self.log.debug(f"  Total init: {total_init_time*1000:.2f}ms")
 
     def lookup(self, subset=None):
+        print("**************************************************** DEBUG: cache_key is: ", cache_key)
         if self.verbose:
             start_time = time.time()
         
@@ -89,7 +90,6 @@ class GetCalibrations:
         else:
             cache_key = f"calibration_lookup_subset:{rounded_datetime}_{'_'.join(subset)}"
 
-        print("DEBUG: cache_key is: ", cache_key)
         try:
             cached_result = _get_cached_result(cache_key, verbose=self.verbose)
             if not self.use_cache:
