@@ -16,7 +16,7 @@ class GetCalibrations:
        returns a dictionary with all calibration types.
 
     """
-    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=True, use_cache=True):
+    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=False, use_cache=True):
         """
         use_db (boolean) - to disable db access, set to False (e.g., when looking up file-based keywords only)
         """
@@ -88,7 +88,6 @@ class GetCalibrations:
             cache_key = f"calibration_lookup_complete:{rounded_datetime}"
         else:
             cache_key = f"calibration_lookup_subset:{rounded_datetime}_{'_'.join(subset)}"
-        print("**************************************************** DEBUG: cache_key is: ", cache_key)
 
         try:
             cached_result = _get_cached_result(cache_key, verbose=self.verbose)
