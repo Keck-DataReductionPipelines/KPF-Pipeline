@@ -15,8 +15,6 @@ fr = config.ARGUMENT.frep_key
 
 date_dir = context.date_dir
 
-query_subset = ['rough_wls']
-
 for cal_type in ['ThAr', 'LFC', 'Etalon']: 
     if cal_type == 'ThAr':
         search_string = config.ARGUMENT.thar_search_string
@@ -35,53 +33,53 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
             dt_string = GetHeaderValue(l1_obj, 'DATE-MID')
             cals = CalibrationLookup(dt_string, subset=['rough_wls'])
             
-            # master_wls_file = cals['rough_wls'] # TRY A NEW ROUGH WLS
-            # full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
-            # base_path = masters_dir + date_dir
-            # obj_string = str_replace(L1_file, base_path + '/kpf_' + date_dir + '_master_arclamp_', '')
-            # obj_string_short = str_replace(obj_string, '_L1.fits', '')
-            # output_filename = output_dir + date_dir + '/kpf_' + date_dir + '_master_WLS_' + obj_string_short + '_L1.fits'
+            master_wls_file = cals['rough_wls'] # TRY A NEW ROUGH WLS
+            full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
+            base_path = masters_dir + date_dir
+            obj_string = str_replace(L1_file, base_path + '/kpf_' + date_dir + '_master_arclamp_', '')
+            obj_string_short = str_replace(obj_string, '_L1.fits', '')
+            output_filename = output_dir + date_dir + '/kpf_' + date_dir + '_master_WLS_' + obj_string_short + '_L1.fits'
 
-            # for ext in ['RED_SCI_WAVE2', 'GREEN_SCI_WAVE2']: # iterate over RED/GREEN CCDs
+            for ext in ['RED_SCI_WAVE2', 'GREEN_SCI_WAVE2']: # iterate over RED/GREEN CCDs
 
-            #     master_wls = full_master_wls[ext]
+                master_wls = full_master_wls[ext]
 
-            #     if ext == 'RED_SCI_WAVE2':
-            #         output_exts = config.ARGUMENT.red_output_ext
-            #         orderlet_names = config.ARGUMENT.red_cal_orderlet_name
-            #         min_order = config.ARGUMENT.red_min_order
-            #         max_order = config.ARGUMENT.red_max_order
-            #         json_filename = str_replace(output_filename, '_L1.fits', '_RED_L1.json.gz')
-            #         if cal_type == 'Etalon':
-            #             orderlet_names = ['RED_SCI_FLUX2']
-            #             output_exts = ['RED_SCI_WAVE2']
+                if ext == 'RED_SCI_WAVE2':
+                    output_exts = config.ARGUMENT.red_output_ext
+                    orderlet_names = config.ARGUMENT.red_cal_orderlet_name
+                    min_order = config.ARGUMENT.red_min_order
+                    max_order = config.ARGUMENT.red_max_order
+                    json_filename = str_replace(output_filename, '_L1.fits', '_RED_L1.json.gz')
+                    if cal_type == 'Etalon':
+                        orderlet_names = ['RED_SCI_FLUX2']
+                        output_exts = ['RED_SCI_WAVE2']
                     
-            #     if ext == 'GREEN_SCI_WAVE2':
-            #         output_exts = config.ARGUMENT.green_output_ext
-            #         orderlet_names = config.ARGUMENT.green_cal_orderlet_name
-            #         min_order = config.ARGUMENT.green_min_order
-            #         max_order = config.ARGUMENT.green_max_order
-            #         json_filename = str_replace(output_filename, '_L1.fits', '_GREEN_L1.json.gz')
-            #         if cal_type == 'Etalon':
-            #             orderlet_names = ['GREEN_SCI_FLUX2']
-            #             output_exts = ['GREEN_SCI_WAVE2']
+                if ext == 'GREEN_SCI_WAVE2':
+                    output_exts = config.ARGUMENT.green_output_ext
+                    orderlet_names = config.ARGUMENT.green_cal_orderlet_name
+                    min_order = config.ARGUMENT.green_min_order
+                    max_order = config.ARGUMENT.green_max_order
+                    json_filename = str_replace(output_filename, '_L1.fits', '_GREEN_L1.json.gz')
+                    if cal_type == 'Etalon':
+                        orderlet_names = ['GREEN_SCI_FLUX2']
+                        output_exts = ['GREEN_SCI_WAVE2']
 
-            #     save_diagnostics_dir = 'plots'
-            #     if save_diagnostics_dir != None:
-            #         plot_dir = save_diagnostics_dir + "/" + date_dir + "/" + obj_string_short + "/"
-            #     else:
-            #         plot_dir = None
+                save_diagnostics_dir = 'plots'
+                if save_diagnostics_dir != None:
+                    plot_dir = save_diagnostics_dir + "/" + date_dir + "/" + obj_string_short + "/"
+                else:
+                    plot_dir = None
 
-            #     save_wlpixelfiles = 1
-            #     l1_obj = WaveCalibrate(
-            #         l1_obj, cal_type, orderlet_names, save_wlpixelfiles, quicklook, min_order, max_order,
-            #         'KPF', output_exts,
-            #         rough_wls = master_wls, 
-            #         f0_key=f0, frep_key=fr,
-            #         output_dir = output_dir,
-            #         linelist_path=linelist,
-            #         save_diagnostics=plot_dir,
-            #         json_filename=json_filename
-            #     )
+                save_wlpixelfiles = 1
+                l1_obj = WaveCalibrate(
+                    l1_obj, cal_type, orderlet_names, save_wlpixelfiles, quicklook, min_order, max_order,
+                    'KPF', output_exts,
+                    rough_wls = master_wls, 
+                    f0_key=f0, frep_key=fr,
+                    output_dir = output_dir,
+                    linelist_path=linelist,
+                    save_diagnostics=plot_dir,
+                    json_filename=json_filename
+                )
 
-            # result = to_fits(l1_obj, output_filename)
+            result = to_fits(l1_obj, output_filename)
