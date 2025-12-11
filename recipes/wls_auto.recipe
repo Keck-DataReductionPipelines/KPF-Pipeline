@@ -34,6 +34,7 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
             cals = CalibrationLookup(dt_string, subset=['rough_wls'])
             # master_wls_file = cals['rough_wls'] # TRY A NEW ROUGH WLS
             full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
+            break
             # base_path = masters_dir + date_dir
             # obj_string = str_replace(L1_file, base_path + '/kpf_' + date_dir + '_master_arclamp_', '')
             # obj_string_short = str_replace(obj_string, '_L1.fits', '')
