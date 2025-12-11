@@ -84,11 +84,11 @@ class GetCalibrations:
         
         # Handle the case where subset is None (use all keys)
         if subset is None:
-            print("**************************************************** DEBUG: cache_key is: ", cache_key)
             subset = list(self.lookup_map.keys())
             cache_key = f"calibration_lookup_complete:{rounded_datetime}"
         else:
             cache_key = f"calibration_lookup_subset:{rounded_datetime}_{'_'.join(subset)}"
+        print("**************************************************** DEBUG: cache_key is: ", cache_key)
 
         try:
             cached_result = _get_cached_result(cache_key, verbose=self.verbose)
