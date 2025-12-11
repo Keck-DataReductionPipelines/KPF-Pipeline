@@ -33,3 +33,8 @@ class KPF_Primitive(BasePrimitive):
             raise(e)
         return None
     
+    def _pre_condition(self):
+        return True
+    
+    def _post_condition(self):
+        return True
