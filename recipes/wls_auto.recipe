@@ -15,6 +15,8 @@ fr = config.ARGUMENT.frep_key
 
 date_dir = context.date_dir
 
+query_subset = ['rough_wls']
+
 for cal_type in ['ThAr', 'LFC', 'Etalon']: 
     if cal_type == 'ThAr':
         search_string = config.ARGUMENT.thar_search_string
@@ -31,7 +33,7 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
         else:
             l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
             dt_string = GetHeaderValue(l1_obj, 'DATE-MID')
-            cals = CalibrationLookup(dt_string, subset=['rough_wls'])
+            cals = CalibrationLookup(dt_string, subset=query_subset)
             
             # master_wls_file = cals['rough_wls'] # TRY A NEW ROUGH WLS
             # full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
