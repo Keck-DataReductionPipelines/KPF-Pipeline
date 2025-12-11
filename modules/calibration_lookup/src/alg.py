@@ -89,6 +89,7 @@ class GetCalibrations:
         else:
             cache_key = f"calibration_lookup_subset:{rounded_datetime}_{'_'.join(subset)}"
 
+        print("DEBUG: cache_key is: ", cache_key)
         try:
             cached_result = _get_cached_result(cache_key, verbose=self.verbose)
             if not self.use_cache:
