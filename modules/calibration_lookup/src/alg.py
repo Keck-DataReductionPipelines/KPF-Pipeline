@@ -72,6 +72,7 @@ class GetCalibrations:
             self.log.debug(f"  Total init: {total_init_time*1000:.2f}ms")
 
     def lookup(self, subset=None):
+        self.verbose = True
         if self.verbose:
             start_time = time.time()
         
