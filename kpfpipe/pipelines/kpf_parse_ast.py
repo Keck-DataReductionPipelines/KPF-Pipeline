@@ -860,7 +860,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             return
         # let the value node put the value on the _load stack
         self.visit(node.value)
-        self.pipeline.logger.debug(f"keyword: {node.arg} {node.value}")
+        self.pipeline.logger.debug(f"keyword: {node.arg} {node.value} self._load is {self._load}")
         val = self._load.pop()
         self.pipeline.logger.debug(f"keyword: {val}")
         self._load.append((node.arg, val))
