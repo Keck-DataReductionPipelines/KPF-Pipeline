@@ -43,6 +43,7 @@ panel_arr:
           linewidth: 0.5
           color: purple
     paneldict:
+      title: Etalon Temperatures
       ylabel: Temperature (C)
       not_junk: true
       qc_not_fail: 'TELEPRL0'
@@ -59,6 +60,7 @@ panel_arr:
           linewidth: 0.5
           color: red
     paneldict:
+      title: Etalon Temperatures
       ylabel: "$\\Delta$Temperature (mK)"
       not_junk: true
       subtractmedian: true
