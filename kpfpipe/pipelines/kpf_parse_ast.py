@@ -857,6 +857,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         stored on the _load stack, replacing the keyword name item.
         """
         if self._reset_visited_states:
+            # Must visit the value node to reset its state (e.g., List nodes)
+            self.visit(node.value)
             return
         # let the value node put the value on the _load stack
         self.visit(node.value)
@@ -924,6 +926,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
+            setattr(node, 'kpf_cached_value', None)
             for elt in node.elts:
                 self.visit(elt)
             return
@@ -938,7 +941,11 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 else:
                     raise RecipeError("List: expected item to append to list, but none was found")
             self._load.append(l)
+            setattr(node, 'kpf_cached_value', l)
             setattr(node, "kpf_completed", True)
+        else:
+            # Already completed - push cached value to _load stack for caller
+            self._load.append(getattr(node, 'kpf_cached_value', []))
 
     def visit_Tuple(self, node):
         """
@@ -954,6 +961,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         self.pipeline.logger.debug(f"Tuple")
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
+            setattr(node, 'kpf_cached_value', None)
             for elt in node.elts:
                 self.visit(elt)
             return
@@ -965,12 +973,17 @@ class KpfPipelineNodeVisitor(NodeVisitor):
                 self.visit_List(node)
                 if not isinstance(self._load[len(self._load)-1], list):
                     raise RecipeError("visit_Tuple() expected a list on the _load stack, "
-                        f"but got {self._load[len(self._load)-s]}")
-                self._load.append(tuple(self._load.pop()))
+                        f"but got {self._load[len(self._load)-1]}")
+                t = tuple(self._load.pop())
+                self._load.append(t)
+                setattr(node, 'kpf_cached_value', t)
                 setattr(node, "kpf_completed", True)
             else:
                 raise RecipeError(
                     f"visit_Tuple: on recipe line {node.lineno}, ctx is unexpected type: {type(node.ctx)}")
+        else:
+            # Already completed - push cached value to _load stack for caller
+            self._load.append(getattr(node, 'kpf_cached_value', ()))
 
     def visit_NameConstant(self, node):
         """
