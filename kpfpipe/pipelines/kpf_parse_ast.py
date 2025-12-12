@@ -760,6 +760,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             setattr(node, 'kpf_completed', False)
             for arg in node.args:
                 self.visit(arg)
+            for kw in node.keywords:
+                self.visit(kw)
             return
         self.pipeline.logger.debug(f"Call: {node.func.id} on recipe line {node.lineno}; kpf_completed is {getattr(node, 'kpf_completed', False)}")
         if node.func.id == 'invoke_subrecipe':
@@ -857,6 +859,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         stored on the _load stack, replacing the keyword name item.
         """
         if self._reset_visited_states:
+            self.visit(node.value)
             return
         # let the value node put the value on the _load stack
         self.visit(node.value)

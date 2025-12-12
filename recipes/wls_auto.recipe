@@ -31,7 +31,8 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
         else:
             l1_obj = kpf1_from_fits(L1_file, data_type='KPF')
             dt_string = GetHeaderValue(l1_obj, 'DATE-MID')
-            cals = CalibrationLookup(dt_string)
+            cals = CalibrationLookup(dt_string, subset=['rough_wls'])
+            
             master_wls_file = cals['rough_wls'] # TRY A NEW ROUGH WLS
             full_master_wls = kpf1_from_fits(master_wls_file, data_type='KPF')
             base_path = masters_dir + date_dir
