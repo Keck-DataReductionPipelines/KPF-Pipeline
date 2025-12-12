@@ -169,8 +169,6 @@ class StrayLightAlg:
         """
         Method to estimate stray light -- returns zero (i.e. no stray light)
         """
-        print("zero")
-        
         mask = self._inter_order_mask(chip).astype('bool')
         stray_light = np.zeros_like(self.target_2D[f'{chip}_CCD'])
 
