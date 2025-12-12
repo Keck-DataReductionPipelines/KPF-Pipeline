@@ -69,6 +69,8 @@ class WaveCalibration:
         self.fit_iterations = configpull.get_config_value('fit_iterations',5)
         self.logger = logger
         self.etalon_mask_in = configpull.get_config_value('master_etalon_file',None)
+        # Counter for tracking Gaussian fit failures
+        self.gaussian_fit_failures = 0
  
     def run_wavelength_cal(
         self, calflux, rough_wls=None, our_wavelength_solution_for_order=None,
@@ -176,6 +178,7 @@ class WaveCalibration:
                         '{}/all_wls.png'.format(self.save_diagnostics_dir), 
                         dpi=250
                     )
+                    plt.close()
 
         if self.quicklook == True:
             #TODO
@@ -191,6 +194,14 @@ class WaveCalibration:
                 expected_peak_locs=peak_wavelengths_ang, peak_wavelengths_ang=peak_wavelengths_ang,
                 print_update=True, plt_path=self.save_diagnostics_dir ###CHECK THIS TODO
             )
+
+        # Log the total number of Gaussian fit failures
+        if self.gaussian_fit_failures > 0:
+            msg = f"Wavelength calibration: {self.gaussian_fit_failures} Gaussian fits failed to converge (maxfev exceeded)"
+            if self.logger:
+                self.logger.info(msg)
+            else:
+                print(msg)
 
         return poly_soln, wls_and_pixels, orderlet_dict    
 
@@ -1327,9 +1338,11 @@ class WaveCalibration:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:   
-                popt, _ = curve_fit(self.calculate_gaussian, x, y, p0=p0, maxfev=1000000)
+                popt, _ = curve_fit(self.calculate_gaussian, x, y, p0=p0, maxfev=5000)
             except RuntimeError:
-                print("Runtime Error")
+                self.gaussian_fit_failures += 1
+                if self.logger:
+                    self.logger.debug(f"Gaussian fit (calculate_gaussian) failed to converge at x={x[len(x)//2]:.2f}")
                 return p0
         return popt
 
@@ -1401,7 +1414,16 @@ class WaveCalibration:
         p0 = [y[i], x[i], 1.5, np.min(y)]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            popt, pcov = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=1000000)
+            try:
+                popt, pcov = curve_fit(self.integrate_gaussian, x, y, p0=p0, maxfev=5000)
+            except RuntimeError:
+                # Fit did not converge within maxfev iterations
+                self.gaussian_fit_failures += 1
+                if self.logger:
+                    self.logger.debug(f"Gaussian fit (integrate_gaussian) failed to converge at x={x[len(x)//2]:.2f}")
+                line_dict['quality'] = 'fit_failed'
+                line_dict['data'] = y
+                return (None, line_dict)
             pcov[np.isinf(pcov)] = 0 # convert inf to zero
             pcov[np.isnan(pcov)] = 0 # convert nan to zero
             line_dict['amp']   = popt[0] # optimized parameters
@@ -1536,13 +1558,14 @@ class WaveCalibration:
                 w = w[good]
                 res = res[good]
             
-            plt.plot(x, res, 'k.')
-            plt.axhline(0, color='b', lw=2)
-            plt.xlabel('Pixel')
-            plt.ylabel(r'Fit residuals [$\AA$]')
-            plt.tight_layout()
-            #plt.savefig('{}/polyfit.png'.format(plot_path))
-            plt.close()
+            if plot_path is not None:
+                plt.plot(x, res, 'k.')
+                plt.axhline(0, color='b', lw=2)
+                plt.xlabel('Pixel')
+                plt.ylabel(r'Fit residuals [$\AA$]')
+                plt.tight_layout()
+                plt.savefig('{}/polyfit.png'.format(plot_path))
+                plt.close()
             
             if plot_path is not None and self.cal_type =='ThAr':
                 approx_dispersion = (our_wavelength_solution_for_order[2000] - our_wavelength_solution_for_order[2100])/100
