@@ -1,9 +1,14 @@
 #!/bin/bash
 
-# CAUTION: The following setting prints out the docker-run command with passwords as arguments,
-# as a debugging tool.  Ideally, passwords should not be passed as environment variables, but
-# instead sourced from an environment file with user-only read permission inside the container.
+# If a processing date (yyyymmdd) is given on the command line, then the masters pipeline will be executed
+# inside a detached container.  This can be executed as a cronjob as well.  Here is an example line for the crontab:
+# 15 06 * * * source $HOME/.bash_profile; ${KPFCRONJOB_CODE}/docker-masters-run.sh 20251030 >& ${KPFCRONJOB_CODE}/docker-masters-run_20251030.out
+
+# CAUTION: The following setting, which is normally commented out, prints out the docker-run command with
+# passwords as arguments, as a debugging tool.  Ideally, passwords should not be passed as environment variables,
+# but instead sourced from an environment file with user-only read permission inside the container.
 # set -x
+
 
 ##############################################################
 # Required environment variables and examples:
@@ -20,6 +25,7 @@
 # KPFPIPE_TSDB_NAME=timeseriesopsdb
 # KPFPIPE_TSDB_USER=timeseriesopsuser
 # KPFPIPE_TSDB_USER=????
+# KPFCRONJOB_DOCKER_NAME_MASTERS=kpfmastersdrp
 
 # Optional environment variable and example:
 # KPFPIPE_PORT=6107
@@ -44,6 +50,7 @@ required_vars=(
 	KPFPIPE_TSDB_NAME
 	KPFPIPE_TSDB_USER
 	KPFPIPE_TSDB_PASS
+	KPFCRONJOB_DOCKER_NAME_MASTERS
 )
 missing_vars=()
 for var in "${required_vars[@]}"; do
@@ -58,6 +65,45 @@ if [ "${#missing_vars[@]}" -ne 0 ]; then
 	done
 	exit 1
 fi
+
+
+# Function to run KPF masters pipeline in detached docker container.
+run_kpf_masters_pipeline() {
+
+    overridescript="/code/KPF-Pipeline/cronjobs/kpf_masters_pipeline.sh"
+
+    if [ "${KPFCRONJOB_DOCKER_NAME_MASTERS:+x}" ]; then
+        echo "KPFCRONJOB_DOCKER_NAME_MASTERS is set and not empty."
+    else
+        echo "KPFCRONJOB_DOCKER_NAME_MASTERS is not set or is empty; quitting..."
+        exit 64
+    fi
+
+    docker rm $KPFCRONJOB_DOCKER_NAME_MASTERS
+
+    docker run -d --name ${KPFCRONJOB_DOCKER_NAME_MASTERS} \
+        --entrypoint $overridescript \
+        -v "${KPFCRONJOB_CODE}:/code/KPF-Pipeline" \
+        -v "${KPFCRONJOB_SBX}:/data/" \
+        -v "${KPFPIPE_L0_BASE_DIR:-/data/kpf/L0}:/data/L0:ro" \
+        -v "${KPFPIPE_MASTERS_BASE_DIR:-/data/kpf/masters}:/masters" \
+        --network=host \
+        -e PROCDATE=${PROCDATE} \
+        -e DBPORT=${KPFPIPE_DB_PORT:-} \
+        -e DBNAME=$KPFPIPE_DB_NAME \
+        -e DBUSER="${KPFPIPE_DB_USER:-}" \
+        -e DBPASS="${KPFPIPE_DB_PASS:-}" \
+        -e DBSERVER=127.0.0.1 \
+        -e TSDBPORT=$KPFPIPE_TSDB_PORT \
+        -e TSDBNAME=$KPFPIPE_TSDB_NAME \
+        -e TSDBUSER="${KPFPIPE_TSDB_USER:-}" \
+        -e TSDBPASS="${KPFPIPE_TSDB_PASS:-}" \
+        -e TSDBSERVER=127.0.0.1 \
+        -e PYTHONUNBUFFERED=1 \
+        -e PYTHONPATH=/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src \
+        $KPFCRONJOB_DOCKER_IMAGE
+
+}
 
 
 # Function to run docker with suppressed warnings
@@ -117,8 +163,15 @@ run_docker() {
 
 # Main execution.
 
-if [ -n "$KPFPIPE_PORT" ]; then
-    run_docker "$KPFPIPE_PORT" "Starting Docker container on port $KPFPIPE_PORT..."
+if [ -z "$1" ]; then
+    if [ -n "$KPFPIPE_PORT" ]; then
+        run_docker "$KPFPIPE_PORT" "Starting Docker container on port $KPFPIPE_PORT..."
+    else
+        run_docker "" "Starting Docker container (no port specified)..."
+    fi
 else
-    run_docker "" "Starting Docker container (no port specified)..."
+    procdate=$1
+    echo "Running the masters pipeline for $procdate"
+    export PROCDATE=$procdate
+    run_kpf_masters_pipeline
 fi

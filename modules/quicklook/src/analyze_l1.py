@@ -121,7 +121,7 @@ class AnalyzeL1:
     def __init__(self, L1, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
         self.L1 = copy.deepcopy(L1)
-        primary_header = HeaderParse(L1, 'PRIMARY')
+        primary_header = HeaderParse(self.L1, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
