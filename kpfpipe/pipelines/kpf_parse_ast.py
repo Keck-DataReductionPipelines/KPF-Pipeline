@@ -197,11 +197,17 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         """
         if self._reset_visited_states:
             setattr(node, 'kpf_completed', False)
+            setattr(node, 'kpf_cached_value', None)
             return
         if not getattr(node, 'kpf_completed', False):
-            self._load.append((node.name, node.asname))
+            val = (node.name, node.asname)
+            self._load.append(val)
             self.pipeline.logger.debug(f"alias: {node.name} as {node.asname}")
+            setattr(node, 'kpf_cached_value', val)
             setattr(node, 'kpf_completed', True)
+        else:
+            # Already completed - push cached value to _load stack for caller
+            self._load.append(getattr(node, 'kpf_cached_value', (None, None)))
 
     def visit_Name(self, node):
         """
@@ -607,25 +613,28 @@ class KpfPipelineNodeVisitor(NodeVisitor):
         either "True" or "False" on the _load stack as a Bool.  See also the comparison
         operators, e.g. visit_Eq(), visit_NotEq(), visit_Lt(), visit_LtE(), visit_Is(),
         visit_IsNot(), visit_In().
+        
+        Note: Comparisons are NOT cached because the result depends on runtime values
+        that may change between loop iterations. The comparison must always be 
+        re-evaluated with current operand values.
         """
         if self._reset_visited_states:
-            setattr(node, 'kpf_completed', False)
+            # Reset children but no state to reset for Compare itself
             for item in node.comparators:
                 self.visit(item)
             self.visit(node.left)
             for op in node.ops:
                 self.visit(op)
             return
-        if not getattr(node, 'kpf_completed', False):
-            self.pipeline.logger.debug(f"Compare")
-            loadQSizeBefore = len(self._load)
-            # comparators before left because they're going on a stack, so left can be pulled first
-            for item in node.comparators:
-                self.visit(item)
-            self.visit(node.left)
-            for op in node.ops:
-                self.visit(op)
-            setattr(node, 'kpf_completed', True)
+        # Always re-evaluate comparisons - they depend on current runtime values
+        self.pipeline.logger.debug(f"Compare")
+        loadQSizeBefore = len(self._load)
+        # comparators before left because they're going on a stack, so left can be pulled first
+        for item in node.comparators:
+            self.visit(item)
+        self.visit(node.left)
+        for op in node.ops:
+            self.visit(op)
 
     # Comparison operators
 
@@ -760,6 +769,8 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             setattr(node, 'kpf_completed', False)
             for arg in node.args:
                 self.visit(arg)
+            for kwnode in node.keywords:
+                self.visit(kwnode)
             return
         self.pipeline.logger.debug(f"Call: {node.func.id} on recipe line {node.lineno}; kpf_completed is {getattr(node, 'kpf_completed', False)}")
         if node.func.id == 'invoke_subrecipe':
@@ -1076,7 +1087,7 @@ class KpfPipelineNodeVisitor(NodeVisitor):
             self.visit(node.value)
             if self.awaiting_call_return:
                 return
-            setattr(node, 'kpf_complted', True)
+            setattr(node, 'kpf_completed', True)
 
     def visit_Attribute(self, node):
         """
