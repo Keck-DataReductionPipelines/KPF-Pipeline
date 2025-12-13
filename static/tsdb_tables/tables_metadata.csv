@@ -2,9 +2,11 @@ table_name,csv,label,file_level,extension,comment
 base,base.csv,Base Keywords,,,Base table
 l0,l0_primary.csv,L0 PRIMARY Header,L0,PRIMARY,L0 PRIMARY keywords
 l0_cal,l0_primary_cal.csv,L0 PRIMARY Header,L0,PRIMARY,L0 PRIMARY keywords related to cal sources
+l0_shutter,l0_primary_shutter.csv,L0 PRIMARY Header,L0,PRIMARY,L0 PRIMARY keywords related to shutters/source selection/subsystem selection
 2d,d2_primary.csv,2D PRIMARY Header,2D,PRIMARY,2D PRIMARY keywords
 2d_flux,d2_primary_flux.csv,2D PRIMARY Header,2D,PRIMARY,2D PRIMARY keywords related to flux
 l1,l1_primary.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords
+l1_flux,l1_primary_flux.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords related to flux
 l1_lines,l1_primary_lines.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords related to lines
 l1_medg,l1_primary_medg.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords of the form MEDWGKnn (Green; nn=order)
 l1_medr,l1_primary_medr.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords of the form MEDWRKnn (Red; nn=order)
@@ -13,14 +15,17 @@ l1_stdr,l1_primary_stdr.csv,L1 PRIMARY Header,L1,PRIMARY,L1 PRIMARY keywords of 
 l2,l2_primary.csv,L2 PRIMARY Header,L2,PRIMARY,L2 PRIMARY keywords
 l0t,l0_telemetry.csv,L0 TELEMETRY Extension,L0,TELEMETRY,L0 TELEMETRY table keywords
 l2rv,l2_rv.csv,L2 RV Header,L2,RV,L2 RV keywords
-l2ccf,l2_green_ccf.csv,L2 CCF Header,L2,GREEN_CCF,L2 RV table keywords of the form CCFBJDnn (nn=order)
+l2ccf,l2_green_ccf.csv,L2 CCF Header,L2,GREEN_CCF,L2 CCF mask keywords (nn=order)
 l2_bcv,l2_rv_bcv.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form BCRVnn (nn=order)
 l2_bjd,l2_rv_bjd.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form CCFBJDnn (nn=order)
 l2_ccfw,l2_rv_ccfw.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form CCFWnn (nn=order)
-l2_sci1,l2_rv_sci1.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RV1nn (nn=order)
-l2_sci2,l2_rv_sci2.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RV2nn (nn=order)
-l2_sci3,l2_rv_sci3.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RV3nn (nn=order)
-l2_sci,l2_rv_sci.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RVSnn and ERVSnn (nn=order)
-l2_cal,l2_rv_cal.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RVCnn and ERVCnn (nn=order)
-l2_sky,l2_rv_sky.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RVSYnn and ERVYnn (nn=order)
+l2_rv_sci1,l2_rv_sci1.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RV1nn (nn=order)
+l2_rv_sci2,l2_rv_sci2.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RV2nn (nn=order)
+l2_rv_sci3,l2_rv_sci3.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RV3nn (nn=order)
+l2_rv_sci,l2_rv_sci.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RVSnn (nn=order)
+l2_rv_cal,l2_rv_cal.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RVCnn (nn=order)
+l2_rv_sky,l2_rv_sky.csv,L2 RV Extension,L2,RV,L2 RV table keywords of the form RVYnn (nn=order)
+l2_erv_sci,l2_erv_sci.csv,L2 RV Extension,L2,RV,L2 ERV table keywords of the form ERVSnn (nn=order)
+l2_erv_cal,l2_erv_cal.csv,L2 RV Extension,L2,RV,L2 ERV table keywords of the form ERVCnn (nn=order)
+l2_erv_sky,l2_erv_sky.csv,L2 RV Extension,L2,RV,L2 ERV table keywords of the form ERVYnn (nn=order)
 metadata,,,,,Metadata table
