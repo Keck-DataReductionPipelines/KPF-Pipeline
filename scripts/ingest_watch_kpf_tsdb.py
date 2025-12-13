@@ -145,7 +145,7 @@ def periodic_scan(db_path,stop_event):
     20 sec after the script starts.
     """
     time.sleep(20)            
-    start_date = '20221201'
+    start_date = '20221109'
     end_date   = '20400101'
     sec_between_scans = 3600*24*2
     last_run_time = datetime.now() - timedelta(seconds=sec_between_scans)
