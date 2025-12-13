@@ -639,7 +639,7 @@ class QCDefinitions:
         self.drift_types[name19] = ['LFC', ]
         self.required_data_products[name19] = [] # no required data products
         self.fits_keywords[name19] = 'LFCSAT'
-        self.fits_comments[name19] = 'QC: LFC not saturated'
+        self.fits_comments[name19] = 'QC: LFC not saturated 452/548/652/747/852nm'
         self.db_columns[name19] = None
         self.fits_keyword_fail_value[name19] = 0
 
@@ -3340,7 +3340,7 @@ class QCL1(QC):
         LFC frames, marking satured frames as failing the test.
 
         Args:
-            SNR_limit - max allowable SNR at two wavelengths (548 Ang and 747 Ang)
+            SNR_limit - max allowable SNR at five wavelengths (452, 548, 652, 747, 852 nm)
         Returns:
             QC_pass - a boolean signifying that the QC passed or failed
         """
