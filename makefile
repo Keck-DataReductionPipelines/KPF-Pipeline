@@ -6,7 +6,7 @@ MASTERS_IMAGE ?= kpfmastersdrp
 
 ifndef KPFCRONJOB_DOCKER_IMAGE
     MASTERS_IMAGE_WITH_TAG ?= $(MASTERS_IMAGE):$(TAG)
-    $(info KPFCRONJOB_DOCKER_IMAGE is not defined)
+    $(info KPFCRONJOB_DOCKER_IMAGE is not defined, so defaulting to kpfmastersdrp:latest)
 else
     MASTERS_IMAGE_WITH_TAG = $(KPFCRONJOB_DOCKER_IMAGE)
     $(info KPFCRONJOB_DOCKER_IMAGE is defined, and is set to $(KPFCRONJOB_DOCKER_IMAGE))

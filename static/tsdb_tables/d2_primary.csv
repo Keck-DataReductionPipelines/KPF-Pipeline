@@ -81,10 +81,10 @@ SUNALT|float|Altitude of Sun; negative = below horizon|deg
 AGEBIAS|float|BIASFILE age|days
 AGEDARK|float|DARKFILE age|days
 AGEFLAT|float|FLATFILE age|days
-XDSPDYG1|float|Green cross-dispersion offset compared to master reference|pixels
-XDSPDYR1|float|Red cross-dispersion offset compared to master reference|pixels
-XDSPDYG2|float|Green cross-dispersion offset compared to reference in era|pixels
-XDSPDYR2|float|Red cross-dispersion offset compared to reference in era|pixels
+XDSPDYG1|float|Green cross-dispersion offset compared to master ref|pixels
+XDSPDYR1|float|Red cross-dispersion offset compared to master ref|pixels
+XDSPDYG2|float|Green cross-dispersion offset compared to ref in era|pixels
+XDSPDYR2|float|Red cross-dispersion offset compared to ref in era|pixels
 XDSPSYG1|float|Uncertainty in XDSPDYG1|pixels
 XDSPSYR1|float|Uncertainty in XDSPDYR1|pixels
 XDSPSYG2|float|Uncertainty in XDSPDYG2|pixels
