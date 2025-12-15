@@ -133,8 +133,9 @@ class SpectralExtractionAlg:
         var_ext_name = f'{chip}_VAR'
 
         # hard-code 2D variance fix w/ quick readnoise addition
-        # readnoise = 0.5*(self.target_2D.header['PRIMARY'][f'RN{chip}1'] + self.target_2D.header['PRIMARY'][f'RN{chip}2'])
-        # self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD']) + readnoise
+        #readnoise = 0.5*(self.target_2D.header['PRIMARY'][f'RN{chip}1'] + self.target_2D.header['PRIMARY'][f'RN{chip}2'])
+        readnoise = 0.0
+        self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD']) + readnoise
 
         if var_ext_name not in self.target_2D.extensions:
             self.log.warning(f"Variance extension {var_ext_name} not found, setting variance equal to photon noise")
