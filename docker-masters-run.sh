@@ -2,7 +2,7 @@
 
 # If a processing date (yyyymmdd) is given on the command line, then the masters pipeline will be executed
 # inside a detached container.  This can be executed as a cronjob as well.  Here is an example line for the crontab:
-# 15 06 * * * source $HOME/.bash_profile; ${KPFCRONJOB_CODE}/docker-masters-run.sh 20251030 >& ${KPFCRONJOB_CODE}/docker-masters-run_20251030.out
+# 15 06 * * * source $HOME/.bash_profile; ${KPFPIPE_MASTERS_CODE}/docker-masters-run.sh 20251030 >& ${KPFPIPE_MASTERS_CODE}/docker-masters-run_20251030.out
 
 # CAUTION: The following setting, which is normally commented out, prints out the docker-run command with
 # passwords as arguments, as a debugging tool.  Ideally, passwords should not be passed as environment variables,
@@ -12,11 +12,11 @@
 
 ##############################################################
 # Required environment variables and examples:
-# KPFCRONJOB_CODE=/data/user/rlaher/git/KPF-Pipeline
-# KPFCRONJOB_DOCKER_IMAGE=russkpfmasters:latest
-# KPFPIPE_MASTERS_BASE_DIR=/data/kpf/masters
-# KPFPIPE_L0_BASE_DIR=/data/kpf/L0
-# KPFCRONJOB_SBX=/data/user/rlaher/sbx
+# KPFPIPE_MASTERS_DOCKER_IMAGE=kpfmasters:latest                 (Docker image name that appears in docker image ls command)
+# KPFPIPE_MASTERS_DOCKER_CONTAINER=kpfmastersdrp                 (Docker container name that appears in docker ps command)
+# KPFPIPE_MASTERS_CODE=/data/user/rlaher/git/KPF-Pipeline        (Outside-container path)
+# KPFPIPE_PRODUCTION_DATA=/data/kpf                              (Outside-container path)
+# KPFPIPE_MASTERS_SBX=/data/user/rlaher/sbx                      (Outside-container path)
 # KPFPIPE_DB_PORT=6125
 # KPFPIPE_DB_NAME=kpfopsdb
 # KPFPIPE_DB_USER=kpfporuss
@@ -25,7 +25,6 @@
 # KPFPIPE_TSDB_NAME=timeseriesopsdb
 # KPFPIPE_TSDB_USER=timeseriesopsuser
 # KPFPIPE_TSDB_USER=????
-# KPFCRONJOB_DOCKER_NAME_MASTERS=kpfmastersdrp
 
 # Optional environment variable and example:
 # KPFPIPE_PORT=6107
@@ -39,15 +38,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_ENV_FILE="${KPFPIPE_ENV_FILE:-${SCRIPT_DIR}/.env}"
 
 load_env_file() {
-	if [ ! -f "$1" ]; then
-		return
-	fi
-	if ! command -v python3 >/dev/null 2>&1; then
-		echo "Warning: python3 not available; skipping env file $1" >&2
-		return
-	fi
-	local exports
-	exports="$(python3 - "$1" <<'PY'
+    if [ ! -f "$1" ]; then
+        return
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "Warning: python3 not available; skipping env file $1" >&2
+        return
+    fi
+    local exports
+    exports="$(python3 - "$1" <<'PY'
 import pathlib, shlex, sys
 path = pathlib.Path(sys.argv[1])
 try:
@@ -70,42 +69,41 @@ for raw in text.splitlines():
     print(f"export {key}={shlex.quote(value)}")
 PY
 )"
-	if [ -n "$exports" ]; then
-		eval "$exports"
-	fi
+    if [ -n "$exports" ]; then
+        eval "$exports"
+    fi
 }
 
 load_env_file "$ROOT_ENV_FILE"
 
 # Verify required environment variables before proceeding
 required_vars=(
-	KPFCRONJOB_CODE
-	KPFCRONJOB_DOCKER_IMAGE
-	KPFPIPE_MASTERS_BASE_DIR
-	KPFPIPE_L0_BASE_DIR
-	KPFCRONJOB_SBX
-	KPFPIPE_DB_PORT
-	KPFPIPE_DB_NAME
-	KPFPIPE_DB_USER
-	KPFPIPE_DB_PASS
-	KPFPIPE_TSDB_PORT
-	KPFPIPE_TSDB_NAME
-	KPFPIPE_TSDB_USER
-	KPFPIPE_TSDB_PASS
-	KPFCRONJOB_DOCKER_NAME_MASTERS
+    KPFPIPE_MASTERS_DOCKER_IMAGE
+    KPFPIPE_MASTERS_DOCKER_CONTAINER
+    KPFPIPE_MASTERS_CODE
+    KPFPIPE_PRODUCTION_DATA
+    KPFPIPE_MASTERS_SBX
+    KPFPIPE_DB_PORT
+    KPFPIPE_DB_NAME
+    KPFPIPE_DB_USER
+    KPFPIPE_DB_PASS
+    KPFPIPE_TSDB_PORT
+    KPFPIPE_TSDB_NAME
+    KPFPIPE_TSDB_USER
+    KPFPIPE_TSDB_PASS
 )
 missing_vars=()
 for var in "${required_vars[@]}"; do
-	if [ -z "${!var}" ]; then
-		missing_vars+=("$var")
-	fi
+    if [ -z "${!var}" ]; then
+        missing_vars+=("$var")
+    fi
 done
 if [ "${#missing_vars[@]}" -ne 0 ]; then
-	echo "Error: Missing required environment variables:" >&2
-	for mv in "${missing_vars[@]}"; do
-		printf '  - %s\n' "$mv" >&2
-	done
-	exit 1
+    echo "Error: Missing required environment variables:" >&2
+    for mv in "${missing_vars[@]}"; do
+        printf '  - %s\n' "$mv" >&2
+    done
+    exit 1
 fi
 
 
@@ -114,21 +112,23 @@ run_kpf_masters_pipeline() {
 
     overridescript="/code/KPF-Pipeline/cronjobs/kpf_masters_pipeline.sh"
 
-    if [ "${KPFCRONJOB_DOCKER_NAME_MASTERS:+x}" ]; then
-        echo "KPFCRONJOB_DOCKER_NAME_MASTERS is set and not empty."
+    if [ "${KPFPIPE_MASTERS_DOCKER_CONTAINER:+x}" ]; then
+        echo "KPFPIPE_MASTERS_DOCKER_CONTAINER is set and not empty."
     else
-        echo "KPFCRONJOB_DOCKER_NAME_MASTERS is not set or is empty; quitting..."
+        echo "KPFPIPE_MASTERS_DOCKER_CONTAINER is not set or is empty; quitting..."
         exit 64
     fi
 
-    docker rm $KPFCRONJOB_DOCKER_NAME_MASTERS
+    docker rm $KPFPIPE_MASTERS_DOCKER_CONTAINER
 
-    docker run -d --name ${KPFCRONJOB_DOCKER_NAME_MASTERS} \
+    docker run -d --name ${KPFPIPE_MASTERS_DOCKER_CONTAINER} \
         --entrypoint $overridescript \
-        -v "${KPFCRONJOB_CODE}:/code/KPF-Pipeline" \
-        -v "${KPFCRONJOB_SBX}:/data/" \
-        -v "${KPFPIPE_L0_BASE_DIR:-/data/kpf/L0}:/data/L0:ro" \
-        -v "${KPFPIPE_MASTERS_BASE_DIR:-/data/kpf/masters}:/masters" \
+        -v "${KPFPIPE_MASTERS_CODE}:/code/KPF-Pipeline" \
+        -v "${KPFPIPE_PRODUCTION_DATA}/L0:/data/L0:ro" \
+        -v "${KPFPIPE_PRODUCTION_DATA}/reference:/reference:ro" \
+        -v "${KPFPIPE_PRODUCTION_DATA}/reference_fits:/reference_fits:ro" \
+        -v "${KPFPIPE_PRODUCTION_DATA}/masters:/masters" \
+        -v "${KPFPIPE_MASTERS_SBX}:/data" \
         --network=host \
         -e PROCDATE=${PROCDATE} \
         -e DBPORT=${KPFPIPE_DB_PORT:-} \
@@ -143,7 +143,7 @@ run_kpf_masters_pipeline() {
         -e TSDBSERVER=127.0.0.1 \
         -e PYTHONUNBUFFERED=1 \
         -e PYTHONPATH=/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src \
-        $KPFCRONJOB_DOCKER_IMAGE
+        $KPFPIPE_MASTERS_DOCKER_IMAGE
 
 }
 
@@ -159,10 +159,12 @@ run_docker() {
         # Run with port mapping
         docker run -it \
             -p "$port:$port" \
-            -v "${KPFCRONJOB_CODE}:/code/KPF-Pipeline" \
-            -v "${KPFCRONJOB_SBX}:/data/" \
-            -v "${KPFPIPE_L0_BASE_DIR:-/data/kpf/L0}:/data/L0:ro" \
-            -v "${KPFPIPE_MASTERS_BASE_DIR:-/data/kpf/masters}:/masters" \
+            -v "${KPFPIPE_MASTERS_CODE}:/code/KPF-Pipeline" \
+            -v "${KPFPIPE_PRODUCTION_DATA}/L0:/data/L0:ro" \
+            -v "${KPFPIPE_PRODUCTION_DATA}/reference:/reference:ro" \
+            -v "${KPFPIPE_PRODUCTION_DATA}/reference_fits:/reference_fits:ro" \
+            -v "${KPFPIPE_PRODUCTION_DATA}/masters:/masters" \
+            -v "${KPFPIPE_MASTERS_SBX}:/data" \
             -e KPFPIPE_PORT="$KPFPIPE_PORT" \
             --network=host \
             -e DBPORT=${KPFPIPE_DB_PORT:-} \
@@ -177,14 +179,16 @@ run_docker() {
             -e TSDBSERVER=127.0.0.1 \
             -e PYTHONUNBUFFERED=1 \
             -e PYTHONPATH=/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src \
-            $KPFCRONJOB_DOCKER_IMAGE bash 2>/dev/null
+            $KPFPIPE_MASTERS_DOCKER_IMAGE bash 2>/dev/null
     else
         # Run without port mapping
         docker run -it \
-            -v "${KPFCRONJOB_CODE}:/code/KPF-Pipeline" \
-            -v "${KPFCRONJOB_SBX}:/data/" \
-            -v "${KPFPIPE_L0_BASE_DIR:-/data/kpf/L0}:/data/L0:ro" \
-            -v "${KPFPIPE_MASTERS_BASE_DIR:-/data/kpf/masters}:/masters" \
+            -v "${KPFPIPE_MASTERS_CODE}:/code/KPF-Pipeline" \
+            -v "${KPFPIPE_PRODUCTION_DATA}/L0:/data/L0:ro" \
+            -v "${KPFPIPE_PRODUCTION_DATA}/reference:/reference:ro" \
+            -v "${KPFPIPE_PRODUCTION_DATA}/reference_fits:/reference_fits:ro" \
+            -v "${KPFPIPE_PRODUCTION_DATA}/masters:/masters" \
+            -v "${KPFPIPE_MASTERS_SBX}:/data" \
             --network=host \
             -e DBPORT=${KPFPIPE_DB_PORT:-} \
             -e DBNAME=$KPFPIPE_DB_NAME \
@@ -198,7 +202,7 @@ run_docker() {
             -e TSDBSERVER=127.0.0.1 \
             -e PYTHONUNBUFFERED=1 \
             -e PYTHONPATH=/code/KPF-Pipeline:/code/KPF-Pipeline/polly/src \
-            $KPFCRONJOB_DOCKER_IMAGE bash 2>/dev/null
+            $KPFPIPE_MASTERS_DOCKER_IMAGE bash 2>/dev/null
     fi
 }
 
