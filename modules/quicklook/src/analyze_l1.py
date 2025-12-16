@@ -121,7 +121,7 @@ class AnalyzeL1:
     def __init__(self, L1, logger=None):
         self.logger = logger if logger is not None else DummyLogger()
         self.L1 = copy.deepcopy(L1)
-        primary_header = HeaderParse(L1, 'PRIMARY')
+        primary_header = HeaderParse(self.L1, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
@@ -342,7 +342,7 @@ class AnalyzeL1:
                     lines[o, oo] = len(peaks)
                 else:
                     lines[o, oo] = 0
-    
+        
         # Determine which orders are 'good' (i.e., above min_lines)
         lines_above_threshold = lines > min_lines
     
@@ -358,7 +358,7 @@ class AnalyzeL1:
             SCI_l = None
         else:
             SCI_l = min(last_indices[0], last_indices[1], last_indices[2])
-        SCI_fl = [SCI_f, SCI_l]
+        SCI_fl = [int(SCI_f), int(SCI_l)]
         # CAL Flux is the 4th column
         if first_indices[3] == None:
             CAL_f = None
@@ -368,7 +368,7 @@ class AnalyzeL1:
             CAL_l = None
         else:
             CAL_l = last_indices[3]
-        CAL_fl = [CAL_f, CAL_l]
+        CAL_fl = [int(CAL_f), int(CAL_l)]
         # SKY Flux is the 5th column
         if first_indices[4] == None:
             SKY_f = None
@@ -378,7 +378,7 @@ class AnalyzeL1:
             SKY_l = None
         else:
             SKY_l = last_indices[4]
-        SKY_fl = [SKY_f, SKY_l]
+        SKY_fl = [int(SKY_f), int(SKY_l)]
     
         return (SCI_fl, CAL_fl, SKY_fl)
 
@@ -400,7 +400,9 @@ class AnalyzeL1:
                                        must have at least one peak in
     
         Returns:
-            SCI_fl, CAL_fl, SKY_fl where, e.g., SCI_fl = [first_good_order, last_good_order]
+            SCI1_sat_lines, SCI2_sat_lines, SCI3_sat_lines, CAL_sat_lines, SKY_sat_lines
+                 where, e.g., SCI1_sat_lines is the number of saturated lines 
+                 in SCI1
         """
         
         chip = chip.lower()
@@ -433,6 +435,28 @@ class AnalyzeL1:
         SKY_sat_lines  = int(np.sum(lines[:, 4]))                   
     
         return (SCI1_sat_lines, SCI2_sat_lines, SCI3_sat_lines, CAL_sat_lines, SKY_sat_lines)
+
+    def count_nans(self, chip='green'):
+        """
+        This returns the number of NaN values in ach.
+    
+        Args:
+            chip (str): CCD name ('green' or 'red')
+
+        Returns:
+            SCI1_nans, SCI2_nans, SCI3_nans, CAL_nans, SKY_nans 
+                where, e.g., SCI1_nans = number of NaN values in all orders of SCI1
+        """
+        L1 = self.L1
+        CHIP = chip.upper()
+        fields = ["SCI_FLUX1","SCI_FLUX2","SCI_FLUX3","SKY_FLUX","CAL_FLUX"]
+        
+        SCI1_nans, SCI2_nans, SCI3_nans, SKY_nans, CAL_nans = [
+            int((np.isnan(L1[f"{CHIP}_{f}"]).sum(axis=1)).sum()) if hasattr(L1, f"{CHIP}_{f}") else 0
+            for f in fields
+        ]
+
+        return (SCI1_nans, SCI2_nans, SCI3_nans, CAL_nans, SKY_nans)
 
 
     def measure_L1_snr(self, snr_percentile=95, counts_percentile=95):

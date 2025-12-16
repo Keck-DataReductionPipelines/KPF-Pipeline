@@ -68,7 +68,7 @@ panel_arr:
           linewidth: 0.5
           color: indianred
     paneldict:
-      ylabel: LFC ERV (m/s)
+      ylabel: 'LRC RV\nUncertainty (m/s)'
       only_object: 
         - autocal-lfc-all-morn
         - autocal-lfc-all-eve
@@ -80,7 +80,7 @@ panel_arr:
         - lfc_all
         - LFC
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.30
 
   # 2) thar_erv_panel
@@ -150,13 +150,13 @@ panel_arr:
           linewidth: 0.5
           color: indianred
     paneldict:
-      ylabel: ThAr ERV (m/s)
+      ylabel: 'ThAr RV\nUncertainty (m/s)'
       only_object: 
         - autocal-thar-all-night
         - autocal-thar-all-eve
         - autocal-thar-all-morn
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.30
 
   # 3) etalon_erv_panel
@@ -226,8 +226,8 @@ panel_arr:
           linewidth: 0.5
           color: indianred
     paneldict:
-      title: LFC, ThAr, & Etalon ERVs
-      ylabel: Etalon ERV (m/s)
+      title: Uncertainties in LFC, ThAr, & Etalon RVs
+      ylabel: 'Etalon RV\nUncertainty (m/s)'
       only_object: 
         - autocal-etalon-all-night
         - autocal-etalon-all-eve
@@ -236,5 +236,5 @@ panel_arr:
         - Etalon_cal
         - etalon-sequence
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.30

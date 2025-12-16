@@ -544,6 +544,88 @@ class TSDB:
         return permissions
 
 
+    @require_role(['admin', 'operations'])
+    def delete_by_datecode(self, datecode: str) -> dict:
+        """
+        Delete all rows for a specific YYYYMMDD datecode across all TSDB tables.
+        Performs all preflight checks before opening the main write connection.
+        Returns a dict with rows deleted per table and TOTAL.
+        """
+        import re
+        if not isinstance(datecode, str) or not re.fullmatch(r"\d{8}", datecode):
+            raise ValueError("datecode must be 'YYYYMMDD'")
+    
+        base_tbl = f"{self.prefix}base"
+        all_tables = [t for t in self.tables.keys() if t != f"{self.prefix}metadata"]
+        child_tables = [t for t in all_tables if t != base_tbl]
+    
+        datecode_col = '"datecode"'
+        obsid_col    = '"ObsID"'
+    
+        # ---------- Preflight checks ----------
+        # 1) Base table must exist
+        if not self.check_if_table_exists(tablename=base_tbl):
+            self.logger.warning(f"Base table '{base_tbl}' does not exist.")
+            return {"TOTAL": 0}
+    
+        # 2) Which child tables exist?
+        existing_child_tables = [t for t in child_tables if self.check_if_table_exists(tablename=t)]
+    
+        # 3) Does this datecode exist in base? (scalar query with its own short connection)
+        def _scalar_query(sql: str, params: tuple):
+            self._open_connection()
+            try:
+                rows = self._execute_sql_command(sql, params=params, fetch=True)
+                return rows[0][0] if rows else None
+            finally:
+                self._close_connection()
+    
+        pre_days_sql = f'SELECT COUNT(DISTINCT {datecode_col}) FROM {base_tbl} WHERE {datecode_col} = ?'
+        days_removed = _scalar_query(pre_days_sql, (datecode,)) or 0
+    
+        if days_removed == 0:
+            self.logger.info(f"No rows found for datecode {datecode}; nothing to delete.")
+            return {"TOTAL": 0}
+    
+        # ---------- Deletions ----------
+        self._open_connection()
+        try:
+            deleted_counts = {}
+            total_deleted = 0
+    
+            # Delete from children first using ObsIDs from base on that date
+            subquery = f'SELECT {obsid_col} FROM {base_tbl} WHERE {datecode_col} = ?'
+            for tbl in existing_child_tables:
+                delete_sql = f'DELETE FROM {tbl} WHERE {obsid_col} IN ({subquery})'
+                self._execute_sql_command(delete_sql, params=(datecode,))
+                cnt = self.cursor.rowcount or 0
+                deleted_counts[tbl] = cnt
+                total_deleted += cnt
+    
+            # Delete from base last
+            delete_base_sql = f'DELETE FROM {base_tbl} WHERE {datecode_col} = ?'
+            self._execute_sql_command(delete_base_sql, params=(datecode,))
+            base_cnt = self.cursor.rowcount or 0
+            deleted_counts[base_tbl] = base_cnt
+            total_deleted += base_cnt
+    
+            self.conn.commit()
+    
+            # Logs
+            self.logger.info(f"Removed rows for {days_removed} day(s) with datecode {datecode}.")
+            self.logger.info(
+                "Deleted rows by table: " +
+                ", ".join(f"{t}={c}" for t, c in deleted_counts.items()) +
+                f" (TOTAL={total_deleted})"
+            )
+    
+            deleted_counts["TOTAL"] = total_deleted
+            return deleted_counts
+    
+        finally:
+            self._close_connection()
+
+        
     @require_role(['admin'])
     def drop_tables(self, tables='all'):
         """
@@ -2241,7 +2323,6 @@ class TSDB:
     
         Returns:
             The resulting dataframe.
-
         """
 
         if isinstance(only_object, str):
@@ -2474,7 +2555,7 @@ class TSDB:
         """
         
         if df is None:
-            df = self.dataframe_from_db(
+            df_int = self.dataframe_from_db(
                 columns=columns,
                 only_object=only_object,
                 object_like=object_like,
@@ -2489,20 +2570,22 @@ class TSDB:
                 end_date=end_date,
                 verbose=verbose
             )
+        else:
+            df_int = copy.deepcopy(df)
 
         # Convert ObsID to clickable HTML links
-        if 'ObsID' in df.columns:
-            df['ObsID'] = df['ObsID'].apply(
+        if 'ObsID' in df_int.columns:
+            df_int['ObsID'] = df_int['ObsID'].apply(
                 lambda obsid: f'<a href="{url_stub}{obsid}" target="_blank">{obsid}</a>'
             )
 
         # Coerce boolean-like columns to pandas nullable boolean so they print as True/False/<NA>
         for col in getattr(self, "bool_columns", []):
-            if col in df.columns:
-                df[col] = df[col].map(lambda v: None if pd.isna(v) else bool(v)).astype("boolean")
+            if col in df_int.columns:
+                df_int[col] = df_int[col].map(lambda v: None if pd.isna(v) else bool(v)).astype("boolean")
 
         # Generate HTML table with scrolling and sortable columns
-        html = df.to_html(escape=False, index=False, classes='sortable')
+        html = df_int.to_html(escape=False, index=False, classes='sortable')
 
         # Wrap in styled div and JavaScript for sorting
         styled_html = f'''

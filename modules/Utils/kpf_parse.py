@@ -25,10 +25,8 @@ class KPFParse:
         self.datecode = ''
         if logger:
             self.logger = logger
-            #self.logger.debug('KPFParse class constructor')
         else:
             self.logger = None
-            #print('---->KPFParse class constructor')
 
 class HeaderParse:
     """
@@ -185,6 +183,7 @@ class HeaderParse:
                 dt2 = datetime.strptime(self.header['GRDATE-E'], datetime_format) # shutter-close time
                 deltat = dt1-dt2
                 green_read_time = deltat.total_seconds()
+                self.green_read_time = green_read_time
             except:
                 pass
             # Red CCD Read Time
@@ -193,6 +192,7 @@ class HeaderParse:
                 dt2 = datetime.strptime(self.header['RDDATE-E'], datetime_format) # shutter-close time
                 deltat = dt1-dt2
                 red_read_time = deltat.total_seconds()
+                self.red_read_time = red_read_time
             except:
                 pass
             # ACF file for Green CCD

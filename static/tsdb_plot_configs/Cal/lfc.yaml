@@ -1,6 +1,30 @@
 description: LFC Diagnostics
 plot_type: time_series_multipanel
 panel_arr:
+
+  - panelvars:
+      - col: LFCMODE
+        plot_type: state
+        plot_attr:
+          label: "LFC Operation Mode (LFCMODE)"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "LFC Operation Mode\n(LFCMODE)"
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
+      legend_frac_size: 0.25
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
+
   - panelvars:
       - col: kpfcal.IRFLUX
         plot_type: scatter
@@ -12,7 +36,7 @@ panel_arr:
     paneldict:
       ylabel: Intensity (counts)
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.25
       only_object: 
         - autocal-lfc-all-morn
@@ -36,7 +60,7 @@ panel_arr:
     paneldict:
       ylabel: Intensity (counts)
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.25
       only_object: 
         - autocal-lfc-all-morn
@@ -61,7 +85,31 @@ panel_arr:
       ylabel: Current (A)
       title: LFC Diagnostics
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
+      legend_frac_size: 0.25
+      only_object: 
+        - autocal-lfc-all-morn
+        - autocal-lfc-all-eve
+        - autocal-lfc-all-night
+        - cal-LFC
+        - cal-LFC-morn
+        - cal-LFC-eve
+        - LFC_all
+        - lfc_all
+        - LFC
+
+  - panelvars:
+      - col: AMPON
+        plot_type: scatter
+        unit: sec
+        plot_attr:
+          label: "Duration of Amplifier On (AMPON)"
+          marker: .
+          linewidth: 0.5
+    paneldict:
+      ylabel: "Duration of Amplifier On\n(AMPON)"
+      not_junk: true
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.25
       only_object: 
         - autocal-lfc-all-morn

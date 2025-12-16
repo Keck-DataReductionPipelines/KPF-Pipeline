@@ -1,5 +1,5 @@
 from modules.Utils.string_proc import str_replace
-from modules.spectral_extraction.src.order_rectification import OrderRectification
+from modules.spectral_extraction_legacy.src.order_rectification import OrderRectification
 
 data_type = config.ARGUMENT.data_type
 overwrite = config.ARGUMENT.overwrite

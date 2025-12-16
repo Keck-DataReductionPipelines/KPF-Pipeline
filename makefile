@@ -2,6 +2,15 @@
 APP_IMAGE ?= kpf-drp
 CI_IMAGE  ?= kpf-drp-ci
 TAG       ?= latest
+MASTERS_IMAGE ?= kpfmastersdrp
+
+ifndef KPFCRONJOB_DOCKER_IMAGE
+    MASTERS_IMAGE_WITH_TAG ?= $(MASTERS_IMAGE):$(TAG)
+    $(info KPFCRONJOB_DOCKER_IMAGE is not defined, so defaulting to kpfmastersdrp:latest)
+else
+    MASTERS_IMAGE_WITH_TAG = $(KPFCRONJOB_DOCKER_IMAGE)
+    $(info KPFCRONJOB_DOCKER_IMAGE is defined, and is set to $(KPFCRONJOB_DOCKER_IMAGE))
+endif
 
 # Cache-busting when requirements.txt changes (Dockerfile must consume REQS_SHA)
 REQS_SHA  := $(shell sha256sum requirements.txt | cut -d ' ' -f1)
@@ -42,7 +51,7 @@ notebook:
 	jupyter notebook --port ${KPFPIPE_PORT} --allow-root --ip=0.0.0.0 ""
 
 docker:
-	@echo "Building Docker image $(APP_IMAGE):$(TAG)…"
+	@echo "Building Docker image for KPF DRP $(APP_IMAGE):$(TAG)…"
 	@DOCKER_BUILDKIT=1 docker build \
 		--cache-from $(APP_IMAGE):$(TAG) \
 		--build-arg REQS_SHA=$(REQS_SHA) \
@@ -51,6 +60,16 @@ docker:
 	$(if $(KPFPIPE_PORT),, @echo "Starting Docker container (no port specified)..." && ./docker-run.sh)
 	$(if $(KPFPIPE_PORT), @echo "Starting Docker container on port ${KPFPIPE_PORT}..." && KPFPIPE_PORT=${KPFPIPE_PORT} ./docker-run.sh)
 
+docker_masters:
+	@echo "Building Docker image for KPF masters pipeline $(MASTERS_IMAGE_WITH_TAG)…"
+	@DOCKER_BUILDKIT=1 docker build \
+		--no-cache \
+		--build-arg REQS_SHA=$(REQS_SHA) \
+		--tag $(MASTERS_IMAGE_WITH_TAG) . --quiet
+	$(if $(KPFPIPE_DATA),,$(error Must set KPFPIPE_DATA))
+	$(if $(KPFPIPE_PORT),, @echo "Starting Docker container (no port specified)..." && ./docker-masters-run.sh)
+	$(if $(KPFPIPE_PORT), @echo "Starting Docker container on port ${KPFPIPE_PORT}..." && KPFPIPE_PORT=${KPFPIPE_PORT} ./docker-masters-run.sh)
+
 # Build the CI image and run inside it (interactive by default; Jenkins overrides RUN/tty)
 test_env:
 	DOCKER_BUILDKIT=1 docker build --cache-from $(CI_IMAGE):$(TAG) \
@@ -58,6 +77,7 @@ test_env:
 		--tag $(CI_IMAGE):$(TAG) .
 	docker run $(DOCKER_RUN_TTY) --rm \
 		--network=host \
+			   \
 		-v "$${PWD}:/code/KPF-Pipeline" \
 		-v "$${CI_DATA_DIR}:/data" \
 		-v "$${CI_DATA_DIR}/masters:/masters" \

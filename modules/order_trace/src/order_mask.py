@@ -82,6 +82,7 @@ import pandas as pd
 import numpy as np
 import os
 import numbers
+import copy
 
 # Pipeline dependencies
 from kpfpipe.primitives.level0 import KPF0_Primitive
@@ -128,6 +129,7 @@ class OrderMask(KPF0_Primitive):
         # action.args[1] is for level 0 flat with order trace result extension
 
         input_flux = action.args[0]         # kpf0 instance for L0 data
+        self.input_flux = input_flux
         self.output_level0 = action.args[1] # kpf0 output containing order mask
         o_names = self.get_args_value('orderlet_names', action.args, args_keys)
         if o_names is not None and o_names:
@@ -272,7 +274,7 @@ class OrderMask(KPF0_Primitive):
                     isinstance(order_mask_result['order_mask_result'], np.ndarray))
 
         if self.output_level0 is None:
-            self.output_level0 = KPF0()
+            self.output_level0 = copy.deepcopy(self.input_flux)
 
         self.output_level0[self.data_ext] = order_mask_result['order_mask_result']
         self.output_level0.header['PRIMARY']['IMTYPE'] = 'OrderMask'

@@ -21,7 +21,7 @@ panel_arr:
     paneldict:
       ylabel: "Green CCD\nRead Noise [e-]\n(std(overscan))"
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.2
 
   - panelvars:
@@ -44,13 +44,12 @@ panel_arr:
     paneldict:
       ylabel: "Red CCD\nRead Noise [e-]\n(std(overscan))"
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.2
 
   - panelvars:
       - col: RNNGGR1
         plot_type: plot
-        unit: e-
         plot_attr:
           label: GREEN_AMP1 Non-Gaussian Metric
           marker: .
@@ -58,7 +57,6 @@ panel_arr:
           color: darkgreen
       - col: RNNGGR2
         plot_type: plot
-        unit: e-
         plot_attr:
           label: GREEN_AMP2 Non-Gaussian Metric
           marker: .
@@ -67,29 +65,27 @@ panel_arr:
     paneldict:
       ylabel: "Non-Gaussian\nNoise Metric (Green)\n0.8*std/mad = f*(s^2-1)\n=1 for Gaussian noise"
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.2
 
   - panelvars:
       - col: RNNGRD1
         plot_type: plot
-        unit: e-
         plot_attr:
           label: RED_AMP1 Non-Gaussian Metric
           marker: .
           linewidth: 0.5
-          color: darkgreen
+          color: darkred
       - col: RNNGRD2
         plot_type: plot
-        unit: e-
         plot_attr:
           label: RED_AMP2 Non-Gaussian Metric
           marker: .
           linewidth: 0.5
-          color: forestgreen
+          color: firebrick
     paneldict:
       ylabel: "Non-Gaussian\nNoise Metric (Red)\n0.8*std/mad = f*(s^2-1)\n=1 for Gaussian noise"
       not_junk: true
-      qc_not_fail: 'GOODREAD'
+      qc_not_fail: 'GOODREAD, FLXSTATS, DATAPRL0, KWRDPRL0, TIMCHKL0'
       legend_frac_size: 0.2
       title: CCD Read Noise Statistics

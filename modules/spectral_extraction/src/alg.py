@@ -15,8 +15,10 @@ from scipy.interpolate import LSQUnivariateSpline
 
 from kpfpipe.config.pipeline_config import ConfigClass
 from kpfpipe.logger import start_logger
-from modules.Utils.config_parser import ConfigHandler
 from kpfpipe.models.level1 import KPF1
+from modules.Utils.config_parser import ConfigHandler
+from modules.Utils.kpf_parse import HeaderParse
+
 
 
 class SpectralExtractionAlg:
@@ -26,7 +28,7 @@ class SpectralExtractionAlg:
         master_flat_2D (KPF0): A KPF 2D master flat
         order_trace_green (str): path to csv with order trace for GREEN ccd
         order_trace_red (str): path to csv with order trace for RED ccd
-        start_order (tuple): index to start order trace, see caldates/start_order.csv
+        start_order (tuple): index to start order trace, see caldates/start_order.csv [DEPRECATED]
         config (configparser.ConfigParser): Config context
         logger (logging.Logger): Instance of logging.Logger
     """
@@ -51,8 +53,21 @@ class SpectralExtractionAlg:
         else:
             self.log = logger
             
+        # required data inputs
+        self.target_2D = target_2D
+        self.master_flat_2D = master_flat_2D
+        self.order_trace = {}
+        self.order_trace['GREEN_CCD'] = pd.read_csv(order_trace_green, index_col=0)
+        self.order_trace['RED_CCD'] = pd.read_csv(order_trace_red, index_col=0)
+        self.tracefile_green = order_trace_green
+        self.tracefile_red = order_trace_red
+
+        # parse config
+        self.header = HeaderParse(self.target_2D, 'PRIMARY')
         cfg_params = ConfigHandler(self.config, 'PARAM')
-        self.extraction_method = cfg_params.get_config_value('extraction_method')
+
+        self.extraction_method = self._set_method(cfg_params)
+        
         self.extraction_sigma_clip = float(cfg_params.get_config_value('extraction_sigma_clip'))
         self.extraction_max_iter = int(cfg_params.get_config_value('extraction_max_iter'))
 
@@ -60,16 +75,9 @@ class SpectralExtractionAlg:
         self.profile_sigma_clip = float(cfg_params.get_config_value('profile_sigma_clip'))
         self.profile_num_knots = int(cfg_params.get_config_value('profile_num_knots'))
 
-        # required data inputs
-        self.target_2D = target_2D
-        self.master_flat_2D = master_flat_2D
-        self.order_trace = {}
-        self.order_trace['GREEN_CCD'] = pd.read_csv(order_trace_green, index_col=0)
-        self.order_trace['RED_CCD'] = pd.read_csv(order_trace_red, index_col=0)
-        self.start_order = {}
-        self.start_order['GREEN_CCD'] = start_order_green
-        self.start_order['RED_CCD'] = start_order_red
-        self.order_trace = self._fix_order_trace_indexing()
+        #self.start_order = {}
+        #self.start_order['GREEN_CCD'] = start_order_green
+        #self.start_order['RED_CCD'] = start_order_red
 
         # By default the KPF DRP subracts stray light from the data image
         # Only supply background_image if you suspect some additional contamination
@@ -99,25 +107,95 @@ class SpectralExtractionAlg:
             self.bad_pixel_mask['RED_CCD'] = bad_pixel_mask_red
         else:
             self.bad_pixel_mask['RED_CCD'] = np.ones_like(self.target_2D['RED_CCD'], dtype='bool')
+        
+        # hardcoded fix for order trace
+        # GJG needs to be moved to calibrations lookup
+        self.order_trace = self._fix_order_trace_indexing()
 
         #for chip in ['GREEN', 'RED']:
         #    self.bad_pixel_mask[f'{chip}_CCD'] &= self._make_bad_pixel_mask(chip)
 
         # initialize L1 object
         self.target_l1 = KPF1.from_l0(self.target_2D)
+        self.add_keywords()        
 
-        
-    def _check_for_variance_frame(self, chip):
+
+    def add_keywords(self):
+        header = self.target_l1.header['PRIMARY']
+        header['TRACFGRN'] = self.tracefile_green
+        header['TRACFRED'] = self.tracefile_red
+        header['EXTMETHK'] = self.extraction_method['SKY']
+        header['EXTMETHS'] = self.extraction_method['SCI']
+        header['EXTMETHC'] = self.extraction_method['CAL']
+
+
+    def _check_for_variance_frame(self, chip, do_patch=True):
         var_ext_name = f'{chip}_VAR'
+
+        # hard-code 2D variance fix w/ quick readnoise addition
+        #readnoise = 0.5*(self.target_2D.header['PRIMARY'][f'RN{chip}1'] + self.target_2D.header['PRIMARY'][f'RN{chip}2'])
+        readnoise = 0.0
+        self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD']) + readnoise
+
         if var_ext_name not in self.target_2D.extensions:
             self.log.warning(f"Variance extension {var_ext_name} not found, setting variance equal to photon noise")
-            self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+            if do_patch:
+                self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+            else:
+                raise ValueError(f"Variance extension {var_ext_name} not found")
 
         elif np.shape(self.target_2D[var_ext_name]) != np.shape(self.target_2D[f'{chip}_CCD']):
             self.log.warning(f"Variance extension {var_ext_name} has mismatched dimensions {np.shape(self.target_2D[var_ext_name])} vs {np.shape(self.target_2D[f'{chip}_CCD'])}, setting variance equal to photon noise")
-            self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+            if do_patch:
+                self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD'])
+            else:
+                raise ValueError(f"Variance extension {var_ext_name} not found")
 
     
+
+
+    def _fix_order_trace_indexing(self):
+        datecode = self.target_2D.header['PRIMARY']['DATE-OBS'].replace('-', '')
+        try:
+            datecode = int(datecode)
+        except ValueError:
+            print(self.target_2D.l1filename)
+            print(self.target_2D.l0filename)
+            print(self.target_2D.header['PRIMARY']['DATE-OBS'])
+            print(datecode)
+        
+        for chip in ['GREEN', 'RED']:
+            ntrace = len(self.order_trace[f'{chip}_CCD'])
+
+            # start is the dataframe index of the first sky fiber trace
+            # this can be negative if the trace does not fall on the chip
+            if (int(datecode) < 20240203) and (chip == 'GREEN'):
+                start = -1
+            elif (int(datecode) < 20240203) and (chip == 'RED'):
+                start = -1
+            elif (int(datecode) >= 20240203) and (int(datecode) < 20251123) and (chip == 'GREEN'):
+                start = 0
+            elif (int(datecode) >= 20240203) and (int(datecode) < 20251123) and (chip == 'RED'):
+                start = 1
+            elif (int(datecode) >= 20251123) and (chip == 'GREEN'):
+                start = 0
+            elif (int(datecode) >= 20251123) and (chip == 'RED'):
+                start = 0
+                    
+            fibers = 'SKY SCI1 SCI2 SCI3 CAL'.split()
+            trace_fiber = [None]*ntrace
+            for i in range(ntrace):
+                trace_fiber[i] = fibers[(i-start)%5]
+            
+            trace_index = np.array(self.order_trace[f'{chip}_CCD'].index, dtype=int)
+            trace_order = np.array(np.ceil((trace_index - start + 1) / 5), dtype=int)
+        
+            self.order_trace[f'{chip}_CCD']['FIBER'] = trace_fiber.copy()
+            self.order_trace[f'{chip}_CCD']['ORDER'] = trace_order.copy()
+            
+        return self.order_trace
+
+
     def _make_bad_pixel_mask(self, chip, sigma_cut=5.0):
         # data, variance, mask
         D = self.target_2D[f'{chip}_CCD']
@@ -130,56 +208,63 @@ class SpectralExtractionAlg:
     
         # check for variance outliers
         V0 = np.abs(V-D)
-        M &= np.abs(V0 - np.median(V0))/mad_std(V0, ignore_nan=True) < sigma_cut
+        M &= np.abs(V0 - np.nanmedian(V0))/mad_std(V0, ignore_nan=True) < sigma_cut
 
         return M
 
+
+    def _get_orderlet_ext_from_fiber_name(self, chip, fiber):
+        flux_dict = {'SKY': f'{chip}_SKY_FLUX',
+                    'SCI1': f'{chip}_SCI_FLUX1',
+                    'SCI2': f'{chip}_SCI_FLUX2',
+                    'SCI3': f'{chip}_SCI_FLUX3',
+                    'CAL': f'{chip}_CAL_FLUX'
+                    }
+
+        var_dict = {'SKY': f'{chip}_SKY_VAR',
+                    'SCI1': f'{chip}_SCI_VAR1',
+                    'SCI2': f'{chip}_SCI_VAR2',
+                    'SCI3': f'{chip}_SCI_VAR3',
+                    'CAL': f'{chip}_CAL_VAR'
+                }
+
+        return flux_dict[fiber], var_dict[fiber]
+ 
+
+    def _set_method(self, cfg_params):
+        self.extraction_method = {}
+
+        force_box = cfg_params.get_config_value('force_box_extraction')
         
-    def _fix_order_trace_indexing(self):
-        for chip in ['GREEN', 'RED']:
-            if self.start_order[f'{chip}_CCD'] > 0:
-                self.order_trace[f'{chip}_CCD'] = self.order_trace[f'{chip}_CCD'].drop(index=0).reset_index(drop=True)
-            elif self.start_order[f'{chip}_CCD'] < 0:
-                n = np.abs(self.start_order[f'{chip}_CCD'])
-                df = self.order_trace[f'{chip}_CCD']
-                nan_rows = pd.DataFrame(np.nan, index=range(n), columns=df.columns)
-                self.order_trace[f'{chip}_CCD'] = pd.concat([nan_rows, df], ignore_index=True)
-            elif self.start_order[f'{chip}_CCD'] == 0:
-                pass
+        if len(force_box) == 0:
+            force_box = ['none']
 
-        return self.order_trace
+        imtype = self.header.get_name(use_star_names=False).lower()
 
+        for fiber in ['SKY', 'SCI', 'CAL']:
+            if np.isin(imtype, force_box):
+                self.extraction_method[fiber] = 'box'
 
-    def _get_orderlet_ext_from_trace_index(self, chip, trace_index, start_order=None):
-        if trace_index % 5 == 0:
-            drp_f_ext = f'{chip}_SKY_FLUX'
-            drp_v_ext = f'{chip}_SKY_VAR'
-        elif trace_index % 5 == 1:
-            drp_f_ext = f'{chip}_SCI_FLUX1'
-            drp_v_ext = f'{chip}_SCI_VAR1'
-        elif trace_index % 5 == 2:
-            drp_f_ext = f'{chip}_SCI_FLUX2'
-            drp_v_ext = f'{chip}_SCI_VAR2'
-        elif trace_index % 5 == 3:
-            drp_f_ext = f'{chip}_SCI_FLUX3'
-            drp_v_ext = f'{chip}_SCI_VAR3'
-        elif trace_index % 5 == 4:
-            drp_f_ext = f'{chip}_CAL_FLUX'
-            drp_v_ext = f'{chip}_CAL_VAR'
+            else:
+                self.extraction_method[fiber] = cfg_params.get_config_value(f'extraction_method_{fiber.lower()}')
 
-        return drp_f_ext, drp_v_ext
+        return self.extraction_method
 
 
-    def _orderlet_box(self, data_image, order_trace, trace_index, return_box_coords=False, verbose=False, do_plot=False):
+    def _orderlet_box(self, data_image, trace, order, fiber, return_box_coords=False, verbose=False, do_plot=False):
         nrow, ncol = data_image.shape
     
         # polynomial order trace
-        coeffs = np.array([float(order_trace[f'Coeff{i}'][trace_index]) for i in range(4)])
-    
+        _trace = trace[(trace.FIBER == fiber) & (trace.ORDER == order)].squeeze()
+
+        assert _trace.ndim == 1, f"unexpected trace dimensions: {_trace.ndim}"
+
+        coeffs = np.array(_trace[[f'Coeff{i}' for i in range(4)]], dtype=float)
+
         # trace in pixel coorrdinates on detector
         trace_center = poly.polyval(np.arange(ncol), coeffs)
-        trace_top    = trace_center + order_trace.TopEdge[trace_index]
-        trace_bottom = trace_center - order_trace.BottomEdge[trace_index]
+        trace_top    = trace_center + _trace.TopEdge
+        trace_bottom = trace_center - _trace.BottomEdge
 
         # track where trace goes off detector
         off_detector = (trace_top > nrow-1) | (trace_bottom < 0)
@@ -307,7 +392,8 @@ class SpectralExtractionAlg:
             P[i] = 1.0*spline(x)
 
         P = np.maximum(P,0)
-        P /= np.sum(P*W,axis=0)
+        P *= (W > 0)
+        P /= np.nansum(P*W,axis=0)
     
         return P
 
@@ -348,8 +434,8 @@ class SpectralExtractionAlg:
 
         # 1D box extraction of spectrum and variance
         self.log.debug(f"Box extraction: D shape: "+str(D.shape)+ " S shape: "+str(S.shape)+ " V shape: "+str(V.shape)+ " M shape: "+str(M.shape)+ " W shape: "+str(W.shape))
-        f = np.sum(M*(D-S)*W,axis=0)
-        v = np.sum(M*V*W,axis=0)
+        f = np.nansum(M*(D-S)*W,axis=0)
+        v = np.nansum(M*V*W,axis=0)
                         
         # return four values to match optimal extraction
         return f, v, None, None
@@ -392,6 +478,9 @@ class SpectralExtractionAlg:
             profile_sigma_clip (float): sigma clipping used to identify outliers during profile modeling 
             extraction_sigma_clip (float): sigma clipping used to identify cosmic rays and pixel defects
         """
+        # get data image shape
+        nrow, ncol = np.shape(D)
+
         # check for pre-computed spatial profile
         if P is not None:
             static_profile = True
@@ -415,9 +504,6 @@ class SpectralExtractionAlg:
             profile_sigma_clip = self.profile_sigma_clip
         if extraction_sigma_clip is None:
             extraction_sigma_clip = self.extraction_sigma_clip
-
-        # get data image shape
-        nrow, ncol = np.shape(D)
         
         # sanitize inputs
         D = np.asarray(D)
@@ -443,10 +529,6 @@ class SpectralExtractionAlg:
         # optimal extraction loop
         loop = 0
         while loop < max_iter:
-            # spectrum
-            f = np.sum(M*P*(D-S)*(W/V),axis=0)/np.sum(M*P**2*(W/V),axis=0)
-            v = np.sum(M*P*W,axis=0)/np.sum(M*P**2*(W/V),axis=0)
-        
             # profile
             if not static_profile:
                 P = self.spatial_profile(D, 
@@ -460,23 +542,27 @@ class SpectralExtractionAlg:
             
             # variance
             V = V0 + np.abs(f*P + S)/Q
-        
+            
             # residuals
             R = (D - f*P - S)**2/V
-            
+
             # mask cosmic rays
-            bad_pixel_count = np.sum(M==0)
-            worst_pixel_row = np.argmax(R*M, axis=0)
-    
+            bad_pixel_count = np.nansum(M==0)
+            try:
+                worst_pixel_row = np.nanargmax(R*M, axis=0)
+            except ValueError:
+                # Define some detaults for the output when a column is all zeros
+                # This occurs when R is all NaNs because V is zero.
+                if np.all(np.isnan(f)):
+                    f = np.zeros_like(f)
+                if np.all(np.isnan(v)):
+                    v = np.zeros_like(v)
+                # Add logging warning statement:
+                self.log.warning("All pixels masked are NaN; returning zeros for extracted spectrum and variance.")
+                return f, v, P, M  
+
             if verbose:
-                print(f"loop {loop} | {bad_pixel_count - np.sum(W==0)} pixels flagged")
-        
-            # plot spectrum
-            if do_plot:
-                plt.figure(figsize=(20,4))
-                plt.plot(f)
-                plt.plot(v)
-                plt.show()
+                print(f"loop {loop} | {bad_pixel_count - np.nansum(W==0)} pixels flagged")
         
             for col in range(ncol):
                 row = worst_pixel_row[col]
@@ -485,24 +571,32 @@ class SpectralExtractionAlg:
                     M[row,col] = 0
     
                     if do_plot:
-                        plt.figure(figsize=(4,3))
-                        plt.step(np.arange(nrow), R[:,col], color='k', where='mid')
-                        plt.plot(row, R[row,col], 'rx')
-                        plt.title(f"Column {col}", fontsize=14)
+                        fig, ax = plt.subplots(1,2, figsize=(8,3))
+                        ax[0].step(np.arange(nrow), R[:,col], color='k', where='mid')
+                        ax[0].plot(row, R[row,col], 'rx')
+                        ax[0].set_title(f"Column {col}", fontsize=14)
+                        ax[1].step(np.arange(nrow), D[:,col], color='k', where='mid')
+                        ax[1].set_title(f"Column {col}", fontsize=14)
                         plt.show()
         
-            if np.sum(M==0) == bad_pixel_count:
+            # 1D spectrum and variance
+            f = np.nansum(M*P*(D-S)*(W/V),axis=0)/np.nansum(M*P**2*(W/V),axis=0)
+            v = np.nansum(M*P*W,axis=0)/np.nansum(M*P**2*(W/V),axis=0)
+
+            # stopping condition
+            if np.nansum(M==0) == bad_pixel_count:
                 break
         
             loop += 1
-        
+
         return f, v, P, M
 
     
     def extract_orderlet(self, 
                          chip, 
-                         trace_index, 
-                         method=None,
+                         order,
+                         fiber, 
+                         method='auto',
                          max_iter=None,
                          profile_filter_size=None,
                          profile_num_knots=None,
@@ -513,9 +607,10 @@ class SpectralExtractionAlg:
         Extract 1D spectrum for a single orderlet
 
         Args:
-            method (str): extraction method, can be 'box' or 'optimal'
+            method (str): extraction method, can be 'auto', 'box', or 'optimal'
             chip (str): 'GREEN' or 'RED' ccd
-            trace_index (int): integer identifying ordelet in order_trace
+            order (int): integer identifying order (GREEN: 0-34, RED:0-31)
+            fiber (str): can be 'SKY', 'SCI1', 'SCI2', 'SCI3', 'CAL'
 
         Returns:
             f (ndarray): extracted 1D spectrum
@@ -524,8 +619,8 @@ class SpectralExtractionAlg:
             M (ndarray): 2D boolean bad pixel mask (if 'optimal' extraction is used)
         """
         # populate kwargs
-        if method is None:
-            method = self.extraction_method
+        if method == 'auto':
+            method = self.extraction_method[fiber[:3]]
         if max_iter is None:
             max_iter = self.extraction_max_iter
         if profile_filter_size is None:
@@ -540,7 +635,8 @@ class SpectralExtractionAlg:
         # data image
         D, W, ymin, ymax = self._orderlet_box(self.target_2D[f'{chip}_CCD'].data,
                                               self.order_trace[f'{chip}_CCD'],
-                                              trace_index,
+                                              order,
+                                              fiber,
                                               return_box_coords=True
                                              )
 
@@ -591,7 +687,8 @@ class SpectralExtractionAlg:
     
 
     def extract_ccd(self, 
-                    chip, 
+                    chip,
+                    fibers=None,
                     method=None,
                     max_iter=None,
                     profile_filter_size=None,
@@ -610,8 +707,10 @@ class SpectralExtractionAlg:
             l1_out: KPF L1 object populated with extracted 1D spectra and varaiance
         """
         # populate kwargs
+        if fibers is None:
+            fibers = 'SKY SCI1 SCI2 SCI3 CAL'.split()
         if method is None:
-            method = self.extraction_method
+            method == 'auto'
         if max_iter is None:
             max_iter = self.extraction_max_iter
         if profile_filter_size is None:
@@ -625,38 +724,42 @@ class SpectralExtractionAlg:
 
         # set up container for arrays
         nrow, ncol = self.target_2D[f'{chip}_CCD'].shape
-        ntrace = len(self.order_trace[f'{chip}_CCD'])
-        norder = ntrace // 5
+        
+        if chip == 'GREEN':
+            norder = 35
+        if chip == 'RED':
+            norder = 32
 
         l1_arrays = {}
-        for trace_index in range(5):
-            f_ext, v_ext = self._get_orderlet_ext_from_trace_index(chip, trace_index)
+        for fiber in fibers:
+            f_ext, v_ext = self._get_orderlet_ext_from_fiber_name(chip, fiber)
 
             l1_arrays[f_ext] = np.zeros((norder,ncol))
             l1_arrays[v_ext] = np.zeros((norder,ncol))
 
         # extract spectra
-        for trace_index in range(ntrace):                      
-            if any(np.isnan(self.order_trace[f'{chip}_CCD'].iloc[trace_index])):
-                f = np.nan*np.ones(ncol)
-                v = np.nan*np.ones(ncol)
+        for order in range(1,norder+1):
+            for fiber in fibers:
+                try:
+                    f, v, _, _ = self.extract_orderlet(chip, 
+                                                       order,
+                                                       fiber, 
+                                                       method=method,
+                                                       max_iter=max_iter,
+                                                       profile_filter_size=profile_filter_size,
+                                                       profile_num_knots=profile_num_knots,
+                                                       profile_sigma_clip=profile_sigma_clip,
+                                                       extraction_sigma_clip=extraction_sigma_clip
+                                                      )
+                except AssertionError:
+                    self.log.warning(f"Skipping {chip} CCD, ORDER {order}, {fiber} FIBER")
+                    f = np.nan*np.ones(ncol)
+                    v = np.nan*np.ones(ncol)
 
-            else:
-                f, v, _, _ = self.extract_orderlet(chip, 
-                                                   trace_index, 
-                                                   method=method,
-                                                   max_iter=max_iter,
-                                                   profile_filter_size=profile_filter_size,
-                                                   profile_num_knots=profile_num_knots,
-                                                   profile_sigma_clip=profile_sigma_clip,
-                                                   extraction_sigma_clip=extraction_sigma_clip
-                                                  )
+                f_ext, v_ext = self._get_orderlet_ext_from_fiber_name(chip, fiber)
 
-            f_ext, v_ext = self._get_orderlet_ext_from_trace_index(chip, trace_index)
-            order_index = trace_index // 5
-
-            l1_arrays[f_ext][order_index] = f.copy()
-            l1_arrays[v_ext][order_index] = v.copy()
+                l1_arrays[f_ext][order-1] = f.copy()
+                l1_arrays[v_ext][order-1] = v.copy()
 
         # build KPF L1 object
         l1_out = self.target_l1

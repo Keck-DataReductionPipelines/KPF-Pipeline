@@ -80,8 +80,17 @@ class KPFPipeMastersLevel1(KPFPipeCronBase):
         """
         super().define_docker_cmd()
 
+        # Get memory optimization flags
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+        from docker_memory_utils import get_docker_memory_flags
+        
+        memory_flags = get_docker_memory_flags()
+        
         self.dockerruncmd = (
             f"docker run -d --name {self.containername} "
+            f"{memory_flags} "
             f"-v {self.kpfdrp_dir}:/code/KPF-Pipeline "
             f"-v {self.reference_fits_dir}:/reference_fits "
             f"-v {self.logs_base}:/logs -v {self.data_workspace}:/data "

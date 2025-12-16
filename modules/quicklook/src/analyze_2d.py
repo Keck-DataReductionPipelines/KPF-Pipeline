@@ -73,7 +73,7 @@ class Analyze2D:
             	self.df_telemetry = None
         except:
             self.df_telemetry = None
-        primary_header = HeaderParse(D2, 'PRIMARY')
+        primary_header = HeaderParse(self.D2, 'PRIMARY')
         self.header = primary_header.header
         self.name = primary_header.get_name()
         self.ObsID = primary_header.get_obsid()
@@ -89,11 +89,11 @@ class Analyze2D:
         self.red_coll_current_a       = 0
         self.red_ech_current_a        = 0
         try:
-            self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(D2['GREEN_CCD'].data),[99,90,50,10])
+            self.green_percentile_99, self.green_percentile_90, self.green_percentile_50, self.green_percentile_10 = np.nanpercentile(np.array(self.D2['GREEN_CCD'].data),[99,90,50,10])
         except:
             self.logger.error('Problem computing SNR for Green 2D image')
         try:
-            self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(D2['RED_CCD'].data),[99,90,50,10])
+            self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(self.D2['RED_CCD'].data),[99,90,50,10])
         except:
             self.logger.error('Problem computing SNR for Red 2D image')
 
@@ -576,7 +576,7 @@ class Analyze2D:
         - Any NaN values in the CCD arrays are ignored when computing percentiles.
         - The returned arrays have the same length as `percentiles`.
         """        
-        default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+        cals_default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
         D2 = self.D2
         if isinstance(chips, str):
             chips = [chips]
@@ -585,7 +585,7 @@ class Analyze2D:
         source = header.get_name()
         datemid = header.header['DATE-MID']
         dt = datetime.strptime(datemid, '%Y-%m-%dT%H:%M:%S.%f').strftime('%Y-%m-%dT%H:%M:%S.%f')
-        GC = GetCalibrations(dt, default_config_path)
+        GC = GetCalibrations(dt, cals_default_config_path)
         cal_dict = GC.lookup(subset=['ordermask'])
         ordermask_file = cal_dict['ordermask']
         mask = KPF0.from_fits(ordermask_file)
@@ -690,7 +690,8 @@ class Analyze2D:
             if bias_read:
                 for extension in ['GREEN_CCD', 'RED_CCD']:
                     if extension in D2_master_bias.extensions:
-                        self.D2[extension] -= D2_master_bias[extension]
+                        if extension == chip.upper() + '_CCD':
+                            self.D2[extension] -= D2_master_bias[extension]
             else:
                 subtract_master_bias = False
         
@@ -716,7 +717,8 @@ class Analyze2D:
             if dark_read:
                 for extension in ['GREEN_CCD', 'RED_CCD']:
                     if extension in D2_master_dark.extensions:
-                        self.D2[extension] -= D2_master_dark[extension] * float(self.exptime)
+                        if extension == chip.upper() + '_CCD':
+                            self.D2[extension] -= D2_master_dark[extension] * float(self.exptime)
             else:
                 subtract_master_dark = False
         
@@ -728,19 +730,29 @@ class Analyze2D:
                 CHIP = 'GREEN'
                 chip_title = 'Green'
                 if overplot_dark_current:
+                    self.measure_2D_dark_current(chip='green')
                     reg = self.green_dark_current_regions
                     if self.green_coll_pressure_torr != None:
                         coll_pressure_torr = self.green_coll_pressure_torr
+                    else:
+                        coll_pressure_torr = None
                     if self.green_ech_pressure_torr != None:
                         ech_pressure_torr = self.green_ech_pressure_torr
+                    else:
+                        ech_pressure_torr = None
                     if self.green_coll_current_a != None:
                         coll_current_a = self.green_coll_current_a
+                    else:
+                        coll_current_a = None
                     if self.green_ech_current_a != None:
                         ech_current_a = self.green_ech_current_a
+                    else:
+                        ech_current_a = None
             if chip == 'red':
                 CHIP = 'RED'
                 chip_title = 'Red'
                 if overplot_dark_current:
+                    self.measure_2D_dark_current(chip='red')
                     reg = self.red_dark_current_regions
                     if self.red_coll_pressure_torr != None:
                         coll_pressure_torr = self.red_coll_pressure_torr
@@ -1143,37 +1155,41 @@ class Analyze2D:
             (e.g., in a Jupyter Notebook).
         """
         chip = chip.lower()
-        
+
+        # Look up order trace file
+        if order_trace_master_file == 'auto':
+            header = HeaderParse(self.D2, 'PRIMARY')
+            datemid = header.header['DATE-MID']
+            dt = datetime.strptime(datemid, '%Y-%m-%dT%H:%M:%S.%f').strftime('%Y-%m-%dT%H:%M:%S.%f')
+            cals_default_config_path = '/code/KPF-Pipeline/modules/calibration_lookup/configs/default.cfg'
+            GC = GetCalibrations(dt, cals_default_config_path)
+            cal_dict = GC.lookup(subset=['ordertrace'])
+            order_trace_files = cal_dict['ordertrace']
+            if chip == 'green':
+                order_trace_master_file = next((s for s in order_trace_files if 'green' in s.lower()), None)
+            if chip == 'red':
+                order_trace_master_file = next((s for s in order_trace_files if 'red' in s.lower()), None)
+ 
         # Set parameters based on the chip selected
         obs_date = Time(self.header['DATE-MID'])
         service_mission_date1 = Time('2024-02-03', format='iso', scale='utc')
+        CHIP = chip.upper()
         if chip == 'green' or chip == 'red':
             if chip == 'green':
-                CHIP = 'GREEN'
                 chip_title = 'Green'
-                if order_trace_master_file == 'auto':
-                    if obs_date < service_mission_date1:
-                        order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_GREEN_CCD.csv'
-                    else:
-                        order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_GREEN_CCD.csv'
                 if start_x_arr == 'default':
                     start_x_arr = [ 0, 3600,  0, 3600]
                 if start_y_arr == 'default':
                     start_y_arr = [1200, 1200,  545,  545]
             if chip == 'red':
-                CHIP = 'RED'
                 chip_title = 'Red'
-                if order_trace_master_file == 'auto':
-                    if obs_date < service_mission_date1:
-                        order_trace_master_file = '/data/reference_fits/kpf_20230920_master_flat_RED_CCD.csv'
-                    else:
-                        order_trace_master_file = '/data/reference_fits/kpf_20240206_master_flat_RED_CCD.csv'
                 if start_x_arr == 'default':
                     start_x_arr = [ 0, 3600,  0, 3600]
                 if start_y_arr == 'default':
                     start_y_arr = [1538, 1538,  545,  550]
             image = np.array(self.D2[CHIP + '_CCD'].data)
-            order_trace_master = pd.read_csv(order_trace_master_file)
+            if order_trace_master_file is not None:
+                order_trace_master = pd.read_csv(order_trace_master_file)
         else:
             self.logger.info('chip not supplied.  Exiting plot_2D_image')
             return
@@ -1200,19 +1216,20 @@ class Analyze2D:
                 axs[i, j].set_ylim(start_y, start_y+height)
                 
                 # Overplot order trace
-                for o in range(1,np.shape(order_trace_master)[0]-2,1):#[50]:#range(np.shape(order_trace)[0])
-                    x_grid_master = np.linspace(order_trace_master.iloc[o]['X1'], 
-                                                order_trace_master.iloc[o]['X2'], 
-                                                int(order_trace_master.iloc[o]['X2']-order_trace_master.iloc[o]['X1'])+1)
-                    x_grid_master = x_grid_master[x_grid_master >= start_x]
-                    x_grid_master = x_grid_master[x_grid_master <= start_x+width]
-                    y_grid_master = order_trace_master.iloc[o]['Coeff0'] + \
-                                    order_trace_master.iloc[o]['Coeff1'] * x_grid_master + \
-                                    order_trace_master.iloc[o]['Coeff2'] * x_grid_master**2 + \
-                                    order_trace_master.iloc[o]['Coeff3'] * x_grid_master**3         
-                    axs[i, j].plot(x_grid_master, y_grid_master,                                          color='red',   linewidth=1.2, linestyle='--')
-                    axs[i, j].plot(x_grid_master, y_grid_master-order_trace_master.iloc[o]['BottomEdge'], color='white', linewidth=1.2, linestyle='--', alpha=1)
-                    axs[i, j].plot(x_grid_master, y_grid_master+order_trace_master.iloc[o]['TopEdge'],    color='white', linewidth=1.2, linestyle='--', alpha=1)                
+                if order_trace_master_file is not None:
+                    for o in range(1,np.shape(order_trace_master)[0]-2,1):#[50]:#range(np.shape(order_trace)[0])
+                        x_grid_master = np.linspace(order_trace_master.iloc[o]['X1'], 
+                                                    order_trace_master.iloc[o]['X2'], 
+                                                    int(order_trace_master.iloc[o]['X2']-order_trace_master.iloc[o]['X1'])+1)
+                        x_grid_master = x_grid_master[x_grid_master >= start_x]
+                        x_grid_master = x_grid_master[x_grid_master <= start_x+width]
+                        y_grid_master = order_trace_master.iloc[o]['Coeff0'] + \
+                                        order_trace_master.iloc[o]['Coeff1'] * x_grid_master + \
+                                        order_trace_master.iloc[o]['Coeff2'] * x_grid_master**2 + \
+                                        order_trace_master.iloc[o]['Coeff3'] * x_grid_master**3         
+                        axs[i, j].plot(x_grid_master, y_grid_master,                                          color='red',   linewidth=1.2, linestyle='--')
+                        axs[i, j].plot(x_grid_master, y_grid_master-order_trace_master.iloc[o]['BottomEdge'], color='white', linewidth=1.2, linestyle='--', alpha=1)
+                        axs[i, j].plot(x_grid_master, y_grid_master+order_trace_master.iloc[o]['TopEdge'],    color='white', linewidth=1.2, linestyle='--', alpha=1)                
                 
                 axs[i, j].grid(False)
                 axs[i, j].tick_params(top=False, right=False, labeltop=False, labelright=False)
@@ -1234,11 +1251,13 @@ class Analyze2D:
         timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(timestamp_label, xy=(1, 0), xycoords='axes fraction', 
                     fontsize=16, color="darkgray", ha="right", va="bottom",
-                    xytext=(-50, -150), textcoords='offset points')
+                    xytext=(-50, -85), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)     
+        if order_trace_master_file is None:
+            order_trace_master_file = 'None'
         plt.annotate('Trace = ' + order_trace_master_file, xy=(0, 0), xycoords='axes fraction', 
                     fontsize=16, color="darkgray", ha="left", va="bottom",
-                    xytext=(50, -150), textcoords='offset points')
+                    xytext=(50, -85), textcoords='offset points')
         plt.subplots_adjust(bottom=0.1)
 
         # Display the plot

@@ -1,26 +1,22 @@
 
-import sys
-if sys.version_info >= (3, 9):
-    from importlib import resources
-else:
-    import importlib_resources as resources
+from importlib import resources
 
 import pandas as pd
 from datetime import datetime
 import time
 
-from database.modules.utils.kpf_db import KPFDB
-from keckdrpframework.models.arguments import Arguments
+from database.modules.utils.kpf_db import KPFDB, _get_cached_result
 from kpfpipe.config.pipeline_config import ConfigClass
-from kpfpipe.logger import start_logger
 from astropy.io.fits import getheader
+from modules.Utils.utils import DummyLogger
+
 
 class GetCalibrations:
     """This utility looks up the associated calibrations for a given datetime and
        returns a dictionary with all calibration types.
 
     """
-    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=True):
+    def __init__(self, datetime, default_config_path, use_db=True, logger=None, verbose=False, use_cache=True):
         """
         use_db (boolean) - to disable db access, set to False (e.g., when looking up file-based keywords only)
         """
@@ -44,7 +40,9 @@ class GetCalibrations:
         if self.verbose:
             logger_start = time.time()
         if logger == None:
-            self.log = start_logger('GetCalibrations', default_config_path)
+            # the line below crashes the code in a notebook environment
+            #self.log = start_logger('GetCalibrations', default_config_path)
+            self.log = DummyLogger()
         else:
             self.log = logger
         if self.verbose:
@@ -63,6 +61,7 @@ class GetCalibrations:
             eval_time = time.time() - eval_start
         
         self.use_db = use_db
+        self.use_cache = use_cache
         
         if self.verbose:
             total_init_time = time.time() - init_start
@@ -82,15 +81,18 @@ class GetCalibrations:
         # Round to nearest minute (same logic as in kpf_db.py)
         rounded_dt = dt.replace(second=0, microsecond=0)
         rounded_datetime = rounded_dt.strftime("%Y-%m-%dT%H:%M:%S")
-        cache_key = f"calibration_lookup_complete:{rounded_datetime}"
         
         # Handle the case where subset is None (use all keys)
         if subset is None:
             subset = list(self.lookup_map.keys())
-        
+            cache_key = f"calibration_lookup_complete:{rounded_datetime}"
+        else:
+            cache_key = f"calibration_lookup_subset:{rounded_datetime}_{'_'.join(subset)}"
+
         try:
-            from database.modules.utils.kpf_db import _get_cached_result
-            cached_result = _get_cached_result(cache_key)
+            cached_result = _get_cached_result(cache_key, verbose=self.verbose)
+            if not self.use_cache:
+                cached_result = None
             if cached_result is not None:
                 # Check if all requested keys are in the cached result
                 missing_keys = [key for key in subset if key not in cached_result]
@@ -120,11 +122,11 @@ class GetCalibrations:
             output_cals = {}
             missing_keys = list(subset)
         
+        # Parse datetime once and reuse
+        dt_start = time.time() if self.verbose else None
+        dt = datetime.strptime(self.datetime, "%Y-%m-%dT%H:%M:%S.%f")
+        date_str = datetime.strftime(dt, "%Y%m%d")
         if self.verbose:
-            # Time the datetime parsing
-            dt_start = time.time()
-            dt = datetime.strptime(self.datetime, "%Y-%m-%dT%H:%M:%S.%f")
-            date_str = datetime.strftime(dt, "%Y%m%d")
             dt_time = time.time() - dt_start
         
         # Don't overwrite output_cals if we had cached results
@@ -193,7 +195,7 @@ class GetCalibrations:
             # Execute single batch query for all database calibrations
             if db_requests and self.use_db:
                 if db is None:
-                    db = KPFDB(logger=self.log)
+                    db = KPFDB(logger=self.log, verbose=self.verbose)
                 if self.verbose:
                     db_start = time.time()
                 try:
@@ -286,21 +288,24 @@ class GetCalibrations:
                     
                 elif lookup == 'wls' or lookup == 'etalon':
                     if self.use_db and db is None:
-                        db = KPFDB(logger=self.log)
+                        db = KPFDB(logger=self.log, verbose=self.verbose)
                     if self.verbose:
                         wls_start = time.time()
                     wls_files = None  # Initialize wls_files
+                    if not self.use_db:
+                        # If database is disabled, use default
+                        output_cals[cal] = self.defaults[cal]
+                        continue
                     for cal_type in self.wls_cal_types:
                         wls_results = db.get_bracketing_wls(self.datetime, cal_type[1], max_cal_delta_time=self.max_age)
-                        if len(wls_results) > 1 and (wls_results[0] == 0 or wls_results[2] == 0):
+                        if len(wls_results) >= 4 and (wls_results[0] == 0 or wls_results[2] == 0):
                             wls_files = [wls_results[1], wls_results[3]]
                             if wls_files[0] == None:
                                 wls_files[0] = wls_files[1]
                             if wls_files[1] == None:
                                 wls_files[1] = wls_files[0]
                             
-                            # Ensure deterministic file selection by sorting file paths
-                            wls_files = sorted(wls_files)
+                            # Keep temporal order: wls_files[0] = before file, wls_files[1] = after file
                             output_cals[cal] = wls_files
                             
                             if self.verbose:
@@ -322,14 +327,11 @@ class GetCalibrations:
                             if self.verbose:
                                 self.log.debug(f"Using fallback etalon_datetime: {etalon_datetime}")
                         
-                        # Look up etalonmask using the INPUT timestamp (self.datetime), not the WLS file timestamp
-                        # The WLS file timestamp is unrelated to when we need the etalonmask
                         etalonmask_found = False
                         for lvl, cal_type in zip(self.db_cal_file_levels, self.db_cal_types):
                             if cal_type[0].lower() == 'etalonmask':
                                 try:
-                                    # Use self.datetime (input timestamp) for etalonmask lookup
-                                    etalonmask_result = db.get_nearest_master(self.datetime, lvl, cal_type)
+                                    etalonmask_result = db.get_nearest_master(etalon_datetime, lvl, cal_type)
                                     if etalonmask_result[0] == 0:
                                         output_cals['etalonmask'] = etalonmask_result[1]
                                         etalonmask_found = True
@@ -396,7 +398,7 @@ class GetCalibrations:
                 if self.verbose:
                     self.log.debug(f"Caching complete new result with {len(output_cals)} keys")
             
-            _set_cached_result(cache_key, complete_result)
+            _set_cached_result(cache_key, complete_result, verbose=self.verbose)
             if self.verbose:
                 self.log.debug(f"Cached complete result for key: {cache_key}")
         except Exception as e:
@@ -426,7 +428,7 @@ class GetCalibrations:
         """Clear the Redis cache for this calibration lookup"""
         try:
             from database.modules.utils.kpf_db import clear_cache
-            clear_cache()
+            clear_cache(verbose=self.verbose)
             if self.verbose:
                 self.log.debug("Redis cache cleared successfully")
         except Exception as e:

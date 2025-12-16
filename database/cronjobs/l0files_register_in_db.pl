@@ -84,10 +84,10 @@ if (! (defined $dbname)) {
     die "*** Env. var. KPFDBNAME not set; quitting...\n";
 }
 
-my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE};
+my $containerimage = $ENV{KPFCRONJOB_DOCKER_IMAGE_NAME};
 if (! (defined $containerimage)) {
     $containerimage = 'russkpfmasters:latest';
-    print "*** Using default KPFCRONJOB_DOCKER_IMAGE=$containerimage (env var not set)\n";
+    print "*** Using default KPFCRONJOB_DOCKER_IMAGE_NAME=$containerimage (env var not set)\n";
 }
 
 
@@ -188,7 +188,13 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
 
+# Get memory optimization flags
+my $memory_flags = `$codedir/scripts/get_docker_memory_flags.sh`;
+chomp($memory_flags);
+
 my $dockerruncmd = "docker run -d --name $containername " .
+                   # Memory optimization
+                   "$memory_flags " .
                    "-v ${codedir}:/code/KPF-Pipeline -v ${l0dir}:${basedir} " .
                    "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 " .
                    "$containerimage bash ./$dockercmdscript";

@@ -234,6 +234,19 @@ STVIGNE   'false '                                    Top shutter vignetting (tr
 SBVIGNE   'false '                                    Bottom shutter vignetting (true/false)
 SBELEV    23.99                                       Bottom shutter elevation (deg)
 STELEV    23.99                                       Top shutter elevation (deg)
+LFCMODE   'StandbyHigh'                               LFC Operation Mode
+AMPON     27635202.107                                LFC: Amount of time amplifier on (sec)
+LFCFO     250000000.0                                 LFC filtered Offset Freq RR Comb counted (Hz)
+LFCFREF   250000000.0                                 LFC filtered Offset Freq RR Comb setpoint (Hz)
+LFCFR     19999999999.9963                            LFC filtered Offset Freq RR Filter counted (Hz)
+LFCFRREF  20000000000.0                               LFC filtered Offset Freq RR Filter setpoint(Hz)
+LFCCEOFR  5220000000.0                                LFC CEO Filtered Setpoint Freq (Hz)
+LFCCWFRF  288005220000000.0                           LFC CW Freq Reference (Hz)
+LFCCWFRQ  288005220406302.0                           LFC CW Freq (Hz)
+LFCCWFER  406302.0                                    LFC CW Freq Error: Ref-Actual (Hz)
+LFCCWMDN  1152021                                     LFC CW mode number
+LFCBIACT  0.033                                       LFC Blue cut amp diode current (A)
+LFCBISET  0.0                                         LFC Blue cut amp diode setting (A)
 ========  ==========================================  =========
 
 2D Primary Extension Header
@@ -466,7 +479,12 @@ DRPTAG    v2.5.2                                                                
 DRPHSH    'ccf5f6ebe0c9ae7d43706cc57fed2ecdeb540a17'                               Git commit hash version of KPF-Pipeline used to make L1 (in the time series database, DRPHSH is listed as DRPHSHL1 for L1 files)
 WLSFILE   /masters/20231230/kpf_20231230_master_WLS_autocal-lfc-all-eve_L1.fits    First wavelength interpolation reference for this L1 file
 WLSFILE2  /masters/20231231/kpf_20231231_master_WLS_autocal-lfc-all-morn_L1.fits   Second wavelength interpolation reference for this L1 file
-TRACFILE  /masters/20250522/kpf_20250522_order_mask.fits                           Order trace file used to extract this L1 file
+TRACFILE	 /masters/20250522/kpf_20250522_order_mask.fits                           Order trace file used to extract this L1 file
+TRACFGRN  /masters/20250522/kpf_20250522_master_flat_GREEN_CCD.csv                 Order trace file used to extract GREEN orders for this L1 file
+TRACFGRN  /masters/20250522/kpf_20250522_master_flat_RED_CCD.csv                   Order trace file used to extract RED orders for this L1 file
+EXTMETHK  'optimal'                                                                Extraction method used for SKY fibers
+EXTMETHS  'optimal'                                                                Extraction method used for SCI fibers
+EXTMETHC  'box'                                                                    Extraction method used for CAL fibers
 LAMPFILE  /masters/20250522/kpf_20250522_smooth_lamp.fits                          Smooth lamp file used to extract this L1 file
 MONOTWLS  1                                                                        QC: 1 = L1 wavelength solution is monotonic
 DATAPRL1  1                                                                        QC: 1 = L1 red and green data present
@@ -484,6 +502,7 @@ ETALINES  1                                                                     
 WILDWSCI  1                                                                        QC: 1 = SCI WLS not wild (stdev compared to reference < 5 pixels)
 WILDWSKY  1                                                                        QC: 1 = SKY WLS not wild (stdev compared to reference < 5 pixels)
 WILDWCAL  1                                                                        QC: 1 = CAL WLS not wild (stdev compared to reference < 5 pixels)
+NANL1OK   1                                                                        QC: 1 = Number of NaNs in L1 (all orders, both chips) < 50
 NSATGS2   23                                                                       Number of saturated lines in Green SCI2
 NSATGC    23                                                                       Number of saturated lines in Green CAL
 NSATGK    23                                                                       Number of saturated lines in Green SKY
@@ -589,6 +608,16 @@ AGEWLS2   0.14193433333333330                                                   
 AGETRAC   -0.2205656666666667                                                      Approx age of TRACFILE compared to this file (days)
 AGELAMP   0.14193433333333330                                                      Approx age of LAMPFILE compared to this file (days)
 STATWREF  /data/reference_fits/430LFCWLS.fits                                      filename of ref for median/stdev(WLS-ref)
+NANL1GS1  0                                                                        Number of NaNs in all orders of L1 Green SCI1
+NANL1GS2  0                                                                        Number of NaNs in all orders of L1 Green SCI2
+NANL1GS3  0                                                                        Number of NaNs in all orders of L1 Green SCI3
+NANL1GCL  0                                                                        Number of NaNs in all orders of L1 Green CAL
+NANL1GSK  0                                                                        Number of NaNs in all orders of L1 Green SKY
+NANL1RS1  0                                                                        Number of NaNs in all orders of L1 Red SCI1
+NANL1RS2  0                                                                        Number of NaNs in all orders of L1 Red SCI2
+NANL1RS3  0                                                                        Number of NaNs in all orders of L1 Red SCI3
+NANL1RCL  0                                                                        Number of NaNs in all orders of L1 Red CAL
+NANL1RSK  0                                                                        Number of NaNs in all orders of L1 Red SKY
 MEDWGS00  0.09425503797584399                                                      median(WLS-ref) [pix], Green SCI order 00       
 MEDWGS01  0.08849442069640202                                                      median(WLS-ref) [pix], Green SCI order 01       
 MEDWGS02  0.08371697673720710                                                      median(WLS-ref) [pix], Green SCI order 02       

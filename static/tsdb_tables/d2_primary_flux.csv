@@ -14,7 +14,7 @@ P84GRN4|float|84th-percentile for GREEN_AMP4 in L0 (incl. overscan)|DN
 MEDRED1|float|Median for RED_AMP1 in L0 (incl. overscan)|DN
 P16RED1|float|16th-percentile for RED_AMP1 in L0 (incl. overscan)|DN
 P84RED1|float|84th-percentile for RED_AMP1 in L0 (incl. overscan)|DN
-MEDRED2|float|Median for RED_AMP2 in L0 [e-] (includes overscan region, excludes NaNs explicitly)
+MEDRED2|float|Median for RED_AMP2 in L0 (incl. overscan)|DN
 P16RED2|float|16th-percentile for RED_AMP2 in L0 (incl. overscan)|DN
 P84RED2|float|84th-percentile for RED_AMP2 in L0 (incl. overscan)|DN
 MEDCAHK|float|Median for CA_HK_AMP in L0 (incl. overscan)|DN

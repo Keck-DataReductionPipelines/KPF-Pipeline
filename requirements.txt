@@ -41,3 +41,6 @@ git+https://github.com/Keck-DataReductionPipelines/KeckDRPFramework.git@master
 # If this is not possible, then the relative path in KPF-Pipeline/cronjobs/run_analysis_for_masters.py
 #
 # git+https://github.com/pemberj/polly.git@main
+
+# Manage process IDs
+psutil>=7.1.1

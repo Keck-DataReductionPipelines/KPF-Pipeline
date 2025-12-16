@@ -1,10 +1,13 @@
 import os
+import re
 import ast
 import time
+import copy
 from astropy.time import Time
 import yaml
 import numpy as np
 import pandas as pd
+import operator
 from datetime import datetime, timedelta, date
 import matplotlib
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
@@ -12,7 +15,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.ticker as ticker
-from matplotlib.ticker import FuncFormatter
+import matplotlib.transforms as mtransforms
+from matplotlib.lines import Line2D 
+from matplotlib.ticker import FuncFormatter, LogLocator
 from modules.Utils.utils import get_sunrise_sunset_ut
 from modules.Utils.kpf_parse import get_datecode
 from collections import Counter
@@ -96,114 +101,92 @@ class AnalyzeTimeSeries:
                                     fig_path=None, show_plot=False, 
                                     log_savefig_timing=False):
         """
-        Generate a multi-panel time series plot using data retrieved from a KPF 
-        time series database (TSDB). Each subplot (panel) is configured via a 
-        dictionary (or YAML file path), allowing fine-grained control
-        over data selection, filtering, formatting, and plotting attributes.
-
+        Generate a multi-panel time series plot from a KPF TSDB. Each subplot is configured
+        via a dict (or YAML file path), enabling control over filters, transforms, and style.
+    
         Parameters
         ----------
         plotdict : str or dict
-            Either a path-like string corresponding to a named YAML configuration file,
-            or a dictionary with a key `'panel_arr'` which contains a list of panel dictionaries.
-            Each dictionary defines the contents and layout of an individual subplot.
-
-        start_date : datetime.datetime, optional
-            Start of the time range to query and plot. Defaults to 2020-01-01 if None.
-
-        end_date : datetime.datetime, optional
-            End of the time range to query and plot. Defaults to 2040-01-01 if None.
-
+            Path to a named YAML config or a dict with key 'panel_arr' (list of panel dicts).
+        start_date, end_date : datetime, optional
+            Query window (UT). Defaults if None: start=2020-01-01, end=2040-01-01. The code
+            may tighten to the data’s min/max timestamps.
         hatch_service_missions : bool, default=True
-            If True, overlay hatched vertical spans for each service mission interval
-            returned by `self.get_service_mission_df()` (columns: `UT_start_date`, `UT_end_date`).
-
+            Overlay hatched spans from self.get_service_mission_df() (UT_start_date, UT_end_date).
         clean : bool, default=False
-            If True, applies outlier removal to the data (via `self.db.clean_df()`).
-
+            Apply self.db.clean_df() to remove outliers.
         fig_path : str, optional
-            If provided, the full path (including filename) where the final PNG image will be saved.
-
+            Full output path (PNG).
         show_plot : bool, default=False
-            If True, the plot will be displayed interactively (e.g., in a Jupyter Notebook).
-
+            Show the figure interactively.
         log_savefig_timing : bool, default=False
-            If True, logs the CPU time spent during `savefig()`.
-
+            Log CPU time for savefig().
+    
         Plot Configuration (via panel_dict or YAML)
         -------------------------------------------
-        plotdict['panel_arr'] : list of dicts
-            Each element defines a panel (subplot). Each panel can include:
-            
-            - 'paneldict' : dict
-                Configuration for panel-level behavior and filters:
-                - 'col' : str  Column name in the database to plot.
-                - 'plot_type' : str  One of {'plot', 'scatter', 'step', 'state', 'errorbar'}.
-                - 'plot_attr' : dict  Matplotlib attributes like marker, color, label, etc.
-                - 'only_object' : str or list[str]  Exact object names to filter by.
-                - 'object_like' : str or list[str]  LIKE-matching object names.
-                - 'only_source' : str  Filter by OBJECT.
-                - 'not_junk' : bool or str ('True' or 'False')  If set, filters by NOTJUNK field.
-                - 'QC_pass' : str or list[str]  Column names where rows must have True.
-                - 'QC_fail' : str or list[str]  Column names where rows must have False.
-                - 'QC_not_pass' : str or list[str]  Column names where rows must have not True (Null allowed).
-                - 'QC_not_fail' : str or list[str]  Column names where rows must have not False (Null allowed).
-                - 'on_sky' : bool or str  If True, filters for FIUMODE == 'Observing'.
-                - 'narrow_xlim_daily' : bool  Restrict x-axis to min/max of data on short timescales.
-                - 'ylabel' : str  Y-axis label for the panel.
-                - 'ylim' : tuple  Explicit y-axis range as (ymin, ymax).
-                - 'ymin' : float  Explicit y-axis minimum (overrides ylim value).
-                - 'ymax' : float  Explicit y-axis maximum (overrides ylim value).
-                - 'yscale' : str  e.g., 'log' to apply logarithmic scaling.
-                - 'subtractmedian' : bool  Subtract median from the plotted data.
-                - 'nolegend' : bool  Suppress legend.
-                - 'legend_frac_size' : float  Legend offset scale.
-                - 'axhspan' : dict  Optional shaded region(s) to overlay (keys: ymin, ymax, color, alpha).
-                - 'title' : str  Per-panel title string prepended to date range info.
-
-            - 'panelvars' : list of dicts
-                Defines the variables to be plotted in this panel. Each dictionary can include:
-                - 'col' : str  Main data column name.
-                - 'col_err' : str  Optional column for error bars.
-                - 'col_subtract' : str  Column to subtract from `col` before plotting.
-                - 'col_multiply' : float  Scalar to multiply data.
-                - 'col_offset' : float  Scalar to add to data.
-                - 'normalize' : bool  If True, normalize data by its median.
-                - 'plot_type' : str  Plot type (overrides the panel-level setting).
-                - 'plot_attr' : dict  Matplotlib styling keywords.
-                - 'unit' : str  Unit label for legends/statistics (e.g., "m/s").
-                - 'vline_pt_color' : str - color of points in vline plots
-
+        plotdict['panel_arr'] : list[dict]
+            Each element defines one panel and includes:
+    
+            - 'paneldict' : dict   # panel-level behavior/filters
+                - 'only_object' : str | list[str]          # exact OBJECT names
+                - 'object_like' : str | list[str]          # LIKE patterns (nested lists ok)
+                - 'only_source' : str                      # passed to DB filter layer
+                - 'not_junk' : bool | {'true','false'}     # filter on NOTJUNK
+                - 'qc_pass' : str | list[str]              # columns that must be True
+                - 'qc_fail' : str | list[str]              # columns that must be False
+                - 'qc_not_pass' : str | list[str]          # columns that are not True (False/NaN)
+                - 'qc_not_fail' : str | list[str]          # columns that are not False (True/NaN)
+                - 'on_sky' : bool | {'true','false'}       # True→FIUMODE=='Observing', False→'Calibration'
+                - 'ylabel' : str                           # label for vertical axis
+                - 'ylim' : tuple | str                     # (ymin, ymax) or a string that evals to that
+                - 'ymin', 'ymax' : float                   # override parts of ylim
+                - 'yscale' : str                           # e.g., 'log'
+                - 'subtractmedian' : bool                  # subtract per-variable median before plotting
+                - 'nolegend' : bool                        # suppresses legend
+                - 'labelrms' : bool                        # add legend text like ""(0.001 C rms)"
+                - 'legend_frac_size' : float               # legend anchor offset
+                - 'axhspan' : dict                         # {key: {'ymin','ymax','color','alpha'}}
+                - 'title' : str                            # title for a set of panels
+                - 'narrow_xlim_daily' : bool               # shrink x-limits to data for day-scale plots
+    
+            - 'panelvars' : list[dict]   # variables drawn in this panel
+                - 'col' : str                                # main data column
+                - 'col_err' : str                            # symmetric error column (optional)
+                - 'col_subtract' : str                       # subtract this column from 'col'
+                - 'col_multiply' : float                     # scalar multiplier
+                - 'col_offset' : float                       # scalar offset
+                - 'normalize' : bool                         # divide by median after transforms
+                - 'plot_type' : {                            # determine plot type
+                     'scatter',                              # scatter plot (default)
+                     'errorbar',                             # errorbar plot; must include 'col_err'
+                     'plot',                                 # line plot
+                     'step',                                 # step plot
+                     'state',                                # state value plot with distinct values, usually strings or booleans
+                     'vlines'                                # plot with vertical lines; must include 'col_min' and 'col_max'
+                     }
+                - 'plot_attr' : dict                         # matplotlib kwargs (marker, label, etc.)
+                - 'unit' : str                               # used when augmenting legend label with RMS
+                - 'col_min','col_max' : str                  # required for plot_type='vlines'
+                - 'vline_pt_color' : str                     # optional color for vline end points
+    
         Returns
         -------
         None
-            Saves the figure to `fig_path` (if specified), displays it (if `show_plot=True`),
-            and logs timing or errors as appropriate. Does not return the figure or axes explicitly.
-
+            Saves to fig_path (if given), optionally shows, and logs as configured.
+    
         Notes
         -----
-        - The function handles various time axis labeling strategies based on time span:
-             Hourly for single-day plots
-             Days since start for <32-day plots
-             Month/day for full-year plots
-             ISO date labels for long-term plots
-        - For `plot_type='state'`, categorical values (e.g., DRPTAG) are color-coded and mapped to strings.
-        - The function attempts to detect empty data and annotates 'No Data' in panels accordingly.
-        - Internally calls `self.db.dataframe_from_db()` to query the database using provided filters.
-
-        To Do
-        -----
-        - Add standardized plot styles for delta-value diagnostics with robust sigma-clipping.
-        - Implement automated correlation plots between parameters.
-        - Implement phased plots (e.g., folding by sidereal day).
-
-        Examples
-        --------
-        >>> self.plot_time_series_multipanel('kpf_qlp_diagnostics.yaml', 
-                                             start_date=datetime(2025, 1, 1),
-                                             end_date=datetime(2025, 1, 31),
-                                             fig_path='monthly_plot.png',
-                                             show_plot=False)
+        - Time axis adapts to span:
+            * ~1 day: hours since start (UT/HST labels possible), optional “Night” shading
+            * <3 days or <32 days: days since start
+            * 28–31 days: month view (day numbers)
+            * ~1 year: month tick marks with MM-DD labels
+            * longer: calendar dates (YYYY-MM-DD)
+        - 'state' plots render categorical levels; {0,1,None}→{Fail,Pass,None}. If ylabel=='Junk Status',
+          {Pass,Fail}→{Not Junk,Junk}.
+        - Empty selections are annotated “No Data”.
+        - Labels may be augmented with “(X unit rms)” when legend shown and enough points exist.
+        - Data come from self.db.dataframe_from_db(...); DATE-MID parsed and sorted; clean_df() optional.
         """
         import warnings
         warnings.filterwarnings("ignore", message=".*tight_layout.*")
@@ -233,6 +216,30 @@ class AnalyzeTimeSeries:
             if isinstance(value, list):
                 return value
             return [value]
+
+        def log_tick_formatter(y, pos):
+            """
+            Format log-scale ticks:
+              - For y >= 1e-2: plain numeric (1, 0.1, 0.01)
+              - For y < 1e-2: mathtext, e.g. 10^{-4}
+            """
+            if y <= 0:
+                return ""
+        
+            exp = int(np.round(np.log10(y)))
+        
+            # If y is exactly a power of 10, use 10^{exp} notation for small values
+            if np.isclose(y, 10**exp):
+                if exp >= -2:
+                    # show as plain number (strip trailing zeros)
+                    return f"{y:g}"
+                else:
+                    # show as 10^{exp} for very small values
+                    return rf"$10^{{{exp}}}$"
+            else:
+                # For non-powers-of-10 ticks (e.g. minor ticks), usually show nothing
+                return ""
+
 
         # Helper: convert absolute datetimes to current axis coordinates
         def _to_axis_x(dt, mode):
@@ -341,6 +348,7 @@ class AnalyzeTimeSeries:
             empty_df = (len(df) == 0) # True if the dataframe has no rows
             if not empty_df:
                 df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
+                df = df.dropna(subset=['DATE-MID'])
                 if start_date_was_none == True:
                     start_date = min(df['DATE-MID'])
                 if end_date_was_none == True:
@@ -500,18 +508,26 @@ class AnalyzeTimeSeries:
                                 xytext=(x_offset, y_offset), textcoords='offset points',
                                 bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.5, edgecolor='none'))
                     
-
             if 'yscale' in thispanel['paneldict']:
                 if thispanel['paneldict']['yscale'] == 'log':
-                    formatter = FuncFormatter(format_func)  # this doesn't seem to be working
-                    axs[p].minorticks_on()
-                    axs[p].grid(which='major', axis='x', color='darkgray',  linestyle='-', linewidth=0.5)
-                    axs[p].grid(which='both',  axis='y', color='lightgray', linestyle='-', linewidth=0.5)
                     axs[p].set_yscale('log')
-                    axs[p].yaxis.set_minor_locator(plt.AutoLocator())
-                    axs[p].yaxis.set_major_formatter(formatter)
+            
+                    # Major ticks: powers of 10
+                    axs[p].yaxis.set_major_locator(LogLocator(base=10.0))
+            
+                    # Minor ticks: 2–9 * 10^exp
+                    axs[p].yaxis.set_minor_locator(
+                        LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1)
+                    )
+            
+                    # Use the custom formatter
+                    axs[p].yaxis.set_major_formatter(FuncFormatter(log_tick_formatter))
+            
+                    axs[p].minorticks_on()
+                    axs[p].grid(which='major', axis='x', color='darkgray', linestyle='-', linewidth=0.5)
+                    axs[p].grid(which='both',  axis='y', color='lightgray', linestyle='-', linewidth=0.5)
             else:
-                axs[p].grid(color='lightgray')        
+                axs[p].grid(color='lightgray')
 
             # Set y-axis limits
             ylim=False
@@ -529,6 +545,12 @@ class AnalyzeTimeSeries:
             if 'nolegend' in thispanel['paneldict']:
                 if str(thispanel['paneldict']['nolegend']).lower() == 'true':
                     makelegend = False
+
+            # Determine if RMS values should be included in legend
+            labelrms = False
+            if 'labelrms' in thispanel['paneldict']:
+                if str(thispanel['paneldict']['labelrms']).lower() == 'true':
+                    labelrms = True
 
             # Subtract median from data
             subtractmedian = False
@@ -640,12 +662,13 @@ class AnalyzeTimeSeries:
                                                 decimal_places = 1
                                                 std_dev = 0.
                                             formatted_median = f"{median:.{decimal_places}f}"
-                                            if len(~np.isnan(data)) > 2:
-                                                formatted_std_dev = f"{std_dev:.{decimal_places}f}"
-                                                label += ' (' + formatted_std_dev 
-                                                if 'unit' in thispanel['panelvars'][i]:
-                                                    label += ' ' + str(thispanel['panelvars'][i]['unit'])
-                                                label += ' rms)'
+                                            if labelrms:
+                                                if len(~np.isnan(data)) > 2:
+                                                    formatted_std_dev = f"{std_dev:.{decimal_places}f}"
+                                                    label += ' (' + formatted_std_dev 
+                                                    if 'unit' in thispanel['panelvars'][i]:
+                                                        label += ' ' + str(thispanel['panelvars'][i]['unit'])
+                                                    label += ' rms)'
                                     except Exception as e:
                                         self.logger.error(e)
                                 plot_attributes = thispanel['panelvars'][i]['plot_attr']
@@ -724,9 +747,37 @@ class AnalyzeTimeSeries:
                             colors = [state_to_color[state] if state in state_to_color else 'black' for state in states]
                             color_map = {state: state_to_color[state] for state in unique_states if state in state_to_color}
                         else:
-                            unique_states = sorted(list(set(unique_states)))
+                            # Unique categories for generic state plots
+                            unique_states = list(set(unique_states))
+                        
+                            # --- Version-aware ordering for git tags like v2.10.3 ---
+                            # Handles labels that *start* with vMAJ.MIN.PATCH (ignore any trailing text)
+                            version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)")
+                        
+                            def parse_version(state):
+                                """
+                                Return (major, minor, patch) as ints if state looks like 'vX.Y.Z',
+                                otherwise return None.
+                                """
+                                s = str(state)
+                                m = version_pattern.match(s)
+                                if not m:
+                                    return None
+                                return tuple(int(part) for part in m.groups())
+                        
+                            # If *all* states look like git-style tags, sort numerically; otherwise lexicographically.
+                            if unique_states and all(parse_version(s) is not None for s in unique_states):
+                                # Numeric development order: v2.5.3 < v2.6.0 < v2.8.2 < v2.9.1 < v2.10.3 < ...
+                                unique_states = sorted(unique_states, key=parse_version)
+                            else:
+                                # Fallback: normal alphabetical order
+                                unique_states = sorted(unique_states)
+                        
+                            # Map states -> y positions according to the chosen order
                             state_to_num = {state: i for i, state in enumerate(unique_states)}
                             mapped_states = [state_to_num[state] for state in states]
+                        
+                            # Color map for generic state plots
                             colors = plt.cm.jet(np.linspace(0, 1, len(unique_states)))
                             color_map = {state: colors[i] for i, state in enumerate(unique_states)}
                         try:
@@ -746,7 +797,7 @@ class AnalyzeTimeSeries:
                             self.logger.info(f"Error converting to a list: {e}")
                         if len(states) != len(t):
                             # Handle the mismatch
-                            print(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
+                            self.logger.info(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
                         for state in unique_states:
                             color = color_map[state]
                             indices = [i for i, s in enumerate(states) if s == state]
@@ -784,6 +835,16 @@ class AnalyzeTimeSeries:
                             continue
                         x0 = _to_axis_x(s_clip, time_mode)
                         x1 = _to_axis_x(e_clip, time_mode)
+                        mid_x = pd.to_datetime(row['UT_start_date']) + (pd.to_datetime(row['UT_end_date'])-pd.to_datetime(row['UT_start_date']))/2
+                        if ylim:
+                            ymin = ylim[0]
+                            ymax = ylim[1]
+                        else:
+                            ymin, ymax = axs[p].get_ylim()
+                        y0_9 = ymin + 0.9 * (ymax - ymin)
+                        if 'yscale' in thispanel['paneldict']:
+                            if thispanel['paneldict']['yscale'] == 'log':
+                                y0_9 = 0.6 * ymax  
                         # Hatched vertical span
                         axs[p].axvspan(
                             x0, x1,
@@ -794,6 +855,20 @@ class AnalyzeTimeSeries:
                             alpha=0.4,
                             zorder=0.2
                         )
+                        label = row.get('name', '')
+                        if pd.notna(label):
+                            axs[p].text(mid_x, y0_9, 
+                                        str(label), 
+                                        ha='center', 
+                                        va='center', 
+                                        fontsize=8, 
+                                        color='darkgray', 
+                                        zorder=0.3,
+                                        bbox=dict(facecolor='white', 
+                                                  edgecolor='none', 
+                                                  boxstyle='round,pad=0.2'
+                                        )
+                            )
 
             # Draw translucent boxes
             if 'axhspan' in thispanel['paneldict']:
@@ -818,9 +893,40 @@ class AnalyzeTimeSeries:
                         else:
                             legend_frac_size = 0.20
                         handles, labels = axs[p].get_legend_handles_labels()
-                        sorted_pairs = sorted(zip(handles, labels), key=lambda x: x[1], reverse=True)
-                        handles, labels = zip(*sorted_pairs)
-                        axs[p].legend(handles, labels, loc='upper right', bbox_to_anchor=(1+legend_frac_size, 1))
+                        pairs = list(zip(labels, handles))  # (label, handle)
+                        
+                        # Match vMAJ.MIN.PATCH at the start of the label, ignore anything after that
+                        version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)")
+                        
+                        def version_components(label):
+                            """
+                            Return (major, minor, patch) as ints if label starts with 'vX.Y.Z',
+                            otherwise return None.
+                            """
+                            m = version_pattern.match(label)
+                            if not m:
+                                return None
+                            return tuple(int(part) for part in m.groups())
+                        
+                        def sort_key(label):
+                            vc = version_components(label)
+                            if vc is not None:
+                                # (0, major, minor, patch, label) → versions first, numeric order
+                                return (0, vc[0], vc[1], vc[2], label.lower())
+                            # non-version labels go after, alphabetically
+                            return (1, label.lower())
+                        
+                        # Sort (label, handle) pairs using the mixed key
+                        pairs.sort(key=lambda lh: sort_key(lh[0]))
+                        
+                        sorted_labels, sorted_handles = zip(*pairs)
+                        
+                        axs[p].legend(
+                            sorted_handles,
+                            sorted_labels,
+                            loc="upper right",
+                            bbox_to_anchor=(1 + legend_frac_size, 1),
+                        )
 
             # Set y-axis limits
             if ylim:
@@ -1584,7 +1690,7 @@ class AnalyzeTimeSeries:
     
         start_date = _coerce_datetime_like(start_date)
         end_date   = _coerce_datetime_like(end_date)
-    
+
         # If exactly one bound is provided, mirror it
         if (start_date is None) ^ (end_date is None):
             if start_date is None:
@@ -1899,8 +2005,12 @@ class AnalyzeTimeSeries:
                             try:
                                 x0 = pd.to_datetime(row['UT_start_date'])
                                 x1 = pd.to_datetime(row['UT_end_date'])
+                                mid_x = x0 + (x1 - x0) / 2
+                                ymin, ymax = ax.get_ylim()
+                                y0_9 = ymin + 0.9 * (ymax - ymin)
                                 if pd.notna(x0) and pd.notna(x1):
                                     ax.axvspan(x0, x1, facecolor='none', edgecolor='none', hatch='////', alpha=0.15)
+                                ax.text(mid_x, y0_9, row('name'), ha='center', va='center', fontsize=8, color=darkgray)
                             except Exception:
                                 continue
                 except Exception:
@@ -2024,6 +2134,431 @@ class AnalyzeTimeSeries:
                                                        plot_timestamp=True,
                                                        show_plot=show_plot, 
                                                        fig_path=fig_path)
+
+    def performance_by_datecode(
+        self,
+        df: pd.DataFrame,
+        spec_config,
+        columns_to_display=None,
+        datecode_col: str = 'datecode',
+        ignore_service_missions=True,
+    ) -> pd.DataFrame:
+        """
+        For each datecode, determine if any row violates each spec criterion.
+    
+        Supports two spec_config styles:
+    
+        1) Simple comparison (backward compatible):
+           {
+               'col': 'kpfgreen.STA_CCD_T',
+               'name': 'Green CCD > -99 K',
+               'op': '>',
+               'threshold': -99.0
+           }
+    
+        2) Expression over multiple columns:
+           {
+               "name": "|ΔT| > 10 mK AND Nobs>20",
+               "cols": ["kpfgreen.STA_CCD_T", "kpfred.STA_CCD_T", "Nobs"],
+               "bool_expr": "(abs(c0 - c1) > 0.01) & (c2 > 20)",
+           }
+    
+           where:
+             - c0, c1, c2 ... are the Series for the listed cols in order
+             - allowed functions: abs, min, max (elementwise), np (restricted)
+             - logical operators: &, |, ~ with parentheses
+        """
+    
+        _OP_MAP = {
+            '>':  operator.gt,
+            '<':  operator.lt,
+            '>=': operator.ge,
+            '<=': operator.le,
+            '==': operator.eq,
+            '!=': operator.ne,
+        }
+    
+        df_work = df.copy()
+    
+        # Optionally drop datecodes that fall inside service missions
+        if ignore_service_missions:
+            df_sm = self.get_service_mission_df()
+            if df_sm is not None and not df_sm.empty:
+                # assume df has a DATE-MID or similar; if not, you can adapt
+                if 'DATE-MID' in df_work.columns:
+                    dates = pd.to_datetime(df_work['DATE-MID'])
+                else:
+                    dates = None
+    
+                if dates is not None:
+                    keep = pd.Series(True, index=df_work.index)
+                    for _, row in df_sm.iterrows():
+                        x0 = pd.to_datetime(row['UT_start_date'])
+                        x1 = pd.to_datetime(row['UT_end_date'])
+                        if pd.notna(x0) and pd.notna(x1):
+                            keep &= ~dates.between(x0, x1)
+                    df_work = df_work[keep].copy()
+    
+        if df_work.empty:
+            base_cols = [datecode_col] + (columns_to_display or [])
+            return pd.DataFrame(columns=base_cols)
+    
+        if datecode_col not in df_work.columns:
+            raise KeyError(f"datecode column '{datecode_col}' not found in dataframe.")
+    
+        group_key = df_work[datecode_col]
+        grouped = df_work.groupby(datecode_col, sort=True)
+    
+        out = {}
+    
+        # --- helpers for expression-based specs ---
+        def _eval_bool_expr(spec, df_local):
+            """
+            Evaluate spec['bool_expr'] over df_local using columns in spec['cols'].
+            Returns a boolean Series aligned with df_local.
+            """
+            cols = spec.get('cols')
+            expr = spec.get('bool_expr')
+    
+            if not cols or not isinstance(cols, (list, tuple)):
+                raise ValueError(
+                    f"Spec '{spec.get('name','<unnamed>')}' with bool_expr "
+                    f"must define a non-empty 'cols' list."
+                )
+            if not isinstance(expr, str):
+                raise ValueError(
+                    f"Spec '{spec.get('name','<unnamed>')}' must have 'bool_expr' "
+                    f"as a string."
+                )
+    
+            missing = [c for c in cols if c not in df_local.columns]
+            if missing:
+                raise KeyError(
+                    f"Columns {missing} (for criterion '{spec.get('name','<unnamed>')}') "
+                    f"not found in dataframe."
+                )
+    
+            # Build the local environment: c0, c1, ... mapped to columns
+            local_env = {}
+            for idx, col in enumerate(cols):
+                local_env[f'c{idx}'] = df_local[col]
+    
+            # Allowed functions & names inside bool_expr
+            local_env.update({
+                'abs': np.abs,
+                'min': np.minimum,   # elementwise min(series0, series1)
+                'max': np.maximum,   # elementwise max(series0, series1)
+                'np': np,
+            })
+    
+            try:
+                cond = eval(expr, {"__builtins__": {}}, local_env)
+            except Exception as e:
+                raise ValueError(
+                    f"Error evaluating bool_expr '{expr}' for criterion "
+                    f"'{spec.get('name','<unnamed>')}': {e}"
+                )
+    
+            # Normalize to boolean Series aligned with df_local
+            if isinstance(cond, pd.Series):
+                cond_series = cond
+            else:
+                cond_series = pd.Series(cond, index=df_local.index)
+    
+            cond_series = cond_series.astype(bool)
+            return cond_series
+    
+        # --- main loop over spec_config ---
+        for spec in spec_config:
+            name = spec.get('name')
+            if not name:
+                raise ValueError("Each spec must have a 'name' key.")
+    
+            # Path 1: expression-based spec (bool_expr + cols)
+            if 'bool_expr' in spec:
+                cond = _eval_bool_expr(spec, df_work)
+                out[name] = cond.groupby(group_key).any()
+                continue
+    
+            # Path 2: simple comparison spec (backward compatible)
+            # expects: col, op, threshold
+            if 'col' not in spec or 'op' not in spec or 'threshold' not in spec:
+                raise ValueError(
+                    f"Spec '{name}' must define either "
+                    f"('cols' + 'bool_expr') or ('col', 'op', 'threshold')."
+                )
+    
+            col = spec['col']
+            op_str = spec['op']
+            threshold = spec['threshold']
+    
+            if col not in df_work.columns:
+                raise KeyError(f"Column '{col}' (for criterion '{name}') not found in dataframe.")
+    
+            if op_str not in _OP_MAP:
+                raise ValueError(f"Unsupported operator '{op_str}' in criterion '{name}'.")
+    
+            op_func = _OP_MAP[op_str]
+            cond = op_func(df_work[col], threshold)
+    
+            # True if ANY row for that datecode meets the condition
+            out[name] = cond.groupby(group_key).any()
+    
+        # Construct out-of-spec summary frame
+        out_df = pd.DataFrame(out)
+    
+        # Add info/display columns (first value within each datecode)
+        if columns_to_display:
+            columns_to_display = list(dict.fromkeys(columns_to_display))  # de-duplicate
+            cols_present = [c for c in columns_to_display if c in df_work.columns]
+    
+            if cols_present:
+                info_df = grouped[cols_present].first()
+                summary_df = info_df.join(out_df)
+            else:
+                summary_df = out_df
+        else:
+            summary_df = out_df
+    
+        summary_df = summary_df.reset_index()  # brings datecode back as a column
+        return summary_df
+
+
+    def plot_performance_by_datecode(
+        self,
+        summary_df: pd.DataFrame,
+        spec_config,
+        datecode_col: str = 'datecode',
+        date_format: str = '%Y%m%d',
+        plot_title=None,
+        figsize='auto',
+        excise_serice_missions=True,
+        hatch_service_missions=True,
+        plot_timestamp=False,
+        fig_path=None, 
+        show_plot=False,
+    ):
+        """
+        Plot criteria (rows) vs time (x-axis) using datecode interpreted as YYYYMMDD.
+    
+        False  -> small, faint green dot
+        True   -> larger, red dot
+    
+        Parameters
+        ----------
+        summary_df : pd.DataFrame
+            Output of summarize_out_of_spec_by_date, one row per datecode.
+        spec_config : list of dict
+            Same spec_config used to generate summary_df. Uses spec['name']
+            to find boolean columns.
+        datecode_col : str, default 'datecode'
+            Column in summary_df giving the datecode (YYYYMMDD).
+        date_format : str, default '%Y%m%d'
+            strftime-style format string to parse datecode.
+        """
+        # Remove dates during service missions
+        if excise_serice_missions:
+            df_sm = self.get_service_mission_df()
+            if not df_sm.empty:
+                dates = pd.to_datetime(summary_df['datecode'].astype(str), format='%Y%m%d')
+            
+                # Start with "keep everything"
+                keep = pd.Series(True, index=summary_df.index)
+            
+                for _, row in df_sm.iterrows():
+                    x0 = pd.to_datetime(row['UT_start_date'])
+                    x1 = pd.to_datetime(row['UT_end_date'])
+                    if pd.notna(x0) and pd.notna(x1):
+                        # Drop anything between x0 and x1 (inclusive)
+                        keep &= ~dates.between(x0, x1)
+                summary_df = summary_df[keep].copy()
+
+        # Parse datecode -> datetime
+        dates = pd.to_datetime(
+            summary_df[datecode_col].astype(str),
+            format=date_format,
+            errors='coerce'
+        )
+
+        # Determine limits
+        start_date = dates.min()
+        end_date   = dates.max()
+        start_datecode = summary_df['datecode'].min()
+        end_datecode   = summary_df['datecode'].max()
+
+        if dates.isna().any():
+            bad = summary_df.loc[dates.isna(), datecode_col]
+            raise ValueError(f"Could not parse some {datecode_col} values as dates: {bad.tolist()}")
+
+        # Determine criteria columns from spec_config, preserving spec_config order
+        criteria_cols = [
+            spec['name']
+            for spec in spec_config
+            if spec['name'] in summary_df.columns and summary_df[spec['name']].dtype == bool
+        ]
+    
+        if not criteria_cols:
+            raise ValueError("No valid boolean criteria columns found in summary_df for given spec_config.")
+
+        if figsize == 'auto':
+            figsize = (10, 1.0 + len(criteria_cols) * 0.15)
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # x is the datetime index
+        x = dates.values  # matplotlib can plot numpy datetime64 directly
+        
+        # blended transform for right-side annotations
+        trans = mtransforms.blended_transform_factory(ax.transAxes, ax.transData)
+
+        # x is the datetime index
+        x = dates.values  # matplotlib can plot numpy datetime64 directly
+
+        # blended transform for right-side annotations
+        trans = mtransforms.blended_transform_factory(ax.transAxes, ax.transData)
+
+        # precompute strings & lengths for annotations 
+        row_data = []  # (crit, vals, red_str, green_str, tail_str)
+        for crit in criteria_cols:
+            vals = summary_df[crit].values
+            Nred = int(vals.sum())          # True == 1, so sum gives Nred
+            Ntotal = int(len(vals))
+            Ngreen = Ntotal - Nred
+
+            red_str   = f"{Nred}"
+            green_str = f":{Ngreen}"
+            tail_str  = f"/{Ntotal} days"
+
+            row_data.append((crit, vals, red_str, green_str, tail_str))
+
+        # Max lengths for each "column" of text
+        max_red_len   = max(len(r[2]) for r in row_data)
+        max_green_len = max(len(r[3]) for r in row_data)
+        # tail length max not strictly needed for alignment, but kept for completeness
+        max_tail_len  = max(len(r[4]) for r in row_data)
+
+        # Approximate width per character in axes coords
+        char_width = 0.012  # tweak if needed
+
+        # Fixed x-positions for each column (in axes coords)
+        x_base_red   = 1.01
+        x_base_green = x_base_red   + char_width * max_red_len
+        x_base_tail  = x_base_green + char_width * max_green_len - 0.8*char_width
+
+
+        # Optional hatching to highlight service missions
+        if hatch_service_missions:
+            try:
+                df_sm = self.get_service_mission_df()
+                if not df_sm.empty:
+                    for _, row in df_sm.iterrows():
+                        try:
+                            x0 = pd.to_datetime(row['UT_start_date'])
+                            x1 = pd.to_datetime(row['UT_end_date'])
+                            if pd.notna(x0) and pd.notna(x1):
+                                ax.axvspan(
+                                    x0, x1,
+                                    facecolor='none',           # keep data visible
+                                    hatch='////',
+                                    edgecolor='dimgray',
+                                    linewidth=0.0,
+                                    alpha=0.4,
+                                    zorder=0.2
+                                )
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+
+        # plot rows & aligned annotations 
+        for j, (crit, vals, red_str, green_str, tail_str) in enumerate(row_data):
+            y = np.full_like(x, j, dtype=float)
+
+            # False = small, faint green
+            mask_false = ~vals
+            ax.scatter(
+                x[mask_false],
+                y[mask_false],
+                s=15,
+                color='green',
+                alpha=0.2,
+                edgecolor='none',
+            )
+
+            # True = larger, bright red
+            mask_true = vals
+            ax.scatter(
+                x[mask_true],
+                y[mask_true],
+                s=30,
+                color='red',
+                alpha=0.9,
+                edgecolor='k',
+                linewidth=0.3,
+            )
+
+            # Row index in data coords
+            y_data = j
+
+            # Column 1: red Nred
+            ax.text(
+                x_base_red, y_data, red_str,
+                transform=trans,
+                va='center', ha='left',
+                fontsize=8,
+                color='red',
+                clip_on=False,
+            )
+
+            # Column 2: green :Ngreen
+            ax.text(
+                x_base_green, y_data, green_str,
+                transform=trans,
+                va='center', ha='left',
+                fontsize=8,
+                color='green',
+                clip_on=False,
+            )
+
+            # Column 3: black /Ntotal days
+            ax.text(
+                x_base_tail, y_data, tail_str,
+                transform=trans,
+                va='center', ha='left',
+                fontsize=8,
+                color='black',
+                clip_on=False,
+            )
+        
+        # Y-axis: criteria labels
+        ax.set_yticks(range(len(criteria_cols)))
+        ax.set_yticklabels(criteria_cols, fontsize=8)
+        ax.set_ylim(len(criteria_cols) - 0.5, -0.5)  # invert so 0 is at top
+    
+        # X-axis: time formatting
+        ax.set_xlim(start_date - timedelta(days=1), end_date + timedelta(days=1))
+        locator = mdates.AutoDateLocator()
+        formatter = mdates.ConciseDateFormatter(locator)
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(formatter)
+        ax.tick_params(axis='x', labelsize=8)
+
+        ax.set_xlabel('Date')
+        if plot_title:
+            ax.set_title(plot_title, fontsize=10)
+        ax.grid(True, axis='x', alpha=0.2)
+    
+        plt.tight_layout()
+
+        # Save/show
+        try:
+            if fig_path is not None:
+                t0 = time.process_time()
+                plt.savefig(fig_path, dpi=250, facecolor='w')
+            if show_plot is not None:
+                plt.show()
+            plt.close('all')
+        except Exception as e:
+            self.logger.info(f"Error saving file or showing plot: {e}")
 
 
 def add_one_month(inputdate):

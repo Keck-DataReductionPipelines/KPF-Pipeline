@@ -1,38 +1,13 @@
-# # L2 to 2D imports
-# from modules.Utils.orientation_ref_reader import OrientationReference
-# from modules.Utils.overscan_subtract import OverscanSubtraction
-# from modules.Utils.amplifier_mask import AmplifierMask
-# from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
-
-# # 2D to L1 imports. If 2D to L1 is a stand alone recipe, add these:
-# # L1 level imports, copied from kpf_drp.recipe.
-# from modules.order_trace.src.order_trace import OrderTrace
-# from modules.spectral_extraction.src.order_rectification import OrderRectification
-# from modules.spectral_extraction.src.spectral_extraction import SpectralExtraction
-# from modules.order_trace.src.order_mask import OrderMask
-# from modules.wavelength_cal.src.alg import WaveInterpolation          
-# from modules.wavelength_cal.src.wavelength_cal import WaveInterpolate
-# from modules.blaze.src.blaze import AddBlaze
-# from modules.ca_hk.src.ca_hk_extraction import CaHKExtraction
-
-
-# # general imports.
-# from modules.Utils.string_proc import str_replace
-# from modules.Utils.string_proc import date_from_kpffile
-# from modules.Utils.data_handler import ExtCopy
-# from modules.Utils.data_handler import FromCSV
-# from modules.Utils.data_handler import GetHeaderValue
-# from modules.Utils.data_handler import SetHeaderValue
-# from modules.Utils.data_handler import SelectObs
-# from modules.image_processing.src.image_process import ImageProcessing
-# from database.modules.query_db_nearest_master_files.src.query_db_nearest_master_files_framework import QueryDBNearestMasterFilesFramework
-# from database.modules.query_db_one_nearest_master_file.src.query_db_one_nearest_master_file_framework import QueryDBOneNearestMasterFileFramework
-# from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
-# from modules.quality_control.src.quality_control_framework import QualityControlFramework
-# from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
-# from modules.var_exts.src.var_exts_framework import VarExtsFramework
-# from modules.quicklook.src.diagnostics_framework import DiagnosticsFramework
-# from modules.calibration_lookup.src.calibration_lookup import CalibrationLookup
+# L0 to 2D imports
+from kpfpipe.pipelines.fits_primitives import kpf0_from_fits
+from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
+from modules.var_exts.src.var_exts_framework import VarExtsFramework
+from modules.image_processing.src.image_process import ImageProcessing
+from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
+from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
+from modules.Utils.orientation_ref_reader import OrientationReference
+from modules.Utils.overscan_subtract import OverscanSubtraction
+from modules.query_db_l0_file.src.query_db_l0_file_framework import QueryDBL0FileFramework
 
 # set the CONFIGURATION flags for each process ------------------------------------
 do_l0_to_2d_science = config.ARGUMENT.do_l0_to_2d_science
@@ -42,10 +17,10 @@ do_l1_to_l2_science = config.ARGUMENT.do_l1_to_l2_science
 do_order_trace = config.ARGUMENT.do_order_trace
 
 # L1 level flags
-do_spectral_extraction = config.WATCHFOR_2D.do_spectral_extraction
-# if copy wavelength solution data to L1 from file samples with wls data.
+do_spectral_extraction = config.ARGUMENT.do_spectral_extraction
+# if copy wavelength solution data to L1 from file samples with wls data
 do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
-# Peroform wavelength interpolation
+# perform wavelength interpolation
 do_db_query_for_before_after_master_files = config.WLS_INTERPOLATION.do_db_query_for_before_after_master_files 
 
 # L2 level flags
@@ -85,12 +60,163 @@ ccd_idx=config.ARGUMENT.ccd_idx
 rect_method = config.ARGUMENT.rectification_method
 extract_method = config.ARGUMENT.extraction_method
 orderlet_names = config.ARGUMENT.orderlet_names
-flat_rect = '_'+rect_method
+# flat_rect = '_'+rect_method
 
 ## full path for wavelength solution sample files for each fiber
 wls_list = config.ARGUMENT.wls_fits
 
-# do L0->2D conversion for watch mode
-if do_l0_to_2d_science:
-    # invoke_subrecipe("./recipes/watchfor_kpf_l0.recipe")
-	invoke_subrecipe("./recipes/kpf_l0_to_2d_science_image_processing.recipe")
+
+# Howard: remove duplicates from above and below here.
+data_type = config.ARGUMENT.data_type
+overwrite = config.ARGUMENT.overwrite
+max_cal_file_age = config.ARGUMENT.max_cal_file_age
+channel_datasec_ncols_green = config.WATCHFOR_L0.channel_datasec_ncols_green
+channel_datasec_nrows_green = config.WATCHFOR_L0.channel_datasec_nrows_green
+channel_datasec_ncols_red = config.WATCHFOR_L0.channel_datasec_ncols_red
+channel_datasec_nrows_red = config.WATCHFOR_L0.channel_datasec_nrows_red
+channel_orientation_ref_path_red = config.WATCHFOR_L0.channel_orientation_ref_path_red
+channel_orientation_ref_path_green = config.WATCHFOR_L0.channel_orientation_ref_path_green
+overscan_method = config.WATCHFOR_L0.overscan_method
+order = config.WATCHFOR_L0.overscan_order
+oscan_clip = config.WATCHFOR_L0.overscan_clip
+lev0_ffi_ext_red = config.WATCHFOR_L0.lev0_ffi_ext_red
+lev0_ffi_ext_green = config.WATCHFOR_L0.lev0_ffi_ext_green
+lev0_ffi_ext_cahk = config.WATCHFOR_L0.lev0_ffi_ext_cahk
+prescan_reg = config.WATCHFOR_L0.prescan_reg
+gain_key = config.WATCHFOR_L0.gain_keyword
+do_db_query_for_master_files = config.WATCHFOR_L0.do_db_query_for_master_files
+
+bad_pixel_masks = config.WATCHFOR_L0.bad_pixel_masks
+quicklook = config.WATCHFOR_L0.quicklook
+n_sigma = config.WATCHFOR_L0.n_sigma
+n_sigma_read_noise = config.WATCHFOR_L0.n_sigma_read_noise
+
+date_dir = context.date_dir + '/'
+
+# file_path = context.file_path
+lev0_ffi_exts = lev0_ffi_ext_red + lev0_ffi_ext_green
+lev0_ffi_exts_subbed = lev0_ffi_ext_red + lev0_ffi_ext_green + lev0_ffi_ext_cahk
+
+# Register L0 file in L0Files database table.  Perform quality-control tasks.
+
+lev0_ffi_exts_full = config.WATCHFOR_L0.lev0_ffi_exts_full
+actual_dir = config.WATCHFOR_L0.actual_dir
+verbose = config.WATCHFOR_L0.verbose
+
+# Exposure Quality Control (not regular QC)
+do_quality_control = True
+if do_quality_control:
+
+    # Read in L0. Be careful not to modify this object.
+    kpf_object_l0 = kpf0_from_fits(l0_filename_science,data_type) # L0, Only read this variable.
+
+    # The 2D kpf object is not modified and the 2D file is not written in this routine.
+    quality_control_list = QualityControlExposureFramework(data_type,
+                                                            # d2_filename_science,
+                                                            l0_filename_science,
+                                                            lev0_ffi_exts_full,
+                                                            actual_dir,
+                                                            kpf_object_l0)
+    quality_control_exit_code = quality_control_list[0]
+    quality_control_rid = quality_control_list[1]
+
+    # Generate the 2D FITS file.  Subtract overscan, master bias, master dark, and apply master flat and bad-pixel masks.    
+
+    if overwrite: 
+        # read l0 file. Modify this object throughout the routine.
+        kpf_object = kpf0_from_fits(l0_filename_science,data_type) # L0, not 2D file is input
+        dt_string = GetHeaderValue(kpf_object, 'DATE-MID')
+        cals = CalibrationLookup(dt_string)
+        masterbias_path = cals['bias']
+        masterdark_path = cals['dark']
+        masterflat_path = cals['flat']
+
+        # Quality Control & Diagnostics - L0 level
+        data_level_str = 'L0'
+        # kpf_object with that name must be defined before invoking subrecipes.
+        invoke_subrecipe("./recipes/quality_control.subrecipe")
+        invoke_subrecipe("./recipes/diagnostics.subrecipe")
+        # Silently returns modified kpf_object
+
+        # Construct the full frame images one at a time.
+        # These routines combine the 2D image from the raw file based on the channel orientation reference file.
+        # Then, overscan subtraction is performed.
+        # The kpf object is modified, and not saved to disk, but returned.
+        ref_output_red = OrientationReference(channel_orientation_ref_path_red, data_type)
+        red_ffi = OverscanSubtraction(kpf_object,
+                                    overscan_method,
+                                    order,
+                                    oscan_clip,
+                                    ref_output_red,
+                                    lev0_ffi_ext_red,
+                                    data_type,
+                                    prescan_reg,
+                                    gain_key,
+                                    channel_datasec_ncols_red,
+                                    channel_datasec_nrows_red,
+                                    n_sigma)
+
+        # Construct the Green full frame image.
+        # These routines combine the 2D image from the raw file based on the channel orientation reference file.
+        # Then, overscan subtraction is performed.
+        # The kpf object is modified, and not saved to disk, but returned.
+        ref_output_green = OrientationReference(channel_orientation_ref_path_green, data_type)
+        # add green-chip ffi to data containing red-chip ffi
+        kpf_object_with_ffi = OverscanSubtraction(red_ffi,
+                                        overscan_method,
+                                        order,
+                                        oscan_clip,
+                                        ref_output_green,
+                                        lev0_ffi_ext_green,
+                                        data_type,
+                                        prescan_reg,
+                                        gain_key,
+                                        channel_datasec_ncols_green,
+                                        channel_datasec_nrows_green,
+                                        n_sigma)
+        # recipe_complete = to_fits(kpf_object_with_ffi, d2_filename_science) 
+        # These calls to ImageProcessing do not write a file (but may adjust the headers, check)
+
+        # Pass kpf_object KPF0 object as 7th argument for in-memory extension updates
+        var_exts_exit_codes = VarExtsFramework(data_type,
+                                            l0_filename_science,
+                                            masterbias_path,
+                                            masterdark_path,
+                                            masterflat_path,
+                                            kpf_object_with_ffi)
+        var_exts_exit_code = var_exts_exit_codes[0]
+        kpf_object_from_var_exts = var_exts_exit_codes[1]
+        
+        bias_subbed = ImageProcessing(kpf_object_from_var_exts, masterbias_path, lev0_ffi_exts_subbed, data_type, quicklook)
+        dark_subbed = ImageProcessing(bias_subbed, masterdark_path, lev0_ffi_exts_subbed, data_type, quicklook)
+        flat_applied = ImageProcessing(dark_subbed, masterflat_path, lev0_ffi_exts, data_type, quicklook)
+        # Apply bad-pixel mask(s).
+        bpm_applied = flat_applied
+        for bpm in bad_pixel_masks:
+            pixels_masked = ImageProcessing(bpm_applied, bpm, lev0_ffi_exts, data_type, quicklook)
+            bpm_applied = pixels_masked
+            
+        # Diagnostics & Quality Control - 2D level
+        # These need to stay in this position in the recipe.
+        # Important header values are inserted into the 2D object.
+        kpf_object = bpm_applied
+        data_level_str = '2D'
+        invoke_subrecipe("./recipes/diagnostics.subrecipe")
+        invoke_subrecipe("./recipes/quality_control.subrecipe")
+        kpf_object_2d = kpf_object # The variable kpf_object is both the input and output of diag and qc.
+        # Query database for QC information and update headers in-memory
+        rid = quality_control_rid # Also returned from QC above.
+
+        if rid > 0:
+            # Pass kpf_object KPF0 object as 5th argument for in-memory header updates
+            do_query_l0_file_exit_vars = QueryDBL0FileFramework(
+                        data_type, 
+                        rid, 
+                        d2_filename_science, 
+                        verbose, 
+                        kpf_object_2d )
+            kpf_object_from_qdbff = do_query_l0_file_exit_vars[2]
+
+        # The read noise is calculated by analyze_l0.py and stored in the header in diagnostics.py
+        # The ReadNoiseFramework is now deprecated.
+        recipe_complete = to_fits(kpf_object_from_qdbff, d2_filename_science) 

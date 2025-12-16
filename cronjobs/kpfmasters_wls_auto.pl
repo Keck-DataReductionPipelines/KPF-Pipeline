@@ -103,6 +103,24 @@ if (!$image_check) {
 }
 
 
+# Database user for connecting to the database to run this script and query CalFiles database table.
+# E.g., kpfporuss
+my $dbuser = $ENV{KPFDBUSER};
+
+if (! (defined $dbuser)) {
+    die "*** Env. var. KPFDBUSER not set; quitting...\n";
+}
+
+# Database name of KPF operations database containing the CalFiles table.
+# E.g., kpfopsdb
+my $dbname = $ENV{KPFDBNAME};
+
+if (! (defined $dbname)) {
+    die "*** Env. var. KPFDBNAME not set; quitting...\n";
+}
+
+
+
 # Initialize fixed parameters and read command-line parameter.
 
 my $iam = 'kpfmasters_wls_auto.pl';
@@ -122,6 +140,33 @@ my $config = '/code/KPF-Pipeline/configs/wls_auto.cfg';
 my $sbxdir = "${sandbox}/masters/$procdate";
 
 
+# Get database parameters from ~/.pgpass file.
+
+my ($dbport, $dbpass);
+my @op = `cat ~/.pgpass`;
+foreach my $op (@op) {
+    chomp $op;
+    $op =~ s/^\s+|\s+$//g;  # strip blanks.
+    if (($op =~ /$dbuser/) and ($op =~ /$dbname/)) {
+        my (@f) = split(/\:/, $op);
+        $dbport = $f[1];
+        $dbpass = $f[4];
+    }
+}
+
+my $dbenvfilename = "db";
+$dbenvfilename .= '_' . $$ . '_' . $trunctime . '.env';                   # Augment with unique numbers (process ID and truncated seconds).
+my $dbenvfile = "$codedir/jobs/" . $dbenvfilename;
+my $dbenvfileinside = "/code/KPF-Pipeline/jobs/" . $dbenvfilename;
+
+`touch $dbenvfile`;
+`chmod 600 $dbenvfile`;
+open(OUT,">$dbenvfile") or die "Could not open $dbenvfile ($!); quitting...\n";
+print OUT "export DBPASS=\"$dbpass\"\n";
+close(OUT) or die "Could not close $dbenvfile ($!); quitting...\n";
+
+
+
 # Print environment.
 
 print "iam=$iam\n";
@@ -136,6 +181,12 @@ print "KPFCRONJOB_SBX=$sandbox\n";
 print "KPFCRONJOB_LOGS=$logdir\n";
 print "KPFCRONJOB_CODE=$codedir\n";
 print "Docker container name = $containername\n";
+print "dbuser=$dbuser\n";
+print "dbname=$dbname\n";
+print "dbport=$dbport\n";
+print "dbenvfile=$dbenvfile\n";
+print "dbenvfileinside=$dbenvfileinside\n";
+print "Docker container name = $containername\n";
 
 
 # Change directory to where the Dockerfile is located.
@@ -143,6 +194,7 @@ print "Docker container name = $containername\n";
 chdir "$codedir" or die "Couldn't cd to $codedir : $!\n";
 
 my $script = "#! /bin/bash\n" .
+             "source $dbenvfileinside\n" .
              "make init\n" .
              "export PYTHONUNBUFFERED=1\n" .
              "git config --global --add safe.directory /code/KPF-Pipeline\n" .
@@ -160,8 +212,15 @@ my $makescriptcmd = "echo \"$script\" > $dockercmdscript";
 `$makescriptcmd`;
 `chmod +x $dockercmdscript`;
 
+# Get memory optimization flags
+my $memory_flags = `$codedir/scripts/get_docker_memory_flags.sh`;
+chomp($memory_flags);
+
 my $dockerruncmd = "docker run -d --name $containername " .
+                   # Memory optimization
+                   "$memory_flags " .
                    "-v ${codedir}:/code/KPF-Pipeline -v $sandbox:/data -v ${mastersdir}:/masters " .
+                   "--network=host -e DBPORT=$dbport -e DBNAME=$dbname -e DBUSER=$dbuser -e DBSERVER=127.0.0.1 -e DBPASS=\"$dbpass\" " .
                    "$containerimage bash ./$dockercmdscript";
 print "Executing $dockerruncmd\n";
 my $opdockerruncmd = `$dockerruncmd`;
