@@ -112,8 +112,8 @@ class SpectralExtractionAlg:
         # GJG needs to be moved to calibrations lookup
         self.order_trace = self._fix_order_trace_indexing()
 
-        #for chip in ['GREEN', 'RED']:
-        #    self.bad_pixel_mask[f'{chip}_CCD'] &= self._make_bad_pixel_mask(chip)
+        for chip in ['GREEN', 'RED']:
+            self.bad_pixel_mask[f'{chip}_CCD'] &= self._make_bad_pixel_mask(chip)
 
         # initialize L1 object
         self.target_l1 = KPF1.from_l0(self.target_2D)
@@ -526,6 +526,11 @@ class SpectralExtractionAlg:
         # variance from non-photon sources
         V0 = V - np.abs(D)/Q
 
+        # Pre-check variance to avoid NaN residuals
+        if np.any(V0 <= 0) or np.any(np.isnan(V0)) or np.any(np.isinf(V0)):
+            self.log.info("Invalid variance values (V0 <= 0, NaN, or inf) detected in optimal_extraction. Patching V0 with photon noise to prevent NaN residuals.")
+            V0 = np.maximum(V0, np.abs(D)/Q)
+
         # optimal extraction loop
         loop = 0
         while loop < max_iter:
@@ -548,13 +553,26 @@ class SpectralExtractionAlg:
             
             # mask cosmic rays
             bad_pixel_count = np.nansum(M==0)
-            worst_pixel_row = np.nanargmax(R*M, axis=0)
+            
+            # Handle all-NaN columns gracefully
+            try:
+                worst_pixel_row = np.nanargmax(R*M, axis=0)
+            except ValueError:
+                # If all-NaN slice encountered, find worst pixel per column individually
+                self.log.warning("All-NaN columns detected in residuals during cosmic ray masking. Processing columns individually.")
+                worst_pixel_row = np.full(ncol, -1, dtype=int)
+                for col in range(ncol):
+                    col_residuals = R[:, col] * M[:, col]
+                    if not np.all(np.isnan(col_residuals)):
+                        worst_pixel_row[col] = np.nanargmax(col_residuals)
     
             if verbose:
-                print(f"loop {loop} | {bad_pixel_count - np.nansum(W==0)} pixels flagged")
+                self.log.info(f"loop {loop} | {bad_pixel_count - np.nansum(W==0)} pixels flagged")
         
             for col in range(ncol):
                 row = worst_pixel_row[col]
+                if row == -1:
+                    continue  # skip columns with all NaN residuals
             
                 if R[row,col] > extraction_sigma_clip**2:
                     M[row,col] = 0
