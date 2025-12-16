@@ -50,8 +50,9 @@ The command below launches 50 processes to reprocess L0 files into 2D/L1/L2 file
 
 **Reprocessing Masters:**
 
-Reprocessing master files from yyyymmdd to YYYYMMDD is accomplished with `scripts/reprocess_masters.py`,
-which is a cousin of `reprocess_obs.py` sharing similar command-line options.
+Reprocessing master files over a range of observation dates from yyyymmdd to YYYYMMDD
+is accomplished with `scripts/reprocess_masters.py`,
+which is a cousin of `reprocess_obs.py` having similar command-line options.
 This script is to be executed inside a KPF Docker container.
 A number of master files are produced, and it can take hours to reprocess a single observation date.
 In production processing by the DRP development team, this command is in the xterm called *Masters Repocessing*.
@@ -94,6 +95,8 @@ Here's the docstring showing all of the options:
 
 At the start of the script, there are lines to remove old master files for the specified dates and
 remove associated records from the CalFiles database table.
+
+The name of the log file can be specified (the default is `masters_reprocessing.log`).
 
 **Quicklook reprocessing -- qlp_parallel.py:**
 
