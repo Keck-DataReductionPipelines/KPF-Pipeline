@@ -16,7 +16,7 @@ It also procuces or appends to a log file (default name: reprocess_obs.log) with
 Dates that have been reprocessed with the same pipeline versions (according to the log file) are skipped.
 In production processing by the DRP development team, this command is in the xterm called *Reprocessing*.::
 
-    reprocess_obs.py --delete --ncpu 96 yyyymmdd YYYYMMDD
+    python3 reprocess_obs.py --delete --ncpu 96 yyyymmdd YYYYMMDD
 
 Here's the docstring showing all of the options.::
 
@@ -64,7 +64,7 @@ with the following command::
 
 An example command to reprocess a single night is (start and end dates are the same)::
 
-    scripts/reprocess_masters.py 20241009 20241009 --ncpu 1 --verbose  --not-nice --force
+    python3 scripts/reprocess_masters.py 20241009 20241009 --ncpu 1 --verbose  --not-nice --force
 
 Here's the docstring showing all of the options:
 
