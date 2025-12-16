@@ -545,11 +545,22 @@ class SpectralExtractionAlg:
             
             # residuals
             R = (D - f*P - S)**2/V
-            
+
             # mask cosmic rays
             bad_pixel_count = np.nansum(M==0)
-            worst_pixel_row = np.nanargmax(R*M, axis=0)
-    
+            try:
+                worst_pixel_row = np.nanargmax(R*M, axis=0)
+            except ValueError:
+                # Define some detaults for the output when a column is all zeros
+                # This occurs when R is all NaNs because V is zero.
+                if np.all(np.isnan(f)):
+                    f = np.zeros_like(f)
+                if np.all(np.isnan(v)):
+                    v = np.zeros_like(v)
+                # Add logging warning statement:
+                self.log.warning("All pixels masked are NaN; returning zeros for extracted spectrum and variance.")
+                return f, v, P, M  
+
             if verbose:
                 print(f"loop {loop} | {bad_pixel_count - np.nansum(W==0)} pixels flagged")
         
