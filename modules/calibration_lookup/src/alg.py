@@ -1,20 +1,15 @@
 
-import sys
-if sys.version_info >= (3, 9):
-    from importlib import resources
-else:
-    import importlib_resources as resources
+from importlib import resources
 
 import pandas as pd
 from datetime import datetime
 import time
 
-from database.modules.utils.kpf_db import KPFDB
-from keckdrpframework.models.arguments import Arguments
+from database.modules.utils.kpf_db import KPFDB, _get_cached_result
 from kpfpipe.config.pipeline_config import ConfigClass
-from kpfpipe.logger import start_logger
 from astropy.io.fits import getheader
 from modules.Utils.utils import DummyLogger
+
 
 class GetCalibrations:
     """This utility looks up the associated calibrations for a given datetime and
@@ -86,14 +81,15 @@ class GetCalibrations:
         # Round to nearest minute (same logic as in kpf_db.py)
         rounded_dt = dt.replace(second=0, microsecond=0)
         rounded_datetime = rounded_dt.strftime("%Y-%m-%dT%H:%M:%S")
-        cache_key = f"calibration_lookup_complete:{rounded_datetime}"
         
         # Handle the case where subset is None (use all keys)
         if subset is None:
             subset = list(self.lookup_map.keys())
-        
+            cache_key = f"calibration_lookup_complete:{rounded_datetime}"
+        else:
+            cache_key = f"calibration_lookup_subset:{rounded_datetime}_{'_'.join(subset)}"
+
         try:
-            from database.modules.utils.kpf_db import _get_cached_result
             cached_result = _get_cached_result(cache_key, verbose=self.verbose)
             if not self.use_cache:
                 cached_result = None

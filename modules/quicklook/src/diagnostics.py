@@ -1983,7 +1983,9 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
         L1.header['PRIMARY']['STATWREF'] = (wls_filename['rough_wls'], 'ref fn for WLS-ref')
         for EXT in ['SCI', 'SKY', 'CAL']:
             norder = L1[chip+'_CAL_WAVE'].shape[0]
-            for o in range(norder):
+            norder_ref = myL1_ref.L1[chip+'_CAL_WAVE'].shape[0]
+            norder_use = min(norder, norder_ref)  # Use the smaller of the two to avoid index errors
+            for o in range(norder_use):
                 try:
                     med_wls, std_wls = compute_stats_wls(myL1.L1, myL1_ref.L1, EXT=[EXT], CHIP=[chip.upper()], ORDER=[o])
                     if chip == 'green':
@@ -2008,7 +2010,7 @@ def add_headers_L1_std_wls(L1, logger=None, debug=False):
                             L1.header['PRIMARY'][f'STDWRC{o:02d}'] = (std_wls, f'stddev(WLS-ref) [pix], Red CAL order {o:02d}')
     
                 except Exception as e:
-                    logger.error(f"Problem with green L1 {name} line measurements: {e}\n{traceback.format_exc()}")
+                    logger.error(f"Problem with {chip} L1 {EXT} WLS measurements (order {o}): {e}\n{traceback.format_exc()}")
 
     return L1
 
