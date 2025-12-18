@@ -6,7 +6,7 @@ panel_arr:
         plot_type: scatter
         unit: Hz
         plot_attr:
-          label: "CEO Filtered Setpoint Freq (LFCCEOFR)"
+          label: "CEO Filtered Setpoint Freq\n(LFCCEOFR)"
           marker: .
           linewidth: 0.5
     paneldict:
@@ -29,7 +29,7 @@ panel_arr:
       - col: LFCCWMDN
         plot_type: scatter
         plot_attr:
-          label: "CW Node Number (LFCCWMDN)"
+          label: "CW Node Number\n(LFCCWMDN)"
           marker: .
           linewidth: 0.5
     paneldict:
