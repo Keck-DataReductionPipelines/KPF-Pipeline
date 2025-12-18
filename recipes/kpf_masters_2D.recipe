@@ -105,6 +105,7 @@ if (overwrite or not output_file_exists) and raw_file_path in file_list:
     diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
     kpf_object = diagnostics_output_list[1]
 
+    # GJG: updating to new image assembly module
     image_assembly_output_list = ImageAssembly(kpf_object)
 
     exit_code = image_assembly_output_list[0]
