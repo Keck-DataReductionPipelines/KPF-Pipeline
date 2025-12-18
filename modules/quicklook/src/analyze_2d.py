@@ -96,6 +96,16 @@ class Analyze2D:
             self.red_percentile_99, self.red_percentile_90, self.red_percentile_50, self.red_percentile_10 = np.nanpercentile(np.array(self.D2['RED_CCD'].data),[99,90,50,10])
         except:
             self.logger.error('Problem computing SNR for Red 2D image')
+        self.gain = {
+             'GREEN_AMP1': 5.175,
+             'GREEN_AMP2': 5.208,
+             'GREEN_AMP3': 5.52,
+             'GREEN_AMP4': 5.39,
+             'RED_AMP1': 5.02,
+             'RED_AMP2': 5.27,
+             'RED_AMP3': 5.32,
+             'RED_AMP4': 5.23,
+        }
 
 
     def measure_master_age(self, kwd='BIASFILE', verbose=False):
@@ -993,8 +1003,10 @@ class Analyze2D:
 #        plt.close('all')
 
 
-    def plot_2D_image_zoom(self, chip=None, fig_path=None, show_plot=False, 
-                           zoom_coords=(3780, 3780, 4080, 4080)):
+    def plot_2D_image_zoom(self, chip=None, 
+                           intensity_threshold=None,
+                           zoom_coords=(3780, 3780, 4080, 4080),
+                           fig_path=None, show_plot=False):
         """
         Generate a zoom-in plot of the a 2D image.  
 
@@ -1022,6 +1034,8 @@ class Analyze2D:
                 chip_title = 'Red'
                 reg = self.red_dark_current_regions
             image = np.array(self.D2[CHIP + '_CCD'].data)
+            if intensity_threshold:
+                image = (image > intensity_threshold).astype(np.uint8)
         else:
             self.logger.debug('chip not supplied.  Exiting plot_2D_image')
             return
