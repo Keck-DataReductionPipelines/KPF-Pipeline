@@ -8,7 +8,7 @@ panel_arr:
           label: DRP Version - 2D
           marker: .
     paneldict:
-      ylabel: DRP Version - 2D
+          label: "DRP Version - 2D\n(DRPTAG2D)"
       not_junk: true
       legend_frac_size: 0.15
 
@@ -16,7 +16,7 @@ panel_arr:
       - col: DRPTAGL1
         plot_type: state
         plot_attr:
-          label: DRP Version - L1
+          label: "DRP Version - L1\n(DRPTAGL1)"
           marker: .
     paneldict:
       ylabel: DRP Version - L1
@@ -27,7 +27,7 @@ panel_arr:
       - col: DRPTAGL2
         plot_type: state
         plot_attr:
-          label: DRP Version - L2
+          label: "DRP Version - L2\n(DRPTAGL2)"
           marker: .
     paneldict:
       ylabel: DRP Version - L2
@@ -38,7 +38,7 @@ panel_arr:
       - col: DRFTCOR
         plot_type: state
         plot_attr:
-          label: Drift Correction Applied
+          label: "Drift Correction\nApplied (DRFTCOR)"
           marker: .
     paneldict:
       ylabel: Drift Correction Applied
