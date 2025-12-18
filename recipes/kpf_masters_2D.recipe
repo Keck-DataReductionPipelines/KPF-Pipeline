@@ -88,13 +88,11 @@ output_file_exists = exists(output_file_name)
 if (overwrite or not output_file_exists) and raw_file_path in file_list:
 
     # Read in FITS data.
-    l0 = kpf0_from_fits(raw_file_path, data_type)
+    kpf_object = kpf0_from_fits(raw_file_path, data_type)
 
     #---------
 
     # Diagnostics & Quality Control - L0 level
-
-    kpf_object = l0
     data_level_str = 'L0'
 
     # Cannot call subrecipes in a loop (does not work correctly).
@@ -106,10 +104,15 @@ if (overwrite or not output_file_exists) and raw_file_path in file_list:
 
     diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
     kpf_object = diagnostics_output_list[1]
-    l0 = kpf_object
 
+    image_assembly_output_list = ImageAssembly(kpf_object)
+
+    exit_code = image_assembly_output_list[0]
+    kpf_object_with_ffi = image_assembly_output_list[1]
+
+    """
     #---------
-
+    
     # Overscan subtraction, first red, then green (the ordering should not matter, except
     # how the FITS object is modified and passed on to subsequent processes in the code below).
 
@@ -147,6 +150,7 @@ if (overwrite or not output_file_exists) and raw_file_path in file_list:
 
 
     #---------
+    """
 
     # Diagnostics & Quality Control - 2D level
 
