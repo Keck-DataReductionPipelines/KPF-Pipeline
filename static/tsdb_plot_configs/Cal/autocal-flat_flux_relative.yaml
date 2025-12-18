@@ -7,7 +7,7 @@ panel_arr:
         normalize: true
         plot_type: scatter
         plot_attr:
-          label: "Relative Flux Ratio\n(452/652nm)"
+          label: "Relative Flux Ratio\n452/652nm (FR452652)"
           marker: .
           linewidth: 0.5
           color: darkviolet
@@ -25,7 +25,7 @@ panel_arr:
         normalize: true
         plot_type: scatter
         plot_attr:
-          label: "Relative Flux Ratio\n(548/652nm)"
+          label: "Relative Flux Ratio\n548/652nm (FR548652)"
           marker: .
           linewidth: 0.5
           color: blue
@@ -43,7 +43,7 @@ panel_arr:
         normalize: true
         plot_type: scatter
         plot_attr:
-          label: "Relative Flux Ratio\n(747/652nm)"
+          label: "Relative Flux Ratio\n747/652nm (FR747652)"
           marker: .
           linewidth: 0.5
           color: orange
@@ -61,7 +61,7 @@ panel_arr:
         normalize: true
         plot_type: scatter
         plot_attr:
-          label: "Relative Flux Ratio\n(852/652nm)"
+          label: "Relative Flux Ratio\n852/652nm (FR852652)"
           marker: .
           linewidth: 0.5
           color: red
