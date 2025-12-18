@@ -385,21 +385,15 @@ class AnalyzeL1:
         return (SCI_fl, CAL_fl, SKY_fl)
 
 
-    def count_saturated_lines(self, chip='green'):
+    def count_saturated_lines(self, chip='green', orders='all', saturation_level=[2.5e6, 2.5e6, 2.5e6, 1.5e6, 2.5e6]):
         """
         This method uses the find_peaks algorithm to measure the number of 
-        emission lines above an intensity threshold. Additionally, it checks
-        that each order has at least one peak in each of the 
-        `divisions_per_order` subregions.  This method is usually applied to 
-        LFC or Etalon spectra.
+        emission lines above an intensity threshold. 
+        This method is usually applied to LFC or Etalon spectra.
     
         Args:
             chip (str):               CCD name ('green' or 'red')
             intensity_thresh (float): minimum line amplitude to be considered good
-            min_lines (int):          minimum number of lines in a spectral 
-                                      order for it to be considered good
-            divisions_per_order (int): number of contiguous subregions each order 
-                                       must have at least one peak in
     
         Returns:
             SCI1_sat_lines, SCI2_sat_lines, SCI3_sat_lines, CAL_sat_lines, SKY_sat_lines
@@ -422,20 +416,25 @@ class AnalyzeL1:
                 flux = np.array(self.L1[chip.upper() + '_' + oo_str].data, dtype='d')[o, :].flatten()
                 
                 # Set saturation level for each orderlet
-                saturation = 2.5e6
-                if oo == 3:
-                    saturation = 1.25e6
+                saturation = saturation_level[oo]
                                                        
                 # Find peaks above intensity_thresh
                 peaks, properties = find_peaks(flux, height=saturation)
                 lines[o, oo] = len(peaks)
         
-        SCI1_sat_lines = int(np.sum(lines[:, 0]))                   
-        SCI2_sat_lines = int(np.sum(lines[:, 1]))                   
-        SCI3_sat_lines = int(np.sum(lines[:, 2]))                   
-        CAL_sat_lines  = int(np.sum(lines[:, 3]))                   
-        SKY_sat_lines  = int(np.sum(lines[:, 4]))                   
-    
+        if orders == 'all':
+            SCI1_sat_lines = int(np.sum(lines[:, 0]))
+            SCI2_sat_lines = int(np.sum(lines[:, 1]))
+            SCI3_sat_lines = int(np.sum(lines[:, 2]))
+            CAL_sat_lines  = int(np.sum(lines[:, 3]))
+            SKY_sat_lines  = int(np.sum(lines[:, 4]))
+        else:
+            SCI1_sat_lines = int(np.sum(lines[orders, 0]))
+            SCI2_sat_lines = int(np.sum(lines[orders, 1]))
+            SCI3_sat_lines = int(np.sum(lines[orders, 2]))
+            CAL_sat_lines  = int(np.sum(lines[orders, 3]))
+            SKY_sat_lines  = int(np.sum(lines[orders, 4]))
+
         return (SCI1_sat_lines, SCI2_sat_lines, SCI3_sat_lines, CAL_sat_lines, SKY_sat_lines)
 
     def count_nans(self, chip='green'):
@@ -1139,22 +1138,57 @@ class AnalyzeL1:
         plt.close('all')
 
 
-    def plot_1D_spectrum_single_order(self, chip=None, order=11, ylog=False, 
+    def plot_1D_spectrum_single_order(self, chip=None, order=11, 
+                                            xlim='auto', ylim='auto', ylog=False, 
+                                            axhlines=None, axvlines=None, 
                                             orderlet=['SCI1', 'SCI2', 'SCI3'], 
                                             fig_path=None, show_plot=False):
         """
-        Generate a plot of a single order of the L1 spectrum showing all orderlets.
+        Generate a plot of a single spectral order from the L1 1D spectrum.
+
+        This routine extracts wavelength/flux arrays from the L1 product for the
+        selected CCD (`chip`) and `order` index, then plots one or more orderlets
+        on a single figure. Supported orderlets are SCI1/SCI2/SCI3/SKY/CAL and/or
+        the combined SCI (= SCI1 + SCI2 + SCI3).
+
+        Notes:
+            - `order` is interpreted as a 0-based array index into the spectral
+              order axis of the L1 arrays (i.e., not a physical “order number”).
+            - If `xlim` is 'auto', the x-range defaults to the SCI1 wavelength
+              span for that order.
+            - If `ylim` is 'auto', Matplotlib chooses the y-limits.
+            - If `ylog` is True, the y-axis is logarithmic.
+            - `axhlines`/`axvlines` draw red dashed guide lines at the specified
+              y/x values.
+            - If `chip` is not supplied as 'green' or 'red', the method logs/prints
+              a message and returns without generating a plot.
+            - If `fig_path` is provided, a PNG is saved with dpi=400; if `show_plot`
+              is True, the figure is displayed in the current environment.
 
         Args:
-            chip (string) - "green" or "red"
-            order (int) - spectral order to plot; if SCI, then SCI1+SCI2+SCI3
-            fig_path (string) - set to the path for the file to be generated.
-            show_plot (boolean) - show the plot in the current environment.
+            chip (str): CCD name. Must be 'green' or 'red' (case-insensitive).
+            order (int): Spectral order index to plot (0-based).
+            xlim (str or tuple[float, float]): X-axis limits in Angstrom.
+                Use 'auto' to plot the full wavelength range for the order.
+            ylim (str or tuple[float, float]): Y-axis limits in counts (e-).
+                Use 'auto' to let Matplotlib choose limits.
+            ylog (bool): If True, use logarithmic scaling for the y-axis.
+            axhlines (list[float] or None): Optional y-values at which to draw
+                horizontal guide lines.
+            axvlines (list[float] or None): Optional x-values (Angstrom) at which
+                to draw vertical guide lines.
+            orderlet (list[str]): Orderlets to plot. Allowed values (case-insensitive):
+                'SCI1', 'SCI2', 'SCI3', 'SKY', 'CAL', 'SCI'. The 'SCI' option plots
+                SCI1+SCI2+SCI3 on the SCI2 wavelength grid.
+            fig_path (str or None): Output file path for the generated PNG. If None,
+                the plot is not saved to disk.
+            show_plot (bool): If True, display the plot interactively (e.g., in a
+                Jupyter notebook).
 
         Returns:
-            PNG plot in fig_path or shows the plot it in the current environment
-            (e.g., in a Jupyter Notebook).
+            None: A plot is saved to `fig_path` and/or displayed via `plt.show()`.
         """
+
         # Set parameters based on the chip selected
         if chip == 'green' or chip == 'red':
             if chip == 'green':
@@ -1203,11 +1237,22 @@ class AnalyzeL1:
             plt.plot(wav_sci3, flux_cal,  linewidth=0.75, label='CAL')
         if 'sci' in orderlet_lowercase:
             plt.plot(wav_sci, flux_sci, linewidth=0.75, label='SCI')
-        plt.xlim(min(wav_sci1), max(wav_sci1))
+        
+        if axhlines != None:
+            for ln in axhlines:
+                plt.axhline(y=ln, color='r', linestyle='--')
+        if axvlines != None:
+            for ln in axvlines:
+                plt.axvline(x=ln, color='r', linestyle='--')
         plt.title('L1 (' + orderlet_label + ') - ' + chip_title + ' CCD: ' + str(self.ObsID) + ' - ' + self.name, fontsize=18)
         plt.xlabel('Wavelength (Ang)', fontsize=18)
         plt.tick_params(axis='both', labelsize=14)  # Setting x-axis label size
         plt.ylabel('Counts (e-)', fontsize=18)
+        if xlim != 'auto': 
+            plt.xlim(xlim)
+        else:
+            plt.xlim(min(wav_sci1), max(wav_sci1))
+        if ylim != 'auto': plt.ylim(ylim)
         if ylog: plt.yscale('log')
         plt.grid(True)
         plt.legend()
