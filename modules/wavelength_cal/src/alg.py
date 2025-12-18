@@ -1536,13 +1536,14 @@ class WaveCalibration:
                 w = w[good]
                 res = res[good]
             
-            plt.plot(x, res, 'k.')
-            plt.axhline(0, color='b', lw=2)
-            plt.xlabel('Pixel')
-            plt.ylabel(r'Fit residuals [$\AA$]')
-            plt.tight_layout()
-            #plt.savefig('{}/polyfit.png'.format(plot_path))
-            plt.close()
+            if plot_path is not None:
+                plt.plot(x, res, 'k.')
+                plt.axhline(0, color='b', lw=2)
+                plt.xlabel('Pixel')
+                plt.ylabel(r'Fit residuals [$\AA$]')
+                plt.tight_layout()
+                #plt.savefig('{}/polyfit.png'.format(plot_path))
+                plt.close()
             
             if plot_path is not None and self.cal_type =='ThAr':
                 approx_dispersion = (our_wavelength_solution_for_order[2000] - our_wavelength_solution_for_order[2100])/100

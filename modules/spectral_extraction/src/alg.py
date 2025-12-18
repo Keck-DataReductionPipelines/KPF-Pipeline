@@ -133,8 +133,9 @@ class SpectralExtractionAlg:
         var_ext_name = f'{chip}_VAR'
 
         # hard-code 2D variance fix w/ quick readnoise addition
-        # readnoise = 0.5*(self.target_2D.header['PRIMARY'][f'RN{chip}1'] + self.target_2D.header['PRIMARY'][f'RN{chip}2'])
-        # self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD']) + readnoise
+        #readnoise = 0.5*(self.target_2D.header['PRIMARY'][f'RN{chip}1'] + self.target_2D.header['PRIMARY'][f'RN{chip}2'])
+        readnoise = 0.0
+        self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD']) + readnoise
 
         if var_ext_name not in self.target_2D.extensions:
             self.log.warning(f"Variance extension {var_ext_name} not found, setting variance equal to photon noise")
@@ -544,11 +545,22 @@ class SpectralExtractionAlg:
             
             # residuals
             R = (D - f*P - S)**2/V
-            
+
             # mask cosmic rays
             bad_pixel_count = np.nansum(M==0)
-            worst_pixel_row = np.nanargmax(R*M, axis=0)
-    
+            try:
+                worst_pixel_row = np.nanargmax(R*M, axis=0)
+            except ValueError:
+                # Define some detaults for the output when a column is all zeros
+                # This occurs when R is all NaNs because V is zero.
+                if np.all(np.isnan(f)):
+                    f = np.zeros_like(f)
+                if np.all(np.isnan(v)):
+                    v = np.zeros_like(v)
+                # Add logging warning statement:
+                self.log.warning("All pixels masked are NaN; returning zeros for extracted spectrum and variance.")
+                return f, v, P, M  
+
             if verbose:
                 print(f"loop {loop} | {bad_pixel_count - np.nansum(W==0)} pixels flagged")
         
