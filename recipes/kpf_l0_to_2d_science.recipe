@@ -17,7 +17,7 @@ do_l1_to_l2_science = config.ARGUMENT.do_l1_to_l2_science
 do_order_trace = config.ARGUMENT.do_order_trace
 
 # L1 level flags
-do_spectral_extraction = config.WATCHFOR_2D.do_spectral_extraction
+do_spectral_extraction = config.ARGUMENT.do_spectral_extraction
 # if copy wavelength solution data to L1 from file samples with wls data
 do_sp_wavecopy = config.ARGUMENT.do_wavecopy_in_sp
 # perform wavelength interpolation

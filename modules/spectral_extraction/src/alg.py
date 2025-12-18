@@ -28,7 +28,7 @@ class SpectralExtractionAlg:
         master_flat_2D (KPF0): A KPF 2D master flat
         order_trace_green (str): path to csv with order trace for GREEN ccd
         order_trace_red (str): path to csv with order trace for RED ccd
-        start_order (tuple): index to start order trace, see caldates/start_order.csv
+        start_order (tuple): index to start order trace, see caldates/start_order.csv [DEPRECATED]
         config (configparser.ConfigParser): Config context
         logger (logging.Logger): Instance of logging.Logger
     """
@@ -133,8 +133,9 @@ class SpectralExtractionAlg:
         var_ext_name = f'{chip}_VAR'
 
         # hard-code 2D variance fix w/ quick readnoise addition
-        # readnoise = 0.5*(self.target_2D.header['PRIMARY'][f'RN{chip}1'] + self.target_2D.header['PRIMARY'][f'RN{chip}2'])
-        # self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD']) + readnoise
+        #readnoise = 0.5*(self.target_2D.header['PRIMARY'][f'RN{chip}1'] + self.target_2D.header['PRIMARY'][f'RN{chip}2'])
+        readnoise = 0.0
+        self.target_2D[var_ext_name] = np.abs(self.target_2D[f'{chip}_CCD']) + readnoise
 
         if var_ext_name not in self.target_2D.extensions:
             self.log.warning(f"Variance extension {var_ext_name} not found, setting variance equal to photon noise")
@@ -168,17 +169,18 @@ class SpectralExtractionAlg:
 
             # start is the dataframe index of the first sky fiber trace
             # this can be negative if the trace does not fall on the chip
-            # use KPFERA keyword
             if (int(datecode) < 20240203) and (chip == 'GREEN'):
                 start = -1
             elif (int(datecode) < 20240203) and (chip == 'RED'):
                 start = -1
-            elif (int(datecode) >= 20240203) and (chip == 'GREEN'):
-               start = 0
-            elif (int(datecode) >= 20240203) and (chip == 'RED'):
+            elif (int(datecode) >= 20240203) and (int(datecode) < 20251123) and (chip == 'GREEN'):
+                start = 0
+            elif (int(datecode) >= 20240203) and (int(datecode) < 20251123) and (chip == 'RED'):
                 start = 1
-
-            print(int(datecode), chip, start)
+            elif (int(datecode) >= 20251123) and (chip == 'GREEN'):
+                start = 0
+            elif (int(datecode) >= 20251123) and (chip == 'RED'):
+                start = 0
                     
             fibers = 'SKY SCI1 SCI2 SCI3 CAL'.split()
             trace_fiber = [None]*ntrace
@@ -390,6 +392,7 @@ class SpectralExtractionAlg:
             P[i] = 1.0*spline(x)
 
         P = np.maximum(P,0)
+        P *= (W > 0)
         P /= np.nansum(P*W,axis=0)
     
         return P
@@ -542,11 +545,22 @@ class SpectralExtractionAlg:
             
             # residuals
             R = (D - f*P - S)**2/V
-            
+
             # mask cosmic rays
             bad_pixel_count = np.nansum(M==0)
-            worst_pixel_row = np.nanargmax(R*M, axis=0)
-    
+            try:
+                worst_pixel_row = np.nanargmax(R*M, axis=0)
+            except ValueError:
+                # Define some detaults for the output when a column is all zeros
+                # This occurs when R is all NaNs because V is zero.
+                if np.all(np.isnan(f)):
+                    f = np.zeros_like(f)
+                if np.all(np.isnan(v)):
+                    v = np.zeros_like(v)
+                # Add logging warning statement:
+                self.log.warning("All pixels masked are NaN; returning zeros for extracted spectrum and variance.")
+                return f, v, P, M  
+
             if verbose:
                 print(f"loop {loop} | {bad_pixel_count - np.nansum(W==0)} pixels flagged")
         
