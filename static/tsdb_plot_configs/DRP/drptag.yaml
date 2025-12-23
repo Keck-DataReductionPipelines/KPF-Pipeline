@@ -8,7 +8,7 @@ panel_arr:
           label: DRP Version - 2D
           marker: .
     paneldict:
-          label: "DRP Version - 2D\n(DRPTAG2D)"
+      ylabel: "DRP Version - 2D\n(DRPTAG2D)"
       not_junk: true
       legend_frac_size: 0.15
 
