@@ -9,7 +9,7 @@ import sys
 import pytz
 from tqdm import tqdm
 from kpfpipe.tools.git_tools import get_git_tag, get_git_branch
-from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries
+from modules.quicklook.src.analyze_time_series import AnalyzeTimeSeries, add_one_month
 
 
 def parse_args():
@@ -190,7 +190,19 @@ def main():
                 day = datetime.datetime.strptime(datecode, "%Y%m%d")
                 savedir = f'/data/QLP/{datecode}/Time_Series/'
                 myTS = AnalyzeTimeSeries(backend='psql')
+                # Make day plots
                 myTS.plot_all_quicklook(day, interval='day', fig_dir=savedir)
+                # Make month and year plots
+                for plotdict in ['drptag', 'drphash']:# , 'files_missing', 'master_age']:
+                    for plot_range in ['month', 'year']:
+                        if plot_range == 'month':
+                            start_date = datetime.datetime(day.year, day.month, 1)
+                            end_date = add_one_month(start_date)
+                        elif plot_range == 'year':
+                            start_date = datetime.datetime(day.year, 1, 1)
+                            end_date = datetime.datetime(day.year+1, 1, 1)
+                        fig_path = savedir + f'kpf_{datecode}_ts_{plotdict}.png'
+                        myTS.plot_time_series_multipanel(plotdict, start_date=start_date, end_date=end_date, fig_path=fig_path, clean=True)
 
             end_time = datetime.datetime.now(local_tz)
             compute_time = end_time - start_time
