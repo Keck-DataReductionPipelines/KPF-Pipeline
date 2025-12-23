@@ -176,6 +176,12 @@ class MasterArclampFramework(KPF0_Primitive):
             exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
             return Arguments(exit_list)
 
+        if n_all_arclamp_files == 1:
+            self.logger.info('n_all_arclamp_files = {}'.format(n_all_arclamp_files))
+            master_arclamp_exit_code = 7
+            exit_list = [master_arclamp_exit_code,master_arclamp_infobits]
+            return Arguments(exit_list)
+
         obsdate_match = re.match(r".*(\d\d\d\d\d\d\d\d).*", all_arclamp_files[0])
         try:
             obsdate = obsdate_match.group(1)
@@ -301,7 +307,7 @@ class MasterArclampFramework(KPF0_Primitive):
         finally:
             # Ensure we always move past this point
             dbh = None
-            
+
         self.logger.debug('Starting to load master calibration files...')
 
         master_bias_data = KPF0.from_fits(self.masterbias_path,self.data_type)
@@ -333,7 +339,7 @@ class MasterArclampFramework(KPF0_Primitive):
             # Optimized: Use header-only reads to check conditions before loading full file
             try:
                 tester_object = fits.getval(arclamp_file_path, 'OBJECT')
-                
+
                 if tester_object == self.arclamp_object:
                     # Check for required keywords using header-only access
                     try:
@@ -349,10 +355,10 @@ class MasterArclampFramework(KPF0_Primitive):
                     # All conditions met - now load the full file for use as prototype
                     tester = KPF0.from_fits(arclamp_file_path)
                     date_obs = tester.header['PRIMARY']['DATE-OBS']
-                    
+
                     self.logger.info('Prototype FITS header from {}'.format(arclamp_file_path))
                     break
-                    
+
             except Exception as e:
                 # Skip files that can't be read
                 self.logger.debug('Could not read header from {}: {}'.format(arclamp_file_path, str(e)))
@@ -380,7 +386,7 @@ class MasterArclampFramework(KPF0_Primitive):
         frames_data_mjdobs_by_ffi = {}
         frames_data_path_by_ffi = {}
         keep_ffi_flags = {}
-        
+
         for ffi in self.lev0_ffi_exts:
             filenames_kept[ffi] = []
             frames_data_by_ffi[ffi] = []
@@ -405,7 +411,7 @@ class MasterArclampFramework(KPF0_Primitive):
                 continue
 
             path = all_arclamp_files[i]
-            
+
             # Load the file once for both chips
             obj = KPF0.from_fits(path)
 
@@ -426,7 +432,7 @@ class MasterArclampFramework(KPF0_Primitive):
                     np_obj_ffi = np.array(obj[ffi])
                     np_obj_ffi_shape = np.shape(np_obj_ffi)
                     n_dims = len(np_obj_ffi_shape)
-                    
+
                     if n_dims == 2:       # Valid data extension
                         keep_ffi_flags[ffi] = 1
                         filenames_kept[ffi].append(all_arclamp_files[i])
@@ -447,7 +453,7 @@ class MasterArclampFramework(KPF0_Primitive):
         # Process each extension's collected data
         for ffi in self.lev0_ffi_exts:
             self.logger.debug('Processing collected arclamp data, ffi = {}'.format(ffi))
-            
+
             frames_data = frames_data_by_ffi[ffi]
             frames_data_exptimes = frames_data_exptimes_by_ffi[ffi]
             frames_data_mjdobs = frames_data_mjdobs_by_ffi[ffi]
@@ -462,6 +468,7 @@ class MasterArclampFramework(KPF0_Primitive):
             if n_frames < 2:
                 self.logger.debug('n_frames < 2 for ffi,n_frames = {},{}'.format(ffi,n_frames))
                 del_ext_list.append(ffi)
+                n_frames_kept[ffi] = n_frames
                 continue
 
             if keep_ffi == 0:
