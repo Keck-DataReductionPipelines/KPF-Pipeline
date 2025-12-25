@@ -167,7 +167,7 @@ class TSDB:
             self.logger.info(f'Backend: {backend}')
             self.logger.info(f'Table prefix: {tables_prefix}')
         if self.backend != 'sqlite' and self.backend != 'psql':
-            self.logger.info("Invalid entry for backend.  Must be 'sqlite' or 'psql'.")
+            self.logger.error("Invalid entry for backend.  Must be 'sqlite' or 'psql'.")
             return
         self.conn = None
         self.cursor = None
@@ -218,7 +218,7 @@ class TSDB:
             else:
                 self.dbpass = os.getenv('TSDBPASS')
                 if os.getenv('TSDBPASS') is None:
-                    self.logger.error("Environment variable 'TSDBPASS' not found. No default value available. Many methods in this class won't work.")
+                    if not self.silent: self.logger.info("Environment variable 'TSDBPASS' not found. No default value available. Many methods in this class won't work.")
 
             if not self.silent: self.logger.info('PSQL server: ' + str(self.dbserver))
             if not self.silent: self.logger.info('PSQL username: ' + str(self.dbuser))
@@ -369,7 +369,7 @@ class TSDB:
                         db_fail = False
                         break
                     except:
-                        self.logger.info("Could not connect to database, retrying...")
+                        if not self.silent: self.logger.info("Could not connect to database, retrying...")
                         db_fail = True
                         time.sleep(10)
                 if self.conn == None:
@@ -836,11 +836,12 @@ class TSDB:
                 unique_datecodes_count = 0
     
             # 5) Print summary
-            if not self.silent: self.logger.info("Database Table Summary:")
-            if not self.silent: self.logger.info(f"{'Table':<30} {'Columns':>8} {'Rows':>12}")
-            if not self.silent: self.logger.info("-" * 55)
-            for table, cols, rows in summary_data:
-                if not self.silent: self.logger.info(f"{table:<30} {cols:>8} {rows:>12}")
+            if not self.silent: 
+                self.logger.info("Database Table Summary:")
+                self.logger.info(f"{'Table':<30} {'Columns':>8} {'Rows':>12}")
+                self.logger.info("-" * 55)
+                for table, cols, rows in summary_data:
+                    self.logger.info(f"{table:<30} {cols:>8} {rows:>12}")
     
             if not self.silent: self.logger.info(f"Dates: {unique_datecodes_count} days from {earliest_datecode} to {latest_datecode}")
             if not self.silent: self.logger.info(f"Last update: {most_recent_read_time}")
