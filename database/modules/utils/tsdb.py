@@ -145,24 +145,27 @@ class TSDB:
                  tables_prefix='tsdb_',
                  credentials=None, 
                  logger=None, 
-                 verbose=False):
+                 verbose=False,
+                 silent=False):
 
         self.logger = logger if logger is not None else DummyLogger()
-        self.logger.info('Starting KPF_TSDB')
+        if not self.silent: self.logger.info('Starting KPF_TSDB')
         self.verbose = verbose
+        self.silent = silent
         
         if self.is_notebook():
             self.tqdm = tqdm_notebook
-            self.logger.info('Jupyter Notebook environment detected.')
+            if not self.silent: self.logger.info('Jupyter Notebook environment detected.')
         else:
             self.tqdm = tqdm
 
         self.prefix = tables_prefix
         self.base_dir = base_dir
         self.backend = backend 
-        self.logger.info(f'Base data directory: {self.base_dir}')
-        self.logger.info(f'Backend: {backend}')
-        self.logger.info(f'Table prefix: {tables_prefix}')
+        if not self.silent: 
+            self.logger.info(f'Base data directory: {self.base_dir}')
+            self.logger.info(f'Backend: {backend}')
+            self.logger.info(f'Table prefix: {tables_prefix}')
         if self.backend != 'sqlite' and self.backend != 'psql':
             self.logger.info("Invalid entry for backend.  Must be 'sqlite' or 'psql'.")
             return
@@ -172,14 +175,14 @@ class TSDB:
         # Get database parameters
         if self.backend == 'sqlite':
             self.db_path = db_path
-            self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
+            if not self.silent: self.logger.info('Path of database file: ' + os.path.abspath(self.db_path))
             self.user_role = 'na' # not applicable
         elif backend == 'psql':
             creds = credentials if isinstance(credentials, dict) else {}
             # ----- TSDBPORT ------------------------------------------------------------
             if 'TSDBPORT' in creds and creds['TSDBPORT'] is not None:
                 self.dbport = creds['TSDBPORT']
-                self.logger.info("Using TSDBPORT from credentials dictionary.")
+                if not self.silent: self.logger.info("Using TSDBPORT from credentials dictionary.")
             else:
                 self.dbport = os.getenv('TSDBPORT') or '6127'
                 if os.getenv('TSDBPORT') is None:
@@ -187,23 +190,23 @@ class TSDB:
             # ----- TSDBNAME ------------------------------------------------------------
             if 'TSDBNAME' in creds and creds['TSDBNAME'] is not None:
                 self.dbname = creds['TSDBNAME']
-                self.logger.info("Using TSDBNAME from credentials dictionary.")
+                if not self.silent: self.logger.info("Using TSDBNAME from credentials dictionary.")
             else:
                 self.dbname = os.getenv('TSDBNAME') or 'timeseriesopsdb'
                 if os.getenv('TSDBNAME') is None:
-                    self.logger.info("Environment variable 'TSDBNAME' not found; using default name 'timeseriesopsdb'.")
+                    if not self.silent: self.logger.info("Environment variable 'TSDBNAME' not found; using default name 'timeseriesopsdb'.")
             # ----- TSDBSERVER ----------------------------------------------------------
             if 'TSDBSERVER' in creds and creds['TSDBSERVER'] is not None:
                 self.dbserver = creds['TSDBSERVER']
-                self.logger.info("Using TSDBSERVER from credentials dictionary.")
+                if not self.silent: self.logger.info("Using TSDBSERVER from credentials dictionary.")
             else:
                 self.dbserver = os.getenv('TSDBSERVER') or '127.0.0.1'
                 if os.getenv('TSDBSERVER') is None:
-                    self.logger.info("Environment variable 'TSDBSERVER' not found; using default server '127.0.0.1'.")
+                    if not self.silent: self.logger.info("Environment variable 'TSDBSERVER' not found; using default server '127.0.0.1'.")
             # ----- TSDBUSER ------------------------------------------------------------
             if 'TSDBUSER' in creds and creds['TSDBUSER'] is not None:
                 self.dbuser = creds['TSDBUSER']
-                self.logger.info("Using TSDBUSER from credentials dictionary.")
+                if not self.silent: self.logger.info("Using TSDBUSER from credentials dictionary.")
             else:
                 self.dbuser = os.getenv('TSDBUSER')
                 if os.getenv('TSDBUSER') is None:
@@ -211,16 +214,16 @@ class TSDB:
             # ----- TSDBPASS ------------------------------------------------------------
             if 'TSDBPASS' in creds and creds['TSDBPASS'] is not None:
                 self.dbpass = creds['TSDBPASS']
-                self.logger.info("Using TSDBPASS from credentials dictionary.")
+                if not self.silent: self.logger.info("Using TSDBPASS from credentials dictionary.")
             else:
                 self.dbpass = os.getenv('TSDBPASS')
                 if os.getenv('TSDBPASS') is None:
                     self.logger.error("Environment variable 'TSDBPASS' not found. No default value available. Many methods in this class won't work.")
 
-            self.logger.info('PSQL server: ' + str(self.dbserver))
-            self.logger.info('PSQL username: ' + str(self.dbuser))
+            if not self.silent: self.logger.info('PSQL server: ' + str(self.dbserver))
+            if not self.silent: self.logger.info('PSQL username: ' + str(self.dbuser))
             self.user_role = self.get_user_role()
-            self.logger.info('PSQL user role: ' + self.user_role)
+            if not self.silent: self.logger.info('PSQL user role: ' + self.user_role)
 
         # Paths
         self.keyword_base_path = '/code/KPF-Pipeline/static/tsdb_tables'
@@ -258,13 +261,13 @@ class TSDB:
         # Create metadata table or use existing one
         metadata_table = self.prefix + 'metadata'
         if not self.check_if_table_exists(tablename=metadata_table):
-            self.logger.info("Metadata table does not exist.  Attempting to create.")
+            if not self.silent: self.logger.info("Metadata table does not exist.  Attempting to create.")
             if self.user_role == 'admin' or self.backend == 'sqlite':
                 self._create_metadata_table()
             else:
-                self.logger.info(f"Cannot create metadata table as user: {self.user_role}")
+                if not self.silent: self.logger.info(f"Cannot create metadata table as user: {self.user_role}")
         else:
-            self.logger.info("Metadata table exists.")
+            if not self.silent: self.logger.info("Metadata table exists.")
         if self.check_if_table_exists(tablename=metadata_table):
             self._read_metadata_table()
             self._set_boolean_columns()
@@ -277,14 +280,14 @@ class TSDB:
         # Create the data tables using metadata
         primary_table = self.prefix + 'base'
         if not self.check_if_table_exists(tablename=primary_table):
-            self.logger.info("Data tables do not exist.  Attempting to create.")
+            if not self.silent: self.logger.info("Data tables do not exist.  Attempting to create.")
             if self.user_role == 'admin' or self.backend == 'sqlite':
                 self._create_data_tables()
             else:
-                self.logger.info(f"Cannot create data tables as user: {self.user_role}")
-                self.logger.info("Additional database functions will not work.")
+                if not self.silent: self.logger.info(f"Cannot create data tables as user: {self.user_role}")
+                if not self.silent: self.logger.info("Additional database functions will not work.")
         else:
-            self.logger.info("Data tables exist.")
+            if not self.silent: self.logger.info("Data tables exist.")
 
 
     def require_role(allowed_roles=None):
@@ -584,7 +587,7 @@ class TSDB:
         days_removed = _scalar_query(pre_days_sql, (datecode,)) or 0
     
         if days_removed == 0:
-            self.logger.info(f"No rows found for datecode {datecode}; nothing to delete.")
+            if not self.silent: self.logger.info(f"No rows found for datecode {datecode}; nothing to delete.")
             return {"TOTAL": 0}
     
         # ---------- Deletions ----------
@@ -612,8 +615,8 @@ class TSDB:
             self.conn.commit()
     
             # Logs
-            self.logger.info(f"Removed rows for {days_removed} day(s) with datecode {datecode}.")
-            self.logger.info(
+            if not self.silent: self.logger.info(f"Removed rows for {days_removed} day(s) with datecode {datecode}.")
+            if not self.silent: self.logger.info(
                 "Deleted rows by table: " +
                 ", ".join(f"{t}={c}" for t, c in deleted_counts.items()) +
                 f" (TOTAL={total_deleted})"
@@ -665,7 +668,7 @@ class TSDB:
         try:
             for tbl in table_list:
                 self._execute_sql_command(f"DROP TABLE IF EXISTS {tbl}")
-                self.logger.info(f"Dropped table: {tbl}")
+                if not self.silent: self.logger.info(f"Dropped table: {tbl}")
         finally:
             self._close_connection()
 
@@ -683,12 +686,12 @@ class TSDB:
     
             if os.path.exists(wal_file):
                 os.remove(wal_file)
-                self.logger.info(f"File removed: {wal_file}")
+                if not self.silent: self.logger.info(f"File removed: {wal_file}")
             if os.path.exists(shm_file):
                 os.remove(shm_file)
-                self.logger.info(f"File removed: {shm_file}")
+                if not self.silent: self.logger.info(f"File removed: {shm_file}")
         elif self.backend == 'psql':
-            self.logger.info("unlock_db() is not applicable for PostgreSQL databases.")
+            if not self.silent: self.logger.info("unlock_db() is not applicable for PostgreSQL databases.")
 
 
     @require_role(['admin', 'operations', 'readonly'])
@@ -697,7 +700,7 @@ class TSDB:
         Check if the specified table exists in the database.
         """
         if tablename is None:
-            self.logger.info('check_if_table_exists: tablename not specified.')
+            if not self.silent: self.logger.info('check_if_table_exists: tablename not specified.')
             return False
     
         self._open_connection()
@@ -810,7 +813,7 @@ class TSDB:
                 summary_data.append((table, ncolumns, nrows))
     
             if not summary_data:
-                self.logger.info("No tables exist.")
+                if not self.silent: self.logger.info("No tables exist.")
                 return
     
             # 4) Additional stats from base table (if present)
@@ -833,14 +836,14 @@ class TSDB:
                 unique_datecodes_count = 0
     
             # 5) Print summary
-            self.logger.info("Database Table Summary:")
-            self.logger.info(f"{'Table':<30} {'Columns':>8} {'Rows':>12}")
-            self.logger.info("-" * 55)
+            if not self.silent: self.logger.info("Database Table Summary:")
+            if not self.silent: self.logger.info(f"{'Table':<30} {'Columns':>8} {'Rows':>12}")
+            if not self.silent: self.logger.info("-" * 55)
             for table, cols, rows in summary_data:
-                self.logger.info(f"{table:<30} {cols:>8} {rows:>12}")
+                if not self.silent: self.logger.info(f"{table:<30} {cols:>8} {rows:>12}")
     
-            self.logger.info(f"Dates: {unique_datecodes_count} days from {earliest_datecode} to {latest_datecode}")
-            self.logger.info(f"Last update: {most_recent_read_time}")
+            if not self.silent: self.logger.info(f"Dates: {unique_datecodes_count} days from {earliest_datecode} to {latest_datecode}")
+            if not self.silent: self.logger.info(f"Last update: {most_recent_read_time}")
     
         finally:
             self._close_connection()
@@ -945,7 +948,7 @@ class TSDB:
             if not check or check[0][0] == 0:
                 self.logger.warning(f"{self.prefix}metadata created but empty.")
 
-            self.logger.info("Metadata table created correctly with indexed columns.")
+            if not self.silent: self.logger.info("Metadata table created correctly with indexed columns.")
     
         finally:
             self._close_connection()
@@ -961,7 +964,7 @@ class TSDB:
         self._open_connection()
         self.metadata_rows = self._execute_sql_command(sql_metadata, fetch=True)
         self._close_connection()
-        self.logger.info("Metadata table read.")
+        if not self.silent: self.logger.info("Metadata table read.")
 
 
     @require_role(['admin'])
@@ -1083,7 +1086,7 @@ class TSDB:
         finally:
             self._close_connection()
     
-        self.logger.info("Data tables and indices created successfully.")
+        if not self.silent: self.logger.info("Data tables and indices created successfully.")
 
 
     @require_role(['admin'])
@@ -1285,7 +1288,7 @@ class TSDB:
         finally:
             self._close_connection()
     
-        self.logger.info(f"Ingested observation: {base_filename}")
+        if not self.silent: self.logger.info(f"Ingested observation: {base_filename}")
 
 
     @require_role(['admin', 'operations'])
@@ -1353,7 +1356,7 @@ class TSDB:
             end_date_str = end_date_str.strftime("%Y%m%d")
         
         if not quiet:
-            self.logger.info("Adding to database between " + start_date_str + " and " + end_date_str)
+            if not self.silent: self.logger.info("Adding to database between " + start_date_str + " and " + end_date_str)
         dir_paths = glob.glob(f"{self.base_dir}/????????")
         sorted_dir_paths = sorted(dir_paths, key=lambda x: int(os.path.basename(x)), reverse=start_date_str > end_date_str)
         filtered_dir_paths = [
@@ -1383,7 +1386,7 @@ class TSDB:
                     self.ingest_batch_observations(batch, force_ingest=force_ingest)
 
         if not quiet:
-            self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
+            if not self.silent: self.logger.info(f"Files for {len(filtered_dir_paths)} days ingested/checked")
 
 
     @require_role(['admin', 'operations'])
@@ -1460,7 +1463,7 @@ class TSDB:
         ]
         if not updated_batch:
             if self.verbose:
-                self.logger.info("No new or updated files found in batch.")
+                self.logger.debug("No new or updated files found in batch.")
             return
     
         extraction_args = {
@@ -1772,7 +1775,7 @@ class TSDB:
             keywords = telemetry_table['keyword']
             averages = telemetry_table['average']
         except Exception as e:
-            self.logger.info(f"Bad TELEMETRY extension in: {file_path}. Error: {e}")
+            if not self.silent: self.logger.info(f"Bad TELEMETRY extension in: {file_path}. Error: {e}")
             return {key: None for key in keyword_types}
     
         try:
@@ -1791,7 +1794,7 @@ class TSDB:
             # Build the output dictionary for the requested keywords
             telemetry_dict = {key: float(telemetry_data.get(key, np.nan)) for key in keyword_types}
         except Exception as e:
-            self.logger.info(f"Error processing TELEMETRY data in: {file_path}. Error: {e}")
+            if not self.silent: self.logger.info(f"Error processing TELEMETRY data in: {file_path}. Error: {e}")
             telemetry_dict = {key: None for key in keyword_types}
     
         return telemetry_dict
@@ -2015,9 +2018,9 @@ class TSDB:
             try:
                 df = pd.read_csv(ObsID_filename)
             except Exception as e:
-                self.logger.info(f'Problem reading {ObsID_filename}: ' + e)
+                if not self.silent: self.logger.info(f'Problem reading {ObsID_filename}: ' + e)
         else:
-            self.logger.info('File missing: ObsID_filename')
+            if not self.silent: self.logger.info('File missing: ObsID_filename')
         
         ObsID_pattern = r'KP\.20\d{6}\.\d{5}\.\d{2}'
         first_column = df.iloc[:, 0]
@@ -2030,7 +2033,7 @@ class TSDB:
         else:
             df = df.sort_values(by='ObsID', ascending=True)
 
-        self.logger.info(f'{ObsID_filename} read with {str(len(df))} properly formatted ObsIDs.')
+        if not self.silent: self.logger.info(f'{ObsID_filename} read with {str(len(df))} properly formatted ObsIDs.')
 
         t = self.tqdm(df.iloc[:, 0].tolist(), desc=f'ObsIDs', leave=True)
         for ObsID in t:

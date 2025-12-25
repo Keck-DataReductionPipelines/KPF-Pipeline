@@ -81,17 +81,19 @@ class AnalyzeTimeSeries:
           in the legend.
     """
 
-    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', tables_prefix='tsdb_', backend='sqlite', credentials=None, logger=None, verbose=False):
+    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', tables_prefix='tsdb_', backend='sqlite', credentials=None, logger=None, verbose=False, silent=False):
        
         self.logger = logger if logger is not None else DummyLogger()
-        self.logger.info('Starting AnalyzeTimeSeries')
+        self.silent = silent
+        if not self.silent: self.logger.info('Starting AnalyzeTimeSeries')
         self.db = TSDB(backend=backend, 
                        db_path=db_path, 
                        base_dir=base_dir, 
                        tables_prefix=tables_prefix, 
                        credentials=credentials, 
                        logger=logger, 
-                       verbose=verbose)
+                       verbose=verbose,
+                       silent=silent)
 
 
     def plot_time_series_multipanel(self, plotdict, 
@@ -260,9 +262,9 @@ class AnalyzeTimeSeries:
             try:
                 ind = base_filenames.index(plotdict_str)
                 plotdict = self.yaml_to_dict(all_yaml[ind])
-                self.logger.info(f'Plotting from config: {all_yaml[ind]}')
+                if not self.silent: self.logger.info(f'Plotting from config: {all_yaml[ind]}')
             except Exception as e:
-                self.logger.info(f"Couldn't find the file {plotdict_str}.  Error message: {e}")
+                if not self.silent: self.logger.info(f"Couldn't find the file {plotdict_str}.  Error message: {e}")
                 return
         
         panel_arr = plotdict['panel_arr']
@@ -787,17 +789,17 @@ class AnalyzeTimeSeries:
                             else:
                                 t = list(t)
                         except Exception as e:
-                            self.logger.info(f"Error converting to a list: {e}")
+                            self.logger.error(f"Error converting to a list: {e}")
                         try:
                             if (hasattr(states, 'tolist') and callable(getattr(states, 'tolist'))):
                                 states = states.tolist()
                             else:
                                 states = list(states)
                         except Exception as e:
-                            self.logger.info(f"Error converting to a list: {e}")
+                            self.logger.error(f"Error converting to a list: {e}")
                         if len(states) != len(t):
                             # Handle the mismatch
-                            self.logger.info(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
+                            if not self.silent: self.logger.info(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
                         for state in unique_states:
                             color = color_map[state]
                             indices = [i for i, s in enumerate(states) if s == state]
@@ -951,12 +953,12 @@ class AnalyzeTimeSeries:
                 t0 = time.process_time()
                 plt.savefig(fig_path, dpi=300, facecolor='w')
                 if log_savefig_timing:
-                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+                    if not self.silent: self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
             if show_plot == True:
                 plt.show()
             plt.close('all')
         except Exception as e:
-            self.logger.info(f"Error saving file or showing plot: {e}")
+            self.logger.error(f"Error saving file or showing plot: {e}")
 
 
     def plot_rv_per_fiber_wavelength(self, rv, chip, fiber, start_date=None, end_date=None, only_object=None, only_source=None, 
@@ -1069,12 +1071,12 @@ class AnalyzeTimeSeries:
                 t0 = time.process_time()
                 plt.savefig(fig_path, dpi=300, facecolor='w')
                 if log_savefig_timing:
-                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+                    if not self.silent: self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
             if show_plot == True:
                 plt.show()
             plt.close('all')
         except Exception as e:
-            self.logger.info(f"Error saving file or showing plot: {e}")
+            self.logger.error(f"Error saving file or showing plot: {e}")
 
 
     def plot_nobs_histogram(self, plot_dict=None, 
@@ -1471,7 +1473,7 @@ class AnalyzeTimeSeries:
         for p in plots:
             plot_name = plots[p]["plot_name"]
             if verbose:
-                self.logger.info(f"AnalyzeTimeSeries.plot_all_quicklook: making {plot_name}")
+                if not self.silent: self.logger.info(f"AnalyzeTimeSeries.plot_all_quicklook: making {plot_name}")
 
             # Set filename 
             if plots[p]['plot_type'] == 'time_series_multipanel':
@@ -1503,7 +1505,7 @@ class AnalyzeTimeSeries:
                 savedir = fig_dir + plots[p]["subdir"] + '/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 fig_path = savedir + filename
-                self.logger.info('Making ' + fig_path)
+                if not self.silent: self.logger.info('Making ' + fig_path)
             else:
                 fig_path = None
 
@@ -2077,12 +2079,12 @@ class AnalyzeTimeSeries:
                 t0 = time.process_time()
                 plt.savefig(fig_path, dpi=150, facecolor='w')
                 if log_savefig_timing:
-                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+                    if not self.silent: self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
             if show_plot is not None:
                 plt.show()
             plt.close('all')
         except Exception as e:
-            self.logger.info(f"Error saving file or showing plot: {e}")
+            self.logger.error(f"Error saving file or showing plot: {e}")
 
 
     def plot_nightly_campaigns(self, UT_date, Nobs_min=2, show_plot=None, fig_dir=''):
@@ -2558,7 +2560,7 @@ class AnalyzeTimeSeries:
                 plt.show()
             plt.close('all')
         except Exception as e:
-            self.logger.info(f"Error saving file or showing plot: {e}")
+            self.logger.error(f"Error saving file or showing plot: {e}")
 
 
 def add_one_month(inputdate):
