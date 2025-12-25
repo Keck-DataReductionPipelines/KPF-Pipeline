@@ -1,7 +1,7 @@
 TSDB Ingestion
 ##############
 
-The code for TSDB ingestion is described here: ``:doc:`/docs/source/tsdb/analyzetimeseries.rst```.
+The code for TSDB ingestion is described :doc:`here <tsdb/analyzetimeseries>`.
 During production processing, data are ingested into the TSDB in the three ways described below. 
 Note that 'ingestion' by all of the above mechanisms is a process retrieves data from all available L0/2D/L1/L2 files for the ObsID 
 (e.g., ``KP.20200101.12345.67``) of a created/modified file, not just the created/modified file itself.
