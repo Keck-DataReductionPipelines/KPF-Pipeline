@@ -33,8 +33,6 @@ iam_pid = os.getpid()
 
 print("iam_pid =",iam_pid)
 
-pid = os.getpid()
-print(f"The PID of the current process is: {pid}")
 
 
 ########################################################################################################
@@ -277,7 +275,7 @@ def run_single_core_job(procdates,bash_cmds_for_nights,dryrun,nparallel,local_tz
 
     print("index_thread,njobs =",index_thread,njobs)
 
-    thread_work_file = iam.replace(".py",f"_pid{pid}_thread{index_thread}.out")
+    thread_work_file = iam.replace(".py",f"_pid{iam_pid}_thread{index_thread}.out")
 
     try:
         fh = open(thread_work_file, 'w', encoding="utf-8")
