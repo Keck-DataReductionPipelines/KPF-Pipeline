@@ -152,10 +152,9 @@ if (overwrite or not output_file_exists) and raw_file_path in file_list:
 
     #---------
     """
+    kpf_object = kpf_object_with_ffi
 
     # Diagnostics & Quality Control - 2D level
-
-    kpf_object = L0_with_ffi
     data_level_str = '2D'
 
     # Cannot call subrecipes in a loop (does not work correctly).
@@ -167,8 +166,7 @@ if (overwrite or not output_file_exists) and raw_file_path in file_list:
 
     diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
     kpf_object = diagnostics_output_list[1]
-    L0_with_ffi = kpf_object
 
     #---------
 
-    oscan_complete = to_fits(L0_with_ffi, output_file_name)
+    oscan_complete = to_fits(kpf_object, output_file_name)
