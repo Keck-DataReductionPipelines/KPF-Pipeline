@@ -6,7 +6,7 @@ from modules.image_assembly.src.alg import ImageAssemblyAlg
 from keckdrpframework.models.arguments import Arguments
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/image_assembly/src/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/image_assembly/configs/default.cfg'
 
 class ImageAssembly(KPF0_Primitive):
     """
