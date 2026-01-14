@@ -70,7 +70,6 @@ all_bias_files_list,\
 object_list = bias_objects_auto + dark_objects_auto + arclamp_objects_auto
 
 file_list = all_bias_files_list + all_dark_files_list + all_flat_files_list + all_arclamp_files_list
-#nlen_file_list = len(file_list)
 
 overwrite = True
 
@@ -80,24 +79,13 @@ output_dir = config.IMAGE_ASSEMBLY.output_dir + "/" + date_dir
 output_file_name = output_dir + "/" + file_name + "_2D" + ext
 output_file_exists = exists(output_file_name)
 
-#if output_file_exists:
-#    file_exists = True
-#else:
-#    file_exists = False
-
 if (overwrite or not output_file_exists) and raw_file_path in file_list:
 
     # Read in FITS data.
     kpf_object = kpf0_from_fits(raw_file_path, data_type)
 
-    #---------
-
     # Diagnostics & Quality Control - L0 level
     data_level_str = 'L0'
-
-    # Cannot call subrecipes in a loop (does not work correctly).
-    #invoke_subrecipe("./recipes/quality_control.subrecipe")
-    #invoke_subrecipe("./recipes/diagnostics.subrecipe")
 
     qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
     kpf_object = qc_output_list[1]
@@ -157,16 +145,10 @@ if (overwrite or not output_file_exists) and raw_file_path in file_list:
     # Diagnostics & Quality Control - 2D level
     data_level_str = '2D'
 
-    # Cannot call subrecipes in a loop (does not work correctly).
-    #invoke_subrecipe("./recipes/quality_control.subrecipe")
-    #invoke_subrecipe("./recipes/diagnostics.subrecipe")
-
     qc_output_list = QualityControlFramework('KPF', data_level_str, kpf_object, 0)
     kpf_object = qc_output_list[1]
 
     diagnostics_output_list = DiagnosticsFramework(data_level_str, kpf_object, 'all')
     kpf_object = diagnostics_output_list[1]
-
-    #---------
 
     oscan_complete = to_fits(kpf_object, output_file_name)
