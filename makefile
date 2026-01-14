@@ -3,7 +3,7 @@ APP_IMAGE ?= kpf-drp
 CI_IMAGE  ?= kpf-drp-ci
 TAG       ?= latest
 MASTERS_IMAGE ?= kpfmastersdrp
-
+ 
 ifndef KPFCRONJOB_DOCKER_IMAGE
     MASTERS_IMAGE_WITH_TAG ?= $(MASTERS_IMAGE):$(TAG)
     $(info KPFCRONJOB_DOCKER_IMAGE is not defined, so defaulting to kpfmastersdrp:latest)
