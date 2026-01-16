@@ -657,7 +657,7 @@ ORDER BY startdate;"""
             if self.verbose:
                 self.log.debug("File exists...")
         else:
-            self.log.error("*** Error: File does not exist; quitting...")
+            self.log.error(f"*** Error: File does not exist ({filename}); quitting...")
             self.exit_code = 65
             return
 
