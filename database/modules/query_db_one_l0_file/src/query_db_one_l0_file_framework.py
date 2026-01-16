@@ -151,6 +151,7 @@ class QueryDBOneL0FileFramework(KPF0_Primitive):
             "where imtype = 'TEMPLATE_IMTYPE' " +\
             "and dateobs = 'TEMPLATE_DATEOBS' " +\
             "and cast((contentbits & TEMPLATE_CONTENTBITMASK) as integer) = TEMPLATE_CONTENTBITMASK " +\
+            "order by mjdobs " +\
             "limit 1;"
 
 
