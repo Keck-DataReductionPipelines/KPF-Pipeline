@@ -81,17 +81,19 @@ class AnalyzeTimeSeries:
           in the legend.
     """
 
-    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', tables_prefix='tsdb_', backend='sqlite', credentials=None, logger=None, verbose=False):
+    def __init__(self, db_path='kpf_ts.db', base_dir='/data/L0', tables_prefix='tsdb_', backend='sqlite', credentials=None, logger=None, verbose=False, silent=False):
        
         self.logger = logger if logger is not None else DummyLogger()
-        self.logger.info('Starting AnalyzeTimeSeries')
+        self.silent = silent
+        if not self.silent: self.logger.info('Starting AnalyzeTimeSeries')
         self.db = TSDB(backend=backend, 
                        db_path=db_path, 
                        base_dir=base_dir, 
                        tables_prefix=tables_prefix, 
                        credentials=credentials, 
                        logger=logger, 
-                       verbose=verbose)
+                       verbose=verbose,
+                       silent=silent)
 
 
     def plot_time_series_multipanel(self, plotdict, 
@@ -136,6 +138,7 @@ class AnalyzeTimeSeries:
                 - 'qc_fail' : str | list[str]              # columns that must be False
                 - 'qc_not_pass' : str | list[str]          # columns that are not True (False/NaN)
                 - 'qc_not_fail' : str | list[str]          # columns that are not False (True/NaN)
+                - 'read_speed' : str | {'fast','normal'}   # filter on READSPED
                 - 'on_sky' : bool | {'true','false'}       # True→FIUMODE=='Observing', False→'Calibration'
                 - 'ylabel' : str                           # label for vertical axis
                 - 'ylim' : tuple | str                     # (ymin, ymax) or a string that evals to that
@@ -260,9 +263,9 @@ class AnalyzeTimeSeries:
             try:
                 ind = base_filenames.index(plotdict_str)
                 plotdict = self.yaml_to_dict(all_yaml[ind])
-                self.logger.info(f'Plotting from config: {all_yaml[ind]}')
+                if not self.silent: self.logger.info(f'Plotting from config: {all_yaml[ind]}')
             except Exception as e:
-                self.logger.info(f"Couldn't find the file {plotdict_str}.  Error message: {e}")
+                if not self.silent: self.logger.info(f"Couldn't find the file {plotdict_str}.  Error message: {e}")
                 return
         
         panel_arr = plotdict['panel_arr']
@@ -273,6 +276,7 @@ class AnalyzeTimeSeries:
         unique_cols.add('FIUMODE')
         unique_cols.add('OBJECT')
         unique_cols.add('NOTJUNK')
+        unique_cols.add('READSPED')
         for panel in panel_arr:
             for d in panel['panelvars']:
                 if 'col' in d:
@@ -346,7 +350,7 @@ class AnalyzeTimeSeries:
 
         	# Check if the resulting dataframe has any rows
             empty_df = (len(df) == 0) # True if the dataframe has no rows
-            if not empty_df:
+            if not empty_df: 
                 df['DATE-MID'] = pd.to_datetime(df['DATE-MID']) # move this to dataframe_from_db ?
                 df = df.dropna(subset=['DATE-MID'])
                 if start_date_was_none == True:
@@ -365,6 +369,13 @@ class AnalyzeTimeSeries:
                         df = df[df['FIUMODE'] == 'Observing']
                     elif str(thispanel['paneldict']['on_sky']).lower() == 'false':
                         df = df[df['FIUMODE'] == 'Calibration']
+    
+                # Filter using read_speed criterion
+                if 'read_speed' in thispanel['paneldict']:
+                    if str(thispanel['paneldict']['read_speed']).lower() == 'regular':
+                        df = df[df['READSPED'].str.strip() == 'regular']
+                    elif str(thispanel['paneldict']['read_speed']).lower() == 'fast':
+                        df = df[df['READSPED'].str.strip() == 'fast']
                     
             # Determine how to display time
             thistitle = ''
@@ -787,17 +798,17 @@ class AnalyzeTimeSeries:
                             else:
                                 t = list(t)
                         except Exception as e:
-                            self.logger.info(f"Error converting to a list: {e}")
+                            self.logger.error(f"Error converting to a list: {e}")
                         try:
                             if (hasattr(states, 'tolist') and callable(getattr(states, 'tolist'))):
                                 states = states.tolist()
                             else:
                                 states = list(states)
                         except Exception as e:
-                            self.logger.info(f"Error converting to a list: {e}")
+                            self.logger.error(f"Error converting to a list: {e}")
                         if len(states) != len(t):
                             # Handle the mismatch
-                            self.logger.info(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
+                            if not self.silent: self.logger.info(f"Length mismatch: states has {len(states)} elements, t has {len(t)}")
                         for state in unique_states:
                             color = color_map[state]
                             indices = [i for i, s in enumerate(states) if s == state]
@@ -951,12 +962,12 @@ class AnalyzeTimeSeries:
                 t0 = time.process_time()
                 plt.savefig(fig_path, dpi=300, facecolor='w')
                 if log_savefig_timing:
-                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+                    if not self.silent: self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
             if show_plot == True:
                 plt.show()
             plt.close('all')
         except Exception as e:
-            self.logger.info(f"Error saving file or showing plot: {e}")
+            self.logger.error(f"Error saving file or showing plot: {e}")
 
 
     def plot_rv_per_fiber_wavelength(self, rv, chip, fiber, start_date=None, end_date=None, only_object=None, only_source=None, 
@@ -1069,12 +1080,12 @@ class AnalyzeTimeSeries:
                 t0 = time.process_time()
                 plt.savefig(fig_path, dpi=300, facecolor='w')
                 if log_savefig_timing:
-                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+                    if not self.silent: self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
             if show_plot == True:
                 plt.show()
             plt.close('all')
         except Exception as e:
-            self.logger.info(f"Error saving file or showing plot: {e}")
+            self.logger.error(f"Error saving file or showing plot: {e}")
 
 
     def plot_nobs_histogram(self, plot_dict=None, 
@@ -1471,7 +1482,7 @@ class AnalyzeTimeSeries:
         for p in plots:
             plot_name = plots[p]["plot_name"]
             if verbose:
-                self.logger.info(f"AnalyzeTimeSeries.plot_all_quicklook: making {plot_name}")
+                if not self.silent: self.logger.info(f"AnalyzeTimeSeries.plot_all_quicklook: making {plot_name}")
 
             # Set filename 
             if plots[p]['plot_type'] == 'time_series_multipanel':
@@ -1503,7 +1514,7 @@ class AnalyzeTimeSeries:
                 savedir = fig_dir + plots[p]["subdir"] + '/'
                 os.makedirs(savedir, exist_ok=True) # make directories if needed
                 fig_path = savedir + filename
-                self.logger.info('Making ' + fig_path)
+                if not self.silent: self.logger.info('Making ' + fig_path)
             else:
                 fig_path = None
 
@@ -2077,12 +2088,12 @@ class AnalyzeTimeSeries:
                 t0 = time.process_time()
                 plt.savefig(fig_path, dpi=150, facecolor='w')
                 if log_savefig_timing:
-                    self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
+                    if not self.silent: self.logger.info(f'Seconds to execute savefig: {(time.process_time()-t0):.1f}')
             if show_plot is not None:
                 plt.show()
             plt.close('all')
         except Exception as e:
-            self.logger.info(f"Error saving file or showing plot: {e}")
+            self.logger.error(f"Error saving file or showing plot: {e}")
 
 
     def plot_nightly_campaigns(self, UT_date, Nobs_min=2, show_plot=None, fig_dir=''):
@@ -2132,436 +2143,300 @@ class AnalyzeTimeSeries:
                                                        panels=['rv', 'snr', 'guiding', 'seeing', 'el', 'sun', 'moon'], 
                                                        annotate = ['rv_rms'], 
                                                        plot_timestamp=True,
-                                                       not_junk=True,
                                                        show_plot=show_plot, 
                                                        fig_path=fig_path)
 
+
     def performance_by_datecode(
-        self,
-        df: pd.DataFrame,
-        spec_config,
-        columns_to_display=None,
-        datecode_col: str = 'datecode',
-        ignore_service_missions=True,
-    ) -> pd.DataFrame:
-        """
-        For each datecode, determine if any row violates each spec criterion.
-    
-        Supports two spec_config styles:
-    
-        1) Simple comparison (backward compatible):
-           {
-               'col': 'kpfgreen.STA_CCD_T',
-               'name': 'Green CCD > -99 K',
-               'op': '>',
-               'threshold': -99.0
-           }
-    
-        2) Expression over multiple columns:
-           {
-               "name": "|ΔT| > 10 mK AND Nobs>20",
-               "cols": ["kpfgreen.STA_CCD_T", "kpfred.STA_CCD_T", "Nobs"],
-               "bool_expr": "(abs(c0 - c1) > 0.01) & (c2 > 20)",
-           }
-    
-           where:
-             - c0, c1, c2 ... are the Series for the listed cols in order
-             - allowed functions: abs, min, max (elementwise), np (restricted)
-             - logical operators: &, |, ~ with parentheses
-        """
-    
-        _OP_MAP = {
-            '>':  operator.gt,
-            '<':  operator.lt,
-            '>=': operator.ge,
-            '<=': operator.le,
-            '==': operator.eq,
-            '!=': operator.ne,
-        }
-    
-        df_work = df.copy()
-    
-        # Optionally drop datecodes that fall inside service missions
-        if ignore_service_missions:
-            df_sm = self.get_service_mission_df()
-            if df_sm is not None and not df_sm.empty:
-                # assume df has a DATE-MID or similar; if not, you can adapt
-                if 'DATE-MID' in df_work.columns:
-                    dates = pd.to_datetime(df_work['DATE-MID'])
-                else:
-                    dates = None
-    
-                if dates is not None:
-                    keep = pd.Series(True, index=df_work.index)
-                    for _, row in df_sm.iterrows():
-                        x0 = pd.to_datetime(row['UT_start_date'])
-                        x1 = pd.to_datetime(row['UT_end_date'])
-                        if pd.notna(x0) and pd.notna(x1):
-                            keep &= ~dates.between(x0, x1)
-                    df_work = df_work[keep].copy()
-    
-        if df_work.empty:
-            base_cols = [datecode_col] + (columns_to_display or [])
-            return pd.DataFrame(columns=base_cols)
-    
-        if datecode_col not in df_work.columns:
-            raise KeyError(f"datecode column '{datecode_col}' not found in dataframe.")
-    
-        group_key = df_work[datecode_col]
-        grouped = df_work.groupby(datecode_col, sort=True)
-    
-        out = {}
-    
-        # --- helpers for expression-based specs ---
-        def _eval_bool_expr(spec, df_local):
+            self,
+            df: pd.DataFrame,
+            spec_config,
+            stats_config=None,
+            columns_to_display=None,
+            datecode_col: str = 'datecode',
+            ignore_service_missions=True,
+        ) -> pd.DataFrame:
             """
-            Evaluate spec['bool_expr'] over df_local using columns in spec['cols'].
-            Returns a boolean Series aligned with df_local.
+            For each datecode, calculate requested statistics and determine spec violations.
+            Incorporates 'multiplier' logic for unit conversion and 'stat_name' for 
+            independent labeling of status matrix panels.
             """
-            cols = spec.get('cols')
-            expr = spec.get('bool_expr')
-    
-            if not cols or not isinstance(cols, (list, tuple)):
-                raise ValueError(
-                    f"Spec '{spec.get('name','<unnamed>')}' with bool_expr "
-                    f"must define a non-empty 'cols' list."
-                )
-            if not isinstance(expr, str):
-                raise ValueError(
-                    f"Spec '{spec.get('name','<unnamed>')}' must have 'bool_expr' "
-                    f"as a string."
-                )
-    
-            missing = [c for c in cols if c not in df_local.columns]
-            if missing:
-                raise KeyError(
-                    f"Columns {missing} (for criterion '{spec.get('name','<unnamed>')}') "
-                    f"not found in dataframe."
-                )
-    
-            # Build the local environment: c0, c1, ... mapped to columns
-            local_env = {}
-            for idx, col in enumerate(cols):
-                local_env[f'c{idx}'] = df_local[col]
-    
-            # Allowed functions & names inside bool_expr
-            local_env.update({
-                'abs': np.abs,
-                'min': np.minimum,   # elementwise min(series0, series1)
-                'max': np.maximum,   # elementwise max(series0, series1)
-                'np': np,
-            })
-    
-            try:
-                cond = eval(expr, {"__builtins__": {}}, local_env)
-            except Exception as e:
-                raise ValueError(
-                    f"Error evaluating bool_expr '{expr}' for criterion "
-                    f"'{spec.get('name','<unnamed>')}': {e}"
-                )
-    
-            # Normalize to boolean Series aligned with df_local
-            if isinstance(cond, pd.Series):
-                cond_series = cond
-            else:
-                cond_series = pd.Series(cond, index=df_local.index)
-    
-            cond_series = cond_series.astype(bool)
-            return cond_series
-    
-        # --- main loop over spec_config ---
-        for spec in spec_config:
-            name = spec.get('name')
-            if not name:
-                raise ValueError("Each spec must have a 'name' key.")
-    
-            # Path 1: expression-based spec (bool_expr + cols)
-            if 'bool_expr' in spec:
-                cond = _eval_bool_expr(spec, df_work)
-                out[name] = cond.groupby(group_key).any()
-                continue
-    
-            # Path 2: simple comparison spec (backward compatible)
-            # expects: col, op, threshold
-            if 'col' not in spec or 'op' not in spec or 'threshold' not in spec:
-                raise ValueError(
-                    f"Spec '{name}' must define either "
-                    f"('cols' + 'bool_expr') or ('col', 'op', 'threshold')."
-                )
-    
-            col = spec['col']
-            op_str = spec['op']
-            threshold = spec['threshold']
-    
-            if col not in df_work.columns:
-                raise KeyError(f"Column '{col}' (for criterion '{name}') not found in dataframe.")
-    
-            if op_str not in _OP_MAP:
-                raise ValueError(f"Unsupported operator '{op_str}' in criterion '{name}'.")
-    
-            op_func = _OP_MAP[op_str]
-            cond = op_func(df_work[col], threshold)
-    
-            # True if ANY row for that datecode meets the condition
-            out[name] = cond.groupby(group_key).any()
-    
-        # Construct out-of-spec summary frame
-        out_df = pd.DataFrame(out)
-    
-        # Add info/display columns (first value within each datecode)
-        if columns_to_display:
-            columns_to_display = list(dict.fromkeys(columns_to_display))  # de-duplicate
-            cols_present = [c for c in columns_to_display if c in df_work.columns]
-    
-            if cols_present:
-                info_df = grouped[cols_present].first()
-                summary_df = info_df.join(out_df)
-            else:
-                summary_df = out_df
-        else:
-            summary_df = out_df
-    
-        summary_df = summary_df.reset_index()  # brings datecode back as a column
-        return summary_df
-
-
-    def plot_performance_by_datecode(
-        self,
-        summary_df: pd.DataFrame,
-        spec_config,
-        datecode_col: str = 'datecode',
-        date_format: str = '%Y%m%d',
-        plot_title=None,
-        figsize='auto',
-        excise_serice_missions=True,
-        hatch_service_missions=True,
-        plot_timestamp=False,
-        fig_path=None, 
-        show_plot=False,
-    ):
-        """
-        Plot criteria (rows) vs time (x-axis) using datecode interpreted as YYYYMMDD.
-    
-        False  -> small, faint green dot
-        True   -> larger, red dot
-    
-        Parameters
-        ----------
-        summary_df : pd.DataFrame
-            Output of summarize_out_of_spec_by_date, one row per datecode.
-        spec_config : list of dict
-            Same spec_config used to generate summary_df. Uses spec['name']
-            to find boolean columns.
-        datecode_col : str, default 'datecode'
-            Column in summary_df giving the datecode (YYYYMMDD).
-        date_format : str, default '%Y%m%d'
-            strftime-style format string to parse datecode.
-        """
-        # Remove dates during service missions
-        if excise_serice_missions:
-            df_sm = self.get_service_mission_df()
-            if not df_sm.empty:
-                dates = pd.to_datetime(summary_df['datecode'].astype(str), format='%Y%m%d')
-            
-                # Start with "keep everything"
-                keep = pd.Series(True, index=summary_df.index)
-            
-                for _, row in df_sm.iterrows():
-                    x0 = pd.to_datetime(row['UT_start_date'])
-                    x1 = pd.to_datetime(row['UT_end_date'])
-                    if pd.notna(x0) and pd.notna(x1):
-                        # Drop anything between x0 and x1 (inclusive)
-                        keep &= ~dates.between(x0, x1)
-                summary_df = summary_df[keep].copy()
-
-        # Parse datecode -> datetime
-        dates = pd.to_datetime(
-            summary_df[datecode_col].astype(str),
-            format=date_format,
-            errors='coerce'
-        )
-
-        # Determine limits
-        start_date = dates.min()
-        end_date   = dates.max()
-        start_datecode = summary_df['datecode'].min()
-        end_datecode   = summary_df['datecode'].max()
-
-        if dates.isna().any():
-            bad = summary_df.loc[dates.isna(), datecode_col]
-            raise ValueError(f"Could not parse some {datecode_col} values as dates: {bad.tolist()}")
-
-        # Determine criteria columns from spec_config, preserving spec_config order
-        criteria_cols = [
-            spec['name']
-            for spec in spec_config
-            if spec['name'] in summary_df.columns and summary_df[spec['name']].dtype == bool
-        ]
-    
-        if not criteria_cols:
-            raise ValueError("No valid boolean criteria columns found in summary_df for given spec_config.")
-
-        if figsize == 'auto':
-            figsize = (10, 1.0 + len(criteria_cols) * 0.15)
-        fig, ax = plt.subplots(figsize=figsize)
         
-        # x is the datetime index
-        x = dates.values  # matplotlib can plot numpy datetime64 directly
+            _OP_MAP = {
+                '>':  operator.gt,
+                '<':  operator.lt,
+                '>=': operator.ge,
+                '<=': operator.le,
+                '==': operator.eq,
+                '!=': operator.ne,
+            }
         
-        # blended transform for right-side annotations
-        trans = mtransforms.blended_transform_factory(ax.transAxes, ax.transData)
-
-        # x is the datetime index
-        x = dates.values  # matplotlib can plot numpy datetime64 directly
-
-        # blended transform for right-side annotations
-        trans = mtransforms.blended_transform_factory(ax.transAxes, ax.transData)
-
-        # precompute strings & lengths for annotations 
-        row_data = []  # (crit, vals, red_str, green_str, tail_str)
-        for crit in criteria_cols:
-            vals = summary_df[crit].values
-            Nred = int(vals.sum())          # True == 1, so sum gives Nred
-            Ntotal = int(len(vals))
-            Ngreen = Ntotal - Nred
-
-            red_str   = f"{Nred}"
-            green_str = f":{Ngreen}"
-            tail_str  = f"/{Ntotal} days"
-
-            row_data.append((crit, vals, red_str, green_str, tail_str))
-
-        # Max lengths for each "column" of text
-        max_red_len   = max(len(r[2]) for r in row_data)
-        max_green_len = max(len(r[3]) for r in row_data)
-        # tail length max not strictly needed for alignment, but kept for completeness
-        max_tail_len  = max(len(r[4]) for r in row_data)
-
-        # Approximate width per character in axes coords
-        char_width = 0.012  # tweak if needed
-
-        # Fixed x-positions for each column (in axes coords)
-        x_base_red   = 1.01
-        x_base_green = x_base_red   + char_width * max_red_len
-        x_base_tail  = x_base_green + char_width * max_green_len - 0.8*char_width
-
-
-        # Optional hatching to highlight service missions
-        if hatch_service_missions:
-            try:
+            # --- Internal Statistical Helpers ---
+            def drift(x):
+                return x.iloc[-1] - x.iloc[0] if len(x) > 0 else np.nan
+        
+            def rms(x):
+                return np.sqrt(np.mean(np.square(x)))
+        
+            _STAT_FUNCS = {
+                'rms': rms,
+                'range': lambda x: x.max() - x.min(),
+                'drift': drift,
+                'mean': 'mean',
+                'std': 'std',
+                'max': 'max',
+                'min': 'min'
+            }
+        
+            df_work = df.copy()
+        
+            # --- 1. Service Mission Filtering ---
+            if ignore_service_missions:
                 df_sm = self.get_service_mission_df()
-                if not df_sm.empty:
-                    for _, row in df_sm.iterrows():
-                        try:
+                if df_sm is not None and not df_sm.empty:
+                    if 'DATE-MID' in df_work.columns:
+                        dates = pd.to_datetime(df_work['DATE-MID'])
+                    else:
+                        dates = None
+        
+                    if dates is not None:
+                        keep = pd.Series(True, index=df_work.index)
+                        for _, row in df_sm.iterrows():
                             x0 = pd.to_datetime(row['UT_start_date'])
                             x1 = pd.to_datetime(row['UT_end_date'])
                             if pd.notna(x0) and pd.notna(x1):
-                                ax.axvspan(
-                                    x0, x1,
-                                    facecolor='none',           # keep data visible
-                                    hatch='////',
-                                    edgecolor='dimgray',
-                                    linewidth=0.0,
-                                    alpha=0.4,
-                                    zorder=0.2
-                                )
-                        except Exception:
-                            continue
-            except Exception:
-                pass
-
-        # plot rows & aligned annotations 
-        for j, (crit, vals, red_str, green_str, tail_str) in enumerate(row_data):
-            y = np.full_like(x, j, dtype=float)
-
-            # False = small, faint green
-            mask_false = ~vals
-            ax.scatter(
-                x[mask_false],
-                y[mask_false],
-                s=15,
-                color='green',
-                alpha=0.2,
-                edgecolor='none',
-            )
-
-            # True = larger, bright red
-            mask_true = vals
-            ax.scatter(
-                x[mask_true],
-                y[mask_true],
-                s=30,
-                color='red',
-                alpha=0.9,
-                edgecolor='k',
-                linewidth=0.3,
-            )
-
-            # Row index in data coords
-            y_data = j
-
-            # Column 1: red Nred
-            ax.text(
-                x_base_red, y_data, red_str,
-                transform=trans,
-                va='center', ha='left',
-                fontsize=8,
-                color='red',
-                clip_on=False,
-            )
-
-            # Column 2: green :Ngreen
-            ax.text(
-                x_base_green, y_data, green_str,
-                transform=trans,
-                va='center', ha='left',
-                fontsize=8,
-                color='green',
-                clip_on=False,
-            )
-
-            # Column 3: black /Ntotal days
-            ax.text(
-                x_base_tail, y_data, tail_str,
-                transform=trans,
-                va='center', ha='left',
-                fontsize=8,
-                color='black',
-                clip_on=False,
-            )
+                                keep &= ~dates.between(x0, x1)
+                        df_work = df_work[keep].copy()
         
-        # Y-axis: criteria labels
-        ax.set_yticks(range(len(criteria_cols)))
-        ax.set_yticklabels(criteria_cols, fontsize=8)
-        ax.set_ylim(len(criteria_cols) - 0.5, -0.5)  # invert so 0 is at top
+            if df_work.empty:
+                base_cols = [datecode_col] + (columns_to_display or [])
+                return pd.DataFrame(columns=base_cols)
+        
+            if datecode_col not in df_work.columns:
+                raise KeyError(f"datecode column '{datecode_col}' not found in dataframe.")
+        
+            group_key = df_work[datecode_col]
+            grouped = df_work.groupby(datecode_col, sort=True)
+        
+            # --- 2. Calculate Statistics ---
+            stats_df = pd.DataFrame(index=grouped.groups.keys())
+            stats_df.index.name = datecode_col
+        
+            if stats_config:
+                for col, metrics in stats_config.items():
+                    if col not in df_work.columns:
+                        continue
+                    
+                    agg_funcs = [_STAT_FUNCS.get(m, m) for m in metrics]
+                    res = grouped[col].agg(agg_funcs)
+                    if isinstance(res, pd.Series):
+                        res = res.to_frame(name=metrics[0])
+                    
+                    res.columns = [f"{col}_{m}" for m in metrics]
+                    stats_df = stats_df.join(res)
+                    
+            # --- 3. Apply Multipliers and Evaluate Specs ---
+            def _eval_bool_expr(spec, df_local):
+                cols = spec.get('cols')
+                expr = spec.get('bool_expr')
+                local_env = {f'c{idx}': df_local[col] for idx, col in enumerate(cols)}
+                local_env.update({'abs': np.abs, 'min': np.minimum, 'max': np.maximum, 'np': np})
+                cond = eval(expr, {"__builtins__": {}}, local_env)
+                return pd.Series(cond, index=df_local.index).astype(bool)
     
-        # X-axis: time formatting
-        ax.set_xlim(start_date - timedelta(days=1), end_date + timedelta(days=1))
-        locator = mdates.AutoDateLocator()
-        formatter = mdates.ConciseDateFormatter(locator)
-        ax.xaxis.set_major_locator(locator)
-        ax.xaxis.set_major_formatter(formatter)
-        ax.tick_params(axis='x', labelsize=8)
-
-        ax.set_xlabel('Date')
-        if plot_title:
-            ax.set_title(plot_title, fontsize=10)
-        ax.grid(True, axis='x', alpha=0.2)
+            violation_out = {}
+            for spec in spec_config:
+                name = spec.get('name')
+                # Use stat_name if provided, otherwise default to name
+                stat_label = spec.get('stat_name', name)
+                mult = spec.get('multiplier', 1.0)
+                
+                if not name: 
+                    raise ValueError("Each spec must have a 'name' key.")
+        
+                # Path A: Expression-based spec
+                if 'bool_expr' in spec:
+                    cond = _eval_bool_expr(spec, df_work)
+                    violation_out[f"{stat_label}_violation"] = cond.groupby(group_key).any()
+                    continue
+        
+                # Path B: Simple comparison
+                col = spec.get('col')
+                op_str = spec.get('op')
+                threshold = spec.get('threshold')
+                op_func = _OP_MAP[op_str]
+        
+                if col in stats_df.columns:
+                    # Apply multiplier to calculated stat values (e.g. range K -> mK)
+                    stats_df[col] = stats_df[col] * mult
+                    violation_out[f"{stat_label}_violation"] = op_func(stats_df[col], threshold)
+                else:
+                    if col not in df_work.columns:
+                        raise KeyError(f"Column '{col}' not found in raw data or stats.")
+                    
+                    # Apply multiplier to raw data slice before evaluation
+                    data_scaled = df_work[col] * mult
+                    
+                    cond = op_func(data_scaled, threshold)
+                    violation_out[f"{stat_label}_violation"] = cond.groupby(group_key).any()
+        
+            spec_violations_df = pd.DataFrame(violation_out)
+        
+            # --- 4. Construct Final Summary ---
+            if columns_to_display:
+                columns_to_display = list(dict.fromkeys(columns_to_display))
+                cols_present = [c for c in columns_to_display if c in df_work.columns]
+                summary_df = grouped[cols_present].first()
+            else:
+                summary_df = pd.DataFrame(index=grouped.groups.keys())
+                summary_df.index.name = datecode_col
+        
+            # Join everything: Info columns + scaled values + violation flags
+            summary_df = summary_df.join(stats_df).join(spec_violations_df)
+            
+            return summary_df.reset_index()
+   
+    def plot_performance_by_datecode(
+            self,
+            summary_df: pd.DataFrame,
+            spec_config,
+            datecode_col: str = 'datecode',
+            date_format: str = '%Y%m%d',
+            plot_title=None,
+            figsize='auto',
+            use_semilog=False,
+            ymin=None,
+            excise_service_missions=True,
+            hatch_service_missions=True,
+            fig_path=None, 
+            show_plot=False,
+        ):
+            # --- 1. Filter Service Missions ---
+            if excise_service_missions:
+                df_sm = self.get_service_mission_df()
+                if df_sm is not None and not df_sm.empty:
+                    dates_temp = pd.to_datetime(summary_df[datecode_col].astype(str), format=date_format)
+                    keep = pd.Series(True, index=summary_df.index)
+                    for _, row in df_sm.iterrows():
+                        x0, x1 = pd.to_datetime(row['UT_start_date']), pd.to_datetime(row['UT_end_date'])
+                        if pd.notna(x0) and pd.notna(x1):
+                            keep &= ~dates_temp.between(x0, x1)
+                    summary_df = summary_df[keep].copy()
     
-        plt.tight_layout()
-
-        # Save/show
-        try:
-            if fig_path is not None:
-                t0 = time.process_time()
-                plt.savefig(fig_path, dpi=250, facecolor='w')
-            if show_plot is not None:
+            # --- 2. Parse Dates ---
+            dates = pd.to_datetime(summary_df[datecode_col].astype(str), format=date_format, errors='coerce')
+            if dates.isna().all(): return
+            x = dates.values
+            x_min, x_max = dates.min(), dates.max()
+    
+            # --- 3. Categorize Specs ---
+            value_specs, status_specs = [], []
+            for spec in spec_config:
+                col = spec.get('col')
+                name = spec.get('name')
+                stat_label = spec.get('stat_name', name)
+                
+                if col in summary_df.columns and not pd.api.types.is_bool_dtype(summary_df[col]):
+                    value_specs.append(spec)
+                
+                v_col = f"{stat_label}_violation"
+                if v_col in summary_df.columns:
+                    status_specs.append({'name': stat_label, 'data_col': v_col})
+    
+            # --- 4. Layout Calculation ---
+            n_val = len(value_specs)
+            n_stat = len(status_specs)
+            has_stat = n_stat > 0
+            total_rows = n_val + (1 if has_stat else 0)
+    
+            label_fontsize, tick_fontsize, stat_fontsize = 11, 10, 10
+            row_height_inc = (1.5 * stat_fontsize) / 72.0 
+            base_h_stat = 0.3
+    
+            if figsize == 'auto':
+                h_val = n_val * 2.8
+                h_stat = base_h_stat + (n_stat * row_height_inc) if has_stat else 0
+                figsize = (12, max(base_h_stat, h_val + h_stat))
+    
+            stat_ratio = (h_stat / 2.8) * 3.0 if (has_stat and n_val > 0) else 1.0
+            ratios = [3.0] * n_val + ([stat_ratio] if has_stat else [])
+            
+            fig, axs = plt.subplots(total_rows, 1, figsize=figsize, sharex=True, 
+                                     gridspec_kw={'height_ratios': ratios, 'hspace': 0.05}, squeeze=False)
+            axs = axs.flatten()
+    
+            # --- 5. Plot Panels ---
+            for i, spec in enumerate(value_specs):
+                ax = axs[i]
+                y_plot = np.abs(summary_df[spec['col']]) if use_semilog else summary_df[spec['col']]
+                ax.plot(x, y_plot, marker='o', markersize=3, ls='-', lw=0.5, alpha=0.8, color='tab:blue')
+                ax.set_ylabel(spec.get('name', spec['col']), fontsize=label_fontsize)
+                ax.tick_params(axis='y', labelsize=tick_fontsize)
+                
+                if use_semilog:
+                    ax.set_yscale('log')
+                    mult = spec.get('multiplier', 1.0)
+                    ax.set_ylim(bottom=ymin * mult if ymin else 0.001 * mult)
+                    ax.grid(True, which="both", ls="-", alpha=0.1)
+                else:
+                    ax.grid(True, alpha=0.2)
+                
+                if 'threshold' in spec:
+                    ax.axhline(spec['threshold'], color='red', ls='--', alpha=0.5)
+                
+                if i == 0 and plot_title:
+                    ax.set_title(plot_title, fontsize=12, pad=12)
+    
+            # --- 6. Plot Status Matrix ---
+            if has_stat:
+                ax_stat = axs[-1]
+                trans = mtransforms.blended_transform_factory(ax_stat.transAxes, ax_stat.transData)
+                for j, s_info in enumerate(status_specs):
+                    vals = summary_df[s_info['data_col']].values
+                    y_centers = np.full_like(x, j, dtype=float)
+                    if (~vals).any():
+                        ax_stat.scatter(x[~vals], y_centers[~vals], s=15, color='green', alpha=0.2, edgecolor='none')
+                    if vals.any():
+                        ax_stat.scatter(x[vals], y_centers[vals], s=30, color='red', alpha=0.9, edgecolor='k', linewidth=0.2)
+                    ax_stat.text(1.005, j, f"{int(vals.sum())}/{len(vals)}", transform=trans, va='center', fontsize=tick_fontsize-2)
+                
+                ax_stat.set_yticks(range(n_stat))
+                ax_stat.set_yticklabels([s['name'] for s in status_specs], fontsize=stat_fontsize)
+                ax_stat.set_ylim(n_stat - 0.4, -0.6)
+                ax_stat.tick_params(axis='y', length=0, pad=4)
+    
+            # --- 7. Hatching ---
+            if hatch_service_missions:
+                df_sm = self.get_service_mission_df()
+                if df_sm is not None and not df_sm.empty:
+                    for ax in axs:
+                        y_lims = ax.get_ylim()
+                        y_pos = y_lims[0] + 0.9*(y_lims[1]-y_lims[0]) if not use_semilog else 10**(np.log10(y_lims[0])+0.9*(np.log10(y_lims[1])-np.log10(y_lims[0])))
+                        for _, row in df_sm.iterrows():
+                            x0, x1 = pd.to_datetime(row['UT_start_date']), pd.to_datetime(row['UT_end_date'])
+                            if pd.isna(x0) or pd.isna(x1): continue
+                            ax.axvspan(x0, x1, facecolor='none', hatch='////', edgecolor='dimgray', linewidth=0.0, alpha=0.4, zorder=0.2)
+                            label = row.get('name', '')
+                            if pd.notna(label) and x_min <= x0 <= x_max:
+                                ax.text(x0+(x1-x0)/2, y_pos, str(label), ha='center', va='center', fontsize=tick_fontsize-2, color='darkgray', zorder=0.3,
+                                        bbox=dict(facecolor='white', edgecolor='none', boxstyle='round,pad=0.1', alpha=0.8))
+    
+            # --- 8. Final Formatting ---
+            axs[-1].set_xlim(x_min, x_max)
+            axs[-1].set_xlabel("UT Date", fontsize=label_fontsize)
+            axs[-1].tick_params(axis='x', labelsize=tick_fontsize)
+            axs[-1].xaxis.set_major_formatter(mdates.ConciseDateFormatter(mdates.AutoDateLocator()))
+            
+            # Increased rect bottom to 0.05 and added explicit savefig parameters
+            plt.tight_layout(rect=[0, 0.05, 0.96, 0.98])
+            
+            if fig_path: 
+                plt.savefig(fig_path, dpi=250, bbox_inches='tight')
+            if show_plot: 
                 plt.show()
             plt.close('all')
-        except Exception as e:
-            self.logger.info(f"Error saving file or showing plot: {e}")
-
-
+        
+                     
 def add_one_month(inputdate):
     """
     Add one month to a datetime object, accounting for the number of days per month.
