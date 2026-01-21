@@ -9,4 +9,5 @@ This section contains topics about processing data with the ``KPF-Pipeline``.
 
     production.rst
     reprocessing.rst
+    ../tsdb/ingestion_tsdb.rst
     other.rst
