@@ -6,35 +6,35 @@ panel_arr:
         plot_type: scatter
         unit: K
         plot_attr:
-          label: Sci Cal Fiber Stg
+          label: "Sci Cal Fiber Stg\n(kpfmet.SCIENCE_CAL_FIBER_STG)"
           marker: .
           linewidth: 0.5
       - col: kpfmet.SCISKY_SCMBLR_CHMBR_EN
         plot_type: scatter
         unit: K
         plot_attr:
-          label: Sci/Sky Scrmb. Chmbr
+          label: "Sci/Sky Scrmb. Chmbr\n(kpfmet.SCISKY_SCMBLR_CHMBR_EN)"
           marker: .
           linewidth: 0.5
       - col: kpfmet.SCISKY_SCMBLR_FIBER_EN
         plot_type: scatter
         unit: K
         plot_attr:
-          label: Sci/Sky Scrmb. Fiber
+          label: "Sci/Sky Scrmb. Fiber\n(kpfmet.SCISKY_SCMBLR_FIBER_EN)"
           marker: .
           linewidth: 0.5
       - col: kpfmet.SIMCAL_FIBER_STG
         plot_type: scatter
         unit: K
         plot_attr:
-          label: SimulCal Fiber Stg
+          label: "SimulCal Fiber Stg\n(kpfmet.SIMCAL_FIBER_STG)"
           marker: .
           linewidth: 0.5
       - col: kpfmet.SKYCAL_FIBER_STG
         plot_type: scatter
         unit: K
         plot_attr:
-          label: SkyCal Fiber Stg
+          label: "SkyCal Fiber Stg\n()"
           marker: .
           linewidth: 0.5
     paneldict:

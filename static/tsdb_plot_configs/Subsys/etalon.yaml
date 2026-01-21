@@ -6,7 +6,7 @@ panel_arr:
         plot_type: plot
         unit: C
         plot_attr:
-          label: Housing Temp
+          label: "Housing Temp (ETAV1C1T)"
           marker: .
           linewidth: 0.5
           color: red
@@ -14,7 +14,7 @@ panel_arr:
         plot_type: plot
         unit: C
         plot_attr:
-          label: "Inner Side Shield Temp\n"
+          label: "Inner Side Shield Temp\n(ETAV1C2T)"
           marker: .
           linewidth: 0.5
           color: blue
@@ -22,7 +22,7 @@ panel_arr:
         plot_type: plot
         unit: C
         plot_attr:
-          label: "Inner Bottom Lid Temp\n"
+          label: "Inner Bottom Lid Temp\n(ETAV1C3T)"
           marker: .
           linewidth: 0.5
           color: green
@@ -30,7 +30,7 @@ panel_arr:
         plot_type: plot
         unit: C
         plot_attr:
-          label: "Outer Etalon Chamber Temp\n"
+          label: "Outer Etalon Chamber Temp\n(ETAV1C4T)"
           marker: .
           linewidth: 0.5
           color: orange
@@ -38,7 +38,7 @@ panel_arr:
         plot_type: plot
         unit: C
         plot_attr:
-          label: "Inner Top Lid Temp\n"
+          label: "Inner Top Lid Temp\n(ETAV2C3T)"
           marker: .
           linewidth: 0.5
           color: purple
@@ -61,7 +61,7 @@ panel_arr:
           color: red
     paneldict:
       title: Etalon Temperatures
-      ylabel: "$\\Delta$Temperature (mK)"
+      ylabel: "$\\Delta$Temp (mK)"
       not_junk: true
       subtractmedian: true
       legend_frac_size: 0.25
@@ -72,12 +72,12 @@ panel_arr:
         plot_type: plot
         unit: mK
         plot_attr:
-          label: "Inner Side Shield Temp\n"
+          label: "Inner Side Shield Temp\n(ETAV1C2T)"
           marker: .
           linewidth: 0.5
           color: blue
     paneldict:
-      ylabel: "$\\Delta$Temperature (mK)"
+      ylabel: "$\\Delta$Temp (mK)"
       not_junk: true
       qc_not_fail: 'TELEPRL0'
       subtractmedian: true
@@ -89,12 +89,12 @@ panel_arr:
         plot_type: plot
         unit: mK
         plot_attr:
-          label: "Inner Top Lid Temp\n"
+          label: "Inner Top Lid Temp\n(ETAV2C3T)"
           marker: .
           linewidth: 0.5
           color: purple
     paneldict:
-      ylabel: "$\\Delta$Temperature (mK)"
+      ylabel: "$\\Delta$Temp (mK)"
       title: Etalon Temperatures
       not_junk: true
       qc_not_fail: 'TELEPRL0'
@@ -107,12 +107,12 @@ panel_arr:
         plot_type: plot
         unit: mK
         plot_attr:
-          label: "Outer Etalon Chamber Temp\n"
+          label: "Outer Etalon Chamber Temp\n(ETAV1C4T)"
           marker: .
           linewidth: 0.5
           color: orange
     paneldict:
-      ylabel: "$\\Delta$Temperature (mK)"
+      ylabel: "$\\Delta$Temp (mK)"
       not_junk: true
       qc_not_fail: 'TELEPRL0'
       subtractmedian: true
@@ -124,12 +124,12 @@ panel_arr:
         plot_type: plot
         unit: mK
         plot_attr:
-          label: "Inner Bottom Lid Temp\n"
+          label: "Inner Bottom Lid Temp\n(ETAV1C3T)"
           marker: .
           linewidth: 0.5
           color: green
     paneldict:
-      ylabel: "$\\Delta$Temperature (mK)"
+      ylabel: "$\\Delta$Temp (mK)"
       title: Etalon Temperatures
       not_junk: true
       qc_not_fail: 'TELEPRL0'
