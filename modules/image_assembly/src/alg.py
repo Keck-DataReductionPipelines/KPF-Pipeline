@@ -64,7 +64,7 @@ class ImageAssemblyAlg:
             raise ValueError(f"Expected 2 or 4 amplifers, detected {len(matches)}")
 
         keyword_map = {'GREEN':'GRNAMPS', 'RED':'REDAMPS'}
-        self.target_l0['PRIMARY'][keyword_map[chip]] = self.namp[chip]
+        self.target_l0.header['PRIMARY'][keyword_map[chip]] = self.namp[chip]
         self.log.info(f"{chip} CCD: {self.namp[chip]}-amplifier mode")
 
         print(f"{chip} CCD: {self.namp[chip]}-amplifier mode")
