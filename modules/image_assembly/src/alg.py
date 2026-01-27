@@ -41,7 +41,7 @@ class ImageAssemblyAlg:
         self.target_l0 = add_headers_L0_read_noise(self.target_l0)
 
     
-    # GJG: legacy code infers amplifer mode from header['{chip}AMP{i}]['NAXIS{1,2}]
+    # GJG: legacy code infers amplifer mode from header['{chip}AMP{i}]['NAXIS{1,2}']
     def _infer_amplifier_mode(self, chip):
         if not hasattr(self, 'namp'):
             self.namp = {}
