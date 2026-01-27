@@ -3,6 +3,7 @@ from kpfpipe.pipelines.fits_primitives import kpf0_from_fits
 #from modules.read_noise.src.read_noise_framework import ReadNoiseFramework
 #from modules.var_exts.src.var_exts_framework import VarExtsFramework
 from modules.image_processing.src.image_process import ImageProcessing
+from modules.image_assembly.src.image_assembly import ImageAssembly
 from modules.quality_control_exposure.src.quality_control_exposure_framework import QualityControlExposureFramework
 #from modules.Utils.orientation_ref_reader import OrientationReference
 #from modules.Utils.overscan_subtract import OverscanSubtraction
