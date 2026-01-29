@@ -76,3 +76,16 @@ DROP FUNCTION getCalFileAfter (
     contentbitmask_  integer,
     maxage_          interval
 );
+
+DROP FUNCTION computeMJD (
+    timestamp_      timestamp
+);
+
+DROP FUNCTION getL0FitsFilesForCalibration (
+    dateobs_ date,
+    imtype_ character varying(32),
+    object_ character varying(32),
+    contentbitmask_  integer,
+    hoursbeforemidnight_ real,
+    hoursaftermidnight_ real
+);
