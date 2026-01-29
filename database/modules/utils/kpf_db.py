@@ -35,7 +35,7 @@ def _get_redis_client(verbose=False):
             # Try default port first, then alternative port
             ports_to_try = [6379, 6380]
             _redis_client = None
-            
+
             for port in ports_to_try:
                 try:
                     _redis_client = redis.Redis(
@@ -55,11 +55,11 @@ def _get_redis_client(verbose=False):
                     print(f"DEBUG: Redis connection failed on port {port}: {e}")
                     _redis_client = None
                     continue
-            
+
             if _redis_client is None:
                 print("DEBUG: Redis connection failed on all ports, falling back to no cache")
                 _cache_enabled = False
-                
+
         except ImportError:
             print("DEBUG: Redis Python client not available, falling back to no cache")
             _redis_client = None
@@ -71,7 +71,7 @@ def _load_cache_config():
     try:
         config_obj = cp.ConfigParser()
         config_obj.read(DEFAULT_CFG_PATH)
-        
+
         if 'CACHE' in config_obj:
             cache_cfg = config_obj['CACHE']
             enabled = cache_cfg.getboolean('enabled', True)
@@ -82,7 +82,7 @@ def _load_cache_config():
             enabled = False
             ttl_seconds = 300
             timestamp_rounding_minutes = 1
-            
+
         return enabled, ttl_seconds, timestamp_rounding_minutes
     except Exception:
         # Fallback to defaults if config reading fails
@@ -110,21 +110,21 @@ def _get_cache_key(obs_date, cal_requests, verbose=False):
     else:
         # Round to nearest minute
         rounded_dt = dt.replace(second=0, microsecond=0)
-    
+
     rounded_obs_date = rounded_dt.strftime("%Y-%m-%dT%H:%M:%S")
-    
+
     # Create a hash of the calibration requests
     requests_hash = hash(tuple(sorted(str(req) for req in cal_requests)))
-    
+
     cache_key = f"calibration_lookup:{rounded_obs_date}_{requests_hash}"
-    
+
     # Debug logging
     if verbose:
         print(f"DEBUG: Original timestamp: {obs_date}")
         print(f"DEBUG: Rounded timestamp: {rounded_obs_date}")
         print(f"DEBUG: Requests hash: {requests_hash}")
         print(f"DEBUG: Final cache key: {cache_key}")
-    
+
     return cache_key
 
 def _get_cached_result(cache_key, verbose=False):
@@ -135,22 +135,22 @@ def _get_cached_result(cache_key, verbose=False):
         if verbose:
             print(f"DEBUG: Cache disabled, returning None")
         return None
-        
+
     redis_client = _get_redis_client()
     if redis_client is None:
         return None
-        
+
     try:
         start_time = time.time()
         cached_data = redis_client.get(cache_key)
         redis_time = time.time() - start_time
-        
+
         if cached_data is not None:
             # Unpickle the cached result
             unpickle_start = time.time()
             result = pickle.loads(cached_data)
             unpickle_time = time.time() - unpickle_start
-            
+
             if not _is_test_env:
                 if verbose:
                     print(f"DEBUG: Redis cache HIT for key: {cache_key}")
@@ -164,7 +164,7 @@ def _get_cached_result(cache_key, verbose=False):
     except Exception as e:
         if not _is_test_env:
             print(f"DEBUG: Redis cache error: {e}")
-    
+
     return None
 
 def _set_cached_result(cache_key, result, verbose=False):
@@ -174,21 +174,21 @@ def _set_cached_result(cache_key, result, verbose=False):
             if verbose:
                 print(f"DEBUG: Cache disabled, not storing result")
         return
-        
+
     redis_client = _get_redis_client()
     if redis_client is None:
         return
-        
+
     try:
         # Pickle the result for storage
         pickle_start = time.time()
         pickled_result = pickle.dumps(result)
         pickle_time = time.time() - pickle_start
-        
+
         redis_start = time.time()
         redis_client.setex(cache_key, _cache_ttl, pickled_result)
         redis_time = time.time() - redis_start
-        
+
         if not _is_test_env:
             if verbose:
                 print(f"DEBUG: Redis cached result for key: {cache_key} with TTL {_cache_ttl}s")
@@ -200,17 +200,17 @@ def clear_cache(verbose=False):
     """Clear all Redis cache entries for this application"""
     if not _cache_enabled:
         return
-        
+
     redis_client = _get_redis_client()
     if redis_client is None:
         return
-        
+
     try:
         # Get all keys with our prefixes and delete them
         keys1 = redis_client.keys("calibration_lookup:*")
         keys2 = redis_client.keys("calibration_lookup_complete:*")
         all_keys = keys1 + keys2
-        
+
         if all_keys:
             redis_client.delete(*all_keys)
             if not _is_test_env:
@@ -236,11 +236,11 @@ def clear_cache_for_timestamp(obs_date, verbose=False):
     """Clear cache entries for a specific timestamp"""
     if not _cache_enabled:
         return
-        
+
     redis_client = _get_redis_client()
     if redis_client is None:
         return
-        
+
     try:
         # Round timestamp the same way we do for cache keys
         dt = datetime.strptime(obs_date, "%Y-%m-%dT%H:%M:%S.%f")
@@ -249,9 +249,9 @@ def clear_cache_for_timestamp(obs_date, verbose=False):
             rounded_dt = dt.replace(minute=minutes, second=0, microsecond=0)
         else:
             rounded_dt = dt.replace(second=0, microsecond=0)
-        
+
         rounded_obs_date = rounded_dt.strftime("%Y-%m-%dT%H:%M:%S")
-        
+
         # Find and delete keys for this timestamp
         pattern = f"calibration_lookup:{rounded_obs_date}_*"
         keys = redis_client.keys(pattern)
@@ -315,7 +315,7 @@ class KPFDB:
         self.filename = None
         self.conn = None
         self.cur = None
-        
+
         # Connection pooling - reuse connection if available
         self._connection_pool = {}
         self._max_connections = 5
@@ -380,7 +380,7 @@ class KPFDB:
             dbuser = os.getenv('DBUSER')
             dbpass = os.getenv('DBPASS')
             dbserver = os.getenv('DBSERVER')
-            
+
             try:
                 self.conn = psycopg2.connect(host=dbserver,database=dbname,port=dbport,user=dbuser,password=dbpass)
                 self.cur = self.conn.cursor()
@@ -396,7 +396,7 @@ class KPFDB:
         """Cache query results to avoid repeated identical queries"""
         if not self._get_connection():
             return pd.DataFrame([])
-        
+
         try:
             results = pd.read_sql_query(query, self.conn)
             return results
@@ -407,7 +407,7 @@ class KPFDB:
     def query_to_pandas(self, query):
         if not self._get_connection():
             return pd.DataFrame([])
-            
+
         try:
             results = pd.read_sql_query(query, self.conn)
         except Exception as e:
@@ -418,7 +418,7 @@ class KPFDB:
 
     def get_nearest_master(self, obs_date, cal_file_level, cal_type_pair, contentbitmask=3, max_cal_delta_time='1000 days'):
         """Get the master file closest in time to obs_date of the specified calibration type
-        
+
         Args:
             obs_date (string): ISO formatted datetime string
             cal_file_level (int): data level (0, 1, 2)
@@ -428,7 +428,7 @@ class KPFDB:
 
         Returns:
             string: path to calibration file
-        
+
         """
         query_template = f"""
 SELECT *,
@@ -439,7 +439,7 @@ AND level = '{cal_file_level}'
 AND caltype = '{cal_type_pair[0].lower()}'
 AND object like '%{cal_type_pair[1]}%'
 ORDER BY startdate;"""
-        
+
         # AND contentbits = {contentbitmask}
 
         # print(query_template)
@@ -449,7 +449,7 @@ ORDER BY startdate;"""
 
         obst = Time(obs_date)
         obs_jd = obst.mjd
-        
+
         # only look backwards for etalon masks
         # if cal_type_pair[0].lower() == 'etalonmask':
         #     df = df[df['meanmjd'] < obs_jd]
@@ -464,16 +464,16 @@ ORDER BY startdate;"""
         self.verify_checksum(fname, best_match['checksum'])
 
         return [self.exit_code, fname]
-    
+
     def get_bracketing_wls(self, obs_date, object_name, contentbitmask=3, max_cal_delta_time='90 days'):
         """Get the WLS files that bracket a given obs_date
-        
+
         Args:
             obs_date (string): ISO formatted datetime string
             object_name (list): Partial object name to search for (e.g. autocal-lfc-all). Object name in database must contain this name but doesn't need to be a complete match.
             contentbitmask (int): (optional) contentbitmask flag to match (default=3)
             max_cal_delta_time (string): (optional) maximum delta time between obs_date and the calibration file to consider (default = 3 days)
-        
+
         """
 
         query_template = f"""
@@ -485,7 +485,7 @@ and level = 1
 AND caltype = 'wls'
 AND (object like '%{object_name}-eve%' OR object like '%{object_name}-morn%')
 ORDER BY startdate;"""
-        
+
         df = self.query_to_pandas(query_template)
         if len(df) == 0:
             return [1, None, 1, None]
@@ -647,8 +647,12 @@ ORDER BY startdate;"""
             self.db_object = db_object
             self.infobits = infobits
 
+
     def verify_checksum(self, filename, checksum):
+
+
         # See if file exists.
+
         isExist = os.path.exists(filename)
         if self.verbose:
             self.log.debug('File existence = {}'.format(isExist))
@@ -657,7 +661,7 @@ ORDER BY startdate;"""
             if self.verbose:
                 self.log.debug("File exists...")
         else:
-            self.log.error(f"*** Error: File does not exist ({filename}); quitting...")
+            self.log.error(f"*** Error: File does not exist ({filename}); returning...")
             self.exit_code = 65
             return
 
@@ -678,7 +682,7 @@ ORDER BY startdate;"""
             self.filename = filename
             self.exit_code = 0
         else:
-            self.log.error("*** Error: File checksum is incorrect ({}); quitting...".format(filename))
+            self.log.error("*** Error: File checksum is incorrect ({}); returning...".format(filename))
             self.exit_code = 66
             return
 
@@ -702,29 +706,29 @@ ORDER BY startdate;"""
 
     def get_nearest_master_batch(self, obs_date, cal_requests, max_cal_delta_time='1000 days'):
         """Get multiple master files in a single database query for better performance
-        
+
         Args:
             obs_date (string): ISO formatted datetime string
             cal_requests (list): List of tuples (cal_file_level, cal_type_pair)
             max_cal_delta_time (string): maximum delta time between obs_date and the calibration file to consider
-        
+
         Returns:
             dict: Dictionary mapping cal_type to [exit_code, filename]
         """
         if not cal_requests:
             return {}
-            
+
         start_time = time.time()
-        
+
         # Don't cache individual batch results - they're already cached in the complete result cache
         # This prevents cache key inconsistencies when cal_requests change between runs
-        
+
         # Build a single optimized query for all calibration types
         query_parts = []
         for level, cal_type_pair in cal_requests:
             cal_type = cal_type_pair[0].lower()
             object_name = cal_type_pair[1]
-            
+
             # Handle list objects (like ordertrace)
             if isinstance(object_name, list):
                 for obj in object_name:
@@ -735,7 +739,7 @@ ORDER BY startdate;"""
                 query_parts.append(f"""
                     (level = {level} AND caltype = '{cal_type}' AND object LIKE '%{object_name}%')
                 """)
-        
+
         # Use optimized query with proper indexing hints
         query = f"""
         WITH all_cals AS (
@@ -748,31 +752,31 @@ ORDER BY startdate;"""
         ranked_cals AS (
             SELECT *,
                    ROW_NUMBER() OVER (
-                       PARTITION BY level, caltype, object 
+                       PARTITION BY level, caltype, object
                        ORDER BY ABS((minmjd + maxmjd)/2 - {Time(obs_date).mjd})
                    ) as rn
             FROM all_cals
         )
         SELECT level, caltype, object, filename, checksum, minmjd, maxmjd, meanmjd
-        FROM ranked_cals 
+        FROM ranked_cals
         WHERE rn = 1
         ORDER BY level, caltype;
         """
-        
+
         # Add query optimization hints
         if self.verbose:
             self.log.debug(f"Executing batch query for {len(cal_requests)} calibration types")
         df = self.query_to_pandas(query)
-        
+
         # Process results and match back to original requests
         results = {}
         obst = Time(obs_date)
         obs_jd = obst.mjd
-        
+
         for level, cal_type_pair in cal_requests:
             cal_type = cal_type_pair[0].lower()
             object_name = cal_type_pair[1]
-            
+
             # Handle list objects (like ordertrace)
             if isinstance(object_name, list):
                 # For list objects, we need to collect all matching results
@@ -786,7 +790,7 @@ ORDER BY startdate;"""
                         self.verify_checksum(fname, best_match['checksum'])
                         if self.exit_code == 0:
                             matching_results.append(fname)
-                
+
                 if matching_results:
                     results[cal_type] = [0, matching_results]
                 else:
@@ -795,22 +799,106 @@ ORDER BY startdate;"""
                 # Find matching result for single object
                 mask = (df['level'] == level) & (df['caltype'] == cal_type) & (df['object'].str.contains(object_name, na=False))
                 matching_rows = df[mask]
-                
+
                 if len(matching_rows) == 0:
                     results[cal_type] = [1, None]
                     continue
-                    
+
                 # Get the best match (already ranked by the query)
                 best_match = matching_rows.iloc[0]
-                
+
                 # Verify file and checksum
                 fname = os.path.join('/', best_match['filename'])
                 self.verify_checksum(fname, best_match['checksum'])
-                
+
                 results[cal_type] = [self.exit_code, fname]
-        
+
         query_time = time.time() - start_time
         if verbose:
             self.log.info(f"Batch query completed in {query_time:.3f}s for {len(cal_requests)} calibration types")
-        
+
         return results
+
+
+#####################################################################################################
+# Query database for all L0-FITS-file records with status > 0 that can be considered as inputs
+# for the desired calibration product.
+#
+# Since raw calibration data are taken nomimally in the afternoon (Pacific time), this time interval
+# can span UT midnight, so the query logic includes the specified hours before and after midnight.
+#####################################################################################################
+
+    def get_l0_calibration_fits_files(self,
+                                      dateobs,
+                                      imtype,
+                                      object,
+                                      contentbitmask,
+                                      hoursbeforemidnight,
+                                      hoursaftermidnight):
+
+        '''
+        Query database for all L0 FITS file records associated with the given input parameters.
+        '''
+
+        self.exit_code = 0
+
+        if self.verbose:
+            self.log.debug(f'dateobs = {dateobs}')
+            self.log.debug(f'imtype = {imtype}')
+            self.log.debug(f'object = {object}')
+            self.log.debug(f'contentbitmask = {contentbitmask}')
+            self.log.debug(f'hoursbeforemidnight = {hoursbeforemidnight}')
+            self.log.debug(f'hoursaftermidnight = {hoursaftermidnight}')
+
+
+        # Define query using database stored function getL0FitsFilesForCalibration.
+
+        query =\
+            f"select rid,filename,checksum,infobits,ut,mjdobs from getL0FitsFilesForCalibration(" +\
+            f"cast('{dateobs}' as date)," +\
+            f"cast('{imtype}' as character varying(32))," +\
+            f"cast('{object}' as character varying(32))," +\
+            f"cast({contentbitmask} as integer)," +\
+            f"cast({hoursbeforemidnight} as real)," +\
+            f"cast({hoursaftermidnight} as real)) as " +\
+            "(rId integer," +\
+            "filename varchar(255)," +\
+            "checksum varchar(32)," +\
+            "infobits bigint," +\
+            "ut time without time zone," +\
+            "mjdobs double precision);"
+
+        if self.verbose:
+            self.log.debug(f'query = {query}')
+
+
+        # Query database.
+
+        print('query = {}'.format(query))
+
+
+        # Execute query.
+
+        try:
+            self.cur.execute(query)
+
+            try:
+                records = []
+                nrecs = 0
+                for record in self.cur:
+                    if self.verbose:
+                        self.log.debug(f'record = {record}')
+                    records.append(record)
+                    nrecs += 1
+
+                self.log.debug(f'nrecs = {nrecs}')
+
+            except:
+                self.log.error("Nothing returned from database query; continuing...")
+
+        except (Exception, psycopg2.DatabaseError) as error:
+            self.log.error(f'*** Error executing query ({query}); skipping...')
+            self.exit_code = 67
+            return
+
+        return records
