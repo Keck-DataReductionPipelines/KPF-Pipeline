@@ -1,3 +1,6 @@
+import re
+
+import database.modules.utils.kpf_db as db
 from modules.Utils.kpf_fits import FitsHeaders
 
 # Pipeline dependencies
@@ -88,9 +91,76 @@ class PickInputsMastersDRP(KPF0_Primitive):
             ret_dark_files.append(dark_file)
 
         # Filter flat files with IMTYPE=‘flatlamp’ and specified OBJECT.
+        # Try to extract the observation date from self.all_fits_files_path
+        # (e.g., '/data/kpf/20260125/*.fits') and perform a database query to
+        # get files on either side of the UT boundary; if the observation date
+        # not found, then fall back on the original method to obtain the files.
 
-        fh3 = FitsHeaders(self.all_fits_files_path,self.flat_imtype_keywords,self.flat_imtype_values_str,self.logger)
-        all_flat_files = fh3.match_headers_string_lower()
+        filename_match = re.match(r".+/(\d\d\d\d\d\d\d\d)/.+", self.all_fits_files_path)
+
+        try:
+
+            dateobs_match = filename_match.group(1)
+
+            self.logger.info(f"dateobs_match = {dateobs_match}")
+
+
+            # Open database connection.
+
+            dbh = db.KPFDB(verbose=True)
+
+
+            # Parameters for querying all L0 FITS file records associated with the desired calibration product.
+
+            dateobs = dateobs_match
+            imtype = self.flat_imtype_values_str[0]
+            object = self.flat_imtype_values_str[1]
+            contentbitmask = 3
+            hoursbeforemidnight = 0                    # Until kpf_masters_2D.recipe is repaired, keep this zero.
+            hoursaftermidnight = 6
+
+
+            # Query database for L0 FITS files for flatfield generation.
+
+            records = dbh.get_l0_calibration_fits_files(dateobs,
+                                                        imtype,
+                                                        object,
+                                                        contentbitmask,
+                                                        hoursbeforemidnight,
+                                                        hoursaftermidnight)
+
+            self.logger.info('database-query exit_code = {}'.format(dbh.exit_code))
+
+            nrecs = len(records)
+            self.logger.info(f'nrecs= {nrecs}')
+
+            self.logger.info(f'records= {records}')
+
+
+            # Close database connection.
+
+            dbh.close()
+
+
+            # Parse filename from records.
+            # Replace outside-container path with inside.
+
+            all_flat_files = []
+            for record in records:
+                filename = record[1].replace("/data/kpf","/data")
+                self.logger.info(f'filename= {filename}')
+                all_flat_files.append(filename)
+
+        except:
+
+            self.logger.info(f"No dateobs match found (self.all_fits_files_path = {self.all_fits_files_path}); " +\
+                             "continuing with original method...")
+
+            fh3 = FitsHeaders(self.all_fits_files_path,self.flat_imtype_keywords,self.flat_imtype_values_str,self.logger)
+            all_flat_files = fh3.match_headers_string_lower()
+
+
+        # Filter out filenames containing a dash (means it was redelivered).
 
         ret_flat_files = []
         for flat_file in all_flat_files:
