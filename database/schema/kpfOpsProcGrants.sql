@@ -76,3 +76,16 @@ grant EXECUTE on FUNCTION getCalFileAfter (
     contentbitmask_  integer,
     maxage_          interval
 ) to kpfporole, kpfreadrole;
+
+grant EXECUTE on FUNCTION computeMJD (
+    timestamp_      timestamp
+) to kpfporole, kpfreadrole;
+
+grant EXECUTE on FUNCTION getL0FitsFilesForCalibration (
+    dateobs_ date,
+    imtype_ character varying(32),
+    object_ character varying(32),
+    contentbitmask_  integer,
+    hoursbeforemidnight_ real,
+    hoursaftermidnight_ real
+) to kpfporole, kpfreadrole;
