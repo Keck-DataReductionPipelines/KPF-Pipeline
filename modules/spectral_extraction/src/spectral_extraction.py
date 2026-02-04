@@ -6,7 +6,7 @@ from modules.spectral_extraction.src.alg import SpectralExtractionAlg
 from keckdrpframework.models.arguments import Arguments
 
 # Global read-only variables
-DEFAULT_CFG_PATH = 'modules/spectral_extraction/src/configs/default.cfg'
+DEFAULT_CFG_PATH = 'modules/spectral_extraction/configs/default.cfg'
 
 class SpectralExtraction(KPF0_Primitive):
     """

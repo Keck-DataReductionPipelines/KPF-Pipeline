@@ -3,29 +3,54 @@ import sys
 import glob
 import warnings
 
+from astropy.stats import mad_std
 from astropy.time import Time
 from datetime import datetime, timedelta
-import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.ndimage import median_filter, gaussian_filter
-from astropy.stats import mad_std
+import numpy as np
 from numpy.polynomial import polynomial, legendre
+import pandas as pd
+from scipy.ndimage import median_filter, gaussian_filter
 
+from kpfpipe.config.pipeline_config import ConfigClass
+from kpfpipe.logger import start_logger
 from kpfpipe.models.level1 import KPF1
+from modules.Utils.config_parser import ConfigHandler
 from modules.Utils.kpf_parse import get_datecode, HeaderParse
 
 
 class WLSAlg:
-    def __init__(self, obs_ids, rough_wls):
+    def __init__(self, 
+                obs_ids, 
+                rough_wls, 
+                linelist, 
+                default_config_path, 
+                logger=None
+                ):
+        """
+        obs_ids : list of obs_ids
+        rough_wls : KPF1 object with WAV extensions
+        linelist : list of thorium wavelengths in Angstroms
+        """
+        # direct inputs
         self.obs_ids = obs_ids
         self.rough_wls = rough_wls
-        self.l1_stack = self._load_stack()
+        self.linelist = linelist
         
-        # config
-        # logger
+        # config inputs
+        self.config = ConfigClass(default_config_path)
+        if logger == None:
+            self.log = start_logger('SpectralExtraction', default_config_path)
+        else:
+            self.log = logger
 
-        self.polyorder = 4
+        cfg_params = ConfigHandler(self.config, 'PARAM')
+        self.polyorder_x = int(cfg_params.get_config_value('polyorder_x'))
+        self.polyorder_m = int(cfg_params.get_config_value('polyorder_m'))
+        self.polyorder_s = int(cfg_params.get_config_value('polyorder_s'))
+
+        # init routines
+        self.l1_stack = self._load_stack()
 
 
     def _load_stack(self):
