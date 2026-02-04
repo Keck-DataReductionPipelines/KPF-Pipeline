@@ -33,8 +33,8 @@ class WLSAlg:
         self.l1_stack = [None]*self.nobs
 
         for i, obs_id in enumerate(self.obs_ids):
-            datecode = get_datecode(obs_ids[i])
-            filepath = f'/data/L1/{datecode}/{obs_ids[i]}_L1.fits'
+            datecode = get_datecode(self.obs_ids[i])
+            filepath = f'/data/L1/{datecode}/{self.obs_ids[i]}_L1.fits'
             self.l1_stack[i] = KPF1.from_fits(filepath, data_type='KPF')
 
         return self.l1_stack
