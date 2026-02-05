@@ -48,7 +48,7 @@ class WLSAlg:
         cfg_params = ConfigHandler(self.config, 'PARAM')
         self.polyorder_x = int(cfg_params.get_config_value('polyorder_x'))
         self.polyorder_m = int(cfg_params.get_config_value('polyorder_m'))
-        self.polyorder_s = int(cfg_params.get_config_value('polyorder_s'))
+        self.polyorder_f = int(cfg_params.get_config_value('polyorder_f'))
 
         # init routines
         self._load_stack()
@@ -134,17 +134,13 @@ class WLSAlg:
         return theta, rms
 
 
-    def fit_line_positions(self, flux1d, wave1d, linelist = None, linefunc = None, window=5, qc_sigma=2.5, do_plot=False):
+    @staticmethod
+    def fit_line_positions_1D(flux1d, wave1d, linelist, linefunc, window=5, qc_sigma=2.5, do_plot=False):
         """
         Fit line postions (in pixel space) for all lines in a 1D flux array
             * line centers are determined by fitting a 1D function in pixel-vs-flux
             * quality control flags and rejects poorly conditioned fits
         """
-        if linelist is None:
-            linelist = self.linelist
-        if linefunc is None:
-            linefunc = self.linefunc
-
         assert len(flux1d) == len(wave1d), "length of flux and wave arrays are mismatched"
         ncol = len(flux1d)
 
@@ -193,13 +189,13 @@ class WLSAlg:
         line_x = lines['pix'][~lines['bad']]
         line_w = lines['wav'][~lines['bad']]
         
-        return line_x, line_w
+        return line_w, line_x
 
 
-    def fit_line_positions(self, 
+    def fit_line_positions_ffi(self, 
                                obs_id, 
                                chip, 
-                               fiber, 
+                               fibers, 
                                linelist = None,
                                linefunc = None, 
                                window = 5, 
@@ -217,61 +213,74 @@ class WLSAlg:
 
         l1_obj = self.l1_stack[self.obs_ids.index(obs_id)]
 
-        flux_ext, var_ext, wave_ext = self._get_orderlet_ext_from_fiber_name(chip, fiber)
-        flux_arr = l1_obj[flux_ext]
-        wave_arr = self.rough_wls[wave_ext]
+        lines = {}
+        for k in lines.keys():
+            lines[k] = [None]*nfiber
 
-        assert np.shape(flux_arr) == np.shape(wave_arr), "shape mismatch between flux array and rough WLS"
-
-        norder, ncol = np.shape(flux_arr)
-
-        line_x = [None]*norder
-        line_w = [None]*norder
-        line_m = [None]*norder
-        
-        for o in range(norder):
+        for i, fiber in enumerate(fibers):
             if verbose:
-                print(f"  order {o+1} of {norder}")
-            
-            line_x[o], line_w[o] = self.fit_line_positions(flux_arr[o], 
-                                                           wave_arr[o],
-                                                           linelist, 
-                                                           linefunc, 
-                                                           window = window, 
-                                                           qc_sigma = qc_sigma, 
-                                                           do_plot = do_plot,
-                                                           )
+                print(f"fitting {chip} {fiber} line positions")
 
-            line_m[o] = (o+1)*np.ones_like(line_x[o], dtype=int)
-             
-        line_x = np.hstack(line_x)
-        line_w = np.hstack(line_w)
-        line_m = np.hstack(line_m)
+            flux_ext, var_ext, wave_ext = self._get_orderlet_ext_from_fiber_name(chip, fiber)
+            flux_arr = l1_obj[flux_ext]
+            wave_arr = self.rough_wls[wave_ext]
 
-        if do_plot:
-            plt.figure(figsize=(5,6))
-            plt.plot(line_x, line_w, 'k.')
-            plt.xlabel("pixel column", fontsize=16)
-            plt.ylabel("wavelength (A)", fontsize=16)
-            plt.title(f"{obs_id} | {chip} {fiber}")
-            plt.show()
+            assert np.shape(flux_arr) == np.shape(wave_arr), "shape mismatch between flux array and rough WLS"
 
-        return line_x, line_w, line_m
+            norder, ncol = np.shape(flux_arr)
+
+            for k in ['w', 'x', 'm', 'f']:
+                lines[k][i] = [None]*norder
+                    
+            for o in range(norder):
+                if verbose:
+                    print(f"  order {o+1} of {norder}")
+                
+                result = self.fit_line_positions_1D(flux_arr[o], 
+                                                    wave_arr[o],
+                                                    linelist, 
+                                                    linefunc, 
+                                                    window = window, 
+                                                    qc_sigma = qc_sigma, 
+                                                    do_plot = do_plot,
+                                                    )
+
+                lines['w'][o] = result[0]
+                lines['x'][o] = result[1]
+                lines['m'][o] = (o+1)*np.ones_like(lines['x'][o], dtype=int)
+                lines['f'][o] = np.array([fiber]*len(lines['x'][o]))
+
+            if do_plot:
+                plt.figure(figsize=(5,6))
+                plt.plot(lines['x'][o], lines['w'][o], 'k.')
+                plt.xlabel("pixel column", fontsize=16)
+                plt.ylabel("wavelength (A)", fontsize=16)
+                plt.title(f"{obs_id} | {chip} {fiber}")
+                plt.show()
+
+        for k in lines.keys()
+            lines[k] = np.hstack(lines[k])        
+        
+        return lines
 
 
+    
+    
+    
     def calculate_wls_coeffs(self, 
                              obs_id, 
                              chip, 
-                             method, 
+                             fibers, 
                              linelist = None,
                              linefunc = None, 
                              window = 5, 
                              qc_sigma = 2.5,
                              polyorder_x = None,
                              polyorder_m = None,
-                             polyorder_s = None,
+                             polyorder_f = None,
                              verbose = True,
                              do_plot = False,
+                             return_lines = True,
                              ):
         """
         Docstring 
@@ -286,8 +295,8 @@ class WLSAlg:
             polyorder_x = self.polyorder_x
         if polyorder_m is None:
             polyorder_m = self.polyorder_m
-        if polyorder_s is None:
-            polyorder_s = self.polyorder_s
+        if polyorder_f is None:
+            polyorder_f = self.polyorder_f
 
         flux_ext, _, _ = self._get_orderlet_ext_from_fiber_name(chip, 'CAL')
         norder, ncol = np.shape(self.rough_wls[flux_ext])
@@ -300,11 +309,11 @@ class WLSAlg:
             raise ValueError("method must be 'SCI' or 'CAL'")
         
         # fit line positions order-by-order
-        line = {}
-        line['x'] = [None]*len(fibers)     # x = pixel
-        line['w'] = [None]*len(fibers)     # w = wavelength
-        line['m'] = [None]*len(fibers)     # m = order
-        line['f'] = [None]*len(fibers)     # f = fiber
+        lines = {}
+        lines['x'] = [None]*len(fibers)     # x = pixel
+        lines['w'] = [None]*len(fibers)     # w = wavelength
+        lines['m'] = [None]*len(fibers)     # m = order
+        lines['f'] = [None]*len(fibers)     # f = fiber
 
         for i, fiber in enumerate(fibers):
             if verbose:
@@ -321,34 +330,32 @@ class WLSAlg:
                                                  do_plot = False,
                                                  )
 
-            line['x'][i], line['w'][i], line['m'][i] = result
+            lines['x'][i], lines['w'][i], lines['m'][i] = result
 
             if method == 'SCI':
-                line['f'][i] = int(fiber[-1])*np.ones_like(result[0])
-            elif method == 'CAL':
-                line['f'][i] = np.zeros_like(result[0])
+                lines['f'][i] = int(fiber[-1])*np.ones_like(result[0], dtype=int)
 
-        for k in line.keys():
-            line[k] = np.hstack(line[k])
+        for k in lines.keys():
+            lines[k] = np.hstack(lines[k])
 
         # rescale position variables to [-1,1] for Legendre fitting
-        _x = 2*line['x']/ncol - 1
-        _m = 2*(line['m'] - line['m'].min())/(line['m'].max() - line['m'].min()) - 1
+        _x = 2*lines['x']/ncol - 1
+        _m = 2*(lines['m'] - lines['m'].min())/(lines['m'].max() - lines['m'].min()) - 1
 
         if method == 'SCI':
-            _f = line['f'] - 2
+            _f = lines['f'] - 2
 
         # fit Legendre polynomials
         if method == 'SCI':
-            V = legendre.legvander3d(_x, _m, _f, deg=[polyorder_x, polyorder_m, polyorder_s])
+            V = legendre.legvander3d(_x, _m, _f, deg=[polyorder_x, polyorder_m, polyorder_f])
 
-            coeffs, *_ = np.linalg.lstsq(V, line['w'], rcond=None)
-            coeffs = coeffs.reshape(polyorder_x+1, polyorder_m+1, polyorder_s+1)
+            coeffs, *_ = np.linalg.lstsq(V, lines['w'], rcond=None)
+            coeffs = coeffs.reshape(polyorder_x+1, polyorder_m+1, polyorder_f+1)
 
         elif method == 'CAL':
             V = legendre.legvander2d(_x, _m, deg=[polyorder_x, polyorder_m])
 
-            coeffs, *_ = np.linalg.lstsq(V, line['w'], rcond=None)
+            coeffs, *_ = np.linalg.lstsq(V, lines['w'], rcond=None)
             coeffs = coeffs.reshape(polyorder_x+1, polyorder_m+1)
 
         return coeffs
