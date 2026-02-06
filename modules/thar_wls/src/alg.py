@@ -74,6 +74,11 @@ class WLSAlg:
         except AttributeError:
             raise ValueError(f"No such line function: {name}")
 
+        try:
+            cls.linefunc_jac = staticmethod(getattr(cls, f'{name}_jac'))
+        except AttributeError:
+            raise ValueError(f"No such jacobian function: {f'{name}_jac'}")
+
 
     @staticmethod
     def _get_orderlet_ext_from_fiber_name(chip, fiber):
@@ -120,22 +125,52 @@ class WLSAlg:
 
         return b + a * np.exp(-(x-mu)**2/(2*sigma**2))
 
-    
+
     @staticmethod
-    def optimize_lsq(func, theta0, x, y):
+    def gaussian_jac(theta, x):
+        mu, sigma, a, b = theta
+        dx = x - mu
+        e = np.exp(-dx**2 / (2*sigma**2))
+
+        J = np.empty((x.size, 4))
+        J[:, 0] = a * e * dx / sigma**2
+        J[:, 1] = a * e * dx**2 / sigma**3
+        J[:, 2] = e
+        J[:, 3] = 1.0
+        
+        return J
+
+
+    @staticmethod
+    def optimize_lsq(func, theta0, x, y, jac=None):
         """
         optimize theta for a given function using non-linear least-squares
         """
         def _residuals(theta, x, y):
             return func(theta, x) - y
         
-        result = least_squares(_residuals, theta0, args=(x,y))
+        if jac is None:
+            raise ValueError("why is jac None!?!?!?!")
+
+        def _jac(theta, x, y):
+                return jac(theta, x)
+        
+        result = least_squares(_residuals, theta0, jac=_jac, method='lm', args=(x,y))
         theta, rms = result.x, np.std(result.fun)
         
         return theta, rms
 
 
-    def fit_line_positions_1D(self, flux1d, wave1d, linelist = None, linefunc = None, window=5, qc_sigma=2.5, do_plot=False):
+    def fit_line_positions_1D(self, 
+                              flux1d, 
+                              wave1d, 
+                              linelist = None, 
+                              linefunc = None, 
+                              linefunc_jac = None, 
+                              window=5, 
+                              qc_sigma=2.5, 
+                              do_plot=False
+                              ):
         """
         Fit line postions (in pixel space) for all lines in a 1D flux array
             * line centers are determined by fitting a 1D function in pixel-vs-flux
@@ -145,6 +180,8 @@ class WLSAlg:
             linelist = self.linelist
         if linefunc is None:
             linefunc = self.linefunc
+        if linefunc_jac is None:
+            linefunc_jac = self.linefunc_jac
 
         assert len(flux1d) == len(wave1d), "length of flux and wave arrays are mismatched"
         ncol = len(flux1d)
@@ -165,7 +202,7 @@ class WLSAlg:
             y = flux1d[cols]
             
             theta0 = [loc, np.abs(np.mean(np.diff(x))), y.max(), 0]
-            theta, rms = self.optimize_lsq(linefunc, theta0, x, y)
+            theta, rms = self.optimize_lsq(linefunc, theta0, x, y, jac=linefunc_jac)
         
             lines['pix'][i] = theta[0]
             lines['std'][i] = theta[1]
@@ -203,6 +240,7 @@ class WLSAlg:
                                fibers, 
                                linelist = None,
                                linefunc = None, 
+                               linefunc_jac = None,
                                window = 5, 
                                qc_sigma = 2.5,
                                verbose = True,
@@ -215,6 +253,8 @@ class WLSAlg:
             linelist = self.linelist
         if linefunc is None:
             linefunc = self.linefunc
+        if linefunc_jac is None:
+            linefunc_jac = self.linefunc_jac
 
         l1_obj = self.l1_stack[self.obs_ids.index(obs_id)]
 
@@ -244,6 +284,7 @@ class WLSAlg:
                                                     wave_arr[o],
                                                     linelist, 
                                                     linefunc, 
+                                                    linefunc_jac,
                                                     window = window, 
                                                     qc_sigma = qc_sigma, 
                                                     do_plot = do_plot,
@@ -352,6 +393,7 @@ class WLSAlg:
                                fibers, 
                                linelist = None,
                                linefunc = None, 
+                               linefunc_jac = None,
                                window = 5, 
                                qc_sigma = 2.5,
                                polyorder_x = None,
@@ -387,6 +429,7 @@ class WLSAlg:
                                                          fibers, 
                                                          linelist = linelist,
                                                          linefunc = linefunc, 
+                                                         linefunc_jac = linefunc_jac,
                                                          window = window, 
                                                          qc_sigma = qc_sigma,
                                                          verbose = verbose,
@@ -408,7 +451,7 @@ class WLSAlg:
         bad = np.abs(coeffs_stack - np.median(coeffs_stack, axis=0)) / mad_std(coeffs_stack, axis=0) > qc_sigma
         coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0)/np.sum(~bad, axis=0)
 
-        W = self.evaluate_wls_coeffs(coeffs_stack[j], self.ncol, self._get_norder[chip], len(fibers))
+        W = self.evaluate_wls_coeffs(coeffs_mean, self.ncol, self._get_norder(chip), len(fibers))
 
         if return_stacks:
             return W, coeffs_mean, coeffs_stack, lines_stack
