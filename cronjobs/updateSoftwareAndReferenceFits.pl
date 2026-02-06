@@ -97,22 +97,18 @@ sub updateReferenceFits {
         print "file2 = $file2\n";
         if (($file2 eq ".") or ($file2 eq "..") or ($file2 =~ /^\.+/)) {
           print "1 Skipping file2---->[$file2]\n";
-	  next;
+          next;
         }
 
-	# Check if file2 exists in private (current) directory.
-	# If not, copy it from the public directory.
 
-        if (-e $file2) {
-            print "$file2 already exists in private directory; skipping...\n";
-	} else {
-	    $file2 = $dir2 . "/" . $file2;
+        # Copy file from the public to private directory.
 
-            my $cmd0 = "cp -p $file2 .";
-            print "Executing [$cmd0]...\n";
-            my @op0 = `$cmd0`;
-            if (@op0) { print "Output from [$cmd0]=[@op0]\n"; }
-        }
+        $file2 = $dir2 . "/" . $file2;
+
+        my $cmd0 = "cp -pfr $file2 .";
+        print "Executing [$cmd0]...\n";
+        my @op0 = `$cmd0`;
+        if (@op0) { print "Output from [$cmd0]=[@op0]\n"; }
     }
 }
 

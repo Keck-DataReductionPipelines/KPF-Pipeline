@@ -274,7 +274,7 @@ def run_single_core_job(procdates,bash_cmds_for_nights,dryrun,nparallel,local_tz
 
     print("index_thread,njobs =",index_thread,njobs)
 
-    thread_work_file = iam.replace(".py","_thread") + str(index_thread) + ".out"
+    thread_work_file = iam.replace(".py",f"_pid{iam_pid}_thread{index_thread}.out")
 
     try:
         fh = open(thread_work_file, 'w', encoding="utf-8")
@@ -480,6 +480,33 @@ def main():
 
     procdates_str = []
     bash_commands_for_nights_to_reprocess = []
+
+
+    # Execute commands that are to be done just once,
+    # regardless of the number of processing dates.
+
+
+    bash_cmd_do_once = [
+        f"cp -pfr /reference/* /data/reference",
+        f"cp -pfr /reference_fits/* /data/reference_fits"
+    ]
+
+    for cmd in bash_cmd_do_once:
+        print(f"Executing {cmd}")
+        code_to_execute_object = subprocess.run(cmd,
+                                                stdout=subprocess.DEVNULL,
+                                                stderr=subprocess.DEVNULL,
+                                                shell=True,
+                                                text=True)
+        returncode = code_to_execute_object.returncode
+        print(f"returncode = {returncode}")
+        if returncode != 0:
+            print("*** Error executing command; quitting...")
+            exitcode = 64
+            exit(exitcode)
+
+
+    # Loop over processing dates to load bash-command sets.
 
     for d in procdates:
 
