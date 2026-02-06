@@ -53,6 +53,7 @@ class WLSAlg:
         # init routines
         self._load_stack()
         self._set_linefunc(str(cfg_params.get_config_value('linefunc')))
+        self.ncol = 4080
         
 
 
@@ -237,8 +238,7 @@ class WLSAlg:
                 lines[k][i] = [None]*norder
                     
             for o in range(norder):
-                if verbose:
-                    print(f"  order {o+1} of {norder}")
+                #print(f"  order {o+1} of {norder}")
                 
                 result = self.fit_line_positions_1D(flux_arr[o], 
                                                     wave_arr[o],
@@ -279,7 +279,6 @@ class WLSAlg:
                              polyorder_f = None,
                              verbose = True,
                              do_plot = False,
-                             return_lines = True,
                              ):
         """
         Docstring 
@@ -346,3 +345,72 @@ class WLSAlg:
             W = legendre.legval3d(X, Y, Z, coeffs)
 
         return W
+
+
+    def compute_wls_from_stack(self, 
+                               chip, 
+                               fibers, 
+                               linelist = None,
+                               linefunc = None, 
+                               window = 5, 
+                               qc_sigma = 2.5,
+                               polyorder_x = None,
+                               polyorder_m = None,
+                               polyorder_f = None,
+                               verbose = True,
+                               do_plot = False,
+                               return_stacks = True,
+                               ):
+        """
+        Docstring
+        """
+        if linelist is None:
+            linelist = self.linelist
+        if linefunc is None:
+            linefunc = self.linefunc
+        if polyorder_x is None:
+            polyorder_x = self.polyorder_x
+        if polyorder_m is None:
+            polyorder_m = self.polyorder_m
+        if polyorder_f is None:
+            polyorder_f = self.polyorder_f
+
+        lines_stack = [None]*self.nobs
+        coeffs_stack = [None]*self.nobs
+
+        for i, obs_id in enumerate(self.obs_ids):
+            if verbose:
+                print(f"\n{i+1} of {self.nobs} : {obs_id}")
+            
+            lines_stack[i] = self.fit_line_positions_ffi(obs_id, 
+                                                         chip, 
+                                                         fibers, 
+                                                         linelist = linelist,
+                                                         linefunc = linefunc, 
+                                                         window = window, 
+                                                         qc_sigma = qc_sigma,
+                                                         verbose = verbose,
+                                                         do_plot = do_plot,
+                                                         )
+
+
+
+            coeffs_stack[i] = self.calculate_wls_coeffs(chip, 
+                                                        lines_stack[i],
+                                                        polyorder_x = polyorder_x,
+                                                        polyorder_m = polyorder_m,
+                                                        polyorder_f = polyorder_f,
+                                                        verbose = True,
+                                                        do_plot = False,
+                                                        )
+
+        coeffs_stack = np.array(coeffs_stack)
+        bad = np.abs(coeffs_stack - np.median(coeffs_stack, axis=0)) / mad_std(coeffs_stack, axis=0) > qc_sigma
+        coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0)/np.sum(~bad, axis=0)
+
+        W = self.evaluate_wls_coeffs(coeffs_stack[j], self.ncol, self._get_norder[chip], len(fibers))
+
+        if return_stacks:
+            return W, coeffs_mean, coeffs_stack, lines_stack
+
+        return W, coeffs_mean
