@@ -64,7 +64,7 @@ for cal_type in ['ThAr', 'LFC', 'Etalon']:
                         orderlet_names = ['GREEN_SCI_FLUX2']
                         output_exts = ['GREEN_SCI_WAVE2']
 
-                save_diagnostics_dir = 'plots'
+                save_diagnostics_dir = None
                 if save_diagnostics_dir != None:
                     plot_dir = save_diagnostics_dir + "/" + date_dir + "/" + obj_string_short + "/"
                 else:
