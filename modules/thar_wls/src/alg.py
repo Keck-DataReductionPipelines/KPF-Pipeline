@@ -46,13 +46,14 @@ class WLSAlg:
             self.log = logger
 
         cfg_params = ConfigHandler(self.config, 'PARAM')
+        self.linemodel = str(cfg_params.get_config_value('linefunc'))
         self.polyorder_x = int(cfg_params.get_config_value('polyorder_x'))
         self.polyorder_m = int(cfg_params.get_config_value('polyorder_m'))
         self.polyorder_f = int(cfg_params.get_config_value('polyorder_f'))
 
         # init routines
         self._load_stack()
-        self._set_linefunc(str(cfg_params.get_config_value('linefunc')))
+        self.nrow = 4080
         self.ncol = 4080
         
 
@@ -67,17 +68,21 @@ class WLSAlg:
             self.l1_stack[i] = KPF1.from_fits(filepath, data_type='KPF')
 
 
-    @classmethod
-    def _set_linefunc(cls, name):
-        try:
-            cls.linefunc = staticmethod(getattr(cls, name))
-        except AttributeError:
-            raise ValueError(f"No such line function: {name}")
+    def _set_linemodel(self, name):
+        _LINE_FUNCTIONS = {
+            'gaussian': ('gaussian', 'gaussian_jac'),
+            'tophat': ('tophat', 'tophat_jac'),
+        }
 
         try:
-            cls.linefunc_jac = staticmethod(getattr(cls, f'{name}_jac'))
-        except AttributeError:
-            raise ValueError(f"No such jacobian function: {f'{name}_jac'}")
+            fname, jname = _LINE_FUNCTIONS[name]
+        except KeyError:
+            raise ValueError(f"Unsupported line function: {name}")
+
+        func = getattr(self.__class__, fname)
+        jac = getattr(self.__class__, jname)
+
+        return func, jac
 
 
     @staticmethod
@@ -149,9 +154,6 @@ class WLSAlg:
         def _residuals(theta, x, y):
             return func(theta, x) - y
         
-        if jac is None:
-            raise ValueError("why is jac None!?!?!?!")
-
         def _jac(theta, x, y):
                 return jac(theta, x)
         
@@ -165,11 +167,10 @@ class WLSAlg:
                               flux1d, 
                               wave1d, 
                               linelist = None, 
-                              linefunc = None, 
-                              linefunc_jac = None, 
-                              window=5, 
-                              qc_sigma=2.5, 
-                              do_plot=False
+                              linemodel = 'gaussian',
+                              window = 5, 
+                              qc_sigma = 2.5, 
+                              do_plot = False,
                               ):
         """
         Fit line postions (in pixel space) for all lines in a 1D flux array
@@ -178,10 +179,8 @@ class WLSAlg:
         """
         if linelist is None:
             linelist = self.linelist
-        if linefunc is None:
-            linefunc = self.linefunc
-        if linefunc_jac is None:
-            linefunc_jac = self.linefunc_jac
+        
+        func, jac = self._set_linemodel(linemodel)
 
         assert len(flux1d) == len(wave1d), "length of flux and wave arrays are mismatched"
         ncol = len(flux1d)
@@ -201,8 +200,12 @@ class WLSAlg:
             x = cols
             y = flux1d[cols]
             
-            theta0 = [loc, np.abs(np.mean(np.diff(x))), y.max(), 0]
-            theta, rms = self.optimize_lsq(linefunc, theta0, x, y, jac=linefunc_jac)
+            if linemodel == 'gaussian':
+                theta0 = [loc, np.abs(np.mean(np.diff(x))), y.max(), 0]
+            else:
+                raise ValueError(f'{linemodel} not yet configured')
+
+            theta, rms = self.optimize_lsq(func, theta0, x, y, jac=jac)
         
             lines['pix'][i] = theta[0]
             lines['std'][i] = theta[1]
@@ -239,8 +242,7 @@ class WLSAlg:
                                chip, 
                                fibers, 
                                linelist = None,
-                               linefunc = None, 
-                               linefunc_jac = None,
+                               linemodel = 'gaussian',
                                window = 5, 
                                qc_sigma = 2.5,
                                verbose = True,
@@ -251,11 +253,7 @@ class WLSAlg:
         """
         if linelist is None:
             linelist = self.linelist
-        if linefunc is None:
-            linefunc = self.linefunc
-        if linefunc_jac is None:
-            linefunc_jac = self.linefunc_jac
-
+        
         l1_obj = self.l1_stack[self.obs_ids.index(obs_id)]
 
         lines = {}
@@ -283,8 +281,7 @@ class WLSAlg:
                 result = self.fit_line_positions_1D(flux_arr[o], 
                                                     wave_arr[o],
                                                     linelist, 
-                                                    linefunc, 
-                                                    linefunc_jac,
+                                                    linemodel,
                                                     window = window, 
                                                     qc_sigma = qc_sigma, 
                                                     do_plot = do_plot,
@@ -392,8 +389,7 @@ class WLSAlg:
                                chip, 
                                fibers, 
                                linelist = None,
-                               linefunc = None, 
-                               linefunc_jac = None,
+                               linemodel = 'gaussian',
                                window = 5, 
                                qc_sigma = 2.5,
                                polyorder_x = None,
@@ -408,8 +404,6 @@ class WLSAlg:
         """
         if linelist is None:
             linelist = self.linelist
-        if linefunc is None:
-            linefunc = self.linefunc
         if polyorder_x is None:
             polyorder_x = self.polyorder_x
         if polyorder_m is None:
@@ -428,8 +422,7 @@ class WLSAlg:
                                                          chip, 
                                                          fibers, 
                                                          linelist = linelist,
-                                                         linefunc = linefunc, 
-                                                         linefunc_jac = linefunc_jac,
+                                                         linemodel = linemodel,
                                                          window = window, 
                                                          qc_sigma = qc_sigma,
                                                          verbose = verbose,
