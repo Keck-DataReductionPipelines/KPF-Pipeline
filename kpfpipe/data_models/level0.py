@@ -96,6 +96,11 @@ class KPF0(KPFDataModel):
 
             if ext_name not in self.extensions:
                 if ext_name != "PRIMARY":
+                    if ext_name not in _KNOWN_L0_EXTENSIONS:
+                        warnings.warn(
+                            f"Non-standard extension '{ext_name}' found in L0 file.",
+                            UserWarning,
+                        )
                     self.create_extension(ext_name, fits_type)
 
             if ext_name == "PRIMARY":
