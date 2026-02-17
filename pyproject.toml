@@ -18,7 +18,8 @@ dependencies = [
     "numpy==2.4.2",
     "pandas==3.0.0",
     "scipy==1.17.0",
-    "tqdm==4.67.3"
+    "tqdm==4.67.3",
+    "rv-data-standard @ git+https://github.com/EPRV-RCN/RVData.git@develop"
 ]
 
 # Optional dependencies for development (linting, testing, formatting)
@@ -35,3 +36,6 @@ dev = [
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+"kpfpipe.data_models.config" = ["*.csv"]
