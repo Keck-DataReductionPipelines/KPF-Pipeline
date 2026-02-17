@@ -1,0 +1,12 @@
+HDU,Name,DataType,Required,Description
+0,PRIMARY,PrimaryHDU,True,Observation metadata header
+1,GREEN_CCD,ImageHDU,True,Assembled green CCD frame (4080x4080)
+2,GREEN_VAR,ImageHDU,True,Green CCD variance frame
+3,RED_CCD,ImageHDU,True,Assembled red CCD frame (4080x4080)
+4,RED_VAR,ImageHDU,True,Red CCD variance frame
+5,CA_HK,ImageHDU,False,Ca H&K spectrometer image
+6,EXPMETER_SCI,BinTableHDU,False,Exposure meter science fiber
+7,EXPMETER_SKY,BinTableHDU,False,Exposure meter sky fiber
+8,TELEMETRY,BinTableHDU,False,System telemetry table
+9,RECEIPT,BinTableHDU,True,Accumulated processing history
+10,CONFIG,BinTableHDU,False,Configuration parameters

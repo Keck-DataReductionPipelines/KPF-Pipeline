@@ -15,6 +15,7 @@ dependencies:
       - astropy==7.2.0
       - astroquery==0.4.11
       - barycorrpy==0.4.4
+      - rv-data-standard @ git+https://github.com/EPRV-RCN/RVData.git@develop
       # --- development tools --- #
       - black==26.1.0
       - flake8==7.3.0

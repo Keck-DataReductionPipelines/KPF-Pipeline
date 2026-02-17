@@ -1,0 +1,19 @@
+HDU,Name,DataType,Required,Description
+0,PRIMARY,PrimaryHDU,True,Observation metadata header
+1,GREEN_AMP1,ImageHDU,False,Green CCD amplifier 1 readout
+2,GREEN_AMP2,ImageHDU,False,Green CCD amplifier 2 readout
+3,GREEN_AMP3,ImageHDU,False,Green CCD amplifier 3 readout
+4,GREEN_AMP4,ImageHDU,False,Green CCD amplifier 4 readout
+5,RED_AMP1,ImageHDU,False,Red CCD amplifier 1 readout
+6,RED_AMP2,ImageHDU,False,Red CCD amplifier 2 readout
+7,RED_AMP3,ImageHDU,False,Red CCD amplifier 3 readout
+8,RED_AMP4,ImageHDU,False,Red CCD amplifier 4 readout
+9,CA_HK,ImageHDU,False,Ca H&K spectrometer image
+10,EXPMETER_SCI,BinTableHDU,False,Exposure meter science fiber
+11,EXPMETER_SKY,BinTableHDU,False,Exposure meter sky fiber
+12,GUIDER_AVG,ImageHDU,False,Guide camera average image
+13,GUIDER_CUBE_ORIGINS,BinTableHDU,False,Guide camera cube origins table
+14,SOCAL PYRHELIOMETER,BinTableHDU,False,SoCal pyrheliometer data
+15,TELEMETRY,BinTableHDU,False,System telemetry table
+16,RECEIPT,BinTableHDU,False,Processing history
+17,CONFIG,BinTableHDU,False,Configuration parameters
