@@ -45,7 +45,10 @@ class KPF0(KPFDataModel):
     def __init__(self):
         super().__init__()
         self.level = 0
-        self.create_extension("PRIMARY", "PrimaryHDU")
+
+        for _, row in L0_EXTENSIONS.iterrows():
+            if row["Required"] and row["Name"] not in self.extensions:
+                self.create_extension(row["Name"], row["DataType"])
 
     @classmethod
     def from_fits(cls, fn, **kwargs):
