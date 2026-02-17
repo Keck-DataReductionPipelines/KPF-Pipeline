@@ -1,7 +1,0 @@
-keyword|datatype|description|unit
-SCI_MASK|string|Mask name for SCI|None
-SCIMPATH|string|Mask path for SCI|None
-CAL_MASK|string|Mask name for CAL|None
-CALMPATH|string|Mask path for CAL|None
-SKY_MASK|string|Mask name for SKY|None
-SKYMPATH|string|Mask path for SKY|None

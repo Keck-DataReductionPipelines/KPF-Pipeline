@@ -1,3 +1,0 @@
-CALTAG, UT_start_date,       UT_end_date,         CALPATH,  comment
-1.0,    2000-01-01 00:00:00, 2024-02-03 00:00:00, /data/reference_fits/kpf_20230730_master_flat.fits,
-2.0,    2024-02-03 00:00:01, 2100-01-01 00:00:00, /data/reference_fits/kpf_20240211_master_flat.fits,

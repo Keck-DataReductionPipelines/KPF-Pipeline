@@ -1,0 +1,24 @@
+name: kpfpipe
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python==3.14.3
+  - GitPython>=3.1.0
+  - matplotlib==3.10.8
+  - numpy==2.4.2
+  - pandas==3.0.0
+  - scipy==1.17.0
+  - tqdm==4.67.3
+  - pip
+  - pip:
+      - astropy==7.2.0
+      - astroquery==0.4.11
+      - barycorrpy==0.4.4
+      # --- development tools --- #
+      - black==26.1.0
+      - flake8==7.3.0
+      - isort==7.0.0
+      - jupyter
+      - mypy==1.19.1
+      - pytest==9.0.2

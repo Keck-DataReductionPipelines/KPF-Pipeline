@@ -1,3 +1,0 @@
-from modules.Trivial.KPFM_Trivial import KPFModExample
-result=KPFModExample()
-
