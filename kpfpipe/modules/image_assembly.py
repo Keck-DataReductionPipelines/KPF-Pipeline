@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.utils.stats import flag_outliers
 
 
 class ImageAssembly:
@@ -22,7 +23,20 @@ class ImageAssembly:
         # temporarily hard-code config params during development
         # switch to config once that interface has been standardized
         overscan_method = 'rowmedian'
-        overscan_sigma_clip = 2.1
+
+
+        # TODO: move gain to static config file
+        self.gain = {
+            'GREEN_AMP1': 5.175,
+            'GREEN_AMP2': 5.208,
+            'GREEN_AMP3': 5.52,
+            'GREEN_AMP4': 5.39,
+            'RED_AMP1': 5.02,
+            'RED_AMP2': 5.27,
+            'RED_AMP3': 5.32,
+            'RED_AMP4': 5.23,
+        }
+
 
     
     def count_amplifiers(self, chip):
@@ -60,7 +74,7 @@ class ImageAssembly:
 
     def orient_channels(self, chip):
         """
-        Extracts and flips amplifier channels to standardize readout orientation.
+        Reorients amplifier channels in place to standardize readout orientation.
             - serial overscan on right
             - parallel overscan on bottom
         All transformations are flips, so a second call to this function will undo the transformation.
@@ -77,7 +91,7 @@ class ImageAssembly:
         for i in range(self.namp[chip]):
             channel_ext = f'{chip.upper()}_AMP{i+1}'
             channel_key = int(orientation.loc[orientation.CHANNEL_EXT == channel_ext, 'CHANNEL_KEY'])
-            image = np.array(self.l0_obj[channel_ext])
+            image = self.l0_obj[channel_ext]
 
             if channel_key == 1: # flip lr
                 image_reoriented = np.flip(image,axis=1)
@@ -121,7 +135,7 @@ class ImageAssembly:
             oscan_pix_prl (np.ndarray): Array of parallel overscan pixels
         """
         chip = chip.upper()
-        full_amplifier = self.l0_obj[f'{chip}_AMP{amp_no}']
+        full_amplifier = np.array(self.l0_obj[f'{chip}_AMP{amp_no}'], dtype=np.float32)
         
         ncol_prescan = prescan[1] - prescan[0]
         nrow_imaging, ncol_imaging = self.dims[chip]
@@ -150,7 +164,7 @@ class ImageAssembly:
             ndarray : data with only active imaging area pixels
         """
         chip = chip.upper()
-        full_amplifier = self.l0_obj[f'{chip}_AMP{amp_no}']
+        full_amplifier = np.array(self.l0_obj[f'{chip}_AMP{amp_no}'], dtype=np.float32)
         
         ncol_prescan = prescan[1] - prescan[0]
         nrow_imaging, ncol_imaging = self.dims[chip]
@@ -159,21 +173,29 @@ class ImageAssembly:
         
         return image_pix
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     # from AnalyzeL0.measure_read_noise_overscan
     # also AnalyzeL0.measure_std_mad_norm_ratio_overscan
-    def measure_read_noise(self, nparallel, nserial, sigma_clip):
+    def measure_read_noise(self, chip, prescan=[0,4], buffer=[5,5], sigma=10.0):
         """
         Measure read noise from overscan region
         """
+        if not hasattr(self.readnoise):
+            self.readnoise = {}
+        if not hasattr(self.readnoise):
+            self.rn_nongauss = {}
+
+        chip = chip.upper()
+        
+        for i in range(self.namp[chip]):
+            channel_ext = f'{chip.upper()}_AMP{i+1}'
+
+            oscan_srl, _ = self._get_overscan_pixels(chip, i+1, prescan, buffer)
+            oscan_srl *= self.gain[channel_ext]
+            
+            out = flag_outliers(oscan_srl, sigma)
+            std = np.nanstd(oscan_srl[~out])
+            mad = np.nanmean(np.abs(oscan_srl[~out] - np.nanmean(oscan_srl[~out])))
+            
+            self.readnoise[channel_ext] = std
+            self.rn_nongauss[channel_ext] = np.sqrt(2/np.pi) * std / mad
