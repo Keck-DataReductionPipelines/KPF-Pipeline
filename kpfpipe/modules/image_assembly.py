@@ -14,29 +14,11 @@ from kpfpipe.utils.stats import flag_outliers
 class ImageAssembly:
     def __init__(self, l0_obj, config=None):
         self.l0_obj = l0_obj
-        
-        CHIPS = ['GREEN', 'RED']
-        for chip in CHIPS:
-            self.count_amplifiers(chip)
-            self.orient_channels(chip)
+        self.CHIPS = ['GREEN', 'RED']
 
         # temporarily hard-code config params during development
         # switch to config once that interface has been standardized
-        overscan_method = 'rowmedian'
-
-
-        # TODO: move gain to static config file
-        self.gain = {
-            'GREEN_AMP1': 5.175,
-            'GREEN_AMP2': 5.208,
-            'GREEN_AMP3': 5.52,
-            'GREEN_AMP4': 5.39,
-            'RED_AMP1': 5.02,
-            'RED_AMP2': 5.27,
-            'RED_AMP3': 5.32,
-            'RED_AMP4': 5.23,
-        }
-
+        self.overscan_method = 'rowmedian'
 
     
     def count_amplifiers(self, chip):
@@ -72,6 +54,20 @@ class ImageAssembly:
             raise ValueError(f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD")
         
 
+    def _read_orientation_reference(self, chip):
+        chip = chip.upper()
+        
+        if not hasattr(self, 'orientation'):
+            self.orientation = {}
+
+        # TODO: fix filepath handling and make it robust
+        filepath = f'static/ccd_orientation_{chip.lower()}_{self.namp[chip]}amp.txt'
+        with open(filepath, 'r') as f:
+            self.orientation[chip] = pd.read_csv(f, delimiter=' ')
+
+        return self.orientation[chip]
+
+    
     def orient_channels(self, chip):
         """
         Reorients amplifier channels in place to standardize readout orientation.
@@ -105,20 +101,29 @@ class ImageAssembly:
             self.l0_obj[channel_ext] = image_reoriented
 
 
-    def _read_orientation_reference(self, chip):
-        chip = chip.upper()
+    def apply_gain_conversion(self, chip):
+        """
+        Apply gain to convert ADU to photo-electrons
+        """
+        # TODO: move gain to static config file
+        GAIN = {
+            'GREEN_AMP1': 5.175,
+            'GREEN_AMP2': 5.208,
+            'GREEN_AMP3': 5.52,
+            'GREEN_AMP4': 5.39,
+            'RED_AMP1': 5.02,
+            'RED_AMP2': 5.27,
+            'RED_AMP3': 5.32,
+            'RED_AMP4': 5.23,
+        }
         
-        if not hasattr(self, 'orientation'):
-            self.orientation = {}
+        chip = chip.upper()
 
-        # TODO: fix filepath handling and make it robust
-        filepath = f'static/ccd_orientation_{chip.lower()}_{self.namp[chip]}amp.txt'
-        with open(filepath, 'r') as f:
-            self.orientation[chip] = pd.read_csv(f, delimiter=' ')
+        for i in range(self.namp[chip]):
+            channel_ext = f'{chip}_AMP{i+1}'
+            self.l0_obj[channel_ext] *= GAIN[channel_ext] / (2 ** 16)
+                
 
-        return self.orientation[chip]
-
-    
     def _get_overscan_pixels(self, chip, amp_no, prescan=[0,4], buffer=[5,5]):
         """
         Gets array of overscan pixel from full amplifier region
@@ -174,8 +179,6 @@ class ImageAssembly:
         return image_pix
 
 
-    # from AnalyzeL0.measure_read_noise_overscan
-    # also AnalyzeL0.measure_std_mad_norm_ratio_overscan
     def measure_read_noise(self, chip, prescan=[0,4], buffer=[5,5], sigma=10.0):
         """
         Measure read noise from overscan region
@@ -186,16 +189,69 @@ class ImageAssembly:
             self.rn_nongauss = {}
 
         chip = chip.upper()
-        
+
         for i in range(self.namp[chip]):
-            channel_ext = f'{chip.upper()}_AMP{i+1}'
+            channel_ext = f'{chip}_AMP{i+1}'
 
             oscan_srl, _ = self._get_overscan_pixels(chip, i+1, prescan, buffer)
-            oscan_srl *= self.gain[channel_ext]
             
-            out = flag_outliers(oscan_srl, sigma)
+            out = flag_outliers(oscan_srl, sigma, method='median')
             std = np.nanstd(oscan_srl[~out])
             mad = np.nanmean(np.abs(oscan_srl[~out] - np.nanmean(oscan_srl[~out])))
             
             self.readnoise[channel_ext] = std
             self.rn_nongauss[channel_ext] = np.sqrt(2/np.pi) * std / mad
+
+
+    def _oscan_zero(self, chip, amp_no, **kwargs):
+        """
+        Sets overscan bias level to zero (i.e. no change to image data)
+        """
+        channel = f'{chip.upper}_AMP{amp_no}'
+        oscan_bias = np.zeros_like(self.l0_obj[channel], dtype=np.float32)
+        self.l0_obj[channel] -= oscan_bias
+
+
+    def _oscan_rowmedian(self, chip, amp_no, prescan=[0,4], buffer=[5,5]):
+        """
+        Calculates row-by-row median or serial overscan region and
+        subtracts from raw image data
+        """
+        pass
+
+
+    def _oscan_median(self, chip, amp_no, prescan=[0,4], buffer=[5,5]):
+        """
+        Calculates single-value median of serial overscan region and
+        subtracts from raw image data
+        """
+        pass
+
+
+
+    def subtract_overscan(self, chip, method, prescan=[0,4], buffer=[5,5]):
+        """
+        Performs the following operations
+         - estimates overscan bias level
+         - subtracts overscan bias from active imaging pixels
+         - removesoverscan region from channel, leaving only imaging pixels
+        """
+        try:
+            oscan_fxn = self.__getattribute(f'_{method}')
+        except AttributeError as e:
+            raise AttributeError(f"Unsupported overscan subtraction method: '{method}'")
+        
+        oscan_fxn(chip, method, prescan=prescan, buffer=buffer)
+
+    
+    
+    def perform(self):
+        for chip in self.CHIPS:
+            self.count_amplifiers(chip)
+            self.orient_channels(chip)
+            self.apply_gain_conversion(chip)
+            self.measure_read_noise(chip)
+            self.subtract_overscan(chip)
+            self.assemble_ffi(chip)
+
+        # TODO: create KPF1 object and return
