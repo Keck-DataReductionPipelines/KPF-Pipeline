@@ -1,4 +1,6 @@
+from astropy.stats import mad_std
 import numpy as np
+from scipy.ndimage import median_filter, gaussian_filter
 from scipy.optimize import least_squares
 
 
@@ -49,3 +51,22 @@ def optimize_lsq(theta0, x, y, func, jac):
     theta, rms = result.x, np.std(result.fun)
     
     return theta, rms
+
+
+def flag_outliers(x, sigma, method='median', kernel_size=None):
+    """
+    Flag outliers in an array above some sigma threshold
+    """
+    if method == 'median':
+        med = np.nanmedian(x)
+        mad = mad_std(x, ignore_nan=True)
+        out = np.abs(x - med) / mad > sigma
+
+    elif method == 'smooth-trend':
+        trend = gaussian_filter(median_filter(x, size=kernel_size), sigma=kernel_size)
+        out = np.abs(x - trend) / mad_std(x - trend, ignore_nan=True) > sigma
+
+    else:
+        raise ValueError(f"method must be 'median' or 'smooth-trend'; {method} not supported")
+
+    return out
