@@ -20,7 +20,7 @@ class ImageAssembly:
 
         # temporarily hard-code config params during development
         # switch to config once that interface has been standardized
-        self.overscan_method = 'zero'
+        self.overscan_method = 'rowmedian'
 
     
     def count_amplifiers(self, chip):
@@ -250,6 +250,38 @@ class ImageAssembly:
             bias = oscan_fxn(chip, i+1, prescan=prescan, buffer=buffer)
             self.l0_obj.data[f'{chip.upper()}_AMP{i+1}'] = np.array(image - bias, dtype=np.float32)
 
+
+    def stitch_ffi(self, chip, prescan=[0,4]):
+        chip = chip.upper()
+
+        ccd_ffi = np.zeros((4080,4080), dtype=np.float32)
+        var_ffi = np.zeros((4080,4080), dtype=np.float32)
+
+        if self.namp[chip] == 2:
+            ccd_ffi[:,:2040] = self.l0_obj.data[f'{chip}_AMP1']
+            ccd_ffi[:,2040:] = self.l0_obj.data[f'{chip}_AMP2']
+            var_ffi[:,:2040] = np.abs(ccd_ffi[:,:2040]) + self.readnoise[f'{chip}_AMP1']
+            var_ffi[:,2040:] = np.abs(ccd_ffi[:,2040:]) + self.readnoise[f'{chip}_AMP2']
+
+        elif self.namp[chip] == 4:
+            ccd_ffi[:2040,:2040] = self.l0_obj.data[f'{chip}_AMP1']
+            ccd_ffi[:2040,2040:] = self.l0_obj.data[f'{chip}_AMP2']
+            ccd_ffi[2040:,:2040] = self.l0_obj.data[f'{chip}_AMP3']
+            ccd_ffi[2040:,2040:] = self.l0_obj.data[f'{chip}_AMP4']
+            var_ffi[:2040,:2040] = np.abs(ccd_ffi[:2040,:2040]) + self.readnoise[f'{chip}_AMP1']
+            var_ffi[:2040,2040:] = np.abs(ccd_ffi[:2040,2040:]) + self.readnoise[f'{chip}_AMP2']
+            var_ffi[2040:,:2040] = np.abs(ccd_ffi[2040:,:2040]) + self.readnoise[f'{chip}_AMP3']
+            var_ffi[2040:,2040:] = np.abs(ccd_ffi[2040:,2040:]) + self.readnoise[f'{chip}_AMP4']
+        
+        else:
+            raise ValueError(f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD")
+
+
+        if chip == 'GREEN':
+            ccd_ffi = np.flip(ccd_ffi, axis=0)
+            var_ffi = np.flip(var_ffi, axis=0)
+                
+        return ccd_ffi, var_ffi
     
 
 
