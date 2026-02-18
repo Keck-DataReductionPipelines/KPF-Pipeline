@@ -10,6 +10,8 @@ import pandas as pd
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.stats import flag_outliers
 
+from pathlib import Path
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 class ImageAssembly:
     def __init__(self, l0_obj, config=None):
@@ -18,7 +20,7 @@ class ImageAssembly:
 
         # temporarily hard-code config params during development
         # switch to config once that interface has been standardized
-        self.overscan_method = 'rowmedian'
+        self.overscan_method = 'zero'
 
     
     def count_amplifiers(self, chip):
@@ -33,9 +35,9 @@ class ImageAssembly:
         Returns:
             None
         """
-        if not hasattr(self.namp):
+        if not hasattr(self, 'namp'):
             self.namp = {}
-        if not hasattr(self.dims):
+        if not hasattr(self, 'dims'):
             self.dims = {}
 
         chip = chip.upper()
@@ -43,7 +45,7 @@ class ImageAssembly:
         self.namp[chip] = 0
         for i in range(4):
             if f'{chip}_AMP{i+1}' in self.l0_obj.extensions:
-                if np.size(self.l0_obj[f'{chip}_AMP{i+1}']) > 0:
+                if np.size(self.l0_obj.data[f'{chip}_AMP{i+1}']) > 0:
                     self.namp[chip] += 1
 
         if self.namp[chip] == 2:
@@ -60,8 +62,7 @@ class ImageAssembly:
         if not hasattr(self, 'orientation'):
             self.orientation = {}
 
-        # TODO: fix filepath handling and make it robust
-        filepath = f'static/ccd_orientation_{chip.lower()}_{self.namp[chip]}amp.txt'
+        filepath = f'{REPO_ROOT}/static/ccd_orientation_{chip.lower()}.txt'
         with open(filepath, 'r') as f:
             self.orientation[chip] = pd.read_csv(f, delimiter=' ')
 
@@ -86,8 +87,8 @@ class ImageAssembly:
 
         for i in range(self.namp[chip]):
             channel_ext = f'{chip.upper()}_AMP{i+1}'
-            channel_key = int(orientation.loc[orientation.CHANNEL_EXT == channel_ext, 'CHANNEL_KEY'])
-            image = self.l0_obj[channel_ext]
+            channel_key = orientation.loc[orientation.CHANNEL_EXT == channel_ext, 'CHANNEL_KEY'].item()
+            image = self.l0_obj.data[channel_ext]
 
             if channel_key == 1: # flip lr
                 image_reoriented = np.flip(image,axis=1)
@@ -98,7 +99,7 @@ class ImageAssembly:
             elif channel_key == 4: # no change
                 image_reoriented = image
 
-            self.l0_obj[channel_ext] = image_reoriented
+            self.l0_obj.data[channel_ext] = image_reoriented
 
 
     def apply_gain_conversion(self, chip):
@@ -121,10 +122,10 @@ class ImageAssembly:
 
         for i in range(self.namp[chip]):
             channel_ext = f'{chip}_AMP{i+1}'
-            self.l0_obj[channel_ext] *= GAIN[channel_ext] / (2 ** 16)
+            self.l0_obj.data[channel_ext] *= GAIN[channel_ext] / (2 ** 16)
                 
 
-    def _get_overscan_pixels(self, chip, amp_no, prescan=[0,4], buffer=[5,5]):
+    def _get_overscan_pixels(self, chip, amp_no, prescan=[0,4], buffer=[0,0]):
         """
         Gets array of overscan pixel from full amplifier region
         Assumes image orientaion has been standardized
@@ -140,16 +141,19 @@ class ImageAssembly:
             oscan_pix_prl (np.ndarray): Array of parallel overscan pixels
         """
         chip = chip.upper()
-        full_amplifier = np.array(self.l0_obj[f'{chip}_AMP{amp_no}'], dtype=np.float32)
+        full_amplifier = np.array(self.l0_obj.data[f'{chip}_AMP{amp_no}'], dtype=np.float32)
         
         ncol_prescan = prescan[1] - prescan[0]
         nrow_imaging, ncol_imaging = self.dims[chip]
 
-        oscan_pix_srl = full_amplifier[:,ncol_prescan+ncol_imaging:]
-        oscan_pix_prl = full_amplifier[nrow_imaging:,:]
+        oscan_pix_srl = full_amplifier[:nrow_imaging,ncol_prescan+ncol_imaging:]
+        oscan_pix_prl = full_amplifier[nrow_imaging:,:ncol_prescan+ncol_imaging]
 
-        oscan_pix_srl = oscan_pix_srl[:,buffer[0]:-buffer[1]-1]
-        oscan_pix_prl = oscan_pix_prl[buffer[0]:-buffer[1]-1,:]
+        start = buffer[0] if buffer[0] > 0 else None
+        end = -buffer[1] if buffer[1] > 0 else None
+
+        oscan_pix_srl = oscan_pix_srl[:, start:end]
+        oscan_pix_prl = oscan_pix_prl[start:end, :]
 
         return oscan_pix_srl, oscan_pix_prl
 
@@ -169,7 +173,7 @@ class ImageAssembly:
             ndarray : data with only active imaging area pixels
         """
         chip = chip.upper()
-        full_amplifier = np.array(self.l0_obj[f'{chip}_AMP{amp_no}'], dtype=np.float32)
+        full_amplifier = np.array(self.l0_obj.data[f'{chip}_AMP{amp_no}'], dtype=np.float32)
         
         ncol_prescan = prescan[1] - prescan[0]
         nrow_imaging, ncol_imaging = self.dims[chip]
@@ -183,9 +187,9 @@ class ImageAssembly:
         """
         Measure read noise from overscan region
         """
-        if not hasattr(self.readnoise):
+        if not hasattr(self, 'readnoise'):
             self.readnoise = {}
-        if not hasattr(self.readnoise):
+        if not hasattr(self, 'rn_nongauss'):
             self.rn_nongauss = {}
 
         chip = chip.upper()
@@ -205,45 +209,51 @@ class ImageAssembly:
 
     def _oscan_zero(self, chip, amp_no, **kwargs):
         """
-        Sets overscan bias level to zero (i.e. no change to image data)
+        Returns overscan bias level of zero
         """
-        channel = f'{chip.upper}_AMP{amp_no}'
-        oscan_bias = np.zeros_like(self.l0_obj[channel], dtype=np.float32)
-        self.l0_obj[channel] -= oscan_bias
+        return 0.0
 
-
-    def _oscan_rowmedian(self, chip, amp_no, prescan=[0,4], buffer=[5,5]):
+    def _oscan_median(self, chip, amp_no, **kwargs):
         """
-        Calculates row-by-row median or serial overscan region and
-        subtracts from raw image data
+        Calculates single-value median of serial overscan region
         """
-        pass
+        oscan_srl, _ = self._get_overscan_pixels(chip, amp_no, **kwargs)
+        bias = np.nanmedian(oscan_srl)
+        return bias
 
 
-    def _oscan_median(self, chip, amp_no, prescan=[0,4], buffer=[5,5]):
+    def _oscan_rowmedian(self, chip, amp_no, **kwargs):
         """
-        Calculates single-value median of serial overscan region and
-        subtracts from raw image data
+        Calculates row-by-row median of serial overscan region
         """
-        pass
+        oscan_srl, _ = self._get_overscan_pixels(chip, amp_no, **kwargs)
+        bias = np.nanmedian(oscan_srl, axis=1)[:,None]
+        return bias
 
 
-
-    def subtract_overscan(self, chip, method, prescan=[0,4], buffer=[5,5]):
+    def subtract_overscan(self, chip, method, prescan=[0,4], buffer=[0,0]):
         """
         Performs the following operations
-         - estimates overscan bias level
-         - subtracts overscan bias from active imaging pixels
-         - removesoverscan region from channel, leaving only imaging pixels
+          - estimates overscan bias level
+          - subtracts overscan bias from active imaging pixels
+          - removes overscan region from channel, leaving only imaging pixels
+
+        Supported methods are 'zero', 'median', and 'rowmedian'
         """
         try:
-            oscan_fxn = self.__getattribute(f'_{method}')
+            oscan_fxn = self.__getattribute__(f'_oscan_{method}')
         except AttributeError as e:
             raise AttributeError(f"Unsupported overscan subtraction method: '{method}'")
         
-        oscan_fxn(chip, method, prescan=prescan, buffer=buffer)
+        for i in range(self.namp[chip]):
+            image = self._get_imaging_pixels(chip, i+1)
+            bias = oscan_fxn(chip, i+1, prescan=prescan, buffer=buffer)
+            self.l0_obj.data[f'{chip.upper()}_AMP{i+1}'] = np.array(image - bias, dtype=np.float32)
 
     
+
+
+
     
     def perform(self):
         for chip in self.CHIPS:

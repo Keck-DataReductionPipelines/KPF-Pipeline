@@ -43,7 +43,7 @@ def optimize_lsq(theta0, x, y, func, jac):
     """
     result = least_squares(_res_wrapper, 
                            theta0, 
-                           args = (x, y, func)
+                           args = (x, y, func),
                            jac = _jac_wrapper,
                            method = 'lm', 
                            )
