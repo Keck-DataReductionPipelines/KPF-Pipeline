@@ -4,13 +4,13 @@ from scipy.ndimage import median_filter, gaussian_filter
 from scipy.optimize import least_squares
 
 
-def gaussian_pdf(theta, x):
-    mu, sigma, a, b = theta
+def gaussian_dist(theta, x):
+    b, a, mu, sigma = theta
     return b + a * np.exp(-(x-mu)**2/(2*sigma**2))
 
 
 def gaussian_jac(theta, x):
-    mu, sigma, a, b = theta
+    b, a, mu, sigma = theta
     dx = x - mu
     e = np.exp(-dx**2 / (2*sigma**2))
 
@@ -29,7 +29,7 @@ def gaussian_theta0(x, y):
     mu0 = x[np.argmax(y)]
     sigma0 = np.std(x)
     
-    return [mu0, sigma0, a0, b0]
+    return [b0, a0, mu0, sigma0]
 
 
 def _res_wrapper(theta, x, y, func):
