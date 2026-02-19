@@ -1,5 +1,5 @@
 """
-KPF Image Assembly Module.
+KPF Image Assembly module.
 
 Orients and assembles raw data from amplifers into 
 a full frame image. Processes data from L0 to L1.
@@ -64,7 +64,8 @@ class ImageAssembly:
 
         filepath = f'{REPO_ROOT}/static/ccd_orientation_{chip.lower()}.txt'
         with open(filepath, 'r') as f:
-            self.orientation[chip] = pd.read_csv(f, delimiter=' ')
+            df = pd.read_csv(f, delimiter=' ')
+            self.orientation[chip] = dict(zip(df['CHANNEL_EXT'], df['CHANNEL_KEY']))
 
         return self.orientation[chip]
 
@@ -74,8 +75,11 @@ class ImageAssembly:
         Reorients amplifier channels in place to standardize readout orientation.
             - serial overscan on right
             - parallel overscan on bottom
-        All transformations are flips, so a second call to this function will undo the transformation.
-
+        
+        All transformations are flips, so a second call will undo the transformation.
+          - call once before estimating read noise and overscan bias
+          - call again before stitching channels into a full frame image
+        
         Args:
             chip (str) : which CCD to use, 'GREEN' or 'RED'
         
@@ -87,13 +91,13 @@ class ImageAssembly:
 
         for i in range(self.namp[chip]):
             channel_ext = f'{chip.upper()}_AMP{i+1}'
-            channel_key = orientation.loc[orientation.CHANNEL_EXT == channel_ext, 'CHANNEL_KEY'].item()
+            channel_key = orientation[channel_ext]
             image = self.l0_obj.data[channel_ext]
 
             if channel_key == 1: # flip lr
                 image_reoriented = np.flip(image,axis=1)
             elif channel_key == 2: # turn upside down and flip lr
-                image_reoriented = np.flip(np.flip(image,axis=0),axis=1)
+                image_reoriented = np.flip(image,axis=(0,1))
             elif channel_key == 3: # turn upside down
                 image_reoriented = np.flip(image,axis=0)
             elif channel_key == 4: # no change
@@ -141,7 +145,7 @@ class ImageAssembly:
             oscan_pix_prl (np.ndarray): Array of parallel overscan pixels
         """
         chip = chip.upper()
-        full_amplifier = np.array(self.l0_obj.data[f'{chip}_AMP{amp_no}'], dtype=np.float32)
+        full_amplifier = self.l0_obj.data[f'{chip}_AMP{amp_no}']
         
         ncol_prescan = prescan[1] - prescan[0]
         nrow_imaging, ncol_imaging = self.dims[chip]
@@ -173,7 +177,7 @@ class ImageAssembly:
             ndarray : data with only active imaging area pixels
         """
         chip = chip.upper()
-        full_amplifier = np.array(self.l0_obj.data[f'{chip}_AMP{amp_no}'], dtype=np.float32)
+        full_amplifier = self.l0_obj.data[f'{chip}_AMP{amp_no}']
         
         ncol_prescan = prescan[1] - prescan[0]
         nrow_imaging, ncol_imaging = self.dims[chip]
@@ -213,6 +217,7 @@ class ImageAssembly:
         """
         return 0.0
 
+
     def _oscan_median(self, chip, amp_no, **kwargs):
         """
         Calculates single-value median of serial overscan region
@@ -248,7 +253,7 @@ class ImageAssembly:
         for i in range(self.namp[chip]):
             image = self._get_imaging_pixels(chip, i+1)
             bias = oscan_fxn(chip, i+1, prescan=prescan, buffer=buffer)
-            self.l0_obj.data[f'{chip.upper()}_AMP{i+1}'] = np.array(image - bias, dtype=np.float32)
+            self.l0_obj.data[f'{chip.upper()}_AMP{i+1}'] = image - bias
 
 
     def stitch_ffi(self, chip, prescan=[0,4]):
@@ -276,7 +281,6 @@ class ImageAssembly:
         else:
             raise ValueError(f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD")
 
-
         if chip == 'GREEN':
             ccd_ffi = np.flip(ccd_ffi, axis=0)
             var_ffi = np.flip(var_ffi, axis=0)
@@ -284,9 +288,6 @@ class ImageAssembly:
         return ccd_ffi, var_ffi
     
 
-
-
-    
     def perform(self):
         for chip in self.CHIPS:
             self.count_amplifiers(chip)
@@ -294,6 +295,8 @@ class ImageAssembly:
             self.apply_gain_conversion(chip)
             self.measure_read_noise(chip)
             self.subtract_overscan(chip)
-            self.assemble_ffi(chip)
+            self.orient_channels(chip)
+            
+            ccd_ffi, var_ffi = self.stitch_ffi(chip)
 
-        # TODO: create KPF1 object and return
+            # TODO: create KPF1 object and return
