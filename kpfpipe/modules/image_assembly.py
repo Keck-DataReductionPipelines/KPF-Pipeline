@@ -13,6 +13,7 @@ from kpfpipe.utils.stats import flag_outliers
 from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+
 class ImageAssembly:
     def __init__(self, l0_obj, config=None):
         self.l0_obj = l0_obj
@@ -288,13 +289,16 @@ class ImageAssembly:
         return ccd_ffi, var_ffi
     
 
-    def perform(self):
+    def perform(self, overscan_method=None):
+        if overscan_method is None:
+            overscan_method = self.overscan_method
+
         for chip in self.CHIPS:
             self.count_amplifiers(chip)
             self.orient_channels(chip)
             self.apply_gain_conversion(chip)
             self.measure_read_noise(chip)
-            self.subtract_overscan(chip)
+            self.subtract_overscan(chip, overscan_method)
             self.orient_channels(chip)
             
             ccd_ffi, var_ffi = self.stitch_ffi(chip)
