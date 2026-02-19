@@ -112,6 +112,7 @@ class ImageAssembly:
         Apply gain to convert ADU to photo-electrons
         """
         # TODO: move gain to static config file
+        # TODO: should we read gain from header?
         GAIN = {
             'GREEN_AMP1': 5.175,
             'GREEN_AMP2': 5.208,
