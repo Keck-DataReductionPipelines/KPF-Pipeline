@@ -8,11 +8,13 @@ from kpfpipe.constants import NROW, NCOL
 
 class BaseMastersModule:
     def __init__(self, obs_ids):
+        # TODO: swap obs_ids to list of filenames
         self.obs_ids = obs_ids
 
 
     @staticmethod
     def load_frame(obs_id):
+        # TODO: add with statement for file handling
         datecode = get_datecode(obs_id)
         filepath = fetch_filepath(obs_id)
         l0_obj = KPF0.from_fits(filepath)
@@ -30,6 +32,9 @@ class BaseMastersModule:
         Stacks full frame images and computes clipped mean and variance
           * For N <= 5, statistics are computed directly
           * For N > 5, computation uses streaming Welford's algorithm
+
+          Note: need to cache direct frames as e.g. self.direct_frames to avoid re-reading
+          Note: make sure that files are clearing from memory after read (in KPF0?)
         """
         if len(self.obs_ids) <= 5:
             mean, var = self.compute_direct_mean_and_variance(sigma_clip = sigma_clip)
@@ -39,7 +44,7 @@ class BaseMastersModule:
         return mean, var
 
 
-    def compute_direct_mean_and_variance(self, sigma_clip=5.0, nframe_max = None)
+    def compute_direct_mean_and_variance(self, sigma_clip=5.0, nframe_max = None):
         if nframe_max is None:
             nframe = len(self.obs_ids)
             obs_ids = self.obs_ids
