@@ -68,7 +68,7 @@ class ImageAssembly:
         if not hasattr(self, 'orientation'):
             self.orientation = {}
 
-        filepath = f'{REPO_ROOT}/static/ccd_orientation_{chip.lower()}.txt'
+        filepath = f'{REPO_ROOT}/reference/ccd_orientation_{chip.lower()}.txt'
         with open(filepath, 'r') as f:
             df = pd.read_csv(f, delimiter=' ')
             self.orientation[chip] = dict(zip(df['CHANNEL_EXT'], df['CHANNEL_KEY']))
