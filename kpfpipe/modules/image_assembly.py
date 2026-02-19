@@ -10,18 +10,19 @@ import pandas as pd
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.stats import flag_outliers
 
-from pathlib import Path
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = kpfpipe.REPO_ROOT
+DEFAULTS = {'overscan_method':'rowmedian'}
 
 
 class ImageAssembly:
-    def __init__(self, l0_obj, config=None):
+    def __init__(self, l0_obj, config={}):
         self.l0_obj = l0_obj
         self.CHIPS = ['GREEN', 'RED']
 
-        # temporarily hard-code config params during development
-        # switch to config once that interface has been standardized
-        self.overscan_method = 'rowmedian'
+        # TODO: check if this config parsing works
+        for k in DEFAULTS.keys():
+            self.__setattr__(k, config.get(k,DEFAULTS[k]))
+
 
     
     def count_amplifiers(self, chip):
@@ -111,7 +112,7 @@ class ImageAssembly:
         """
         Apply gain to convert ADU to photo-electrons
         """
-        # TODO: move gain to static config file
+        # TODO: move gain to static config file or...
         # TODO: should we read gain from header?
         GAIN = {
             'GREEN_AMP1': 5.175,
@@ -294,6 +295,8 @@ class ImageAssembly:
         if overscan_method is None:
             overscan_method = self.overscan_method
 
+        l1_obj = l0_obj.to_l1()
+
         for chip in self.CHIPS:
             self.count_amplifiers(chip)
             self.orient_channels(chip)
@@ -302,6 +305,9 @@ class ImageAssembly:
             self.subtract_overscan(chip, overscan_method)
             self.orient_channels(chip)
             
-            ccd_ffi, var_ffi = self.stitch_ffi(chip)
+            #ccd_ffi[chip], var_ffi[chip] = self.stitch_ffi(chip)
+            l1_obj[f'{chip}_CCD'], l1_obj[f'{chip}_VAR'] = self.stitch_ffi(chip)
 
-            # TODO: create KPF1 object and return
+            # TODO: add necessay header keywords
+        
+        return l1_obj
