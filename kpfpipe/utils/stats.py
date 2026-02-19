@@ -4,7 +4,7 @@ from scipy.ndimage import median_filter, gaussian_filter
 from scipy.optimize import least_squares
 
 
-def gaussian(theta, x):
+def gaussian_pdf(theta, x):
     mu, sigma, a, b = theta
     return b + a * np.exp(-(x-mu)**2/(2*sigma**2))
 
@@ -21,6 +21,15 @@ def gaussian_jac(theta, x):
     J[:, 3] = 1.0
     
     return J
+
+
+def gaussian_theta0(x, y):
+    b0 = 0.25 * np.sum(y[:2] + y[-2:])
+    a0 = np.max(y) - b0
+    mu0 = x[np.argmax(y)]
+    sigma0 = np.std(x)
+    
+    return [mu0, sigma0, a0, b0]
 
 
 def _res_wrapper(theta, x, y, func):
@@ -62,11 +71,11 @@ def flag_outliers(x, sigma, method='median', kernel_size=None):
         mad = mad_std(x, ignore_nan=True)
         out = np.abs(x - med) / mad > sigma
 
-    elif method == 'smooth-trend':
+    elif method == 'trend':
         trend = gaussian_filter(median_filter(x, size=kernel_size), sigma=kernel_size)
         out = np.abs(x - trend) / mad_std(x - trend, ignore_nan=True) > sigma
 
     else:
-        raise ValueError(f"method must be 'median' or 'smooth-trend'; {method} not supported")
+        raise ValueError(f"method must be 'median' or 'trend'; {method} not supported")
 
     return out
