@@ -1,8 +1,12 @@
 """
 KPF Image Assembly module.
 
-Orients and assembles raw data from amplifers into 
-a full frame image. Processes data from L0 to L1.
+Processes data from L0 to L1.
+ - orients amplifier channels
+ - applies gain (ADU --> photo-electrons)
+ - measures read noise
+ - subtracts overscan bias
+ - assembles full frame image
 """
 import numpy as np
 import pandas as pd
