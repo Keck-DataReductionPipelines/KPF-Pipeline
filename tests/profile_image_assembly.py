@@ -18,6 +18,7 @@ def run():
     target_l0 = KPF0.from_fits(filepath)
     image_assembly = ImageAssembly(target_l0)
 
+    # TODO: profile .perform() directly
     for chip in image_assembly.CHIPS:
         image_assembly.count_amplifiers(chip)
         image_assembly.orient_channels(chip)
