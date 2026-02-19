@@ -7,10 +7,10 @@ a full frame image. Processes data from L0 to L1.
 import numpy as np
 import pandas as pd
 
+from kpfpipe import REPO_ROOT
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.stats import flag_outliers
 
-REPO_ROOT = kpfpipe.REPO_ROOT
 DEFAULTS = {'overscan_method':'rowmedian'}
 
 
@@ -295,7 +295,8 @@ class ImageAssembly:
         if overscan_method is None:
             overscan_method = self.overscan_method
 
-        l1_obj = l0_obj.to_l1()
+        # TODO: l1_obj = l0_obj.to_l1()
+        l1_obj = None
 
         for chip in self.CHIPS:
             self.count_amplifiers(chip)
@@ -305,9 +306,7 @@ class ImageAssembly:
             self.subtract_overscan(chip, overscan_method)
             self.orient_channels(chip)
             
-            #ccd_ffi[chip], var_ffi[chip] = self.stitch_ffi(chip)
-            l1_obj[f'{chip}_CCD'], l1_obj[f'{chip}_VAR'] = self.stitch_ffi(chip)
-
-            # TODO: add necessay header keywords
+            # TODO: l1_obj.dataf'{chip}_CCD'], l1_obj.data[f'{chip}_VAR'] = self.stitch_ffi(chip)
+            ccd_ffi[chip], var_ffi[chip] = self.stitch_ffi(chip)
         
         return l1_obj
