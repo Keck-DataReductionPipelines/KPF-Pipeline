@@ -24,7 +24,7 @@ def run():
         image_assembly.orient_channels(chip)
         image_assembly.apply_gain_conversion(chip)
         image_assembly.measure_read_noise(chip)
-        image_assembly.subtract_overscan(chip, 'zero')
+        image_assembly.subtract_overscan(chip, 'rowmedian')
         image_assembly.orient_channels(chip)
         
         ccd_ffi, var_ffi = image_assembly.stitch_ffi(chip)
