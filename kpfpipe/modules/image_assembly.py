@@ -15,13 +15,15 @@ from kpfpipe import REPO_ROOT
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.stats import flag_outliers
 
-DEFAULTS = {'overscan_method':'rowmedian'}
+DEFAULTS = {
+    'chips' : ['GREEN', 'RED'],
+    'overscan_method':'rowmedian'
+}
 
 
 class ImageAssembly:
     def __init__(self, l0_obj, config={}):
         self.l0_obj = l0_obj
-        self.CHIPS = ['GREEN', 'RED']
 
         for k in DEFAULTS.keys():
             self.__setattr__(k, config.get(k,DEFAULTS[k]))
@@ -292,14 +294,16 @@ class ImageAssembly:
         return ccd_ffi, var_ffi
     
 
-    def perform(self, overscan_method=None):
+    def perform(self, chips=None, overscan_method=None):
+        if chips is None:
+            chips = self.chips
         if overscan_method is None:
             overscan_method = self.overscan_method
 
         # TODO: l1_obj = l0_obj.to_l1()
         l1_obj = None
 
-        for chip in self.CHIPS:
+        for chip in chips:
             self.count_amplifiers(chip)
             self.orient_channels(chip)
             self.apply_gain_conversion(chip)
