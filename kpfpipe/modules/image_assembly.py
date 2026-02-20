@@ -23,7 +23,6 @@ class ImageAssembly:
         self.l0_obj = l0_obj
         self.CHIPS = ['GREEN', 'RED']
 
-        # TODO: check if this config parsing works
         for k in DEFAULTS.keys():
             self.__setattr__(k, config.get(k,DEFAULTS[k]))
 
@@ -63,17 +62,15 @@ class ImageAssembly:
         
 
     def _read_orientation_reference(self, chip):
-        chip = chip.upper()
-        
         if not hasattr(self, 'orientation'):
             self.orientation = {}
 
         filepath = f'{REPO_ROOT}/reference/ccd_orientation_{chip.lower()}.txt'
         with open(filepath, 'r') as f:
             df = pd.read_csv(f, delimiter=' ')
-            self.orientation[chip] = dict(zip(df['CHANNEL_EXT'], df['CHANNEL_KEY']))
+            self.orientation[chip.upper()] = dict(zip(df['CHANNEL_EXT'], df['CHANNEL_KEY']))
 
-        return self.orientation[chip]
+        return self.orientation[chip.upper()]
 
     
     def orient_channels(self, chip):
