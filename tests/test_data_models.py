@@ -380,9 +380,9 @@ class TestToRV2:
         hdul.close()
 
         l1 = KPF1.from_fits(fn)
-        # from_fits won't set obs_id since filename doesn't match L0 pattern
-        # Set it manually as if it came from to_l1()
-        l1.obs_id = "KP.20240113.23249.10"
+        # obs_id is set by from_fits since filename starts with KP pattern;
+        # in production this would come from to_l1()
+        assert l1.obs_id == "KP.20240113.23249.10"
         rv2 = l1.to_rv2()
         # ORIGID is stored as (value, comment) tuple
         origid = rv2.headers["PRIMARY"]["ORIGID"]

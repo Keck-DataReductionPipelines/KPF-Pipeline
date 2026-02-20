@@ -194,6 +194,7 @@ class KPF0(KPFDataModel):
         # Copy obs_id
         l1.obs_id = self.obs_id
 
+        l1.headers["PRIMARY"]["DATALVL"] = ("L1", "Data product level")
         l1.receipt_add_entry("to_l1", "PASS")
         return l1
 
