@@ -11,14 +11,11 @@ Processes data from L0 to L1.
 import numpy as np
 import pandas as pd
 
-from kpfpipe import REPO_ROOT
+from kpfpipe import REPO_ROOT, DEFAULTS
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.stats import flag_outliers
 
-DEFAULTS = {
-    'chips' : ['GREEN', 'RED'],
-    'overscan_method':'rowmedian'
-}
+DEFAULTS.update({'overscan_method': 'rowmedian'})
 
 
 class ImageAssembly:

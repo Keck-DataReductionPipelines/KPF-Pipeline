@@ -10,14 +10,10 @@ import numpy as np
 import pandas as pd
 from numpy.polynomial import polynomial
 
-from kpfpipe import REPO_ROOT
+from kpfpipe import REPO_ROOT, DEFAULTS
 
-DEFAULTS = {
-    'chips' : ['GREEN', 'RED'],
-    'fibers' : ['SKY','SCI1','SCI2','SCI3','CAL'],
-    'norder' : {'GREEN':35, 'RED':32},
-    'extraction_method' : 'box'
-}
+DEFAULTS.update({'extraction_method': 'box'})
+
 
 class SpectralExtraction:
     """
@@ -33,7 +29,6 @@ class SpectralExtraction:
     """
     def __init__(self, l1_obj, config={}):
         self.l1_obj = l1_obj
-        self.CHIPS = ['GREEN', 'RED']
 
         for k in DEFAULTS.keys():
             self.__setattr__(k, config.get(k,DEFAULTS[k]))
@@ -219,5 +214,3 @@ class SpectralExtraction:
                 l2_obj.set_data(k, l2_arrays[k])
 
         return l2_obj
-
-
