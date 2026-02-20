@@ -157,6 +157,46 @@ class KPF0(KPFDataModel):
         hdul.close()
         return fn
 
+    _L0_TO_L1_PASSTHROUGH = ["CA_HK", "EXPMETER_SCI", "EXPMETER_SKY", "TELEMETRY", "CONFIG"]
+
+    def to_l1(self):
+        """Create a KPF1 scaffold from this L0, carrying over headers and pass-through extensions.
+
+        Returns a KPF1 with PRIMARY header, pass-through extensions (CA_HK,
+        EXPMETER_SCI/SKY, TELEMETRY, CONFIG), receipt, and obs_id copied over.
+        GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created but empty —
+        the caller (image assembly) fills those in.
+        """
+        from kpfpipe.data_models.level1 import KPF1
+
+        l1 = KPF1()
+
+        # Copy PRIMARY header
+        if "PRIMARY" in self.headers:
+            for key, value in self.headers["PRIMARY"].items():
+                l1.headers["PRIMARY"][key] = value
+
+        # Copy pass-through extensions (data + header)
+        for ext_name in self._L0_TO_L1_PASSTHROUGH:
+            if ext_name in self.extensions:
+                ext_type = self.extensions[ext_name]
+                if ext_name not in l1.extensions:
+                    l1.create_extension(ext_name, ext_type)
+                if ext_name in self.data and self.data[ext_name] is not None:
+                    l1.set_data(ext_name, self.data[ext_name])
+                if ext_name in self.headers:
+                    l1.set_header(ext_name, self.headers[ext_name])
+
+        # Carry forward receipt
+        if self.receipt is not None and not self.receipt.empty:
+            l1.receipt = self.receipt.copy()
+
+        # Copy obs_id
+        l1.obs_id = self.obs_id
+
+        l1.receipt_add_entry("to_l1", "PASS")
+        return l1
+
     def info(self):
         """Print summary of L0 data model contents."""
         if self.filename:

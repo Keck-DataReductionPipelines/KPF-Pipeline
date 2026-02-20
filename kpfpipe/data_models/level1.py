@@ -28,6 +28,9 @@ _config_path = importlib.resources.files("kpfpipe.data_models.config")
 L1_EXTENSIONS = pd.read_csv(_config_path / "L1-extensions.csv")
 _KNOWN_L1_EXTENSIONS = set(L1_EXTENSIONS["Name"].tolist())
 
+_kpf_config = importlib.resources.files("rvdata.instruments.kpf.config")
+_HEADER_MAP = pd.read_csv(_kpf_config / "header_map.csv")
+
 
 class KPF1(KPFDataModel):
     """
@@ -172,6 +175,69 @@ class KPF1(KPFDataModel):
         hdul.writeto(fn, overwrite=True, output_verify="silentfix")
         hdul.close()
         return fn
+
+    # Mapping of L1 extension names → RV2 extension names for pass-through
+    _L1_TO_RV2_PASSTHROUGH = {
+        "TELEMETRY": "TELEMETRY",
+        "EXPMETER_SCI": "EXPMETER",
+        "CA_HK": "ANCILLARY_SPECTRUM",
+    }
+
+    def to_rv2(self):
+        """Create an RV2 scaffold from this L1, carrying over headers and pass-through extensions.
+
+        Returns an RV2 with PRIMARY header keywords mapped from KPF-native
+        to EPRV standard (using rvdata's header_map.csv), the full L1 PRIMARY
+        stored in INSTRUMENT_HEADER, and pass-through extensions (TELEMETRY,
+        EXPMETER_SCI→EXPMETER, CA_HK→ANCILLARY_SPECTRUM). Trace data arrays
+        are created but empty — the caller (spectral extraction) fills those in.
+        """
+        from rvdata.core.models.level2 import RV2
+
+        rv2 = RV2()
+
+        # Map KPF-native header keywords to EPRV standard using header_map.csv
+        if "PRIMARY" in self.headers:
+            l1_header = self.headers["PRIMARY"]
+            for _, row in _HEADER_MAP.iterrows():
+                standard_key = str(row["STANDARD"]).strip()
+                instrument_key = str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""
+                default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
+
+                if instrument_key and instrument_key in l1_header:
+                    value = l1_header[instrument_key]
+                    if isinstance(value, tuple):
+                        rv2.headers["PRIMARY"][standard_key] = value
+                    else:
+                        rv2.headers["PRIMARY"][standard_key] = value
+                elif default_val is not None and str(default_val).strip():
+                    rv2.headers["PRIMARY"][standard_key] = default_val
+
+            # Store full L1 PRIMARY header in INSTRUMENT_HEADER
+            for key, value in l1_header.items():
+                rv2.headers["INSTRUMENT_HEADER"][key] = value
+
+        # Pass-through extensions with renaming
+        for l1_ext, rv2_ext in self._L1_TO_RV2_PASSTHROUGH.items():
+            if l1_ext in self.extensions:
+                if rv2_ext not in rv2.extensions:
+                    rv2.create_extension(rv2_ext, self.extensions[l1_ext])
+                if l1_ext in self.data and self.data[l1_ext] is not None:
+                    rv2.set_data(rv2_ext, self.data[l1_ext])
+                if l1_ext in self.headers:
+                    rv2.set_header(rv2_ext, self.headers[l1_ext])
+
+        # Carry forward receipt
+        if self.receipt is not None and not self.receipt.empty:
+            rv2.receipt = self.receipt.copy()
+
+        # Store obs_id for traceability
+        if self.obs_id is not None:
+            rv2.headers["PRIMARY"]["ORIGID"] = (self.obs_id, "Original L0 observation ID")
+
+        rv2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
+        rv2.receipt_add_entry("to_rv2", "PASS")
+        return rv2
 
     def info(self):
         """Print summary of L1 data model contents."""

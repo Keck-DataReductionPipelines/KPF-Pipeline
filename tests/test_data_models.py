@@ -222,6 +222,173 @@ class TestKPF1:
             KPF1.from_fits(fn)
 
 
+class TestToL1:
+    def test_to_l1_creates_kpf1(self, synthetic_l0_file):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l1 = l0.to_l1()
+        assert l1.level == 1
+        assert isinstance(l1, KPF1)
+
+    def test_to_l1_copies_primary_header(self, synthetic_l0_file):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l1 = l0.to_l1()
+        assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
+        assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
+        assert l1.headers["PRIMARY"]["OBJECT"] == "HD_10700"
+
+    def test_to_l1_copies_passthrough_extensions(self, synthetic_l0_file):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l1 = l0.to_l1()
+        # CA_HK and TELEMETRY were in the synthetic file
+        assert "CA_HK" in l1.extensions
+        assert "TELEMETRY" in l1.extensions
+        np.testing.assert_array_equal(l1.data["CA_HK"], l0.data["CA_HK"])
+
+    def test_to_l1_skips_missing_extensions(self, synthetic_l0_minimal):
+        l0 = KPF0.from_fits(synthetic_l0_minimal)
+        l1 = l0.to_l1()
+        assert "CA_HK" not in l1.extensions
+        assert "TELEMETRY" not in l1.extensions
+
+    def test_to_l1_leaves_ccd_empty(self, synthetic_l0_file):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l1 = l0.to_l1()
+        assert "GREEN_CCD" in l1.extensions
+        assert "RED_CCD" in l1.extensions
+        # Extensions exist but data is empty (not populated yet)
+        assert len(l1.data["GREEN_CCD"]) == 0
+        assert len(l1.data["RED_CCD"]) == 0
+
+    def test_to_l1_carries_receipt(self, synthetic_l0_file):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l1 = l0.to_l1()
+        assert len(l1.receipt) >= 2  # from_fits + to_l1
+        assert "to_l1" in l1.receipt["Module_Name"].values
+
+    def test_to_l1_copies_obs_id(self, synthetic_l0_file):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l1 = l0.to_l1()
+        assert l1.obs_id == "KP.20240113.23249.10"
+
+    def test_to_l1_drops_amp_extensions(self, synthetic_l0_file):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l1 = l0.to_l1()
+        assert "GREEN_AMP1" not in l1.extensions
+        assert "GREEN_AMP2" not in l1.extensions
+        assert "RED_AMP1" not in l1.extensions
+
+
+class TestToRV2:
+    def test_to_rv2_creates_rv2(self, synthetic_l1_file):
+        from rvdata.core.models.level2 import RV2
+        l1 = KPF1.from_fits(synthetic_l1_file)
+        rv2 = l1.to_rv2()
+        assert rv2.level == 2
+        assert isinstance(rv2, RV2)
+
+    def test_to_rv2_maps_header_keywords(self, synthetic_l1_file):
+        l1 = KPF1.from_fits(synthetic_l1_file)
+        # Set a KPF-native keyword that maps to an EPRV standard keyword
+        l1.headers["PRIMARY"]["ELAPSED"] = 300.0
+        l1.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l1.headers["PRIMARY"]["GROBSERV"] = "Smith"
+        rv2 = l1.to_rv2()
+        assert rv2.headers["PRIMARY"]["EXPTIME"] == 300.0
+        assert rv2.headers["PRIMARY"]["OBSTYPE"] == "Object"
+        assert rv2.headers["PRIMARY"]["OBSERVER"] == "Smith"
+
+    def test_to_rv2_copies_same_name_keywords(self, synthetic_l1_file):
+        l1 = KPF1.from_fits(synthetic_l1_file)
+        rv2 = l1.to_rv2()
+        # Keywords with same name in KPF and EPRV standard
+        assert rv2.headers["PRIMARY"]["INSTRUME"] == "KPF"
+        assert rv2.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
+
+    def test_to_rv2_sets_defaults(self, synthetic_l1_file):
+        l1 = KPF1.from_fits(synthetic_l1_file)
+        rv2 = l1.to_rv2()
+        # DATALVL is set as (value, comment) tuple
+        datalvl = rv2.headers["PRIMARY"]["DATALVL"]
+        assert (datalvl[0] if isinstance(datalvl, tuple) else datalvl) == "L2"
+        # ORIGIN comes from header_map.csv defaults
+        origin = rv2.headers["PRIMARY"].get("ORIGIN")
+        assert origin is not None
+
+    def test_to_rv2_sets_instrument_header(self, synthetic_l1_file):
+        l1 = KPF1.from_fits(synthetic_l1_file)
+        rv2 = l1.to_rv2()
+        # Full L1 PRIMARY should be stored in INSTRUMENT_HEADER
+        assert "INSTRUME" in rv2.headers["INSTRUMENT_HEADER"]
+        assert rv2.headers["INSTRUMENT_HEADER"]["INSTRUME"] == "KPF"
+
+    def test_to_rv2_maps_passthrough_extensions(self, tmp_path):
+        """Build an L1 with TELEMETRY and CA_HK, verify they map to RV2 extensions."""
+        fn = str(tmp_path / "l1_with_extras.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["INSTRUME"] = "KPF"
+        primary.header["DATE-OBS"] = "2024-01-13T10:26:56"
+        green = fits.ImageHDU(data=np.zeros((8, 8), dtype=np.float32))
+        green.name = "GREEN_CCD"
+        green_var = fits.ImageHDU(data=np.zeros((8, 8), dtype=np.float32))
+        green_var.name = "GREEN_VAR"
+        red = fits.ImageHDU(data=np.zeros((8, 8), dtype=np.float32))
+        red.name = "RED_CCD"
+        red_var = fits.ImageHDU(data=np.zeros((8, 8), dtype=np.float32))
+        red_var.name = "RED_VAR"
+        ca_hk = fits.ImageHDU(data=np.ones((4, 4), dtype=np.float32))
+        ca_hk.name = "CA_HK"
+        telemetry = Table({"keyword": ["T1"], "average": [20.0]})
+        tel_hdu = fits.BinTableHDU(data=telemetry)
+        tel_hdu.name = "TELEMETRY"
+        hdul = fits.HDUList([primary, green, green_var, red, red_var, ca_hk, tel_hdu])
+        hdul.writeto(fn, overwrite=True)
+        hdul.close()
+
+        l1 = KPF1.from_fits(fn)
+        rv2 = l1.to_rv2()
+        assert "TELEMETRY" in rv2.extensions
+        assert "ANCILLARY_SPECTRUM" in rv2.extensions
+
+    def test_to_rv2_leaves_traces_empty(self, synthetic_l1_file):
+        l1 = KPF1.from_fits(synthetic_l1_file)
+        rv2 = l1.to_rv2()
+        assert "TRACE1_FLUX" in rv2.extensions
+        # RV2 init creates empty arrays for trace extensions
+        assert len(rv2.data["TRACE1_FLUX"]) == 0
+
+    def test_to_rv2_carries_receipt(self, synthetic_l1_file):
+        l1 = KPF1.from_fits(synthetic_l1_file)
+        rv2 = l1.to_rv2()
+        assert "to_rv2" in rv2.receipt["Module_Name"].values
+
+    def test_to_rv2_sets_origid(self, tmp_path):
+        """Verify obs_id is stored as ORIGID in RV2 PRIMARY."""
+        fn = str(tmp_path / "KP.20240113.23249.10_L1.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["INSTRUME"] = "KPF"
+        primary.header["DATE-OBS"] = "2024-01-13T10:26:56"
+        green = fits.ImageHDU(data=np.zeros((8, 8), dtype=np.float32))
+        green.name = "GREEN_CCD"
+        green_var = fits.ImageHDU(data=np.zeros((8, 8), dtype=np.float32))
+        green_var.name = "GREEN_VAR"
+        red = fits.ImageHDU(data=np.zeros((8, 8), dtype=np.float32))
+        red.name = "RED_CCD"
+        red_var = fits.ImageHDU(data=np.zeros((8, 8), dtype=np.float32))
+        red_var.name = "RED_VAR"
+        hdul = fits.HDUList([primary, green, green_var, red, red_var])
+        hdul.writeto(fn, overwrite=True)
+        hdul.close()
+
+        l1 = KPF1.from_fits(fn)
+        # from_fits won't set obs_id since filename doesn't match L0 pattern
+        # Set it manually as if it came from to_l1()
+        l1.obs_id = "KP.20240113.23249.10"
+        rv2 = l1.to_rv2()
+        # ORIGID is stored as (value, comment) tuple
+        origid = rv2.headers["PRIMARY"]["ORIGID"]
+        assert (origid[0] if isinstance(origid, tuple) else origid) == "KP.20240113.23249.10"
+
+
 class TestImports:
     def test_data_models_import(self):
         from kpfpipe.data_models import KPF0, KPF1
