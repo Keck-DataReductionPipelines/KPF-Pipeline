@@ -17,6 +17,11 @@ DEFAULTS.update({'extraction_method': 'box'})
 
 class SpectralExtraction:
     """
+    This class performs spectral extraction of the 1D spectrum.
+    Processes data from KPF1 to RV2.
+
+    Notes
+    -----
     Single-letter variable names for 2D images in this class follow 
     Horne 1986 Optimal Extraction:
       - D = data
@@ -35,6 +40,25 @@ class SpectralExtraction:
 
 
     def _read_order_trace_reference(self, chip):
+        """
+        Load and cache the order trace reference table for a given chip.
+
+        Parameters
+        ----------
+        chip : str
+            Chip identifier (e.g., 'GREEN', 'RED').
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame containing trace coefficients and geometric parameters
+            for all fibers and orders on the specified chip.
+
+        Notes
+        -----
+        The trace reference file is read from the repository reference
+        directory and cached in `self.order_trace` to avoid repeated I/O.
+        """
         if not hasattr(self, 'order_trace'):
             self.order_trace = {}
 
@@ -47,10 +71,41 @@ class SpectralExtraction:
 
     def _get_orderlet_pixels(self, chip, fiber, order, return_coords=False):
         """
-        Get a rectangular section of pixels containing a single orderlet.
+        Extract the 2D pixel region corresponding to a single orderlet.
 
-        The section may contain pixels from adjacent orderlets if curvature
-        of the target orderlet is sufficiently high. This is expected behavior.
+        Parameters
+        ----------
+        chip : str
+            Chip identifier, i.e. 'GREEN' or 'RED'
+        fiber : str
+            Fiber identifier, e.g. 'SCI2'
+        order : int
+            Spectral order number.
+        return_coords : bool, optional
+            If True, also return the detector row bounds of the extracted box.
+
+        Returns
+        -------
+        D : ndarray
+            2D array of data values within the bounding box.
+        V : ndarray
+            2D array of variance values within the bounding box.
+        W : ndarray
+            2D weight array accounting for fractional pixel coverage at
+            order boundaries.
+        row_min : int, optional
+            Lower detector row index of the bounding box (if return_coords=True).
+        row_max : int, optional
+            Upper detector row index of the bounding box (if return_coords=True).
+
+        Notes
+        -----
+        The bounding region fully encloses the traced orderlet. Due to order
+        tilt and curvature, the box may include pixels from adjacent orders.
+        Weights are assigned as:
+        - 1 for fully enclosed pixels,
+        - 0 for pixels outside the orderlet,
+        - fractional values at the top and bottom trace edges.
         """
         chip = chip.upper()
         fiber = fiber.upper()
@@ -122,14 +177,29 @@ class SpectralExtraction:
 
 
     @staticmethod
-    def _box_extraction(D, V, S=None, M=None, W=None):
+    def _box_extraction(D, V, *, S=None, M=None, W=None):
         """
-        Performs simple box extraction on a 2D image array    
-        Variable names follow Horne 1986 optimal extraction
+        Perform simple box (summation) extraction of a 2D spectral trace.
 
-        Optionally weights pixels as M * W
-          - M is a binary bad pixel mask
-          - W accounts for order tilt/curvature
+        Parameters
+        ----------
+        D : ndarray
+            2D data array.
+        V : ndarray
+            2D variance array.
+        S : ndarray, optional
+            2D sky/scattered light model.
+        M : ndarray, optional
+            Binary bad-pixel mask (1 = good, 0 = bad).
+        W : ndarray, optional
+            Pixel weights accounting for trace geometry.
+
+        Returns
+        -------
+        flux_1d : ndarray
+            Extracted 1D flux spectrum.
+        var_1d : ndarray
+            Corresponding 1D variance spectrum.
         """
         if S is None:
             S = np.zeros_like(D)
@@ -150,7 +220,103 @@ class SpectralExtraction:
         return flux_1d, var_1d
 
 
+    @staticmethod
+    def _optimal_extraction(D, V, *, S=None, M=None, W=None, P=None):
+        """
+        Perform optimal extraction of a 2D spectral trace.
+
+        Parameters
+        ----------
+        D : ndarray
+            2D data array.
+        V : ndarray
+            2D variance array.
+        S : ndarray, optional
+            2D sky/scattered light model.
+        M : ndarray, optional
+            Binary bad-pixel mask (1 = good, 0 = bad).
+        W : ndarray, optional
+            Pixel weights accounting for trace geometry.
+        P : ndarray, optional
+            Spatial profile model of the spectral trace.
+
+        Returns
+        -------
+        flux_1d : ndarray
+            Extracted 1D flux spectrum.
+        var_1d : ndarray
+            Corresponding 1D variance spectrum.
+
+        Notes
+        -----
+        Follows the Horne (1986) optimal extraction algorithm.
+        Currently not implemented.
+        """
+        raise NotImplementedError("optimal extraction net yet implemented")
+
+
+    @staticmethod
+    def _flat_relative_extraction(D, V, *, S=None, M=None, W=None, F=None):
+        """
+        Perform flat-relative spectral extraction.
+
+        Parameters
+        ----------
+        D : ndarray
+            2D data array.
+        V : ndarray
+            2D variance array.
+        S : ndarray, optional
+            2D sky/scattered light model.
+        M : ndarray, optional
+            Binary bad-pixel mask (1 = good, 0 = bad).
+        W : ndarray, optional
+            Pixel weights accounting for trace geometry.
+        F : ndarray, optional
+            Flat-field reference image.
+
+        Returns
+        -------
+        flux_1d : ndarray
+            Extracted 1D flux spectrum.
+        var_1d : ndarray
+            Corresponding 1D variance spectrum.
+
+        Notes
+        -----
+        Follows the Zechmeister et al. (2014) flat-relative extraction
+        algorithm. Currently not implemented.
+        """
+        raise NotImplementedError("flat relative extraction net yet implemented")
+
+
     def extract_orderlet(self, chip, fiber, order, method=None):
+        """
+        Extract a single orderlet as a 1D spectrum.
+
+        Parameters
+        ----------
+        chip : str
+            Chip identifier, i.e. 'GREEN' or 'RED'
+        fiber : str
+            Fiber identifier, e.g. 'SCI2'
+        order : int
+            Spectral order number.
+        method : str, optional
+            Extraction method ('box', 'optimal', or 'flat_relative').
+
+        Returns
+        -------
+        flux_1d : ndarray
+            Extracted 1D flux spectrum for the specified orderlet.
+        var_1d : ndarray
+            Corresponding 1D variance spectrum.
+
+        Notes
+        -----
+        Retrieves the orderlet pixel region and dispatches to the selected
+        extraction method.
+        """
         if method is None:
             method = self.extraction_method
 
@@ -169,6 +335,31 @@ class SpectralExtraction:
 
 
     def extract_ffi(self, chip, fibers=None, method=None):
+        """
+        Extract all spectral orders from a full-frame image (FFI).
+
+        Parameters
+        ----------
+        chip : str
+            Chip identifier, i.e. 'GREEN' or 'RED'
+        fibers : list of str, optional
+            Fibers identifiers, e.g. 'SCI2'
+        method : str, optional
+            Extraction method ('box', 'optimal', or 'flat_relative').
+
+        Returns
+        -------
+        dict
+            Dictionary containing 2D arrays of shape (norder, ncol) for
+            extracted flux and variance. Keys follow standard KPF name
+            conventions, e.g. 'GREEN_SCI2_FLUX'.
+
+        Notes
+        -----
+        Loops over all spectral orders and requested fibers, performing
+        order-by-order extraction. Orders that fail validation are skipped
+        with a warning.
+        """
         chip = chip.upper()
 
         if fibers is None:
@@ -198,6 +389,29 @@ class SpectralExtraction:
 
 
     def perform(self, chips=None, fibers=None, method=None):
+        """
+        Execute spectral extraction. Optional kyeword arguments
+        default to config settings.
+
+        Parameters
+        ----------
+        chip : str
+            Chip identifier, i.e. 'GREEN' or 'RED'
+        fibers : list of str, optional
+            Fibers identifiers, e.g. 'SCI2'
+        method : str, optional
+            Extraction method ('box', 'optimal', or 'flat_relative').
+
+        Returns
+        -------
+        object
+            L2 data object containing extracted 1D flux and variance arrays.
+
+        Notes
+        -----
+        Creates an RV2 object from the input KPF1 object and populates it
+        with extracted spectra for all requested chips and fibers.
+        """
         if chips is None:
             chips = self.chips
         if fibers is None:
