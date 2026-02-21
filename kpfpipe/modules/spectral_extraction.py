@@ -9,6 +9,7 @@ import pandas as pd
 from numpy.polynomial import polynomial
 
 from kpfpipe import REPO_ROOT, DEFAULTS
+from kpfpipe.exceptions import KPFError
 from kpfpipe.utils.config_parser import ConfigHandler
 from kpfpipe.utils.quality_control import validate_array
 
@@ -130,8 +131,16 @@ class SpectralExtraction:
         if not hasattr(self, 'order_trace') or chip not in self.order_trace:
             self._read_order_trace_reference(chip)
 
-        trace = self.order_trace[chip].loc[(fiber, order)]
-        assert trace.ndim == 1, f"Expected only one trace, got {trace.shape[0]}"
+        try:
+            trace = self.order_trace[chip].loc[(fiber, order)]
+        except KeyError:
+            raise KPFError(f"No trace found for {chip} {fiber} Order {order}")
+
+        if trace.ndim != 1:
+            raise KPFError(
+                f"Expected exactly one row for {chip} {fiber} Order {order} "
+                f"but found {trace.shape[0]}"
+        )
 
         # track the trace position
         coeffs = np.array(trace[[f'Coeff{i}' for i in range(4)]], dtype=np.float32)
@@ -164,9 +173,7 @@ class SpectralExtraction:
         _trace_top = trace_top[None,:]
         _trace_bottom = trace_bottom[None,:]
 
-        # make data, variance, and weight 2D arrays
-        # sets W_ij for pixels fully outside (0) or inside (1) trace
-        # sets W_ij for pixels at edge of trace to fractional values
+        # make data, variance, and weight arrays
         D = data_image[box_zeropt:box_zeropt + box_height]
         V = var_image[box_zeropt:box_zeropt + box_height]        
         
@@ -327,9 +334,6 @@ class SpectralExtraction:
         if method is None:
             method = self.extraction_method
 
-        # sanitize likely input errors for 'flat_relative'
-        method = method.replace(" ", "_").replace("-","_")
-
         try:
             extraction_fxn = self.__getattribute__(f'_{method}_extraction')
         except AttributeError as e:
@@ -370,8 +374,7 @@ class SpectralExtraction:
         Notes
         -----
         Loops over all spectral orders and requested fibers, performing
-        order-by-order extraction. Orders that fail validation are skipped
-        with a warning.
+        order-by-order extraction.
         """
         chip = chip.upper()
 
@@ -388,16 +391,26 @@ class SpectralExtraction:
             l2_arrays[f'{chip}_{fiber}_FLUX'] = np.empty((norder,ncol))
             l2_arrays[f'{chip}_{fiber}_VAR'] = np.empty((norder,ncol))
 
+        failure = 0
         for order in range(1,norder+1):
             for fiber in fibers:
                 try:
                     flux_1d, var_1d = self.extract_orderlet(chip, fiber, order, method)
-                except AssertionError:
-                    warnings.warn(f"Skipping {chip}_{fiber}, ORDER {order}")
+                except KPFError:
+                    failure += 1
+                    flux_1d = np.nan * np.zeros(ncol, dtype=np.float32)
+                    var_1d = np.nan * np.zeros(ncol, dtype=np.float32)
 
                 l2_arrays[f'{chip}_{fiber}_FLUX'][order-1] = flux_1d
                 l2_arrays[f'{chip}_{fiber}_VAR'][order-1] = var_1d
 
+        # During some KPF eras one of the traces does not fall on the detector.
+        # In this case a single failure is expected from this method. Allowing
+        # the loop to continue through all orders provides useful diagnostic
+        # information for cases where the algorithm truly fails.
+        if failure > 1:
+            raise KPFError(f"Failed to extract {failure} orders from the {chip} CCD")
+        
         return l2_arrays
 
 
