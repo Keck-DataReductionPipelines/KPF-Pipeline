@@ -1,6 +1,5 @@
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
-from kpfpipe.data_models.ffi import KPF_FFI
 
 from kpfpipe.modules.exposure_time import ExposureTime
 from kpfpipe.modules.image_assembly import ImageAssembly
@@ -20,9 +19,9 @@ def main():
     datecode = get_datecode(obs_id)
     target_l0 = KPF0.from_fits(fetch_filepath(obs_id, level='L0'))
 
-    flat = KPF_FFI.from_fits(fetch_filepath(datecode, master='flat'))
-    dark = KPF_FFI.from_fits(fetch_filepath(datecode, master='dark'))
-    bias = KPF_FFI.from_fits(fetch_filepath(datecode, master='bias'))
+    flat = KPF1.from_fits(fetch_filepath(datecode, master='flat'))
+    dark = KPF1.from_fits(fetch_filepath(datecode, master='dark'))
+    bias = KPF1.from_fits(fetch_filepath(datecode, master='bias'))
     wls = KPF1.from_fits(fetch_filepath(datecode, master='thar-wls'))
 
     # Perform L0 --> L1 data processing algorithms
@@ -30,22 +29,23 @@ def main():
     target_l0 = exposure_time.perform()
 
     image_assembly = ImageAssembly(target_l0)
-    target_ffi = image_assembly.perform()
+    target_l1 = image_assembly.perform()
 
-    image_processing = ImageProcessing(target_ffi)
-    target_ffi = image_processing.perform(flat, dark, bias)
+    image_processing = ImageProcessing(target_l1)
+    target_l1 = image_processing.perform(flat, dark, bias)
 
-    spectral_extraction = SpectralExtraction(target_ffi)
-    target_l1 = spectral_extraction.perform()
+    spectral_extraction = SpectralExtraction(target_l1)
+    target_l2 = spectral_extraction.perform()
 
-    wavelength_calibration = WavelengthCalibration(target_l1)
-    target_l1 = wavelength_calibration.perform(wls)
+    wavelength_calibration = WavelengthCalibration(target_l2)
+    target_l2 = wavelength_calibration.perform(wls)
 
-    barycentric_correction = BarycentricCorrection(target_l1)
-    target_l1 = barycentric_correction.perform()
+    # TODO: roll ExposureTime into BarycentricCorrection?
+    barycentric_correction = BarycentricCorrection(target_l2)
+    target_l2 = barycentric_correction.perform()
 
     # Save L1 file to disk
-    target_l1.to_fits()
+    target_l2.to_fits()
 
     print("\n\n=== exiting kpf_drp_science pipeline ===\n\n")
 

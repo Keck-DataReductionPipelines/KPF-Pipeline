@@ -1,0 +1,17 @@
+[DATA_DIRS]
+KFP_DATA_INPUT = "/data/kpf/"
+KPF_DATA_OUTPUT = "/data/kpf-next/"
+
+[KPFPIPE]
+chips = ["GREEN", "RED"]
+fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
+
+[KPFPIPE.norder]
+GREEN = 35
+RED = 32
+
+[MODULE_IMAGE_ASSEMBLY]
+overscan_method = "rowmedian"
+
+[MODULE_SPECTRAL_EXTRACTION]
+extraction_method = "box"

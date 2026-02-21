@@ -1,8 +1,5 @@
 """
 KPF Image Assembly module.
-
-Processes data from L1 to SL2.
- - extracts 1D spectrum from 2D FFI
 """
 import warnings
 
@@ -11,6 +8,7 @@ import pandas as pd
 from numpy.polynomial import polynomial
 
 from kpfpipe import REPO_ROOT, DEFAULTS
+from kpfpipe.utils.config_parser import ConfigHandler
 
 DEFAULTS.update({'extraction_method': 'box'})
 
@@ -23,20 +21,31 @@ class SpectralExtraction:
     Notes
     -----
     Single-letter variable names for 2D images in this class follow 
-    Horne 1986 Optimal Extraction:
+    Horne 1986 optimal extractionm, with small modifcations:
       - D = data
-      - S = sky / scattered light
       - V = variance
+      - S = sky / scattered light
       - F = flat
       - P = profile
       - M = mask
       - W = weight
     """
-    def __init__(self, l1_obj, config={}):
+    def __init__(self, l1_obj, config=None):
         self.l1_obj = l1_obj
 
-        for k in DEFAULTS.keys():
-            self.__setattr__(k, config.get(k,DEFAULTS[k]))
+        if config is None:
+            params = {}
+        elif isinstance(config, dict):
+            params = config
+        elif isinstance(config, ConfigHandler):
+            params = config.get_params(
+                ["DATA_DIRS", "KPFPIPE", "MODULE_SPECTRAL_EXTRACTION"]
+            )
+        else:
+            raise TypeError("config must be None, dict, or ConfigHandler")
+
+        for k, v in DEFAULTS.items():
+            setattr(self, k, params.get(k, v))
 
 
     def _read_order_trace_reference(self, chip):
@@ -209,11 +218,11 @@ class SpectralExtraction:
 
         M = M * (M.shape[0] / M.sum(0))
 
-        if np.any(np.sum(M*W, axis=0) == 0):
+        if np.any(np.sum(M * W, axis=0) == 0):
             raise ValueError("Fully masked columns detected in trace")
 
-        flux_1d = np.sum((D - S) * W, axis=0)
-        var_1d = np.sum(V * W, axis=0)
+        flux_1d = np.sum((D - S) * M * W, axis=0)
+        var_1d = np.sum(V * M * W, axis=0)
                         
         return flux_1d, var_1d
 
@@ -247,8 +256,7 @@ class SpectralExtraction:
 
         Notes
         -----
-        Follows the Horne (1986) optimal extraction algorithm.
-        Currently not implemented.
+        Follows Horne (1986) optimal extraction algorithm.
         """
         raise NotImplementedError("optimal extraction net yet implemented")
 
@@ -282,8 +290,7 @@ class SpectralExtraction:
 
         Notes
         -----
-        Follows the Zechmeister et al. (2014) flat-relative extraction
-        algorithm. Currently not implemented.
+        Follows Zechmeister et al. (2014) flat-relative extraction algorithm.
         """
         raise NotImplementedError("flat relative extraction net yet implemented")
 
@@ -317,6 +324,9 @@ class SpectralExtraction:
         """
         if method is None:
             method = self.extraction_method
+
+        # quietly sanitize likely input errors for 'flat_relative'
+        method = method.replace(" ", "_").replace("-","_")
 
         try:
             extraction_fxn = self.__getattribute__(f'_{method}_extraction')
