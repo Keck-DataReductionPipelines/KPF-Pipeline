@@ -3,13 +3,14 @@ KPF Image Assembly module.
 """
 import warnings
 
+from astropy.stats import mad_std
 import numpy as np
 import pandas as pd
 from numpy.polynomial import polynomial
 
 from kpfpipe import REPO_ROOT, DEFAULTS
 from kpfpipe.utils.config_parser import ConfigHandler
-from kpfpipe.utils.quality_control import validate_positive_finite_array
+from kpfpipe.utils.quality_control import validate_array
 
 DEFAULTS.update({'extraction_method': 'box'})
 
@@ -326,7 +327,7 @@ class SpectralExtraction:
         if method is None:
             method = self.extraction_method
 
-        # quietly sanitize likely input errors for 'flat_relative'
+        # sanitize likely input errors for 'flat_relative'
         method = method.replace(" ", "_").replace("-","_")
 
         try:
@@ -340,8 +341,8 @@ class SpectralExtraction:
         # TODO: add bad pixel masking
         flux_1d, var_1d = extraction_fxn(D, V, W=W)
 
-        validate_positive_finite_array(flux_1d, context=f"flux_1d array: {chip} {fiber} {order}")
-        validate_positive_finite_array(var_1d, context=f"var_1d array: {chip} {fiber} {order}")
+        validate_array(flux_1d, context=f'flux_1d array: {chip} {fiber} {order}', response='warn')
+        validate_array(var_1d, context=f'var_1d array: {chip} {fiber} {order}', response='warn')
 
         return flux_1d, var_1d
 
