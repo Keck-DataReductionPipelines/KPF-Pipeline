@@ -1,5 +1,5 @@
 """
-KPF Image Assembly module.
+KPF Spectral Extraction module.
 """
 import warnings
 
@@ -24,7 +24,7 @@ class SpectralExtraction:
     Notes
     -----
     Single-letter variable names for 2D images in this class follow 
-    Horne 1986 optimal extractionm, with small modifcations:
+    Horne 1986 optimal extraction, with small modifcations:
       - D = data
       - V = variance
       - S = sky / scattered light
@@ -267,7 +267,7 @@ class SpectralExtraction:
         -----
         Follows Horne (1986) optimal extraction algorithm.
         """
-        raise NotImplementedError("optimal extraction net yet implemented")
+        raise NotImplementedError("optimal extraction not yet implemented")
 
 
     @staticmethod
@@ -301,7 +301,7 @@ class SpectralExtraction:
         -----
         Follows Zechmeister et al. (2014) flat-relative extraction algorithm.
         """
-        raise NotImplementedError("flat relative extraction net yet implemented")
+        raise NotImplementedError("flat relative extraction not yet implemented")
 
 
     def extract_orderlet(self, chip, fiber, order, method=None):
@@ -416,7 +416,7 @@ class SpectralExtraction:
 
     def perform(self, chips=None, fibers=None, method=None):
         """
-        Execute spectral extraction. Optional kyeword arguments
+        Execute spectral extraction. Optional keyword arguments
         default to config settings.
 
         Parameters
