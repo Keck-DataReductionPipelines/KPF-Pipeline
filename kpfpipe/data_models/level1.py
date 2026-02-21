@@ -176,25 +176,27 @@ class KPF1(KPFDataModel):
         hdul.close()
         return fn
 
-    # Mapping of L1 extension names → RV2 extension names for pass-through
-    _L1_TO_RV2_PASSTHROUGH = {
+    # Mapping of L1 extension names → KPF2/RV2 extension names for pass-through
+    _L1_TO_KPF2_PASSTHROUGH = {
         "TELEMETRY": "TELEMETRY",
         "EXPMETER_SCI": "EXPMETER",
         "CA_HK": "ANCILLARY_SPECTRUM",
     }
 
-    def to_rv2(self):
-        """Create an RV2 scaffold from this L1, carrying over headers and pass-through extensions.
+    def to_kpf2(self):
+        """Create a KPF2 scaffold from this L1, carrying over headers and pass-through extensions.
 
-        Returns an RV2 with PRIMARY header keywords mapped from KPF-native
+        Returns a KPF2 with PRIMARY header keywords mapped from KPF-native
         to EPRV standard (using rvdata's header_map.csv), the full L1 PRIMARY
         stored in INSTRUMENT_HEADER, and pass-through extensions (TELEMETRY,
-        EXPMETER_SCI→EXPMETER, CA_HK→ANCILLARY_SPECTRUM). Trace data arrays
-        are created but empty — the caller (spectral extraction) fills those in.
+        EXPMETER_SCI→EXPMETER, CA_HK→ANCILLARY_SPECTRUM). KPF-friendly
+        aliases are registered automatically (e.g., SCI2_FLUX → TRACE3_FLUX,
+        CA_HK → ANCILLARY_SPECTRUM). Trace data arrays are created but
+        empty — the caller (spectral extraction) fills those in.
         """
-        from rvdata.core.models.level2 import RV2
+        from kpfpipe.data_models.level2 import KPF2
 
-        rv2 = RV2()
+        kpf2 = KPF2()
 
         # Map KPF-native header keywords to EPRV standard using header_map.csv
         if "PRIMARY" in self.headers:
@@ -206,38 +208,39 @@ class KPF1(KPFDataModel):
 
                 if instrument_key and instrument_key in l1_header:
                     value = l1_header[instrument_key]
-                    if isinstance(value, tuple):
-                        rv2.headers["PRIMARY"][standard_key] = value
-                    else:
-                        rv2.headers["PRIMARY"][standard_key] = value
+                    kpf2.headers["PRIMARY"][standard_key] = value
                 elif default_val is not None and str(default_val).strip():
-                    rv2.headers["PRIMARY"][standard_key] = default_val
+                    kpf2.headers["PRIMARY"][standard_key] = default_val
 
             # Store full L1 PRIMARY header in INSTRUMENT_HEADER
             for key, value in l1_header.items():
-                rv2.headers["INSTRUMENT_HEADER"][key] = value
+                kpf2.headers["INSTRUMENT_HEADER"][key] = value
 
         # Pass-through extensions with renaming
-        for l1_ext, rv2_ext in self._L1_TO_RV2_PASSTHROUGH.items():
+        for l1_ext, kpf2_ext in self._L1_TO_KPF2_PASSTHROUGH.items():
             if l1_ext in self.extensions:
-                if rv2_ext not in rv2.extensions:
-                    rv2.create_extension(rv2_ext, self.extensions[l1_ext])
+                l1_type = self.extensions[l1_ext]
+                if kpf2_ext not in kpf2.extensions:
+                    kpf2.create_extension(kpf2_ext, l1_type)
+                elif kpf2.extensions[kpf2_ext] != l1_type:
+                    # Update type to match actual L1 data
+                    kpf2.extensions[kpf2_ext] = l1_type
                 if l1_ext in self.data and self.data[l1_ext] is not None:
-                    rv2.set_data(rv2_ext, self.data[l1_ext])
+                    kpf2.set_data(kpf2_ext, self.data[l1_ext])
                 if l1_ext in self.headers:
-                    rv2.set_header(rv2_ext, self.headers[l1_ext])
+                    kpf2.set_header(kpf2_ext, self.headers[l1_ext])
 
         # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:
-            rv2.receipt = self.receipt.copy()
+            kpf2.receipt = self.receipt.copy()
 
         # Store obs_id for traceability
         if self.obs_id is not None:
-            rv2.headers["PRIMARY"]["ORIGID"] = (self.obs_id, "Original L0 observation ID")
+            kpf2.headers["PRIMARY"]["ORIGID"] = (self.obs_id, "Original L0 observation ID")
 
-        rv2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
-        rv2.receipt_add_entry("to_rv2", "PASS")
-        return rv2
+        kpf2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
+        kpf2.receipt_add_entry("to_kpf2", "PASS")
+        return kpf2
 
     def info(self):
         """Print summary of L1 data model contents."""

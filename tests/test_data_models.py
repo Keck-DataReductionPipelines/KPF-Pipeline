@@ -1,5 +1,5 @@
 """
-Tests for KPF data models (KPF0 and KPF1).
+Tests for KPF data models (KPF0, KPF1, KPF2, KPF4).
 
 Uses synthetic FITS fixtures — no real KPF data needed.
 """
@@ -14,6 +14,9 @@ from astropy.table import Table
 
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.data_models.level2 import KPF2
+from kpfpipe.data_models.level4 import KPF4
+from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 
 
 @pytest.fixture
@@ -278,51 +281,45 @@ class TestToL1:
         assert "RED_AMP1" not in l1.extensions
 
 
-class TestToRV2:
-    def test_to_rv2_creates_rv2(self, synthetic_l1_file):
-        from rvdata.core.models.level2 import RV2
+class TestToKPF2:
+    def test_to_kpf2_creates_kpf2(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
-        rv2 = l1.to_rv2()
-        assert rv2.level == 2
-        assert isinstance(rv2, RV2)
+        kpf2 = l1.to_kpf2()
+        assert kpf2.level == 2
+        assert isinstance(kpf2, KPF2)
 
-    def test_to_rv2_maps_header_keywords(self, synthetic_l1_file):
+    def test_to_kpf2_maps_header_keywords(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
-        # Set a KPF-native keyword that maps to an EPRV standard keyword
         l1.headers["PRIMARY"]["ELAPSED"] = 300.0
         l1.headers["PRIMARY"]["IMTYPE"] = "Object"
         l1.headers["PRIMARY"]["GROBSERV"] = "Smith"
-        rv2 = l1.to_rv2()
-        assert rv2.headers["PRIMARY"]["EXPTIME"] == 300.0
-        assert rv2.headers["PRIMARY"]["OBSTYPE"] == "Object"
-        assert rv2.headers["PRIMARY"]["OBSERVER"] == "Smith"
+        kpf2 = l1.to_kpf2()
+        assert kpf2.headers["PRIMARY"]["EXPTIME"] == 300.0
+        assert kpf2.headers["PRIMARY"]["OBSTYPE"] == "Object"
+        assert kpf2.headers["PRIMARY"]["OBSERVER"] == "Smith"
 
-    def test_to_rv2_copies_same_name_keywords(self, synthetic_l1_file):
+    def test_to_kpf2_copies_same_name_keywords(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
-        rv2 = l1.to_rv2()
-        # Keywords with same name in KPF and EPRV standard
-        assert rv2.headers["PRIMARY"]["INSTRUME"] == "KPF"
-        assert rv2.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
+        kpf2 = l1.to_kpf2()
+        assert kpf2.headers["PRIMARY"]["INSTRUME"] == "KPF"
+        assert kpf2.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
 
-    def test_to_rv2_sets_defaults(self, synthetic_l1_file):
+    def test_to_kpf2_sets_defaults(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
-        rv2 = l1.to_rv2()
-        # DATALVL is set as (value, comment) tuple
-        datalvl = rv2.headers["PRIMARY"]["DATALVL"]
+        kpf2 = l1.to_kpf2()
+        datalvl = kpf2.headers["PRIMARY"]["DATALVL"]
         assert (datalvl[0] if isinstance(datalvl, tuple) else datalvl) == "L2"
-        # ORIGIN comes from header_map.csv defaults
-        origin = rv2.headers["PRIMARY"].get("ORIGIN")
+        origin = kpf2.headers["PRIMARY"].get("ORIGIN")
         assert origin is not None
 
-    def test_to_rv2_sets_instrument_header(self, synthetic_l1_file):
+    def test_to_kpf2_sets_instrument_header(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
-        rv2 = l1.to_rv2()
-        # Full L1 PRIMARY should be stored in INSTRUMENT_HEADER
-        assert "INSTRUME" in rv2.headers["INSTRUMENT_HEADER"]
-        assert rv2.headers["INSTRUMENT_HEADER"]["INSTRUME"] == "KPF"
+        kpf2 = l1.to_kpf2()
+        assert "INSTRUME" in kpf2.headers["INSTRUMENT_HEADER"]
+        assert kpf2.headers["INSTRUMENT_HEADER"]["INSTRUME"] == "KPF"
 
-    def test_to_rv2_maps_passthrough_extensions(self, tmp_path):
-        """Build an L1 with TELEMETRY and CA_HK, verify they map to RV2 extensions."""
+    def test_to_kpf2_maps_passthrough_extensions(self, tmp_path):
+        """Build an L1 with TELEMETRY and CA_HK, verify they map to KPF2 extensions."""
         fn = str(tmp_path / "l1_with_extras.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
@@ -345,24 +342,23 @@ class TestToRV2:
         hdul.close()
 
         l1 = KPF1.from_fits(fn)
-        rv2 = l1.to_rv2()
-        assert "TELEMETRY" in rv2.extensions
-        assert "ANCILLARY_SPECTRUM" in rv2.extensions
+        kpf2 = l1.to_kpf2()
+        assert "TELEMETRY" in kpf2.extensions
+        assert "ANCILLARY_SPECTRUM" in kpf2.extensions
 
-    def test_to_rv2_leaves_traces_empty(self, synthetic_l1_file):
+    def test_to_kpf2_leaves_traces_empty(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
-        rv2 = l1.to_rv2()
-        assert "TRACE1_FLUX" in rv2.extensions
-        # RV2 init creates empty arrays for trace extensions
-        assert len(rv2.data["TRACE1_FLUX"]) == 0
+        kpf2 = l1.to_kpf2()
+        assert "TRACE1_FLUX" in kpf2.extensions
+        assert len(kpf2.data["TRACE1_FLUX"]) == 0
 
-    def test_to_rv2_carries_receipt(self, synthetic_l1_file):
+    def test_to_kpf2_carries_receipt(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
-        rv2 = l1.to_rv2()
-        assert "to_rv2" in rv2.receipt["Module_Name"].values
+        kpf2 = l1.to_kpf2()
+        assert "to_kpf2" in kpf2.receipt["Module_Name"].values
 
-    def test_to_rv2_sets_origid(self, tmp_path):
-        """Verify obs_id is stored as ORIGID in RV2 PRIMARY."""
+    def test_to_kpf2_sets_origid(self, tmp_path):
+        """Verify obs_id is stored as ORIGID in KPF2 PRIMARY."""
         fn = str(tmp_path / "KP.20240113.23249.10_L1.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
@@ -380,20 +376,167 @@ class TestToRV2:
         hdul.close()
 
         l1 = KPF1.from_fits(fn)
-        # obs_id is set by from_fits since filename starts with KP pattern;
-        # in production this would come from to_l1()
         assert l1.obs_id == "KP.20240113.23249.10"
-        rv2 = l1.to_rv2()
-        # ORIGID is stored as (value, comment) tuple
-        origid = rv2.headers["PRIMARY"]["ORIGID"]
+        kpf2 = l1.to_kpf2()
+        origid = kpf2.headers["PRIMARY"]["ORIGID"]
         assert (origid[0] if isinstance(origid, tuple) else origid) == "KP.20240113.23249.10"
+
+
+class TestAliasedOrderedDict:
+    def test_basic_alias(self):
+        d = AliasedOrderedDict()
+        d["CANONICAL"] = 42
+        d.register_alias("ALIAS", "CANONICAL")
+        assert d["ALIAS"] == 42
+        assert d["CANONICAL"] == 42
+
+    def test_contains_with_alias(self):
+        d = AliasedOrderedDict()
+        d["CANONICAL"] = "data"
+        d.register_alias("ALIAS", "CANONICAL")
+        assert "ALIAS" in d
+        assert "CANONICAL" in d
+        assert "MISSING" not in d
+
+    def test_set_via_alias(self):
+        d = AliasedOrderedDict()
+        d["CANONICAL"] = "old"
+        d.register_alias("ALIAS", "CANONICAL")
+        d["ALIAS"] = "new"
+        assert d["CANONICAL"] == "new"
+
+    def test_get_with_default(self):
+        d = AliasedOrderedDict()
+        d["CANONICAL"] = 99
+        d.register_alias("ALIAS", "CANONICAL")
+        assert d.get("ALIAS") == 99
+        assert d.get("MISSING", "default") == "default"
+
+    def test_aliases_for(self):
+        d = AliasedOrderedDict()
+        d["CANONICAL"] = 1
+        d.register_alias("A1", "CANONICAL")
+        d.register_alias("A2", "CANONICAL")
+        aliases = d.aliases_for("CANONICAL")
+        assert aliases == {"A1", "A2"}
+
+    def test_from_ordered_dict(self):
+        from collections import OrderedDict
+        od = OrderedDict([("A", 1), ("B", 2)])
+        aliased = AliasedOrderedDict.from_ordered_dict(od)
+        assert aliased["A"] == 1
+        assert aliased["B"] == 2
+        aliased.register_alias("C", "A")
+        assert aliased["C"] == 1
+
+    def test_identity_via_alias(self):
+        """Alias access returns the exact same object (not a copy)."""
+        d = AliasedOrderedDict()
+        arr = np.zeros((4, 4))
+        d["CANONICAL"] = arr
+        d.register_alias("ALIAS", "CANONICAL")
+        assert d["ALIAS"] is d["CANONICAL"]
+
+
+class TestKPF2Aliases:
+    def test_kpf2_inherits_rv2(self):
+        from rvdata.core.models.level2 import RV2
+        kpf2 = KPF2()
+        assert isinstance(kpf2, RV2)
+        assert kpf2.level == 2
+
+    def test_fiber_alias_resolves(self):
+        kpf2 = KPF2()
+        # SCI2_FLUX should resolve to TRACE3_FLUX
+        assert kpf2.data["SCI2_FLUX"] is kpf2.data["TRACE3_FLUX"]
+        assert kpf2.data["CAL_FLUX"] is kpf2.data["TRACE1_FLUX"]
+        assert kpf2.data["SKY_WAVE"] is kpf2.data["TRACE5_WAVE"]
+
+    def test_extension_alias_resolves(self):
+        kpf2 = KPF2()
+        # CA_HK should resolve to ANCILLARY_SPECTRUM
+        assert "CA_HK" in kpf2.extensions
+        assert kpf2.data["CA_HK"] is kpf2.data["ANCILLARY_SPECTRUM"]
+
+    def test_expmeter_alias(self):
+        kpf2 = KPF2()
+        assert "EXPMETER_SCI" in kpf2.extensions
+        assert kpf2.data["EXPMETER_SCI"] is kpf2.data["EXPMETER"]
+
+    def test_set_data_via_alias(self):
+        kpf2 = KPF2()
+        test_data = np.random.random((10, 100)).astype(np.float64)
+        kpf2.set_data("SCI2_FLUX", test_data)
+        np.testing.assert_array_equal(kpf2.data["TRACE3_FLUX"], test_data)
+
+    def test_all_trace_aliases_registered(self):
+        kpf2 = KPF2()
+        # Check all 5 fibers x 4 data types = 20 aliases
+        for fiber, trace in [("CAL", 1), ("SCI1", 2), ("SCI2", 3), ("SCI3", 4), ("SKY", 5)]:
+            for dtype in ["FLUX", "WAVE", "VAR", "BLAZE"]:
+                alias = f"{fiber}_{dtype}"
+                canonical = f"TRACE{trace}_{dtype}"
+                assert alias in kpf2.extensions, f"{alias} not found"
+                assert kpf2.data[alias] is kpf2.data[canonical]
+
+    def test_green_red_methods(self):
+        """Test per-chip slicing after populating traces with data."""
+        kpf2 = KPF2()
+        # Create synthetic trace data: 35 green orders + 30 red orders
+        n_green, n_red = 35, 30
+        n_pix = 100
+        trace_data = np.random.random((n_green + n_red, n_pix))
+        kpf2.set_data("TRACE3_FLUX", trace_data)
+
+        # Populate ORDER_TABLE with wavelengths to define the split
+        wave_start = np.concatenate([
+            np.linspace(4450, 5800, n_green),  # green orders
+            np.linspace(5900, 8600, n_red),     # red orders
+        ])
+        wave_end = wave_start + 50
+        import pandas as pd
+        order_df = pd.DataFrame({
+            "ECHELLE_ORDER": np.arange(n_green + n_red),
+            "ORDER_INDEX": np.arange(n_green + n_red),
+            "WAVE_START": wave_start,
+            "WAVE_END": wave_end,
+        })
+        kpf2.set_data("ORDER_TABLE", order_df)
+
+        green = kpf2.green("SCI2", "FLUX")
+        red = kpf2.red("SCI2", "FLUX")
+        assert green.shape == (n_green, n_pix)
+        assert red.shape == (n_red, n_pix)
+        np.testing.assert_array_equal(green, trace_data[:n_green])
+        np.testing.assert_array_equal(red, trace_data[n_green:])
+
+    def test_green_red_raises_without_order_table(self):
+        kpf2 = KPF2()
+        kpf2.set_data("TRACE3_FLUX", np.zeros((10, 100)))
+        with pytest.raises(ValueError, match="ORDER_TABLE not populated"):
+            kpf2.green("SCI2", "FLUX")
+
+
+class TestKPF4:
+    def test_kpf4_inherits_rv4(self):
+        from rvdata.core.models.level4 import RV4
+        kpf4 = KPF4()
+        assert isinstance(kpf4, RV4)
+        assert kpf4.level == 4
+
+    def test_rv_alias(self):
+        kpf4 = KPF4()
+        assert "RV" in kpf4.extensions
+        assert kpf4.data["RV"] is kpf4.data["RV1"]
 
 
 class TestImports:
     def test_data_models_import(self):
-        from kpfpipe.data_models import KPF0, KPF1
+        from kpfpipe.data_models import KPF0, KPF1, KPF2, KPF4
         assert KPF0 is not None
         assert KPF1 is not None
+        assert KPF2 is not None
+        assert KPF4 is not None
 
     def test_rvdata_import(self):
         from rvdata.core.models.level2 import RV2
