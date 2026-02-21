@@ -19,7 +19,7 @@ def run():
     image_assembly = ImageAssembly(target_l0)
 
     # TODO: profile .perform() directly
-    for chip in image_assembly.CHIPS:
+    for chip in image_assembly.chips:
         image_assembly.count_amplifiers(chip)
         image_assembly.orient_channels(chip)
         image_assembly.apply_gain_conversion(chip)
