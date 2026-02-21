@@ -298,7 +298,7 @@ class ImageAssembly:
             overscan_method = self.overscan_method
 
         # TODO: l1_obj = l0_obj.to_l1()
-        l1_obj = None
+        l1_obj = KPF1()
 
         for chip in chips:
             self.count_amplifiers(chip)
@@ -308,7 +308,8 @@ class ImageAssembly:
             self.subtract_overscan(chip, overscan_method)
             self.orient_channels(chip)
             
-            # TODO: l1_obj.dataf'{chip}_CCD'], l1_obj.data[f'{chip}_VAR'] = self.stitch_ffi(chip)
-            ccd_ffi[chip], var_ffi[chip] = self.stitch_ffi(chip)
+            ccd_ffi, var_ffi = self.stitch_ffi(chip)
+            l1_obj.set_data(f'{chip}_CCD', data=ccd_ffi)
+            l1_obj.set_data(f'{chip}_VAR', data=var_ffi)        
         
         return l1_obj
