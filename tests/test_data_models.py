@@ -479,42 +479,35 @@ class TestKPF2Aliases:
                 assert alias in kpf2.extensions, f"{alias} not found"
                 assert kpf2.data[alias] is kpf2.data[canonical]
 
-    def test_green_red_methods(self):
-        """Test per-chip slicing after populating traces with data."""
+    def test_chip_prefix_access(self):
+        """Test GREEN_/RED_ prefix returns correct slices of concatenated trace."""
+        from kpfpipe.constants import NORDER_GREEN, NORDER_RED
         kpf2 = KPF2()
-        # Create synthetic trace data: 35 green orders + 30 red orders
-        n_green, n_red = 35, 30
         n_pix = 100
-        trace_data = np.random.random((n_green + n_red, n_pix))
+        trace_data = np.random.random((NORDER_GREEN + NORDER_RED, n_pix))
         kpf2.set_data("TRACE3_FLUX", trace_data)
 
-        # Populate ORDER_TABLE with wavelengths to define the split
-        wave_start = np.concatenate([
-            np.linspace(4450, 5800, n_green),  # green orders
-            np.linspace(5900, 8600, n_red),     # red orders
-        ])
-        wave_end = wave_start + 50
-        import pandas as pd
-        order_df = pd.DataFrame({
-            "ECHELLE_ORDER": np.arange(n_green + n_red),
-            "ORDER_INDEX": np.arange(n_green + n_red),
-            "WAVE_START": wave_start,
-            "WAVE_END": wave_end,
-        })
-        kpf2.set_data("ORDER_TABLE", order_df)
+        green = kpf2.data["GREEN_SCI2_FLUX"]
+        red = kpf2.data["RED_SCI2_FLUX"]
+        assert green.shape == (NORDER_GREEN, n_pix)
+        assert red.shape == (NORDER_RED, n_pix)
+        np.testing.assert_array_equal(green, trace_data[:NORDER_GREEN])
+        np.testing.assert_array_equal(red, trace_data[NORDER_GREEN:])
 
-        green = kpf2.green("SCI2", "FLUX")
-        red = kpf2.red("SCI2", "FLUX")
-        assert green.shape == (n_green, n_pix)
-        assert red.shape == (n_red, n_pix)
-        np.testing.assert_array_equal(green, trace_data[:n_green])
-        np.testing.assert_array_equal(red, trace_data[n_green:])
-
-    def test_green_red_raises_without_order_table(self):
+    def test_chip_prefix_contains(self):
+        """GREEN_SCI2_FLUX should be 'in' the data dict."""
         kpf2 = KPF2()
-        kpf2.set_data("TRACE3_FLUX", np.zeros((10, 100)))
-        with pytest.raises(ValueError, match="ORDER_TABLE not populated"):
-            kpf2.green("SCI2", "FLUX")
+        assert "GREEN_SCI2_FLUX" in kpf2.data
+        assert "RED_CAL_WAVE" in kpf2.data
+        assert "GREEN_NONEXISTENT" not in kpf2.data
+
+    def test_chip_prefix_all_fibers(self):
+        """All chip+fiber+dtype combinations should work."""
+        kpf2 = KPF2()
+        for fiber in ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]:
+            for dtype in ["FLUX", "WAVE", "VAR", "BLAZE"]:
+                assert f"GREEN_{fiber}_{dtype}" in kpf2.data
+                assert f"RED_{fiber}_{dtype}" in kpf2.data
 
 
 class TestKPF4:
