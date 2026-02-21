@@ -11,19 +11,17 @@ Processes data from L0 to L1.
 import numpy as np
 import pandas as pd
 
-from kpfpipe import REPO_ROOT
+from kpfpipe import REPO_ROOT, DEFAULTS
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.stats import flag_outliers
 
-DEFAULTS = {'overscan_method':'rowmedian'}
+DEFAULTS.update({'overscan_method': 'rowmedian'})
 
 
 class ImageAssembly:
     def __init__(self, l0_obj, config={}):
         self.l0_obj = l0_obj
-        self.CHIPS = ['GREEN', 'RED']
 
-        # TODO: check if this config parsing works
         for k in DEFAULTS.keys():
             self.__setattr__(k, config.get(k,DEFAULTS[k]))
 
@@ -63,17 +61,15 @@ class ImageAssembly:
         
 
     def _read_orientation_reference(self, chip):
-        chip = chip.upper()
-        
         if not hasattr(self, 'orientation'):
             self.orientation = {}
 
         filepath = f'{REPO_ROOT}/reference/ccd_orientation_{chip.lower()}.txt'
         with open(filepath, 'r') as f:
             df = pd.read_csv(f, delimiter=' ')
-            self.orientation[chip] = dict(zip(df['CHANNEL_EXT'], df['CHANNEL_KEY']))
+            self.orientation[chip.upper()] = dict(zip(df['CHANNEL_EXT'], df['CHANNEL_KEY']))
 
-        return self.orientation[chip]
+        return self.orientation[chip.upper()]
 
     
     def orient_channels(self, chip):
@@ -295,14 +291,16 @@ class ImageAssembly:
         return ccd_ffi, var_ffi
     
 
-    def perform(self, overscan_method=None):
+    def perform(self, chips=None, overscan_method=None):
+        if chips is None:
+            chips = self.chips
         if overscan_method is None:
             overscan_method = self.overscan_method
 
         # TODO: l1_obj = l0_obj.to_l1()
-        l1_obj = None
+        l1_obj = KPF1()
 
-        for chip in self.CHIPS:
+        for chip in chips:
             self.count_amplifiers(chip)
             self.orient_channels(chip)
             self.apply_gain_conversion(chip)
@@ -310,7 +308,8 @@ class ImageAssembly:
             self.subtract_overscan(chip, overscan_method)
             self.orient_channels(chip)
             
-            # TODO: l1_obj.dataf'{chip}_CCD'], l1_obj.data[f'{chip}_VAR'] = self.stitch_ffi(chip)
-            ccd_ffi[chip], var_ffi[chip] = self.stitch_ffi(chip)
+            ccd_ffi, var_ffi = self.stitch_ffi(chip)
+            l1_obj.set_data(f'{chip}_CCD', data=ccd_ffi)
+            l1_obj.set_data(f'{chip}_VAR', data=var_ffi)        
         
         return l1_obj
