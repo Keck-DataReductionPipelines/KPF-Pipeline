@@ -64,9 +64,11 @@ class SpectralExtraction:
 
         filepath = f'{REPO_ROOT}/reference/order_trace_{chip.lower()}.csv'
         with open(filepath, 'r') as f:
-            self.order_trace[chip.upper()] = pd.read_csv(f, index_col=0)
-
-        return self.order_trace[chip.upper()]
+            self.order_trace[chip.upper()] = (
+                pd.read_csv(f, index_col=0)
+                .set_index(['Fiber', 'Order'])
+                .sort_index()
+            )
 
 
     def _get_orderlet_pixels(self, chip, fiber, order, return_coords=False):
@@ -114,13 +116,10 @@ class SpectralExtraction:
         var_image = self.l1_obj.data[f'{chip}_VAR']
         nrow, ncol = data_image.shape
 
-        try:
-            trace = self.order_trace[f'{chip}']
-        except (KeyError, AttributeError) as e:
-            trace = self._read_order_trace_reference(chip)
+        if not hasattr(self, 'order_trace') or chip not in self.order_trace:
+            self._read_order_trace_reference(chip)
 
-        trace = trace[(trace.Fiber == fiber) & (trace.Order == order)].squeeze()
-
+        trace = self.order_trace[chip].loc[(fiber, order)]
         assert trace.ndim == 1, f"Expected only one trace, got {trace.shape[0]}"
 
         # track the trace position
@@ -170,7 +169,7 @@ class SpectralExtraction:
         mask_bot = _row == _edge_pixel_bottom
         frac_bot = np.tile((1 - (_trace_bottom - box_zeropt - _edge_pixel_bottom)), (box_height,1))
         W[mask_bot] = frac_bot[mask_bot]
-
+        
         if return_coords:
             return D, V, W, box_zeropt, box_zeropt+box_height
         return D, V, W
@@ -213,9 +212,8 @@ class SpectralExtraction:
         if np.any(np.sum(M*W, axis=0) == 0):
             raise ValueError("Fully masked columns detected in trace")
 
-        # TODO: better nan handling to avoid np.nansum and improve speed
-        flux_1d = np.nansum((D - S) * W, axis=0)
-        var_1d = np.nansum(V * W, axis=0)
+        flux_1d = np.sum((D - S) * W, axis=0)
+        var_1d = np.sum(V * W, axis=0)
                         
         return flux_1d, var_1d
 
@@ -422,7 +420,7 @@ class SpectralExtraction:
         l2_obj = self.l1_obj.to_rv2()
 
         for chip in chips:
-            l2_arrays = self.extract_ffi(chips, fibers, method)
+            l2_arrays = self.extract_ffi(chip, fibers, method)
 
             for k in l2_arrays.keys():
                 l2_obj.set_data(k, l2_arrays[k])
