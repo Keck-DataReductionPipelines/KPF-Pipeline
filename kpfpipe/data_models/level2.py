@@ -26,18 +26,18 @@ _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _TRACE_MAP = pd.read_csv(_config_path / "L2-trace-map.csv")
 _L2_ALIASES = pd.read_csv(_config_path / "L2-aliases.csv")
 
-# Data types that each trace carries
-_TRACE_DTYPES = ["FLUX", "WAVE", "VAR", "BLAZE"]
+# Extension name suffixes for each trace (e.g., TRACE3_FLUX, TRACE3_WAVE)
+_TRACE_SUFFIXES = ["FLUX", "WAVE", "VAR", "BLAZE"]
 
 # Build a set of valid chip-prefix keys for fast membership testing.
 # e.g., {"GREEN_CAL_FLUX", "RED_CAL_FLUX", "GREEN_SCI1_FLUX", ...}
-_CHIP_PREFIX_KEYS = {}  # chip_fiber_dtype → (fiber_alias, chip)
+_CHIP_PREFIX_KEYS = {}  # chip_fiber_suffix → (fiber_alias, chip)
 for _, _row in _TRACE_MAP.iterrows():
     _fiber = str(_row["Fiber"]).strip()
-    for _dtype in _TRACE_DTYPES:
-        _fiber_alias = f"{_fiber}_{_dtype}"
+    for _suffix in _TRACE_SUFFIXES:
+        _fiber_alias = f"{_fiber}_{_suffix}"
         for _chip in ("GREEN", "RED"):
-            _CHIP_PREFIX_KEYS[f"{_chip}_{_fiber}_{_dtype}"] = (_fiber_alias, _chip)
+            _CHIP_PREFIX_KEYS[f"{_chip}_{_fiber}_{_suffix}"] = (_fiber_alias, _chip)
 
 
 class _KPF2DataDict(AliasedOrderedDict):
@@ -123,8 +123,8 @@ class KPF2(RV2):
 
         # RV2 creates only TRACE1 by default; KPF uses 5 traces
         for trace_num in range(2, 6):
-            for dtype in _TRACE_DTYPES:
-                ext = f"TRACE{trace_num}_{dtype}"
+            for suffix in _TRACE_SUFFIXES:
+                ext = f"TRACE{trace_num}_{suffix}"
                 if ext not in self.extensions:
                     self.create_extension(ext, "ImageHDU")
 
@@ -157,9 +157,9 @@ class KPF2(RV2):
         for _, row in _TRACE_MAP.iterrows():
             trace_num = int(row["Trace"])
             fiber = str(row["Fiber"]).strip()
-            for dtype in _TRACE_DTYPES:
-                canonical = f"TRACE{trace_num}_{dtype}"
-                alias = f"{fiber}_{dtype}"
+            for suffix in _TRACE_SUFFIXES:
+                canonical = f"TRACE{trace_num}_{suffix}"
+                alias = f"{fiber}_{suffix}"
                 if canonical in self.extensions:
                     self.extensions.register_alias(alias, canonical)
                     self.headers.register_alias(alias, canonical)

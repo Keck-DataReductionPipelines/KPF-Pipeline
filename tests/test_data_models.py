@@ -471,11 +471,11 @@ class TestKPF2Aliases:
 
     def test_all_trace_aliases_registered(self):
         kpf2 = KPF2()
-        # Check all 5 fibers x 4 data types = 20 aliases
+        # Check all 5 fibers x 4 suffixes = 20 aliases
         for fiber, trace in [("CAL", 1), ("SCI1", 2), ("SCI2", 3), ("SCI3", 4), ("SKY", 5)]:
-            for dtype in ["FLUX", "WAVE", "VAR", "BLAZE"]:
-                alias = f"{fiber}_{dtype}"
-                canonical = f"TRACE{trace}_{dtype}"
+            for suffix in ["FLUX", "WAVE", "VAR", "BLAZE"]:
+                alias = f"{fiber}_{suffix}"
+                canonical = f"TRACE{trace}_{suffix}"
                 assert alias in kpf2.extensions, f"{alias} not found"
                 assert kpf2.data[alias] is kpf2.data[canonical]
 
@@ -502,12 +502,12 @@ class TestKPF2Aliases:
         assert "GREEN_NONEXISTENT" not in kpf2.data
 
     def test_chip_prefix_all_fibers(self):
-        """All chip+fiber+dtype combinations should work."""
+        """All chip+fiber+suffix combinations should work."""
         kpf2 = KPF2()
         for fiber in ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]:
-            for dtype in ["FLUX", "WAVE", "VAR", "BLAZE"]:
-                assert f"GREEN_{fiber}_{dtype}" in kpf2.data
-                assert f"RED_{fiber}_{dtype}" in kpf2.data
+            for suffix in ["FLUX", "WAVE", "VAR", "BLAZE"]:
+                assert f"GREEN_{fiber}_{suffix}" in kpf2.data
+                assert f"RED_{fiber}_{suffix}" in kpf2.data
 
 
 class TestKPF4:
