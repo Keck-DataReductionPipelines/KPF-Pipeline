@@ -3,10 +3,10 @@ KPF-specific base data model.
 
 Thin layer on top of RVDataModel that adds KPF-specific attributes
 and override points for filename conventions. L0 and L1 subclass this.
-L2+ data products use RVData classes directly (RV2, RV4).
+L2 and L4 data products use KPF2 and KPF4 (which extend RV2/RV4
+with KPF-friendly extension aliases).
 """
 
-import os
 import re
 
 from rvdata.core.models.base import RVDataModel
