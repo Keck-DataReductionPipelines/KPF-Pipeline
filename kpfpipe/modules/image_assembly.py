@@ -8,8 +8,9 @@ from kpfpipe import REPO_ROOT, DEFAULTS
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.stats import flag_outliers
 
-DEFAULTS.update({'overscan_method': 'rowmedian'})
-# TODO: move prescan and buffer to DEFAULTS
+DEFAULTS.update({
+    'overscan_method': 'rowmedian',
+})
 
 class ImageAssembly:
     """
@@ -326,7 +327,7 @@ class ImageAssembly:
         return bias
 
 
-    def subtract_overscan(self, chip, method, prescan=[0,4], buffer=[0,0]):
+    def subtract_overscan(self, chip, method=None, prescan=[0,4], buffer=[0,0]):
         """
         Subtract overscan bias from imaging pixels for each amplifier. Also
         removes overscan region from amplifier channel, leaving only active
@@ -347,6 +348,9 @@ class ImageAssembly:
         -------
         None
         """
+        if method is None:
+            method = self.overscan_method
+
         try:
             oscan_fxn = self.__getattribute__(f'_oscan_{method}')
         except AttributeError as e:
