@@ -445,12 +445,12 @@ class SpectralExtraction:
         if method is None:
             method = self.extraction_method
 
-        l2_obj = self.l1_obj.to_rv2()
+        #l2_obj = self.l1_obj.to_rv2()
 
         for chip in chips:
             l2_arrays = self.extract_ffi(chip, fibers, method)
 
-            for k in l2_arrays.keys():
-                l2_obj.set_data(k, l2_arrays[k])
+            #for k in l2_arrays.keys():
+            #    l2_obj.set_data(k, l2_arrays[k])
 
-        return l2_obj
+        return None
