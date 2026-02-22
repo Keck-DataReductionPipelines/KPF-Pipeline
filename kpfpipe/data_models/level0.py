@@ -159,7 +159,7 @@ class KPF0(KPFDataModel):
 
     _L0_TO_L1_PASSTHROUGH = ["CA_HK", "EXPMETER_SCI", "EXPMETER_SKY", "TELEMETRY", "CONFIG"]
 
-    def to_l1(self):
+    def to_kpf1(self):
         """Create a KPF1 scaffold from this L0, carrying over headers and pass-through extensions.
 
         Returns a KPF1 with PRIMARY header, pass-through extensions (CA_HK,
