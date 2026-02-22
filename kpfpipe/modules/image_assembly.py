@@ -1,12 +1,5 @@
 """
 KPF Image Assembly module.
-
-Processes data from L0 to L1.
- - orients amplifier channels
- - applies gain (ADU --> photo-electrons)
- - measures read noise
- - subtracts overscan bias
- - assembles full frame image
 """
 import numpy as np
 import pandas as pd
@@ -16,9 +9,19 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({'overscan_method': 'rowmedian'})
-
+# TODO: move prescan and buffer to DEFAULTS
 
 class ImageAssembly:
+    """
+    This class performs CCD-level processing to convert L0 data to L1.
+
+    Operations include:
+      - orienting amplifier channels
+      - applying gain conversion (ADU --> photo-electrons)
+      - measuring read noise
+      - subtracting overscan bias
+      - assembling full-frame images (FFI)
+    """
     def __init__(self, l0_obj, config={}):
         self.l0_obj = l0_obj
 
@@ -29,15 +32,24 @@ class ImageAssembly:
     
     def count_amplifiers(self, chip):
         """
-        Determine if extensions are present for a given CCD and
-        count the number of amplifier regions. Sets attributes to
-        track chips, namp, and dims (i.e. channel dimensions)
-        
-        Args:
-            chip (str) : which CCD to use, 'GREEN' or 'RED'
-        
-        Returns:
-            None
+        Count the number of amplifier extensions present for a given CCD and
+        determine their channel dimensions.
+
+        Parameters
+        ----------
+        chip : str
+            CCD identifier, e.g., 'GREEN' or 'RED'.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Sets instance attributes:
+        - `self.namp[chip]` : number of amplifier regions detected.
+        - `self.dims[chip]` : shape of each amplifier channel.
+        Only 2-amp and 4-amp configurations are supported.
         """
         if not hasattr(self, 'namp'):
             self.namp = {}
@@ -61,6 +73,25 @@ class ImageAssembly:
         
 
     def _read_orientation_reference(self, chip):
+        """
+        Load the orientation mapping for amplifier channels from reference files.
+
+        Parameters
+        ----------
+        chip : str
+            CCD identifier, e.g., 'GREEN' or 'RED'.
+
+        Returns
+        -------
+        dict
+            Dictionary mapping channel extensions to orientation keys.
+
+        Notes
+        -----
+        Orientation keys indicate how to flip/rotate each amplifier channel to 
+        standard orientation (serial overscan on right, parallel overscan on bottom).
+        Cached in `self.orientation` for repeated use.
+        """
         if not hasattr(self, 'orientation'):
             self.orientation = {}
 
@@ -74,19 +105,21 @@ class ImageAssembly:
     
     def orient_channels(self, chip):
         """
-        Reorients amplifier channels in place to standardize readout orientation.
-            - serial overscan on right
-            - parallel overscan on bottom
-        
-        All transformations are flips, so a second call will undo the transformation.
-          - call once before estimating read noise and overscan bias
-          - call again before stitching channels into a full frame image
-        
-        Args:
-            chip (str) : which CCD to use, 'GREEN' or 'RED'
-        
-        Returns:
-            None
+        Reorient amplifier channels to a standard orientation in-place.
+        (serial overscan on right, parallel overscan on bottom)
+
+        Parameters
+        ----------
+        chip : str
+            CCD identifier, e.g., 'GREEN' or 'RED'.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        The transformations are flips; calling twice will undo the operation.
         """
         chip = chip.upper()
         orientation = self._read_orientation_reference(chip)
@@ -110,7 +143,21 @@ class ImageAssembly:
 
     def apply_gain_conversion(self, chip):
         """
-        Apply gain to convert ADU to photo-electrons
+        Convert pixel values from ADU to photo-electrons using amplifier-specific gain.
+        Amplifier channels are modified in-place.
+
+        Parameters
+        ----------
+        chip : str
+            CCD identifier, e.g., 'GREEN' or 'RED'.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Conversion formula: pixel_electrons = pixel_ADU * gain / 65536
         """
         # TODO: move gain to static config file or...
         # TODO: should we read gain from header?
@@ -134,18 +181,29 @@ class ImageAssembly:
 
     def _get_overscan_pixels(self, chip, amp_no, prescan=[0,4], buffer=[0,0]):
         """
-        Gets array of overscan pixel from full amplifier region
-        Assumes image orientaion has been standardized
-            - serial overscan on right
-            - parallel overscan on bottom
+        Extract overscan pixels for a given amplifier.
 
-        Args:
-            chip (str) : which CCD to use, 'GREEN' or 'RED'
-            amp_no (int) : amplifier number
+        Parameters
+        ----------
+        chip : str
+            CCD identifier, e.g., 'GREEN' or 'RED'.
+        amp_no : int
+            Amplifier number (1-4).
+        prescan : list of int, optional
+            Columns corresponding to prescan region [start, end].
+        buffer : list of int, optional
+            Number of pixels to ignore at edges [start, end].
 
-        Returns:
-            oscan_pix_srl (np.ndarray): Array of serial overscan pixels
-            oscan_pix_prl (np.ndarray): Array of parallel overscan pixels
+        Returns
+        -------
+        oscan_pix_srl : ndarray
+            Serial overscan pixels (columns beyond imaging area).
+        oscan_pix_prl : ndarray
+            Parallel overscan pixels (rows beyond imaging area).
+
+        Notes
+        -----
+        Assumes image orientation has been standardized.
         """
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f'{chip}_AMP{amp_no}']
@@ -167,17 +225,25 @@ class ImageAssembly:
 
     def _get_imaging_pixels(self, chip, amp_no, prescan=[0,4]):
         """
-        Gets array of imaging pixels from full amplifier region
-        Assumes image orientaion has been standardized
-            - serial overscan on right
-            - parallel overscan on bottom
+        Extract imaging pixels (active CCD area) for a given amplifier.
 
-        Args:
-            chip (str) : which CCD to use, 'GREEN' or 'RED'
-            amp_no (int) : amplifier number
+        Parameters
+        ----------
+        chip : str
+            CCD identifier, e.g., 'GREEN' or 'RED'.
+        amp_no : int
+            Amplifier number (1-4).
+        prescan : list of int, optional
+            Columns corresponding to prescan region [start, end].
 
-        Returns:
-            ndarray : data with only active imaging area pixels
+        Returns
+        -------
+        ndarray
+            2D array of imaging pixels.
+
+        Notes
+        -----
+        Assumes image orientation has been standardized.
         """
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f'{chip}_AMP{amp_no}']
@@ -192,7 +258,28 @@ class ImageAssembly:
 
     def measure_read_noise(self, chip, prescan=[0,4], buffer=[5,5], sigma=10.0):
         """
-        Measure read noise from overscan region
+        Estimate read noise for each amplifier from overscan pixels.
+
+        Parameters
+        ----------
+        chip : str
+            CCD identifier, e.g., 'GREEN' or 'RED'.
+        prescan : list of int, optional
+            Columns corresponding to prescan region [start, end].
+        buffer : list of int, optional
+            Number of pixels to ignore at the edges [start, end].
+        sigma : float, optional
+            Threshold for sigma clipping overscan pixels.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Stores results in:
+        - `self.readnoise[channel_ext]` : standard deviation of cleaned overscan.
+        - `self.rn_nongauss[channel_ext]` : non-Gaussian factor computed as std/mad.
         """
         if not hasattr(self, 'readnoise'):
             self.readnoise = {}
@@ -241,12 +328,24 @@ class ImageAssembly:
 
     def subtract_overscan(self, chip, method, prescan=[0,4], buffer=[0,0]):
         """
-        Performs the following operations
-          - estimates overscan bias level
-          - subtracts overscan bias from active imaging pixels
-          - removes overscan region from channel, leaving only imaging pixels
+        Subtract overscan bias from imaging pixels for each amplifier. Also
+        removes overscan region from amplifier channel, leaving only active
+        imaging area pixels. Amplifier channels are modified in-place.
 
-        Supported methods are 'zero', 'median', and 'rowmedian'
+        Parameters
+        ----------
+        chip : str
+            CCD identifier, e.g., 'GREEN' or 'RED'.
+        method : str
+            Overscan subtraction method ('zero', 'median', 'rowmedian').
+        prescan : list of int, optional
+            Columns corresponding to prescan region.
+        buffer : list of int, optional
+            Number of pixels to ignore at edges.
+
+        Returns
+        -------
+        None
         """
         try:
             oscan_fxn = self.__getattribute__(f'_oscan_{method}')
@@ -260,6 +359,28 @@ class ImageAssembly:
 
 
     def stitch_ffi(self, chip, prescan=[0,4]):
+        """
+        Combine individual amplifier channels into a full-frame image (FFI).
+
+        Parameters
+        ----------
+        chip : str
+            CCD identifier, e.g., 'GREEN' or 'RED'.
+        prescan : list of int, optional
+            Columns corresponding to prescan region.
+
+        Returns
+        -------
+        ccd_ffi : ndarray
+            Full-frame data image.
+        var_ffi : ndarray
+            Full-frame variance image, incorporating read noise.
+
+        Notes
+        -----
+        Supports 2-amp and 4-amp CCD configurations. Raises an error if
+        any other number of amplifiers is detected.
+        """
         chip = chip.upper()
 
         ccd_ffi = np.zeros((4080,4080), dtype=np.float32)
@@ -292,6 +413,34 @@ class ImageAssembly:
     
 
     def perform(self, chips=None, overscan_method=None):
+        """
+        Execute the image assembly algorithm. Optional keyword arguments
+        default to config settings.
+
+        Parameters
+        ----------
+        chips : list of str, optional
+            CCD identifiers to process, i.e. 'GREEN', 'RED'
+        overscan_method : str, optional
+            Method for overscan subtraction ('zero', 'median', 'rowmedian').
+
+        Returns
+        -------
+        l1_obj : KPF1
+            L1 data object containing assembled full frame images (FFIs)
+            for data and variance.
+
+        Notes
+        -----
+        Pipeline steps:
+        1. Count amplifiers and determine dimensions
+        2. Orient amplifier channels
+        3. Apply gain conversion (ADU --> electrons)
+        4. Measure read noise
+        5. Subtract overscan bias
+        6. Re-orient channels if needed
+        7. Stitch channels into a full-frame image
+        """
         if chips is None:
             chips = self.chips
         if overscan_method is None:
