@@ -177,6 +177,30 @@ class KPF2(RV2):
             ext_name = self.extensions._resolve(ext_name)
         super().set_header(ext_name, header)
 
+    def to_kpf4(self):
+        """Create a KPF4 scaffold from this KPF2, carrying over headers and receipt.
+
+        Returns a KPF4 with PRIMARY header keywords forwarded from L2,
+        and the receipt chain preserved. RV and CCF data extensions are
+        created but empty — the caller (RV computation) fills those in.
+        """
+        from kpfpipe.data_models.level4 import KPF4
+
+        kpf4 = KPF4()
+
+        # Forward PRIMARY header
+        if "PRIMARY" in self.headers:
+            for key, value in self.headers["PRIMARY"].items():
+                kpf4.headers["PRIMARY"][key] = value
+
+        # Carry forward receipt
+        if self.receipt is not None and not self.receipt.empty:
+            kpf4.receipt = self.receipt.copy()
+
+        kpf4.headers["PRIMARY"]["DATALVL"] = ("L4", "Data product level")
+        kpf4.receipt_add_entry("to_kpf4", "PASS")
+        return kpf4
+
     def info(self):
         """Print summary of KPF2 data model contents."""
         if self.filename:

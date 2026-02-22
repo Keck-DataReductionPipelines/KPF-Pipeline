@@ -510,6 +510,39 @@ class TestKPF2Aliases:
                 assert f"RED_{fiber}_{suffix}" in kpf2.data
 
 
+class TestToKPF4:
+    def test_to_kpf4_creates_kpf4(self):
+        kpf2 = KPF2()
+        kpf4 = kpf2.to_kpf4()
+        assert isinstance(kpf4, KPF4)
+        assert kpf4.level == 4
+
+    def test_to_kpf4_forwards_primary_header(self):
+        kpf2 = KPF2()
+        kpf2.headers["PRIMARY"]["INSTRUME"] = "KPF"
+        kpf2.headers["PRIMARY"]["OBJECT"] = "HD_10700"
+        kpf4 = kpf2.to_kpf4()
+        assert kpf4.headers["PRIMARY"]["INSTRUME"] == "KPF"
+        assert kpf4.headers["PRIMARY"]["OBJECT"] == "HD_10700"
+
+    def test_to_kpf4_sets_datalvl(self):
+        kpf2 = KPF2()
+        kpf4 = kpf2.to_kpf4()
+        datalvl = kpf4.headers["PRIMARY"]["DATALVL"]
+        assert (datalvl[0] if isinstance(datalvl, tuple) else datalvl) == "L4"
+
+    def test_to_kpf4_carries_receipt(self):
+        kpf2 = KPF2()
+        kpf4 = kpf2.to_kpf4()
+        assert "to_kpf4" in kpf4.receipt["Module_Name"].values
+
+    def test_to_kpf4_leaves_rv_empty(self):
+        kpf2 = KPF2()
+        kpf4 = kpf2.to_kpf4()
+        assert "RV1" in kpf4.extensions
+        assert len(kpf4.data["RV1"]) == 0
+
+
 class TestKPF4:
     def test_kpf4_inherits_rv4(self):
         from rvdata.core.models.level4 import RV4
