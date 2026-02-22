@@ -14,8 +14,14 @@ from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
     'nframe_stream': 5,
-    'stack_sigma':, 5.0
+    'stack_sigma': 5.0
 })
+
+# TODO: scale stacks by exposure time
+# TODO: double-check variance calculations for correctness
+# TODO: check consistency of nframe_stream and nframe_direct keywords
+# TODO: line profile and remove uneccessary array allocations
+# TODO: stack frames into L1 object
 
 
 class BaseMastersModule:
@@ -41,8 +47,8 @@ class BaseMastersModule:
     def stack_frames(self, l0_file_list=None, nframe_stream=None, sigma=None):
         """
         Stacks full frame images and computes clipped mean and variance
-          * For N <= 5, statistics are computed directly
-          * For N > 5, computation uses streaming Welford's algorithm
+          * For nframe_stream <= 5, statistics are computed directly
+          * For nframe_stream > 5, computation uses streaming Welford's algorithm
 
           Note: need to cache direct frames as e.g. self.direct_frames to avoid re-reading
           Note: make sure that files are clearing from memory after read (in KPF0?)
@@ -55,11 +61,11 @@ class BaseMastersModule:
             sigma = self.stack_sigma
 
         if len(l0_file_list) <= nframe_stream:
-            mean, var = self.compute_direct_statistics(sigma = sigma)
+            stats = self.compute_direct_statistics(sigma = sigma)
         else:
-            mean, var = self.compute_streaming_statistics(sigma = sigma)
+            stats = self.compute_streaming_statistics(sigma = sigma)
 
-        return mean, var
+        return None
 
 
     def compute_direct_statistics(self, l0_file_list=None, nframe_stack=None, nframe_cache=None, sigma=None):
@@ -131,73 +137,130 @@ class BaseMastersModule:
 
         stats = {}
 
-        for chip in chips:
+        for chip in self.chips:
             stats[f'{chip}_CCD'] = {}
             stats[f'{chip}_VAR'] = {}
 
-            # TODO: streamline quality control
+            # TODO: replace with robust quality control
             if np.any(np.isnan(data_cube[f'{chip}_CCD'])):
                 raise ValueError(f"NaN values detected in {chip}_CCD data cube")
             if np.any(np.isnan(data_cube[f'{chip}_VAR'])):
                 raise ValueError(f"NaN values detected in {chip}_VAR data cube")
 
-            out = flag_outliers(data_cube[f'{chip}_CCD'], axis=0) | flag_outliers(data_cube[f'{chip}_VAR'], axis=0)
+            out = (
+                flag_outliers(data_cube[f'{chip}_CCD'], sigma, axis=0) | 
+                flag_outliers(data_cube[f'{chip}_VAR'], sigma, axis=0)
+            )
 
             for suffix in ['CCD', 'VAR']:
                 ext_name = f'{chip}_{suffix}'
 
-                stats[ext_name]['nframe'] = np.sum(~out, axis=0)
+                N = np.sum(~out, axis=0)
+                stats[ext_name]['nframe'] = N
 
-                S = np.sum(np.where(out, 0, data_cube[ext_name]), axis=0)
-                stats[ext_name]['mean'] = S / stats[ext_name]['nframe']
+                X = np.sum(np.where(out, 0, data_cube[ext_name]), axis=0)
+                stats[ext_name]['mean'] = np.where(N >= 1, X / N, np.nan)
 
-                S2 = np.sum(np.where(out, 0, (data_cube[ext_name] - stats[ext_name]['mean'])**2), axis=0)
-                stats[ext_name]['rms'] = np.sqrt(S2 / stats[ext_name]['nframe'])
+                X2 = np.sum(np.where(out, 0, (data_cube[ext_name] - stats[ext_name]['mean'])**2), axis=0)
+                stats[ext_name]['rms'] = np.where(N >= 2, np.sqrt(X2 / N), np.nan)
 
         return stats
 
 
-    def compute_streaming_statistics(self, sigma_clip=5.0):
+    def compute_streaming_statistics(self, l0_file_list=None, nframe_direct=None, sigma=None):
         """
         Computes mean and variance using Welford's algorithm
+        
+        Note that the variance computed by Welford's algorithm is the frame-to-frame
+        variance NOT the photon noise variance, which is the weighted sum of variance
+        across all frames in the stack.
+
+
         Optimized to reduce RAM usage at the expense of compute speed
         Estimates approximate mean and variance directly to perform outlier rejection
+
+        nframe_direct : maximum number of frames pass to compute_direct_statistics
         """
-        if sigma_clip:
-            approx_mean, approx_var = self.compute_direct_mean_and_variance(sigma_clip = sigma_clip, nframe_max = 5)
-            lower = approx_mean - sigma_clip * np.sqrt(approx_var)
-            upper = approx_mean + sigma_clip * np.sqrt(approx_var)
-        else:
-            lower = -np.inf
-            upper = np.inf
-            
-        S = np.zeros((NROW,NCOL), dtype=float)
-        S2 = np.zeros((NROW,NCOL), dtype=float)
-        count = np.zeros((NROW,NCOL), dtype=int)
+        if l0_file_list is None:
+            l0_file_list = self.l0_file_list
+        if nframe_direct is None:
+            nframe_direct = self.nframe_stream
+        if sigma is None:
+            sigma = self.stack_sigma
+
+        approx_stats = self.compute_direct_statistics(l0_file_list=l0_file_list,
+                                                     nframe_stack=nframe_direct, 
+                                                     nframe_cache=nframe_direct, 
+                                                     sigma=sigma
+                                                     )
+        
+        if len(l0_file_list) <= nframe_direct:
+            return approx_stats  # exact_stats = approx_stats
+
+        exact_stats = {}
+
+        for chip in self.chips:
+            for suffix in ['CCD', 'VAR']:
+                ext_name = f'{chip}_{suffix}'
+
+                exact_stats[ext_name] = {}
+                exact_stats[ext_name]['nframe'] = np.zeros((NROW,NCOL),dtype=int)
+                exact_stats[ext_name]['mean'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext_name]['X2'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                
+                approx_stats[ext_name]['lower'] = approx_stats[ext_name]['mean'] - sigma * approx_stats[ext_name]['rms']
+                approx_stats[ext_name]['upper'] = approx_stats[ext_name]['mean'] + sigma * approx_stats[ext_name]['rms']
+
         failure = 0
 
-        for i, obs_id in enumerate(self.obs_ids):
-            # TODO: scale by exposure time
-            try:
-                l0_obj = self.load_frame(obs_id)
-                frame = self.assemble_frame(l0_obj)
-            except Exception as e:
-                logger.warning(f"Skipping {obs_id} in compute_streaming_mean_and_variance: {e}")
-                failure += 1
-                continue
+        for fn in l0_file_list:
+            if fn in self._l1_obj_cache.keys():
+                l1_obj = self._l1_obj_cache[fn]
+                
+            else:
+                try:
+                    l0_obj = self.load_frame(fn)
+                    l1_obj = self.assemble_frame(l0_obj)
+                except FileNotFoundError as e:
+                    warnings.warn(f"Skipping {fn} in compute_streaming_statistics: {e}")
+                    failure += 1
+                    continue
 
-            if failure / len(self.obs_ids) > 0.2:
+            if failure / len(l0_file_list) > 0.2:
                 raise ValueError(f"more than 20% of frames in stack failed to load")
+        
+            for chip in self.chips:
+                for suffix in ['CCD', 'VAR']:
+                    ext_name = f'{chip}_{suffix}'
 
-            mask = (frame >= lower) & (frame <= upper)
-            S += frame * mask
-            S2 += frame ** 2 * mask
-            count += mask.astype(int)
+                    frame = l1_obj.data[ext_name]
+                    lower = approx_stats[ext_name]['lower']
+                    upper = approx_stats[ext_name]['upper']
+                    mask = (frame >= lower) & (frame <= upper)
+
+                    exact_stats[ext_name]['nframe'] += mask.astype(int)
+
+                    valid = mask & (exact_stats[ext_name]['nframe'] > 0)
+
+                    delta = np.where(valid, frame - exact_stats[ext_name]['mean'], 0)
+
+                    exact_stats[ext_name]['mean'] += (
+                        np.where(valid, delta / exact_stats[ext_name]['nframe'], 0)
+                    )
+
+                    delta2 = np.where(valid, frame - exact_stats[ext_name]['mean'], 0)
+
+                    exact_stats[ext_name]['X2'] += np.where(valid, delta * delta2, 0)
     
-        bad = count <= 0.5 * len(self.obs_ids)
-        count = np.where(bad, 1, count)
+        for chip in self.chips:
+            for suffix in ['CCD', 'VAR']:
+                ext_name = f'{chip}_{suffix}'
+                
+                N = exact_stats[ext_name]['nframe']
+                X2 = exact_stats[ext_name]['X2']
 
-        clipped_mean = np.where(bad, np.nan, S / count)
-        clipped_var = np.where(bad, np.nan, S2 / count - clipped_mean ** 2)
+                exact_stats[ext_name]['rms'] = np.where(N >= 2, np.sqrt(X2 / N), np.nan)
 
-        return clipped_mean, clipped_var
+        exact_stats.pop('X2')
+
+        return exact_stats
