@@ -1,24 +1,32 @@
+"""
+Base class for KPF Masters modules.
+"""
 from astropy.stats import mad_std
 import numpy as np
 
+from kpfpipe import DEFAULTS
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.utils import get_datecode, fetch_filepath
 from kpfpipe.constants import NROW, NCOL
 
+DEFAULTS.update({
+    'nframe_stream': 5,
+    'stack_sigma':, 5.0
+})
+
+
 class BaseMastersModule:
-    def __init__(self, obs_ids):
-        # TODO: swap obs_ids to list of filenames
+    def __init__(self, l0_file_list):
         self.obs_ids = obs_ids
+
+        for k in DEFAULTS.keys():
+            self.__setattr__(k, config.get(k,DEFAULTS[k]))
 
 
     @staticmethod
-    def load_frame(obs_id):
-        # TODO: add with statement for file handling
-        datecode = get_datecode(obs_id)
-        filepath = fetch_filepath(obs_id)
-        l0_obj = KPF0.from_fits(filepath)
-
+    def load_frame(fn):
+        l0_obj = KPF0.from_fits(fn)
         return l0_obj
 
 
@@ -27,7 +35,7 @@ class BaseMastersModule:
         return ImageAssembly(l0_obj).perform()
 
 
-    def stack_frames(self, sigma_clip=5.0):
+    def stack_frames(self, l0_file_list=None, nframe_stream=None, sigma=None):
         """
         Stacks full frame images and computes clipped mean and variance
           * For N <= 5, statistics are computed directly
@@ -36,25 +44,51 @@ class BaseMastersModule:
           Note: need to cache direct frames as e.g. self.direct_frames to avoid re-reading
           Note: make sure that files are clearing from memory after read (in KPF0?)
         """
-        if len(self.obs_ids) <= 5:
-            mean, var = self.compute_direct_mean_and_variance(sigma_clip = sigma_clip)
+        if l0_file_list is None:
+            l0_file_list = self.l0_file_list
+        if nframe_stream is None:
+            nframe_stream = self.nframe_stream
+        if sigma is None:
+            sigma = self.stack_sigma
+
+        if len(l0_file_list) <= nframe_stream:
+            mean, var = self.compute_direct_statistics(sigma = sigma)
         else:
-            mean, var = self.compute_streaming_mean_and_variance(sigma_clip = sigma_clip)
+            mean, var = self.compute_streaming_statistics(sigma = sigma)
 
         return mean, var
 
 
-    def compute_direct_mean_and_variance(self, sigma_clip=5.0, nframe_max = None):
+    def compute_direct_statistics(self, l0_file_list=None, nframe_max=None, sigma=None):
+        if l0_file_list is None:
+            l0_file_list = self.l0_file_list
         if nframe_max is None:
-            nframe = len(self.obs_ids)
-            obs_ids = self.obs_ids
-        else:
-            nframe = np.min([nframe_max,len(self.obs_ids)])
-            obs_ids = self.obs_ids[:nframe]
-
-        data_cube = np.zeros((nframe,NROW,NCOL),dtype=float)
-        failure = 0
+            nframe_max = self.nframe_stream
         
+        nframe = np.min([nframe_max,len(l0_file_list)])
+
+        if not hasattr(self, '_l1_obj_cache'):
+            self._l1_obj_cache = {}
+        
+        data_cube = {}
+
+        for chip in self.chips:
+            chip = chip.upper()
+            data_cube[chip] = np.empty((nframe,NROW,NCOL),dtype=np.float32)
+
+            i = 0
+            failure = 0
+            while (i < nframe) and (i + failure < len(l0_file_list)):
+                for fn in l0_file_list:
+                    if np.isin(fn, self._l1_obj_cache[fn]):
+                        data_cube[i]
+
+
+                try:
+                    
+                    data_cube[i] = self.load_frame(fn).assemble_frame()
+
+
         for i, obs_id in enumerate(obs_ids):
             # TODO: scale by exposure time
             try:
@@ -85,7 +119,7 @@ class BaseMastersModule:
         return clipped_mean, clipped_var
 
 
-    def compute_streaming_mean_and_variance(self, sigma_clip=5.0):
+    def compute_streaming_statistics(self, sigma_clip=5.0):
         """
         Computes mean and variance using Welford's algorithm
         Optimized to reduce RAM usage at the expense of compute speed

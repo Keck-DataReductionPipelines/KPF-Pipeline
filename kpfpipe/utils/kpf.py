@@ -82,32 +82,3 @@ def fetch_filepath(input_str, *, level=None, master=None, abspath=True):
             filepath = f'/data/masters/{datecode}/{filepath}'
 
         return filepath
-
-
-
-            
-
-
-def get_orderlet_ext_from_fiber_name(chip, fiber):
-    flux_dict = {'SKY': f'{chip}_SKY_FLUX',
-                'SCI1': f'{chip}_SCI_FLUX1',
-                'SCI2': f'{chip}_SCI_FLUX2',
-                'SCI3': f'{chip}_SCI_FLUX3',
-                'CAL': f'{chip}_CAL_FLUX'
-                }
-
-    var_dict = {'SKY': f'{chip}_SKY_VAR',
-                'SCI1': f'{chip}_SCI_VAR1',
-                'SCI2': f'{chip}_SCI_VAR2',
-                'SCI3': f'{chip}_SCI_VAR3',
-                'CAL': f'{chip}_CAL_VAR'
-            }
-
-    wave_dict = {'SKY': f'{chip}_SKY_WAVE',
-                 'SCI1': f'{chip}_SCI_WAVE1',
-                 'SCI2': f'{chip}_SCI_WAVE2',
-                 'SCI3': f'{chip}_SCI_WAVE3',
-                 'CAL': f'{chip}_CAL_WAVE'
-            }
-    
-    return flux_dict[fiber], var_dict[fiber], wave_dict[fiber]
