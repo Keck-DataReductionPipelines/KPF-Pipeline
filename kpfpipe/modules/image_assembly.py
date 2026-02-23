@@ -464,14 +464,10 @@ class ImageAssembly:
             l1_obj.set_data(f'{chip}_VAR', var_ffi)
 
         # Record read noise measurements in PRIMARY header (8-char FITS keys)
-        _RN_KEYS = {
-            "GREEN_AMP1": "RNGRN1", "GREEN_AMP2": "RNGRN2",
-            "GREEN_AMP3": "RNGRN3", "GREEN_AMP4": "RNGRN4",
-            "RED_AMP1": "RNRED1", "RED_AMP2": "RNRED2",
-            "RED_AMP3": "RNRED3", "RED_AMP4": "RNRED4",
-        }
+        _CHIP_SHORT = {"GREEN": "GRN", "RED": "RED"}
         for channel_ext, rn in self.readnoise.items():
-            key = _RN_KEYS[channel_ext]
+            chip, amp = channel_ext.rsplit("_", 1)
+            key = f"RN{_CHIP_SHORT[chip]}{amp[-1]}"
             l1_obj.headers["PRIMARY"][key] = (
                 round(float(rn), 4), f"Read noise {channel_ext} [e-]"
             )
