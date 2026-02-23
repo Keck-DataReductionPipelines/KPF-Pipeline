@@ -145,11 +145,13 @@ class TSDB:
                  tables_prefix='tsdb_',
                  credentials=None, 
                  logger=None, 
-                 verbose=False):
+                 verbose=False, 
+                 silent=False):
 
         self.logger = logger if logger is not None else DummyLogger()
         self.logger.info('Starting KPF_TSDB')
         self.verbose = verbose
+        self.silent = silent
         
         if self.is_notebook():
             self.tqdm = tqdm_notebook
