@@ -18,20 +18,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
 
-def _find_l0_dir():
-    """Resolve L0 test data directory from env var or known locations."""
-    candidates = [
-        os.environ.get("KPF_TESTDATA", ""),
-        "/data/kpf/L0",
-        os.path.expanduser("~/analysis/kpf/L0"),
-    ]
-    for path in candidates:
-        if path and os.path.isdir(path):
-            return path
-    return None
-
-
-L0_DIR = _find_l0_dir()
+L0_DIR = os.environ.get("KPF_TESTDATA")
 L0_BIAS = os.path.join(L0_DIR, "KP.20240923.03637.97.fits") if L0_DIR else ""
 L0_FLAT = os.path.join(L0_DIR, "KP.20240923.00022.16.fits") if L0_DIR else ""
 
@@ -67,7 +54,6 @@ def synthetic_4amp_l0(tmp_path):
         for amp in range(1, 5):
             data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
             hdu = fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}")
-            hdu.header["CCDGAIN"] = 5.0
             hdus.append(hdu)
 
     hdul = fits.HDUList(hdus)
