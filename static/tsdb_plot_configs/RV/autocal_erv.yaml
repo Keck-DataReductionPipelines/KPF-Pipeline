@@ -68,7 +68,7 @@ panel_arr:
           linewidth: 0.5
           color: indianred
     paneldict:
-      ylabel: 'LRC RV\nUncertainty (m/s)'
+      ylabel: "LRC RV\nUncertainty (m/s)"
       only_object: 
         - autocal-lfc-all-morn
         - autocal-lfc-all-eve
@@ -150,7 +150,7 @@ panel_arr:
           linewidth: 0.5
           color: indianred
     paneldict:
-      ylabel: 'ThAr RV\nUncertainty (m/s)'
+      ylabel: "ThAr RV\nUncertainty (m/s)"
       only_object: 
         - autocal-thar-all-night
         - autocal-thar-all-eve
@@ -227,7 +227,7 @@ panel_arr:
           color: indianred
     paneldict:
       title: Uncertainties in LFC, ThAr, & Etalon RVs
-      ylabel: 'Etalon RV\nUncertainty (m/s)'
+      ylabel: "Etalon RV\nUncertainty (m/s)"
       only_object: 
         - autocal-etalon-all-night
         - autocal-etalon-all-eve
