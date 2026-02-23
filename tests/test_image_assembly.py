@@ -67,6 +67,7 @@ def synthetic_4amp_l0(tmp_path):
         for amp in range(1, 5):
             data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
             hdu = fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}")
+            hdu.header["CCDGAIN"] = 5.0
             hdus.append(hdu)
 
     hdul = fits.HDUList(hdus)

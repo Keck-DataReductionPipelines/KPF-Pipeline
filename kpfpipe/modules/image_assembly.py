@@ -11,6 +11,14 @@ DEFAULTS.update({
     'overscan_method': 'rowmedian',
 })
 
+# Mapping from amplifier extension name to 8-char FITS header keyword
+RN_KEYS = {
+    "GREEN_AMP1": "RNGRN1", "GREEN_AMP2": "RNGRN2",
+    "GREEN_AMP3": "RNGRN3", "GREEN_AMP4": "RNGRN4",
+    "RED_AMP1": "RNRED1", "RED_AMP2": "RNRED2",
+    "RED_AMP3": "RNRED3", "RED_AMP4": "RNRED4",
+}
+
 class ImageAssembly:
     """
     This class performs CCD-level processing to convert L0 data to L1.
@@ -157,26 +165,15 @@ class ImageAssembly:
 
         Notes
         -----
+        Reads CCDGAIN from each amplifier extension header.
         Conversion formula: pixel_electrons = pixel_ADU * gain / 65536
         """
-        # TODO: move gain to static config file or...
-        # TODO: should we read gain from header?
-        GAIN = {
-            'GREEN_AMP1': 5.175,
-            'GREEN_AMP2': 5.208,
-            'GREEN_AMP3': 5.52,
-            'GREEN_AMP4': 5.39,
-            'RED_AMP1': 5.02,
-            'RED_AMP2': 5.27,
-            'RED_AMP3': 5.32,
-            'RED_AMP4': 5.23,
-        }
-        
         chip = chip.upper()
 
         for i in range(self.namp[chip]):
             channel_ext = f'{chip}_AMP{i+1}'
-            self.l0_obj.data[channel_ext] *= GAIN[channel_ext] / (2 ** 16)
+            gain = self.l0_obj.headers[channel_ext]['CCDGAIN']
+            self.l0_obj.data[channel_ext] *= gain / (2 ** 16)
                 
 
     def _get_overscan_pixels(self, chip, amp_no, prescan=[0,4], buffer=[0,0]):
@@ -463,15 +460,9 @@ class ImageAssembly:
             l1_obj.set_data(f'{chip}_CCD', ccd_ffi)
             l1_obj.set_data(f'{chip}_VAR', var_ffi)
 
-        # Record read noise measurements in PRIMARY header (8-char FITS keys)
-        _RN_KEYS = {
-            "GREEN_AMP1": "RNGRN1", "GREEN_AMP2": "RNGRN2",
-            "GREEN_AMP3": "RNGRN3", "GREEN_AMP4": "RNGRN4",
-            "RED_AMP1": "RNRED1", "RED_AMP2": "RNRED2",
-            "RED_AMP3": "RNRED3", "RED_AMP4": "RNRED4",
-        }
+        # Record read noise measurements in PRIMARY header
         for channel_ext, rn in self.readnoise.items():
-            key = _RN_KEYS[channel_ext]
+            key = RN_KEYS[channel_ext]
             l1_obj.headers["PRIMARY"][key] = (
                 round(float(rn), 4), f"Read noise {channel_ext} [e-]"
             )
