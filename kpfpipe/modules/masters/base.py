@@ -14,7 +14,8 @@ from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
     'nframe_stream': 5,
-    'stack_sigma': 5.0
+    'stack_sigma': 5.0,
+    'exptime_scale': 60.
 })
 
 # TODO: scale stacks by exposure time
@@ -44,7 +45,7 @@ class BaseMastersModule:
         return l1_obj
 
 
-    def stack_frames(self, l0_file_list=None, nframe_stream=None, sigma=None):
+    def _stack_frames(self, l0_file_list=None, nframe_stream=None, sigma=None, exptime_scale=None):
         """
         Stacks full frame images and computes clipped mean and variance
           * For nframe_stream <= 5, statistics are computed directly
@@ -59,16 +60,25 @@ class BaseMastersModule:
             nframe_stream = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
+        if exptime_scale is None:
+            exptime_scale = self.exptime_scale
 
         if len(l0_file_list) <= nframe_stream:
             stats = self.compute_direct_statistics(sigma = sigma)
         else:
             stats = self.compute_streaming_statistics(sigma = sigma)
 
+
+        #for chip in self.chips:
+        #    nframe = stats[f'{chip}_CCD']['nframe']
+        #    ccd_total_counts = stats[f'{chip}_CCD']['mean'] * nframe
+         #   var_total_counts = stats[f'{chip}_VAR']['mean'] * nframe
+
+
         return None
 
 
-    def compute_direct_statistics(self, l0_file_list=None, nframe_stack=None, nframe_cache=None, sigma=None):
+    def _compute_direct_statistics(self, l0_file_list=None, nframe_stack=None, nframe_cache=None, sigma=None, exptime_scale=None):
         """
         nframe_stack : maximum number of frames to stack for computing statistics
         nframe_cache : maximum number of L1 objects to cache
@@ -87,6 +97,8 @@ class BaseMastersModule:
             nframe_cache = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
+        if exptime_scale is None:
+            exptime_scale = self.exptime_scale
         
         nframe = np.min([nframe_stack,len(l0_file_list)])
         ncache = np.min([nframe, nframe_cache])
@@ -107,34 +119,34 @@ class BaseMastersModule:
             if i >= nframe:
                 break
 
-            if fn in self._l1_obj_cache.keys():
-                for chip in self.chips:
-                    data_cube[f'{chip}_CCD'] = self._l1_obj_cache[fn].data[f'{chip}_CCD']
-                    data_cube[f'{chip}_VAR'] = self._l1_obj_cache[fn].data[f'{chip}_VAR']
-                i += 1
+            if fn in self._l1_obj_cache:
+                l1_obj = self._l1_obj_cache[fn]
 
             else:
                 try:
                     l0_obj = self.load_frame(fn)
                     l1_obj = self.assemble_frame(l0_obj)
 
-                    for chip in self.chips:
-                        data_cube[f'{chip}_CCD'][i] = l1_obj.data[f'{chip}_CCD']
-                        data_cube[f'{chip}_VAR'][i] = l1_obj.data[f'{chip}_VAR']
-    
-                    if len(self._l1_obj_cache.keys()) < ncache:
+                    if len(self._l1_obj_cache) < ncache:
                         self._l1_obj_cache[fn] = l1_obj
-
-                    i += 1
 
                 except FileNotFoundError as e:
                     warnings.warn(f"Skipping {fn} in compute_direct_statistics: {e}")
                     failure += 1
+                    if failure / nframe > 0.2:
+                        raise ValueError(f"more than 20% of frames in stack failed to load")
                     continue
 
-        if failure / nframe > 0.2:
-            raise ValueError(f"more than 20% of frames in stack failed to load")
+            for chip in self.chips:
+                data_cube[f'{chip}_CCD'][i] = l1_obj.data[f'{chip}_CCD']
+                data_cube[f'{chip}_VAR'][i] = l1_obj.data[f'{chip}_VAR']
 
+            i += 1
+
+        if i < nframe:
+            for k in data_cube.keys():
+                data_cube[k] = data_cube[k][:i]
+        
         stats = {}
 
         for chip in self.chips:
@@ -167,19 +179,17 @@ class BaseMastersModule:
         return stats
 
 
-    def compute_streaming_statistics(self, l0_file_list=None, nframe_direct=None, sigma=None):
+    def _compute_streaming_statistics(self, l0_file_list=None, nframe_direct=None, sigma=None):
         """
-        Computes mean and variance using Welford's algorithm
+        Computes mean and rms using Welford's algorithm
         
         Note that the variance computed by Welford's algorithm is the frame-to-frame
-        variance NOT the photon noise variance, which is the weighted sum of variance
-        across all frames in the stack.
-
+        rms NOT the photon noise variance.
 
         Optimized to reduce RAM usage at the expense of compute speed
-        Estimates approximate mean and variance directly to perform outlier rejection
+        Estimates approximate mean and rms directly to perform outlier rejection
 
-        nframe_direct : maximum number of frames pass to compute_direct_statistics
+        nframe_direct : maximum number of frames pass to _compute_direct_statistics
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -187,12 +197,16 @@ class BaseMastersModule:
             nframe_direct = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
+        if exptime_scale is None:
+            exptime_scale = self.exptime_scale
 
-        approx_stats = self.compute_direct_statistics(l0_file_list=l0_file_list,
-                                                     nframe_stack=nframe_direct, 
-                                                     nframe_cache=nframe_direct, 
-                                                     sigma=sigma
-                                                     )
+        approx_stats = self._compute_direct_statistics(
+            l0_file_list=l0_file_list,         
+            nframe_stack=nframe_direct, 
+            nframe_cache=nframe_direct, 
+            sigma=sigma,
+            exptime_scale=exptime_scale
+        )
         
         if len(l0_file_list) <= nframe_direct:
             return approx_stats  # exact_stats = approx_stats
@@ -260,7 +274,6 @@ class BaseMastersModule:
                 X2 = exact_stats[ext_name]['X2']
 
                 exact_stats[ext_name]['rms'] = np.where(N >= 2, np.sqrt(X2 / N), np.nan)
-
-        exact_stats.pop('X2')
+                exact_stats[ext_name].pop('X2')
 
         return exact_stats
