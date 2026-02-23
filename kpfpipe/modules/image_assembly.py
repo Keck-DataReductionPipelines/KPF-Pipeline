@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe import REPO_ROOT, DEFAULTS
-from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
@@ -450,8 +449,7 @@ class ImageAssembly:
         if overscan_method is None:
             overscan_method = self.overscan_method
 
-        # TODO: l1_obj = l0_obj.to_l1()
-        l1_obj = KPF1()
+        l1_obj = self.l0_obj.to_kpf1()
 
         for chip in chips:
             self.count_amplifiers(chip)
@@ -460,9 +458,26 @@ class ImageAssembly:
             self.measure_read_noise(chip)
             self.subtract_overscan(chip, overscan_method)
             self.orient_channels(chip)
-            
+
             ccd_ffi, var_ffi = self.stitch_ffi(chip)
-            l1_obj.set_data(f'{chip}_CCD', data=ccd_ffi)
-            l1_obj.set_data(f'{chip}_VAR', data=var_ffi)        
-        
+            l1_obj.set_data(f'{chip}_CCD', ccd_ffi)
+            l1_obj.set_data(f'{chip}_VAR', var_ffi)
+
+        # Record read noise measurements in PRIMARY header (8-char FITS keys)
+        _RN_KEYS = {
+            "GREEN_AMP1": "RNGRN1", "GREEN_AMP2": "RNGRN2",
+            "GREEN_AMP3": "RNGRN3", "GREEN_AMP4": "RNGRN4",
+            "RED_AMP1": "RNRED1", "RED_AMP2": "RNRED2",
+            "RED_AMP3": "RNRED3", "RED_AMP4": "RNRED4",
+        }
+        for channel_ext, rn in self.readnoise.items():
+            key = _RN_KEYS[channel_ext]
+            l1_obj.headers["PRIMARY"][key] = (
+                round(float(rn), 4), f"Read noise {channel_ext} [e-]"
+            )
+
+        l1_obj.headers["PRIMARY"]["OSCANMET"] = (
+            overscan_method, "Overscan subtraction method"
+        )
+        l1_obj.receipt_add_entry("image_assembly", "PASS")
         return l1_obj
