@@ -163,6 +163,8 @@ class ImageAssembly:
                 image_reoriented = np.flip(image,axis=0)
             elif flip == 'none':
                 image_reoriented = image
+            else:
+                raise ValueError("unexpected 'flip' entry found in orientation reference")
 
             self.l0_obj.data[channel_ext] = image_reoriented
 
