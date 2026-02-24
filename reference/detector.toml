@@ -24,3 +24,7 @@ red = [
 [norder]
 green = 35        # Number of green CCD echelle orders
 red = 32          # Number of red CCD echelle orders
+
+[echelle_orders]
+green = [137, 103]    # green CCD orders from grating equation, blue -> red
+red = [102, 71]       # red CCD orders from grating equation, blue -> red
