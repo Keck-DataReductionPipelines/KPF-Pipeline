@@ -4,7 +4,7 @@ KPF Image Assembly module.
 import numpy as np
 import pandas as pd
 
-from kpfpipe import REPO_ROOT, DEFAULTS
+from kpfpipe import REPO_ROOT, DEFAULTS, DETECTOR
 from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
@@ -21,6 +21,8 @@ DEFAULTS.update({
     }
 })
 
+DEFAULTS.update(DETECTOR)
+
 _RN_KEYS = {
     'GREEN_AMP1': ['RNGRN1', 'RNNGGR1'],
     'GREEN_AMP2': ['RNGRN2', 'RNNGGR2'],
@@ -31,6 +33,9 @@ _RN_KEYS = {
     'RED_AMP3': ['RNRED3', 'RNNGRD3'],
     'RED_AMP4': ['RNRED4', 'RNNGRD4'],
 }
+
+# TODO: use prescan from detector.toml config
+# TODO: add overscan and readnoise params to main config
 
 class ImageAssembly:
     """
@@ -49,6 +54,8 @@ class ImageAssembly:
         for k in DEFAULTS.keys():
             self.__setattr__(k, config.get(k,DEFAULTS[k]))
 
+        for k, v in self.ccd.items():
+            self.__setattr__(k, v)
 
     
     def count_amplifiers(self, chip):
@@ -86,16 +93,16 @@ class ImageAssembly:
                     self.namp[chip] += 1
 
         if self.namp[chip] == 2:
-            self.dims[chip] = (4080, 2040)
+            self.dims[chip] = (self.nrow, self.ncol // 2)
         elif self.namp[chip] == 4:
-            self.dims[chip] = (2040, 2040)
+            self.dims[chip] = (self.nrow // 2, self.ncol // 2)
         else:
             raise ValueError(f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD")
         
 
     def _read_orientation_reference(self, chip):
         """
-        Load the orientation mapping for amplifier channels from reference files.
+        Load the orientation mapping for amplifier channels.
 
         Parameters
         ----------
@@ -116,10 +123,8 @@ class ImageAssembly:
         if not hasattr(self, 'orientation'):
             self.orientation = {}
 
-        filepath = f'{REPO_ROOT}/reference/ccd_orientation_{chip.lower()}.txt'
-        with open(filepath, 'r') as f:
-            df = pd.read_csv(f, delimiter=' ')
-            self.orientation[chip.upper()] = dict(zip(df['CHANNEL_EXT'], df['CHANNEL_KEY']))
+        df = pd.DataFrame(self.amplifiers[chip.upper()]).set_index('channel_id')
+        self.orientation[chip.upper()] = dict(zip(df['ext_name'], df['flip']))
 
         return self.orientation[chip.upper()]
 
@@ -147,16 +152,16 @@ class ImageAssembly:
 
         for i in range(self.namp[chip]):
             channel_ext = f'{chip.upper()}_AMP{i+1}'
-            channel_key = orientation[channel_ext]
+            flip = orientation[channel_ext]
             image = self.l0_obj.data[channel_ext]
 
-            if channel_key == 1: # flip lr
+            if flip == 'LR':
                 image_reoriented = np.flip(image,axis=1)
-            elif channel_key == 2: # turn upside down and flip lr
+            elif flip == 'UD-LR':
                 image_reoriented = np.flip(image,axis=(0,1))
-            elif channel_key == 3: # turn upside down
+            elif flip == 'UD':
                 image_reoriented = np.flip(image,axis=0)
-            elif channel_key == 4: # no change
+            elif flip == 'none':
                 image_reoriented = image
 
             self.l0_obj.data[channel_ext] = image_reoriented

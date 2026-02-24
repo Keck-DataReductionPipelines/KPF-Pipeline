@@ -19,8 +19,10 @@ import numpy as np
 import pandas as pd
 from rvdata.core.models.level2 import RV2
 
-from kpfpipe.constants import NORDER_GREEN
+from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+
+NORDER_GREEN = DETECTOR['norder']['GREEN']
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _TRACE_MAP = pd.read_csv(_config_path / "L2-trace-map.csv")

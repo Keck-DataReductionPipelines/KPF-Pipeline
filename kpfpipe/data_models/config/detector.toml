@@ -1,9 +1,0 @@
-# KPF detector parameters
-
-[ccd]
-nrow = 4080       # Detector rows (pixels)
-ncol = 4080       # Detector columns (pixels)
-
-[orders]
-green = 35        # Number of green CCD echelle orders
-red = 32          # Number of red CCD echelle orders
