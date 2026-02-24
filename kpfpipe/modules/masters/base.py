@@ -1,10 +1,11 @@
 from astropy.stats import mad_std
 import numpy as np
 
+from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.utils import get_datecode, fetch_filepath
-from kpfpipe.constants import NROW, NCOL
+
 
 class BaseMastersModule:
     def __init__(self, obs_ids):
