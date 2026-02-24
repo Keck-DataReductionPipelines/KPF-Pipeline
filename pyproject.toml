@@ -27,9 +27,12 @@ dependencies = [
 dev = [
     "black==26.1.0",
     "flake8==7.3.0",
+    "ipykernel==7.2.0",
     "isort==7.0.0",
-    "jupyter",
+    "jupyterlab==4.5.4",
+    "line_profiler",
     "mypy==1.19.1",
+    "notebook==7.5.3",
     "pytest==9.0.2"
 ]
 
@@ -39,3 +42,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-data]
 "kpfpipe.data_models.config" = ["*.csv"]
+
+[tool.setuptools.packages.find]
+include = ["kpfpipe*"]
