@@ -18,14 +18,19 @@ DEFAULTS.update({
         'RED_AMP2': 5.27,
         'RED_AMP3': 5.32,
         'RED_AMP4': 5.23,
-    },
-    'rn_keys': {
-        "GREEN_AMP1": "RNGRN1", "GREEN_AMP2": "RNGRN2",
-        "GREEN_AMP3": "RNGRN3", "GREEN_AMP4": "RNGRN4",
-        "RED_AMP1": "RNRED1", "RED_AMP2": "RNRED2",
-        "RED_AMP3": "RNRED3", "RED_AMP4": "RNRED4",
-    },
+    }
 })
+
+_RN_KEYS = {
+    'GREEN_AMP1': ['RNGRN1', 'RNNGGR1'],
+    'GREEN_AMP2': ['RNGRN2', 'RNNGGR2'],
+    'GREEN_AMP3': ['RNGRN3', 'RNNGGR3'],
+    'GREEN_AMP4': ['RNGRN4', 'RNNGGR4'],
+    'RED_AMP1': ['RNRED1', 'RNNGRD1'],
+    'RED_AMP2': ['RNRED2', 'RNNGRD2'],
+    'RED_AMP3': ['RNRED3', 'RNNGRD3'],
+    'RED_AMP4': ['RNRED4', 'RNNGRD4'],
+}
 
 class ImageAssembly:
     """
@@ -418,6 +423,42 @@ class ImageAssembly:
         return ccd_ffi, var_ffi
     
 
+    def set_kpf1_headers(self, l1_obj):
+        """
+        Populate KPF1 header keywords related to read noise measurement
+        and overscan subtraction.
+
+        Parameters
+        ----------
+        l1_obj : KPF1
+            L1 data object whose PRIMARY header will be updated with
+            read noise and overscan metadata.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Header updates:
+        1. Read noise per amplifier channel (e.g. RNGRN1)
+        2. Non-Gaussian read noise per amplifier channel (e.g. RNNGG1)
+        3. Overscan subtraction method (OSCANMET)
+        """
+        for channel_ext, rn in self.readnoise.items():
+            key_read, key_rnng = _RN_KEYS[channel_ext]
+            l1_obj.headers['PRIMARY'][key_read] = (
+                round(float(rn), 4), f'Read noise {channel_ext} [e-]'
+            )
+            l1_obj.headers['PRIMARY'][key_rnng] = (
+                round(float(rn), 4), f'Non-Gaussian read noise {channel_ext} [e-]'
+            )
+
+        l1_obj.headers['PRIMARY']['OSCANMET'] = (
+            self.overscan_method, 'Overscan subtraction method'
+        )
+
+
     def perform(self, chips=None, overscan_method=None):
         """
         Execute the image assembly algorithm. Optional keyword arguments
@@ -452,6 +493,9 @@ class ImageAssembly:
         if overscan_method is None:
             overscan_method = self.overscan_method
 
+        self.chips = chips
+        self.overscan_method = overscan_method
+
         l1_obj = self.l0_obj.to_kpf1()
 
         for chip in chips:
@@ -466,15 +510,9 @@ class ImageAssembly:
             l1_obj.set_data(f'{chip}_CCD', ccd_ffi)
             l1_obj.set_data(f'{chip}_VAR', var_ffi)
 
-        # Record read noise measurements in PRIMARY header
-        for channel_ext, rn in self.readnoise.items():
-            key = self.rn_keys[channel_ext]
-            l1_obj.headers["PRIMARY"][key] = (
-                round(float(rn), 4), f"Read noise {channel_ext} [e-]"
-            )
+        self.set_kpf1_headers(l1_obj)
+        l1_obj.receipt_add_entry('image_assembly', 'PASS')
 
-        l1_obj.headers["PRIMARY"]["OSCANMET"] = (
-            overscan_method, "Overscan subtraction method"
-        )
-        l1_obj.receipt_add_entry("image_assembly", "PASS")
         return l1_obj
+
+
