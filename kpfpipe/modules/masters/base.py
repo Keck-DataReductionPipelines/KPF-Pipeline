@@ -15,7 +15,6 @@ from kpfpipe.utils.stats import flag_outliers
 DEFAULTS.update({
     'nframe_stream': 5,
     'stack_sigma': 5.0,
-    'exptime_scale': 60.
 })
 
 # TODO: scale stacks by exposure time
@@ -45,14 +44,25 @@ class BaseMastersModule:
         return l1_obj
 
 
-    def _stack_frames(self, l0_file_list=None, nframe_stream=None, sigma=None, exptime_scale=None):
+    def stack_frames(self, l0_file_list=None, nframe_stream=None, sigma=None):
         """
         Stacks full frame images and computes clipped mean and variance
           * For nframe_stream <= 5, statistics are computed directly
           * For nframe_stream > 5, computation uses streaming Welford's algorithm
 
-          Note: need to cache direct frames as e.g. self.direct_frames to avoid re-reading
-          Note: make sure that files are clearing from memory after read (in KPF0?)
+        Returns
+            dict
+                sum (2D array; total photons collected, after rejecting outliers)
+                mean (2D array; frame-to-frame mean, after normalizing exptime)
+                rms (2D array; frame-to-frame rms, after normalizing exptime)
+            
+            exptime (float; integrated exposure time across full stack)
+
+            Note that due to outlier rejection sum = mean * exptime only for pixels
+            which are valid in every frame in the stack
+
+        IMG = CCD['mean']
+        SNR = CCD['sum'] / np.sqrt(VAR['sum'])
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -60,25 +70,16 @@ class BaseMastersModule:
             nframe_stream = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
-        if exptime_scale is None:
-            exptime_scale = self.exptime_scale
 
         if len(l0_file_list) <= nframe_stream:
             stats = self.compute_direct_statistics(sigma = sigma)
         else:
             stats = self.compute_streaming_statistics(sigma = sigma)
 
-
-        #for chip in self.chips:
-        #    nframe = stats[f'{chip}_CCD']['nframe']
-        #    ccd_total_counts = stats[f'{chip}_CCD']['mean'] * nframe
-         #   var_total_counts = stats[f'{chip}_VAR']['mean'] * nframe
-
-
         return None
 
 
-    def _compute_direct_statistics(self, l0_file_list=None, nframe_stack=None, nframe_cache=None, sigma=None, exptime_scale=None):
+    def _compute_direct_statistics(self, l0_file_list=None, nframe_stack=None, nframe_cache=None, sigma=None):
         """
         nframe_stack : maximum number of frames to stack for computing statistics
         nframe_cache : maximum number of L1 objects to cache
@@ -97,8 +98,6 @@ class BaseMastersModule:
             nframe_cache = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
-        if exptime_scale is None:
-            exptime_scale = self.exptime_scale
         
         nframe = np.min([nframe_stack,len(l0_file_list)])
         ncache = np.min([nframe, nframe_cache])
@@ -107,6 +106,7 @@ class BaseMastersModule:
             self._l1_obj_cache = {}
         
         data_cube = {}
+        exptime = np.zeros(nframe,dtype=np.float32)
 
         for chip in self.chips:
             data_cube[f'{chip}_CCD'] = np.zeros((nframe,NROW,NCOL),dtype=np.float32)
@@ -137,46 +137,69 @@ class BaseMastersModule:
                         raise ValueError(f"more than 20% of frames in stack failed to load")
                     continue
 
+            exptime[i] = l1_obj.header['PRIMARY']['ELAPSED']
+            
             for chip in self.chips:
                 data_cube[f'{chip}_CCD'][i] = l1_obj.data[f'{chip}_CCD']
                 data_cube[f'{chip}_VAR'][i] = l1_obj.data[f'{chip}_VAR']
 
             i += 1
 
+        if i < 2:
+            raise ValueError(f"At least two frames neeed for frame stacking, got {i}")
+
         if i < nframe:
+            exptime = exptime[:i]
             for k in data_cube.keys():
                 data_cube[k] = data_cube[k][:i]
+
+        if np.any(exptime < 0):
+            raise ValueError(f"Exposure times cannot be negative; exptime = {exptime}")
         
+        if np.all(exptime > 0):
+            T = exptime[:, None, None]
+        elif np.all(exptime == 0):
+            T = np.ones_like(exptime)[:, None, None]
+        else:
+            raise ValueError(f"Exposure times must be all zero or all non-zero; exptime = {exptime}")
+
         stats = {}
 
         for chip in self.chips:
             stats[f'{chip}_CCD'] = {}
             stats[f'{chip}_VAR'] = {}
 
-            # TODO: replace with robust quality control
-            if np.any(np.isnan(data_cube[f'{chip}_CCD'])):
-                raise ValueError(f"NaN values detected in {chip}_CCD data cube")
-            if np.any(np.isnan(data_cube[f'{chip}_VAR'])):
-                raise ValueError(f"NaN values detected in {chip}_VAR data cube")
-
             out = (
-                flag_outliers(data_cube[f'{chip}_CCD'], sigma, axis=0) | 
-                flag_outliers(data_cube[f'{chip}_VAR'], sigma, axis=0)
+                flag_outliers(data_cube[f'{chip}_CCD'] / T, sigma, axis=0) | 
+                flag_outliers(data_cube[f'{chip}_VAR'] / T, sigma, axis=0)
             )
 
+            N = np.sum(~out, axis=0)
+            valid = ~out
+            
             for suffix in ['CCD', 'VAR']:
                 ext_name = f'{chip}_{suffix}'
 
-                N = np.sum(~out, axis=0)
-                stats[ext_name]['nframe'] = N
+                D = data_cube[ext_name]
+                S0 = np.sum(D, axis=0, where=valid)        
+                S1 = np.sum(D / T, axis=0, where=valid)
+                S2 = np.sum((D / T)**2, axis=0, where=valid)
 
-                X = np.sum(np.where(out, 0, data_cube[ext_name]), axis=0)
-                stats[ext_name]['mean'] = np.where(N >= 1, X / N, np.nan)
+                good = N > 0
+                
+                mean = np.zeros_like(S1)
+                mean[good] = S1[good] / N[good]
 
-                X2 = np.sum(np.where(out, 0, (data_cube[ext_name] - stats[ext_name]['mean'])**2), axis=0)
-                stats[ext_name]['rms'] = np.where(N >= 2, np.sqrt(X2 / N), np.nan)
+                var = np.zeros_like(S2)
+                var[good] = S2[good] / N[good] - mean[good]**2
+                
+                rms = np.sqrt(np.maximum(var,0))
 
-        return stats
+                stats[ext_name]['clipped_sum'] = S0
+                stats[ext_name]['norm_mean'] = mean
+                stats[ext_name]['norm_rms'] = rms
+
+        return stats, np.sum(exptime)
 
 
     def _compute_streaming_statistics(self, l0_file_list=None, nframe_direct=None, sigma=None):
@@ -197,38 +220,43 @@ class BaseMastersModule:
             nframe_direct = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
-        if exptime_scale is None:
-            exptime_scale = self.exptime_scale
 
-        approx_stats = self._compute_direct_statistics(
-            l0_file_list=l0_file_list,         
-            nframe_stack=nframe_direct, 
-            nframe_cache=nframe_direct, 
-            sigma=sigma,
-            exptime_scale=exptime_scale
+        approx_stats, exptime_direct = (
+            self._compute_direct_statistics(
+                l0_file_list=l0_file_list,         
+                nframe_stack=nframe_direct, 
+                nframe_cache=nframe_direct, 
+                sigma=sigma
+            )
         )
+
+        zero_exptime = exptime_direct == 0
         
         if len(l0_file_list) <= nframe_direct:
             return approx_stats  # exact_stats = approx_stats
 
         exact_stats = {}
+        exptime = 0.0
 
         for chip in self.chips:
             for suffix in ['CCD', 'VAR']:
                 ext_name = f'{chip}_{suffix}'
 
                 exact_stats[ext_name] = {}
-                exact_stats[ext_name]['nframe'] = np.zeros((NROW,NCOL),dtype=int)
-                exact_stats[ext_name]['mean'] = np.zeros((NROW,NCOL),dtype=np.float32)
-                exact_stats[ext_name]['X2'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext_name]['clipped_sum'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext_name]['norm_mean'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext_name]['norm_rms'] = np.zeros((NROW,NCOL),dtype=np.float32)
+
+                mean = approx_stats[ext_name]['norm_mean']
+                dev = approx_stats[ext_name]['norm_rms'] * sigma
                 
-                approx_stats[ext_name]['lower'] = approx_stats[ext_name]['mean'] - sigma * approx_stats[ext_name]['rms']
-                approx_stats[ext_name]['upper'] = approx_stats[ext_name]['mean'] + sigma * approx_stats[ext_name]['rms']
+                approx_stats[ext_name]['norm_lower'] = mean - dev
+                approx_stats[ext_name]['norm_upper'] = mean + dev
 
         failure = 0
 
         for fn in l0_file_list:
-            if fn in self._l1_obj_cache.keys():
+            if fn in self._l1_obj_cache:
                 l1_obj = self._l1_obj_cache[fn]
                 
             else:
@@ -238,25 +266,31 @@ class BaseMastersModule:
                 except FileNotFoundError as e:
                     warnings.warn(f"Skipping {fn} in compute_streaming_statistics: {e}")
                     failure += 1
+                    if failure / len(l0_file_list) > 0.2:
+                        raise ValueError(f"more than 20% of frames in stack failed to load")
                     continue
 
-            if failure / len(l0_file_list) > 0.2:
-                raise ValueError(f"more than 20% of frames in stack failed to load")
-        
+            exptime_total += l1_obj.header['PRIMARY']['ELAPSED']
+
+            if (exptime_total == 0) != zero_exptime:
+                raise ValueError(f"Exposure times must be all zero or all non-zero")
+            
             for chip in self.chips:
                 for suffix in ['CCD', 'VAR']:
                     ext_name = f'{chip}_{suffix}'
-
+                    
                     frame = l1_obj.data[ext_name]
-                    lower = approx_stats[ext_name]['lower']
-                    upper = approx_stats[ext_name]['upper']
-                    mask = (frame >= lower) & (frame <= upper)
+                    exptime = l1_obj.header['PRIMARY']['ELAPSED']
 
-                    exact_stats[ext_name]['nframe'] += mask.astype(int)
+                    lower = approx_stats[ext_name]['norm_lower']
+                    upper = approx_stats[ext_name]['norm_upper']
+                    valid = (frame / exptime >= lower) & (frame / exptime <= upper)
 
-                    valid = mask & (exact_stats[ext_name]['nframe'] > 0)
+                    delta = frame - exact_stats[ext_name]['norm_mean']
+                    delta[~valid] = 0
 
-                    delta = np.where(valid, frame - exact_stats[ext_name]['mean'], 0)
+                    mean = exact_stats['exptime']['']
+
 
                     exact_stats[ext_name]['mean'] += (
                         np.where(valid, delta / exact_stats[ext_name]['nframe'], 0)
