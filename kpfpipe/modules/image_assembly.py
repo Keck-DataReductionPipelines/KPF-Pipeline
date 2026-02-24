@@ -5,11 +5,26 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe import REPO_ROOT, DEFAULTS
-from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
     'overscan_method': 'rowmedian',
+    'gain': {
+        'GREEN_AMP1': 5.175,
+        'GREEN_AMP2': 5.208,
+        'GREEN_AMP3': 5.52,
+        'GREEN_AMP4': 5.39,
+        'RED_AMP1': 5.02,
+        'RED_AMP2': 5.27,
+        'RED_AMP3': 5.32,
+        'RED_AMP4': 5.23,
+    },
+    'rn_keys': {
+        "GREEN_AMP1": "RNGRN1", "GREEN_AMP2": "RNGRN2",
+        "GREEN_AMP3": "RNGRN3", "GREEN_AMP4": "RNGRN4",
+        "RED_AMP1": "RNRED1", "RED_AMP2": "RNRED2",
+        "RED_AMP3": "RNRED3", "RED_AMP4": "RNRED4",
+    },
 })
 
 class ImageAssembly:
@@ -160,24 +175,11 @@ class ImageAssembly:
         -----
         Conversion formula: pixel_electrons = pixel_ADU * gain / 65536
         """
-        # TODO: move gain to static config file or...
-        # TODO: should we read gain from header?
-        GAIN = {
-            'GREEN_AMP1': 5.175,
-            'GREEN_AMP2': 5.208,
-            'GREEN_AMP3': 5.52,
-            'GREEN_AMP4': 5.39,
-            'RED_AMP1': 5.02,
-            'RED_AMP2': 5.27,
-            'RED_AMP3': 5.32,
-            'RED_AMP4': 5.23,
-        }
-        
         chip = chip.upper()
 
         for i in range(self.namp[chip]):
             channel_ext = f'{chip}_AMP{i+1}'
-            self.l0_obj.data[channel_ext] *= GAIN[channel_ext] / (2 ** 16)
+            self.l0_obj.data[channel_ext] *= self.gain[channel_ext] / (2 ** 16)
                 
 
     def _get_overscan_pixels(self, chip, amp_no, prescan=[0,4], buffer=[0,0]):
@@ -450,8 +452,7 @@ class ImageAssembly:
         if overscan_method is None:
             overscan_method = self.overscan_method
 
-        # TODO: l1_obj = l0_obj.to_l1()
-        l1_obj = KPF1()
+        l1_obj = self.l0_obj.to_kpf1()
 
         for chip in chips:
             self.count_amplifiers(chip)
@@ -460,9 +461,20 @@ class ImageAssembly:
             self.measure_read_noise(chip)
             self.subtract_overscan(chip, overscan_method)
             self.orient_channels(chip)
-            
+
             ccd_ffi, var_ffi = self.stitch_ffi(chip)
-            l1_obj.set_data(f'{chip}_CCD', data=ccd_ffi)
-            l1_obj.set_data(f'{chip}_VAR', data=var_ffi)        
-        
+            l1_obj.set_data(f'{chip}_CCD', ccd_ffi)
+            l1_obj.set_data(f'{chip}_VAR', var_ffi)
+
+        # Record read noise measurements in PRIMARY header
+        for channel_ext, rn in self.readnoise.items():
+            key = self.rn_keys[channel_ext]
+            l1_obj.headers["PRIMARY"][key] = (
+                round(float(rn), 4), f"Read noise {channel_ext} [e-]"
+            )
+
+        l1_obj.headers["PRIMARY"]["OSCANMET"] = (
+            overscan_method, "Overscan subtraction method"
+        )
+        l1_obj.receipt_add_entry("image_assembly", "PASS")
         return l1_obj
