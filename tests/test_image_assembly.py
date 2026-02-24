@@ -133,6 +133,12 @@ class TestImageAssemblyBias:
         for channel_ext, rn in ia.readnoise.items():
             assert 1.0 < rn < 20.0, f"Read noise for {channel_ext} = {rn} e-"
 
+    def test_rnng_in_header(self, l1_bias):
+        l1, _ = l1_bias
+        # 2-amp mode: expect RNNGGR1, RNNGGR2, RNNGRD1, RNNGRD2
+        assert "RNNGGR1" in l1.headers["PRIMARY"]
+        assert "RNNGRD1" in l1.headers["PRIMARY"]
+        
     def test_overscan_method_in_header(self, l1_bias):
         l1, _ = l1_bias
         oscan = l1.headers["PRIMARY"]["OSCANMET"]

@@ -442,7 +442,7 @@ class ImageAssembly:
         -----
         Header updates:
         1. Read noise per amplifier channel (e.g. RNGRN1)
-        2. Non-Gaussian read noise per amplifier channel (e.g. RNNGG1)
+        2. Non-Gaussian read noise per amplifier channel (e.g. RNNGGR1)
         3. Overscan subtraction method (OSCANMET)
         """
         for channel_ext, rn in self.readnoise.items():
@@ -514,5 +514,3 @@ class ImageAssembly:
         l1_obj.receipt_add_entry('image_assembly', 'PASS')
 
         return l1_obj
-
-
