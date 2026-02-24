@@ -6,10 +6,6 @@ KPF_DATA_OUTPUT = "/data/kpf-next/"
 chips = ["GREEN", "RED"]
 fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
-[KPFPIPE.norder]
-GREEN = 35
-RED = 32
-
 [MODULE_IMAGE_ASSEMBLY]
 overscan_method = "rowmedian"
 
