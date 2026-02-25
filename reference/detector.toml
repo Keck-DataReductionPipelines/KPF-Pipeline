@@ -9,16 +9,16 @@ oscan_prl = 30    # Parallel overscan columns (pixels)
 
 [amplifiers]
 green = [
-  { channel_id = 1, flip = "none",  ffi_row = 1, ffi_col = 1, ext_name = "GREEN_AMP1" },
-  { channel_id = 2, flip = "LR",    ffi_row = 1, ffi_col = 2, ext_name = "GREEN_AMP2" },
-  { channel_id = 3, flip = "UD",    ffi_row = 2, ffi_col = 1, ext_name = "GREEN_AMP3" },
-  { channel_id = 4, flip = "UD-LR", ffi_row = 2, ffi_col = 2, ext_name = "GREEN_AMP4" }
+  { channel_id = 1, flip = "none", ffi_row = 1, ffi_col = 1, ext_name = "GREEN_AMP1" },
+  { channel_id = 2, flip = "cols", ffi_row = 1, ffi_col = 2, ext_name = "GREEN_AMP2" },
+  { channel_id = 3, flip = "rows", ffi_row = 2, ffi_col = 1, ext_name = "GREEN_AMP3" },
+  { channel_id = 4, flip = "both", ffi_row = 2, ffi_col = 2, ext_name = "GREEN_AMP4" }
 ]
 red = [
-  { channel_id = 1, flip = "none",  ffi_row = 1, ffi_col = 1, ext_name = "RED_AMP1" },
-  { channel_id = 2, flip = "LR",    ffi_row = 1, ffi_col = 2, ext_name = "RED_AMP2" },
-  { channel_id = 3, flip = "UD",    ffi_row = 2, ffi_col = 1, ext_name = "RED_AMP3" },
-  { channel_id = 4, flip = "UD-LR", ffi_row = 2, ffi_col = 2, ext_name = "RED_AMP4" }
+  { channel_id = 1, flip = "none", ffi_row = 1, ffi_col = 1, ext_name = "RED_AMP1" },
+  { channel_id = 2, flip = "cols", ffi_row = 1, ffi_col = 2, ext_name = "RED_AMP2" },
+  { channel_id = 3, flip = "rows", ffi_row = 2, ffi_col = 1, ext_name = "RED_AMP3" },
+  { channel_id = 4, flip = "both", ffi_row = 2, ffi_col = 2, ext_name = "RED_AMP4" }
 ]
 
 [norder]

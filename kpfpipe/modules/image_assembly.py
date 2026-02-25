@@ -155,12 +155,12 @@ class ImageAssembly:
             flip = orientation[channel_ext]
             image = self.l0_obj.data[channel_ext]
 
-            if flip == 'LR':
-                image_reoriented = np.flip(image,axis=1)
-            elif flip == 'UD-LR':
-                image_reoriented = np.flip(image,axis=(0,1))
-            elif flip == 'UD':
+            if flip == 'rows':
                 image_reoriented = np.flip(image,axis=0)
+            elif flip == 'cols':
+                image_reoriented = np.flip(image,axis=1)
+            elif flip == 'both':
+                image_reoriented = np.flip(image,axis=(0,1))
             elif flip == 'none':
                 image_reoriented = image
             else:
