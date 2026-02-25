@@ -6,7 +6,6 @@ import numpy as np
 import warnings
 
 from kpfpipe import DEFAULTS
-from kpfpipe.constants import NROW, NCOL
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.utils.kpf_parse import get_datecode, fetch_filepath
@@ -164,6 +163,7 @@ class BaseMastersModule:
             raise ValueError(f"Exposure times must be all zero or all non-zero; exptime = {exptime}")
 
         stats = {}
+        exptime_total = np.sum(exptime)
 
         for chip in self.chips:
             stats[f'{chip}_CCD'] = {}
@@ -199,7 +199,7 @@ class BaseMastersModule:
                 stats[ext_name]['norm_mean'] = mean
                 stats[ext_name]['norm_rms'] = rms
 
-        return stats, np.sum(exptime)
+        return stats, exptime_total
 
 
     def _compute_streaming_statistics(self, l0_file_list=None, nframe_direct=None, sigma=None):
@@ -236,24 +236,26 @@ class BaseMastersModule:
             return approx_stats  # exact_stats = approx_stats
 
         exact_stats = {}
-        exptime = 0.0
+        exptime_total = 0.0
 
         for chip in self.chips:
             for suffix in ['CCD', 'VAR']:
                 ext_name = f'{chip}_{suffix}'
 
                 exact_stats[ext_name] = {}
-                exact_stats[ext_name]['clipped_sum'] = np.zeros((NROW,NCOL),dtype=np.float32)
-                exact_stats[ext_name]['norm_mean'] = np.zeros((NROW,NCOL),dtype=np.float32)
-                exact_stats[ext_name]['norm_rms'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext_name]['N'] = np.zeros((NROW,NCOL),dtype=np.int32)
+                exact_stats[ext_name]['S0'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext_name]['S1'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext_name]['S2'] = np.zeros((NROW,NCOL),dtype=np.float32)
 
-                mean = approx_stats[ext_name]['norm_mean']
-                dev = approx_stats[ext_name]['norm_rms'] * sigma
+                approx_mean = approx_stats[ext_name]['norm_mean']
+                approx_rms = approx_stats[ext_name]['norm_rms']
                 
-                approx_stats[ext_name]['norm_lower'] = mean - dev
-                approx_stats[ext_name]['norm_upper'] = mean + dev
+                approx_stats[ext_name]['norm_lower'] = approx_mean - approx_rms * sigma
+                approx_stats[ext_name]['norm_upper'] = approx_mean + approx_rms * sigma
 
         failure = 0
+        nframe = 0
 
         for fn in l0_file_list:
             if fn in self._l1_obj_cache:
@@ -270,44 +272,72 @@ class BaseMastersModule:
                         raise ValueError(f"more than 20% of frames in stack failed to load")
                     continue
 
-            exptime_total += l1_obj.header['PRIMARY']['ELAPSED']
+            nframe += 1
+            exptime = l1_obj.header['PRIMARY']['ELAPSED']
 
-            if (exptime_total == 0) != zero_exptime:
+            if zero_exptime and exptime != 0:
                 raise ValueError(f"Exposure times must be all zero or all non-zero")
+            if not zero_exptime and exptime == 0:
+                raise ValueError(f"Exposure times must be all zero or all non-zero")
+
+            if exptime < 0:
+                raise ValueError("Exposure times cannot be negative")
+            elif exptime == 0:
+                exptime_norm = 1.0
+            else:
+                exptime_norm = exptime
+            
+            exptime_total += exptime                
             
             for chip in self.chips:
                 for suffix in ['CCD', 'VAR']:
                     ext_name = f'{chip}_{suffix}'
                     
                     frame = l1_obj.data[ext_name]
-                    exptime = l1_obj.header['PRIMARY']['ELAPSED']
 
                     lower = approx_stats[ext_name]['norm_lower']
                     upper = approx_stats[ext_name]['norm_upper']
-                    valid = (frame / exptime >= lower) & (frame / exptime <= upper)
+                    valid = ((frame / exptime_norm) >= lower) & ((frame / exptime_norm) <= upper)
 
-                    delta = frame - exact_stats[ext_name]['norm_mean']
-                    delta[~valid] = 0
+                    N = exact_stats[ext_name]['N']
+                    N[valid] += 1
+    
+                    S0 = exact_stats[ext_name]['S0']
+                    S0[valid] += frame[valid]
 
-                    mean = exact_stats['exptime']['']
+                    S1 = exact_stats[ext_name]['S1']
+                    D1 = frame / exptime_norm - S1
+                    D1[~valid] = 0
+                    S1[valid] += D1[valid] / N[valid]
 
+                    D2 = frame / exptime_norm - S1
+                    S2 = exact_stats[ext_name]['S2']
+                    S2[valid] += D1[valid] * D2[valid]
 
-                    exact_stats[ext_name]['mean'] += (
-                        np.where(valid, delta / exact_stats[ext_name]['nframe'], 0)
-                    )
+                    exact_stats[ext_name]['S0'] = S0
+                    exact_stats[ext_name]['S1'] = S1
+                    exact_stats[ext_name]['S2'] = S2
 
-                    delta2 = np.where(valid, frame - exact_stats[ext_name]['mean'], 0)
-
-                    exact_stats[ext_name]['X2'] += np.where(valid, delta * delta2, 0)
     
         for chip in self.chips:
             for suffix in ['CCD', 'VAR']:
                 ext_name = f'{chip}_{suffix}'
+
+                N = exact_stats[ext_name]['N']
+                S0 = exact_stats[ext_name]['S0']
+                S1 = exact_stats[ext_name]['S1']
+                S2 = exact_stats[ext_name]['S2']
+
+                rms = np.zeros_like(S2)
+                good = N > 0
+                rms[good] = np.sqrt(S2[good] / N[good])
+
+                exact_stats[ext_name]['clipped_sum'] = S0
+                exact_stats[ext_name]['norm_mean'] = S1
+                exact_stats[ext_name]['norm_rms'] = rms  
                 
-                N = exact_stats[ext_name]['nframe']
-                X2 = exact_stats[ext_name]['X2']
+                exact_stats[ext_name].pop('S0')
+                exact_stats[ext_name].pop('S1')
+                exact_stats[ext_name].pop('S2')
 
-                exact_stats[ext_name]['rms'] = np.where(N >= 2, np.sqrt(X2 / N), np.nan)
-                exact_stats[ext_name].pop('X2')
-
-        return exact_stats
+        return exact_stats, exptime_total
