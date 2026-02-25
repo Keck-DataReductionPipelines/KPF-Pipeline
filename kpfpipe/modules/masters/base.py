@@ -5,49 +5,87 @@ from astropy.stats import mad_std
 import numpy as np
 import warnings
 
-from kpfpipe import DEFAULTS
+from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.utils.kpf_parse import get_datecode, fetch_filepath
 from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
-    'nframe_stream': 5,
+    'nframe_stream': 6,
     'stack_sigma': 5.0,
 })
 
-# TODO: scale stacks by exposure time
+DEFAULTS.update(DETECTOR)
+NROW = DETECTOR['ccd']['nrow']
+NCOL = DETECTOR['ccd']['ncol']
+
+# TODO: move frame-caching logic into load_frame
 # TODO: double-check variance calculations for correctness
 # TODO: check consistency of nframe_stream and nframe_direct keywords
 # TODO: line profile and remove uneccessary array allocations
-# TODO: stack frames into L1 object
+# TODO: build output object
+# TODO: decide how to handle ImageAssembly config
 
 
 class BaseMastersModule:
-    def __init__(self, l0_file_list):
+    def __init__(self, l0_file_list, config={}):
         self.l0_file_list = l0_file_list
 
         for k in DEFAULTS.keys():
             self.__setattr__(k, config.get(k,DEFAULTS[k]))
 
 
-    @staticmethod
-    def load_frame(fn):
-        l0_obj = KPF0.from_fits(fn)
-        return l0_obj
+    def load_frame(self, fn, ncache=None):
+        """
+        Loads and L0 file from disk and performs image assembly
+
+        fn (str): filename 
+
+        Returns
+        -------
+            l1_obj (KPF1)
+            exit_code (bool) : 1 if file was successfully loaded and processed, 0 otherwise
+
+        Notes
+        -----
+        This function will automatically cache a subset of L1 objects for downstream use.
+        The maximum number of cached items allowed is set by ncache.
+        """
+        if ncache is None:
+            ncache = self.nframe_stream - 1
+
+        if not hasattr(self, '_l1_obj_cache'):
+            self._l1_obj_cache = {}
+
+        success = True
+        failure = False
+
+        if fn in self._l1_obj_cache:
+            l1_obj = self._l1_obj_cache[fn]
+
+        else:
+            try:
+                l0_obj = KPF0.from_fits(fn)
+                l1_obj = ImageAssembly(l0_obj).perform()
+
+                if len(self._l1_obj_cache) < ncache:
+                    self._l1_obj_cache[fn] = l1_obj
+
+            except FileNotFoundError as e:
+                warnings.warn(f"Failed to load {fn}: {e}")
+                return None, failure
+        
+        return l1_obj, success
 
 
-    @staticmethod
-    def assemble_frame(l0_obj):
-        l1_obj = ImageAssembly(l0_obj).perform()
-        return l1_obj
-
-
-    def stack_frames(self, l0_file_list=None, nframe_stream=None, sigma=None):
+    def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
         """
         Stacks full frame images and computes clipped mean and variance
-          * For nframe_stream <= 5, statistics are computed directly
-          * For nframe_stream > 5, computation uses streaming Welford's algorithm
+        
+         - if len(l0_file_list) < nstream, statistics are computed directly
+         - if len(l0_file_list) >= nstream, statistics are computed using
+           Welford's algorithm for streaming mean and variance
 
         Returns
             dict
@@ -57,53 +95,72 @@ class BaseMastersModule:
             
             exptime (float; integrated exposure time across full stack)
 
-            Note that due to outlier rejection sum = mean * exptime only for pixels
+            Note that due to outlier rejection, sum = mean * exptime only for pixels
             which are valid in every frame in the stack
 
-        IMG = CCD['mean']
-        SNR = CCD['sum'] / np.sqrt(VAR['sum'])
+        IMG: CCD['mean']
+        SNR: CCD['sum'] / np.sqrt(VAR['sum'])
+        MASK: bool, pixels where at least 50% of frames in stack are good
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if nframe_stream is None:
-            nframe_stream = self.nframe_stream
+        if nstream is None:
+            nstream = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
 
-        if len(l0_file_list) <= nframe_stream:
-            stats = self.compute_direct_statistics(sigma = sigma)
+        nframe = len(l0_file_list)
+
+        if nframe < 2:
+            raise ValueError(f"Stacking requires at least two frames, got {nframe}")
+
+        if nframe < nstream:
+            stats, exptime = self._compute_direct_statistics(l0_file_list, nstream - 1, sigma)
         else:
-            stats = self.compute_streaming_statistics(sigma = sigma)
+            stats, exptime = self._compute_streaming_statistics(l0_file_list, nstream - 1, sigma)
 
-        return None
+        l1_arrays = {}
+        for chip in self.chips:
+            img = stats[f'{chip}_CCD']['norm_mean']
+            tot = stats[f'{chip}_CCD']['raw_sum']
+            var = stats[f'{chip}_VAR']['raw_sum']
+
+            good = var > 0
+            for suffix in ['CCD','VAR']:
+                ext_name = f'{chip}_{suffix}'
+                good &= stats[ext_name]['nframe'] > 0.5 * nframe
+
+            snr = np.zeros_like(img)
+            snr[good] = tot[good] / np.sqrt(var[good])
+
+            l1_arrays[f'{chip}_IMG'] = img
+            l1_arrays[f'{chip}_SNR'] = snr
+            l1_arrays[f'{chip}_MASK'] = good
+
+        return l1_arrays
 
 
-    def _compute_direct_statistics(self, l0_file_list=None, nframe_stack=None, nframe_cache=None, sigma=None):
+    def _compute_direct_statistics(self, l0_file_list=None, nframe=None, sigma=None):
         """
-        nframe_stack : maximum number of frames to stack for computing statistics
-        nframe_cache : maximum number of L1 objects to cache
+        nframe : maximum number of frames to stack for computing statistics
 
         Notes
         -----
-        This function will automatically cache a subset of L1 objects for downstream use.
-        The maximum number of cached items allowed is set by nframe_cached, but the actual number
-        of cached items will be the smallest of len(l0_file_list), nframe_stack, and nframe_cache.
+        Passing nframe in addition to l0_file_list helps robust statistics to be
+        computed by enabling extra fallback files if some frames fail to load
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if nframe_stack is None:
-            nframe_stack = self.nframe_stream
-        if nframe_cache is None:
-            nframe_cache = self.nframe_stream
+        if nframe is None:
+            nframe = self.nframe_stream - 1
         if sigma is None:
             sigma = self.stack_sigma
         
-        nframe = np.min([nframe_stack,len(l0_file_list)])
-        ncache = np.min([nframe, nframe_cache])
+        nframe = np.min([nframe,len(l0_file_list)])
 
-        if not hasattr(self, '_l1_obj_cache'):
-            self._l1_obj_cache = {}
-        
+        if nframe < 2:
+            raise ValueError(f"Stacking requires at least two frames, got {nframe}")
+
         data_cube = {}
         exptime = np.zeros(nframe,dtype=np.float32)
 
@@ -118,23 +175,13 @@ class BaseMastersModule:
             if i >= nframe:
                 break
 
-            if fn in self._l1_obj_cache:
-                l1_obj = self._l1_obj_cache[fn]
-
-            else:
-                try:
-                    l0_obj = self.load_frame(fn)
-                    l1_obj = self.assemble_frame(l0_obj)
-
-                    if len(self._l1_obj_cache) < ncache:
-                        self._l1_obj_cache[fn] = l1_obj
-
-                except FileNotFoundError as e:
-                    warnings.warn(f"Skipping {fn} in compute_direct_statistics: {e}")
-                    failure += 1
-                    if failure / nframe > 0.2:
-                        raise ValueError(f"more than 20% of frames in stack failed to load")
-                    continue
+            l1_obj, success = self.load_frame(fn)
+            
+            if not success:
+                failure += 1
+                if failure / len(l0_file_list) > 0.2:
+                    raise ValueError(f"more than 20% of frames in stack failed to load")
+                continue
 
             exptime[i] = l1_obj.header['PRIMARY']['ELAPSED']
             
@@ -143,9 +190,6 @@ class BaseMastersModule:
                 data_cube[f'{chip}_VAR'][i] = l1_obj.data[f'{chip}_VAR']
 
             i += 1
-
-        if i < 2:
-            raise ValueError(f"At least two frames neeed for frame stacking, got {i}")
 
         if i < nframe:
             exptime = exptime[:i]
@@ -174,8 +218,9 @@ class BaseMastersModule:
                 flag_outliers(data_cube[f'{chip}_VAR'] / T, sigma, axis=0)
             )
 
-            N = np.sum(~out, axis=0)
             valid = ~out
+            N = np.sum(~out, axis=0)
+            good = N > 1
             
             for suffix in ['CCD', 'VAR']:
                 ext_name = f'{chip}_{suffix}'
@@ -185,24 +230,22 @@ class BaseMastersModule:
                 S1 = np.sum(D / T, axis=0, where=valid)
                 S2 = np.sum((D / T)**2, axis=0, where=valid)
 
-                good = N > 0
-                
                 mean = np.zeros_like(S1)
                 mean[good] = S1[good] / N[good]
 
                 var = np.zeros_like(S2)
-                var[good] = S2[good] / N[good] - mean[good]**2
-                
+                var[good] = (S2[good] - S1[good]**2 / N[good]) / (N[good] - 1)
                 rms = np.sqrt(np.maximum(var,0))
 
-                stats[ext_name]['clipped_sum'] = S0
+                stats[ext_name]['nframe'] = N
+                stats[ext_name]['raw_sum'] = S0
                 stats[ext_name]['norm_mean'] = mean
                 stats[ext_name]['norm_rms'] = rms
 
         return stats, exptime_total
 
 
-    def _compute_streaming_statistics(self, l0_file_list=None, nframe_direct=None, sigma=None):
+    def _compute_streaming_statistics(self, l0_file_list=None, ndirect=None, sigma=None):
         """
         Computes mean and rms using Welford's algorithm
         
@@ -216,28 +259,26 @@ class BaseMastersModule:
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if nframe_direct is None:
-            nframe_direct = self.nframe_stream
+        if ndirect is None:
+            ndirect = self.nframe_stream - 1
         if sigma is None:
             sigma = self.stack_sigma
 
         approx_stats, exptime_direct = (
             self._compute_direct_statistics(
                 l0_file_list=l0_file_list,         
-                nframe_stack=nframe_direct, 
-                nframe_cache=nframe_direct, 
+                nframe=ndirect, 
                 sigma=sigma
             )
         )
 
-        zero_exptime = exptime_direct == 0
-        
-        if len(l0_file_list) <= nframe_direct:
-            return approx_stats  # exact_stats = approx_stats
+        if len(l0_file_list) <= ndirect:
+            return approx_stats, exptime_direct
 
         exact_stats = {}
         exptime_total = 0.0
-
+        zero_exptime = exptime_direct == 0
+        
         for chip in self.chips:
             for suffix in ['CCD', 'VAR']:
                 ext_name = f'{chip}_{suffix}'
@@ -255,37 +296,27 @@ class BaseMastersModule:
                 approx_stats[ext_name]['norm_upper'] = approx_mean + approx_rms * sigma
 
         failure = 0
-        nframe = 0
 
         for fn in l0_file_list:
-            if fn in self._l1_obj_cache:
-                l1_obj = self._l1_obj_cache[fn]
-                
-            else:
-                try:
-                    l0_obj = self.load_frame(fn)
-                    l1_obj = self.assemble_frame(l0_obj)
-                except FileNotFoundError as e:
-                    warnings.warn(f"Skipping {fn} in compute_streaming_statistics: {e}")
-                    failure += 1
-                    if failure / len(l0_file_list) > 0.2:
-                        raise ValueError(f"more than 20% of frames in stack failed to load")
-                    continue
+            l1_obj, success = self.load_frame(fn)
 
-            nframe += 1
+            if not success:
+                failure += 1
+                if failure / len(l0_file_list) > 0.2:
+                    raise ValueError(f"more than 20% of frames in stack failed to load")
+                continue
+
             exptime = l1_obj.header['PRIMARY']['ELAPSED']
 
-            if zero_exptime and exptime != 0:
-                raise ValueError(f"Exposure times must be all zero or all non-zero")
-            if not zero_exptime and exptime == 0:
+            if zero_exptime != (exptime == 0):
                 raise ValueError(f"Exposure times must be all zero or all non-zero")
 
             if exptime < 0:
                 raise ValueError("Exposure times cannot be negative")
             elif exptime == 0:
-                exptime_norm = 1.0
+                T = 1.0
             else:
-                exptime_norm = exptime
+                T = exptime
             
             exptime_total += exptime                
             
@@ -293,26 +324,25 @@ class BaseMastersModule:
                 for suffix in ['CCD', 'VAR']:
                     ext_name = f'{chip}_{suffix}'
                     
-                    frame = l1_obj.data[ext_name]
+                    D = l1_obj.data[ext_name]
 
                     lower = approx_stats[ext_name]['norm_lower']
                     upper = approx_stats[ext_name]['norm_upper']
-                    valid = ((frame / exptime_norm) >= lower) & ((frame / exptime_norm) <= upper)
+                    valid = (D / T >= lower) & (D / T <= upper)
 
                     N = exact_stats[ext_name]['N']
                     N[valid] += 1
     
                     S0 = exact_stats[ext_name]['S0']
-                    S0[valid] += frame[valid]
+                    S0[valid] += D[valid]
 
                     S1 = exact_stats[ext_name]['S1']
-                    D1 = frame / exptime_norm - S1
-                    D1[~valid] = 0
-                    S1[valid] += D1[valid] / N[valid]
-
-                    D2 = frame / exptime_norm - S1
+                    delta1 = D / T - S1
+                    delta1[~valid] = 0
+                    S1[valid] += delta1[valid] / N[valid]
+                    delta2 = D / T - S1
                     S2 = exact_stats[ext_name]['S2']
-                    S2[valid] += D1[valid] * D2[valid]
+                    S2[valid] += delta1[valid] * delta2[valid]
 
                     exact_stats[ext_name]['S0'] = S0
                     exact_stats[ext_name]['S1'] = S1
@@ -328,16 +358,18 @@ class BaseMastersModule:
                 S1 = exact_stats[ext_name]['S1']
                 S2 = exact_stats[ext_name]['S2']
 
-                rms = np.zeros_like(S2)
-                good = N > 0
-                rms[good] = np.sqrt(S2[good] / N[good])
+                mean = S1
+                good = N > 1
 
-                exact_stats[ext_name]['clipped_sum'] = S0
-                exact_stats[ext_name]['norm_mean'] = S1
-                exact_stats[ext_name]['norm_rms'] = rms  
-                
-                exact_stats[ext_name].pop('S0')
-                exact_stats[ext_name].pop('S1')
-                exact_stats[ext_name].pop('S2')
+                var = np.zeros_like(S2)
+                var[good] = S2[good] / (N[good] - 1)
+                rms = np.sqrt(np.maximum(var,0))
+
+                exact_stats[ext_name]['nframe'] = exact_stats[ext_name].pop('N')
+                exact_stats[ext_name]['raw_sum'] = exact_stats[ext_name].pop('S0')
+                exact_stats[ext_name]['norm_mean'] = exact_stats[ext_name].pop('S1')
+                exact_stats[ext_name]['norm_rms'] = rms
+
+                del exact_stats[ext_name]['S2']
 
         return exact_stats, exptime_total
