@@ -12,11 +12,15 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
+from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+
+NORDER_GREEN = DETECTOR['norder']['GREEN']
+NORDER_RED = DETECTOR['norder']['RED']
 
 
 @pytest.fixture
@@ -481,7 +485,6 @@ class TestKPF2Aliases:
 
     def test_chip_prefix_access(self):
         """Test GREEN_/RED_ prefix returns correct slices of concatenated trace."""
-        from kpfpipe.constants import NORDER_GREEN, NORDER_RED
         kpf2 = KPF2()
         n_pix = 100
         trace_data = np.random.random((NORDER_GREEN + NORDER_RED, n_pix))
