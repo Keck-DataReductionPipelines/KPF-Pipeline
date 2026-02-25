@@ -10,28 +10,25 @@ DEFAULTS = {
 }
 
 # Lazy-load the detector config on first access
-_detector = None
 
 def load_detector_config():
-    global _detector
-    if _detector is None:
-        path = Path(REPO_ROOT) / "reference/detector.toml"
-        config = tomllib.loads(path.read_text())
+    path = Path(REPO_ROOT) / "reference/detector.toml"
+    config = tomllib.loads(path.read_text())
 
-        # Uppercase 'red'/'green' keys recursively, but keep them in dict
-        def traverse(obj):
-            if isinstance(obj, dict):
-                return {
-                    (k.upper() if isinstance(k, str) and k.lower() in ("red", "green") else k):
-                    traverse(v)
-                    for k, v in obj.items()
-                }
-            if isinstance(obj, list):
-                return [traverse(v) for v in obj]
-            return obj
+    # Uppercase 'red'/'green' keys recursively, but keep them in dict
+    def traverse(obj):
+        if isinstance(obj, dict):
+            return {
+                (k.upper() if isinstance(k, str) and k.lower() in ("red", "green") else k):
+                traverse(v)
+                for k, v in obj.items()
+            }
+        if isinstance(obj, list):
+            return [traverse(v) for v in obj]
+        return obj
 
-        _detector = dict(traverse(config))
+    _detector = dict(traverse(config))
 
-    return _detector
+return _detector
 
 DETECTOR = load_detector_config()
