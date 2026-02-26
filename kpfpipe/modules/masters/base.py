@@ -115,15 +115,17 @@ class BaseMastersModule:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
         if nframe < nstream:
-            stats, exptime = self._compute_direct_statistics(l0_file_list, nstream - 1, sigma)
+            stats, exptime = self._compute_stats_from_datacube(l0_file_list, nstream - 1, sigma)
         else:
-            stats, exptime = self._compute_streaming_statistics(l0_file_list, nstream - 1, sigma)
+            stats, exptime = self._compute_stats_from_stream(l0_file_list, nstream - 1, sigma)
+
+        # TODO: add check that nframe is consistent between CCD and VAR
 
         l1_arrays = {}
         for chip in self.chips:
-            img = stats[f'{chip}_CCD']['norm_mean']
-            tot = stats[f'{chip}_CCD']['raw_sum']
-            var = stats[f'{chip}_VAR']['raw_sum']
+            img = stats[f'{chip}_CCD']['rate_mean']
+            tot = stats[f'{chip}_CCD']['total_sum']
+            var = stats[f'{chip}_VAR']['total_sum']
 
             good = var > 0
             for suffix in ['CCD','VAR']:
@@ -140,7 +142,7 @@ class BaseMastersModule:
         return l1_arrays
 
 
-    def _compute_direct_statistics(self, l0_file_list=None, nframe=None, sigma=None):
+    def _compute_stats_from_datacube(self, l0_file_list=None, nframe=None, sigma=None):
         """
         nframe : maximum number of frames to stack for computing statistics
 
@@ -223,31 +225,25 @@ class BaseMastersModule:
             good = N > 1
             
             for suffix in ['CCD', 'VAR']:
-                ext_name = f'{chip}_{suffix}'
+                ext = f'{chip}_{suffix}'
+                D = data_cube[ext]
 
-                D = data_cube[ext_name]
-                S0 = np.sum(D, axis=0, where=valid)        
-                S1 = np.sum(D / T, axis=0, where=valid)
-                S2 = np.sum((D / T)**2, axis=0, where=valid)
+                total_sum = np.sum(D, axis=0, where=valid)
+                rate_mean = np.mean(D / T, axis=0, where=valid)
+                rate_rms = np.zeros_like(rate_mean)
+                rate_rms[good] = np.std(D / T, axis=0, where=valid, ddof=1)[good]
 
-                mean = np.zeros_like(S1)
-                mean[good] = S1[good] / N[good]
-
-                var = np.zeros_like(S2)
-                var[good] = (S2[good] - S1[good]**2 / N[good]) / (N[good] - 1)
-                rms = np.sqrt(np.maximum(var,0))
-
-                stats[ext_name]['nframe'] = N
-                stats[ext_name]['raw_sum'] = S0
-                stats[ext_name]['norm_mean'] = mean
-                stats[ext_name]['norm_rms'] = rms
+                stats[ext]['nframe'] = N
+                stats[ext]['total_sum'] = total_sum
+                stats[ext]['rate_mean'] = rate_mean
+                stats[ext]['rate_rms'] = rate_rms
 
         return stats, exptime_total
 
 
-    def _compute_streaming_statistics(self, l0_file_list=None, ndirect=None, sigma=None):
+    def _compute_stats_from_stream(self, l0_file_list=None, ndirect=None, sigma=None):
         """
-        Computes mean and rms using Welford's algorithm
+        Computes mean and rms using streaming Welford's algorithm
         
         Note that the variance computed by Welford's algorithm is the frame-to-frame
         rms NOT the photon noise variance.
@@ -255,7 +251,7 @@ class BaseMastersModule:
         Optimized to reduce RAM usage at the expense of compute speed
         Estimates approximate mean and rms directly to perform outlier rejection
 
-        nframe_direct : maximum number of frames pass to _compute_direct_statistics
+        nframe_direct : maximum number of frames pass to _compute_stats_from_datacube
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -265,7 +261,7 @@ class BaseMastersModule:
             sigma = self.stack_sigma
 
         approx_stats, exptime_direct = (
-            self._compute_direct_statistics(
+            self._compute_stats_from_datacube(
                 l0_file_list=l0_file_list,         
                 nframe=ndirect, 
                 sigma=sigma
@@ -281,19 +277,19 @@ class BaseMastersModule:
         
         for chip in self.chips:
             for suffix in ['CCD', 'VAR']:
-                ext_name = f'{chip}_{suffix}'
+                ext = f'{chip}_{suffix}'
 
-                exact_stats[ext_name] = {}
-                exact_stats[ext_name]['N'] = np.zeros((NROW,NCOL),dtype=np.int32)
-                exact_stats[ext_name]['S0'] = np.zeros((NROW,NCOL),dtype=np.float32)
-                exact_stats[ext_name]['S1'] = np.zeros((NROW,NCOL),dtype=np.float32)
-                exact_stats[ext_name]['S2'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext] = {}
+                exact_stats[ext]['nframe'] = np.zeros((NROW,NCOL),dtype=np.int32)
+                exact_stats[ext]['total_sum'] = np.zeros((NROW,NCOL),dtype=np.float64)
+                exact_stats[ext]['rate_mean'] = np.zeros((NROW,NCOL),dtype=np.float64)
+                exact_stats[ext]['rate_M2'] = np.zeros((NROW,NCOL),dtype=np.float64)
 
-                approx_mean = approx_stats[ext_name]['norm_mean']
-                approx_rms = approx_stats[ext_name]['norm_rms']
+                approx_mean = approx_stats[ext]['rate_mean']
+                approx_rms = approx_stats[ext]['rate_rms']
                 
-                approx_stats[ext_name]['norm_lower'] = approx_mean - approx_rms * sigma
-                approx_stats[ext_name]['norm_upper'] = approx_mean + approx_rms * sigma
+                approx_stats[ext]['rate_lower'] = approx_mean - approx_rms * sigma
+                approx_stats[ext]['rate_upper'] = approx_mean + approx_rms * sigma
 
         failure = 0
 
@@ -321,55 +317,50 @@ class BaseMastersModule:
             exptime_total += exptime                
             
             for chip in self.chips:
+                valid = np.ones((NROW,NCOL), dtype=bool)
+
                 for suffix in ['CCD', 'VAR']:
-                    ext_name = f'{chip}_{suffix}'
-                    
-                    D = l1_obj.data[ext_name]
+                    ext = f'{chip}_{suffix}'
+                    D = l1_obj.data[ext] 
 
-                    lower = approx_stats[ext_name]['norm_lower']
-                    upper = approx_stats[ext_name]['norm_upper']
-                    valid = (D / T >= lower) & (D / T <= upper)
+                    lower = approx_stats[ext]['rate_lower']
+                    upper = approx_stats[ext]['rate_upper']
+                    valid &= (D / T >= lower) & (D / T <= upper)
 
-                    N = exact_stats[ext_name]['N']
+                for suffix in ['CCD', 'VAR']:
+                    ext = f'{chip}_{suffix}'
+                    D = l1_obj.data[ext]
+
+                    N = exact_stats[ext]['nframe']
                     N[valid] += 1
     
-                    S0 = exact_stats[ext_name]['S0']
-                    S0[valid] += D[valid]
+                    total_sum = exact_stats[ext]['total_sum']
+                    total_sum[valid] += D[valid]
 
-                    S1 = exact_stats[ext_name]['S1']
-                    delta1 = D / T - S1
-                    delta1[~valid] = 0
-                    S1[valid] += delta1[valid] / N[valid]
-                    delta2 = D / T - S1
-                    S2 = exact_stats[ext_name]['S2']
-                    S2[valid] += delta1[valid] * delta2[valid]
+                    # Welford algorithm accumulation begins
+                    mean = exact_stats[ext]['rate_mean']
+                    delta = D / T - mean
+                    delta[~valid] = 0
+                    mean[valid] += delta[valid] / N[valid]
+                    delta2 = D / T - mean
+                    M2 = exact_stats[ext]['rate_M2']
+                    M2[valid] += delta[valid] * delta2[valid]
+                    # Welford algorithm accumulation ends
 
-                    exact_stats[ext_name]['S0'] = S0
-                    exact_stats[ext_name]['S1'] = S1
-                    exact_stats[ext_name]['S2'] = S2
+                    exact_stats[ext]['total_sum'] = total_sum
+                    exact_stats[ext]['rate_mean'] = mean
+                    exact_stats[ext]['rate_M2'] = M2
 
-    
         for chip in self.chips:
             for suffix in ['CCD', 'VAR']:
-                ext_name = f'{chip}_{suffix}'
+                ext = f'{chip}_{suffix}'
 
-                N = exact_stats[ext_name]['N']
-                S0 = exact_stats[ext_name]['S0']
-                S1 = exact_stats[ext_name]['S1']
-                S2 = exact_stats[ext_name]['S2']
+                N = exact_stats[ext]['nframe']
+                mean = exact_stats[ext]['rate_mean']
+                M2 = exact_stats[ext]['rate_M2']
+                rms = np.sqrt(np.where(N > 1, M2 / (N - 1), 0))
 
-                mean = S1
-                good = N > 1
-
-                var = np.zeros_like(S2)
-                var[good] = S2[good] / (N[good] - 1)
-                rms = np.sqrt(np.maximum(var,0))
-
-                exact_stats[ext_name]['nframe'] = exact_stats[ext_name].pop('N')
-                exact_stats[ext_name]['raw_sum'] = exact_stats[ext_name].pop('S0')
-                exact_stats[ext_name]['norm_mean'] = exact_stats[ext_name].pop('S1')
-                exact_stats[ext_name]['norm_rms'] = rms
-
-                del exact_stats[ext_name]['S2']
+                exact_stats[ext]['rate_rms'] = rms
+                del exact_stats[ext]['rate_M2']
 
         return exact_stats, exptime_total
