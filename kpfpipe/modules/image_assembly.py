@@ -9,16 +9,6 @@ from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
     'overscan_method': 'rowmedian',
-    'gain': {
-        'GREEN_AMP1': 5.175,
-        'GREEN_AMP2': 5.208,
-        'GREEN_AMP3': 5.52,
-        'GREEN_AMP4': 5.39,
-        'RED_AMP1': 5.02,
-        'RED_AMP2': 5.27,
-        'RED_AMP3': 5.32,
-        'RED_AMP4': 5.23,
-    }
 })
 
 DEFAULTS.update(DETECTOR)
@@ -57,7 +47,29 @@ class ImageAssembly:
         for k, v in self.ccd.items():
             self.__setattr__(k, v)
 
+        self._parse_amplifier_reference()
+
     
+    def _parse_amplifier_reference(self):
+        """
+        Load orientation mapping and gain for amplifier channels.
+
+        Orientation keys indicate how to flip/rotate each amplifier channel to 
+        standard orientation (serial overscan on right, parallel overscan on bottom).
+        Cached in `self.orientation` for repeated use.
+        """
+        if not hasattr(self, 'orientation'):
+            self.orientation = {}
+        if not hasattr(self, 'gain'):
+            self.gain = {}
+
+        for chip in self.chips:
+            chip = chip.upper()
+            df = pd.DataFrame(self.amplifiers[chip]).set_index('channel_id')
+            self.orientation.update(dict(zip(df['ext_name'], df['flip'])))
+            self.gain.update(dict(zip(df['ext_name'], df['gain'])))
+
+
     def count_amplifiers(self, chip):
         """
         Count the number of amplifier extensions present for a given CCD and
@@ -100,35 +112,6 @@ class ImageAssembly:
             raise ValueError(f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD")
         
 
-    def _read_orientation_reference(self, chip):
-        """
-        Load the orientation mapping for amplifier channels.
-
-        Parameters
-        ----------
-        chip : str
-            CCD identifier, e.g., 'GREEN' or 'RED'.
-
-        Returns
-        -------
-        dict
-            Dictionary mapping channel extensions to orientation keys.
-
-        Notes
-        -----
-        Orientation keys indicate how to flip/rotate each amplifier channel to 
-        standard orientation (serial overscan on right, parallel overscan on bottom).
-        Cached in `self.orientation` for repeated use.
-        """
-        if not hasattr(self, 'orientation'):
-            self.orientation = {}
-
-        df = pd.DataFrame(self.amplifiers[chip.upper()]).set_index('channel_id')
-        self.orientation[chip.upper()] = dict(zip(df['ext_name'], df['flip']))
-
-        return self.orientation[chip.upper()]
-
-    
     def orient_channels(self, chip):
         """
         Reorient amplifier channels to a standard orientation in-place.
@@ -148,11 +131,10 @@ class ImageAssembly:
         The transformations are flips; calling twice will undo the operation.
         """
         chip = chip.upper()
-        orientation = self._read_orientation_reference(chip)
 
         for i in range(self.namp[chip]):
             channel_ext = f'{chip.upper()}_AMP{i+1}'
-            flip = orientation[channel_ext]
+            flip = self.orientation[channel_ext]
             image = self.l0_obj.data[channel_ext]
 
             if flip == 'rows':

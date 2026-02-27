@@ -29,6 +29,6 @@ def load_detector_config():
 
     _detector = dict(traverse(config))
 
-return _detector
+    return _detector
 
 DETECTOR = load_detector_config()
