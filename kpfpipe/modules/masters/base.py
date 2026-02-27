@@ -20,8 +20,6 @@ DEFAULTS.update(DETECTOR)
 NROW = DETECTOR['ccd']['nrow']
 NCOL = DETECTOR['ccd']['ncol']
 
-# TODO: move frame-caching logic into load_frame
-# TODO: double-check variance calculations for correctness
 # TODO: check consistency of nframe_stream and nframe_direct keywords
 # TODO: line profile and remove uneccessary array allocations
 # TODO: build output object
