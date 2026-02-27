@@ -28,6 +28,14 @@ NCOL = DETECTOR['ccd']['ncol']
 
 
 class BaseMastersModule:
+        """
+        Base class for KPF masters generation.
+        The class should not be called directly, but is used for inheritance
+        of masters subclasses: Bias, Dark, Flat, WLS.
+
+        Masters modules read a stack of L0 files from disk and output
+        a masters L1 object.
+        """
     def __init__(self, l0_file_list, config={}):
         self.l0_file_list = l0_file_list
 
@@ -37,19 +45,27 @@ class BaseMastersModule:
 
     def load_frame(self, fn, ncache=None):
         """
-        Loads and L0 file from disk and performs image assembly
+        Load an L0 file and perform image assembly to produce an L1 object.
 
-        fn (str): filename 
+        Parameters
+        ----------
+        fn : str
+            Path to L0 FITS file.
+        ncache : int, optional
+            Maximum number of L1 objects to retain in internal cache.
 
         Returns
         -------
-            l1_obj (KPF1)
-            exit_code (bool) : 1 if file was successfully loaded and processed, 0 otherwise
+        l1_obj : KPF1 or None
+            Assembled L1 data object if successful, otherwise None.
+        success : bool
+            True if file was successfully loaded and processed, False otherwise.
 
         Notes
         -----
-        This function will automatically cache a subset of L1 objects for downstream use.
-        The maximum number of cached items allowed is set by ncache.
+        Successfully processed frames may be cached to reduce redundant I/O and
+        recomputation. Cache size is limited by `ncache`, which defaults to
+        `nframe_stream - 1`.
         """
         if ncache is None:
             ncache = self.nframe_stream - 1
@@ -80,26 +96,34 @@ class BaseMastersModule:
 
     def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
         """
-        Stacks full frame images and computes clipped mean and variance
-        
-         - if len(l0_file_list) < nstream, statistics are computed directly
-         - if len(l0_file_list) >= nstream, statistics are computed using
-           Welford's algorithm for streaming mean and variance
+        Stack full-frame images to produce masters L1.
+
+        Parameters
+        ----------
+        l0_file_list : list of str, optional
+            List of L0 FITS filenames to stack.
+        nstream : int, optional
+            Threshold number of frames above which streaming statistics are used.
+        sigma : float, optional
+            Sigma threshold for frame-to-frame outlier rejection.
 
         Returns
-            dict
-                sum (2D array; total photons collected, after rejecting outliers)
-                mean (2D array; frame-to-frame mean, after normalizing exptime)
-                rms (2D array; frame-to-frame rms, after normalizing exptime)
-            
-            exptime (float; integrated exposure time across full stack)
+        -------
+        l1_arrays : dict
+            Dictionary containing per-chip stacked products:
+            - '{chip}_IMG'  : mean count rate FFI
+            - '{chip}_SNR'  : signal-to-noise ratio FFI
+            - '{chip}_MASK' : boolean bad pixel mask (1 = good, 0 = bad)
 
-            Note that due to outlier rejection, sum = mean * exptime only for pixels
-            which are valid in every frame in the stack
+        Notes
+        -----
+        If number of frames is less than `nstream`, statistics are computed
+        directly from a full data cube. Otherwise, streaming Welford statistics
+        are used to reduce memory usage.
 
-        IMG: CCD['mean']
-        SNR: CCD['sum'] / np.sqrt(VAR['sum'])
-        MASK: bool, pixels where at least 50% of frames in stack are good
+        An initial subset of frames is processed using the direct data cube
+        method to estimate approximate mean and rms. These estimates define
+        per-pixel clipping bounds for the streaming pass.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -143,12 +167,33 @@ class BaseMastersModule:
 
     def _compute_stats_from_datacube(self, l0_file_list=None, nframe=None, sigma=None):
         """
-        nframe : maximum number of frames to stack for computing statistics
+        Compute stacked statistics using an in-memory data cube.
+
+        Parameters
+        ----------
+        l0_file_list : list of str, optional
+            List of L0 FITS filenames to process.
+        nframe : int, optional
+            Maximum number of successfully loaded frames to include.
+        sigma : float, optional
+            Sigma threshold for outlier rejection across frames.
+
+        Returns
+        -------
+        stats : dict
+            Per-extension statistics including:
+            - 'nframe'     : number of valid frames per pixel
+            - 'total_sum'  : summed counts across valid frames
+            - 'rate_mean'  : exposure-time-normalized mean
+            - 'rate_rms'   : frame-to-frame sample RMS
+        exptime_total : float
+            Total integrated exposure time across included frames.
 
         Notes
         -----
-        Passing nframe in addition to l0_file_list helps robust statistics to be
-        computed by enabling extra fallback files if some frames fail to load
+        Outlier rejection is performed jointly on CCD and VAR extensions.
+        Exposure times must be either all zero or all strictly positive.
+        Raises an error if more than 20% of frames fail to load.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -242,15 +287,38 @@ class BaseMastersModule:
 
     def _compute_stats_from_stream(self, l0_file_list=None, ndirect=None, sigma=None):
         """
-        Computes mean and rms using streaming Welford's algorithm
-        
-        Note that the variance computed by Welford's algorithm is the frame-to-frame
-        rms NOT the photon noise variance.
+        Compute stacked statistics using streaming Welford accumulation.
 
-        Optimized to reduce RAM usage at the expense of compute speed
-        Estimates approximate mean and rms directly to perform outlier rejection
+        Parameters
+        ----------
+        l0_file_list : list of str, optional
+            List of L0 FITS filenames to process.
+        ndirect : int, optional
+            Number of initial frames used to estimate approximate statistics
+            for defining clipping thresholds.
+        sigma : float, optional
+            Sigma threshold for outlier rejection.
 
-        nframe_direct : maximum number of frames pass to _compute_stats_from_datacube
+        Returns
+        -------
+        exact_stats : dict
+            Per-extension statistics including:
+            - 'nframe'     : number of valid frames per pixel
+            - 'total_sum'  : summed counts across valid frames
+            - 'rate_mean'  : per-pixel rate mean, normalized by exposure time
+            - 'rate_rms'   : frame-to-frame rate rms deviation
+        exptime_total : float
+            Total integrated exposure time across included frames.
+
+        Notes
+        -----
+        An initial subset of frames is processed using the direct data cube
+        method to estimate approximate mean and RMS. These estimates define
+        per-pixel clipping bounds for the streaming pass.
+
+        Optimized to reduce memory usage at the expense of compute speed.
+        Raises an error if more than 20% of frames fail to load or if exposure
+        times are inconsistent.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
