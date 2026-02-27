@@ -1,0 +1,30 @@
+# KPF detector parameters
+
+[ccd]
+nrow = 4080       # Detector rows (pixels)
+ncol = 4080       # Detector columns (pixels)
+prescan = 4       # Prescan columns (pixels)
+oscan_srl = 50    # Serial overscan columns (pixels)
+oscan_prl = 30    # Parallel overscan columns (pixels)
+
+[amplifiers]
+green = [
+  { channel_id = 1, flip = "none", ffi_row = 1, ffi_col = 1, ext_name = "GREEN_AMP1" },
+  { channel_id = 2, flip = "cols", ffi_row = 1, ffi_col = 2, ext_name = "GREEN_AMP2" },
+  { channel_id = 3, flip = "rows", ffi_row = 2, ffi_col = 1, ext_name = "GREEN_AMP3" },
+  { channel_id = 4, flip = "both", ffi_row = 2, ffi_col = 2, ext_name = "GREEN_AMP4" }
+]
+red = [
+  { channel_id = 1, flip = "none", ffi_row = 1, ffi_col = 1, ext_name = "RED_AMP1" },
+  { channel_id = 2, flip = "cols", ffi_row = 1, ffi_col = 2, ext_name = "RED_AMP2" },
+  { channel_id = 3, flip = "rows", ffi_row = 2, ffi_col = 1, ext_name = "RED_AMP3" },
+  { channel_id = 4, flip = "both", ffi_row = 2, ffi_col = 2, ext_name = "RED_AMP4" }
+]
+
+[norder]
+green = 35        # Number of green CCD echelle orders
+red = 32          # Number of red CCD echelle orders
+
+[echelle_orders]
+green = [137, 103]    # green CCD orders from grating equation, blue -> red
+red = [102, 71]       # red CCD orders from grating equation, blue -> red

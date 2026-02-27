@@ -4,13 +4,38 @@ KPF Image Assembly module.
 import numpy as np
 import pandas as pd
 
-from kpfpipe import REPO_ROOT, DEFAULTS
-from kpfpipe.data_models.level1 import KPF1
+from kpfpipe import REPO_ROOT, DEFAULTS, DETECTOR
 from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
     'overscan_method': 'rowmedian',
+    'gain': {
+        'GREEN_AMP1': 5.175,
+        'GREEN_AMP2': 5.208,
+        'GREEN_AMP3': 5.52,
+        'GREEN_AMP4': 5.39,
+        'RED_AMP1': 5.02,
+        'RED_AMP2': 5.27,
+        'RED_AMP3': 5.32,
+        'RED_AMP4': 5.23,
+    }
 })
+
+DEFAULTS.update(DETECTOR)
+
+_RN_KEYS = {
+    'GREEN_AMP1': ['RNGRN1', 'RNNGGR1'],
+    'GREEN_AMP2': ['RNGRN2', 'RNNGGR2'],
+    'GREEN_AMP3': ['RNGRN3', 'RNNGGR3'],
+    'GREEN_AMP4': ['RNGRN4', 'RNNGGR4'],
+    'RED_AMP1': ['RNRED1', 'RNNGRD1'],
+    'RED_AMP2': ['RNRED2', 'RNNGRD2'],
+    'RED_AMP3': ['RNRED3', 'RNNGRD3'],
+    'RED_AMP4': ['RNRED4', 'RNNGRD4'],
+}
+
+# TODO: use prescan from detector.toml config
+# TODO: add overscan and readnoise params to main config
 
 class ImageAssembly:
     """
@@ -29,6 +54,8 @@ class ImageAssembly:
         for k in DEFAULTS.keys():
             self.__setattr__(k, config.get(k,DEFAULTS[k]))
 
+        for k, v in self.ccd.items():
+            self.__setattr__(k, v)
 
     
     def count_amplifiers(self, chip):
@@ -66,16 +93,16 @@ class ImageAssembly:
                     self.namp[chip] += 1
 
         if self.namp[chip] == 2:
-            self.dims[chip] = (4080, 2040)
+            self.dims[chip] = (self.nrow, self.ncol // 2)
         elif self.namp[chip] == 4:
-            self.dims[chip] = (2040, 2040)
+            self.dims[chip] = (self.nrow // 2, self.ncol // 2)
         else:
             raise ValueError(f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD")
         
 
     def _read_orientation_reference(self, chip):
         """
-        Load the orientation mapping for amplifier channels from reference files.
+        Load the orientation mapping for amplifier channels.
 
         Parameters
         ----------
@@ -96,10 +123,8 @@ class ImageAssembly:
         if not hasattr(self, 'orientation'):
             self.orientation = {}
 
-        filepath = f'{REPO_ROOT}/reference/ccd_orientation_{chip.lower()}.txt'
-        with open(filepath, 'r') as f:
-            df = pd.read_csv(f, delimiter=' ')
-            self.orientation[chip.upper()] = dict(zip(df['CHANNEL_EXT'], df['CHANNEL_KEY']))
+        df = pd.DataFrame(self.amplifiers[chip.upper()]).set_index('channel_id')
+        self.orientation[chip.upper()] = dict(zip(df['ext_name'], df['flip']))
 
         return self.orientation[chip.upper()]
 
@@ -127,17 +152,19 @@ class ImageAssembly:
 
         for i in range(self.namp[chip]):
             channel_ext = f'{chip.upper()}_AMP{i+1}'
-            channel_key = orientation[channel_ext]
+            flip = orientation[channel_ext]
             image = self.l0_obj.data[channel_ext]
 
-            if channel_key == 1: # flip lr
-                image_reoriented = np.flip(image,axis=1)
-            elif channel_key == 2: # turn upside down and flip lr
-                image_reoriented = np.flip(image,axis=(0,1))
-            elif channel_key == 3: # turn upside down
+            if flip == 'rows':
                 image_reoriented = np.flip(image,axis=0)
-            elif channel_key == 4: # no change
+            elif flip == 'cols':
+                image_reoriented = np.flip(image,axis=1)
+            elif flip == 'both':
+                image_reoriented = np.flip(image,axis=(0,1))
+            elif flip == 'none':
                 image_reoriented = image
+            else:
+                raise ValueError("unexpected 'flip' entry found in orientation reference")
 
             self.l0_obj.data[channel_ext] = image_reoriented
 
@@ -160,24 +187,11 @@ class ImageAssembly:
         -----
         Conversion formula: pixel_electrons = pixel_ADU * gain / 65536
         """
-        # TODO: move gain to static config file or...
-        # TODO: should we read gain from header?
-        GAIN = {
-            'GREEN_AMP1': 5.175,
-            'GREEN_AMP2': 5.208,
-            'GREEN_AMP3': 5.52,
-            'GREEN_AMP4': 5.39,
-            'RED_AMP1': 5.02,
-            'RED_AMP2': 5.27,
-            'RED_AMP3': 5.32,
-            'RED_AMP4': 5.23,
-        }
-        
         chip = chip.upper()
 
         for i in range(self.namp[chip]):
             channel_ext = f'{chip}_AMP{i+1}'
-            self.l0_obj.data[channel_ext] *= GAIN[channel_ext] / (2 ** 16)
+            self.l0_obj.data[channel_ext] *= self.gain[channel_ext] / (2 ** 16)
                 
 
     def _get_overscan_pixels(self, chip, amp_no, prescan=[0,4], buffer=[0,0]):
@@ -416,6 +430,42 @@ class ImageAssembly:
         return ccd_ffi, var_ffi
     
 
+    def set_kpf1_headers(self, l1_obj):
+        """
+        Populate KPF1 header keywords related to read noise measurement
+        and overscan subtraction.
+
+        Parameters
+        ----------
+        l1_obj : KPF1
+            L1 data object whose PRIMARY header will be updated with
+            read noise and overscan metadata.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Header updates:
+        1. Read noise per amplifier channel (e.g. RNGRN1)
+        2. Non-Gaussian read noise per amplifier channel (e.g. RNNGGR1)
+        3. Overscan subtraction method (OSCANMET)
+        """
+        for channel_ext, rn in self.readnoise.items():
+            key_read, key_rnng = _RN_KEYS[channel_ext]
+            l1_obj.headers['PRIMARY'][key_read] = (
+                round(float(rn), 4), f'Read noise {channel_ext} [e-]'
+            )
+            l1_obj.headers['PRIMARY'][key_rnng] = (
+                round(float(rn), 4), f'Non-Gaussian read noise {channel_ext} [e-]'
+            )
+
+        l1_obj.headers['PRIMARY']['OSCANMET'] = (
+            self.overscan_method, 'Overscan subtraction method'
+        )
+
+
     def perform(self, chips=None, overscan_method=None):
         """
         Execute the image assembly algorithm. Optional keyword arguments
@@ -450,8 +500,10 @@ class ImageAssembly:
         if overscan_method is None:
             overscan_method = self.overscan_method
 
-        # TODO: l1_obj = l0_obj.to_l1()
-        l1_obj = KPF1()
+        self.chips = chips
+        self.overscan_method = overscan_method
+
+        l1_obj = self.l0_obj.to_kpf1()
 
         for chip in chips:
             self.count_amplifiers(chip)
@@ -460,9 +512,12 @@ class ImageAssembly:
             self.measure_read_noise(chip)
             self.subtract_overscan(chip, overscan_method)
             self.orient_channels(chip)
-            
+
             ccd_ffi, var_ffi = self.stitch_ffi(chip)
-            l1_obj.set_data(f'{chip}_CCD', data=ccd_ffi)
-            l1_obj.set_data(f'{chip}_VAR', data=var_ffi)        
-        
+            l1_obj.set_data(f'{chip}_CCD', ccd_ffi)
+            l1_obj.set_data(f'{chip}_VAR', var_ffi)
+
+        self.set_kpf1_headers(l1_obj)
+        l1_obj.receipt_add_entry('image_assembly', 'PASS')
+
         return l1_obj
