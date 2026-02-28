@@ -15,83 +15,32 @@ from kpfpipe.utils.stats import flag_outliers
 DEFAULTS.update({
     'nframe_stream': 6,
     'stack_sigma': 5.0,
+    'exptime_tolerance': 0.1,
 })
 
 DEFAULTS.update(DETECTOR)
 NROW = DETECTOR['ccd']['nrow']
 NCOL = DETECTOR['ccd']['ncol']
 
-# TODO: check consistency of nframe_stream and nframe_direct keywords
 # TODO: line profile and remove uneccessary array allocations
 # TODO: build output object
 # TODO: decide how to handle ImageAssembly config
 
 
 class BaseMastersModule:
-        """
-        Base class for KPF masters generation.
-        The class should not be called directly, but is used for inheritance
-        of masters subclasses: Bias, Dark, Flat, WLS.
+    """
+    Base class for KPF masters generation.
+    The class should not be called directly, but is used for inheritance
+    of masters subclasses: Bias, Dark, Flat, WLS.
 
-        Masters modules read a stack of L0 files from disk and output
-        a masters L1 object.
-        """
+    Masters modules read a stack of L0 files from disk and output
+    a masters L1 object.
+    """
     def __init__(self, l0_file_list, config={}):
         self.l0_file_list = l0_file_list
 
         for k in DEFAULTS.keys():
             self.__setattr__(k, config.get(k,DEFAULTS[k]))
-
-
-    def load_frame(self, fn, ncache=None):
-        """
-        Load an L0 file and perform image assembly to produce an L1 object.
-
-        Parameters
-        ----------
-        fn : str
-            Path to L0 FITS file.
-        ncache : int, optional
-            Maximum number of L1 objects to retain in internal cache.
-
-        Returns
-        -------
-        l1_obj : KPF1 or None
-            Assembled L1 data object if successful, otherwise None.
-        success : bool
-            True if file was successfully loaded and processed, False otherwise.
-
-        Notes
-        -----
-        Successfully processed frames may be cached to reduce redundant I/O and
-        recomputation. Cache size is limited by `ncache`, which defaults to
-        `nframe_stream - 1`.
-        """
-        if ncache is None:
-            ncache = self.nframe_stream - 1
-
-        if not hasattr(self, '_l1_obj_cache'):
-            self._l1_obj_cache = {}
-
-        success = True
-        failure = False
-
-        if fn in self._l1_obj_cache:
-            l1_obj = self._l1_obj_cache[fn]
-
-        else:
-            try:
-                l0_obj = KPF0.from_fits(fn)
-                l1_obj = ImageAssembly(l0_obj).perform()
-
-                if len(self._l1_obj_cache) < ncache:
-                    self._l1_obj_cache[fn] = l1_obj
-
-            except FileNotFoundError as e:
-                warnings.warn(f"Failed to load {fn}: {e}")
-                return None, failure
-        
-        return l1_obj, success
 
 
     def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
@@ -152,8 +101,8 @@ class BaseMastersModule:
 
             good = var > 0
             for suffix in ['CCD','VAR']:
-                ext_name = f'{chip}_{suffix}'
-                good &= stats[ext_name]['nframe'] > 0.5 * nframe
+                ext = f'{chip}_{suffix}'
+                good &= stats[ext]['nframe'] > 0.5 * nframe
 
             snr = np.zeros_like(img)
             snr[good] = tot[good] / np.sqrt(var[good])
@@ -163,6 +112,75 @@ class BaseMastersModule:
             l1_arrays[f'{chip}_MASK'] = good
 
         return l1_arrays
+
+
+    def _load_frame(self, fn, ncache=None, exptime_tolerance=None):
+        """
+        Load an L0 file and perform image assembly to produce an L1 object.
+
+        Parameters
+        ----------
+        fn : str
+            Path to L0 FITS file.
+        ncache : int, optional
+            Maximum number of L1 objects to retain in internal cache.
+
+        Returns
+        -------
+        l1_obj : KPF1 or None
+            Assembled L1 data object if successful, otherwise None.
+        success : bool
+            True if file was successfully loaded and processed, False otherwise.
+
+        Notes
+        -----
+        Successfully processed frames may be cached to reduce redundant I/O and
+        recomputation. Cache size is limited by `ncache`, which defaults to
+        `nframe_stream - 1`.
+        """
+        print(f"loading {fn}")
+
+        if ncache is None:
+            ncache = self.nframe_stream - 1
+        if exptime_tolerance is None:
+            exptime_tolerance = self.exptime_tolerance
+
+        if not hasattr(self, '_l1_obj_cache'):
+            self._l1_obj_cache = {}
+
+        success = True
+        failure = False
+
+        if fn in self._l1_obj_cache:
+            l1_obj = self._l1_obj_cache[fn]
+
+        else:
+            try:
+                l0_obj = KPF0.from_fits(fn)
+                l1_obj = ImageAssembly(l0_obj).perform()
+
+                if len(self._l1_obj_cache) < ncache:
+                    self._l1_obj_cache[fn] = l1_obj
+
+            except FileNotFoundError as e:
+                warnings.warn(f"Failed to load {fn}: {e}")
+                return None, failure
+
+        self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
+        
+        return l1_obj, success
+
+
+    @staticmethod
+    def _check_exptime_vs_elapsed(l1_obj, exptime_tolerance):
+        exptime = l1_obj.headers['PRIMARY']['EXPTIME']
+        elapsed = l1_obj.headers['PRIMARY']['ELAPSED']
+
+        delta = elapsed - exptime
+        if delta < 0:
+            raise ValueError("premature frame readout detected")
+        if delta > exptime_tolerance:
+            raise ValueError(f"elapsed time - requested time > {exptime_tolerance}")
 
 
     def _compute_stats_from_datacube(self, l0_file_list=None, nframe=None, sigma=None):
@@ -195,6 +213,8 @@ class BaseMastersModule:
         Exposure times must be either all zero or all strictly positive.
         Raises an error if more than 20% of frames fail to load.
         """
+        print("_compute_stats_from_datacube")
+
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
         if nframe is None:
@@ -221,7 +241,7 @@ class BaseMastersModule:
             if i >= nframe:
                 break
 
-            l1_obj, success = self.load_frame(fn)
+            l1_obj, success = self._load_frame(fn)
             
             if not success:
                 failure += 1
@@ -229,7 +249,7 @@ class BaseMastersModule:
                     raise ValueError(f"more than 20% of frames in stack failed to load")
                 continue
 
-            exptime[i] = l1_obj.header['PRIMARY']['ELAPSED']
+            exptime[i] = l1_obj.headers['PRIMARY']['EXPTIME']
             
             for chip in self.chips:
                 data_cube[f'{chip}_CCD'][i] = l1_obj.data[f'{chip}_CCD']
@@ -256,6 +276,8 @@ class BaseMastersModule:
         exptime_total = np.sum(exptime)
 
         for chip in self.chips:
+            print(chip)
+
             stats[f'{chip}_CCD'] = {}
             stats[f'{chip}_VAR'] = {}
 
@@ -320,6 +342,8 @@ class BaseMastersModule:
         Raises an error if more than 20% of frames fail to load or if exposure
         times are inconsistent.
         """
+        print("_compute_stats_from_stream")
+
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
         if ndirect is None:
@@ -361,7 +385,7 @@ class BaseMastersModule:
         failure = 0
 
         for fn in l0_file_list:
-            l1_obj, success = self.load_frame(fn)
+            l1_obj, success = self._load_frame(fn)
 
             if not success:
                 failure += 1
@@ -369,7 +393,7 @@ class BaseMastersModule:
                     raise ValueError(f"more than 20% of frames in stack failed to load")
                 continue
 
-            exptime = l1_obj.header['PRIMARY']['ELAPSED']
+            exptime = l1_obj.headers['PRIMARY']['EXPTIME']
 
             if zero_exptime != (exptime == 0):
                 raise ValueError(f"Exposure times must be all zero or all non-zero")

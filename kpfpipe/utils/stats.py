@@ -63,18 +63,21 @@ def optimize_lsq(theta0, x, y, func, jac):
     return theta, rms
 
 
-def flag_outliers(x, sigma, method='median', kernel_size=None):
+def flag_outliers(x, sigma, method='median', axis=None, kernel_size=None):
     """
     Flag outliers in an array above some sigma threshold
     """
+    eps = 1e-12
+
     if method == 'median':
-        med = np.nanmedian(x)
-        mad = mad_std(x, ignore_nan=True)
-        out = np.abs(x - med) / mad > sigma
+        med = np.median(x, axis=axis)
+        mad = mad_std(x, axis=axis)
+        out = np.abs(x - med) / (mad + eps) > sigma
 
     elif method == 'trend':
         trend = gaussian_filter(median_filter(x, size=kernel_size), sigma=kernel_size)
-        out = np.abs(x - trend) / mad_std(x - trend, ignore_nan=True) > sigma
+        mad = mad_std(x - trend)
+        out = np.abs(x - trend) / (mad + eps) > sigma
 
     else:
         raise ValueError(f"method must be 'median' or 'trend'; {method} not supported")
