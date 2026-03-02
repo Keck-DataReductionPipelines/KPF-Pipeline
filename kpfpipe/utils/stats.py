@@ -1,7 +1,8 @@
 from astropy.stats import mad_std
 from astropy.stats import mad_std
 import numpy as np
-from scipy.ndimage import median_filter, gaussian_filter
+from scipy.interpolate import RegularGridInterpolator
+from scipy.ndimage import median_filter, gaussian_filter, convolve, distance_transform_edt
 from scipy.optimize import least_squares
 
 
@@ -83,3 +84,73 @@ def flag_outliers(x, sigma, method='median', axis=None, kernel_size=None):
         raise ValueError(f"method must be 'median' or 'trend'; {method} not supported")
 
     return out
+
+
+def interpolate_bad_pixels(data, mask, method='local', fill_outside=True):
+    """
+    Interpolate over bad pixels.
+    """
+
+    good = mask.astype(bool)
+    bad = ~good
+
+    data_interp = data.copy()
+
+    # local convolution-based method (assumes isolated bad pixels)
+    if method == 'local':
+        kernel = np.array([[1,2,1],
+                           [2,0,2],
+                           [1,2,1]], dtype=float) / 12.0
+
+        neighbor_sum = convolve(data * good, kernel, mode='mirror')
+        weight = convolve(good.astype(float), kernel, mode='mirror')
+
+        valid = bad & (weight > 0)
+        data_interp[valid] = neighbor_sum[valid] / weight[valid]
+
+        if fill_outside:
+            remaining = bad & (weight == 0)
+            if np.any(remaining):
+                _, indices = distance_transform_edt(
+                    remaining,
+                    return_indices=True
+                )
+                data_interp[remaining] = data_interp[
+                    tuple(indices[:, remaining])
+                ]
+
+    # global linear interpolation (robust to clumps of bad pixels)
+    elif method == 'global':
+
+        ny, nx = data.shape
+        y = np.arange(ny)
+        x = np.arange(nx)
+
+        interp = RegularGridInterpolator(
+            (y, x),
+            data,
+            method='linear',
+            bounds_error=False,
+            fill_value=np.nan
+        )
+
+        coords = np.column_stack(np.nonzero(bad))
+        values = interp(coords)
+
+        data_interp[bad] = values
+
+        if fill_outside:
+            nan_mask = np.isnan(data_interp)
+            if np.any(nan_mask):
+                _, indices = distance_transform_edt(
+                    nan_mask,
+                    return_indices=True
+                )
+                data_interp[nan_mask] = data_interp[
+                    tuple(indices[:, nan_mask])
+                ]
+
+    else:
+        raise ValueError("method must be 'local' or 'global'")
+
+    return data_interp

@@ -92,20 +92,25 @@ class BaseMastersModule:
             stats, exptime = self._compute_stats_from_stream(l0_file_list, nstream - 1, sigma)
 
         # TODO: add check that nframe is consistent between CCD and VAR
+        for chip in self.chips:
+            if np.any(stats[f'{chip}_CCD']['nframe'] != stats[f'{chip}_VAR']['nframe']):
+                raise ValueError(f"mismatched frame count between {chip}_CCD and {chip}_VAR")
 
         l1_arrays = {}
         for chip in self.chips:
+
             img = stats[f'{chip}_CCD']['rate_mean']
             tot = stats[f'{chip}_CCD']['total_sum']
             var = stats[f'{chip}_VAR']['total_sum']
 
             good = var > 0
+
             for suffix in ['CCD','VAR']:
                 ext = f'{chip}_{suffix}'
                 good &= stats[ext]['nframe'] > 0.5 * nframe
 
             snr = np.zeros_like(img)
-            snr[good] = tot[good] / np.sqrt(var[good])
+            snr[good] = np.abs(tot[good]) / np.sqrt(var[good])
 
             l1_arrays[f'{chip}_IMG'] = img
             l1_arrays[f'{chip}_SNR'] = snr
@@ -213,8 +218,6 @@ class BaseMastersModule:
         Exposure times must be either all zero or all strictly positive.
         Raises an error if more than 20% of frames fail to load.
         """
-        print("_compute_stats_from_datacube")
-
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
         if nframe is None:
@@ -276,8 +279,6 @@ class BaseMastersModule:
         exptime_total = np.sum(exptime)
 
         for chip in self.chips:
-            print(chip)
-
             stats[f'{chip}_CCD'] = {}
             stats[f'{chip}_VAR'] = {}
 
@@ -293,11 +294,18 @@ class BaseMastersModule:
             for suffix in ['CCD', 'VAR']:
                 ext = f'{chip}_{suffix}'
                 D = data_cube[ext]
+                R = D / T
 
                 total_sum = np.sum(D, axis=0, where=valid)
-                rate_mean = np.mean(D / T, axis=0, where=valid)
-                rate_rms = np.zeros_like(rate_mean)
-                rate_rms[good] = np.std(D / T, axis=0, where=valid, ddof=1)[good]
+
+                rate_mean = np.zeros_like(R[0])
+                rate_mean[good] = np.sum(R, axis=0, where=valid)[good] / N[good]
+                
+                diff2 = (R - rate_mean)**2
+                ssd = np.sum(diff2, axis=0, where=valid)
+
+                rate_rms = np.zeros_like(R[0])
+                rate_rms[good] = np.sqrt(ssd[good] / (N[good] - 1))
 
                 stats[ext]['nframe'] = N
                 stats[ext]['total_sum'] = total_sum
@@ -342,8 +350,6 @@ class BaseMastersModule:
         Raises an error if more than 20% of frames fail to load or if exposure
         times are inconsistent.
         """
-        print("_compute_stats_from_stream")
-
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
         if ndirect is None:
