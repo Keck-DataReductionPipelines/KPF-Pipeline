@@ -6,7 +6,6 @@ import numpy as np
 import warnings
 
 from kpfpipe import DEFAULTS, DETECTOR
-from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.utils.kpf_parse import get_datecode, fetch_filepath
@@ -25,6 +24,8 @@ NCOL = DETECTOR['ccd']['ncol']
 # TODO: line profile and remove uneccessary array allocations
 # TODO: build output object
 # TODO: decide how to handle ImageAssembly config
+# TODO: throw out first frame in stack?
+# TODO: use start, middle, end of stack for initial datacube
 
 
 class BaseMastersModule:
