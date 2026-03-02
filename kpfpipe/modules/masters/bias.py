@@ -5,7 +5,7 @@ import numpy as np
 
 from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.modules.masters.base import BaseMastersModule
-from kpfpipe.utils.stats import interpolate_bad_pixels
+from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 DEFAULTS.update({
     'nframe_stream': 6,
@@ -35,9 +35,9 @@ class Bias(BaseMastersModule):
             sigma = self.stack_sigma
 
         l1_arrays = self.stack_frames(
-            l0_file_list=None, 
-            nstream=None, 
-            sigma=None
+            l0_file_list=l0_file_list, 
+            nstream=nstream, 
+            sigma=sigma
         )
 
         for chip in self.chips:
@@ -47,7 +47,11 @@ class Bias(BaseMastersModule):
 
             l1_arrays[f'{chip}_IMG'] = interpolate_bad_pixels(img, mask)
             l1_arrays[f'{chip}_SNR'] = interpolate_bad_pixels(snr, mask)
-            l1_arrays[f'{chip}_MASK'] = np.ones_like(mask, dtype=bool)
+
+            out = flag_outliers(l1_arrays[f'{chip}_IMG'], sigma)
+            bad = (l1_arrays[f'{chip}_SNR']) <= 0 | (l1_arrays[f'{chip}_IMG'] == 0)
+
+            l1_arrays[f'{chip}_MASK'] = ~(bad | out)
 
         # TODO: create L1 object (masters specific KPF1?)
         self.l1_arrays = l1_arrays
