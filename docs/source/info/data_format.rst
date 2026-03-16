@@ -200,6 +200,8 @@ SCI-OBJ   Target                                      Science fiber source
 AGITSTA   Running                                     Agitator status
 FIUMODE   Observing                                   FIU operating mode
 FFFB      Yes                                         Flatfield fiber on
+SSCALFW   OD 0.1                                      Science/Cal filter wheel position (optical depth of filter)
+SIMCALFW  OD 1.3                                      Science/Cal filter wheel position (optical depth of filter)
 TOTCNTS   1.1299e+08 1.959e+08 1.8185e+08 1.1561e+08  Total Exp. Meter counts (DN) - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
 TOTCORR   2.3994e+08 4.1319e+08 3.8088e+08 2.403e+08  Total Exp. Meter counts (DN), corrected for dead time - four channels (445.0-551.25, 551.25-657.5, 657.5-763.75, 763.75-870.0 nm) 
 ETAV1C1T  23.990154                                   Etalon Vescent 1 Ch 1 temp (Housing)
