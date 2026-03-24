@@ -1,9 +1,6 @@
 """
 KPF Spectral Extraction module.
 """
-import warnings
-
-from astropy.stats import mad_std
 import numpy as np
 import pandas as pd
 from numpy.polynomial import polynomial
@@ -18,7 +15,7 @@ DEFAULTS.update({'extraction_method': 'box'})
 class SpectralExtraction:
     """
     This class performs spectral extraction of the 1D spectrum.
-    Processes data from KPF1 to RV2.
+    Processes data from KPF1 to KPF2.
 
     Notes
     -----
@@ -335,7 +332,7 @@ class SpectralExtraction:
 
         try:
             extraction_fxn = self.__getattribute__(f'_{method}_extraction')
-        except AttributeError as e:
+        except AttributeError:
             raise AttributeError(f"Unsupported extraction method: '{method}'")
 
         D, V, W, row_min, row_max = self._get_orderlet_pixels(chip, fiber, order, return_coords=True)
@@ -397,8 +394,8 @@ class SpectralExtraction:
                     flux_1d, var_1d = self.extract_orderlet(chip, fiber, order, method)
                 except KPFError:
                     failure += 1
-                    flux_1d = np.nan * np.zeros(ncol, dtype=np.float32)
-                    var_1d = np.nan * np.zeros(ncol, dtype=np.float32)
+                    flux_1d = np.full(ncol, np.nan, dtype=np.float32)
+                    var_1d  = np.full(ncol, np.nan, dtype=np.float32)
 
                 l2_arrays[f'{chip}_{fiber}_FLUX'][order-1] = flux_1d
                 l2_arrays[f'{chip}_{fiber}_VAR'][order-1] = var_1d
@@ -420,21 +417,21 @@ class SpectralExtraction:
 
         Parameters
         ----------
-        chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'
+        chips : list of str, optional
+            Chip identifiers, i.e. 'GREEN' or 'RED'
         fibers : list of str, optional
-            Fibers identifiers, e.g. 'SCI2'
+            Fiber identifiers, e.g. 'SCI2'
         method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
 
         Returns
         -------
-        object
+        l2_obj : KPF2
             L2 data object containing extracted 1D flux and variance arrays.
 
         Notes
         -----
-        Creates an RV2 object from the input KPF1 object and populates it
+        Creates a KPF2 object from the input KPF1 object and populates it
         with extracted spectra for all requested chips and fibers.
         """
         if chips is None:
