@@ -224,10 +224,10 @@ class SpectralExtraction:
         if W is None:
             W = np.ones_like(D)
 
-        M = M * (M.shape[0] / M.sum(0))
-
-        if np.any(np.sum(M * W, axis=0) == 0):
+        if np.any((M * W).sum(axis=0) == 0):
             raise ValueError("Fully masked columns detected in trace")
+
+        M = M * (M.shape[0] / M.sum(0))
 
         flux_1d = np.sum((D - S) * M * W, axis=0)
         var_1d = np.sum(V * M * W, axis=0)
@@ -444,12 +444,13 @@ class SpectralExtraction:
         if method is None:
             method = self.extraction_method
 
-        #l2_obj = self.l1_obj.to_rv2()
+        l2_obj = self.l1_obj.to_kpf2()
 
         for chip in chips:
             l2_arrays = self.extract_ffi(chip, fibers, method)
+            for fiber in fibers:
+                l2_obj.set_data(f'{chip}_{fiber}_FLUX', l2_arrays[f'{chip}_{fiber}_FLUX'])
+                l2_obj.set_data(f'{chip}_{fiber}_VAR',  l2_arrays[f'{chip}_{fiber}_VAR'])
 
-            #for k in l2_arrays.keys():
-            #    l2_obj.set_data(k, l2_arrays[k])
-
-        return None
+        l2_obj.receipt_add_entry('spectral_extraction', 'PASS')
+        return l2_obj
