@@ -12,11 +12,15 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
+from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+
+NORDER_GREEN = DETECTOR['norder']['GREEN']
+NORDER_RED = DETECTOR['norder']['RED']
 
 
 @pytest.fixture
@@ -228,20 +232,20 @@ class TestKPF1:
 class TestToL1:
     def test_to_l1_creates_kpf1(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l1 = l0.to_l1()
+        l1 = l0.to_kpf1()
         assert l1.level == 1
         assert isinstance(l1, KPF1)
 
     def test_to_l1_copies_primary_header(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l1 = l0.to_l1()
+        l1 = l0.to_kpf1()
         assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
         assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
         assert l1.headers["PRIMARY"]["OBJECT"] == "HD_10700"
 
     def test_to_l1_copies_passthrough_extensions(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l1 = l0.to_l1()
+        l1 = l0.to_kpf1()
         # CA_HK and TELEMETRY were in the synthetic file
         assert "CA_HK" in l1.extensions
         assert "TELEMETRY" in l1.extensions
@@ -249,13 +253,13 @@ class TestToL1:
 
     def test_to_l1_skips_missing_extensions(self, synthetic_l0_minimal):
         l0 = KPF0.from_fits(synthetic_l0_minimal)
-        l1 = l0.to_l1()
+        l1 = l0.to_kpf1()
         assert "CA_HK" not in l1.extensions
         assert "TELEMETRY" not in l1.extensions
 
     def test_to_l1_leaves_ccd_empty(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l1 = l0.to_l1()
+        l1 = l0.to_kpf1()
         assert "GREEN_CCD" in l1.extensions
         assert "RED_CCD" in l1.extensions
         # Extensions exist but data is empty (not populated yet)
@@ -264,18 +268,18 @@ class TestToL1:
 
     def test_to_l1_carries_receipt(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l1 = l0.to_l1()
+        l1 = l0.to_kpf1()
         assert len(l1.receipt) >= 2  # from_fits + to_l1
         assert "to_l1" in l1.receipt["Module_Name"].values
 
     def test_to_l1_copies_obs_id(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l1 = l0.to_l1()
+        l1 = l0.to_kpf1()
         assert l1.obs_id == "KP.20240113.23249.10"
 
     def test_to_l1_drops_amp_extensions(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l1 = l0.to_l1()
+        l1 = l0.to_kpf1()
         assert "GREEN_AMP1" not in l1.extensions
         assert "GREEN_AMP2" not in l1.extensions
         assert "RED_AMP1" not in l1.extensions
@@ -481,7 +485,6 @@ class TestKPF2Aliases:
 
     def test_chip_prefix_access(self):
         """Test GREEN_/RED_ prefix returns correct slices of concatenated trace."""
-        from kpfpipe.constants import NORDER_GREEN, NORDER_RED
         kpf2 = KPF2()
         n_pix = 100
         trace_data = np.random.random((NORDER_GREEN + NORDER_RED, n_pix))

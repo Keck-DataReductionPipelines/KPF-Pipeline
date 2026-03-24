@@ -15,7 +15,6 @@ from kpfpipe.utils.quality_control import validate_array
 
 DEFAULTS.update({'extraction_method': 'box'})
 
-
 class SpectralExtraction:
     """
     This class performs spectral extraction of the 1D spectrum.
