@@ -390,6 +390,7 @@ class BaseMastersModule:
                 approx_stats[ext]['rate_upper'] = approx_mean + approx_rms * sigma
 
         failure = 0
+        valid = np.ones((NROW, NCOL), dtype=bool)
 
         for fn in l0_file_list:
             l1_obj, success = self._load_frame(fn)
@@ -411,38 +412,41 @@ class BaseMastersModule:
                 T = 1.0
             else:
                 T = exptime
-            
-            exptime_total += exptime                
-            
+
+            exptime_total += exptime
+
             for chip in self.chips:
-                valid = np.ones((NROW,NCOL), dtype=bool)
-
-                for suffix in ['CCD', 'VAR']:
-                    ext = f'{chip}_{suffix}'
-                    D = l1_obj.data[ext] 
-
-                    lower = approx_stats[ext]['rate_lower']
-                    upper = approx_stats[ext]['rate_upper']
-                    valid &= (D / T >= lower) & (D / T <= upper)
+                valid[:] = True
+                R = {}
 
                 for suffix in ['CCD', 'VAR']:
                     ext = f'{chip}_{suffix}'
                     D = l1_obj.data[ext]
+                    R[ext] = D / T
+
+                    lower = approx_stats[ext]['rate_lower']
+                    upper = approx_stats[ext]['rate_upper']
+                    valid &= (R[ext] >= lower) & (R[ext] <= upper)
+
+                for suffix in ['CCD', 'VAR']:
+                    ext = f'{chip}_{suffix}'
+                    D = l1_obj.data[ext]
+                    rate = R[ext]
 
                     N = exact_stats[ext]['nframe']
-                    N[valid] += 1
-    
+                    N += valid
+
                     total_sum = exact_stats[ext]['total_sum']
-                    total_sum[valid] += D[valid]
+                    total_sum += D * valid
 
                     # Welford algorithm accumulation begins
                     mean = exact_stats[ext]['rate_mean']
-                    delta = D / T - mean
-                    delta[~valid] = 0
-                    mean[valid] += delta[valid] / N[valid]
-                    delta2 = D / T - mean
+                    safe_N = np.maximum(N, 1)
+                    delta = (rate - mean) * valid
+                    mean += delta / safe_N
+                    delta2 = (rate - mean) * valid
                     M2 = exact_stats[ext]['rate_M2']
-                    M2[valid] += delta[valid] * delta2[valid]
+                    M2 += delta * delta2
                     # Welford algorithm accumulation ends
 
                     exact_stats[ext]['total_sum'] = total_sum
