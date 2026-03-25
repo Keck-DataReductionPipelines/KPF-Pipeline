@@ -15,6 +15,7 @@ differ from science L1 to reflect masters-specific normalization:
 
 import importlib.resources
 
+import numpy as np
 import pandas as pd
 
 from kpfpipe.data_models.base import KPFDataModel
@@ -55,3 +56,23 @@ class KPFMasterL1(KPFMasterModel, KPF1):
         for _, row in _MASTERS_L1_EXTENSIONS.iterrows():
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
+
+    def _create_hdul(self):
+        """Cast MASK extensions to uint8 before building HDUs, then restore."""
+        originals = {}
+        for ext in list(self.data.keys()):
+            if ext.endswith("_MASK") and self.data[ext] is not None:
+                originals[ext] = self.data[ext]
+                self.data[ext] = self.data[ext].astype(np.uint8)
+        try:
+            return super()._create_hdul()
+        finally:
+            for ext, arr in originals.items():
+                self.data[ext] = arr
+
+    def _read(self, hdul):
+        """Read extensions from FITS; cast MASK extensions back to bool."""
+        super()._read(hdul)
+        for ext in list(self.data.keys()):
+            if ext.endswith("_MASK") and self.data[ext] is not None:
+                self.data[ext] = self.data[ext].astype(bool)

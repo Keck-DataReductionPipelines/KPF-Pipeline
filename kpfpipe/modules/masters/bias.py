@@ -4,6 +4,7 @@ KPF Master Bias construction module.
 import numpy as np
 
 from kpfpipe import DEFAULTS, DETECTOR
+from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
@@ -52,7 +53,13 @@ class Bias(BaseMasterModule):
 
             l1_arrays[f'{chip}_MASK'] = ~(bad | out)
 
-        # TODO: create L1 object (masters specific KPF1?)
-        self.l1_arrays = l1_arrays
+        ml1_obj = KPFMasterL1()
 
-        return l1_arrays
+        for chip in self.chips:
+            ml1_obj.set_data(f'{chip}_IMG',  l1_arrays[f'{chip}_IMG'])
+            ml1_obj.set_data(f'{chip}_SNR',  l1_arrays[f'{chip}_SNR'])
+            ml1_obj.set_data(f'{chip}_MASK', l1_arrays[f'{chip}_MASK'])
+
+        ml1_obj.receipt_add_entry('master_bias', 'PASS')
+
+        return ml1_obj

@@ -37,6 +37,8 @@ class BaseMasterModule:
     a masters L1 object.
     """
     def __init__(self, l0_file_list, config={}):
+        if l0_file_list != sorted(l0_file_list):
+            raise ValueError("l0_file_list must be sorted in ascending order")
         self.l0_file_list = l0_file_list
 
         for k in DEFAULTS.keys():
@@ -239,6 +241,8 @@ class BaseMasterModule:
 
         i = 0
         failure = 0
+
+        frame_indices = np.arange(len(l0_file_list))
 
         for fn in l0_file_list:
             if i >= nframe:
