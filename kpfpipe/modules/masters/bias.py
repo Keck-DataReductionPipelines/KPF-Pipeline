@@ -13,7 +13,6 @@ DEFAULTS.update({
     'exptime_tolerance': 0.1,
 })
 
-DEFAULTS.update(DETECTOR)
 NROW = DETECTOR['ccd']['nrow']
 NCOL = DETECTOR['ccd']['ncol']
 
