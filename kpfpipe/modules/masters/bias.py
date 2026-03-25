@@ -4,7 +4,7 @@ KPF Master Bias construction module.
 import numpy as np
 
 from kpfpipe import DEFAULTS, DETECTOR
-from kpfpipe.modules.masters.base import BaseMastersModule
+from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 DEFAULTS.update({
@@ -18,7 +18,7 @@ NROW = DETECTOR['ccd']['nrow']
 NCOL = DETECTOR['ccd']['ncol']
 
 
-class Bias(BaseMastersModule):
+class Bias(BaseMasterModule):
     def __init__(self, l0_file_list, config={}):
         super().__init__(l0_file_list, config)
 

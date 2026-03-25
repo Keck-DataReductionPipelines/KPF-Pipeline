@@ -48,6 +48,10 @@ class KPF1(KPFDataModel):
         l1.data["RED_CCD"]    # numpy array, 4080x4080
     """
 
+    _DATALVL = "L1"
+    _FILENAME_PREFIX = "kpf_L1"
+    _known_extensions = _KNOWN_L1_EXTENSIONS
+
     def __init__(self):
         super().__init__()
         self.level = 1
@@ -104,7 +108,7 @@ class KPF1(KPFDataModel):
 
             if ext_name not in self.extensions:
                 if ext_name != "PRIMARY":
-                    if ext_name not in _KNOWN_L1_EXTENSIONS:
+                    if ext_name not in self._known_extensions:
                         warnings.warn(
                             f"Non-standard extension '{ext_name}' found in L1 file.",
                             UserWarning,
@@ -147,7 +151,7 @@ class KPF1(KPFDataModel):
                 try:
                     dt = datetime.datetime.fromisoformat(date_str)
                     datetime_str = dt.strftime("%Y%m%dT%H%M%S")
-                    return f"kpf_L1_{datetime_str}.fits"
+                    return f"{self._FILENAME_PREFIX}_{datetime_str}.fits"
                 except ValueError:
                     pass
         raise ValueError("Cannot generate filename: DATE-OBS not available")
@@ -165,7 +169,7 @@ class KPF1(KPFDataModel):
             self.headers["PRIMARY"]["FILENAME"] = (
                 os.path.basename(fn), "Name of the FITS file"
             )
-            self.headers["PRIMARY"]["DATALVL"] = ("L1", "Data product level")
+            self.headers["PRIMARY"]["DATALVL"] = (self._DATALVL, "Data product level")
 
         hdu_list = self._create_hdul()
         hdul = fits.HDUList(hdu_list)

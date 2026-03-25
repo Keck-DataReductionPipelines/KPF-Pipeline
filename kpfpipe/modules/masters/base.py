@@ -28,7 +28,7 @@ NCOL = DETECTOR['ccd']['ncol']
 # TODO: use start, middle, end of stack for initial datacube
 
 
-class BaseMastersModule:
+class BaseMasterModule:
     """
     Base class for KPF masters generation.
     The class should not be called directly, but is used for inheritance
