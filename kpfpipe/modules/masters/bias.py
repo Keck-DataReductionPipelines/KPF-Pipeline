@@ -1,8 +1,6 @@
 """
 KPF Master Bias construction module.
 """
-import numpy as np
-
 from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.base import BaseMasterModule
@@ -19,7 +17,9 @@ NCOL = DETECTOR['ccd']['ncol']
 
 
 class Bias(BaseMasterModule):
-    def __init__(self, l0_file_list, config={}):
+    def __init__(self, l0_file_list, config=None):
+        if config is None:
+            config = {}
         super().__init__(l0_file_list, config)
 
 

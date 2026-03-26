@@ -35,7 +35,10 @@ class BaseMasterModule:
     Masters modules read a stack of L0 files from disk and output
     a masters L1 object.
     """
-    def __init__(self, l0_file_list, config={}):
+    def __init__(self, l0_file_list, config=None):
+        if config is None:
+            config = {}
+
         if l0_file_list != sorted(l0_file_list):
             raise ValueError("l0_file_list must be sorted in ascending order")
         self.l0_file_list = l0_file_list

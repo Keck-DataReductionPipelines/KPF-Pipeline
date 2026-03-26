@@ -1,5 +1,4 @@
 from astropy.stats import mad_std
-from astropy.stats import mad_std
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import median_filter, gaussian_filter, convolve, distance_transform_edt
@@ -71,13 +70,13 @@ def flag_outliers(x, sigma, method='median', axis=None, kernel_size=None):
     eps = 1e-12
 
     if method == 'median':
-        med = np.median(x, axis=axis)
-        mad = mad_std(x, axis=axis)
+        med = np.nanmedian(x)
+        mad = mad_std(x, ignore_nan=True)
         out = np.abs(x - med) / (mad + eps) > sigma
 
     elif method == 'trend':
         trend = gaussian_filter(median_filter(x, size=kernel_size), sigma=kernel_size)
-        mad = mad_std(x - trend)
+        mad = mad_std(x - trend, ignore_nan=True)
         out = np.abs(x - trend) / (mad + eps) > sigma
 
     else:
