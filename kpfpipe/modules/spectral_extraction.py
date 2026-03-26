@@ -135,9 +135,9 @@ class SpectralExtraction:
         # track the trace position
         coeffs = np.array(trace[[f'Coeff{i}' for i in range(4)]], dtype=np.float32)
 
-        trace_center = polynomial.polyval(np.arange(ncol), coeffs)
-        trace_top    = trace_center + trace.TopEdge
-        trace_bottom = trace_center - trace.BottomEdge
+        trace_center = polynomial.polyval(np.arange(ncol, dtype=np.float32), coeffs)
+        trace_top    = (trace_center + trace.TopEdge).astype(np.float32)
+        trace_bottom = (trace_center - trace.BottomEdge).astype(np.float32)
 
         off_detector = (trace_top > nrow-1) | (trace_bottom < 0)
 
@@ -379,8 +379,8 @@ class SpectralExtraction:
 
         l2_arrays = {}
         for fiber in fibers:
-            l2_arrays[f'{chip}_{fiber}_FLUX'] = np.empty((norder,ncol))
-            l2_arrays[f'{chip}_{fiber}_VAR'] = np.empty((norder,ncol))
+            l2_arrays[f'{chip}_{fiber}_FLUX'] = np.empty((norder,ncol), dtype=np.float32)
+            l2_arrays[f'{chip}_{fiber}_VAR'] = np.empty((norder,ncol), dtype=np.float32)
 
         failure = 0
         for order in range(1,norder+1):
