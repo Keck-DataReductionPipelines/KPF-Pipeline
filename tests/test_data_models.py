@@ -514,6 +514,41 @@ class TestKPF2Aliases:
                 assert f"GREEN_{fiber}_{suffix}" in kpf2.data
                 assert f"RED_{fiber}_{suffix}" in kpf2.data
 
+    def test_chip_prefix_write_populates_slices(self):
+        """Writing via chip-prefix should fill the correct slice of the trace."""
+        kpf2 = KPF2()
+        n_pix = 100
+        green_data = np.ones((NORDER_GREEN, n_pix), dtype=np.float32)
+        red_data = np.full((NORDER_RED, n_pix), 2.0, dtype=np.float32)
+
+        kpf2.set_data("GREEN_SCI2_FLUX", green_data)
+        kpf2.set_data("RED_SCI2_FLUX", red_data)
+
+        full = kpf2.data["SCI2_FLUX"]
+        assert full.shape == (NORDER_GREEN + NORDER_RED, n_pix)
+        np.testing.assert_array_equal(full[:NORDER_GREEN], green_data)
+        np.testing.assert_array_equal(full[NORDER_GREEN:], red_data)
+
+    def test_chip_prefix_write_allocates_on_first_write(self):
+        """Writing GREEN first should allocate the full (67, ncol) trace."""
+        kpf2 = KPF2()
+        n_pix = 100
+        assert len(kpf2.data["TRACE3_FLUX"]) == 0
+
+        green_data = np.zeros((NORDER_GREEN, n_pix), dtype=np.float32)
+        kpf2.set_data("GREEN_SCI2_FLUX", green_data)
+
+        assert kpf2.data["TRACE3_FLUX"].shape == (NORDER_GREEN + NORDER_RED, n_pix)
+
+    def test_chip_prefix_write_via_set_data(self):
+        """set_data() should route chip-prefix keys through __setitem__."""
+        kpf2 = KPF2()
+        n_pix = 50
+        green_data = np.arange(NORDER_GREEN * n_pix, dtype=np.float32).reshape(NORDER_GREEN, n_pix)
+
+        kpf2.set_data("GREEN_SCI2_FLUX", green_data)
+        np.testing.assert_array_equal(kpf2.data["GREEN_SCI2_FLUX"], green_data)
+
 
 class TestToKPF4:
     def test_to_kpf4_creates_kpf4(self):

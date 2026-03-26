@@ -23,6 +23,7 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 
 NORDER_GREEN = DETECTOR['norder']['GREEN']
+NORDER_RED   = DETECTOR['norder']['RED']
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _TRACE_MAP = pd.read_csv(_config_path / "L2-trace-map.csv")
@@ -55,6 +56,25 @@ class _KPF2DataDict(AliasedOrderedDict):
         Returns None if key is not a chip-prefix pattern.
         """
         return _CHIP_PREFIX_KEYS.get(key)
+
+    def __setitem__(self, key, value):
+        split = self._chip_split(key)
+        if split is not None:
+            fiber_alias, chip = split
+            resolved = self._resolve(fiber_alias)
+            # Allocate full trace on first write (or if currently empty)
+            existing = super().__getitem__(resolved) if super().__contains__(resolved) else None
+            if existing is None or np.size(existing) == 0:
+                ncol = value.shape[1]
+                full = np.zeros((NORDER_GREEN + NORDER_RED, ncol), dtype=value.dtype)
+                super().__setitem__(resolved, full)
+            arr = super().__getitem__(resolved)
+            if chip == 'GREEN':
+                arr[:NORDER_GREEN] = value
+            else:
+                arr[NORDER_GREEN:] = value
+        else:
+            super().__setitem__(key, value)
 
     def __getitem__(self, key):
         split = self._chip_split(key)
@@ -168,7 +188,14 @@ class KPF2(RV2):
                     self.data.register_alias(alias, canonical)
 
     def set_data(self, ext_name, data):
-        """Override to resolve aliases before the base class .keys() check."""
+        """Override to resolve aliases before the base class .keys() check.
+        Chip-prefix keys (e.g. 'GREEN_SCI2_FLUX') are routed directly through
+        _KPF2DataDict.__setitem__, which writes into the appropriate slice of
+        the concatenated trace array.
+        """
+        if hasattr(self.data, '_chip_split') and self.data._chip_split(ext_name) is not None:
+            self.data[ext_name] = data
+            return
         if hasattr(self.extensions, '_resolve'):
             ext_name = self.extensions._resolve(ext_name)
         super().set_data(ext_name, data)
