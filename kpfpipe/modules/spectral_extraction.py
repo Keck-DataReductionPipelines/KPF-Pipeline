@@ -135,7 +135,7 @@ class SpectralExtraction:
         # track the trace position
         coeffs = np.array(trace[[f'Coeff{i}' for i in range(4)]], dtype=np.float32)
 
-        trace_center = polynomial.polyval(np.arange(ncol, dype=np.float32), coeffs)
+        trace_center = polynomial.polyval(np.arange(ncol, dtype=np.float32), coeffs)
         trace_top    = (trace_center + trace.TopEdge).astype(np.float32)
         trace_bottom = (trace_center - trace.BottomEdge).astype(np.float32)
 
