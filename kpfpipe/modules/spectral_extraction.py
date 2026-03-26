@@ -56,12 +56,6 @@ class SpectralExtraction:
         chip : str
             Chip identifier (e.g., 'GREEN', 'RED').
 
-        Returns
-        -------
-        pandas.DataFrame
-            DataFrame containing trace coefficients and geometric parameters
-            for all fibers and orders on the specified chip.
-
         Notes
         -----
         The trace reference file is read from the repository reference
@@ -227,7 +221,7 @@ class SpectralExtraction:
         M = M * (M.shape[0] / M.sum(0))
 
         flux_1d = np.sum((D - S) * M * W, axis=0)
-        var_1d = np.sum(V * M * W, axis=0)
+        var_1d = np.sum(V * (M * W) ** 2, axis=0)
                         
         return flux_1d, var_1d
 
@@ -372,12 +366,13 @@ class SpectralExtraction:
         Loops over all spectral orders and requested fibers, performing
         order-by-order extraction.
         """
-        chip = chip.upper()
-
         if fibers is None:
             fibers = self.fibers
         if method is None:
             method = self.extraction_method
+
+        chip = chip.upper()
+        fibers = [f.upper() for f in fibers]
 
         norder = self.norder[chip]
         nrow, ncol = self.l1_obj.data[f'{chip}_CCD'].shape
