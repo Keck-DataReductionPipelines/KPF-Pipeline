@@ -32,3 +32,4 @@ def load_detector_config():
     return _detector
 
 DETECTOR = load_detector_config()
+DEFAULTS.update(DETECTOR)
