@@ -19,7 +19,7 @@ from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe.data_models.base import KPFDataModel
-from kpfpipe.utils.kpf_parse import get_obs_id
+from kpfpipe.utils.kpf import get_obs_id
 
 import importlib.resources
 
