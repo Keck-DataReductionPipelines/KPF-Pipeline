@@ -55,7 +55,7 @@ class TestMasterBiasUnit:
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            return bias.perform()
+            return bias.make_master_l1()
 
     def test_returns_kpf_master_l1(self, master_bias):
         assert isinstance(master_bias, KPFMasterL1)
@@ -105,7 +105,7 @@ class TestMasterBiasRoundTrip:
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.perform()
+            ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fn = os.path.join(tmpdir, "master_bias.fits")
@@ -123,7 +123,7 @@ class TestMasterBiasRoundTrip:
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.perform()
+            ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fn = os.path.join(tmpdir, "master_bias.fits")
@@ -138,7 +138,7 @@ class TestMasterBiasRoundTrip:
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.perform()
+            ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fn = os.path.join(tmpdir, "master_bias.fits")
@@ -171,7 +171,7 @@ class TestMasterBiasRegression:
 
     @pytest.fixture(scope="class")
     def master_bias(self, l0_bias_list):
-        return Bias(l0_bias_list).perform()
+        return Bias(l0_bias_list).make_master_l1()
 
     def test_returns_kpf_master_l1(self, master_bias):
         assert isinstance(master_bias, KPFMasterL1)

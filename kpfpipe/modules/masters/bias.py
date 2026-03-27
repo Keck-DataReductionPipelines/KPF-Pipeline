@@ -19,18 +19,12 @@ NCOL = DETECTOR['ccd']['ncol']
 
 class Bias(BaseMasterModule):
     def __init__(self, l0_file_list, config=None):
-        if config is None:
-            params = {}
-        elif isinstance(config, dict):
-            params = config
-        elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE", "BIAS"])
-        else:
-            raise TypeError("config must be None, dict, or ConfigHandler")
-        super().__init__(l0_file_list, params)
+        if isinstance(config, ConfigHandler):
+            config = config.get_params(["DATA_DIRS", "KPFPIPE", "BIAS"])
+        super().__init__(l0_file_list, config)
 
 
-    def perform(self, l0_file_list=None, nstream=None, sigma=None):
+    def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None):
         """
         Build master bias from stack
         """
