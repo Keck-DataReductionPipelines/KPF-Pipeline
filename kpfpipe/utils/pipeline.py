@@ -220,6 +220,31 @@ def build_l0_file_list(data_dir, imtype, utc_time):
     return sorted(metadata.loc[cluster_mask, 'FILENAME'].tolist())
 
 
+def get_calibration_stack_clusters(mini_db, imtype):
+    """
+    Return one sorted file list per calibration cluster of the requested type.
+
+    Args:
+        mini_db: DataFrame returned by build_mini_database.
+        imtype:  calibration frame type. One of 'bias', 'dark', 'flat'.
+
+    Returns:
+        List of sorted file lists, one per cluster, ordered by CAL_START.
+
+    Raises:
+        ValueError: if imtype is not a recognized calibration type.
+    """
+    if imtype not in _OBJECT_MAP:
+        raise ValueError(
+            f"imtype must be one of {list(_OBJECT_MAP.keys())}; got '{imtype}'"
+        )
+    mask = (mini_db['OBJECT'] == _OBJECT_MAP[imtype]) & (mini_db['CAL_START'] != '')
+    return [
+        sorted(cluster['FILENAME'].tolist())
+        for _, cluster in mini_db[mask].groupby('CAL_START')
+    ]
+
+
 def build_filepath(input_str, data_root, level, *, master=None):
     """
     Build an absolute filepath for a KPF data product.
