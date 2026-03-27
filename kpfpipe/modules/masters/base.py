@@ -171,7 +171,7 @@ class BaseMasterModule:
                 if len(self._l1_obj_cache) < ncache:
                     self._l1_obj_cache[fn] = l1_obj
 
-            except FileNotFoundError as e:
+            except (FileNotFoundError, IOError, OSError) as e:
                 warnings.warn(f"Failed to load {fn}: {e}")
                 return None, failure
 
