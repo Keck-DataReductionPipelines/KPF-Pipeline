@@ -49,7 +49,7 @@ class Bias(BaseMasterModule):
             l1_arrays[f'{chip}_SNR'] = interpolate_bad_pixels(snr, mask)
 
             out = flag_outliers(l1_arrays[f'{chip}_IMG'], sigma, axis=0)
-            bad = (l1_arrays[f'{chip}_SNR']) <= 0 | (l1_arrays[f'{chip}_IMG'] == 0)
+            bad = ((l1_arrays[f'{chip}_SNR'] <= 0) | (l1_arrays[f'{chip}_IMG'] == 0))
 
             l1_arrays[f'{chip}_MASK'] = ~(bad | out)
 
