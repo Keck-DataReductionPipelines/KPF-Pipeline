@@ -3,7 +3,7 @@ import sys
 
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
-from kpfpipe.utils.kpf import get_datecode
+from kpfpipe.utils.kpf_parse import get_datecode
 
 from line_profiler import LineProfiler
 

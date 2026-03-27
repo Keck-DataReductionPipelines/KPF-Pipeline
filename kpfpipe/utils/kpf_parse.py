@@ -1,84 +1,98 @@
-import numpy as np
+import os
 import re
 
 
-def get_datecode(input_str):
+_OBS_ID_PATTERN = re.compile(r'(KP\.\d{8}\.\d{5}\.\d{2})')
+_DATECODE_PATTERN = re.compile(r'^\d{8}$')
+
+
+def is_obs_id(s):
     """
-    Extract the datecode from an obs_id or filename
-
-    Args:
-        input_str, e.g. 'KP.20230708.04519.63' or 'KP.20230708.04519.63_2D.fits'
-
-    Returns:
-        datecode, e.g. '20230708'
+    Returns True if s is a valid KPF observation ID, e.g. 'KP.20240113.23249.10'
     """
-    # TODO: modify to properly handle masters files, use regex
-    if is_obs_id(input_str):
-        obs_id = input_str
-    else:
-        obs_id = get_obs_id(input_str)
-    
-    datecode = obs_id.split('.')[1]
+    return bool(_OBS_ID_PATTERN.fullmatch(s))
 
-    return datecode
+
+def is_datecode(s):
+    """
+    Returns True if s is a valid 8-digit datecode, e.g. '20240405'
+    """
+    return bool(_DATECODE_PATTERN.match(s))
 
 
 def get_obs_id(filename):
     """
-    Extracts an obs_id from a filename
-    
+    Extract obs_id from a filename or path.
+
     Args:
-        filename, e.g. '/data/L1/20240113/KP.20240113.23249.10_L1.fits').
+        filename: e.g. '/data/L1/20240113/KP.20240113.23249.10_L1.fits'
 
     Returns:
-        obs_id, e.g. 'KP.20240113.23249.10'
+        obs_id: e.g. 'KP.20240113.23249.10'
+
+    Raises:
+        ValueError: if no obs_id pattern found in filename
     """
-    # TODO: modify to properly handle masters files, use regex
-    obs_id = filename.split('/')[-1]
-    for substring in ['.fits', '_2D', '_L1', '_L2']:
-        obs_id = obs_id.replace(substring, '')
-    return obs_id
+    match = _OBS_ID_PATTERN.search(os.path.basename(filename))
+    if match:
+        return match.group(1)
+    raise ValueError(f"No obs_id found in: {filename}")
 
 
-def is_obs_id(obs_id):
+def get_datecode(input_str):
     """
-    Returns True if the input is a properly formatted ObsID, e.g. 'KP.20240113.23249.10'
+    Extract datecode from an obs_id or filename.
+
+    Args:
+        input_str: e.g. 'KP.20230708.04519.63' or 'KP.20230708.04519.63_L1.fits'
+
+    Returns:
+        datecode: e.g. '20230708'
+
+    Raises:
+        ValueError: if no obs_id pattern found in input_str
     """
-    pattern = r'^KP\.\d{8}\.\d{5}\.\d{2}$'
-    is_obs_id_bool = bool(re.match(pattern, obs_id))
-    return is_obs_id_bool
+    match = _OBS_ID_PATTERN.search(input_str)
+    if match:
+        return match.group(1).split('.')[1]
+    raise ValueError(f"Cannot extract datecode from: {input_str}")
 
 
-def fetch_filepath(input_str, *, level=None, master=None, abspath=True):
-    # TODO: fix logic to allow L1, L2 masters to be pulled
-    if (level is None) == (master is None):
-        raise ValueError("Exactly one of 'level' or 'master' must be provided.")
-    
-    datecode = get_datecode(input_str)
+def build_filepath(input_str, data_root, level, *, master=None):
+    """
+    Build an absolute filepath for a KPF data product.
 
-    if level is not None:
-        if not is_obs_id(input_str):
-            raise ValueError("input string must be a valid obs_id when 'level' is provided")
-        
-        if level == 'L0':
-            filepath = f'{input_str}.fits'
-        elif np.isin(level, ['L1', 'L2', 'FFI']):
-            filepath = f'{input_str}_{level}.fits'
-        else:
-            raise ValueError(f"'level' must be one of 'L0', 'L1', 'L2', or 'FFI'; got {level}")
+    Args:
+        input_str: obs_id (e.g. 'KP.20240405.49597.71') for science products;
+                   obs_id or datecode (e.g. '20240405') for master products.
+        data_root: root data directory from config (e.g. '/data/kpf/').
+        level:     data level string, one of 'L0', 'L1', 'L2', 'L4'.
+        master:    master calibration type, one of 'bias', 'dark', 'flat',
+                   'thar-wls'. If provided, builds a master calibration path.
+                   If omitted, builds a science data path.
 
-        if abspath:
-            filepath = f'/data/{level}/{datecode}/{filepath}/'
+    Returns:
+        Absolute filepath as a string.
 
-        return filepath
+    Raises:
+        ValueError: if level is unrecognized, if input_str is not a valid
+                    obs_id for science products, or if master type is
+                    unrecognized.
+    """
+    if level not in ('L0', 'L1', 'L2', 'L4'):
+        raise ValueError(f"'level' must be 'L0', 'L1', 'L2', or 'L4'; got '{level}'")
 
     if master is not None:
-        if np.isin(master, ['bias', 'dark', 'flat', 'thar-wls']):
-            filename = f'kpf_{datecode}_{master}.fits'
-        else:
-            raise ValueError(f"'master' must be one of 'bias', 'dark', 'flat', or 'thar-wls'; got {master}")
+        if master not in ('bias', 'dark', 'flat', 'thar-wls'):
+            raise ValueError(f"'master' must be 'bias', 'dark', 'flat', or 'thar-wls'; got '{master}'")
 
-        if abspath:
-            filepath = f'/data/masters/{datecode}/{filepath}'
+        datecode = input_str if is_datecode(input_str) else get_datecode(input_str)
+        filename = f'kpf_{datecode}_{master}_{level}.fits'
+        return os.path.join(data_root, 'masters', datecode, filename)
 
-        return filepath
+    if not is_obs_id(input_str):
+        raise ValueError("input_str must be a valid obs_id for science data products")
+
+    datecode = get_datecode(input_str)
+    filename = f'{input_str}.fits' if level == 'L0' else f'{input_str}_{level}.fits'
+    return os.path.join(data_root, level, datecode, filename)
