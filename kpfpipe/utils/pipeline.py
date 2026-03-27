@@ -20,18 +20,10 @@ _OBJECT_MAP = {
 _HST_UTC_OFFSET_SECONDS = 36000
 _CALIBRATION_CLUSTER_GAP_SECONDS = 7200
 
-_TIMEOFDAY_BOUNDARIES = [
-    ( 0,  4, 'midnight'),
-    ( 4, 10, 'morn'),
-    (10, 15, 'midday'),
-    (15, 19, 'eve'),
-    (19, 23, 'night'),
-    (23, 24, 'midnight'),
-]
 
 def _utc_to_hst(utc_timestamp):
     """
-    Convert a KPF UTC timestamp to an HST timestamp.
+    Convert a KPF UTC timestamp to HST.
 
     Args:
         utc_timestamp: str of the form 'YYYYMMDD.SSSSS.FF'
@@ -48,63 +40,50 @@ def _utc_to_hst(utc_timestamp):
     return f'{hst_date.strftime("%Y%m%d")}.{hst_seconds:05d}.{frame_str}'
 
 
-def _detect_and_assign_timeofday(hst_timestamp):
+def _detect_calibration_stack_clusters(df):
     """
-    Assign a local Hawaii time of day to an HST timestamp.
+    Assign CAL_START and CAL_END columns to calibration frames in df.
+
+    Calibration frames are grouped by OBJECT, sorted by UTC seconds, and
+    split into clusters wherever the gap between consecutive frames exceeds
+    _CALIBRATION_CLUSTER_GAP_SECONDS. Every frame in a cluster receives
+    the UTC timestamp of the first frame as CAL_START and the UTC timestamp
+    of the last frame as CAL_END. Science frames (IMTYPE == 'Object') receive
+    an empty string for both columns.
 
     Args:
-        hst_timestamp: str of the form 'YYYYMMDD.SSSSS.FF' in HST
+        df: DataFrame with FILENAME, IMTYPE, and OBJECT columns.
 
     Returns:
-        str: one of 'midnight', 'morn', 'midday', 'eve', 'night'
+        df with CAL_START and CAL_END columns added (same row order as input).
     """
-    hst_hour = int(hst_timestamp.split('.')[1]) / 3600
-    for start, end, label in _TIMEOFDAY_BOUNDARIES:
-        if start <= hst_hour < end:
-            return label
-    raise RuntimeError(f"No time-of-day label for HST hour {hst_hour:.2f}")
+    def _utc_total_seconds(filename):
+        date_str, seconds_str, _ = get_timestamp(filename).split('.')
+        date_ordinal = datetime.strptime(date_str, '%Y%m%d').toordinal()
+        return date_ordinal * 86400 + int(seconds_str)
 
+    cal_start = pd.Series('', index=df.index)
+    cal_end   = pd.Series('', index=df.index)
 
-def _check_cluster_timeofday_consistency(df):
-    """
-    Verify that all files within a calibration cluster share the same TIMEOFDAY label.
+    cal_objects = set(_OBJECT_MAP.values())
+    cal_df = df[df['OBJECT'].isin(cal_objects)].copy()
+    cal_df['_UTC_TOTAL'] = cal_df['FILENAME'].apply(_utc_total_seconds)
 
-    Calibrations are taken in rapid succession, then a multi-hour gap separates
-    the next cluster. Files within a cluster should all map to the same time-of-day.
-    A mismatch indicates a boundary-straddling cluster or a timestamp anomaly.
-
-    Groups rows by OBJECT, sorts each group by UTC seconds, detects cluster
-    boundaries using _CALIBRATION_CLUSTER_GAP_SECONDS, then checks that all
-    TIMEOFDAY values within each cluster are identical.
-
-    Args:
-        df: DataFrame with FILENAME, OBJECT, and TIMEOFDAY columns.
-
-    Raises:
-        ValueError: if any cluster contains more than one TIMEOFDAY label.
-    """
-    for obj_val, group in df.groupby('OBJECT', dropna=False):
-        # Build a sortable total-seconds value from the UTC timestamp.
-        def utc_total_seconds(filename):
-            date_str, seconds_str, _ = get_timestamp(filename).split('.')
-            date_ordinal = datetime.strptime(date_str, '%Y%m%d').toordinal()
-            return date_ordinal * 86400 + int(seconds_str)
-
-        group = group.copy()
-        group['_UTC_TOTAL'] = group['FILENAME'].apply(utc_total_seconds)
+    for _, group in cal_df.groupby('OBJECT', dropna=False):
         group = group.sort_values('_UTC_TOTAL')
-
         gaps = group['_UTC_TOTAL'].diff()
         cluster_id = (gaps > _CALIBRATION_CLUSTER_GAP_SECONDS).cumsum()
 
-        for cid, cluster_rows in group.groupby(cluster_id):
-            labels = cluster_rows['TIMEOFDAY'].unique()
-            if len(labels) > 1:
-                raise ValueError(
-                    f"OBJECT='{obj_val}' cluster {cid} spans multiple time-of-day "
-                    f"labels: {sorted(labels)}. Check timestamps near "
-                    f"{cluster_rows['FILENAME'].iloc[0]}"
-                )
+        for _, cluster_rows in group.groupby(cluster_id):
+            start_time = get_timestamp(cluster_rows.iloc[0]['FILENAME'])
+            end_time   = get_timestamp(cluster_rows.iloc[-1]['FILENAME'])
+            cal_start.loc[cluster_rows.index] = start_time
+            cal_end.loc[cluster_rows.index]   = end_time
+
+    df = df.copy()
+    df['CAL_START'] = cal_start
+    df['CAL_END']   = cal_end
+    return df
 
 
 def build_mini_database(data_dir):
@@ -114,8 +93,8 @@ def build_mini_database(data_dir):
 
     Reads the PRIMARY header of each FITS file and extracts a standard
     set of keys used for frame selection (e.g. filtering by OBJECT type
-    to identify bias, dark, or flat frames). Also assigns a TIMEOFDAY
-    label to each row based on its HST timestamp.
+    to identify bias, dark, or flat frames). Also detects calibration stack
+    clusters and records the start and end timestamps of each cluster.
 
     Assumes data_dir follows the convention .../{level}/{datecode}/.
 
@@ -124,13 +103,16 @@ def build_mini_database(data_dir):
 
     Returns:
         pandas DataFrame with columns:
-            FILENAME   -- absolute path to the FITS file
-            TARGNAME   -- target name
-            IMTYPE     -- image type
-            OBJECT     -- object identifier (e.g. 'autocal-bias')
-            EXPTIME    -- requested exposure time (s)
-            ELAPSED    -- actual elapsed time (s)
-            TIMEOFDAY  -- time-of-day label inferred from each file's HST timestamp
+            FILENAME  -- absolute path to the FITS file
+            TARGNAME  -- target name
+            IMTYPE    -- image type
+            OBJECT    -- object identifier (e.g. 'autocal-bias')
+            EXPTIME   -- requested exposure time (s)
+            ELAPSED   -- actual elapsed time (s)
+            CAL_START -- UTC timestamp of the first frame in the calibration
+                         stack cluster; empty string for science frames
+            CAL_END   -- UTC timestamp of the last frame in the calibration
+                         stack cluster; empty string for science frames
 
         Rows where a header key is missing are included with NaN for
         that column and a warning is issued.
@@ -156,41 +138,36 @@ def build_mini_database(data_dir):
             metadata[k].append(header.get(k, None))
 
     df = pd.DataFrame(metadata)
-
-    timeofday = []
-    for fn in df['FILENAME']:
-        timestamp = get_timestamp(fn)
-        hst_timestamp = _utc_to_hst(timestamp)
-        timeofday.append(_detect_and_assign_timeofday(hst_timestamp))
-    df['TIMEOFDAY'] = timeofday
-    _check_cluster_timeofday_consistency(df)
+    df = _detect_calibration_stack_clusters(df)
 
     csv_path = os.path.join(data_dir, f'KP.{datecode}_{level}.csv')
     df.to_csv(csv_path, index=False)
     return df
 
 
-def build_l0_file_list(data_dir, imtype, time_of_day=None):
+def build_l0_file_list(data_dir, imtype, utc_time):
     """
-    Build a sorted list of L0 FITS files of a given calibration type.
+    Build a sorted list of L0 FITS files for the calibration cluster most
+    recently preceding a given UTC time.
 
-    Loads the mini database CSV from data_dir if it exists and already
-    contains a TIMEOFDAY column; otherwise calls build_mini_database to
-    scan headers and write it. Filters by the OBJECT header keyword and,
-    optionally, by time-of-day label.
+    Loads the mini database CSV from data_dir if it exists; otherwise calls
+    build_mini_database to scan headers and write it. Selects the calibration
+    cluster of the requested type whose CAL_START is the most recent timestamp
+    strictly before utc_time. Raises if no such cluster exists within 24 hours.
 
     Args:
-        data_dir:    path to directory containing L0 FITS files.
-        imtype:      calibration frame type. One of 'bias', 'dark', 'flat'.
-        time_of_day: optional label to filter by, e.g. 'morn', 'eve'.
-                     If None, returns all frames of the requested type.
+        data_dir: path to directory containing L0 FITS files.
+        imtype:   calibration frame type. One of 'bias', 'dark', 'flat'.
+        utc_time: UTC timestamp string ('YYYYMMDD.SSSSS.FF') of the observation
+                  for which calibrations are being selected.
 
     Returns:
-        Sorted list of absolute file paths matching the requested type
-        (and time-of-day, if specified).
+        Sorted list of absolute file paths belonging to the selected cluster.
 
     Raises:
-        ValueError: if imtype is not a recognized calibration type.
+        ValueError: if imtype is not a recognized calibration type, if no
+                    calibration cluster precedes utc_time, or if the nearest
+                    preceding cluster started more than 24 hours before utc_time.
     """
     if imtype not in _OBJECT_MAP:
         raise ValueError(
@@ -204,16 +181,43 @@ def build_l0_file_list(data_dir, imtype, time_of_day=None):
 
     if os.path.isfile(csv_path):
         metadata = pd.read_csv(csv_path)
-        if 'TIMEOFDAY' not in metadata.columns:
+        if 'CAL_START' not in metadata.columns:
             metadata = build_mini_database(data_dir)
     else:
         metadata = build_mini_database(data_dir)
 
-    mask = metadata['OBJECT'] == _OBJECT_MAP[imtype]
-    if time_of_day is not None:
-        mask &= metadata['TIMEOFDAY'] == time_of_day
+    def _to_seconds(ts):
+        date_str, seconds_str, _ = ts.split('.')
+        date_ordinal = datetime.strptime(date_str, '%Y%m%d').toordinal()
+        return date_ordinal * 86400 + int(seconds_str)
 
-    return sorted(metadata.loc[mask, 'FILENAME'].tolist())
+    ref_seconds = _to_seconds(utc_time)
+
+    cal_mask = metadata['OBJECT'] == _OBJECT_MAP[imtype]
+    clusters = (
+        metadata[cal_mask & (metadata['CAL_START'] != '')]
+        [['CAL_START']]
+        .drop_duplicates()
+        .copy()
+    )
+    clusters['_SECONDS'] = clusters['CAL_START'].apply(_to_seconds)
+
+    before = clusters[clusters['_SECONDS'] < ref_seconds]
+    if before.empty:
+        raise ValueError(
+            f"No '{imtype}' calibration cluster found before {utc_time}"
+        )
+
+    best = before.loc[before['_SECONDS'].idxmax()]
+    gap = ref_seconds - best['_SECONDS']
+    if gap > 86400:
+        raise ValueError(
+            f"Nearest '{imtype}' calibration cluster (CAL_START={best['CAL_START']}) "
+            f"is {gap / 3600:.1f} hours before {utc_time}; exceeds 24-hour limit"
+        )
+
+    cluster_mask = cal_mask & (metadata['CAL_START'] == best['CAL_START'])
+    return sorted(metadata.loc[cluster_mask, 'FILENAME'].tolist())
 
 
 def build_filepath(input_str, data_root, level, *, master=None):
