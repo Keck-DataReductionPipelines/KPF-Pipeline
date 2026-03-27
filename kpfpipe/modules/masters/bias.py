@@ -4,6 +4,7 @@ KPF Master Bias construction module.
 from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.base import BaseMasterModule
+from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 DEFAULTS.update({
@@ -19,8 +20,14 @@ NCOL = DETECTOR['ccd']['ncol']
 class Bias(BaseMasterModule):
     def __init__(self, l0_file_list, config=None):
         if config is None:
-            config = {}
-        super().__init__(l0_file_list, config)
+            params = {}
+        elif isinstance(config, dict):
+            params = config
+        elif isinstance(config, ConfigHandler):
+            params = config.get_params(["DATA_DIRS", "KPFPIPE", "BIAS"])
+        else:
+            raise TypeError("config must be None, dict, or ConfigHandler")
+        super().__init__(l0_file_list, params)
 
 
     def perform(self, l0_file_list=None, nstream=None, sigma=None):

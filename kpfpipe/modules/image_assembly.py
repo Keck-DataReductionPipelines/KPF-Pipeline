@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe import REPO_ROOT, DEFAULTS, DETECTOR
+from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
@@ -38,14 +39,23 @@ class ImageAssembly:
       - subtracting overscan bias
       - assembling full-frame images (FFI)
     """
-    def __init__(self, l0_obj, config={}):
+    def __init__(self, l0_obj, config=None):
         self.l0_obj = l0_obj
 
-        for k in DEFAULTS.keys():
-            self.__setattr__(k, config.get(k,DEFAULTS[k]))
+        if config is None:
+            params = {}
+        elif isinstance(config, dict):
+            params = config
+        elif isinstance(config, ConfigHandler):
+            params = config.get_params(["DATA_DIRS", "KPFPIPE", "MODULE_IMAGE_ASSEMBLY"])
+        else:
+            raise TypeError("config must be None, dict, or ConfigHandler")
+
+        for k, v in DEFAULTS.items():
+            setattr(self, k, params.get(k, v))
 
         for k, v in self.ccd.items():
-            self.__setattr__(k, v)
+            setattr(self, k, v)
 
         self._parse_amplifier_reference()
 

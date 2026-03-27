@@ -7,6 +7,7 @@ import warnings
 from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
+from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
@@ -34,15 +35,21 @@ class BaseMasterModule:
     a masters L1 object.
     """
     def __init__(self, l0_file_list, config=None):
-        if config is None:
-            config = {}
-
         if l0_file_list != sorted(l0_file_list):
             raise ValueError("l0_file_list must be sorted in ascending order")
         self.l0_file_list = l0_file_list
 
-        for k in DEFAULTS.keys():
-            self.__setattr__(k, config.get(k,DEFAULTS[k]))
+        if config is None:
+            params = {}
+        elif isinstance(config, dict):
+            params = config
+        elif isinstance(config, ConfigHandler):
+            params = config.get_params(["DATA_DIRS", "KPFPIPE"])
+        else:
+            raise TypeError("config must be None, dict, or ConfigHandler")
+
+        for k, v in DEFAULTS.items():
+            setattr(self, k, params.get(k, v))
 
 
     def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
