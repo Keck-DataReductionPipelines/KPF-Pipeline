@@ -1,0 +1,8 @@
+[BIAS]
+skip_frames = 0
+
+[DARK]
+skip_frames = 0
+
+[FLAT]
+skip_frames = 0

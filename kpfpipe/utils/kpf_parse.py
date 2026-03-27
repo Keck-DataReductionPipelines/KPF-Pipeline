@@ -16,7 +16,7 @@ def get_datecode(input_str):
     if is_obs_id(input_str):
         obs_id = input_str
     else:
-        obs_id = get_obs_id(filename)
+        obs_id = get_obs_id(input_str)
     
     datecode = obs_id.split('.')[1]
 
@@ -34,7 +34,7 @@ def get_obs_id(filename):
         obs_id, e.g. 'KP.20240113.23249.10'
     """
     # TODO: modify to properly handle masters files, use regex
-    obs_id = file.split('/')[-1]
+    obs_id = filename.split('/')[-1]
     for substring in ['.fits', '_2D', '_L1', '_L2']:
         obs_id = obs_id.replace(substring, '')
     return obs_id
@@ -82,32 +82,3 @@ def fetch_filepath(input_str, *, level=None, master=None, abspath=True):
             filepath = f'/data/masters/{datecode}/{filepath}'
 
         return filepath
-
-
-
-            
-
-
-def get_orderlet_ext_from_fiber_name(chip, fiber):
-    flux_dict = {'SKY': f'{chip}_SKY_FLUX',
-                'SCI1': f'{chip}_SCI_FLUX1',
-                'SCI2': f'{chip}_SCI_FLUX2',
-                'SCI3': f'{chip}_SCI_FLUX3',
-                'CAL': f'{chip}_CAL_FLUX'
-                }
-
-    var_dict = {'SKY': f'{chip}_SKY_VAR',
-                'SCI1': f'{chip}_SCI_VAR1',
-                'SCI2': f'{chip}_SCI_VAR2',
-                'SCI3': f'{chip}_SCI_VAR3',
-                'CAL': f'{chip}_CAL_VAR'
-            }
-
-    wave_dict = {'SKY': f'{chip}_SKY_WAVE',
-                 'SCI1': f'{chip}_SCI_WAVE1',
-                 'SCI2': f'{chip}_SCI_WAVE2',
-                 'SCI3': f'{chip}_SCI_WAVE3',
-                 'CAL': f'{chip}_CAL_WAVE'
-            }
-    
-    return flux_dict[fiber], var_dict[fiber], wave_dict[fiber]

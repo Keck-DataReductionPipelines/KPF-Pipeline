@@ -18,6 +18,8 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+from kpfpipe.data_models.masters import KPFMasterL1, KPFMasterL2, KPFMasterL4
+from kpfpipe.data_models.masters.base import KPFMasterModel
 
 NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED = DETECTOR['norder']['RED']
@@ -594,6 +596,122 @@ class TestKPF4:
         assert kpf4.data["RV"] is kpf4.data["RV1"]
 
 
+@pytest.fixture
+def synthetic_masters_l1_file(tmp_path):
+    """Create a minimal synthetic Masters L1 FITS file."""
+    fn = str(tmp_path / "kpf_ML1_20240113T102656.fits")
+
+    primary = fits.PrimaryHDU()
+    primary.header["INSTRUME"] = "KPF"
+    primary.header["DATE-OBS"] = "2024-01-13T10:26:56"
+    primary.header["DATALVL"] = "ML1"
+
+    green_img = fits.ImageHDU(data=np.random.random((32, 32)).astype(np.float32))
+    green_img.name = "GREEN_IMG"
+
+    green_snr = fits.ImageHDU(data=np.random.random((32, 32)).astype(np.float32))
+    green_snr.name = "GREEN_SNR"
+
+    green_mask = fits.ImageHDU(data=np.ones((32, 32), dtype=np.uint8))
+    green_mask.name = "GREEN_MASK"
+
+    red_img = fits.ImageHDU(data=np.random.random((32, 32)).astype(np.float32))
+    red_img.name = "RED_IMG"
+
+    red_snr = fits.ImageHDU(data=np.random.random((32, 32)).astype(np.float32))
+    red_snr.name = "RED_SNR"
+
+    red_mask = fits.ImageHDU(data=np.ones((32, 32), dtype=np.uint8))
+    red_mask.name = "RED_MASK"
+
+    hdul = fits.HDUList([primary, green_img, green_snr, green_mask,
+                         red_img, red_snr, red_mask])
+    hdul.writeto(fn, overwrite=True)
+    hdul.close()
+
+    return fn
+
+
+class TestKPFMasterL1:
+    def test_required_extensions_created(self):
+        m = KPFMasterL1()
+        for ext in ["PRIMARY", "GREEN_IMG", "GREEN_SNR", "GREEN_MASK",
+                    "RED_IMG", "RED_SNR", "RED_MASK", "RECEIPT"]:
+            assert ext in m.extensions
+
+    def test_no_science_extensions(self):
+        m = KPFMasterL1()
+        for ext in ["GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR", "CA_HK"]:
+            assert ext not in m.extensions
+
+    def test_inherits_from_kpf1(self):
+        m = KPFMasterL1()
+        assert isinstance(m, KPF1)
+
+    def test_inherits_from_kpf_master_model(self):
+        m = KPFMasterL1()
+        assert isinstance(m, KPFMasterModel)
+
+    def test_class_attributes(self):
+        assert KPFMasterL1._DATALVL == "ML1"
+        assert KPFMasterL1._FILENAME_PREFIX == "kpf_ML1"
+
+    def test_from_fits(self, synthetic_masters_l1_file):
+        m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
+        assert "GREEN_IMG" in m.extensions
+        assert "GREEN_SNR" in m.extensions
+        assert "GREEN_MASK" in m.extensions
+        assert "RED_IMG" in m.extensions
+        assert m.data["GREEN_IMG"].shape == (32, 32)
+
+    def test_round_trip(self, synthetic_masters_l1_file, tmp_path):
+        m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
+        original = m.data["GREEN_IMG"].copy()
+
+        out_fn = str(tmp_path / "roundtrip_ml1.fits")
+        m.to_fits(out_fn)
+
+        m2 = KPFMasterL1.from_fits(out_fn)
+        np.testing.assert_array_almost_equal(m2.data["GREEN_IMG"], original)
+
+    def test_datalvl_header_in_fits(self, synthetic_masters_l1_file, tmp_path):
+        m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
+        out_fn = str(tmp_path / "datalvl_ml1.fits")
+        m.to_fits(out_fn)
+        with fits.open(out_fn) as hdul:
+            assert hdul["PRIMARY"].header["DATALVL"] == "ML1"
+
+    def test_generate_filename(self, synthetic_masters_l1_file):
+        m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
+        fn = m.generate_standard_filename()
+        assert fn.startswith("kpf_ML1_")
+        assert fn.endswith(".fits")
+
+    def test_no_warning_on_known_extensions(self, synthetic_masters_l1_file):
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            KPFMasterL1.from_fits(synthetic_masters_l1_file)
+
+
+class TestKPFMasterStubs:
+    def test_master_l2_not_implemented(self):
+        with pytest.raises(NotImplementedError):
+            KPFMasterL2()
+
+    def test_master_l4_not_implemented(self):
+        with pytest.raises(NotImplementedError):
+            KPFMasterL4()
+
+    def test_master_l2_inherits_kpf2(self):
+        from kpfpipe.data_models.level2 import KPF2
+        assert issubclass(KPFMasterL2, KPF2)
+
+    def test_master_l4_inherits_kpf4(self):
+        from kpfpipe.data_models.level4 import KPF4
+        assert issubclass(KPFMasterL4, KPF4)
+
+
 class TestImports:
     def test_data_models_import(self):
         from kpfpipe.data_models import KPF0, KPF1, KPF2, KPF4
@@ -601,6 +719,12 @@ class TestImports:
         assert KPF1 is not None
         assert KPF2 is not None
         assert KPF4 is not None
+
+    def test_masters_data_models_import(self):
+        from kpfpipe.data_models.masters import KPFMasterL1, KPFMasterL2, KPFMasterL4
+        assert KPFMasterL1 is not None
+        assert KPFMasterL2 is not None
+        assert KPFMasterL4 is not None
 
     def test_rvdata_import(self):
         from rvdata.core.models.level2 import RV2
