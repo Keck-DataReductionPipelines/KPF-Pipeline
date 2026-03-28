@@ -7,7 +7,7 @@ from kpfpipe.modules.masters.bias import Bias
 
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import get_obs_id
-from kpfpipe.utils.pipeline import build_filepath, build_l0_file_lists
+from kpfpipe.utils.pipeline import build_filepath, build_l0_file_lists, build_mini_database
 
 
 def main(config, args):
@@ -20,27 +20,28 @@ def main(config, args):
     data_root_out = data_dirs['KPF_DATA_OUTPUT']
 
     l0_dir = os.path.join(data_root_in, 'L0', datecode)
+    mini_db = build_mini_database(l0_dir)
 
     # master bias
-    for files in build_l0_file_lists(l0_dir, 'bias'):
+    for files in build_l0_file_lists('bias', mini_db=mini_db):
         bias_handler = Bias(files, config)
         bias_l1 = bias_handler.make_master_l1()
         bias_l1.to_fits(build_filepath(get_obs_id(files[0]), data_root_out, 'L1', master='bias'))
 
     # master dark (not yet implemented)
-    #for files in build_l0_file_lists(l0_dir, 'dark'):
+    #for files in build_l0_file_lists('dark', mini_db=mini_db):
     #    dark_handler = Dark(files, config)
     #    dark_l1 = dark_handler.make_master_l1()
     #    dark_l1.to_fits(build_filepath(get_obs_id(files[0]), data_root_out, 'L1', master='dark'))
 
     # master flat (not yet implemented)
-    #for files in build_l0_file_lists(l0_dir, 'flat'):
+    #for files in build_l0_file_lists('flat', mini_db=mini_db):
     #    flat_handler = Flat(files, config)
     #    flat_l1 = flat_handler.make_master_l1()
     #    flat_l1.to_fits(build_filepath(get_obs_id(files[0]), data_root_out, 'L1', master='flat'))
 
     # wavelength solution (not yet implemented)
-    #for files in build_l0_file_lists(l0_dir, 'thar-wls'):
+    #for files in build_l0_file_lists('thar-wls', mini_db=mini_db):
     #    wls_handler = WLS(files, config)
     #    wls_l1 = wls_handler.make_master_l1()
     #    wls_l1.to_fits(build_filepath(get_obs_id(files[0]), data_root_out, 'L1', master='thar-wls'))

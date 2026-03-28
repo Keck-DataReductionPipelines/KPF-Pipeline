@@ -155,28 +155,32 @@ def build_mini_database(data_dir):
     return df
 
 
-def build_l0_file_lists(data_dir, imtype, min_file_count=5):
+def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None):
     """
     Return sorted file lists for all calibration clusters of the requested type.
 
-    Loads the mini database CSV from data_dir if it exists; otherwise calls
-    build_mini_database to scan headers and write it. Groups calibration frames
-    into clusters. Clusters with at least min_file_count files are returned as
-    individual lists. If any cluster falls below min_file_count, all clusters
-    of that type in data_dir are merged into a single list with a warning.
+    Exactly one of data_dir or mini_db must be provided. When data_dir is given,
+    loads the mini database CSV if it exists, otherwise calls build_mini_database
+    to scan headers and write it. When mini_db is given, uses it directly to
+    avoid redundant I/O. Groups calibration frames into clusters. Clusters with
+    at least min_file_count files are returned as individual lists. If any
+    cluster falls below min_file_count, all clusters of that type are merged
+    into a single list with a warning.
 
     Args:
-        data_dir:        path to directory containing L0 FITS files.
         imtype:          calibration frame type. One of 'bias', 'dark', 'flat'.
         min_file_count:  minimum number of files required per returned list.
                          Default is 5.
+        data_dir:        path to directory containing L0 FITS files.
+        mini_db:         DataFrame returned by build_mini_database.
 
     Returns:
         List of sorted file lists, one per cluster or one merged list if any
         cluster fell below min_file_count.
 
     Raises:
-        ValueError: if imtype is not a recognized calibration type, if no
+        ValueError: if imtype is not a recognized calibration type, if exactly
+                    one of data_dir or mini_db is not provided, if no
                     calibration frames of the requested type are found, or if
                     the merged total still contains fewer than min_file_count
                     files.
@@ -186,17 +190,23 @@ def build_l0_file_lists(data_dir, imtype, min_file_count=5):
             f"imtype must be one of {list(_OBJECT_MAP.keys())}; got '{imtype}'"
         )
 
-    data_dir = os.path.normpath(data_dir)
-    datecode = os.path.basename(data_dir)
-    level = os.path.basename(os.path.dirname(data_dir))
-    csv_path = os.path.join(data_dir, f'KP.{datecode}_{level}.csv')
+    if (data_dir is None) == (mini_db is None):
+        raise ValueError("Exactly one of data_dir or mini_db must be provided")
 
-    if os.path.isfile(csv_path):
-        metadata = pd.read_csv(csv_path)
-        if 'CAL_START' not in metadata.columns:
-            metadata = build_mini_database(data_dir)
+    if mini_db is not None:
+        metadata = mini_db
     else:
-        metadata = build_mini_database(data_dir)
+        data_dir = os.path.normpath(data_dir)
+        datecode = os.path.basename(data_dir)
+        level = os.path.basename(os.path.dirname(data_dir))
+        csv_path = os.path.join(data_dir, f'KP.{datecode}_{level}.csv')
+
+        if os.path.isfile(csv_path):
+            metadata = pd.read_csv(csv_path)
+            if 'CAL_START' not in metadata.columns:
+                metadata = build_mini_database(data_dir)
+        else:
+            metadata = build_mini_database(data_dir)
 
     mask = (metadata['OBJECT'] == _OBJECT_MAP[imtype]) & (metadata['CAL_START'] != '')
     cal_df = metadata[mask]
