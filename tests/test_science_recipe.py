@@ -78,7 +78,7 @@ class TestScienceRecipe:
         assert os.path.isfile(recipe_output), f"Expected output not found: {recipe_output}"
 
     def test_output_filename_format(self, recipe_output):
-        assert os.path.basename(recipe_output) == f'{OBS_ID}_L2.fits'
+        assert os.path.basename(recipe_output) == 'kpf_SL2_20240405T110833.fits'
 
     def test_output_is_valid_kpf2(self, recipe_output):
         l2 = KPF2.from_fits(recipe_output)

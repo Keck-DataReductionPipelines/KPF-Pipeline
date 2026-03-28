@@ -282,12 +282,29 @@ def build_filepath(input_str, data_root, level, *, master=None):
             )
         return os.path.join(data_root, 'masters', datecode, filename)
 
-    # Science: {data_root}/{level}/{datecode}/{obs_id}[_{level}].fits
+    # Science paths by level:
+    #   L0/L1: {data_root}/{level}/{datecode}/{obs_id}[_{level}].fits  (KPF-native names)
+    #   L2/L4: {data_root}/{level}/{datecode}/kpf_SL{N}_{YYYYMMDD}T{HHmmss}.fits  (EPRV standard)
     if level not in ('L0', 'L1', 'L2', 'L4'):
         raise ValueError(f"'level' must be 'L0', 'L1', 'L2', or 'L4'; got '{level}'")
     if not is_obs_id(input_str):
         raise ValueError("input_str must be a valid obs_id for science data products")
 
+    from kpfpipe.utils.kpf import get_timestamp
     datecode = get_datecode(input_str)
-    filename = f'{input_str}.fits' if level == 'L0' else f'{input_str}_{level}.fits'
+
+    if level in ('L2', 'L4'):
+        timestamp = get_timestamp(input_str)
+        date_str, seconds_str, _ = timestamp.split('.')
+        total_seconds = int(seconds_str)
+        hh = total_seconds // 3600
+        mm = (total_seconds % 3600) // 60
+        ss = total_seconds % 60
+        level_num = level[1]
+        filename = f'kpf_SL{level_num}_{date_str}T{hh:02d}{mm:02d}{ss:02d}.fits'
+    elif level == 'L0':
+        filename = f'{input_str}.fits'
+    else:
+        filename = f'{input_str}_{level}.fits'
+
     return os.path.join(data_root, level, datecode, filename)
