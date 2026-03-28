@@ -5,7 +5,6 @@ from kpfpipe.modules.masters.bias import Bias
 #from kpfpipe.modules.masters.flat import Flat
 #from kpfpipe.modules.masters.wls import WLS
 
-from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import get_obs_id
 from kpfpipe.utils.pipeline import build_filepath, build_l0_file_lists, build_mini_database
 
@@ -48,12 +47,3 @@ def main(config, args):
 
     print("\n\n=== exiting kpf_drp_masters pipeline ===\n\n")
 
-
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(description='KPF masters DRP')
-    parser.add_argument('-c', '--config', required=True, help='path to TOML config file')
-    parser.add_argument('--datecode', required=True, help='datecode, e.g. 20240405')
-    args = parser.parse_args()
-    config = ConfigHandler(args.config)
-    main(config, args)

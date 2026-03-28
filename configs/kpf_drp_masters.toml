@@ -7,10 +7,7 @@ chips = ["GREEN", "RED"]
 fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
 [BIAS]
-dummy = None
 
 [DARK]
-dummy = None
 
 [FLAT]
-dummy = None
