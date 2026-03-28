@@ -6,5 +6,6 @@ HDU,Name,DataType,Required,Description
 4,RED_IMG,ImageHDU,True,Stacked red CCD mean image (count rate)
 5,RED_SNR,ImageHDU,True,Red CCD signal-to-noise ratio
 6,RED_MASK,ImageHDU,True,Red CCD bad pixel mask (1=good 0=bad)
-7,RECEIPT,BinTableHDU,True,Accumulated processing history
-8,CONFIG,BinTableHDU,False,Configuration parameters
+7,INPUT_FILES,BinTableHDU,True,Input L0 files used to generate this master stack
+8,RECEIPT,BinTableHDU,True,Accumulated processing history
+9,CONFIG,BinTableHDU,False,Configuration parameters

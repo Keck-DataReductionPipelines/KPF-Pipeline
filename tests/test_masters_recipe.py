@@ -369,3 +369,19 @@ class TestMastersRecipe:
             ml1 = KPFMasterL1.from_fits(path)
             assert ml1.data["GREEN_IMG"] is not None
             assert ml1.data["RED_IMG"] is not None
+
+    def test_input_files_extension_present(self, recipe_output):
+        for path in recipe_output:
+            ml1 = KPFMasterL1.from_fits(path)
+            assert "INPUT_FILES" in ml1.extensions
+
+    def test_input_files_extension_has_correct_count(self, recipe_output):
+        for path in recipe_output:
+            ml1 = KPFMasterL1.from_fits(path)
+            assert len(ml1.data["INPUT_FILES"]) == 5
+
+    def test_input_files_all_fits(self, recipe_output):
+        for path in recipe_output:
+            ml1 = KPFMasterL1.from_fits(path)
+            filenames = ml1.data["INPUT_FILES"]["FILENAME"].tolist()
+            assert all(f.endswith(".fits") for f in filenames)

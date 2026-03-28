@@ -61,6 +61,7 @@ class Bias(BaseMasterModule):
             ml1_obj.set_data(f'{chip}_SNR',  l1_arrays[f'{chip}_SNR'])
             ml1_obj.set_data(f'{chip}_MASK', l1_arrays[f'{chip}_MASK'])
 
+        self._set_input_files(ml1_obj, l0_file_list)
         ml1_obj.receipt_add_entry('master_bias', 'PASS')
 
         return ml1_obj

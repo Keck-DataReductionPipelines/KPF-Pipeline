@@ -2,6 +2,7 @@
 Base class for KPF Masters modules.
 """
 import numpy as np
+import pandas as pd
 import warnings
 
 from kpfpipe import DEFAULTS, DETECTOR
@@ -50,6 +51,11 @@ class BaseMasterModule:
 
         for k, v in DEFAULTS.items():
             setattr(self, k, params.get(k, v))
+
+
+    def _set_input_files(self, ml1_obj, file_list):
+        """Record the input L0 file list in the INPUT_FILES extension."""
+        ml1_obj.set_data('INPUT_FILES', pd.DataFrame({'FILENAME': file_list}))
 
 
     def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
