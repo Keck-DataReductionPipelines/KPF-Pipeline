@@ -17,6 +17,7 @@ import importlib.resources
 
 import numpy as np
 import pandas as pd
+from astropy.table import Table
 from rvdata.core.models.level2 import RV2
 
 from kpfpipe import DETECTOR
@@ -198,7 +199,27 @@ class KPF2(RV2):
             return
         if hasattr(self.extensions, '_resolve'):
             ext_name = self.extensions._resolve(ext_name)
+        # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
+        if (ext_name in self.extensions
+                and self.extensions[ext_name] == "BinTableHDU"
+                and isinstance(data, np.ndarray)
+                and data.dtype.names is not None):
+            data = Table(data)
         super().set_data(ext_name, data)
+        # Sync self.receipt when the RECEIPT extension is loaded from FITS.
+        if ext_name == "RECEIPT" and isinstance(data, Table):
+            self.receipt = data.to_pandas()
+
+    def _create_hdul(self):
+        """Override to sync self.receipt into self.data["RECEIPT"] before writing.
+
+        rvdata's to_fits writes self.data["RECEIPT"] (the default empty table),
+        not self.receipt (the processing history DataFrame). This override syncs
+        them so the full receipt is written to the FITS file.
+        """
+        if self.receipt is not None and not self.receipt.empty:
+            self.data["RECEIPT"] = Table.from_pandas(self.receipt)
+        return super()._create_hdul()
 
     def set_header(self, ext_name, header):
         """Override to resolve aliases before the base class .keys() check."""

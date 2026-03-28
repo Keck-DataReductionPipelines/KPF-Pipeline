@@ -1,5 +1,5 @@
 [DATA_DIRS]
-KFP_DATA_INPUT = "/data/kpf/"
+KPF_DATA_INPUT = "/data/kpf/"
 KPF_DATA_OUTPUT = "/data/kpf-next/"
 
 [KPFPIPE]

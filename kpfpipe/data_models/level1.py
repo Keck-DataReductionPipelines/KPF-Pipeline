@@ -181,11 +181,12 @@ class KPF1(KPFDataModel):
         hdul.close()
         return fn
 
-    # Mapping of L1 extension names → KPF2/RV2 extension names for pass-through
+    # Mapping of L1 extension names → KPF2/RV2 extension names for pass-through.
+    # CA_HK is excluded: it is a raw 2D CCD image, not an extracted spectrum.
+    # ANCILLARY_SPECTRUM (BinTableHDU) should be populated after Ca HK extraction.
     _L1_TO_KPF2_PASSTHROUGH = {
         "TELEMETRY": "TELEMETRY",
         "EXPMETER_SCI": "EXPMETER",
-        "CA_HK": "ANCILLARY_SPECTRUM",
     }
 
     def to_kpf2(self):
@@ -217,9 +218,9 @@ class KPF1(KPFDataModel):
                 elif default_val is not None and str(default_val).strip():
                     kpf2.headers["PRIMARY"][standard_key] = default_val
 
-            # Store full L1 PRIMARY header in INSTRUMENT_HEADER
+            # Store full L1 PRIMARY header in INSTRUMENT_HEADER (ImageHDU: scalar values only)
             for key, value in l1_header.items():
-                kpf2.headers["INSTRUMENT_HEADER"][key] = value
+                kpf2.headers["INSTRUMENT_HEADER"][key] = value[0] if isinstance(value, tuple) else value
 
         # Pass-through extensions with renaming
         for l1_ext, kpf2_ext in self._L1_TO_KPF2_PASSTHROUGH.items():

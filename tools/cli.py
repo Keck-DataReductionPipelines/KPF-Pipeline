@@ -3,6 +3,7 @@ KPF pipeline CLI entry point.
 
 Usage:
     kpfpipe -r recipes/kpf_drp_masters.py -c configs/kpf_drp_masters.toml -d 20240405
+    kpfpipe -r recipes/kpf_drp_science.py  -c configs/kpf_drp_science.toml  -o KP.20240405.40113.57
 """
 import argparse
 import importlib.util
@@ -22,9 +23,10 @@ def main():
     )
     parser.add_argument('-r', '--recipe',   required=True, help='path to recipe .py file')
     parser.add_argument('-c', '--config',   required=True, help='path to TOML config file')
-    parser.add_argument('-d', '--datecode', required=True, help='datecode, e.g. 20240405')
-    parser.add_argument('--data-input',  default=None, help='override KPF_DATA_INPUT directory')
-    parser.add_argument('--data-output', default=None, help='override KPF_DATA_OUTPUT directory')
+    parser.add_argument('-d', '--datecode', default=None, help='datecode, e.g. 20240405 (masters recipe)')
+    parser.add_argument('-o', '--obs_id',   default=None, help='obs_id, e.g. KP.20240405.40113.57 (science recipe)')
+    parser.add_argument('--data_input',  default=None, help='override KPF_DATA_INPUT directory')
+    parser.add_argument('--data_output', default=None, help='override KPF_DATA_OUTPUT directory')
     parser.add_argument('--test', action='store_true',
                         help='use tests/testdata/ for input and output')
     args = parser.parse_args()
