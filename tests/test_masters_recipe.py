@@ -2,19 +2,18 @@
 Tests for pipeline utils and the kpf_drp_masters recipe.
 
 Unit tests use synthetic DataFrames and temp directories — no real data needed.
-Integration tests are gated on KPF_TESTDATA pointing to an L0 directory,
-e.g. /Users/research/data/kpf/L0/20240405.
+Integration tests use real L0 data from tests/testdata/L0/20240405/.
 """
 
 import os
-import tempfile
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.pipeline import (
     _utc_to_hst,
     _detect_calibration_stack_clusters,
@@ -26,20 +25,33 @@ from kpfpipe.utils.pipeline import (
 
 
 # ---------------------------------------------------------------------------
-# Test data setup
+# Test data paths
 # ---------------------------------------------------------------------------
 
-L0_DIR = os.environ.get("KPF_TESTDATA")
+TESTDATA_DIR    = Path(__file__).parent / 'testdata'
+TESTDATA_L0_DIR = TESTDATA_DIR / 'L0' / '20240405'
 
-needs_l0_data = pytest.mark.skipif(
-    L0_DIR is None or not os.path.isdir(L0_DIR),
-    reason="L0 test data not available (set KPF_TESTDATA env var)",
-)
+
+# ---------------------------------------------------------------------------
+# Session-scoped cleanup: remove CSV written into testdata by build_mini_database
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope='session', autouse=True)
+def cleanup_testdata_csv():
+    yield
+    csv_path = TESTDATA_L0_DIR / 'KP.20240405_L0.csv'
+    if csv_path.exists():
+        csv_path.unlink()
+
+
+# ---------------------------------------------------------------------------
+# Synthetic test data setup (unit tests only)
+# ---------------------------------------------------------------------------
 
 # Synthetic filenames: KP.YYYYMMDD.SSSSS.FF.fits
 # Two bias clusters separated by a >2hr gap; one dark cluster; science frames.
-_BIAS_A = [f"/data/L0/20240405/KP.20240405.0{3600 + i*100:04d}.00.fits" for i in range(4)]  # 03600–03900
-_BIAS_B = [f"/data/L0/20240405/KP.20240405.{14000 + i*100:05d}.00.fits" for i in range(4)]  # 14000–14300
+_BIAS_A = [f"/data/L0/20240405/KP.20240405.0{3600 + i*100:04d}.00.fits" for i in range(5)]  # 03600–04000
+_BIAS_B = [f"/data/L0/20240405/KP.20240405.{14000 + i*100:05d}.00.fits" for i in range(5)]  # 14000–14400
 _DARK_A = [f"/data/L0/20240405/KP.20240405.{18000 + i*100:05d}.00.fits" for i in range(3)]  # 18000–18200
 _SCI_A  = [f"/data/L0/20240405/KP.20240405.{50000 + i*100:05d}.00.fits" for i in range(2)]  # 50000–50100
 
@@ -104,7 +116,7 @@ class TestDetectCalibrationStackClusters:
 
     def test_bias_cluster_a_cal_end(self, db):
         rows = db[db["FILENAME"].isin(_BIAS_A)]
-        assert (rows["CAL_END"] == "20240405.03900.00").all()
+        assert (rows["CAL_END"] == "20240405.04000.00").all()
 
     def test_bias_cluster_b_cal_start(self, db):
         rows = db[db["FILENAME"].isin(_BIAS_B)]
@@ -112,7 +124,7 @@ class TestDetectCalibrationStackClusters:
 
     def test_bias_cluster_b_cal_end(self, db):
         rows = db[db["FILENAME"].isin(_BIAS_B)]
-        assert (rows["CAL_END"] == "20240405.14300.00").all()
+        assert (rows["CAL_END"] == "20240405.14400.00").all()
 
     def test_two_bias_clusters_detected(self, db):
         bias = db[db["OBJECT"] == "autocal-bias"]
@@ -230,6 +242,55 @@ class TestBuildL0FileList:
         mock_bmd.assert_called_once_with(data_dir)
         assert files == sorted(_BIAS_B)
 
+    def test_fallback_issues_warning_when_cluster_below_min(self, data_dir):
+        # bias cluster B has 5 files; min_file_count=6 forces fallback to 24hr window
+        with pytest.warns(UserWarning, match="using all"):
+            build_l0_file_list(data_dir, "bias", "20240405.20000.00", min_file_count=6)
+
+    def test_fallback_returns_24hr_window_files(self, data_dir):
+        # with min_file_count=6, both bias clusters (10 total) are returned
+        with pytest.warns(UserWarning):
+            files = build_l0_file_list(data_dir, "bias", "20240405.20000.00", min_file_count=6)
+        assert files == sorted(_BIAS_A + _BIAS_B)
+
+    def test_raises_when_24hr_window_below_min_count(self, data_dir):
+        # dark cluster has 3 files, 3 total in 24hr window — below default min_file_count=5
+        with pytest.raises(ValueError, match="need at least"):
+            build_l0_file_list(data_dir, "dark", "20240405.20000.00")
+
+
+# ---------------------------------------------------------------------------
+# build_l0_file_list (real data)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildL0FileListRealData:
+
+    @pytest.fixture(scope="class")
+    def l0_dir(self):
+        return str(TESTDATA_L0_DIR)
+
+    def test_bias_returns_single_cluster(self, l0_dir):
+        files = build_l0_file_list(l0_dir, "bias", "20240405.10000.00")
+        assert len(files) == 5
+        assert files == sorted(files)
+
+    def test_flat_returns_single_cluster(self, l0_dir):
+        files = build_l0_file_list(l0_dir, "flat", "20240405.10000.00")
+        assert len(files) == 5
+        assert files == sorted(files)
+
+    def test_dark_fallback_issues_warning(self, l0_dir):
+        # Each dark cluster has only 2 files; fallback to 24hr window expected
+        with pytest.warns(UserWarning, match="using all"):
+            build_l0_file_list(l0_dir, "dark", "20240405.85000.00")
+
+    def test_dark_fallback_returns_all_five(self, l0_dir):
+        with pytest.warns(UserWarning):
+            files = build_l0_file_list(l0_dir, "dark", "20240405.85000.00")
+        assert len(files) == 5
+        assert files == sorted(files)
+
 
 # ---------------------------------------------------------------------------
 # build_filepath
@@ -272,21 +333,15 @@ class TestBuildFilepath:
 
 
 # ---------------------------------------------------------------------------
-# build_mini_database (integration, real L0 data)
+# build_mini_database (real L0 data from tests/testdata/)
 # ---------------------------------------------------------------------------
 
 
-@needs_l0_data
 class TestBuildMiniDatabase:
 
     @pytest.fixture(scope="class")
-    def mini_db(self, tmp_path_factory):
-        tmp_path = tmp_path_factory.mktemp("minidb")
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Point data_dir at the real L0 directory so headers can be read,
-            # but write the CSV to a temp location by monkey-patching normpath.
-            pass
-        return build_mini_database(L0_DIR)
+    def mini_db(self):
+        return build_mini_database(str(TESTDATA_L0_DIR))
 
     def test_has_required_columns(self, mini_db):
         for col in ("FILENAME", "IMTYPE", "OBJECT", "CAL_START", "CAL_END"):
@@ -305,34 +360,28 @@ class TestBuildMiniDatabase:
         assert (bias["CAL_START"] != "").all()
 
     def test_csv_written(self):
-        datecode = os.path.basename(L0_DIR)
-        level = os.path.basename(os.path.dirname(L0_DIR))
-        csv_path = os.path.join(L0_DIR, f"KP.{datecode}_{level}.csv")
-        assert os.path.isfile(csv_path)
+        csv_path = TESTDATA_L0_DIR / "KP.20240405_L0.csv"
+        assert csv_path.exists()
 
 
 # ---------------------------------------------------------------------------
-# Masters recipe integration (real L0 data)
+# Masters recipe integration (real L0 data from tests/testdata/)
 # ---------------------------------------------------------------------------
 
 
-@needs_l0_data
 class TestMastersRecipe:
     """End-to-end recipe test: build_mini_database → get_calibration_stack_clusters
     → Bias.make_master_l1 → to_fits."""
 
     @pytest.fixture(scope="class")
     def recipe_output(self, tmp_path_factory):
-        from unittest.mock import patch
         from kpfpipe.modules.masters.bias import Bias
         from kpfpipe.utils.kpf import get_obs_id
 
         tmp_path = tmp_path_factory.mktemp("recipe_out")
-        data_root_in  = os.path.dirname(os.path.dirname(L0_DIR))
         data_root_out = str(tmp_path)
-        datecode      = os.path.basename(L0_DIR)
 
-        mini_db = build_mini_database(L0_DIR)
+        mini_db = build_mini_database(str(TESTDATA_L0_DIR))
 
         output_paths = []
         for files in get_calibration_stack_clusters(mini_db, "bias"):
@@ -358,8 +407,6 @@ class TestMastersRecipe:
             assert "_master_bias_L1.fits" in fname
 
     def test_output_is_valid_fits(self, recipe_output):
-        from astropy.io import fits
-        from kpfpipe.data_models.masters import KPFMasterL1
         for path in recipe_output:
             ml1 = KPFMasterL1.from_fits(path)
             assert ml1.data["GREEN_IMG"] is not None

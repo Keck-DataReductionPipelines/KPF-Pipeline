@@ -145,7 +145,7 @@ def build_mini_database(data_dir):
     return df
 
 
-def build_l0_file_list(data_dir, imtype, utc_time):
+def build_l0_file_list(data_dir, imtype, utc_time, min_file_count=5):
     """
     Build a sorted list of L0 FITS files for the calibration cluster most
     recently preceding a given UTC time.
@@ -153,21 +153,31 @@ def build_l0_file_list(data_dir, imtype, utc_time):
     Loads the mini database CSV from data_dir if it exists; otherwise calls
     build_mini_database to scan headers and write it. Selects the calibration
     cluster of the requested type whose CAL_START is the most recent timestamp
-    strictly before utc_time. Raises if no such cluster exists within 24 hours.
+    strictly before utc_time.
+
+    If the selected cluster contains fewer than min_file_count files, all
+    calibration frames of the requested type from the previous 24 hours are
+    returned instead, with a warning. Raises if no cluster precedes utc_time
+    within 24 hours, or if the expanded 24-hour window still yields fewer than
+    min_file_count files.
 
     Args:
-        data_dir: path to directory containing L0 FITS files.
-        imtype:   calibration frame type. One of 'bias', 'dark', 'flat'.
-        utc_time: UTC timestamp string ('YYYYMMDD.SSSSS.FF') of the observation
-                  for which calibrations are being selected.
+        data_dir:        path to directory containing L0 FITS files.
+        imtype:          calibration frame type. One of 'bias', 'dark', 'flat'.
+        utc_time:        UTC timestamp string ('YYYYMMDD.SSSSS.FF') of the
+                         observation for which calibrations are being selected.
+        min_file_count:  minimum number of files required in the returned list.
+                         Default is 5.
 
     Returns:
-        Sorted list of absolute file paths belonging to the selected cluster.
+        Sorted list of absolute file paths belonging to the selected cluster,
+        or all frames within 24 hours if the cluster is below min_file_count.
 
     Raises:
         ValueError: if imtype is not a recognized calibration type, if no
-                    calibration cluster precedes utc_time, or if the nearest
-                    preceding cluster started more than 24 hours before utc_time.
+                    calibration cluster precedes utc_time within 24 hours, or
+                    if the 24-hour window contains fewer than min_file_count
+                    files.
     """
     if imtype not in _OBJECT_MAP:
         raise ValueError(
@@ -217,7 +227,31 @@ def build_l0_file_list(data_dir, imtype, utc_time):
         )
 
     cluster_mask = cal_mask & (metadata['CAL_START'] == best['CAL_START'])
-    return sorted(metadata.loc[cluster_mask, 'FILENAME'].tolist())
+    files = sorted(metadata.loc[cluster_mask, 'FILENAME'].tolist())
+
+    if len(files) >= min_file_count:
+        return files
+
+    # Cluster is below min_file_count — expand to all frames within 24 hours.
+    cal_files = metadata.loc[cal_mask, 'FILENAME'].tolist()
+    cal_seconds = {f: _to_seconds(get_timestamp(f)) for f in cal_files}
+    expanded_files = sorted(
+        f for f in cal_files
+        if ref_seconds - 86400 <= cal_seconds[f] < ref_seconds
+    )
+
+    if len(expanded_files) < min_file_count:
+        raise ValueError(
+            f"Only {len(expanded_files)} '{imtype}' frame(s) found in the 24 hours "
+            f"before {utc_time}; need at least {min_file_count}"
+        )
+
+    warnings.warn(
+        f"'{imtype}' cluster at CAL_START={best['CAL_START']} has only "
+        f"{len(files)} file(s); using all {len(expanded_files)} frames "
+        f"from the previous 24 hours instead."
+    )
+    return expanded_files
 
 
 def get_calibration_stack_clusters(mini_db, imtype):
