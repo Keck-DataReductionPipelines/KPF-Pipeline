@@ -40,6 +40,21 @@ def _utc_to_hst(utc_timestamp):
     return f'{hst_date.strftime("%Y%m%d")}.{hst_seconds:05d}.{frame_str}'
 
 
+def _timestamp_to_seconds(ts):
+    """
+    Convert a KPF timestamp string to a total-seconds value for comparison.
+
+    Args:
+        ts: timestamp string of the form 'YYYYMMDD.SSSSS.FF'
+
+    Returns:
+        int: date ordinal * 86400 + intra-day seconds
+    """
+    date_str, seconds_str, _ = ts.split('.')
+    date_ordinal = datetime.strptime(date_str, '%Y%m%d').toordinal()
+    return date_ordinal * 86400 + int(seconds_str)
+
+
 def _detect_calibration_stack_clusters(df):
     """
     Assign CAL_START and CAL_END columns to calibration frames in df.
@@ -57,17 +72,12 @@ def _detect_calibration_stack_clusters(df):
     Returns:
         df with CAL_START and CAL_END columns added (same row order as input).
     """
-    def _utc_total_seconds(filename):
-        date_str, seconds_str, _ = get_timestamp(filename).split('.')
-        date_ordinal = datetime.strptime(date_str, '%Y%m%d').toordinal()
-        return date_ordinal * 86400 + int(seconds_str)
-
     cal_start = pd.Series('', index=df.index)
     cal_end   = pd.Series('', index=df.index)
 
     cal_objects = set(_OBJECT_MAP.values())
     cal_df = df[df['OBJECT'].isin(cal_objects)].copy()
-    cal_df['_UTC_TOTAL'] = cal_df['FILENAME'].apply(_utc_total_seconds)
+    cal_df['_UTC_TOTAL'] = [_timestamp_to_seconds(get_timestamp(f)) for f in cal_df['FILENAME']]
 
     for _, group in cal_df.groupby('OBJECT', dropna=False):
         group = group.sort_values('_UTC_TOTAL')
@@ -145,38 +155,30 @@ def build_mini_database(data_dir):
     return df
 
 
-def build_l0_file_list(data_dir, imtype, utc_time, min_file_count=5):
+def build_l0_file_lists(data_dir, imtype, min_file_count=5):
     """
-    Build a sorted list of L0 FITS files for the calibration cluster most
-    recently preceding a given UTC time.
+    Return sorted file lists for all calibration clusters of the requested type.
 
     Loads the mini database CSV from data_dir if it exists; otherwise calls
-    build_mini_database to scan headers and write it. Selects the calibration
-    cluster of the requested type whose CAL_START is the most recent timestamp
-    strictly before utc_time.
-
-    If the selected cluster contains fewer than min_file_count files, all
-    calibration frames of the requested type from the previous 24 hours are
-    returned instead, with a warning. Raises if no cluster precedes utc_time
-    within 24 hours, or if the expanded 24-hour window still yields fewer than
-    min_file_count files.
+    build_mini_database to scan headers and write it. Groups calibration frames
+    into clusters. Clusters with at least min_file_count files are returned as
+    individual lists. If any cluster falls below min_file_count, all clusters
+    of that type in data_dir are merged into a single list with a warning.
 
     Args:
         data_dir:        path to directory containing L0 FITS files.
         imtype:          calibration frame type. One of 'bias', 'dark', 'flat'.
-        utc_time:        UTC timestamp string ('YYYYMMDD.SSSSS.FF') of the
-                         observation for which calibrations are being selected.
-        min_file_count:  minimum number of files required in the returned list.
+        min_file_count:  minimum number of files required per returned list.
                          Default is 5.
 
     Returns:
-        Sorted list of absolute file paths belonging to the selected cluster,
-        or all frames within 24 hours if the cluster is below min_file_count.
+        List of sorted file lists, one per cluster or one merged list if any
+        cluster fell below min_file_count.
 
     Raises:
         ValueError: if imtype is not a recognized calibration type, if no
-                    calibration cluster precedes utc_time within 24 hours, or
-                    if the 24-hour window contains fewer than min_file_count
+                    calibration frames of the requested type are found, or if
+                    the merged total still contains fewer than min_file_count
                     files.
     """
     if imtype not in _OBJECT_MAP:
@@ -196,87 +198,34 @@ def build_l0_file_list(data_dir, imtype, utc_time, min_file_count=5):
     else:
         metadata = build_mini_database(data_dir)
 
-    def _to_seconds(ts):
-        date_str, seconds_str, _ = ts.split('.')
-        date_ordinal = datetime.strptime(date_str, '%Y%m%d').toordinal()
-        return date_ordinal * 86400 + int(seconds_str)
+    mask = (metadata['OBJECT'] == _OBJECT_MAP[imtype]) & (metadata['CAL_START'] != '')
+    cal_df = metadata[mask]
 
-    ref_seconds = _to_seconds(utc_time)
-
-    cal_mask = metadata['OBJECT'] == _OBJECT_MAP[imtype]
-    clusters = (
-        metadata[cal_mask & (metadata['CAL_START'] != '')]
-        [['CAL_START']]
-        .drop_duplicates()
-        .copy()
-    )
-    clusters['_SECONDS'] = clusters['CAL_START'].apply(_to_seconds)
-
-    before = clusters[clusters['_SECONDS'] < ref_seconds]
-    if before.empty:
+    if cal_df.empty:
         raise ValueError(
-            f"No '{imtype}' calibration cluster found before {utc_time}"
+            f"No '{imtype}' calibration frames found in {data_dir}"
         )
 
-    best = before.loc[before['_SECONDS'].idxmax()]
-    gap = ref_seconds - best['_SECONDS']
-    if gap > 86400:
-        raise ValueError(
-            f"Nearest '{imtype}' calibration cluster (CAL_START={best['CAL_START']}) "
-            f"is {gap / 3600:.1f} hours before {utc_time}; exceeds 24-hour limit"
-        )
-
-    cluster_mask = cal_mask & (metadata['CAL_START'] == best['CAL_START'])
-    files = sorted(metadata.loc[cluster_mask, 'FILENAME'].tolist())
-
-    if len(files) >= min_file_count:
-        return files
-
-    # Cluster is below min_file_count — expand to all frames within 24 hours.
-    cal_files = metadata.loc[cal_mask, 'FILENAME'].tolist()
-    cal_seconds = {f: _to_seconds(get_timestamp(f)) for f in cal_files}
-    expanded_files = sorted(
-        f for f in cal_files
-        if ref_seconds - 86400 <= cal_seconds[f] < ref_seconds
-    )
-
-    if len(expanded_files) < min_file_count:
-        raise ValueError(
-            f"Only {len(expanded_files)} '{imtype}' frame(s) found in the 24 hours "
-            f"before {utc_time}; need at least {min_file_count}"
-        )
-
-    warnings.warn(
-        f"'{imtype}' cluster at CAL_START={best['CAL_START']} has only "
-        f"{len(files)} file(s); using all {len(expanded_files)} frames "
-        f"from the previous 24 hours instead."
-    )
-    return expanded_files
-
-
-def get_calibration_stack_clusters(mini_db, imtype):
-    """
-    Return one sorted file list per calibration cluster of the requested type.
-
-    Args:
-        mini_db: DataFrame returned by build_mini_database.
-        imtype:  calibration frame type. One of 'bias', 'dark', 'flat'.
-
-    Returns:
-        List of sorted file lists, one per cluster, ordered by CAL_START.
-
-    Raises:
-        ValueError: if imtype is not a recognized calibration type.
-    """
-    if imtype not in _OBJECT_MAP:
-        raise ValueError(
-            f"imtype must be one of {list(_OBJECT_MAP.keys())}; got '{imtype}'"
-        )
-    mask = (mini_db['OBJECT'] == _OBJECT_MAP[imtype]) & (mini_db['CAL_START'] != '')
-    return [
-        sorted(cluster['FILENAME'].tolist())
-        for _, cluster in mini_db[mask].groupby('CAL_START')
+    clusters = [
+        sorted(group['FILENAME'].tolist())
+        for _, group in cal_df.groupby('CAL_START')
     ]
+
+    if all(len(c) >= min_file_count for c in clusters):
+        return clusters
+
+    merged = sorted(f for c in clusters for f in c)
+    if len(merged) < min_file_count:
+        raise ValueError(
+            f"Only {len(merged)} '{imtype}' frame(s) found in {data_dir}; "
+            f"need at least {min_file_count}"
+        )
+    warnings.warn(
+        f"'{imtype}' clusters below min_file_count={min_file_count}; "
+        f"merged into one list of {len(merged)} files.",
+        UserWarning,
+    )
+    return [merged]
 
 
 def build_filepath(input_str, data_root, level, *, master=None):

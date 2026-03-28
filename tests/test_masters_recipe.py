@@ -17,10 +17,9 @@ from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.pipeline import (
     _utc_to_hst,
     _detect_calibration_stack_clusters,
-    build_l0_file_list,
+    build_l0_file_lists,
     build_filepath,
     build_mini_database,
-    get_calibration_stack_clusters,
 )
 
 
@@ -67,6 +66,15 @@ def _make_mini_db():
     df["EXPTIME"] = 60.0
     df["ELAPSED"] = 60.0
     return _detect_calibration_stack_clusters(df)
+
+
+def _write_test_csv(tmp_path, db):
+    """Write a mini_db CSV in the expected location for L0/20240405."""
+    data_dir = tmp_path / "L0" / "20240405"
+    data_dir.mkdir(parents=True)
+    csv_path = data_dir / "KP.20240405_L0.csv"
+    db.to_csv(csv_path, index=False)
+    return str(data_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -148,61 +156,11 @@ class TestDetectCalibrationStackClusters:
 
 
 # ---------------------------------------------------------------------------
-# get_calibration_stack_clusters
+# build_l0_file_lists
 # ---------------------------------------------------------------------------
 
 
-class TestGetCalibrationStackClusters:
-
-    @pytest.fixture(scope="class")
-    def db(self):
-        return _make_mini_db()
-
-    def test_two_bias_clusters(self, db):
-        clusters = get_calibration_stack_clusters(db, "bias")
-        assert len(clusters) == 2
-
-    def test_bias_cluster_a_files(self, db):
-        clusters = get_calibration_stack_clusters(db, "bias")
-        assert clusters[0] == sorted(_BIAS_A)
-
-    def test_bias_cluster_b_files(self, db):
-        clusters = get_calibration_stack_clusters(db, "bias")
-        assert clusters[1] == sorted(_BIAS_B)
-
-    def test_one_dark_cluster(self, db):
-        clusters = get_calibration_stack_clusters(db, "dark")
-        assert len(clusters) == 1
-        assert clusters[0] == sorted(_DARK_A)
-
-    def test_no_flat_clusters(self, db):
-        clusters = get_calibration_stack_clusters(db, "flat")
-        assert clusters == []
-
-    def test_invalid_imtype_raises(self, db):
-        with pytest.raises(ValueError, match="imtype must be one of"):
-            get_calibration_stack_clusters(db, "wls")
-
-    def test_files_are_sorted(self, db):
-        for cluster in get_calibration_stack_clusters(db, "bias"):
-            assert cluster == sorted(cluster)
-
-
-# ---------------------------------------------------------------------------
-# build_l0_file_list
-# ---------------------------------------------------------------------------
-
-
-def _write_test_csv(tmp_path, db):
-    """Write a mini_db CSV in the expected location for L0/20240405."""
-    data_dir = tmp_path / "L0" / "20240405"
-    data_dir.mkdir(parents=True)
-    csv_path = data_dir / "KP.20240405_L0.csv"
-    db.to_csv(csv_path, index=False)
-    return str(data_dir)
-
-
-class TestBuildL0FileList:
+class TestBuildL0FileLists:
 
     @pytest.fixture(scope="class")
     def data_dir(self, tmp_path_factory):
@@ -210,86 +168,89 @@ class TestBuildL0FileList:
         db = _make_mini_db()
         return _write_test_csv(tmp_path, db)
 
-    def test_selects_cluster_before_utc_time(self, data_dir):
-        # 20000s is after bias cluster B starts at 14000s
-        files = build_l0_file_list(data_dir, "bias", "20240405.20000.00")
-        assert files == sorted(_BIAS_B)
+    def test_two_bias_clusters_returned_separately(self, data_dir):
+        lists = build_l0_file_lists(data_dir, "bias")
+        assert len(lists) == 2
 
-    def test_selects_earlier_cluster_when_between_two(self, data_dir):
-        # 13000s is after cluster A ends (03900) but before cluster B starts (14000)
-        files = build_l0_file_list(data_dir, "bias", "20240405.13000.00")
-        assert files == sorted(_BIAS_A)
+    def test_bias_cluster_a_files(self, data_dir):
+        lists = build_l0_file_lists(data_dir, "bias")
+        assert lists[0] == sorted(_BIAS_A)
 
-    def test_raises_when_no_cluster_before_utc_time(self, data_dir):
-        with pytest.raises(ValueError, match="No 'bias' calibration cluster found before"):
-            build_l0_file_list(data_dir, "bias", "20240405.03000.00")
+    def test_bias_cluster_b_files(self, data_dir):
+        lists = build_l0_file_lists(data_dir, "bias")
+        assert lists[1] == sorted(_BIAS_B)
 
-    def test_raises_when_gap_exceeds_24h(self, data_dir):
-        # Cluster B starts at 14000s on 20240405; 14001s on 20240406 = 86401s gap
-        with pytest.raises(ValueError, match="exceeds 24-hour limit"):
-            build_l0_file_list(data_dir, "bias", "20240406.14001.00")
+    def test_files_are_sorted(self, data_dir):
+        for lst in build_l0_file_lists(data_dir, "bias"):
+            assert lst == sorted(lst)
+
+    def test_small_clusters_merged_issues_warning(self, data_dir):
+        # min_file_count=6: both bias clusters (5 files each) fall below → merged
+        with pytest.warns(UserWarning, match="merged into one list"):
+            build_l0_file_lists(data_dir, "bias", min_file_count=6)
+
+    def test_small_clusters_merged_returns_one_list(self, data_dir):
+        with pytest.warns(UserWarning):
+            lists = build_l0_file_lists(data_dir, "bias", min_file_count=6)
+        assert len(lists) == 1
+        assert lists[0] == sorted(_BIAS_A + _BIAS_B)
+
+    def test_raises_when_no_frames_found(self, data_dir):
+        with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
+            build_l0_file_lists(data_dir, "flat")
+
+    def test_raises_when_merged_below_min(self, data_dir):
+        # dark cluster has only 3 files; merged total still < min_file_count=5
+        with pytest.raises(ValueError, match="need at least"):
+            build_l0_file_lists(data_dir, "dark")
 
     def test_invalid_imtype_raises(self, data_dir):
         with pytest.raises(ValueError, match="imtype must be one of"):
-            build_l0_file_list(data_dir, "wls", "20240405.20000.00")
+            build_l0_file_lists(data_dir, "wls")
 
     def test_rebuilds_db_if_csv_missing(self, tmp_path):
         data_dir = str(tmp_path / "L0" / "20240405")
         os.makedirs(data_dir)
         with patch("kpfpipe.utils.pipeline.build_mini_database") as mock_bmd:
             mock_bmd.return_value = _make_mini_db()
-            files = build_l0_file_list(data_dir, "bias", "20240405.20000.00")
+            lists = build_l0_file_lists(data_dir, "bias")
         mock_bmd.assert_called_once_with(data_dir)
-        assert files == sorted(_BIAS_B)
-
-    def test_fallback_issues_warning_when_cluster_below_min(self, data_dir):
-        # bias cluster B has 5 files; min_file_count=6 forces fallback to 24hr window
-        with pytest.warns(UserWarning, match="using all"):
-            build_l0_file_list(data_dir, "bias", "20240405.20000.00", min_file_count=6)
-
-    def test_fallback_returns_24hr_window_files(self, data_dir):
-        # with min_file_count=6, both bias clusters (10 total) are returned
-        with pytest.warns(UserWarning):
-            files = build_l0_file_list(data_dir, "bias", "20240405.20000.00", min_file_count=6)
-        assert files == sorted(_BIAS_A + _BIAS_B)
-
-    def test_raises_when_24hr_window_below_min_count(self, data_dir):
-        # dark cluster has 3 files, 3 total in 24hr window — below default min_file_count=5
-        with pytest.raises(ValueError, match="need at least"):
-            build_l0_file_list(data_dir, "dark", "20240405.20000.00")
+        assert len(lists) == 2
 
 
 # ---------------------------------------------------------------------------
-# build_l0_file_list (real data)
+# build_l0_file_lists (real data)
 # ---------------------------------------------------------------------------
 
 
-class TestBuildL0FileListRealData:
+class TestBuildL0FileListsRealData:
 
     @pytest.fixture(scope="class")
     def l0_dir(self):
         return str(TESTDATA_L0_DIR)
 
     def test_bias_returns_single_cluster(self, l0_dir):
-        files = build_l0_file_list(l0_dir, "bias", "20240405.10000.00")
-        assert len(files) == 5
-        assert files == sorted(files)
+        lists = build_l0_file_lists(l0_dir, "bias")
+        assert len(lists) == 1
+        assert len(lists[0]) == 5
+        assert lists[0] == sorted(lists[0])
 
     def test_flat_returns_single_cluster(self, l0_dir):
-        files = build_l0_file_list(l0_dir, "flat", "20240405.10000.00")
-        assert len(files) == 5
-        assert files == sorted(files)
+        lists = build_l0_file_lists(l0_dir, "flat")
+        assert len(lists) == 1
+        assert len(lists[0]) == 5
+        assert lists[0] == sorted(lists[0])
 
-    def test_dark_fallback_issues_warning(self, l0_dir):
-        # Each dark cluster has only 2 files; fallback to 24hr window expected
-        with pytest.warns(UserWarning, match="using all"):
-            build_l0_file_list(l0_dir, "dark", "20240405.85000.00")
+    def test_dark_clusters_merged_issues_warning(self, l0_dir):
+        with pytest.warns(UserWarning, match="merged into one list"):
+            build_l0_file_lists(l0_dir, "dark")
 
-    def test_dark_fallback_returns_all_five(self, l0_dir):
+    def test_dark_clusters_merged_returns_one_list(self, l0_dir):
         with pytest.warns(UserWarning):
-            files = build_l0_file_list(l0_dir, "dark", "20240405.85000.00")
-        assert len(files) == 5
-        assert files == sorted(files)
+            lists = build_l0_file_lists(l0_dir, "dark")
+        assert len(lists) == 1
+        assert len(lists[0]) == 5
+        assert lists[0] == sorted(lists[0])
 
 
 # ---------------------------------------------------------------------------
@@ -370,8 +331,7 @@ class TestBuildMiniDatabase:
 
 
 class TestMastersRecipe:
-    """End-to-end recipe test: build_mini_database → get_calibration_stack_clusters
-    → Bias.make_master_l1 → to_fits."""
+    """End-to-end recipe test: build_l0_file_lists → Bias.make_master_l1 → to_fits."""
 
     @pytest.fixture(scope="class")
     def recipe_output(self, tmp_path_factory):
@@ -381,10 +341,8 @@ class TestMastersRecipe:
         tmp_path = tmp_path_factory.mktemp("recipe_out")
         data_root_out = str(tmp_path)
 
-        mini_db = build_mini_database(str(TESTDATA_L0_DIR))
-
         output_paths = []
-        for files in get_calibration_stack_clusters(mini_db, "bias"):
+        for files in build_l0_file_lists(str(TESTDATA_L0_DIR), "bias"):
             bias_handler = Bias(files)
             bias_l1      = bias_handler.make_master_l1()
             out_path     = build_filepath(get_obs_id(files[0]), data_root_out, "L1", master="bias")
