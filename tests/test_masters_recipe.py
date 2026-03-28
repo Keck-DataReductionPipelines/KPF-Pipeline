@@ -301,6 +301,25 @@ class TestBuildFilepath:
         with pytest.raises(ValueError, match="'level' for master products"):
             build_filepath("KP.20240405.03600.00", "/data", "L0", master="bias")
 
+    def test_science_l2(self):
+        # KP.20240405.40113.57 → 40113s = 11:08:33
+        path = build_filepath("KP.20240405.40113.57", "/data", "L2")
+        assert path == "/data/L2/20240405/kpf_SL2_20240405T110833.fits"
+
+    def test_science_l4(self):
+        path = build_filepath("KP.20240405.40113.57", "/data", "L4")
+        assert path == "/data/L4/20240405/kpf_SL4_20240405T110833.fits"
+
+    def test_science_l2_midnight_boundary(self):
+        # 3600s = 01:00:00
+        path = build_filepath("KP.20240405.03600.00", "/data", "L2")
+        assert path == "/data/L2/20240405/kpf_SL2_20240405T010000.fits"
+
+    def test_science_l2_zero_seconds(self):
+        # 0s = 00:00:00
+        path = build_filepath("KP.20240405.00000.00", "/data", "L2")
+        assert path == "/data/L2/20240405/kpf_SL2_20240405T000000.fits"
+
     def test_science_invalid_obs_id_raises(self):
         with pytest.raises(ValueError, match="must be a valid obs_id"):
             build_filepath("20240405", "/data", "L1")
