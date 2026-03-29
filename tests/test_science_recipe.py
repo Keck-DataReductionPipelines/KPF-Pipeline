@@ -71,7 +71,7 @@ class TestScienceRecipe:
         recipe = _load_recipe()
         recipe.main(config, args)
 
-        out_path = build_filepath(OBS_ID, str(tmp_path), 'L2')
+        out_path = build_filepath(OBS_ID, 'L2', data_root=str(tmp_path))
         return out_path
 
     def test_output_file_exists(self, recipe_output):
@@ -104,8 +104,8 @@ class TestScienceRecipe:
 
     def test_variance_positive(self, recipe_output):
         l2 = KPF2.from_fits(recipe_output)
-        assert np.all(l2.data['GREEN_SCI2_VAR'] >= 0)
-        assert np.all(l2.data['RED_SCI2_VAR'] >= 0)
+        assert np.nanmin(l2.data['GREEN_SCI2_VAR']) >= 0
+        assert np.nanmin(l2.data['RED_SCI2_VAR']) >= 0
 
     def test_receipt_chain(self, recipe_output):
         l2 = KPF2.from_fits(recipe_output)

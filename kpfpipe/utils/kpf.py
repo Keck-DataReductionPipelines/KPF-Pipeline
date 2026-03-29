@@ -3,7 +3,7 @@ import re
 
 
 _OBS_ID_PATTERN = re.compile(r'(KP\.\d{8}\.\d{5}\.\d{2})')
-_DATECODE_PATTERN = re.compile(r'^\d{8}$')
+_DATECODE_PATTERN = re.compile(r'\d{8}')
 _TIMESTAMP_PATTERN = re.compile(r'(\d{8}\.\d{5}\.\d{2})')
 
 
@@ -18,7 +18,7 @@ def is_datecode(s):
     """
     Returns True if s is a valid 8-digit datecode, e.g. '20240405'
     """
-    return bool(_DATECODE_PATTERN.match(s))
+    return bool(_DATECODE_PATTERN.fullmatch(s))
 
 
 def is_timestamp(s):

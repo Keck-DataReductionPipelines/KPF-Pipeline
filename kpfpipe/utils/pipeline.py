@@ -6,7 +6,7 @@ import pandas as pd
 from astropy.io import fits
 from datetime import datetime, timedelta
 
-from kpfpipe.utils.kpf import is_datecode, get_datecode, is_obs_id, get_timestamp
+from kpfpipe.utils.kpf import get_datecode, is_obs_id, get_timestamp
 
 
 _METADATA_KEYS = ['FILENAME', 'TARGNAME', 'IMTYPE', 'OBJECT', 'EXPTIME', 'ELAPSED']
@@ -18,6 +18,10 @@ _OBJECT_MAP = {
 }
 
 _HST_UTC_OFFSET_SECONDS = 36000
+
+# 2-hour gap threshold: KPF calibration sequences within a night are
+# separated by science observations; a gap >2hr reliably distinguishes
+# morning vs. evening calibration clusters.
 _CALIBRATION_CLUSTER_GAP_SECONDS = 7200
 
 
@@ -77,7 +81,13 @@ def _detect_calibration_stack_clusters(df):
 
     cal_objects = set(_OBJECT_MAP.values())
     cal_df = df[df['OBJECT'].isin(cal_objects)].copy()
-    cal_df['_UTC_TOTAL'] = [_timestamp_to_seconds(get_timestamp(f)) for f in cal_df['FILENAME']]
+    def _safe_seconds(f):
+        try:
+            return _timestamp_to_seconds(get_timestamp(f))
+        except ValueError:
+            raise ValueError(f"Cannot parse timestamp from filename: {f}")
+
+    cal_df['_UTC_TOTAL'] = [_safe_seconds(f) for f in cal_df['FILENAME']]
 
     for _, group in cal_df.groupby('OBJECT', dropna=False):
         group = group.sort_values('_UTC_TOTAL')
@@ -96,7 +106,7 @@ def _detect_calibration_stack_clusters(df):
     return df
 
 
-def build_mini_database(data_dir):
+def build_mini_database(data_dir, write=True):
     """
     Build a metadata table for all FITS files in a directory and write
     it to disk as KP.{datecode}_{level}.csv in that directory.
@@ -150,8 +160,9 @@ def build_mini_database(data_dir):
     df = pd.DataFrame(metadata)
     df = _detect_calibration_stack_clusters(df)
 
-    csv_path = os.path.join(data_dir, f'KP.{datecode}_{level}.csv')
-    df.to_csv(csv_path, index=False)
+    if write:
+        csv_path = os.path.join(data_dir, f'KP.{datecode}_{level}.csv')
+        df.to_csv(csv_path, index=False)
     return df
 
 
@@ -204,6 +215,10 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
         if os.path.isfile(csv_path):
             metadata = pd.read_csv(csv_path)
             if 'CAL_START' not in metadata.columns:
+                warnings.warn(
+                    f"Mini database at {csv_path} is missing CAL_START column; rebuilding.",
+                    UserWarning,
+                )
                 metadata = build_mini_database(data_dir)
         else:
             metadata = build_mini_database(data_dir)
@@ -212,9 +227,8 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
     cal_df = metadata[mask]
 
     if cal_df.empty:
-        raise ValueError(
-            f"No '{imtype}' calibration frames found in {data_dir}"
-        )
+        source = data_dir if data_dir is not None else "the provided mini_db"
+        raise ValueError(f"No '{imtype}' calibration frames found in {source}")
 
     clusters = [
         sorted(group['FILENAME'].tolist())
@@ -238,30 +252,34 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
     return [merged]
 
 
-def build_filepath(input_str, data_root, level, *, master=None):
+def build_filepath(obs_id, level, *, data_root=None, master=None):
     """
-    Build an absolute filepath for a KPF data product.
+    Build a filepath for a KPF data product.
 
     Args:
-        input_str: obs_id (e.g. 'KP.20240405.49597.71') for both science
-                   and master products. For masters, this should be the
-                   obs_id of the first frame in the stack.
-                   A bare datecode (e.g. '20240405') is also accepted for
-                   master products (deprecated; prefer obs_id).
-        data_root: root data directory from config (e.g. '/data/kpf/').
+        obs_id:    observation ID (e.g. 'KP.20240405.49597.71'). For master
+                   products this should be the obs_id of the first frame in
+                   the stack.
         level:     data level string, one of 'L0', 'L1', 'L2', 'L4'.
+        data_root: root data directory (e.g. '/data/kpf/'). When provided,
+                   returns an absolute path. When omitted, returns the bare
+                   filename only.
         master:    master calibration type, one of 'bias', 'dark', 'flat',
                    'thar-wls'. If provided, builds a master calibration path.
                    If omitted, builds a science data path.
 
     Returns:
-        Absolute filepath as a string.
+        Absolute filepath as a string if data_root is given, else bare filename.
 
     Raises:
-        ValueError: if level is unrecognized, if input_str is not a valid
-                    obs_id for science products, or if master type is
-                    unrecognized.
+        ValueError: if level is unrecognized, if obs_id is not a valid
+                    observation ID, or if master type is unrecognized.
     """
+    if not is_obs_id(obs_id):
+        raise ValueError(f"obs_id must be a valid observation ID (e.g. 'KP.20240405.49597.71'); got '{obs_id}'")
+
+    datecode = get_datecode(obs_id)
+
     if master is not None:
         # Masters: {data_root}/masters/{datecode}/{obs_id}_master_{master}_{level}.fits
         # Level is in the filename only — no level subdirectory.
@@ -269,32 +287,21 @@ def build_filepath(input_str, data_root, level, *, master=None):
             raise ValueError(f"'master' must be 'bias', 'dark', 'flat', or 'thar-wls'; got '{master}'")
         if level not in ('L1', 'L2', 'L4'):
             raise ValueError(f"'level' for master products must be 'L1', 'L2', or 'L4'; got '{level}'")
-
-        if is_obs_id(input_str):
-            datecode = get_datecode(input_str)
-            filename = f'{input_str}_master_{master}_{level}.fits'
-        elif is_datecode(input_str):
-            datecode = input_str
-            filename = f'kpf_{datecode}_{master}_{level}.fits'
-        else:
-            raise ValueError(
-                f"input_str must be a valid obs_id or datecode for master products; got '{input_str}'"
-            )
+        filename = f'{obs_id}_master_{master}_{level}.fits'
+        if data_root is None:
+            return filename
         return os.path.join(data_root, 'masters', datecode, filename)
 
     # Science paths by level:
-    #   L0/L1: {data_root}/{level}/{datecode}/{obs_id}[_{level}].fits  (KPF-native names)
-    #   L2/L4: {data_root}/{level}/{datecode}/kpf_SL{N}_{YYYYMMDD}T{HHmmss}.fits  (EPRV standard)
+    #   L0:       {obs_id}.fits                                       (KPF-native)
+    #   L1/L2/L4: kpf_SL{N}_{YYYYMMDD}T{HHmmss}.fits                (EPRV standard)
     if level not in ('L0', 'L1', 'L2', 'L4'):
         raise ValueError(f"'level' must be 'L0', 'L1', 'L2', or 'L4'; got '{level}'")
-    if not is_obs_id(input_str):
-        raise ValueError("input_str must be a valid obs_id for science data products")
 
-    from kpfpipe.utils.kpf import get_timestamp
-    datecode = get_datecode(input_str)
-
-    if level in ('L2', 'L4'):
-        timestamp = get_timestamp(input_str)
+    if level == 'L0':
+        filename = f'{obs_id}.fits'
+    else:
+        timestamp = get_timestamp(obs_id)
         date_str, seconds_str, _ = timestamp.split('.')
         total_seconds = int(seconds_str)
         hh = total_seconds // 3600
@@ -302,9 +309,7 @@ def build_filepath(input_str, data_root, level, *, master=None):
         ss = total_seconds % 60
         level_num = level[1]
         filename = f'kpf_SL{level_num}_{date_str}T{hh:02d}{mm:02d}{ss:02d}.fits'
-    elif level == 'L0':
-        filename = f'{input_str}.fits'
-    else:
-        filename = f'{input_str}_{level}.fits'
 
+    if data_root is None:
+        return filename
     return os.path.join(data_root, level, datecode, filename)

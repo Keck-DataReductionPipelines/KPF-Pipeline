@@ -45,6 +45,9 @@ def main():
 
     config = ConfigHandler(args.config, overrides=overrides or None)
 
+    if not os.path.isfile(args.recipe):
+        raise SystemExit(f"Recipe file not found: {args.recipe}")
+
     spec = importlib.util.spec_from_file_location('recipe', args.recipe)
     recipe = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(recipe)

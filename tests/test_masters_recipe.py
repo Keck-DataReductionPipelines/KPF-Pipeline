@@ -31,16 +31,6 @@ TESTDATA_DIR    = Path(__file__).parent / 'testdata'
 TESTDATA_L0_DIR = TESTDATA_DIR / 'L0' / '20240405'
 
 
-# ---------------------------------------------------------------------------
-# Session-scoped cleanup: remove CSV written into testdata by build_mini_database
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope='session', autouse=True)
-def cleanup_testdata_csv():
-    yield
-    csv_path = TESTDATA_L0_DIR / 'KP.20240405_L0.csv'
-    if csv_path.exists():
-        csv_path.unlink()
 
 
 # ---------------------------------------------------------------------------
@@ -274,55 +264,69 @@ class TestBuildL0FileListsRealData:
 class TestBuildFilepath:
 
     def test_master_bias_with_obs_id(self):
-        path = build_filepath("KP.20240405.03600.00", "/data", "L1", master="bias")
+        path = build_filepath("KP.20240405.03600.00", "L1", data_root="/data", master="bias")
         assert path == "/data/masters/20240405/KP.20240405.03600.00_master_bias_L1.fits"
 
     def test_master_flat_with_obs_id(self):
-        path = build_filepath("KP.20240405.14000.00", "/data", "L1", master="flat")
+        path = build_filepath("KP.20240405.14000.00", "L1", data_root="/data", master="flat")
         assert path == "/data/masters/20240405/KP.20240405.14000.00_master_flat_L1.fits"
 
-    def test_master_with_datecode_deprecated(self):
-        path = build_filepath("20240405", "/data", "L1", master="bias")
-        assert path == "/data/masters/20240405/kpf_20240405_bias_L1.fits"
+    def test_master_bare_filename(self):
+        name = build_filepath("KP.20240405.03600.00", "L1", master="bias")
+        assert name == "KP.20240405.03600.00_master_bias_L1.fits"
 
     def test_science_l0(self):
-        path = build_filepath("KP.20240405.49597.71", "/data", "L0")
+        path = build_filepath("KP.20240405.49597.71", "L0", data_root="/data")
         assert path == "/data/L0/20240405/KP.20240405.49597.71.fits"
 
     def test_science_l1(self):
-        path = build_filepath("KP.20240405.49597.71", "/data", "L1")
-        assert path == "/data/L1/20240405/KP.20240405.49597.71_L1.fits"
+        # Science L1 uses EPRV naming: KP.20240405.49597.71 → 49597s = 13:46:37
+        path = build_filepath("KP.20240405.49597.71", "L1", data_root="/data")
+        assert path == "/data/L1/20240405/kpf_SL1_20240405T134637.fits"
+
+    def test_science_bare_filename_l0(self):
+        name = build_filepath("KP.20240405.49597.71", "L0")
+        assert name == "KP.20240405.49597.71.fits"
+
+    def test_science_bare_filename_l1(self):
+        # 49597s = 13:46:37
+        name = build_filepath("KP.20240405.49597.71", "L1")
+        assert name == "kpf_SL1_20240405T134637.fits"
 
     def test_invalid_master_type_raises(self):
         with pytest.raises(ValueError, match="'master' must be"):
-            build_filepath("KP.20240405.03600.00", "/data", "L1", master="wls")
+            build_filepath("KP.20240405.03600.00", "L1", master="wls")
 
     def test_invalid_master_level_raises(self):
         with pytest.raises(ValueError, match="'level' for master products"):
-            build_filepath("KP.20240405.03600.00", "/data", "L0", master="bias")
+            build_filepath("KP.20240405.03600.00", "L0", master="bias")
 
     def test_science_l2(self):
         # KP.20240405.40113.57 → 40113s = 11:08:33
-        path = build_filepath("KP.20240405.40113.57", "/data", "L2")
+        path = build_filepath("KP.20240405.40113.57", "L2", data_root="/data")
         assert path == "/data/L2/20240405/kpf_SL2_20240405T110833.fits"
 
     def test_science_l4(self):
-        path = build_filepath("KP.20240405.40113.57", "/data", "L4")
+        path = build_filepath("KP.20240405.40113.57", "L4", data_root="/data")
         assert path == "/data/L4/20240405/kpf_SL4_20240405T110833.fits"
 
     def test_science_l2_midnight_boundary(self):
         # 3600s = 01:00:00
-        path = build_filepath("KP.20240405.03600.00", "/data", "L2")
+        path = build_filepath("KP.20240405.03600.00", "L2", data_root="/data")
         assert path == "/data/L2/20240405/kpf_SL2_20240405T010000.fits"
 
     def test_science_l2_zero_seconds(self):
         # 0s = 00:00:00
-        path = build_filepath("KP.20240405.00000.00", "/data", "L2")
+        path = build_filepath("KP.20240405.00000.00", "L2", data_root="/data")
         assert path == "/data/L2/20240405/kpf_SL2_20240405T000000.fits"
 
-    def test_science_invalid_obs_id_raises(self):
-        with pytest.raises(ValueError, match="must be a valid obs_id"):
-            build_filepath("20240405", "/data", "L1")
+    def test_science_bare_filename_l2(self):
+        name = build_filepath("KP.20240405.40113.57", "L2")
+        assert name == "kpf_SL2_20240405T110833.fits"
+
+    def test_invalid_obs_id_raises(self):
+        with pytest.raises(ValueError, match="valid observation ID"):
+            build_filepath("20240405", "L1")
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +338,7 @@ class TestBuildMiniDatabase:
 
     @pytest.fixture(scope="class")
     def mini_db(self):
-        return build_mini_database(str(TESTDATA_L0_DIR))
+        return build_mini_database(str(TESTDATA_L0_DIR), write=False)
 
     def test_has_required_columns(self, mini_db):
         for col in ("FILENAME", "IMTYPE", "OBJECT", "CAL_START", "CAL_END"):
@@ -352,9 +356,11 @@ class TestBuildMiniDatabase:
         bias = mini_db[mini_db["OBJECT"] == "autocal-bias"]
         assert (bias["CAL_START"] != "").all()
 
-    def test_csv_written(self):
+    def test_write_false_does_not_write_csv(self):
         csv_path = TESTDATA_L0_DIR / "KP.20240405_L0.csv"
-        assert csv_path.exists()
+        was_present = csv_path.exists()
+        build_mini_database(str(TESTDATA_L0_DIR), write=False)
+        assert csv_path.exists() == was_present
 
 
 # ---------------------------------------------------------------------------
@@ -377,7 +383,7 @@ class TestMastersRecipe:
         for files in build_l0_file_lists("bias", data_dir=str(TESTDATA_L0_DIR)):
             bias_handler = Bias(files)
             bias_l1      = bias_handler.make_master_l1()
-            out_path     = build_filepath(get_obs_id(files[0]), data_root_out, "L1", master="bias")
+            out_path     = build_filepath(get_obs_id(files[0]), "L1", data_root=data_root_out, master="bias")
             os.makedirs(os.path.dirname(out_path), exist_ok=True)
             bias_l1.to_fits(out_path)
             output_paths.append(out_path)
