@@ -15,7 +15,6 @@ import pytest
 
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.pipeline import (
-    _utc_to_hst,
     _detect_calibration_stack_clusters,
     build_l0_file_lists,
     build_filepath,
@@ -65,32 +64,6 @@ def _write_test_csv(tmp_path, db):
     csv_path = data_dir / "KP.20240405_L0.csv"
     db.to_csv(csv_path, index=False)
     return str(data_dir)
-
-
-# ---------------------------------------------------------------------------
-# _utc_to_hst
-# ---------------------------------------------------------------------------
-
-
-class TestUtcToHst:
-    def test_midday_no_rollover(self):
-        # 12:00 UTC = 02:00 HST same day (43200 - 36000 = 7200)
-        result = _utc_to_hst("20240405.43200.00")
-        assert result == "20240405.07200.00"
-
-    def test_rollover_to_previous_day(self):
-        # 03:00 UTC = 17:00 HST previous day (10800 - 36000 < 0)
-        result = _utc_to_hst("20240405.10800.00")
-        assert result == "20240404.61200.00"
-
-    def test_frame_str_preserved(self):
-        result = _utc_to_hst("20240405.43200.71")
-        assert result.endswith(".71")
-
-    def test_exact_offset_boundary(self):
-        # 10:00 UTC = 00:00 HST (36000 - 36000 = 0)
-        result = _utc_to_hst("20240405.36000.00")
-        assert result == "20240405.00000.00"
 
 
 # ---------------------------------------------------------------------------

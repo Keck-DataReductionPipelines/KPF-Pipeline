@@ -4,9 +4,9 @@ import warnings
 
 import pandas as pd
 from astropy.io import fits
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from kpfpipe.utils.kpf import get_datecode, is_obs_id, get_timestamp
+from kpfpipe.utils.kpf import get_datecode, is_obs_id, get_timestamp, kpf_timestamp_to_eprv_timestamp
 
 
 _METADATA_KEYS = ['FILENAME', 'TARGNAME', 'IMTYPE', 'OBJECT', 'EXPTIME', 'ELAPSED']
@@ -17,46 +17,10 @@ _OBJECT_MAP = {
     'flat': 'autocal-flat-all',
 }
 
-_HST_UTC_OFFSET_SECONDS = 36000
-
 # 2-hour gap threshold: KPF calibration sequences within a night are
 # separated by science observations; a gap >2hr reliably distinguishes
 # morning vs. evening calibration clusters.
 _CALIBRATION_CLUSTER_GAP_SECONDS = 7200
-
-
-def _utc_to_hst(utc_timestamp):
-    """
-    Convert a KPF UTC timestamp to HST.
-
-    Args:
-        utc_timestamp: str of the form 'YYYYMMDD.SSSSS.FF'
-
-    Returns:
-        str: HST timestamp in the same format
-    """
-    date_str, seconds_str, frame_str = utc_timestamp.split('.')
-    hst_seconds = int(seconds_str) - _HST_UTC_OFFSET_SECONDS
-    hst_date = datetime.strptime(date_str, '%Y%m%d')
-    if hst_seconds < 0:
-        hst_seconds += 86400
-        hst_date -= timedelta(days=1)
-    return f'{hst_date.strftime("%Y%m%d")}.{hst_seconds:05d}.{frame_str}'
-
-
-def _timestamp_to_seconds(ts):
-    """
-    Convert a KPF timestamp string to a total-seconds value for comparison.
-
-    Args:
-        ts: timestamp string of the form 'YYYYMMDD.SSSSS.FF'
-
-    Returns:
-        int: date ordinal * 86400 + intra-day seconds
-    """
-    date_str, seconds_str, _ = ts.split('.')
-    date_ordinal = datetime.strptime(date_str, '%Y%m%d').toordinal()
-    return date_ordinal * 86400 + int(seconds_str)
 
 
 def _detect_calibration_stack_clusters(df):
@@ -76,17 +40,22 @@ def _detect_calibration_stack_clusters(df):
     Returns:
         df with CAL_START and CAL_END columns added (same row order as input).
     """
-    cal_start = pd.Series('', index=df.index)
-    cal_end   = pd.Series('', index=df.index)
+    def _timestamp_to_seconds(ts):
+        date_str, seconds_str, _ = ts.split('.')
+        date_ordinal = datetime.strptime(date_str, '%Y%m%d').toordinal()
+        return date_ordinal * 86400 + int(seconds_str)
 
-    cal_objects = set(_OBJECT_MAP.values())
-    cal_df = df[df['OBJECT'].isin(cal_objects)].copy()
     def _safe_seconds(f):
         try:
             return _timestamp_to_seconds(get_timestamp(f))
         except ValueError:
             raise ValueError(f"Cannot parse timestamp from filename: {f}")
 
+    cal_start = pd.Series('', index=df.index)
+    cal_end   = pd.Series('', index=df.index)
+
+    cal_objects = set(_OBJECT_MAP.values())
+    cal_df = df[df['OBJECT'].isin(cal_objects)].copy()
     cal_df['_UTC_TOTAL'] = [_safe_seconds(f) for f in cal_df['FILENAME']]
 
     for _, group in cal_df.groupby('OBJECT', dropna=False):
@@ -301,14 +270,8 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
     if level == 'L0':
         filename = f'{obs_id}.fits'
     else:
-        timestamp = get_timestamp(obs_id)
-        date_str, seconds_str, _ = timestamp.split('.')
-        total_seconds = int(seconds_str)
-        hh = total_seconds // 3600
-        mm = (total_seconds % 3600) // 60
-        ss = total_seconds % 60
-        level_num = level[1]
-        filename = f'kpf_SL{level_num}_{date_str}T{hh:02d}{mm:02d}{ss:02d}.fits'
+        eprv_ts = kpf_timestamp_to_eprv_timestamp(get_timestamp(obs_id))
+        filename = f'kpf_SL{level[1]}_{eprv_ts}.fits'
 
     if data_root is None:
         return filename
