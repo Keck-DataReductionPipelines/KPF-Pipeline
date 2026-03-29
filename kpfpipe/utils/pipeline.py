@@ -112,6 +112,9 @@ def build_mini_database(data_dir, write=True):
 
     file_list = sorted(glob.glob(os.path.join(data_dir, '*.fits')))
 
+    if not file_list:
+        raise ValueError(f"No FITS files found in {data_dir}")
+
     metadata = {k: [] for k in _METADATA_KEYS}
 
     for fn in file_list:
@@ -196,8 +199,9 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
     cal_df = metadata[mask]
 
     if cal_df.empty:
-        source = data_dir if data_dir is not None else "the provided mini_db"
-        raise ValueError(f"No '{imtype}' calibration frames found in {source}")
+        raise ValueError(
+            f"No '{imtype}' calibration frames found in {data_dir or 'the provided mini_db'}"
+        )
 
     clusters = [
         sorted(group['FILENAME'].tolist())
@@ -210,7 +214,7 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
     merged = sorted(f for c in clusters for f in c)
     if len(merged) < min_file_count:
         raise ValueError(
-            f"Only {len(merged)} '{imtype}' frame(s) found in {data_dir}; "
+            f"Only {len(merged)} '{imtype}' frame(s) found in {data_dir or 'the provided mini_db'}; "
             f"need at least {min_file_count}"
         )
     warnings.warn(

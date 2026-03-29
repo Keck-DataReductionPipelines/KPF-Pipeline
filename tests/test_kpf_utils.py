@@ -9,6 +9,9 @@ from kpfpipe.utils.kpf import (
     hst_to_utc,
     kpf_timestamp_to_eprv_timestamp,
     eprv_timestamp_to_kpf_timestamp,
+    get_obs_id,
+    get_datecode,
+    get_timestamp,
 )
 
 
@@ -97,3 +100,39 @@ class TestEprvTimestampToKpf:
         # Round-trip loses frame field (becomes .00)
         ts = "20240405.40113.57"
         assert eprv_timestamp_to_kpf_timestamp(kpf_timestamp_to_eprv_timestamp(ts)) == "20240405.40113.00"
+
+
+class TestGetObsId:
+
+    def test_extracts_from_bare_obs_id(self):
+        assert get_obs_id("KP.20240405.40113.57") == "KP.20240405.40113.57"
+
+    def test_extracts_from_path(self):
+        assert get_obs_id("/data/L0/20240405/KP.20240405.40113.57.fits") == "KP.20240405.40113.57"
+
+    def test_no_match_raises(self):
+        with pytest.raises(ValueError, match="No obs_id found"):
+            get_obs_id("not_an_obs_id.fits")
+
+
+class TestGetDatecode:
+
+    def test_extracts_from_obs_id(self):
+        assert get_datecode("KP.20240405.40113.57") == "20240405"
+
+    def test_no_match_raises(self):
+        with pytest.raises(ValueError, match="Cannot extract datecode"):
+            get_datecode("not_an_obs_id")
+
+
+class TestGetTimestamp:
+
+    def test_extracts_from_obs_id(self):
+        assert get_timestamp("KP.20240405.40113.57") == "20240405.40113.57"
+
+    def test_extracts_from_path(self):
+        assert get_timestamp("/data/L0/20240405/KP.20240405.40113.57.fits") == "20240405.40113.57"
+
+    def test_no_match_raises(self):
+        with pytest.raises(ValueError, match="No KPF timestamp found"):
+            get_timestamp("notimestamp.fits")

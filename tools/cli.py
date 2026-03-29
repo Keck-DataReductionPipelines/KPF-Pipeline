@@ -51,4 +51,6 @@ def main():
     spec = importlib.util.spec_from_file_location('recipe', args.recipe)
     recipe = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(recipe)
+    if not hasattr(recipe, 'main'):
+        raise SystemExit(f"Recipe {args.recipe!r} has no main() function")
     recipe.main(config, args)

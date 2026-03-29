@@ -22,6 +22,8 @@ def main(config, args):
     data_root_out = data_dirs['KPF_DATA_OUTPUT']
 
     l0_dir = os.path.join(data_root_in, 'L0', datecode)
+    if not os.path.isdir(l0_dir):
+        raise SystemExit(f"L0 data directory not found: {l0_dir}")
     mini_db = build_mini_database(l0_dir)
 
     # master bias

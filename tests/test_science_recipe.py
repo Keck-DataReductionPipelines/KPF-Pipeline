@@ -112,3 +112,41 @@ class TestScienceRecipe:
         modules = l2.receipt['Module_Name'].values
         assert 'image_assembly' in modules
         assert 'spectral_extraction' in modules
+
+
+# ---------------------------------------------------------------------------
+# Science recipe error paths
+# ---------------------------------------------------------------------------
+
+
+class TestScienceRecipeErrors:
+
+    def test_missing_l0_file_raises(self, tmp_path):
+        config = ConfigHandler(
+            str(CONFIG_PATH),
+            overrides={
+                'DATA_DIRS': {
+                    'KPF_DATA_INPUT':  str(tmp_path),
+                    'KPF_DATA_OUTPUT': str(tmp_path),
+                }
+            },
+        )
+        args = argparse.Namespace(obs_id=OBS_ID)
+        recipe = _load_recipe()
+        with pytest.raises((FileNotFoundError, IOError, OSError)):
+            recipe.main(config, args)
+
+    def test_missing_obs_id_raises(self, tmp_path):
+        config = ConfigHandler(
+            str(CONFIG_PATH),
+            overrides={
+                'DATA_DIRS': {
+                    'KPF_DATA_INPUT':  str(tmp_path),
+                    'KPF_DATA_OUTPUT': str(tmp_path),
+                }
+            },
+        )
+        args = argparse.Namespace(obs_id=None)
+        recipe = _load_recipe()
+        with pytest.raises(SystemExit, match="--obs_id is required"):
+            recipe.main(config, args)

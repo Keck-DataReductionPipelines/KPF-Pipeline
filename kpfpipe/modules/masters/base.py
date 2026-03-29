@@ -52,6 +52,8 @@ class BaseMasterModule:
         for k, v in DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
+        self._l1_obj_cache = {}
+
 
     def _set_input_files(self, ml1_obj, file_list):
         """Record the input L0 file list in the INPUT_FILES extension."""
@@ -165,9 +167,6 @@ class BaseMasterModule:
         if exptime_tolerance is None:
             exptime_tolerance = self.exptime_tolerance
 
-        if not hasattr(self, '_l1_obj_cache'):
-            self._l1_obj_cache = {}
-
         success = True
         failure = False
 
@@ -186,7 +185,11 @@ class BaseMasterModule:
                 warnings.warn(f"Failed to load {fn}: {e}")
                 return None, failure
 
-        self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
+        try:
+            self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
+        except ValueError as e:
+            warnings.warn(f"Exptime check failed for {fn}: {e}")
+            return None, failure
         
         return l1_obj, success
 

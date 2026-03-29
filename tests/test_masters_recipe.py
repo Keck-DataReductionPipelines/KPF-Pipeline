@@ -5,6 +5,7 @@ Unit tests use synthetic DataFrames and temp directories — no real data needed
 Integration tests use real L0 data from tests/testdata/L0/20240405/.
 """
 
+import importlib.util
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -14,6 +15,7 @@ import pandas as pd
 import pytest
 
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
+from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.pipeline import (
     _detect_calibration_stack_clusters,
     build_l0_file_lists,
@@ -28,6 +30,17 @@ from kpfpipe.utils.pipeline import (
 
 TESTDATA_DIR    = Path(__file__).parent / 'testdata'
 TESTDATA_L0_DIR = TESTDATA_DIR / 'L0' / '20240405'
+MASTERS_CONFIG_PATH = Path(__file__).parent.parent / 'configs' / 'kpf_drp_masters.toml'
+
+
+def _load_masters_recipe():
+    spec = importlib.util.spec_from_file_location(
+        'kpf_drp_masters',
+        Path(__file__).parent.parent / 'recipes' / 'kpf_drp_masters.py',
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 
@@ -297,6 +310,10 @@ class TestBuildFilepath:
         name = build_filepath("KP.20240405.40113.57", "L2")
         assert name == "kpf_SL2_20240405T110833.fits"
 
+    def test_master_thar_wls_with_obs_id(self):
+        path = build_filepath("KP.20240405.03600.00", "L1", data_root="/data", master="thar-wls")
+        assert path == "/data/masters/20240405/KP.20240405.03600.00_master_thar-wls_L1.fits"
+
     def test_invalid_obs_id_raises(self):
         with pytest.raises(ValueError, match="valid observation ID"):
             build_filepath("20240405", "L1")
@@ -334,6 +351,10 @@ class TestBuildMiniDatabase:
         was_present = csv_path.exists()
         build_mini_database(str(TESTDATA_L0_DIR), write=False)
         assert csv_path.exists() == was_present
+
+    def test_empty_directory_raises(self, tmp_path):
+        with pytest.raises(ValueError, match="No FITS files found"):
+            build_mini_database(str(tmp_path))
 
 
 # ---------------------------------------------------------------------------
@@ -396,3 +417,39 @@ class TestMastersRecipe:
             ml1 = KPFMasterL1.from_fits(path)
             filenames = ml1.data["INPUT_FILES"]["FILENAME"].tolist()
             assert all(f.endswith(".fits") for f in filenames)
+
+
+# ---------------------------------------------------------------------------
+# Masters recipe error paths
+# ---------------------------------------------------------------------------
+
+
+class TestMastersRecipeErrors:
+
+    def _make_config(self, data_input, data_output):
+        import argparse
+        return ConfigHandler(
+            str(MASTERS_CONFIG_PATH),
+            overrides={
+                'DATA_DIRS': {
+                    'KPF_DATA_INPUT':  str(data_input),
+                    'KPF_DATA_OUTPUT': str(data_output),
+                }
+            },
+        )
+
+    def test_nonexistent_l0_dir_raises(self, tmp_path):
+        import argparse
+        config = self._make_config(tmp_path, tmp_path)
+        args = argparse.Namespace(datecode='20240405', obs_id=None)
+        recipe = _load_masters_recipe()
+        with pytest.raises(SystemExit, match="L0 data directory not found"):
+            recipe.main(config, args)
+
+    def test_missing_datecode_raises(self, tmp_path):
+        import argparse
+        config = self._make_config(tmp_path, tmp_path)
+        args = argparse.Namespace(datecode=None, obs_id=None)
+        recipe = _load_masters_recipe()
+        with pytest.raises(SystemExit, match="--datecode is required"):
+            recipe.main(config, args)
