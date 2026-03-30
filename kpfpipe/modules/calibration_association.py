@@ -161,6 +161,7 @@ class CalibrationAssociation:
         """
         date_obs = self.l1_obj.headers['PRIMARY']['DATE-OBS']
         obs_date = datetime.fromisoformat(date_obs).date()
+        active_window = search_window if search_window is not None else self.masters_search_window_days
 
         _header_prefix = {'bias': 'BIAS', 'dark': 'DARK', 'flat': 'FLAT'}
 
@@ -170,7 +171,7 @@ class CalibrationAssociation:
             if filepath is None:
                 raise FileNotFoundError(
                     f"No '{cal_type}' master found for {date_obs} "
-                    f"within window {self.masters_search_window_days} days"
+                    f"within window {active_window} days"
                 )
 
             prefix = _header_prefix.get(cal_type)
