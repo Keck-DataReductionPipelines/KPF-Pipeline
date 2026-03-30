@@ -523,7 +523,7 @@ class ImageAssembly:
         print(f"  obs_id:           {self.l0_obj.obs_id}")
         print(f"  overscan_method:  {self.overscan_method}")
         print(f"  readnoise_sigma:  {self.readnoise_sigma}")
-
+        
         if self._results is None:
             print("  perform() has not been called")
             return
