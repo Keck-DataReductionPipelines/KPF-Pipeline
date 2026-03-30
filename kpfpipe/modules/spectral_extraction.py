@@ -69,6 +69,8 @@ class SpectralExtraction:
         """
         if not hasattr(self, 'order_trace'):
             self.order_trace = {}
+        if not hasattr(self, 'order_trace_path'):
+            self.order_trace_path = {}
 
         filepath = f'{REPO_ROOT}/reference/order_trace_{chip.lower()}.csv'
         with open(filepath, 'r') as f:
@@ -77,6 +79,7 @@ class SpectralExtraction:
                 .set_index(['Fiber', 'Order'])
                 .sort_index()
             )
+        self.order_trace_path[chip.upper()] = filepath
 
 
     def _get_orderlet_pixels(self, chip, fiber, order, return_coords=False):
