@@ -1,0 +1,56 @@
+"""
+KPF pipeline CLI entry point.
+
+Usage:
+    kpfpipe -r recipes/kpf_drp_masters.py -c configs/kpf_drp_masters.toml -d 20240405
+    kpfpipe -r recipes/kpf_drp_science.py  -c configs/kpf_drp_science.toml  -o KP.20240405.40113.57
+"""
+import argparse
+import importlib.util
+import os
+
+from kpfpipe.utils.config import ConfigHandler
+
+
+_REPO_ROOT    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_TESTDATA_DIR = os.path.join(_REPO_ROOT, 'tests', 'testdata')
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog='kpfpipe',
+        description='KPF Data Reduction Pipeline',
+    )
+    parser.add_argument('-r', '--recipe',   required=True, help='path to recipe .py file')
+    parser.add_argument('-c', '--config',   required=True, help='path to TOML config file')
+    parser.add_argument('-d', '--datecode', default=None, help='datecode, e.g. 20240405 (masters recipe)')
+    parser.add_argument('-o', '--obs_id',   default=None, help='obs_id, e.g. KP.20240405.40113.57 (science recipe)')
+    parser.add_argument('--data_input',  default=None, help='override KPF_DATA_INPUT directory')
+    parser.add_argument('--data_output', default=None, help='override KPF_DATA_OUTPUT directory')
+    parser.add_argument('--test', action='store_true',
+                        help='use tests/testdata/ for input and output')
+    args = parser.parse_args()
+
+    if args.test:
+        args.data_input  = args.data_input  or _TESTDATA_DIR
+        args.data_output = args.data_output or _TESTDATA_DIR
+
+    overrides = {}
+    if args.data_input or args.data_output:
+        overrides['DATA_DIRS'] = {}
+        if args.data_input:
+            overrides['DATA_DIRS']['KPF_DATA_INPUT'] = args.data_input
+        if args.data_output:
+            overrides['DATA_DIRS']['KPF_DATA_OUTPUT'] = args.data_output
+
+    config = ConfigHandler(args.config, overrides=overrides or None)
+
+    if not os.path.isfile(args.recipe):
+        raise SystemExit(f"Recipe file not found: {args.recipe}")
+
+    spec = importlib.util.spec_from_file_location('recipe', args.recipe)
+    recipe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(recipe)
+    if not hasattr(recipe, 'main'):
+        raise SystemExit(f"Recipe {args.recipe!r} has no main() function")
+    recipe.main(config, args)

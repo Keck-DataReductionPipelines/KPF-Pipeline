@@ -2,11 +2,13 @@
 Base class for KPF Masters modules.
 """
 import numpy as np
+import pandas as pd
 import warnings
 
 from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
+from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
 
 DEFAULTS.update({
@@ -34,15 +36,28 @@ class BaseMasterModule:
     a masters L1 object.
     """
     def __init__(self, l0_file_list, config=None):
-        if config is None:
-            config = {}
-
         if l0_file_list != sorted(l0_file_list):
             raise ValueError("l0_file_list must be sorted in ascending order")
         self.l0_file_list = l0_file_list
 
-        for k in DEFAULTS.keys():
-            self.__setattr__(k, config.get(k,DEFAULTS[k]))
+        if config is None:
+            params = {}
+        elif isinstance(config, dict):
+            params = config
+        elif isinstance(config, ConfigHandler):
+            params = config.get_params(["DATA_DIRS", "KPFPIPE"])
+        else:
+            raise TypeError("config must be None, dict, or ConfigHandler")
+
+        for k, v in DEFAULTS.items():
+            setattr(self, k, params.get(k, v))
+
+        self._l1_obj_cache = {}
+
+
+    def _set_input_files(self, ml1_obj, file_list):
+        """Record the input L0 file list in the INPUT_FILES extension."""
+        ml1_obj.set_data('INPUT_FILES', pd.DataFrame({'FILENAME': file_list}))
 
 
     def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
@@ -152,9 +167,6 @@ class BaseMasterModule:
         if exptime_tolerance is None:
             exptime_tolerance = self.exptime_tolerance
 
-        if not hasattr(self, '_l1_obj_cache'):
-            self._l1_obj_cache = {}
-
         success = True
         failure = False
 
@@ -173,7 +185,11 @@ class BaseMasterModule:
                 warnings.warn(f"Failed to load {fn}: {e}")
                 return None, failure
 
-        self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
+        try:
+            self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
+        except ValueError as e:
+            warnings.warn(f"Exptime check failed for {fn}: {e}")
+            return None, failure
         
         return l1_obj, success
 

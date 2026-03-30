@@ -3,12 +3,13 @@ KPF Spectral Extraction module.
 """
 import numpy as np
 import pandas as pd
+import warnings
 from numpy.polynomial import polynomial
 
 from kpfpipe import REPO_ROOT, DEFAULTS
 from kpfpipe.exceptions import KPFError
-from kpfpipe.utils.config_parser import ConfigHandler
-from kpfpipe.utils.quality_control import validate_array
+from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.qc import validate_array
 
 DEFAULTS.update({'extraction_method': 'box'})
 
@@ -399,7 +400,12 @@ class SpectralExtraction:
         # In this case a single failure is expected from this method. Allowing
         # the loop to continue through all orders provides useful diagnostic
         # information for cases where the algorithm truly fails.
-        if failure > 1:
+        if failure == 1:
+            warnings.warn(
+                f"1 orderlet failed to extract from the {chip} CCD; filled with NaN.",
+                UserWarning,
+            )
+        elif failure > 1:
             raise KPFError(f"Failed to extract {failure} orders from the {chip} CCD")
         
         return l2_arrays

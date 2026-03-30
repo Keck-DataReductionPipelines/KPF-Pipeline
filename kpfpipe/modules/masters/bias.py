@@ -4,6 +4,7 @@ KPF Master Bias construction module.
 from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.base import BaseMasterModule
+from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 DEFAULTS.update({
@@ -18,12 +19,12 @@ NCOL = DETECTOR['ccd']['ncol']
 
 class Bias(BaseMasterModule):
     def __init__(self, l0_file_list, config=None):
-        if config is None:
-            config = {}
+        if isinstance(config, ConfigHandler):
+            config = config.get_params(["DATA_DIRS", "KPFPIPE", "BIAS"])
         super().__init__(l0_file_list, config)
 
 
-    def perform(self, l0_file_list=None, nstream=None, sigma=None):
+    def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None):
         """
         Build master bias from stack
         """
@@ -60,6 +61,7 @@ class Bias(BaseMasterModule):
             ml1_obj.set_data(f'{chip}_SNR',  l1_arrays[f'{chip}_SNR'])
             ml1_obj.set_data(f'{chip}_MASK', l1_arrays[f'{chip}_MASK'])
 
+        self._set_input_files(ml1_obj, l0_file_list)
         ml1_obj.receipt_add_entry('master_bias', 'PASS')
 
         return ml1_obj

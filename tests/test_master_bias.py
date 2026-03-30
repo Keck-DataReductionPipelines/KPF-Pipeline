@@ -7,6 +7,7 @@ Real-data regression tests are gated on KPF_TESTDATA env var.
 
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -16,12 +17,14 @@ from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
 
 
-L0_DIR = os.environ.get("KPF_TESTDATA")
-
-needs_l0_data = pytest.mark.skipif(
-    L0_DIR is None or not os.path.isdir(L0_DIR),
-    reason="L0 test data not available (set KPF_TESTDATA env var)",
-)
+TESTDATA_L0_DIR = Path(__file__).parent / 'testdata' / 'L0' / '20240405'
+TESTDATA_BIAS_FILES = sorted([
+    str(TESTDATA_L0_DIR / 'KP.20240405.03637.74.fits'),
+    str(TESTDATA_L0_DIR / 'KP.20240405.03687.64.fits'),
+    str(TESTDATA_L0_DIR / 'KP.20240405.03737.52.fits'),
+    str(TESTDATA_L0_DIR / 'KP.20240405.03787.42.fits'),
+    str(TESTDATA_L0_DIR / 'KP.20240405.03837.33.fits'),
+])
 
 CHIPS = ["GREEN", "RED"]
 NROW, NCOL = 10, 10  # small arrays for unit tests
@@ -55,7 +58,7 @@ class TestMasterBiasUnit:
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            return bias.perform()
+            return bias.make_master_l1()
 
     def test_returns_kpf_master_l1(self, master_bias):
         assert isinstance(master_bias, KPFMasterL1)
@@ -105,7 +108,7 @@ class TestMasterBiasRoundTrip:
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.perform()
+            ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fn = os.path.join(tmpdir, "master_bias.fits")
@@ -123,7 +126,7 @@ class TestMasterBiasRoundTrip:
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.perform()
+            ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fn = os.path.join(tmpdir, "master_bias.fits")
@@ -138,7 +141,7 @@ class TestMasterBiasRoundTrip:
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.perform()
+            ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fn = os.path.join(tmpdir, "master_bias.fits")
@@ -154,24 +157,12 @@ class TestMasterBiasRoundTrip:
 # ---------------------------------------------------------------------------
 
 
-@needs_l0_data
 class TestMasterBiasRegression:
     """Regression tests against a real stack of L0 bias frames."""
 
     @pytest.fixture(scope="class")
-    def l0_bias_list(self):
-        fns = sorted(
-            os.path.join(L0_DIR, f)
-            for f in os.listdir(L0_DIR)
-            if f.endswith(".fits")
-        )
-        if len(fns) < 2:
-            pytest.skip("Need at least two L0 files for stacking")
-        return fns[:10]
-
-    @pytest.fixture(scope="class")
-    def master_bias(self, l0_bias_list):
-        return Bias(l0_bias_list).perform()
+    def master_bias(self):
+        return Bias(TESTDATA_BIAS_FILES).make_master_l1()
 
     def test_returns_kpf_master_l1(self, master_bias):
         assert isinstance(master_bias, KPFMasterL1)

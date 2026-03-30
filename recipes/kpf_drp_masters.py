@@ -1,47 +1,56 @@
+import os
+
 from kpfpipe.modules.masters.bias import Bias
-from kpfpipe.modules.masters.dark import Dark
-from kpfpipe.modules.masters.flat import Flat
-from kpfpipe.modules.masters.wls import WLS
+#from kpfpipe.modules.masters.dark import Dark
+#from kpfpipe.modules.masters.flat import Flat
+#from kpfpipe.modules.masters.wls import WLS
 
-from kpfpipe.modules.image_assembly import ImageAssembly
-from kpfpipe.modules.image_processing import ImageProcessing
-from kpfpipe.modules.spectral_extraction import SpectralExtraction
+from kpfpipe.utils.kpf import get_obs_id
+from kpfpipe.utils.pipeline import build_filepath, build_l0_file_lists, build_mini_database
 
-from kpfpipe.utils import query_db_for_masters_stack
 
-def main():
+def main(config, args):
     print("\n\n=== entering kpf_drp_masters pipeline ===\n\n")
-    
-    datecode = 'YYYYMMDD'
 
-    # make FFIs from stacks
-    bias = Bias(query_db_for_masters_stack(datecode), 'bias').make_master()
-    dark = Dark(query_db_for_masters_stack(datecode), 'dark').make_master()
-    flat = Flat(query_db_for_masters_stack(datecode), 'flat').make_master()
+    if not args.datecode:
+        raise SystemExit("Error: --datecode is required for the masters recipe (e.g. -d 20240405)")
 
-    # reduce and extract individual wavecal files
-    obs_ids = query_db_for_masters_stack(datecode)
+    datecode = args.datecode
 
-    for i, obs_id in enumerate(obs_ids):
-        filpath = fetch_filepath(obs_id)
-        target_l0 = KPF0.from_fits(filpath)
+    data_dirs = config.get_params(['DATA_DIRS'])
+    data_root_in  = data_dirs['KPF_DATA_INPUT']
+    data_root_out = data_dirs['KPF_DATA_OUTPUT']
 
-        image_assembly = ImageAssembly(target_l0)
-        target_ffi = image_assembly.perform()
+    l0_dir = os.path.join(data_root_in, 'L0', datecode)
+    if not os.path.isdir(l0_dir):
+        raise SystemExit(f"L0 data directory not found: {l0_dir}")
+    mini_db = build_mini_database(l0_dir)
 
-        image_processing = ImageProcessing(target_ffi)
-        target_ffi = image_processing.perform(flat, dark, bias)
+    # master bias
+    for files in build_l0_file_lists('bias', mini_db=mini_db):
+        bias_handler = Bias(files, config)
+        bias_l1 = bias_handler.make_master_l1()
+        out_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='bias')
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        bias_l1.to_fits(out_path)
 
-        spectral_extraction = SpectralExtraction(target_ffi)
-        target_l1 = spectral_extraction.perform()
+    # master dark (not yet implemented)
+    #for files in build_l0_file_lists('dark', mini_db=mini_db):
+    #    dark_handler = Dark(files, config)
+    #    dark_l1 = dark_handler.make_master_l1()
+    #    dark_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='dark'))
 
-        target_l1.to_fits()
+    # master flat (not yet implemented)
+    #for files in build_l0_file_lists('flat', mini_db=mini_db):
+    #    flat_handler = Flat(files, config)
+    #    flat_l1 = flat_handler.make_master_l1()
+    #    flat_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='flat'))
 
-    # calculate wavelength solution
-    wls = WLS(query_db_for_masters_stack(datecode), 'thar-wls').make_master()
+    # wavelength solution (not yet implemented)
+    #for files in build_l0_file_lists('thar-wls', mini_db=mini_db):
+    #    wls_handler = WLS(files, config)
+    #    wls_l1 = wls_handler.make_master_l1()
+    #    wls_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='thar-wls'))
 
     print("\n\n=== exiting kpf_drp_masters pipeline ===\n\n")
 
-
-if __name__ == '__main__':
-    main()

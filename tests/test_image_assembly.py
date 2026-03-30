@@ -8,6 +8,7 @@ Set KPF_TESTDATA env var to your L0 data directory, or defaults to
 
 import os
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -18,14 +19,9 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
 
-L0_DIR = os.environ.get("KPF_TESTDATA")
-L0_BIAS = os.path.join(L0_DIR, "KP.20240923.03637.97.fits") if L0_DIR else ""
-L0_FLAT = os.path.join(L0_DIR, "KP.20240923.00022.16.fits") if L0_DIR else ""
-
-needs_l0_data = pytest.mark.skipif(
-    L0_DIR is None or not os.path.isfile(L0_BIAS),
-    reason="L0 test data not available (set KPF_TESTDATA env var)",
-)
+TESTDATA_L0_DIR = Path(__file__).parent / 'testdata' / 'L0' / '20240405'
+L0_BIAS = str(TESTDATA_L0_DIR / 'KP.20240405.03637.74.fits')
+L0_FLAT = str(TESTDATA_L0_DIR / 'KP.20240405.00020.86.fits')
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +62,6 @@ def synthetic_4amp_l0(tmp_path):
 # 2-amp regression tests (real data)
 # ---------------------------------------------------------------------------
 
-@needs_l0_data
 class TestImageAssemblyBias:
     """Regression tests using a bias frame (no signal, 2-amp mode)."""
 
@@ -113,7 +108,7 @@ class TestImageAssemblyBias:
 
     def test_obs_id_carried_forward(self, l1_bias):
         l1, _ = l1_bias
-        assert l1.obs_id == "KP.20240923.03637.97"
+        assert l1.obs_id == "KP.20240405.03637.74"
 
     def test_datalvl_set(self, l1_bias):
         l1, _ = l1_bias
@@ -162,14 +157,11 @@ class TestImageAssemblyBias:
         assert not np.any(np.isnan(l1.data["RED_CCD"]))
 
 
-@needs_l0_data
 class TestImageAssemblyFlat:
     """Regression tests using a flat lamp frame (has signal)."""
 
     @pytest.fixture(scope="class")
     def l1_flat(self):
-        if not os.path.isfile(L0_FLAT):
-            pytest.skip("Flat L0 file not available")
         l0 = KPF0.from_fits(L0_FLAT)
         ia = ImageAssembly(l0)
         return ia.perform()
@@ -248,7 +240,6 @@ class TestImageAssembly4Amp:
 # FITS round-trip tests (real data)
 # ---------------------------------------------------------------------------
 
-@needs_l0_data
 class TestImageAssemblyRoundTrip:
     """Test that L1 can be written to FITS and read back."""
 

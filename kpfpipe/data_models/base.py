@@ -7,15 +7,16 @@ L2 and L4 data products use KPF2 and KPF4 (which extend RV2/RV4
 with KPF-friendly extension aliases).
 """
 
-import re
-
 from rvdata.core.models.base import RVDataModel
+
+from kpfpipe.utils.kpf import _OBS_ID_PATTERN, _DATECODE_PATTERN
 
 
 class KPFDataModel(RVDataModel):
     """Base class for KPF pre-extraction data models (L0, L1)."""
 
-    OBS_ID_PATTERN = re.compile(r"^KP\.\d{8}\.\d{5}\.\d{2}$")
+    OBS_ID_PATTERN = _OBS_ID_PATTERN
+    DATECODE_PATTERN = _DATECODE_PATTERN
 
     def __init__(self):
         super().__init__()

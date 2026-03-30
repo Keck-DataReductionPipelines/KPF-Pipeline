@@ -1,8 +1,13 @@
+[DATA_DIRS]
+KPF_DATA_INPUT = "/data/kpf/"
+KPF_DATA_OUTPUT = "/data/kpf-next/"
+
+[KPFPIPE]
+chips = ["GREEN", "RED"]
+fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
+
 [BIAS]
-skip_frames = 0
 
 [DARK]
-skip_frames = 0
 
 [FLAT]
-skip_frames = 0

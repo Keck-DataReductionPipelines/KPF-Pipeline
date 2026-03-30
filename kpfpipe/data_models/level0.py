@@ -10,7 +10,6 @@ infrastructure and receipt system.
 """
 
 import os
-import re
 import warnings
 from collections import OrderedDict
 
@@ -20,6 +19,7 @@ from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.utils.kpf import get_obs_id
 
 import importlib.resources
 
@@ -70,9 +70,10 @@ class KPF0(KPFDataModel):
             this_data.dirname = os.path.dirname(fn)
             this_data._read(hdul)
 
-        obs_id_match = re.match(r"(KP\.\d{8}\.\d{5}\.\d{2})", os.path.basename(fn))
-        if obs_id_match:
-            this_data.obs_id = obs_id_match.group(1)
+        try:
+            this_data.obs_id = get_obs_id(fn)
+        except ValueError:
+            pass
 
         this_data.receipt_add_entry("from_fits", "PASS")
         return this_data

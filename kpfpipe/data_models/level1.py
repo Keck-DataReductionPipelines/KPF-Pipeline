@@ -11,7 +11,6 @@ infrastructure and receipt system.
 
 import datetime
 import os
-import re
 import warnings
 from collections import OrderedDict
 
@@ -21,6 +20,7 @@ from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.utils.kpf import get_obs_id
 
 import importlib.resources
 
@@ -80,9 +80,10 @@ class KPF1(KPFDataModel):
             this_data.dirname = os.path.dirname(fn)
             this_data._read(hdul)
 
-        obs_id_match = re.match(r"(KP\.\d{8}\.\d{5}\.\d{2})", os.path.basename(fn))
-        if obs_id_match:
-            this_data.obs_id = obs_id_match.group(1)
+        try:
+            this_data.obs_id = get_obs_id(fn)
+        except ValueError:
+            pass
 
         this_data.receipt_add_entry("from_fits", "PASS")
         return this_data
@@ -180,11 +181,12 @@ class KPF1(KPFDataModel):
         hdul.close()
         return fn
 
-    # Mapping of L1 extension names → KPF2/RV2 extension names for pass-through
+    # Mapping of L1 extension names → KPF2/RV2 extension names for pass-through.
+    # CA_HK is excluded: it is a raw 2D CCD image, not an extracted spectrum.
+    # ANCILLARY_SPECTRUM (BinTableHDU) should be populated after Ca HK extraction.
     _L1_TO_KPF2_PASSTHROUGH = {
         "TELEMETRY": "TELEMETRY",
         "EXPMETER_SCI": "EXPMETER",
-        "CA_HK": "ANCILLARY_SPECTRUM",
     }
 
     def to_kpf2(self):
@@ -216,9 +218,9 @@ class KPF1(KPFDataModel):
                 elif default_val is not None and str(default_val).strip():
                     kpf2.headers["PRIMARY"][standard_key] = default_val
 
-            # Store full L1 PRIMARY header in INSTRUMENT_HEADER
+            # Store full L1 PRIMARY header in INSTRUMENT_HEADER (ImageHDU: scalar values only)
             for key, value in l1_header.items():
-                kpf2.headers["INSTRUMENT_HEADER"][key] = value
+                kpf2.headers["INSTRUMENT_HEADER"][key] = value[0] if isinstance(value, tuple) else value
 
         # Pass-through extensions with renaming
         for l1_ext, kpf2_ext in self._L1_TO_KPF2_PASSTHROUGH.items():

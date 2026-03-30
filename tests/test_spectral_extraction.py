@@ -8,6 +8,7 @@ skipped if KPF_TESTDATA is not set.
 """
 
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -24,13 +25,8 @@ NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED   = DETECTOR['norder']['RED']
 NCOL         = DETECTOR['ccd']['ncol']
 
-L0_DIR  = os.environ.get("KPF_TESTDATA")
-L0_FILE = os.path.join(L0_DIR, "KP.20240923.00022.16.fits") if L0_DIR else ""
-
-needs_l0_data = pytest.mark.skipif(
-    L0_DIR is None or not os.path.isfile(L0_FILE),
-    reason="L0 test data not available (set KPF_TESTDATA env var)",
-)
+TESTDATA_L0_DIR = Path(__file__).parent / 'testdata' / 'L0' / '20240405'
+L0_FILE = str(TESTDATA_L0_DIR / 'KP.20240405.00020.86.fits')
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +231,6 @@ class TestPerformShapes:
 # Regression tests (real L0 data → assemble L1 → extract)
 # ---------------------------------------------------------------------------
 
-@needs_l0_data
 class TestSpectralExtractionRealData:
 
     @pytest.fixture(scope="class")
