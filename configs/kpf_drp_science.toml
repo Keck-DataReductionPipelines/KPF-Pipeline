@@ -6,6 +6,9 @@ KPF_DATA_OUTPUT = "/data/kpf-next/"
 chips = ["GREEN", "RED"]
 fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
+[MODULE_CALIBRATION_ASSOCIATION]
+masters_search_window_days = [-1, 0]
+
 [MODULE_IMAGE_ASSEMBLY]
 overscan_method = "rowmedian"
 

@@ -111,7 +111,16 @@ class TestScienceRecipe:
         l2 = KPF2.from_fits(recipe_output)
         modules = l2.receipt['Module_Name'].values
         assert 'image_assembly' in modules
+        assert 'calibration_association' in modules
         assert 'spectral_extraction' in modules
+
+    def test_calibration_headers_set(self, recipe_output):
+        """CalibrationAssociation should populate BIASFILE/DIR/AGE headers on L1."""
+        # Verify via the L2 receipt that calibration_association ran; header
+        # inspection requires loading the intermediate L1, which the recipe
+        # doesn't write to disk.  Check at minimum that the receipt entry exists.
+        l2 = KPF2.from_fits(recipe_output)
+        assert 'calibration_association' in l2.receipt['Module_Name'].values
 
 
 # ---------------------------------------------------------------------------

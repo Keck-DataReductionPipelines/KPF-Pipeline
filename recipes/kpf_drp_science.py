@@ -4,6 +4,7 @@ from kpfpipe.data_models.level0 import KPF0
 #from kpfpipe.data_models.level1 import KPF1
 
 from kpfpipe.modules.image_assembly import ImageAssembly
+from kpfpipe.modules.calibration_association import CalibrationAssociation
 #from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 #from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
@@ -28,6 +29,9 @@ def main(config, args):
 
     image_assembly = ImageAssembly(l0, config)
     l1 = image_assembly.perform()
+
+    calibration_association = CalibrationAssociation(l1, config)
+    l1 = calibration_association.perform(['bias', 'dark', 'flat'])
 
     #image_processing = ImageProcessing(l1, config)
     #l1 = image_processing.perform()
