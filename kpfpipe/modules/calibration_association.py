@@ -1,11 +1,9 @@
 """
 KPF Calibration Association module.
 
-Given a science L1 frame, finds the most appropriate master calibration
+Given a KPF observation frame, finds the most appropriate master calibration
 file for each calibration type (bias, dark, flat, thar-wls) by searching
 the masters directory and selecting the nearest-in-time match.
-
-Returns a dict mapping calibration type -> absolute filepath.
 """
 import glob
 import os
@@ -22,18 +20,18 @@ DEFAULTS.update({
 
 class CalibrationAssociation:
     """
-    Associate a science L1 frame with master calibration files.
+    Associate a KPF observation frame with master calibration files.
 
     For each requested calibration type, scans the masters directory and
-    selects the master whose observation timestamp is nearest to the science
+    selects the master whose observation timestamp is nearest to the
     frame's observation time. A configurable search window limits how far
     back (or forward) in time the search extends.
 
     Parameters
     ----------
     l1_obj : KPF1
-        Science L1 frame. The observation timestamp is read from its
-        PRIMARY header.
+        KPF observation frame. For now this is always an L1 frame. The
+        observation timestamp is read from its PRIMARY header (DATE-OBS).
     config : None | dict | ConfigHandler
         Module configuration. Recognised keys:
             masters_search_window_days : [int, int]
@@ -74,8 +72,8 @@ class CalibrationAssociation:
         cal_type : str
             One of 'bias', 'dark', 'flat', 'thar-wls'.
         date_obs : str
-            ISO-format observation datetime from the science frame's PRIMARY
-            header (e.g. '2024-04-05T11:08:33').
+            ISO-format observation datetime from the frame's PRIMARY header
+            (e.g. '2024-04-05T11:08:33').
         search_window : [int, int], optional
             Search window as [days_before, days_after]. Defaults to
             self.masters_search_window_days.
@@ -112,8 +110,8 @@ class CalibrationAssociation:
         Parameters
         ----------
         date_obs : str
-            ISO-format observation datetime from the science frame's PRIMARY
-            header (e.g. '2024-04-05T11:08:33').
+            ISO-format observation datetime from the frame's PRIMARY header
+            (e.g. '2024-04-05T11:08:33').
         master_files : list of (str, str)
             (filepath, kpf_timestamp) pairs from _find_master_files.
 
@@ -153,7 +151,7 @@ class CalibrationAssociation:
         Returns
         -------
         KPF1
-            The input L1 object with calibration headers populated and a
+            The input frame with calibration headers populated and a
             receipt entry added.
 
         Raises
