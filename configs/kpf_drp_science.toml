@@ -11,6 +11,7 @@ masters_search_window_days = [-1, 0]
 
 [MODULE_IMAGE_ASSEMBLY]
 overscan_method = "rowmedian"
+readnoise_sigma = 10.0
 
 [MODULE_SPECTRAL_EXTRACTION]
 extraction_method = "box"
