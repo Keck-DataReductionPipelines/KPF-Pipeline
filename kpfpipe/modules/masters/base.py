@@ -55,9 +55,9 @@ class BaseMasterModule:
         self._l1_obj_cache = {}
 
 
-    def _set_input_files(self, ml1_obj, file_list):
+    def _set_input_files(self, file_list):
         """Record the input L0 file list in the INPUT_FILES extension."""
-        ml1_obj.set_data('INPUT_FILES', pd.DataFrame({'FILENAME': file_list}))
+        self.ml1_obj.set_data('INPUT_FILES', pd.DataFrame({'FILENAME': file_list}))
 
 
     def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
