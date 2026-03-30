@@ -57,6 +57,7 @@ class CalibrationAssociation:
             setattr(self, k, params.get(k, v))
 
         self._data_root = params.get('KPF_DATA_INPUT')
+        self._results = None  # populated by perform()
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -181,6 +182,37 @@ class CalibrationAssociation:
                 self.l1_obj.headers['PRIMARY'][f'{prefix}DIR'] = os.path.dirname(filepath)
                 self.l1_obj.headers['PRIMARY'][f'AGE{prefix}'] = (obs_date - master_date).days
 
+        self._results = {
+            cal_type: self.l1_obj.headers['PRIMARY'].get(f'{_header_prefix[cal_type]}FILE')
+                      if cal_type in _header_prefix else None
+            for cal_type in cal_types
+        }
         self.l1_obj.receipt_add_entry('calibration_association', 'PASS')
 
         return self.l1_obj
+
+    def info(self):
+        """Print a summary of the module configuration and association results."""
+        print("CalibrationAssociation")
+        print(f"  obs_id:        {self.l1_obj.obs_id}")
+        print(f"  data root:     {self._data_root}")
+        print(f"  search window: {self.masters_search_window_days} days [before, after]")
+
+        if self._results is None:
+            print("  perform() has not been called")
+            return
+
+        print(f"\n  {'cal_type':<12s} {'master file'}")
+        print("  " + "-" * 60)
+        h = self.l1_obj.headers['PRIMARY']
+        _prefix = {'bias': 'BIAS', 'dark': 'DARK', 'flat': 'FLAT'}
+        for cal_type, filename in self._results.items():
+            prefix = _prefix.get(cal_type)
+            if prefix is not None:
+                age = h.get(f'AGE{prefix}', 'n/a')
+                print(f"  {cal_type:<12s} {filename}")
+                print(f"  {'':12s} age = {age}d")
+                print()
+            else:
+                print(f"  {cal_type:<12s} (no header written)")
+                print()
