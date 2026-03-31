@@ -118,8 +118,8 @@ class TestImageAssemblyBias:
 
     def test_read_noise_in_header(self, l1_bias):
         l1, _ = l1_bias
-        # 2-amp mode: expect RNGRN1, RNGRN2, RNRED1, RNRED2
-        assert "RNGRN1" in l1.headers["PRIMARY"]
+        # 2-amp mode: expect RNGREEN1, RNGREEN2, RNRED1, RNRED2
+        assert "RNGREEN1" in l1.headers["PRIMARY"]
         assert "RNRED1" in l1.headers["PRIMARY"]
 
     def test_read_noise_reasonable(self, l1_bias):
@@ -214,7 +214,7 @@ class TestImageAssembly4Amp:
             assert channel_ext in ia.readnoise
 
         # All 8 RN keywords in header
-        for key in ["RNGRN1", "RNGRN2", "RNGRN3", "RNGRN4",
+        for key in ["RNGREEN1", "RNGREEN2", "RNGREEN3", "RNGREEN4",
                      "RNRED1", "RNRED2", "RNRED3", "RNRED4"]:
             assert key in l1.headers["PRIMARY"]
 

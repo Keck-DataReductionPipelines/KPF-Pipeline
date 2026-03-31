@@ -47,6 +47,11 @@ class SpectralExtraction:
         for k, v in DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
+        self._results = None  # populated by perform()
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
 
     def _read_order_trace_reference(self, chip):
         """
@@ -64,6 +69,8 @@ class SpectralExtraction:
         """
         if not hasattr(self, 'order_trace'):
             self.order_trace = {}
+        if not hasattr(self, 'order_trace_path'):
+            self.order_trace_path = {}
 
         filepath = f'{REPO_ROOT}/reference/order_trace_{chip.lower()}.csv'
         with open(filepath, 'r') as f:
@@ -72,6 +79,7 @@ class SpectralExtraction:
                 .set_index(['Fiber', 'Order'])
                 .sort_index()
             )
+        self.order_trace_path[chip.upper()] = filepath
 
 
     def _get_orderlet_pixels(self, chip, fiber, order, return_coords=False):
@@ -294,6 +302,9 @@ class SpectralExtraction:
         """
         raise NotImplementedError("flat relative extraction not yet implemented")
 
+    # ------------------------------------------------------------------
+    # Algorithm steps
+    # ------------------------------------------------------------------
 
     def extract_orderlet(self, chip, fiber, order, method=None):
         """
@@ -410,6 +421,9 @@ class SpectralExtraction:
         
         return l2_arrays
 
+    # ------------------------------------------------------------------
+    # Public entry point
+    # ------------------------------------------------------------------
 
     def perform(self, chips=None, fibers=None, method=None):
         """
@@ -451,4 +465,26 @@ class SpectralExtraction:
                 l2_obj.set_data(f'{chip}_{fiber}_VAR',  l2_arrays[f'{chip}_{fiber}_VAR'])
 
         l2_obj.receipt_add_entry('spectral_extraction', 'PASS')
+
+        self._results = {
+            chip: {'fibers': list(fibers), 'norder': self.norder[chip.upper()]}
+            for chip in chips
+        }
+
         return l2_obj
+
+    def info(self):
+        """Print a summary of the module configuration and extraction results."""
+        print("SpectralExtraction")
+        print(f"  obs_id:            {self.l1_obj.obs_id}")
+        print(f"  extraction_method: {self.extraction_method}")
+
+        if self._results is None:
+            print("  perform() has not been called")
+            return
+
+        print(f"\n  {'CHIP':<8s} {'FIBERS':<30s} {'NORDER'}")
+        print("  " + "-" * 46)
+        for chip, info in self._results.items():
+            fibers_str = ' '.join(info['fibers'])
+            print(f"  {chip:<8s} {fibers_str:<30s} {info['norder']}")
