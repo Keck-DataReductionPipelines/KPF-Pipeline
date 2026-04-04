@@ -177,13 +177,13 @@ class SpectralExtractionAlg:
                 start = 0
             elif (int(datecode) >= 20240203) and (int(datecode) < 20251123) and (chip == 'RED'):
                 start = 1
-            elif (int(datecode) >= 20251123) and (int(datecode) < 20260327) and (chip == 'GREEN'):
+            elif (int(datecode) >= 20251123) and (int(datecode) < 20260328) and (chip == 'GREEN'):
                 start = 0
-            elif (int(datecode) >= 20251123) and (int(datecode) < 20260327) and (chip == 'RED'):
+            elif (int(datecode) >= 20251123) and (int(datecode) < 20260328) and (chip == 'RED'):
                 start = 0
-            elif (int(datecode) >= 20260327) and (chip == 'GREEN'):
+            elif (int(datecode) >= 20260328) and (chip == 'GREEN'):
                 start = 0
-            elif (int(datecode) >= 20260327) and (chip == 'RED'):
+            elif (int(datecode) >= 20260328) and (chip == 'RED'):
                 start = 1
 
             fibers = 'SKY SCI1 SCI2 SCI3 CAL'.split()
