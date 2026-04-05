@@ -22,3 +22,6 @@ flat = false
 extraction_method = "box"
 
 [MODULE_WAVELENGTH_CALIBRATION]
+
+[MODULE_BARYCENTRIC_CORRECTION]
+fix_bad_exposures = True
