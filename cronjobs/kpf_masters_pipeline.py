@@ -82,6 +82,8 @@ pylogfile_registerCalFilesForDate = form_output_file_for_python_script(pythonscr
 # Commands to execute inside container.
 
 bash_cmds = [
+             f"cp -pfr /reference/* /data/reference",
+             f"cp -pfr /reference_fits/* /data/reference_fits",
              f"mkdir -p /data/2D/{procdate}",
              f"mkdir -p /data/L1/{procdate}",
              f"mkdir -p /data/L2/{procdate}",

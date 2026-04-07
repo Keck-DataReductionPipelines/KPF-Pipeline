@@ -469,3 +469,99 @@ create function getCalFileAfter (
 
 
 $$ language plpgsql;
+
+
+-- Compute modified Julian date from observation date/time.
+--
+create function computeMJD (
+    timestamp_      timestamp
+)
+
+    returns double precision as $$
+
+    declare
+
+        year_            double precision;
+        month_           double precision;
+        day_             double precision;
+        hour_            double precision;
+        min_             double precision;
+        sec_             double precision;
+        a_               double precision;
+        y_               double precision;
+        m_               double precision;
+        jdn_             double precision;
+        jd_              double precision;
+        mjd_             double precision;
+
+    begin
+
+        year_  := extract(year from timestamp_);
+        month_ := extract(month from timestamp_);
+        day_   := extract(day from timestamp_);
+        hour_  := extract(hour from timestamp_);
+        min_   := extract(minute from timestamp_);
+        sec_   := extract(second from timestamp_);
+
+        a_ := floor((14.0 - month_)/12.0);
+        y_ := year_ + 4800.0 - a_;
+        m_ := month_ + 12.0 * a_ - 3.0;
+        jdn_ := day_ + floor((153.0 * m_ + 2.0)/5.0) + 365.0 * y_ + floor(y_/4.0)
+                - floor(y_/100.0) + floor(y_/400.0) - 32045.0;
+        jd_ := sec_/86400.0 + min_/1440.0 + (hour_ - 12.0)/24.0 + jdn_;
+        mjd_ := jd_ - 2400000.5;
+
+        return mjd_;
+
+    end;
+
+$$ language plpgsql;
+
+
+-- Get all L0 FITS files for specified night, IMTYPE, OBJECT, and contentbitmask.
+-- Since raw calibration data are taken nomimally in the afternoon (Pacific time),
+-- this time interval can span UT midnight, and special logic is used to expand
+-- the query domain.
+--
+create function getL0FitsFilesForCalibration (
+    dateobs_ date,
+    imtype_ character varying(32),
+    object_ character varying(32),
+    contentbitmask_  integer,
+    hoursbeforemidnight_ real,
+    hoursaftermidnight_ real
+)
+    returns setof record as $$
+
+    declare
+
+        mjd_             double precision;
+        startmjd_        double precision;
+        endmjd_          double precision;
+        r_               record;
+
+    begin
+
+        select computeMJD(cast(dateobs_ as timestamp)) into mjd_;
+        startmjd_ := mjd_ - cast(hoursbeforemidnight_ as double precision) / 24.0;
+        endmjd_   := mjd_ + cast(hoursaftermidnight_ as double precision) / 24.0;
+
+        for r_ in
+        select rId, filename, checkSum, infobits, ut, mjdobs
+        from L0Files
+        where lower(imtype) = lower(imtype_)
+        and lower(object) = lower(object_)
+        and mjdobs > startmjd_
+        and mjdobs < endmjd_
+        and status > 0
+        and cast((contentbits & contentbitmask_) as integer) = contentbitmask_
+        order by mjdobs
+        loop
+            return next r_;
+        end loop;
+
+        return;  -- Required to indicate function is finished executing.
+
+    end;
+
+$$ language plpgsql;
