@@ -5,7 +5,7 @@ from kpfpipe.data_models.level0 import KPF0
 
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.calibration_association import CalibrationAssociation
-#from kpfpipe.modules.image_processing import ImageProcessing
+from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 #from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 #from kpfpipe.modules.barycentric_correction import BarycentricCorrection
@@ -36,8 +36,8 @@ def main(config, args):
     l1 = calibration_association.perform(['bias', 'dark', 'flat'])
 
     # apply stardard FFI image processing (bias, dark, flat)
-    #image_processing = ImageProcessing(l1, config)
-    #l1 = image_processing.perform()
+    image_processing = ImageProcessing(l1, config)
+    l1 = image_processing.perform()
 
     # extract 2D --> 1D spectra
     spectral_extraction = SpectralExtraction(l1, config)
