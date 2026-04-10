@@ -18,10 +18,6 @@ from kpfpipe import DEFAULTS
 from kpfpipe.utils.astro import compute_doppler_shift
 from kpfpipe.utils.config import ConfigHandler
 
-DEFAULTS.update({
-    'fix_bad_exposures': True,
-})
-
 
 class BarycentricCorrection:
     """
@@ -346,7 +342,7 @@ class BarycentricCorrection:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def flux_weighted_midpoint(self, interpolate=True, extrapolate=True, fix_bad_exposures=None):
+    def flux_weighted_midpoint(self, interpolate=True, extrapolate=True, fix_bad_exposures=True):
         """
         Compute the flux-weighted midpoint observation time from EXPMETER_SCI.
 
@@ -372,9 +368,6 @@ class BarycentricCorrection:
         distribution (and therefore the flux-weighted time) varies across
         the exposure meter bandpass.
         """
-        if fix_bad_exposures is None:
-            fix_bad_exposures = self.fix_bad_exposures
-
         t_beg, t_mid, t_end = self._get_timestamps()
         f = self._get_normalized_flux()
 

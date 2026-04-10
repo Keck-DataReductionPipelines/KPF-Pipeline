@@ -17,4 +17,3 @@ readnoise_sigma = 10.0
 extraction_method = "box"
 
 [MODULE_BARYCENTRIC_CORRECTION]
-fix_bad_exposures = True
