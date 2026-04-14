@@ -206,3 +206,68 @@ class TestStitchedImage2To16:
         img_data = ax.get_images()[0].get_array()
         assert np.nanmedian(img_data) == pytest.approx(300, abs=1)
         plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Task 4: File saving and all()
+# ---------------------------------------------------------------------------
+
+class TestPlotL0FileSaving:
+
+    def test_saves_png_when_output_dir_set(self, synthetic_4amp_l0, tmp_path):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0, output_dir=str(tmp_path))
+        fig = qlp.stitched_image('green')
+        expected_path = tmp_path / "KP.20240405.00001.00_L0_stitched_image_green_zoomable.png"
+        assert expected_path.exists()
+        assert expected_path.stat().st_size > 0
+        plt.close(fig)
+
+    def test_no_file_when_output_dir_none(self, synthetic_4amp_l0, tmp_path):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0)
+        fig = qlp.stitched_image('green')
+        # No PNG should exist anywhere in tmp_path
+        pngs = list(tmp_path.glob("*.png"))
+        assert pngs == []
+        plt.close(fig)
+
+
+class TestPlotL0All:
+
+    def test_all_returns_dict_of_figures(self, synthetic_4amp_l0):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0)
+        figs = qlp.all()
+        assert isinstance(figs, dict)
+        assert 'L0_stitched_green' in figs
+        assert 'L0_stitched_red' in figs
+        assert all(isinstance(f, plt.Figure) for f in figs.values())
+        for f in figs.values():
+            plt.close(f)
+
+    def test_all_skips_missing_chip(self, tmp_path):
+        """L0 with only green amps should only produce green plot."""
+        fn = str(tmp_path / "KP.20240405.00004.00.fits")
+        rng = np.random.default_rng(7)
+
+        primary = fits.PrimaryHDU()
+        primary.header["OBJECT"] = "green-only"
+        hdus = [primary]
+        for amp in range(1, 5):
+            data = rng.normal(1000, 3, (100, 100)).astype(np.float32)
+            hdus.append(fits.ImageHDU(data=data, name=f"GREEN_AMP{amp}"))
+
+        hdul = fits.HDUList(hdus)
+        hdul.writeto(fn, overwrite=True)
+        hdul.close()
+
+        l0 = KPF0.from_fits(fn)
+
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(l0)
+        figs = qlp.all()
+        assert 'L0_stitched_green' in figs
+        assert 'L0_stitched_red' not in figs
+        for f in figs.values():
+            plt.close(f)

@@ -130,3 +130,16 @@ class PlotL0:
             fig.savefig(fig_path, dpi=600, facecolor='w')
 
         return fig
+
+    def all(self):
+        """
+        Generate all L0 plots for chips present in the data.
+
+        Returns:
+            dict mapping plot name to matplotlib.Figure.
+        """
+        figures = {}
+        for chip in ['green', 'red']:
+            if self._count_amps(chip.upper()) > 0:
+                figures[f'L0_stitched_{chip}'] = self.stitched_image(chip)
+        return figures
