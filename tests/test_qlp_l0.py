@@ -87,3 +87,58 @@ class TestPlotL0Constructor:
         from kpfpipe.qlp.plot_l0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0, output_dir=str(tmp_path))
         assert qlp.output_dir == str(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Task 2: stitched_image
+# ---------------------------------------------------------------------------
+
+import matplotlib.pyplot as plt
+
+
+class TestStitchedImage4Amp:
+
+    def test_returns_figure(self, synthetic_4amp_l0):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0)
+        fig = qlp.stitched_image('green')
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_title_format(self, synthetic_4amp_l0):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0)
+        fig = qlp.stitched_image('green')
+        ax = fig.axes[0]
+        title = ax.get_title()
+        assert 'L0 - Green CCD' in title
+        assert 'KP.20240405.00001.00' in title
+        assert 'synthetic-4amp' in title
+        plt.close(fig)
+
+    def test_red_chip(self, synthetic_4amp_l0):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0)
+        fig = qlp.stitched_image('red')
+        ax = fig.axes[0]
+        assert 'L0 - Red CCD' in ax.get_title()
+        plt.close(fig)
+
+    def test_colorbar_label_adu(self, synthetic_4amp_l0):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0)
+        fig = qlp.stitched_image('green')
+        # Figure should have 2 axes: image + colorbar
+        assert len(fig.axes) == 2
+        plt.close(fig)
+
+    def test_image_shape_4amp(self, synthetic_4amp_l0):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0)
+        fig = qlp.stitched_image('green')
+        ax = fig.axes[0]
+        images = ax.get_images()
+        assert len(images) == 1
+        # 4-amp: 2 amps stacked vertically (2070*2) x 2 amps side by side (2094*2)
+        assert images[0].get_array().shape == (2070 * 2, 2094 * 2)
+        plt.close(fig)
