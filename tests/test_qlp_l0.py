@@ -142,3 +142,67 @@ class TestStitchedImage4Amp:
         # 4-amp: 2 amps stacked vertically (2070*2) x 2 amps side by side (2094*2)
         assert images[0].get_array().shape == (2070 * 2, 2094 * 2)
         plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Task 3: 2-amp mode and 2^16 scaling
+# ---------------------------------------------------------------------------
+
+class TestStitchedImage2Amp:
+
+    def test_returns_figure(self, synthetic_2amp_l0):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_2amp_l0)
+        fig = qlp.stitched_image('green')
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_image_shape_2amp(self, synthetic_2amp_l0):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_2amp_l0)
+        fig = qlp.stitched_image('red')
+        ax = fig.axes[0]
+        images = ax.get_images()
+        # 2-amp: full height (4080) x 2 amps side by side (2094*2)
+        assert images[0].get_array().shape == (4080, 2094 * 2)
+        plt.close(fig)
+
+    def test_title_2amp(self, synthetic_2amp_l0):
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(synthetic_2amp_l0)
+        fig = qlp.stitched_image('green')
+        ax = fig.axes[0]
+        assert 'synthetic-2amp' in ax.get_title()
+        plt.close(fig)
+
+
+class TestStitchedImage2To16:
+
+    def test_scales_high_values(self, tmp_path):
+        """Data with median > 200 * 2^16 should be divided by 2^16."""
+        fn = str(tmp_path / "KP.20240405.00003.00.fits")
+        high_val = 300 * 2**16
+
+        primary = fits.PrimaryHDU()
+        primary.header["OBJECT"] = "high-value"
+        hdus = [primary]
+        for chip in ["GREEN", "RED"]:
+            for amp in range(1, 5):
+                data = np.full((100, 100), high_val, dtype=np.float64)
+                hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
+
+        hdul = fits.HDUList(hdus)
+        hdul.writeto(fn, overwrite=True)
+        hdul.close()
+
+        l0 = KPF0.from_fits(fn)
+
+        from kpfpipe.qlp.plot_l0 import PlotL0
+        qlp = PlotL0(l0)
+        fig = qlp.stitched_image('green')
+
+        # Image data should be scaled down to ~300
+        ax = fig.axes[0]
+        img_data = ax.get_images()[0].get_array()
+        assert np.nanmedian(img_data) == pytest.approx(300, abs=1)
+        plt.close(fig)
