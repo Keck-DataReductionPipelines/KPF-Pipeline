@@ -120,3 +120,30 @@ class PlotL1:
             fig.savefig(fig_path, dpi=600, facecolor='w')
 
         return fig
+
+    def histogram(self, chip):
+        """Flux distribution histogram. Matches v2.12 plot_2D_image_histogram."""
+        raise NotImplementedError("PlotL1.histogram not yet implemented")
+
+    def column_cut(self, chip):
+        """Median column profiles at 10th/50th/90th percentiles.
+        Matches v2.12 plot_2D_column_cut."""
+        raise NotImplementedError("PlotL1.column_cut not yet implemented")
+
+    def zoom_3x3(self, chip):
+        """3x3 grid of zoomed detector regions. Matches v2.12 plot_2D_image_zoom_3x3."""
+        raise NotImplementedError("PlotL1.zoom_3x3 not yet implemented")
+
+    def order_trace_overlay(self, chip):
+        """2x2 grid with order trace overlaid. Matches v2.12 plot_2D_order_trace2x2.
+        Requires calibration DB lookup for order trace file (not yet in v3)."""
+        raise NotImplementedError("PlotL1.order_trace_overlay not yet implemented")
+
+    def bias_subtracted(self, chip):
+        """Image with master bias subtracted. Matches v2.12 plot_2D_image(subtract_master_bias=True)."""
+        raise NotImplementedError("PlotL1.bias_subtracted not yet implemented")
+
+    def dark_subtracted(self, chip):
+        """Image with master dark subtracted, displayed in e-/hr.
+        Matches v2.12 plot_2D_image(subtract_master_dark=True)."""
+        raise NotImplementedError("PlotL1.dark_subtracted not yet implemented")

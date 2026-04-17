@@ -141,3 +141,21 @@ class TestImage:
         texts = [t.get_text() for t in fig.axes[0].texts]
         assert not any('RN:' in t for t in texts)
         plt.close(fig)
+
+
+class TestStubs:
+
+    @pytest.mark.parametrize("method_name", [
+        "histogram",
+        "column_cut",
+        "zoom_3x3",
+        "order_trace_overlay",
+        "bias_subtracted",
+        "dark_subtracted",
+    ])
+    def test_stub_raises_not_implemented(self, synthetic_l1, method_name):
+        from kpfpipe.qlp.plot_l1 import PlotL1
+        qlp = PlotL1(synthetic_l1)
+        method = getattr(qlp, method_name)
+        with pytest.raises(NotImplementedError):
+            method('green')
