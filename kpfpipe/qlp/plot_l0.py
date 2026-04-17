@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 import numpy as np
 import matplotlib.pyplot as plt
 
+from kpfpipe import DETECTOR
+
 
 class PlotL0:
     """
@@ -38,6 +40,20 @@ class PlotL0:
                     count += 1
         return count
 
+    @staticmethod
+    def _orient(data, flip):
+        """Apply orientation flip to an amplifier array for display."""
+        if flip == 'none':
+            return data
+        elif flip == 'cols':
+            return np.flip(data, axis=1)
+        elif flip == 'rows':
+            return np.flip(data, axis=0)
+        elif flip == 'both':
+            return np.flip(data, axis=(0, 1))
+        else:
+            raise ValueError(f"Unknown flip value: '{flip}'")
+
     def _stitch(self, chip):
         """Concatenate raw amplifier arrays into a single display image."""
         chip = chip.upper()
@@ -51,15 +67,27 @@ class PlotL0:
             if chip == 'GREEN':
                 image = np.flipud(image)
         elif namp == 4:
-            bot = np.concatenate(
-                (self.l0.data[f'{chip}_AMP1'], self.l0.data[f'{chip}_AMP2']),
-                axis=1,
-            )
-            top = np.concatenate(
-                (self.l0.data[f'{chip}_AMP3'], self.l0.data[f'{chip}_AMP4']),
-                axis=1,
-            )
+            # In 4-amp mode, each amp has a different readout orientation.
+            # Orient each amp, strip prescan/overscan, then stitch into FFI.
+            amp_cfg = {a['ext_name']: a for a in DETECTOR['amplifiers'][chip]}
+            prescan = DETECTOR['ccd']['prescan']
+            nrow_img = DETECTOR['ccd']['nrow'] // 2
+            ncol_img = DETECTOR['ccd']['ncol'] // 2
+
+            panels = {}
+            for i in range(1, 5):
+                ext = f'{chip}_AMP{i}'
+                raw = self.l0.data[ext]
+                oriented = self._orient(raw, amp_cfg[ext]['flip'])
+                # Strip prescan (left) and overscan (right cols, bottom rows)
+                panels[i] = oriented[:nrow_img, prescan:prescan + ncol_img]
+
+            bot = np.concatenate((panels[1], panels[2]), axis=1)
+            top = np.concatenate((panels[3], panels[4]), axis=1)
             image = np.concatenate((bot, top), axis=0)
+
+            if chip == 'GREEN':
+                image = np.flipud(image)
         else:
             raise ValueError(
                 f"Unsupported amplifier count ({namp}) for {chip} CCD. "

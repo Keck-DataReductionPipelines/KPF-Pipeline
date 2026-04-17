@@ -139,8 +139,8 @@ class TestStitchedImage4Amp:
         ax = fig.axes[0]
         images = ax.get_images()
         assert len(images) == 1
-        # 4-amp: 2 amps stacked vertically (2070*2) x 2 amps side by side (2094*2)
-        assert images[0].get_array().shape == (2070 * 2, 2094 * 2)
+        # 4-amp: oriented and stripped to imaging area (4080 x 4080)
+        assert images[0].get_array().shape == (4080, 4080)
         plt.close(fig)
 
 
