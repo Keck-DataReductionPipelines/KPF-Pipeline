@@ -1,0 +1,83 @@
+"""Tests for L1 quicklook plots."""
+
+import os
+import numpy as np
+import pytest
+from astropy.io import fits
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+from kpfpipe.data_models.level1 import KPF1
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+def _build_synthetic_l1(tmp_path, *, obs_id="KP.20240405.00001.00",
+                        object_name="synthetic-l1",
+                        with_readnoise=True, shape=(4080, 4080)):
+    """Create a synthetic L1 FITS file with assembled CCDs and read-noise headers."""
+    fn = str(tmp_path / f"{obs_id}_L1.fits")
+    rng = np.random.default_rng(42)
+
+    primary = fits.PrimaryHDU()
+    primary.header["INSTRUME"] = "KPF"
+    primary.header["OBJECT"] = object_name
+    primary.header["DATALVL"] = "L1"
+    primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+    primary.header["EXPTIME"] = 300.0
+
+    if with_readnoise:
+        for i in range(1, 5):
+            primary.header[f"RNGREEN{i}"] = (3.5 + 0.05 * i, f"Read noise GREEN_AMP{i} [e-]")
+            primary.header[f"RNNGGR{i}"] = (1.0 + 0.001 * i, f"Non-Gaussian read noise GREEN_AMP{i}")
+            primary.header[f"RNRED{i}"]  = (4.0 + 0.05 * i, f"Read noise RED_AMP{i} [e-]")
+            primary.header[f"RNNGRD{i}"] = (1.002 + 0.001 * i, f"Non-Gaussian read noise RED_AMP{i}")
+
+    hdus = [primary]
+    for chip in ["GREEN", "RED"]:
+        ccd = (1000.0 + rng.normal(0, 3.0, shape)).astype(np.float32)
+        var = np.abs(ccd).astype(np.float32)
+        ccd_hdu = fits.ImageHDU(data=ccd, name=f"{chip}_CCD")
+        var_hdu = fits.ImageHDU(data=var, name=f"{chip}_VAR")
+        hdus += [ccd_hdu, var_hdu]
+
+    hdul = fits.HDUList(hdus)
+    hdul.writeto(fn, overwrite=True)
+    hdul.close()
+    return fn
+
+
+@pytest.fixture
+def synthetic_l1(tmp_path):
+    fn = _build_synthetic_l1(tmp_path)
+    return KPF1.from_fits(fn)
+
+
+@pytest.fixture
+def synthetic_l1_no_rn(tmp_path):
+    fn = _build_synthetic_l1(tmp_path, with_readnoise=False, obs_id="KP.20240405.00002.00")
+    return KPF1.from_fits(fn)
+
+
+# ---------------------------------------------------------------------------
+# Task 1: Constructor
+# ---------------------------------------------------------------------------
+
+class TestPlotL1Constructor:
+
+    def test_init(self, synthetic_l1):
+        from kpfpipe.qlp.plot_l1 import PlotL1
+        qlp = PlotL1(synthetic_l1)
+        assert qlp.l1 is synthetic_l1
+        assert qlp.obs_id == "KP.20240405.00001.00"
+        assert qlp.name == "synthetic-l1"
+        assert qlp.output_dir is None
+
+    def test_init_with_output_dir(self, synthetic_l1, tmp_path):
+        from kpfpipe.qlp.plot_l1 import PlotL1
+        qlp = PlotL1(synthetic_l1, output_dir=str(tmp_path))
+        assert qlp.output_dir == str(tmp_path)
