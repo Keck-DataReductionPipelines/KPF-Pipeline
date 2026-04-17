@@ -147,3 +147,22 @@ class PlotL1:
         """Image with master dark subtracted, displayed in e-/hr.
         Matches v2.12 plot_2D_image(subtract_master_dark=True)."""
         raise NotImplementedError("PlotL1.dark_subtracted not yet implemented")
+
+    def _has_chip(self, chip):
+        ext = f'{chip.upper()}_CCD'
+        if ext not in self.l1.data or self.l1.data[ext] is None:
+            return False
+        return np.size(self.l1.data[ext]) > 0
+
+    def all(self):
+        """
+        Generate all implemented L1 plots for chips present in the data.
+
+        Returns:
+            dict mapping plot name to matplotlib.Figure.
+        """
+        figures = {}
+        for chip in ['green', 'red']:
+            if self._has_chip(chip):
+                figures[f'L1_image_{chip}'] = self.image(chip)
+        return figures

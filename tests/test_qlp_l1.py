@@ -143,6 +143,62 @@ class TestImage:
         plt.close(fig)
 
 
+class TestFileSaving:
+
+    def test_saves_png(self, synthetic_l1, tmp_path):
+        from kpfpipe.qlp.plot_l1 import PlotL1
+        qlp = PlotL1(synthetic_l1, output_dir=str(tmp_path))
+        fig = qlp.image('green')
+        expected = tmp_path / "KP.20240405.00001.00_L1_image_green_zoomable.png"
+        assert expected.exists()
+        assert expected.stat().st_size > 0
+        plt.close(fig)
+
+    def test_no_file_when_output_dir_none(self, synthetic_l1, tmp_path):
+        from kpfpipe.qlp.plot_l1 import PlotL1
+        qlp = PlotL1(synthetic_l1)
+        fig = qlp.image('green')
+        assert list(tmp_path.glob("*.png")) == []
+        plt.close(fig)
+
+
+class TestAll:
+
+    def test_all_returns_dict(self, synthetic_l1):
+        from kpfpipe.qlp.plot_l1 import PlotL1
+        qlp = PlotL1(synthetic_l1)
+        figs = qlp.all()
+        assert isinstance(figs, dict)
+        assert 'L1_image_green' in figs
+        assert 'L1_image_red' in figs
+        for f in figs.values():
+            plt.close(f)
+
+    def test_all_skips_missing_chip(self, tmp_path):
+        # KPF1 with only green CCD, no red
+        fn = str(tmp_path / "KP.20240405.00003.00_L1.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["INSTRUME"] = "KPF"
+        primary.header["OBJECT"] = "green-only"
+        primary.header["DATALVL"] = "L1"
+        primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+        primary.header["EXPTIME"] = 300.0
+        green_ccd = fits.ImageHDU(data=np.random.random((100, 100)).astype(np.float32), name="GREEN_CCD")
+        green_var = fits.ImageHDU(data=np.random.random((100, 100)).astype(np.float32), name="GREEN_VAR")
+        hdul = fits.HDUList([primary, green_ccd, green_var])
+        hdul.writeto(fn, overwrite=True)
+        hdul.close()
+
+        l1 = KPF1.from_fits(fn)
+        from kpfpipe.qlp.plot_l1 import PlotL1
+        qlp = PlotL1(l1)
+        figs = qlp.all()
+        assert 'L1_image_green' in figs
+        assert 'L1_image_red' not in figs
+        for f in figs.values():
+            plt.close(f)
+
+
 class TestStubs:
 
     @pytest.mark.parametrize("method_name", [
