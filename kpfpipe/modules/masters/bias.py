@@ -18,11 +18,30 @@ NCOL = DETECTOR['ccd']['ncol']
 
 
 class Bias(BaseMasterModule):
+    """
+    Construct a master bias frame from a stack of L0 bias exposures.
+
+    Stacks frames using sigma-clipped statistics, interpolates bad pixels,
+    and performs a final outlier pass on the combined image. Outputs a
+    KPFMasterL1 containing per-chip IMG, SNR, and MASK extensions.
+
+    Parameters
+    ----------
+    l0_file_list : list of str
+        Sorted list of L0 FITS file paths to stack.
+    config : None | dict | ConfigHandler
+        Module configuration. Recognized keys: nframe_stream, stack_sigma,
+        exptime_tolerance, chips.
+    """
     def __init__(self, l0_file_list, config=None):
         if isinstance(config, ConfigHandler):
             config = config.get_params(["DATA_DIRS", "KPFPIPE", "BIAS"])
         super().__init__(l0_file_list, config)
 
+
+    # ------------------------------------------------------------------
+    # Public entry point
+    # ------------------------------------------------------------------
 
     def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None):
         """
