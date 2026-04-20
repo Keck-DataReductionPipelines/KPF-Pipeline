@@ -1,12 +1,13 @@
 """L0 quicklook plots for raw KPF detector images."""
 
 import os
+from copy import deepcopy
 from datetime import datetime, timezone
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-from kpfpipe import DETECTOR
+from kpfpipe.modules.image_assembly import ImageAssembly
 
 
 class PlotL0:
@@ -14,7 +15,9 @@ class PlotL0:
     Quicklook plots for KPF L0 (raw CCD) data.
 
     Takes a KPF0 object and generates plots of the raw detector images.
-    Pure visualization — no science computation.
+    Pure visualization — no science computation. Amplifier counting and
+    orientation delegate to ImageAssembly so detector-geometry knowledge
+    has a single home.
 
     Args:
         l0_obj: KPF0 data object.
@@ -29,35 +32,28 @@ class PlotL0:
         if 'PRIMARY' in l0_obj.headers:
             self.name = l0_obj.headers['PRIMARY'].get('OBJECT', '')
 
-    def _count_amps(self, chip):
-        """Count amplifier extensions present for a chip."""
-        chip = chip.upper()
-        count = 0
+    def _has_chip(self, chip):
+        """Return True if any AMP extension for the chip holds data."""
         for i in range(1, 5):
-            ext = f'{chip}_AMP{i}'
-            if ext in self.l0.data and self.l0.data[ext] is not None:
-                if np.size(self.l0.data[ext]) > 0:
-                    count += 1
-        return count
-
-    @staticmethod
-    def _orient(data, flip):
-        """Apply orientation flip to an amplifier array for display."""
-        if flip == 'none':
-            return data
-        elif flip == 'cols':
-            return np.flip(data, axis=1)
-        elif flip == 'rows':
-            return np.flip(data, axis=0)
-        elif flip == 'both':
-            return np.flip(data, axis=(0, 1))
-        else:
-            raise ValueError(f"Unknown flip value: '{flip}'")
+            ext = f'{chip.upper()}_AMP{i}'
+            arr = self.l0.data.get(ext)
+            if arr is not None and np.size(arr) > 0:
+                return True
+        return False
 
     def _stitch(self, chip):
-        """Concatenate raw amplifier arrays into a single display image."""
+        """Concatenate raw amplifier arrays into a single display image.
+
+        Uses ImageAssembly to count amps and (for 4-amp mode) apply per-amp
+        orientation. Orientation is performed on a deepcopy of the L0 so
+        the caller's object is not mutated.
+        """
         chip = chip.upper()
-        namp = self._count_amps(chip)
+
+        # Count amplifiers via ImageAssembly (non-destructive).
+        ia = ImageAssembly(self.l0)
+        ia.count_amplifiers(chip)
+        namp = ia.namp[chip]
 
         if namp == 2:
             image = np.concatenate(
@@ -67,20 +63,19 @@ class PlotL0:
             if chip == 'GREEN':
                 image = np.flipud(image)
         elif namp == 4:
-            # In 4-amp mode, each amp has a different readout orientation.
-            # Orient each amp, strip prescan/overscan, then stitch into FFI.
-            amp_cfg = {a['ext_name']: a for a in DETECTOR['amplifiers'][chip]}
-            prescan = DETECTOR['ccd']['prescan']
-            nrow_img = DETECTOR['ccd']['nrow'] // 2
-            ncol_img = DETECTOR['ccd']['ncol'] // 2
+            # orient_channels mutates l0.data, so operate on a copy.
+            l0_copy = deepcopy(self.l0)
+            ia = ImageAssembly(l0_copy)
+            ia.count_amplifiers(chip)
+            ia.orient_channels(chip)
+
+            prescan = ia.prescan
+            nrow_img = ia.nrow // 2
+            ncol_img = ia.ncol // 2
 
             panels = {}
             for i in range(1, 5):
-                ext = f'{chip}_AMP{i}'
-                raw = self.l0.data[ext]
-                oriented = self._orient(raw, amp_cfg[ext]['flip'])
-                # Strip prescan (left) and overscan (right cols, bottom rows)
-                panels[i] = oriented[:nrow_img, prescan:prescan + ncol_img]
+                panels[i] = l0_copy.data[f'{chip}_AMP{i}'][:nrow_img, prescan:prescan + ncol_img]
 
             bot = np.concatenate((panels[1], panels[2]), axis=1)
             top = np.concatenate((panels[3], panels[4]), axis=1)
@@ -88,11 +83,6 @@ class PlotL0:
 
             if chip == 'GREEN':
                 image = np.flipud(image)
-        else:
-            raise ValueError(
-                f"Unsupported amplifier count ({namp}) for {chip} CCD. "
-                f"Expected 2 or 4."
-            )
 
         return image
 
@@ -168,6 +158,6 @@ class PlotL0:
         """
         figures = {}
         for chip in ['green', 'red']:
-            if self._count_amps(chip.upper()) > 0:
+            if self._has_chip(chip):
                 figures[f'L0_stitched_{chip}'] = self.stitched_image(chip)
         return figures
