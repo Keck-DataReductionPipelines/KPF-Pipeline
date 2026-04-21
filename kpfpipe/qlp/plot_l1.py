@@ -6,13 +6,17 @@ from datetime import datetime, timezone
 import numpy as np
 import matplotlib.pyplot as plt
 
+from kpfpipe.modules.image_assembly import _RN_KEYS
+
 
 class PlotL1:
     """
     Quicklook plots for KPF L1 (assembled 2D) data.
 
     Takes a KPF1 object and generates plots of the assembled detector image.
-    Pure visualization — no science computation.
+    Pure visualization — no science computation. Read-noise header mapping
+    is imported from ImageAssembly so there is one source of truth for which
+    FITS keywords hold which amplifier's read noise.
 
     Args:
         l1_obj: KPF1 data object (post-ImageAssembly).
@@ -27,23 +31,14 @@ class PlotL1:
         if 'PRIMARY' in l1_obj.headers:
             self.name = l1_obj.headers['PRIMARY'].get('OBJECT', '')
 
-    _RN_KEYS = {
-        'GREEN': [('RNGREEN1', 'RNNGGR1'),
-                  ('RNGREEN2', 'RNNGGR2'),
-                  ('RNGREEN3', 'RNNGGR3'),
-                  ('RNGREEN4', 'RNNGGR4')],
-        'RED':   [('RNRED1', 'RNNGRD1'),
-                  ('RNRED2', 'RNNGRD2'),
-                  ('RNRED3', 'RNNGRD3'),
-                  ('RNRED4', 'RNNGRD4')],
-    }
-
     def _read_noise_values(self, chip):
         """Return (rn_list, rnng_list) from PRIMARY header, or ([], []) if absent."""
         primary = self.l1.headers.get('PRIMARY', {})
         rn_values = []
         rnng_values = []
-        for rn_key, rnng_key in self._RN_KEYS[chip.upper()]:
+        for i in range(1, 5):
+            channel_ext = f'{chip.upper()}_AMP{i}'
+            rn_key, rnng_key = _RN_KEYS[channel_ext]
             if rn_key in primary and rnng_key in primary:
                 rn_values.append(float(primary[rn_key]))
                 rnng_values.append(float(primary[rnng_key]))
