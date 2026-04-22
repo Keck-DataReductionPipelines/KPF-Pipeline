@@ -1,6 +1,5 @@
 """Tests for L1 quicklook plots."""
 
-import os
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -16,9 +15,14 @@ from kpfpipe.data_models.level1 import KPF1
 # Fixtures
 # ---------------------------------------------------------------------------
 
+# 300x300 is large enough to exercise the 100-pixel border stripping used by
+# image()'s percentile scaling without paying for full 4080x4080 arrays.
+_FIXTURE_SHAPE = (300, 300)
+
+
 def _build_synthetic_l1(tmp_path, *, obs_id="KP.20240405.00001.00",
                         object_name="synthetic-l1",
-                        with_readnoise=True, shape=(4080, 4080)):
+                        with_readnoise=True, shape=_FIXTURE_SHAPE):
     """Create a synthetic L1 FITS file with assembled CCDs and read-noise headers."""
     fn = str(tmp_path / f"{obs_id}_L1.fits")
     rng = np.random.default_rng(42)
@@ -122,7 +126,7 @@ class TestImage:
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image('green')
         img = fig.axes[0].get_images()[0].get_array()
-        assert img.shape == (4080, 4080)
+        assert img.shape == _FIXTURE_SHAPE
         plt.close(fig)
 
     def test_read_noise_annotation_present(self, synthetic_l1):

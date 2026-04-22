@@ -58,6 +58,11 @@ def main():
     if args.output_dir:
         output_dir = args.output_dir
     elif args.config:
+        if not obs_id:
+            parser.error(
+                f"Could not determine obs_id from {input_file}. "
+                "Pass --obs_id explicitly or --output_dir to bypass obs_id-based path building."
+            )
         config = ConfigHandler(args.config)
         params = config.get_params(["DATA_DIRS"])
         data_root = params.get("KPF_DATA_OUTPUT", "/data/kpf-next/")
