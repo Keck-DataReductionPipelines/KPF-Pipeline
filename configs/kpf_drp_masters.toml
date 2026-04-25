@@ -11,3 +11,5 @@ fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 [DARK]
 
 [FLAT]
+
+[WLS]

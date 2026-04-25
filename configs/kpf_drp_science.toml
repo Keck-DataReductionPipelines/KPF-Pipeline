@@ -13,7 +13,10 @@ readnoise_sigma = 10.0
 [MODULE_CALIBRATION_ASSOCIATION]
 masters_search_window_days = [-1, 0]
 
-[MODULE_IMAGE_PRCESSING]
+[MODULE_IMAGE_PROCESSING]
+bias = True
+dark = False
+flat = False
 
 [MODULE_SPECTRAL_EXTRACTION]
 extraction_method = "box"
