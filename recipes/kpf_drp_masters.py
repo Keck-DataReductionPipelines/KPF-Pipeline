@@ -3,7 +3,7 @@ import os
 from kpfpipe.modules.masters.bias import Bias
 #from kpfpipe.modules.masters.dark import Dark
 #from kpfpipe.modules.masters.flat import Flat
-#from kpfpipe.modules.masters.wls import WLS
+from kpfpipe.modules.masters.wls import WLS
 
 from kpfpipe.utils.kpf import get_obs_id
 from kpfpipe.utils.pipeline import build_filepath, build_l0_file_lists, build_mini_database
@@ -46,11 +46,13 @@ def main(config, args):
     #    flat_l1 = flat_handler.make_master_l1()
     #    flat_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='flat'))
 
-    # wavelength solution (not yet implemented)
-    #for files in build_l0_file_lists('thar-wls', mini_db=mini_db):
-    #    wls_handler = WLS(files, config)
-    #    wls_l1 = wls_handler.make_master_l1()
-    #    wls_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='thar-wls'))
+    # wavelength solution
+    for files in build_l0_file_lists('thar-wls', mini_db=mini_db):
+        wls_handler = WLS(files, config)
+        wls_l2_list = wls_handler.process_stack_l0_to_l2()
+
+        #for l2 in wls_l2_list:
+        #    l2.to_fits(...)
 
     print("\n\n=== exiting kpf_drp_masters pipeline ===\n\n")
 
