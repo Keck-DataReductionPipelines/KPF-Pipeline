@@ -13,3 +13,18 @@ fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 [FLAT]
 
 [WLS]
+
+[MODULE_IMAGE_ASSEMBLY]
+overscan_method = "rowmedian"
+readnoise_sigma = 10.0
+
+[MODULE_CALIBRATION_ASSOCIATION]
+masters_search_window_days = [-1, 0]
+
+[MODULE_IMAGE_PROCESSING]
+bias = true
+dark = false
+flat = false
+
+[MODULE_SPECTRAL_EXTRACTION]
+extraction_method = "box"
