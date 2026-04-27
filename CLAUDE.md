@@ -94,6 +94,14 @@ Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/
 
 The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (all OrderedDicts), plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. The base `set_data()`/`set_header()` use `.keys()` checks that bypass `__contains__` overrides, so KPF2/KPF4 override these methods with a `hasattr` guard to resolve aliases during init before the dicts are upgraded.
 
+### QLP and QC
+
+`kpfpipe/qlp/` — quicklook plots. Reads data products and renders matplotlib figures. No computation; any metric shown on a plot is pulled from a FITS header or extension that a pipeline module already populated. Detector-geometry helpers (amp counting, orientation) are owned by `ImageAssembly`; QLP imports what it needs (e.g. `_RN_KEYS`, `count_amplifiers`, `orient_channels`) rather than duplicating the logic.
+
+QC (future) will follow the same pattern: read data products, make pass/fail decisions, no computation.
+
+There is no separate "Diagnostics" layer as there was in v2.12 — the computation-of-metrics role is absorbed into the pipeline modules that own each step, so there is one home for detector/instrument knowledge.
+
 ## Design Principles
 
 From the project charter — these guide all implementation decisions:
