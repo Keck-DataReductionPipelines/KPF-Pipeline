@@ -228,6 +228,114 @@ class TestPerformShapes:
 
 
 # ---------------------------------------------------------------------------
+# NaN / zero-flux QC metric header tests
+# ---------------------------------------------------------------------------
+
+class TestNanZeroMetrics:
+    """Verify NANSCI1..NANCAL and ZEROFRAC headers are written by perform()."""
+
+    @pytest.fixture
+    def mock_ffi_arrays(self):
+        """Return pre-built (chip, fiber) arrays matching real detector dims.
+        All values are 1.0 (no NaNs, no zeros)."""
+        chips  = ['GREEN', 'RED']
+        fibers = ['CAL', 'SCI1', 'SCI2', 'SCI3', 'SKY']
+        norder = {'GREEN': NORDER_GREEN, 'RED': NORDER_RED}
+        arrays = {}
+        for chip in chips:
+            for fiber in fibers:
+                n = norder[chip]
+                arrays[f'{chip}_{fiber}_FLUX'] = np.ones((n, NCOL), dtype=np.float32)
+                arrays[f'{chip}_{fiber}_VAR']  = np.ones((n, NCOL), dtype=np.float32)
+        return arrays
+
+    def _make_se_and_l2(self, minimal_l1, arrays, monkeypatch):
+        """Helper: monkeypatch extract_ffi and call perform()."""
+        monkeypatch.setattr(
+            SpectralExtraction, 'extract_ffi',
+            lambda self, chip, fibers, method: {
+                k: v for k, v in arrays.items() if k.startswith(chip)
+            }
+        )
+        se = SpectralExtraction(minimal_l1)
+        return se.perform()
+
+    def test_nan_headers_exist(self, minimal_l1, mock_ffi_arrays, monkeypatch):
+        """All five NAN* header keys must be present after perform()."""
+        l2 = self._make_se_and_l2(minimal_l1, mock_ffi_arrays, monkeypatch)
+        primary = l2.headers['PRIMARY']
+        for key in ['NANSCI1', 'NANSCI2', 'NANSCI3', 'NANSKY', 'NANCAL']:
+            assert key in primary, f"Missing header key: {key}"
+
+    def test_zerofrac_header_exists(self, minimal_l1, mock_ffi_arrays, monkeypatch):
+        """ZEROFRAC header key must be present after perform()."""
+        l2 = self._make_se_and_l2(minimal_l1, mock_ffi_arrays, monkeypatch)
+        assert 'ZEROFRAC' in l2.headers['PRIMARY']
+
+    @staticmethod
+    def _hval(raw):
+        """Unpack header value from (value, comment) tuple or plain value."""
+        return raw[0] if isinstance(raw, tuple) else raw
+
+    def test_zero_nan_arrays_produce_nan_counts_zero(self, minimal_l1, mock_ffi_arrays, monkeypatch):
+        """All-ones arrays should yield NAN* == 0 for every fiber."""
+        l2 = self._make_se_and_l2(minimal_l1, mock_ffi_arrays, monkeypatch)
+        primary = l2.headers['PRIMARY']
+        for key in ['NANSCI1', 'NANSCI2', 'NANSCI3', 'NANSKY', 'NANCAL']:
+            val = self._hval(primary[key])
+            assert val == 0, f"{key} should be 0 but got {val}"
+
+    def test_injected_nan_in_green_sci1_flux(self, minimal_l1, mock_ffi_arrays, monkeypatch):
+        """One NaN injected into GREEN_SCI1_FLUX must yield NANSCI1==1 and others==0."""
+        mock_ffi_arrays['GREEN_SCI1_FLUX'][0, 0] = np.nan
+        l2 = self._make_se_and_l2(minimal_l1, mock_ffi_arrays, monkeypatch)
+        primary = l2.headers['PRIMARY']
+        val = self._hval(primary['NANSCI1'])
+        assert val == 1, f"NANSCI1 should be 1 but got {val}"
+        for key in ['NANSCI2', 'NANSCI3', 'NANSKY', 'NANCAL']:
+            val = self._hval(primary[key])
+            assert val == 0, f"{key} should be 0 but got {val}"
+
+    def test_zerofrac_all_zero(self, minimal_l1, monkeypatch):
+        """All-zero FLUX arrays must yield ZEROFRAC == 1.0."""
+        chips  = ['GREEN', 'RED']
+        fibers = ['CAL', 'SCI1', 'SCI2', 'SCI3', 'SKY']
+        norder = {'GREEN': NORDER_GREEN, 'RED': NORDER_RED}
+        arrays = {}
+        for chip in chips:
+            for fiber in fibers:
+                n = norder[chip]
+                arrays[f'{chip}_{fiber}_FLUX'] = np.zeros((n, NCOL), dtype=np.float32)
+                arrays[f'{chip}_{fiber}_VAR']  = np.ones((n, NCOL), dtype=np.float32)
+        l2 = self._make_se_and_l2(minimal_l1, arrays, monkeypatch)
+        val = self._hval(l2.headers['PRIMARY']['ZEROFRAC'])
+        assert val == pytest.approx(1.0)
+
+    def test_zerofrac_all_ones(self, minimal_l1, mock_ffi_arrays, monkeypatch):
+        """All-ones FLUX arrays must yield ZEROFRAC == 0.0."""
+        l2 = self._make_se_and_l2(minimal_l1, mock_ffi_arrays, monkeypatch)
+        val = self._hval(l2.headers['PRIMARY']['ZEROFRAC'])
+        assert val == pytest.approx(0.0)
+
+    def test_zerofrac_half_zero(self, minimal_l1, monkeypatch):
+        """GREEN FLUX arrays all zero, RED all ones → ZEROFRAC == green_pixels / total_pixels."""
+        chips  = ['GREEN', 'RED']
+        fibers = ['CAL', 'SCI1', 'SCI2', 'SCI3', 'SKY']
+        norder = {'GREEN': NORDER_GREEN, 'RED': NORDER_RED}
+        arrays = {}
+        for chip in chips:
+            for fiber in fibers:
+                n = norder[chip]
+                fill = 0.0 if chip == 'GREEN' else 1.0
+                arrays[f'{chip}_{fiber}_FLUX'] = np.full((n, NCOL), fill, dtype=np.float32)
+                arrays[f'{chip}_{fiber}_VAR']  = np.ones((n, NCOL), dtype=np.float32)
+        l2 = self._make_se_and_l2(minimal_l1, arrays, monkeypatch)
+        expected = NORDER_GREEN / (NORDER_GREEN + NORDER_RED)  # per-fiber ratio, same for all
+        val = self._hval(l2.headers['PRIMARY']['ZEROFRAC'])
+        assert val == pytest.approx(expected, rel=1e-5)
+
+
+# ---------------------------------------------------------------------------
 # Regression tests (real L0 data → assemble L1 → extract)
 # ---------------------------------------------------------------------------
 
