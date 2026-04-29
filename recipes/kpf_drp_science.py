@@ -10,6 +10,7 @@ from kpfpipe.modules.spectral_extraction import SpectralExtraction
 #from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 #from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 
+from kpfpipe.qc import QCL1, QCL2
 from kpfpipe.utils.pipeline import build_filepath
 
 
@@ -39,9 +40,15 @@ def main(config, args):
     image_processing = ImageProcessing(l1, config)
     l1 = image_processing.perform()
 
+    # Run L1 QC (writes ISGOOD and per-check headers to PRIMARY)
+    QCL1(l1).run()
+
     # extract 2D --> 1D spectra
     spectral_extraction = SpectralExtraction(l1, config)
     l2 = spectral_extraction.perform()
+
+    # Run L2 QC (writes ISGOOD and per-check headers to PRIMARY)
+    QCL2(l2).run()
 
     # determine wavelength calibration using WLS master
     #wavelength_calibration = WavelengthCalibration(l2, config)
