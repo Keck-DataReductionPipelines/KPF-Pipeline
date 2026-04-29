@@ -468,35 +468,27 @@ class SpectralExtraction:
         # QC metrics written to PRIMARY header
         # ------------------------------------------------------------------
 
-        # Per-fiber NaN counts (summed across both chips)
+        # Per-fiber NaN counts (summed across both chips). Write all five
+        # NAN* keys unconditionally — fibers not extracted in this run report 0.
+        # This keeps the L2 header schema consistent so downstream consumers
+        # (e.g. QCL2.flux_finite_fraction) can rely on the keys being present.
         fiber_to_key = {
-            'SCI1': 'NANSCI1',
-            'SCI2': 'NANSCI2',
-            'SCI3': 'NANSCI3',
-            'SKY':  'NANSKY',
-            'CAL':  'NANCAL',
+            'SCI1': ('NANSCI1', 'NaN pixel count, SCI1 (green+red)'),
+            'SCI2': ('NANSCI2', 'NaN pixel count, SCI2 (green+red)'),
+            'SCI3': ('NANSCI3', 'NaN pixel count, SCI3 (green+red)'),
+            'SKY':  ('NANSKY',  'NaN pixel count, SKY (green+red)'),
+            'CAL':  ('NANCAL',  'NaN pixel count, CAL (green+red)'),
         }
-        fiber_nan_comments = {
-            'SCI1': 'NaN pixel count, SCI1 (green+red)',
-            'SCI2': 'NaN pixel count, SCI2 (green+red)',
-            'SCI3': 'NaN pixel count, SCI3 (green+red)',
-            'SKY':  'NaN pixel count, SKY (green+red)',
-            'CAL':  'NaN pixel count, CAL (green+red)',
-        }
-        for fiber in fibers:
-            fiber_upper = fiber.upper()
-            if fiber_upper not in fiber_to_key:
-                continue
+        extracted_fibers = {f.upper() for f in fibers}
+        for fiber, (hdr_key, comment) in fiber_to_key.items():
             nan_count = 0
-            for chip in chips:
-                key = f'{chip.upper()}_{fiber_upper}_FLUX'
-                arr = l2_obj.data.get(key)
-                if arr is not None:
-                    nan_count += int(np.sum(np.isnan(arr)))
-            hdr_key = fiber_to_key[fiber_upper]
-            l2_obj.headers['PRIMARY'][hdr_key] = (
-                nan_count, fiber_nan_comments[fiber_upper]
-            )
+            if fiber in extracted_fibers:
+                for chip in chips:
+                    key = f'{chip.upper()}_{fiber}_FLUX'
+                    arr = l2_obj.data.get(key)
+                    if arr is not None:
+                        nan_count += int(np.sum(np.isnan(arr)))
+            l2_obj.headers['PRIMARY'][hdr_key] = (nan_count, comment)
 
         # Total zero-flux fraction across all per-chip FLUX extensions
         total_zero = 0

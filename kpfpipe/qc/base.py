@@ -18,8 +18,11 @@ class QC:
     def run(self):
         """Run all checks, write each result to PRIMARY, aggregate ISGOOD.
 
-        Returns dict {keyword: (passed, comment)}.
+        Returns dict {keyword: (passed, comment)}. Resets self.results at the
+        start so calling run() repeatedly on the same instance is deterministic.
         """
+        self.results = {}
+
         for name, fn in self._iter_checks():
             try:
                 passed = fn()
@@ -34,10 +37,10 @@ class QC:
             self.kpf.headers["PRIMARY"][kw] = (1 if passed else 0, comment)
 
         is_good = all(p for p, _ in self.results.values())
-        self.kpf.headers["PRIMARY"]["ISGOOD"] = (
-            1 if is_good else 0,
-            "QC: all checks pass",
+        is_good_comment = (
+            "QC: all checks pass" if is_good else "QC: one or more checks failed"
         )
+        self.kpf.headers["PRIMARY"]["ISGOOD"] = (1 if is_good else 0, is_good_comment)
         return self.results
 
     def _iter_checks(self):

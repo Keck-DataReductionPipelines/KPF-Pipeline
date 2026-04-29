@@ -21,7 +21,6 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.qc import QCL0, QCL1, QCL2
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.kpf import get_datecode
 from kpfpipe.utils.pipeline import build_filepath
 
 _LEVEL_MAP = {

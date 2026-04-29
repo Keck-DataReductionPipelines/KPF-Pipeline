@@ -285,6 +285,34 @@ class TestNanZeroMetrics:
             val = self._hval(primary[key])
             assert val == 0, f"{key} should be 0 but got {val}"
 
+    def test_nan_headers_all_present_for_fiber_subset(self, minimal_l1, monkeypatch):
+        """Even when a subset of fibers is extracted, all 5 NAN* headers must
+        be present (with 0 for non-extracted fibers). Downstream consumers
+        (QCL2.flux_finite_fraction) rely on the schema being complete."""
+        chips = ['GREEN', 'RED']
+        fibers = ['SCI2']  # subset
+        norder = {'GREEN': NORDER_GREEN, 'RED': NORDER_RED}
+        arrays = {}
+        for chip in chips:
+            for fiber in fibers:
+                n = norder[chip]
+                arrays[f'{chip}_{fiber}_FLUX'] = np.ones((n, NCOL), dtype=np.float32)
+                arrays[f'{chip}_{fiber}_VAR']  = np.ones((n, NCOL), dtype=np.float32)
+
+        monkeypatch.setattr(
+            SpectralExtraction, 'extract_ffi',
+            lambda self, chip, fibers_arg, method: {
+                k: v for k, v in arrays.items() if k.startswith(chip)
+            }
+        )
+        se = SpectralExtraction(minimal_l1, config={'fibers': fibers})
+        l2 = se.perform(fibers=fibers)
+
+        primary = l2.headers['PRIMARY']
+        for key in ['NANSCI1', 'NANSCI2', 'NANSCI3', 'NANSKY', 'NANCAL']:
+            assert key in primary, f"Missing header key: {key}"
+            assert self._hval(primary[key]) == 0, f"{key} should be 0 (not extracted or no NaNs)"
+
     def test_injected_nan_in_green_sci1_flux(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         """One NaN injected into GREEN_SCI1_FLUX must yield NANSCI1==1 and others==0."""
         mock_ffi_arrays['GREEN_SCI1_FLUX'][0, 0] = np.nan

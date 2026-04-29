@@ -178,7 +178,7 @@ class TestQCBase:
             check_fail._qc_comment = "fails"
 
         MyQC(obj).run()
-        assert obj.headers["PRIMARY"]["ISGOOD"] == (0, "QC: all checks pass")
+        assert obj.headers["PRIMARY"]["ISGOOD"] == (0, "QC: one or more checks failed")
         assert obj.headers["PRIMARY"]["CHKOK"]   == (1, "passes")
         assert obj.headers["PRIMARY"]["CHKFAIL"] == (0, "fails")
 
@@ -203,6 +203,32 @@ class TestQCBase:
         results = EmptyQC(obj).run()
         assert results == {}
         assert obj.headers["PRIMARY"]["ISGOOD"] == (1, "QC: all checks pass")
+
+    def test_repeated_run_resets_results(self):
+        """Calling run() twice on the same instance should not accumulate state.
+
+        First run with one failing check → ISGOOD=0. Mutate underlying state to make
+        the check pass, run again → ISGOOD=1. Without the reset, the failed result
+        from the first run would still be in self.results and ISGOOD would stay 0.
+        """
+        obj = self._make_obj()
+        obj.flag = False
+
+        class MyQC(QC):
+            def check_flag(self):
+                return self.kpf.flag
+            check_flag._qc_key = "FLAG"
+            check_flag._qc_comment = "flag check"
+
+        qc = MyQC(obj)
+        qc.run()
+        assert obj.headers["PRIMARY"]["ISGOOD"] == (0, "QC: one or more checks failed")
+        assert qc.results == {"FLAG": (False, "flag check")}
+
+        obj.flag = True
+        qc.run()
+        assert obj.headers["PRIMARY"]["ISGOOD"] == (1, "QC: all checks pass")
+        assert qc.results == {"FLAG": (True, "flag check")}
 
 
 # ---------------------------------------------------------------------------
@@ -492,10 +518,7 @@ class TestQCL2:
     def test_extraction_present_fail_one_trace_cleared(self):
         """Clearing a trace array (set to empty array) should fail the check."""
         kpf2 = _make_kpf2_with_flux()
-        # Directly set the canonical TRACE to empty so chip views are size=0.
-        from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-        from collections import OrderedDict
-        # Resolve alias SKY_FLUX → TRACE1_FLUX and set to empty
+        # Resolve alias SKY_FLUX → TRACE1_FLUX and set to empty so chip views are size=0.
         kpf2.data["SKY_FLUX"] = np.array([], dtype=np.float32)
         assert QCL2(kpf2).extraction_present() is False
 
@@ -613,7 +636,7 @@ class TestQCScript:
         )
 
     def test_failure_injected_exit_1_isgood_fail(self, tmp_path):
-        """L0 with EXPTIME=0 → exit code 1, stdout contains 'ISGOOD: FAIL'."""
+        """L0 with negative EXPTIME → exit code 1, stdout contains 'ISGOOD: FAIL'."""
         fixture = tmp_path / "KP.20240405.00002.00.fits"
         _write_l0_fixture(str(fixture), passing=False)
 
