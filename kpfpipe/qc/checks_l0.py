@@ -41,18 +41,27 @@ class QCL0(QC):
     header_keywords_present._qc_key = "KWRDPRL0"
     header_keywords_present._qc_comment = "QC: required L0 PRIMARY keywords present"
 
-    def exptime_positive(self):
-        """EXPTIME > 0."""
+    def exptime_sane(self):
+        """EXPTIME is present, finite, and non-negative.
+
+        Bias frames legitimately have EXPTIME=0, so we don't require strictly
+        positive. Tightening this requires frame-type-aware filtering, which
+        is deferred until QC gains spectrum-type gating.
+        """
         hdr = self.kpf.headers["PRIMARY"]
         if "EXPTIME" not in hdr:
             return False
         val = hdr["EXPTIME"]
         if isinstance(val, tuple):
             val = val[0]
-        return float(val) > 0
+        try:
+            f = float(val)
+        except (TypeError, ValueError):
+            return False
+        return np.isfinite(f) and f >= 0
 
-    exptime_positive._qc_key = "EXPTIMOK"
-    exptime_positive._qc_comment = "QC: EXPTIME > 0"
+    exptime_sane._qc_key = "EXPTIMOK"
+    exptime_sane._qc_comment = "QC: EXPTIME present, finite, non-negative"
 
     def not_junk(self):
         """obs_id not in reference/junk_observations.csv."""

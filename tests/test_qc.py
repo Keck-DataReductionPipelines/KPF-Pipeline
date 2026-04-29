@@ -243,22 +243,23 @@ class TestQCL0:
         del l0.headers["PRIMARY"]["OFNAME"]
         assert QCL0(l0).header_keywords_present() is False
 
-    def test_exptime_positive_pass(self, tmp_path):
+    def test_exptime_sane_pass_positive(self, tmp_path):
         l0 = _make_kpf0(tmp_path, exptime=300.0)
-        assert QCL0(l0).exptime_positive() is True
+        assert QCL0(l0).exptime_sane() is True
 
-    def test_exptime_positive_fail_zero(self, tmp_path):
+    def test_exptime_sane_pass_zero(self, tmp_path):
+        """Bias frames legitimately have EXPTIME=0; should pass."""
         l0 = _make_kpf0(tmp_path, exptime=0.0)
-        assert QCL0(l0).exptime_positive() is False
+        assert QCL0(l0).exptime_sane() is True
 
-    def test_exptime_positive_fail_negative(self, tmp_path):
+    def test_exptime_sane_fail_negative(self, tmp_path):
         l0 = _make_kpf0(tmp_path, exptime=-1.0)
-        assert QCL0(l0).exptime_positive() is False
+        assert QCL0(l0).exptime_sane() is False
 
-    def test_exptime_positive_fail_missing(self, tmp_path):
+    def test_exptime_sane_fail_missing(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
         del l0.headers["PRIMARY"]["EXPTIME"]
-        assert QCL0(l0).exptime_positive() is False
+        assert QCL0(l0).exptime_sane() is False
 
     def test_not_junk_pass_no_file(self, tmp_path, monkeypatch):
         """No junk CSV → pass by default."""
@@ -564,12 +565,12 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def _write_l0_fixture(path, *, passing=True):
     """Write a minimal L0 FITS fixture at path.
 
-    passing=True  → all QCL0 checks pass (valid header keywords, EXPTIME>0, amps present).
-    passing=False → inject a failure (EXPTIME=0 so EXPTIMOK fails).
+    passing=True  → all QCL0 checks pass (valid header keywords, finite EXPTIME, amps present).
+    passing=False → inject a failure (negative EXPTIME so EXPTIMOK fails).
     """
     primary = fits.PrimaryHDU()
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-    primary.header["EXPTIME"] = 60.0 if passing else 0.0
+    primary.header["EXPTIME"] = 60.0 if passing else -1.0
     primary.header["OBJECT"] = "synthetic"
     primary.header["OFNAME"] = os.path.basename(path)
     primary.header["IMTYPE"] = "Object"
