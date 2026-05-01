@@ -464,47 +464,6 @@ class SpectralExtraction:
                 l2_obj.set_data(f'{chip}_{fiber}_FLUX', l2_arrays[f'{chip}_{fiber}_FLUX'])
                 l2_obj.set_data(f'{chip}_{fiber}_VAR',  l2_arrays[f'{chip}_{fiber}_VAR'])
 
-        # ------------------------------------------------------------------
-        # QC metrics written to PRIMARY header
-        # ------------------------------------------------------------------
-
-        # Per-fiber NaN counts (summed across both chips). Write all five
-        # NAN* keys unconditionally — fibers not extracted in this run report 0.
-        # This keeps the L2 header schema consistent so downstream consumers
-        # (e.g. QCL2.flux_finite_fraction) can rely on the keys being present.
-        fiber_to_key = {
-            'SCI1': ('NANSCI1', 'NaN pixel count, SCI1 (green+red)'),
-            'SCI2': ('NANSCI2', 'NaN pixel count, SCI2 (green+red)'),
-            'SCI3': ('NANSCI3', 'NaN pixel count, SCI3 (green+red)'),
-            'SKY':  ('NANSKY',  'NaN pixel count, SKY (green+red)'),
-            'CAL':  ('NANCAL',  'NaN pixel count, CAL (green+red)'),
-        }
-        extracted_fibers = {f.upper() for f in fibers}
-        for fiber, (hdr_key, comment) in fiber_to_key.items():
-            nan_count = 0
-            if fiber in extracted_fibers:
-                for chip in chips:
-                    key = f'{chip.upper()}_{fiber}_FLUX'
-                    arr = l2_obj.data.get(key)
-                    if arr is not None:
-                        nan_count += int(np.sum(np.isnan(arr)))
-            l2_obj.headers['PRIMARY'][hdr_key] = (nan_count, comment)
-
-        # Total zero-flux fraction across all per-chip FLUX extensions
-        total_zero = 0
-        total_pix  = 0
-        for chip in chips:
-            for fiber in fibers:
-                key = f'{chip.upper()}_{fiber.upper()}_FLUX'
-                arr = l2_obj.data.get(key)
-                if arr is not None:
-                    total_zero += int(np.sum(arr == 0))
-                    total_pix  += arr.size
-        zerofrac = round(float(total_zero / total_pix) if total_pix > 0 else 0.0, 6)
-        l2_obj.headers['PRIMARY']['ZEROFRAC'] = (
-            zerofrac, 'Fraction of L2 flux pixels equal to zero'
-        )
-
         l2_obj.receipt_add_entry('spectral_extraction', 'PASS')
 
         self._results = {
