@@ -16,11 +16,11 @@ def gaussian_jac(theta, x):
     e = np.exp(-dx**2 / (2*sigma**2))
 
     J = np.empty((x.size, 4))
-    J[:, 0] = a * e * dx / sigma**2
-    J[:, 1] = a * e * dx**2 / sigma**3
-    J[:, 2] = e
-    J[:, 3] = 1.0
-    
+    J[:, 0] = 1.0
+    J[:, 1] = e
+    J[:, 2] = a * e * dx / sigma**2
+    J[:, 3] = a * e * dx**2 / sigma**3
+
     return J
 
 
@@ -33,33 +33,48 @@ def gaussian_theta0(x, y):
     return [b0, a0, mu0, sigma0]
 
 
-def _res_wrapper(theta, x, y, func):
+_FUNCTIONS = {
+    'gaussian': (gaussian_dist, gaussian_jac, gaussian_theta0),
+}
+
+
+def _res_wrapper(theta, x, y, func, jac):
     """
     Helper function for optimize_lsq
     """
     return func(theta, x) - y
 
 
-def _jac_wrapper(theta, x, y, jac):
+def _jac_wrapper(theta, x, y, func, jac):
     """
     Helper function for optimize_lsq
     """
     return jac(theta, x)
 
 
-def optimize_lsq(theta0, x, y, func, jac):
+def optimize_lsq(x, y, linemodel):
     """
-    Wrapper function for scipy.optimize.least_squares
+    Fit a 1D line model to (x, y) by non-linear least squares.
+
+    Looks up the model function, Jacobian, and theta0 initializer for the
+    given linemodel name and dispatches scipy.optimize.least_squares.
     """
-    result = least_squares(_res_wrapper, 
-                           theta0, 
-                           args = (x, y, func),
-                           jac = _jac_wrapper,
-                           method = 'lm', 
+    try:
+        func, jac, theta0_func = _FUNCTIONS[linemodel]
+    except KeyError:
+        raise ValueError(f"Unsupported line function: {linemodel}")
+
+    theta0 = theta0_func(x, y)
+
+    result = least_squares(_res_wrapper,
+                           theta0,
+                           args=(x, y, func, jac),
+                           jac=_jac_wrapper,
+                           method='lm',
                            )
-    
+
     theta, rms = result.x, np.std(result.fun)
-    
+
     return theta, rms
 
 

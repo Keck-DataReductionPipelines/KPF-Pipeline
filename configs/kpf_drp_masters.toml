@@ -13,6 +13,7 @@ fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 [FLAT]
 
 [WLS]
+linemodel = "gaussian"
 
 [MODULE_IMAGE_ASSEMBLY]
 overscan_method = "rowmedian"
