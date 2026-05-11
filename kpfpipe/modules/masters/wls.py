@@ -23,6 +23,8 @@ DEFAULTS.update({
     'polyorder_f': 2,
 })
 
+FIBER_INDEX_MAP = {'SKY':0, 'SCI1':1, 'SCI2':2, 'SCI3':3, 'CAL':4}
+
 class WLS(BaseMasterModule):
     """
     Construct a master wavelength solution from a stack of WLS L0 exposures.
@@ -390,15 +392,21 @@ class WLS(BaseMasterModule):
         if polyorder_f is None:
             polyorder_f = self.polyorder_f
 
-        fibers = list(np.unique(lines['f']))
+        fibers = list(set(lines['f']))
 
-        if len(fibers) == 1:
-            pass
-        elif len(fibers) == 3:
-            if not np.isin('SCI1', fibers) or not np.isin('SCI2', fibers) or not np.isin('SCI3', fibers):
-                raise ValueError("expected SCI1 / SCI2 / SCI3")
-        else:
-            raise ValueError(f"expected 1 or 3 fibers, got {len(fibers)}")
+        if (len(fibers) != 1) and (len(fibers) != 3) and (len(fibers) != 5):
+            raise ValueError(f"expected 1, 3, or 5 fibers, got {len(fibers)}")
+        
+        if len(fibers) == 3:
+            expected_fibers = ['SCI1', 'SCI2', 'SCI3']
+        elif len(fibers) == 5:
+            expected_fibers = ['SKY', 'SCI1', 'SCI2', 'SCI3', 'CAL']
+
+        if not (
+            np.all(np.isin(fibers, expected_fibers)) and 
+            np.all(np.isin(expected_fibers, fibers))
+        ):
+            raise ValueError(f"unexpected fibers input: {fibers}")
 
         ncol = self.ccd['ncol']
 
@@ -407,21 +415,24 @@ class WLS(BaseMasterModule):
         _x = 2*lines['x']/ncol - 1
         _m = 2*(lines['m'] - 1)/(norder - 1) - 1
 
-        if len(fibers) == 3:
-            _f = np.array([fiber[-1] for fiber in lines['f']], dtype=int) - 2
+        if len(fibers) != 1:
+            _f = np.array([FIBER_INDEX_MAP[f] for f in lines['f']], dtype=int)
+            _f = (2*_f)/(len(fibers) - 1) - 1
+
 
         # fit Legendre polynomials
-        if len(fibers) == 3:
+        if len(fibers) == 1:
+            V = legendre.legvander2d(_x, _m, deg=[polyorder_x, polyorder_m])
+
+            coeffs, *_ = np.linalg.lstsq(V, lines['w'], rcond=None)
+            coeffs = coeffs.reshape(polyorder_x+1, polyorder_m+1)
+        
+        else:
             V = legendre.legvander3d(_x, _m, _f, deg=[polyorder_x, polyorder_m, polyorder_f])
 
             coeffs, *_ = np.linalg.lstsq(V, lines['w'], rcond=None)
             coeffs = coeffs.reshape(polyorder_x+1, polyorder_m+1, polyorder_f+1)
 
-        elif len(fibers) == 1:
-            V = legendre.legvander2d(_x, _m, deg=[polyorder_x, polyorder_m])
-
-            coeffs, *_ = np.linalg.lstsq(V, lines['w'], rcond=None)
-            coeffs = coeffs.reshape(polyorder_x+1, polyorder_m+1)
 
         return coeffs
     
