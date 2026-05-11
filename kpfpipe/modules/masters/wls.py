@@ -1,9 +1,10 @@
 """
 KPF Master Wavelength Solution construction module.
 """
-import numpy as np
-import pandas as pd
 from astropy.stats import mad_std
+import numpy as np
+from numpy.polynomial import legendre
+import pandas as pd
 
 from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.modules.masters.base import BaseMasterModule
@@ -16,6 +17,10 @@ from kpfpipe.utils.stats import optimize_lsq
 DEFAULTS.update({
     'rough_wls_file': f'{REPO_ROOT}/reference/rough_wls_fallback.csv',
     'linelist_file': f'{REPO_ROOT}/reference/thar_line_list.csv',
+    'linemodel': 'gaussian',
+    'polyorder_x': 6,
+    'polyorder_m': 3,
+    'polyorder_f': 2,
 })
 
 class WLS(BaseMasterModule):
@@ -114,10 +119,9 @@ class WLS(BaseMasterModule):
         list of KPF2
             Extracted L2 objects for all successfully processed frames.
 
-        Raises
-        ------
-        ValueError
-            If more than 20% of frames fail to load.
+        Notes
+        -----
+        Raises ValueError if more than 20% of frames fail to load.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -327,3 +331,270 @@ class WLS(BaseMasterModule):
             lines[k] = np.hstack(lines[k])
 
         return lines
+
+
+    def calculate_wls_coeffs(self,
+                             lines,
+                             norder,
+                             polyorder_x=None,
+                             polyorder_m=None,
+                             polyorder_f=None,
+                             ):
+        """
+        Fit a multivariate Legendre polynomial wavelength solution to
+        fitted line positions.
+
+        Treats wavelength as a smooth function of pixel position (x), order
+        number (m), and (optionally) fiber index (f). Pixel and order
+        variables are rescaled to [-1, 1] before fitting, using the
+        canonical detector ranges (pixel in [0, ncol] and order in
+        [1, norder]) so that the fit and `evaluate_wls_coeffs` share the
+        same parameter space. The 3-fiber case assumes the three KPF
+        science fibers (SCI1, SCI2, SCI3) and maps them to {-1, 0, 1}.
+
+        Parameters
+        ----------
+        lines : dict of ndarray
+            Flat 1D arrays as produced by `fit_line_positions_ffi`, with keys:
+              'w' - reference line wavelengths
+              'x' - fitted pixel positions
+              'm' - 1-indexed order numbers
+              'f' - fiber names
+        norder : int
+            Total number of spectral orders on the chip. Used to rescale
+            the order axis to [-1, 1].
+        polyorder_x : int, optional
+            Polynomial degree along the pixel axis.
+        polyorder_m : int, optional
+            Polynomial degree along the order axis.
+        polyorder_f : int, optional
+            Polynomial degree along the fiber axis (only used for 3-fiber fits).
+
+        Returns
+        -------
+        coeffs : ndarray
+            Legendre coefficient array. Shape is
+            (polyorder_x+1, polyorder_m+1) for a single-fiber fit, or
+            (polyorder_x+1, polyorder_m+1, polyorder_f+1) for a 3-fiber fit.
+
+        Notes
+        -----
+        Raises ValueError if `lines['f']` contains anything other than one
+        fiber or the three science fibers (SCI1, SCI2, SCI3).
+        """
+        # sanitize inputs
+        if polyorder_x is None:
+            polyorder_x = self.polyorder_x
+        if polyorder_m is None:
+            polyorder_m = self.polyorder_m
+        if polyorder_f is None:
+            polyorder_f = self.polyorder_f
+
+        fibers = list(np.unique(lines['f']))
+
+        if len(fibers) == 1:
+            pass
+        elif len(fibers) == 3:
+            if not np.isin('SCI1', fibers) or not np.isin('SCI2', fibers) or not np.isin('SCI3', fibers):
+                raise ValueError("expected SCI1 / SCI2 / SCI3")
+        else:
+            raise ValueError(f"expected 1 or 3 fibers, got {len(fibers)}")
+
+        ncol = self.ccd['ncol']
+
+        # rescale position variables to [-1,1] for Legendre fitting; use
+        # canonical detector ranges so this matches evaluate_wls_coeffs.
+        _x = 2*lines['x']/ncol - 1
+        _m = 2*(lines['m'] - 1)/(norder - 1) - 1
+
+        if len(fibers) == 3:
+            _f = np.array([fiber[-1] for fiber in lines['f']], dtype=int) - 2
+
+        # fit Legendre polynomials
+        if len(fibers) == 3:
+            V = legendre.legvander3d(_x, _m, _f, deg=[polyorder_x, polyorder_m, polyorder_f])
+
+            coeffs, *_ = np.linalg.lstsq(V, lines['w'], rcond=None)
+            coeffs = coeffs.reshape(polyorder_x+1, polyorder_m+1, polyorder_f+1)
+
+        elif len(fibers) == 1:
+            V = legendre.legvander2d(_x, _m, deg=[polyorder_x, polyorder_m])
+
+            coeffs, *_ = np.linalg.lstsq(V, lines['w'], rcond=None)
+            coeffs = coeffs.reshape(polyorder_x+1, polyorder_m+1)
+
+        return coeffs
+    
+
+    @staticmethod
+    def evaluate_wls_coeffs(coeffs, ncol, norder, nfiber):
+        """
+        Evaluate a Legendre wavelength solution onto a regular grid.
+
+        Parameters
+        ----------
+        coeffs : ndarray
+            Legendre coefficient array from `calculate_wls_coeffs`. Either
+            2D (single-fiber) or 3D (three-fiber).
+        ncol : int
+            Number of detector columns at which to evaluate.
+        norder : int
+            Number of spectral orders at which to evaluate.
+        nfiber : int
+            Number of fibers at which to evaluate. Ignored for 2D `coeffs`.
+
+        Returns
+        -------
+        W : ndarray
+            Wavelength array of shape (norder, ncol) for 2D `coeffs`, or
+            (norder, ncol, nfiber) for 3D `coeffs`.
+        """
+        _x = np.linspace(-1, 1, ncol)
+        _y = np.linspace(-1, 1, norder)
+        _z = np.linspace(-1, 1, nfiber)
+
+        if coeffs.ndim == 2:
+            X, Y = np.meshgrid(_x, _y)
+            W = legendre.legval2d(X, Y, coeffs)
+        
+        elif coeffs.ndim == 3:
+            X, Y, Z = np.meshgrid(_x, _y, _z)
+            W = legendre.legval3d(X, Y, Z, coeffs)
+
+        else:
+            raise ValueError(f"coeffs.ndim expected to be 2 or 3, got {coeffs.ndim}")
+
+        return W
+
+
+
+    def compute_wls_from_stack(self,
+                               chip,
+                               fibers,
+                               linelist=None,
+                               linemodel=None,
+                               window=5,
+                               qc_sigma=2.5,
+                               polyorder_x=None,
+                               polyorder_m=None,
+                               polyorder_f=None,
+                               verbose=True,
+                               return_stacks=True,
+                               ):
+        """
+        Compute a master wavelength solution from a stack of extracted L2 frames.
+
+        For each L2 frame in `self._l2_obj_cache` (populated by
+        `process_stack_l0_to_l2`), fits line positions across the requested
+        fibers, fits a Legendre WLS to those line positions, then combines
+        the per-frame coefficient sets via per-coefficient outlier-rejected
+        averaging. The averaged coefficients are evaluated to produce a
+        master wavelength array.
+
+        Parameters
+        ----------
+        chip : str
+            Chip identifier, i.e. 'GREEN' or 'RED'.
+        fibers : list of str
+            Fiber identifiers, e.g. ['SCI1', 'SCI2', 'SCI3'] or a single fiber.
+        linelist : ndarray, optional
+            Reference line wavelengths. Defaults to self.linelist.
+        linemodel : str, optional
+            Line profile model name. Defaults to self.linemodel.
+        window : int, optional
+            Half-width of the per-line fit window, in pixels.
+        qc_sigma : float, optional
+            Outlier rejection threshold applied to per-frame Legendre
+            coefficients, and passed through to the per-line QC in
+            `fit_line_positions_1D`.
+        polyorder_x : int, optional
+            Polynomial degree along the pixel axis.
+        polyorder_m : int, optional
+            Polynomial degree along the order axis.
+        polyorder_f : int, optional
+            Polynomial degree along the fiber axis (only used for 3-fiber fits).
+        verbose : bool, optional
+            If True, print progress for each frame and fiber.
+        return_stacks : bool, optional
+            If True, also return the per-frame line and coefficient stacks.
+
+        Returns
+        -------
+        W : ndarray
+            Master wavelength array, shape (norder, ncol) or
+            (norder, ncol, nfiber).
+        coeffs_mean : ndarray
+            Outlier-rejected mean Legendre coefficient array.
+        coeffs_stack : ndarray, optional
+            Per-frame coefficient arrays, returned only if `return_stacks=True`.
+        lines_stack : list of dict, optional
+            Per-frame line dicts from `fit_line_positions_ffi`, returned only
+            if `return_stacks=True`.
+
+        Notes
+        -----
+        Raises ValueError if `self._l2_obj_cache` is empty (i.e.,
+        `process_stack_l0_to_l2` has not been run).
+        """
+        if linelist is None:
+            linelist = self.linelist
+        if linemodel is None:
+            linemodel = self.linemodel
+        if polyorder_x is None:
+            polyorder_x = self.polyorder_x
+        if polyorder_m is None:
+            polyorder_m = self.polyorder_m
+        if polyorder_f is None:
+            polyorder_f = self.polyorder_f
+
+        
+        if hasattr(self, '_l2_obj_cache'):
+            l2_obj_list = self._l2_obj_cache
+        else:
+            raise ValueError(
+                "No L2 objects found; please run process_stack_l0_to_l2"
+            )
+        
+        nobs = len(l2_obj_list)
+
+        lines_stack = [None]*nobs
+        coeffs_stack = [None]*nobs
+
+        for i, l2_obj in enumerate(l2_obj_list):
+            if verbose:
+                print(f"\n{i+1} of {nobs}")
+            
+            lines_stack[i] = self.fit_line_positions_ffi(l2_obj, 
+                                                         chip, 
+                                                         fibers, 
+                                                         linelist = linelist,
+                                                         linemodel = linemodel,
+                                                         window = window, 
+                                                         qc_sigma = qc_sigma,
+                                                         verbose = verbose,
+                                                         )
+
+
+
+            coeffs_stack[i] = self.calculate_wls_coeffs(lines_stack[i],
+                                                        self.norder[chip],
+                                                        polyorder_x = polyorder_x,
+                                                        polyorder_m = polyorder_m,
+                                                        polyorder_f = polyorder_f,
+                                                        )
+
+        coeffs_stack = np.array(coeffs_stack)
+        bad = np.abs(coeffs_stack - np.median(coeffs_stack, axis=0)) / mad_std(coeffs_stack, axis=0) > qc_sigma
+        coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0)/np.sum(~bad, axis=0)
+
+        W = self.evaluate_wls_coeffs(coeffs_mean, self.ccd['ncol'], self.norder[chip], len(fibers))
+
+        if return_stacks:
+            return W, coeffs_mean, coeffs_stack, lines_stack
+
+        return W, coeffs_mean
+
+    # ------------------------------------------------------------------
+    # Public entry point
+    # ------------------------------------------------------------------
+

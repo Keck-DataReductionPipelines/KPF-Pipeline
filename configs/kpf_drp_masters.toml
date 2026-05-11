@@ -14,6 +14,9 @@ fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
 [WLS]
 linemodel = "gaussian"
+polyorder_x = 6
+polyorder_m = 3
+polyorder_f = 2
 
 [MODULE_IMAGE_ASSEMBLY]
 overscan_method = "rowmedian"
