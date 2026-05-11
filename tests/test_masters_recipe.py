@@ -21,6 +21,7 @@ from kpfpipe.utils.pipeline import (
     build_l0_file_lists,
     build_filepath,
     build_mini_database,
+    build_qlp_dir,
 )
 
 
@@ -317,6 +318,26 @@ class TestBuildFilepath:
     def test_invalid_obs_id_raises(self):
         with pytest.raises(ValueError, match="valid observation ID"):
             build_filepath("20240405", "L1")
+
+
+# ---------------------------------------------------------------------------
+# build_qlp_dir
+# ---------------------------------------------------------------------------
+
+
+class TestBuildQlpDir:
+
+    def test_l0(self):
+        path = build_qlp_dir("KP.20240405.49597.71", "L0", data_root="/data")
+        assert path == "/data/QLP/20240405/KP.20240405.49597.71/L0"
+
+    def test_l1(self):
+        path = build_qlp_dir("KP.20240405.49597.71", "L1", data_root="/data")
+        assert path == "/data/QLP/20240405/KP.20240405.49597.71/L1"
+
+    def test_invalid_obs_id_raises(self):
+        with pytest.raises(ValueError, match="valid observation ID"):
+            build_qlp_dir("20240405", "L0", data_root="/data")
 
 
 # ---------------------------------------------------------------------------
