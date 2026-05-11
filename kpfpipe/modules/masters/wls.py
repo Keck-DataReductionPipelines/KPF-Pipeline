@@ -16,7 +16,7 @@ from kpfpipe.utils.stats import optimize_lsq
 
 DEFAULTS.update({
     'rough_wls_file': f'{REPO_ROOT}/reference/rough_wls_fallback.csv',
-    'linelist_file': f'{REPO_ROOT}/reference/thar_line_list.csv',
+    'line_list_file': f'{REPO_ROOT}/reference/thar_line_list.csv',
     'linemodel': 'gaussian',
     'polyorder_x': 6,
     'polyorder_m': 3,
@@ -58,7 +58,7 @@ class WLS(BaseMasterModule):
     # ------------------------------------------------------------------
 
     def _load_linelist(self):
-        self.linelist = pd.read_csv(self.linelist_file)['Wavelength'].values
+        self.linelist = pd.read_csv(self.line_list_file)['Wavelength'].values
         return self.linelist
         
     def _load_rough_wls(self):
