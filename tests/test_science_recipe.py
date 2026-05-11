@@ -122,6 +122,16 @@ class TestScienceRecipe:
         l2 = KPF2.from_fits(recipe_output)
         assert 'calibration_association' in l2.receipt['Module_Name'].values
 
+    def test_qlp_l0_pngs_exist(self, recipe_output):
+        qlp_dir = Path(recipe_output).parents[2] / 'QLP' / '20240405' / OBS_ID / 'L0'
+        assert (qlp_dir / f'{OBS_ID}_L0_stitched_image_green_zoomable.png').is_file()
+        assert (qlp_dir / f'{OBS_ID}_L0_stitched_image_red_zoomable.png').is_file()
+
+    def test_qlp_l1_pngs_exist(self, recipe_output):
+        qlp_dir = Path(recipe_output).parents[2] / 'QLP' / '20240405' / OBS_ID / 'L1'
+        assert (qlp_dir / f'{OBS_ID}_L1_image_green_zoomable.png').is_file()
+        assert (qlp_dir / f'{OBS_ID}_L1_image_red_zoomable.png').is_file()
+
 
 # ---------------------------------------------------------------------------
 # Science recipe error paths

@@ -145,7 +145,7 @@ class PlotL0:
                 self.output_dir,
                 f'{self.obs_id}_L0_stitched_image_{chip.lower()}_zoomable.png',
             )
-            fig.savefig(fig_path, dpi=600, facecolor='w')
+            fig.savefig(fig_path, dpi=150, facecolor='w')
 
         return fig
 
