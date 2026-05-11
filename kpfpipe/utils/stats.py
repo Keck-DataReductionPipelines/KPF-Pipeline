@@ -95,14 +95,16 @@ def interpolate_bad_pixels(data, mask, method='local', fill_outside=True):
 
     data_interp = data.copy()
 
-    # local convolution-based method (assumes isolated bad pixels)
+    # local convolution-based method (assumes isolated bad pixels).
+    # Cast kernel and weight mask to the input dtype so scipy.convolve does
+    # not promote float32 image data to float64 in its intermediates.
     if method == 'local':
         kernel = np.array([[1,2,1],
                            [2,0,2],
-                           [1,2,1]], dtype=float) / 12.0
+                           [1,2,1]], dtype=data.dtype) / 12.0
 
         neighbor_sum = convolve(data * good, kernel, mode='mirror')
-        weight = convolve(good.astype(float), kernel, mode='mirror')
+        weight = convolve(good.astype(data.dtype), kernel, mode='mirror')
 
         valid = bad & (weight > 0)
         data_interp[valid] = neighbor_sum[valid] / weight[valid]
