@@ -1,5 +1,7 @@
 import os
 
+import matplotlib.pyplot as plt
+
 from kpfpipe.data_models.level0 import KPF0
 #from kpfpipe.data_models.level1 import KPF1
 
@@ -12,7 +14,20 @@ from kpfpipe.modules.spectral_extraction import SpectralExtraction
 
 from kpfpipe.diagnostics import DiagL1, DiagL2
 from kpfpipe.qc import QCL1, QCL2
+from kpfpipe.qlp.plot_l0 import PlotL0
+from kpfpipe.qlp.plot_l1 import PlotL1
+from kpfpipe.utils.kpf import get_datecode
 from kpfpipe.utils.pipeline import build_filepath
+
+
+def _qlp_dir(data_root, obs_id, level):
+    return os.path.join(data_root, 'QLP', get_datecode(obs_id), obs_id, level)
+
+
+def _run_qlp(plotter):
+    figs = plotter.all()
+    for fig in figs.values():
+        plt.close(fig)
 
 
 def main(config, args):
@@ -29,9 +44,19 @@ def main(config, args):
 
     l0 = KPF0.from_fits(build_filepath(obs_id, 'L0', data_root=data_root_in))
 
+    l0_qlp_dir = _qlp_dir(data_root_out, obs_id, 'L0')
+    os.makedirs(l0_qlp_dir, exist_ok=True)
+    _run_qlp(PlotL0(l0, output_dir=l0_qlp_dir))
+
     # read raw L0 file and assemble into L1 full frame image (FFI)
     image_assembly = ImageAssembly(l0, config)
     l1 = image_assembly.perform()
+
+    # L1 QLP is computed on the assembled (pre-bias-subtraction) image because
+    # ImageProcessing mutates GREEN_CCD/RED_CCD in place during bias subtraction.
+    l1_qlp_dir = _qlp_dir(data_root_out, obs_id, 'L1')
+    os.makedirs(l1_qlp_dir, exist_ok=True)
+    _run_qlp(PlotL1(l1, output_dir=l1_qlp_dir))
 
     # assign calibration masters (bias, dark, flat, wls) to this frame
     calibration_association = CalibrationAssociation(l1, config)

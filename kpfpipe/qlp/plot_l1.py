@@ -9,6 +9,10 @@ import matplotlib.pyplot as plt
 from kpfpipe.modules.image_assembly import _RN_KEYS
 
 
+def _unwrap(val):
+    return val[0] if isinstance(val, tuple) else val
+
+
 class PlotL1:
     """
     Quicklook plots for KPF L1 (assembled 2D) data.
@@ -40,8 +44,8 @@ class PlotL1:
             channel_ext = f'{chip.upper()}_AMP{i}'
             rn_key, rnng_key = _RN_KEYS[channel_ext]
             if rn_key in primary and rnng_key in primary:
-                rn_values.append(float(primary[rn_key]))
-                rnng_values.append(float(primary[rnng_key]))
+                rn_values.append(float(_unwrap(primary[rn_key])))
+                rnng_values.append(float(_unwrap(primary[rnng_key])))
         return rn_values, rnng_values
 
     def image(self, chip):
