@@ -402,9 +402,9 @@ class BaseMasterModule:
 
                 exact_stats[ext] = {}
                 exact_stats[ext]['nframe'] = np.zeros((NROW,NCOL),dtype=np.int32)
-                exact_stats[ext]['total_sum'] = np.zeros((NROW,NCOL),dtype=np.float64)
-                exact_stats[ext]['rate_mean'] = np.zeros((NROW,NCOL),dtype=np.float64)
-                exact_stats[ext]['rate_M2'] = np.zeros((NROW,NCOL),dtype=np.float64)
+                exact_stats[ext]['total_sum'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext]['rate_mean'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext]['rate_M2'] = np.zeros((NROW,NCOL),dtype=np.float32)
 
                 approx_mean = approx_stats[ext]['rate_mean']
                 approx_rms = approx_stats[ext]['rate_rms']
