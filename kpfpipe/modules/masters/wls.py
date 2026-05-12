@@ -698,8 +698,17 @@ class WLS(BaseMasterModule):
             every chip in self.chips, INPUT_FILES recording the stacked
             L0 files, and a 'master_wls' receipt entry.
         h5py.File, optional
-            In-memory HDF5 file (core driver, no backing store) with layout
-            /<chip>/coeffs_stack and /<chip>/lines_stack/frame_<NNN>/{w,x,m,f}.
+            In-memory HDF5 file (core driver, no backing store) packaging
+            per-frame WLS diagnostics for every chip. Layout:
+              /<chip>/coeffs_stack                    per-frame Legendre coefficients
+              /<chip>/lines_stack/frame_<NNN>/wav     reference line wavelength
+              /<chip>/lines_stack/frame_<NNN>/pix     fitted pixel position
+              /<chip>/lines_stack/frame_<NNN>/std     fitted line sigma
+              /<chip>/lines_stack/frame_<NNN>/amp     fitted line amplitude
+              /<chip>/lines_stack/frame_<NNN>/rms     normalized fit residual RMS
+              /<chip>/lines_stack/frame_<NNN>/bad     boolean QC flag
+              /<chip>/lines_stack/frame_<NNN>/ord     1-indexed order number
+              /<chip>/lines_stack/frame_<NNN>/fib     fiber name
             Returned only if `return_stacks=True`.
 
         Notes
