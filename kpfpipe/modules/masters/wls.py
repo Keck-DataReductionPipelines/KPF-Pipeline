@@ -7,6 +7,7 @@ from numpy.polynomial import legendre
 import pandas as pd
 
 from kpfpipe import DEFAULTS, REPO_ROOT
+from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_processing import ImageProcessing
@@ -17,7 +18,7 @@ from kpfpipe.utils.stats import optimize_lsq
 DEFAULTS.update({
     'rough_wls_file': f'{REPO_ROOT}/reference/rough_wls_fallback.csv',
     'line_list_file': f'{REPO_ROOT}/reference/thar_line_list.csv',
-    'linemodel': 'gaussian',
+    'lineprofile': 'gaussian',
     'polyorder_x': 6,
     'polyorder_m': 3,
     'polyorder_f': 2,
@@ -157,7 +158,7 @@ class WLS(BaseMasterModule):
                               flux1d,
                               wave1d,
                               linelist=None,
-                              linemodel='gaussian',
+                              lineprofile='gaussian',
                               window=5,
                               qc_sigma=2.5,
                               ):
@@ -179,7 +180,7 @@ class WLS(BaseMasterModule):
         linelist : ndarray, optional
             Reference line wavelengths (Angstroms). Defaults to
             self.linelist.
-        linemodel : str, optional
+        lineprofile : str, optional
             Line profile model name. See kpfpipe.utils.stats._FUNCTIONS
             for supported values.
         window : int, optional
@@ -215,23 +216,23 @@ class WLS(BaseMasterModule):
 
             x = cols
             y = flux1d[cols]
-            theta, rms = optimize_lsq(x, y, linemodel)
+            theta, rms = optimize_lsq(x, y, lineprofile)
 
-            if linemodel == 'gaussian':
+            if lineprofile == 'gaussian':
                 # gaussian_dist theta convention: [b, a, mu, sigma]
                 lines['pix'][i] = theta[2]
                 lines['std'][i] = theta[3]
                 lines['amp'][i] = theta[1]
                 lines['rms'][i] = rms / np.abs(theta[1] * np.sqrt(2*np.pi) * theta[3])
             else:
-                raise ValueError(f"Unsupported linemodel: {linemodel}")
+                raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
-        if linemodel == 'gaussian':
+        if lineprofile == 'gaussian':
             lines['bad'] = np.abs(lines['rms'] - np.median(lines['rms'])) / mad_std(lines['rms']) > qc_sigma
             lines['bad'] |= np.abs(lines['std'] - np.median(lines['std'])) / mad_std(lines['std']) > qc_sigma
             lines['bad'] |= lines['amp'] < 0
         else:
-            raise ValueError(f"Unsupported linemodel: {linemodel}")
+            raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
         line_x = lines['pix'][~lines['bad']]
         line_w = lines['wav'][~lines['bad']]
@@ -244,7 +245,7 @@ class WLS(BaseMasterModule):
                                chip,
                                fibers,
                                linelist=None,
-                               linemodel=None,
+                               lineprofile=None,
                                window=5,
                                qc_sigma=2.5,
                                verbose=True,
@@ -268,7 +269,7 @@ class WLS(BaseMasterModule):
             Fiber identifiers (e.g. ['SCI1', 'SCI2', 'SCI3']).
         linelist : ndarray, optional
             Reference line wavelengths. Defaults to self.linelist.
-        linemodel : str, optional
+        lineprofile : str, optional
             Line profile model name. See kpfpipe.utils.stats._FUNCTIONS.
         window : int, optional
             Half-width of the per-line fit window, in pixels.
@@ -290,8 +291,8 @@ class WLS(BaseMasterModule):
         if linelist is None:
             linelist = self.linelist
 
-        if linemodel is None:
-            linemodel = self.linemodel
+        if lineprofile is None:
+            lineprofile = self.lineprofile
 
         lines = {}
         for k in ['w', 'x', 'm', 'f']:
@@ -316,7 +317,7 @@ class WLS(BaseMasterModule):
                     flux_arr[o],
                     wave_arr[o],
                     linelist=linelist,
-                    linemodel=linemodel,
+                    lineprofile=lineprofile,
                     window=window,
                     qc_sigma=qc_sigma,
                 )
@@ -483,7 +484,7 @@ class WLS(BaseMasterModule):
                                chip,
                                fibers,
                                linelist=None,
-                               linemodel=None,
+                               lineprofile=None,
                                window=5,
                                qc_sigma=2.5,
                                polyorder_x=None,
@@ -510,8 +511,8 @@ class WLS(BaseMasterModule):
             Fiber identifiers, e.g. ['SCI1', 'SCI2', 'SCI3'] or a single fiber.
         linelist : ndarray, optional
             Reference line wavelengths. Defaults to self.linelist.
-        linemodel : str, optional
-            Line profile model name. Defaults to self.linemodel.
+        lineprofile : str, optional
+            Line profile model name. Defaults to self.lineprofile.
         window : int, optional
             Half-width of the per-line fit window, in pixels.
         qc_sigma : float, optional
@@ -549,8 +550,8 @@ class WLS(BaseMasterModule):
         """
         if linelist is None:
             linelist = self.linelist
-        if linemodel is None:
-            linemodel = self.linemodel
+        if lineprofile is None:
+            lineprofile = self.lineprofile
         if polyorder_x is None:
             polyorder_x = self.polyorder_x
         if polyorder_m is None:
@@ -579,7 +580,7 @@ class WLS(BaseMasterModule):
                                                          chip, 
                                                          fibers, 
                                                          linelist = linelist,
-                                                         linemodel = linemodel,
+                                                         lineprofile = lineprofile,
                                                          window = window, 
                                                          qc_sigma = qc_sigma,
                                                          verbose = verbose,
@@ -609,3 +610,88 @@ class WLS(BaseMasterModule):
     # Public entry point
     # ------------------------------------------------------------------
 
+    def make_master_l2(self, l0_file_list=None, lineprofile=None,
+                       polyorder_x=None, polyorder_m=None, polyorder_f=None):
+        """
+        Build a master wavelength solution from a stack of L0 frames.
+
+        Processes each input L0 frame through the L0-to-L2 pipeline, then
+        computes per-chip Legendre wavelength solutions using
+        `compute_wls_from_stack`. The resulting wavelength arrays are
+        written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
+        which is returned and cached on `self.ml2_obj`.
+
+        Parameters
+        ----------
+        l0_file_list : list of str, optional
+            L0 files to process. Defaults to self.l0_file_list.
+        lineprofile : str, optional
+            Line profile model name. Defaults to self.lineprofile.
+        polyorder_x : int, optional
+            Polynomial degree along the pixel axis. Defaults to self.polyorder_x.
+        polyorder_m : int, optional
+            Polynomial degree along the order axis. Defaults to self.polyorder_m.
+        polyorder_f : int, optional
+            Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
+            Defaults to self.polyorder_f.
+
+        Returns
+        -------
+        KPFMasterL2
+            Master L2 object with per-fiber _WAVE extensions populated for
+            every chip in self.chips, INPUT_FILES recording the stacked
+            L0 files, and a 'master_wls' receipt entry.
+
+        Notes
+        -----
+        Resets self._l2_obj_cache before processing so repeat calls do not
+        carry stale frames forward.
+        """
+        if l0_file_list is None:
+            l0_file_list = self.l0_file_list
+        if lineprofile is None:
+            lineprofile = self.lineprofile
+        if polyorder_x is None:
+            polyorder_x = self.polyorder_x
+        if polyorder_m is None:
+            polyorder_m = self.polyorder_m
+        if polyorder_f is None:
+            polyorder_f = self.polyorder_f
+
+        self._l2_obj_cache = []
+        self.process_stack_l0_to_l2(l0_file_list=l0_file_list)
+
+        self.ml2_obj = KPFMasterL2()
+
+        for chip in self.chips:
+            W, _ = self.compute_wls_from_stack(
+                chip=chip,
+                fibers=self.fibers,
+                lineprofile=lineprofile,
+                polyorder_x=polyorder_x,
+                polyorder_m=polyorder_m,
+                polyorder_f=polyorder_f,
+                return_stacks=False,
+            )
+
+            for i, fiber in enumerate(self.fibers):
+                if W.ndim == 2:
+                    self.ml2_obj.data[f'{chip}_{fiber}_WAVE'] = W
+                else:
+                    self.ml2_obj.data[f'{chip}_{fiber}_WAVE'] = W[:, :, i]
+
+        self.ml2_obj.set_input_files(l0_file_list)
+
+        primary = self.ml2_obj.headers['PRIMARY']
+        primary['ROUGHWLS'] = (self.rough_wls_file, 'Rough WLS reference file')
+        primary['LINELIST'] = (self.line_list_file, 'Line list reference file')
+        primary['LINEPROF'] = (lineprofile, 'Line profile model used in WLS fit')
+        primary['POLYORDX'] = (polyorder_x, 'WLS polynomial degree, pixel axis')
+        primary['POLYORDM'] = (polyorder_m, 'WLS polynomial degree, order axis')
+        primary['POLYORDF'] = (polyorder_f, 'WLS polynomial degree, fiber axis')
+        primary['CHIPS'] = (','.join(self.chips), 'Chips included in master WLS')
+        primary['FIBERS'] = (','.join(self.fibers), 'Fibers included in master WLS')
+
+        self.ml2_obj.receipt_add_entry('master_wls', 'PASS')
+
+        return self.ml2_obj

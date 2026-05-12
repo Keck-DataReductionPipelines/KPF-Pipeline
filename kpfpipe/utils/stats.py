@@ -52,17 +52,17 @@ def _jac_wrapper(theta, x, y, func, jac):
     return jac(theta, x)
 
 
-def optimize_lsq(x, y, linemodel):
+def optimize_lsq(x, y, lineprofile):
     """
     Fit a 1D line model to (x, y) by non-linear least squares.
 
     Looks up the model function, Jacobian, and theta0 initializer for the
-    given linemodel name and dispatches scipy.optimize.least_squares.
+    given lineprofile name and dispatches scipy.optimize.least_squares.
     """
     try:
-        func, jac, theta0_func = _FUNCTIONS[linemodel]
+        func, jac, theta0_func = _FUNCTIONS[lineprofile]
     except KeyError:
-        raise ValueError(f"Unsupported line function: {linemodel}")
+        raise ValueError(f"Unsupported line function: {lineprofile}")
 
     theta0 = theta0_func(x, y)
 
