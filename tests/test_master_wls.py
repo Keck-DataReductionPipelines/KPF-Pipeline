@@ -177,10 +177,14 @@ def mock_make_master_l2(monkeypatch):
         if return_stacks:
             coeffs_stack = np.array([coeffs] * 3)
             lines_stack = [
-                {'w': np.array([5500.0, 5501.0]),
-                 'x': np.array([100.5, 200.5]),
-                 'm': np.array([1, 2]),
-                 'f': np.array([fibers[0]] * 2)}
+                {'wav': np.array([5500.0, 5501.0]),
+                 'pix': np.array([100.5, 200.5]),
+                 'ord': np.array([1, 2]),
+                 'fib': np.array([fibers[0]] * 2),
+                 'bad': np.array([False, False]),
+                 'std': np.array([0.5, 0.5]),
+                 'amp': np.array([1.0, 1.0]),
+                 'rms': np.array([0.01, 0.01])}
                 for _ in range(3)
             ]
             return W, coeffs, coeffs_stack, lines_stack
@@ -286,5 +290,5 @@ class TestMakeMasterL2:
             frame_keys = list(h5[chip]['lines_stack'].keys())
             assert len(frame_keys) > 0
             sample = h5[chip]['lines_stack'][frame_keys[0]]
-            for key in ['w', 'x', 'm', 'f']:
+            for key in ['wav', 'pix', 'ord', 'fib', 'bad']:
                 assert key in sample

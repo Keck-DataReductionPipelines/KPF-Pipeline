@@ -110,7 +110,9 @@ class WLS(BaseMasterModule):
         Package per-chip WLS stacks into an in-memory HDF5 file.
 
         Layout: /<chip>/coeffs_stack as a dataset, /<chip>/lines_stack/
-        frame_<NNN>/{w,x,m,f} as per-frame subgroups.
+        frame_<NNN>/<key> as per-frame subgroups, with every key from
+        the per-frame `lines` dict (e.g. wav, pix, ord, fib, bad, plus
+        diagnostics like std, amp, rms).
         """
         f = h5py.File('wls_stacks.h5', 'w', driver='core', backing_store=False)
         str_dt = h5py.string_dtype(encoding='utf-8')
@@ -122,10 +124,12 @@ class WLS(BaseMasterModule):
             lines_group = chip_group.create_group('lines_stack')
             for i, lines in enumerate(lines_by_chip[chip]):
                 frame_group = lines_group.create_group(f'frame_{i:03d}')
-                frame_group.create_dataset('w', data=lines['w'])
-                frame_group.create_dataset('x', data=lines['x'])
-                frame_group.create_dataset('m', data=lines['m'])
-                frame_group.create_dataset('f', data=lines['f'].astype(object), dtype=str_dt)
+                for key, value in lines.items():
+                    arr = np.asarray(value)
+                    if arr.dtype.kind in ('U', 'S', 'O'):
+                        frame_group.create_dataset(key, data=arr.astype(object), dtype=str_dt)
+                    else:
+                        frame_group.create_dataset(key, data=arr)
 
         return f
 
@@ -217,10 +221,16 @@ class WLS(BaseMasterModule):
 
         Returns
         -------
-        line_w : ndarray
-            Reference wavelengths of surviving lines.
-        line_x : ndarray
-            Fitted pixel positions of surviving lines.
+        lines : dict of ndarray
+            Per-line arrays of equal length. All entries are retained
+            regardless of QC status; the caller is responsible for
+            filtering on 'bad' before downstream use. Keys:
+              'wav' - reference line wavelength
+              'pix' - fitted pixel position
+              'std' - fitted line sigma (Gaussian width)
+              'amp' - fitted line amplitude
+              'rms' - normalized fit residual RMS
+              'bad' - boolean QC flag (True = line failed QC)
         """
         if linelist is None:
             linelist = self.linelist
@@ -260,10 +270,7 @@ class WLS(BaseMasterModule):
         else:
             raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
-        line_x = lines['pix'][~lines['bad']]
-        line_w = lines['wav'][~lines['bad']]
-
-        return line_w, line_x
+        return lines
     
 
     def fit_line_positions_ffi(self,
@@ -308,11 +315,20 @@ class WLS(BaseMasterModule):
         Returns
         -------
         lines : dict of ndarray
-            Flat 1D arrays, all of equal length, with keys:
-              'w' — reference wavelength of each surviving line
-              'x' — fitted pixel position
-              'm' — 1-indexed order number
-              'f' — fiber name
+            Flat 1D arrays, all of equal length. All lines are retained
+            regardless of QC status; the caller is responsible for
+            filtering on 'bad' before downstream use. All per-line keys
+            produced by `fit_line_positions_1D` are carried through, plus
+            'ord' and 'fib' which tag each line with its source order
+            and fiber. Keys:
+              'wav' - reference line wavelength
+              'pix' - fitted pixel position
+              'std' - fitted line sigma (Gaussian width)
+              'amp' - fitted line amplitude
+              'rms' - normalized fit residual RMS
+              'bad' - boolean QC flag (True = line failed QC)
+              'ord' - 1-indexed order number
+              'fib' - fiber name
         """
         if linelist is None:
             linelist = self.linelist
@@ -320,9 +336,7 @@ class WLS(BaseMasterModule):
         if lineprofile is None:
             lineprofile = self.lineprofile
 
-        lines = {}
-        for k in ['w', 'x', 'm', 'f']:
-            lines[k] = [None] * len(fibers)
+        lines = None  # built on first call so keys match fit_line_positions_1D
 
         for i, fiber in enumerate(fibers):
             if verbose:
@@ -335,11 +349,8 @@ class WLS(BaseMasterModule):
 
             norder = np.shape(flux_arr)[0]
 
-            for k in ['w', 'x', 'm', 'f']:
-                lines[k][i] = [None] * norder
-
             for o in range(norder):
-                line_w, line_x = self.fit_line_positions_1D(
+                line_dict = self.fit_line_positions_1D(
                     flux_arr[o],
                     wave_arr[o],
                     linelist=linelist,
@@ -348,15 +359,20 @@ class WLS(BaseMasterModule):
                     qc_sigma=qc_sigma,
                 )
 
-                lines['w'][i][o] = line_w
-                lines['x'][i][o] = line_x
-                lines['m'][i][o] = (o + 1) * np.ones_like(line_x, dtype=int)
-                lines['f'][i][o] = np.array([fiber] * len(line_x))
+                nlines = len(line_dict['wav'])
+                line_dict['ord'] = (o + 1) * np.ones(nlines, dtype=int)
+                line_dict['fib'] = np.array([fiber] * nlines)
 
-            for k in lines.keys():
+                if lines is None:
+                    lines = {k: [[None] * norder for _ in fibers] for k in line_dict}
+
+                for k in line_dict:
+                    lines[k][i][o] = line_dict[k]
+
+            for k in lines:
                 lines[k][i] = np.hstack(lines[k][i])
 
-        for k in lines.keys():
+        for k in lines:
             lines[k] = np.hstack(lines[k])
 
         return lines
@@ -384,11 +400,9 @@ class WLS(BaseMasterModule):
         Parameters
         ----------
         lines : dict of ndarray
-            Flat 1D arrays as produced by `fit_line_positions_ffi`, with keys:
-              'w' - reference line wavelengths
-              'x' - fitted pixel positions
-              'm' - 1-indexed order numbers
-              'f' - fiber names
+            Flat 1D arrays as produced by `fit_line_positions_ffi`. Lines
+            with `lines['bad']` set are excluded from the fit. Required
+            keys: 'wav', 'pix', 'ord', 'fib', 'bad'.
         norder : int
             Total number of spectral orders on the chip. Used to rescale
             the order axis to [-1, 1].
@@ -408,8 +422,8 @@ class WLS(BaseMasterModule):
 
         Notes
         -----
-        Raises ValueError if `lines['f']` contains anything other than one
-        fiber or the three science fibers (SCI1, SCI2, SCI3).
+        Raises ValueError if `lines['fib']` contains anything other than
+        one fiber or the three science fibers (SCI1, SCI2, SCI3).
         """
         # sanitize inputs
         if polyorder_x is None:
@@ -419,18 +433,25 @@ class WLS(BaseMasterModule):
         if polyorder_f is None:
             polyorder_f = self.polyorder_f
 
-        fibers = list(set(lines['f']))
+        # drop QC-flagged lines before fitting
+        good = ~lines['bad']
+        wav = lines['wav'][good]
+        pix = lines['pix'][good]
+        ord = lines['ord'][good]
+        fib = lines['fib'][good]
+
+        fibers = list(set(fib))
 
         if (len(fibers) != 1) and (len(fibers) != 3) and (len(fibers) != 5):
             raise ValueError(f"expected 1, 3, or 5 fibers, got {len(fibers)}")
-        
+
         if len(fibers) == 3:
             expected_fibers = ['SCI1', 'SCI2', 'SCI3']
         elif len(fibers) == 5:
             expected_fibers = ['SKY', 'SCI1', 'SCI2', 'SCI3', 'CAL']
 
         if not (
-            np.all(np.isin(fibers, expected_fibers)) and 
+            np.all(np.isin(fibers, expected_fibers)) and
             np.all(np.isin(expected_fibers, fibers))
         ):
             raise ValueError(f"unexpected fibers input: {fibers}")
@@ -439,11 +460,11 @@ class WLS(BaseMasterModule):
 
         # rescale position variables to [-1,1] for Legendre fitting; use
         # canonical detector ranges so this matches evaluate_wls_coeffs.
-        _x = 2*lines['x']/ncol - 1
-        _m = 2*(lines['m'] - 1)/(norder - 1) - 1
+        _x = 2*pix/ncol - 1
+        _m = 2*(ord - 1)/(norder - 1) - 1
 
         if len(fibers) != 1:
-            _f = np.array([FIBER_INDEX_MAP[f] for f in lines['f']], dtype=int)
+            _f = np.array([FIBER_INDEX_MAP[f] for f in fib], dtype=int)
             _f = (2*_f)/(len(fibers) - 1) - 1
 
 
@@ -451,13 +472,13 @@ class WLS(BaseMasterModule):
         if len(fibers) == 1:
             V = legendre.legvander2d(_x, _m, deg=[polyorder_x, polyorder_m])
 
-            coeffs, *_ = np.linalg.lstsq(V, lines['w'], rcond=None)
+            coeffs, *_ = np.linalg.lstsq(V, wav, rcond=None)
             coeffs = coeffs.reshape(polyorder_x+1, polyorder_m+1)
-        
+
         else:
             V = legendre.legvander3d(_x, _m, _f, deg=[polyorder_x, polyorder_m, polyorder_f])
 
-            coeffs, *_ = np.linalg.lstsq(V, lines['w'], rcond=None)
+            coeffs, *_ = np.linalg.lstsq(V, wav, rcond=None)
             coeffs = coeffs.reshape(polyorder_x+1, polyorder_m+1, polyorder_f+1)
 
 
