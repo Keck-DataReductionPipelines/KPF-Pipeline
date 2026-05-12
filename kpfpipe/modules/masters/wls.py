@@ -2,6 +2,7 @@
 KPF Master Wavelength Solution construction module.
 """
 from astropy.stats import mad_std
+import h5py
 import numpy as np
 from numpy.polynomial import legendre
 import pandas as pd
@@ -102,7 +103,32 @@ class WLS(BaseMasterModule):
         l2_obj = spectral_extraction.perform()
 
         return l2_obj
-    
+
+    @staticmethod
+    def _package_stacks_hdf5(coeffs_by_chip, lines_by_chip):
+        """
+        Package per-chip WLS stacks into an in-memory HDF5 file.
+
+        Layout: /<chip>/coeffs_stack as a dataset, /<chip>/lines_stack/
+        frame_<NNN>/{w,x,m,f} as per-frame subgroups.
+        """
+        f = h5py.File('wls_stacks.h5', 'w', driver='core', backing_store=False)
+        str_dt = h5py.string_dtype(encoding='utf-8')
+
+        for chip, coeffs_stack in coeffs_by_chip.items():
+            chip_group = f.create_group(chip)
+            chip_group.create_dataset('coeffs_stack', data=np.asarray(coeffs_stack))
+
+            lines_group = chip_group.create_group('lines_stack')
+            for i, lines in enumerate(lines_by_chip[chip]):
+                frame_group = lines_group.create_group(f'frame_{i:03d}')
+                frame_group.create_dataset('w', data=lines['w'])
+                frame_group.create_dataset('x', data=lines['x'])
+                frame_group.create_dataset('m', data=lines['m'])
+                frame_group.create_dataset('f', data=lines['f'].astype(object), dtype=str_dt)
+
+        return f
+
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -610,8 +636,14 @@ class WLS(BaseMasterModule):
     # Public entry point
     # ------------------------------------------------------------------
 
-    def make_master_l2(self, l0_file_list=None, lineprofile=None,
-                       polyorder_x=None, polyorder_m=None, polyorder_f=None):
+    def make_master_l2(self,
+                       l0_file_list=None,
+                       lineprofile=None,
+                       polyorder_x=None,
+                       polyorder_m=None,
+                       polyorder_f=None,
+                       return_stacks=False,
+                      ):
         """
         Build a master wavelength solution from a stack of L0 frames.
 
@@ -634,6 +666,9 @@ class WLS(BaseMasterModule):
         polyorder_f : int, optional
             Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
             Defaults to self.polyorder_f.
+        return_stacks : bool, optional
+            If True, also return an in-memory HDF5 file containing per-frame
+            coefficient and line stacks for every chip.
 
         Returns
         -------
@@ -641,6 +676,10 @@ class WLS(BaseMasterModule):
             Master L2 object with per-fiber _WAVE extensions populated for
             every chip in self.chips, INPUT_FILES recording the stacked
             L0 files, and a 'master_wls' receipt entry.
+        h5py.File, optional
+            In-memory HDF5 file (core driver, no backing store) with layout
+            /<chip>/coeffs_stack and /<chip>/lines_stack/frame_<NNN>/{w,x,m,f}.
+            Returned only if `return_stacks=True`.
 
         Notes
         -----
@@ -663,16 +702,26 @@ class WLS(BaseMasterModule):
 
         self.ml2_obj = KPFMasterL2()
 
+        coeffs_by_chip = {}
+        lines_by_chip = {}
+
         for chip in self.chips:
-            W, coeffs = self.compute_wls_from_stack(
+            result = self.compute_wls_from_stack(
                 chip=chip,
                 fibers=self.fibers,
                 lineprofile=lineprofile,
                 polyorder_x=polyorder_x,
                 polyorder_m=polyorder_m,
                 polyorder_f=polyorder_f,
-                return_stacks=False,
+                return_stacks=return_stacks,
             )
+
+            if return_stacks:
+                W, coeffs, coeffs_stack, lines_stack = result
+                coeffs_by_chip[chip] = coeffs_stack
+                lines_by_chip[chip] = lines_stack
+            else:
+                W, coeffs = result
 
             for i, fiber in enumerate(self.fibers):
                 if W.ndim == 2:
@@ -703,5 +752,9 @@ class WLS(BaseMasterModule):
         primary['FIBERS'] = (','.join(self.fibers), 'Fibers included in master WLS')
 
         self.ml2_obj.receipt_add_entry('master_wls', 'PASS')
+
+        if return_stacks:
+            stacks_hdf5 = self._package_stacks_hdf5(coeffs_by_chip, lines_by_chip)
+            return self.ml2_obj, stacks_hdf5
 
         return self.ml2_obj
