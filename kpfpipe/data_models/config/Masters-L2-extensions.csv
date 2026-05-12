@@ -1,2 +1,4 @@
 HDU,Name,DataType,Required,Description
 0,INPUT_FILES,BinTableHDU,True,Input L0 files used to generate this master
+1,GREEN_WLS_COEFFS,ImageHDU,False,Green chip WLS Legendre coefficients
+2,RED_WLS_COEFFS,ImageHDU,False,Red chip WLS Legendre coefficients

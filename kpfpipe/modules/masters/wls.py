@@ -664,7 +664,7 @@ class WLS(BaseMasterModule):
         self.ml2_obj = KPFMasterL2()
 
         for chip in self.chips:
-            W, _ = self.compute_wls_from_stack(
+            W, coeffs = self.compute_wls_from_stack(
                 chip=chip,
                 fibers=self.fibers,
                 lineprofile=lineprofile,
@@ -679,6 +679,16 @@ class WLS(BaseMasterModule):
                     self.ml2_obj.data[f'{chip}_{fiber}_WAVE'] = W
                 else:
                     self.ml2_obj.data[f'{chip}_{fiber}_WAVE'] = W[:, :, i]
+
+            coeffs_ext = f'{chip}_WLS_COEFFS'
+            if coeffs_ext not in self.ml2_obj.extensions:
+                self.ml2_obj.create_extension(coeffs_ext, 'ImageHDU')
+            self.ml2_obj.set_data(coeffs_ext, coeffs)
+
+            coeffs_hdr = self.ml2_obj.headers[coeffs_ext]
+            coeffs_hdr['POLYORDX'] = (polyorder_x, 'WLS polynomial degree, pixel axis')
+            coeffs_hdr['POLYORDM'] = (polyorder_m, 'WLS polynomial degree, order axis')
+            coeffs_hdr['POLYORDF'] = (polyorder_f, 'WLS polynomial degree, fiber axis')
 
         self.ml2_obj.set_input_files(l0_file_list)
 

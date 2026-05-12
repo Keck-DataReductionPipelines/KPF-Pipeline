@@ -38,21 +38,7 @@ _FUNCTIONS = {
 }
 
 
-def _res_wrapper(theta, x, y, func, jac):
-    """
-    Helper function for optimize_lsq
-    """
-    return func(theta, x) - y
-
-
-def _jac_wrapper(theta, x, y, func, jac):
-    """
-    Helper function for optimize_lsq
-    """
-    return jac(theta, x)
-
-
-def optimize_lsq(x, y, lineprofile):
+def optimize_lsq(x, y, linemodel):
     """
     Fit a 1D line model to (x, y) by non-linear least squares.
 
@@ -60,16 +46,21 @@ def optimize_lsq(x, y, lineprofile):
     given lineprofile name and dispatches scipy.optimize.least_squares.
     """
     try:
-        func, jac, theta0_func = _FUNCTIONS[lineprofile]
+        func, jac, theta0_func = _FUNCTIONS[linemodel]
     except KeyError:
-        raise ValueError(f"Unsupported line function: {lineprofile}")
+        raise ValueError(f"Unsupported line function: {linemodel}")
+
+    def residual(theta):
+        return func(theta, x) - y
+
+    def jacobian(theta):
+        return jac(theta, x)
 
     theta0 = theta0_func(x, y)
 
-    result = least_squares(_res_wrapper,
+    result = least_squares(residual,
                            theta0,
-                           args=(x, y, func, jac),
-                           jac=_jac_wrapper,
+                           jac=jacobian,
                            method='lm',
                            )
 
