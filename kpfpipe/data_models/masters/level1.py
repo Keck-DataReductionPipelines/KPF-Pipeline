@@ -11,6 +11,9 @@ differ from science L1 to reflect masters-specific normalization:
     GREEN_SNR  -- signal-to-noise ratio
     GREEN_MASK -- boolean bad pixel mask (1=good, 0=bad)
     RED_IMG, RED_SNR, RED_MASK -- same for red chip
+
+Filename convention: masters products follow WMKO filename format 
+(KP.YYYYMMDD.NNNNN.NN.fits), not the EPRV per-level convention.
 """
 
 import importlib.resources
@@ -24,7 +27,6 @@ from kpfpipe.data_models.masters.base import KPFMasterModel
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _MASTERS_L1_EXTENSIONS = pd.read_csv(_config_path / "Masters-L1-extensions.csv")
-_KNOWN_MASTERS_L1_EXTENSIONS = set(_MASTERS_L1_EXTENSIONS["Name"].tolist())
 
 
 class KPFMasterL1(KPFMasterModel, KPF1):
@@ -47,7 +49,7 @@ class KPFMasterL1(KPFMasterModel, KPF1):
 
     _DATALVL = "ML1"
     _FILENAME_PREFIX = "kpf_ML1"
-    _known_extensions = _KNOWN_MASTERS_L1_EXTENSIONS
+    _known_extensions = set(_MASTERS_L1_EXTENSIONS["Name"])
 
     def __init__(self):
         KPFMasterModel.__init__(self)

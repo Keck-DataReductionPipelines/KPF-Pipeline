@@ -693,19 +693,140 @@ class TestKPFMasterL1:
             warnings.simplefilter("error", UserWarning)
             KPFMasterL1.from_fits(synthetic_masters_l1_file)
 
+    def test_set_input_files(self):
+        m = KPFMasterL1()
+        files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]
+        m.set_input_files(files)
+        assert m.data["INPUT_FILES"]["FILENAME"].tolist() == files
+
+
+@pytest.fixture
+def synthetic_masters_l2_file(tmp_path):
+    """Create a minimal synthetic Masters L2 FITS file."""
+    fn = str(tmp_path / "kpf_ML2_20240113T102656.fits")
+
+    primary = fits.PrimaryHDU()
+    primary.header["INSTRUME"] = "KPF"
+    primary.header["DATE-OBS"] = "2024-01-13T10:26:56"
+    primary.header["DATALVL"] = "ML2"
+
+    n_pix = 64
+    wave = np.random.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float32)
+    trace3_wave = fits.ImageHDU(data=wave)
+    trace3_wave.name = "TRACE3_WAVE"
+
+    hdul = fits.HDUList([primary, trace3_wave])
+    hdul.writeto(fn, overwrite=True)
+    hdul.close()
+
+    return fn
+
+
+class TestKPFMasterL2:
+    def test_required_extensions_created(self):
+        m = KPFMasterL2()
+        for ext in ["PRIMARY", "RECEIPT",
+                    "TRACE1_FLUX", "TRACE1_WAVE", "TRACE1_VAR", "TRACE1_BLAZE",
+                    "TRACE3_FLUX", "TRACE3_WAVE", "TRACE3_VAR", "TRACE3_BLAZE",
+                    "TRACE5_FLUX", "TRACE5_WAVE", "TRACE5_VAR", "TRACE5_BLAZE"]:
+            assert ext in m.extensions
+
+    def test_aliases_work(self):
+        m = KPFMasterL2()
+        assert m.extensions._resolve("SCI2_WAVE") == "TRACE3_WAVE"
+        assert m.extensions._resolve("CAL_WAVE") == "TRACE1_WAVE"
+        assert m.extensions._resolve("SKY_WAVE") == "TRACE5_WAVE"
+
+    def test_chip_prefix_access(self):
+        m = KPFMasterL2()
+        n_pix = 32
+        trace_data = np.random.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float32)
+        m.data["TRACE3_WAVE"] = trace_data
+
+        green = m.data["GREEN_SCI2_WAVE"]
+        red = m.data["RED_SCI2_WAVE"]
+        assert green.shape == (NORDER_GREEN, n_pix)
+        assert red.shape == (NORDER_RED, n_pix)
+        np.testing.assert_array_equal(green, trace_data[:NORDER_GREEN])
+        np.testing.assert_array_equal(red, trace_data[NORDER_GREEN:])
+
+    def test_inherits_from_kpf2(self):
+        m = KPFMasterL2()
+        assert isinstance(m, KPF2)
+
+    def test_inherits_from_kpf_master_model(self):
+        m = KPFMasterL2()
+        assert isinstance(m, KPFMasterModel)
+
+    def test_class_attributes(self):
+        assert KPFMasterL2._DATALVL == "ML2"
+        assert KPFMasterL2._FILENAME_PREFIX == "kpf_ML2"
+
+    def test_from_fits(self, synthetic_masters_l2_file):
+        m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
+        assert "TRACE3_WAVE" in m.extensions
+        assert m.data["TRACE3_WAVE"].shape == (NORDER_GREEN + NORDER_RED, 64)
+
+    def test_round_trip(self, synthetic_masters_l2_file, tmp_path):
+        m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
+        original = m.data["TRACE3_WAVE"].copy()
+
+        out_fn = str(tmp_path / "roundtrip_ml2.fits")
+        m.to_fits(out_fn)
+
+        m2 = KPFMasterL2.from_fits(out_fn)
+        np.testing.assert_array_almost_equal(m2.data["TRACE3_WAVE"], original)
+
+    def test_datalvl_header_in_fits(self, synthetic_masters_l2_file, tmp_path):
+        m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
+        out_fn = str(tmp_path / "datalvl_ml2.fits")
+        m.to_fits(out_fn)
+        with fits.open(out_fn) as hdul:
+            assert hdul["PRIMARY"].header["DATALVL"] == "ML2"
+
+    def test_no_warning_on_known_extensions(self, synthetic_masters_l2_file):
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            KPFMasterL2.from_fits(synthetic_masters_l2_file)
+
+    def test_set_input_files(self):
+        m = KPFMasterL2()
+        files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]
+        m.set_input_files(files)
+        assert m.data["INPUT_FILES"]["FILENAME"].tolist() == files
+
+    def test_input_files_roundtrip(self, tmp_path):
+        m = KPFMasterL2()
+        files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]
+        m.set_input_files(files)
+        m.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
+
+        out_fn = str(tmp_path / "ml2_input_files.fits")
+        m.to_fits(out_fn)
+
+        m2 = KPFMasterL2.from_fits(out_fn)
+        assert "INPUT_FILES" in m2.extensions
+        assert m2.data["INPUT_FILES"]["FILENAME"].tolist() == files
+
+    def test_warns_on_unknown_extension(self, tmp_path):
+        fn = str(tmp_path / "unknown_ext_ml2.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["DATE-OBS"] = "2024-01-13T00:00:00"
+        weird = fits.ImageHDU(data=np.zeros((4, 4)))
+        weird.name = "WEIRD_EXTENSION"
+        hdul = fits.HDUList([primary, weird])
+        hdul.writeto(fn, overwrite=True)
+        hdul.close()
+
+        with pytest.warns(UserWarning, match="Non-standard extension"):
+            KPFMasterL2.from_fits(fn)
+
 
 class TestKPFMasterStubs:
-    def test_master_l2_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            KPFMasterL2()
-
     def test_master_l4_not_implemented(self):
         with pytest.raises(NotImplementedError):
             KPFMasterL4()
-
-    def test_master_l2_inherits_kpf2(self):
-        from kpfpipe.data_models.level2 import KPF2
-        assert issubclass(KPFMasterL2, KPF2)
 
     def test_master_l4_inherits_kpf4(self):
         from kpfpipe.data_models.level4 import KPF4

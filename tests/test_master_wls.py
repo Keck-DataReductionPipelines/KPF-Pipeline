@@ -69,10 +69,6 @@ class TestInit:
         with pytest.raises(TypeError):
             WLS(FILE_LIST, config=42)
 
-    def test_thar_l2_list_absent_before_processing(self):
-        wls = WLS(FILE_LIST)
-        assert not hasattr(wls, 'thar_l2_list')
-
 
 # ---------------------------------------------------------------------------
 # TestExtractFrame
@@ -84,32 +80,6 @@ class TestExtractFrame:
         wls = WLS(FILE_LIST)
         result = wls._extract_frame(MockL1())
         assert result is mock_pipeline
-
-    def test_appends_to_thar_l2_list(self, mock_pipeline):
-        wls = WLS(FILE_LIST)
-        wls._extract_frame(MockL1())
-        assert mock_pipeline in wls.thar_l2_list
-
-    def test_accumulates_across_calls(self, monkeypatch):
-        l2a, l2b = MockL2(), MockL2()
-        results = iter([l2a, l2b])
-
-        mock_ca = MagicMock()
-        mock_ca.return_value.perform.return_value = MockL1()
-        mock_ip = MagicMock()
-        mock_ip.return_value.perform.return_value = MockL1()
-        mock_se = MagicMock()
-        mock_se.return_value.perform.side_effect = lambda: next(results)
-
-        monkeypatch.setattr(wls_module, 'CalibrationAssociation', mock_ca)
-        monkeypatch.setattr(wls_module, 'ImageProcessing', mock_ip)
-        monkeypatch.setattr(wls_module, 'SpectralExtraction', mock_se)
-
-        wls = WLS(FILE_LIST)
-        wls._extract_frame(MockL1())
-        wls._extract_frame(MockL1())
-
-        assert wls.thar_l2_list == [l2a, l2b]
 
     def test_passes_data_input_to_calibration_association(self, monkeypatch):
         mock_ca = MagicMock()

@@ -2,6 +2,9 @@
 KPF Masters Level 4 data model.
 
 Masters RV/CCF calibration products. Not yet implemented.
+
+Filename convention: masters products follow WMKO filename format
+(KP.YYYYMMDD.NNNNN.NN.fits), not the EPRV per-level convention.
 """
 
 from kpfpipe.data_models.level4 import KPF4
