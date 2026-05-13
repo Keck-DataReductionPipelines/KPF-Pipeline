@@ -129,8 +129,12 @@ class BaseMasterModule:
             snr = np.zeros_like(img)
             snr[good] = np.abs(tot[good]) / np.sqrt(var[good])
 
-            l1_arrays[f'{chip}_IMG'] = img
-            l1_arrays[f'{chip}_SNR'] = snr
+            # Welford accumulators run in float64 for numerical stability;
+            # the stored master image fits comfortably in float32 (bias signal
+            # is a few-ADU offset with ~5 e- read noise) and halves the
+            # on-disk size of the IMG and SNR extensions.
+            l1_arrays[f'{chip}_IMG'] = img.astype(np.float32)
+            l1_arrays[f'{chip}_SNR'] = snr.astype(np.float32)
             l1_arrays[f'{chip}_MASK'] = good
 
         return l1_arrays
@@ -398,9 +402,9 @@ class BaseMasterModule:
 
                 exact_stats[ext] = {}
                 exact_stats[ext]['nframe'] = np.zeros((NROW,NCOL),dtype=np.int32)
-                exact_stats[ext]['total_sum'] = np.zeros((NROW,NCOL),dtype=np.float64)
-                exact_stats[ext]['rate_mean'] = np.zeros((NROW,NCOL),dtype=np.float64)
-                exact_stats[ext]['rate_M2'] = np.zeros((NROW,NCOL),dtype=np.float64)
+                exact_stats[ext]['total_sum'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext]['rate_mean'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext]['rate_M2'] = np.zeros((NROW,NCOL),dtype=np.float32)
 
                 approx_mean = approx_stats[ext]['rate_mean']
                 approx_rms = approx_stats[ext]['rate_rms']
