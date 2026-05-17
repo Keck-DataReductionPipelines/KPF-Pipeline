@@ -46,13 +46,13 @@ def main(config, args):
     #    flat_l1 = flat_handler.make_master_l1()
     #    flat_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='flat'))
 
-    # wavelength solution
+    # master wavelength solution (ThAr)
     for files in build_l0_file_lists('thar-wls', mini_db=mini_db):
         wls_handler = WLS(files, config)
-        wls_l2_list = wls_handler.process_stack_l0_to_l2()
-
-        #for l2 in wls_l2_list:
-        #    l2.to_fits(...)
+        wls_l2 = wls_handler.make_master_l2()
+        out_path = build_filepath(get_obs_id(files[0]), 'L2', data_root=data_root_out, master='thar-wls')
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        wls_l2.to_fits(out_path)
 
     print("\n\n=== exiting kpf_drp_masters pipeline ===\n\n")
 
