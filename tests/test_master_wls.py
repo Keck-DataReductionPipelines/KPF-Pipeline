@@ -292,3 +292,22 @@ class TestMakeMasterL2:
             sample = h5[chip]['lines_stack'][frame_keys[0]]
             for key in ['wav', 'pix', 'ord', 'fib', 'bad']:
                 assert key in sample
+
+    def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
+        """Override file is loaded into the cache and stamped to the header."""
+        override = tmp_path / "alt_linelist.csv"
+        override.write_text("Wavelength\n4500.0\n5500.0\n6500.0\n")
+
+        wls = WLS(FILE_LIST)
+        original_path = wls.linelist
+        original_array = wls._linelist_array.copy()
+
+        ml2 = wls.make_master_l2(linelist=str(override))
+
+        assert wls.linelist == str(override)
+        assert wls.linelist != original_path
+        assert not np.array_equal(wls._linelist_array, original_array)
+        np.testing.assert_array_equal(
+            wls._linelist_array, np.array([4500.0, 5500.0, 6500.0])
+        )
+        assert _header_value(ml2.headers['PRIMARY'], 'LINELIST') == str(override)

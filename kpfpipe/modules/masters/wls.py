@@ -17,13 +17,14 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 
 DEFAULTS.update({
-    'rough_wls_file': f'{REPO_ROOT}/reference/rough_wls_fallback.csv',
-    'line_list_file': f'{REPO_ROOT}/reference/thar_line_list.csv',
+    'linelist': f'{REPO_ROOT}/reference/thar_line_list.csv',
     'lineprofile': 'gaussian',
     'polyorder_x': 6,
     'polyorder_m': 3,
     'polyorder_f': 2,
 })
+
+_ROUGH_WLS_FILE = f'{REPO_ROOT}/reference/rough_wls_fallback.csv'
 
 FIBER_INDEX_MAP = {'SKY':0, 'SCI1':1, 'SCI2':2, 'SCI3':3, 'CAL':4}
 
@@ -53,6 +54,7 @@ class WLS(BaseMasterModule):
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
         self._data_root = params.get('KPF_DATA_INPUT')
+        self.rough_wls_file = _ROUGH_WLS_FILE
 
         self._load_rough_wls()
         self._load_linelist()
@@ -61,35 +63,65 @@ class WLS(BaseMasterModule):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _load_linelist(self):
-        self.linelist = pd.read_csv(self.line_list_file)['Wavelength'].values
-        return self.linelist
-        
-    def _load_rough_wls(self):
-        df = pd.read_csv(self.rough_wls_file)
+    def _load_linelist(self, linelist=None):
+        """
+        Return the cached line wavelength array, loading or reloading if needed.
 
-        ncol = self.ccd['ncol']
-        self.rough_wls = {}
+        Loads from disk when no array is cached yet, or when `linelist`
+        (a file path) differs from the cached `self.linelist`. Otherwise
+        returns the cache unchanged. The cache is transparently kept in
+        sync with the most recently passed-in file path.
+        """
+        needs_load = not hasattr(self, '_linelist_array')
+        if linelist is not None and linelist != self.linelist:
+            self.linelist = linelist
+            needs_load = True
+        if needs_load:
+            self._linelist_array = pd.read_csv(self.linelist)['Wavelength'].values
+        return self._linelist_array
 
-        for chip in self.chips:
-            norder = self.norder[chip]
-            for fiber in self.fibers:
-                channel_ext = f'{chip}_{fiber}_WAVE'
-                self.rough_wls[channel_ext] = np.zeros((norder, ncol))
 
-                for o in range(norder):
-                    use = (df.CHIP == chip) & (df.ORDER == o)
-                    self.rough_wls[channel_ext][o] = np.linspace(
-                        df.loc[use, 'WAVE_MIN'].values[0],
-                        df.loc[use, 'WAVE_MAX'].values[0],
-                        ncol,
-                    )
+    def _load_rough_wls(self, rough_wls_file=None):
+        """
+        Return the cached rough WLS dict, loading or reloading if needed.
 
-        return self.rough_wls    
+        Loads from disk when no rough WLS is cached yet, or when
+        `rough_wls_file` (a file path) differs from the cached
+        `self.rough_wls_file`. Otherwise returns the cache unchanged. The
+        cache is transparently kept in sync with the most recently
+        passed-in file path.
+        """
+        needs_load = not hasattr(self, 'rough_wls')
+        if rough_wls_file is not None and rough_wls_file != self.rough_wls_file:
+            self.rough_wls_file = rough_wls_file
+            needs_load = True
+        if needs_load:
+            df = pd.read_csv(self.rough_wls_file)
+
+            ncol = self.ccd['ncol']
+            self.rough_wls = {}
+
+            for chip in self.chips:
+                norder = self.norder[chip]
+                for fiber in self.fibers:
+                    channel_ext = f'{chip}_{fiber}_WAVE'
+                    self.rough_wls[channel_ext] = np.zeros((norder, ncol))
+
+                    for o in range(norder):
+                        use = (df.CHIP == chip) & (df.ORDER == o)
+                        self.rough_wls[channel_ext][o] = np.linspace(
+                            df.loc[use, 'WAVE_MIN'].values[0],
+                            df.loc[use, 'WAVE_MAX'].values[0],
+                            ncol,
+                        )
+
+        return self.rough_wls
     
+
     def _load_frame(self, fn, ncache=0, exptime_tolerance=None):
         # load and assemble a single raw image frame from L0 --> L1
         return super()._load_frame(fn, ncache=ncache, exptime_tolerance=exptime_tolerance)
+
 
     def _extract_frame(self, l1_obj):
         # process and extract single image frame from L1 --> L2
@@ -103,6 +135,7 @@ class WLS(BaseMasterModule):
         l2_obj = spectral_extraction.perform()
 
         return l2_obj
+
 
     @staticmethod
     def _package_stacks_hdf5(coeffs_by_chip, lines_by_chip):
@@ -207,9 +240,10 @@ class WLS(BaseMasterModule):
             1D extracted flux for a single order.
         wave1d : ndarray
             1D rough wavelength grid for the same order.
-        linelist : ndarray, optional
-            Reference line wavelengths (Angstroms). Defaults to
-            self.linelist.
+        linelist : str, optional
+            Path to a CSV line list. If different from the currently
+            cached `self.linelist`, the file is reloaded and the cache
+            is updated. Defaults to `self.linelist` (no reload).
         lineprofile : str, optional
             Line profile model name. See kpfpipe.utils.stats._FUNCTIONS
             for supported values.
@@ -232,14 +266,13 @@ class WLS(BaseMasterModule):
               'rms' - normalized fit residual RMS
               'bad' - boolean QC flag (True = line failed QC)
         """
-        if linelist is None:
-            linelist = self.linelist
+        linelist_array = self._load_linelist(linelist)
 
         assert len(flux1d) == len(wave1d), "length of flux and wave arrays are mismatched"
         ncol = len(flux1d)
 
         lines = {}
-        lines['wav'] = np.sort(linelist[(linelist > wave1d.min()) & (linelist < wave1d.max())])
+        lines['wav'] = np.sort(linelist_array[(linelist_array > wave1d.min()) & (linelist_array < wave1d.max())])
         nlines = len(lines['wav'])
 
         for key in ['pix', 'std', 'amp', 'rms']:
@@ -300,8 +333,10 @@ class WLS(BaseMasterModule):
             Chip identifier ('GREEN' or 'RED').
         fibers : list of str
             Fiber identifiers (e.g. ['SCI1', 'SCI2', 'SCI3']).
-        linelist : ndarray, optional
-            Reference line wavelengths. Defaults to self.linelist.
+        linelist : str, optional
+            Path to a CSV line list. If different from the currently
+            cached `self.linelist`, the file is reloaded and the cache
+            is updated. Defaults to `self.linelist` (no reload).
         lineprofile : str, optional
             Line profile model name. See kpfpipe.utils.stats._FUNCTIONS.
         window : int, optional
@@ -330,8 +365,7 @@ class WLS(BaseMasterModule):
               'ord' - 1-indexed order number
               'fib' - fiber name
         """
-        if linelist is None:
-            linelist = self.linelist
+        self._load_linelist(linelist)
 
         if lineprofile is None:
             lineprofile = self.lineprofile
@@ -555,8 +589,10 @@ class WLS(BaseMasterModule):
             Chip identifier, i.e. 'GREEN' or 'RED'.
         fibers : list of str
             Fiber identifiers, e.g. ['SCI1', 'SCI2', 'SCI3'] or a single fiber.
-        linelist : ndarray, optional
-            Reference line wavelengths. Defaults to self.linelist.
+        linelist : str, optional
+            Path to a CSV line list. If different from the currently
+            cached `self.linelist`, the file is reloaded and the cache
+            is updated. Defaults to `self.linelist` (no reload).
         lineprofile : str, optional
             Line profile model name. Defaults to self.lineprofile.
         window : int, optional
@@ -594,8 +630,7 @@ class WLS(BaseMasterModule):
         Raises ValueError if `self._l2_obj_cache` is empty (i.e.,
         `process_stack_l0_to_l2` has not been run).
         """
-        if linelist is None:
-            linelist = self.linelist
+        self._load_linelist(linelist)
         if lineprofile is None:
             lineprofile = self.lineprofile
         if polyorder_x is None:
@@ -658,6 +693,7 @@ class WLS(BaseMasterModule):
 
     def make_master_l2(self,
                        l0_file_list=None,
+                       linelist=None,
                        lineprofile=None,
                        polyorder_x=None,
                        polyorder_m=None,
@@ -677,6 +713,10 @@ class WLS(BaseMasterModule):
         ----------
         l0_file_list : list of str, optional
             L0 files to process. Defaults to self.l0_file_list.
+        linelist : str, optional
+            Path to a CSV line list. If different from the currently
+            cached `self.linelist`, the file is reloaded and the cache
+            is updated. Defaults to `self.linelist` (no reload).
         lineprofile : str, optional
             Line profile model name. Defaults to self.lineprofile.
         polyorder_x : int, optional
@@ -726,6 +766,8 @@ class WLS(BaseMasterModule):
         if polyorder_f is None:
             polyorder_f = self.polyorder_f
 
+        self._load_linelist(linelist)
+
         self._l2_obj_cache = []
         self.process_stack_l0_to_l2(l0_file_list=l0_file_list)
 
@@ -772,7 +814,7 @@ class WLS(BaseMasterModule):
 
         primary = self.ml2_obj.headers['PRIMARY']
         primary['ROUGHWLS'] = (self.rough_wls_file, 'Rough WLS reference file')
-        primary['LINELIST'] = (self.line_list_file, 'Line list reference file')
+        primary['LINELIST'] = (self.linelist, 'Line list reference file')
         primary['LINEPROF'] = (lineprofile, 'Line profile model used in WLS fit')
         primary['POLYORDX'] = (polyorder_x, 'WLS polynomial degree, pixel axis')
         primary['POLYORDM'] = (polyorder_m, 'WLS polynomial degree, order axis')
