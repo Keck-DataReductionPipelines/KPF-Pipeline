@@ -293,6 +293,35 @@ class TestMakeMasterL2:
             for key in ['wav', 'pix', 'ord', 'fib', 'bad']:
                 assert key in sample
 
+    def test_nan_orderlet_emits_warning_and_does_not_crash(self):
+        """
+        A NaN-filled orderlet (extraction failure) should be skipped with a
+        warning rather than crashing scipy's least_squares.
+        """
+        wls = WLS(FILE_LIST)
+        ncol = wls.ccd['ncol']
+        norder = wls.norder['RED']
+
+        flux = np.ones((norder, ncol))
+        flux[0, :] = np.nan  # simulate failed-extraction orderlet
+
+        class StubL2:
+            data = {f'RED_SCI1_FLUX': flux}
+
+        wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
+            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
+        )
+        wls._linelist_array = np.array([6502.0, 6505.0, 6508.0])
+
+        with pytest.warns(UserWarning, match=r"RED SCI1 order 1: orderlet skipped"):
+            result = wls.fit_line_positions_ffi(
+                StubL2(), 'RED', ['SCI1'], verbose=False,
+            )
+
+        # The NaN order contributed no lines; remaining orders did.
+        assert result['ord'].min() >= 2
+        assert len(result['wav']) > 0
+
     def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
         """Override file is loaded into the cache and stamped to the header."""
         override = tmp_path / "alt_linelist.csv"

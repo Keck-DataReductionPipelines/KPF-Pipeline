@@ -1,6 +1,8 @@
 """
 KPF Master Wavelength Solution construction module.
 """
+import warnings
+
 from astropy.stats import mad_std
 import h5py
 import numpy as np
@@ -258,7 +260,11 @@ class WLS(BaseMasterModule):
         lines : dict of ndarray
             Per-line arrays of equal length. All entries are retained
             regardless of QC status; the caller is responsible for
-            filtering on 'bad' before downstream use. Keys:
+            filtering on 'bad' before downstream use. Lines whose fit
+            window contains any non-finite flux are dropped silently
+            before fitting. If the input order is entirely non-finite
+            (e.g. an extraction-failed orderlet filled with NaN), all
+            arrays are returned empty. Keys:
               'wav' - reference line wavelength
               'pix' - fitted pixel position
               'std' - fitted line sigma (Gaussian width)
@@ -271,9 +277,26 @@ class WLS(BaseMasterModule):
         assert len(flux1d) == len(wave1d), "length of flux and wave arrays are mismatched"
         ncol = len(flux1d)
 
-        lines = {}
-        lines['wav'] = np.sort(linelist_array[(linelist_array > wave1d.min()) & (linelist_array < wave1d.max())])
+        lines = {k: np.zeros(0, dtype='float') for k in ['wav', 'pix', 'std', 'amp', 'rms']}
+        lines['bad'] = np.zeros(0, dtype=bool)
+
+        if not np.isfinite(flux1d).any():
+            return lines
+
+        candidate_wavs = np.sort(linelist_array[(linelist_array > wave1d.min()) & (linelist_array < wave1d.max())])
+
+        keep = np.zeros(len(candidate_wavs), dtype=bool)
+        for i, lw in enumerate(candidate_wavs):
+            loc = np.argmin(np.abs(wave1d - lw))
+            cols = np.arange(loc - window, loc + window + 1)
+            cols = cols[(cols >= 0) & (cols < ncol)]
+            keep[i] = np.isfinite(flux1d[cols]).all()
+
+        lines['wav'] = candidate_wavs[keep]
         nlines = len(lines['wav'])
+
+        if nlines == 0:
+            return lines
 
         for key in ['pix', 'std', 'amp', 'rms']:
             lines[key] = np.zeros(nlines, dtype='float')
@@ -394,8 +417,13 @@ class WLS(BaseMasterModule):
                 )
 
                 nlines = len(line_dict['wav'])
+                if nlines == 0:
+                    warnings.warn(
+                        f"{chip} {fiber} order {o + 1}: orderlet skipped "
+                        f"(no fittable lines; flux likely NaN-filled)"
+                    )
                 line_dict['ord'] = (o + 1) * np.ones(nlines, dtype=int)
-                line_dict['fib'] = np.array([fiber] * nlines)
+                line_dict['fib'] = np.full(nlines, fiber)
 
                 if lines is None:
                     lines = {k: [[None] * norder for _ in fibers] for k in line_dict}
