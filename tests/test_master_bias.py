@@ -179,5 +179,10 @@ class TestMasterBiasRegression:
         assert np.sum(master_bias.data["GREEN_MASK"]) > 0
         assert np.sum(master_bias.data["RED_MASK"]) > 0
 
+    def test_img_snr_dtype_is_float32(self, master_bias):
+        for chip in ("GREEN", "RED"):
+            assert master_bias.data[f"{chip}_IMG"].dtype == np.float32
+            assert master_bias.data[f"{chip}_SNR"].dtype == np.float32
+
     def test_receipt_chain(self, master_bias):
         assert "master_bias" in master_bias.receipt["Module_Name"].values

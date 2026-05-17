@@ -225,6 +225,26 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
     return [merged]
 
 
+def build_qlp_dir(obs_id, level, *, data_root):
+    """
+    Build the QLP output directory for a given observation and level.
+
+    Args:
+        obs_id:    observation ID (e.g. 'KP.20240405.49597.71').
+        level:     data level string, one of 'L0', 'L1', 'L2', 'L4'.
+        data_root: root data directory (e.g. '/data/kpf-next/').
+
+    Returns:
+        Absolute path: {data_root}/QLP/{datecode}/{obs_id}/{level}/
+
+    Raises:
+        ValueError: if obs_id is not a valid observation ID.
+    """
+    if not is_obs_id(obs_id):
+        raise ValueError(f"obs_id must be a valid observation ID (e.g. 'KP.20240405.49597.71'); got '{obs_id}'")
+    return os.path.join(data_root, 'QLP', get_datecode(obs_id), obs_id, level)
+
+
 def build_filepath(obs_id, level, *, data_root=None, master=None):
     """
     Build a filepath for a KPF data product.
