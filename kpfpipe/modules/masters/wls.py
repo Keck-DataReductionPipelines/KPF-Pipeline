@@ -524,8 +524,7 @@ class WLS(BaseMasterModule):
             raise ValueError(f"coeffs.ndim expected to be 2 or 3, got {coeffs.ndim}")
 
         return W
-
-
+    
 
     def compute_wls_from_stack(self,
                                chip,
