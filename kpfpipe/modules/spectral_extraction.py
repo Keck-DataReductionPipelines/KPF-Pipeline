@@ -7,7 +7,6 @@ import warnings
 from numpy.polynomial import polynomial
 
 from kpfpipe import REPO_ROOT, DEFAULTS
-from kpfpipe.exceptions import KPFError
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.qc import validate_array
 
@@ -133,13 +132,14 @@ class SpectralExtraction:
         try:
             trace = self.order_trace[chip].loc[(fiber, order)]
         except KeyError:
-            raise KPFError(f"No trace found for {chip} {fiber} Order {order}")
+            raise LookupError(f"No trace found for {chip} {fiber} Order {order}")
 
         if trace.ndim != 1:
-            raise KPFError(
+            raise ValueError(
                 f"Expected exactly one row for {chip} {fiber} Order {order} "
-                f"but found {trace.shape[0]}"
-        )
+                f"but found {trace.shape[0]} (likely duplicate entries in the "
+                f"order trace reference file)"
+            )
 
         # track the trace position
         coeffs = np.array(trace[[f'Coeff{i}' for i in range(4)]], dtype=np.float32)
@@ -408,7 +408,7 @@ class SpectralExtraction:
             for fiber in fibers:
                 try:
                     flux_1d, var_1d = self.extract_orderlet(chip, fiber, order, method, verbose=verbose)
-                except KPFError:
+                except LookupError:
                     failure += 1
                     flux_1d = np.full(ncol, np.nan, dtype=np.float32)
                     var_1d  = np.full(ncol, np.nan, dtype=np.float32)
@@ -426,7 +426,7 @@ class SpectralExtraction:
                 UserWarning,
             )
         elif failure > 1:
-            raise KPFError(f"Failed to extract {failure} orders from the {chip} CCD")
+            raise LookupError(f"Failed to extract {failure} orders from the {chip} CCD")
 
         return l2_arrays
 
