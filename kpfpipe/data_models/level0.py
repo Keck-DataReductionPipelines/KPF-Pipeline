@@ -50,33 +50,18 @@ class KPF0(KPFDataModel):
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
 
-    @classmethod
-    def from_fits(cls, fn, **kwargs):
+    def read(self, hdul, instrument=None, overwrite=False, **kwargs):
+        """Route L0 FITS reads to KPF0._read.
+
+        RVDataModel.read has no lvl==0 dispatch branch, so the inherited
+        from_fits would never call into _read without this override.
         """
-        Create a KPF0 instance from a FITS file.
-
-        Overrides RVDataModel.from_fits() to bypass the base class read()
-        dispatch, which only handles levels 2-4.
-        """
-        if not os.path.isfile(fn):
-            raise IOError(f"{fn} does not exist.")
-        if not fn.endswith(".fits") and not fn.endswith(".fit"):
-            raise IOError("Input file must be a FITS file.")
-
-        this_data = cls()
-
-        with fits.open(fn) as hdul:
-            this_data.filename = os.path.basename(fn)
-            this_data.dirname = os.path.dirname(fn)
-            this_data._read(hdul)
-
-        try:
-            this_data.obs_id = get_obs_id(fn)
-        except ValueError:
-            pass
-
-        this_data.receipt_add_entry("from_fits", "PASS")
-        return this_data
+        self._read(hdul)
+        if self.filename is not None:
+            try:
+                self.obs_id = get_obs_id(self.filename)
+            except ValueError:
+                pass
 
     def _read(self, hdul):
         """

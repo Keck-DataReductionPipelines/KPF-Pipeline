@@ -16,7 +16,6 @@ Filename convention: masters products follow WMKO filename format
 """
 
 import importlib.resources
-import os
 import warnings
 
 import numpy as np
@@ -57,29 +56,14 @@ class KPFMasterL2(KPFMasterModel, KPF2):
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
 
-    @classmethod
-    def from_fits(cls, fn, **kwargs):
+    def read(self, hdul, instrument=None, overwrite=False, **kwargs):
+        """Route Masters L2 FITS reads to KPFMasterL2._read.
+
+        RVDataModel.read dispatches lvl==2 to RV2._read, which only knows
+        the EPRV standard L2 extensions and would KeyError on masters-
+        specific ones (INPUT_FILES, *_WLS_COEFFS).
         """
-        Create a KPFMasterL2 instance from a FITS file.
-
-        Overrides RVDataModel.from_fits() to bypass the base class read()
-        dispatch, which hardcodes RV2._read for level==2 and does not know
-        about masters-specific extensions (e.g., INPUT_FILES).
-        """
-        if not os.path.isfile(fn):
-            raise IOError(f"{fn} does not exist.")
-        if not fn.endswith(".fits") and not fn.endswith(".fit"):
-            raise IOError("Input file must be a FITS file.")
-
-        this_data = cls()
-
-        with fits.open(fn) as hdul:
-            this_data.filename = os.path.basename(fn)
-            this_data.dirname = os.path.dirname(fn)
-            this_data._read(hdul)
-
-        this_data.receipt_add_entry("from_fits", "PASS")
-        return this_data
+        self._read(hdul)
 
     def _read(self, hdul):
         """
