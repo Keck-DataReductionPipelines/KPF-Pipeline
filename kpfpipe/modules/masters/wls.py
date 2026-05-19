@@ -28,7 +28,6 @@ DEFAULTS.update({
 
 _ROUGH_WLS_FILE = f'{REPO_ROOT}/reference/rough_wls_fallback.csv'
 
-FIBER_INDEX_MAP = {'SKY':0, 'SCI1':1, 'SCI2':2, 'SCI3':3, 'CAL':4}
 
 class WLS(BaseMasterModule):
     """
@@ -274,7 +273,8 @@ class WLS(BaseMasterModule):
         """
         linelist_array = self._load_linelist(linelist)
 
-        assert len(flux1d) == len(wave1d), "length of flux and wave arrays are mismatched"
+        if len(flux1d) != len(wave1d):
+            raise ValueError("length of flux and wave arrays are mismatched")
         ncol = len(flux1d)
 
         lines = {k: np.zeros(0, dtype='float') for k in ['wav', 'pix', 'std', 'amp', 'rms']}
@@ -402,7 +402,8 @@ class WLS(BaseMasterModule):
             flux_arr = l2_obj.data[f'{chip}_{fiber}_FLUX']
             wave_arr = self.rough_wls[f'{chip}_{fiber}_WAVE']
 
-            assert np.shape(flux_arr) == np.shape(wave_arr), "shape mismatch between flux array and rough WLS"
+            if np.shape(flux_arr) != np.shape(wave_arr):
+                raise ValueError("shape mismatch between flux array and rough WLS")
 
             norder = np.shape(flux_arr)[0]
 
@@ -452,12 +453,8 @@ class WLS(BaseMasterModule):
         fitted line positions.
 
         Treats wavelength as a smooth function of pixel position (x), order
-        number (m), and (optionally) fiber index (f). Pixel and order
-        variables are rescaled to [-1, 1] before fitting, using the
-        canonical detector ranges (pixel in [0, ncol] and order in
-        [1, norder]) so that the fit and `evaluate_wls_coeffs` share the
-        same parameter space. The 3-fiber case assumes the three KPF
-        science fibers (SCI1, SCI2, SCI3) and maps them to {-1, 0, 1}.
+        number (m), and (optionally) fiber index (f). All variables are
+        rescaled to [-1, 1] before fitting.
 
         Parameters
         ----------
@@ -485,9 +482,8 @@ class WLS(BaseMasterModule):
         Notes
         -----
         Raises ValueError if `lines['fib']` contains anything other than
-        one fiber or the three science fibers (SCI1, SCI2, SCI3).
+        one fiber, all five fibers, or three SCI fibers (SCI1, SCI2, SCI3).
         """
-        # sanitize inputs
         if polyorder_x is None:
             polyorder_x = self.polyorder_x
         if polyorder_m is None:
@@ -520,14 +516,16 @@ class WLS(BaseMasterModule):
 
         ncol = self.ccd['ncol']
 
-        # rescale position variables to [-1,1] for Legendre fitting; use
-        # canonical detector ranges so this matches evaluate_wls_coeffs.
-        _x = 2*pix/ncol - 1
+        # rescale position variables to [-1,1] for Legendre fitting
+        _x = 2*pix/(ncol - 1) - 1
         _m = 2*(ord - 1)/(norder - 1) - 1
 
         if len(fibers) != 1:
-            _f = np.array([FIBER_INDEX_MAP[f] for f in fib], dtype=int)
-            _f = (2*_f)/(len(fibers) - 1) - 1
+            # map fibers to their positional rank then rescale to [-1, 1]
+            canonical = sorted(expected_fibers, key=lambda f: self.fiber_positions[f])
+            fiber_pos = {f: i for i, f in enumerate(canonical)}
+            _f = np.array([fiber_pos[f] for f in fib], dtype=int)
+            _f = 2*_f/(len(canonical) - 1) - 1
 
 
         # fit Legendre polynomials
@@ -705,7 +703,9 @@ class WLS(BaseMasterModule):
                                                         )
 
         coeffs_stack = np.array(coeffs_stack)
-        bad = np.abs(coeffs_stack - np.median(coeffs_stack, axis=0)) / mad_std(coeffs_stack, axis=0) > qc_sigma
+        diff = np.abs(coeffs_stack - np.median(coeffs_stack, axis=0))
+        sigma = mad_std(coeffs_stack, axis=0)
+        bad = diff > qc_sigma * sigma
         coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0)/np.sum(~bad, axis=0)
 
         W = self.evaluate_wls_coeffs(coeffs_mean, self.ccd['ncol'], self.norder[chip], len(fibers))

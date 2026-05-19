@@ -28,3 +28,11 @@ red = 32          # Number of red CCD echelle orders
 [echelle_orders]
 green = [137, 103]    # green CCD orders from grating equation, blue -> red
 red = [102, 71]       # red CCD orders from grating equation, blue -> red
+
+[fiber_positions]
+# canonical positional index of each KPF fiber on the slicer
+SKY  = 0
+SCI1 = 1
+SCI2 = 2
+SCI3 = 3
+CAL  = 4
