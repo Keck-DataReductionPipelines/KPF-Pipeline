@@ -19,8 +19,6 @@ DEFAULTS.update({
 NROW = DETECTOR['ccd']['nrow']
 NCOL = DETECTOR['ccd']['ncol']
 
-# TODO: line profile and remove uneccessary array allocations
-# TODO: decide how to handle ImageAssembly config
 # TODO: throw out first frame in stack?
 # TODO: use start, middle, end of stack for initial datacube
 

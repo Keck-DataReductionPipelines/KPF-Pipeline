@@ -4,7 +4,7 @@ KPF Image Assembly module.
 import numpy as np
 import pandas as pd
 
-from kpfpipe import REPO_ROOT, DEFAULTS, DETECTOR
+from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
 
@@ -12,8 +12,6 @@ DEFAULTS.update({
     'overscan_method': 'rowmedian',
     'readnoise_sigma': 10.0,
 })
-
-DEFAULTS.update(DETECTOR)
 
 _RN_KEYS = {
     'GREEN_AMP1': ['RNGREEN1', 'RNNGGR1'],

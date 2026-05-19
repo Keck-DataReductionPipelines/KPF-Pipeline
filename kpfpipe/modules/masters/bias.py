@@ -1,20 +1,13 @@
 """
 KPF Master Bias construction module.
 """
-from kpfpipe import DEFAULTS, DETECTOR
+from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
-DEFAULTS.update({
-    'nframe_stream': 6,
-    'stack_sigma': 5.0,
-    'exptime_tolerance': 0.1,
-})
-
-NROW = DETECTOR['ccd']['nrow']
-NCOL = DETECTOR['ccd']['ncol']
+DEFAULTS.update({'stack_sigma': 5.0})
 
 
 class Bias(BaseMasterModule):
@@ -34,9 +27,15 @@ class Bias(BaseMasterModule):
         exptime_tolerance, chips.
     """
     def __init__(self, l0_file_list, config=None):
-        if isinstance(config, ConfigHandler):
-            config = config.get_params(["DATA_DIRS", "KPFPIPE", "BIAS"])
-        super().__init__(l0_file_list, config)
+        if config is None:
+            params = {}
+        elif isinstance(config, dict):
+            params = config
+        elif isinstance(config, ConfigHandler):
+            params = config.get_params(["DATA_DIRS", "KPFPIPE", "BIAS"])
+        else:
+            raise TypeError("config must be None, dict, or ConfigHandler")
+        super().__init__(l0_file_list, params)
 
 
     # ------------------------------------------------------------------

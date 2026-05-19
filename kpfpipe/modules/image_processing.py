@@ -39,7 +39,6 @@ class ImageProcessing:
         for k, v in DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self.chips = params.get('chips', ['GREEN', 'RED'])
         self._bias_path = None  # set by load_bias()
         self._results = None    # populated by perform()
 
