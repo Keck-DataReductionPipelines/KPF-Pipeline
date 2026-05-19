@@ -60,6 +60,8 @@ class WLS(BaseMasterModule):
         self._load_rough_wls()
         self._load_linelist()
 
+        self._results = None  # populated by make_master_l2()
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -822,8 +824,11 @@ class WLS(BaseMasterModule):
 
         coeffs_by_chip = {}
         lines_by_chip = {}
+        self._results = {}
 
         for chip in self.chips:
+            # Always request stacks internally so we can populate self._results
+            # for info(); only package them into HDF5 when the caller asks.
             result = self.compute_wls_from_stack(
                 chip=chip,
                 fibers=self.fibers,
@@ -831,16 +836,19 @@ class WLS(BaseMasterModule):
                 polyorder_x=polyorder_x,
                 polyorder_m=polyorder_m,
                 polyorder_f=polyorder_f,
-                return_stacks=return_stacks,
+                return_stacks=True,
                 verbose=verbose,
             )
+            W, coeffs, coeffs_stack, lines_stack = result
+
+            self._results[chip] = {
+                'n_total': sum(len(frame['wav']) for frame in lines_stack),
+                'n_fit':   sum(int(np.sum(~frame['bad'])) for frame in lines_stack),
+            }
 
             if return_stacks:
-                W, coeffs, coeffs_stack, lines_stack = result
                 coeffs_by_chip[chip] = coeffs_stack
                 lines_by_chip[chip] = lines_stack
-            else:
-                W, coeffs = result
 
             for i, fiber in enumerate(self.fibers):
                 if W.ndim == 2:
@@ -877,3 +885,27 @@ class WLS(BaseMasterModule):
             return self.ml2_obj, stacks_hdf5
 
         return self.ml2_obj
+
+    def info(self):
+        """Print a summary of the module configuration and WLS results."""
+        print("WLS")
+        print(f"  l0_file_list:")
+        for fn in self.l0_file_list:
+            print(f"    {fn}")
+        print(f"  chips:           {self.chips}")
+        print(f"  fibers:          {self.fibers}")
+        print(f"  linelist:        {self.linelist}")
+        print(f"  rough_wls_file:  {self.rough_wls_file}")
+        print(f"  lineprofile:     {self.lineprofile}")
+        print(f"  polyorder:       x={self.polyorder_x}, m={self.polyorder_m}, f={self.polyorder_f}")
+
+        if self._results is None:
+            print("  make_master_l2() has not been called")
+            return
+
+        print(f"\n  {'chip':<8s} {'n lines fit/total'}")
+        print("  " + "-" * 40)
+        for chip, stats in self._results.items():
+            n_fit, n_total = stats['n_fit'], stats['n_total']
+            pct = 100.0 * n_fit / n_total if n_total else 0.0
+            print(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")

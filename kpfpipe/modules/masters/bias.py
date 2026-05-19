@@ -1,6 +1,8 @@
 """
 KPF Master Bias construction module.
 """
+import numpy as np
+
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.base import BaseMasterModule
@@ -36,6 +38,8 @@ class Bias(BaseMasterModule):
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
+
+        self._results = None  # populated by make_master_l1()
 
 
     # ------------------------------------------------------------------
@@ -83,4 +87,30 @@ class Bias(BaseMasterModule):
         self.ml1_obj.set_input_files(l0_file_list)
         self.ml1_obj.receipt_add_entry('master_bias', 'PASS')
 
+        self._results = {
+            chip: {
+                'bad_pixels': int(np.sum(~l1_arrays[f'{chip}_MASK'])),
+                'median':     float(np.nanmedian(l1_arrays[f'{chip}_IMG'])),
+                'rms':        float(np.nanstd(l1_arrays[f'{chip}_IMG'])),
+            }
+            for chip in self.chips
+        }
+
         return self.ml1_obj
+
+    def info(self):
+        """Print a summary of the module configuration and stacking results."""
+        print("Bias")
+        print(f"  l0_file_list:")
+        for fn in self.l0_file_list:
+            print(f"    {fn}")
+        print(f"  chips:  {self.chips}")
+
+        if self._results is None:
+            print("  make_master_l1() has not been called")
+            return
+
+        print(f"\n  {'chip':<8s} {'bad pixels':<14s} {'median [e-]':<15s} {'rms [e-]'}")
+        print("  " + "-" * 50)
+        for chip, stats in self._results.items():
+            print(f"  {chip:<8s} {stats['bad_pixels']:<14d} {stats['median']:<15.4f} {stats['rms']:.4f}")
