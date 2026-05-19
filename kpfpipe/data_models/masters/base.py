@@ -18,7 +18,12 @@ Masters products differ from science products in extension naming to
 avoid confusion: units and normalization conventions differ by
 calibration type (bias, dark, flat) and are not the same as raw
 science counts (e.g., GREEN_CCD).
+
+Filename convention: masters products follow WMKO filename format 
+(KP.YYYYMMDD.NNNNN.NN.fits), not the EPRV per-level convention.
 """
+
+import pandas as pd
 
 from kpfpipe.data_models.base import KPFDataModel
 
@@ -35,3 +40,7 @@ class KPFMasterModel(KPFDataModel):
 
     def __init__(self):
         KPFDataModel.__init__(self)
+
+    def set_input_files(self, file_list):
+        """Record the input L0 file list in the INPUT_FILES extension."""
+        self.set_data('INPUT_FILES', pd.DataFrame({'FILENAME': file_list}))

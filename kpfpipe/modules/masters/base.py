@@ -2,7 +2,6 @@
 Base class for KPF Masters modules.
 """
 import numpy as np
-import pandas as pd
 import warnings
 
 from kpfpipe import DEFAULTS, DETECTOR
@@ -55,90 +54,9 @@ class BaseMasterModule:
         self._l1_obj_cache = {}
 
 
-    def _set_input_files(self, file_list):
-        """Record the input L0 file list in the INPUT_FILES extension."""
-        self.ml1_obj.set_data('INPUT_FILES', pd.DataFrame({'FILENAME': file_list}))
-
-
-    def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
-        """
-        Stack full-frame images to produce masters L1.
-
-        Parameters
-        ----------
-        l0_file_list : list of str, optional
-            List of L0 FITS filenames to stack.
-        nstream : int, optional
-            Threshold number of frames above which streaming statistics are used.
-        sigma : float, optional
-            Sigma threshold for frame-to-frame outlier rejection.
-
-        Returns
-        -------
-        l1_arrays : dict
-            Dictionary containing per-chip stacked products:
-            - '{chip}_IMG'  : mean count rate FFI
-            - '{chip}_SNR'  : signal-to-noise ratio FFI
-            - '{chip}_MASK' : boolean bad pixel mask (1 = good, 0 = bad)
-
-        Notes
-        -----
-        If number of frames is less than `nstream`, statistics are computed
-        directly from a full data cube. Otherwise, streaming Welford statistics
-        are used to reduce memory usage.
-
-        An initial subset of frames is processed using the direct data cube
-        method to estimate approximate mean and rms. These estimates define
-        per-pixel clipping bounds for the streaming pass.
-        """
-        if l0_file_list is None:
-            l0_file_list = self.l0_file_list
-        if nstream is None:
-            nstream = self.nframe_stream
-        if sigma is None:
-            sigma = self.stack_sigma
-
-        nframe = len(l0_file_list)
-
-        if nframe < 2:
-            raise ValueError(f"Stacking requires at least two frames, got {nframe}")
-
-        if nframe < nstream:
-            stats, exptime = self._compute_stats_from_datacube(l0_file_list, nstream - 1, sigma)
-        else:
-            stats, exptime = self._compute_stats_from_stream(l0_file_list, nstream - 1, sigma)
-
-        # TODO: add check that nframe is consistent between CCD and VAR
-        for chip in self.chips:
-            if np.any(stats[f'{chip}_CCD']['nframe'] != stats[f'{chip}_VAR']['nframe']):
-                raise ValueError(f"mismatched frame count between {chip}_CCD and {chip}_VAR")
-
-        l1_arrays = {}
-        for chip in self.chips:
-
-            img = stats[f'{chip}_CCD']['rate_mean']
-            tot = stats[f'{chip}_CCD']['total_sum']
-            var = stats[f'{chip}_VAR']['total_sum']
-
-            good = var > 0
-
-            for suffix in ['CCD','VAR']:
-                ext = f'{chip}_{suffix}'
-                good &= stats[ext]['nframe'] > 0.5 * nframe
-
-            snr = np.zeros_like(img)
-            snr[good] = np.abs(tot[good]) / np.sqrt(var[good])
-
-            # Welford accumulators run in float64 for numerical stability;
-            # the stored master image fits comfortably in float32 (bias signal
-            # is a few-ADU offset with ~5 e- read noise) and halves the
-            # on-disk size of the IMG and SNR extensions.
-            l1_arrays[f'{chip}_IMG'] = img.astype(np.float32)
-            l1_arrays[f'{chip}_SNR'] = snr.astype(np.float32)
-            l1_arrays[f'{chip}_MASK'] = good
-
-        return l1_arrays
-
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
 
     def _load_frame(self, fn, ncache=None, exptime_tolerance=None):
         """
@@ -194,12 +112,28 @@ class BaseMasterModule:
         except ValueError as e:
             warnings.warn(f"Exptime check failed for {fn}: {e}")
             return None, failure
-        
+
         return l1_obj, success
 
 
     @staticmethod
     def _check_exptime_vs_elapsed(l1_obj, exptime_tolerance):
+        """
+        Validate that elapsed readout time is consistent with requested exposure time.
+
+        Parameters
+        ----------
+        l1_obj : KPF1
+            Assembled L1 object whose PRIMARY header contains EXPTIME and ELAPSED.
+        exptime_tolerance : float
+            Maximum allowed excess of elapsed time over requested exposure time, in seconds.
+
+        Raises
+        ------
+        ValueError
+            If elapsed time is less than requested (premature readout), or if the
+            excess exceeds exptime_tolerance.
+        """
         exptime = l1_obj.headers['PRIMARY']['EXPTIME']
         elapsed = l1_obj.headers['PRIMARY']['ELAPSED']
 
@@ -246,7 +180,7 @@ class BaseMasterModule:
             nframe = self.nframe_stream - 1
         if sigma is None:
             sigma = self.stack_sigma
-        
+
         nframe = np.min([nframe,len(l0_file_list)])
 
         if nframe < 2:
@@ -269,7 +203,7 @@ class BaseMasterModule:
                 break
 
             l1_obj, success = self._load_frame(fn)
-            
+
             if not success:
                 failure += 1
                 if failure / len(l0_file_list) > 0.2:
@@ -277,7 +211,7 @@ class BaseMasterModule:
                 continue
 
             exptime[i] = l1_obj.headers['PRIMARY']['EXPTIME']
-            
+
             for chip in self.chips:
                 data_cube[f'{chip}_CCD'][i] = l1_obj.data[f'{chip}_CCD']
                 data_cube[f'{chip}_VAR'][i] = l1_obj.data[f'{chip}_VAR']
@@ -291,7 +225,7 @@ class BaseMasterModule:
 
         if np.any(exptime < 0):
             raise ValueError(f"Exposure times cannot be negative; exptime = {exptime}")
-        
+
         if np.all(exptime > 0):
             T = exptime[:, None, None]
         elif np.all(exptime == 0):
@@ -307,14 +241,14 @@ class BaseMasterModule:
             stats[f'{chip}_VAR'] = {}
 
             out = (
-                flag_outliers(data_cube[f'{chip}_CCD'] / T, sigma, axis=0) | 
+                flag_outliers(data_cube[f'{chip}_CCD'] / T, sigma, axis=0) |
                 flag_outliers(data_cube[f'{chip}_VAR'] / T, sigma, axis=0)
             )
 
             valid = ~out
             N = np.sum(~out, axis=0)
             good = N > 1
-            
+
             for suffix in ['CCD', 'VAR']:
                 ext = f'{chip}_{suffix}'
                 D = data_cube[ext]
@@ -324,7 +258,7 @@ class BaseMasterModule:
 
                 rate_mean = np.zeros_like(R[0])
                 rate_mean[good] = np.sum(R, axis=0, where=valid)[good] / N[good]
-                
+
                 diff2 = (R - rate_mean)**2
                 ssd = np.sum(diff2, axis=0, where=valid)
 
@@ -383,8 +317,8 @@ class BaseMasterModule:
 
         approx_stats, exptime_direct = (
             self._compute_stats_from_datacube(
-                l0_file_list=l0_file_list,         
-                nframe=ndirect, 
+                l0_file_list=l0_file_list,
+                nframe=ndirect,
                 sigma=sigma
             )
         )
@@ -395,7 +329,7 @@ class BaseMasterModule:
         exact_stats = {}
         exptime_total = 0.0
         zero_exptime = exptime_direct == 0
-        
+
         for chip in self.chips:
             for suffix in ['CCD', 'VAR']:
                 ext = f'{chip}_{suffix}'
@@ -408,7 +342,7 @@ class BaseMasterModule:
 
                 approx_mean = approx_stats[ext]['rate_mean']
                 approx_rms = approx_stats[ext]['rate_rms']
-                
+
                 approx_stats[ext]['rate_lower'] = approx_mean - approx_rms * sigma
                 approx_stats[ext]['rate_upper'] = approx_mean + approx_rms * sigma
 
@@ -489,3 +423,87 @@ class BaseMasterModule:
                 del exact_stats[ext]['rate_M2']
 
         return exact_stats, exptime_total
+
+
+    # ------------------------------------------------------------------
+    # Algorithm steps
+    # ------------------------------------------------------------------
+
+    def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
+        """
+        Stack full-frame images to produce masters L1.
+
+        Parameters
+        ----------
+        l0_file_list : list of str, optional
+            List of L0 FITS filenames to stack.
+        nstream : int, optional
+            Threshold number of frames above which streaming statistics are used.
+        sigma : float, optional
+            Sigma threshold for frame-to-frame outlier rejection.
+
+        Returns
+        -------
+        l1_arrays : dict
+            Dictionary containing per-chip stacked products:
+            - '{chip}_IMG'  : mean count rate FFI
+            - '{chip}_SNR'  : signal-to-noise ratio FFI
+            - '{chip}_MASK' : boolean bad pixel mask (1 = good, 0 = bad)
+
+        Notes
+        -----
+        If number of frames is less than `nstream`, statistics are computed
+        directly from a full data cube. Otherwise, streaming Welford statistics
+        are used to reduce memory usage.
+
+        An initial subset of frames is processed using the direct data cube
+        method to estimate approximate mean and rms. These estimates define
+        per-pixel clipping bounds for the streaming pass.
+        """
+        if l0_file_list is None:
+            l0_file_list = self.l0_file_list
+        if nstream is None:
+            nstream = self.nframe_stream
+        if sigma is None:
+            sigma = self.stack_sigma
+
+        nframe = len(l0_file_list)
+
+        if nframe < 2:
+            raise ValueError(f"Stacking requires at least two frames, got {nframe}")
+
+        if nframe < nstream:
+            stats, exptime = self._compute_stats_from_datacube(l0_file_list, nstream - 1, sigma)
+        else:
+            stats, exptime = self._compute_stats_from_stream(l0_file_list, nstream - 1, sigma)
+
+        # TODO: add check that nframe is consistent between CCD and VAR
+        for chip in self.chips:
+            if np.any(stats[f'{chip}_CCD']['nframe'] != stats[f'{chip}_VAR']['nframe']):
+                raise ValueError(f"mismatched frame count between {chip}_CCD and {chip}_VAR")
+
+        l1_arrays = {}
+        for chip in self.chips:
+
+            img = stats[f'{chip}_CCD']['rate_mean']
+            tot = stats[f'{chip}_CCD']['total_sum']
+            var = stats[f'{chip}_VAR']['total_sum']
+
+            good = var > 0
+
+            for suffix in ['CCD','VAR']:
+                ext = f'{chip}_{suffix}'
+                good &= stats[ext]['nframe'] > 0.5 * nframe
+
+            snr = np.zeros_like(img)
+            snr[good] = np.abs(tot[good]) / np.sqrt(var[good])
+
+            # Welford accumulators run in float64 for numerical stability;
+            # the stored master image fits comfortably in float32 (bias signal
+            # is a few-ADU offset with ~5 e- read noise) and halves the
+            # on-disk size of the IMG and SNR extensions.
+            l1_arrays[f'{chip}_IMG'] = img.astype(np.float32)
+            l1_arrays[f'{chip}_SNR'] = snr.astype(np.float32)
+            l1_arrays[f'{chip}_MASK'] = good
+
+        return l1_arrays
