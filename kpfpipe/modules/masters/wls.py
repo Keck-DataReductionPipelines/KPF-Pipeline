@@ -120,12 +120,10 @@ class WLS(BaseMasterModule):
     
 
     def _load_frame(self, fn, ncache=0, exptime_tolerance=None):
-        # load and assemble a single raw image frame from L0 --> L1
         return super()._load_frame(fn, ncache=ncache, exptime_tolerance=exptime_tolerance)
 
 
     def _extract_frame(self, l1_obj):
-        # process and extract single image frame from L1 --> L2
         calibration_association = CalibrationAssociation(l1_obj, {'KPF_DATA_INPUT': self._data_root})
         l1_obj = calibration_association.perform(['bias'])
 
@@ -206,8 +204,7 @@ class WLS(BaseMasterModule):
                 if failure / len(l0_file_list) > 0.2:
                     raise ValueError(f"more than 20% of frames in stack failed to load")
                 continue
-            
-            # extract L1 --> L2
+
             l2_obj = self._extract_frame(l1_obj)
             
             if not hasattr(self, '_l2_obj_cache'):
@@ -393,7 +390,10 @@ class WLS(BaseMasterModule):
         if lineprofile is None:
             lineprofile = self.lineprofile
 
-        lines = None  # built on first call so keys match fit_line_positions_1D
+        norder = self.norder[chip]
+        # keys mirror fit_line_positions_1D's output plus per-line provenance tags
+        keys = ('wav', 'pix', 'std', 'amp', 'rms', 'bad', 'ord', 'fib')
+        lines = {k: [[None] * norder for _ in fibers] for k in keys}
 
         for i, fiber in enumerate(fibers):
             if verbose:
@@ -404,8 +404,6 @@ class WLS(BaseMasterModule):
 
             if np.shape(flux_arr) != np.shape(wave_arr):
                 raise ValueError("shape mismatch between flux array and rough WLS")
-
-            norder = np.shape(flux_arr)[0]
 
             for o in range(norder):
                 line_dict = self.fit_line_positions_1D(
@@ -426,10 +424,7 @@ class WLS(BaseMasterModule):
                 line_dict['ord'] = (o + 1) * np.ones(nlines, dtype=int)
                 line_dict['fib'] = np.full(nlines, fiber)
 
-                if lines is None:
-                    lines = {k: [[None] * norder for _ in fibers] for k in line_dict}
-
-                for k in line_dict:
+                for k in keys:
                     lines[k][i][o] = line_dict[k]
 
             for k in lines:
@@ -501,7 +496,6 @@ class WLS(BaseMasterModule):
         if polyorder_f is None:
             polyorder_f = self.polyorder_f
 
-        # drop QC-flagged lines before fitting
         good = ~lines['bad']
         wav = lines['wav'][good]
         pix = lines['pix'][good]
@@ -550,7 +544,6 @@ class WLS(BaseMasterModule):
             _f = 2*_f/(len(canonical) - 1) - 1
 
 
-        # fit Legendre polynomials
         if len(fibers) == 1:
             V = legendre.legvander2d(_x, _m, deg=[polyorder_x, polyorder_m])
 
