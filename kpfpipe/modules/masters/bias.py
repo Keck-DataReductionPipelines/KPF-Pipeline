@@ -89,10 +89,10 @@ class Bias(BaseMasterModule):
 
         self._results = {
             chip: {
-                'bad_tot': int(np.sum(~l1_arrays[f'{chip}_MASK'])),
-                'bad_pct':    float(100.0 * np.mean(~l1_arrays[f'{chip}_MASK'])),
-                'median':     float(np.nanmedian(l1_arrays[f'{chip}_IMG'])),
-                'rms':        float(np.nanstd(l1_arrays[f'{chip}_IMG'])),
+                'num_bad':   int(np.sum(~l1_arrays[f'{chip}_MASK'])),
+                'pct_bad': float(100.0 * np.mean(~l1_arrays[f'{chip}_MASK'])),
+                'median':  float(np.nanmedian(l1_arrays[f'{chip}_IMG'])),
+                'rms':     float(np.nanstd(l1_arrays[f'{chip}_IMG'])),
             }
             for chip in self.chips
         }
@@ -114,4 +114,4 @@ class Bias(BaseMasterModule):
         print(f"\n  {'chip':<8s} {'median [e-]':<15s} {'rms [e-]':<10s} {'bad pixels'}")
         print("  " + "-" * 56)
         for chip, stats in self._results.items():
-            print(f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} {stats['bad_tot']} ({stats['bad_pct']:.3f}%)")
+            print(f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} {stats['num_bad']} ({stats['pct_bad']:.3f}%)")

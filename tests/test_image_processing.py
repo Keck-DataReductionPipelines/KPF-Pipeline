@@ -268,3 +268,18 @@ class TestPerform:
         mod = _make_module()
         with pytest.raises(TypeError, match="bias must be"):
             mod.perform(bias=42)
+
+    def test_dark_filepath_raises_not_implemented(self, mod_with_bias, tmp_path):
+        # Any truthy form (including a filepath string) should hit the dark stub.
+        dark_path = str(tmp_path / 'master_dark.fits')
+        _write_master_bias(dark_path)
+        with pytest.raises(NotImplementedError, match="dark"):
+            mod_with_bias.perform(dark=dark_path)
+
+    def test_flat_master_l1_raises_not_implemented(self, mod_with_bias, tmp_path):
+        # KPFMasterL1 instance should also trip the flat stub.
+        flat_path = str(tmp_path / 'master_flat.fits')
+        _write_master_bias(flat_path)
+        flat_master = KPFMasterL1.from_fits(flat_path)
+        with pytest.raises(NotImplementedError, match="flat"):
+            mod_with_bias.perform(flat=flat_master)

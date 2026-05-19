@@ -42,7 +42,9 @@ class WLS(BaseMasterModule):
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to process.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: KPF_DATA_INPUT.
+        Module configuration. Recognized keys: linelist, lineprofile,
+        polyorder_x, polyorder_m, polyorder_f, chips, fibers,
+        KPF_DATA_INPUT.
     """
     def __init__(self, l0_file_list, config=None):
         if config is None:

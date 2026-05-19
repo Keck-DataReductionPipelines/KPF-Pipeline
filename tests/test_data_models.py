@@ -767,6 +767,10 @@ class TestKPFMasterL2:
         assert "TRACE3_WAVE" in m.extensions
         assert m.data["TRACE3_WAVE"].shape == (NORDER_GREEN + NORDER_RED, 64)
 
+    def test_from_fits_adds_receipt_entry(self, synthetic_masters_l2_file):
+        m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
+        assert "from_fits" in m.receipt["Module_Name"].values
+
     def test_round_trip(self, synthetic_masters_l2_file, tmp_path):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
         original = m.data["TRACE3_WAVE"].copy()

@@ -7,10 +7,13 @@ chips = ["GREEN", "RED"]
 fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
 [BIAS]
+stack_sigma = 5.0
 
 [DARK]
+stack_sigma = 5.0
 
 [FLAT]
+stack_sigma = 5.0
 
 [WLS]
 lineprofile = "gaussian"
