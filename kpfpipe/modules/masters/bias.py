@@ -89,7 +89,8 @@ class Bias(BaseMasterModule):
 
         self._results = {
             chip: {
-                'bad_pixels': int(np.sum(~l1_arrays[f'{chip}_MASK'])),
+                'bad_tot': int(np.sum(~l1_arrays[f'{chip}_MASK'])),
+                'bad_pct':    float(100.0 * np.mean(~l1_arrays[f'{chip}_MASK'])),
                 'median':     float(np.nanmedian(l1_arrays[f'{chip}_IMG'])),
                 'rms':        float(np.nanstd(l1_arrays[f'{chip}_IMG'])),
             }
@@ -110,7 +111,7 @@ class Bias(BaseMasterModule):
             print("  make_master_l1() has not been called")
             return
 
-        print(f"\n  {'chip':<8s} {'bad pixels':<14s} {'median [e-]':<15s} {'rms [e-]'}")
-        print("  " + "-" * 50)
+        print(f"\n  {'chip':<8s} {'median [e-]':<15s} {'rms [e-]':<10s} {'bad pixels'}")
+        print("  " + "-" * 56)
         for chip, stats in self._results.items():
-            print(f"  {chip:<8s} {stats['bad_pixels']:<14d} {stats['median']:<15.4f} {stats['rms']:.4f}")
+            print(f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} {stats['bad_tot']} ({stats['bad_pct']:.3f}%)")
