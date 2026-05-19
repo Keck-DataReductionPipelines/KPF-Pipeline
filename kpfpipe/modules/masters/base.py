@@ -150,7 +150,7 @@ class BaseMasterModule:
             raise ValueError(f"elapsed time - requested time > {exptime_tolerance}")
 
 
-    def _compute_stats_from_datacube(self, l0_file_list=None, nframe=None, sigma=None):
+    def _compute_stats_from_datacube(self, l0_file_list=None, nframe=None, sigma=None, verbose=True):
         """
         Compute stacked statistics using an in-memory data cube.
 
@@ -162,6 +162,9 @@ class BaseMasterModule:
             Maximum number of successfully loaded frames to include.
         sigma : float, optional
             Sigma threshold for outlier rejection across frames.
+        verbose : bool, optional
+            If True (default), emit per-frame progress prints and load
+            failure warnings from `_load_frame`.
 
         Returns
         -------
@@ -208,7 +211,7 @@ class BaseMasterModule:
             if i >= nframe:
                 break
 
-            l1_obj, success = self._load_frame(fn)
+            l1_obj, success = self._load_frame(fn, verbose=verbose)
 
             if not success:
                 failure += 1
@@ -279,7 +282,7 @@ class BaseMasterModule:
         return stats, exptime_total
 
 
-    def _compute_stats_from_stream(self, l0_file_list=None, ndirect=None, sigma=None):
+    def _compute_stats_from_stream(self, l0_file_list=None, ndirect=None, sigma=None, verbose=True):
         """
         Compute stacked statistics using streaming Welford accumulation.
 
@@ -292,6 +295,9 @@ class BaseMasterModule:
             for defining clipping thresholds.
         sigma : float, optional
             Sigma threshold for outlier rejection.
+        verbose : bool, optional
+            If True (default), emit per-frame progress prints and load
+            failure warnings from `_load_frame`.
 
         Returns
         -------
@@ -325,7 +331,8 @@ class BaseMasterModule:
             self._compute_stats_from_datacube(
                 l0_file_list=l0_file_list,
                 nframe=ndirect,
-                sigma=sigma
+                sigma=sigma,
+                verbose=verbose,
             )
         )
 
@@ -356,7 +363,7 @@ class BaseMasterModule:
         valid = np.ones((NROW, NCOL), dtype=bool)
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(fn)
+            l1_obj, success = self._load_frame(fn, verbose=verbose)
 
             if not success:
                 failure += 1
@@ -435,7 +442,7 @@ class BaseMasterModule:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
+    def stack_frames(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
         """
         Stack full-frame images to produce masters L1.
 
@@ -447,6 +454,9 @@ class BaseMasterModule:
             Threshold number of frames above which streaming statistics are used.
         sigma : float, optional
             Sigma threshold for frame-to-frame outlier rejection.
+        verbose : bool, optional
+            If True (default), emit per-frame progress prints and load
+            failure warnings during stacking.
 
         Returns
         -------
@@ -479,9 +489,9 @@ class BaseMasterModule:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
         if nframe < nstream:
-            stats, exptime = self._compute_stats_from_datacube(l0_file_list, nstream - 1, sigma)
+            stats, exptime = self._compute_stats_from_datacube(l0_file_list, nstream - 1, sigma, verbose=verbose)
         else:
-            stats, exptime = self._compute_stats_from_stream(l0_file_list, nstream - 1, sigma)
+            stats, exptime = self._compute_stats_from_stream(l0_file_list, nstream - 1, sigma, verbose=verbose)
 
         # TODO: add check that nframe is consistent between CCD and VAR
         for chip in self.chips:

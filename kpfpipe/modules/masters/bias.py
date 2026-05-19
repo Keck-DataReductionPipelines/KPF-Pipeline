@@ -42,7 +42,7 @@ class Bias(BaseMasterModule):
     # Public entry point
     # ------------------------------------------------------------------
 
-    def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None):
+    def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
         """
         Build master bias from stack
         """
@@ -54,9 +54,10 @@ class Bias(BaseMasterModule):
             sigma = self.stack_sigma
 
         l1_arrays = self.stack_frames(
-            l0_file_list=l0_file_list, 
-            nstream=nstream, 
-            sigma=sigma
+            l0_file_list=l0_file_list,
+            nstream=nstream,
+            sigma=sigma,
+            verbose=verbose,
         )
 
         for chip in self.chips:
