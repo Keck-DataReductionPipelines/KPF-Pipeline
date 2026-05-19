@@ -246,10 +246,14 @@ class TestMakeMasterL2:
 
     def test_polyorder_override_stamped(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
-        ml2 = wls.make_master_l2(polyorder_x=10)
-        assert _header_value(ml2.headers['PRIMARY'], 'POLYORDX') == 10
+        override_x = wls.polyorder_x + 4   # ensure different from default
+        ml2 = wls.make_master_l2(polyorder_x=override_x)
+        assert _header_value(ml2.headers['PRIMARY'], 'POLYORDX') == override_x
         for chip in wls.chips:
-            assert _header_value(ml2.headers[f'{chip}_WLS_COEFFS'], 'POLYORDX') == 10
+            assert _header_value(ml2.headers[f'{chip}_WLS_COEFFS'], 'POLYORDX') == override_x
+            # verify the override actually propagated into the fit, not just the header
+            coeffs = ml2.data[f'{chip}_WLS_COEFFS']
+            assert coeffs.shape[0] == override_x + 1
 
     def test_input_files_recorded(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
@@ -283,15 +287,37 @@ class TestMakeMasterL2:
     def test_hdf5_structure(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         ml2, h5 = wls.make_master_l2(return_stacks=True)
+
+        # mock_compute returns three synthetic frames per chip
+        expected_nframes = 3
+        expected_coeffs_shape = (
+            expected_nframes,
+            wls.polyorder_x + 1,
+            wls.polyorder_m + 1,
+            wls.polyorder_f + 1,
+        )
+
         for chip in wls.chips:
             assert chip in h5
-            assert 'coeffs_stack' in h5[chip]
+            cs = h5[chip]['coeffs_stack']
+            assert cs.shape == expected_coeffs_shape
+            assert np.issubdtype(cs.dtype, np.floating)
+
             assert 'lines_stack' in h5[chip]
-            frame_keys = list(h5[chip]['lines_stack'].keys())
-            assert len(frame_keys) > 0
+            frame_keys = sorted(h5[chip]['lines_stack'].keys())
+            assert len(frame_keys) == expected_nframes
+
             sample = h5[chip]['lines_stack'][frame_keys[0]]
-            for key in ['wav', 'pix', 'ord', 'fib', 'bad']:
+            for key in ['wav', 'pix', 'ord', 'fib', 'bad', 'std', 'amp', 'rms']:
                 assert key in sample
+            assert np.issubdtype(sample['wav'].dtype, np.floating)
+            assert np.issubdtype(sample['pix'].dtype, np.floating)
+            assert np.issubdtype(sample['ord'].dtype, np.integer)
+            assert sample['bad'].dtype == bool
+            assert h5py.check_string_dtype(sample['fib'].dtype) is not None
+            # finite values for all numeric per-line arrays
+            for key in ['wav', 'pix', 'std', 'amp', 'rms']:
+                assert np.all(np.isfinite(sample[key][...]))
 
     def test_nan_orderlet_emits_warning_and_does_not_crash(self):
         """
@@ -340,3 +366,125 @@ class TestMakeMasterL2:
             wls._linelist_array, np.array([4500.0, 5500.0, 6500.0])
         )
         assert _header_value(ml2.headers['PRIMARY'], 'LINELIST') == str(override)
+
+    def test_single_frame_stack(self, mock_make_master_l2):
+        """A 1-frame stack should still produce a valid master L2."""
+        wls = WLS(FILE_LIST[:1])
+        ml2 = wls.make_master_l2()
+        assert isinstance(ml2, KPFMasterL2)
+        assert len(wls._l2_obj_cache) == 1
+        for chip in wls.chips:
+            for fiber in wls.fibers:
+                assert f'{chip}_{fiber}_WAVE' in ml2.data
+
+    def test_empty_file_list_raises(self, mock_make_master_l2):
+        wls = WLS([])
+        with pytest.raises(ValueError, match=r"Empty l0_file_list"):
+            wls.make_master_l2()
+
+    def test_single_chip_config(self, mock_make_master_l2):
+        """A WLS configured for one chip only should not populate the other."""
+        wls = WLS(FILE_LIST, config={'chips': ['GREEN']})
+        ml2 = wls.make_master_l2()
+        for fiber in wls.fibers:
+            # GREEN populated by the mock (5500.0); RED left at the schema-
+            # default zeros since RED was not in self.chips.
+            assert np.all(ml2.data[f'GREEN_{fiber}_WAVE'] == 5500.0)
+            assert np.all(ml2.data[f'RED_{fiber}_WAVE'] == 0.0)
+        assert 'GREEN_WLS_COEFFS' in ml2.extensions
+        assert 'RED_WLS_COEFFS' not in ml2.extensions
+
+
+# ---------------------------------------------------------------------------
+# TestCalculateWlsCoeffs
+# ---------------------------------------------------------------------------
+
+class TestCalculateWlsCoeffs:
+
+    def _make_lines(self, n, fibers=('SCI1',)):
+        """Build a minimal `lines` dict with `n` lines per fiber."""
+        wav, pix, ord_, fib = [], [], [], []
+        for f in fibers:
+            wav.extend(5000.0 + np.arange(n))
+            pix.extend(np.linspace(10.0, 4000.0, n))
+            ord_.extend(np.linspace(1, 30, n).astype(int))
+            fib.extend([f] * n)
+        return {
+            'wav': np.asarray(wav, dtype=float),
+            'pix': np.asarray(pix, dtype=float),
+            'ord': np.asarray(ord_, dtype=int),
+            'fib': np.asarray(fib),
+            'bad': np.zeros(n * len(fibers), dtype=bool),
+        }
+
+    def test_underconstrained_single_fiber_raises(self):
+        # default polyorder is (6, 3, 2) → 7*4 = 28 free params single-fiber
+        wls = WLS(FILE_LIST)
+        lines = self._make_lines(5, fibers=('SCI1',))
+        with pytest.raises(ValueError, match=r"underconstrained"):
+            wls.calculate_wls_coeffs(lines, norder=30)
+
+    def test_underconstrained_multi_fiber_raises(self):
+        # 5-fiber → 7*4*3 = 84 free params; 10 lines per fiber * 5 = 50 < 84
+        wls = WLS(FILE_LIST)
+        lines = self._make_lines(10, fibers=('SKY', 'SCI1', 'SCI2', 'SCI3', 'CAL'))
+        with pytest.raises(ValueError, match=r"underconstrained"):
+            wls.calculate_wls_coeffs(lines, norder=30)
+
+    def test_sufficient_lines_does_not_raise(self):
+        wls = WLS(FILE_LIST)
+        lines = self._make_lines(50, fibers=('SCI1',))
+        coeffs = wls.calculate_wls_coeffs(lines, norder=30)
+        assert coeffs.shape == (wls.polyorder_x + 1, wls.polyorder_m + 1)
+
+
+# ---------------------------------------------------------------------------
+# TestFitLinePositions
+# ---------------------------------------------------------------------------
+
+class TestFitLinePositions:
+
+    def test_linelist_no_overlap_returns_empty(self):
+        """Linelist with no entries inside `wave1d` range yields empty arrays."""
+        wls = WLS(FILE_LIST)
+        flux = np.ones(100)
+        wave = np.linspace(5000.0, 5100.0, 100)
+        wls._linelist_array = np.array([6000.0, 6100.0])  # entirely outside
+
+        result = wls.fit_line_positions_1D(flux, wave)
+        for key in ['wav', 'pix', 'std', 'amp', 'rms', 'bad']:
+            assert len(result[key]) == 0
+
+    def test_all_nan_fiber_emits_fiber_level_warning(self):
+        """A fiber whose every order is NaN should emit a fiber-level warning."""
+        wls = WLS(FILE_LIST)
+        ncol = wls.ccd['ncol']
+        norder = wls.norder['RED']
+
+        flux = np.full((norder, ncol), np.nan)  # entire fiber NaN
+
+        class StubL2:
+            data = {'RED_SCI1_FLUX': flux}
+
+        wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
+            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
+        )
+        wls._linelist_array = np.array([6502.0, 6505.0])
+
+        with pytest.warns(UserWarning, match=r"RED SCI1: no good lines retained"):
+            result = wls.fit_line_positions_ffi(
+                StubL2(), 'RED', ['SCI1'], verbose=False,
+            )
+        assert len(result['wav']) == 0
+
+
+# ---------------------------------------------------------------------------
+# TestRoughWlsLoading
+# ---------------------------------------------------------------------------
+
+class TestRoughWlsLoading:
+
+    def test_missing_rough_wls_file_raises(self):
+        wls = WLS(FILE_LIST)
+        with pytest.raises(FileNotFoundError):
+            wls._load_rough_wls(rough_wls_file='/nonexistent/path.csv')

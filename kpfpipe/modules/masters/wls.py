@@ -435,6 +435,16 @@ class WLS(BaseMasterModule):
             for k in lines:
                 lines[k][i] = np.hstack(lines[k][i])
 
+            n_total = len(lines['wav'][i])
+            n_good = int(np.sum(~lines['bad'][i]))
+            if verbose:
+                print(f"  {chip} {fiber}: {n_good}/{n_total} good lines")
+            if n_good == 0:
+                warnings.warn(
+                    f"{chip} {fiber}: no good lines retained "
+                    f"({n_total} attempted; all rejected or NaN-filled)"
+                )
+
         for k in lines:
             lines[k] = np.hstack(lines[k])
 
@@ -508,11 +518,23 @@ class WLS(BaseMasterModule):
         elif len(fibers) == 5:
             expected_fibers = ['SKY', 'SCI1', 'SCI2', 'SCI3', 'CAL']
 
-        if not (
+        if len(fibers) != 1 and not (
             np.all(np.isin(fibers, expected_fibers)) and
             np.all(np.isin(expected_fibers, fibers))
         ):
             raise ValueError(f"unexpected fibers input: {fibers}")
+
+        # guard against degenerate / underconstrained fits
+        n_params = (polyorder_x + 1) * (polyorder_m + 1)
+        if len(fibers) != 1:
+            n_params *= (polyorder_f + 1)
+        if len(wav) < n_params:
+            raise ValueError(
+                f"WLS fit underconstrained: {len(wav)} good lines < "
+                f"{n_params} free parameters "
+                f"(polyorder_x={polyorder_x}, polyorder_m={polyorder_m}, "
+                f"polyorder_f={polyorder_f}, fibers={sorted(fibers)})"
+            )
 
         ncol = self.ccd['ncol']
 
