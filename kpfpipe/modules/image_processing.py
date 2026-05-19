@@ -51,6 +51,29 @@ class ImageProcessing:
         self._results = None    # populated by perform()
 
     # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _resolve_bias(self, value):
+        """Resolve a `bias` kwarg into a KPFMasterL1 instance.
+
+        See perform() for accepted input types. Updates self._bias_path
+        so downstream reporting reflects what was actually used.
+        """
+        if isinstance(value, KPFMasterL1):
+            dirname = getattr(value, 'dirname', '') or ''
+            filename = getattr(value, 'filename', None)
+            self._bias_path = os.path.join(dirname, filename) if filename else None
+            return value
+        if isinstance(value, str):
+            return self.load_bias(bias_path=value)
+        if value is True:
+            return self.load_bias()
+        raise TypeError(
+            f"bias must be bool, filepath str, or KPFMasterL1; got {type(value).__name__}"
+        )
+
+    # ------------------------------------------------------------------
     # Algorithm steps
     # ------------------------------------------------------------------
 
@@ -98,7 +121,7 @@ class ImageProcessing:
         self._bias_path = bias_path
         return KPFMasterL1.from_fits(bias_path)
 
-    def subtract_bias(self, master_bias, chip):
+    def subtract_bias(self, bias_l1, chip):
         """
         Subtract master bias image from the CCD data for a single chip.
 
@@ -115,7 +138,7 @@ class ImageProcessing:
             Modifies l1_obj.data['{chip}_CCD'] in-place.
         """
         chip = chip.upper()
-        self.l1_obj.data[f'{chip}_CCD'] -= master_bias.data[f'{chip}_IMG']
+        self.l1_obj.data[f'{chip}_CCD'] -= bias_l1.data[f'{chip}_IMG']
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -129,14 +152,17 @@ class ImageProcessing:
         ----------
         chips : list of str, optional
             CCD chips to process. Defaults to self.chips.
-        bias : bool, optional
-            If True (default from config), subtract the master bias.
-        dark : bool, optional
-            If True, subtract the master dark. Not yet implemented;
-            passing True raises NotImplementedError.
-        flat : bool, optional
-            If True, divide by the master flat. Not yet implemented;
-            passing True raises NotImplementedError.
+        bias : bool | str | KPFMasterL1, optional
+            How to source the master bias. Falsy → skip. True → load via
+            BIASFILE/BIASDIR in the PRIMARY header. str → treat as an
+            explicit filepath. KPFMasterL1 → use this object directly
+            (no disk I/O). Defaults to self.bias.
+        dark : bool | str | KPFMasterL1, optional
+            Same shape as `bias`. Any truthy value raises
+            NotImplementedError until dark subtraction is built out.
+        flat : bool | str | KPFMasterL1, optional
+            Same shape as `bias`. Any truthy value raises
+            NotImplementedError until flat division is built out.
 
         Returns
         -------
@@ -149,7 +175,9 @@ class ImageProcessing:
         FileNotFoundError
             Propagated from load_bias() if the master bias cannot be located.
         NotImplementedError
-            If dark or flat is True.
+            If dark or flat is truthy.
+        TypeError
+            If `bias` is not bool, str, or KPFMasterL1.
         """
         if chips is None:
             chips = self.chips
@@ -167,12 +195,12 @@ class ImageProcessing:
 
         self._results = {}
         if bias:
-            master_bias = self.load_bias()
+            master_bias = self._resolve_bias(bias)
             for chip in chips:
                 self.subtract_bias(master_bias, chip)
             self._results['bias'] = self._bias_path
 
-        self.l1_obj.headers['PRIMARY']['BIASUB'] = (bias, 'Bias subtraction applied')
+        self.l1_obj.headers['PRIMARY']['BIASUB'] = (bool(bias), 'Bias subtraction applied')
         self.l1_obj.receipt_add_entry('image_processing', 'PASS')
 
         return self.l1_obj
