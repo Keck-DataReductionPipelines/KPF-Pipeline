@@ -74,13 +74,13 @@ class TestFindMasterFiles:
 
         assert result == []
 
-    def test_search_window_override_expands_range(self, tmp_path):
+    def test_masters_search_window_days_override_expands_range(self, tmp_path):
         d = tmp_path / 'masters' / '20240403'
         d.mkdir(parents=True)
         _stub_master(d, 'KP.20240403.03637.74', 'bias')
 
         mod = _make_module(tmp_path)
-        result = mod._find_master_files('bias', '2024-04-05T11:08:33', search_window=[-2, 0])
+        result = mod._find_master_files('bias', '2024-04-05T11:08:33', masters_search_window_days=[-2, 0])
 
         assert len(result) == 1
 
@@ -238,7 +238,7 @@ class TestPerform:
         with pytest.raises(FileNotFoundError, match="dark"):
             mod.perform(['bias', 'dark'])
 
-    def test_search_window_override(self, tmp_path):
+    def test_masters_search_window_days_override(self, tmp_path):
         # Master is 2 days before the science frame; only found with wider window.
         d = tmp_path / 'masters' / '20240403'
         d.mkdir(parents=True)
@@ -249,5 +249,5 @@ class TestPerform:
             mod.perform(['bias'])  # default window doesn't reach 2 days back
 
         mod2 = _make_module(tmp_path)
-        mod2.perform(['bias'], search_window=[-2, 0])  # should succeed
+        mod2.perform(['bias'], masters_search_window_days=[-2, 0])  # should succeed
         assert 'BIASFILE' in mod2.l1_obj.headers['PRIMARY']

@@ -306,7 +306,7 @@ class SpectralExtraction:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def extract_orderlet(self, chip, fiber, order, method=None, verbose=True):
+    def extract_orderlet(self, chip, fiber, order, extraction_method=None, verbose=True):
         """
         Extract a single orderlet as a 1D spectrum.
 
@@ -318,7 +318,7 @@ class SpectralExtraction:
             Fiber identifier, e.g. 'SCI2'
         order : int
             Spectral order number.
-        method : str, optional
+        extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
         verbose : bool, optional
             If True (default), emit warnings from per-orderlet array
@@ -337,13 +337,13 @@ class SpectralExtraction:
         Retrieves the orderlet pixel region and dispatches to the selected
         extraction method.
         """
-        if method is None:
-            method = self.extraction_method
+        if extraction_method is None:
+            extraction_method = self.extraction_method
 
         try:
-            extraction_fxn = self.__getattribute__(f'_{method}_extraction')
+            extraction_fxn = self.__getattribute__(f'_{extraction_method}_extraction')
         except AttributeError:
-            raise AttributeError(f"Unsupported extraction method: '{method}'")
+            raise AttributeError(f"Unsupported extraction method: '{extraction_method}'")
 
         D, V, W, row_min, row_max = self._get_orderlet_pixels(chip, fiber, order, return_coords=True)
 
@@ -358,7 +358,7 @@ class SpectralExtraction:
         return flux_1d, var_1d
 
 
-    def extract_ffi(self, chip, fibers=None, method=None, verbose=True):
+    def extract_ffi(self, chip, fibers=None, extraction_method=None, verbose=True):
         """
         Extract all spectral orders from a full-frame image (FFI).
 
@@ -368,7 +368,7 @@ class SpectralExtraction:
             Chip identifier, i.e. 'GREEN' or 'RED'
         fibers : list of str, optional
             Fibers identifiers, e.g. 'SCI2'
-        method : str, optional
+        extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
         verbose : bool, optional
             If True (default), emit informational warnings (per-orderlet
@@ -389,8 +389,8 @@ class SpectralExtraction:
         """
         if fibers is None:
             fibers = self.fibers
-        if method is None:
-            method = self.extraction_method
+        if extraction_method is None:
+            extraction_method = self.extraction_method
 
         chip = chip.upper()
         fibers = [f.upper() for f in fibers]
@@ -407,7 +407,7 @@ class SpectralExtraction:
         for order in range(1,norder+1):
             for fiber in fibers:
                 try:
-                    flux_1d, var_1d = self.extract_orderlet(chip, fiber, order, method, verbose=verbose)
+                    flux_1d, var_1d = self.extract_orderlet(chip, fiber, order, extraction_method, verbose=verbose)
                 except LookupError:
                     failure += 1
                     flux_1d = np.full(ncol, np.nan, dtype=np.float32)
@@ -434,7 +434,7 @@ class SpectralExtraction:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, fibers=None, method=None, verbose=True):
+    def perform(self, chips=None, fibers=None, extraction_method=None, verbose=True):
         """
         Execute spectral extraction. Optional keyword arguments
         default to config settings.
@@ -445,7 +445,7 @@ class SpectralExtraction:
             Chip identifiers, i.e. 'GREEN' or 'RED'
         fibers : list of str, optional
             Fiber identifiers, e.g. 'SCI2'
-        method : str, optional
+        extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
         verbose : bool, optional
             If True (default), emit informational warnings during
@@ -466,13 +466,13 @@ class SpectralExtraction:
             chips = self.chips
         if fibers is None:
             fibers = self.fibers
-        if method is None:
-            method = self.extraction_method
+        if extraction_method is None:
+            extraction_method = self.extraction_method
 
         l2_obj = self.l1_obj.to_kpf2()
 
         for chip in chips:
-            l2_arrays = self.extract_ffi(chip, fibers, method, verbose=verbose)
+            l2_arrays = self.extract_ffi(chip, fibers, extraction_method, verbose=verbose)
             for fiber in fibers:
                 l2_obj.set_data(f'{chip}_{fiber}_FLUX', l2_arrays[f'{chip}_{fiber}_FLUX'])
                 l2_obj.set_data(f'{chip}_{fiber}_VAR',  l2_arrays[f'{chip}_{fiber}_VAR'])

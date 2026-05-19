@@ -63,7 +63,7 @@ class CalibrationAssociation:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _find_master_files(self, cal_type, date_obs, search_window=None):
+    def _find_master_files(self, cal_type, date_obs, masters_search_window_days=None):
         """
         Return a list of (filepath, timestamp) tuples for all available
         masters of the given calibration type within the search window.
@@ -75,7 +75,7 @@ class CalibrationAssociation:
         date_obs : str
             ISO-format observation datetime from the frame's PRIMARY header
             (e.g. '2024-04-05T11:08:33').
-        search_window : [int, int], optional
+        masters_search_window_days : [int, int], optional
             Search window as [days_before, days_after]. Defaults to
             self.masters_search_window_days.
 
@@ -84,8 +84,11 @@ class CalibrationAssociation:
         list of (str, str)
             Sorted list of (filepath, kpf_timestamp) tuples.
         """
+        if masters_search_window_days is None:
+            masters_search_window_days = self.masters_search_window_days
+
         obs_date = datetime.fromisoformat(date_obs).date()
-        days_before, days_after = search_window if search_window is not None else self.masters_search_window_days
+        days_before, days_after = masters_search_window_days
 
         master_files = []
         for delta in range(days_before, days_after + 1):
@@ -137,7 +140,7 @@ class CalibrationAssociation:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, cal_types, search_window=None):
+    def perform(self, cal_types, masters_search_window_days=None):
         """
         Run calibration association for the given calibration types.
 
@@ -145,7 +148,7 @@ class CalibrationAssociation:
         ----------
         cal_types : list of str
             Calibration types to associate (e.g. ['bias', 'dark', 'flat', 'thar-wls']).
-        search_window : [int, int], optional
+        masters_search_window_days : [int, int], optional
             Search window as [days_before, days_after]. Defaults to
             self.masters_search_window_days.
 
@@ -160,19 +163,21 @@ class CalibrationAssociation:
         FileNotFoundError
             If no master file is found for any requested calibration type.
         """
+        if masters_search_window_days is None:
+            masters_search_window_days = self.masters_search_window_days
+
         date_obs = self.l1_obj.headers['PRIMARY']['DATE-OBS']
         obs_date = datetime.fromisoformat(date_obs).date()
-        active_window = search_window if search_window is not None else self.masters_search_window_days
 
         _header_prefix = {'bias': 'BIAS', 'dark': 'DARK', 'flat': 'FLAT'}
 
         for cal_type in cal_types:
-            master_files = self._find_master_files(cal_type, date_obs, search_window)
+            master_files = self._find_master_files(cal_type, date_obs, masters_search_window_days)
             filepath = self._select_nearest(date_obs, master_files)
             if filepath is None:
                 raise FileNotFoundError(
                     f"No '{cal_type}' master found for {date_obs} "
-                    f"within window {active_window} days"
+                    f"within window {masters_search_window_days} days"
                 )
 
             prefix = _header_prefix.get(cal_type)

@@ -146,7 +146,7 @@ class TestPerformShapes:
 
     def test_returns_kpf2(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method, **kwargs: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -157,7 +157,7 @@ class TestPerformShapes:
 
     def test_green_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method, **kwargs: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -167,7 +167,7 @@ class TestPerformShapes:
 
     def test_red_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method, **kwargs: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -177,7 +177,7 @@ class TestPerformShapes:
 
     def test_full_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method, **kwargs: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -187,7 +187,7 @@ class TestPerformShapes:
 
     def test_all_fibers_populated(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method, **kwargs: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -199,7 +199,7 @@ class TestPerformShapes:
 
     def test_green_red_slices_independent(self, minimal_l1, monkeypatch):
         """GREEN and RED slices should contain distinct values."""
-        def mock_extract(self, chip, fibers, method, **kwargs):
+        def mock_extract(self, chip, fibers, extraction_method, **kwargs):
             fill = 1.0 if chip == 'GREEN' else 2.0
             n = NORDER_GREEN if chip == 'GREEN' else NORDER_RED
             return {
@@ -216,7 +216,7 @@ class TestPerformShapes:
 
     def test_receipt_chain(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method, **kwargs: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
