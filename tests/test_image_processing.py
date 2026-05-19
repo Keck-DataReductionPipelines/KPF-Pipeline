@@ -221,3 +221,22 @@ class TestPerform:
         mod = _make_module()  # no BIASFILE / BIASDIR
         with pytest.raises(FileNotFoundError):
             mod.perform()
+
+    def test_bias_false_skips_subtraction(self):
+        mod = _make_module()  # no BIASFILE / BIASDIR needed when bias is off
+        result = mod.perform(bias=False)
+        # CCDs untouched
+        np.testing.assert_allclose(result.data['GREEN_CCD'], _CCD_VALUE)
+        np.testing.assert_allclose(result.data['RED_CCD'], _CCD_VALUE)
+        # BIASUB header reflects the choice
+        assert result.headers['PRIMARY']['BIASUB'][0] is False
+        # No bias path recorded
+        assert 'bias' not in mod._results
+
+    def test_dark_true_raises_not_implemented(self, mod_with_bias):
+        with pytest.raises(NotImplementedError, match="dark"):
+            mod_with_bias.perform(dark=True)
+
+    def test_flat_true_raises_not_implemented(self, mod_with_bias):
+        with pytest.raises(NotImplementedError, match="flat"):
+            mod_with_bias.perform(flat=True)

@@ -7,13 +7,20 @@ from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 
+DEFAULTS.update({
+    'bias': True,
+    'dark': False,
+    'flat': False,
+})
+
 
 class ImageProcessing:
     """
     Apply calibration corrections to an assembled KPF L1 frame.
 
     Currently implements bias subtraction only. Dark subtraction and
-    flat division will be added in future updates.
+    flat division will be added in future updates; requesting them now
+    raises NotImplementedError.
 
     Parameters
     ----------
@@ -21,7 +28,8 @@ class ImageProcessing:
         Assembled L1 frame. The PRIMARY header must contain BIASFILE
         and BIASDIR keywords (written by CalibrationAssociation).
     config : None | dict | ConfigHandler
-        Module configuration. No module-specific keys at this time.
+        Module configuration. Recognized keys: bias, dark, flat
+        (boolean flags toggling each correction).
     """
 
     def __init__(self, l1_obj, config=None):
@@ -113,7 +121,7 @@ class ImageProcessing:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None):
+    def perform(self, chips=None, bias=None, dark=None, flat=None):
         """
         Run image processing corrections on the L1 frame.
 
@@ -121,6 +129,14 @@ class ImageProcessing:
         ----------
         chips : list of str, optional
             CCD chips to process. Defaults to self.chips.
+        bias : bool, optional
+            If True (default from config), subtract the master bias.
+        dark : bool, optional
+            If True, subtract the master dark. Not yet implemented;
+            passing True raises NotImplementedError.
+        flat : bool, optional
+            If True, divide by the master flat. Not yet implemented;
+            passing True raises NotImplementedError.
 
         Returns
         -------
@@ -132,18 +148,31 @@ class ImageProcessing:
         ------
         FileNotFoundError
             Propagated from load_bias() if the master bias cannot be located.
+        NotImplementedError
+            If dark or flat is True.
         """
         if chips is None:
             chips = self.chips
+        if bias is None:
+            bias = self.bias
+        if dark is None:
+            dark = self.dark
+        if flat is None:
+            flat = self.flat
 
-        master_bias = self.load_bias()
+        if dark:
+            raise NotImplementedError("dark subtraction not yet implemented")
+        if flat:
+            raise NotImplementedError("flat division not yet implemented")
 
         self._results = {}
-        for chip in chips:
-            self.subtract_bias(master_bias, chip)
-        self._results['bias'] = self._bias_path
+        if bias:
+            master_bias = self.load_bias()
+            for chip in chips:
+                self.subtract_bias(master_bias, chip)
+            self._results['bias'] = self._bias_path
 
-        self.l1_obj.headers['PRIMARY']['BIASUB'] = (True, 'Bias subtraction applied')
+        self.l1_obj.headers['PRIMARY']['BIASUB'] = (bias, 'Bias subtraction applied')
         self.l1_obj.receipt_add_entry('image_processing', 'PASS')
 
         return self.l1_obj
