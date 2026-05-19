@@ -56,7 +56,7 @@ class BaseMasterModule:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _load_frame(self, fn, ncache=None, exptime_tolerance=None):
+    def _load_frame(self, fn, ncache=None, exptime_tolerance=None, verbose=True):
         """
         Load an L0 file and perform image assembly to produce an L1 object.
 
@@ -66,6 +66,11 @@ class BaseMasterModule:
             Path to L0 FITS file.
         ncache : int, optional
             Maximum number of L1 objects to retain in internal cache.
+        verbose : bool, optional
+            If True (default), emit a progress print and propagate load /
+            exptime-check failures as UserWarnings. If False, all such
+            output is suppressed; the (None, False) failure return value
+            still signals the caller.
 
         Returns
         -------
@@ -80,7 +85,8 @@ class BaseMasterModule:
         recomputation. Cache size is limited by `ncache`, which defaults to
         `nframe_stream - 1`.
         """
-        print(f"loading {fn}")
+        if verbose:
+            print(f"loading {fn}")
 
         if ncache is None:
             ncache = self.nframe_stream - 1
@@ -102,13 +108,15 @@ class BaseMasterModule:
                     self._l1_obj_cache[fn] = l1_obj
 
             except (FileNotFoundError, IOError, OSError) as e:
-                warnings.warn(f"Failed to load {fn}: {e}")
+                if verbose:
+                    warnings.warn(f"Failed to load {fn}: {e}")
                 return None, failure
 
         try:
             self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
         except ValueError as e:
-            warnings.warn(f"Exptime check failed for {fn}: {e}")
+            if verbose:
+                warnings.warn(f"Exptime check failed for {fn}: {e}")
             return None, failure
 
         return l1_obj, success

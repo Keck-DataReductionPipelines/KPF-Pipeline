@@ -306,7 +306,7 @@ class SpectralExtraction:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def extract_orderlet(self, chip, fiber, order, method=None):
+    def extract_orderlet(self, chip, fiber, order, method=None, verbose=True):
         """
         Extract a single orderlet as a 1D spectrum.
 
@@ -320,6 +320,10 @@ class SpectralExtraction:
             Spectral order number.
         method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
+        verbose : bool, optional
+            If True (default), emit warnings from per-orderlet array
+            validation (NaN / negative / non-finite flux). If False,
+            those warnings are suppressed.
 
         Returns
         -------
@@ -347,13 +351,14 @@ class SpectralExtraction:
         # TODO: add bad pixel masking
         flux_1d, var_1d = extraction_fxn(D, V, W=W)
 
-        validate_array(flux_1d, context=f'flux_1d array: {chip} {fiber} {order}', response='warn')
-        validate_array(var_1d, context=f'var_1d array: {chip} {fiber} {order}', response='warn')
+        response = 'warn' if verbose else 'silent'
+        validate_array(flux_1d, context=f'flux_1d array: {chip} {fiber} {order}', response=response)
+        validate_array(var_1d, context=f'var_1d array: {chip} {fiber} {order}', response=response)
 
         return flux_1d, var_1d
 
 
-    def extract_ffi(self, chip, fibers=None, method=None):
+    def extract_ffi(self, chip, fibers=None, method=None, verbose=True):
         """
         Extract all spectral orders from a full-frame image (FFI).
 
@@ -365,6 +370,10 @@ class SpectralExtraction:
             Fibers identifiers, e.g. 'SCI2'
         method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
+        verbose : bool, optional
+            If True (default), emit informational warnings (per-orderlet
+            validation, expected single-orderlet failure). Hard failures
+            (>1 orderlet missing) still raise regardless.
 
         Returns
         -------
@@ -398,7 +407,7 @@ class SpectralExtraction:
         for order in range(1,norder+1):
             for fiber in fibers:
                 try:
-                    flux_1d, var_1d = self.extract_orderlet(chip, fiber, order, method)
+                    flux_1d, var_1d = self.extract_orderlet(chip, fiber, order, method, verbose=verbose)
                 except KPFError:
                     failure += 1
                     flux_1d = np.full(ncol, np.nan, dtype=np.float32)
@@ -411,21 +420,21 @@ class SpectralExtraction:
         # In this case a single failure is expected from this method. Allowing
         # the loop to continue through all orders provides useful diagnostic
         # information for cases where the algorithm truly fails.
-        if failure == 1:
+        if failure == 1 and verbose:
             warnings.warn(
                 f"1 orderlet failed to extract from the {chip} CCD; filled with NaN.",
                 UserWarning,
             )
         elif failure > 1:
             raise KPFError(f"Failed to extract {failure} orders from the {chip} CCD")
-        
+
         return l2_arrays
 
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, fibers=None, method=None):
+    def perform(self, chips=None, fibers=None, method=None, verbose=True):
         """
         Execute spectral extraction. Optional keyword arguments
         default to config settings.
@@ -438,6 +447,10 @@ class SpectralExtraction:
             Fiber identifiers, e.g. 'SCI2'
         method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
+        verbose : bool, optional
+            If True (default), emit informational warnings during
+            extraction (per-orderlet array validation, expected
+            single-orderlet failure). Hard errors still raise.
 
         Returns
         -------
@@ -459,7 +472,7 @@ class SpectralExtraction:
         l2_obj = self.l1_obj.to_kpf2()
 
         for chip in chips:
-            l2_arrays = self.extract_ffi(chip, fibers, method)
+            l2_arrays = self.extract_ffi(chip, fibers, method, verbose=verbose)
             for fiber in fibers:
                 l2_obj.set_data(f'{chip}_{fiber}_FLUX', l2_arrays[f'{chip}_{fiber}_FLUX'])
                 l2_obj.set_data(f'{chip}_{fiber}_VAR',  l2_arrays[f'{chip}_{fiber}_VAR'])
