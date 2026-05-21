@@ -8,7 +8,7 @@ computed from the finished L1 product alone (e.g. flux percentiles,
 order-trace alignment metrics) will live here.
 """
 
-from kpfpipe.diagnostics.base import Diagnostics
+from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 
 class DiagL1(Diagnostics):

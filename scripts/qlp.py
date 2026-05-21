@@ -15,8 +15,8 @@ import sys
 
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
-from kpfpipe.qlp.plot_l0 import PlotL0
-from kpfpipe.qlp.plot_l1 import PlotL1
+from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import get_datecode
 from kpfpipe.utils.pipeline import build_filepath

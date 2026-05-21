@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from kpfpipe.qc.base import QC
+from kpfpipe.quality_control.qc_binaries.base import QC
 
 _RN_KEYS    = ["RNGREEN1", "RNGREEN2", "RNGREEN3", "RNGREEN4",
                "RNRED1",   "RNRED2",   "RNRED3",   "RNRED4"]

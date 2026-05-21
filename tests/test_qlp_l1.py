@@ -74,7 +74,7 @@ def synthetic_l1_no_rn(tmp_path):
 class TestPlotL1Constructor:
 
     def test_init(self, synthetic_l1):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         assert qlp.l1 is synthetic_l1
         assert qlp.obs_id == "KP.20240405.00001.00"
@@ -82,7 +82,7 @@ class TestPlotL1Constructor:
         assert qlp.output_dir is None
 
     def test_init_with_output_dir(self, synthetic_l1, tmp_path):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1, output_dir=str(tmp_path))
         assert qlp.output_dir == str(tmp_path)
 
@@ -90,14 +90,14 @@ class TestPlotL1Constructor:
 class TestImage:
 
     def test_returns_figure(self, synthetic_l1):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image('green')
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
 
     def test_title_green(self, synthetic_l1):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image('green')
         title = fig.axes[0].get_title()
@@ -107,14 +107,14 @@ class TestImage:
         plt.close(fig)
 
     def test_title_red(self, synthetic_l1):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image('red')
         assert 'L1 - Red CCD' in fig.axes[0].get_title()
         plt.close(fig)
 
     def test_has_colorbar(self, synthetic_l1):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image('green')
         # image axis + colorbar axis
@@ -122,7 +122,7 @@ class TestImage:
         plt.close(fig)
 
     def test_image_shape(self, synthetic_l1):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image('green')
         img = fig.axes[0].get_images()[0].get_array()
@@ -130,7 +130,7 @@ class TestImage:
         plt.close(fig)
 
     def test_read_noise_annotation_present(self, synthetic_l1):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image('green')
         texts = [t.get_text() for t in fig.axes[0].texts]
@@ -139,7 +139,7 @@ class TestImage:
         plt.close(fig)
 
     def test_no_read_noise_annotation_when_headers_missing(self, synthetic_l1_no_rn):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1_no_rn)
         fig = qlp.image('green')
         texts = [t.get_text() for t in fig.axes[0].texts]
@@ -150,7 +150,7 @@ class TestImage:
 class TestFileSaving:
 
     def test_saves_png(self, synthetic_l1, tmp_path):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1, output_dir=str(tmp_path))
         fig = qlp.image('green')
         expected = tmp_path / "KP.20240405.00001.00_L1_image_green_zoomable.png"
@@ -159,7 +159,7 @@ class TestFileSaving:
         plt.close(fig)
 
     def test_no_file_when_output_dir_none(self, synthetic_l1, tmp_path):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image('green')
         assert list(tmp_path.glob("*.png")) == []
@@ -169,7 +169,7 @@ class TestFileSaving:
 class TestAll:
 
     def test_all_returns_dict(self, synthetic_l1):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         figs = qlp.all()
         assert isinstance(figs, dict)
@@ -194,7 +194,7 @@ class TestAll:
         hdul.close()
 
         l1 = KPF1.from_fits(fn)
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(l1)
         figs = qlp.all()
         assert 'L1_image_green' in figs
@@ -214,7 +214,7 @@ class TestStubs:
         "dark_subtracted",
     ])
     def test_stub_raises_not_implemented(self, synthetic_l1, method_name):
-        from kpfpipe.qlp.plot_l1 import PlotL1
+        from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         method = getattr(qlp, method_name)
         with pytest.raises(NotImplementedError):
