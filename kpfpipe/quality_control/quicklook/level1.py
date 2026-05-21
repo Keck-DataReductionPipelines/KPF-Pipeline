@@ -50,7 +50,7 @@ class PlotL1:
 
     def image(self, chip):
         """
-        Plot the assembled 2D detector image for one CCD.
+        Plot the assembled FFI for one CCD.
 
         Replicates v2.12 plot_2D_image for the basic science-frame case.
 

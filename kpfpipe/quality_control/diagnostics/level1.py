@@ -1,4 +1,4 @@
-"""Diagnostics for KPF Level 1 (assembled 2D) data products.
+"""Diagnostics for KPF Level 1 (assembled FFI) data products.
 
 Currently a placeholder. The L1 metrics consumed by QCL1 (read noise,
 master ages, BIASUB flag) are all written by the modules that produce

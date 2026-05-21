@@ -22,7 +22,7 @@ def _hdr_float(hdr, key):
 
 
 class QCL1(QC):
-    """QC checks for KPF Level 1 assembled 2D frame products."""
+    """QC checks for KPF Level 1 assembled FFI products."""
 
     LEVEL = "L1"
 

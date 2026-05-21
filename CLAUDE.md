@@ -54,7 +54,7 @@ Data products follow the EPRV RV Data Standard (rvdata) with KPF-specific extens
 RVDataModel (rvdata)
 ├── KPFDataModel (base.py)         — KPF base: obs_id, filename conventions
 │   ├── KPF0 (level0.py)          — Raw CCD data (L0)
-│   └── KPF1 (level1.py)          — Assembled 2D frames (L1)
+│   └── KPF1 (level1.py)          — Assembled FFI (L1)
 ├── RV2 (rvdata)
 │   └── KPF2 (level2.py)          — Extracted spectra (L2) with aliases
 └── RV4 (rvdata)
@@ -77,7 +77,7 @@ Traces store 67 orders concatenated (35 green + 32 red). Chip-prefix keys are co
 ### Data Flow
 
 ```
-L0 (raw CCD) → ImageAssembly → ImageProcessing → L1 (assembled 2D)
+L0 (raw CCD) → ImageAssembly → ImageProcessing → L1 (assembled FFI)
 L1 → SpectralExtraction → WavelengthCalibration → BarycentricCorrection → L1 (science-ready)
 L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 ```
@@ -94,19 +94,19 @@ Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/
 
 The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (all OrderedDicts), plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. The base `set_data()`/`set_header()` use `.keys()` checks that bypass `__contains__` overrides, so KPF2/KPF4 override these methods with a `hasattr` guard to resolve aliases during init before the dicts are upgraded.
 
-### Diagnostics, QC, and QLP
+### Diagnostics, QC, and Quicklook
 
-Three read-only layers consume data products. None of them mutate the scientific arrays — they only read data and write to PRIMARY headers (and, in QLP's case, to PNG files).
+Three read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write to PRIMARY headers (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`.
 
-- **Diagnostics** (`kpfpipe/diagnostics/`) — computes scalar/array metrics from finished data products and writes them to PRIMARY headers. Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
-- **QC** (`kpfpipe/qc/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes 0/1 keywords plus `ISGOOD` aggregate.
-- **QLP** (`kpfpipe/qlp/`) — reads products and renders matplotlib plots. Pulls any annotation values from existing headers.
+- **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them to PRIMARY headers. Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
+- **QC** (`kpfpipe/quality_control/qc_binaries/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes 0/1 keywords plus `ISGOOD` aggregate.
+- **Quicklook** (`kpfpipe/quality_control/quicklook/`) — reads products and renders matplotlib plots. Pulls any annotation values from existing headers.
 
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key`) and no shared state.
 
 **Where metrics live.** Metrics that depend on intermediate processing state (read noise from raw overscan, master ages from header lookups during association) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics.
 
-**Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `_RN_KEYS` are owned by `ImageAssembly`. Other consumers (QLP, future Diagnostics) import them rather than duplicating the logic.
+**Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `_RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
 
 ## Design Principles
 
