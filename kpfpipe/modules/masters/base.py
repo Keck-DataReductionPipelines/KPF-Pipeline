@@ -13,7 +13,6 @@ from kpfpipe.utils.stats import flag_outliers
 DEFAULTS.update({
     'nframe_stream': 6,
     'stack_sigma': 5.0,
-    'exptime_tolerance': 0.1,
 })
 
 NROW = DETECTOR['ccd']['nrow']
@@ -56,7 +55,7 @@ class BaseMasterModule:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _load_frame(self, fn, ncache=None, exptime_tolerance=None, verbose=True):
+    def _load_frame(self, fn, ncache=None, exptime_tolerance=0.1, verbose=True):
         """
         Load an L0 file and perform image assembly to produce an L1 object.
 
@@ -66,6 +65,9 @@ class BaseMasterModule:
             Path to L0 FITS file.
         ncache : int, optional
             Maximum number of L1 objects to retain in internal cache.
+        exptime_tolerance : float
+            Maximum allowed excess of elapsed time over requested exposure time, 
+            in seconds (default = 0.1).
         verbose : bool, optional
             If True (default), emit a progress print and propagate load /
             exptime-check failures as UserWarnings. If False, all such
@@ -90,8 +92,6 @@ class BaseMasterModule:
 
         if ncache is None:
             ncache = self.nframe_stream - 1
-        if exptime_tolerance is None:
-            exptime_tolerance = self.exptime_tolerance
 
         success = True
         failure = False

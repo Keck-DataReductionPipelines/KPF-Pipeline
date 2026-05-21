@@ -426,7 +426,7 @@ class SpectralExtraction:
                 UserWarning,
             )
         elif failure > 1:
-            raise LookupError(f"Failed to extract {failure} orders from the {chip} CCD")
+            raise LookupError(f"Failed to extract {failure} orderlets from the {chip} CCD")
 
         return l2_arrays
 
