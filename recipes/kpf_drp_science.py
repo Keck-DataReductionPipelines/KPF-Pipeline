@@ -14,8 +14,8 @@ from kpfpipe.modules.spectral_extraction import SpectralExtraction
 
 from kpfpipe.quality_control.diagnostics import DiagL1, DiagL2
 from kpfpipe.quality_control.qc_binaries import QCL1, QCL2
-from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
-from kpfpipe.quality_control.quicklook.plot_l1 import PlotL1
+from kpfpipe.quality_control.quicklook.level0 import PlotL0
+from kpfpipe.quality_control.quicklook.level1 import PlotL1
 from kpfpipe.utils.pipeline import build_filepath, build_qlp_dir
 
 

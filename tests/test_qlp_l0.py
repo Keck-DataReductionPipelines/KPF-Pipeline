@@ -76,7 +76,7 @@ def synthetic_2amp_l0(tmp_path):
 class TestPlotL0Constructor:
 
     def test_init_with_l0(self, synthetic_4amp_l0):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0)
         assert qlp.l0 is synthetic_4amp_l0
         assert qlp.obs_id == "KP.20240405.00001.00"
@@ -84,7 +84,7 @@ class TestPlotL0Constructor:
         assert qlp.output_dir is None
 
     def test_init_with_output_dir(self, synthetic_4amp_l0, tmp_path):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0, output_dir=str(tmp_path))
         assert qlp.output_dir == str(tmp_path)
 
@@ -99,14 +99,14 @@ import matplotlib.pyplot as plt
 class TestStitchedImage4Amp:
 
     def test_returns_figure(self, synthetic_4amp_l0):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0)
         fig = qlp.stitched_image('green')
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
 
     def test_title_format(self, synthetic_4amp_l0):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0)
         fig = qlp.stitched_image('green')
         ax = fig.axes[0]
@@ -117,7 +117,7 @@ class TestStitchedImage4Amp:
         plt.close(fig)
 
     def test_red_chip(self, synthetic_4amp_l0):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0)
         fig = qlp.stitched_image('red')
         ax = fig.axes[0]
@@ -125,7 +125,7 @@ class TestStitchedImage4Amp:
         plt.close(fig)
 
     def test_colorbar_label_adu(self, synthetic_4amp_l0):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0)
         fig = qlp.stitched_image('green')
         # Figure should have 2 axes: image + colorbar
@@ -133,7 +133,7 @@ class TestStitchedImage4Amp:
         plt.close(fig)
 
     def test_image_shape_4amp(self, synthetic_4amp_l0):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0)
         fig = qlp.stitched_image('green')
         ax = fig.axes[0]
@@ -151,14 +151,14 @@ class TestStitchedImage4Amp:
 class TestStitchedImage2Amp:
 
     def test_returns_figure(self, synthetic_2amp_l0):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_2amp_l0)
         fig = qlp.stitched_image('green')
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
 
     def test_image_shape_2amp(self, synthetic_2amp_l0):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_2amp_l0)
         fig = qlp.stitched_image('red')
         ax = fig.axes[0]
@@ -168,7 +168,7 @@ class TestStitchedImage2Amp:
         plt.close(fig)
 
     def test_title_2amp(self, synthetic_2amp_l0):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_2amp_l0)
         fig = qlp.stitched_image('green')
         ax = fig.axes[0]
@@ -197,7 +197,7 @@ class TestStitchedImage2To16:
 
         l0 = KPF0.from_fits(fn)
 
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(l0)
         fig = qlp.stitched_image('green')
 
@@ -215,7 +215,7 @@ class TestStitchedImage2To16:
 class TestPlotL0FileSaving:
 
     def test_saves_png_when_output_dir_set(self, synthetic_4amp_l0, tmp_path):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0, output_dir=str(tmp_path))
         fig = qlp.stitched_image('green')
         expected_path = tmp_path / "KP.20240405.00001.00_L0_stitched_image_green_zoomable.png"
@@ -224,7 +224,7 @@ class TestPlotL0FileSaving:
         plt.close(fig)
 
     def test_no_file_when_output_dir_none(self, synthetic_4amp_l0, tmp_path):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0)
         fig = qlp.stitched_image('green')
         # No PNG should exist anywhere in tmp_path
@@ -236,7 +236,7 @@ class TestPlotL0FileSaving:
 class TestPlotL0All:
 
     def test_all_returns_dict_of_figures(self, synthetic_4amp_l0):
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0)
         figs = qlp.all()
         assert isinstance(figs, dict)
@@ -264,7 +264,7 @@ class TestPlotL0All:
 
         l0 = KPF0.from_fits(fn)
 
-        from kpfpipe.quality_control.quicklook.plot_l0 import PlotL0
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(l0)
         figs = qlp.all()
         assert 'L0_stitched_green' in figs
