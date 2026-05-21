@@ -1,4 +1,4 @@
-"""QC checks for KPF Level 1 (assembled 2D frame) data products."""
+"""QC checks for KPF Level 1 (assembled FFI) data products."""
 
 import numpy as np
 
