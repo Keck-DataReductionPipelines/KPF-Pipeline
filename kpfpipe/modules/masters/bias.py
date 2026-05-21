@@ -1,20 +1,15 @@
 """
 KPF Master Bias construction module.
 """
-from kpfpipe import DEFAULTS, DETECTOR
+import numpy as np
+
+from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
-DEFAULTS.update({
-    'nframe_stream': 6,
-    'stack_sigma': 5.0,
-    'exptime_tolerance': 0.1,
-})
-
-NROW = DETECTOR['ccd']['nrow']
-NCOL = DETECTOR['ccd']['ncol']
+DEFAULTS.update({'stack_sigma': 5.0})
 
 
 class Bias(BaseMasterModule):
@@ -34,16 +29,24 @@ class Bias(BaseMasterModule):
         exptime_tolerance, chips.
     """
     def __init__(self, l0_file_list, config=None):
-        if isinstance(config, ConfigHandler):
-            config = config.get_params(["DATA_DIRS", "KPFPIPE", "BIAS"])
-        super().__init__(l0_file_list, config)
+        if config is None:
+            params = {}
+        elif isinstance(config, dict):
+            params = config
+        elif isinstance(config, ConfigHandler):
+            params = config.get_params(["DATA_DIRS", "KPFPIPE", "BIAS"])
+        else:
+            raise TypeError("config must be None, dict, or ConfigHandler")
+        super().__init__(l0_file_list, params)
+
+        self._results = None  # populated by make_master_l1()
 
 
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
-    def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None):
+    def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
         """
         Build master bias from stack
         """
@@ -55,9 +58,10 @@ class Bias(BaseMasterModule):
             sigma = self.stack_sigma
 
         l1_arrays = self.stack_frames(
-            l0_file_list=l0_file_list, 
-            nstream=nstream, 
-            sigma=sigma
+            l0_file_list=l0_file_list,
+            nstream=nstream,
+            sigma=sigma,
+            verbose=verbose,
         )
 
         for chip in self.chips:
@@ -83,4 +87,31 @@ class Bias(BaseMasterModule):
         self.ml1_obj.set_input_files(l0_file_list)
         self.ml1_obj.receipt_add_entry('master_bias', 'PASS')
 
+        self._results = {
+            chip: {
+                'num_bad':   int(np.sum(~l1_arrays[f'{chip}_MASK'])),
+                'pct_bad': float(100.0 * np.mean(~l1_arrays[f'{chip}_MASK'])),
+                'median':  float(np.nanmedian(l1_arrays[f'{chip}_IMG'])),
+                'rms':     float(np.nanstd(l1_arrays[f'{chip}_IMG'])),
+            }
+            for chip in self.chips
+        }
+
         return self.ml1_obj
+
+    def info(self):
+        """Print a summary of the module configuration and stacking results."""
+        print("Bias")
+        print(f"  l0_file_list:")
+        for fn in self.l0_file_list:
+            print(f"    {fn}")
+        print(f"  chips:  {self.chips}")
+
+        if self._results is None:
+            print("  make_master_l1() has not been called")
+            return
+
+        print(f"\n  {'chip':<8s} {'median [e-]':<15s} {'rms [e-]':<10s} {'bad pixels'}")
+        print("  " + "-" * 56)
+        for chip, stats in self._results.items():
+            print(f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} {stats['num_bad']} ({stats['pct_bad']:.3f}%)")

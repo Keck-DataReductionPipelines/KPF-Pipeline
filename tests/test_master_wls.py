@@ -115,20 +115,20 @@ class TestProcessIndividualFrames:
 
     def test_returns_l2_objects_for_all_frames(self, mock_pipeline, monkeypatch):
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(wls, '_load_frame', lambda fn, ncache=0: (MockL1(), True))
+        monkeypatch.setattr(wls, '_load_frame', lambda fn, ncache=0, **kwargs:(MockL1(), True))
         result = wls.process_stack_l0_to_l2()
         assert len(result) == len(FILE_LIST)
         assert all(r is mock_pipeline for r in result)
 
     def test_file_list_override(self, mock_pipeline, monkeypatch):
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(wls, '_load_frame', lambda fn, ncache=0: (MockL1(), True))
+        monkeypatch.setattr(wls, '_load_frame', lambda fn, ncache=0, **kwargs:(MockL1(), True))
         result = wls.process_stack_l0_to_l2(l0_file_list=FILE_LIST[:3])
         assert len(result) == 3
 
     def test_raises_when_failures_exceed_threshold(self, monkeypatch):
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(wls, '_load_frame', lambda fn, ncache=0: (None, False))
+        monkeypatch.setattr(wls, '_load_frame', lambda fn, ncache=0, **kwargs:(None, False))
         with pytest.raises(ValueError, match="20%"):
             wls.process_stack_l0_to_l2()
 
@@ -136,7 +136,7 @@ class TestProcessIndividualFrames:
         # 1 failure out of 8 = 12.5%, below the 20% threshold
         calls = iter([(None, False)] + [(MockL1(), True)] * 7)
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(wls, '_load_frame', lambda fn, ncache=0: next(calls))
+        monkeypatch.setattr(wls, '_load_frame', lambda fn, ncache=0, **kwargs:next(calls))
         result = wls.process_stack_l0_to_l2()
         assert len(result) == 7
 
@@ -153,9 +153,9 @@ def mock_make_master_l2(monkeypatch):
     synthetic W and coefficient arrays with chip-correct shapes.
     """
     monkeypatch.setattr(WLS, '_load_frame',
-                        lambda self, fn, ncache=0: (MockL1(), True))
+                        lambda self, fn, ncache=0, **kwargs: (MockL1(), True))
     monkeypatch.setattr(WLS, '_extract_frame',
-                        lambda self, l1: MockL2())
+                        lambda self, l1, **kwargs: MockL2())
 
     def mock_compute(self, chip, fibers, lineprofile=None,
                      polyorder_x=None, polyorder_m=None, polyorder_f=None,
@@ -341,7 +341,7 @@ class TestMakeMasterL2:
 
         with pytest.warns(UserWarning, match=r"RED SCI1 order 1: orderlet skipped"):
             result = wls.fit_line_positions_ffi(
-                StubL2(), 'RED', ['SCI1'], verbose=False,
+                StubL2(), 'RED', ['SCI1'],
             )
 
         # The NaN order contributed no lines; remaining orders did.
@@ -393,6 +393,39 @@ class TestMakeMasterL2:
             assert np.all(ml2.data[f'RED_{fiber}_WAVE'] == 0.0)
         assert 'GREEN_WLS_COEFFS' in ml2.extensions
         assert 'RED_WLS_COEFFS' not in ml2.extensions
+
+    def test_results_populated(self, mock_make_master_l2):
+        """make_master_l2 should populate self._results with per-chip line yields."""
+        wls = WLS(FILE_LIST)
+        assert wls._results is None
+        wls.make_master_l2()
+        assert wls._results is not None
+        for chip in wls.chips:
+            assert chip in wls._results
+            assert 'n_total' in wls._results[chip]
+            assert 'n_fit' in wls._results[chip]
+            assert isinstance(wls._results[chip]['n_total'], int)
+            assert isinstance(wls._results[chip]['n_fit'], int)
+
+    def test_info_before_make_master_l2(self, capsys):
+        """info() before perform should print config and the not-called message."""
+        wls = WLS(FILE_LIST)
+        wls.info()
+        out = capsys.readouterr().out
+        assert "WLS" in out
+        assert "make_master_l2() has not been called" in out
+
+    def test_info_after_make_master_l2(self, mock_make_master_l2, capsys):
+        """info() after perform should print the per-chip line yield table."""
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2()
+        capsys.readouterr()  # discard any output from make_master_l2 itself
+        wls.info()
+        out = capsys.readouterr().out
+        assert "WLS" in out
+        assert "make_master_l2() has not been called" not in out
+        for chip in wls.chips:
+            assert chip in out
 
 
 # ---------------------------------------------------------------------------
@@ -473,9 +506,52 @@ class TestFitLinePositions:
 
         with pytest.warns(UserWarning, match=r"RED SCI1: no good lines retained"):
             result = wls.fit_line_positions_ffi(
-                StubL2(), 'RED', ['SCI1'], verbose=False,
+                StubL2(), 'RED', ['SCI1'],
             )
         assert len(result['wav']) == 0
+
+    def test_nan_orderlet_warning_suppressed_when_verbose_false(self, recwarn):
+        """verbose=False should silence the per-orderlet skip warning."""
+        wls = WLS(FILE_LIST)
+        ncol = wls.ccd['ncol']
+        norder = wls.norder['RED']
+
+        flux = np.ones((norder, ncol))
+        flux[0, :] = np.nan  # one orderlet NaN-filled
+
+        class StubL2:
+            data = {'RED_SCI1_FLUX': flux}
+
+        wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
+            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
+        )
+        wls._linelist_array = np.array([6502.0, 6505.0, 6508.0])
+
+        wls.fit_line_positions_ffi(StubL2(), 'RED', ['SCI1'], verbose=False)
+
+        skipped = [w for w in recwarn if "orderlet skipped" in str(w.message)]
+        assert len(skipped) == 0
+
+    def test_all_nan_fiber_warning_suppressed_when_verbose_false(self, recwarn):
+        """verbose=False should silence the fiber-level no-good-lines warning."""
+        wls = WLS(FILE_LIST)
+        ncol = wls.ccd['ncol']
+        norder = wls.norder['RED']
+
+        flux = np.full((norder, ncol), np.nan)
+
+        class StubL2:
+            data = {'RED_SCI1_FLUX': flux}
+
+        wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
+            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
+        )
+        wls._linelist_array = np.array([6502.0, 6505.0])
+
+        wls.fit_line_positions_ffi(StubL2(), 'RED', ['SCI1'], verbose=False)
+
+        fiber_level = [w for w in recwarn if "no good lines retained" in str(w.message)]
+        assert len(fiber_level) == 0
 
 
 # ---------------------------------------------------------------------------

@@ -13,14 +13,11 @@ from kpfpipe.utils.stats import flag_outliers
 DEFAULTS.update({
     'nframe_stream': 6,
     'stack_sigma': 5.0,
-    'exptime_tolerance': 0.1,
 })
 
 NROW = DETECTOR['ccd']['nrow']
 NCOL = DETECTOR['ccd']['ncol']
 
-# TODO: line profile and remove uneccessary array allocations
-# TODO: decide how to handle ImageAssembly config
 # TODO: throw out first frame in stack?
 # TODO: use start, middle, end of stack for initial datacube
 
@@ -58,7 +55,7 @@ class BaseMasterModule:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _load_frame(self, fn, ncache=None, exptime_tolerance=None):
+    def _load_frame(self, fn, ncache=None, exptime_tolerance=0.1, verbose=True):
         """
         Load an L0 file and perform image assembly to produce an L1 object.
 
@@ -68,6 +65,14 @@ class BaseMasterModule:
             Path to L0 FITS file.
         ncache : int, optional
             Maximum number of L1 objects to retain in internal cache.
+        exptime_tolerance : float
+            Maximum allowed excess of elapsed time over requested exposure time, 
+            in seconds (default = 0.1).
+        verbose : bool, optional
+            If True (default), emit a progress print and propagate load /
+            exptime-check failures as UserWarnings. If False, all such
+            output is suppressed; the (None, False) failure return value
+            still signals the caller.
 
         Returns
         -------
@@ -82,12 +87,11 @@ class BaseMasterModule:
         recomputation. Cache size is limited by `ncache`, which defaults to
         `nframe_stream - 1`.
         """
-        print(f"loading {fn}")
+        if verbose:
+            print(f"loading {fn}")
 
         if ncache is None:
             ncache = self.nframe_stream - 1
-        if exptime_tolerance is None:
-            exptime_tolerance = self.exptime_tolerance
 
         success = True
         failure = False
@@ -104,13 +108,15 @@ class BaseMasterModule:
                     self._l1_obj_cache[fn] = l1_obj
 
             except (FileNotFoundError, IOError, OSError) as e:
-                warnings.warn(f"Failed to load {fn}: {e}")
+                if verbose:
+                    warnings.warn(f"Failed to load {fn}: {e}")
                 return None, failure
 
         try:
             self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
         except ValueError as e:
-            warnings.warn(f"Exptime check failed for {fn}: {e}")
+            if verbose:
+                warnings.warn(f"Exptime check failed for {fn}: {e}")
             return None, failure
 
         return l1_obj, success
@@ -144,7 +150,7 @@ class BaseMasterModule:
             raise ValueError(f"elapsed time - requested time > {exptime_tolerance}")
 
 
-    def _compute_stats_from_datacube(self, l0_file_list=None, nframe=None, sigma=None):
+    def _compute_stats_from_datacube(self, l0_file_list=None, nframe=None, sigma=None, verbose=True):
         """
         Compute stacked statistics using an in-memory data cube.
 
@@ -156,6 +162,9 @@ class BaseMasterModule:
             Maximum number of successfully loaded frames to include.
         sigma : float, optional
             Sigma threshold for outlier rejection across frames.
+        verbose : bool, optional
+            If True (default), emit per-frame progress prints and load
+            failure warnings from `_load_frame`.
 
         Returns
         -------
@@ -202,7 +211,7 @@ class BaseMasterModule:
             if i >= nframe:
                 break
 
-            l1_obj, success = self._load_frame(fn)
+            l1_obj, success = self._load_frame(fn, verbose=verbose)
 
             if not success:
                 failure += 1
@@ -273,7 +282,7 @@ class BaseMasterModule:
         return stats, exptime_total
 
 
-    def _compute_stats_from_stream(self, l0_file_list=None, ndirect=None, sigma=None):
+    def _compute_stats_from_stream(self, l0_file_list=None, ndirect=None, sigma=None, verbose=True):
         """
         Compute stacked statistics using streaming Welford accumulation.
 
@@ -286,6 +295,9 @@ class BaseMasterModule:
             for defining clipping thresholds.
         sigma : float, optional
             Sigma threshold for outlier rejection.
+        verbose : bool, optional
+            If True (default), emit per-frame progress prints and load
+            failure warnings from `_load_frame`.
 
         Returns
         -------
@@ -319,7 +331,8 @@ class BaseMasterModule:
             self._compute_stats_from_datacube(
                 l0_file_list=l0_file_list,
                 nframe=ndirect,
-                sigma=sigma
+                sigma=sigma,
+                verbose=verbose,
             )
         )
 
@@ -350,7 +363,7 @@ class BaseMasterModule:
         valid = np.ones((NROW, NCOL), dtype=bool)
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(fn)
+            l1_obj, success = self._load_frame(fn, verbose=verbose)
 
             if not success:
                 failure += 1
@@ -429,7 +442,7 @@ class BaseMasterModule:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def stack_frames(self, l0_file_list=None, nstream=None, sigma=None):
+    def stack_frames(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
         """
         Stack full-frame images to produce masters L1.
 
@@ -441,6 +454,9 @@ class BaseMasterModule:
             Threshold number of frames above which streaming statistics are used.
         sigma : float, optional
             Sigma threshold for frame-to-frame outlier rejection.
+        verbose : bool, optional
+            If True (default), emit per-frame progress prints and load
+            failure warnings during stacking.
 
         Returns
         -------
@@ -473,9 +489,9 @@ class BaseMasterModule:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
         if nframe < nstream:
-            stats, exptime = self._compute_stats_from_datacube(l0_file_list, nstream - 1, sigma)
+            stats, exptime = self._compute_stats_from_datacube(l0_file_list, nstream - 1, sigma, verbose=verbose)
         else:
-            stats, exptime = self._compute_stats_from_stream(l0_file_list, nstream - 1, sigma)
+            stats, exptime = self._compute_stats_from_stream(l0_file_list, nstream - 1, sigma, verbose=verbose)
 
         # TODO: add check that nframe is consistent between CCD and VAR
         for chip in self.chips:

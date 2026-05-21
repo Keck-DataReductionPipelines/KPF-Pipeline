@@ -221,3 +221,65 @@ class TestPerform:
         mod = _make_module()  # no BIASFILE / BIASDIR
         with pytest.raises(FileNotFoundError):
             mod.perform()
+
+    def test_bias_false_skips_subtraction(self):
+        mod = _make_module()  # no BIASFILE / BIASDIR needed when bias is off
+        result = mod.perform(bias=False)
+        # CCDs untouched
+        np.testing.assert_allclose(result.data['GREEN_CCD'], _CCD_VALUE)
+        np.testing.assert_allclose(result.data['RED_CCD'], _CCD_VALUE)
+        # BIASUB header reflects the choice
+        assert result.headers['PRIMARY']['BIASUB'][0] is False
+        # No bias path recorded
+        assert 'bias' not in mod._results
+
+    def test_dark_true_raises_not_implemented(self, mod_with_bias):
+        with pytest.raises(NotImplementedError, match="dark"):
+            mod_with_bias.perform(dark=True)
+
+    def test_flat_true_raises_not_implemented(self, mod_with_bias):
+        with pytest.raises(NotImplementedError, match="flat"):
+            mod_with_bias.perform(flat=True)
+
+    def test_bias_filepath_overrides_headers(self, tmp_path):
+        # explicit filepath should be used even when headers point elsewhere
+        bias_path = str(tmp_path / 'explicit_bias.fits')
+        _write_master_bias(bias_path)
+        mod = _make_module(bias_file='wrong.fits', bias_dir='/wrong/dir')
+        result = mod.perform(bias=bias_path)
+        np.testing.assert_allclose(result.data['GREEN_CCD'], _CCD_VALUE - _BIAS_VALUE)
+        np.testing.assert_allclose(result.data['RED_CCD'], _CCD_VALUE - _BIAS_VALUE)
+        assert result.headers['PRIMARY']['BIASUB'][0] is True
+        assert mod._results['bias'] == bias_path
+
+    def test_bias_master_l1_object_used_directly(self, tmp_path):
+        # supplying a KPFMasterL1 instance should bypass disk I/O entirely
+        bias_path = str(tmp_path / 'preloaded_bias.fits')
+        _write_master_bias(bias_path)
+        preloaded = KPFMasterL1.from_fits(bias_path)
+        mod = _make_module()  # no BIASFILE / BIASDIR needed
+        result = mod.perform(bias=preloaded)
+        np.testing.assert_allclose(result.data['GREEN_CCD'], _CCD_VALUE - _BIAS_VALUE)
+        assert result.headers['PRIMARY']['BIASUB'][0] is True
+        # _bias_path should reflect the in-memory object's filename
+        assert mod._results['bias'] == bias_path
+
+    def test_bias_invalid_type_raises_type_error(self):
+        mod = _make_module()
+        with pytest.raises(TypeError, match="bias must be"):
+            mod.perform(bias=42)
+
+    def test_dark_filepath_raises_not_implemented(self, mod_with_bias, tmp_path):
+        # Any truthy form (including a filepath string) should hit the dark stub.
+        dark_path = str(tmp_path / 'master_dark.fits')
+        _write_master_bias(dark_path)
+        with pytest.raises(NotImplementedError, match="dark"):
+            mod_with_bias.perform(dark=dark_path)
+
+    def test_flat_master_l1_raises_not_implemented(self, mod_with_bias, tmp_path):
+        # KPFMasterL1 instance should also trip the flat stub.
+        flat_path = str(tmp_path / 'master_flat.fits')
+        _write_master_bias(flat_path)
+        flat_master = KPFMasterL1.from_fits(flat_path)
+        with pytest.raises(NotImplementedError, match="flat"):
+            mod_with_bias.perform(flat=flat_master)

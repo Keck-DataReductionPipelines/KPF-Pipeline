@@ -42,7 +42,9 @@ class WLS(BaseMasterModule):
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to process.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: KPF_DATA_INPUT.
+        Module configuration. Recognized keys: linelist, lineprofile,
+        polyorder_x, polyorder_m, polyorder_f, chips, fibers,
+        KPF_DATA_INPUT.
     """
     def __init__(self, l0_file_list, config=None):
         if config is None:
@@ -59,6 +61,8 @@ class WLS(BaseMasterModule):
 
         self._load_rough_wls()
         self._load_linelist()
+
+        self._results = None  # populated by make_master_l2()
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -119,11 +123,7 @@ class WLS(BaseMasterModule):
         return self.rough_wls
     
 
-    def _load_frame(self, fn, ncache=0, exptime_tolerance=None):
-        return super()._load_frame(fn, ncache=ncache, exptime_tolerance=exptime_tolerance)
-
-
-    def _extract_frame(self, l1_obj):
+    def _extract_frame(self, l1_obj, verbose=True):
         calibration_association = CalibrationAssociation(l1_obj, {'KPF_DATA_INPUT': self._data_root})
         l1_obj = calibration_association.perform(['bias'])
 
@@ -131,7 +131,7 @@ class WLS(BaseMasterModule):
         l1_obj = image_processing.perform()
 
         spectral_extraction = SpectralExtraction(l1_obj)
-        l2_obj = spectral_extraction.perform()
+        l2_obj = spectral_extraction.perform(verbose=verbose)
 
         return l2_obj
 
@@ -170,7 +170,7 @@ class WLS(BaseMasterModule):
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def process_stack_l0_to_l2(self, l0_file_list=None):
+    def process_stack_l0_to_l2(self, l0_file_list=None, verbose=True):
         """
         Run each L0 frame in the stack through the L0→L2 pipeline.
 
@@ -178,6 +178,9 @@ class WLS(BaseMasterModule):
         ----------
         l0_file_list : list of str, optional
             L0 files to process. Defaults to self.l0_file_list.
+        verbose : bool, optional
+            If True (default), emit progress prints and per-frame warnings
+            from the underlying L0 → L1 → L2 calls.
 
         Returns
         -------
@@ -197,7 +200,7 @@ class WLS(BaseMasterModule):
         failure = 0
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(fn, ncache=0)
+            l1_obj, success = self._load_frame(fn, ncache=0, verbose=verbose)
 
             if not success:
                 failure += 1
@@ -205,7 +208,7 @@ class WLS(BaseMasterModule):
                     raise ValueError(f"more than 20% of frames in stack failed to load")
                 continue
 
-            l2_obj = self._extract_frame(l1_obj)
+            l2_obj = self._extract_frame(l1_obj, verbose=verbose)
             
             if not hasattr(self, '_l2_obj_cache'):
                 self._l2_obj_cache = []
@@ -416,7 +419,7 @@ class WLS(BaseMasterModule):
                 )
 
                 nlines = len(line_dict['wav'])
-                if nlines == 0:
+                if nlines == 0 and verbose:
                     warnings.warn(
                         f"{chip} {fiber} order {o + 1}: orderlet skipped "
                         f"(no fittable lines; flux likely NaN-filled)"
@@ -434,7 +437,7 @@ class WLS(BaseMasterModule):
             n_good = int(np.sum(~lines['bad'][i]))
             if verbose:
                 print(f"  {chip} {fiber}: {n_good}/{n_total} good lines")
-            if n_good == 0:
+            if n_good == 0 and verbose:
                 warnings.warn(
                     f"{chip} {fiber}: no good lines retained "
                     f"({n_total} attempted; all rejected or NaN-filled)"
@@ -742,6 +745,7 @@ class WLS(BaseMasterModule):
                        polyorder_m=None,
                        polyorder_f=None,
                        return_stacks=False,
+                       verbose=True,
                       ):
         """
         Build a master wavelength solution from a stack of L0 frames.
@@ -772,6 +776,10 @@ class WLS(BaseMasterModule):
         return_stacks : bool, optional
             If True, also return an in-memory HDF5 file containing per-frame
             coefficient and line stacks for every chip.
+        verbose : bool, optional
+            If True (default), emit progress prints and informational
+            warnings from frame loading, spectral extraction, and the
+            per-frame WLS fit. Hard failures still raise.
 
         Returns
         -------
@@ -812,14 +820,17 @@ class WLS(BaseMasterModule):
         self._load_linelist(linelist)
 
         self._l2_obj_cache = []
-        self.process_stack_l0_to_l2(l0_file_list=l0_file_list)
+        self.process_stack_l0_to_l2(l0_file_list=l0_file_list, verbose=verbose)
 
         self.ml2_obj = KPFMasterL2()
 
         coeffs_by_chip = {}
         lines_by_chip = {}
+        self._results = {}
 
         for chip in self.chips:
+            # Always request stacks internally so we can populate self._results
+            # for info(); only package them into HDF5 when the caller asks.
             result = self.compute_wls_from_stack(
                 chip=chip,
                 fibers=self.fibers,
@@ -827,15 +838,19 @@ class WLS(BaseMasterModule):
                 polyorder_x=polyorder_x,
                 polyorder_m=polyorder_m,
                 polyorder_f=polyorder_f,
-                return_stacks=return_stacks,
+                return_stacks=True,
+                verbose=verbose,
             )
+            W, coeffs, coeffs_stack, lines_stack = result
+
+            self._results[chip] = {
+                'n_total': sum(len(frame['wav']) for frame in lines_stack),
+                'n_fit':   sum(int(np.sum(~frame['bad'])) for frame in lines_stack),
+            }
 
             if return_stacks:
-                W, coeffs, coeffs_stack, lines_stack = result
                 coeffs_by_chip[chip] = coeffs_stack
                 lines_by_chip[chip] = lines_stack
-            else:
-                W, coeffs = result
 
             for i, fiber in enumerate(self.fibers):
                 if W.ndim == 2:
@@ -872,3 +887,27 @@ class WLS(BaseMasterModule):
             return self.ml2_obj, stacks_hdf5
 
         return self.ml2_obj
+
+    def info(self):
+        """Print a summary of the module configuration and WLS results."""
+        print("WLS")
+        print(f"  l0_file_list:")
+        for fn in self.l0_file_list:
+            print(f"    {fn}")
+        print(f"  chips:           {self.chips}")
+        print(f"  fibers:          {self.fibers}")
+        print(f"  linelist:        {self.linelist}")
+        print(f"  rough_wls_file:  {self.rough_wls_file}")
+        print(f"  lineprofile:     {self.lineprofile}")
+        print(f"  polyorder:       x={self.polyorder_x}, m={self.polyorder_m}, f={self.polyorder_f}")
+
+        if self._results is None:
+            print("  make_master_l2() has not been called")
+            return
+
+        print(f"\n  {'chip':<8s} {'n lines fit/total'}")
+        print("  " + "-" * 40)
+        for chip, stats in self._results.items():
+            n_fit, n_total = stats['n_fit'], stats['n_total']
+            pct = 100.0 * n_fit / n_total if n_total else 0.0
+            print(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")

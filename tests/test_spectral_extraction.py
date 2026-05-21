@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 from astropy.io import fits
 
@@ -146,7 +147,7 @@ class TestPerformShapes:
 
     def test_returns_kpf2(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -157,7 +158,7 @@ class TestPerformShapes:
 
     def test_green_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -167,7 +168,7 @@ class TestPerformShapes:
 
     def test_red_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -177,7 +178,7 @@ class TestPerformShapes:
 
     def test_full_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -187,7 +188,7 @@ class TestPerformShapes:
 
     def test_all_fibers_populated(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -199,7 +200,7 @@ class TestPerformShapes:
 
     def test_green_red_slices_independent(self, minimal_l1, monkeypatch):
         """GREEN and RED slices should contain distinct values."""
-        def mock_extract(self, chip, fibers, method):
+        def mock_extract(self, chip, fibers, extraction_method, **kwargs):
             fill = 1.0 if chip == 'GREEN' else 2.0
             n = NORDER_GREEN if chip == 'GREEN' else NORDER_RED
             return {
@@ -216,7 +217,7 @@ class TestPerformShapes:
 
     def test_receipt_chain(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, method: {
+                            lambda self, chip, fibers, extraction_method, **kwargs: {
                                 k: v for k, v in mock_ffi_arrays.items()
                                 if k.startswith(chip)
                             })
@@ -273,3 +274,50 @@ class TestSpectralExtractionRealData:
         modules = l2.receipt['Module_Name'].values
         assert 'image_assembly' in modules
         assert 'spectral_extraction' in modules
+
+
+# ---------------------------------------------------------------------------
+# TestOrderTraceErrors
+# ---------------------------------------------------------------------------
+
+class TestOrderTraceErrors:
+    """Errors raised from _get_orderlet_pixels via extract_orderlet."""
+
+    _TRACE_COLS = ['TopEdge', 'BottomEdge', 'Coeff0', 'Coeff1', 'Coeff2', 'Coeff3']
+
+    def _make_se(self, rows):
+        """Build a SpectralExtraction with a pre-populated order_trace cache."""
+        class StubL1:
+            data = {
+                'GREEN_CCD': np.zeros((100, 100), dtype=np.float32),
+                'GREEN_VAR': np.ones((100, 100), dtype=np.float32),
+            }
+            headers = {'PRIMARY': {}}
+
+        df = pd.DataFrame(rows).set_index(['Fiber', 'Order']).sort_index()
+        se = SpectralExtraction(StubL1())
+        se.order_trace = {'GREEN': df}
+        se.order_trace_path = {'GREEN': '<stub>'}
+        return se
+
+    def test_missing_trace_raises_lookup_error(self):
+        # Table has SCI1 order 1 only; asking for order 2 misses.
+        rows = [
+            {'Fiber': 'SCI1', 'Order': 1, 'TopEdge': 5.0, 'BottomEdge': 5.0,
+             'Coeff0': 50.0, 'Coeff1': 0.0, 'Coeff2': 0.0, 'Coeff3': 0.0},
+        ]
+        se = self._make_se(rows)
+        with pytest.raises(LookupError, match="No trace found"):
+            se.extract_orderlet('GREEN', 'SCI1', 2)
+
+    def test_duplicate_trace_raises_value_error(self):
+        # Two rows for the same (Fiber, Order) — a corrupt reference file.
+        rows = [
+            {'Fiber': 'SCI1', 'Order': 1, 'TopEdge': 5.0, 'BottomEdge': 5.0,
+             'Coeff0': 50.0, 'Coeff1': 0.0, 'Coeff2': 0.0, 'Coeff3': 0.0},
+            {'Fiber': 'SCI1', 'Order': 1, 'TopEdge': 5.0, 'BottomEdge': 5.0,
+             'Coeff0': 50.0, 'Coeff1': 0.0, 'Coeff2': 0.0, 'Coeff3': 0.0},
+        ]
+        se = self._make_se(rows)
+        with pytest.raises(ValueError, match="Expected exactly one row"):
+            se.extract_orderlet('GREEN', 'SCI1', 1)

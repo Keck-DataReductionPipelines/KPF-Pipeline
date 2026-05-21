@@ -97,6 +97,34 @@ class TestMasterBiasUnit:
 
 
 # ---------------------------------------------------------------------------
+# info() smoke tests
+# ---------------------------------------------------------------------------
+
+
+class TestMasterBiasInfo:
+    """Smoke tests for Bias.info() in both pre- and post-perform states."""
+
+    def test_info_before_make_master_l1(self, capsys):
+        bias = Bias(FILE_LIST)
+        bias.info()
+        out = capsys.readouterr().out
+        assert "Bias" in out
+        assert "make_master_l1() has not been called" in out
+
+    def test_info_after_make_master_l1(self, capsys):
+        synthetic = make_l1_arrays()
+        bias = Bias(FILE_LIST)
+        with patch.object(bias, "stack_frames", return_value=synthetic):
+            bias.make_master_l1()
+        bias.info()
+        out = capsys.readouterr().out
+        assert "Bias" in out
+        assert "make_master_l1() has not been called" not in out
+        for chip in CHIPS:
+            assert chip in out
+
+
+# ---------------------------------------------------------------------------
 # FITS round-trip (mocked stack_frames)
 # ---------------------------------------------------------------------------
 

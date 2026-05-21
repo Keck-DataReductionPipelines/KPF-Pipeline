@@ -7,7 +7,6 @@ import warnings
 from numpy.polynomial import polynomial
 
 from kpfpipe import REPO_ROOT, DEFAULTS
-from kpfpipe.exceptions import KPFError
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.qc import validate_array
 
@@ -133,13 +132,14 @@ class SpectralExtraction:
         try:
             trace = self.order_trace[chip].loc[(fiber, order)]
         except KeyError:
-            raise KPFError(f"No trace found for {chip} {fiber} Order {order}")
+            raise LookupError(f"No trace found for {chip} {fiber} Order {order}")
 
         if trace.ndim != 1:
-            raise KPFError(
+            raise ValueError(
                 f"Expected exactly one row for {chip} {fiber} Order {order} "
-                f"but found {trace.shape[0]}"
-        )
+                f"but found {trace.shape[0]} (likely duplicate entries in the "
+                f"order trace reference file)"
+            )
 
         # track the trace position
         coeffs = np.array(trace[[f'Coeff{i}' for i in range(4)]], dtype=np.float32)
@@ -306,7 +306,7 @@ class SpectralExtraction:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def extract_orderlet(self, chip, fiber, order, method=None):
+    def extract_orderlet(self, chip, fiber, order, extraction_method=None, verbose=True):
         """
         Extract a single orderlet as a 1D spectrum.
 
@@ -318,8 +318,12 @@ class SpectralExtraction:
             Fiber identifier, e.g. 'SCI2'
         order : int
             Spectral order number.
-        method : str, optional
+        extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
+        verbose : bool, optional
+            If True (default), emit warnings from per-orderlet array
+            validation (NaN / negative / non-finite flux). If False,
+            those warnings are suppressed.
 
         Returns
         -------
@@ -333,13 +337,13 @@ class SpectralExtraction:
         Retrieves the orderlet pixel region and dispatches to the selected
         extraction method.
         """
-        if method is None:
-            method = self.extraction_method
+        if extraction_method is None:
+            extraction_method = self.extraction_method
 
         try:
-            extraction_fxn = self.__getattribute__(f'_{method}_extraction')
+            extraction_fxn = self.__getattribute__(f'_{extraction_method}_extraction')
         except AttributeError:
-            raise AttributeError(f"Unsupported extraction method: '{method}'")
+            raise AttributeError(f"Unsupported extraction method: '{extraction_method}'")
 
         D, V, W, row_min, row_max = self._get_orderlet_pixels(chip, fiber, order, return_coords=True)
 
@@ -347,13 +351,14 @@ class SpectralExtraction:
         # TODO: add bad pixel masking
         flux_1d, var_1d = extraction_fxn(D, V, W=W)
 
-        validate_array(flux_1d, context=f'flux_1d array: {chip} {fiber} {order}', response='warn')
-        validate_array(var_1d, context=f'var_1d array: {chip} {fiber} {order}', response='warn')
+        response = 'warn' if verbose else 'silent'
+        validate_array(flux_1d, context=f'flux_1d array: {chip} {fiber} {order}', response=response)
+        validate_array(var_1d, context=f'var_1d array: {chip} {fiber} {order}', response=response)
 
         return flux_1d, var_1d
 
 
-    def extract_ffi(self, chip, fibers=None, method=None):
+    def extract_ffi(self, chip, fibers=None, extraction_method=None, verbose=True):
         """
         Extract all spectral orders from a full-frame image (FFI).
 
@@ -363,8 +368,12 @@ class SpectralExtraction:
             Chip identifier, i.e. 'GREEN' or 'RED'
         fibers : list of str, optional
             Fibers identifiers, e.g. 'SCI2'
-        method : str, optional
+        extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
+        verbose : bool, optional
+            If True (default), emit informational warnings (per-orderlet
+            validation, expected single-orderlet failure). Hard failures
+            (>1 orderlet missing) still raise regardless.
 
         Returns
         -------
@@ -380,8 +389,8 @@ class SpectralExtraction:
         """
         if fibers is None:
             fibers = self.fibers
-        if method is None:
-            method = self.extraction_method
+        if extraction_method is None:
+            extraction_method = self.extraction_method
 
         chip = chip.upper()
         fibers = [f.upper() for f in fibers]
@@ -398,8 +407,8 @@ class SpectralExtraction:
         for order in range(1,norder+1):
             for fiber in fibers:
                 try:
-                    flux_1d, var_1d = self.extract_orderlet(chip, fiber, order, method)
-                except KPFError:
+                    flux_1d, var_1d = self.extract_orderlet(chip, fiber, order, extraction_method, verbose=verbose)
+                except LookupError:
                     failure += 1
                     flux_1d = np.full(ncol, np.nan, dtype=np.float32)
                     var_1d  = np.full(ncol, np.nan, dtype=np.float32)
@@ -411,21 +420,21 @@ class SpectralExtraction:
         # In this case a single failure is expected from this method. Allowing
         # the loop to continue through all orders provides useful diagnostic
         # information for cases where the algorithm truly fails.
-        if failure == 1:
+        if failure == 1 and verbose:
             warnings.warn(
                 f"1 orderlet failed to extract from the {chip} CCD; filled with NaN.",
                 UserWarning,
             )
         elif failure > 1:
-            raise KPFError(f"Failed to extract {failure} orders from the {chip} CCD")
-        
+            raise LookupError(f"Failed to extract {failure} orderlets from the {chip} CCD")
+
         return l2_arrays
 
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, fibers=None, method=None):
+    def perform(self, chips=None, fibers=None, extraction_method=None, verbose=True):
         """
         Execute spectral extraction. Optional keyword arguments
         default to config settings.
@@ -436,8 +445,12 @@ class SpectralExtraction:
             Chip identifiers, i.e. 'GREEN' or 'RED'
         fibers : list of str, optional
             Fiber identifiers, e.g. 'SCI2'
-        method : str, optional
+        extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
+        verbose : bool, optional
+            If True (default), emit informational warnings during
+            extraction (per-orderlet array validation, expected
+            single-orderlet failure). Hard errors still raise.
 
         Returns
         -------
@@ -453,13 +466,13 @@ class SpectralExtraction:
             chips = self.chips
         if fibers is None:
             fibers = self.fibers
-        if method is None:
-            method = self.extraction_method
+        if extraction_method is None:
+            extraction_method = self.extraction_method
 
         l2_obj = self.l1_obj.to_kpf2()
 
         for chip in chips:
-            l2_arrays = self.extract_ffi(chip, fibers, method)
+            l2_arrays = self.extract_ffi(chip, fibers, extraction_method, verbose=verbose)
             for fiber in fibers:
                 l2_obj.set_data(f'{chip}_{fiber}_FLUX', l2_arrays[f'{chip}_{fiber}_FLUX'])
                 l2_obj.set_data(f'{chip}_{fiber}_VAR',  l2_arrays[f'{chip}_{fiber}_VAR'])
