@@ -24,10 +24,10 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
-from kpfpipe.qc.base import QC
-from kpfpipe.qc.checks_l0 import QCL0
-from kpfpipe.qc.checks_l1 import QCL1
-from kpfpipe.qc.checks_l2 import QCL2
+from kpfpipe.quality_control.qc_binaries.base import QC
+from kpfpipe.quality_control.qc_binaries.level0 import QCL0
+from kpfpipe.quality_control.qc_binaries.level1 import QCL1
+from kpfpipe.quality_control.qc_binaries.level2 import QCL2
 
 _NORDER = {"GREEN": DETECTOR["norder"]["GREEN"], "RED": DETECTOR["norder"]["RED"]}
 _NCOLS = 10  # small column count for fast tests
@@ -289,14 +289,14 @@ class TestQCL0:
 
     def test_not_junk_pass_no_file(self, tmp_path, monkeypatch):
         """No junk CSV → pass by default."""
-        import kpfpipe.qc.checks_l0 as mod
+        import kpfpipe.quality_control.qc_binaries.level0 as mod
         monkeypatch.setattr(mod, "_JUNK_CSV", tmp_path / "reference" / "junk_observations.csv")
         l0 = _make_kpf0(tmp_path)
         assert QCL0(l0).not_junk() is True
 
     def test_not_junk_pass_not_in_list(self, tmp_path, monkeypatch):
         import pandas as pd
-        import kpfpipe.qc.checks_l0 as mod
+        import kpfpipe.quality_control.qc_binaries.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
         pd.DataFrame({"obs_id": ["KP.20240101.99999.00"]}).to_csv(csv_path, index=False)
@@ -307,7 +307,7 @@ class TestQCL0:
 
     def test_not_junk_fail_in_list(self, tmp_path, monkeypatch):
         import pandas as pd
-        import kpfpipe.qc.checks_l0 as mod
+        import kpfpipe.quality_control.qc_binaries.level0 as mod
 
         obs_id = "KP.20240405.00001.00"
         csv_path = tmp_path / "junk_observations.csv"
@@ -320,7 +320,7 @@ class TestQCL0:
     def test_not_junk_pass_none_obs_id(self, tmp_path, monkeypatch):
         """obs_id=None → passes (can't be in junk list)."""
         import pandas as pd
-        import kpfpipe.qc.checks_l0 as mod
+        import kpfpipe.quality_control.qc_binaries.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
         pd.DataFrame({"obs_id": ["KP.20240405.00001.00"]}).to_csv(csv_path, index=False)
@@ -333,7 +333,7 @@ class TestQCL0:
     def test_not_junk_malformed_csv_raises(self, tmp_path, monkeypatch):
         """CSV without 'obs_id' column → raises ValueError."""
         import pandas as pd
-        import kpfpipe.qc.checks_l0 as mod
+        import kpfpipe.quality_control.qc_binaries.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
         pd.DataFrame({"wrong_col": ["whatever"]}).to_csv(csv_path, index=False)

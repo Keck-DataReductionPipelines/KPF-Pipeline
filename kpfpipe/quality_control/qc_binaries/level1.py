@@ -1,8 +1,8 @@
-"""QC checks for KPF Level 1 (assembled 2D frame) data products."""
+"""QC checks for KPF Level 1 (assembled FFI) data products."""
 
 import numpy as np
 
-from kpfpipe.qc.base import QC
+from kpfpipe.quality_control.qc_binaries.base import QC
 
 _RN_KEYS    = ["RNGREEN1", "RNGREEN2", "RNGREEN3", "RNGREEN4",
                "RNRED1",   "RNRED2",   "RNRED3",   "RNRED4"]
@@ -22,7 +22,7 @@ def _hdr_float(hdr, key):
 
 
 class QCL1(QC):
-    """QC checks for KPF Level 1 assembled 2D frame products."""
+    """QC checks for KPF Level 1 assembled FFI products."""
 
     LEVEL = "L1"
 

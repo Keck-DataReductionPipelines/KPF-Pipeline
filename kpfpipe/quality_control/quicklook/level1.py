@@ -1,4 +1,4 @@
-"""L1 quicklook plots for assembled KPF 2D frames."""
+"""L1 quicklook plots for assembled FFI."""
 
 import os
 from datetime import datetime, timezone
@@ -15,7 +15,7 @@ def _unwrap(val):
 
 class PlotL1:
     """
-    Quicklook plots for KPF L1 (assembled 2D) data.
+    Quicklook plots for KPF L1 (assembled FFI) data.
 
     Takes a KPF1 object and generates plots of the assembled detector image.
     Pure visualization — no science computation. Read-noise header mapping
@@ -50,7 +50,7 @@ class PlotL1:
 
     def image(self, chip):
         """
-        Plot the assembled 2D detector image for one CCD.
+        Plot the assembled FFI for one CCD.
 
         Replicates v2.12 plot_2D_image for the basic science-frame case.
 

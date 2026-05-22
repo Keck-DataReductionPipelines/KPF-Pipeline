@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from kpfpipe.diagnostics.base import Diagnostics
+from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 
 _FIBERS = ('SCI1', 'SCI2', 'SCI3', 'SKY', 'CAL')

@@ -90,7 +90,7 @@ class PlotL0:
         """
         Plot the stitched raw detector image for one CCD.
 
-        Replicates plot_L0_stitched_image from v2.12.
+        Replicates v2.12 plot_L0_stitched_image.
 
         Args:
             chip: 'green' or 'red'.

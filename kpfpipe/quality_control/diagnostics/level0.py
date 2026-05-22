@@ -7,7 +7,7 @@ noise, non-Gaussian RN) are owned by ImageAssembly because they need
 to run before gain conversion modifies the amp data.
 """
 
-from kpfpipe.diagnostics.base import Diagnostics
+from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 
 class DiagL0(Diagnostics):

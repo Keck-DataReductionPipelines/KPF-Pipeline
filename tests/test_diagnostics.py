@@ -6,7 +6,7 @@ from astropy.io import fits
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level1 import KPF1
-from kpfpipe.diagnostics import Diagnostics, DiagL0, DiagL1, DiagL2
+from kpfpipe.quality_control.diagnostics import Diagnostics, DiagL0, DiagL1, DiagL2
 
 NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED   = DETECTOR['norder']['RED']

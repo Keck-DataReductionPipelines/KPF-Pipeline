@@ -12,10 +12,10 @@ from kpfpipe.modules.spectral_extraction import SpectralExtraction
 #from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 #from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 
-from kpfpipe.diagnostics import DiagL1, DiagL2
-from kpfpipe.qc import QCL1, QCL2
-from kpfpipe.qlp.plot_l0 import PlotL0
-from kpfpipe.qlp.plot_l1 import PlotL1
+from kpfpipe.quality_control.diagnostics import DiagL1, DiagL2
+from kpfpipe.quality_control.qc_binaries import QCL1, QCL2
+from kpfpipe.quality_control.quicklook.level0 import PlotL0
+from kpfpipe.quality_control.quicklook.level1 import PlotL1
 from kpfpipe.utils.pipeline import build_filepath, build_qlp_dir
 
 
