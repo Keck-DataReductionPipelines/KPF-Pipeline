@@ -20,3 +20,5 @@ flat = false
 
 [MODULE_SPECTRAL_EXTRACTION]
 extraction_method = "box"
+
+[MODULE_WAVELENGTH_CALIBRATION]
