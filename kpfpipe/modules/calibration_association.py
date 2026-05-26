@@ -2,7 +2,7 @@
 KPF Calibration Association module.
 
 Given a KPF observation frame, finds the most appropriate master calibration
-file for each calibration type (bias, dark, flat, thar-wls) by searching
+file for each calibration type (bias, dark, flat, wls_thar) by searching
 the masters directory and selecting the nearest-in-time match.
 """
 import glob
@@ -23,7 +23,7 @@ _LEVEL_BY_CAL_TYPE = {
     'bias':     'L1',
     'dark':     'L1',
     'flat':     'L1',
-    'thar-wls': 'L2',
+    'wls_thar': 'L2',
 }
 
 # PRIMARY header prefix written for each supported calibration type.
@@ -31,7 +31,7 @@ _HEADER_PREFIX = {
     'bias':     'BIAS',
     'dark':     'DARK',
     'flat':     'FLAT',
-    'thar-wls': 'WLS',
+    'wls_thar': 'WLS',
 }
 
 
@@ -88,7 +88,7 @@ class CalibrationAssociation:
         Parameters
         ----------
         cal_type : str
-            One of 'bias', 'dark', 'flat', 'thar-wls'.
+            One of 'bias', 'dark', 'flat', 'wls_thar'.
         date_obs : str
             ISO-format observation datetime from the frame's PRIMARY header
             (e.g. '2024-04-05T11:08:33').
@@ -170,7 +170,7 @@ class CalibrationAssociation:
         Parameters
         ----------
         cal_types : list of str
-            Calibration types to associate (e.g. ['bias', 'dark', 'flat', 'thar-wls']).
+            Calibration types to associate (e.g. ['bias', 'dark', 'flat', 'wls_thar']).
         masters_search_window_days : [int, int], optional
             Search window as [days_before, days_after]. Defaults to
             self.masters_search_window_days.
@@ -209,7 +209,7 @@ class CalibrationAssociation:
                     f"within window {masters_search_window_days} days"
                 )
 
-            if cal_type == 'thar-wls':
+            if cal_type == 'wls_thar':
                 # Match legacy WLS header convention exactly: full path in
                 # WLSFILE (no WLSDIR), AGEWLS in fractional days using the
                 # master and obs timestamps (sign convention: master - obs,

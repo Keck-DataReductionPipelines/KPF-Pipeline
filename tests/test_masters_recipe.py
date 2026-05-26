@@ -311,9 +311,9 @@ class TestBuildFilepath:
         name = build_filepath("KP.20240405.40113.57", "L2")
         assert name == "kpf_SL2_20240405T110833.fits"
 
-    def test_master_thar_wls_with_obs_id(self):
-        path = build_filepath("KP.20240405.03600.00", "L1", data_root="/data", master="thar-wls")
-        assert path == "/data/masters/20240405/KP.20240405.03600.00_master_thar-wls_L1.fits"
+    def test_master_wls_thar_with_obs_id(self):
+        path = build_filepath("KP.20240405.03600.00", "L2", data_root="/data", master="wls_thar")
+        assert path == "/data/masters/20240405/KP.20240405.03600.00_master_wls_thar_L2.fits"
 
     def test_invalid_obs_id_raises(self):
         with pytest.raises(ValueError, match="valid observation ID"):

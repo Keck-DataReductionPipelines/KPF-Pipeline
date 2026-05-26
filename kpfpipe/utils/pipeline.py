@@ -258,7 +258,7 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
                    returns an absolute path. When omitted, returns the bare
                    filename only.
         master:    master calibration type, one of 'bias', 'dark', 'flat',
-                   'thar-wls'. If provided, builds a master calibration path.
+                   'wls_thar'. If provided, builds a master calibration path.
                    If omitted, builds a science data path.
 
     Returns:
@@ -276,8 +276,8 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
     if master is not None:
         # Masters: {data_root}/masters/{datecode}/{obs_id}_master_{master}_{level}.fits
         # Level is in the filename only — no level subdirectory.
-        if master not in ('bias', 'dark', 'flat', 'thar-wls'):
-            raise ValueError(f"'master' must be 'bias', 'dark', 'flat', or 'thar-wls'; got '{master}'")
+        if master not in ('bias', 'dark', 'flat', 'wls_thar'):
+            raise ValueError(f"'master' must be 'bias', 'dark', 'flat', or 'wls_thar'; got '{master}'")
         if level not in ('L1', 'L2', 'L4'):
             raise ValueError(f"'level' for master products must be 'L1', 'L2', or 'L4'; got '{level}'")
         filename = f'{obs_id}_master_{master}_{level}.fits'

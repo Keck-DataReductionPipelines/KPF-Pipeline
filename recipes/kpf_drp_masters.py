@@ -47,10 +47,10 @@ def main(config, args):
     #    flat_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='flat'))
 
     # master wavelength solution (ThAr)
-    for files in build_l0_file_lists('thar-wls', mini_db=mini_db):
+    for files in build_l0_file_lists('wls_thar', mini_db=mini_db):
         wls_handler = WLS(files, config)
         wls_l2 = wls_handler.make_master_l2()
-        out_path = build_filepath(get_obs_id(files[0]), 'L2', data_root=data_root_out, master='thar-wls')
+        out_path = build_filepath(get_obs_id(files[0]), 'L2', data_root=data_root_out, master='wls_thar')
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         wls_l2.to_fits(out_path)
 

@@ -31,7 +31,7 @@ _LEVEL_BY_CAL_TYPE = {
     'bias':     'L1',
     'dark':     'L1',
     'flat':     'L1',
-    'thar-wls': 'L2',
+    'wls_thar': 'L2',
 }
 
 
@@ -224,18 +224,18 @@ class TestPerform:
             assert f'{prefix}DIR' in mod.l1_obj.headers['PRIMARY']
             assert f'AGE{prefix}' in mod.l1_obj.headers['PRIMARY']
 
-    def test_sets_headers_for_thar_wls(self, masters_dir):
+    def test_sets_headers_for_wls_thar(self, masters_dir):
         # Legacy WLS convention: WLSFILE holds the full path (no WLSDIR), and
         # AGEWLS is float days with sign = (master_dt - obs_dt). For a master
         # at 2024-04-05 01:00:37 UTC and obs at 2024-04-05 11:08:33 UTC the
         # master is ~0.42 days before the obs, so AGEWLS is negative.
         d = masters_dir / 'masters' / '20240405'
-        _stub_master(d, 'KP.20240405.03637.74', 'thar-wls')
+        _stub_master(d, 'KP.20240405.03637.74', 'wls_thar')
 
         mod = _make_module(masters_dir)
-        mod.perform(['bias', 'thar-wls'])
+        mod.perform(['bias', 'wls_thar'])
         h = mod.l1_obj.headers['PRIMARY']
-        assert h['WLSFILE'] == str(d / 'KP.20240405.03637.74_master_thar-wls_L2.fits')
+        assert h['WLSFILE'] == str(d / 'KP.20240405.03637.74_master_wls_thar_L2.fits')
         assert 'WLSDIR' not in h
         assert isinstance(h['AGEWLS'], float)
         assert -0.5 < h['AGEWLS'] < 0.0
