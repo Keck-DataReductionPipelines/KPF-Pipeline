@@ -90,6 +90,24 @@ def get_timestamp(input_str):
     raise ValueError(f"No KPF timestamp found in: {input_str}")
 
 
+def kpf_timestamp_to_datetime(timestamp):
+    """
+    Parse a KPF UTC timestamp string into a `datetime`.
+
+    Args:
+        timestamp: KPF timestamp string of the form 'YYYYMMDD.SSSSS.FF'
+                   (the sub-second frame field is ignored).
+
+    Returns:
+        datetime: naive UTC datetime at the timestamp's seconds-past-midnight.
+
+    Example:
+        kpf_timestamp_to_datetime('20240405.40113.57') -> datetime(2024, 4, 5, 11, 8, 33)
+    """
+    date_str, seconds_str, _ = timestamp.split('.')
+    return datetime.strptime(date_str, '%Y%m%d') + timedelta(seconds=int(seconds_str))
+
+
 def utc_to_hst(timestamp):
     """
     Convert a KPF UTC timestamp to HST (Hawaii Standard Time, UTC-10).
