@@ -17,7 +17,6 @@ import pytest
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.pipeline import (
-    _detect_calibration_stack_clusters,
     build_l0_file_lists,
     build_filepath,
     build_mini_database,
@@ -73,7 +72,7 @@ def _make_mini_db():
     df = pd.DataFrame(rows)
     df["EXPTIME"] = 60.0
     df["ELAPSED"] = 60.0
-    return _detect_calibration_stack_clusters(df)
+    return df
 
 
 def _write_test_csv(tmp_path, db):
@@ -99,58 +98,6 @@ def _write_test_csv(tmp_path, db):
 def _at(data_dir, synthetic_paths):
     """Translate /data/L0/... synthetic paths to absolute paths in data_dir."""
     return [os.path.join(data_dir, os.path.basename(p)) for p in synthetic_paths]
-
-
-# ---------------------------------------------------------------------------
-# _detect_calibration_stack_clusters
-# ---------------------------------------------------------------------------
-
-
-class TestDetectCalibrationStackClusters:
-
-    @pytest.fixture(scope="class")
-    def db(self):
-        return _make_mini_db()
-
-    def test_cal_start_columns_exist(self, db):
-        assert "CAL_START" in db.columns
-        assert "CAL_END" in db.columns
-
-    def test_bias_cluster_a_cal_start(self, db):
-        rows = db[db["FILENAME"].isin(_BIAS_A)]
-        assert (rows["CAL_START"] == "20240405.03600.00").all()
-
-    def test_bias_cluster_a_cal_end(self, db):
-        rows = db[db["FILENAME"].isin(_BIAS_A)]
-        assert (rows["CAL_END"] == "20240405.04000.00").all()
-
-    def test_bias_cluster_b_cal_start(self, db):
-        rows = db[db["FILENAME"].isin(_BIAS_B)]
-        assert (rows["CAL_START"] == "20240405.14000.00").all()
-
-    def test_bias_cluster_b_cal_end(self, db):
-        rows = db[db["FILENAME"].isin(_BIAS_B)]
-        assert (rows["CAL_END"] == "20240405.14400.00").all()
-
-    def test_two_bias_clusters_detected(self, db):
-        bias = db[db["OBJECT"] == "autocal-bias"]
-        assert bias["CAL_START"].nunique() == 2
-
-    def test_dark_cluster_cal_start(self, db):
-        rows = db[db["FILENAME"].isin(_DARK_A)]
-        assert (rows["CAL_START"] == "20240405.18000.00").all()
-
-    def test_science_frames_cal_start_empty(self, db):
-        sci = db[db["IMTYPE"] == "Object"]
-        assert (sci["CAL_START"] == "").all()
-
-    def test_science_frames_cal_end_empty(self, db):
-        sci = db[db["IMTYPE"] == "Object"]
-        assert (sci["CAL_END"] == "").all()
-
-    def test_row_order_preserved(self, db):
-        # Science frames should still be at the end
-        assert db.iloc[-1]["IMTYPE"] == "Object"
 
 
 # ---------------------------------------------------------------------------
@@ -415,20 +362,17 @@ class TestBuildMiniDatabase:
         return build_mini_database(str(TESTDATA_L0_DIR), write=False)
 
     def test_has_required_columns(self, mini_db):
-        for col in ("FILENAME", "IMTYPE", "OBJECT", "CAL_START", "CAL_END"):
+        for col in ("FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"):
             assert col in mini_db.columns
+
+    def test_no_cluster_columns(self, mini_db):
+        # CAL_START/CAL_END were moved out of the mini_db; cluster detection
+        # now happens at build_l0_file_lists time.
+        assert "CAL_START" not in mini_db.columns
+        assert "CAL_END" not in mini_db.columns
 
     def test_all_files_are_fits(self, mini_db):
         assert mini_db["FILENAME"].str.endswith(".fits").all()
-
-    def test_cal_start_empty_for_science(self, mini_db):
-        sci = mini_db[mini_db["IMTYPE"] == "Object"]
-        if not sci.empty:
-            assert (sci["CAL_START"] == "").all()
-
-    def test_cal_start_nonempty_for_bias(self, mini_db):
-        bias = mini_db[mini_db["OBJECT"] == "autocal-bias"]
-        assert (bias["CAL_START"] != "").all()
 
     def test_write_false_does_not_write_csv(self):
         csv_path = TESTDATA_L0_DIR / "KP.20240405_L0.csv"

@@ -29,61 +29,14 @@ _OBJECT_MAP = {
     ],
 }
 
-def _detect_calibration_stack_clusters(df, cluster_gap_seconds=7200):
-    """
-    Assign CAL_START and CAL_END columns to calibration frames in df.
-
-    Calibration frames are grouped by OBJECT, sorted by UTC seconds, and
-    split into clusters wherever the gap between consecutive frames exceeds
-    cluster_gap_seconds. Every frame in a cluster receives the UTC timestamp
-    of the first frame as CAL_START and the UTC timestamp of the last frame
-    as CAL_END. Science frames (IMTYPE == 'Object') receive an empty string
-    for both columns.
-
-    Args:
-        df:                  DataFrame with FILENAME, IMTYPE, and OBJECT columns.
-        cluster_gap_seconds: gap between consecutive frames that splits a
-                             calibration sequence into separate clusters.
-                             Default 7200s (2 hours) reliably distinguishes
-                             morning vs. evening KPF calibration clusters,
-                             which are separated by science observations.
-
-    Returns:
-        df with CAL_START and CAL_END columns added (same row order as input).
-    """
-    cal_start = pd.Series('', index=df.index)
-    cal_end   = pd.Series('', index=df.index)
-
-    cal_objects = {obj for objs in _OBJECT_MAP.values() for obj in objs}
-    cal_df = df[df['OBJECT'].isin(cal_objects)].copy()
-    cal_df['_UTC_TOTAL'] = [get_seconds_since_j2000(f) for f in cal_df['FILENAME']]
-
-    for _, group in cal_df.groupby('OBJECT', dropna=False):
-        group = group.sort_values('_UTC_TOTAL')
-        gaps = group['_UTC_TOTAL'].diff()
-        cluster_id = (gaps > cluster_gap_seconds).cumsum()
-
-        for _, cluster_rows in group.groupby(cluster_id):
-            start_time = get_timestamp(cluster_rows.iloc[0]['FILENAME'])
-            end_time   = get_timestamp(cluster_rows.iloc[-1]['FILENAME'])
-            cal_start.loc[cluster_rows.index] = start_time
-            cal_end.loc[cluster_rows.index]   = end_time
-
-    df = df.copy()
-    df['CAL_START'] = cal_start
-    df['CAL_END']   = cal_end
-    return df
-
-
 def build_mini_database(data_dir, write=True):
     """
     Build the mini database for all FITS files in a directory and write
     it to disk as KP.{datecode}_{level}.csv in that directory.
 
     Reads the PRIMARY header of each FITS file and extracts a standard
-    set of keys used for frame selection (e.g. filtering by OBJECT type
-    to identify bias, dark, or flat frames). Also detects calibration stack
-    clusters and records the start and end timestamps of each cluster.
+    set of keys used for frame selection (e.g. filtering by OBJECT to
+    identify bias, dark, flat, or thar frames).
 
     Assumes data_dir follows the convention .../{level}/{datecode}/.
 
@@ -92,16 +45,12 @@ def build_mini_database(data_dir, write=True):
 
     Returns:
         pandas DataFrame with columns:
-            FILENAME  -- absolute path to the FITS file
-            TARGNAME  -- target name
-            IMTYPE    -- image type
-            OBJECT    -- object identifier (e.g. 'autocal-bias')
-            EXPTIME   -- requested exposure time (s)
-            ELAPSED   -- actual elapsed time (s)
-            CAL_START -- UTC timestamp of the first frame in the calibration
-                         stack cluster; empty string for science frames
-            CAL_END   -- UTC timestamp of the last frame in the calibration
-                         stack cluster; empty string for science frames
+            FILENAME -- absolute path to the FITS file
+            TARGNAME -- target name
+            IMTYPE   -- image type
+            OBJECT   -- object identifier (e.g. 'autocal-bias')
+            EXPTIME  -- requested exposure time (s)
+            ELAPSED  -- actual elapsed time (s)
 
         Rows where a header key is missing are included with NaN for
         that column and a warning is issued.
@@ -130,7 +79,6 @@ def build_mini_database(data_dir, write=True):
             mini_db[k].append(header.get(k, None))
 
     df = pd.DataFrame(mini_db)
-    df = _detect_calibration_stack_clusters(df)
 
     if write:
         csv_path = os.path.join(data_dir, f'KP.{datecode}_{level}.csv')
@@ -138,24 +86,62 @@ def build_mini_database(data_dir, write=True):
     return df
 
 
-def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None):
+def _split_into_clusters(filenames, cluster_gap_seconds):
+    """
+    Group filenames into time-contiguous clusters.
+
+    Sorts by UTC seconds and splits wherever the gap between consecutive
+    frames exceeds cluster_gap_seconds.
+
+    Args:
+        filenames:           iterable of KPF L0 FITS paths.
+        cluster_gap_seconds: gap threshold (seconds) between consecutive
+                             frames that splits a calibration sequence
+                             into separate clusters.
+
+    Returns:
+        list of lists of filenames, each inner list sorted by timestamp.
+    """
+    timed = sorted(((get_seconds_since_j2000(fn), fn) for fn in filenames),
+                   key=lambda t: t[0])
+    if not timed:
+        return []
+
+    clusters = [[timed[0][1]]]
+    for (prev_t, _), (t, fn) in zip(timed, timed[1:]):
+        if t - prev_t > cluster_gap_seconds:
+            clusters.append([fn])
+        else:
+            clusters[-1].append(fn)
+    return clusters
+
+
+def build_l0_file_lists(imtype, *, min_file_count=5, cluster_gap_seconds=7200,
+                        data_dir=None, mini_db=None):
     """
     Return sorted file lists for all calibration clusters of the requested type.
 
     Exactly one of data_dir or mini_db must be provided. When data_dir is given,
     loads the mini database CSV if it exists, otherwise calls build_mini_database
     to scan headers and write it. When mini_db is given, uses it directly to
-    avoid redundant I/O. Groups calibration frames into clusters. Clusters with
-    at least min_file_count files are returned as individual lists. If any
+    avoid redundant I/O. Filters by OBJECT, then groups frames into clusters by
+    detecting >cluster_gap_seconds gaps between consecutive timestamps. Clusters
+    with at least min_file_count files are returned as individual lists. If any
     cluster falls below min_file_count, all clusters of that type are merged
     into a single list with a warning.
 
     Args:
-        imtype:          calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
-        min_file_count:  minimum number of files required per returned list.
-                         Default is 5.
-        data_dir:        path to directory containing L0 FITS files.
-        mini_db:         DataFrame returned by build_mini_database.
+        imtype:              calibration frame type. One of 'bias', 'dark',
+                             'flat', 'thar'.
+        min_file_count:      minimum number of files required per returned list.
+                             Default is 5.
+        cluster_gap_seconds: gap (seconds) between consecutive frames that
+                             splits a calibration sequence into separate
+                             clusters. Default 7200 (2 hours) reliably
+                             distinguishes morning vs. evening KPF calibration
+                             clusters, which are separated by science obs.
+        data_dir:            path to directory containing L0 FITS files.
+        mini_db:             DataFrame returned by build_mini_database.
 
     Returns:
         List of sorted file lists, one per cluster or one merged list if any
@@ -186,13 +172,7 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
             mini_db = pd.read_csv(csv_path)
             on_disk = set(glob.glob(os.path.join(data_dir, '*.fits')))
             cached = set(mini_db['FILENAME']) if 'FILENAME' in mini_db.columns else set()
-            if 'CAL_START' not in mini_db.columns:
-                warnings.warn(
-                    f"Mini database at {csv_path} is missing CAL_START column; rebuilding.",
-                    UserWarning,
-                )
-                mini_db = build_mini_database(data_dir)
-            elif on_disk != cached:
+            if on_disk != cached:
                 added = on_disk - cached
                 removed = cached - on_disk
                 warnings.warn(
@@ -204,18 +184,19 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
         else:
             mini_db = build_mini_database(data_dir)
 
-    mask = mini_db['OBJECT'].isin(_OBJECT_MAP[imtype]) & (mini_db['CAL_START'] != '')
-    cal_df = mini_db[mask]
+    cal_df = mini_db[mini_db['OBJECT'].isin(_OBJECT_MAP[imtype])]
 
     if cal_df.empty:
         raise ValueError(
             f"No '{imtype}' calibration frames found in {data_dir or 'the provided mini_db'}"
         )
 
-    clusters = [
-        sorted(group['FILENAME'].tolist())
-        for _, group in cal_df.groupby('CAL_START')
-    ]
+    # Cluster per-OBJECT (morning vs. evening thar etc. have different OBJECT
+    # suffixes), then flatten and sort chronologically by first frame.
+    clusters = []
+    for _, group in cal_df.groupby('OBJECT', dropna=False):
+        clusters.extend(_split_into_clusters(group['FILENAME'], cluster_gap_seconds))
+    clusters.sort(key=lambda c: get_seconds_since_j2000(c[0]))
 
     if all(len(c) >= min_file_count for c in clusters):
         return clusters
