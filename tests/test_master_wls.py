@@ -274,11 +274,11 @@ class TestMakeMasterL2:
     def test_stacks_stashed_on_self(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         wls.make_master_l2()
-        assert wls._coeffs_by_chip is not None
-        assert wls._lines_by_chip is not None
+        assert wls._coeffs_stack is not None
+        assert wls._lines_stack is not None
         for chip in wls.chips:
-            assert chip in wls._coeffs_by_chip
-            assert chip in wls._lines_by_chip
+            assert chip in wls._coeffs_stack
+            assert chip in wls._lines_stack
 
     def test_save_stacks_before_make_raises(self):
         wls = WLS(FILE_LIST)
@@ -500,7 +500,7 @@ class TestFitLinePositions:
         wave = np.linspace(5000.0, 5100.0, 100)
         wls._linelist_array = np.array([6000.0, 6100.0])  # entirely outside
 
-        result = wls.fit_line_positions_1D(flux, wave)
+        result = wls.fit_line_positions_1d(flux, wave)
         for key in ['wav', 'pix', 'std', 'amp', 'rms', 'bad']:
             assert len(result[key]) == 0
 
