@@ -4,12 +4,17 @@ import warnings
 
 import pandas as pd
 from astropy.io import fits
-from datetime import datetime
 
-from kpfpipe.utils.kpf import get_datecode, is_obs_id, get_timestamp, kpf_timestamp_to_eprv_timestamp
+from kpfpipe.utils.kpf import (
+    get_datecode,
+    get_seconds_since_j2000,
+    get_timestamp,
+    is_obs_id,
+    kpf_timestamp_to_eprv_timestamp,
+)
 
 
-_METADATA_KEYS = ['FILENAME', 'TARGNAME', 'IMTYPE', 'OBJECT', 'EXPTIME', 'ELAPSED']
+_MINI_DB_KEYS = ['FILENAME', 'TARGNAME', 'IMTYPE', 'OBJECT', 'EXPTIME', 'ELAPSED']
 
 _OBJECT_MAP = {
     'bias':     ['autocal-bias'],
@@ -24,51 +29,39 @@ _OBJECT_MAP = {
     ],
 }
 
-# 2-hour gap threshold: KPF calibration sequences within a night are
-# separated by science observations; a gap >2hr reliably distinguishes
-# morning vs. evening calibration clusters.
-_CALIBRATION_CLUSTER_GAP_SECONDS = 7200
-
-
-def _detect_calibration_stack_clusters(df):
+def _detect_calibration_stack_clusters(df, cluster_gap_seconds=7200):
     """
     Assign CAL_START and CAL_END columns to calibration frames in df.
 
     Calibration frames are grouped by OBJECT, sorted by UTC seconds, and
     split into clusters wherever the gap between consecutive frames exceeds
-    _CALIBRATION_CLUSTER_GAP_SECONDS. Every frame in a cluster receives
-    the UTC timestamp of the first frame as CAL_START and the UTC timestamp
-    of the last frame as CAL_END. Science frames (IMTYPE == 'Object') receive
-    an empty string for both columns.
+    cluster_gap_seconds. Every frame in a cluster receives the UTC timestamp
+    of the first frame as CAL_START and the UTC timestamp of the last frame
+    as CAL_END. Science frames (IMTYPE == 'Object') receive an empty string
+    for both columns.
 
     Args:
-        df: DataFrame with FILENAME, IMTYPE, and OBJECT columns.
+        df:                  DataFrame with FILENAME, IMTYPE, and OBJECT columns.
+        cluster_gap_seconds: gap between consecutive frames that splits a
+                             calibration sequence into separate clusters.
+                             Default 7200s (2 hours) reliably distinguishes
+                             morning vs. evening KPF calibration clusters,
+                             which are separated by science observations.
 
     Returns:
         df with CAL_START and CAL_END columns added (same row order as input).
     """
-    def _timestamp_to_seconds(ts):
-        date_str, seconds_str, _ = ts.split('.')
-        date_ordinal = datetime.strptime(date_str, '%Y%m%d').toordinal()
-        return date_ordinal * 86400 + int(seconds_str)
-
-    def _safe_seconds(f):
-        try:
-            return _timestamp_to_seconds(get_timestamp(f))
-        except ValueError:
-            raise ValueError(f"Cannot parse timestamp from filename: {f}")
-
     cal_start = pd.Series('', index=df.index)
     cal_end   = pd.Series('', index=df.index)
 
     cal_objects = {obj for objs in _OBJECT_MAP.values() for obj in objs}
     cal_df = df[df['OBJECT'].isin(cal_objects)].copy()
-    cal_df['_UTC_TOTAL'] = [_safe_seconds(f) for f in cal_df['FILENAME']]
+    cal_df['_UTC_TOTAL'] = [get_seconds_since_j2000(f) for f in cal_df['FILENAME']]
 
     for _, group in cal_df.groupby('OBJECT', dropna=False):
         group = group.sort_values('_UTC_TOTAL')
         gaps = group['_UTC_TOTAL'].diff()
-        cluster_id = (gaps > _CALIBRATION_CLUSTER_GAP_SECONDS).cumsum()
+        cluster_id = (gaps > cluster_gap_seconds).cumsum()
 
         for _, cluster_rows in group.groupby(cluster_id):
             start_time = get_timestamp(cluster_rows.iloc[0]['FILENAME'])
@@ -84,7 +77,7 @@ def _detect_calibration_stack_clusters(df):
 
 def build_mini_database(data_dir, write=True):
     """
-    Build a metadata table for all FITS files in a directory and write
+    Build the mini database for all FITS files in a directory and write
     it to disk as KP.{datecode}_{level}.csv in that directory.
 
     Reads the PRIMARY header of each FITS file and extracts a standard
@@ -122,7 +115,7 @@ def build_mini_database(data_dir, write=True):
     if not file_list:
         raise ValueError(f"No FITS files found in {data_dir}")
 
-    metadata = {k: [] for k in _METADATA_KEYS}
+    mini_db = {k: [] for k in _MINI_DB_KEYS}
 
     for fn in file_list:
         try:
@@ -131,12 +124,12 @@ def build_mini_database(data_dir, write=True):
             warnings.warn(f"Could not read header from {fn}: {e}")
             continue
 
-        metadata['FILENAME'].append(fn)
+        mini_db['FILENAME'].append(fn)
 
-        for k in _METADATA_KEYS[1:]:
-            metadata[k].append(header.get(k, None))
+        for k in _MINI_DB_KEYS[1:]:
+            mini_db[k].append(header.get(k, None))
 
-    df = pd.DataFrame(metadata)
+    df = pd.DataFrame(mini_db)
     df = _detect_calibration_stack_clusters(df)
 
     if write:
@@ -183,27 +176,25 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
     if (data_dir is None) == (mini_db is None):
         raise ValueError("Exactly one of data_dir or mini_db must be provided")
 
-    if mini_db is not None:
-        metadata = mini_db
-    else:
+    if mini_db is None:
         data_dir = os.path.normpath(data_dir)
         datecode = os.path.basename(data_dir)
         level = os.path.basename(os.path.dirname(data_dir))
         csv_path = os.path.join(data_dir, f'KP.{datecode}_{level}.csv')
 
         if os.path.isfile(csv_path):
-            metadata = pd.read_csv(csv_path)
-            if 'CAL_START' not in metadata.columns:
+            mini_db = pd.read_csv(csv_path)
+            if 'CAL_START' not in mini_db.columns:
                 warnings.warn(
                     f"Mini database at {csv_path} is missing CAL_START column; rebuilding.",
                     UserWarning,
                 )
-                metadata = build_mini_database(data_dir)
+                mini_db = build_mini_database(data_dir)
         else:
-            metadata = build_mini_database(data_dir)
+            mini_db = build_mini_database(data_dir)
 
-    mask = metadata['OBJECT'].isin(_OBJECT_MAP[imtype]) & (metadata['CAL_START'] != '')
-    cal_df = metadata[mask]
+    mask = mini_db['OBJECT'].isin(_OBJECT_MAP[imtype]) & (mini_db['CAL_START'] != '')
+    cal_df = mini_db[mask]
 
     if cal_df.empty:
         raise ValueError(

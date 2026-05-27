@@ -9,9 +9,14 @@ from kpfpipe.utils.kpf import (
     hst_to_utc,
     kpf_timestamp_to_eprv_timestamp,
     eprv_timestamp_to_kpf_timestamp,
+    kpf_timestamp_to_datetime,
     get_obs_id,
     get_datecode,
     get_timestamp,
+    get_seconds_since_j2000,
+    is_obs_id,
+    is_datecode,
+    is_timestamp,
 )
 
 
@@ -136,3 +141,221 @@ class TestGetTimestamp:
     def test_no_match_raises(self):
         with pytest.raises(ValueError, match="No KPF timestamp found"):
             get_timestamp("notimestamp.fits")
+
+
+# ---------------------------------------------------------------------------
+# Validation: predicates reject semantically invalid input
+# ---------------------------------------------------------------------------
+
+
+class TestIsObsId:
+
+    def test_valid_obs_id(self):
+        assert is_obs_id("KP.20240405.40113.57") is True
+
+    def test_rejects_bad_date(self):
+        # Format matches but month 99 is not a real date.
+        assert is_obs_id("KP.20249999.40113.57") is False
+
+    def test_rejects_seconds_out_of_range(self):
+        # SSSSS = 99999 > 86399.
+        assert is_obs_id("KP.20240405.99999.57") is False
+
+    def test_rejects_wrong_format(self):
+        assert is_obs_id("20240405.40113.57") is False
+
+    def test_rejects_non_string(self):
+        assert is_obs_id(None) is False
+        assert is_obs_id(12345) is False
+
+
+class TestIsDatecode:
+
+    def test_valid_datecode(self):
+        assert is_datecode("20240405") is True
+
+    def test_rejects_bad_date(self):
+        # Format matches but month 99 is not a real date.
+        assert is_datecode("20249999") is False
+
+    def test_rejects_wrong_format(self):
+        assert is_datecode("2024-04-05") is False
+
+    def test_rejects_non_string(self):
+        assert is_datecode(None) is False
+        assert is_datecode(20240405) is False
+
+
+class TestIsTimestamp:
+
+    def test_valid_timestamp(self):
+        assert is_timestamp("20240405.40113.57") is True
+
+    def test_rejects_bad_date(self):
+        assert is_timestamp("20249999.40113.57") is False
+
+    def test_rejects_seconds_out_of_range(self):
+        assert is_timestamp("20240405.99999.57") is False
+
+    def test_rejects_wrong_format(self):
+        assert is_timestamp("20240405T110833") is False
+
+    def test_rejects_non_string(self):
+        assert is_timestamp(None) is False
+
+
+# ---------------------------------------------------------------------------
+# Validation: extractors raise on semantically invalid embedded timestamps
+# ---------------------------------------------------------------------------
+
+
+class TestGetObsIdValidation:
+
+    def test_raises_on_invalid_date(self):
+        with pytest.raises(ValueError, match="Invalid date"):
+            get_obs_id("KP.20249999.40113.57.fits")
+
+    def test_raises_on_seconds_out_of_range(self):
+        with pytest.raises(ValueError, match="seconds-past-midnight"):
+            get_obs_id("KP.20240405.99999.57.fits")
+
+    def test_raises_on_non_string(self):
+        with pytest.raises(ValueError, match="must be a string"):
+            get_obs_id(None)
+
+
+class TestGetDatecodeValidation:
+
+    def test_raises_on_invalid_date(self):
+        with pytest.raises(ValueError, match="Invalid date"):
+            get_datecode("KP.20249999.40113.57")
+
+    def test_raises_on_seconds_out_of_range(self):
+        with pytest.raises(ValueError, match="seconds-past-midnight"):
+            get_datecode("KP.20240405.99999.57")
+
+    def test_raises_on_non_string(self):
+        with pytest.raises(ValueError, match="must be a string"):
+            get_datecode(None)
+
+
+class TestGetTimestampValidation:
+
+    def test_raises_on_invalid_date(self):
+        with pytest.raises(ValueError, match="Invalid date"):
+            get_timestamp("KP.20249999.40113.57.fits")
+
+    def test_raises_on_seconds_out_of_range(self):
+        # The path contains a syntactically-matching but invalid timestamp.
+        with pytest.raises(ValueError, match="seconds-past-midnight"):
+            get_timestamp("KP.20240405.99999.57.fits")
+
+    def test_raises_on_non_string(self):
+        with pytest.raises(ValueError, match="must be a string"):
+            get_timestamp(None)
+
+
+# ---------------------------------------------------------------------------
+# Validation: converters reject malformed input rather than silently
+# producing wrong output (the day-rollover and hh>=24 slips).
+# ---------------------------------------------------------------------------
+
+
+class TestKpfTimestampToDatetimeValidation:
+
+    def test_raises_on_seconds_out_of_range(self):
+        # Previously: silently rolled over into the next day.
+        with pytest.raises(ValueError, match="seconds-past-midnight"):
+            kpf_timestamp_to_datetime("20240405.99999.57")
+
+    def test_raises_on_invalid_date(self):
+        with pytest.raises(ValueError, match="Invalid date"):
+            kpf_timestamp_to_datetime("20249999.40113.57")
+
+    def test_raises_on_wrong_format(self):
+        with pytest.raises(ValueError, match="Invalid KPF timestamp format"):
+            kpf_timestamp_to_datetime("not-a-timestamp")
+
+
+class TestUtcToHstValidation:
+
+    def test_raises_on_seconds_out_of_range(self):
+        with pytest.raises(ValueError, match="seconds-past-midnight"):
+            utc_to_hst("20240405.99999.57")
+
+    def test_raises_on_wrong_format(self):
+        with pytest.raises(ValueError, match="Invalid KPF timestamp format"):
+            utc_to_hst("20240405T110833")
+
+
+class TestHstToUtcValidation:
+
+    def test_raises_on_seconds_out_of_range(self):
+        with pytest.raises(ValueError, match="seconds-past-midnight"):
+            hst_to_utc("20240405.99999.57")
+
+    def test_raises_on_wrong_format(self):
+        with pytest.raises(ValueError, match="Invalid KPF timestamp format"):
+            hst_to_utc("not-a-timestamp")
+
+
+class TestKpfTimestampToEprvValidation:
+
+    def test_raises_on_seconds_out_of_range(self):
+        # Previously: produced 'YYYYMMDDT273739' with hh=27.
+        with pytest.raises(ValueError, match="seconds-past-midnight"):
+            kpf_timestamp_to_eprv_timestamp("20240405.99999.57")
+
+    def test_raises_on_invalid_date(self):
+        with pytest.raises(ValueError, match="Invalid date"):
+            kpf_timestamp_to_eprv_timestamp("20249999.40113.57")
+
+
+class TestEprvTimestampToKpfValidation:
+
+    def test_raises_on_non_T_separator(self):
+        # Previously: silently accepted any char at position 8.
+        with pytest.raises(ValueError, match="Invalid EPRV timestamp format"):
+            eprv_timestamp_to_kpf_timestamp("20240405A110833")
+
+    def test_raises_on_hours_out_of_range(self):
+        # Previously: emitted an invalid KPF timestamp going out.
+        with pytest.raises(ValueError, match="time-of-day"):
+            eprv_timestamp_to_kpf_timestamp("20240405T256059")
+
+    def test_raises_on_minutes_out_of_range(self):
+        with pytest.raises(ValueError, match="time-of-day"):
+            eprv_timestamp_to_kpf_timestamp("20240405T126059")
+
+    def test_raises_on_seconds_out_of_range(self):
+        with pytest.raises(ValueError, match="time-of-day"):
+            eprv_timestamp_to_kpf_timestamp("20240405T120060")
+
+    def test_raises_on_invalid_date(self):
+        with pytest.raises(ValueError, match="Invalid date"):
+            eprv_timestamp_to_kpf_timestamp("20249999T110833")
+
+    def test_raises_on_short_input(self):
+        with pytest.raises(ValueError, match="Invalid EPRV timestamp format"):
+            eprv_timestamp_to_kpf_timestamp("short")
+
+
+class TestGetSecondsSinceJ2000:
+
+    def test_basic(self):
+        # J2000.0 itself: 2000-01-01 12:00 UTC = '20000101.43200.00'
+        assert get_seconds_since_j2000("20000101.43200.00") == 0
+
+    def test_monotonic_across_year_boundary(self):
+        # Dec 31 23:59:00 -> Jan 1 00:00:00 should differ by 60s exactly.
+        end = get_seconds_since_j2000("20231231.86340.00")
+        start_next_year = get_seconds_since_j2000("20240101.00000.00")
+        assert start_next_year - end == 60
+
+    def test_raises_on_invalid_timestamp(self):
+        with pytest.raises(ValueError, match="seconds-past-midnight"):
+            get_seconds_since_j2000("KP.20240405.99999.57.fits")
+
+    def test_raises_when_no_timestamp_found(self):
+        with pytest.raises(ValueError, match="No KPF timestamp found"):
+            get_seconds_since_j2000("notimestamp.fits")
