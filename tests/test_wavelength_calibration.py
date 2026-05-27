@@ -1,5 +1,7 @@
 """Tests for the WavelengthCalibration module."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -7,6 +9,10 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
+from kpfpipe.utils.config import ConfigHandler
+
+
+_SCIENCE_CONFIG_PATH = Path(__file__).parent.parent / 'configs' / 'kpf_drp_science.toml'
 
 
 NORDER_GREEN = DETECTOR['norder']['GREEN']
@@ -82,6 +88,12 @@ class TestConstructor:
         assert mod.chips  == ['GREEN']
         assert mod.fibers == ['SCI2']
 
+    def test_config_handler_accepted(self):
+        config = ConfigHandler(str(_SCIENCE_CONFIG_PATH))
+        mod = WavelengthCalibration(_make_science_l2(), config=config)
+        assert mod.chips  == _CHIPS
+        assert mod.fibers == _FIBERS
+
     def test_invalid_config_type(self):
         with pytest.raises(TypeError):
             WavelengthCalibration(_make_science_l2(), config='not a dict')
@@ -146,11 +158,9 @@ class TestPerform:
         l2 = _make_science_l2(wls_path=master_wls_path)
         mod = WavelengthCalibration(l2)
         mod.perform()
-        assert mod._results == {
-            'wls_path': master_wls_path,
-            'chips':  _CHIPS,
-            'fibers': _FIBERS,
-        }
+        assert mod._results['wls_path'] == master_wls_path
+        assert mod._results['chips']    == _CHIPS
+        assert mod._results['fibers']   == _FIBERS
 
     def test_copies_all_wave_arrays(self, master_wls_path):
         # Every (chip, fiber) WAVE array on the science L2 should match the master.
@@ -174,7 +184,9 @@ class TestPerform:
         )
 
     def test_subset_chips_and_fibers(self, master_wls_path):
-        # Only the requested (chip, fiber) blocks are copied; the rest stay zero.
+        # Only the requested (chip, fiber) blocks are copied; everything
+        # else stays zero — both un-requested fibers within the requested
+        # chip, and un-requested chips entirely.
         l2 = _make_science_l2(wls_path=master_wls_path)
         WavelengthCalibration(l2).perform(chips=['GREEN'], fibers=['SCI2'])
 
@@ -182,11 +194,30 @@ class TestPerform:
         np.testing.assert_array_equal(
             l2.data['GREEN_SCI2_WAVE'], master.data['GREEN_SCI2_WAVE']
         )
-        # An un-requested block remains zero (default fill from KPF2's
-        # _KPF2DataDict alloc on first chip-prefix write).
+        # Un-requested fiber within the requested chip stays zero.
+        assert not np.any(l2.data['GREEN_SCI1_WAVE'])
+        # Un-requested chip stays zero.
         assert not np.any(l2.data['RED_SCI2_WAVE'])
 
     def test_raises_when_wlsfile_missing(self):
         l2 = _make_science_l2()  # no WLSFILE
         with pytest.raises(KeyError, match='WLSFILE'):
+            WavelengthCalibration(l2).perform()
+
+    def test_raises_when_master_missing_requested_fiber(self, tmp_path):
+        # Master only has SCI2; config asks for all 5 fibers → fail loudly.
+        master = KPFMasterL2()
+        master.headers['PRIMARY']['INSTRUME'] = 'KPF'
+        master.headers['PRIMARY']['DATE-OBS'] = '2024-04-05T01:00:37'
+        rng = np.random.default_rng(7)
+        for chip in _CHIPS:
+            norder = NORDER_GREEN if chip == 'GREEN' else NORDER_RED
+            master.data[f'{chip}_SCI2_WAVE'] = rng.uniform(
+                4000.0, 8000.0, size=(norder, NCOL)
+            ).astype(np.float32)
+        master_path = str(tmp_path / 'partial_master.fits')
+        master.to_fits(master_path)
+
+        l2 = _make_science_l2(wls_path=master_path)
+        with pytest.raises(KeyError, match='SKY_WAVE'):
             WavelengthCalibration(l2).perform()

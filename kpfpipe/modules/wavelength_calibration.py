@@ -9,6 +9,8 @@ this module reads it from.
 """
 import os
 
+import numpy as np
+
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.utils.config import ConfigHandler
@@ -139,7 +141,13 @@ class WavelengthCalibration:
         for chip in chips:
             for fiber in fibers:
                 key = f'{chip}_{fiber}_WAVE'
-                self.l2_obj.set_data(key, master.data[key])
+                src = master.data[key]
+                if src is None or np.size(src) == 0:
+                    raise KeyError(
+                        f"WLS master has no data for {key}; "
+                        f"cannot apply wavelength solution"
+                    )
+                self.l2_obj.set_data(key, src)
 
         self.l2_obj.receipt_add_entry('wavelength_calibration', 'PASS')
 

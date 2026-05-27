@@ -295,6 +295,19 @@ class TestMakeMasterL2:
         with pytest.raises(RuntimeError, match="run make_master_l2"):
             wls.save_diagnostics('/tmp/should_not_be_created.h5')
 
+    def test_save_diagnostics_with_empty_stash_raises(self, tmp_path):
+        # make_master_l2 initialises both stash dicts to {} before populating
+        # them. If the chip loop raises before any chip is added, the dicts
+        # stay empty — save_diagnostics must refuse rather than write an
+        # empty HDF5.
+        wls = WLS(FILE_LIST)
+        wls._coeffs_stack = {}
+        wls._lines_stack = {}
+        out_path = tmp_path / "empty.h5"
+        with pytest.raises(RuntimeError, match="run make_master_l2"):
+            wls.save_diagnostics(str(out_path))
+        assert not out_path.exists()
+
     def test_diagnostics_path_writes_hdf5(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         diagnostics_path = tmp_path / "diagnostics.h5"

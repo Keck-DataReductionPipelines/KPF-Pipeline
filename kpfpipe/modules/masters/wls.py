@@ -822,6 +822,8 @@ class WLS(BaseMasterModule):
                 self.ml2_obj.create_extension(coeffs_ext, 'ImageHDU')
             self.ml2_obj.set_data(coeffs_ext, coeffs_mean)
 
+            # (value, comment) tuples are rejected for non-PRIMARY headers
+            # by rvdata's fits.Header(dict) round-trip; keep these plain.
             coeffs_hdr = self.ml2_obj.headers[coeffs_ext]
             coeffs_hdr['POLYORDX'] = polyorder_x
             coeffs_hdr['POLYORDM'] = polyorder_m
@@ -859,9 +861,10 @@ class WLS(BaseMasterModule):
         Raises
         ------
         RuntimeError
-            If make_master_l2() has not been run yet (no diagnostics available).
+            If make_master_l2() has not been run yet, or raised before
+            populating any chip.
         """
-        if self._coeffs_stack is None or self._lines_stack is None:
+        if not self._coeffs_stack or not self._lines_stack:
             raise RuntimeError("No diagnostics available; run make_master_l2() first")
 
         str_dt = h5py.string_dtype(encoding='utf-8')
