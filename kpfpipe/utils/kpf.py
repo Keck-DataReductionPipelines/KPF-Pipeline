@@ -189,12 +189,16 @@ def get_seconds_since_j2000(s):
     KPF timestamp embedded in s. Suitable as a monotonic scalar for sorting
     and gap detection.
 
+    Note: arithmetic is naive UTC; leap seconds are ignored. Fine for frame
+    ordering and cluster-gap detection but does not give TT/TAI precision
+    and should not be used for astronomical timing.
+
     Args:
         s: a KPF timestamp ('YYYYMMDD.SSSSS.FF'), an obs_id
            ('KP.YYYYMMDD.SSSSS.FF'), or any filename or path containing one.
 
     Returns:
-        int: seconds since J2000.0.
+        int: seconds since J2000.0 (naive UTC).
 
     Raises:
         ValueError: if no valid KPF timestamp is found in s.

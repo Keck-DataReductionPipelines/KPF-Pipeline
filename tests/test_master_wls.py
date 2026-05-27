@@ -159,7 +159,7 @@ def mock_make_master_l2(monkeypatch):
 
     def mock_compute(self, chip, fibers, lineprofile=None,
                      polyorder_x=None, polyorder_m=None, polyorder_f=None,
-                     return_stacks=False, **kwargs):
+                     **kwargs):
         polyorder_x = polyorder_x if polyorder_x is not None else self.polyorder_x
         polyorder_m = polyorder_m if polyorder_m is not None else self.polyorder_m
         polyorder_f = polyorder_f if polyorder_f is not None else self.polyorder_f
@@ -174,21 +174,19 @@ def mock_make_master_l2(monkeypatch):
             W = np.full((norder, NCOL_TEST, nfibers), 5500.0)
             coeffs = np.zeros((polyorder_x + 1, polyorder_m + 1, polyorder_f + 1))
 
-        if return_stacks:
-            coeffs_stack = np.array([coeffs] * 3)
-            lines_stack = [
-                {'wav': np.array([5500.0, 5501.0]),
-                 'pix': np.array([100.5, 200.5]),
-                 'ord': np.array([1, 2]),
-                 'fib': np.array([fibers[0]] * 2),
-                 'bad': np.array([False, False]),
-                 'std': np.array([0.5, 0.5]),
-                 'amp': np.array([1.0, 1.0]),
-                 'rms': np.array([0.01, 0.01])}
-                for _ in range(3)
-            ]
-            return W, coeffs, coeffs_stack, lines_stack
-        return W, coeffs
+        coeffs_stack = np.array([coeffs] * 3)
+        lines_stack = [
+            {'wav': np.array([5500.0, 5501.0]),
+             'pix': np.array([100.5, 200.5]),
+             'ord': np.array([1, 2]),
+             'fib': np.array([fibers[0]] * 2),
+             'bad': np.array([False, False]),
+             'std': np.array([0.5, 0.5]),
+             'amp': np.array([1.0, 1.0]),
+             'rms': np.array([0.01, 0.01])}
+            for _ in range(3)
+        ]
+        return W, coeffs, coeffs_stack, lines_stack
 
     monkeypatch.setattr(WLS, 'compute_wls_from_stack', mock_compute)
 

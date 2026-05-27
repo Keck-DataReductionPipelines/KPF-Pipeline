@@ -226,9 +226,9 @@ class TestPerform:
 
     def test_sets_headers_for_thar(self, masters_dir):
         # Legacy WLS convention: WLSFILE holds the full path (no WLSDIR), and
-        # AGEWLS is float days with sign = (master_dt - obs_dt). For a master
-        # at 2024-04-05 01:00:37 UTC and obs at 2024-04-05 11:08:33 UTC the
-        # master is ~0.42 days before the obs, so AGEWLS is negative.
+        # AGEWLS is float days with sign = (master_dt - obs_dt). Master at
+        # 2024-04-05 01:00:37 UTC vs obs at 2024-04-05 11:08:33 UTC gives
+        # delta = -10h 07m 56s = -36476 s = -0.422176 days.
         d = masters_dir / 'masters' / '20240405'
         _stub_master(d, 'KP.20240405.03637.74', 'thar')
 
@@ -238,7 +238,7 @@ class TestPerform:
         assert h['WLSFILE'] == str(d / 'KP.20240405.03637.74_master_thar_L2.fits')
         assert 'WLSDIR' not in h
         assert isinstance(h['AGEWLS'], float)
-        assert -0.5 < h['AGEWLS'] < 0.0
+        assert h['AGEWLS'] == pytest.approx(-0.422176, abs=1e-5)
 
     def test_raises_on_unknown_cal_type(self, masters_dir):
         mod = _make_module(masters_dir)

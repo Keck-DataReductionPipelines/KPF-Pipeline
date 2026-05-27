@@ -161,7 +161,8 @@ class WLS(BaseMasterModule):
 
         Notes
         -----
-        Raises ValueError if more than 20% of frames fail to load.
+        Resets self._l2_obj_cache at entry. Raises ValueError if more than
+        20% of frames fail to load.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -169,6 +170,7 @@ class WLS(BaseMasterModule):
         if len(l0_file_list) == 0:
             raise ValueError("Empty l0_file_list; must supply at least one valid file")
 
+        self._l2_obj_cache = []
         failure = 0
 
         for fn in l0_file_list:
@@ -181,10 +183,6 @@ class WLS(BaseMasterModule):
                 continue
 
             l2_obj = self._extract_frame(l1_obj, verbose=verbose)
-            
-            if not hasattr(self, '_l2_obj_cache'):
-                self._l2_obj_cache = []
-            
             self._l2_obj_cache.append(l2_obj)
 
         return self._l2_obj_cache
@@ -587,7 +585,6 @@ class WLS(BaseMasterModule):
                                polyorder_m=None,
                                polyorder_f=None,
                                verbose=True,
-                               return_stacks=True,
                                ):
         """
         Compute a master wavelength solution from a stack of extracted L2 frames.
@@ -625,8 +622,6 @@ class WLS(BaseMasterModule):
             Polynomial degree along the fiber axis (only used for 3-fiber fits).
         verbose : bool, optional
             If True, print progress for each frame and fiber.
-        return_stacks : bool, optional
-            If True, also return the per-frame line and coefficient stacks.
 
         Returns
         -------
@@ -635,11 +630,10 @@ class WLS(BaseMasterModule):
             (norder, ncol, nfiber).
         coeffs_mean : ndarray
             Outlier-rejected mean Legendre coefficient array.
-        coeffs_stack : ndarray, optional
-            Per-frame coefficient arrays, returned only if `return_stacks=True`.
-        lines_stack : list of dict, optional
-            Per-frame line dicts from `fit_line_positions_ffi`, returned only
-            if `return_stacks=True`.
+        coeffs_stack : ndarray
+            Per-frame coefficient arrays (stacked).
+        lines_stack : list of dict
+            Per-frame line dicts from `fit_line_positions_ffi`.
 
         Notes
         -----
@@ -700,10 +694,7 @@ class WLS(BaseMasterModule):
 
         W = self.evaluate_wls_coeffs(coeffs_mean, self.ccd['ncol'], self.norder[chip], len(fibers))
 
-        if return_stacks:
-            return W, coeffs_mean, coeffs_stack, lines_stack
-
-        return W, coeffs_mean
+        return W, coeffs_mean, coeffs_stack, lines_stack
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -782,7 +773,7 @@ class WLS(BaseMasterModule):
 
         self._load_linelist(linelist)
 
-        self._l2_obj_cache = []
+        # process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
         self.process_stack_l0_to_l2(l0_file_list=l0_file_list, verbose=verbose)
 
         self.ml2_obj = KPFMasterL2()
@@ -799,7 +790,6 @@ class WLS(BaseMasterModule):
                 polyorder_x=polyorder_x,
                 polyorder_m=polyorder_m,
                 polyorder_f=polyorder_f,
-                return_stacks=True,
                 verbose=verbose,
             )
             W, coeffs_mean, coeffs_stack, lines_stack = result

@@ -136,8 +136,11 @@ def build_l0_file_lists(imtype, *, min_file_count=5, cluster_gap_seconds=7200,
 
         if os.path.isfile(csv_path):
             mini_db = pd.read_csv(csv_path)
-            on_disk = set(glob.glob(os.path.join(data_dir, '*.fits')))
-            cached = set(mini_db['FILENAME']) if 'FILENAME' in mini_db.columns else set()
+            # Normalize both sides via realpath so symlinks and relative
+            # paths don't trigger gratuitous rebuilds.
+            on_disk = {os.path.realpath(p) for p in glob.glob(os.path.join(data_dir, '*.fits'))}
+            cached = {os.path.realpath(p) for p in mini_db['FILENAME']} \
+                if 'FILENAME' in mini_db.columns else set()
             if on_disk != cached:
                 added = on_disk - cached
                 removed = cached - on_disk

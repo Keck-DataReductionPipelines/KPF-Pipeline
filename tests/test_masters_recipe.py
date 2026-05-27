@@ -195,6 +195,18 @@ class TestBuildL0FileLists:
                 build_l0_file_lists("bias", data_dir=data_dir)
         mock_bmd.assert_called_once_with(data_dir)
 
+    def test_rebuilds_db_if_files_removed_from_disk(self, tmp_path):
+        # Materialize a consistent CSV + stubs, then unlink one .fits
+        # the CSV still references.
+        data_dir = _write_test_csv(tmp_path, _make_mini_db())
+        os.unlink(os.path.join(data_dir, os.path.basename(_BIAS_A[0])))
+
+        with patch("kpfpipe.utils.pipeline.build_mini_database") as mock_bmd:
+            mock_bmd.return_value = _make_mini_db()
+            with pytest.warns(UserWarning, match=r"stale.*-1 removed"):
+                build_l0_file_lists("bias", data_dir=data_dir)
+        mock_bmd.assert_called_once_with(data_dir)
+
 
 # ---------------------------------------------------------------------------
 # build_l0_file_lists (real data)
