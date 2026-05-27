@@ -138,40 +138,6 @@ class WLS(BaseMasterModule):
         return l2_obj
 
 
-    def save_stacks(self, path):
-        """
-        Write the per-frame WLS diagnostic stacks to an HDF5 file at `path`.
-
-        Layout: /<chip>/coeffs_stack as a dataset, /<chip>/lines_stack/
-        frame_<NNN>/<key> as per-frame subgroups, with every key from
-        the per-frame `lines` dict (e.g. wav, pix, ord, fib, bad, plus
-        diagnostics like std, amp, rms).
-
-        Raises
-        ------
-        RuntimeError
-            If make_master_l2() has not been run yet (no stacks available).
-        """
-        if self._coeffs_stack is None or self._lines_stack is None:
-            raise RuntimeError("No stacks available; run make_master_l2() first")
-
-        str_dt = h5py.string_dtype(encoding='utf-8')
-        with h5py.File(path, 'w') as f:
-            for chip, coeffs_stack in self._coeffs_stack.items():
-                chip_group = f.create_group(chip)
-                chip_group.create_dataset('coeffs_stack', data=np.asarray(coeffs_stack))
-
-                lines_group = chip_group.create_group('lines_stack')
-                for i, lines in enumerate(self._lines_stack[chip]):
-                    frame_group = lines_group.create_group(f'frame_{i:03d}')
-                    for key, value in lines.items():
-                        arr = np.asarray(value)
-                        if arr.dtype.kind in ('U', 'S', 'O'):
-                            frame_group.create_dataset(key, data=arr.astype(object), dtype=str_dt)
-                        else:
-                            frame_group.create_dataset(key, data=arr)
-
-
     # ------------------------------------------------------------------
     # Algorithm steps
     # ------------------------------------------------------------------
@@ -879,6 +845,41 @@ class WLS(BaseMasterModule):
             self.save_stacks(stacks_path)
 
         return self.ml2_obj
+
+
+    def save_stacks(self, path):
+        """
+        Write the per-frame WLS diagnostic stacks to an HDF5 file at `path`.
+
+        Layout: /<chip>/coeffs_stack as a dataset, /<chip>/lines_stack/
+        frame_<NNN>/<key> as per-frame subgroups, with every key from
+        the per-frame `lines` dict (e.g. wav, pix, ord, fib, bad, plus
+        diagnostics like std, amp, rms).
+
+        Raises
+        ------
+        RuntimeError
+            If make_master_l2() has not been run yet (no stacks available).
+        """
+        if self._coeffs_stack is None or self._lines_stack is None:
+            raise RuntimeError("No stacks available; run make_master_l2() first")
+
+        str_dt = h5py.string_dtype(encoding='utf-8')
+        with h5py.File(path, 'w') as f:
+            for chip, coeffs_stack in self._coeffs_stack.items():
+                chip_group = f.create_group(chip)
+                chip_group.create_dataset('coeffs_stack', data=np.asarray(coeffs_stack))
+
+                lines_group = chip_group.create_group('lines_stack')
+                for i, lines in enumerate(self._lines_stack[chip]):
+                    frame_group = lines_group.create_group(f'frame_{i:03d}')
+                    for key, value in lines.items():
+                        arr = np.asarray(value)
+                        if arr.dtype.kind in ('U', 'S', 'O'):
+                            frame_group.create_dataset(key, data=arr.astype(object), dtype=str_dt)
+                        else:
+                            frame_group.create_dataset(key, data=arr)
+
 
     def info(self):
         """Print a summary of the module configuration and WLS results."""
