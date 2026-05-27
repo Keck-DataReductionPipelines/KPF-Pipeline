@@ -1,7 +1,5 @@
 import os
 
-import h5py
-
 from kpfpipe.modules.masters.bias import Bias
 #from kpfpipe.modules.masters.dark import Dark
 #from kpfpipe.modules.masters.flat import Flat
@@ -50,19 +48,13 @@ def main(config, args):
 
     # master wavelength solution (ThAr)
     for files in build_l0_file_lists('thar', mini_db=mini_db):
-        wls_handler = WLS(files, config)
-        wls_l2, wls_stack_h5 = wls_handler.make_master_l2(return_stacks=True)
-
-        out_path = build_filepath(get_obs_id(files[0]), 'L2', data_root=data_root_out, master='thar')
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        wls_l2.to_fits(out_path)
-
-        # Persist the in-memory diagnostic stacks alongside the L2 master.
+        out_path    = build_filepath(get_obs_id(files[0]), 'L2', data_root=data_root_out, master='thar')
         stacks_path = out_path[:-len('_L2.fits')] + '_stacks.h5'
-        with h5py.File(stacks_path, 'w') as fout:
-            for name in wls_stack_h5:
-                wls_stack_h5.copy(name, fout)
-        wls_stack_h5.close()
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+        wls_handler = WLS(files, config)
+        wls_l2 = wls_handler.make_master_l2(stacks_path=stacks_path)
+        wls_l2.to_fits(out_path)
 
     print("\n\n=== exiting kpf_drp_masters pipeline ===\n\n")
 

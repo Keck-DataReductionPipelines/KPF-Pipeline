@@ -63,6 +63,8 @@ class WLS(BaseMasterModule):
         self._load_linelist()
 
         self._results = None  # populated by make_master_l2()
+        self._coeffs_by_chip = None  # populated by make_master_l2(); used by save_stacks()
+        self._lines_by_chip  = None  # populated by make_master_l2(); used by save_stacks()
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -136,34 +138,38 @@ class WLS(BaseMasterModule):
         return l2_obj
 
 
-    @staticmethod
-    def _package_stacks_hdf5(coeffs_by_chip, lines_by_chip):
+    def save_stacks(self, path):
         """
-        Package per-chip WLS stacks into an in-memory HDF5 file.
+        Write the per-frame WLS diagnostic stacks to an HDF5 file at `path`.
 
         Layout: /<chip>/coeffs_stack as a dataset, /<chip>/lines_stack/
         frame_<NNN>/<key> as per-frame subgroups, with every key from
         the per-frame `lines` dict (e.g. wav, pix, ord, fib, bad, plus
         diagnostics like std, amp, rms).
+
+        Raises
+        ------
+        RuntimeError
+            If make_master_l2() has not been run yet (no stacks available).
         """
-        f = h5py.File('wls_stacks.h5', 'w', driver='core', backing_store=False)
+        if self._coeffs_by_chip is None or self._lines_by_chip is None:
+            raise RuntimeError("No stacks available; run make_master_l2() first")
+
         str_dt = h5py.string_dtype(encoding='utf-8')
+        with h5py.File(path, 'w') as f:
+            for chip, coeffs_stack in self._coeffs_by_chip.items():
+                chip_group = f.create_group(chip)
+                chip_group.create_dataset('coeffs_stack', data=np.asarray(coeffs_stack))
 
-        for chip, coeffs_stack in coeffs_by_chip.items():
-            chip_group = f.create_group(chip)
-            chip_group.create_dataset('coeffs_stack', data=np.asarray(coeffs_stack))
-
-            lines_group = chip_group.create_group('lines_stack')
-            for i, lines in enumerate(lines_by_chip[chip]):
-                frame_group = lines_group.create_group(f'frame_{i:03d}')
-                for key, value in lines.items():
-                    arr = np.asarray(value)
-                    if arr.dtype.kind in ('U', 'S', 'O'):
-                        frame_group.create_dataset(key, data=arr.astype(object), dtype=str_dt)
-                    else:
-                        frame_group.create_dataset(key, data=arr)
-
-        return f
+                lines_group = chip_group.create_group('lines_stack')
+                for i, lines in enumerate(self._lines_by_chip[chip]):
+                    frame_group = lines_group.create_group(f'frame_{i:03d}')
+                    for key, value in lines.items():
+                        arr = np.asarray(value)
+                        if arr.dtype.kind in ('U', 'S', 'O'):
+                            frame_group.create_dataset(key, data=arr.astype(object), dtype=str_dt)
+                        else:
+                            frame_group.create_dataset(key, data=arr)
 
 
     # ------------------------------------------------------------------
@@ -744,7 +750,7 @@ class WLS(BaseMasterModule):
                        polyorder_x=None,
                        polyorder_m=None,
                        polyorder_f=None,
-                       return_stacks=False,
+                       stacks_path=None,
                        verbose=True,
                       ):
         """
@@ -754,7 +760,10 @@ class WLS(BaseMasterModule):
         computes per-chip Legendre wavelength solutions using
         `compute_wls_from_stack`. The resulting wavelength arrays are
         written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
-        which is returned and cached on `self.ml2_obj`.
+        which is returned and cached on `self.ml2_obj`. Per-frame
+        coefficient and line stacks are always stashed on
+        `self._coeffs_by_chip` / `self._lines_by_chip`; pass `stacks_path`
+        to also persist them to disk via `save_stacks()`.
 
         Parameters
         ----------
@@ -773,9 +782,10 @@ class WLS(BaseMasterModule):
         polyorder_f : int, optional
             Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
             Defaults to self.polyorder_f.
-        return_stacks : bool, optional
-            If True, also return an in-memory HDF5 file containing per-frame
-            coefficient and line stacks for every chip.
+        stacks_path : str, optional
+            If provided, calls `self.save_stacks(stacks_path)` at the end to
+            persist the per-frame coefficient and line stacks to an HDF5
+            file at this path.
         verbose : bool, optional
             If True (default), emit progress prints and informational
             warnings from frame loading, spectral extraction, and the
@@ -787,19 +797,6 @@ class WLS(BaseMasterModule):
             Master L2 object with per-fiber _WAVE extensions populated for
             every chip in self.chips, INPUT_FILES recording the stacked
             L0 files, and a 'master_wls' receipt entry.
-        h5py.File, optional
-            In-memory HDF5 file (core driver, no backing store) packaging
-            per-frame WLS diagnostics for every chip. Layout:
-              /<chip>/coeffs_stack                    per-frame Legendre coefficients
-              /<chip>/lines_stack/frame_<NNN>/wav     reference line wavelength
-              /<chip>/lines_stack/frame_<NNN>/pix     fitted pixel position
-              /<chip>/lines_stack/frame_<NNN>/std     fitted line sigma
-              /<chip>/lines_stack/frame_<NNN>/amp     fitted line amplitude
-              /<chip>/lines_stack/frame_<NNN>/rms     normalized fit residual RMS
-              /<chip>/lines_stack/frame_<NNN>/bad     boolean QC flag
-              /<chip>/lines_stack/frame_<NNN>/ord     1-indexed order number
-              /<chip>/lines_stack/frame_<NNN>/fib     fiber name
-            Returned only if `return_stacks=True`.
 
         Notes
         -----
@@ -824,13 +821,11 @@ class WLS(BaseMasterModule):
 
         self.ml2_obj = KPFMasterL2()
 
-        coeffs_by_chip = {}
-        lines_by_chip = {}
+        self._coeffs_by_chip = {}
+        self._lines_by_chip  = {}
         self._results = {}
 
         for chip in self.chips:
-            # Always request stacks internally so we can populate self._results
-            # for info(); only package them into HDF5 when the caller asks.
             result = self.compute_wls_from_stack(
                 chip=chip,
                 fibers=self.fibers,
@@ -847,10 +842,8 @@ class WLS(BaseMasterModule):
                 'n_total': sum(len(frame['wav']) for frame in lines_stack),
                 'n_fit':   sum(int(np.sum(~frame['bad'])) for frame in lines_stack),
             }
-
-            if return_stacks:
-                coeffs_by_chip[chip] = coeffs_stack
-                lines_by_chip[chip] = lines_stack
+            self._coeffs_by_chip[chip] = coeffs_stack
+            self._lines_by_chip[chip]  = lines_stack
 
             for i, fiber in enumerate(self.fibers):
                 if W.ndim == 2:
@@ -882,9 +875,8 @@ class WLS(BaseMasterModule):
 
         self.ml2_obj.receipt_add_entry('master_wls', 'PASS')
 
-        if return_stacks:
-            stacks_hdf5 = self._package_stacks_hdf5(coeffs_by_chip, lines_by_chip)
-            return self.ml2_obj, stacks_hdf5
+        if stacks_path is not None:
+            self.save_stacks(stacks_path)
 
         return self.ml2_obj
 

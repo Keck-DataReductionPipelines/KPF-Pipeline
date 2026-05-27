@@ -247,8 +247,11 @@ def build_qlp_dir(obs_id, level, *, data_root):
         Absolute path: {data_root}/QLP/{datecode}/{obs_id}/{level}/
 
     Raises:
-        ValueError: if obs_id is not a valid observation ID.
+        ValueError: if obs_id is not a valid observation ID, or if
+                    data_root is not a non-empty string.
     """
+    if not isinstance(data_root, str) or not data_root:
+        raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")
     if not is_obs_id(obs_id):
         raise ValueError(f"obs_id must be a valid observation ID (e.g. 'KP.20240405.49597.71'); got '{obs_id}'")
     return os.path.join(data_root, 'QLP', get_datecode(obs_id), obs_id, level)
@@ -263,20 +266,24 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
                    products this should be the obs_id of the first frame in
                    the stack.
         level:     data level string, one of 'L0', 'L1', 'L2', 'L4'.
-        data_root: root data directory (e.g. '/data/kpf/'). When provided,
-                   returns an absolute path. When omitted, returns the bare
-                   filename only.
+        data_root: root data directory (e.g. '/data/kpf/'). When None (the
+                   default), returns the bare filename. Otherwise must be a
+                   non-empty string and a full path is returned.
         master:    master calibration type, one of 'bias', 'dark', 'flat',
                    'thar'. If provided, builds a master calibration path.
                    If omitted, builds a science data path.
 
     Returns:
-        Absolute filepath as a string if data_root is given, else bare filename.
+        Filepath as a string (full path if data_root is set, bare filename
+        if data_root is None).
 
     Raises:
         ValueError: if level is unrecognized, if obs_id is not a valid
-                    observation ID, or if master type is unrecognized.
+                    observation ID, if master type is unrecognized, or if
+                    data_root is not None and not a non-empty string.
     """
+    if data_root is not None and (not isinstance(data_root, str) or not data_root):
+        raise ValueError(f"data_root must be None or a non-empty string; got {data_root!r}")
     if not is_obs_id(obs_id):
         raise ValueError(f"obs_id must be a valid observation ID (e.g. 'KP.20240405.49597.71'); got '{obs_id}'")
 

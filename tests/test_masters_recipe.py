@@ -366,6 +366,14 @@ class TestBuildFilepath:
         with pytest.raises(ValueError, match="valid observation ID"):
             build_filepath("20240405", "L1")
 
+    def test_invalid_data_root_empty_string_raises(self):
+        with pytest.raises(ValueError, match="data_root must be None or a non-empty string"):
+            build_filepath("KP.20240405.40113.57", "L2", data_root="")
+
+    def test_invalid_data_root_non_string_raises(self):
+        with pytest.raises(ValueError, match="data_root must be None or a non-empty string"):
+            build_filepath("KP.20240405.40113.57", "L2", data_root=12345)
+
 
 # ---------------------------------------------------------------------------
 # build_qlp_dir
@@ -385,6 +393,14 @@ class TestBuildQlpDir:
     def test_invalid_obs_id_raises(self):
         with pytest.raises(ValueError, match="valid observation ID"):
             build_qlp_dir("20240405", "L0", data_root="/data")
+
+    def test_invalid_data_root_none_raises(self):
+        with pytest.raises(ValueError, match="data_root must be a non-empty string"):
+            build_qlp_dir("KP.20240405.40113.57", "L0", data_root=None)
+
+    def test_invalid_data_root_empty_string_raises(self):
+        with pytest.raises(ValueError, match="data_root must be a non-empty string"):
+            build_qlp_dir("KP.20240405.40113.57", "L0", data_root="")
 
 
 # ---------------------------------------------------------------------------

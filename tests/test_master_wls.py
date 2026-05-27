@@ -271,22 +271,37 @@ class TestMakeMasterL2:
         wls.make_master_l2()
         assert len(wls._l2_obj_cache) == len(FILE_LIST)
 
-    def test_return_stacks_false_returns_single(self, mock_make_master_l2):
+    def test_stacks_stashed_on_self(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
-        result = wls.make_master_l2(return_stacks=False)
-        assert isinstance(result, KPFMasterL2)
+        wls.make_master_l2()
+        assert wls._coeffs_by_chip is not None
+        assert wls._lines_by_chip is not None
+        for chip in wls.chips:
+            assert chip in wls._coeffs_by_chip
+            assert chip in wls._lines_by_chip
 
-    def test_return_stacks_true_returns_tuple(self, mock_make_master_l2):
+    def test_save_stacks_before_make_raises(self):
         wls = WLS(FILE_LIST)
-        result = wls.make_master_l2(return_stacks=True)
-        assert isinstance(result, tuple) and len(result) == 2
-        ml2, h5 = result
-        assert isinstance(ml2, KPFMasterL2)
-        assert isinstance(h5, h5py.File)
+        with pytest.raises(RuntimeError, match="run make_master_l2"):
+            wls.save_stacks('/tmp/should_not_be_created.h5')
 
-    def test_hdf5_structure(self, mock_make_master_l2):
+    def test_stacks_path_writes_hdf5(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
-        ml2, h5 = wls.make_master_l2(return_stacks=True)
+        stacks_path = tmp_path / "stacks.h5"
+        wls.make_master_l2(stacks_path=str(stacks_path))
+        assert stacks_path.exists()
+
+    def test_save_stacks_post_hoc(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2()  # no stacks_path; stacks stashed on self
+        stacks_path = tmp_path / "stacks.h5"
+        wls.save_stacks(str(stacks_path))
+        assert stacks_path.exists()
+
+    def test_hdf5_structure(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        stacks_path = str(tmp_path / "stacks.h5")
+        wls.make_master_l2(stacks_path=stacks_path)
 
         # mock_compute returns three synthetic frames per chip
         expected_nframes = 3
@@ -297,27 +312,28 @@ class TestMakeMasterL2:
             wls.polyorder_f + 1,
         )
 
-        for chip in wls.chips:
-            assert chip in h5
-            cs = h5[chip]['coeffs_stack']
-            assert cs.shape == expected_coeffs_shape
-            assert np.issubdtype(cs.dtype, np.floating)
+        with h5py.File(stacks_path, 'r') as h5:
+            for chip in wls.chips:
+                assert chip in h5
+                cs = h5[chip]['coeffs_stack']
+                assert cs.shape == expected_coeffs_shape
+                assert np.issubdtype(cs.dtype, np.floating)
 
-            assert 'lines_stack' in h5[chip]
-            frame_keys = sorted(h5[chip]['lines_stack'].keys())
-            assert len(frame_keys) == expected_nframes
+                assert 'lines_stack' in h5[chip]
+                frame_keys = sorted(h5[chip]['lines_stack'].keys())
+                assert len(frame_keys) == expected_nframes
 
-            sample = h5[chip]['lines_stack'][frame_keys[0]]
-            for key in ['wav', 'pix', 'ord', 'fib', 'bad', 'std', 'amp', 'rms']:
-                assert key in sample
-            assert np.issubdtype(sample['wav'].dtype, np.floating)
-            assert np.issubdtype(sample['pix'].dtype, np.floating)
-            assert np.issubdtype(sample['ord'].dtype, np.integer)
-            assert sample['bad'].dtype == bool
-            assert h5py.check_string_dtype(sample['fib'].dtype) is not None
-            # finite values for all numeric per-line arrays
-            for key in ['wav', 'pix', 'std', 'amp', 'rms']:
-                assert np.all(np.isfinite(sample[key][...]))
+                sample = h5[chip]['lines_stack'][frame_keys[0]]
+                for key in ['wav', 'pix', 'ord', 'fib', 'bad', 'std', 'amp', 'rms']:
+                    assert key in sample
+                assert np.issubdtype(sample['wav'].dtype, np.floating)
+                assert np.issubdtype(sample['pix'].dtype, np.floating)
+                assert np.issubdtype(sample['ord'].dtype, np.integer)
+                assert sample['bad'].dtype == bool
+                assert h5py.check_string_dtype(sample['fib'].dtype) is not None
+                # finite values for all numeric per-line arrays
+                for key in ['wav', 'pix', 'std', 'amp', 'rms']:
+                    assert np.all(np.isfinite(sample[key][...]))
 
     def test_nan_orderlet_emits_warning_and_does_not_crash(self):
         """
