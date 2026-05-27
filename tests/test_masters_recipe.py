@@ -77,12 +77,28 @@ def _make_mini_db():
 
 
 def _write_test_csv(tmp_path, db):
-    """Write a mini_db CSV in the expected location for L0/20240405."""
+    """
+    Materialize a synthetic mini_db on disk: touch a stub .fits for every
+    FILENAME row, rewrite the CSV's FILENAME column to point to the stubs,
+    and write the CSV alongside them.
+    """
     data_dir = tmp_path / "L0" / "20240405"
     data_dir.mkdir(parents=True)
+    db = db.copy()
+    new_filenames = []
+    for original in db["FILENAME"]:
+        new_path = str(data_dir / os.path.basename(original))
+        open(new_path, "w").close()
+        new_filenames.append(new_path)
+    db["FILENAME"] = new_filenames
     csv_path = data_dir / "KP.20240405_L0.csv"
     db.to_csv(csv_path, index=False)
     return str(data_dir)
+
+
+def _at(data_dir, synthetic_paths):
+    """Translate /data/L0/... synthetic paths to absolute paths in data_dir."""
+    return [os.path.join(data_dir, os.path.basename(p)) for p in synthetic_paths]
 
 
 # ---------------------------------------------------------------------------
@@ -156,11 +172,11 @@ class TestBuildL0FileLists:
 
     def test_bias_cluster_a_files(self, data_dir):
         lists = build_l0_file_lists("bias", data_dir=data_dir)
-        assert lists[0] == sorted(_BIAS_A)
+        assert lists[0] == sorted(_at(data_dir, _BIAS_A))
 
     def test_bias_cluster_b_files(self, data_dir):
         lists = build_l0_file_lists("bias", data_dir=data_dir)
-        assert lists[1] == sorted(_BIAS_B)
+        assert lists[1] == sorted(_at(data_dir, _BIAS_B))
 
     def test_files_are_sorted(self, data_dir):
         for lst in build_l0_file_lists("bias", data_dir=data_dir):
@@ -175,7 +191,7 @@ class TestBuildL0FileLists:
         with pytest.warns(UserWarning):
             lists = build_l0_file_lists("bias", min_file_count=6, data_dir=data_dir)
         assert len(lists) == 1
-        assert lists[0] == sorted(_BIAS_A + _BIAS_B)
+        assert lists[0] == sorted(_at(data_dir, _BIAS_A + _BIAS_B))
 
     def test_raises_when_no_frames_found(self, data_dir):
         with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
@@ -198,11 +214,11 @@ class TestBuildL0FileLists:
 
     def test_thar_morn_cluster(self, data_dir):
         lists = build_l0_file_lists("thar", data_dir=data_dir)
-        assert lists[0] == sorted(_THAR_MORN)
+        assert lists[0] == sorted(_at(data_dir, _THAR_MORN))
 
     def test_thar_eve_cluster(self, data_dir):
         lists = build_l0_file_lists("thar", data_dir=data_dir)
-        assert lists[1] == sorted(_THAR_EVE)
+        assert lists[1] == sorted(_at(data_dir, _THAR_EVE))
 
     def test_raises_when_neither_source_provided(self):
         with pytest.raises(ValueError, match="Exactly one of"):
@@ -225,6 +241,18 @@ class TestBuildL0FileLists:
             lists = build_l0_file_lists("bias", data_dir=data_dir)
         mock_bmd.assert_called_once_with(data_dir)
         assert len(lists) == 2
+
+    def test_rebuilds_db_if_files_added_on_disk(self, tmp_path):
+        # Materialize a consistent CSV + stubs, then plant an extra .fits
+        # file the CSV does not know about.
+        data_dir = _write_test_csv(tmp_path, _make_mini_db())
+        open(os.path.join(data_dir, "KP.20240405.99999.99.fits"), "w").close()
+
+        with patch("kpfpipe.utils.pipeline.build_mini_database") as mock_bmd:
+            mock_bmd.return_value = _make_mini_db()
+            with pytest.warns(UserWarning, match=r"stale.*\+1 added"):
+                build_l0_file_lists("bias", data_dir=data_dir)
+        mock_bmd.assert_called_once_with(data_dir)
 
 
 # ---------------------------------------------------------------------------

@@ -184,9 +184,20 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
 
         if os.path.isfile(csv_path):
             mini_db = pd.read_csv(csv_path)
+            on_disk = set(glob.glob(os.path.join(data_dir, '*.fits')))
+            cached = set(mini_db['FILENAME']) if 'FILENAME' in mini_db.columns else set()
             if 'CAL_START' not in mini_db.columns:
                 warnings.warn(
                     f"Mini database at {csv_path} is missing CAL_START column; rebuilding.",
+                    UserWarning,
+                )
+                mini_db = build_mini_database(data_dir)
+            elif on_disk != cached:
+                added = on_disk - cached
+                removed = cached - on_disk
+                warnings.warn(
+                    f"Mini database at {csv_path} is stale "
+                    f"(+{len(added)} added, -{len(removed)} removed on disk); rebuilding.",
                     UserWarning,
                 )
                 mini_db = build_mini_database(data_dir)
