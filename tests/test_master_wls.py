@@ -290,28 +290,28 @@ class TestMakeMasterL2:
             assert chip in wls._coeffs_stack
             assert chip in wls._lines_stack
 
-    def test_save_stacks_before_make_raises(self):
+    def test_save_diagnostics_before_make_raises(self):
         wls = WLS(FILE_LIST)
         with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_stacks('/tmp/should_not_be_created.h5')
+            wls.save_diagnostics('/tmp/should_not_be_created.h5')
 
-    def test_stacks_path_writes_hdf5(self, mock_make_master_l2, tmp_path):
+    def test_diagnostics_path_writes_hdf5(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
-        stacks_path = tmp_path / "stacks.h5"
-        wls.make_master_l2(stacks_path=str(stacks_path))
-        assert stacks_path.exists()
+        diagnostics_path = tmp_path / "diagnostics.h5"
+        wls.make_master_l2(diagnostics_path=str(diagnostics_path))
+        assert diagnostics_path.exists()
 
-    def test_save_stacks_post_hoc(self, mock_make_master_l2, tmp_path):
+    def test_save_diagnostics_post_hoc(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
-        wls.make_master_l2()  # no stacks_path; stacks stashed on self
-        stacks_path = tmp_path / "stacks.h5"
-        wls.save_stacks(str(stacks_path))
-        assert stacks_path.exists()
+        wls.make_master_l2()  # no diagnostics_path; stacks stashed on self
+        diagnostics_path = tmp_path / "diagnostics.h5"
+        wls.save_diagnostics(str(diagnostics_path))
+        assert diagnostics_path.exists()
 
     def test_hdf5_structure(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
-        stacks_path = str(tmp_path / "stacks.h5")
-        wls.make_master_l2(stacks_path=stacks_path)
+        diagnostics_path = str(tmp_path / "diagnostics.h5")
+        wls.make_master_l2(diagnostics_path=diagnostics_path)
 
         # mock_compute returns three synthetic frames per chip
         expected_nframes = 3
@@ -322,7 +322,7 @@ class TestMakeMasterL2:
             wls.polyorder_f + 1,
         )
 
-        with h5py.File(stacks_path, 'r') as h5:
+        with h5py.File(diagnostics_path, 'r') as h5:
             for chip in wls.chips:
                 assert chip in h5
                 cs = h5[chip]['coeffs_stack']

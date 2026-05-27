@@ -63,8 +63,8 @@ class WLS(BaseMasterModule):
         self._load_linelist()
 
         self._results = None  # populated by make_master_l2()
-        self._coeffs_stack = None  # populated by make_master_l2(); used by save_stacks()
-        self._lines_stack  = None  # populated by make_master_l2(); used by save_stacks()
+        self._coeffs_stack = None  # populated by make_master_l2(); used by save_diagnostics()
+        self._lines_stack  = None  # populated by make_master_l2(); used by save_diagnostics()
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -716,7 +716,7 @@ class WLS(BaseMasterModule):
                        polyorder_x=None,
                        polyorder_m=None,
                        polyorder_f=None,
-                       stacks_path=None,
+                       diagnostics_path=None,
                        verbose=True,
                       ):
         """
@@ -728,8 +728,8 @@ class WLS(BaseMasterModule):
         written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
         which is returned and cached on `self.ml2_obj`. Per-frame
         coefficient and line stacks are always stashed on
-        `self._coeffs_stack` / `self._lines_stack`; pass `stacks_path`
-        to also persist them to disk via `save_stacks()`.
+        `self._coeffs_stack` / `self._lines_stack`; pass `diagnostics_path`
+        to also persist them to disk via `save_diagnostics()`.
 
         Parameters
         ----------
@@ -748,10 +748,10 @@ class WLS(BaseMasterModule):
         polyorder_f : int, optional
             Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
             Defaults to self.polyorder_f.
-        stacks_path : str, optional
-            If provided, calls `self.save_stacks(stacks_path)` at the end to
-            persist the per-frame coefficient and line stacks to an HDF5
-            file at this path.
+        diagnostics_path : str, optional
+            If provided, calls `self.save_diagnostics(diagnostics_path)`
+            at the end to persist the per-frame coefficient and line stacks
+            to an HDF5 file at this path.
         verbose : bool, optional
             If True (default), emit progress prints and informational
             warnings from frame loading, spectral extraction, and the
@@ -841,13 +841,13 @@ class WLS(BaseMasterModule):
 
         self.ml2_obj.receipt_add_entry('master_wls', 'PASS')
 
-        if stacks_path is not None:
-            self.save_stacks(stacks_path)
+        if diagnostics_path is not None:
+            self.save_diagnostics(diagnostics_path)
 
         return self.ml2_obj
 
 
-    def save_stacks(self, path):
+    def save_diagnostics(self, path):
         """
         Write the per-frame WLS diagnostic stacks to an HDF5 file at `path`.
 
@@ -859,10 +859,10 @@ class WLS(BaseMasterModule):
         Raises
         ------
         RuntimeError
-            If make_master_l2() has not been run yet (no stacks available).
+            If make_master_l2() has not been run yet (no diagnostics available).
         """
         if self._coeffs_stack is None or self._lines_stack is None:
-            raise RuntimeError("No stacks available; run make_master_l2() first")
+            raise RuntimeError("No diagnostics available; run make_master_l2() first")
 
         str_dt = h5py.string_dtype(encoding='utf-8')
         with h5py.File(path, 'w') as f:
