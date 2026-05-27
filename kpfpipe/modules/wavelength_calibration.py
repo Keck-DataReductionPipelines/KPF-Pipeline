@@ -58,9 +58,10 @@ class WavelengthCalibration:
         Load the master wavelength solution from disk.
 
         If `wls_path` is provided it is used directly, bypassing the header
-        lookup. Otherwise the path is read from `WLSFILE` in the L2 PRIMARY
-        header (written as a full path by CalibrationAssociation, per the
-        legacy WLS convention).
+        lookup. Otherwise the path is read from `WLSFILE` in the L2
+        INSTRUMENT_HEADER extension (which preserves the L1 PRIMARY, where
+        CalibrationAssociation wrote WLSFILE as a full path per the legacy
+        WLS convention).
 
         Parameters
         ----------
@@ -76,18 +77,18 @@ class WavelengthCalibration:
         ------
         KeyError
             If neither `wls_path` is given nor WLSFILE is present in the L2
-            PRIMARY header.
+            INSTRUMENT_HEADER.
         FileNotFoundError
             If the resolved path does not exist.
         """
         if wls_path is None:
-            primary = self.l2_obj.headers['PRIMARY']
-            if 'WLSFILE' not in primary:
+            inst_header = self.l2_obj.headers.get('INSTRUMENT_HEADER', {})
+            if 'WLSFILE' not in inst_header:
                 raise KeyError(
-                    "WLSFILE missing from L2 PRIMARY header; "
-                    "run CalibrationAssociation with 'thar' first"
+                    "WLSFILE missing from L2 INSTRUMENT_HEADER; "
+                    "run CalibrationAssociation with 'thar' on the L1 first"
                 )
-            wls_path = primary['WLSFILE']
+            wls_path = inst_header['WLSFILE']
 
         if not os.path.isfile(wls_path):
             raise FileNotFoundError(f"Master WLS file not found: {wls_path}")
