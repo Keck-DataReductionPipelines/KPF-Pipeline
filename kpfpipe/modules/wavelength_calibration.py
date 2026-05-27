@@ -3,8 +3,9 @@ KPF Wavelength Calibration module.
 
 Copies the per-fiber wavelength solution from a precomputed master WLS L2
 product onto a science L2. The master is located by CalibrationAssociation,
-which writes the full WLSFILE path to the L1 PRIMARY header (and which
-propagates into the L2 PRIMARY via KPF1.to_kpf2()).
+which writes the full WLSFILE path to the L1 PRIMARY header. KPF1.to_kpf2()
+preserves the full L1 PRIMARY in the L2 INSTRUMENT_HEADER extension, where
+this module reads it from.
 """
 import os
 
@@ -17,16 +18,17 @@ class WavelengthCalibration:
     """
     Apply a precomputed wavelength solution to an extracted KPF L2 frame.
 
-    Reads `WLSFILE` (full path, legacy convention) from the L2 PRIMARY
-    header (populated by CalibrationAssociation), loads the corresponding
+    Reads `WLSFILE` (full path, legacy convention) from the L2
+    INSTRUMENT_HEADER extension (populated by CalibrationAssociation on
+    the L1 PRIMARY and carried through by to_kpf2), loads the corresponding
     KPFMasterL2, and copies each per-fiber {CHIP}_{FIBER}_WAVE array onto
     the science L2.
 
     Parameters
     ----------
     l2_obj : KPF2
-        Extracted L2 frame. The PRIMARY header must contain a WLSFILE
-        keyword.
+        Extracted L2 frame. The INSTRUMENT_HEADER extension must contain
+        a WLSFILE keyword.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: chips, fibers.
     """

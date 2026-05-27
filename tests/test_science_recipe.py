@@ -113,14 +113,30 @@ class TestScienceRecipe:
         assert 'image_assembly' in modules
         assert 'calibration_association' in modules
         assert 'spectral_extraction' in modules
+        assert 'wavelength_calibration' in modules
 
     def test_calibration_headers_set(self, recipe_output):
-        """CalibrationAssociation should populate BIASFILE/DIR/AGE headers on L1."""
-        # Verify via the L2 receipt that calibration_association ran; header
-        # inspection requires loading the intermediate L1, which the recipe
-        # doesn't write to disk.  Check at minimum that the receipt entry exists.
+        """CalibrationAssociation's L1 PRIMARY writes survive into L2 INSTRUMENT_HEADER."""
         l2 = KPF2.from_fits(recipe_output)
-        assert 'calibration_association' in l2.receipt['Module_Name'].values
+        inst = l2.headers['INSTRUMENT_HEADER']
+        # bias/dark/flat use basename + DIR + integer AGE
+        for prefix in ('BIAS', 'DARK', 'FLAT'):
+            assert f'{prefix}FILE' in inst
+            assert f'{prefix}DIR'  in inst
+            assert f'AGE{prefix}'  in inst
+        # thar uses legacy convention: WLSFILE = full path (no WLSDIR), AGEWLS = float days
+        assert 'WLSFILE' in inst
+        assert 'WLSDIR' not in inst
+        assert inst['WLSFILE'].endswith('_master_thar_L2.fits')
+        assert isinstance(inst['AGEWLS'], float)
+
+    def test_wave_arrays_populated(self, recipe_output):
+        """WavelengthCalibration should fill the per-fiber WAVE extensions."""
+        l2 = KPF2.from_fits(recipe_output)
+        assert l2.data['GREEN_SCI2_WAVE'].shape == (NORDER_GREEN, NCOL)
+        assert l2.data['RED_SCI2_WAVE'].shape   == (NORDER_RED,   NCOL)
+        assert np.any(l2.data['GREEN_SCI2_WAVE'] != 0)
+        assert np.any(l2.data['RED_SCI2_WAVE']   != 0)
 
     def test_qlp_l0_pngs_exist(self, recipe_output):
         qlp_dir = Path(recipe_output).parents[2] / 'QLP' / '20240405' / OBS_ID / 'L0'
