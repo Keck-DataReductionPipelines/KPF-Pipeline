@@ -129,24 +129,18 @@ class TestBuildL0FileLists:
         for lst in build_l0_file_lists("bias", data_dir=data_dir):
             assert lst == sorted(lst)
 
-    def test_small_clusters_merged_issues_warning(self, data_dir):
-        # min_file_count=6: both bias clusters (5 files each) fall below → merged
-        with pytest.warns(UserWarning, match="merged into one list"):
+    def test_raises_when_any_cluster_below_min(self, data_dir):
+        # min_file_count=6: both bias clusters (5 files each) fall below → raises.
+        with pytest.raises(ValueError, match="below min_file_count=6"):
             build_l0_file_lists("bias", min_file_count=6, data_dir=data_dir)
-
-    def test_small_clusters_merged_returns_one_list(self, data_dir):
-        with pytest.warns(UserWarning):
-            lists = build_l0_file_lists("bias", min_file_count=6, data_dir=data_dir)
-        assert len(lists) == 1
-        assert lists[0] == sorted(_at(data_dir, _BIAS_A + _BIAS_B))
 
     def test_raises_when_no_frames_found(self, data_dir):
         with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
             build_l0_file_lists("flat", data_dir=data_dir)
 
-    def test_raises_when_merged_below_min(self, data_dir):
-        # dark cluster has only 3 files; merged total still < min_file_count=5
-        with pytest.raises(ValueError, match="need at least"):
+    def test_raises_when_dark_cluster_below_default_min(self, data_dir):
+        # dark cluster has only 3 files; default min_file_count=5 → raises.
+        with pytest.raises(ValueError, match="below min_file_count=5"):
             build_l0_file_lists("dark", data_dir=data_dir)
 
     def test_invalid_imtype_raises(self, data_dir):
@@ -225,16 +219,11 @@ class TestBuildL0FileListsRealData:
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
-    def test_dark_clusters_merged_issues_warning(self, l0_dir):
-        with pytest.warns(UserWarning, match="merged into one list"):
+    def test_dark_raises_on_undersized_clusters(self, l0_dir):
+        # The testdata has two dark clusters of 2 and 3 frames — both below
+        # the default min_file_count=5 → raises.
+        with pytest.raises(ValueError, match="below min_file_count=5"):
             build_l0_file_lists("dark", data_dir=l0_dir)
-
-    def test_dark_clusters_merged_returns_one_list(self, l0_dir):
-        with pytest.warns(UserWarning):
-            lists = build_l0_file_lists("dark", data_dir=l0_dir)
-        assert len(lists) == 1
-        assert len(lists[0]) == 5
-        assert lists[0] == sorted(lists[0])
 
 
 # ---------------------------------------------------------------------------

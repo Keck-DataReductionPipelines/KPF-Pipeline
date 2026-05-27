@@ -86,36 +86,6 @@ def build_mini_database(data_dir, write=True):
     return df
 
 
-def _split_into_clusters(filenames, cluster_gap_seconds):
-    """
-    Group filenames into time-contiguous clusters.
-
-    Sorts by UTC seconds and splits wherever the gap between consecutive
-    frames exceeds cluster_gap_seconds.
-
-    Args:
-        filenames:           iterable of KPF L0 FITS paths.
-        cluster_gap_seconds: gap threshold (seconds) between consecutive
-                             frames that splits a calibration sequence
-                             into separate clusters.
-
-    Returns:
-        list of lists of filenames, each inner list sorted by timestamp.
-    """
-    timed = sorted(((get_seconds_since_j2000(fn), fn) for fn in filenames),
-                   key=lambda t: t[0])
-    if not timed:
-        return []
-
-    clusters = [[timed[0][1]]]
-    for (prev_t, _), (t, fn) in zip(timed, timed[1:]):
-        if t - prev_t > cluster_gap_seconds:
-            clusters.append([fn])
-        else:
-            clusters[-1].append(fn)
-    return clusters
-
-
 def build_l0_file_lists(imtype, *, min_file_count=5, cluster_gap_seconds=7200,
                         data_dir=None, mini_db=None):
     """
@@ -125,15 +95,13 @@ def build_l0_file_lists(imtype, *, min_file_count=5, cluster_gap_seconds=7200,
     loads the mini database CSV if it exists, otherwise calls build_mini_database
     to scan headers and write it. When mini_db is given, uses it directly to
     avoid redundant I/O. Filters by OBJECT, then groups frames into clusters by
-    detecting >cluster_gap_seconds gaps between consecutive timestamps. Clusters
-    with at least min_file_count files are returned as individual lists. If any
-    cluster falls below min_file_count, all clusters of that type are merged
-    into a single list with a warning.
+    detecting >cluster_gap_seconds gaps between consecutive timestamps. Every
+    returned cluster must have at least min_file_count files; otherwise raises.
 
     Args:
         imtype:              calibration frame type. One of 'bias', 'dark',
                              'flat', 'thar'.
-        min_file_count:      minimum number of files required per returned list.
+        min_file_count:      minimum number of files required per cluster.
                              Default is 5.
         cluster_gap_seconds: gap (seconds) between consecutive frames that
                              splits a calibration sequence into separate
@@ -144,15 +112,13 @@ def build_l0_file_lists(imtype, *, min_file_count=5, cluster_gap_seconds=7200,
         mini_db:             DataFrame returned by build_mini_database.
 
     Returns:
-        List of sorted file lists, one per cluster or one merged list if any
-        cluster fell below min_file_count.
+        List of sorted file lists, one per cluster.
 
     Raises:
         ValueError: if imtype is not a recognized calibration type, if exactly
                     one of data_dir or mini_db is not provided, if no
                     calibration frames of the requested type are found, or if
-                    the merged total still contains fewer than min_file_count
-                    files.
+                    any cluster contains fewer than min_file_count files.
     """
     if imtype not in _OBJECT_MAP:
         raise ValueError(
@@ -192,27 +158,30 @@ def build_l0_file_lists(imtype, *, min_file_count=5, cluster_gap_seconds=7200,
         )
 
     # Cluster per-OBJECT (morning vs. evening thar etc. have different OBJECT
-    # suffixes), then flatten and sort chronologically by first frame.
+    # suffixes), splitting wherever consecutive frames are more than
+    # cluster_gap_seconds apart. Final list sorted chronologically.
     clusters = []
     for _, group in cal_df.groupby('OBJECT', dropna=False):
-        clusters.extend(_split_into_clusters(group['FILENAME'], cluster_gap_seconds))
+        timed = sorted((get_seconds_since_j2000(fn), fn) for fn in group['FILENAME'])
+        if not timed:
+            continue
+        cluster = [timed[0][1]]
+        for (prev_t, _), (t, fn) in zip(timed, timed[1:]):
+            if t - prev_t > cluster_gap_seconds:
+                clusters.append(cluster)
+                cluster = [fn]
+            else:
+                cluster.append(fn)
+        clusters.append(cluster)
     clusters.sort(key=lambda c: get_seconds_since_j2000(c[0]))
 
-    if all(len(c) >= min_file_count for c in clusters):
-        return clusters
-
-    merged = sorted(f for c in clusters for f in c)
-    if len(merged) < min_file_count:
+    short = [c for c in clusters if len(c) < min_file_count]
+    if short:
         raise ValueError(
-            f"Only {len(merged)} '{imtype}' frame(s) found in {data_dir or 'the provided mini_db'}; "
-            f"need at least {min_file_count}"
+            f"'{imtype}' has {len(short)} cluster(s) below "
+            f"min_file_count={min_file_count}; sizes: {[len(c) for c in short]}"
         )
-    warnings.warn(
-        f"'{imtype}' clusters below min_file_count={min_file_count}; "
-        f"merged into one list of {len(merged)} files.",
-        UserWarning,
-    )
-    return [merged]
+    return clusters
 
 
 def build_qlp_dir(obs_id, level, *, data_root):
