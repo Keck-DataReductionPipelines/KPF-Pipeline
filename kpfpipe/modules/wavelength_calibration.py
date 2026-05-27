@@ -118,15 +118,14 @@ class WavelengthCalibration:
             Defaults to self.fibers.
         wls_path : str, optional
             Direct path to the master WLS L2 file. If omitted, the path is
-            resolved from WLSDIR/WLSFILE on the L2 PRIMARY header.
+            read from WLSFILE on the L2 INSTRUMENT_HEADER extension.
 
         Returns
         -------
         l2_obj : KPF2
-            The input L2 with per-fiber _WAVE extensions populated, the
-            master filename recorded in PRIMARY['WLSFILE'] (already present
-            from CalibrationAssociation, left untouched), and a
-            'wavelength_calibration' receipt entry.
+            The input L2 with per-fiber _WAVE extensions populated and a
+            'wavelength_calibration' receipt entry. WLSFILE on
+            INSTRUMENT_HEADER is left untouched.
         """
         if chips is None:
             chips = self.chips
