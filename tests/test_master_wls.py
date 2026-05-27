@@ -244,6 +244,16 @@ class TestMakeMasterL2:
             for key in ['POLYORDX', 'POLYORDM', 'POLYORDF']:
                 assert key in hdr
 
+    def test_to_fits_round_trip(self, mock_make_master_l2, tmp_path):
+        # Regression: rvdata builds non-PRIMARY headers via fits.Header(dict),
+        # which rejects (value, comment) tuple values. Make sure every header
+        # we set survives the round-trip.
+        wls = WLS(FILE_LIST)
+        ml2 = wls.make_master_l2()
+        out_path = tmp_path / "round_trip_master.fits"
+        ml2.to_fits(str(out_path))
+        assert out_path.exists()
+
     def test_polyorder_override_stamped(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         override_x = wls.polyorder_x + 4   # ensure different from default

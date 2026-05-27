@@ -823,9 +823,9 @@ class WLS(BaseMasterModule):
             self.ml2_obj.set_data(coeffs_ext, coeffs_mean)
 
             coeffs_hdr = self.ml2_obj.headers[coeffs_ext]
-            coeffs_hdr['POLYORDX'] = (polyorder_x, 'WLS polynomial degree, pixel axis')
-            coeffs_hdr['POLYORDM'] = (polyorder_m, 'WLS polynomial degree, order axis')
-            coeffs_hdr['POLYORDF'] = (polyorder_f, 'WLS polynomial degree, fiber axis')
+            coeffs_hdr['POLYORDX'] = polyorder_x
+            coeffs_hdr['POLYORDM'] = polyorder_m
+            coeffs_hdr['POLYORDF'] = polyorder_f
 
         self.ml2_obj.set_input_files(l0_file_list)
 
