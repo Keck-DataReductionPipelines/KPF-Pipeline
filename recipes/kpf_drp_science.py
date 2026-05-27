@@ -56,7 +56,7 @@ def main(config, args):
 
     # assign calibration masters (bias, dark, flat, wls) to this frame
     calibration_association = CalibrationAssociation(l1, config)
-    l1 = calibration_association.perform(['bias', 'dark', 'flat', 'wls_thar'])
+    l1 = calibration_association.perform(['bias', 'dark', 'flat', 'thar'])
 
     # apply stardard FFI image processing (bias, dark, flat)
     image_processing = ImageProcessing(l1, config)

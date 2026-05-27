@@ -51,19 +51,24 @@ def _load_masters_recipe():
 # ---------------------------------------------------------------------------
 
 # Synthetic filenames: KP.YYYYMMDD.SSSSS.FF.fits
-# Two bias clusters separated by a >2hr gap; one dark cluster; science frames.
-_BIAS_A = [f"/data/L0/20240405/KP.20240405.0{3600 + i*100:04d}.00.fits" for i in range(5)]  # 03600–04000
-_BIAS_B = [f"/data/L0/20240405/KP.20240405.{14000 + i*100:05d}.00.fits" for i in range(5)]  # 14000–14400
-_DARK_A = [f"/data/L0/20240405/KP.20240405.{18000 + i*100:05d}.00.fits" for i in range(3)]  # 18000–18200
-_SCI_A  = [f"/data/L0/20240405/KP.20240405.{50000 + i*100:05d}.00.fits" for i in range(2)]  # 50000–50100
+# Two bias clusters separated by a >2hr gap; one dark cluster; two ThAr clusters
+# (morning and evening) with different OBJECT suffixes; science frames.
+_BIAS_A     = [f"/data/L0/20240405/KP.20240405.0{3600 + i*100:04d}.00.fits" for i in range(5)]  # 03600–04000
+_BIAS_B     = [f"/data/L0/20240405/KP.20240405.{14000 + i*100:05d}.00.fits" for i in range(5)]  # 14000–14400
+_DARK_A     = [f"/data/L0/20240405/KP.20240405.{18000 + i*100:05d}.00.fits" for i in range(3)]  # 18000–18200
+_THAR_MORN  = [f"/data/L0/20240405/KP.20240405.{60000 + i*100:05d}.00.fits" for i in range(5)]  # 60000–60400
+_THAR_EVE   = [f"/data/L0/20240405/KP.20240405.{75000 + i*100:05d}.00.fits" for i in range(5)]  # 75000–75400
+_SCI_A      = [f"/data/L0/20240405/KP.20240405.{50000 + i*100:05d}.00.fits" for i in range(2)]  # 50000–50100
 
 
 def _make_mini_db():
     rows = (
-        [{"FILENAME": f, "IMTYPE": "Bias",   "OBJECT": "autocal-bias", "TARGNAME": None} for f in _BIAS_A]
-      + [{"FILENAME": f, "IMTYPE": "Bias",   "OBJECT": "autocal-bias", "TARGNAME": None} for f in _BIAS_B]
-      + [{"FILENAME": f, "IMTYPE": "Dark",   "OBJECT": "autocal-dark", "TARGNAME": None} for f in _DARK_A]
-      + [{"FILENAME": f, "IMTYPE": "Object", "OBJECT": "185144",       "TARGNAME": "185144"} for f in _SCI_A]
+        [{"FILENAME": f, "IMTYPE": "Bias",    "OBJECT": "autocal-bias",           "TARGNAME": None} for f in _BIAS_A]
+      + [{"FILENAME": f, "IMTYPE": "Bias",    "OBJECT": "autocal-bias",           "TARGNAME": None} for f in _BIAS_B]
+      + [{"FILENAME": f, "IMTYPE": "Dark",    "OBJECT": "autocal-dark",           "TARGNAME": None} for f in _DARK_A]
+      + [{"FILENAME": f, "IMTYPE": "Arclamp", "OBJECT": "autocal-thar-all-morn",  "TARGNAME": None} for f in _THAR_MORN]
+      + [{"FILENAME": f, "IMTYPE": "Arclamp", "OBJECT": "autocal-thar-all-eve",   "TARGNAME": None} for f in _THAR_EVE]
+      + [{"FILENAME": f, "IMTYPE": "Object",  "OBJECT": "185144",                 "TARGNAME": "185144"} for f in _SCI_A]
     )
     df = pd.DataFrame(rows)
     df["EXPTIME"] = 60.0
@@ -183,7 +188,21 @@ class TestBuildL0FileLists:
 
     def test_invalid_imtype_raises(self, data_dir):
         with pytest.raises(ValueError, match="imtype must be one of"):
-            build_l0_file_lists("wls", data_dir=data_dir)
+            build_l0_file_lists("bogus", data_dir=data_dir)
+
+    def test_thar_returns_two_clusters(self, data_dir):
+        # Morning and evening ThArs have different OBJECT suffixes and are >2hr
+        # apart; each forms its own cluster.
+        lists = build_l0_file_lists("thar", data_dir=data_dir)
+        assert len(lists) == 2
+
+    def test_thar_morn_cluster(self, data_dir):
+        lists = build_l0_file_lists("thar", data_dir=data_dir)
+        assert lists[0] == sorted(_THAR_MORN)
+
+    def test_thar_eve_cluster(self, data_dir):
+        lists = build_l0_file_lists("thar", data_dir=data_dir)
+        assert lists[1] == sorted(_THAR_EVE)
 
     def test_raises_when_neither_source_provided(self):
         with pytest.raises(ValueError, match="Exactly one of"):
@@ -311,9 +330,9 @@ class TestBuildFilepath:
         name = build_filepath("KP.20240405.40113.57", "L2")
         assert name == "kpf_SL2_20240405T110833.fits"
 
-    def test_master_wls_thar_with_obs_id(self):
-        path = build_filepath("KP.20240405.03600.00", "L2", data_root="/data", master="wls_thar")
-        assert path == "/data/masters/20240405/KP.20240405.03600.00_master_wls_thar_L2.fits"
+    def test_master_thar_with_obs_id(self):
+        path = build_filepath("KP.20240405.03600.00", "L2", data_root="/data", master="thar")
+        assert path == "/data/masters/20240405/KP.20240405.03600.00_master_thar_L2.fits"
 
     def test_invalid_obs_id_raises(self):
         with pytest.raises(ValueError, match="valid observation ID"):

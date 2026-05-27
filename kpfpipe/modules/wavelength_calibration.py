@@ -85,7 +85,7 @@ class WavelengthCalibration:
             if 'WLSFILE' not in primary:
                 raise KeyError(
                     "WLSFILE missing from L2 PRIMARY header; "
-                    "run CalibrationAssociation with 'wls_thar' first"
+                    "run CalibrationAssociation with 'thar' first"
                 )
             wls_path = primary['WLSFILE']
 

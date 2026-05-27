@@ -12,9 +12,16 @@ from kpfpipe.utils.kpf import get_datecode, is_obs_id, get_timestamp, kpf_timest
 _METADATA_KEYS = ['FILENAME', 'TARGNAME', 'IMTYPE', 'OBJECT', 'EXPTIME', 'ELAPSED']
 
 _OBJECT_MAP = {
-    'bias': 'autocal-bias',
-    'dark': 'autocal-dark',
-    'flat': 'autocal-flat-all',
+    'bias':     ['autocal-bias'],
+    'dark':     ['autocal-dark'],
+    'flat':     ['autocal-flat-all'],
+    'thar': [
+        'autocal-thar-all-morn',
+        'autocal-thar-all-midday',
+        'autocal-thar-all-eve',
+        'autocal-thar-all-night',
+        'autocal-thar-all-midnight',
+    ],
 }
 
 # 2-hour gap threshold: KPF calibration sequences within a night are
@@ -54,7 +61,7 @@ def _detect_calibration_stack_clusters(df):
     cal_start = pd.Series('', index=df.index)
     cal_end   = pd.Series('', index=df.index)
 
-    cal_objects = set(_OBJECT_MAP.values())
+    cal_objects = {obj for objs in _OBJECT_MAP.values() for obj in objs}
     cal_df = df[df['OBJECT'].isin(cal_objects)].copy()
     cal_df['_UTC_TOTAL'] = [_safe_seconds(f) for f in cal_df['FILENAME']]
 
@@ -151,7 +158,7 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
     into a single list with a warning.
 
     Args:
-        imtype:          calibration frame type. One of 'bias', 'dark', 'flat'.
+        imtype:          calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
         min_file_count:  minimum number of files required per returned list.
                          Default is 5.
         data_dir:        path to directory containing L0 FITS files.
@@ -195,7 +202,7 @@ def build_l0_file_lists(imtype, min_file_count=5, *, data_dir=None, mini_db=None
         else:
             metadata = build_mini_database(data_dir)
 
-    mask = (metadata['OBJECT'] == _OBJECT_MAP[imtype]) & (metadata['CAL_START'] != '')
+    mask = metadata['OBJECT'].isin(_OBJECT_MAP[imtype]) & (metadata['CAL_START'] != '')
     cal_df = metadata[mask]
 
     if cal_df.empty:
@@ -258,7 +265,7 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
                    returns an absolute path. When omitted, returns the bare
                    filename only.
         master:    master calibration type, one of 'bias', 'dark', 'flat',
-                   'wls_thar'. If provided, builds a master calibration path.
+                   'thar'. If provided, builds a master calibration path.
                    If omitted, builds a science data path.
 
     Returns:
@@ -276,8 +283,8 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
     if master is not None:
         # Masters: {data_root}/masters/{datecode}/{obs_id}_master_{master}_{level}.fits
         # Level is in the filename only — no level subdirectory.
-        if master not in ('bias', 'dark', 'flat', 'wls_thar'):
-            raise ValueError(f"'master' must be 'bias', 'dark', 'flat', or 'wls_thar'; got '{master}'")
+        if master not in ('bias', 'dark', 'flat', 'thar'):
+            raise ValueError(f"'master' must be 'bias', 'dark', 'flat', or 'thar'; got '{master}'")
         if level not in ('L1', 'L2', 'L4'):
             raise ValueError(f"'level' for master products must be 'L1', 'L2', or 'L4'; got '{level}'")
         filename = f'{obs_id}_master_{master}_{level}.fits'
