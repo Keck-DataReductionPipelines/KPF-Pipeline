@@ -378,6 +378,10 @@ class BarycentricCorrection:
         if fix_expmeter_outliers:
             f = self._fix_expmeter_outliers(f)
 
+        # Cache boundary readings; f[0] and f[-1] get clobbered by later vstacks.
+        f_first_reading = f[0].copy()
+        f_last_reading  = f[-1].copy()
+
         t = t_mid.copy()
 
         if interpolate:
@@ -391,12 +395,12 @@ class BarycentricCorrection:
             obs_end = Time(hdr['DATE-END'], format='isot', scale='utc')
 
             if obs_beg < t_beg[0]:
-                t_ext, f_ext = self._extrapolate(obs_beg, t_beg[0], t_end[0], f[0])
+                t_ext, f_ext = self._extrapolate(obs_beg, t_beg[0], t_end[0], f_first_reading)
                 t = Time(np.concatenate([t.jd, [t_ext.jd]]), format='jd', scale='utc')
                 f = np.vstack([f, f_ext])
 
             if obs_end > t_end[-1]:
-                t_ext, f_ext = self._extrapolate(obs_end, t_beg[-1], t_end[-1], f[-1])
+                t_ext, f_ext = self._extrapolate(obs_end, t_beg[-1], t_end[-1], f_last_reading)
                 t = Time(np.concatenate([t.jd, [t_ext.jd]]), format='jd', scale='utc')
                 f = np.vstack([f, f_ext])
 

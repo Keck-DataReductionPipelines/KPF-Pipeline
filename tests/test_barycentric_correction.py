@@ -307,6 +307,8 @@ class TestFluxWeightedMidpointExpmeter:
             bc.compute_flux_weighted_midpoint_times(output='expmeter')
 
     def test_interpolate_shifts_midpoint_with_front_weighted_flux(self, synthetic_kpf2):
+        """Front-weighted flux: interpolation sees a bright sample at the
+        first gap (~T+90s) that pulls the FWM strictly later."""
         data = {'Date-Beg': ['2024-01-01T00:00:00.000',
                               '2024-01-01T00:02:00.000',
                               '2024-01-01T00:04:00.000'],
@@ -326,7 +328,39 @@ class TestFluxWeightedMidpointExpmeter:
             output='expmeter',
             interpolate=True, extrapolate=False, fix_expmeter_outliers=False,
         )
-        assert np.mean(t_yes.jd) >= np.mean(t_no.jd) - 1e-9
+        # Shift should be sub-minute → tens of microdays, easily > 1e-9 days
+        assert np.mean(t_yes.jd) > np.mean(t_no.jd) + 1e-7
+
+    def test_extrapolate_shifts_midpoint_when_shutter_brackets_expmeter(self, synthetic_kpf2):
+        """DATE-BEG before t_beg[0] and DATE-END after t_end[-1] → extrapolated
+        gap samples on both sides pull the FWM. Bright first reading + faint
+        last → leading extrapolation dominates → midpoint earlier than with
+        extrapolate=False."""
+        data = {'Date-Beg': ['2024-01-01T00:02:00.000',   # readings inset from shutter
+                              '2024-01-01T00:02:30.000',
+                              '2024-01-01T00:03:00.000'],
+                'Date-End': ['2024-01-01T00:02:20.000',
+                              '2024-01-01T00:02:50.000',
+                              '2024-01-01T00:03:20.000'],
+                '5000': [1000.0, 1.0, 1.0],
+                '5100': [1000.0, 1.0, 1.0]}
+        synthetic_kpf2.set_data('EXPMETER_SCI', Table(data))
+        # Shutter open 00:00:00 → 00:05:00; readings only 00:02:00–00:03:20
+        synthetic_kpf2.headers['INSTRUMENT_HEADER']['DATE-BEG'] = '2024-01-01T00:00:00.000'
+        synthetic_kpf2.headers['INSTRUMENT_HEADER']['DATE-END'] = '2024-01-01T00:05:00.000'
+
+        bc = BarycentricCorrection(synthetic_kpf2)
+        _, t_no  = bc.compute_flux_weighted_midpoint_times(
+            output='expmeter',
+            interpolate=False, extrapolate=False, fix_expmeter_outliers=False,
+        )
+        _, t_yes = bc.compute_flux_weighted_midpoint_times(
+            output='expmeter',
+            interpolate=False, extrapolate=True, fix_expmeter_outliers=False,
+        )
+        # Bright first reading + 2-minute leading shutter gap → big leading
+        # extrapolation pulls FWM clearly earlier than the no-extrap case.
+        assert np.mean(t_yes.jd) < np.mean(t_no.jd) - 1e-7
 
 
 class TestFluxWeightedMidpointOrders:
@@ -598,4 +632,79 @@ class TestPerform:
         assert set(results.keys()) == {'bjd_tdb', 'bary_kms', 'bary_z'}
         for v in results.values():
             assert len(v) == NORDER
+
+    def test_real_outlier_filter_runs_end_to_end(self, synthetic_kpf2, monkeypatch):
+        """Exercise fix_expmeter_outliers=True through perform() with a
+        noisy expmeter table (3×4 uniform fixture would crash griddata)."""
+        rng = np.random.default_rng(0)
+        ntime, nwave = 60, 20
+        wave_cols = [str(5000.0 + 10 * i) for i in range(nwave)]
+        data = {'Date-Beg': [f'2024-01-01T00:{m:02d}:00.000' for m in range(ntime)],
+                'Date-End': [f'2024-01-01T00:{m:02d}:30.000' for m in range(ntime)]}
+        for wc in wave_cols:
+            data[wc] = rng.normal(100.0, 2.0, ntime).astype(float)
+        # Inject a clear outlier so the filter has work to do
+        data[wave_cols[5]][30] = 1e6
+        synthetic_kpf2.set_data('EXPMETER_SCI', Table(data))
+        synthetic_kpf2.headers['INSTRUMENT_HEADER']['DATE-END'] = '2024-01-01T01:00:00.000'
+
+        def mock_query(gaia_id):
+            return _fake_skycoord()
+
+        def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
+            n = len(np.atleast_1d(obs_times.jd))
+            return np.full(n, 1000.0), np.atleast_1d(obs_times.jd)
+
+        monkeypatch.setattr(BarycentricCorrection, '_query_gaia', staticmethod(mock_query))
+        monkeypatch.setattr(BarycentricCorrection, '_compute_barycorr', staticmethod(mock_compute))
+
+        # No monkeypatch on _fix_expmeter_outliers — real filter runs.
+        kpf2 = BarycentricCorrection(synthetic_kpf2).perform(fix_expmeter_outliers=True)
+        assert np.all(np.isfinite(np.asarray(kpf2.data['BJD_TDB'])))
+
+
+# ---------------------------------------------------------------------------
+# Constructor + missing-header error paths
+# ---------------------------------------------------------------------------
+
+class TestConstructor:
+
+    def test_invalid_config_type_raises(self, synthetic_kpf2):
+        with pytest.raises(TypeError, match="None, dict, or ConfigHandler"):
+            BarycentricCorrection(synthetic_kpf2, config="not-a-config")
+
+
+class TestMissingHeader:
+    """perform() should fail loudly when required INSTRUMENT_HEADER keys are absent."""
+
+    def test_missing_gaiaid_raises(self, synthetic_kpf2, monkeypatch):
+        # Stub _fix_expmeter_outliers so we don't hit the griddata degeneracy
+        # before reaching the GAIAID lookup.
+        def passthrough(f, kernel_size=5):
+            return f.copy()
+        monkeypatch.setattr(BarycentricCorrection, '_fix_expmeter_outliers', staticmethod(passthrough))
+
+        del synthetic_kpf2.headers['INSTRUMENT_HEADER']['GAIAID']
+        bc = BarycentricCorrection(synthetic_kpf2)
+        with pytest.raises(KeyError, match='GAIAID'):
+            bc.perform()
+
+    def test_missing_date_beg_raises_when_extrapolating(self, synthetic_kpf2):
+        del synthetic_kpf2.headers['INSTRUMENT_HEADER']['DATE-BEG']
+        bc = BarycentricCorrection(synthetic_kpf2)
+        with pytest.raises(KeyError, match='DATE-BEG'):
+            bc.compute_flux_weighted_midpoint_times(
+                output='expmeter',
+                interpolate=False, extrapolate=True, fix_expmeter_outliers=False,
+            )
+
+    def test_missing_date_beg_ok_without_extrapolate(self, synthetic_kpf2):
+        """DATE-BEG is only needed when extrapolate=True."""
+        del synthetic_kpf2.headers['INSTRUMENT_HEADER']['DATE-BEG']
+        bc = BarycentricCorrection(synthetic_kpf2)
+        # Should not raise:
+        bc.compute_flux_weighted_midpoint_times(
+            output='expmeter',
+            interpolate=False, extrapolate=False, fix_expmeter_outliers=False,
+        )
 
