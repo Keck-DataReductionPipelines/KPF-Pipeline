@@ -840,7 +840,7 @@ class WLS(BaseMasterModule):
         self.ml2_obj.receipt_add_entry('master_wls', 'PASS')
 
         if master_path is not None:
-            self.save_master('L2', master_path)
+            self.save_master('L2', master_path, overwrite=True)
 
         if diagnostics_path is not None:
             self.save_diagnostics(diagnostics_path)

@@ -350,6 +350,29 @@ class TestMakeMasterL2:
         wls.save_master('L2', str(master_path))
         assert master_path.exists()
 
+    def test_save_master_refuses_overwrite_by_default(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2()
+        master_path = tmp_path / "master.fits"
+        master_path.touch()
+        with pytest.raises(FileExistsError, match="overwrite=True"):
+            wls.save_master('L2', str(master_path))
+
+    def test_save_master_overwrite_true_replaces(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2()
+        master_path = tmp_path / "master.fits"
+        master_path.write_bytes(b"stale")
+        wls.save_master('L2', str(master_path), overwrite=True)
+        assert master_path.read_bytes()[:6] == b"SIMPLE"
+
+    def test_master_path_overwrites_existing(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        master_path = tmp_path / "master.fits"
+        master_path.touch()
+        wls.make_master_l2(master_path=str(master_path))
+        assert master_path.read_bytes()[:6] == b"SIMPLE"
+
     def test_hdf5_structure(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         diagnostics_path = str(tmp_path / "diagnostics.h5")

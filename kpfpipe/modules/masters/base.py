@@ -534,7 +534,7 @@ class BaseMasterModule:
     # Public methods
     # ------------------------------------------------------------------
 
-    def save_master(self, level, path):
+    def save_master(self, level, path, *, overwrite=False):
         """
         Write the cached master object to a FITS file at `path`.
 
@@ -546,11 +546,20 @@ class BaseMasterModule:
             subclass's `make_master_l1` / `make_master_l2` entry point.
         path : str
             Output FITS path. Parent directories are created as needed.
+        overwrite : bool, optional
+            If False (default), refuse to clobber an existing file and
+            raise FileExistsError. If True, replace any existing file
+            at `path`. Defaults to False to protect against accidental
+            overwrites when called directly; entry points that pass an
+            output path through `make_master_lN()` should set True
+            explicitly.
 
         Raises
         ------
         ValueError
             If `level` is not a recognized data level.
+        FileExistsError
+            If `path` already exists and `overwrite` is False.
         RuntimeError
             If the corresponding make_master_lN() has not been run yet,
             or raised before constructing the master.
@@ -563,6 +572,11 @@ class BaseMasterModule:
         if obj is None:
             raise RuntimeError(
                 f"No master available; run make_master_{level.lower()}() first"
+            )
+
+        if not overwrite and os.path.exists(path):
+            raise FileExistsError(
+                f"{path} already exists; pass overwrite=True to replace it"
             )
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
