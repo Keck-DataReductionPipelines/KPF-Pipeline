@@ -195,12 +195,12 @@ class TestExtrapolate:
             BarycentricCorrection._extrapolate(t0, t_beg, t_end, f)
 
 
-class TestFixBadExposures:
+class TestFixExpmeterOutliers:
 
     def test_clean_array_unchanged(self):
         rng = np.random.default_rng(0)
         f = rng.normal(100.0, 2.0, (60, 20))
-        f_fixed = BarycentricCorrection._fix_bad_exposures(f)
+        f_fixed = BarycentricCorrection._fix_expmeter_outliers(f)
         np.testing.assert_allclose(f_fixed, f, rtol=1e-4)
 
     def test_outlier_repaired(self):
@@ -208,13 +208,13 @@ class TestFixBadExposures:
         f = rng.normal(100.0, 2.0, (60, 20))
         f[30, 10] = 1e6
 
-        f_fixed = BarycentricCorrection._fix_bad_exposures(f)
+        f_fixed = BarycentricCorrection._fix_expmeter_outliers(f)
         assert abs(f_fixed[30, 10] - 100.0) < 20.0
 
     def test_output_shape_preserved(self):
         rng = np.random.default_rng(2)
         f = rng.normal(50.0, 1.0, (60, 20))
-        assert BarycentricCorrection._fix_bad_exposures(f).shape == f.shape
+        assert BarycentricCorrection._fix_expmeter_outliers(f).shape == f.shape
 
 
 # ---------------------------------------------------------------------------
@@ -281,14 +281,14 @@ class TestFluxWeightedMidpoint:
     def test_uniform_flux_gives_geometric_midpoint(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
         w, t_fwm = bc.flux_weighted_midpoint(interpolate=False, extrapolate=False,
-                                              fix_bad_exposures=False)
+                                              fix_expmeter_outliers=False)
         _, t_mid, _ = bc._get_timestamps()
         np.testing.assert_allclose(np.mean(t_fwm.jd), np.mean(t_mid.jd), atol=1e-6)
 
     def test_output_shapes(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
         w, t_fwm = bc.flux_weighted_midpoint(interpolate=False, extrapolate=False,
-                                              fix_bad_exposures=False)
+                                              fix_expmeter_outliers=False)
         assert w.shape == (len(_WAVE_COLS),)
         assert len(t_fwm) == len(_WAVE_COLS)
 
@@ -315,9 +315,9 @@ class TestFluxWeightedMidpoint:
         bc = BarycentricCorrection(synthetic_kpf2)
 
         _, t_no = bc.flux_weighted_midpoint(interpolate=False, extrapolate=False,
-                                             fix_bad_exposures=False)
+                                             fix_expmeter_outliers=False)
         _, t_yes = bc.flux_weighted_midpoint(interpolate=True, extrapolate=False,
-                                              fix_bad_exposures=False)
+                                              fix_expmeter_outliers=False)
         assert np.mean(t_yes.jd) >= np.mean(t_no.jd) - 1e-9
 
 
@@ -393,12 +393,16 @@ class TestPerform:
             bjd_tdb = np.atleast_1d(obs_times.jd) + 500.0 / 86400.0
             return bc_vel, bjd_tdb
 
+        def passthrough(f, kernel_size=5):
+            return f.copy()
+
         monkeypatch.setattr(BarycentricCorrection, '_query_gaia', staticmethod(mock_query))
         monkeypatch.setattr(BarycentricCorrection, '_compute_barycorr', staticmethod(mock_compute))
-        # Disable fix_bad_exposures: the 3×4 uniform-flux fixture triggers a
+        # Stub _fix_expmeter_outliers: the 3×4 uniform-flux fixture triggers a
         # degenerate triangulation inside scipy.griddata. Filter itself is
-        # exercised by TestFixBadExposures with a noisy 60×20 array.
-        return BarycentricCorrection(synthetic_kpf2, config={'fix_bad_exposures': False})
+        # exercised by TestFixExpmeterOutliers with a noisy 60×20 array.
+        monkeypatch.setattr(BarycentricCorrection, '_fix_expmeter_outliers', staticmethod(passthrough))
+        return BarycentricCorrection(synthetic_kpf2)
 
     def test_returns_kpf2(self, bc_monkeypatched):
         assert isinstance(bc_monkeypatched.perform(), KPF2)
@@ -444,15 +448,15 @@ class TestPerform:
             np.testing.assert_allclose(after, before * z[:, None], rtol=1e-5,
                                        err_msg=f"{key} not scaled correctly")
 
-    def test_per_ccd_primary_keywords(self, bc_monkeypatched):
+    def test_per_ccd_instrument_header_keywords(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
-        primary = kpf2.headers['PRIMARY']
+        inst = kpf2.headers['INSTRUMENT_HEADER']
         for key in ['CCD1BJD', 'CCD1BKMS', 'CCD1BZ',
                     'CCD2BJD', 'CCD2BKMS', 'CCD2BZ']:
-            assert key in primary, f"{key} missing from PRIMARY"
+            assert key in inst, f"{key} missing from INSTRUMENT_HEADER"
 
         def _v(k):
-            x = primary[k]
+            x = inst[k]
             return x[0] if isinstance(x, tuple) else x
 
         # All orders had the same delta_rv → green and red means are equal
@@ -484,7 +488,7 @@ class TestPerform:
         monkeypatch.setattr(BarycentricCorrection, '_query_gaia', staticmethod(mock_query))
         monkeypatch.setattr(BarycentricCorrection, '_compute_barycorr', staticmethod(mock_compute))
 
-        bc = BarycentricCorrection(synthetic_kpf2, config={'fix_bad_exposures': False})
+        bc = BarycentricCorrection(synthetic_kpf2)
         orig = bc.kpf2_obj.data['GREEN_SCI2_WAVE'].copy()
-        bc.perform()
+        bc.perform(fix_expmeter_outliers=False)
         np.testing.assert_allclose(bc.kpf2_obj.data['GREEN_SCI2_WAVE'], orig, rtol=1e-7)

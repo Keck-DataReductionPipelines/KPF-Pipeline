@@ -10,7 +10,7 @@ Outputs (rvdata-standard ImageHDUs, shape (NORDER,)):
   - BARYCORR_KMS  barycentric velocity per spectral order [km/s]
   - BARYCORR_Z    barycentric redshift per spectral order
 
-Per-CCD scalar summaries (mean across that chip's orders) written to PRIMARY:
+Per-CCD scalar summaries (mean across that chip's orders) written to INSTRUMENT_HEADER:
   - CCD1BJD       GREEN photon-weighted mid-time (BJD_TDB)
   - CCD1BKMS      GREEN mean barycentric velocity [km/s]
   - CCD1BZ        GREEN mean barycentric redshift
@@ -18,7 +18,7 @@ Per-CCD scalar summaries (mean across that chip's orders) written to PRIMARY:
   - CCD2BKMS      RED   mean barycentric velocity [km/s]
   - CCD2BZ        RED   mean barycentric redshift
 
-CCD1BJD/CCD2BJD match the legacy keyword names and semantics; the *BVEL/*BZ
+CCD1BJD/CCD2BJD match the legacy keyword names and semantics; the *BKMS/*BZ
 companions follow the same CCD{n} naming pattern.
 
 Notes
@@ -44,10 +44,6 @@ from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.utils.astro import compute_doppler_shift
 from kpfpipe.utils.config import ConfigHandler
 
-DEFAULTS.update({
-    'fix_bad_exposures': True,
-})
-
 NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED   = DETECTOR['norder']['RED']
 NORDER       = NORDER_GREEN + NORDER_RED
@@ -57,11 +53,12 @@ class BarycentricCorrection:
     """
     Compute and apply per-order barycentric correction to KPF2 wavelength arrays.
 
-    Reads EXPMETER_SCI to derive the flux-weighted midpoint time per expmeter
-    wavelength channel, interpolates onto each spectral order's central
-    wavelength (using SCI2_WAVE as the reference), queries Gaia DR3 for the
-    target's astrometric solution, and runs barycorrpy per order to populate
-    the rvdata-standard BJD_TDB, BARYCORR_KMS, and BARYCORR_Z extensions.
+    Derives the flux-weighted midpoint per expmeter wavelength channel
+    (EXPMETER_SCI), interpolates onto each spectral order's central
+    wavelength (SCI2_WAVE), queries Gaia DR3 for the target's astrometry,
+    and calls barycorrpy to populate the rvdata-standard BJD_TDB /
+    BARYCORR_KMS / BARYCORR_Z extensions. Per-order BARYCORR_Z is then
+    applied to every WAVE array in place.
 
     Parameters
     ----------
@@ -70,7 +67,7 @@ class BarycentricCorrection:
         populated by WavelengthCalibration. INSTRUMENT_HEADER (the preserved
         L1 PRIMARY) must contain GAIAID and DATE-BEG/DATE-END.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: chips, fibers, fix_bad_exposures.
+        Module configuration. Recognized keys: chips, fibers.
     """
 
     def __init__(self, kpf2_obj, config=None):
@@ -135,18 +132,15 @@ class BarycentricCorrection:
         """
         Read EXPMETER_SCI flux and normalize by gain and wavelength dispersion.
 
+        Columns with numeric names are wavelength channels; non-numeric
+        columns (e.g. timestamps) are skipped.
+
         Returns
         -------
         w : ndarray, shape (nwave,)
-            Wavelength of each expmeter channel (label units; typically
-            Angstroms for KPF).
+            Wavelength of each expmeter channel (label units, e.g. Å).
         f : ndarray, shape (ntime, nwave)
-            Flux in units of photons per (Å|nm), normalized by dispersion.
-
-        Notes
-        -----
-        Columns with numeric names are treated as wavelength channels;
-        non-numeric columns (e.g., timestamps) are skipped.
+            Dispersion-normalized flux [e- per wavelength unit].
         """
         expmeter = self.kpf2_obj.data['EXPMETER_SCI']
 
@@ -172,26 +166,15 @@ class BarycentricCorrection:
         return bool(np.all(t[:-1].jd < t[1:].jd))
 
     @staticmethod
-    def _fix_bad_exposures(f, kernel_size=5):
+    def _fix_expmeter_outliers(f, kernel_size=5):
         """
-        Detect and interpolate outlier pixels in the exposure meter array.
+        Detect and interpolate outlier pixels in an expmeter flux array.
 
-        Parameters
-        ----------
-        f : ndarray, shape (ntime, nwave)
-            Exposure meter flux array.
-        kernel_size : int
-            Kernel size for median and Gaussian smoothing filters.
+        Outlier threshold is adaptive (Chauvenet-like criterion based on
+        array size). Replacement uses scipy.griddata linear interpolation,
+        falling back to nearest for any remaining NaNs.
 
-        Returns
-        -------
-        f_fixed : ndarray, shape (ntime, nwave)
-            Flux array with outliers replaced by interpolated values.
-
-        Notes
-        -----
-        Outlier threshold is set adaptively using the expected maximum
-        deviation for the array size (Chauvenet-like criterion).
+        Returns a copy of f with outliers replaced; shape unchanged.
         """
         f_smooth = gaussian_filter(median_filter(f, size=kernel_size), sigma=kernel_size)
 
@@ -226,17 +209,9 @@ class BarycentricCorrection:
         """
         Estimate flux during gaps between consecutive exposure meter readings.
 
-        Returns
-        -------
-        t_gap : Time, shape (ngap,)
-            Midpoint time of each inter-exposure gap.
-        f_gap : ndarray, shape (ngap, nwave)
-            Estimated flux during each gap.
-
-        Notes
-        -----
-        Gap flux is estimated as the average count rate of adjacent
-        exposures multiplied by the gap duration.
+        Gap flux is the average count rate of adjacent exposures times
+        the gap duration. Returns (t_gap, f_gap), shapes (ngap,) and
+        (ngap, nwave).
         """
         dt_exp = (t_end - t_beg).jd[:, None]     # (ntime, 1)
         dt_gap = (t_beg[1:] - t_end[:-1]).jd     # (ngap,)
@@ -252,14 +227,10 @@ class BarycentricCorrection:
     @staticmethod
     def _extrapolate(t0, t_beg, t_end, f):
         """
-        Estimate flux for a gap before the first or after the last expmeter reading.
+        Estimate flux for a gap before the first or after the last reading.
 
-        Returns
-        -------
-        t_ext : Time
-            Midpoint of the extrapolated gap.
-        f_ext : ndarray, shape (nwave,)
-            Estimated flux during the gap.
+        Same rate-based model as `_interpolate`. Returns (t_ext, f_ext)
+        for the single gap defined by t0 vs t_beg/t_end.
         """
         dt_exp = (t_end - t_beg).jd
         rate = f / dt_exp
@@ -283,17 +254,10 @@ class BarycentricCorrection:
     @staticmethod
     def _query_gaia(gaia_id):
         """
-        Query Gaia DR3 for the astrometric solution of a target.
+        Query Gaia DR3 for a target's ICRS astrometry.
 
-        Parameters
-        ----------
-        gaia_id : int or str
-            Gaia DR3 source ID (numeric).
-
-        Returns
-        -------
-        skycoord : SkyCoord
-            Target coordinates including proper motion and distance.
+        Returns a SkyCoord with proper motion and distance (from parallax)
+        attached, at the Gaia ref_epoch.
         """
         query = f"""
         SELECT ra, dec, pmra, pmdec, parallax, ref_epoch
@@ -317,23 +281,9 @@ class BarycentricCorrection:
     @staticmethod
     def _compute_barycorr(skycoord, obs_times, location):
         """
-        Compute barycentric velocity and BJD_TDB for an array of obs_times.
+        Compute barycentric velocity (m/s) and BJD_TDB for an array of obs_times.
 
-        Parameters
-        ----------
-        skycoord : SkyCoord
-            Target coordinates with proper motion and distance.
-        obs_times : Time
-            Observation times (array).
-        location : EarthLocation
-            Observatory location.
-
-        Returns
-        -------
-        bc_vel_mps : ndarray, shape (n,)
-            Barycentric velocity correction per time [m/s].
-        bjd_tdb : ndarray, shape (n,)
-            Barycentric Julian date in TDB per time.
+        Returns (bc_vel_mps, bjd_tdb), each shape (n,).
         """
         icrs = skycoord.icrs
         ra  = icrs.ra.to(u.deg).value
@@ -370,7 +320,7 @@ class BarycentricCorrection:
     # ------------------------------------------------------------------
 
     def flux_weighted_midpoint(self, interpolate=True, extrapolate=True,
-                                fix_bad_exposures=None):
+                                fix_expmeter_outliers=True):
         """
         Compute the flux-weighted midpoint observation time per wavelength channel.
 
@@ -380,10 +330,10 @@ class BarycentricCorrection:
             If True, estimate flux during gaps between expmeter readings.
         extrapolate : bool, optional
             If True, estimate flux during gaps before the first or after the
-            last expmeter reading, using DATE-BEG / DATE-END from the header.
-        fix_bad_exposures : bool, optional
-            If True, detect and replace outlier expmeter readings. Defaults
-            to the config value.
+            last expmeter reading, using DATE-BEG / DATE-END from
+            INSTRUMENT_HEADER.
+        fix_expmeter_outliers : bool, optional
+            If True (default), detect and replace outlier expmeter readings.
 
         Returns
         -------
@@ -392,17 +342,14 @@ class BarycentricCorrection:
         t_fwm : Time, shape (nwave,)
             Flux-weighted midpoint time (JD-UTC) for each wavelength channel.
         """
-        if fix_bad_exposures is None:
-            fix_bad_exposures = self.fix_bad_exposures
-
         t_beg, t_mid, t_end = self._get_timestamps()
         w, f = self._get_normalized_flux()
 
         if np.any(f < 0):
             raise ValueError("negative exposure meter flux values detected")
 
-        if fix_bad_exposures:
-            f = self._fix_bad_exposures(f)
+        if fix_expmeter_outliers:
+            f = self._fix_expmeter_outliers(f)
 
         t = t_mid.copy()
 
@@ -434,17 +381,16 @@ class BarycentricCorrection:
 
     def map_to_orders(self, w_em, t_fwm):
         """
-        Interpolate per-channel PHOTON_JD onto each spectral order's wavelength.
+        Interpolate per-channel midpoint times onto each spectral order.
 
-        Uses SCI2_WAVE (TRACE3_WAVE) as the reference wavelength solution.
-        Per-order central wavelength is the median across columns. Orders
-        outside the expmeter range get the nearest endpoint value (np.interp
-        default behavior).
+        Order central wavelength = median of SCI2_WAVE across columns.
+        Orders outside the expmeter range clamp to the nearest endpoint
+        (np.interp default).
 
         Parameters
         ----------
         w_em : ndarray, shape (nwave,)
-            Expmeter channel wavelengths (label units).
+            Expmeter channel wavelengths (label units; same as SCI2_WAVE).
         t_fwm : Time, shape (nwave,)
             Per-channel flux-weighted midpoint times.
 
@@ -469,7 +415,7 @@ class BarycentricCorrection:
     # ------------------------------------------------------------------
 
     def perform(self, chips=None, fibers=None, interpolate=True, extrapolate=True,
-                fix_bad_exposures=None):
+                fix_expmeter_outliers=True):
         """
         Compute per-order barycentric correction and apply it to wavelength arrays.
 
@@ -479,16 +425,16 @@ class BarycentricCorrection:
             Chip identifiers, e.g. ['GREEN', 'RED']. Defaults to self.chips.
         fibers : list of str, optional
             Fiber identifiers, e.g. ['SCI1', 'SCI2', ...]. Defaults to self.fibers.
-        interpolate, extrapolate, fix_bad_exposures : bool, optional
+        interpolate, extrapolate, fix_expmeter_outliers : bool, optional
             Forwarded to flux_weighted_midpoint(). See that method for semantics.
 
         Returns
         -------
         kpf2_obj : KPF2
-            Input KPF2 with BJD_TDB, BARYCORR_KMS, BARYCORR_Z populated;
-            WAVE arrays scaled in-place by per-order redshift; PRIMARY
-            BJDTDB/BARYKMS/BARYZ summaries written; 'barycentric_correction'
-            receipt entry added.
+            Input KPF2 with BJD_TDB / BARYCORR_KMS / BARYCORR_Z populated,
+            WAVE arrays scaled in-place by per-order redshift, per-CCD
+            CCD{1,2}BJD/BKMS/BZ summaries written to INSTRUMENT_HEADER,
+            and a 'barycentric_correction' receipt entry.
         """
         if chips is None:
             chips = self.chips
@@ -498,7 +444,7 @@ class BarycentricCorrection:
         # Per-channel flux-weighted midpoint times → per-order via interpolation
         w_em, t_fwm = self.flux_weighted_midpoint(
             interpolate=interpolate, extrapolate=extrapolate,
-            fix_bad_exposures=fix_bad_exposures,
+            fix_expmeter_outliers=fix_expmeter_outliers,
         )
         t_per_order = self.map_to_orders(w_em, t_fwm)
 
@@ -532,17 +478,19 @@ class BarycentricCorrection:
                 z = bary_z[:NORDER_GREEN] if chip.upper() == 'GREEN' else bary_z[NORDER_GREEN:]
                 self.kpf2_obj.data[wave_ext] = (arr * z[:, None]).astype(arr.dtype)
 
-        # Per-CCD scalar summaries on PRIMARY.
+        # Per-CCD scalar summaries on INSTRUMENT_HEADER (KPF-native keywords).
         # CCD1 = GREEN (orders [:NORDER_GREEN]), CCD2 = RED (orders [NORDER_GREEN:]).
-        primary = self.kpf2_obj.headers['PRIMARY']
+        # INSTRUMENT_HEADER serializes as a no-data ImageHDU and only accepts
+        # scalar values (no (value, comment) tuples) — see KPF1.to_kpf2.
+        inst = self.kpf2_obj.headers['INSTRUMENT_HEADER']
         green = slice(0, NORDER_GREEN)
         red   = slice(NORDER_GREEN, NORDER)
-        primary['CCD1BJD']  = (float(np.mean(bjd_tdb[green])),  'GREEN photon-weighted mid-time (BJD_TDB)')
-        primary['CCD1BKMS'] = (float(np.mean(bary_kms[green])), 'GREEN mean barycentric velocity [km/s]')
-        primary['CCD1BZ']   = (float(np.mean(bary_z[green])),   'GREEN mean barycentric redshift')
-        primary['CCD2BJD']  = (float(np.mean(bjd_tdb[red])),    'RED photon-weighted mid-time (BJD_TDB)')
-        primary['CCD2BKMS'] = (float(np.mean(bary_kms[red])),   'RED mean barycentric velocity [km/s]')
-        primary['CCD2BZ']   = (float(np.mean(bary_z[red])),     'RED mean barycentric redshift')
+        inst['CCD1BJD']  = float(np.mean(bjd_tdb[green]))
+        inst['CCD1BKMS'] = float(np.mean(bary_kms[green]))
+        inst['CCD1BZ']   = float(np.mean(bary_z[green]))
+        inst['CCD2BJD']  = float(np.mean(bjd_tdb[red]))
+        inst['CCD2BKMS'] = float(np.mean(bary_kms[red]))
+        inst['CCD2BZ']   = float(np.mean(bary_z[red]))
 
         self.kpf2_obj.receipt_add_entry('barycentric_correction', 'PASS')
 
@@ -556,8 +504,7 @@ class BarycentricCorrection:
     def info(self):
         """Print a summary of the module configuration and correction results."""
         print("BarycentricCorrection")
-        print(f"  obs_id:            {self.kpf2_obj.obs_id}")
-        print(f"  fix_bad_exposures: {self.fix_bad_exposures}")
+        print(f"  obs_id:  {self.kpf2_obj.obs_id}")
 
         if self._results is None:
             print("  perform() has not been called")
