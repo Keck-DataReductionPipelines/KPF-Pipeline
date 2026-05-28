@@ -319,6 +319,31 @@ class TestMakeMasterL2:
         wls.save_diagnostics(str(diagnostics_path))
         assert diagnostics_path.exists()
 
+    def test_save_master_l2_before_make_raises(self):
+        wls = WLS(FILE_LIST)
+        with pytest.raises(RuntimeError, match="run make_master_l2"):
+            wls.save_master_l2('/tmp/should_not_be_created.fits')
+
+    def test_master_path_writes_fits(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        master_path = tmp_path / "master.fits"
+        wls.make_master_l2(master_path=str(master_path))
+        assert master_path.exists()
+
+    def test_save_master_l2_post_hoc(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2()  # no master_path; ml2_obj stashed on self
+        master_path = tmp_path / "master.fits"
+        wls.save_master_l2(str(master_path))
+        assert master_path.exists()
+
+    def test_save_master_l2_creates_parent_dir(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2()
+        master_path = tmp_path / "nested" / "subdir" / "master.fits"
+        wls.save_master_l2(str(master_path))
+        assert master_path.exists()
+
     def test_hdf5_structure(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         diagnostics_path = str(tmp_path / "diagnostics.h5")
