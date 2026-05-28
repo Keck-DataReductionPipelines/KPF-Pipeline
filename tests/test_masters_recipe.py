@@ -17,7 +17,6 @@ import pytest
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.pipeline import (
-    _detect_calibration_stack_clusters,
     build_l0_file_lists,
     build_filepath,
     build_mini_database,
@@ -51,85 +50,54 @@ def _load_masters_recipe():
 # ---------------------------------------------------------------------------
 
 # Synthetic filenames: KP.YYYYMMDD.SSSSS.FF.fits
-# Two bias clusters separated by a >2hr gap; one dark cluster; science frames.
-_BIAS_A = [f"/data/L0/20240405/KP.20240405.0{3600 + i*100:04d}.00.fits" for i in range(5)]  # 03600–04000
-_BIAS_B = [f"/data/L0/20240405/KP.20240405.{14000 + i*100:05d}.00.fits" for i in range(5)]  # 14000–14400
-_DARK_A = [f"/data/L0/20240405/KP.20240405.{18000 + i*100:05d}.00.fits" for i in range(3)]  # 18000–18200
-_SCI_A  = [f"/data/L0/20240405/KP.20240405.{50000 + i*100:05d}.00.fits" for i in range(2)]  # 50000–50100
+# Two bias clusters separated by a >2hr gap; one dark cluster; two ThAr clusters
+# (morning and evening) with different OBJECT suffixes; science frames.
+_BIAS_A     = [f"/data/L0/20240405/KP.20240405.0{3600 + i*100:04d}.00.fits" for i in range(5)]  # 03600–04000
+_BIAS_B     = [f"/data/L0/20240405/KP.20240405.{14000 + i*100:05d}.00.fits" for i in range(5)]  # 14000–14400
+_DARK_A     = [f"/data/L0/20240405/KP.20240405.{18000 + i*100:05d}.00.fits" for i in range(3)]  # 18000–18200
+_THAR_MORN  = [f"/data/L0/20240405/KP.20240405.{60000 + i*100:05d}.00.fits" for i in range(5)]  # 60000–60400
+_THAR_EVE   = [f"/data/L0/20240405/KP.20240405.{75000 + i*100:05d}.00.fits" for i in range(5)]  # 75000–75400
+_SCI_A      = [f"/data/L0/20240405/KP.20240405.{50000 + i*100:05d}.00.fits" for i in range(2)]  # 50000–50100
 
 
 def _make_mini_db():
     rows = (
-        [{"FILENAME": f, "IMTYPE": "Bias",   "OBJECT": "autocal-bias", "TARGNAME": None} for f in _BIAS_A]
-      + [{"FILENAME": f, "IMTYPE": "Bias",   "OBJECT": "autocal-bias", "TARGNAME": None} for f in _BIAS_B]
-      + [{"FILENAME": f, "IMTYPE": "Dark",   "OBJECT": "autocal-dark", "TARGNAME": None} for f in _DARK_A]
-      + [{"FILENAME": f, "IMTYPE": "Object", "OBJECT": "185144",       "TARGNAME": "185144"} for f in _SCI_A]
+        [{"FILENAME": f, "IMTYPE": "Bias",    "OBJECT": "autocal-bias",           "TARGNAME": None} for f in _BIAS_A]
+      + [{"FILENAME": f, "IMTYPE": "Bias",    "OBJECT": "autocal-bias",           "TARGNAME": None} for f in _BIAS_B]
+      + [{"FILENAME": f, "IMTYPE": "Dark",    "OBJECT": "autocal-dark",           "TARGNAME": None} for f in _DARK_A]
+      + [{"FILENAME": f, "IMTYPE": "Arclamp", "OBJECT": "autocal-thar-all-morn",  "TARGNAME": None} for f in _THAR_MORN]
+      + [{"FILENAME": f, "IMTYPE": "Arclamp", "OBJECT": "autocal-thar-all-eve",   "TARGNAME": None} for f in _THAR_EVE]
+      + [{"FILENAME": f, "IMTYPE": "Object",  "OBJECT": "185144",                 "TARGNAME": "185144"} for f in _SCI_A]
     )
     df = pd.DataFrame(rows)
     df["EXPTIME"] = 60.0
     df["ELAPSED"] = 60.0
-    return _detect_calibration_stack_clusters(df)
+    return df
 
 
 def _write_test_csv(tmp_path, db):
-    """Write a mini_db CSV in the expected location for L0/20240405."""
+    """
+    Materialize a synthetic mini_db on disk: touch a stub .fits for every
+    FILENAME row, rewrite the CSV's FILENAME column to point to the stubs,
+    and write the CSV alongside them.
+    """
     data_dir = tmp_path / "L0" / "20240405"
     data_dir.mkdir(parents=True)
+    db = db.copy()
+    new_filenames = []
+    for original in db["FILENAME"]:
+        new_path = str(data_dir / os.path.basename(original))
+        open(new_path, "w").close()
+        new_filenames.append(new_path)
+    db["FILENAME"] = new_filenames
     csv_path = data_dir / "KP.20240405_L0.csv"
     db.to_csv(csv_path, index=False)
     return str(data_dir)
 
 
-# ---------------------------------------------------------------------------
-# _detect_calibration_stack_clusters
-# ---------------------------------------------------------------------------
-
-
-class TestDetectCalibrationStackClusters:
-
-    @pytest.fixture(scope="class")
-    def db(self):
-        return _make_mini_db()
-
-    def test_cal_start_columns_exist(self, db):
-        assert "CAL_START" in db.columns
-        assert "CAL_END" in db.columns
-
-    def test_bias_cluster_a_cal_start(self, db):
-        rows = db[db["FILENAME"].isin(_BIAS_A)]
-        assert (rows["CAL_START"] == "20240405.03600.00").all()
-
-    def test_bias_cluster_a_cal_end(self, db):
-        rows = db[db["FILENAME"].isin(_BIAS_A)]
-        assert (rows["CAL_END"] == "20240405.04000.00").all()
-
-    def test_bias_cluster_b_cal_start(self, db):
-        rows = db[db["FILENAME"].isin(_BIAS_B)]
-        assert (rows["CAL_START"] == "20240405.14000.00").all()
-
-    def test_bias_cluster_b_cal_end(self, db):
-        rows = db[db["FILENAME"].isin(_BIAS_B)]
-        assert (rows["CAL_END"] == "20240405.14400.00").all()
-
-    def test_two_bias_clusters_detected(self, db):
-        bias = db[db["OBJECT"] == "autocal-bias"]
-        assert bias["CAL_START"].nunique() == 2
-
-    def test_dark_cluster_cal_start(self, db):
-        rows = db[db["FILENAME"].isin(_DARK_A)]
-        assert (rows["CAL_START"] == "20240405.18000.00").all()
-
-    def test_science_frames_cal_start_empty(self, db):
-        sci = db[db["IMTYPE"] == "Object"]
-        assert (sci["CAL_START"] == "").all()
-
-    def test_science_frames_cal_end_empty(self, db):
-        sci = db[db["IMTYPE"] == "Object"]
-        assert (sci["CAL_END"] == "").all()
-
-    def test_row_order_preserved(self, db):
-        # Science frames should still be at the end
-        assert db.iloc[-1]["IMTYPE"] == "Object"
+def _at(data_dir, synthetic_paths):
+    """Translate /data/L0/... synthetic paths to absolute paths in data_dir."""
+    return [os.path.join(data_dir, os.path.basename(p)) for p in synthetic_paths]
 
 
 # ---------------------------------------------------------------------------
@@ -151,39 +119,47 @@ class TestBuildL0FileLists:
 
     def test_bias_cluster_a_files(self, data_dir):
         lists = build_l0_file_lists("bias", data_dir=data_dir)
-        assert lists[0] == sorted(_BIAS_A)
+        assert lists[0] == sorted(_at(data_dir, _BIAS_A))
 
     def test_bias_cluster_b_files(self, data_dir):
         lists = build_l0_file_lists("bias", data_dir=data_dir)
-        assert lists[1] == sorted(_BIAS_B)
+        assert lists[1] == sorted(_at(data_dir, _BIAS_B))
 
     def test_files_are_sorted(self, data_dir):
         for lst in build_l0_file_lists("bias", data_dir=data_dir):
             assert lst == sorted(lst)
 
-    def test_small_clusters_merged_issues_warning(self, data_dir):
-        # min_file_count=6: both bias clusters (5 files each) fall below → merged
-        with pytest.warns(UserWarning, match="merged into one list"):
+    def test_raises_when_any_cluster_below_min(self, data_dir):
+        # min_file_count=6: both bias clusters (5 files each) fall below → raises.
+        with pytest.raises(ValueError, match="below min_file_count=6"):
             build_l0_file_lists("bias", min_file_count=6, data_dir=data_dir)
-
-    def test_small_clusters_merged_returns_one_list(self, data_dir):
-        with pytest.warns(UserWarning):
-            lists = build_l0_file_lists("bias", min_file_count=6, data_dir=data_dir)
-        assert len(lists) == 1
-        assert lists[0] == sorted(_BIAS_A + _BIAS_B)
 
     def test_raises_when_no_frames_found(self, data_dir):
         with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
             build_l0_file_lists("flat", data_dir=data_dir)
 
-    def test_raises_when_merged_below_min(self, data_dir):
-        # dark cluster has only 3 files; merged total still < min_file_count=5
-        with pytest.raises(ValueError, match="need at least"):
+    def test_raises_when_dark_cluster_below_default_min(self, data_dir):
+        # dark cluster has only 3 files; default min_file_count=5 → raises.
+        with pytest.raises(ValueError, match="below min_file_count=5"):
             build_l0_file_lists("dark", data_dir=data_dir)
 
     def test_invalid_imtype_raises(self, data_dir):
         with pytest.raises(ValueError, match="imtype must be one of"):
-            build_l0_file_lists("wls", data_dir=data_dir)
+            build_l0_file_lists("bogus", data_dir=data_dir)
+
+    def test_thar_returns_two_clusters(self, data_dir):
+        # Morning and evening ThArs have different OBJECT suffixes and are >2hr
+        # apart; each forms its own cluster.
+        lists = build_l0_file_lists("thar", data_dir=data_dir)
+        assert len(lists) == 2
+
+    def test_thar_morn_cluster(self, data_dir):
+        lists = build_l0_file_lists("thar", data_dir=data_dir)
+        assert lists[0] == sorted(_at(data_dir, _THAR_MORN))
+
+    def test_thar_eve_cluster(self, data_dir):
+        lists = build_l0_file_lists("thar", data_dir=data_dir)
+        assert lists[1] == sorted(_at(data_dir, _THAR_EVE))
 
     def test_raises_when_neither_source_provided(self):
         with pytest.raises(ValueError, match="Exactly one of"):
@@ -206,6 +182,30 @@ class TestBuildL0FileLists:
             lists = build_l0_file_lists("bias", data_dir=data_dir)
         mock_bmd.assert_called_once_with(data_dir)
         assert len(lists) == 2
+
+    def test_rebuilds_db_if_files_added_on_disk(self, tmp_path):
+        # Materialize a consistent CSV + stubs, then plant an extra .fits
+        # file the CSV does not know about.
+        data_dir = _write_test_csv(tmp_path, _make_mini_db())
+        open(os.path.join(data_dir, "KP.20240405.99999.99.fits"), "w").close()
+
+        with patch("kpfpipe.utils.pipeline.build_mini_database") as mock_bmd:
+            mock_bmd.return_value = _make_mini_db()
+            with pytest.warns(UserWarning, match=r"stale.*\+1 added"):
+                build_l0_file_lists("bias", data_dir=data_dir)
+        mock_bmd.assert_called_once_with(data_dir)
+
+    def test_rebuilds_db_if_files_removed_from_disk(self, tmp_path):
+        # Materialize a consistent CSV + stubs, then unlink one .fits
+        # the CSV still references.
+        data_dir = _write_test_csv(tmp_path, _make_mini_db())
+        os.unlink(os.path.join(data_dir, os.path.basename(_BIAS_A[0])))
+
+        with patch("kpfpipe.utils.pipeline.build_mini_database") as mock_bmd:
+            mock_bmd.return_value = _make_mini_db()
+            with pytest.warns(UserWarning, match=r"stale.*-1 removed"):
+                build_l0_file_lists("bias", data_dir=data_dir)
+        mock_bmd.assert_called_once_with(data_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -231,16 +231,11 @@ class TestBuildL0FileListsRealData:
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
-    def test_dark_clusters_merged_issues_warning(self, l0_dir):
-        with pytest.warns(UserWarning, match="merged into one list"):
+    def test_dark_raises_on_undersized_clusters(self, l0_dir):
+        # The testdata has two dark clusters of 2 and 3 frames — both below
+        # the default min_file_count=5 → raises.
+        with pytest.raises(ValueError, match="below min_file_count=5"):
             build_l0_file_lists("dark", data_dir=l0_dir)
-
-    def test_dark_clusters_merged_returns_one_list(self, l0_dir):
-        with pytest.warns(UserWarning):
-            lists = build_l0_file_lists("dark", data_dir=l0_dir)
-        assert len(lists) == 1
-        assert len(lists[0]) == 5
-        assert lists[0] == sorted(lists[0])
 
 
 # ---------------------------------------------------------------------------
@@ -311,13 +306,21 @@ class TestBuildFilepath:
         name = build_filepath("KP.20240405.40113.57", "L2")
         assert name == "kpf_SL2_20240405T110833.fits"
 
-    def test_master_thar_wls_with_obs_id(self):
-        path = build_filepath("KP.20240405.03600.00", "L1", data_root="/data", master="thar-wls")
-        assert path == "/data/masters/20240405/KP.20240405.03600.00_master_thar-wls_L1.fits"
+    def test_master_thar_with_obs_id(self):
+        path = build_filepath("KP.20240405.03600.00", "L2", data_root="/data", master="thar")
+        assert path == "/data/masters/20240405/KP.20240405.03600.00_master_thar_L2.fits"
 
     def test_invalid_obs_id_raises(self):
         with pytest.raises(ValueError, match="valid observation ID"):
             build_filepath("20240405", "L1")
+
+    def test_invalid_data_root_empty_string_raises(self):
+        with pytest.raises(ValueError, match="data_root must be None or a non-empty string"):
+            build_filepath("KP.20240405.40113.57", "L2", data_root="")
+
+    def test_invalid_data_root_non_string_raises(self):
+        with pytest.raises(ValueError, match="data_root must be None or a non-empty string"):
+            build_filepath("KP.20240405.40113.57", "L2", data_root=12345)
 
 
 # ---------------------------------------------------------------------------
@@ -339,6 +342,14 @@ class TestBuildQlpDir:
         with pytest.raises(ValueError, match="valid observation ID"):
             build_qlp_dir("20240405", "L0", data_root="/data")
 
+    def test_invalid_data_root_none_raises(self):
+        with pytest.raises(ValueError, match="data_root must be a non-empty string"):
+            build_qlp_dir("KP.20240405.40113.57", "L0", data_root=None)
+
+    def test_invalid_data_root_empty_string_raises(self):
+        with pytest.raises(ValueError, match="data_root must be a non-empty string"):
+            build_qlp_dir("KP.20240405.40113.57", "L0", data_root="")
+
 
 # ---------------------------------------------------------------------------
 # build_mini_database (real L0 data from tests/testdata/)
@@ -352,20 +363,17 @@ class TestBuildMiniDatabase:
         return build_mini_database(str(TESTDATA_L0_DIR), write=False)
 
     def test_has_required_columns(self, mini_db):
-        for col in ("FILENAME", "IMTYPE", "OBJECT", "CAL_START", "CAL_END"):
+        for col in ("FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"):
             assert col in mini_db.columns
+
+    def test_no_cluster_columns(self, mini_db):
+        # CAL_START/CAL_END were moved out of the mini_db; cluster detection
+        # now happens at build_l0_file_lists time.
+        assert "CAL_START" not in mini_db.columns
+        assert "CAL_END" not in mini_db.columns
 
     def test_all_files_are_fits(self, mini_db):
         assert mini_db["FILENAME"].str.endswith(".fits").all()
-
-    def test_cal_start_empty_for_science(self, mini_db):
-        sci = mini_db[mini_db["IMTYPE"] == "Object"]
-        if not sci.empty:
-            assert (sci["CAL_START"] == "").all()
-
-    def test_cal_start_nonempty_for_bias(self, mini_db):
-        bias = mini_db[mini_db["OBJECT"] == "autocal-bias"]
-        assert (bias["CAL_START"] != "").all()
 
     def test_write_false_does_not_write_csv(self):
         csv_path = TESTDATA_L0_DIR / "KP.20240405_L0.csv"

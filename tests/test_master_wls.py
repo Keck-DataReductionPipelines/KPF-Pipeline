@@ -159,7 +159,7 @@ def mock_make_master_l2(monkeypatch):
 
     def mock_compute(self, chip, fibers, lineprofile=None,
                      polyorder_x=None, polyorder_m=None, polyorder_f=None,
-                     return_stacks=False, **kwargs):
+                     **kwargs):
         polyorder_x = polyorder_x if polyorder_x is not None else self.polyorder_x
         polyorder_m = polyorder_m if polyorder_m is not None else self.polyorder_m
         polyorder_f = polyorder_f if polyorder_f is not None else self.polyorder_f
@@ -174,21 +174,19 @@ def mock_make_master_l2(monkeypatch):
             W = np.full((norder, NCOL_TEST, nfibers), 5500.0)
             coeffs = np.zeros((polyorder_x + 1, polyorder_m + 1, polyorder_f + 1))
 
-        if return_stacks:
-            coeffs_stack = np.array([coeffs] * 3)
-            lines_stack = [
-                {'wav': np.array([5500.0, 5501.0]),
-                 'pix': np.array([100.5, 200.5]),
-                 'ord': np.array([1, 2]),
-                 'fib': np.array([fibers[0]] * 2),
-                 'bad': np.array([False, False]),
-                 'std': np.array([0.5, 0.5]),
-                 'amp': np.array([1.0, 1.0]),
-                 'rms': np.array([0.01, 0.01])}
-                for _ in range(3)
-            ]
-            return W, coeffs, coeffs_stack, lines_stack
-        return W, coeffs
+        coeffs_stack = np.array([coeffs] * 3)
+        lines_stack = [
+            {'wav': np.array([5500.0, 5501.0]),
+             'pix': np.array([100.5, 200.5]),
+             'ord': np.array([1, 2]),
+             'fib': np.array([fibers[0]] * 2),
+             'bad': np.array([False, False]),
+             'std': np.array([0.5, 0.5]),
+             'amp': np.array([1.0, 1.0]),
+             'rms': np.array([0.01, 0.01])}
+            for _ in range(3)
+        ]
+        return W, coeffs, coeffs_stack, lines_stack
 
     monkeypatch.setattr(WLS, 'compute_wls_from_stack', mock_compute)
 
@@ -244,6 +242,16 @@ class TestMakeMasterL2:
             for key in ['POLYORDX', 'POLYORDM', 'POLYORDF']:
                 assert key in hdr
 
+    def test_to_fits_round_trip(self, mock_make_master_l2, tmp_path):
+        # Regression: rvdata builds non-PRIMARY headers via fits.Header(dict),
+        # which rejects (value, comment) tuple values. Make sure every header
+        # we set survives the round-trip.
+        wls = WLS(FILE_LIST)
+        ml2 = wls.make_master_l2()
+        out_path = tmp_path / "round_trip_master.fits"
+        ml2.to_fits(str(out_path))
+        assert out_path.exists()
+
     def test_polyorder_override_stamped(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         override_x = wls.polyorder_x + 4   # ensure different from default
@@ -271,22 +279,50 @@ class TestMakeMasterL2:
         wls.make_master_l2()
         assert len(wls._l2_obj_cache) == len(FILE_LIST)
 
-    def test_return_stacks_false_returns_single(self, mock_make_master_l2):
+    def test_stacks_stashed_on_self(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
-        result = wls.make_master_l2(return_stacks=False)
-        assert isinstance(result, KPFMasterL2)
+        wls.make_master_l2()
+        assert wls._coeffs_stack is not None
+        assert wls._lines_stack is not None
+        for chip in wls.chips:
+            assert chip in wls._coeffs_stack
+            assert chip in wls._lines_stack
 
-    def test_return_stacks_true_returns_tuple(self, mock_make_master_l2):
+    def test_save_diagnostics_before_make_raises(self):
         wls = WLS(FILE_LIST)
-        result = wls.make_master_l2(return_stacks=True)
-        assert isinstance(result, tuple) and len(result) == 2
-        ml2, h5 = result
-        assert isinstance(ml2, KPFMasterL2)
-        assert isinstance(h5, h5py.File)
+        with pytest.raises(RuntimeError, match="run make_master_l2"):
+            wls.save_diagnostics('/tmp/should_not_be_created.h5')
 
-    def test_hdf5_structure(self, mock_make_master_l2):
+    def test_save_diagnostics_with_empty_stash_raises(self, tmp_path):
+        # make_master_l2 initialises both stash dicts to {} before populating
+        # them. If the chip loop raises before any chip is added, the dicts
+        # stay empty — save_diagnostics must refuse rather than write an
+        # empty HDF5.
         wls = WLS(FILE_LIST)
-        ml2, h5 = wls.make_master_l2(return_stacks=True)
+        wls._coeffs_stack = {}
+        wls._lines_stack = {}
+        out_path = tmp_path / "empty.h5"
+        with pytest.raises(RuntimeError, match="run make_master_l2"):
+            wls.save_diagnostics(str(out_path))
+        assert not out_path.exists()
+
+    def test_diagnostics_path_writes_hdf5(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        diagnostics_path = tmp_path / "diagnostics.h5"
+        wls.make_master_l2(diagnostics_path=str(diagnostics_path))
+        assert diagnostics_path.exists()
+
+    def test_save_diagnostics_post_hoc(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2()  # no diagnostics_path; stacks stashed on self
+        diagnostics_path = tmp_path / "diagnostics.h5"
+        wls.save_diagnostics(str(diagnostics_path))
+        assert diagnostics_path.exists()
+
+    def test_hdf5_structure(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        diagnostics_path = str(tmp_path / "diagnostics.h5")
+        wls.make_master_l2(diagnostics_path=diagnostics_path)
 
         # mock_compute returns three synthetic frames per chip
         expected_nframes = 3
@@ -297,27 +333,28 @@ class TestMakeMasterL2:
             wls.polyorder_f + 1,
         )
 
-        for chip in wls.chips:
-            assert chip in h5
-            cs = h5[chip]['coeffs_stack']
-            assert cs.shape == expected_coeffs_shape
-            assert np.issubdtype(cs.dtype, np.floating)
+        with h5py.File(diagnostics_path, 'r') as h5:
+            for chip in wls.chips:
+                assert chip in h5
+                cs = h5[chip]['coeffs_stack']
+                assert cs.shape == expected_coeffs_shape
+                assert np.issubdtype(cs.dtype, np.floating)
 
-            assert 'lines_stack' in h5[chip]
-            frame_keys = sorted(h5[chip]['lines_stack'].keys())
-            assert len(frame_keys) == expected_nframes
+                assert 'lines_stack' in h5[chip]
+                frame_keys = sorted(h5[chip]['lines_stack'].keys())
+                assert len(frame_keys) == expected_nframes
 
-            sample = h5[chip]['lines_stack'][frame_keys[0]]
-            for key in ['wav', 'pix', 'ord', 'fib', 'bad', 'std', 'amp', 'rms']:
-                assert key in sample
-            assert np.issubdtype(sample['wav'].dtype, np.floating)
-            assert np.issubdtype(sample['pix'].dtype, np.floating)
-            assert np.issubdtype(sample['ord'].dtype, np.integer)
-            assert sample['bad'].dtype == bool
-            assert h5py.check_string_dtype(sample['fib'].dtype) is not None
-            # finite values for all numeric per-line arrays
-            for key in ['wav', 'pix', 'std', 'amp', 'rms']:
-                assert np.all(np.isfinite(sample[key][...]))
+                sample = h5[chip]['lines_stack'][frame_keys[0]]
+                for key in ['wav', 'pix', 'ord', 'fib', 'bad', 'std', 'amp', 'rms']:
+                    assert key in sample
+                assert np.issubdtype(sample['wav'].dtype, np.floating)
+                assert np.issubdtype(sample['pix'].dtype, np.floating)
+                assert np.issubdtype(sample['ord'].dtype, np.integer)
+                assert sample['bad'].dtype == bool
+                assert h5py.check_string_dtype(sample['fib'].dtype) is not None
+                # finite values for all numeric per-line arrays
+                for key in ['wav', 'pix', 'std', 'amp', 'rms']:
+                    assert np.all(np.isfinite(sample[key][...]))
 
     def test_nan_orderlet_emits_warning_and_does_not_crash(self):
         """
@@ -484,7 +521,7 @@ class TestFitLinePositions:
         wave = np.linspace(5000.0, 5100.0, 100)
         wls._linelist_array = np.array([6000.0, 6100.0])  # entirely outside
 
-        result = wls.fit_line_positions_1D(flux, wave)
+        result = wls.fit_line_positions_1d(flux, wave)
         for key in ['wav', 'pix', 'std', 'amp', 'rms', 'bad']:
             assert len(result[key]) == 0
 

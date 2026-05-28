@@ -2,7 +2,7 @@
 KPF Calibration Association module.
 
 Given a KPF observation frame, finds the most appropriate master calibration
-file for each calibration type (bias, dark, flat, thar-wls) by searching
+file for each calibration type (bias, dark, flat, thar) by searching
 the masters directory and selecting the nearest-in-time match.
 """
 import glob
@@ -11,11 +11,28 @@ from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.kpf import get_datecode, get_timestamp
+from kpfpipe.utils.kpf import get_datecode, get_timestamp, kpf_timestamp_to_datetime
 
 DEFAULTS.update({
     'masters_search_window_days': [-1, 0],
 })
+
+# Level suffix of the master FITS file for each supported calibration type,
+# used to build the *_master_<cal_type>_<level>.fits glob.
+_LEVEL_BY_CAL_TYPE = {
+    'bias':     'L1',
+    'dark':     'L1',
+    'flat':     'L1',
+    'thar': 'L2',
+}
+
+# PRIMARY header prefix written for each supported calibration type.
+_HEADER_PREFIX = {
+    'bias':     'BIAS',
+    'dark':     'DARK',
+    'flat':     'FLAT',
+    'thar': 'WLS',
+}
 
 
 class CalibrationAssociation:
@@ -71,7 +88,7 @@ class CalibrationAssociation:
         Parameters
         ----------
         cal_type : str
-            One of 'bias', 'dark', 'flat', 'thar-wls'.
+            One of 'bias', 'dark', 'flat', 'thar'.
         date_obs : str
             ISO-format observation datetime from the frame's PRIMARY header
             (e.g. '2024-04-05T11:08:33').
@@ -83,12 +100,23 @@ class CalibrationAssociation:
         -------
         list of (str, str)
             Sorted list of (filepath, kpf_timestamp) tuples.
+
+        Raises
+        ------
+        ValueError
+            If `cal_type` is not a key of `_LEVEL_BY_CAL_TYPE`.
         """
+        if cal_type not in _LEVEL_BY_CAL_TYPE:
+            raise ValueError(
+                f"unsupported cal_type {cal_type!r}; "
+                f"expected one of {sorted(_LEVEL_BY_CAL_TYPE)}"
+            )
         if masters_search_window_days is None:
             masters_search_window_days = self.masters_search_window_days
 
         obs_date = datetime.fromisoformat(date_obs).date()
         days_before, days_after = masters_search_window_days
+        level = _LEVEL_BY_CAL_TYPE[cal_type]
 
         master_files = []
         for delta in range(days_before, days_after + 1):
@@ -96,7 +124,7 @@ class CalibrationAssociation:
             datecode = search_date.strftime('%Y%m%d')
             pattern = os.path.join(
                 self._data_root, 'masters', datecode,
-                f'*_master_{cal_type}_L1.fits'
+                f'*_master_{cal_type}_{level}.fits'
             )
             for filepath in sorted(glob.glob(pattern)):
                 try:
@@ -129,12 +157,7 @@ class CalibrationAssociation:
             return None
 
         obs_dt = datetime.fromisoformat(date_obs)
-
-        def _candidate_dt(ts):
-            date_str, seconds_str, _ = ts.split('.')
-            return datetime.strptime(date_str, '%Y%m%d') + timedelta(seconds=int(seconds_str))
-
-        return min(master_files, key=lambda x: abs((_candidate_dt(x[1]) - obs_dt).total_seconds()))[0]
+        return min(master_files, key=lambda x: abs((kpf_timestamp_to_datetime(x[1]) - obs_dt).total_seconds()))[0]
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -147,7 +170,7 @@ class CalibrationAssociation:
         Parameters
         ----------
         cal_types : list of str
-            Calibration types to associate (e.g. ['bias', 'dark', 'flat', 'thar-wls']).
+            Calibration types to associate (e.g. ['bias', 'dark', 'flat', 'thar']).
         masters_search_window_days : [int, int], optional
             Search window as [days_before, days_after]. Defaults to
             self.masters_search_window_days.
@@ -166,10 +189,16 @@ class CalibrationAssociation:
         if masters_search_window_days is None:
             masters_search_window_days = self.masters_search_window_days
 
+        unknown = [c for c in cal_types if c not in _HEADER_PREFIX]
+        if unknown:
+            raise ValueError(
+                f"unsupported cal_type(s) {unknown}; "
+                f"expected subset of {sorted(_HEADER_PREFIX)}"
+            )
+
         date_obs = self.l1_obj.headers['PRIMARY']['DATE-OBS']
         obs_date = datetime.fromisoformat(date_obs).date()
-
-        _header_prefix = {'bias': 'BIAS', 'dark': 'DARK', 'flat': 'FLAT'}
+        primary = self.l1_obj.headers['PRIMARY']
 
         for cal_type in cal_types:
             master_files = self._find_master_files(cal_type, date_obs, masters_search_window_days)
@@ -180,16 +209,24 @@ class CalibrationAssociation:
                     f"within window {masters_search_window_days} days"
                 )
 
-            prefix = _header_prefix.get(cal_type)
-            if prefix is not None:
+            if cal_type == 'thar':
+                # Match legacy WLS header convention exactly: full path in
+                # WLSFILE (no WLSDIR), AGEWLS in fractional days using the
+                # master and obs timestamps (sign convention: master - obs,
+                # so AGEWLS is negative when the master predates the obs).
+                obs_dt = datetime.fromisoformat(date_obs)
+                master_dt = kpf_timestamp_to_datetime(get_timestamp(filepath))
+                primary['WLSFILE'] = filepath
+                primary['AGEWLS']  = (master_dt - obs_dt).total_seconds() / 86400.0
+            else:
+                prefix = _HEADER_PREFIX[cal_type]
                 master_date = datetime.strptime(get_datecode(filepath), '%Y%m%d').date()
-                self.l1_obj.headers['PRIMARY'][f'{prefix}FILE'] = os.path.basename(filepath)
-                self.l1_obj.headers['PRIMARY'][f'{prefix}DIR'] = os.path.dirname(filepath)
-                self.l1_obj.headers['PRIMARY'][f'AGE{prefix}'] = (obs_date - master_date).days
+                primary[f'{prefix}FILE'] = os.path.basename(filepath)
+                primary[f'{prefix}DIR']  = os.path.dirname(filepath)
+                primary[f'AGE{prefix}']  = (obs_date - master_date).days
 
         self._results = {
-            cal_type: self.l1_obj.headers['PRIMARY'].get(f'{_header_prefix[cal_type]}FILE')
-                      if cal_type in _header_prefix else None
+            cal_type: primary[f'{_HEADER_PREFIX[cal_type]}FILE']
             for cal_type in cal_types
         }
         self.l1_obj.receipt_add_entry('calibration_association', 'PASS')
@@ -210,14 +247,9 @@ class CalibrationAssociation:
         print(f"\n  {'cal_type':<12s} {'master file'}")
         print("  " + "-" * 60)
         h = self.l1_obj.headers['PRIMARY']
-        _prefix = {'bias': 'BIAS', 'dark': 'DARK', 'flat': 'FLAT'}
         for cal_type, filename in self._results.items():
-            prefix = _prefix.get(cal_type)
-            if prefix is not None:
-                age = h.get(f'AGE{prefix}', 'n/a')
-                print(f"  {cal_type:<12s} {filename}")
-                print(f"  {'':12s} age = {age}d")
-                print()
-            else:
-                print(f"  {cal_type:<12s} (no header written)")
-                print()
+            prefix = _HEADER_PREFIX[cal_type]
+            age = h.get(f'AGE{prefix}', 'n/a')
+            print(f"  {cal_type:<12s} {filename}")
+            print(f"  {'':12s} age = {age}d")
+            print()

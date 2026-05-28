@@ -9,13 +9,14 @@ from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
-#from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
+from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 #from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 
 from kpfpipe.quality_control.diagnostics import DiagL1, DiagL2
 from kpfpipe.quality_control.qc_binaries import QCL1, QCL2
 from kpfpipe.quality_control.quicklook.level0 import PlotL0
 from kpfpipe.quality_control.quicklook.level1 import PlotL1
+
 from kpfpipe.utils.pipeline import build_filepath, build_qlp_dir
 
 
@@ -55,7 +56,7 @@ def main(config, args):
 
     # assign calibration masters (bias, dark, flat, wls) to this frame
     calibration_association = CalibrationAssociation(l1, config)
-    l1 = calibration_association.perform(['bias', 'dark', 'flat'])
+    l1 = calibration_association.perform(['bias', 'dark', 'flat', 'thar'])
 
     # apply stardard FFI image processing (bias, dark, flat)
     image_processing = ImageProcessing(l1, config)
@@ -69,13 +70,13 @@ def main(config, args):
     spectral_extraction = SpectralExtraction(l1, config)
     l2 = spectral_extraction.perform()
 
+    # apply precomputed wavelength solution (per-fiber WAVE arrays from WLS master)
+    wavelength_calibration = WavelengthCalibration(l2, config)
+    l2 = wavelength_calibration.perform()
+
     # Run L2 diagnostics (compute NaN counts and zero-flux fraction) and QC
     DiagL2(l2).run()
     QCL2(l2).run()
-
-    # determine wavelength calibration using WLS master
-    #wavelength_calibration = WavelengthCalibration(l2, config)
-    #l2 = wavelength_calibration.perform()
 
     # calculate barycentric correction
     #barycentric_correction = BarycentricCorrection(l2, config)

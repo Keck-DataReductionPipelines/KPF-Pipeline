@@ -27,9 +27,18 @@ def _make_module(tmp_path, date_obs='2024-04-05T11:08:33'):
     return CalibrationAssociation(l1, config={'KPF_DATA_INPUT': str(tmp_path)})
 
 
+_LEVEL_BY_CAL_TYPE = {
+    'bias':     'L1',
+    'dark':     'L1',
+    'flat':     'L1',
+    'thar': 'L2',
+}
+
+
 def _stub_master(directory, obs_id, cal_type):
     """Create a zero-byte stub master file with the correct naming convention."""
-    path = directory / f'{obs_id}_master_{cal_type}_L1.fits'
+    level = _LEVEL_BY_CAL_TYPE[cal_type]
+    path = directory / f'{obs_id}_master_{cal_type}_{level}.fits'
     path.touch()
     return path
 
@@ -215,13 +224,26 @@ class TestPerform:
             assert f'{prefix}DIR' in mod.l1_obj.headers['PRIMARY']
             assert f'AGE{prefix}' in mod.l1_obj.headers['PRIMARY']
 
-    def test_no_header_written_for_thar_wls(self, masters_dir):
+    def test_sets_headers_for_thar(self, masters_dir):
+        # Legacy WLS convention: WLSFILE holds the full path (no WLSDIR), and
+        # AGEWLS is float days with sign = (master_dt - obs_dt). Master at
+        # 2024-04-05 01:00:37 UTC vs obs at 2024-04-05 11:08:33 UTC gives
+        # delta = -10h 07m 56s = -36476 s = -0.422176 days.
         d = masters_dir / 'masters' / '20240405'
-        _stub_master(d, 'KP.20240405.03637.74', 'thar-wls')
+        _stub_master(d, 'KP.20240405.03637.74', 'thar')
 
         mod = _make_module(masters_dir)
-        mod.perform(['bias', 'thar-wls'])
-        assert 'WLSFILE' not in mod.l1_obj.headers['PRIMARY']
+        mod.perform(['bias', 'thar'])
+        h = mod.l1_obj.headers['PRIMARY']
+        assert h['WLSFILE'] == str(d / 'KP.20240405.03637.74_master_thar_L2.fits')
+        assert 'WLSDIR' not in h
+        assert isinstance(h['AGEWLS'], float)
+        assert h['AGEWLS'] == pytest.approx(-0.422176, abs=1e-5)
+
+    def test_raises_on_unknown_cal_type(self, masters_dir):
+        mod = _make_module(masters_dir)
+        with pytest.raises(ValueError, match="bogus"):
+            mod.perform(['bogus'])
 
     def test_raises_when_no_master_found(self, tmp_path):
         mod = _make_module(tmp_path)
