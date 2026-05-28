@@ -233,20 +233,36 @@ class TestPlotL0FileSaving:
         plt.close(fig)
 
 
-class TestPlotL0All:
+class TestPlotL0Run:
 
-    def test_all_returns_dict_of_figures(self, synthetic_4amp_l0):
+    def test_run_all_returns_dict_of_figures(self, synthetic_4amp_l0):
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(synthetic_4amp_l0)
-        figs = qlp.all()
+        figs = qlp.run('all')
         assert isinstance(figs, dict)
-        assert 'L0_stitched_green' in figs
-        assert 'L0_stitched_red' in figs
+        assert 'stitched_image_green' in figs
+        assert 'stitched_image_red' in figs
         assert all(isinstance(f, plt.Figure) for f in figs.values())
-        for f in figs.values():
-            plt.close(f)
 
-    def test_all_skips_missing_chip(self, tmp_path):
+    def test_run_single_plot_name(self, synthetic_4amp_l0):
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0)
+        figs = qlp.run('stitched_image')
+        assert set(figs.keys()) == {'stitched_image_green', 'stitched_image_red'}
+
+    def test_run_unknown_which_raises(self, synthetic_4amp_l0):
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0)
+        with pytest.raises(ValueError, match="unknown plot"):
+            qlp.run('bogus')
+
+    def test_run_requires_which(self, synthetic_4amp_l0):
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
+        qlp = PlotL0(synthetic_4amp_l0)
+        with pytest.raises(TypeError):
+            qlp.run()
+
+    def test_run_skips_missing_chip(self, tmp_path):
         """L0 with only green amps should only produce green plot."""
         fn = str(tmp_path / "KP.20240405.00004.00.fits")
         rng = np.random.default_rng(7)
@@ -266,8 +282,6 @@ class TestPlotL0All:
 
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
         qlp = PlotL0(l0)
-        figs = qlp.all()
-        assert 'L0_stitched_green' in figs
-        assert 'L0_stitched_red' not in figs
-        for f in figs.values():
-            plt.close(f)
+        figs = qlp.run('all')
+        assert 'stitched_image_green' in figs
+        assert 'stitched_image_red' not in figs

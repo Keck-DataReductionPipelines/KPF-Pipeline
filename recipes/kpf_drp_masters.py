@@ -28,33 +28,29 @@ def main(config, args):
 
     # master bias
     for files in build_l0_file_lists('bias', mini_db=mini_db):
+        bias_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='bias')
         bias_handler = Bias(files, config)
-        bias_l1 = bias_handler.make_master_l1()
-        out_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='bias')
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        bias_l1.to_fits(out_path)
+        bias_handler.make_master_l1(filepath=bias_path)
 
     # master dark (not yet implemented)
     #for files in build_l0_file_lists('dark', mini_db=mini_db):
+    #    dark_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='dark')
     #    dark_handler = Dark(files, config)
-    #    dark_l1 = dark_handler.make_master_l1()
-    #    dark_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='dark'))
+    #    dark_handler.make_master_l1(filepath=dark_path)
 
     # master flat (not yet implemented)
     #for files in build_l0_file_lists('flat', mini_db=mini_db):
+    #    flat_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='flat')
     #    flat_handler = Flat(files, config)
-    #    flat_l1 = flat_handler.make_master_l1()
-    #    flat_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='flat'))
+    #    flat_handler.make_master_l1(filepath=flat_path)
 
     # master wavelength solution (ThAr)
     for files in build_l0_file_lists('thar', mini_db=mini_db):
-        out_path         = build_filepath(get_obs_id(files[0]), 'L2', data_root=data_root_out, master='thar')
-        diagnostics_path = out_path[:-len('_L2.fits')] + '_diagnostics.h5'
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        wls_master_path      = build_filepath(get_obs_id(files[0]), 'L2', data_root=data_root_out, master='thar')
+        wls_diagnostics_path = wls_master_path[:-len('_L2.fits')] + '_diagnostics.h5'
 
         wls_handler = WLS(files, config)
-        wls_l2 = wls_handler.make_master_l2(diagnostics_path=diagnostics_path)
-        wls_l2.to_fits(out_path)
+        wls_handler.make_master_l2(master_path=wls_master_path, diagnostics_path=wls_diagnostics_path)
 
     print("\n\n=== exiting kpf_drp_masters pipeline ===\n\n")
 

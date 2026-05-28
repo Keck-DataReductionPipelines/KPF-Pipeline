@@ -1,6 +1,7 @@
 """
 KPF Master Wavelength Solution construction module.
 """
+import os
 import warnings
 
 from astropy.stats import mad_std
@@ -707,6 +708,7 @@ class WLS(BaseMasterModule):
                        polyorder_x=None,
                        polyorder_m=None,
                        polyorder_f=None,
+                       master_path=None,
                        diagnostics_path=None,
                        verbose=True,
                       ):
@@ -717,7 +719,8 @@ class WLS(BaseMasterModule):
         computes per-chip Legendre wavelength solutions using
         `compute_wls_from_stack`. The resulting wavelength arrays are
         written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
-        which is returned and cached on `self.ml2_obj`. Per-frame
+        which is returned and cached on `self.ml2_obj`; pass `master_path`
+        to also persist it to disk via `save_master('L2', ...)`. Per-frame
         coefficient and line stacks are always stashed on
         `self._coeffs_stack` / `self._lines_stack`; pass `diagnostics_path`
         to also persist them to disk via `save_diagnostics()`.
@@ -739,6 +742,9 @@ class WLS(BaseMasterModule):
         polyorder_f : int, optional
             Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
             Defaults to self.polyorder_f.
+        master_path : str, optional
+            If provided, calls `self.save_master('L2', master_path)` at
+            the end to persist the master L2 to a FITS file at this path.
         diagnostics_path : str, optional
             If provided, calls `self.save_diagnostics(diagnostics_path)`
             at the end to persist the per-frame coefficient and line stacks
@@ -833,6 +839,9 @@ class WLS(BaseMasterModule):
 
         self.ml2_obj.receipt_add_entry('master_wls', 'PASS')
 
+        if master_path is not None:
+            self.save_master('L2', master_path, overwrite=True)
+
         if diagnostics_path is not None:
             self.save_diagnostics(diagnostics_path)
 
@@ -857,6 +866,7 @@ class WLS(BaseMasterModule):
         if not self._coeffs_stack or not self._lines_stack:
             raise RuntimeError("No diagnostics available; run make_master_l2() first")
 
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         str_dt = h5py.string_dtype(encoding='utf-8')
         with h5py.File(path, 'w') as f:
             for chip, coeffs_stack in self._coeffs_stack.items():

@@ -1,8 +1,10 @@
 """
 Base class for KPF Masters modules.
 """
-import numpy as np
+import os
 import warnings
+
+import numpy as np
 
 from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.data_models.level0 import KPF0
@@ -49,6 +51,9 @@ class BaseMasterModule:
             setattr(self, k, params.get(k, v))
 
         self._l1_obj_cache = {}
+
+        self.ml1_obj = None  # populated by subclass make_master_l1(); used by save_master('L1', ...)
+        self.ml2_obj = None  # populated by subclass make_master_l2(); used by save_master('L2', ...)
 
 
     # ------------------------------------------------------------------
@@ -523,3 +528,56 @@ class BaseMasterModule:
             l1_arrays[f'{chip}_MASK'] = good
 
         return l1_arrays
+
+
+    # ------------------------------------------------------------------
+    # Public methods
+    # ------------------------------------------------------------------
+
+    def save_master(self, level, path, *, overwrite=False):
+        """
+        Write the cached master object to a FITS file at `path`.
+
+        Parameters
+        ----------
+        level : str
+            Data level of the master to save; selects which cached
+            object to write. One of 'L1' or 'L2', matching the
+            subclass's `make_master_l1` / `make_master_l2` entry point.
+        path : str
+            Output FITS path. Parent directories are created as needed.
+        overwrite : bool, optional
+            If False (default), refuse to clobber an existing file and
+            raise FileExistsError. If True, replace any existing file
+            at `path`. Defaults to False to protect against accidental
+            overwrites when called directly; entry points that pass an
+            output path through `make_master_lN()` should set True
+            explicitly.
+
+        Raises
+        ------
+        ValueError
+            If `level` is not a recognized data level.
+        FileExistsError
+            If `path` already exists and `overwrite` is False.
+        RuntimeError
+            If the corresponding make_master_lN() has not been run yet,
+            or raised before constructing the master.
+        """
+        if level not in ('L1', 'L2'):
+            raise ValueError(f"level must be 'L1' or 'L2'; got {level!r}")
+
+        attr = f'ml{level[1]}_obj'
+        obj = getattr(self, attr, None)
+        if obj is None:
+            raise RuntimeError(
+                f"No master available; run make_master_{level.lower()}() first"
+            )
+
+        if not overwrite and os.path.exists(path):
+            raise FileExistsError(
+                f"{path} already exists; pass overwrite=True to replace it"
+            )
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        obj.to_fits(path)

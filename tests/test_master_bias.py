@@ -181,6 +181,55 @@ class TestMasterBiasRoundTrip:
 
 
 # ---------------------------------------------------------------------------
+# master_path integration with save_master
+# ---------------------------------------------------------------------------
+
+
+class TestMasterBiasSaveMaster:
+    """make_master_l1(master_path=...) should write the FITS via save_master."""
+
+    def test_master_path_writes_fits(self, tmp_path):
+        synthetic = make_l1_arrays()
+        bias = Bias(FILE_LIST)
+        master_path = tmp_path / "master_bias.fits"
+        with patch.object(bias, "stack_frames", return_value=synthetic):
+            bias.make_master_l1(filepath=str(master_path))
+        assert master_path.exists()
+
+    def test_master_path_creates_parent_dir(self, tmp_path):
+        synthetic = make_l1_arrays()
+        bias = Bias(FILE_LIST)
+        master_path = tmp_path / "nested" / "subdir" / "master_bias.fits"
+        with patch.object(bias, "stack_frames", return_value=synthetic):
+            bias.make_master_l1(filepath=str(master_path))
+        assert master_path.exists()
+
+    def test_master_path_overwrites_existing(self, tmp_path):
+        synthetic = make_l1_arrays()
+        bias = Bias(FILE_LIST)
+        master_path = tmp_path / "master_bias.fits"
+        master_path.touch()
+        with patch.object(bias, "stack_frames", return_value=synthetic):
+            bias.make_master_l1(filepath=str(master_path))
+        assert master_path.read_bytes()[:6] == b"SIMPLE"
+
+    def test_save_master_before_make_raises(self):
+        bias = Bias(FILE_LIST)
+        with pytest.raises(RuntimeError, match="run make_master_l1"):
+            bias.save_master('L1', '/tmp/should_not_be_created.fits')
+
+    def test_save_master_refuses_overwrite_by_default(self, tmp_path):
+        synthetic = make_l1_arrays()
+        bias = Bias(FILE_LIST)
+        master_path = tmp_path / "master_bias.fits"
+        master_path.touch()
+        with patch.object(bias, "stack_frames", return_value=synthetic):
+            bias.make_master_l1()  # populates ml1_obj
+        with pytest.raises(FileExistsError, match="overwrite=True"):
+            bias.save_master('L1', str(master_path))
+
+
+# ---------------------------------------------------------------------------
 # Regression tests (real L0 data)
 # ---------------------------------------------------------------------------
 

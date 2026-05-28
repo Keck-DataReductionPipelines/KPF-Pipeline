@@ -46,9 +46,28 @@ class Bias(BaseMasterModule):
     # Public entry point
     # ------------------------------------------------------------------
 
-    def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
+    def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None,
+                       filepath=None, verbose=True):
         """
-        Build master bias from stack
+        Build master bias from stack.
+
+        The constructed KPFMasterL1 is returned and cached on
+        `self.ml1_obj`; pass `filepath` to also persist it to disk
+        via `save_master('L1', ...)`.
+
+        Parameters
+        ----------
+        l0_file_list : list of str, optional
+            L0 files to stack. Defaults to self.l0_file_list.
+        nstream : int, optional
+            Stream threshold passed to stack_frames.
+        sigma : float, optional
+            Outlier rejection threshold passed to stack_frames.
+        filepath : str, optional
+            If provided, calls `self.save_master('L1', filepath)` at
+            the end to persist the master L1 to a FITS file at this filepath.
+        verbose : bool, optional
+            If True (default), emit per-frame progress prints during stacking.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -96,6 +115,9 @@ class Bias(BaseMasterModule):
             }
             for chip in self.chips
         }
+
+        if filepath is not None:
+            self.save_master('L1', filepath, overwrite=True)
 
         return self.ml1_obj
 
