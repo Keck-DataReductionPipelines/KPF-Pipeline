@@ -27,6 +27,8 @@ class PlotL1:
         output_dir: Directory to save PNG files. None = return Figure only.
     """
 
+    _PLOT_METHODS = ('image',)
+
     def __init__(self, l1_obj, output_dir=None):
         self.l1 = l1_obj
         self.output_dir = output_dir
@@ -153,15 +155,38 @@ class PlotL1:
             return False
         return np.size(self.l1.data[ext]) > 0
 
-    def all(self):
+    def run(self, which):
         """
-        Generate all implemented L1 plots for chips present in the data.
+        Generate the requested plot(s) for every chip that has data,
+        saving each to `output_dir` and closing the matplotlib figure
+        so callers don't accumulate them.
+
+        Args:
+            which: 'all' to run every implemented plot, or the name of a
+                   single plot method (one of self._PLOT_METHODS).
 
         Returns:
-            dict mapping plot name to matplotlib.Figure.
+            dict mapping `{method_name}_{chip}` to matplotlib.Figure
+            (closed; useful for tests/introspection).
         """
+        if which == 'all':
+            names = self._PLOT_METHODS
+        elif which in self._PLOT_METHODS:
+            names = (which,)
+        else:
+            raise ValueError(
+                f"unknown plot {which!r}; expected 'all' or one of {self._PLOT_METHODS}"
+            )
+
+        if self.output_dir is not None:
+            os.makedirs(self.output_dir, exist_ok=True)
+
         figures = {}
         for chip in ['green', 'red']:
-            if self._has_chip(chip):
-                figures[f'L1_image_{chip}'] = self.image(chip)
+            if not self._has_chip(chip):
+                continue
+            for name in names:
+                fig = getattr(self, name)(chip)
+                figures[f'{name}_{chip}'] = fig
+                plt.close(fig)
         return figures

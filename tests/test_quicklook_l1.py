@@ -166,19 +166,35 @@ class TestFileSaving:
         plt.close(fig)
 
 
-class TestAll:
+class TestRun:
 
-    def test_all_returns_dict(self, synthetic_l1):
+    def test_run_all_returns_dict(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
-        figs = qlp.all()
+        figs = qlp.run('all')
         assert isinstance(figs, dict)
-        assert 'L1_image_green' in figs
-        assert 'L1_image_red' in figs
-        for f in figs.values():
-            plt.close(f)
+        assert 'image_green' in figs
+        assert 'image_red' in figs
 
-    def test_all_skips_missing_chip(self, tmp_path):
+    def test_run_single_plot_name(self, synthetic_l1):
+        from kpfpipe.quality_control.quicklook.level1 import PlotL1
+        qlp = PlotL1(synthetic_l1)
+        figs = qlp.run('image')
+        assert set(figs.keys()) == {'image_green', 'image_red'}
+
+    def test_run_unknown_which_raises(self, synthetic_l1):
+        from kpfpipe.quality_control.quicklook.level1 import PlotL1
+        qlp = PlotL1(synthetic_l1)
+        with pytest.raises(ValueError, match="unknown plot"):
+            qlp.run('bogus')
+
+    def test_run_requires_which(self, synthetic_l1):
+        from kpfpipe.quality_control.quicklook.level1 import PlotL1
+        qlp = PlotL1(synthetic_l1)
+        with pytest.raises(TypeError):
+            qlp.run()
+
+    def test_run_skips_missing_chip(self, tmp_path):
         # KPF1 with only green CCD, no red
         fn = str(tmp_path / "KP.20240405.00003.00_L1.fits")
         primary = fits.PrimaryHDU()
@@ -196,11 +212,9 @@ class TestAll:
         l1 = KPF1.from_fits(fn)
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(l1)
-        figs = qlp.all()
-        assert 'L1_image_green' in figs
-        assert 'L1_image_red' not in figs
-        for f in figs.values():
-            plt.close(f)
+        figs = qlp.run('all')
+        assert 'image_green' in figs
+        assert 'image_red' not in figs
 
 
 class TestStubs:
