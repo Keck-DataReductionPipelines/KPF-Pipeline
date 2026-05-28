@@ -473,7 +473,8 @@ class TestPerform:
         # 30 km/s redshift is < 1: positive RV means moving away
         assert 0.9 < z[0] < 1.0
 
-    def test_wave_arrays_scaled(self, bc_monkeypatched):
+    def test_wave_arrays_untouched(self, bc_monkeypatched):
+        """BarycentricCorrection should track but not apply: WAVE arrays unchanged."""
         kpf2 = bc_monkeypatched.kpf2_obj
         orig = {f'{chip}_{fiber}_WAVE': kpf2.data[f'{chip}_{fiber}_WAVE'].copy()
                 for chip in ['GREEN', 'RED']
@@ -481,13 +482,11 @@ class TestPerform:
 
         bc_monkeypatched.perform()
 
-        z_extension = np.asarray(kpf2.data['BARYCORR_Z'])
         for key, before in orig.items():
-            after = kpf2.data[key]
-            chip = key.split('_')[0]
-            z = z_extension[:NORDER_GREEN] if chip == 'GREEN' else z_extension[NORDER_GREEN:]
-            np.testing.assert_allclose(after, before * z[:, None], rtol=1e-5,
-                                       err_msg=f"{key} not scaled correctly")
+            np.testing.assert_array_equal(
+                kpf2.data[key], before,
+                err_msg=f"{key} should be unmodified",
+            )
 
     def test_per_ccd_instrument_header_keywords(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
@@ -517,19 +516,3 @@ class TestPerform:
         for v in results.values():
             assert len(v) == NORDER
 
-    def test_zero_rv_leaves_wavelengths_unchanged(self, synthetic_kpf2, monkeypatch):
-        """delta_rv == 0 → z == 1 → WAVE arrays unchanged."""
-        def mock_query(gaia_id):
-            return _fake_skycoord()
-
-        def mock_compute(skycoord, obs_times, location):
-            n = len(np.atleast_1d(obs_times.jd))
-            return np.zeros(n), np.atleast_1d(obs_times.jd)
-
-        monkeypatch.setattr(BarycentricCorrection, '_query_gaia', staticmethod(mock_query))
-        monkeypatch.setattr(BarycentricCorrection, '_compute_barycorr', staticmethod(mock_compute))
-
-        bc = BarycentricCorrection(synthetic_kpf2)
-        orig = bc.kpf2_obj.data['GREEN_SCI2_WAVE'].copy()
-        bc.perform(fix_expmeter_outliers=False)
-        np.testing.assert_allclose(bc.kpf2_obj.data['GREEN_SCI2_WAVE'], orig, rtol=1e-7)

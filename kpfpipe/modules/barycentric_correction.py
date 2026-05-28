@@ -2,8 +2,7 @@
 KPF Barycentric Correction module.
 
 Computes per-order barycentric corrections from the EXPMETER_SCI flux-weighted
-midpoint times. Populates the rvdata-standard L2 extensions and applies the
-per-order redshift to all WAVE arrays in place.
+midpoint times and stores them on the L2. WAVE arrays are not modified.
 
 Outputs (rvdata-standard ImageHDUs, shape (NORDER,)):
   - BJD_TDB       photon-weighted midpoint in BJD_TDB per spectral order
@@ -58,14 +57,13 @@ KECK_LOCATION = EarthLocation(
 
 class BarycentricCorrection:
     """
-    Compute and apply per-order barycentric correction to KPF2 wavelength arrays.
+    Compute and store per-order barycentric correction on a KPF2.
 
-    Derives the flux-weighted midpoint per expmeter wavelength channel
-    (EXPMETER_SCI), interpolates onto each spectral order's central
-    wavelength (SCI2_WAVE), queries Gaia DR3 for the target's astrometry,
-    and calls barycorrpy to populate the rvdata-standard BJD_TDB /
-    BARYCORR_KMS / BARYCORR_Z extensions. Per-order BARYCORR_Z is then
-    applied to every WAVE array in place.
+    Derives the flux-weighted midpoint per expmeter channel (EXPMETER_SCI),
+    interpolates onto each spectral order's central wavelength (SCI2_WAVE),
+    queries Gaia DR3 for the target's astrometry, and calls barycorrpy to
+    populate BJD_TDB / BARYCORR_KMS / BARYCORR_Z. WAVE arrays are not
+    modified.
 
     Parameters
     ----------
@@ -437,33 +435,23 @@ class BarycentricCorrection:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, fibers=None, interpolate=True, extrapolate=True,
-                fix_expmeter_outliers=True):
+    def perform(self, interpolate=True, extrapolate=True, fix_expmeter_outliers=True):
         """
-        Compute per-order barycentric correction and apply it to wavelength arrays.
+        Compute per-order barycentric correction and store it on the KPF2.
 
         Parameters
         ----------
-        chips : list of str, optional
-            Chip identifiers, e.g. ['GREEN', 'RED']. Defaults to self.chips.
-        fibers : list of str, optional
-            Fiber identifiers, e.g. ['SCI1', 'SCI2', ...]. Defaults to self.fibers.
         interpolate, extrapolate, fix_expmeter_outliers : bool, optional
-            Forwarded to compute_flux_weighted_midpoint_times(). See that method for semantics.
+            Forwarded to compute_flux_weighted_midpoint_times(). See that
+            method for semantics.
 
         Returns
         -------
         kpf2_obj : KPF2
             Input KPF2 with BJD_TDB / BARYCORR_KMS / BARYCORR_Z populated,
-            WAVE arrays scaled in-place by per-order redshift, per-CCD
-            CCD{1,2}BJD/BKMS/BZ summaries written to INSTRUMENT_HEADER,
-            and a 'barycentric_correction' receipt entry.
+            per-CCD CCD{1,2}BJD/BKMS/BZ summaries written to
+            INSTRUMENT_HEADER, and a 'barycentric_correction' receipt entry.
         """
-        if chips is None:
-            chips = self.chips
-        if fibers is None:
-            fibers = self.fibers
-
         # Per-order flux-weighted midpoint times (interpolated from per-channel)
         _, t_per_order = self.compute_flux_weighted_midpoint_times(
             output='orders',
@@ -483,22 +471,12 @@ class BarycentricCorrection:
             float(compute_doppler_shift(v * u.m / u.s)) for v in bc_vel_mps
         ])
 
-        # Write rvdata standard extensions (per-order arrays)
+        # Write rvdata standard extensions (per-order arrays). The WAVE
+        # arrays are left untouched; downstream RV computation consumes
+        # BARYCORR_Z directly.
         self.kpf2_obj.set_data('BJD_TDB',      np.asarray(bjd_tdb,  dtype=np.float64))
         self.kpf2_obj.set_data('BARYCORR_KMS', np.asarray(bary_kms, dtype=np.float64))
         self.kpf2_obj.set_data('BARYCORR_Z',   np.asarray(bary_z,   dtype=np.float64))
-
-        # Apply per-order redshift to all WAVE arrays (in-place, per-order multiply)
-        for fiber in fibers:
-            for chip in chips:
-                wave_ext = f'{chip}_{fiber}_WAVE'
-                if wave_ext not in self.kpf2_obj.data:
-                    continue
-                arr = self.kpf2_obj.data[wave_ext]
-                if arr is None or np.size(arr) == 0:
-                    continue
-                z = bary_z[:NORDER_GREEN] if chip.upper() == 'GREEN' else bary_z[NORDER_GREEN:]
-                self.kpf2_obj.data[wave_ext] = (arr * z[:, None]).astype(arr.dtype)
 
         # Per-CCD scalar summaries on INSTRUMENT_HEADER (KPF-native keywords).
         # CCD1 = GREEN (orders [:NORDER_GREEN]), CCD2 = RED (orders [NORDER_GREEN:]).
