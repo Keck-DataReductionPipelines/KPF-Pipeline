@@ -193,7 +193,7 @@ class TestMasterBiasSaveMaster:
         bias = Bias(FILE_LIST)
         master_path = tmp_path / "master_bias.fits"
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(master_path=str(master_path))
+            bias.make_master_l1(filepath=str(master_path))
         assert master_path.exists()
 
     def test_master_path_creates_parent_dir(self, tmp_path):
@@ -201,7 +201,7 @@ class TestMasterBiasSaveMaster:
         bias = Bias(FILE_LIST)
         master_path = tmp_path / "nested" / "subdir" / "master_bias.fits"
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(master_path=str(master_path))
+            bias.make_master_l1(filepath=str(master_path))
         assert master_path.exists()
 
     def test_master_path_overwrites_existing(self, tmp_path):
@@ -210,7 +210,7 @@ class TestMasterBiasSaveMaster:
         master_path = tmp_path / "master_bias.fits"
         master_path.touch()
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(master_path=str(master_path))
+            bias.make_master_l1(filepath=str(master_path))
         assert master_path.read_bytes()[:6] == b"SIMPLE"
 
     def test_save_master_before_make_raises(self):
