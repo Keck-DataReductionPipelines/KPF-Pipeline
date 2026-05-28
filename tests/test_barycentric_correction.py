@@ -397,6 +397,32 @@ class TestFluxWeightedMidpointCcds:
             [t_orders.jd[:NORDER_GREEN].mean(), t_orders.jd[NORDER_GREEN:].mean()],
         )
 
+    def test_green_and_red_resolve_distinct_values(self, synthetic_kpf2):
+        """With GREEN orders at 5000Å and RED orders at 5100Å plus a chromatic
+        flux gradient, 'ccds' should report distinguishable times per chip."""
+        synthetic_kpf2.set_data('GREEN_SCI2_WAVE',
+                                np.full((NORDER_GREEN, NCOL), 5000.0, dtype=np.float32))
+        synthetic_kpf2.set_data('RED_SCI2_WAVE',
+                                np.full((NORDER_RED, NCOL), 5100.0, dtype=np.float32))
+        # Front-weighted at 5000Å, back-weighted at 5100Å → distinct midpoints
+        data = {'Date-Beg': ['2024-01-01T00:00:00.000',
+                              '2024-01-01T00:02:00.000',
+                              '2024-01-01T00:04:00.000'],
+                'Date-End': ['2024-01-01T00:01:00.000',
+                              '2024-01-01T00:03:00.000',
+                              '2024-01-01T00:05:00.000'],
+                '5000': [1000.0, 1.0, 1.0],
+                '5100': [1.0, 1.0, 1000.0]}
+        synthetic_kpf2.set_data('EXPMETER_SCI', Table(data))
+
+        bc = BarycentricCorrection(synthetic_kpf2)
+        w, t = bc.compute_flux_weighted_midpoint_times(output='ccds', **self._KWARGS)
+        assert w[0] == 5000.0 and w[1] == 5100.0
+        assert t.jd[0] < t.jd[1], (
+            f"GREEN should be earlier than RED with front-then-back-weighted flux; "
+            f"got GREEN={t.jd[0]}, RED={t.jd[1]}"
+        )
+
 
 class TestFluxWeightedMidpointFormat:
 
@@ -414,6 +440,26 @@ class TestFluxWeightedMidpointFormat:
 
 
 # ---------------------------------------------------------------------------
+# _query_gaia input validation
+# ---------------------------------------------------------------------------
+
+class TestQueryGaiaValidation:
+    """Reject non-numeric source IDs before they hit the ADQL query string."""
+
+    @pytest.mark.parametrize('bad_id', [
+        'foo',                           # not a number at all
+        '12345 OR 1=1',                  # injection attempt
+        '12345; DROP TABLE',
+        '',
+        '12.34',                         # decimal
+        '-12345',                        # negative
+    ])
+    def test_non_numeric_raises(self, bad_id):
+        with pytest.raises(ValueError, match='all digits'):
+            BarycentricCorrection._query_gaia(bad_id)
+
+
+# ---------------------------------------------------------------------------
 # perform() — Gaia and barycorrpy stubbed
 # ---------------------------------------------------------------------------
 
@@ -427,7 +473,7 @@ class TestPerform:
         def mock_query(gaia_id):
             return _fake_skycoord()
 
-        def mock_compute(skycoord, obs_times, location):
+        def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
             n = len(np.atleast_1d(obs_times.jd))
             bc_vel = np.full(n, TestPerform.DELTA_RV_MPS, dtype=float)
             # BJD = JD + 500s (light-travel approx); same for every order in this stub
@@ -507,6 +553,43 @@ class TestPerform:
         bc_monkeypatched.perform()
         modules = bc_monkeypatched.kpf2_obj.receipt['Module_Name'].values
         assert 'barycentric_correction' in modules
+
+    def test_targradv_converted_km_to_m_and_passed_through(self, synthetic_kpf2, monkeypatch):
+        """TARGRADV (km/s) should arrive at _compute_barycorr as m/s."""
+        synthetic_kpf2.headers['INSTRUMENT_HEADER']['TARGRADV'] = 81.87  # km/s
+        captured = {}
+
+        def mock_query(gaia_id):
+            return _fake_skycoord()
+
+        def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
+            captured['rv_mps'] = rv_mps
+            n = len(np.atleast_1d(obs_times.jd))
+            return np.zeros(n), np.atleast_1d(obs_times.jd)
+
+        def passthrough(f, kernel_size=5):
+            return f.copy()
+
+        monkeypatch.setattr(BarycentricCorrection, '_query_gaia', staticmethod(mock_query))
+        monkeypatch.setattr(BarycentricCorrection, '_compute_barycorr', staticmethod(mock_compute))
+        monkeypatch.setattr(BarycentricCorrection, '_fix_expmeter_outliers', staticmethod(passthrough))
+
+        BarycentricCorrection(synthetic_kpf2).perform()
+        assert captured['rv_mps'] == pytest.approx(81870.0)
+
+    def test_missing_targradv_defaults_to_zero(self, bc_monkeypatched, monkeypatch):
+        """No TARGRADV in INSTRUMENT_HEADER → rv_mps=0 passed through."""
+        # synthetic_kpf2 fixture does not set TARGRADV
+        captured = {}
+
+        def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
+            captured['rv_mps'] = rv_mps
+            n = len(np.atleast_1d(obs_times.jd))
+            return np.full(n, TestPerform.DELTA_RV_MPS), np.atleast_1d(obs_times.jd)
+
+        monkeypatch.setattr(BarycentricCorrection, '_compute_barycorr', staticmethod(mock_compute))
+        bc_monkeypatched.perform()
+        assert captured['rv_mps'] == 0.0
 
     def test_results_populated(self, bc_monkeypatched):
         assert bc_monkeypatched._results is None

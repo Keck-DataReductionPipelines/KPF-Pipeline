@@ -39,7 +39,7 @@ from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter, median_filter
 from scipy.special import erfcinv
 
-from kpfpipe import DEFAULTS, DETECTOR
+from kpfpipe import DETECTOR
 from kpfpipe.utils.astro import compute_doppler_shift
 from kpfpipe.utils.config import ConfigHandler
 
@@ -76,22 +76,13 @@ class BarycentricCorrection:
     """
 
     def __init__(self, kpf2_obj, config=None):
-        self.kpf2_obj = kpf2_obj
-
-        if config is None:
-            params = {}
-        elif isinstance(config, dict):
-            params = config
-        elif isinstance(config, ConfigHandler):
-            params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_BARYCENTRIC_CORRECTION"]
-            )
-        else:
+        # `config` is accepted (None | dict | ConfigHandler) to match sibling
+        # modules and the recipe pattern, but BarycentricCorrection has no
+        # per-module knobs today; all behavior toggles live on perform().
+        if config is not None and not isinstance(config, (dict, ConfigHandler)):
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in DEFAULTS.items():
-            setattr(self, k, params.get(k, v))
-
+        self.kpf2_obj = kpf2_obj
         self._results = None  # populated by perform()
 
     # ------------------------------------------------------------------
@@ -267,6 +258,11 @@ class BarycentricCorrection:
         Returns a SkyCoord with proper motion and distance (from parallax)
         attached, at the Gaia ref_epoch.
         """
+        gaia_id = str(gaia_id)
+        if not gaia_id.isdigit():
+            raise ValueError(
+                f"Gaia source_id must be all digits; got {gaia_id!r}"
+            )
         query = f"""
         SELECT ra, dec, pmra, pmdec, parallax, ref_epoch
         FROM gaiadr3.gaia_source
@@ -287,9 +283,12 @@ class BarycentricCorrection:
         return skycoord
 
     @staticmethod
-    def _compute_barycorr(skycoord, obs_times, location):
+    def _compute_barycorr(skycoord, obs_times, location, rv_mps=0.0):
         """
         Compute barycentric velocity (m/s) and BJD_TDB for an array of obs_times.
+
+        `rv_mps` is the target's systemic RV (m/s), passed to barycorrpy so
+        the light-travel correction in BJD_TDB accounts for stellar motion.
 
         Returns (bc_vel_mps, bjd_tdb), each shape (n,).
         """
@@ -313,6 +312,7 @@ class BarycentricCorrection:
             lat=lat, longi=lon, alt=alt,
             pmra=pmra, pmdec=pmdec,
             px=px, epoch=epoch,
+            rv=rv_mps,
         )
         bjd_tdb, *_ = utc_tdb.JDUTC_to_BJDTDB(
             JDUTC=JDUTC,
@@ -320,6 +320,7 @@ class BarycentricCorrection:
             lat=lat, longi=lon, alt=alt,
             pmra=pmra, pmdec=pmdec,
             px=px, epoch=epoch,
+            rv=rv_mps,
         )
         return np.asarray(bc_vel), np.asarray(bjd_tdb)
 
@@ -459,17 +460,20 @@ class BarycentricCorrection:
             fix_expmeter_outliers=fix_expmeter_outliers,
         )
 
-        # Astrometric solution + per-order barycorr
-        # GAIAID is preserved from L1 PRIMARY by KPF1.to_kpf2() into L2 INSTRUMENT_HEADER.
-        gaia_id_raw = self.kpf2_obj.headers['INSTRUMENT_HEADER']['GAIAID']
+        # Astrometric solution + per-order barycorr. GAIAID and TARGRADV
+        # are preserved from L1 PRIMARY by KPF1.to_kpf2() into INSTRUMENT_HEADER.
+        inst = self.kpf2_obj.headers['INSTRUMENT_HEADER']
+        gaia_id_raw = inst['GAIAID']
         gaia_id = re.split(r'\s+', str(gaia_id_raw).strip())[-1]
         skycoord = self._query_gaia(gaia_id)
 
-        bc_vel_mps, bjd_tdb = self._compute_barycorr(skycoord, t_per_order, KECK_LOCATION)
+        # TARGRADV is in km/s; barycorrpy expects rv in m/s. Missing → 0.
+        rv_mps = float(inst.get('TARGRADV', 0.0) or 0.0) * 1000.0
+        bc_vel_mps, bjd_tdb = self._compute_barycorr(
+            skycoord, t_per_order, KECK_LOCATION, rv_mps=rv_mps,
+        )
         bary_kms = bc_vel_mps / 1000.0
-        bary_z = np.array([
-            float(compute_doppler_shift(v * u.m / u.s)) for v in bc_vel_mps
-        ])
+        bary_z = np.asarray(compute_doppler_shift(bc_vel_mps * u.m / u.s))
 
         # Write rvdata standard extensions (per-order arrays). The WAVE
         # arrays are left untouched; downstream RV computation consumes
