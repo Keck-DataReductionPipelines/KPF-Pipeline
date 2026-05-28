@@ -28,23 +28,21 @@ def main(config, args):
 
     # master bias
     for files in build_l0_file_lists('bias', mini_db=mini_db):
+        master_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='bias')
         bias_handler = Bias(files, config)
-        bias_l1 = bias_handler.make_master_l1()
-        out_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='bias')
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        bias_l1.to_fits(out_path)
+        bias_handler.make_master_l1(master_path=master_path)
 
     # master dark (not yet implemented)
     #for files in build_l0_file_lists('dark', mini_db=mini_db):
+    #    master_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='dark')
     #    dark_handler = Dark(files, config)
-    #    dark_l1 = dark_handler.make_master_l1()
-    #    dark_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='dark'))
+    #    dark_handler.make_master_l1(master_path=master_path)
 
     # master flat (not yet implemented)
     #for files in build_l0_file_lists('flat', mini_db=mini_db):
+    #    master_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='flat')
     #    flat_handler = Flat(files, config)
-    #    flat_l1 = flat_handler.make_master_l1()
-    #    flat_l1.to_fits(build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='flat'))
+    #    flat_handler.make_master_l1(master_path=master_path)
 
     # master wavelength solution (ThAr)
     for files in build_l0_file_lists('thar', mini_db=mini_db):
