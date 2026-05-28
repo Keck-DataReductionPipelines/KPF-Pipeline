@@ -142,12 +142,15 @@ class BarycentricCorrection:
         Columns with numeric names are wavelength channels; non-numeric
         columns (e.g. timestamps) are skipped.
 
+        EXPMETER_SCI column labels are in Å on L1+ data (converted from the
+        native L0 nm by ImageAssembly), so `w` is returned in Å.
+
         Returns
         -------
         w : ndarray, shape (nwave,)
-            Wavelength of each expmeter channel (label units, e.g. Å).
+            Wavelength of each expmeter channel [Å].
         f : ndarray, shape (ntime, nwave)
-            Dispersion-normalized flux [e- per wavelength unit].
+            Dispersion-normalized flux [e- / Å].
         """
         expmeter = self.kpf2_obj.data['EXPMETER_SCI']
 
@@ -357,7 +360,7 @@ class BarycentricCorrection:
         Returns
         -------
         w : ndarray
-            Wavelengths corresponding to each output bin (label units).
+            Wavelengths corresponding to each output bin [Å].
         t_fwm : Time
             Flux-weighted midpoint time (JD-UTC) per output bin.
         """

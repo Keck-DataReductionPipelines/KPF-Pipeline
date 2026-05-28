@@ -237,6 +237,100 @@ class TestImageAssembly4Amp:
 
 
 # ---------------------------------------------------------------------------
+# Expmeter wavelength unit conversion (nm → Å at L0 → L1)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def synthetic_4amp_l0_with_expmeter(tmp_path):
+    """Synthetic 4-amp L0 with EXPMETER_SCI/SKY tables labeled in nm.
+
+    The wavelength column labels mirror real KPF expmeter native units
+    (e.g. '498.12' nm). The detector amp data is the same minimal 4-amp
+    scaffold used by `synthetic_4amp_l0`.
+    """
+    fn = str(tmp_path / "KP.20240101.00002.00.fits")
+    rng = np.random.default_rng(7)
+
+    nrow, ncol = 2070, 2094
+    bias_level = 1000.0
+
+    primary = fits.PrimaryHDU()
+    primary.header["INSTRUME"] = "KPF"
+    primary.header["OBJECT"]   = "synthetic-expmeter"
+    primary.header["IMTYPE"]   = "Bias"
+    primary.header["DATE-OBS"] = "2024-01-01T00:00:01"
+
+    hdus = [primary]
+    for chip in ["GREEN", "RED"]:
+        for amp in range(1, 5):
+            data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
+            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
+
+    # EXPMETER tables: Date-Beg/Date-End + a handful of channels in nm
+    wave_nm_labels = ['498.12', '604.38', '710.62', '816.88']
+    nrows = 3
+    for ext_name in ['EXPMETER_SCI', 'EXPMETER_SKY']:
+        cols = [
+            fits.Column(name='Date-Beg', format='25A',
+                        array=['2024-01-01T00:00:00.000'] * nrows),
+            fits.Column(name='Date-End', format='25A',
+                        array=['2024-01-01T00:00:01.000'] * nrows),
+        ]
+        for w in wave_nm_labels:
+            cols.append(fits.Column(name=w, format='E',
+                                     array=np.full(nrows, 100.0, dtype=np.float32)))
+        hdus.append(fits.BinTableHDU.from_columns(cols, name=ext_name))
+
+    fits.HDUList(hdus).writeto(fn, overwrite=True)
+    return fn
+
+
+class TestExpmeterWavelengthConversion:
+    """L0 → L1 should relabel EXPMETER_SCI/SKY wavelength columns from nm to Å."""
+
+    @pytest.fixture
+    def l1(self, synthetic_4amp_l0_with_expmeter):
+        l0 = KPF0.from_fits(synthetic_4amp_l0_with_expmeter)
+        return ImageAssembly(l0).perform()
+
+    def test_sci_columns_converted_to_angstroms(self, l1):
+        cols = l1.data['EXPMETER_SCI'].colnames
+        # nm labels (498.12, 604.38, 710.62, 816.88) → Å (4981.2, 6043.8, 7106.2, 8168.8)
+        for expected in ('4981.2', '6043.8', '7106.2', '8168.8'):
+            assert expected in cols, f"missing Å column {expected!r}; got {cols}"
+
+    def test_sky_columns_converted_to_angstroms(self, l1):
+        cols = l1.data['EXPMETER_SKY'].colnames
+        for expected in ('4981.2', '6043.8', '7106.2', '8168.8'):
+            assert expected in cols
+
+    def test_nm_labels_removed(self, l1):
+        cols = l1.data['EXPMETER_SCI'].colnames
+        for nm_label in ('498.12', '604.38', '710.62', '816.88'):
+            assert nm_label not in cols, f"nm label {nm_label!r} should be gone"
+
+    def test_non_numeric_columns_preserved(self, l1):
+        cols = l1.data['EXPMETER_SCI'].colnames
+        assert 'Date-Beg' in cols
+        assert 'Date-End' in cols
+
+    def test_values_preserved(self, l1):
+        # Underlying flux values shouldn't be touched by the rename.
+        np.testing.assert_array_equal(
+            np.asarray(l1.data['EXPMETER_SCI']['4981.2']),
+            np.full(3, 100.0, dtype=np.float32),
+        )
+
+    def test_no_error_when_expmeter_absent(self, synthetic_4amp_l0):
+        """Frames without an EXPMETER extension (e.g. biases) shouldn't error."""
+        l0 = KPF0.from_fits(synthetic_4amp_l0)
+        l1 = ImageAssembly(l0).perform()
+        # EXPMETER_SCI exists in the extension registry but is empty/None
+        em = l1.data.get('EXPMETER_SCI')
+        assert em is None or not hasattr(em, 'colnames') or len(em.colnames) == 0
+
+
+# ---------------------------------------------------------------------------
 # FITS round-trip tests (real data)
 # ---------------------------------------------------------------------------
 

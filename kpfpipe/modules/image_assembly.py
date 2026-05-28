@@ -36,6 +36,7 @@ class ImageAssembly:
       - measuring read noise
       - subtracting overscan bias
       - assembling full-frame images (FFI)
+      - converting EXPMETER_SCI/SKY wavelengths from nm to Angstroms
     """
     def __init__(self, l0_obj, config=None):
         self.l0_obj = l0_obj
@@ -208,6 +209,35 @@ class ImageAssembly:
         l1_obj.headers['PRIMARY']['OSCANMET'] = (
             self.overscan_method, 'Overscan subtraction method'
         )
+
+    @staticmethod
+    def _convert_expmeter_wavelengths_to_angstroms(l1_obj):
+        """
+        Rename EXPMETER_SCI/SKY wavelength column labels from nm to Å.
+
+        Raw L0 expmeter tables label per-channel flux columns with the
+        channel central wavelength in nanometers (e.g. '498.12'). The
+        RVData L2 standard and KPF WAVE arrays use Angstroms, so this
+        renames those columns at the L0 → L1 boundary so the entire
+        L1+ pipeline operates in a single wavelength unit.
+
+        Non-numeric columns (e.g. 'Date-Beg', 'Date-End') are skipped.
+        Underlying flux values are unchanged.
+        """
+        for ext_name in ('EXPMETER_SCI', 'EXPMETER_SKY'):
+            if ext_name not in l1_obj.data:
+                continue
+            table = l1_obj.data[ext_name]
+            if table is None or not hasattr(table, 'rename_column'):
+                continue
+            for col in list(table.colnames):
+                try:
+                    wave_nm = float(col)
+                except (ValueError, TypeError):
+                    continue
+                new_name = format(wave_nm * 10, 'g')
+                if new_name != col:
+                    table.rename_column(col, new_name)
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -477,6 +507,7 @@ class ImageAssembly:
         5. Subtract overscan bias
         6. Re-orient channels if needed
         7. Stitch channels into a full-frame image
+        8. Convert EXPMETER_SCI/SKY wavelength column labels from nm to Å
         """
         if chips is None:
             chips = self.chips
@@ -504,6 +535,7 @@ class ImageAssembly:
             l1_obj.set_data(f'{chip}_VAR', var_ffi)
 
         self._set_kpf1_headers(l1_obj)
+        self._convert_expmeter_wavelengths_to_angstroms(l1_obj)
         l1_obj.receipt_add_entry('image_assembly', 'PASS')
 
         self._results = {
