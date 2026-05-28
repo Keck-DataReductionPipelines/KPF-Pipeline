@@ -319,13 +319,25 @@ class BarycentricCorrection:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def flux_weighted_midpoint(self, interpolate=True, extrapolate=True,
-                                fix_expmeter_outliers=True):
+    def compute_flux_weighted_midpoint_times(self, output='orders', interpolate=True,
+                                extrapolate=True, fix_expmeter_outliers=True):
         """
-        Compute the flux-weighted midpoint observation time per wavelength channel.
+        Compute the flux-weighted midpoint observation time.
+
+        Always derives the per-expmeter-channel midpoint internally;
+        `output` controls how those values are projected. When called
+        from perform(), 'orders' (default) will be used.
 
         Parameters
         ----------
+        output : {'expmeter', 'orders', 'ccds'}
+            'expmeter' — raw per-channel result, shape (nwave,).
+            'orders'   — linearly interpolated onto each spectral order's
+                         central wavelength (median of SCI2_WAVE), shape (NORDER,).
+                         Orders outside the expmeter range clamp to the
+                         nearest endpoint (np.interp default).
+            'ccds'     — mean of the per-order values within each chip,
+                         shape (2,); [GREEN, RED].
         interpolate : bool, optional
             If True, estimate flux during gaps between expmeter readings.
         extrapolate : bool, optional
@@ -337,13 +349,19 @@ class BarycentricCorrection:
 
         Returns
         -------
-        w : ndarray, shape (nwave,)
-            Wavelength of each expmeter channel (label units; typically Å).
-        t_fwm : Time, shape (nwave,)
-            Flux-weighted midpoint time (JD-UTC) for each wavelength channel.
+        w : ndarray
+            Wavelengths corresponding to each output bin (label units).
+        t_fwm : Time
+            Flux-weighted midpoint time (JD-UTC) per output bin.
         """
+        if output not in ('expmeter', 'orders', 'ccds'):
+            raise ValueError(
+                f"output must be 'expmeter', 'orders', or 'ccds'; "
+                f"got {output!r}"
+            )
+
         t_beg, t_mid, t_end = self._get_timestamps()
-        w, f = self._get_normalized_flux()
+        w_em, f = self._get_normalized_flux()
 
         if np.any(f < 0):
             raise ValueError("negative exposure meter flux values detected")
@@ -373,42 +391,37 @@ class BarycentricCorrection:
                 t = Time(np.concatenate([t.jd, [t_ext.jd]]), format='jd', scale='utc')
                 f = np.vstack([f, f_ext])
 
-        t_fwm = Time(
+        t_em = Time(
             np.sum(t.jd[:, None] * f, axis=0) / np.sum(f, axis=0),
-            format='jd', scale='utc'
+            format='jd', scale='utc',
         )
-        return w, t_fwm
 
-    def map_to_orders(self, w_em, t_fwm):
-        """
-        Interpolate per-channel midpoint times onto each spectral order.
+        if output == 'expmeter':
+            return w_em, t_em
 
-        Order central wavelength = median of SCI2_WAVE across columns.
-        Orders outside the expmeter range clamp to the nearest endpoint
-        (np.interp default).
-
-        Parameters
-        ----------
-        w_em : ndarray, shape (nwave,)
-            Expmeter channel wavelengths (label units; same as SCI2_WAVE).
-        t_fwm : Time, shape (nwave,)
-            Per-channel flux-weighted midpoint times.
-
-        Returns
-        -------
-        t_per_order : Time, shape (NORDER,)
-            Per-order flux-weighted midpoint time (JD-UTC).
-        """
+        # Project per-channel times onto each spectral order via SCI2_WAVE.
         wave = self.kpf2_obj.data['SCI2_WAVE']
         if wave is None or np.size(wave) == 0:
             raise KeyError(
                 "SCI2_WAVE missing or empty; run WavelengthCalibration first"
             )
         order_centers = np.median(np.asarray(wave), axis=1)  # (NORDER,)
-
         sort_idx = np.argsort(w_em)
-        jd_per_order = np.interp(order_centers, w_em[sort_idx], t_fwm.jd[sort_idx])
-        return Time(jd_per_order, format='jd', scale='utc')
+        jd_per_order = np.interp(order_centers, w_em[sort_idx], t_em.jd[sort_idx])
+        t_orders = Time(jd_per_order, format='jd', scale='utc')
+
+        if output == 'orders':
+            return order_centers, t_orders
+
+        # 'ccds': mean within each chip's order slice.
+        green = slice(0, NORDER_GREEN)
+        red   = slice(NORDER_GREEN, NORDER)
+        w_ccds = np.array([order_centers[green].mean(), order_centers[red].mean()])
+        t_ccds = Time(
+            [jd_per_order[green].mean(), jd_per_order[red].mean()],
+            format='jd', scale='utc',
+        )
+        return w_ccds, t_ccds
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -426,7 +439,7 @@ class BarycentricCorrection:
         fibers : list of str, optional
             Fiber identifiers, e.g. ['SCI1', 'SCI2', ...]. Defaults to self.fibers.
         interpolate, extrapolate, fix_expmeter_outliers : bool, optional
-            Forwarded to flux_weighted_midpoint(). See that method for semantics.
+            Forwarded to compute_flux_weighted_midpoint_times(). See that method for semantics.
 
         Returns
         -------
@@ -441,12 +454,12 @@ class BarycentricCorrection:
         if fibers is None:
             fibers = self.fibers
 
-        # Per-channel flux-weighted midpoint times → per-order via interpolation
-        w_em, t_fwm = self.flux_weighted_midpoint(
+        # Per-order flux-weighted midpoint times (interpolated from per-channel)
+        _, t_per_order = self.compute_flux_weighted_midpoint_times(
+            output='orders',
             interpolate=interpolate, extrapolate=extrapolate,
             fix_expmeter_outliers=fix_expmeter_outliers,
         )
-        t_per_order = self.map_to_orders(w_em, t_fwm)
 
         # Astrometric solution + per-order barycorr
         # GAIAID is preserved from L1 PRIMARY by KPF1.to_kpf2() into L2 INSTRUMENT_HEADER.

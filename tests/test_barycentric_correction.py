@@ -273,22 +273,26 @@ class TestGetNormalizedFlux:
 
 
 # ---------------------------------------------------------------------------
-# flux_weighted_midpoint (now returns (w, t_fwm))
+# compute_flux_weighted_midpoint_times (output = 'expmeter' | 'orders' | 'ccds')
 # ---------------------------------------------------------------------------
 
-class TestFluxWeightedMidpoint:
+class TestFluxWeightedMidpointExpmeter:
 
     def test_uniform_flux_gives_geometric_midpoint(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
-        w, t_fwm = bc.flux_weighted_midpoint(interpolate=False, extrapolate=False,
-                                              fix_expmeter_outliers=False)
+        _, t_fwm = bc.compute_flux_weighted_midpoint_times(
+            output='expmeter',
+            interpolate=False, extrapolate=False, fix_expmeter_outliers=False,
+        )
         _, t_mid, _ = bc._get_timestamps()
         np.testing.assert_allclose(np.mean(t_fwm.jd), np.mean(t_mid.jd), atol=1e-6)
 
     def test_output_shapes(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
-        w, t_fwm = bc.flux_weighted_midpoint(interpolate=False, extrapolate=False,
-                                              fix_expmeter_outliers=False)
+        w, t_fwm = bc.compute_flux_weighted_midpoint_times(
+            output='expmeter',
+            interpolate=False, extrapolate=False, fix_expmeter_outliers=False,
+        )
         assert w.shape == (len(_WAVE_COLS),)
         assert len(t_fwm) == len(_WAVE_COLS)
 
@@ -300,7 +304,7 @@ class TestFluxWeightedMidpoint:
 
         bc = BarycentricCorrection(synthetic_kpf2)
         with pytest.raises(ValueError, match="negative"):
-            bc.flux_weighted_midpoint()
+            bc.compute_flux_weighted_midpoint_times(output='expmeter')
 
     def test_interpolate_shifts_midpoint_with_front_weighted_flux(self, synthetic_kpf2):
         data = {'Date-Beg': ['2024-01-01T00:00:00.000',
@@ -314,62 +318,99 @@ class TestFluxWeightedMidpoint:
         synthetic_kpf2.set_data('EXPMETER_SCI', Table(data))
         bc = BarycentricCorrection(synthetic_kpf2)
 
-        _, t_no = bc.flux_weighted_midpoint(interpolate=False, extrapolate=False,
-                                             fix_expmeter_outliers=False)
-        _, t_yes = bc.flux_weighted_midpoint(interpolate=True, extrapolate=False,
-                                              fix_expmeter_outliers=False)
+        _, t_no = bc.compute_flux_weighted_midpoint_times(
+            output='expmeter',
+            interpolate=False, extrapolate=False, fix_expmeter_outliers=False,
+        )
+        _, t_yes = bc.compute_flux_weighted_midpoint_times(
+            output='expmeter',
+            interpolate=True, extrapolate=False, fix_expmeter_outliers=False,
+        )
         assert np.mean(t_yes.jd) >= np.mean(t_no.jd) - 1e-9
 
 
-# ---------------------------------------------------------------------------
-# map_to_orders
-# ---------------------------------------------------------------------------
+class TestFluxWeightedMidpointOrders:
 
-class TestMapToOrders:
+    _KWARGS = dict(interpolate=False, extrapolate=False, fix_expmeter_outliers=False)
 
     def test_output_shape(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
-        w_em = np.array([5000.0, 5100.0, 5200.0, 5300.0])
-        t_fwm = Time(np.linspace(2460310.5, 2460310.6, 4), format='jd', scale='utc')
-        t_per_order = bc.map_to_orders(w_em, t_fwm)
-        assert len(t_per_order) == NORDER
+        w, t = bc.compute_flux_weighted_midpoint_times(output='orders', **self._KWARGS)
+        assert w.shape == (NORDER,)
+        assert len(t) == NORDER
 
     def test_constant_wave_gives_constant_time(self, synthetic_kpf2):
         """SCI2_WAVE filled with 5000.0 → every order interpolates at 5000Å
-        and gets the first per-channel t_fwm."""
+        and gets the value from the first per-channel t_fwm."""
         bc = BarycentricCorrection(synthetic_kpf2)
-        w_em = np.array([5000.0, 5100.0, 5200.0, 5300.0])
-        jds = np.array([10.0, 20.0, 30.0, 40.0])
-        t_fwm = Time(2460310.5 + jds / 86400.0, format='jd', scale='utc')
-        t_per_order = bc.map_to_orders(w_em, t_fwm)
-        np.testing.assert_allclose(t_per_order.jd, t_fwm.jd[0])
+        _, t = bc.compute_flux_weighted_midpoint_times(output='orders', **self._KWARGS)
+        # All per-channel times are equal (uniform flux), so all per-order
+        # interpolated times equal that shared value.
+        assert np.std(t.jd) < 1e-12
 
     def test_orders_get_distinct_times_when_waves_vary(self, synthetic_kpf2):
-        """Set SCI2_WAVE so GREEN orders straddle 5000Å and RED orders 5300Å."""
+        """Front-weighted flux + GREEN orders at 5000Å vs RED at 5100Å:
+        GREEN orders should get an earlier midpoint than RED."""
+        synthetic_kpf2.set_data('GREEN_SCI2_WAVE',
+                                np.full((NORDER_GREEN, NCOL), 5000.0, dtype=np.float32))
+        synthetic_kpf2.set_data('RED_SCI2_WAVE',
+                                np.full((NORDER_RED, NCOL), 5100.0, dtype=np.float32))
+        # Front-weighted at 5000Å, back-weighted at 5100Å
+        data = {'Date-Beg': ['2024-01-01T00:00:00.000',
+                              '2024-01-01T00:02:00.000',
+                              '2024-01-01T00:04:00.000'],
+                'Date-End': ['2024-01-01T00:01:00.000',
+                              '2024-01-01T00:03:00.000',
+                              '2024-01-01T00:05:00.000'],
+                '5000': [1000.0, 1.0, 1.0],
+                '5100': [1.0, 1.0, 1000.0]}
+        synthetic_kpf2.set_data('EXPMETER_SCI', Table(data))
+
         bc = BarycentricCorrection(synthetic_kpf2)
-        green = np.full((NORDER_GREEN, NCOL), 5000.0, dtype=np.float32)
-        red   = np.full((NORDER_RED, NCOL),   5300.0, dtype=np.float32)
-        synthetic_kpf2.set_data('GREEN_SCI2_WAVE', green)
-        synthetic_kpf2.set_data('RED_SCI2_WAVE',   red)
+        _, t = bc.compute_flux_weighted_midpoint_times(output='orders', **self._KWARGS)
+        assert t.jd[:NORDER_GREEN].mean() < t.jd[NORDER_GREEN:].mean()
 
-        w_em = np.array([5000.0, 5100.0, 5200.0, 5300.0])
-        jds  = np.array([10.0, 20.0, 30.0, 40.0])
-        t_fwm = Time(2460310.5 + jds / 86400.0, format='jd', scale='utc')
-
-        t_per_order = bc.map_to_orders(w_em, t_fwm)
-        # GREEN orders → t_fwm[0] (=10s), RED orders → t_fwm[-1] (=40s)
-        np.testing.assert_allclose(t_per_order.jd[:NORDER_GREEN], t_fwm.jd[0])
-        np.testing.assert_allclose(t_per_order.jd[NORDER_GREEN:], t_fwm.jd[-1])
-
-    def test_empty_sci2_wave_raises(self, synthetic_kpf2, monkeypatch):
-        """If SCI2_WAVE is empty, map_to_orders should fail loudly."""
+    def test_empty_sci2_wave_raises(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
-        # Force the underlying TRACE3_WAVE to empty by replacing the alias target
         synthetic_kpf2.data['TRACE3_WAVE'] = np.array([])
-        w_em = np.array([5000.0, 5100.0])
-        t_fwm = Time([2460310.5, 2460310.6], format='jd', scale='utc')
         with pytest.raises(KeyError, match="SCI2_WAVE"):
-            bc.map_to_orders(w_em, t_fwm)
+            bc.compute_flux_weighted_midpoint_times(output='orders', **self._KWARGS)
+
+
+class TestFluxWeightedMidpointCcds:
+
+    _KWARGS = dict(interpolate=False, extrapolate=False, fix_expmeter_outliers=False)
+
+    def test_output_shape(self, synthetic_kpf2):
+        bc = BarycentricCorrection(synthetic_kpf2)
+        w, t = bc.compute_flux_weighted_midpoint_times(output='ccds', **self._KWARGS)
+        assert w.shape == (2,)
+        assert len(t) == 2
+
+    def test_ccd_values_equal_chip_means(self, synthetic_kpf2):
+        """The ccds output should equal the per-chip means of the orders output."""
+        bc = BarycentricCorrection(synthetic_kpf2)
+        _, t_orders = bc.compute_flux_weighted_midpoint_times(output='orders', **self._KWARGS)
+        w_ccds, t_ccds = bc.compute_flux_weighted_midpoint_times(output='ccds', **self._KWARGS)
+        np.testing.assert_allclose(
+            t_ccds.jd,
+            [t_orders.jd[:NORDER_GREEN].mean(), t_orders.jd[NORDER_GREEN:].mean()],
+        )
+
+
+class TestFluxWeightedMidpointFormat:
+
+    def test_invalid_format_raises(self, synthetic_kpf2):
+        bc = BarycentricCorrection(synthetic_kpf2)
+        with pytest.raises(ValueError, match="output"):
+            bc.compute_flux_weighted_midpoint_times(output='bogus')
+
+    def test_default_is_orders(self, synthetic_kpf2):
+        bc = BarycentricCorrection(synthetic_kpf2)
+        w, t = bc.compute_flux_weighted_midpoint_times(
+            interpolate=False, extrapolate=False, fix_expmeter_outliers=False,
+        )
+        assert w.shape == (NORDER,)
 
 
 # ---------------------------------------------------------------------------
