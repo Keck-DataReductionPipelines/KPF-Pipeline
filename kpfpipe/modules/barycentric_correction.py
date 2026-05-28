@@ -48,6 +48,13 @@ NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED   = DETECTOR['norder']['RED']
 NORDER       = NORDER_GREEN + NORDER_RED
 
+# WMKO site coordinates
+KECK_LOCATION = EarthLocation(
+    lat=19.8260 * u.deg,
+    lon=-155.474719 * u.deg,
+    height=4145.0 * u.m,
+)
+
 
 class BarycentricCorrection:
     """
@@ -465,10 +472,9 @@ class BarycentricCorrection:
         # GAIAID is preserved from L1 PRIMARY by KPF1.to_kpf2() into L2 INSTRUMENT_HEADER.
         gaia_id_raw = self.kpf2_obj.headers['INSTRUMENT_HEADER']['GAIAID']
         gaia_id = re.split(r'\s+', str(gaia_id_raw).strip())[-1]
-        location = EarthLocation.of_site('Keck Observatory')
         skycoord = self._query_gaia(gaia_id)
 
-        bc_vel_mps, bjd_tdb = self._compute_barycorr(skycoord, t_per_order, location)
+        bc_vel_mps, bjd_tdb = self._compute_barycorr(skycoord, t_per_order, KECK_LOCATION)
         bary_kms = bc_vel_mps / 1000.0
         bary_z = np.array([
             float(compute_doppler_shift(v * u.m / u.s)) for v in bc_vel_mps
