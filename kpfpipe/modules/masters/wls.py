@@ -64,7 +64,6 @@ class WLS(BaseMasterModule):
         self._load_linelist()
 
         self._results = None  # populated by make_master_l2()
-        self.ml2_obj       = None  # populated by make_master_l2(); used by save_master_l2()
         self._coeffs_stack = None  # populated by make_master_l2(); used by save_diagnostics()
         self._lines_stack  = None  # populated by make_master_l2(); used by save_diagnostics()
 
@@ -721,7 +720,7 @@ class WLS(BaseMasterModule):
         `compute_wls_from_stack`. The resulting wavelength arrays are
         written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
         which is returned and cached on `self.ml2_obj`; pass `master_path`
-        to also persist it to disk via `save_master_l2()`. Per-frame
+        to also persist it to disk via `save_master('L2', ...)`. Per-frame
         coefficient and line stacks are always stashed on
         `self._coeffs_stack` / `self._lines_stack`; pass `diagnostics_path`
         to also persist them to disk via `save_diagnostics()`.
@@ -744,8 +743,8 @@ class WLS(BaseMasterModule):
             Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
             Defaults to self.polyorder_f.
         master_path : str, optional
-            If provided, calls `self.save_master_l2(master_path)` at the end
-            to persist the master L2 to a FITS file at this path.
+            If provided, calls `self.save_master('L2', master_path)` at
+            the end to persist the master L2 to a FITS file at this path.
         diagnostics_path : str, optional
             If provided, calls `self.save_diagnostics(diagnostics_path)`
             at the end to persist the per-frame coefficient and line stacks
@@ -841,29 +840,12 @@ class WLS(BaseMasterModule):
         self.ml2_obj.receipt_add_entry('master_wls', 'PASS')
 
         if master_path is not None:
-            self.save_master_l2(master_path)
+            self.save_master('L2', master_path)
 
         if diagnostics_path is not None:
             self.save_diagnostics(diagnostics_path)
 
         return self.ml2_obj
-
-
-    def save_master_l2(self, path):
-        """
-        Write the master L2 to a FITS file at `path`.
-
-        Raises
-        ------
-        RuntimeError
-            If make_master_l2() has not been run yet, or raised before
-            constructing the master.
-        """
-        if self.ml2_obj is None:
-            raise RuntimeError("No master available; run make_master_l2() first")
-
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        self.ml2_obj.to_fits(path)
 
 
     def save_diagnostics(self, path):
