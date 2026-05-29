@@ -674,9 +674,12 @@ class TestPerform:
         assert bc_monkeypatched._results is None
         bc_monkeypatched.perform()
         results = bc_monkeypatched._results
-        assert set(results.keys()) == {'bjd_tdb', 'bary_kms', 'bary_z'}
-        for v in results.values():
-            assert len(v) == NORDER
+        assert set(results.keys()) == {
+            'bjd_tdb', 'bary_kms', 'bary_z', 'ccd_bjd', 'ccd_kms', 'ccd_z'}
+        for key in ('bjd_tdb', 'bary_kms', 'bary_z'):
+            assert len(results[key]) == NORDER
+        for key in ('ccd_bjd', 'ccd_kms', 'ccd_z'):
+            assert len(results[key]) == 2
 
     def test_real_outlier_filter_runs_end_to_end(self, synthetic_kpf2, monkeypatch):
         """Exercise fix_expmeter_outliers=True through perform() with a

@@ -9,13 +9,14 @@ Outputs (rvdata-standard ImageHDUs, shape (NORDER,)):
   - BARYCORR_KMS  barycentric velocity per spectral order [km/s]
   - BARYCORR_Z    barycentric redshift per spectral order
 
-Per-CCD scalar summaries (mean across that chip's orders) written to INSTRUMENT_HEADER:
+Per-CCD scalar summaries (at each chip's flux-weighted photon-midpoint time)
+written to INSTRUMENT_HEADER:
   - CCD1BJD       GREEN photon-weighted mid-time (BJD_TDB)
-  - CCD1BKMS      GREEN mean barycentric velocity [km/s]
-  - CCD1BZ        GREEN mean barycentric redshift
+  - CCD1BKMS      GREEN barycentric velocity [km/s]
+  - CCD1BZ        GREEN barycentric redshift
   - CCD2BJD       RED   photon-weighted mid-time (BJD_TDB)
-  - CCD2BKMS      RED   mean barycentric velocity [km/s]
-  - CCD2BZ        RED   mean barycentric redshift
+  - CCD2BKMS      RED   barycentric velocity [km/s]
+  - CCD2BZ        RED   barycentric redshift
 
 CCD1BJD/CCD2BJD match the legacy keyword names and semantics; the *BKMS/*BZ
 companions follow the same CCD{n} naming pattern.
@@ -59,31 +60,29 @@ class BarycentricCorrection:
     """
     Compute and store per-order barycentric correction on a KPF2.
 
-    Derives the flux-weighted midpoint per expmeter channel (EXPMETER_SCI),
-    interpolates onto each spectral order's central wavelength (SCI2_WAVE),
-    queries Gaia DR3 for the target's astrometry, and calls barycorrpy to
-    populate BJD_TDB / BARYCORR_KMS / BARYCORR_Z. WAVE arrays are not
-    modified.
+    Derives the flux-weighted midpoint time per expmeter channel (EXPMETER_SCI),
+    averages it over the channels within each spectral order's wavelength range
+    (SCI2_WAVE), queries Gaia DR3 for the target's astrometry, and calls
+    barycorrpy to populate BJD_TDB / BARYCORR_KMS / BARYCORR_Z. WAVE arrays are
+    not modified.
 
     Parameters
     ----------
     kpf2_obj : KPF2
         Extracted L2 frame. Must have EXPMETER_SCI populated and SCI2_WAVE
         populated by WavelengthCalibration. INSTRUMENT_HEADER (the preserved
-        L1 PRIMARY) must contain GAIAID and DATE-BEG/DATE-END.
+        L1 PRIMARY) must contain GAIAID, and DATE-BEG/DATE-END when extrapolating.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: chips, fibers.
+        Accepted for interface consistency with sibling modules; unused (all
+        behavior toggles live on perform()).
     """
 
     def __init__(self, kpf2_obj, config=None):
-        # `config` is accepted (None | dict | ConfigHandler) to match sibling
-        # modules and the recipe pattern, but BarycentricCorrection has no
-        # per-module knobs today; all behavior toggles live on perform().
         if config is not None and not isinstance(config, (dict, ConfigHandler)):
             raise TypeError("config must be None, dict, or ConfigHandler")
 
         self.kpf2_obj = kpf2_obj
-        self._results = None   # populated by perform()
+        self._results = None
         self._em_cache = None  # (toggle_key, w_em, t_em) from the last integration
         self._skycoord = None  # cached Gaia DR3 SkyCoord
 
@@ -214,11 +213,11 @@ class BarycentricCorrection:
         the gap duration. Returns (t_gap, f_gap), shapes (ngap,) and
         (ngap, nwave).
         """
-        dt_exp = (t_end - t_beg).jd[:, None]     # (ntime, 1)
-        dt_gap = (t_beg[1:] - t_end[:-1]).jd     # (ngap,)
+        dt_exp = (t_end - t_beg).jd[:, None]
+        dt_gap = (t_beg[1:] - t_end[:-1]).jd
 
-        rate = f / dt_exp                         # flux per day
-        rate_gap = 0.5 * (rate[1:] + rate[:-1])   # (ngap, nwave)
+        rate = f / dt_exp
+        rate_gap = 0.5 * (rate[1:] + rate[:-1])
 
         t_gap = Time(t_end[:-1].jd + dt_gap / 2, format='jd', scale='utc')
         f_gap = rate_gap * dt_gap[:, None]
@@ -397,20 +396,19 @@ class BarycentricCorrection:
         """
         Compute the flux-weighted midpoint observation time.
 
-        Always derives the per-expmeter-channel midpoint internally;
-        `output` controls how those values are projected. When called
-        from perform(), 'orders' (default) will be used.
+        The per-channel midpoint is always derived internally; `output`
+        controls how it is projected.
 
         Parameters
         ----------
         output : {'expmeter', 'orders', 'ccds'}
-            'expmeter' — raw per-channel result, shape (nwave,).
-            'orders'   — linearly interpolated onto each spectral order's
-                         central wavelength (median of SCI2_WAVE), shape (NORDER,).
-                         Orders outside the expmeter range clamp to the
-                         nearest endpoint (np.interp default).
-            'ccds'     — mean of the per-order values within each chip,
-                         shape (2,); [GREEN, RED].
+            'expmeter' — per-channel times, shape (nwave,).
+            'orders'   — per spectral order: mean of the per-channel times for
+                         the expmeter channels within the order's wavelength
+                         range, shape (NORDER,). Orders outside expmeter
+                         coverage fall back to the nearest channel.
+            'ccds'     — per chip: the SCI2-flux-weighted mean of the per-order
+                         values, shape (2,); [GREEN, RED].
         interpolate : bool, optional
             If True, estimate flux during gaps between expmeter readings.
         extrapolate : bool, optional
@@ -433,9 +431,8 @@ class BarycentricCorrection:
                 f"got {output!r}"
             )
 
-        # Cache the per-channel integration keyed on the toggles, so a second
-        # call with the same toggles (e.g. perform() asking for 'orders' then
-        # 'ccds') reuses it instead of re-running the expensive integration.
+        # Reuse the cached integration when the toggles match (perform() asks
+        # for 'orders' then 'ccds').
         key = (interpolate, extrapolate, fix_expmeter_outliers)
         if self._em_cache is None or self._em_cache[0] != key:
             w_em, t_em = self._compute_per_chanel_flux_weighted_midpoint_time(
@@ -448,7 +445,6 @@ class BarycentricCorrection:
         if output == 'expmeter':
             return w_em, t_em
 
-        # Project per-channel times onto each spectral order via SCI2_WAVE.
         wave = self.kpf2_obj.data['SCI2_WAVE']
         if wave is None or np.size(wave) == 0:
             raise KeyError(
@@ -457,8 +453,7 @@ class BarycentricCorrection:
         wave = np.asarray(wave)
         wave_min = wave.min(axis=1)
         wave_max = wave.max(axis=1)
-
-        w_orders = 0.5 * (wave_min + wave_max)  # (NORDER,)
+        w_orders = 0.5 * (wave_min + wave_max)
 
         t_em_jd = t_em.jd
         jd_per_order = np.empty(len(w_orders))
@@ -473,10 +468,8 @@ class BarycentricCorrection:
         if output == 'orders':
             return w_orders, t_orders
 
-        # 'ccds': flux-weighted mean within each chip's order slice, weighted by
-        # each order's SCI2 brightness (90th percentile, robust to cosmics) so
-        # faint/edge orders contribute less. NaN orders (failed extraction) get
-        # zero weight; uniform weights if SCI2_FLUX is absent.
+        # Weight each order by its SCI2 brightness (90th percentile, robust to
+        # cosmics); NaN/failed orders get zero weight, uniform if SCI2_FLUX absent.
         flux = self.kpf2_obj.data['SCI2_FLUX']
         if flux is None or np.size(flux) == 0:
             weights = np.ones(NORDER)
@@ -562,8 +555,6 @@ class BarycentricCorrection:
             per-CCD CCD{1,2}BJD/BKMS/BZ summaries written to
             INSTRUMENT_HEADER, and a 'barycentric_correction' receipt entry.
         """
-        # Per-order and per-CCD barycorr. The 'ccds' call reuses the cached
-        # integration and Gaia query from the 'orders' call.
         kwargs = dict(interpolate=interpolate, extrapolate=extrapolate,
                       fix_expmeter_outliers=fix_expmeter_outliers)
         bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(output='orders', **kwargs)
@@ -571,17 +562,12 @@ class BarycentricCorrection:
 
         inst = self.kpf2_obj.headers['INSTRUMENT_HEADER']
 
-        # Write rvdata standard extensions (per-order arrays). The WAVE
-        # arrays are left untouched; downstream RV computation consumes
-        # BARYCORR_Z directly.
+        # Per-order extensions; WAVE arrays are left untouched
         self.kpf2_obj.set_data('BJD_TDB',      np.asarray(bjd_tdb,  dtype=np.float64))
         self.kpf2_obj.set_data('BARYCORR_KMS', np.asarray(bary_kms, dtype=np.float64))
         self.kpf2_obj.set_data('BARYCORR_Z',   np.asarray(bary_z,   dtype=np.float64))
 
-        # Per-CCD scalar summaries on INSTRUMENT_HEADER (KPF-native keywords).
-        # CCD1 = GREEN, CCD2 = RED. INSTRUMENT_HEADER serializes as a no-data
-        # ImageHDU and only accepts scalar values (no (value, comment) tuples)
-        # — see KPF1.to_kpf2.
+        # Per-CCD instrument header keyword (CCD1=GREEN, CCD2=RED)
         inst['CCD1BJD']  = float(ccd_bjd[0])
         inst['CCD1BKMS'] = float(ccd_kms[0])
         inst['CCD1BZ']   = float(ccd_z[0])
@@ -595,11 +581,14 @@ class BarycentricCorrection:
             'bjd_tdb':  np.asarray(bjd_tdb),
             'bary_kms': np.asarray(bary_kms),
             'bary_z':   np.asarray(bary_z),
+            'ccd_bjd':  np.asarray(ccd_bjd),
+            'ccd_kms':  np.asarray(ccd_kms),
+            'ccd_z':    np.asarray(ccd_z),
         }
         return self.kpf2_obj
 
     def info(self):
-        """Print a summary of the module configuration and correction results."""
+        """Print a summary of the barycentric correction results."""
         print("BarycentricCorrection")
         print(f"  obs_id:  {self.kpf2_obj.obs_id}")
 
@@ -607,15 +596,15 @@ class BarycentricCorrection:
             print("  perform() has not been called")
             return
 
-        bjd = self._results['bjd_tdb']
-        kms = self._results['bary_kms']
-        z   = self._results['bary_z']
-        green = slice(0, NORDER_GREEN)
-        red   = slice(NORDER_GREEN, NORDER)
+        r = self._results
+        ccd_bjd, ccd_kms, ccd_z = r['ccd_bjd'], r['ccd_kms'], r['ccd_z']
 
+        # Per-CCD summaries (match CCD1*/CCD2* in INSTRUMENT_HEADER).
         print(f"\n  {'':<8s}{'BJD_TDB':>18s}{'BARYCORR_KMS':>18s}{'BARYCORR_Z':>18s}")
         print("  " + "-" * 62)
-        print(f"  {'GREEN':<8s}{np.mean(bjd[green]):>18.6f}{np.mean(kms[green]):>+18.4f}{np.mean(z[green]):>18.10f}")
-        print(f"  {'RED':<8s}{np.mean(bjd[red]):>18.6f}{np.mean(kms[red]):>+18.4f}{np.mean(z[red]):>18.10f}")
+        print(f"  {'GREEN':<8s}{ccd_bjd[0]:>18.6f}{ccd_kms[0]:>+18.4f}{ccd_z[0]:>18.10f}")
+        print(f"  {'RED':<8s}{ccd_bjd[1]:>18.6f}{ccd_kms[1]:>+18.4f}{ccd_z[1]:>18.10f}")
+
+        bjd, kms = r['bjd_tdb'], r['bary_kms']
         print(f"\n  per-order spread:   BJD {np.ptp(bjd) * 86400:.3f} sec,"
               f" BARY {np.ptp(kms) * 1000:.3f} m/s")
