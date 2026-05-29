@@ -125,6 +125,7 @@ class TestScienceRecipe:
             arr = np.asarray(l2.data[ext])
             assert arr.shape == (norder,), f"{ext} shape {arr.shape} != ({norder},)"
             assert np.all(np.isfinite(arr)), f"{ext} has non-finite values"
+            assert np.issubdtype(arr.dtype, np.float64), f"{ext} is {arr.dtype}, expected float64"
         # Sanity: barycentric Z should be very close to 1 (|v| << c).
         z = np.asarray(l2.data['BARYCORR_Z'])
         assert np.all(np.abs(z - 1.0) < 1e-3)
@@ -160,6 +161,9 @@ class TestScienceRecipe:
         assert l2.data['RED_SCI2_WAVE'].shape   == (NORDER_RED,   NCOL)
         assert np.any(l2.data['GREEN_SCI2_WAVE'] != 0)
         assert np.any(l2.data['RED_SCI2_WAVE']   != 0)
+        # Wavelength solutions are stored in float64.
+        assert np.issubdtype(l2.data['GREEN_SCI2_WAVE'].dtype, np.float64)
+        assert np.issubdtype(l2.data['RED_SCI2_WAVE'].dtype,   np.float64)
 
     def test_qlp_l0_pngs_exist(self, recipe_output):
         qlp_dir = Path(recipe_output).parents[2] / 'QLP' / '20240405' / OBS_ID / 'L0'

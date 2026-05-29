@@ -244,6 +244,10 @@ class WLS(BaseMasterModule):
         """
         linelist_array = self._load_linelist(linelist)
 
+        # Fit in float64 (wavelength solutions are float64).
+        flux1d = np.asarray(flux1d, dtype=np.float64)
+        wave1d = np.asarray(wave1d, dtype=np.float64)
+
         if len(flux1d) != len(wave1d):
             raise ValueError("length of flux and wave arrays are mismatched")
         ncol = len(flux1d)
