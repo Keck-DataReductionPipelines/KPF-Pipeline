@@ -306,6 +306,24 @@ class TestFluxWeightedMidpointExpmeter:
         with pytest.raises(ValueError, match="negative"):
             bc.compute_flux_weighted_midpoint_times(output='expmeter')
 
+    def test_zero_flux_channel_raises(self, synthetic_kpf2):
+        """A channel with zero flux across all readings → 0/0 midpoint; fail loudly."""
+        data = {'Date-Beg': ['2024-01-01T00:00:00.000',
+                             '2024-01-01T00:02:00.000',
+                             '2024-01-01T00:04:00.000'],
+                'Date-End': ['2024-01-01T00:01:00.000',
+                             '2024-01-01T00:03:00.000',
+                             '2024-01-01T00:05:00.000'],
+                '5000': [100.0, 100.0, 100.0],
+                '5100': [0.0, 0.0, 0.0]}
+        synthetic_kpf2.set_data('EXPMETER_SCI', Table(data))
+        bc = BarycentricCorrection(synthetic_kpf2)
+        with pytest.raises(ValueError, match="total flux"):
+            bc.compute_flux_weighted_midpoint_times(
+                output='expmeter',
+                interpolate=False, extrapolate=False, fix_expmeter_outliers=False,
+            )
+
     def test_interpolate_shifts_midpoint_with_front_weighted_flux(self, synthetic_kpf2):
         """Front-weighted flux: interpolation sees a bright sample at the
         first gap (~T+90s) that pulls the FWM strictly later."""
@@ -473,6 +491,15 @@ class TestFluxWeightedMidpointCcds:
         bc = BarycentricCorrection(synthetic_kpf2)
         _, t_ccds = bc.compute_flux_weighted_midpoint_times(output='ccds', **self._KWARGS)
         assert np.all(np.isfinite(t_ccds.jd))
+
+    def test_all_zero_weight_chip_raises(self, synthetic_kpf2):
+        """A whole chip with zero SCI2 flux → undefined weighted mean; fail loudly."""
+        flux = np.ones((NORDER, NCOL), dtype=float)
+        flux[NORDER_GREEN:] = 0.0   # all RED orders have zero flux
+        synthetic_kpf2.set_data('SCI2_FLUX', flux)
+        bc = BarycentricCorrection(synthetic_kpf2)
+        with pytest.raises(ValueError, match="weights are zero"):
+            bc.compute_flux_weighted_midpoint_times(output='ccds', **self._KWARGS)
 
     def test_green_and_red_resolve_distinct_values(self, synthetic_kpf2):
         """With GREEN orders at 5000Å and RED orders at 5100Å plus a chromatic

@@ -300,8 +300,12 @@ class BarycentricCorrection:
                 t = Time(np.concatenate([t.jd, [t_ext.jd]]), format='jd', scale='utc')
                 f = np.vstack([f, f_ext])
 
+        flux_sum = np.sum(f, axis=0)
+        if np.any(flux_sum <= 0):
+            raise ValueError("exposure meter channel with non-positive total flux; "
+                             "cannot compute flux-weighted midpoint")
         t_em = Time(
-            np.sum(t.jd[:, None] * f, axis=0) / np.sum(f, axis=0),
+            np.sum(t.jd[:, None] * f, axis=0) / flux_sum,
             format='jd', scale='utc',
         )
         return w_em, t_em
@@ -479,6 +483,9 @@ class BarycentricCorrection:
 
         green = slice(0, NORDER_GREEN)
         red   = slice(NORDER_GREEN, NORDER)
+        if weights[green].sum() <= 0 or weights[red].sum() <= 0:
+            raise ValueError("all SCI2 order weights are zero for a CCD; "
+                             "cannot compute per-CCD midpoint")
         w_ccds = np.array([
             np.average(w_orders[green], weights=weights[green]),
             np.average(w_orders[red],   weights=weights[red]),
