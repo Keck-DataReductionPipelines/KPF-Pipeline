@@ -421,15 +421,58 @@ class TestFluxWeightedMidpointCcds:
         assert w.shape == (2,)
         assert len(t) == 2
 
-    def test_ccd_values_equal_chip_means(self, synthetic_kpf2):
-        """The ccds output should equal the per-chip means of the orders output."""
+    def test_ccd_values_equal_chip_means_with_uniform_weights(self, synthetic_kpf2):
+        """With no SCI2_FLUX (uniform weights), the ccds output should equal the
+        plain per-chip means of the orders output."""
         bc = BarycentricCorrection(synthetic_kpf2)
         _, t_orders = bc.compute_flux_weighted_midpoint_times(output='orders', **self._KWARGS)
-        w_ccds, t_ccds = bc.compute_flux_weighted_midpoint_times(output='ccds', **self._KWARGS)
+        _, t_ccds   = bc.compute_flux_weighted_midpoint_times(output='ccds', **self._KWARGS)
         np.testing.assert_allclose(
             t_ccds.jd,
             [t_orders.jd[:NORDER_GREEN].mean(), t_orders.jd[NORDER_GREEN:].mean()],
         )
+
+    def test_flux_weighting_biases_ccd_time_toward_bright_orders(self, synthetic_kpf2):
+        """A bright bluest GREEN order pulls the chip summary toward its
+        (earlier) midpoint relative to the unweighted chip mean."""
+        green_waves = np.linspace(5000.0, 5300.0, NORDER_GREEN, dtype=np.float32)
+        synthetic_kpf2.set_data(
+            'GREEN_SCI2_WAVE', np.repeat(green_waves[:, None], NCOL, axis=1))
+        synthetic_kpf2.set_data(
+            'RED_SCI2_WAVE', np.full((NORDER_RED, NCOL), 5300.0, dtype=np.float32))
+        # Chromatic flux gradient: bluest channel early, reddest channel late.
+        data = {'Date-Beg': ['2024-01-01T00:00:00.000',
+                             '2024-01-01T00:02:00.000',
+                             '2024-01-01T00:04:00.000'],
+                'Date-End': ['2024-01-01T00:01:00.000',
+                             '2024-01-01T00:03:00.000',
+                             '2024-01-01T00:05:00.000'],
+                '5000': [1000.0, 1.0, 1.0],
+                '5300': [1.0, 1.0, 1000.0]}
+        synthetic_kpf2.set_data('EXPMETER_SCI', Table(data))
+
+        bc = BarycentricCorrection(synthetic_kpf2)
+        _, t_orders = bc.compute_flux_weighted_midpoint_times(output='orders', **self._KWARGS)
+        unweighted_green = t_orders.jd[:NORDER_GREEN].mean()
+
+        # Make the bluest (earliest) GREEN order dominate the flux weighting.
+        flux = np.ones((NORDER, NCOL), dtype=float)
+        flux[0] = 1000.0
+        synthetic_kpf2.set_data('SCI2_FLUX', flux)
+
+        _, t_ccds = bc.compute_flux_weighted_midpoint_times(output='ccds', **self._KWARGS)
+        assert t_ccds.jd[0] < unweighted_green
+
+    def test_nan_flux_order_gets_zero_weight(self, synthetic_kpf2):
+        """A failed-extraction order (all-NaN SCI2 flux) gets zero weight rather
+        than poisoning its chip summary, so the ccds time stays finite."""
+        flux = np.ones((NORDER, NCOL), dtype=float)
+        flux[NORDER_GREEN] = np.nan   # first RED order failed extraction
+        synthetic_kpf2.set_data('SCI2_FLUX', flux)
+
+        bc = BarycentricCorrection(synthetic_kpf2)
+        _, t_ccds = bc.compute_flux_weighted_midpoint_times(output='ccds', **self._KWARGS)
+        assert np.all(np.isfinite(t_ccds.jd))
 
     def test_green_and_red_resolve_distinct_values(self, synthetic_kpf2):
         """With GREEN orders at 5000Å and RED orders at 5100Å plus a chromatic
@@ -488,9 +531,11 @@ class TestQueryGaiaValidation:
         '12.34',                         # decimal
         '-12345',                        # negative
     ])
-    def test_non_numeric_raises(self, bad_id):
+    def test_non_numeric_raises(self, synthetic_kpf2, bad_id):
+        synthetic_kpf2.headers['INSTRUMENT_HEADER']['GAIAID'] = bad_id
+        bc = BarycentricCorrection(synthetic_kpf2)
         with pytest.raises(ValueError, match='all digits'):
-            BarycentricCorrection._query_gaia(bad_id)
+            bc._query_gaia()
 
 
 # ---------------------------------------------------------------------------
@@ -504,7 +549,7 @@ class TestPerform:
     @pytest.fixture
     def bc_monkeypatched(self, synthetic_kpf2, monkeypatch):
         """BarycentricCorrection with Gaia + barycorrpy stubbed."""
-        def mock_query(gaia_id):
+        def mock_query(self):
             return _fake_skycoord()
 
         def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
@@ -517,7 +562,7 @@ class TestPerform:
         def passthrough(f, kernel_size=5):
             return f.copy()
 
-        monkeypatch.setattr(BarycentricCorrection, '_query_gaia', staticmethod(mock_query))
+        monkeypatch.setattr(BarycentricCorrection, '_query_gaia', mock_query)
         monkeypatch.setattr(BarycentricCorrection, '_compute_barycorr', staticmethod(mock_compute))
         # Stub _fix_expmeter_outliers: the 3×4 uniform-flux fixture triggers a
         # degenerate triangulation inside scipy.griddata. Filter itself is
@@ -593,7 +638,7 @@ class TestPerform:
         synthetic_kpf2.headers['INSTRUMENT_HEADER']['TARGRADV'] = 81.87  # km/s
         captured = {}
 
-        def mock_query(gaia_id):
+        def mock_query(self):
             return _fake_skycoord()
 
         def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
@@ -604,7 +649,7 @@ class TestPerform:
         def passthrough(f, kernel_size=5):
             return f.copy()
 
-        monkeypatch.setattr(BarycentricCorrection, '_query_gaia', staticmethod(mock_query))
+        monkeypatch.setattr(BarycentricCorrection, '_query_gaia', mock_query)
         monkeypatch.setattr(BarycentricCorrection, '_compute_barycorr', staticmethod(mock_compute))
         monkeypatch.setattr(BarycentricCorrection, '_fix_expmeter_outliers', staticmethod(passthrough))
 
@@ -648,14 +693,14 @@ class TestPerform:
         synthetic_kpf2.set_data('EXPMETER_SCI', Table(data))
         synthetic_kpf2.headers['INSTRUMENT_HEADER']['DATE-END'] = '2024-01-01T01:00:00.000'
 
-        def mock_query(gaia_id):
+        def mock_query(self):
             return _fake_skycoord()
 
         def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
             n = len(np.atleast_1d(obs_times.jd))
             return np.full(n, 1000.0), np.atleast_1d(obs_times.jd)
 
-        monkeypatch.setattr(BarycentricCorrection, '_query_gaia', staticmethod(mock_query))
+        monkeypatch.setattr(BarycentricCorrection, '_query_gaia', mock_query)
         monkeypatch.setattr(BarycentricCorrection, '_compute_barycorr', staticmethod(mock_compute))
 
         # No monkeypatch on _fix_expmeter_outliers — real filter runs.
