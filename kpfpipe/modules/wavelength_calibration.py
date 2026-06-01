@@ -162,7 +162,10 @@ class WavelengthCalibration:
     def info(self):
         """Print a summary of the module configuration and association results."""
         print("WavelengthCalibration")
-        print(f"  obs_id:  {self.l2_obj.obs_id}")
+        obs_id = self.l2_obj.headers.get('PRIMARY', {}).get('ORIGID', 'unknown')
+        if isinstance(obs_id, tuple):
+            obs_id = obs_id[0]
+        print(f"  obs_id:  {obs_id}")
         print(f"  chips:   {self.chips}")
         print(f"  fibers:  {self.fibers}")
 

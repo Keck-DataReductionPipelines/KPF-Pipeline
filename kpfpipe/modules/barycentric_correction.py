@@ -597,7 +597,10 @@ class BarycentricCorrection:
     def info(self):
         """Print a summary of the barycentric correction results."""
         print("BarycentricCorrection")
-        print(f"  obs_id:  {self.kpf2_obj.obs_id}")
+        obs_id = self.kpf2_obj.headers.get('PRIMARY', {}).get('ORIGID', 'unknown')
+        if isinstance(obs_id, tuple):
+            obs_id = obs_id[0]
+        print(f"  obs_id:  {obs_id}")
 
         if self._results is None:
             print("  perform() has not been called")
