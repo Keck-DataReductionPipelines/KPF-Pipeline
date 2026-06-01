@@ -147,7 +147,7 @@ class WavelengthCalibration:
                         f"WLS master has no data for {key}; "
                         f"cannot apply wavelength solution"
                     )
-                self.l2_obj.set_data(key, src)
+                self.l2_obj.set_data(key, np.asarray(src, dtype=np.float64))
 
         self.l2_obj.receipt_add_entry('wavelength_calibration', 'PASS')
 

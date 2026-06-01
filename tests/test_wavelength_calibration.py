@@ -173,6 +173,16 @@ class TestPerform:
                 key = f'{chip}_{fiber}_WAVE'
                 np.testing.assert_array_equal(l2.data[key], master.data[key])
 
+    def test_wave_arrays_are_float64(self, master_wls_path):
+        # The fixture master is float32 (4-byte); the science WAVE must be float64.
+        master = KPFMasterL2.from_fits(master_wls_path)
+        assert master.data['GREEN_SCI2_WAVE'].dtype.itemsize == 4
+        l2 = _make_science_l2(wls_path=master_wls_path)
+        WavelengthCalibration(l2).perform()
+        for chip in _CHIPS:
+            for fiber in _FIBERS:
+                assert l2.data[f'{chip}_{fiber}_WAVE'].dtype == np.float64
+
     def test_explicit_path_bypasses_header(self, master_wls_path):
         # WLSFILE header is bogus, but wls_path override is valid → perform() succeeds.
         l2 = _make_science_l2(wls_path='/tmp/bogus.fits')

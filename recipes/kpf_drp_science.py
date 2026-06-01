@@ -8,7 +8,7 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
-#from kpfpipe.modules.barycentric_correction import BarycentricCorrection
+from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 
 from kpfpipe.quality_control.diagnostics import DiagL1, DiagL2
 from kpfpipe.quality_control.qc_binaries import QCL1, QCL2
@@ -68,9 +68,9 @@ def main(config, args):
     DiagL2(l2).run()
     QCL2(l2).run()
 
-    # calculate barycentric correction
-    #barycentric_correction = BarycentricCorrection(l2, config)
-    #l2 = barycentric_correction.perform()
+    # apply per-order barycentric correction (writes BJD_TDB, BARYCORR_KMS, BARYCORR_Z)
+    barycentric_correction = BarycentricCorrection(l2, config)
+    l2 = barycentric_correction.perform()
 
     # write L2 data product to disk
     out_path = build_filepath(obs_id, 'L2', data_root=data_root_out)

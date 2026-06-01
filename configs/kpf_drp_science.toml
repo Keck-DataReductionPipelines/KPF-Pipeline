@@ -22,3 +22,5 @@ flat = false
 extraction_method = "box"
 
 [MODULE_WAVELENGTH_CALIBRATION]
+
+[MODULE_BARYCENTRIC_CORRECTION]

@@ -579,6 +579,20 @@ class TestFitLinePositions:
         for key in ['wav', 'pix', 'std', 'amp', 'rms', 'bad']:
             assert len(result[key]) == 0
 
+    def test_fit_returns_float64_from_float32_inputs(self):
+        """float32 flux/wave inputs must not drag the line fit into float32."""
+        wls = WLS(FILE_LIST)
+        ncol = 100
+        x = np.arange(ncol)
+        wave = np.linspace(5000.0, 5100.0, ncol).astype(np.float32)
+        flux = (1.0 + 50.0 * np.exp(-0.5 * ((x - 50) / 2.0) ** 2)).astype(np.float32)
+        wls._linelist_array = np.array([wave[50]], dtype=float)
+
+        result = wls.fit_line_positions_1d(flux, wave, lineprofile='gaussian')
+        assert len(result['wav']) == 1
+        for key in ['wav', 'pix', 'std', 'amp', 'rms']:
+            assert result[key].dtype == np.float64
+
     def test_all_nan_fiber_emits_fiber_level_warning(self):
         """A fiber whose every order is NaN should emit a fiber-level warning."""
         wls = WLS(FILE_LIST)
