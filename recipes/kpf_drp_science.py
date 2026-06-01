@@ -9,6 +9,7 @@ from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
+from kpfpipe.modules.radial_velocity import RadialVelocity
 
 from kpfpipe.quality_control.diagnostics import DiagL1, DiagL2
 from kpfpipe.quality_control.qc_binaries import QCL1, QCL2
@@ -73,8 +74,17 @@ def main(config, args):
     l2 = barycentric_correction.perform()
 
     # write L2 data product to disk
-    out_path = build_filepath(obs_id, 'L2', data_root=data_root_out)
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    l2.to_fits(out_path)
+    l2_out_path = build_filepath(obs_id, 'L2', data_root=data_root_out)
+    os.makedirs(os.path.dirname(l2_out_path), exist_ok=True)
+    l2.to_fits(l2_out_path)
+
+    # compute radial velocity (RV) from cross-correlation function (CCF)
+    radial_velocity = RadialVelocity(l2, config)
+    l4 = radial_velocity.perform()
+
+    # write L4 data product to disk
+    l4_out_path = build_filepath(obs_id, 'L4', data_root=data_root_out)
+    os.makedirs(os.path.dirname(l4_out_path), exist_ok=True)
+    l4.to_fits(l4_out_path)
 
     print("\n\n=== exiting kpf_drp_science pipeline ===\n\n")
