@@ -61,7 +61,7 @@ def main(config, args):
     spectral_extraction = SpectralExtraction(l1, config)
     l2 = spectral_extraction.perform()
 
-    # apply precomputed wavelength solution (per-fiber WAVE arrays from WLS master)
+    # attach precomputed wavelength solution (per-fiber WAVE arrays from WLS master)
     wavelength_calibration = WavelengthCalibration(l2, config)
     l2 = wavelength_calibration.perform()
 
