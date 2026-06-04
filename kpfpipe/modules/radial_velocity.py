@@ -68,10 +68,20 @@ class RadialVelocity:
 
     def _build_ccf_line_mask(self):
         """
-        Build the CCF line mask for the TARGTEFF-selected stellar mask: vacuum
-        line centers, weights, and per-line top-hat edges (center ± center *
-        mask_width_kms / c). Cached after the first call. Raises ValueError if
-        TARGTEFF is unavailable.
+        Build (and cache) the CCF line mask for the TARGTEFF-selected stellar
+        mask: vacuum line centers, weights, and per-line top-hat edges
+        (center ± center * mask_width_kms / c).
+
+        Returns
+        -------
+        dict
+            Mask with keys 'center', 'weight', 'start', 'end', each a 1D ndarray
+            of length n_line; wavelengths are vacuum [Å].
+
+        Raises
+        ------
+        ValueError
+            If TARGTEFF is not available in INSTRUMENT_HEADER.
         """
         if self._line_mask is not None:
             return self._line_mask
@@ -106,9 +116,19 @@ class RadialVelocity:
 
     def _build_ccf_velocity_grid(self):
         """
-        Evenly-spaced CCF velocity grid [km/s], centered on the target's
-        systemic RV (TARGRADV). Cached after the first call. Raises ValueError
-        if TARGRADV is unavailable.
+        Build (and cache) the evenly-spaced CCF velocity grid, centered on the
+        target's systemic RV (TARGRADV).
+
+        Returns
+        -------
+        ndarray
+            Velocity steps [km/s], spanning ccf_step_range * ccf_step_size about
+            TARGRADV.
+
+        Raises
+        ------
+        ValueError
+            If TARGRADV is not available in INSTRUMENT_HEADER.
         """
         if self._velocity_grid is not None:
             return self._velocity_grid
@@ -132,9 +152,27 @@ class RadialVelocity:
     @staticmethod
     def _compute_ccf(wave, flux, mask, velocity_grid, z):
         """
-        Cross-correlate one order's 1D spectrum against the mask over the
-        velocity grid, folding in the order's barycentric redshift z. Returns
-        the CCF (one value per velocity step).
+        Cross-correlate one order's spectrum against the mask over the velocity
+        grid, folding in the order's barycentric redshift z.
+
+        Parameters
+        ----------
+        wave : ndarray
+            1D wavelength solution for the order [Å].
+        flux : ndarray
+            1D extracted flux for the order.
+        mask : dict
+            Line mask (keys 'start', 'end', 'weight') from _build_ccf_line_mask.
+        velocity_grid : ndarray
+            CCF velocity steps [km/s].
+        z : float
+            Barycentric redshift for the order.
+
+        Returns
+        -------
+        ndarray
+            CCF value at each velocity step (all zeros if the order is unusable
+            or no mask lines fall fully within it).
         """
         wave = np.asarray(wave, dtype=np.float64)
         flux = np.asarray(flux, dtype=np.float64)
@@ -186,15 +224,39 @@ class RadialVelocity:
     @staticmethod
     def _compute_rv(vel, ccf, wave, ccf_window_kms=50.0, ccf_window_pts=9):
         """
-        Two-pass Gaussian fit to a CCF dip. Returns the radial velocity [km/s]
-        (the fitted line center) and its photon-limited uncertainty [km/s]
-        (Bouchy et al. 2001), or (NaN, NaN) if the fit fails.
+        Two-pass Gaussian fit to a CCF dip, with a photon-limited error.
 
         The first pass locates the CCF minimum and fits a +/-ccf_window_kms/2
         velocity window around it. The second pass refits the ccf_window_pts grid
         points centered on the first-pass RV (snapped to the grid); those same
-        points set the error estimate. ccf_window_pts must be odd so the window
-        is symmetric about the peak.
+        points set the error estimate (Bouchy et al. 2001).
+
+        Parameters
+        ----------
+        vel : ndarray
+            CCF velocity steps [km/s].
+        ccf : ndarray
+            CCF value at each velocity step.
+        wave : ndarray
+            1D wavelength solution for the order [Å]; sets the per-pixel velocity
+            scale used in the error estimate.
+        ccf_window_kms : float, optional
+            Full width [km/s] of the first-pass velocity window. Default 50.
+        ccf_window_pts : int, optional
+            Number of grid points in the second-pass fit/error window; must be
+            odd so the window is symmetric about the peak. Default 9.
+
+        Returns
+        -------
+        rv : float
+            Fitted radial velocity [km/s], or NaN if the fit fails.
+        rv_err : float
+            Photon-limited RV uncertainty [km/s], or NaN if unavailable.
+
+        Raises
+        ------
+        ValueError
+            If ccf_window_pts is even.
         """
         if ccf_window_pts % 2 == 0:
             raise ValueError("ccf_window_pts must be odd for a symmetric fitting window")
@@ -255,8 +317,25 @@ class RadialVelocity:
     def compute_ccf(self, chip, fibers=None, **kwargs):
         """
         Cross-correlate every order of one chip against the line mask for the
-        requested fibers. Returns {fiber: ccf}, where ccf has shape
-        (norder_chip, n_velocity_step).
+        requested fibers.
+
+        Parameters
+        ----------
+        chip : str
+            Chip identifier, i.e. 'GREEN' or 'RED'.
+        fibers : list of str, optional
+            Fiber identifiers, e.g. ['SCI1', 'SCI2']. Defaults to the configured
+            science fibers.
+
+        Returns
+        -------
+        dict
+            {fiber: ccf}, where ccf has shape (norder_chip, n_velocity_step).
+
+        Raises
+        ------
+        ValueError
+            If BARYCORR_Z is not populated on the L2.
         """
         if fibers is None:
             fibers = [f for f in self.fibers if f.startswith('SCI')]
@@ -288,9 +367,25 @@ class RadialVelocity:
     def compute_rv(self, chip, fibers=None, **kwargs):
         """
         Compute per-order CCFs and radial velocities for one chip and the
-        requested fibers. Returns {fiber: {'ccf', 'rv', 'rv_err'}}, with rv and
-        rv_err in km/s. Extra keyword args (e.g. ccf_window_kms, ccf_window_pts)
-        are forwarded to the per-order fit.
+        requested fibers.
+
+        Parameters
+        ----------
+        chip : str
+            Chip identifier, i.e. 'GREEN' or 'RED'.
+        fibers : list of str, optional
+            Fiber identifiers, e.g. ['SCI1', 'SCI2']. Defaults to the configured
+            science fibers.
+        **kwargs
+            Forwarded to the per-order fit (_compute_rv), e.g. ccf_window_kms,
+            ccf_window_pts.
+
+        Returns
+        -------
+        dict
+            {fiber: {'ccf', 'rv', 'rv_err'}}, where 'ccf' has shape
+            (norder_chip, n_velocity_step) and 'rv'/'rv_err' are length
+            norder_chip [km/s].
         """
         if fibers is None:
             fibers = [f for f in self.fibers if f.startswith('SCI')]
@@ -320,9 +415,25 @@ class RadialVelocity:
     def perform(self, chips=None, fibers=None, **kwargs):
         """
         Compute per-order CCFs and radial velocities for each requested chip and
-        science fiber. Returns a dict with the velocity grid and, per chip and
-        fiber, the CCF cube (norder, n_step), per-order RVs [km/s], and per-order
-        RV errors [km/s].
+        fiber.
+
+        Parameters
+        ----------
+        chips : list of str, optional
+            Chip identifiers, i.e. 'GREEN' or 'RED'. Defaults to the configured
+            chips.
+        fibers : list of str, optional
+            Fiber identifiers, e.g. ['SCI1', 'SCI2']. Defaults to the configured
+            science fibers.
+        **kwargs
+            Forwarded to the per-order fit (_compute_rv), e.g. ccf_window_kms,
+            ccf_window_pts.
+
+        Returns
+        -------
+        dict
+            {'velocity_grid': ndarray [km/s],
+             'orderlets': {chip: {fiber: {'ccf', 'rv', 'rv_err'}}}}.
         """
         if chips is None:
             chips = self.chips
