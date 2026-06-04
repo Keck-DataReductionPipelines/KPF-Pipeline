@@ -57,7 +57,9 @@ class RadialVelocity:
         for k, v in DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._results = None  # populated by perform()
+        self._line_mask = None     # cached by _build_ccf_line_mask()
+        self._velocity_grid = None  # cached by _build_ccf_velocity_grid()
+        self._results = None        # populated by perform()
 
     # ------------------------------------------------------------------
     # Private helpers — CCF inputs
@@ -80,12 +82,16 @@ class RadialVelocity:
                 wave_vac[modify] = wave_new * fact
         return wave_vac
 
-    def _build_line_mask(self):
+    def _build_ccf_line_mask(self):
         """
         Build the CCF line mask for the TARGTEFF-selected stellar mask: vacuum
         line centers, weights, and per-line top-hat edges (center ± center *
-        mask_width_kms / c). Raises ValueError if TARGTEFF is unavailable.
+        mask_width_kms / c). Cached after the first call. Raises ValueError if
+        TARGTEFF is unavailable.
         """
+        if self._line_mask is not None:
+            return self._line_mask
+
         inst = self.l2_obj.headers.get('INSTRUMENT_HEADER', {})
         try:
             teff = float(inst.get('TARGTEFF'))
@@ -105,18 +111,23 @@ class RadialVelocity:
         centers, weights = np.loadtxt(mask_path, unpack=True)
         centers = self._air_to_vac(centers)
         half_width = centers * (self.mask_width_kms / SPEED_OF_LIGHT_KMS)
-        return {
+        self._line_mask = {
             'center': centers,
             'weight': weights,
             'start': centers - half_width,
             'end': centers + half_width,
         }
+        return self._line_mask
 
     def _build_ccf_velocity_grid(self):
         """
         Evenly-spaced CCF velocity grid [km/s], centered on the target's
-        systemic RV (TARGRADV). Raises ValueError if TARGRADV is unavailable.
+        systemic RV (TARGRADV). Cached after the first call. Raises ValueError
+        if TARGRADV is unavailable.
         """
+        if self._velocity_grid is not None:
+            return self._velocity_grid
+
         inst = self.l2_obj.headers.get('INSTRUMENT_HEADER', {})
         try:
             star_rv = float(inst.get('TARGRADV'))
@@ -129,7 +140,8 @@ class RadialVelocity:
             )
 
         lo, hi = self.ccf_step_range
-        return np.arange(lo, hi + 1) * self.ccf_step_size + star_rv
+        self._velocity_grid = np.arange(lo, hi + 1) * self.ccf_step_size + star_rv
+        return self._velocity_grid
 
     # ------------------------------------------------------------------
     # Private helpers — CCF & RV math
@@ -275,7 +287,7 @@ class RadialVelocity:
                 "the L2; run BarycentricCorrection first"
             )
 
-        mask = self._build_line_mask()
+        mask = self._build_ccf_line_mask()
         velocity_grid = self._build_ccf_velocity_grid()
         z = np.asarray(self.l2_obj.data[f'{chip}_BARYCORR_Z'], dtype=np.float64)
 
