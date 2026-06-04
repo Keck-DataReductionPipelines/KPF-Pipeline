@@ -8,7 +8,7 @@ from numpy.polynomial import polynomial
 
 from kpfpipe import REPO_ROOT, DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.qc import validate_array
+from kpfpipe.utils.validation import validate_array
 
 DEFAULTS.update({'extraction_method': 'box'})
 

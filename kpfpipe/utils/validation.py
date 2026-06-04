@@ -1,6 +1,13 @@
 import numpy as np
 import warnings
 
+
+def strictly_increasing(x):
+    """Return True if the 1D array is strictly increasing."""
+    x = np.asarray(x)
+    return bool(np.all(x[:-1] < x[1:]))
+
+
 def validate_array(arr, context="array", response="warn", check_finite=True, check_positive=True):
     """
     Validate that an array contains finite and/or positive values.

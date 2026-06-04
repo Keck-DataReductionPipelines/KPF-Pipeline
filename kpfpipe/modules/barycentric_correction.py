@@ -43,6 +43,7 @@ from scipy.special import erfcinv
 from kpfpipe import DETECTOR
 from kpfpipe.utils.astro import compute_doppler_shift
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.validation import strictly_increasing
 
 NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED   = DETECTOR['norder']['RED']
@@ -117,9 +118,9 @@ class BarycentricCorrection:
             t_beg = Time(np.array(expmeter['Date-Beg']).astype(str), format='isot', scale='utc')
             t_end = Time(np.array(expmeter['Date-End']).astype(str), format='isot', scale='utc')
 
-        if not self._strictly_increasing(t_beg):
+        if not strictly_increasing(t_beg.jd):
             raise ValueError("EXPMETER_SCI Date-Beg timestamps are not strictly increasing")
-        if not self._strictly_increasing(t_end):
+        if not strictly_increasing(t_end.jd):
             raise ValueError("EXPMETER_SCI Date-End timestamps are not strictly increasing")
 
         t_mid = Time((t_beg.jd + t_end.jd) / 2, format='jd', scale='utc')
@@ -159,11 +160,6 @@ class BarycentricCorrection:
         f = f * 1.48424 / dispersion  # 1.48424 e-/ADU: exposure meter detector gain
 
         return w, f
-
-    @staticmethod
-    def _strictly_increasing(t):
-        """Return True if Time array is strictly increasing."""
-        return bool(np.all(t[:-1].jd < t[1:].jd))
 
     @staticmethod
     def _fix_expmeter_outliers(f, kernel_size=5):

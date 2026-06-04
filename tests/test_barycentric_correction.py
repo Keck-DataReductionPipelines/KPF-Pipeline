@@ -21,6 +21,7 @@ from kpfpipe.modules.barycentric_correction import (
     NORDER_RED,
     NORDER,
 )
+from kpfpipe.utils.validation import strictly_increasing
 
 NCOL = 50   # reduced column count for speed
 
@@ -100,16 +101,16 @@ class TestStrictlyIncreasing:
         return Time(jd0 + np.array(seconds) / 86400.0, format='jd', scale='utc')
 
     def test_increasing(self):
-        assert BarycentricCorrection._strictly_increasing(self._make_time([0, 1, 2, 3])) is True
+        assert strictly_increasing(self._make_time([0, 1, 2, 3]).jd) is True
 
     def test_constant_fails(self):
-        assert BarycentricCorrection._strictly_increasing(self._make_time([0, 1, 1, 2])) is False
+        assert strictly_increasing(self._make_time([0, 1, 1, 2]).jd) is False
 
     def test_decreasing_fails(self):
-        assert BarycentricCorrection._strictly_increasing(self._make_time([3, 2, 1, 0])) is False
+        assert strictly_increasing(self._make_time([3, 2, 1, 0]).jd) is False
 
     def test_single_element(self):
-        assert BarycentricCorrection._strictly_increasing(self._make_time([0])) is True
+        assert strictly_increasing(self._make_time([0]).jd) is True
 
 
 class TestInterpolate:

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe import REPO_ROOT
-from kpfpipe.quality_control.qc_binaries.base import QC
+from kpfpipe.quality_control.qc_booleans.base import QC
 
 _JUNK_CSV = REPO_ROOT / "reference" / "junk_observations.csv"
 

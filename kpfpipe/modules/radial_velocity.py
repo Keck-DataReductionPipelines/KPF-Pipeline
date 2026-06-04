@@ -10,14 +10,16 @@ holding the CCFs and RVs.
 ESPRESSO line masks give in-air wavelengths
 Calibration line masks give vacuum wavelengths
 """
+from astropy.constants import c
 import numpy as np
 import pandas as pd
 
 from kpfpipe import REPO_ROOT, DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
+from kpfpipe.utils.validation import strictly_increasing
 
-LIGHT_SPEED = 299792.458  # speed of light, km/s
+SPEED_OF_LIGHT = np.float64(c.value)
 
 DEFAULTS.update({
     'mask_width_kms': 0.5,
@@ -67,7 +69,7 @@ class RadialVelocity:
         Convert air wavelengths [Å] to vacuum via the Edlén 1953 formula
         (two iterations, only wavelengths > 2000 Å are modified).
         """
-        wave_vac = np.asarray(wave_air, dtype=float).copy()
+        wave_vac = np.asarray(wave_air, dtype=np.float64).copy()
         modify = wave_vac > 2000.0
         if np.any(modify):
             wave_new = wave_vac[modify]
@@ -102,7 +104,7 @@ class RadialVelocity:
 
         centers, weights = np.loadtxt(mask_path, unpack=True)
         centers = self._air_to_vac(centers)
-        half_width = centers * (self.mask_width_kms / LIGHT_SPEED)
+        half_width = centers * (self.mask_width_kms / SPEED_OF_LIGHT)
         return {
             'center': centers,
             'weight': weights,
@@ -184,17 +186,17 @@ class RadialVelocity:
         """
         wave = np.asarray(wave, dtype=float)
         flux = np.asarray(flux, dtype=float)
-        if wave[0] > wave[-1]:          # ensure ascending wavelength
+        if wave[0] > wave[-1]:          # reversed order -> flip to ascending
             wave, flux = wave[::-1], flux[::-1]
 
         ccf = np.zeros(velocity_grid.size)
         n_pix = wave.size
-        if n_pix < 3 or not np.all(np.isfinite(wave)):
+        if n_pix < 3 or not strictly_increasing(wave):
             return ccf
 
         edges = self._pixel_edges(wave)
         pix_width = np.diff(edges)
-        shift = (1.0 + velocity_grid / LIGHT_SPEED) / (1.0 + z)  # mask shift per step
+        shift = (1.0 + velocity_grid / SPEED_OF_LIGHT) / (1.0 + z)  # mask shift per step
 
         # Keep only mask lines that stay fully inside the order across the whole
         # scan, so the same lines contribute at every step (flat CCF baseline).
@@ -268,8 +270,8 @@ class RadialVelocity:
 
         results = {'velocity_grid': velocity_grid, 'orderlets': {}}
         for fiber in (f for f in self.fibers if f.startswith('SCI')):
-            flux = np.asarray(self.l2_obj.data[f'{fiber}_FLUX'], dtype=float)
-            wave = np.asarray(self.l2_obj.data[f'{fiber}_WAVE'], dtype=float)
+            flux = np.asarray(self.l2_obj.data[f'{fiber}_FLUX'], dtype=np.float32)
+            wave = np.asarray(self.l2_obj.data[f'{fiber}_WAVE'], dtype=np.float64)
             n_order = flux.shape[0]
 
             ccf = np.zeros((n_order, velocity_grid.size))
@@ -283,7 +285,7 @@ class RadialVelocity:
                 if not np.any(ccf[o]):
                     continue
                 rv[o] = self.compute_rv(velocity_grid, ccf[o])
-                vel_span_pixel = LIGHT_SPEED * np.median(np.abs(np.diff(w))) / np.median(w)
+                vel_span_pixel = SPEED_OF_LIGHT * np.median(np.abs(np.diff(w))) / np.median(w)
                 rv_err[o] = self._ccf_rv_error(velocity_grid, ccf[o], rv[o], vel_span_pixel)
 
             results['orderlets'][fiber] = {'ccf': ccf, 'rv': rv, 'rv_err': rv_err}

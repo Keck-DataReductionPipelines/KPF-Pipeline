@@ -99,7 +99,7 @@ The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (all OrderedDi
 Three read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write to PRIMARY headers (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`.
 
 - **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them to PRIMARY headers. Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
-- **QC** (`kpfpipe/quality_control/qc_binaries/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes 0/1 keywords plus `ISGOOD` aggregate.
+- **QC** (`kpfpipe/quality_control/qc_booleans/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes 0/1 keywords plus `ISGOOD` aggregate.
 - **Quicklook** (`kpfpipe/quality_control/quicklook/`) — reads products and renders matplotlib plots. Pulls any annotation values from existing headers.
 
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key`) and no shared state.
