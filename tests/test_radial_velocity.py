@@ -126,39 +126,39 @@ class TestComputeRV:
 
     def test_recovers_injected_rv(self):
         vel, ccf, wave = self._ccf(v0=2.5)
-        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave)
+        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 11)
         assert rv == pytest.approx(2.5, abs=0.05)
 
     def test_error_finite_and_positive(self):
         vel, ccf, wave = self._ccf(v0=0.0)
-        _, rv_err = RadialVelocity._compute_rv(vel, ccf, wave)
+        _, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 11)
         assert np.isfinite(rv_err) and rv_err > 0
 
     def test_even_window_raises(self):
         vel, ccf, wave = self._ccf()
         with pytest.raises(ValueError, match="odd"):
-            RadialVelocity._compute_rv(vel, ccf, wave, ccf_window_pts=8)
+            RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 8)
 
     def test_flat_ccf_returns_nan(self):
         vel = np.arange(-402, 403) * 0.25
         ccf = np.full_like(vel, 100.0)
         wave = np.linspace(5000.0, 5050.0, 4000)
-        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave)
+        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 11)
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_window_off_grid_returns_rv_with_nan_error(self):
         vel = np.arange(-402, 403) * 0.25
-        v0 = vel[3]   # dip within ccf_window_pts//2 of the low edge
+        v0 = vel[3]   # dip within rv_window_pts//2 of the low edge
         ccf = 100.0 - 30.0 * np.exp(-0.5 * ((vel - v0) / 4.0) ** 2)
         wave = np.linspace(5000.0, 5050.0, 4000)
-        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave)
+        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 11)
         assert np.isfinite(rv) and np.isnan(rv_err)
 
     def test_window_size_controls_points(self):
         # A wider points window still recovers the same center.
         vel, ccf, wave = self._ccf(v0=1.0)
-        rv9, _ = RadialVelocity._compute_rv(vel, ccf, wave, ccf_window_pts=9)
-        rv21, _ = RadialVelocity._compute_rv(vel, ccf, wave, ccf_window_pts=21)
+        rv9, _ = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 9)
+        rv21, _ = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 21)
         assert rv9 == pytest.approx(1.0, abs=0.05)
         assert rv21 == pytest.approx(1.0, abs=0.05)
 
@@ -268,88 +268,92 @@ def rv_kpf2():
 def rv_module(rv_kpf2, monkeypatch):
     """RadialVelocity on a narrow grid with the line mask stubbed to _MASK_CENTERS."""
     mask = _make_mask(_MASK_CENTERS)
-    monkeypatch.setattr(RadialVelocity, '_build_ccf_line_mask', lambda self: mask)
+    monkeypatch.setattr(RadialVelocity, '_build_ccf_line_mask',
+                        lambda self, mask_width_kms=None: mask)
     return RadialVelocity(rv_kpf2, config={'ccf_step_range': _STEP_RANGE})
 
 
 class TestComputeCCFPublic:
 
-    def test_returns_fiber_dict_with_shapes(self, rv_module):
-        ccf = rv_module.compute_ccf('GREEN', ['SCI2'])
-        assert set(ccf) == {'SCI2'}
-        assert ccf['SCI2'].shape == (NORDER_GREEN, _NVEL)
+    def test_returns_array_with_shape(self, rv_module):
+        ccf = rv_module.compute_ccf('GREEN', 'SCI2')
+        assert ccf.shape == (NORDER_GREEN, _NVEL)
 
     def test_red_chip_shape(self, rv_module):
-        ccf = rv_module.compute_ccf('RED', ['SCI1'])
-        assert ccf['SCI1'].shape == (NORDER_RED, _NVEL)
+        ccf = rv_module.compute_ccf('RED', 'SCI1')
+        assert ccf.shape == (NORDER_RED, _NVEL)
 
     def test_dip_at_injected_velocity(self, rv_module):
-        ccf = rv_module.compute_ccf('GREEN', ['SCI2'])['SCI2']
+        ccf = rv_module.compute_ccf('GREEN', 'SCI2')
         vel = rv_module._build_ccf_velocity_grid()
         assert vel[np.argmin(ccf[0])] == pytest.approx(_V_INJECT, abs=0.3)
 
-    def test_defaults_to_science_fibers(self, rv_module):
-        assert set(rv_module.compute_ccf('GREEN')) == {'SCI1', 'SCI2', 'SCI3'}
+    def test_caches_ccf(self, rv_module):
+        ccf = rv_module.compute_ccf('GREEN', 'SCI2')
+        assert rv_module._ccf['GREEN_SCI2'] is ccf
 
     def test_lowercase_chip_accepted(self, rv_module):
-        ccf = rv_module.compute_ccf('green', ['sci2'])
-        assert ccf['SCI2'].shape == (NORDER_GREEN, _NVEL)
+        ccf = rv_module.compute_ccf('green', 'sci2')
+        assert ccf.shape == (NORDER_GREEN, _NVEL)
 
     def test_missing_barycorr_z_raises(self, rv_kpf2, monkeypatch):
         monkeypatch.setattr(RadialVelocity, '_build_ccf_line_mask',
-                            lambda self: _make_mask(_MASK_CENTERS))
+                            lambda self, mask_width_kms=None: _make_mask(_MASK_CENTERS))
         rv_kpf2.set_data('BARYCORR_Z', np.array([]))
         rv = RadialVelocity(rv_kpf2, config={'ccf_step_range': _STEP_RANGE})
         with pytest.raises(ValueError, match="BARYCORR_Z"):
-            rv.compute_ccf('GREEN', ['SCI2'])
+            rv.compute_ccf('GREEN', 'SCI2')
 
 
 class TestComputeRVPublic:
 
-    def test_returns_nested_dict(self, rv_module):
-        res = rv_module.compute_rv('GREEN', ['SCI2'])
-        assert set(res) == {'SCI2'}
-        assert set(res['SCI2']) == {'ccf', 'rv', 'rv_err'}
-        assert res['SCI2']['rv'].shape == (NORDER_GREEN,)
-        assert res['SCI2']['ccf'].shape == (NORDER_GREEN, _NVEL)
+    def test_returns_rv_dict(self, rv_module):
+        rv_module.compute_ccf('GREEN', 'SCI2')
+        res = rv_module.compute_rv('GREEN', 'SCI2')
+        assert set(res) == {'rv', 'rv_err'}
+        assert res['rv'].shape == (NORDER_GREEN,)
+        assert res['rv_err'].shape == (NORDER_GREEN,)
+
+    def test_raises_without_ccf(self, rv_module):
+        with pytest.raises(RuntimeError, match="compute_ccf"):
+            rv_module.compute_rv('GREEN', 'SCI2')
 
     def test_recovers_injected_rv(self, rv_module):
-        rv = rv_module.compute_rv('GREEN', ['SCI2'])['SCI2']['rv']
+        rv_module.compute_ccf('GREEN', 'SCI2')
+        rv = rv_module.compute_rv('GREEN', 'SCI2')['rv']
         np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
 
     def test_errors_finite_and_positive(self, rv_module):
-        rv_err = rv_module.compute_rv('GREEN', ['SCI2'])['SCI2']['rv_err']
+        rv_module.compute_ccf('GREEN', 'SCI2')
+        rv_err = rv_module.compute_rv('GREEN', 'SCI2')['rv_err']
         assert np.all(np.isfinite(rv_err)) and np.all(rv_err > 0)
 
 
 class TestPerform:
 
     def test_result_structure(self, rv_module):
-        res = rv_module.perform()
-        assert set(res) == {'velocity_grid', 'orderlets'}
-        assert set(res['orderlets']) == {'GREEN', 'RED'}
-        assert set(res['orderlets']['GREEN']) == {'SCI1', 'SCI2', 'SCI3'}
+        ccf_arrays, rv_arrays = rv_module.perform()
+        exts = {f'{c}_{f}' for c in ('GREEN', 'RED') for f in ('SCI1', 'SCI2', 'SCI3')}
+        assert set(ccf_arrays) == exts
+        assert set(rv_arrays) == exts
+        assert set(rv_arrays['GREEN_SCI2']) == {'rv', 'rv_err'}
 
-    def test_velocity_grid_in_result(self, rv_module):
-        res = rv_module.perform()
-        assert res['velocity_grid'].size == _NVEL
+    def test_ccf_shapes(self, rv_module):
+        ccf_arrays, _ = rv_module.perform()
+        assert ccf_arrays['GREEN_SCI2'].shape == (NORDER_GREEN, _NVEL)
+        assert ccf_arrays['RED_SCI1'].shape == (NORDER_RED, _NVEL)
 
     def test_recovers_injected_rv_all_chips_fibers(self, rv_module):
-        res = rv_module.perform()
+        _, rv_arrays = rv_module.perform()
         for chip in ('GREEN', 'RED'):
             for fiber in ('SCI1', 'SCI2', 'SCI3'):
-                rv = res['orderlets'][chip][fiber]['rv']
+                rv = rv_arrays[f'{chip}_{fiber}']['rv']
                 np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
 
-    def test_results_cached_on_instance(self, rv_module):
-        assert rv_module._results is None
-        res = rv_module.perform()
-        assert rv_module._results is res
-
     def test_explicit_chips_and_fibers(self, rv_module):
-        res = rv_module.perform(chips=['GREEN'], fibers=['SCI1'])
-        assert set(res['orderlets']) == {'GREEN'}
-        assert set(res['orderlets']['GREEN']) == {'SCI1'}
+        ccf_arrays, rv_arrays = rv_module.perform(chips=['GREEN'], fibers=['SCI1'])
+        assert set(ccf_arrays) == {'GREEN_SCI1'}
+        assert set(rv_arrays) == {'GREEN_SCI1'}
 
 
 # ---------------------------------------------------------------------------
