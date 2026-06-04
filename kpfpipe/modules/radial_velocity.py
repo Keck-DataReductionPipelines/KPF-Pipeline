@@ -190,7 +190,7 @@ class RadialVelocity:
 
         return ccf
 
-    def _fit_order_rv(self, vel, ccf, wave, ccf_window_kms=50.0, ccf_window_pts=9):
+    def _compute_rv(self, vel, ccf, wave, ccf_window_kms=50.0, ccf_window_pts=9):
         """
         Two-pass Gaussian fit to a CCF dip. Returns the radial velocity [km/s]
         (the fitted line center) and its photon-limited uncertainty [km/s]
@@ -315,7 +315,7 @@ class RadialVelocity:
             for o in range(cube.shape[0]):
                 if not np.any(cube[o]):
                     continue
-                rv[o], rv_err[o] = self._fit_order_rv(velocity_grid, cube[o], wave[o], **kwargs)
+                rv[o], rv_err[o] = self._compute_rv(velocity_grid, cube[o], wave[o], **kwargs)
             results[fiber] = {'ccf': cube, 'rv': rv, 'rv_err': rv_err}
         return results
 
