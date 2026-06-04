@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe import REPO_ROOT, DEFAULTS
+from kpfpipe.utils.astro import air_to_vac
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 from kpfpipe.utils.validation import strictly_increasing
@@ -62,25 +63,8 @@ class RadialVelocity:
         self._results = None        # populated by perform()
 
     # ------------------------------------------------------------------
-    # Private helpers — CCF inputs
+    # Private helpers
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _air_to_vac(wave_air):
-        """
-        Convert air wavelengths [Å] to vacuum via the Edlén 1953 formula
-        (two iterations, only wavelengths > 2000 Å are modified).
-        """
-        wave_vac = np.asarray(wave_air, dtype=np.float64).copy()
-        modify = wave_vac > 2000.0
-        if np.any(modify):
-            wave_new = wave_vac[modify]
-            for _ in range(2):
-                sigma2 = (1e4 / wave_vac[modify]) ** 2
-                fact = (1.0 + 5.792105e-2 / (238.0185 - sigma2)
-                        + 1.67917e-3 / (57.362 - sigma2))
-                wave_vac[modify] = wave_new * fact
-        return wave_vac
 
     def _build_ccf_line_mask(self):
         """
@@ -109,7 +93,7 @@ class RadialVelocity:
         mask_path = f'{REPO_ROOT}/reference/line_masks/stellar_masks/{mask_name}.txt'
 
         centers, weights = np.loadtxt(mask_path, unpack=True)
-        centers = self._air_to_vac(centers)
+        centers = air_to_vac(centers)
         half_width = centers * (self.mask_width_kms / SPEED_OF_LIGHT_KMS)
         self._line_mask = {
             'center': centers,
@@ -118,6 +102,7 @@ class RadialVelocity:
             'end': centers + half_width,
         }
         return self._line_mask
+
 
     def _build_ccf_velocity_grid(self):
         """
@@ -143,9 +128,6 @@ class RadialVelocity:
         self._velocity_grid = np.arange(lo, hi + 1) * self.ccf_step_size + star_rv
         return self._velocity_grid
 
-    # ------------------------------------------------------------------
-    # Private helpers — CCF & RV math
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _compute_ccf(wave, flux, mask, velocity_grid, z):
@@ -170,7 +152,6 @@ class RadialVelocity:
         edges[0] = wave[0] - 0.5 * (wave[1] - wave[0])
         edges[-1] = wave[-1] + 0.5 * (wave[-1] - wave[-2])
         widths = np.diff(edges)
-
         shift = (1.0 + velocity_grid / SPEED_OF_LIGHT_KMS) / (1.0 + z)  # mask shift per step
 
         # Keep only mask lines that stay fully inside the order across the whole
@@ -202,7 +183,8 @@ class RadialVelocity:
 
         return ccf
 
-    def _compute_rv(self, vel, ccf, wave, ccf_window_kms=50.0, ccf_window_pts=9):
+    @staticmethod
+    def _compute_rv(vel, ccf, wave, ccf_window_kms=50.0, ccf_window_pts=9):
         """
         Two-pass Gaussian fit to a CCF dip. Returns the radial velocity [km/s]
         (the fitted line center) and its photon-limited uncertainty [km/s]
