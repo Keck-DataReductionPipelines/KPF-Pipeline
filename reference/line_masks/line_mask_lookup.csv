@@ -1,0 +1,8 @@
+TEFF_MIN,TEFF_MAX,DEFAULT_MASK
+0,3700,M2_espresso
+3700,4600,K6_espresso
+4600,5200,K2_espresso
+5200,5400,G9_espresso
+5400,5650,G8_espresso
+5650,5800,G2_espresso
+5800,inf,F9_espresso
