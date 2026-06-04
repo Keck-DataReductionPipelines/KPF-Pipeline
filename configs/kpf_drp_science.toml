@@ -29,3 +29,5 @@ extraction_method = "box"
 mask_width_kms = 0.5
 ccf_step_size = 0.25
 ccf_step_range = [-402, 402]
+rv_window_kms = 50.0
+rv_window_pts = 11
