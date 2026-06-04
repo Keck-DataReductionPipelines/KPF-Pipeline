@@ -131,19 +131,6 @@ class RadialVelocity:
         lo, hi = self.ccf_step_range
         return np.arange(lo, hi + 1) * self.ccf_step_size + star_rv
 
-    def _get_per_order_barycorr_z(self):
-        """
-        Per-order barycentric redshift (BARYCORR_Z) from the L2, aligned with
-        the FLUX/WAVE trace orders. Raises ValueError if not populated.
-        """
-        z = self.l2_obj.data.get('BARYCORR_Z')
-        if z is None or np.size(z) == 0:
-            raise ValueError(
-                "per-order barycentric redshift (BARYCORR_Z) not populated on "
-                "the L2; run BarycentricCorrection first"
-            )
-        return np.asarray(z, dtype=float)
-
     # ------------------------------------------------------------------
     # Private helpers — CCF & RV math
     # ------------------------------------------------------------------
@@ -160,11 +147,7 @@ class RadialVelocity:
 
         return edges, widths
 
-    # ------------------------------------------------------------------
-    # Algorithm steps
-    # ------------------------------------------------------------------
-
-    def compute_ccf(self, wave, flux, mask, velocity_grid, z):
+    def _compute_order_ccf(self, wave, flux, mask, velocity_grid, z):
         """
         Cross-correlate one order's 1D spectrum against the mask over the
         velocity grid, folding in the order's barycentric redshift z. Returns
@@ -212,7 +195,7 @@ class RadialVelocity:
 
         return ccf
 
-    def compute_rv(self, vel, ccf, wave, ccf_window_kms=50.0, ccf_window_pts=9):
+    def _fit_order_rv(self, vel, ccf, wave, ccf_window_kms=50.0, ccf_window_pts=9):
         """
         Two-pass Gaussian fit to a CCF dip. Returns the radial velocity [km/s]
         (the fitted line center) and its photon-limited uncertainty [km/s]
@@ -277,38 +260,91 @@ class RadialVelocity:
         return rv, rv_err
 
     # ------------------------------------------------------------------
+    # Algorithm steps
+    # ------------------------------------------------------------------
+
+    def compute_ccf(self, chip, fibers=None, **kwargs):
+        """
+        Cross-correlate every order of one chip against the line mask for the
+        requested fibers. Returns {fiber: ccf}, where ccf has shape
+        (norder_chip, n_velocity_step).
+        """
+        if fibers is None:
+            fibers = [f for f in self.fibers if f.startswith('SCI')]
+        chip = chip.upper()
+        fibers = [f.upper() for f in fibers]
+
+        if np.size(self.l2_obj.data.get('BARYCORR_Z', np.array([]))) == 0:
+            raise ValueError(
+                "per-order barycentric redshift (BARYCORR_Z) not populated on "
+                "the L2; run BarycentricCorrection first"
+            )
+
+        mask = self._build_line_mask()
+        velocity_grid = self._build_ccf_velocity_grid()
+        z = np.asarray(self.l2_obj.data[f'{chip}_BARYCORR_Z'], dtype=np.float64)
+
+        ccf = {}
+        for fiber in fibers:
+            flux = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_FLUX'], dtype=np.float64)
+            wave = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_WAVE'], dtype=np.float64)
+            cube = np.zeros((flux.shape[0], velocity_grid.size))
+            for o in range(flux.shape[0]):
+                if not np.all(np.isfinite(wave[o])) or not np.any(np.isfinite(flux[o])):
+                    continue
+                cube[o] = self._compute_order_ccf(wave[o], flux[o], mask, velocity_grid, z[o])
+            ccf[fiber] = cube
+        return ccf
+
+    def compute_rv(self, chip, fibers=None, **kwargs):
+        """
+        Compute per-order CCFs and radial velocities for one chip and the
+        requested fibers. Returns {fiber: {'ccf', 'rv', 'rv_err'}}, with rv and
+        rv_err in km/s. Extra keyword args (e.g. ccf_window_kms, ccf_window_pts)
+        are forwarded to the per-order fit.
+        """
+        if fibers is None:
+            fibers = [f for f in self.fibers if f.startswith('SCI')]
+        chip = chip.upper()
+        fibers = [f.upper() for f in fibers]
+
+        velocity_grid = self._build_ccf_velocity_grid()
+        ccf = self.compute_ccf(chip, fibers)
+
+        results = {}
+        for fiber in fibers:
+            cube = ccf[fiber]
+            wave = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_WAVE'], dtype=np.float64)
+            rv = np.full(cube.shape[0], np.nan)
+            rv_err = np.full(cube.shape[0], np.nan)
+            for o in range(cube.shape[0]):
+                if not np.any(cube[o]):
+                    continue
+                rv[o], rv_err[o] = self._fit_order_rv(velocity_grid, cube[o], wave[o], **kwargs)
+            results[fiber] = {'ccf': cube, 'rv': rv, 'rv_err': rv_err}
+        return results
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self):
+    def perform(self, chips=None, fibers=None, **kwargs):
         """
-        Compute per-order CCFs and radial velocities for each science orderlet.
-        Returns a dict with the velocity grid and, per orderlet, the CCF cube
-        (n_order, n_step), per-order RVs [km/s], and per-order RV errors [km/s].
+        Compute per-order CCFs and radial velocities for each requested chip and
+        science fiber. Returns a dict with the velocity grid and, per chip and
+        fiber, the CCF cube (norder, n_step), per-order RVs [km/s], and per-order
+        RV errors [km/s].
         """
-        line_mask = self._build_line_mask()
+        if chips is None:
+            chips = self.chips
+        if fibers is None:
+            fibers = [f for f in self.fibers if f.startswith('SCI')]
+
         velocity_grid = self._build_ccf_velocity_grid()
-        barycorr_z = self._get_per_order_barycorr_z()
 
-        results = {'velocity_grid': velocity_grid, 'orderlets': {}}
-        for fiber in (f for f in self.fibers if f.startswith('SCI')):
-            flux = np.asarray(self.l2_obj.data[f'{fiber}_FLUX'], dtype=np.float64)
-            wave = np.asarray(self.l2_obj.data[f'{fiber}_WAVE'], dtype=np.float64)
-            n_order = flux.shape[0]
+        orderlets = {}
+        for chip in chips:
+            orderlets[chip.upper()] = self.compute_rv(chip, fibers, **kwargs)
 
-            ccf = np.zeros((n_order, velocity_grid.size))
-            rv = np.full(n_order, np.nan)
-            rv_err = np.full(n_order, np.nan)
-            for o in range(n_order):
-                w, f = wave[o], flux[o]
-                if not np.all(np.isfinite(w)) or not np.any(np.isfinite(f)):
-                    continue
-                ccf[o] = self.compute_ccf(w, f, line_mask, velocity_grid, barycorr_z[o])
-                if not np.any(ccf[o]):
-                    continue
-                rv[o], rv_err[o] = self.compute_rv(velocity_grid, ccf[o], w)
-
-            results['orderlets'][fiber] = {'ccf': ccf, 'rv': rv, 'rv_err': rv_err}
-
-        self._results = results
-        return results
+        self._results = {'velocity_grid': velocity_grid, 'orderlets': orderlets}
+        return self._results

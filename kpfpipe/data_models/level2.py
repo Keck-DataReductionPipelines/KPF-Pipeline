@@ -33,15 +33,23 @@ _L2_ALIASES = pd.read_csv(_config_path / "L2-aliases.csv")
 # Extension name suffixes for each trace (e.g., TRACE3_FLUX, TRACE3_WAVE)
 _TRACE_SUFFIXES = ["FLUX", "WAVE", "VAR", "BLAZE"]
 
+# Per-order ancillary extensions (not traces) that also support chip-prefix
+# access, e.g. GREEN_BARYCORR_Z -> BARYCORR_Z[:NORDER_GREEN]. These are 1-D
+# (norder,) arrays aligned with the concatenated trace orders.
+_ANCILLARY_PER_ORDER = ["BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"]
+
 # Build a set of valid chip-prefix keys for fast membership testing.
-# e.g., {"GREEN_CAL_FLUX", "RED_CAL_FLUX", "GREEN_SCI1_FLUX", ...}
-_CHIP_PREFIX_KEYS = {}  # chip_fiber_suffix → (fiber_alias, chip)
+# e.g., {"GREEN_CAL_FLUX", "RED_CAL_FLUX", "GREEN_SCI1_FLUX", "GREEN_BARYCORR_Z", ...}
+_CHIP_PREFIX_KEYS = {}  # chip-prefixed key → (base_key, chip)
 for _, _row in _TRACE_MAP.iterrows():
     _fiber = str(_row["Fiber"]).strip()
     for _suffix in _TRACE_SUFFIXES:
         _fiber_alias = f"{_fiber}_{_suffix}"
         for _chip in ("GREEN", "RED"):
             _CHIP_PREFIX_KEYS[f"{_chip}_{_fiber}_{_suffix}"] = (_fiber_alias, _chip)
+for _ext in _ANCILLARY_PER_ORDER:
+    for _chip in ("GREEN", "RED"):
+        _CHIP_PREFIX_KEYS[f"{_chip}_{_ext}"] = (_ext, _chip)
 
 
 class _KPF2DataDict(AliasedOrderedDict):
@@ -63,11 +71,12 @@ class _KPF2DataDict(AliasedOrderedDict):
         if split is not None:
             fiber_alias, chip = split
             resolved = self._resolve(fiber_alias)
-            # Allocate full trace on first write (or if currently empty)
+            # Allocate the full concatenated array on first write (or if empty).
+            # value.shape[1:] keeps this correct for 2-D traces (norder, ncol)
+            # and 1-D per-order ancillary arrays (norder,).
             existing = super().__getitem__(resolved) if super().__contains__(resolved) else None
             if existing is None or np.size(existing) == 0:
-                ncol = value.shape[1]
-                full = np.zeros((NORDER_GREEN + NORDER_RED, ncol), dtype=value.dtype)
+                full = np.zeros((NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype)
                 super().__setitem__(resolved, full)
             arr = super().__getitem__(resolved)
             if chip == 'GREEN':
