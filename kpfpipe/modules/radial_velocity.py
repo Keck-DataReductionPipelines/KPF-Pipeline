@@ -136,18 +136,7 @@ class RadialVelocity:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _get_ccf_bins(wave):
-        """Wavelength bin edges (length n+1) and widths (length n) at the pixel midpoints."""
-        edges = np.empty(wave.size + 1)
-        edges[1:-1] = 0.5 * (wave[:-1] + wave[1:])
-        edges[0] = wave[0] - 0.5 * (wave[1] - wave[0])
-        edges[-1] = wave[-1] + 0.5 * (wave[-1] - wave[-2])
-
-        widths = np.diff(edges)
-
-        return edges, widths
-
-    def _compute_order_ccf(self, wave, flux, mask, velocity_grid, z):
+    def _compute_ccf(wave, flux, mask, velocity_grid, z):
         """
         Cross-correlate one order's 1D spectrum against the mask over the
         velocity grid, folding in the order's barycentric redshift z. Returns
@@ -163,7 +152,13 @@ class RadialVelocity:
         if n_pix < 3 or not strictly_increasing(wave):
             return ccf
 
-        edges, widths = self._get_ccf_bins(wave)
+        # Wavelength bin edges (length n+1) and widths at the pixel midpoints.
+        edges = np.empty(n_pix + 1)
+        edges[1:-1] = 0.5 * (wave[:-1] + wave[1:])
+        edges[0] = wave[0] - 0.5 * (wave[1] - wave[0])
+        edges[-1] = wave[-1] + 0.5 * (wave[-1] - wave[-2])
+        widths = np.diff(edges)
+
         shift = (1.0 + velocity_grid / SPEED_OF_LIGHT_KMS) / (1.0 + z)  # mask shift per step
 
         # Keep only mask lines that stay fully inside the order across the whole
@@ -292,7 +287,7 @@ class RadialVelocity:
             for o in range(flux.shape[0]):
                 if not np.all(np.isfinite(wave[o])) or not np.any(np.isfinite(flux[o])):
                     continue
-                cube[o] = self._compute_order_ccf(wave[o], flux[o], mask, velocity_grid, z[o])
+                cube[o] = self._compute_ccf(wave[o], flux[o], mask, velocity_grid, z[o])
             ccf[fiber] = cube
         return ccf
 
