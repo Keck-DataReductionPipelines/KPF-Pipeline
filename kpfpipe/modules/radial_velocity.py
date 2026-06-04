@@ -19,7 +19,7 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 from kpfpipe.utils.validation import strictly_increasing
 
-SPEED_OF_LIGHT = np.float64(c.value)
+SPEED_OF_LIGHT_KMS = np.float64(c.to('km/s').value)  # km/s
 
 DEFAULTS.update({
     'mask_width_kms': 0.5,
@@ -104,7 +104,7 @@ class RadialVelocity:
 
         centers, weights = np.loadtxt(mask_path, unpack=True)
         centers = self._air_to_vac(centers)
-        half_width = centers * (self.mask_width_kms / SPEED_OF_LIGHT)
+        half_width = centers * (self.mask_width_kms / SPEED_OF_LIGHT_KMS)
         return {
             'center': centers,
             'weight': weights,
@@ -149,30 +149,16 @@ class RadialVelocity:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _pixel_edges(wave):
-        """Wavelength bin edges (length n+1) at the pixel midpoints."""
+    def _get_ccf_bins(wave):
+        """Wavelength bin edges (length n+1) and widths (length n) at the pixel midpoints."""
         edges = np.empty(wave.size + 1)
         edges[1:-1] = 0.5 * (wave[:-1] + wave[1:])
         edges[0] = wave[0] - 0.5 * (wave[1] - wave[0])
         edges[-1] = wave[-1] + 0.5 * (wave[-1] - wave[-2])
-        return edges
 
-    @staticmethod
-    def _ccf_rv_error(velocity_grid, ccf, rv, vel_span_pixel, fit_width=50.0):
-        """
-        Photon-limited RV uncertainty [km/s] from the weighted CCF slope
-        (Bouchy et al. 2001), evaluated within +/-fit_width/2 of rv.
-        """
-        sel = (velocity_grid >= rv - fit_width / 2.0) & (velocity_grid <= rv + fit_width / 2.0)
-        c, v = ccf[sel], velocity_grid[sel]
-        if not np.any(c) or np.any(c < 0):
-            return np.nan
+        widths = np.diff(edges)
 
-        vel_step = np.mean(np.diff(velocity_grid))
-        n_scale_pix = vel_step / vel_span_pixel       # CCD pixels per velocity step
-        weighted_slope = np.gradient(c, v) ** 2 / c   # noise variance ~ c (photon)
-        qccf = (np.sum(weighted_slope) ** 0.5 / np.sum(c) ** 0.5) * n_scale_pix ** 0.5
-        return 1.0 / (qccf * np.sum(c) ** 0.5)
+        return edges, widths
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -184,8 +170,8 @@ class RadialVelocity:
         velocity grid, folding in the order's barycentric redshift z. Returns
         the CCF (one value per velocity step).
         """
-        wave = np.asarray(wave, dtype=float)
-        flux = np.asarray(flux, dtype=float)
+        wave = np.asarray(wave, dtype=np.float64)
+        flux = np.asarray(flux, dtype=np.float64)
         if wave[0] > wave[-1]:          # reversed order -> flip to ascending
             wave, flux = wave[::-1], flux[::-1]
 
@@ -194,9 +180,8 @@ class RadialVelocity:
         if n_pix < 3 or not strictly_increasing(wave):
             return ccf
 
-        edges = self._pixel_edges(wave)
-        pix_width = np.diff(edges)
-        shift = (1.0 + velocity_grid / SPEED_OF_LIGHT) / (1.0 + z)  # mask shift per step
+        edges, widths = self._get_ccf_bins(wave)
+        shift = (1.0 + velocity_grid / SPEED_OF_LIGHT_KMS) / (1.0 + z)  # mask shift per step
 
         # Keep only mask lines that stay fully inside the order across the whole
         # scan, so the same lines contribute at every step (flat CCF baseline).
@@ -207,9 +192,9 @@ class RadialVelocity:
         l_start, l_end = mask['start'][keep], mask['end'][keep]
         l_weight = mask['weight'][keep]
 
-        for c in range(velocity_grid.size):
-            a = l_start * shift[c]
-            b = l_end * shift[c]
+        for v in range(velocity_grid.size):
+            a = l_start * shift[v]
+            b = l_end * shift[v]
             ia = np.clip(np.searchsorted(edges, a, side='right') - 1, 0, n_pix - 1)
             ib = np.clip(np.searchsorted(edges, b, side='right') - 1, 0, n_pix - 1)
 
@@ -221,38 +206,75 @@ class RadialVelocity:
                 nn = n[sel]
                 overlap = np.minimum(edges[nn + 1], b[sel]) - np.maximum(edges[nn], a[sel])
                 np.clip(overlap, 0.0, None, out=overlap)
-                np.add.at(frac, nn, l_weight[sel] * overlap / pix_width[nn])
+                np.add.at(frac, nn, l_weight[sel] * overlap / widths[nn])
 
-            ccf[c] = np.nansum(flux * frac)
+            ccf[v] = np.nansum(flux * frac)
 
         return ccf
 
-    def compute_rv(self, velocity_grid, ccf):
+    def compute_rv(self, vel, ccf, wave, ccf_window_kms=50.0, ccf_window_pts=9):
         """
-        Two-pass Gaussian fit to a CCF dip; returns the radial velocity [km/s]
-        (the fitted line center), or NaN if the fit fails.
+        Two-pass Gaussian fit to a CCF dip. Returns the radial velocity [km/s]
+        (the fitted line center) and its photon-limited uncertainty [km/s]
+        (Bouchy et al. 2001), or (NaN, NaN) if the fit fails.
+
+        The first pass locates the CCF minimum and fits a +/-ccf_window_kms/2
+        velocity window around it. The second pass refits the ccf_window_pts grid
+        points centered on the first-pass RV (snapped to the grid); those same
+        points set the error estimate. ccf_window_pts must be odd so the window
+        is symmetric about the peak.
         """
+        if ccf_window_pts % 2 == 0:
+            raise ValueError("ccf_window_pts must be odd for a symmetric fitting window")
+
         finite = np.isfinite(ccf)
         if finite.sum() < 4 or np.ptp(ccf[finite]) == 0:
-            return np.nan
+            return np.nan, np.nan
 
-        # Fit the inverted CCF so the absorption dip is a peak (matching the
-        # peak-oriented initial guess in optimize_lsq); theta = [b, a, mu, sigma].
+        # Locate the absorption dip; fit the inverted CCF so it presents as a peak
+        # (matching optimize_lsq's peak-oriented guess); theta = [b, a, mu, sigma].
+        peak = vel[np.nanargmin(ccf)]
+
+        # First pass: +/-ccf_window_kms/2 velocity window around the dip.
+        win = finite & (np.abs(vel - peak) <= ccf_window_kms / 2)
+        if win.sum() < 4:
+            return np.nan, np.nan
         try:
-            rv = optimize_lsq(velocity_grid[finite], -ccf[finite], 'gaussian')[0][2]
+            rv = optimize_lsq(vel[win], -ccf[win], 'gaussian')[0][2]
         except (RuntimeError, ValueError):
-            return np.nan
+            return np.nan, np.nan
+        if not np.isfinite(rv):
+            return np.nan, np.nan
 
-        # Second pass refined within +/-25 km/s of the first fit.
-        near = finite & (np.abs(velocity_grid - rv) <= 25.0)
-        if near.sum() >= 4:
-            try:
-                mu = optimize_lsq(velocity_grid[near], -ccf[near], 'gaussian')[0][2]
-                if velocity_grid[near].min() <= mu <= velocity_grid[near].max():
-                    rv = mu
-            except (RuntimeError, ValueError):
-                pass
-        return rv
+        # Second pass: ccf_window_pts points centered on the first-pass RV snapped
+        # to the nearest grid point; these points also set the error estimate.
+        center = int(np.argmin(np.abs(vel - rv)))
+        half = ccf_window_pts // 2
+        lo, hi = center - half, center + half + 1
+        if lo < 0 or hi > vel.size:
+            return rv, np.nan          # symmetric window runs off the grid
+        vel_fit, ccf_fit = vel[lo:hi], ccf[lo:hi]
+        try:
+            mu = optimize_lsq(vel_fit, -ccf_fit, 'gaussian')[0][2]
+            if vel_fit.min() <= mu <= vel_fit.max():
+                rv = mu
+        except (RuntimeError, ValueError):
+            pass
+
+        # Photon-limited RV uncertainty from the weighted CCF slope over the
+        # same ccf_window_pts points.
+        if not np.any(ccf_fit) or np.any(ccf_fit < 0):
+            return rv, np.nan
+
+        vel_step = np.mean(np.diff(vel))
+        vel_span_per_pixel = SPEED_OF_LIGHT_KMS * np.median(np.abs(np.diff(wave))) / np.median(wave)
+        n_pix_per_vel_step = vel_step / vel_span_per_pixel
+
+        weighted_slope = np.gradient(ccf_fit, vel_fit) ** 2 / ccf_fit
+        qccf = (np.sum(weighted_slope) ** 0.5 / np.sum(ccf_fit) ** 0.5) * n_pix_per_vel_step ** 0.5
+        rv_err = 1.0 / (qccf * np.sum(ccf_fit) ** 0.5)
+
+        return rv, rv_err
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -270,7 +292,7 @@ class RadialVelocity:
 
         results = {'velocity_grid': velocity_grid, 'orderlets': {}}
         for fiber in (f for f in self.fibers if f.startswith('SCI')):
-            flux = np.asarray(self.l2_obj.data[f'{fiber}_FLUX'], dtype=np.float32)
+            flux = np.asarray(self.l2_obj.data[f'{fiber}_FLUX'], dtype=np.float64)
             wave = np.asarray(self.l2_obj.data[f'{fiber}_WAVE'], dtype=np.float64)
             n_order = flux.shape[0]
 
@@ -284,9 +306,7 @@ class RadialVelocity:
                 ccf[o] = self.compute_ccf(w, f, line_mask, velocity_grid, barycorr_z[o])
                 if not np.any(ccf[o]):
                     continue
-                rv[o] = self.compute_rv(velocity_grid, ccf[o])
-                vel_span_pixel = SPEED_OF_LIGHT * np.median(np.abs(np.diff(w))) / np.median(w)
-                rv_err[o] = self._ccf_rv_error(velocity_grid, ccf[o], rv[o], vel_span_pixel)
+                rv[o], rv_err[o] = self.compute_rv(velocity_grid, ccf[o], w)
 
             results['orderlets'][fiber] = {'ccf': ccf, 'rv': rv, 'rv_err': rv_err}
 
