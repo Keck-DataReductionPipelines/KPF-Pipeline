@@ -14,13 +14,17 @@ from astropy.constants import c
 import numpy as np
 import pandas as pd
 
-from kpfpipe import REPO_ROOT, DEFAULTS
+from kpfpipe import REPO_ROOT, DEFAULTS, DETECTOR
 from kpfpipe.utils.astro import air_to_vac
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 from kpfpipe.utils.validation import strictly_increasing
 
 SPEED_OF_LIGHT_KMS = np.float64(c.to('km/s').value)  # km/s
+
+NORDER_GREEN = DETECTOR['norder']['GREEN']
+NORDER_RED   = DETECTOR['norder']['RED']
+NORDER       = NORDER_GREEN + NORDER_RED
 
 DEFAULTS.update({
     'mask_width_kms': 0.5,
@@ -345,8 +349,9 @@ class RadialVelocity:
 
         Returns
         -------
-        ndarray
-            CCF with shape (norder_chip, n_velocity_step). Also cached under
+        dict
+            {'velocity', 'ccf'}: the CCF velocity grid [km/s] and the CCF with
+            shape (norder_chip, n_velocity_step). The CCF is also cached under
             f'{chip}_{fiber}' for a subsequent compute_rv call.
 
         Raises
@@ -382,7 +387,8 @@ class RadialVelocity:
             ccf[o] = self._compute_ccf(wave[o], flux[o], ccf_line_mask, ccf_velocity_grid, barycorr_z[o])
 
         self._ccf[f'{chip}_{fiber}'] = ccf
-        return ccf
+        
+        return {'velocity': ccf_velocity_grid, 'ccf': ccf}
 
     def compute_rv(self, chip, fiber, rv_window_kms=None, rv_window_pts=None):
         """
@@ -447,8 +453,11 @@ class RadialVelocity:
     def perform(self, chips=None, fibers=None, mask_width_kms=None, ccf_step_size=None, ccf_step_range=None,
                 rv_window_kms=None, rv_window_pts=None):
         """
-        Compute per-order CCFs and radial velocities for each requested chip and
-        fiber.
+        Compute per-order CCFs and radial velocities and package them in a KPF4.
+
+        For each requested orderlet (fiber), the per-order CCFs of both chips are
+        written to the orderlet's CCF cube ({fiber}_CCF, green+red concatenated)
+        and the per-order RVs to the orderlet's RV table ({fiber}_RV).
 
         Parameters
         ----------
@@ -456,8 +465,8 @@ class RadialVelocity:
             Chip identifiers, i.e. 'GREEN' or 'RED'. Defaults to the configured
             chips.
         fibers : list of str, optional
-            Fiber identifiers, e.g. ['SCI1', 'SCI2']. Defaults to the configured
-            science fibers.
+            Fiber identifiers, e.g. ['SCI1', 'SCI2']. Defaults to all configured
+            fibers (SCI, CAL, and SKY).
         mask_width_kms : float, optional
             Per-line mask top-hat width [km/s]. Overrides the configured value.
         ccf_step_size : float, optional
@@ -473,15 +482,15 @@ class RadialVelocity:
 
         Returns
         -------
-        ccf_arrays : dict
-            {f'{chip}_{fiber}': ccf}, ccf shape (norder_chip, n_velocity_step).
-        rv_arrays : dict
-            {f'{chip}_{fiber}': {'rv', 'rv_err'}}, each length norder_chip [km/s].
+        l4_obj : KPF4
+            L4 data product with one CCF cube and one per-order RV table per
+            orderlet (e.g. SCI2_CCF, SCI2_RV), the CCF velocity grid and
+            RVMETHOD written to PRIMARY, and a 'radial_velocity' receipt entry.
         """
         if chips is None:
             chips = self.chips
         if fibers is None:
-            fibers = [f for f in self.fibers if f.startswith('SCI')]
+            fibers = self.fibers
         if mask_width_kms is None:
             mask_width_kms = self.mask_width_kms
         if ccf_step_size is None:
@@ -493,13 +502,44 @@ class RadialVelocity:
         if rv_window_pts is None:
             rv_window_pts = self.rv_window_pts
 
-        ccf_arrays = {}
-        rv_arrays = {}
+        chips = [c.upper() for c in chips]
+        fibers = [f.upper() for f in fibers]
 
-        for chip in chips:
-            for fiber in fibers:
-                ext = f'{chip}_{fiber}'
-                ccf_arrays[ext] = self.compute_ccf(chip, fiber, mask_width_kms, ccf_step_size, ccf_step_range)
-                rv_arrays[ext] = self.compute_rv(chip, fiber, rv_window_kms, rv_window_pts)
+        l4_obj = self.l2_obj.to_kpf4()
 
-        return ccf_arrays, rv_arrays
+        # Per-order barycentric metadata, shared by every orderlet's RV table.
+        bjd_tdb = np.asarray(self.l2_obj.data['BJD_TDB'], dtype=np.float64)
+        berv = np.asarray(self.l2_obj.data['BARYCORR_KMS'], dtype=np.float64)
+
+        for fiber in fibers:
+            rv = np.full(NORDER, np.nan)
+            rv_err = np.full(NORDER, np.nan)
+            for chip in chips:
+                ccf = self.compute_ccf(chip, fiber, mask_width_kms, ccf_step_size, ccf_step_range)['ccf']
+                l4_obj.set_data(f'{chip}_{fiber}_CCF', ccf)
+                result = self.compute_rv(chip, fiber, rv_window_kms, rv_window_pts)
+                rows = slice(0, NORDER_GREEN) if chip == 'GREEN' else slice(NORDER_GREEN, NORDER)
+                rv[rows] = result['rv']
+                rv_err[rows] = result['rv_err']
+
+            # Per-orderlet RV table, one row per spectral order.
+            wave = np.asarray(self.l2_obj.data[f'{fiber}_WAVE'], dtype=np.float64)
+            l4_obj.set_data(f'{fiber}_RV', pd.DataFrame({
+                'ORDER_INDEX': np.arange(NORDER, dtype=np.int64),
+                'BJD_TDB':     bjd_tdb,
+                'BERV':        berv,
+                'WAVE_START':  np.nanmin(wave, axis=1),
+                'WAVE_END':    np.nanmax(wave, axis=1),
+                'RV':          rv,
+                'RV_ERR':      rv_err,
+            }))
+
+        # Record the CCF velocity grid (linear, shared by all CCFs) and method.
+        primary = l4_obj.headers['PRIMARY']
+        primary['RVMETHOD'] = ('CCF', 'RV derivation method')
+        primary['CCFVSTRT'] = (float(self._ccf_velocity_grid[0]), '[km/s] CCF velocity grid start')
+        primary['CCFVSTEP'] = (float(ccf_step_size), '[km/s] CCF velocity grid step')
+        primary['CCFNVEL'] = (int(self._ccf_velocity_grid.size), 'CCF velocity grid length')
+
+        l4_obj.receipt_add_entry('radial_velocity', 'PASS')
+        return l4_obj

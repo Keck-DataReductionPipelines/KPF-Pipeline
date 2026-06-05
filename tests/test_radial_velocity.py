@@ -1,5 +1,5 @@
 """
-Tests for the RadialVelocity module (KPF2 -> per-chip/fiber CCFs and RVs).
+Tests for the RadialVelocity module (KPF2 -> KPF4: per-orderlet CCFs and RVs).
 
 Static-method unit tests (_compute_ccf, _compute_rv) build synthetic spectra
 and CCFs with no fixtures. Build-helper tests use a header-only KPF2 and read
@@ -12,9 +12,11 @@ import numpy as np
 import pytest
 
 from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN, NORDER_RED
+from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.radial_velocity import RadialVelocity, SPEED_OF_LIGHT_KMS
 
 NORDER = NORDER_GREEN + NORDER_RED
+_FIBERS = ['CAL', 'SCI1', 'SCI2', 'SCI3', 'SKY']   # all orderlets
 
 # Narrow CCF grid for fast integration tests: +/-10 km/s at 0.25 km/s -> 81 steps.
 _STEP_RANGE = [-40, 40]
@@ -245,7 +247,7 @@ class TestBuildVelocityGrid:
 @pytest.fixture
 def rv_kpf2():
     """KPF2 with identical per-order synthetic spectra (absorption at _MASK_CENTERS
-    shifted by _V_INJECT) and zero barycentric redshift."""
+    shifted by _V_INJECT) for every orderlet and zero barycentric correction."""
     kpf2 = KPF2()
     kpf2.headers['INSTRUMENT_HEADER']['TARGTEFF'] = 5772.0
     kpf2.headers['INSTRUMENT_HEADER']['TARGRADV'] = 0.0
@@ -255,12 +257,15 @@ def rv_kpf2():
     flux_1d = _absorption_spectrum(wave_1d, lam_obs)
 
     for chip, n in [('GREEN', NORDER_GREEN), ('RED', NORDER_RED)]:
-        for fiber in ['SCI1', 'SCI2', 'SCI3']:
+        for fiber in _FIBERS:
             kpf2.set_data(f'{chip}_{fiber}_WAVE',
                           np.tile(wave_1d, (n, 1)).astype(np.float64))
             kpf2.set_data(f'{chip}_{fiber}_FLUX',
                           np.tile(flux_1d, (n, 1)).astype(np.float64))
+    # Per-order barycentric extensions (populated together by BarycentricCorrection).
     kpf2.set_data('BARYCORR_Z', np.zeros(NORDER))
+    kpf2.set_data('BARYCORR_KMS', np.zeros(NORDER))
+    kpf2.set_data('BJD_TDB', np.zeros(NORDER))
     return kpf2
 
 
@@ -275,26 +280,28 @@ def rv_module(rv_kpf2, monkeypatch):
 
 class TestComputeCCFPublic:
 
-    def test_returns_array_with_shape(self, rv_module):
-        ccf = rv_module.compute_ccf('GREEN', 'SCI2')
-        assert ccf.shape == (NORDER_GREEN, _NVEL)
+    def test_returns_velocity_and_ccf(self, rv_module):
+        res = rv_module.compute_ccf('GREEN', 'SCI2')
+        assert set(res) == {'velocity', 'ccf'}
+        assert res['velocity'].shape == (_NVEL,)
+        assert res['ccf'].shape == (NORDER_GREEN, _NVEL)
 
     def test_red_chip_shape(self, rv_module):
-        ccf = rv_module.compute_ccf('RED', 'SCI1')
-        assert ccf.shape == (NORDER_RED, _NVEL)
+        res = rv_module.compute_ccf('RED', 'SCI1')
+        assert res['ccf'].shape == (NORDER_RED, _NVEL)
 
     def test_dip_at_injected_velocity(self, rv_module):
-        ccf = rv_module.compute_ccf('GREEN', 'SCI2')
-        vel = rv_module._build_ccf_velocity_grid()
+        res = rv_module.compute_ccf('GREEN', 'SCI2')
+        vel, ccf = res['velocity'], res['ccf']
         assert vel[np.argmin(ccf[0])] == pytest.approx(_V_INJECT, abs=0.3)
 
     def test_caches_ccf(self, rv_module):
-        ccf = rv_module.compute_ccf('GREEN', 'SCI2')
-        assert rv_module._ccf['GREEN_SCI2'] is ccf
+        res = rv_module.compute_ccf('GREEN', 'SCI2')
+        assert rv_module._ccf['GREEN_SCI2'] is res['ccf']
 
     def test_lowercase_chip_accepted(self, rv_module):
-        ccf = rv_module.compute_ccf('green', 'sci2')
-        assert ccf.shape == (NORDER_GREEN, _NVEL)
+        res = rv_module.compute_ccf('green', 'sci2')
+        assert res['ccf'].shape == (NORDER_GREEN, _NVEL)
 
     def test_missing_barycorr_z_raises(self, rv_kpf2, monkeypatch):
         monkeypatch.setattr(RadialVelocity, '_build_ccf_line_mask',
@@ -331,29 +338,46 @@ class TestComputeRVPublic:
 
 class TestPerform:
 
-    def test_result_structure(self, rv_module):
-        ccf_arrays, rv_arrays = rv_module.perform()
-        exts = {f'{c}_{f}' for c in ('GREEN', 'RED') for f in ('SCI1', 'SCI2', 'SCI3')}
-        assert set(ccf_arrays) == exts
-        assert set(rv_arrays) == exts
-        assert set(rv_arrays['GREEN_SCI2']) == {'rv', 'rv_err'}
+    def test_returns_kpf4_with_per_orderlet_extensions(self, rv_module):
+        l4 = rv_module.perform()
+        assert isinstance(l4, KPF4)
+        for fiber in _FIBERS:
+            assert l4.data[f'{fiber}_CCF'].shape == (NORDER, _NVEL)
+            table = l4.data[f'{fiber}_RV']
+            assert len(table) == NORDER
+            assert set(table.columns) >= {
+                'ORDER_INDEX', 'BJD_TDB', 'BERV', 'WAVE_START', 'WAVE_END', 'RV', 'RV_ERR'}
 
-    def test_ccf_shapes(self, rv_module):
-        ccf_arrays, _ = rv_module.perform()
-        assert ccf_arrays['GREEN_SCI2'].shape == (NORDER_GREEN, _NVEL)
-        assert ccf_arrays['RED_SCI1'].shape == (NORDER_RED, _NVEL)
+    def test_ccf_chip_halves_populated(self, rv_module):
+        l4 = rv_module.perform()
+        assert l4.data['GREEN_SCI2_CCF'].shape == (NORDER_GREEN, _NVEL)
+        assert l4.data['RED_SCI2_CCF'].shape == (NORDER_RED, _NVEL)
+        assert np.any(l4.data['GREEN_SCI2_CCF'])
+        assert np.any(l4.data['RED_SCI2_CCF'])
 
-    def test_recovers_injected_rv_all_chips_fibers(self, rv_module):
-        _, rv_arrays = rv_module.perform()
-        for chip in ('GREEN', 'RED'):
-            for fiber in ('SCI1', 'SCI2', 'SCI3'):
-                rv = rv_arrays[f'{chip}_{fiber}']['rv']
-                np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
+    def test_recovers_injected_rv_all_orderlets(self, rv_module):
+        l4 = rv_module.perform()
+        for fiber in _FIBERS:
+            rv = np.asarray(l4.data[f'{fiber}_RV']['RV'])
+            np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
+
+    def test_primary_records_grid_and_method(self, rv_module):
+        l4 = rv_module.perform()
+        primary = l4.headers['PRIMARY']
+        assert primary['RVMETHOD'][0] == 'CCF'
+        assert primary['CCFNVEL'][0] == _NVEL
+        assert primary['CCFVSTEP'][0] == pytest.approx(0.25)
 
     def test_explicit_chips_and_fibers(self, rv_module):
-        ccf_arrays, rv_arrays = rv_module.perform(chips=['GREEN'], fibers=['SCI1'])
-        assert set(ccf_arrays) == {'GREEN_SCI1'}
-        assert set(rv_arrays) == {'GREEN_SCI1'}
+        l4 = rv_module.perform(chips=['GREEN'], fibers=['SCI1'])
+        # SCI1 green half populated, red half left zero; other orderlets untouched.
+        assert np.any(l4.data['GREEN_SCI1_CCF'])
+        assert not np.any(l4.data['RED_SCI1_CCF'])
+        assert l4.data['SCI2_CCF'].size == 0
+        assert len(l4.data['SCI2_RV']) == 0
+        rv = np.asarray(l4.data['SCI1_RV']['RV'])
+        assert np.all(np.isfinite(rv[:NORDER_GREEN]))
+        assert np.all(np.isnan(rv[NORDER_GREEN:]))
 
 
 # ---------------------------------------------------------------------------
