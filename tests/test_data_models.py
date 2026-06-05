@@ -23,6 +23,7 @@ from kpfpipe.data_models.masters.base import KPFMasterModel
 
 NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED = DETECTOR['norder']['RED']
+NORDER = NORDER_GREEN + NORDER_RED
 
 
 @pytest.fixture
@@ -590,10 +591,33 @@ class TestKPF4:
         assert isinstance(kpf4, RV4)
         assert kpf4.level == 4
 
-    def test_rv_alias(self):
+    def test_ccf_rv_extensions_per_orderlet(self):
         kpf4 = KPF4()
-        assert "RV" in kpf4.extensions
-        assert kpf4.data["RV"] is kpf4.data["RV1"]
+        for n in range(1, 6):
+            assert f"CCF{n}" in kpf4.extensions
+            assert f"RV{n}" in kpf4.extensions
+
+    def test_trace_derived_aliases(self):
+        # CCF{n}/RV{n} <-> TRACE{n}: SCI2 is trace 3, CAL is trace 1, SKY is 5.
+        kpf4 = KPF4()
+        assert kpf4.data._resolve("SCI2_CCF") == "CCF3"
+        assert kpf4.data._resolve("SCI2_RV") == "RV3"
+        assert kpf4.data._resolve("CAL_CCF") == "CCF1"
+        assert kpf4.data._resolve("SKY_RV") == "RV5"
+        # bare RV is not an alias (RV is trace-mapped, not a 1:1 alias)
+        assert kpf4.data._resolve("RV") == "RV"
+
+    def test_ccf_chip_prefix_views(self):
+        kpf4 = KPF4()
+        green = np.ones((NORDER_GREEN, 5))
+        red = 2 * np.ones((NORDER - NORDER_GREEN, 5))
+        kpf4.set_data("GREEN_SCI2_CCF", green)
+        kpf4.set_data("RED_SCI2_CCF", red)
+        assert kpf4.data["SCI2_CCF"].shape == (NORDER, 5)
+        np.testing.assert_array_equal(kpf4.data["GREEN_SCI2_CCF"], green)
+        np.testing.assert_array_equal(kpf4.data["RED_SCI2_CCF"], red)
+        # RV tables are not chip-split
+        assert kpf4.data._chip_split("GREEN_SCI2_RV") is None
 
 
 @pytest.fixture

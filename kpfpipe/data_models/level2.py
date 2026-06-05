@@ -27,8 +27,8 @@ NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED   = DETECTOR['norder']['RED']
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
-_TRACE_MAP = pd.read_csv(_config_path / "L2-trace-map.csv")
-_L2_ALIASES = pd.read_csv(_config_path / "L2-aliases.csv")
+_TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
+_ALIASES = pd.read_csv(_config_path / "aliases.csv")
 
 # Extension name suffixes for each trace (e.g., TRACE3_FLUX, TRACE3_WAVE)
 _TRACE_SUFFIXES = ["FLUX", "WAVE", "VAR", "BLAZE"]
@@ -177,9 +177,9 @@ class KPF2(RV2):
     def _register_aliases(self):
         """Register KPF-friendly aliases from config CSVs."""
         # Simple 1:1 extension aliases (e.g., CA_HK → ANCILLARY_SPECTRUM)
-        for _, row in _L2_ALIASES.iterrows():
-            alias = str(row["Alias"]).strip()
-            canonical = str(row["Canonical"]).strip()
+        for _, row in _ALIASES.iterrows():
+            alias = str(row["KPF"]).strip()
+            canonical = str(row["EPRV"]).strip()
             if canonical in self.extensions:
                 self.extensions.register_alias(alias, canonical)
                 self.headers.register_alias(alias, canonical)
@@ -251,6 +251,11 @@ class KPF2(RV2):
         if "PRIMARY" in self.headers:
             for key, value in self.headers["PRIMARY"].items():
                 kpf4.headers["PRIMARY"][key] = value
+
+        # Carry forward INSTRUMENT_HEADER (TARGTEFF, TARGRADV, GAIAID, CCD*BJD, ...)
+        if "INSTRUMENT_HEADER" in self.headers and "INSTRUMENT_HEADER" in kpf4.headers:
+            for key, value in self.headers["INSTRUMENT_HEADER"].items():
+                kpf4.headers["INSTRUMENT_HEADER"][key] = value
 
         # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:

@@ -5,8 +5,8 @@ Extracted-spectrum-level masters calibration product (e.g., master
 wavelength solutions, master flats).
 
 Inherits from KPFMasterModel and KPF2. The full L2 schema and the KPF
-alias system are inherited from KPF2 (see L2-aliases.csv and
-L2-trace-map.csv for the mapping between KPF-internal fiber names like
+alias system are inherited from KPF2 (see aliases.csv and
+trace-map.csv for the mapping between KPF-internal fiber names like
 SCI2_WAVE and the standard names like TRACE3_WAVE). Only masters-
 specific additions (INPUT_FILES) are declared in
 Masters-L2-extensions.csv.
