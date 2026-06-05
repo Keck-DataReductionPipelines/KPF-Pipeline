@@ -27,11 +27,10 @@ NORDER_RED   = DETECTOR['norder']['RED']
 NORDER       = NORDER_GREEN + NORDER_RED
 
 DEFAULTS.update({
-    'mask_width_kms': 0.5,
+    'ccf_mask_width': 0.5,
     'ccf_step_size': 0.25,
-    'ccf_step_range': [-402, 402],
-    'rv_window_kms': 50.0,
-    'rv_window_pts': 11,
+    'ccf_window': [-100.0, 100.0],
+    'rv_window': [-25.0, 25.0]
 })
 
 
@@ -73,11 +72,11 @@ class RadialVelocity:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _build_ccf_line_mask(self, mask_width_kms=None):
+    def _build_ccf_line_mask(self, width=None):
         """
         Build (and cache) the CCF line mask for the TARGTEFF-selected stellar
         mask: vacuum line centers, weights, and per-line top-hat edges
-        (center ± center * mask_width_kms / c).
+        (center ± center * width / c).
 
         Returns
         -------
@@ -93,8 +92,8 @@ class RadialVelocity:
         if self._ccf_line_mask is not None:
             return self._ccf_line_mask
         
-        if mask_width_kms is None:
-            mask_width_kms = self.mask_width_kms
+        if width is None:
+            width = self.ccf_mask_width
 
         inst = self.l2_obj.headers.get('INSTRUMENT_HEADER', {})
         try:
@@ -114,7 +113,7 @@ class RadialVelocity:
 
         centers, weights = np.loadtxt(mask_path, unpack=True)
         centers = air_to_vac(centers)
-        half_width = centers * (mask_width_kms / SPEED_OF_LIGHT_KMS)
+        half_width = centers * (width / SPEED_OF_LIGHT_KMS)
         self._ccf_line_mask = {
             'center': centers,
             'weight': weights,
@@ -124,16 +123,19 @@ class RadialVelocity:
         return self._ccf_line_mask
 
 
-    def _build_ccf_velocity_grid(self, ccf_step_size=None, ccf_step_range=None):
+    def _build_ccf_velocity_grid(self, step_size=None, window=None):
         """
         Build (and cache) the evenly-spaced CCF velocity grid, centered on the
         target's systemic RV (TARGRADV).
 
+        The [min, max] `window` is converted to an integer number of `step_size`
+        steps about TARGRADV, so the grid step is exact.
+
         Returns
         -------
         ndarray
-            Velocity steps [km/s], spanning ccf_step_range * ccf_step_size about
-            TARGRADV.
+            Velocity steps [km/s], spanning `window` about TARGRADV in
+            `step_size` increments.
 
         Raises
         ------
@@ -142,11 +144,11 @@ class RadialVelocity:
         """
         if self._ccf_velocity_grid is not None:
             return self._ccf_velocity_grid
-        
-        if ccf_step_size is None:
-            ccf_step_size = self.ccf_step_size
-        if ccf_step_range is None:
-            ccf_step_range = self.ccf_step_range
+
+        if step_size is None:
+            step_size = self.ccf_step_size
+        if window is None:
+            window = self.ccf_window
 
         inst = self.l2_obj.headers.get('INSTRUMENT_HEADER', {})
         try:
@@ -159,13 +161,16 @@ class RadialVelocity:
                 "INSTRUMENT_HEADER; cannot center the CCF velocity grid"
             )
 
-        lo, hi = ccf_step_range
-        self._ccf_velocity_grid = np.arange(lo, hi + 1) * ccf_step_size + star_rv
+        # Convert the [min, max] km/s window to integer step counts.
+        lo_kms, hi_kms = window
+        lo = int(round(lo_kms / step_size))
+        hi = int(round(hi_kms / step_size))
+        self._ccf_velocity_grid = np.arange(lo, hi + 1) * step_size + star_rv
         return self._ccf_velocity_grid
 
 
     @staticmethod
-    def _compute_ccf(wave, flux, ccf_line_mask, ccf_velocity_grid, barycorr_z):
+    def _compute_ccf(wave, flux, line_mask, velocity_grid, barycorr_z):
         """
         Cross-correlate one order's spectrum against the mask over the velocity
         grid, folding in the order's barycentric redshift z.
@@ -176,9 +181,9 @@ class RadialVelocity:
             1D wavelength solution for the order [Å].
         flux : ndarray
             1D extracted flux for the order.
-        ccf_line_mask : dict
+        line_mask : dict
             Line mask (keys 'start', 'end', 'weight') from _build_ccf_line_mask.
-        ccf_velocity_grid : ndarray
+        velocity_grid : ndarray
             CCF velocity steps [km/s].
         barycorr_z : float
             Barycentric redshift for the order.
@@ -194,7 +199,7 @@ class RadialVelocity:
         if wave[0] > wave[-1]:          # reversed order -> flip to ascending
             wave, flux = wave[::-1], flux[::-1]
 
-        ccf = np.zeros(ccf_velocity_grid.size)
+        ccf = np.zeros(velocity_grid.size)
         n_pix = wave.size
         if n_pix < 3 or not strictly_increasing(wave):
             return ccf
@@ -205,18 +210,18 @@ class RadialVelocity:
         edges[0] = wave[0] - 0.5 * (wave[1] - wave[0])
         edges[-1] = wave[-1] + 0.5 * (wave[-1] - wave[-2])
         widths = np.diff(edges)
-        shift = (1.0 + ccf_velocity_grid / SPEED_OF_LIGHT_KMS) / (1.0 + barycorr_z)  # mask shift per step
+        shift = (1.0 + velocity_grid / SPEED_OF_LIGHT_KMS) / (1.0 + barycorr_z)  # mask shift per step
 
         # Keep only mask lines that stay fully inside the order across the whole
         # scan, so the same lines contribute at every step (flat CCF baseline).
         smin, smax = shift.min(), shift.max()
-        keep = (ccf_line_mask['start'] * smin >= wave[0]) & (ccf_line_mask['end'] * smax <= wave[-1])
+        keep = (line_mask['start'] * smin >= wave[0]) & (line_mask['end'] * smax <= wave[-1])
         if not np.any(keep):
             return ccf
-        l_start, l_end = ccf_line_mask['start'][keep], ccf_line_mask['end'][keep]
-        l_weight = ccf_line_mask['weight'][keep]
+        l_start, l_end = line_mask['start'][keep], line_mask['end'][keep]
+        l_weight = line_mask['weight'][keep]
 
-        for v in range(ccf_velocity_grid.size):
+        for v in range(velocity_grid.size):
             a = l_start * shift[v]
             b = l_end * shift[v]
             ia = np.clip(np.searchsorted(edges, a, side='right') - 1, 0, n_pix - 1)
@@ -237,14 +242,15 @@ class RadialVelocity:
         return ccf
 
     @staticmethod
-    def _compute_rv(vel, ccf, wave, rv_window_kms, rv_window_pts):
+    def _compute_rv(vel, ccf, wave, window, min_npts=9):
         """
         Two-pass Gaussian fit to a CCF dip, with a photon-limited error.
 
-        The first pass locates the CCF minimum and fits a +/-rv_window_kms/2
-        velocity window around it. The second pass refits the rv_window_pts grid
-        points centered on the first-pass RV (snapped to the grid); those same
-        points set the error estimate (Bouchy et al. 2001).
+        The first pass fits the `window` ([min, max] km/s) about the CCF
+        minimum, yielding a mean and sigma. The second pass refits a window of
+        +/-3 sigma about that mean (symmetric about it); those points also set
+        the error estimate (Bouchy et al. 2001). Both windows use at least
+        min_npts grid points.
 
         Parameters
         ----------
@@ -255,11 +261,10 @@ class RadialVelocity:
         wave : ndarray
             1D wavelength solution for the order [Å]; sets the per-pixel velocity
             scale used in the error estimate.
-        rv_window_kms : float
-            Full width [km/s] of the first-pass velocity window.
-        rv_window_pts : int
-            Number of grid points in the second-pass fit/error window; must be
-            odd so the window is symmetric about the peak.
+        window : list of float
+            [min, max] km/s velocity window about the dip for the first pass.
+        min_npts : int
+            Minimum number of grid points to use in each fit window.
 
         Returns
         -------
@@ -267,51 +272,47 @@ class RadialVelocity:
             Fitted radial velocity [km/s], or NaN if the fit fails.
         rv_err : float
             Photon-limited RV uncertainty [km/s], or NaN if unavailable.
-
-        Raises
-        ------
-        ValueError
-            If rv_window_pts is even.
         """
-        if rv_window_pts % 2 == 0:
-            raise ValueError("rv_window_pts must be odd for a symmetric fitting window")
-
-        finite = np.isfinite(ccf)
-        if finite.sum() < 4 or np.ptp(ccf[finite]) == 0:
+        # Fail loudly on non-finite CCF values rather than masking them out.
+        if ccf.size < min_npts or not np.all(np.isfinite(ccf)) or np.ptp(ccf) == 0:
             return np.nan, np.nan
 
         # Locate the absorption dip; fit the inverted CCF so it presents as a peak
         # (matching optimize_lsq's peak-oriented guess); theta = [b, a, mu, sigma].
-        peak = vel[np.nanargmin(ccf)]
+        peak = vel[np.argmin(ccf)]
 
-        # First pass: +/-ccf_window_kms/2 velocity window around the dip.
-        win = finite & (np.abs(vel - peak) <= rv_window_kms / 2)
-        if win.sum() < 4:
+        # First pass: [min, max] velocity window about the dip.
+        lo_kms, hi_kms = window
+        win = (vel - peak >= lo_kms) & (vel - peak <= hi_kms)
+        if win.sum() < min_npts:
             return np.nan, np.nan
         try:
-            rv = optimize_lsq(vel[win], -ccf[win], 'gaussian')[0][2]
+            theta = optimize_lsq(vel[win], -ccf[win], 'gaussian')[0]
         except (RuntimeError, ValueError):
             return np.nan, np.nan
-        if not np.isfinite(rv):
+        mu1, sigma1 = theta[2], theta[3]
+        if not np.isfinite(mu1) or not np.isfinite(sigma1) or sigma1 < 0:
             return np.nan, np.nan
 
-        # Second pass: ccf_window_pts points centered on the first-pass RV snapped
-        # to the nearest grid point; these points also set the error estimate.
-        center = int(np.argmin(np.abs(vel - rv)))
-        half = rv_window_pts // 2
-        lo, hi = center - half, center + half + 1
+        # Second pass: +/-3 sigma about the first-pass mean, symmetric, with at
+        # least min_npts points; these points also set the error estimate.
+        dv = np.mean(np.diff(vel))
+        half_pts = max(int(np.floor(3.0 * sigma1 / dv)), int(np.ceil((min_npts - 1) / 2)))
+        center = int(np.argmin(np.abs(vel - mu1)))
+        lo, hi = center - half_pts, center + half_pts + 1
         if lo < 0 or hi > vel.size:
-            return rv, np.nan          # symmetric window runs off the grid
+            return mu1, np.nan          # symmetric window runs off the grid
         vel_fit, ccf_fit = vel[lo:hi], ccf[lo:hi]
+        rv = mu1
         try:
-            mu = optimize_lsq(vel_fit, -ccf_fit, 'gaussian')[0][2]
-            if vel_fit.min() <= mu <= vel_fit.max():
-                rv = mu
+            mu2 = optimize_lsq(vel_fit, -ccf_fit, 'gaussian')[0][2]
+            if vel_fit.min() <= mu2 <= vel_fit.max():
+                rv = mu2
         except (RuntimeError, ValueError):
             pass
 
         # Photon-limited RV uncertainty from the weighted CCF slope over the
-        # same ccf_window_pts points.
+        # second-pass window.
         if not np.any(ccf_fit) or np.any(ccf_fit < 0):
             return rv, np.nan
 
@@ -329,8 +330,8 @@ class RadialVelocity:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def compute_ccf(self, chip, fiber, mask_width_kms=None, ccf_step_size=None,
-                    ccf_step_range=None):
+    def compute_ccf(self, chip, fiber, width=None, step_size=None,
+                    window=None):
         """
         Cross-correlate every order of one chip/fiber against the line mask.
 
@@ -340,12 +341,13 @@ class RadialVelocity:
             Chip identifier, i.e. 'GREEN' or 'RED'.
         fiber : str
             Fiber identifier, e.g. 'SCI1'.
-        mask_width_kms : float, optional
+        width : float, optional
             Per-line mask top-hat width [km/s]. Defaults to the configured value.
-        ccf_step_size : float, optional
+        step_size : float, optional
             CCF velocity step size [km/s]. Defaults to the configured value.
-        ccf_step_range : list of int, optional
-            CCF velocity grid range, in steps. Defaults to the configured value.
+        window : list of float, optional
+            CCF velocity grid range [km/s] as [min, max] about the systemic RV.
+            Defaults to the configured value.
 
         Returns
         -------
@@ -361,36 +363,36 @@ class RadialVelocity:
         """
         chip = chip.upper()
         fiber = fiber.upper()
-        if mask_width_kms is None:
-            mask_width_kms = self.mask_width_kms
-        if ccf_step_size is None:
-            ccf_step_size = self.ccf_step_size
-        if ccf_step_range is None:
-            ccf_step_range = self.ccf_step_range
+        if width is None:
+            width = self.ccf_mask_width
+        if step_size is None:
+            step_size = self.ccf_step_size
+        if window is None:
+            window = self.ccf_window
 
         if np.size(self.l2_obj.data.get('BARYCORR_Z', np.array([]))) == 0:
             raise ValueError(
                 "per-order barycentric redshift (BARYCORR_Z) not populated; run BarycentricCorrection first"
             )
 
-        ccf_line_mask = self._build_ccf_line_mask(mask_width_kms)
-        ccf_velocity_grid = self._build_ccf_velocity_grid(ccf_step_size, ccf_step_range)
+        line_mask = self._build_ccf_line_mask(width)
+        velocity_grid = self._build_ccf_velocity_grid(step_size, window)
         barycorr_z = np.asarray(self.l2_obj.data[f'{chip}_BARYCORR_Z'], dtype=np.float64)
 
         flux = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_FLUX'], dtype=np.float64)
         wave = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_WAVE'], dtype=np.float64)
-        ccf = np.zeros((flux.shape[0], ccf_velocity_grid.size))
+        ccf = np.zeros((flux.shape[0], velocity_grid.size))
         
         for o in range(flux.shape[0]):
             if not np.all(np.isfinite(wave[o])) or not np.any(np.isfinite(flux[o])):
                 continue
-            ccf[o] = self._compute_ccf(wave[o], flux[o], ccf_line_mask, ccf_velocity_grid, barycorr_z[o])
+            ccf[o] = self._compute_ccf(wave[o], flux[o], line_mask, velocity_grid, barycorr_z[o])
 
         self._ccf[f'{chip}_{fiber}'] = ccf
         
-        return {'velocity': ccf_velocity_grid, 'ccf': ccf}
+        return {'velocity': velocity_grid, 'ccf': ccf}
 
-    def compute_rv(self, chip, fiber, rv_window_kms=None, rv_window_pts=None):
+    def compute_rv(self, chip, fiber, window=None, min_npts=9):
         """
         Compute per-order radial velocities for one chip/fiber.
 
@@ -400,12 +402,12 @@ class RadialVelocity:
             Chip identifier, i.e. 'GREEN' or 'RED'.
         fiber : str
             Fiber identifier, e.g. 'SCI1'.
-        rv_window_kms : float, optional
-            Full width [km/s] of the first-pass fit window. Defaults to the
-            configured value.
-        rv_window_pts : int, optional
-            Number of grid points in the second-pass fit/error window; must be
-            odd. Defaults to the configured value.
+        window : list of float, optional
+            [min, max] km/s window about the dip for the first-pass fit.
+            Defaults to the configured value.
+        min_npts : int, optional
+            Minimum number of grid points to use in each fit window. Not a
+            configurable parameter; set in code (default 9).
 
         Returns
         -------
@@ -418,10 +420,8 @@ class RadialVelocity:
             If compute_ccf has not been called for this chip/fiber; the CCF must
             be computed (and cached) first.
         """
-        if rv_window_kms is None:
-            rv_window_kms = self.rv_window_kms
-        if rv_window_pts is None:
-            rv_window_pts = self.rv_window_pts
+        if window is None:
+            window = self.rv_window
 
         chip = chip.upper()
         fiber = fiber.upper()
@@ -442,7 +442,7 @@ class RadialVelocity:
             if not np.any(ccf[o]):
                 continue
             rv[o], rv_err[o] = self._compute_rv(
-                velocity_grid, ccf[o], wave[o], rv_window_kms, rv_window_pts)
+                velocity_grid, ccf[o], wave[o], window, min_npts)
 
         return {'rv': rv, 'rv_err': rv_err}
 
@@ -450,8 +450,8 @@ class RadialVelocity:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, fibers=None, mask_width_kms=None, ccf_step_size=None, ccf_step_range=None,
-                rv_window_kms=None, rv_window_pts=None):
+    def perform(self, chips=None, fibers=None, ccf_mask_width=None, ccf_step_size=None, ccf_window=None,
+                rv_window=None, min_npts=9):
         """
         Compute per-order CCFs and radial velocities and package them in a KPF4.
 
@@ -467,18 +467,19 @@ class RadialVelocity:
         fibers : list of str, optional
             Fiber identifiers, e.g. ['SCI1', 'SCI2']. Defaults to all configured
             fibers (SCI, CAL, and SKY).
-        mask_width_kms : float, optional
+        ccf_mask_width : float, optional
             Per-line mask top-hat width [km/s]. Overrides the configured value.
         ccf_step_size : float, optional
             CCF velocity step size [km/s]. Overrides the configured value.
-        ccf_step_range : list of int, optional
-            CCF velocity grid range, in steps. Overrides the configured value.
-        rv_window_kms : float, optional
-            Full width [km/s] of the first-pass fit window. Overrides the
-            configured value.
-        rv_window_pts : int, optional
-            Number of grid points in the second-pass fit/error window; must be
-            odd. Overrides the configured value.
+        ccf_window : list of float, optional
+            CCF velocity grid range [km/s] as [min, max] about the systemic RV.
+            Overrides the configured value.
+        rv_window : list of float, optional
+            [min, max] km/s window about the dip for the first-pass fit.
+            Overrides the configured value.
+        min_npts : int, optional
+            Minimum number of grid points to use in each fit window. Not a
+            configurable parameter; set in code (default 9).
 
         Returns
         -------
@@ -491,16 +492,14 @@ class RadialVelocity:
             chips = self.chips
         if fibers is None:
             fibers = self.fibers
-        if mask_width_kms is None:
-            mask_width_kms = self.mask_width_kms
+        if ccf_mask_width is None:
+            ccf_mask_width = self.ccf_mask_width
         if ccf_step_size is None:
             ccf_step_size = self.ccf_step_size
-        if ccf_step_range is None:
-            ccf_step_range = self.ccf_step_range
-        if rv_window_kms is None:
-            rv_window_kms = self.rv_window_kms
-        if rv_window_pts is None:
-            rv_window_pts = self.rv_window_pts
+        if ccf_window is None:
+            ccf_window = self.ccf_window
+        if rv_window is None:
+            rv_window = self.rv_window
 
         chips = [c.upper() for c in chips]
         fibers = [f.upper() for f in fibers]
@@ -515,9 +514,9 @@ class RadialVelocity:
             rv = np.full(NORDER, np.nan)
             rv_err = np.full(NORDER, np.nan)
             for chip in chips:
-                ccf = self.compute_ccf(chip, fiber, mask_width_kms, ccf_step_size, ccf_step_range)['ccf']
+                ccf = self.compute_ccf(chip, fiber, ccf_mask_width, ccf_step_size, ccf_window)['ccf']
                 l4_obj.set_data(f'{chip}_{fiber}_CCF', ccf)
-                result = self.compute_rv(chip, fiber, rv_window_kms, rv_window_pts)
+                result = self.compute_rv(chip, fiber, rv_window, min_npts)
                 rows = slice(0, NORDER_GREEN) if chip == 'GREEN' else slice(NORDER_GREEN, NORDER)
                 rv[rows] = result['rv']
                 rv_err[rows] = result['rv_err']

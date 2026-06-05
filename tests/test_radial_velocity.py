@@ -18,9 +18,11 @@ from kpfpipe.modules.radial_velocity import RadialVelocity, SPEED_OF_LIGHT_KMS
 NORDER = NORDER_GREEN + NORDER_RED
 _FIBERS = ['CAL', 'SCI1', 'SCI2', 'SCI3', 'SKY']   # all orderlets
 
-# Narrow CCF grid for fast integration tests: +/-10 km/s at 0.25 km/s -> 81 steps.
-_STEP_RANGE = [-40, 40]
-_NVEL = _STEP_RANGE[1] - _STEP_RANGE[0] + 1
+# Narrow CCF grid for fast integration tests; wide enough for the second-pass
+# +/-3 sigma window (sigma ~ 4 km/s) to stay on-grid: +/-15 km/s at 0.25 km/s.
+_RANGE_KMS = [-15.0, 15.0]
+_STEP_KMS = 0.25                                   # matches the module default
+_NVEL = round((_RANGE_KMS[1] - _RANGE_KMS[0]) / _STEP_KMS) + 1
 _V_INJECT = 1.5                                   # injected RV [km/s], on the grid
 _MASK_CENTERS = np.linspace(5005.0, 5045.0, 30)   # vacuum line centers [Å]
 NCOL = 1000
@@ -30,12 +32,12 @@ NCOL = 1000
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_mask(centers, weights=None, mask_width_kms=0.5):
+def _make_mask(centers, weights=None, width=0.5):
     """Build a line-mask dict matching _build_ccf_line_mask's structure."""
     centers = np.asarray(centers, dtype=np.float64)
     if weights is None:
         weights = np.ones_like(centers)
-    half_width = centers * (mask_width_kms / SPEED_OF_LIGHT_KMS)
+    half_width = centers * (width / SPEED_OF_LIGHT_KMS)
     return {
         'center': centers,
         'weight': np.asarray(weights, dtype=np.float64),
@@ -128,39 +130,49 @@ class TestComputeRV:
 
     def test_recovers_injected_rv(self):
         vel, ccf, wave = self._ccf(v0=2.5)
-        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 11)
+        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, [-50.0, 50.0], 11)
         assert rv == pytest.approx(2.5, abs=0.05)
 
     def test_error_finite_and_positive(self):
         vel, ccf, wave = self._ccf(v0=0.0)
-        _, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 11)
+        _, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, [-50.0, 50.0], 11)
         assert np.isfinite(rv_err) and rv_err > 0
 
-    def test_even_window_raises(self):
-        vel, ccf, wave = self._ccf()
-        with pytest.raises(ValueError, match="odd"):
-            RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 8)
+    def test_even_window_pts_allowed(self):
+        # min_npts is a minimum point count, not a centered odd window.
+        vel, ccf, wave = self._ccf(v0=1.0)
+        rv, _ = RadialVelocity._compute_rv(vel, ccf, wave, [-50.0, 50.0], 8)
+        assert rv == pytest.approx(1.0, abs=0.05)
 
     def test_flat_ccf_returns_nan(self):
         vel = np.arange(-402, 403) * 0.25
         ccf = np.full_like(vel, 100.0)
         wave = np.linspace(5000.0, 5050.0, 4000)
-        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 11)
+        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, [-50.0, 50.0], 11)
         assert np.isnan(rv) and np.isnan(rv_err)
 
-    def test_window_off_grid_returns_rv_with_nan_error(self):
+    def test_nonfinite_ccf_returns_nan(self):
+        # Non-finite CCF values fail loudly (NaN) rather than being masked out.
+        vel, ccf, wave = self._ccf(v0=1.0)
+        ccf[10] = np.nan
+        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, [-50.0, 50.0], 11)
+        assert np.isnan(rv) and np.isnan(rv_err)
+
+    def test_second_pass_off_grid_returns_first_pass_rv(self):
+        # Dip near the low edge: the first-pass fit succeeds, but the +/-3 sigma
+        # second-pass window runs off the grid -> first-pass RV, NaN error.
         vel = np.arange(-402, 403) * 0.25
-        v0 = vel[3]   # dip within rv_window_pts//2 of the low edge
+        v0 = vel[20]
         ccf = 100.0 - 30.0 * np.exp(-0.5 * ((vel - v0) / 4.0) ** 2)
         wave = np.linspace(5000.0, 5050.0, 4000)
-        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 11)
-        assert np.isfinite(rv) and np.isnan(rv_err)
+        rv, rv_err = RadialVelocity._compute_rv(vel, ccf, wave, [-50.0, 50.0], 11)
+        assert rv == pytest.approx(v0, abs=0.1) and np.isnan(rv_err)
 
-    def test_window_size_controls_points(self):
-        # A wider points window still recovers the same center.
+    def test_min_points_floor_does_not_change_result(self):
+        # A larger min-points floor below the +/-3 sigma window doesn't shift the fit.
         vel, ccf, wave = self._ccf(v0=1.0)
-        rv9, _ = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 9)
-        rv21, _ = RadialVelocity._compute_rv(vel, ccf, wave, 50.0, 21)
+        rv9, _ = RadialVelocity._compute_rv(vel, ccf, wave, [-50.0, 50.0], 9)
+        rv21, _ = RadialVelocity._compute_rv(vel, ccf, wave, [-50.0, 50.0], 21)
         assert rv9 == pytest.approx(1.0, abs=0.05)
         assert rv21 == pytest.approx(1.0, abs=0.05)
 
@@ -223,7 +235,7 @@ class TestBuildVelocityGrid:
 
     def test_default_size_and_step(self, header_kpf2):
         grid = RadialVelocity(header_kpf2)._build_ccf_velocity_grid()
-        assert grid.size == 805                       # arange(-402, 403)
+        assert grid.size == 801                       # [-100, 100] km/s at 0.25 -> arange(-400, 401)
         np.testing.assert_allclose(np.diff(grid), 0.25)
 
     def test_symmetric_about_targradv(self, header_kpf2):
@@ -274,8 +286,8 @@ def rv_module(rv_kpf2, monkeypatch):
     """RadialVelocity on a narrow grid with the line mask stubbed to _MASK_CENTERS."""
     mask = _make_mask(_MASK_CENTERS)
     monkeypatch.setattr(RadialVelocity, '_build_ccf_line_mask',
-                        lambda self, mask_width_kms=None: mask)
-    return RadialVelocity(rv_kpf2, config={'ccf_step_range': _STEP_RANGE})
+                        lambda self, width=None:mask)
+    return RadialVelocity(rv_kpf2, config={'ccf_window': _RANGE_KMS})
 
 
 class TestComputeCCFPublic:
@@ -305,9 +317,9 @@ class TestComputeCCFPublic:
 
     def test_missing_barycorr_z_raises(self, rv_kpf2, monkeypatch):
         monkeypatch.setattr(RadialVelocity, '_build_ccf_line_mask',
-                            lambda self, mask_width_kms=None: _make_mask(_MASK_CENTERS))
+                            lambda self, width=None:_make_mask(_MASK_CENTERS))
         rv_kpf2.set_data('BARYCORR_Z', np.array([]))
-        rv = RadialVelocity(rv_kpf2, config={'ccf_step_range': _STEP_RANGE})
+        rv = RadialVelocity(rv_kpf2, config={'ccf_window': _RANGE_KMS})
         with pytest.raises(ValueError, match="BARYCORR_Z"):
             rv.compute_ccf('GREEN', 'SCI2')
 
@@ -391,10 +403,10 @@ class TestConstructor:
             RadialVelocity(header_kpf2, config="not-a-config")
 
     def test_dict_config_overrides_default(self, header_kpf2):
-        rv = RadialVelocity(header_kpf2, config={'mask_width_kms': 1.0})
-        assert rv.mask_width_kms == 1.0
+        rv = RadialVelocity(header_kpf2, config={'ccf_mask_width': 1.0})
+        assert rv.ccf_mask_width == 1.0
 
     def test_defaults_applied(self, header_kpf2):
         rv = RadialVelocity(header_kpf2)
-        assert rv.mask_width_kms == 0.5
+        assert rv.ccf_mask_width == 0.5
         assert rv.ccf_step_size == 0.25

@@ -26,8 +26,7 @@ extraction_method = "box"
 [MODULE_BARYCENTRIC_CORRECTION]
 
 [MODULE_RADIAL_VELOCITY]
-mask_width_kms = 0.5
+ccf_mask_width = 0.5
 ccf_step_size = 0.25
-ccf_step_range = [-402, 402]
-rv_window_kms = 50.0
-rv_window_pts = 11
+ccf_window = [-100.0, 100.0]
+rv_window = [-25.0, 25.0]
