@@ -618,13 +618,17 @@ class TestPerform:
         np.testing.assert_allclose(kms, TestPerform.DELTA_RV_MPS / 1000.0)
 
     def test_barycorr_z_extension_populated(self, bc_monkeypatched):
+        from astropy.constants import c
         kpf2 = bc_monkeypatched.perform()
         z = np.asarray(kpf2.data['BARYCORR_Z'])
         assert z.shape == (NORDER,)
         # All orders share the same delta_rv → all z values identical
         assert np.std(z) < 1e-12
-        # 30 km/s redshift is < 1: positive RV means moving away
-        assert 0.9 < z[0] < 1.0
+        # BARYCORR_Z is the small redshift z (~ v/c), same sign as the velocity:
+        # +30 km/s (receding) -> small positive z, not the Doppler factor (~1).
+        assert z[0] == pytest.approx(
+            TestPerform.DELTA_RV_MPS / c.to('m/s').value, rel=1e-4)
+        assert 0.0 < z[0] < 1e-3
 
     def test_wave_arrays_untouched(self, bc_monkeypatched):
         """BarycentricCorrection should track but not apply: WAVE arrays unchanged."""

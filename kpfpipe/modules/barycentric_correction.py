@@ -41,7 +41,7 @@ from scipy.ndimage import gaussian_filter, median_filter
 from scipy.special import erfcinv
 
 from kpfpipe import DETECTOR
-from kpfpipe.utils.astro import compute_doppler_shift
+from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import strictly_increasing
 
@@ -534,7 +534,7 @@ class BarycentricCorrection:
             skycoord, t_fwm, KECK_LOCATION, rv_mps=rv_mps,
         )
         bary_kms = bc_vel_mps / 1000.0
-        bary_z = np.asarray(compute_doppler_shift(bc_vel_mps * u.m / u.s))
+        bary_z = np.asarray(compute_redshift(bc_vel_mps * u.m / u.s))
         return bjd_tdb, bary_kms, bary_z
 
     # ------------------------------------------------------------------
