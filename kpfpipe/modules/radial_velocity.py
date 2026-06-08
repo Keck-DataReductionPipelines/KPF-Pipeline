@@ -331,7 +331,7 @@ class RadialVelocity:
     # ------------------------------------------------------------------
 
     def compute_ccf(self, chip, fiber, width=None, step_size=None,
-                    window=None):
+                    window=None, clip_edge_pixels=[500, 500]):
         """
         Cross-correlate every order of one chip/fiber against the line mask.
 
@@ -348,6 +348,10 @@ class RadialVelocity:
         window : list of float, optional
             CCF velocity grid range [km/s] as [min, max] about the systemic RV.
             Defaults to the configured value.
+        clip_edge_pixels : list of int, optional
+            Number of pixels to drop from the [short_wavelength_end,
+            long_wavelength_end] of each order before correlating, removing the
+            blaze-faint, low-S/N order edges. Defaults to [500, 500].
 
         Returns
         -------
@@ -381,6 +385,26 @@ class RadialVelocity:
 
         flux = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_FLUX'], dtype=np.float64)
         wave = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_WAVE'], dtype=np.float64)
+
+        # Drop the blaze-faint, low-S/N pixels at each order's edges, which
+        # otherwise inject noise into the CCF. clip_edge_pixels counts pixels to
+        # remove from the [short_wavelength_end, long_wavelength_end]; map those
+        # to the pixel axis using the measured dispersion direction.
+        n_short, n_long = int(clip_edge_pixels[0]), int(clip_edge_pixels[1])
+        if n_short or n_long:
+            ncol = flux.shape[1]
+            if n_short + n_long >= ncol:
+                raise ValueError(
+                    f"clip_edge_pixels {list(clip_edge_pixels)} removes all "
+                    f"{ncol} pixels of {chip}_{fiber}"
+                )
+            if np.nanmedian(np.diff(wave, axis=1)) >= 0:   # pixel 0 = short wavelength
+                cols = slice(n_short, ncol - n_long)
+            else:
+                cols = slice(n_long, ncol - n_short)
+            flux = flux[:, cols]
+            wave = wave[:, cols]
+
         norder = flux.shape[0]
         ccf = np.zeros((norder, velocity_grid.size))
 
@@ -469,7 +493,7 @@ class RadialVelocity:
     # ------------------------------------------------------------------
 
     def perform(self, chips=None, fibers=None, ccf_mask_width=None, ccf_step_size=None, ccf_window=None,
-                rv_window=None, min_npts=9):
+                rv_window=None, min_npts=9, clip_edge_pixels=[500, 500]):
         """
         Compute per-order CCFs and radial velocities and package them in a KPF4.
 
@@ -498,6 +522,9 @@ class RadialVelocity:
         min_npts : int, optional
             Minimum number of grid points to use in each fit window. Not a
             configurable parameter; set in code (default 9).
+        clip_edge_pixels : list of int, optional
+            Pixels to drop from the [short_wavelength_end, long_wavelength_end]
+            of each order before correlating. Defaults to [500, 500].
 
         Returns
         -------
@@ -533,7 +560,8 @@ class RadialVelocity:
             rv = np.full(NORDER, np.nan)
             rv_err = np.full(NORDER, np.nan)
             for chip in chips:
-                ccf = self.compute_ccf(chip, fiber, ccf_mask_width, ccf_step_size, ccf_window)['ccf']
+                ccf = self.compute_ccf(chip, fiber, ccf_mask_width, ccf_step_size, ccf_window,
+                                       clip_edge_pixels=clip_edge_pixels)['ccf']
                 l4_obj.set_data(f'{chip}_{fiber}_CCF', ccf)
                 result = self.compute_rv(chip, fiber, rv_window, min_npts)
                 rows = slice(0, NORDER_GREEN) if chip == 'GREEN' else slice(NORDER_GREEN, NORDER)

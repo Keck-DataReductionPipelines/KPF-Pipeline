@@ -24,8 +24,10 @@ _RANGE_KMS = [-15.0, 15.0]
 _STEP_KMS = 0.25                                   # matches the module default
 _NVEL = round((_RANGE_KMS[1] - _RANGE_KMS[0]) / _STEP_KMS) + 1
 _V_INJECT = 1.5                                   # injected RV [km/s], on the grid
-_MASK_CENTERS = np.linspace(5005.0, 5045.0, 30)   # vacuum line centers [Å]
-NCOL = 1000
+_MASK_CENTERS = np.linspace(5015.0, 5035.0, 30)   # vacuum line centers [Å]
+# Wide enough that the default compute_ccf clip (clip_edge_pixels=[500, 500])
+# trims the order edges but leaves the 5015-5035 Å mask lines well inside.
+NCOL = 2000
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +332,16 @@ class TestComputeCCFPublic:
         rv_module.l2_obj.set_data('GREEN_SCI2_FLUX', np.zeros_like(flux))
         with pytest.raises(RuntimeError, match="identically zero"):
             rv_module.compute_ccf('GREEN', 'SCI2')
+
+    def test_clip_edge_pixels_zero_keeps_all(self, rv_module):
+        # clip_edge_pixels=[0, 0] is a no-op (no pixels removed).
+        full = rv_module.compute_ccf('GREEN', 'SCI2', clip_edge_pixels=[0, 0])['ccf']
+        assert np.any(full)
+
+    def test_clip_edge_pixels_too_large_raises(self, rv_module):
+        # Clipping more pixels than the order has fails loudly.
+        with pytest.raises(ValueError, match="removes all"):
+            rv_module.compute_ccf('GREEN', 'SCI2', clip_edge_pixels=[NCOL, NCOL])
 
 
 class TestComputeRVPublic:
