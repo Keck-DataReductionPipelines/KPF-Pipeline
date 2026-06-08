@@ -323,6 +323,14 @@ class TestComputeCCFPublic:
         with pytest.raises(ValueError, match="BARYCORR_Z"):
             rv.compute_ccf('GREEN', 'SCI2')
 
+    def test_all_zero_ccf_raises(self, rv_module):
+        # No usable signal across the whole orderlet -> fail loudly instead of
+        # silently returning an all-zero CCF cube.
+        flux = np.asarray(rv_module.l2_obj.data['GREEN_SCI2_FLUX'])
+        rv_module.l2_obj.set_data('GREEN_SCI2_FLUX', np.zeros_like(flux))
+        with pytest.raises(RuntimeError, match="identically zero"):
+            rv_module.compute_ccf('GREEN', 'SCI2')
+
 
 class TestComputeRVPublic:
 

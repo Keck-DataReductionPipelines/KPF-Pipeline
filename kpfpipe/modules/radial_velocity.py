@@ -381,15 +381,33 @@ class RadialVelocity:
 
         flux = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_FLUX'], dtype=np.float64)
         wave = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_WAVE'], dtype=np.float64)
-        ccf = np.zeros((flux.shape[0], velocity_grid.size))
-        
-        for o in range(flux.shape[0]):
+        norder = flux.shape[0]
+        ccf = np.zeros((norder, velocity_grid.size))
+
+        # Some orders legitimately yield a zero CCF (no mask lines fall within
+        # their wavelength coverage, or the order has no usable flux); those are
+        # skipped, not failures. A whole-orderlet zero result, however, is a
+        # failure and is caught below rather than silently passed through.
+        for o in range(norder):
             if not np.all(np.isfinite(wave[o])) or not np.any(np.isfinite(flux[o])):
                 continue
             ccf[o] = self._compute_ccf(wave[o], flux[o], line_mask, velocity_grid, barycorr_z[o])
 
+        # Fail loudly: an identically-zero CCF across every order means the
+        # cross-correlation produced nothing usable for this orderlet (no mask
+        # line overlapped any order with finite flux). Common causes: an
+        # unpopulated/garbage wavelength solution or flux, or a line mask whose
+        # wavelengths (vacuum, Angstrom) do not overlap the data.
+        if not np.any(ccf):
+            raise RuntimeError(
+                f"CCF for {chip}_{fiber} is identically zero across all {norder} "
+                "orders; cross-correlation produced no usable signal. Check that "
+                f"{chip}_{fiber}_WAVE and {chip}_{fiber}_FLUX are populated and "
+                "finite, and that the line mask overlaps the data wavelengths."
+            )
+
         self._ccf[f'{chip}_{fiber}'] = ccf
-        
+
         return {'velocity': velocity_grid, 'ccf': ccf}
 
     def compute_rv(self, chip, fiber, window=None, min_npts=9):
@@ -510,6 +528,7 @@ class RadialVelocity:
         bjd_tdb = np.asarray(self.l2_obj.data['BJD_TDB'], dtype=np.float64)
         berv = np.asarray(self.l2_obj.data['BARYCORR_KMS'], dtype=np.float64)
 
+        self._results = {}
         for fiber in fibers:
             rv = np.full(NORDER, np.nan)
             rv_err = np.full(NORDER, np.nan)
@@ -520,6 +539,7 @@ class RadialVelocity:
                 rows = slice(0, NORDER_GREEN) if chip == 'GREEN' else slice(NORDER_GREEN, NORDER)
                 rv[rows] = result['rv']
                 rv_err[rows] = result['rv_err']
+            self._results[fiber] = {'rv': rv, 'rv_err': rv_err}
 
             # Per-orderlet RV table, one row per spectral order.
             wave = np.asarray(self.l2_obj.data[f'{fiber}_WAVE'], dtype=np.float64)
@@ -542,3 +562,39 @@ class RadialVelocity:
 
         l4_obj.receipt_add_entry('radial_velocity', 'PASS')
         return l4_obj
+
+    def info(self):
+        """Print a summary of the module configuration and RV results."""
+        print("RadialVelocity")
+        obs_id = self.l2_obj.headers.get('PRIMARY', {}).get('ORIGID', 'unknown')
+        if isinstance(obs_id, tuple):
+            obs_id = obs_id[0]
+        print(f"  obs_id:         {obs_id}")
+        print(f"  ccf_mask_width: {self.ccf_mask_width} km/s")
+        print(f"  ccf_step_size:  {self.ccf_step_size} km/s")
+        print(f"  ccf_window:     {self.ccf_window} km/s")
+        print(f"  rv_window:      {self.rv_window} km/s")
+
+        if self._results is None:
+            print("  perform() has not been called")
+            return
+
+        # CCF velocity grid (linear, shared by all orderlets).
+        grid = self._ccf_velocity_grid
+        print(f"\n  CCF velocity grid: {grid[0]:+.2f} to {grid[-1]:+.2f} km/s, "
+              f"{grid.size} steps of {self.ccf_step_size} km/s")
+
+        # Per-orderlet, per-CCD RV summary (median over valid orders; RV_ERR in
+        # m/s to match the typical scale).
+        print(f"\n  {'FIBER':<8s}{'CHIP':<8s}{'NVALID':>8s}"
+              f"{'RV [km/s]':>16s}{'RV_ERR [m/s]':>16s}")
+        print("  " + "-" * 54)
+        for fiber, r in self._results.items():
+            for chip, rows in (('GREEN', slice(0, NORDER_GREEN)),
+                               ('RED', slice(NORDER_GREEN, NORDER))):
+                rv, rv_err = r['rv'][rows], r['rv_err'][rows]
+                nvalid = int(np.sum(np.isfinite(rv)))
+                if nvalid == 0:
+                    continue
+                print(f"  {fiber:<8s}{chip:<8s}{nvalid:>8d}"
+                      f"{np.nanmedian(rv):>+16.5f}{np.nanmedian(rv_err) * 1e3:>16.3f}")
