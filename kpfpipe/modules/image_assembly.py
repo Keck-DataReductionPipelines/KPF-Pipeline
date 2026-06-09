@@ -467,6 +467,11 @@ class ImageAssembly:
         else:
             raise ValueError(f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD")
 
+        # Flip along the dispersion axis to orient columns blue -> red
+        ccd_ffi = np.flip(ccd_ffi, axis=1)
+        var_ffi = np.flip(var_ffi, axis=1)
+
+        # GREEN ccd raw image is inverted relative to RED
         if chip == 'GREEN':
             ccd_ffi = np.flip(ccd_ffi, axis=0)
             var_ffi = np.flip(var_ffi, axis=0)
