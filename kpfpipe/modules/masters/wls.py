@@ -22,8 +22,8 @@ from kpfpipe.utils.stats import optimize_lsq
 DEFAULTS.update({
     'linelist': f'{REPO_ROOT}/reference/thar_line_list.csv',
     'lineprofile': 'gaussian',
-    'polyorder_x': 6,
-    'polyorder_m': 3,
+    'polyorder_x': 9,
+    'polyorder_m': 6,
     'polyorder_f': 2,
 })
 
@@ -107,6 +107,11 @@ class WLS(BaseMasterModule):
             df = pd.read_csv(self.rough_wls_file)
 
             ncol = self.ccd['ncol']
+            # Per-order Legendre coefficients (C0..Cn) evaluated on the
+            # normalized pixel grid; see scripts/build_rough_wls_from_legacy_wls.py.
+            coeff_cols = sorted((c for c in df.columns if c.startswith('C') and c[1:].isdigit()),
+                                key=lambda c: int(c[1:]))
+            x = 2*np.arange(ncol)/(ncol - 1) - 1
             self.rough_wls = {}
 
             for chip in self.chips:
@@ -117,11 +122,8 @@ class WLS(BaseMasterModule):
 
                     for o in range(norder):
                         use = (df.CHIP == chip) & (df.ORDER == o)
-                        self.rough_wls[channel_ext][o] = np.linspace(
-                            df.loc[use, 'WAVE_MIN'].values[0],
-                            df.loc[use, 'WAVE_MAX'].values[0],
-                            ncol,
-                        )
+                        coeffs = df.loc[use, coeff_cols].values[0]
+                        self.rough_wls[channel_ext][o] = legendre.legval(x, coeffs)
 
         return self.rough_wls
     
