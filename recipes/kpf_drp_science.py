@@ -15,6 +15,7 @@ from kpfpipe.quality_control.diagnostics import DiagL1, DiagL2
 from kpfpipe.quality_control.qc_booleans import QCL1, QCL2
 from kpfpipe.quality_control.quicklook.level0 import PlotL0
 from kpfpipe.quality_control.quicklook.level1 import PlotL1
+from kpfpipe.quality_control.quicklook.level2 import PlotL2
 
 from kpfpipe.utils.pipeline import build_filepath, build_qlp_dir
 
@@ -72,6 +73,10 @@ def main(config, args):
     # apply per-order barycentric correction (writes BJD_TDB, BARYCORR_KMS, BARYCORR_Z)
     barycentric_correction = BarycentricCorrection(l2, config)
     l2 = barycentric_correction.perform()
+
+    # L2 QLP (wavelength-aware extracted-spectrum plots; requires attached WAVE)
+    l2_qlp_dir = build_qlp_dir(obs_id, 'L2', data_root=data_root_science)
+    PlotL2(l2, output_dir=l2_qlp_dir, obs_id=obs_id).run('all')
 
     # write L2 data product to disk
     l2_out_path = build_filepath(obs_id, 'L2', data_root=data_root_science)
