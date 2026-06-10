@@ -73,13 +73,21 @@ def mock_pipeline(monkeypatch):
 
 class TestInit:
 
-    def test_none_config_sets_data_input_none(self):
+    def test_none_config_sets_masters_root_none(self):
         wls = WLS(FILE_LIST)
-        assert wls._data_root is None
+        assert wls._masters_root is None
 
-    def test_dict_config_sets_data_input(self):
-        wls = WLS(FILE_LIST, config={'KPF_DATA_INPUT': '/data/kpf'})
-        assert wls._data_root == '/data/kpf'
+    def test_reads_masters_root_from_config(self):
+        # WLS associates the master bias from KPF_MASTERS_OUTPUT -- where the
+        # masters recipe writes it and where CalibrationAssociation reads it.
+        wls = WLS(FILE_LIST, config={'KPF_MASTERS_OUTPUT': '/masters'})
+        assert wls._masters_root == '/masters'
+
+    def test_ignores_data_input_for_masters_root(self):
+        # The raw input root is not where masters live; only KPF_MASTERS_OUTPUT
+        # drives the masters search.
+        wls = WLS(FILE_LIST, config={'KPF_DATA_INPUT': '/in'})
+        assert wls._masters_root is None
 
     def test_invalid_config_raises(self):
         with pytest.raises(TypeError):
@@ -97,7 +105,8 @@ class TestExtractFrame:
         result = wls._extract_frame(MockL1())
         assert result is mock_pipeline
 
-    def test_passes_data_input_to_calibration_association(self, monkeypatch):
+    def test_passes_masters_root_to_calibration_association(self, monkeypatch):
+        # _extract_frame must associate the bias from KPF_MASTERS_OUTPUT.
         mock_ca = MagicMock()
         mock_ca.return_value.perform.return_value = MockL1()
         mock_ip = MagicMock()
@@ -109,11 +118,11 @@ class TestExtractFrame:
         monkeypatch.setattr(wls_module, 'ImageProcessing', mock_ip)
         monkeypatch.setattr(wls_module, 'SpectralExtraction', mock_se)
 
-        wls = WLS(FILE_LIST, config={'KPF_DATA_INPUT': '/data/kpf'})
+        wls = WLS(FILE_LIST, config={'KPF_MASTERS_OUTPUT': '/masters'})
         wls._extract_frame(MockL1())
 
         call_args = mock_ca.call_args[0]
-        assert call_args[1].get('KPF_DATA_INPUT') == '/data/kpf'
+        assert call_args[1].get('KPF_MASTERS_OUTPUT') == '/masters'
 
 
 # ---------------------------------------------------------------------------

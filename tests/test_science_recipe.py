@@ -61,8 +61,9 @@ class TestScienceRecipe:
             str(CONFIG_PATH),
             overrides={
                 'DATA_DIRS': {
-                    'KPF_DATA_INPUT':  str(TESTDATA_DIR),
-                    'KPF_DATA_OUTPUT': str(tmp_path),
+                    'KPF_DATA_INPUT':     str(TESTDATA_DIR),
+                    'KPF_MASTERS_OUTPUT': str(TESTDATA_DIR),
+                    'KPF_SCIENCE_OUTPUT': str(tmp_path),
                 }
             },
         )
@@ -189,8 +190,9 @@ class TestScienceRecipeErrors:
             str(CONFIG_PATH),
             overrides={
                 'DATA_DIRS': {
-                    'KPF_DATA_INPUT':  str(tmp_path),
-                    'KPF_DATA_OUTPUT': str(tmp_path),
+                    'KPF_DATA_INPUT':     str(tmp_path),
+                    'KPF_MASTERS_OUTPUT': str(tmp_path),
+                    'KPF_SCIENCE_OUTPUT': str(tmp_path),
                 }
             },
         )
@@ -204,8 +206,9 @@ class TestScienceRecipeErrors:
             str(CONFIG_PATH),
             overrides={
                 'DATA_DIRS': {
-                    'KPF_DATA_INPUT':  str(tmp_path),
-                    'KPF_DATA_OUTPUT': str(tmp_path),
+                    'KPF_DATA_INPUT':     str(tmp_path),
+                    'KPF_MASTERS_OUTPUT': str(tmp_path),
+                    'KPF_SCIENCE_OUTPUT': str(tmp_path),
                 }
             },
         )
