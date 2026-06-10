@@ -72,6 +72,16 @@ class TestInit:
         wls = WLS(FILE_LIST, config={'KPF_DATA_INPUT': '/data/kpf'})
         assert wls._data_root == '/data/kpf'
 
+    def test_prefers_data_output_over_input(self):
+        # The masters recipe writes the bias WLS needs to KPF_DATA_OUTPUT, so
+        # it takes precedence over KPF_DATA_INPUT.
+        wls = WLS(FILE_LIST, config={'KPF_DATA_OUTPUT': '/out', 'KPF_DATA_INPUT': '/in'})
+        assert wls._data_root == '/out'
+
+    def test_falls_back_to_input_without_output(self):
+        wls = WLS(FILE_LIST, config={'KPF_DATA_INPUT': '/in'})
+        assert wls._data_root == '/in'
+
     def test_invalid_config_raises(self):
         with pytest.raises(TypeError):
             WLS(FILE_LIST, config=42)
@@ -105,6 +115,26 @@ class TestExtractFrame:
 
         call_args = mock_ca.call_args[0]
         assert call_args[1].get('KPF_DATA_INPUT') == '/data/kpf'
+
+    def test_extract_frame_prefers_data_output(self, monkeypatch):
+        # The recipe passes both roots and writes the just-built bias to
+        # KPF_DATA_OUTPUT; _extract_frame must associate the bias from there.
+        mock_ca = MagicMock()
+        mock_ca.return_value.perform.return_value = MockL1()
+        mock_ip = MagicMock()
+        mock_ip.return_value.perform.return_value = MockL1()
+        mock_se = MagicMock()
+        mock_se.return_value.perform.return_value = MockL2()
+
+        monkeypatch.setattr(wls_module, 'CalibrationAssociation', mock_ca)
+        monkeypatch.setattr(wls_module, 'ImageProcessing', mock_ip)
+        monkeypatch.setattr(wls_module, 'SpectralExtraction', mock_se)
+
+        wls = WLS(FILE_LIST, config={'KPF_DATA_OUTPUT': '/out', 'KPF_DATA_INPUT': '/in'})
+        wls._extract_frame(MockL1())
+
+        call_args = mock_ca.call_args[0]
+        assert call_args[1].get('KPF_DATA_INPUT') == '/out'
 
 
 # ---------------------------------------------------------------------------

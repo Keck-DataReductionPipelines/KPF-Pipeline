@@ -45,7 +45,7 @@ class WLS(BaseMasterModule):
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: linelist, lineprofile,
         polyorder_x, polyorder_m, polyorder_f, chips, fibers,
-        KPF_DATA_INPUT.
+        KPF_DATA_OUTPUT, KPF_DATA_INPUT.
     """
     def __init__(self, l0_file_list, config=None):
         if config is None:
@@ -57,7 +57,12 @@ class WLS(BaseMasterModule):
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
-        self._data_root = params.get('KPF_DATA_INPUT')
+        # WLS extraction associates a master bias for each ThAr frame. The
+        # masters recipe writes that bias to KPF_DATA_OUTPUT, so prefer it
+        # (otherwise WLS can't see the bias the recipe just built when
+        # input != output). Fall back to KPF_DATA_INPUT for standalone callers
+        # that only set an input root (e.g. masters colocated with inputs).
+        self._data_root = params.get('KPF_DATA_OUTPUT') or params.get('KPF_DATA_INPUT')
         self.rough_wls_file = _ROUGH_WLS_FILE
 
         self._load_rough_wls()
