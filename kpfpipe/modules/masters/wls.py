@@ -22,7 +22,7 @@ from kpfpipe.utils.stats import optimize_lsq
 DEFAULTS.update({
     'linelist': f'{REPO_ROOT}/reference/thar_line_list.csv',
     'lineprofile': 'gaussian',
-    'polyorder_x': 9,
+    'polyorder_x': 6,
     'polyorder_m': 6,
     'polyorder_f': 2,
 })

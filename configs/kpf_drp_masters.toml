@@ -17,7 +17,7 @@ stack_sigma = 5.0
 
 [WLS]
 lineprofile = "gaussian"
-polyorder_x = 9
+polyorder_x = 6
 polyorder_m = 6
 polyorder_f = 2
 
