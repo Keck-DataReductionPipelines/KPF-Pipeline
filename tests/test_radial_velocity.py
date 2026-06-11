@@ -91,11 +91,10 @@ class TestComputeCCF:
         ccf = RadialVelocity._compute_ccf(wave, flux, mask, vel, z)
         assert vel[np.argmin(ccf)] == pytest.approx(2.0, abs=0.3)
 
-    def test_reversed_order_matches(self):
+    def test_descending_wave_raises(self):
         wave, flux, mask, vel = self._order(v_dip=0.0)
-        ccf_asc = RadialVelocity._compute_ccf(wave, flux, mask, vel, 0.0)
-        ccf_desc = RadialVelocity._compute_ccf(wave[::-1], flux[::-1], mask, vel, 0.0)
-        np.testing.assert_allclose(ccf_asc, ccf_desc)
+        with pytest.raises(ValueError, match="descending"):
+            RadialVelocity._compute_ccf(wave[::-1], flux[::-1], mask, vel, 0.0)
 
     def test_constant_wave_returns_zeros(self):
         wave, flux, mask, vel = self._order()

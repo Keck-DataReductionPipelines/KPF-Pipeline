@@ -193,11 +193,22 @@ class RadialVelocity:
         ndarray
             CCF value at each velocity step (all zeros if the order is unusable
             or no mask lines fall fully within it).
+
+        Raises
+        ------
+        ValueError
+            If the WAVE array is descending; an ascending (blue->red) solution
+            is expected, so a reversed order signals an upstream orientation
+            error rather than something to silently correct.
         """
         wave = np.asarray(wave, dtype=np.float64)
         flux = np.asarray(flux, dtype=np.float64)
-        if wave[0] > wave[-1]:          # reversed order -> flip to ascending
-            wave, flux = wave[::-1], flux[::-1]
+        if wave[0] > wave[-1]:
+            raise ValueError(
+                f"WAVE array is descending (wave[0]={wave[0]:.4f} > "
+                f"wave[-1]={wave[-1]:.4f}); expected ascending blue->red "
+                f"orientation. This signals an upstream orientation error."
+            )
 
         ccf = np.zeros(velocity_grid.size)
         n_pix = wave.size
