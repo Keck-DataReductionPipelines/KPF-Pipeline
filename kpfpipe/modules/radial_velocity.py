@@ -303,7 +303,7 @@ class RadialVelocity:
         except (RuntimeError, ValueError):
             return np.nan, np.nan
         mu1, sigma1 = theta[2], theta[3]
-        if not np.isfinite(mu1) or not np.isfinite(sigma1) or sigma1 < 0:
+        if not np.isfinite(mu1) or not np.isfinite(sigma1):
             return np.nan, np.nan
 
         # Second pass: +/-3 sigma about the first-pass mean, symmetric, with at
