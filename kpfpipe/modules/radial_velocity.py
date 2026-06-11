@@ -11,6 +11,7 @@ ESPRESSO line masks give in-air wavelengths
 Calibration line masks give vacuum wavelengths
 """
 from astropy.constants import c
+from astropy.stats import mad_std
 import numpy as np
 import pandas as pd
 
@@ -623,17 +624,24 @@ class RadialVelocity:
         print(f"\n  CCF velocity grid: {grid[0]:+.2f} to {grid[-1]:+.2f} km/s, "
               f"{grid.size} steps of {self.ccf_step_size} km/s")
 
-        # Per-orderlet, per-CCD RV summary (median over valid orders; RV_ERR in
-        # m/s to match the typical scale).
-        print(f"\n  {'FIBER':<8s}{'CHIP':<8s}{'NVALID':>8s}"
-              f"{'RV [km/s]':>16s}{'RV_ERR [m/s]':>16s}")
-        print("  " + "-" * 54)
-        for fiber, r in self._results.items():
-            for chip, rows in (('GREEN', slice(0, NORDER_GREEN)),
-                               ('RED', slice(NORDER_GREEN, NORDER))):
-                rv, rv_err = r['rv'][rows], r['rv_err'][rows]
+        # Per-CCD, per-orderlet RV summary (median over valid orders). RV_ERR is
+        # the median formal photon error; RV_RMS is the order-to-order mad_std,
+        # both in m/s so the scatter can be compared to the formal error.
+        fiber_order = [f for f in ('SCI1', 'SCI2', 'SCI3', 'SKY', 'CAL')
+                       if f in self._results]
+        fiber_order += [f for f in self._results if f not in fiber_order]
+
+        print(f"\n  {'CHIP':<8s}{'FIBER':<8s}{'NVALID':>8s}"
+              f"{'RV [km/s]':>16s}{'RV_ERR [m/s]':>16s}{'RV_RMS [m/s]':>16s}")
+        print("  " + "-" * 72)
+        for chip, rows in (('GREEN', slice(0, NORDER_GREEN)),
+                           ('RED', slice(NORDER_GREEN, NORDER))):
+            for fiber in fiber_order:
+                rv, rv_err = self._results[fiber]['rv'][rows], self._results[fiber]['rv_err'][rows]
                 nvalid = int(np.sum(np.isfinite(rv)))
                 if nvalid == 0:
                     continue
-                print(f"  {fiber:<8s}{chip:<8s}{nvalid:>8d}"
-                      f"{np.nanmedian(rv):>+16.5f}{np.nanmedian(rv_err) * 1e3:>16.3f}")
+                rv_rms = mad_std(rv, ignore_nan=True) * 1e3 if nvalid >= 2 else np.nan
+                print(f"  {chip:<8s}{fiber:<8s}{nvalid:>8d}"
+                      f"{np.nanmedian(rv):>+16.5f}{np.nanmedian(rv_err) * 1e3:>16.3f}"
+                      f"{rv_rms:>16.3f}")
