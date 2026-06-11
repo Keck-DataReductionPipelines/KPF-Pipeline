@@ -12,11 +12,12 @@ Calibration line masks give vacuum wavelengths
 """
 from astropy.constants import c
 from astropy.stats import mad_std
+import astropy.units as u
 import numpy as np
 import pandas as pd
 
 from kpfpipe import REPO_ROOT, DEFAULTS, DETECTOR
-from kpfpipe.utils.astro import air_to_vac
+from kpfpipe.utils.astro import air_to_vac, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 from kpfpipe.utils.validation import strictly_increasing
@@ -76,8 +77,8 @@ class RadialVelocity:
     def _build_ccf_line_mask(self, width=None):
         """
         Build (and cache) the CCF line mask for the TARGTEFF-selected stellar
-        mask: vacuum line centers, weights, and per-line top-hat edges
-        (center ± center * width / c).
+        mask: vacuum line centers, weights, and per-line top-hat edges at
+        velocity -/+ width about each center (relativistic Doppler).
 
         Returns
         -------
@@ -114,12 +115,11 @@ class RadialVelocity:
 
         centers, weights = np.loadtxt(mask_path, unpack=True)
         centers = air_to_vac(centers)
-        half_width = centers * (width / SPEED_OF_LIGHT_KMS)
         self._ccf_line_mask = {
             'center': centers,
             'weight': weights,
-            'start': centers - half_width,
-            'end': centers + half_width,
+            'start': centers * (1.0 + compute_redshift(-width * u.km / u.s)),
+            'end':   centers * (1.0 + compute_redshift(+width * u.km / u.s)),
         }
         return self._ccf_line_mask
 
@@ -222,7 +222,8 @@ class RadialVelocity:
         edges[0] = wave[0] - 0.5 * (wave[1] - wave[0])
         edges[-1] = wave[-1] + 0.5 * (wave[-1] - wave[-2])
         widths = np.diff(edges)
-        shift = (1.0 + velocity_grid / SPEED_OF_LIGHT_KMS) / (1.0 + barycorr_z)  # mask shift per step
+        # Relativistic mask shift per velocity step, de-redshifting the barycorr.
+        shift = (1.0 + compute_redshift(velocity_grid * u.km / u.s)) / (1.0 + barycorr_z)
 
         # Keep only mask lines that stay fully inside the order across the whole
         # scan, so the same lines contribute at every step (flat CCF baseline).
