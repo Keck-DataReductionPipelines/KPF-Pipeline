@@ -372,6 +372,14 @@ class TestQCL1:
         l1 = _make_kpf1(tmp_path, with_rn=False)
         assert QCL1(l1).read_noise_in_range() is False
 
+    def test_read_noise_in_range_pass_2amp(self, tmp_path):
+        # 2-amp readout: only AMP1/AMP2 keys present (AMP3/4 absent).
+        l1 = _make_kpf1(tmp_path, with_rn=True)
+        for i in (3, 4):
+            del l1.headers["PRIMARY"][f"RNGREEN{i}"]
+            del l1.headers["PRIMARY"][f"RNRED{i}"]
+        assert QCL1(l1).read_noise_in_range() is True
+
     def test_read_noise_nongauss_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
         assert QCL1(l1).read_noise_nongauss() is True
@@ -384,6 +392,14 @@ class TestQCL1:
     def test_read_noise_nongauss_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=False)
         assert QCL1(l1).read_noise_nongauss() is False
+
+    def test_read_noise_nongauss_pass_2amp(self, tmp_path):
+        # 2-amp readout: only AMP1/AMP2 keys present (AMP3/4 absent).
+        l1 = _make_kpf1(tmp_path, with_rn=True)
+        for i in (3, 4):
+            del l1.headers["PRIMARY"][f"RNNGGR{i}"]
+            del l1.headers["PRIMARY"][f"RNNGRD{i}"]
+        assert QCL1(l1).read_noise_nongauss() is True
 
     def test_bias_subtracted_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biasub=True)
