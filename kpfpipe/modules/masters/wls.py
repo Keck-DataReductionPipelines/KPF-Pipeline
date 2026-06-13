@@ -149,8 +149,7 @@ class WLS(BaseMasterModule):
         if lineprofile != 'gaussian':
             raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
-        bad = lines['chisq'] > 5.0   # reduced chi-square (sqrt-flux noise proxy)
-        bad |= (lines['amp'] < 0) | (lines['amp'] > 1.5e6) # 10x single-pixel saturation
+        bad = (lines['amp'] < 0) | (lines['amp'] > 1.5e6) # 10x single-pixel saturation
         bad |= (lines['std'] < 0.5) | (lines['std'] >= window)
 
         return bad
@@ -251,7 +250,6 @@ class WLS(BaseMasterModule):
               'pix' - fitted pixel position
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
-              'chisq' - reduced chi-square of the fit (sqrt-flux noise proxy)
               'bad' - boolean QC flag (True = line failed QC)
         """
         linelist_array = self._load_linelist(linelist)
@@ -264,7 +262,7 @@ class WLS(BaseMasterModule):
             raise ValueError("length of flux and wave arrays are mismatched")
         ncol = len(flux1d)
 
-        lines = {k: np.zeros(0, dtype='float') for k in ['wav', 'pix', 'std', 'amp', 'chisq']}
+        lines = {k: np.zeros(0, dtype='float') for k in ['wav', 'pix', 'std', 'amp']}
         lines['bad'] = np.zeros(0, dtype=bool)
 
         if not np.isfinite(flux1d).any():
@@ -285,7 +283,7 @@ class WLS(BaseMasterModule):
         if nlines == 0:
             return lines
 
-        for key in ['pix', 'std', 'amp', 'chisq']:
+        for key in ['pix', 'std', 'amp']:
             lines[key] = np.zeros(nlines, dtype='float')
 
         for i, lw in enumerate(lines['wav']):
@@ -299,15 +297,9 @@ class WLS(BaseMasterModule):
 
             if lineprofile == 'gaussian':
                 # gaussian_dist theta convention: [b, a, mu, sigma]
-                b, a, mu, sigma = theta
-                model = b + a * np.exp(-(x - mu)**2 / (2*sigma**2))
-                # Reduced chi-square with a photon-noise proxy (variance ~ counts);
-                # flux is floored to keep the per-pixel noise positive.
-                chisq = np.sum((model - y)**2 / np.clip(y, 1.0, None)) / (len(y) - len(theta))
-                lines['pix'][i] = mu
-                lines['std'][i] = sigma
-                lines['amp'][i] = a
-                lines['chisq'][i] = chisq
+                lines['pix'][i] = theta[2]
+                lines['std'][i] = theta[3]
+                lines['amp'][i] = theta[1]
             else:
                 raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
@@ -366,7 +358,6 @@ class WLS(BaseMasterModule):
               'pix' - fitted pixel position
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
-              'chisq' - reduced chi-square of the fit (sqrt-flux noise proxy)
               'bad' - boolean QC flag (True = line failed QC)
               'order' - 1-indexed order number
               'fiber' - fiber name
@@ -378,7 +369,7 @@ class WLS(BaseMasterModule):
 
         norder = self.norder[chip]
         # keys mirror fit_line_positions_1d's output plus per-line provenance tags
-        keys = ('wav', 'pix', 'std', 'amp', 'chisq', 'bad', 'order', 'fiber')
+        keys = ('wav', 'pix', 'std', 'amp', 'bad', 'order', 'fiber')
         lines = {k: [[None] * norder for _ in fibers] for k in keys}
 
         for i, fiber in enumerate(fibers):
@@ -864,7 +855,7 @@ class WLS(BaseMasterModule):
         Layout: /<chip>/coeffs_stack as a dataset, /<chip>/lines_stack/
         frame_<NNN>/<key> as per-frame subgroups, with every key from
         the per-frame `lines` dict (e.g. wav, pix, order, fiber, bad, plus
-        diagnostics like std, amp, chisq).
+        diagnostics like std, amp).
 
         Raises
         ------
