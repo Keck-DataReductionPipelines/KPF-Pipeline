@@ -141,6 +141,21 @@ class WLS(BaseMasterModule):
         return l2_obj
 
 
+    def _line_fit_qc(self, lines, lineprofile, window):
+        """
+        Quality-control the per-line fits and return a boolean flag array
+        (True = line failed QC), aligned with the per-line arrays in `lines`.
+        """
+        if lineprofile != 'gaussian':
+            raise ValueError(f"Unsupported lineprofile: {lineprofile}")
+
+        bad = lines['chisq'] > 5.0   # reduced chi-square (sqrt-flux noise proxy)
+        bad |= (lines['amp'] < 0) | (lines['amp'] > 1.5e6) # 10x single-pixel saturation
+        bad |= (lines['std'] < 0.5) | (lines['std'] >= window)
+
+        return bad
+
+
     # ------------------------------------------------------------------
     # Algorithm steps
     # ------------------------------------------------------------------
@@ -197,16 +212,14 @@ class WLS(BaseMasterModule):
                               linelist=None,
                               lineprofile='gaussian',
                               window=5,
-                              qc_sigma=2.5,
                               ):
         """
         Fit line positions (in pixel space) along a 1D extracted order.
 
         For each linelist entry within the wavelength range of `wave1d`,
         fits a 1D line model over a ±`window` pixel neighborhood around
-        the rough wavelength match. Fits whose sigma or normalized RMS
-        deviate from the median by more than `qc_sigma` are rejected, as
-        are negative-amplitude fits.
+        the rough wavelength match. Fits are then quality-controlled by
+        `_line_fit_qc`.
 
         Parameters
         ----------
@@ -223,9 +236,6 @@ class WLS(BaseMasterModule):
             for supported values.
         window : int, optional
             Half-width of the fit window, in pixels.
-        qc_sigma : float, optional
-            Outlier rejection threshold (in MAD-stds) applied to the
-            line-by-line sigma and normalized RMS.
 
         Returns
         -------
@@ -241,7 +251,7 @@ class WLS(BaseMasterModule):
               'pix' - fitted pixel position
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
-              'rms' - normalized fit residual RMS
+              'chisq' - reduced chi-square of the fit (sqrt-flux noise proxy)
               'bad' - boolean QC flag (True = line failed QC)
         """
         linelist_array = self._load_linelist(linelist)
@@ -254,7 +264,7 @@ class WLS(BaseMasterModule):
             raise ValueError("length of flux and wave arrays are mismatched")
         ncol = len(flux1d)
 
-        lines = {k: np.zeros(0, dtype='float') for k in ['wav', 'pix', 'std', 'amp', 'rms']}
+        lines = {k: np.zeros(0, dtype='float') for k in ['wav', 'pix', 'std', 'amp', 'chisq']}
         lines['bad'] = np.zeros(0, dtype=bool)
 
         if not np.isfinite(flux1d).any():
@@ -275,7 +285,7 @@ class WLS(BaseMasterModule):
         if nlines == 0:
             return lines
 
-        for key in ['pix', 'std', 'amp', 'rms']:
+        for key in ['pix', 'std', 'amp', 'chisq']:
             lines[key] = np.zeros(nlines, dtype='float')
 
         for i, lw in enumerate(lines['wav']):
@@ -285,23 +295,23 @@ class WLS(BaseMasterModule):
 
             x = cols
             y = flux1d[cols]
-            theta, rms = optimize_lsq(x, y, lineprofile)
+            theta, _ = optimize_lsq(x, y, lineprofile)
 
             if lineprofile == 'gaussian':
                 # gaussian_dist theta convention: [b, a, mu, sigma]
-                lines['pix'][i] = theta[2]
-                lines['std'][i] = theta[3]
-                lines['amp'][i] = theta[1]
-                lines['rms'][i] = rms / np.abs(theta[1] * np.sqrt(2*np.pi) * theta[3])
+                b, a, mu, sigma = theta
+                model = b + a * np.exp(-(x - mu)**2 / (2*sigma**2))
+                # Reduced chi-square with a photon-noise proxy (variance ~ counts);
+                # flux is floored to keep the per-pixel noise positive.
+                chisq = np.sum((model - y)**2 / np.clip(y, 1.0, None)) / (len(y) - len(theta))
+                lines['pix'][i] = mu
+                lines['std'][i] = sigma
+                lines['amp'][i] = a
+                lines['chisq'][i] = chisq
             else:
                 raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
-        if lineprofile == 'gaussian':
-            lines['bad'] = np.abs(lines['rms'] - np.median(lines['rms'])) / mad_std(lines['rms']) > qc_sigma
-            lines['bad'] |= np.abs(lines['std'] - np.median(lines['std'])) / mad_std(lines['std']) > qc_sigma
-            lines['bad'] |= lines['amp'] < 0
-        else:
-            raise ValueError(f"Unsupported lineprofile: {lineprofile}")
+        lines['bad'] = self._line_fit_qc(lines, lineprofile, window)
 
         return lines
     
@@ -313,7 +323,6 @@ class WLS(BaseMasterModule):
                                linelist=None,
                                lineprofile=None,
                                window=5,
-                               qc_sigma=2.5,
                                verbose=True,
                                ):
         """
@@ -341,9 +350,6 @@ class WLS(BaseMasterModule):
             Line profile model name. See kpfpipe.utils.stats._FUNCTIONS.
         window : int, optional
             Half-width of the per-line fit window, in pixels.
-        qc_sigma : float, optional
-            Outlier rejection threshold passed through to
-            `fit_line_positions_1d`.
         verbose : bool, optional
             If True, print a progress line for each fiber.
 
@@ -354,16 +360,16 @@ class WLS(BaseMasterModule):
             regardless of QC status; the caller is responsible for
             filtering on 'bad' before downstream use. All per-line keys
             produced by `fit_line_positions_1d` are carried through, plus
-            'ord' and 'fib' which tag each line with its source order
+            'order' and 'fiber' which tag each line with its source order
             and fiber. Keys:
               'wav' - reference line wavelength
               'pix' - fitted pixel position
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
-              'rms' - normalized fit residual RMS
+              'chisq' - reduced chi-square of the fit (sqrt-flux noise proxy)
               'bad' - boolean QC flag (True = line failed QC)
-              'ord' - 1-indexed order number
-              'fib' - fiber name
+              'order' - 1-indexed order number
+              'fiber' - fiber name
         """
         self._load_linelist(linelist)
 
@@ -372,7 +378,7 @@ class WLS(BaseMasterModule):
 
         norder = self.norder[chip]
         # keys mirror fit_line_positions_1d's output plus per-line provenance tags
-        keys = ('wav', 'pix', 'std', 'amp', 'rms', 'bad', 'ord', 'fib')
+        keys = ('wav', 'pix', 'std', 'amp', 'chisq', 'bad', 'order', 'fiber')
         lines = {k: [[None] * norder for _ in fibers] for k in keys}
 
         for i, fiber in enumerate(fibers):
@@ -392,7 +398,6 @@ class WLS(BaseMasterModule):
                     linelist=linelist,
                     lineprofile=lineprofile,
                     window=window,
-                    qc_sigma=qc_sigma,
                 )
 
                 nlines = len(line_dict['wav'])
@@ -401,8 +406,8 @@ class WLS(BaseMasterModule):
                         f"{chip} {fiber} order {o + 1}: orderlet skipped "
                         f"(no fittable lines; flux likely NaN-filled)"
                     )
-                line_dict['ord'] = (o + 1) * np.ones(nlines, dtype=int)
-                line_dict['fib'] = np.full(nlines, fiber)
+                line_dict['order'] = (o + 1) * np.ones(nlines, dtype=int)
+                line_dict['fiber'] = np.full(nlines, fiber)
 
                 for k in keys:
                     lines[k][i][o] = line_dict[k]
@@ -446,7 +451,7 @@ class WLS(BaseMasterModule):
         lines : dict of ndarray
             Flat 1D arrays as produced by `fit_line_positions_ffi`. Lines
             with `lines['bad']` set are excluded from the fit. Required
-            keys: 'wav', 'pix', 'ord', 'fib', 'bad'.
+            keys: 'wav', 'pix', 'order', 'fiber', 'bad'.
         norder : int
             Total number of spectral orders on the chip. Used to rescale
             the order axis to [-1, 1].
@@ -466,7 +471,7 @@ class WLS(BaseMasterModule):
 
         Notes
         -----
-        Raises ValueError if `lines['fib']` contains anything other than
+        Raises ValueError if `lines['fiber']` contains anything other than
         one fiber, all five fibers, or three SCI fibers (SCI1, SCI2, SCI3).
         """
         if polyorder_x is None:
@@ -479,8 +484,8 @@ class WLS(BaseMasterModule):
         good = ~lines['bad']
         wav = lines['wav'][good]
         pix = lines['pix'][good]
-        ord = lines['ord'][good]
-        fib = lines['fib'][good]
+        ord = lines['order'][good]
+        fib = lines['fiber'][good]
 
         fibers = list(set(fib))
 
@@ -618,9 +623,8 @@ class WLS(BaseMasterModule):
         window : int, optional
             Half-width of the per-line fit window, in pixels.
         qc_sigma : float, optional
-            Outlier rejection threshold applied to per-frame Legendre
-            coefficients, and passed through to the per-line QC in
-            `fit_line_positions_1d`.
+            Outlier rejection threshold applied to the per-frame Legendre
+            coefficients when combining them.
         polyorder_x : int, optional
             Polynomial degree along the pixel axis.
         polyorder_m : int, optional
@@ -674,13 +678,12 @@ class WLS(BaseMasterModule):
             if verbose:
                 print(f"\n{i+1} of {nobs}")
             
-            lines_stack[i] = self.fit_line_positions_ffi(l2_obj, 
-                                                         chip, 
-                                                         fibers, 
+            lines_stack[i] = self.fit_line_positions_ffi(l2_obj,
+                                                         chip,
+                                                         fibers,
                                                          linelist = linelist,
                                                          lineprofile = lineprofile,
-                                                         window = window, 
-                                                         qc_sigma = qc_sigma,
+                                                         window = window,
                                                          verbose = verbose,
                                                          )
 
@@ -860,8 +863,8 @@ class WLS(BaseMasterModule):
 
         Layout: /<chip>/coeffs_stack as a dataset, /<chip>/lines_stack/
         frame_<NNN>/<key> as per-frame subgroups, with every key from
-        the per-frame `lines` dict (e.g. wav, pix, ord, fib, bad, plus
-        diagnostics like std, amp, rms).
+        the per-frame `lines` dict (e.g. wav, pix, order, fiber, bad, plus
+        diagnostics like std, amp, chisq).
 
         Raises
         ------

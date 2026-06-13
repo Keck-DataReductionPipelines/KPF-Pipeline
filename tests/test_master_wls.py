@@ -178,12 +178,12 @@ def mock_make_master_l2(monkeypatch):
         lines_stack = [
             {'wav': np.array([5500.0, 5501.0]),
              'pix': np.array([100.5, 200.5]),
-             'ord': np.array([1, 2]),
-             'fib': np.array([fibers[0]] * 2),
+             'order': np.array([1, 2]),
+             'fiber': np.array([fibers[0]] * 2),
              'bad': np.array([False, False]),
              'std': np.array([0.5, 0.5]),
              'amp': np.array([1.0, 1.0]),
-             'rms': np.array([0.01, 0.01])}
+             'chisq': np.array([0.01, 0.01])}
             for _ in range(3)
         ]
         return W, coeffs, coeffs_stack, lines_stack
@@ -399,15 +399,15 @@ class TestMakeMasterL2:
                 assert len(frame_keys) == expected_nframes
 
                 sample = h5[chip]['lines_stack'][frame_keys[0]]
-                for key in ['wav', 'pix', 'ord', 'fib', 'bad', 'std', 'amp', 'rms']:
+                for key in ['wav', 'pix', 'order', 'fiber', 'bad', 'std', 'amp', 'chisq']:
                     assert key in sample
                 assert np.issubdtype(sample['wav'].dtype, np.floating)
                 assert np.issubdtype(sample['pix'].dtype, np.floating)
-                assert np.issubdtype(sample['ord'].dtype, np.integer)
+                assert np.issubdtype(sample['order'].dtype, np.integer)
                 assert sample['bad'].dtype == bool
-                assert h5py.check_string_dtype(sample['fib'].dtype) is not None
+                assert h5py.check_string_dtype(sample['fiber'].dtype) is not None
                 # finite values for all numeric per-line arrays
-                for key in ['wav', 'pix', 'std', 'amp', 'rms']:
+                for key in ['wav', 'pix', 'std', 'amp', 'chisq']:
                     assert np.all(np.isfinite(sample[key][...]))
 
     def test_nan_orderlet_emits_warning_and_does_not_crash(self):
@@ -436,7 +436,7 @@ class TestMakeMasterL2:
             )
 
         # The NaN order contributed no lines; remaining orders did.
-        assert result['ord'].min() >= 2
+        assert result['order'].min() >= 2
         assert len(result['wav']) > 0
 
     def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
@@ -536,8 +536,8 @@ class TestCalculateWlsCoeffs:
         return {
             'wav': np.asarray(wav, dtype=float),
             'pix': np.asarray(pix, dtype=float),
-            'ord': np.asarray(ord_, dtype=int),
-            'fib': np.asarray(fib),
+            'order': np.asarray(ord_, dtype=int),
+            'fiber': np.asarray(fib),
             'bad': np.zeros(n * len(fibers), dtype=bool),
         }
 
@@ -576,7 +576,7 @@ class TestFitLinePositions:
         wls._linelist_array = np.array([6000.0, 6100.0])  # entirely outside
 
         result = wls.fit_line_positions_1d(flux, wave)
-        for key in ['wav', 'pix', 'std', 'amp', 'rms', 'bad']:
+        for key in ['wav', 'pix', 'std', 'amp', 'chisq', 'bad']:
             assert len(result[key]) == 0
 
     def test_fit_returns_float64_from_float32_inputs(self):
@@ -590,7 +590,7 @@ class TestFitLinePositions:
 
         result = wls.fit_line_positions_1d(flux, wave, lineprofile='gaussian')
         assert len(result['wav']) == 1
-        for key in ['wav', 'pix', 'std', 'amp', 'rms']:
+        for key in ['wav', 'pix', 'std', 'amp', 'chisq']:
             assert result[key].dtype == np.float64
 
     def test_all_nan_fiber_emits_fiber_level_warning(self):
