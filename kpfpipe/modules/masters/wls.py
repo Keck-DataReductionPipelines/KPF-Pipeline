@@ -584,6 +584,7 @@ class WLS(BaseMasterModule):
                                lineprofile=None,
                                window=5,
                                qc_sigma=2.5,
+                               max_bad_frac=0.05,
                                polyorder_x=None,
                                polyorder_m=None,
                                polyorder_f=None,
@@ -616,6 +617,10 @@ class WLS(BaseMasterModule):
         qc_sigma : float, optional
             Outlier rejection threshold applied to the per-frame Legendre
             coefficients when combining them.
+        max_bad_frac : float, optional
+            Maximum fraction of per-line fits allowed to fail QC before a
+            frame is rejected from the stack. Frames exceeding this are
+            dropped; if more than one frame is rejected, an error is raised.
         polyorder_x : int, optional
             Polynomial degree along the pixel axis.
         polyorder_m : int, optional
@@ -640,7 +645,10 @@ class WLS(BaseMasterModule):
         Notes
         -----
         Raises ValueError if `self._l2_obj_cache` is empty (i.e.,
-        `process_stack_l0_to_l2` has not been run).
+        `process_stack_l0_to_l2` has not been run), or if more than one
+        frame is rejected for having > `max_bad_frac` of its line fits fail
+        QC. Rejected frames are excluded from the returned `coeffs_stack`
+        and `lines_stack`.
         """
         self._load_linelist(linelist)
         if lineprofile is None:
@@ -664,11 +672,13 @@ class WLS(BaseMasterModule):
 
         lines_stack = [None]*nobs
         coeffs_stack = [None]*nobs
+        keep = np.ones(nobs, dtype=bool)
+        rejected = 0
 
         for i, l2_obj in enumerate(l2_obj_list):
             if verbose:
                 print(f"\n{i+1} of {nobs}")
-            
+
             lines_stack[i] = self.fit_line_positions_ffi(l2_obj,
                                                          chip,
                                                          fibers,
@@ -678,7 +688,23 @@ class WLS(BaseMasterModule):
                                                          verbose = verbose,
                                                          )
 
+            nlines = len(lines_stack[i]['bad'])
+            bad_frac = np.sum(lines_stack[i]['bad']) / nlines if nlines else 0.0
 
+            if bad_frac > max_bad_frac:
+                keep[i] = False
+                rejected += 1
+                if rejected > 1:
+                    raise ValueError(
+                        f"{chip}: more than one frame rejected from stack "
+                        f"(> {max_bad_frac:.0%} of line fits failed QC)"
+                    )
+                if verbose:
+                    warnings.warn(
+                        f"{chip} frame {i+1}: {bad_frac:.1%} of line fits failed QC "
+                        f"(> {max_bad_frac:.0%}); frame rejected from stack"
+                    )
+                continue
 
             coeffs_stack[i] = self.calculate_wls_coeffs(lines_stack[i],
                                                         self.norder[chip],
@@ -686,6 +712,9 @@ class WLS(BaseMasterModule):
                                                         polyorder_m = polyorder_m,
                                                         polyorder_f = polyorder_f,
                                                         )
+
+        lines_stack = [lines_stack[i] for i in range(nobs) if keep[i]]
+        coeffs_stack = [coeffs_stack[i] for i in range(nobs) if keep[i]]
 
         coeffs_stack = np.array(coeffs_stack)
         diff = np.abs(coeffs_stack - np.median(coeffs_stack, axis=0))

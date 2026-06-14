@@ -562,6 +562,63 @@ class TestCalculateWlsCoeffs:
 
 
 # ---------------------------------------------------------------------------
+# TestComputeWlsFrameRejection
+# ---------------------------------------------------------------------------
+
+class TestComputeWlsFrameRejection:
+    """Frame-level QC in compute_wls_from_stack: drop frames whose line-fit
+    failure fraction exceeds max_bad_frac, and error if more than one is dropped."""
+
+    def _setup(self, monkeypatch, bad_fracs, nlines=100):
+        """Build a WLS whose stack yields one fake `lines` dict per entry in
+        `bad_fracs`, each with the requested fraction of bad line fits."""
+        wls = WLS(FILE_LIST)
+        wls._l2_obj_cache = [MockL2() for _ in bad_fracs]
+
+        frames = []
+        for frac in bad_fracs:
+            bad = np.zeros(nlines, dtype=bool)
+            bad[:int(round(frac * nlines))] = True
+            frames.append({'wav': np.zeros(nlines), 'bad': bad})
+        it = iter(frames)
+
+        monkeypatch.setattr(WLS, 'fit_line_positions_ffi',
+                            lambda self, *a, **k: next(it))
+        monkeypatch.setattr(WLS, 'calculate_wls_coeffs',
+                            lambda self, *a, **k: np.ones((2, 2)))
+        monkeypatch.setattr(WLS, 'evaluate_wls_coeffs',
+                            staticmethod(lambda *a, **k: np.zeros((3, 3))))
+        return wls
+
+    def test_all_clean_frames_kept(self, monkeypatch):
+        wls = self._setup(monkeypatch, [0.01, 0.02, 0.0, 0.03, 0.01])
+        _, _, coeffs_stack, lines_stack = wls.compute_wls_from_stack(
+            'GREEN', ['SCI1'], verbose=False)
+        assert len(coeffs_stack) == 5
+        assert len(lines_stack) == 5
+
+    def test_single_bad_frame_dropped(self, monkeypatch):
+        wls = self._setup(monkeypatch, [0.01, 0.22, 0.0, 0.03, 0.01])
+        _, _, coeffs_stack, lines_stack = wls.compute_wls_from_stack(
+            'GREEN', ['SCI1'], verbose=False)
+        # the 22%-bad frame is excluded from both stacks
+        assert len(coeffs_stack) == 4
+        assert len(lines_stack) == 4
+
+    def test_two_bad_frames_raises(self, monkeypatch):
+        wls = self._setup(monkeypatch, [0.22, 0.01, 0.34, 0.01, 0.01])
+        with pytest.raises(ValueError, match=r"more than one frame rejected"):
+            wls.compute_wls_from_stack('GREEN', ['SCI1'], verbose=False)
+
+    def test_threshold_is_inclusive_at_max_bad_frac(self, monkeypatch):
+        # exactly 5% bad is not > 5%, so the frame is kept
+        wls = self._setup(monkeypatch, [0.05, 0.01], nlines=100)
+        _, _, coeffs_stack, _ = wls.compute_wls_from_stack(
+            'GREEN', ['SCI1'], verbose=False)
+        assert len(coeffs_stack) == 2
+
+
+# ---------------------------------------------------------------------------
 # TestFitLinePositions
 # ---------------------------------------------------------------------------
 
