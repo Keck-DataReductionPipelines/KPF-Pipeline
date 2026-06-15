@@ -41,6 +41,13 @@ class Bias(BaseMasterModule):
 
         self._results = None  # populated by make_master_l1()
 
+    # ------------------------------------------------------------------
+    # Implement the interface method defined in base.py:
+    # Pass through l1_obj in the case of bias.py.
+    # ------------------------------------------------------------------
+
+    def prepare_frame(self,l1_obj) -> KPF0:
+        return l1_obj
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -98,10 +105,14 @@ class Bias(BaseMasterModule):
 
         self.ml1_obj = KPFMasterL1()
 
+
         for chip in self.chips:
             self.ml1_obj.set_data(f'{chip}_IMG',  l1_arrays[f'{chip}_IMG'])
             self.ml1_obj.set_data(f'{chip}_SNR',  l1_arrays[f'{chip}_SNR'])
             self.ml1_obj.set_data(f'{chip}_MASK', l1_arrays[f'{chip}_MASK'])
+
+            #self.ml1_obj.headers[f'{chip}_IMG']['BUNIT'] = ('electrons/sec','Units of master bias')   # Does not work
+            self.ml1_obj.headers[f'{chip}_IMG']['BUNIT'] = 'electrons/sec'
 
         self.ml1_obj.set_input_files(l0_file_list)
         self.ml1_obj.receipt_add_entry('master_bias', 'PASS')

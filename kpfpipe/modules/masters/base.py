@@ -5,9 +5,11 @@ import os
 import warnings
 
 import numpy as np
+from abc import ABC, abstractmethod
 
 from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.data_models.level0 import KPF0
+from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
@@ -24,7 +26,7 @@ NCOL = DETECTOR['ccd']['ncol']
 # TODO: use start, middle, end of stack for initial datacube
 
 
-class BaseMasterModule:
+class BaseMasterModule(ABC):
     """
     Base class for KPF masters generation.
     The class should not be called directly, but is used for inheritance
@@ -55,9 +57,60 @@ class BaseMasterModule:
         self.ml1_obj = None  # populated by subclass make_master_l1(); used by save_master('L1', ...)
         self.ml2_obj = None  # populated by subclass make_master_l2(); used by save_master('L2', ...)
 
+    # ------------------------------------------------------------------
+    # Abstract interface method for subclasses:
+    # bias.py (pass l1_obj through),
+    # dark.py (subtract master bias),
+    # flat.py (subtract master bias and master dark times exposure time)
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def prepare_frame(self,l1_obj) -> KPF0:
+        pass
 
     # ------------------------------------------------------------------
-    # Private helpers
+    # Private helpers for masters.
+    # ------------------------------------------------------------------
+
+    def _load_master(self, fn, verbose=True):
+        """
+        Load a master file into an L1 object.
+
+        Parameters
+        ----------
+        fn : str
+            Path to master L1 FITS file.
+        verbose : bool, optional
+            If True (default), emit a progress print and propagate load /
+            exptime-check failures as UserWarnings. If False, all such
+            output is suppressed; the (None, False) failure return value
+            still signals the caller.
+
+        Returns
+        -------
+        l1_obj : KPF1 or None
+            Assembled L1 data object if successful, otherwise None.
+        success : bool
+            True if file was successfully loaded and processed, False otherwise.
+        """
+        if verbose:
+            print(f"loading {fn}")
+
+        success = True
+        failure = False
+
+        try:
+            l1_obj = KPFMasterL1.from_fits(fn)
+
+        except (FileNotFoundError, IOError, OSError) as e:
+            if verbose:
+                warnings.warn(f"Failed to load {fn}: {e}")
+            return None, failure
+
+        return l1_obj, success
+
+    # ------------------------------------------------------------------
+    # Private helpers for stacking.
     # ------------------------------------------------------------------
 
     def _load_frame(self, fn, ncache=None, exptime_tolerance=0.1, verbose=True):
@@ -71,7 +124,7 @@ class BaseMasterModule:
         ncache : int, optional
             Maximum number of L1 objects to retain in internal cache.
         exptime_tolerance : float
-            Maximum allowed excess of elapsed time over requested exposure time, 
+            Maximum allowed excess of elapsed time over requested exposure time,
             in seconds (default = 0.1).
         verbose : bool, optional
             If True (default), emit a progress print and propagate load /
@@ -224,6 +277,8 @@ class BaseMasterModule:
                     raise ValueError(f"more than 20% of frames in stack failed to load")
                 continue
 
+            l1_obj = self.prepare_frame(l1_obj)
+
             exptime[i] = l1_obj.headers['PRIMARY']['EXPTIME']
 
             for chip in self.chips:
@@ -375,6 +430,8 @@ class BaseMasterModule:
                 if failure / len(l0_file_list) > 0.2:
                     raise ValueError(f"more than 20% of frames in stack failed to load")
                 continue
+
+            l1_obj = self.prepare_frame(l1_obj)
 
             exptime = l1_obj.headers['PRIMARY']['EXPTIME']
 
