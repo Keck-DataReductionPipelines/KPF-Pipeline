@@ -73,20 +73,19 @@ class WLS(BaseMasterModule):
 
     def _load_linelist(self, linelist=None):
         """
-        Return the cached line wavelength array, loading or reloading if needed.
+        Return the cached line list DataFrame, loading or reloading if needed.
 
-        Loads from disk when no array is cached yet, or when `linelist`
-        (a file path) differs from the cached `self.linelist`. Otherwise
-        returns the cache unchanged. The cache is transparently kept in
-        sync with the most recently passed-in file path.
+        Columns: CHIP, ORDER (0-indexed per chip), WAVE [Å, vacuum]. Loads from
+        disk when nothing is cached, or when `linelist` (a file path) differs
+        from the cached `self.linelist`; otherwise returns the cache unchanged.
         """
-        needs_load = not hasattr(self, '_linelist_array')
+        needs_load = not hasattr(self, '_linelist_df')
         if linelist is not None and linelist != self.linelist:
             self.linelist = linelist
             needs_load = True
         if needs_load:
-            self._linelist_array = pd.read_csv(self.linelist)['Wavelength'].values
-        return self._linelist_array
+            self._linelist_df = pd.read_csv(self.linelist)
+        return self._linelist_df
 
 
     def _load_rough_wls(self, rough_wls_file=None):
@@ -212,17 +211,17 @@ class WLS(BaseMasterModule):
     def fit_line_positions_1d(self,
                               flux1d,
                               wave1d,
-                              linelist=None,
+                              line_waves,
                               lineprofile='gaussian',
                               window=5,
                               ):
         """
         Fit line positions (in pixel space) along a 1D extracted order.
 
-        For each linelist entry within the wavelength range of `wave1d`,
-        fits a 1D line model over a ±`window` pixel neighborhood around
-        the rough wavelength match. Fits are then quality-controlled by
-        `_line_fit_qc`.
+        Fits a 1D line model over a ±`window` pixel neighborhood around each
+        reference line in `line_waves` (the lines pre-selected for this order),
+        then quality-controls the fits via `_line_fit_qc`. The rough WLS span
+        of `wave1d` is a guardrail: a reference line outside it raises.
 
         Parameters
         ----------
@@ -230,10 +229,9 @@ class WLS(BaseMasterModule):
             1D extracted flux for a single order.
         wave1d : ndarray
             1D rough wavelength grid for the same order.
-        linelist : str, optional
-            Path to a CSV line list. If different from the currently
-            cached `self.linelist`, the file is reloaded and the cache
-            is updated. Defaults to `self.linelist` (no reload).
+        line_waves : ndarray
+            Reference line wavelengths to fit in this order [Å], already
+            selected for the order by the caller.
         lineprofile : str, optional
             Line profile model name. See kpfpipe.utils.stats._FUNCTIONS
             for supported values.
@@ -256,11 +254,10 @@ class WLS(BaseMasterModule):
               'amp' - fitted line amplitude
               'bad' - boolean QC flag (True = line failed QC)
         """
-        linelist_array = self._load_linelist(linelist)
-
         # Fit in float64 (wavelength solutions are float64).
         flux1d = np.asarray(flux1d, dtype=np.float64)
         wave1d = np.asarray(wave1d, dtype=np.float64)
+        line_waves = np.asarray(line_waves, dtype=np.float64)
 
         if len(flux1d) != len(wave1d):
             raise ValueError("length of flux and wave arrays are mismatched")
@@ -272,7 +269,18 @@ class WLS(BaseMasterModule):
         if not np.isfinite(flux1d).any():
             return lines
 
-        candidate_wavs = np.sort(linelist_array[(linelist_array > wave1d.min()) & (linelist_array < wave1d.max())])
+        candidate_wavs = np.sort(line_waves)
+
+        # Guardrail: supplied lines must lie within this order's rough WLS span;
+        # an out-of-range line signals a CHIP/ORDER labeling inconsistency.
+        lo, hi = wave1d.min(), wave1d.max()
+        outside = (candidate_wavs < lo) | (candidate_wavs > hi)
+        if np.any(outside):
+            raise ValueError(
+                f"{int(np.sum(outside))} reference line(s) outside the rough "
+                f"WLS range [{lo:.3f}, {hi:.3f}] A; line-list CHIP/ORDER labels "
+                f"are inconsistent with the rough WLS"
+            )
 
         keep = np.zeros(len(candidate_wavs), dtype=bool)
         for i, lw in enumerate(candidate_wavs):
@@ -368,7 +376,7 @@ class WLS(BaseMasterModule):
               'order' - 1-indexed order number
               'fiber' - fiber name
         """
-        self._load_linelist(linelist)
+        linelist_df = self._load_linelist(linelist)
 
         if lineprofile is None:
             lineprofile = self.lineprofile
@@ -389,10 +397,13 @@ class WLS(BaseMasterModule):
                 raise ValueError("shape mismatch between flux array and rough WLS")
 
             for o in range(norder):
+                line_waves = linelist_df.loc[
+                    (linelist_df['CHIP'] == chip) & (linelist_df['ORDER'] == o),
+                    'WAVE'].to_numpy(dtype=float)
                 line_dict = self.fit_line_positions_1d(
                     flux_arr[o],
                     wave_arr[o],
-                    linelist=linelist,
+                    line_waves,
                     lineprofile=lineprofile,
                     window=window,
                 )

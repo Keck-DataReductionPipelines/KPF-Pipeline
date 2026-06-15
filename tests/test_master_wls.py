@@ -5,6 +5,7 @@ All sub-module I/O is mocked; no real data or FITS files are required.
 """
 import h5py
 import numpy as np
+import pandas as pd
 import pytest
 from unittest.mock import MagicMock
 
@@ -30,6 +31,14 @@ class MockL1:
 
 class MockL2:
     pass
+
+
+def _linelist_df(chip, norder, waves):
+    """Stub line list (CHIP, ORDER, WAVE): `waves` repeated for every order."""
+    return pd.DataFrame(
+        [(chip, o, w) for o in range(norder) for w in waves],
+        columns=['CHIP', 'ORDER', 'WAVE'],
+    )
 
 
 @pytest.fixture
@@ -427,7 +436,7 @@ class TestMakeMasterL2:
         wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
             np.linspace(6500.0, 6510.0, ncol), (norder, 1)
         )
-        wls._linelist_array = np.array([6502.0, 6505.0, 6508.0])
+        wls._linelist_df = _linelist_df('RED', norder, [6502.0, 6505.0, 6508.0])
 
         with pytest.warns(UserWarning, match=r"RED SCI1 order 1: orderlet skipped"):
             result = wls.fit_line_positions_ffi(
@@ -441,19 +450,19 @@ class TestMakeMasterL2:
     def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
         """Override file is loaded into the cache and stamped to the header."""
         override = tmp_path / "alt_linelist.csv"
-        override.write_text("Wavelength\n4500.0\n5500.0\n6500.0\n")
+        override.write_text("CHIP,ORDER,WAVE\nGREEN,0,4500.0\nGREEN,1,5500.0\nRED,0,6500.0\n")
 
         wls = WLS(FILE_LIST)
         original_path = wls.linelist
-        original_array = wls._linelist_array.copy()
+        original_df = wls._linelist_df.copy()
 
         ml2 = wls.make_master_l2(linelist=str(override))
 
         assert wls.linelist == str(override)
         assert wls.linelist != original_path
-        assert not np.array_equal(wls._linelist_array, original_array)
+        assert not wls._linelist_df.equals(original_df)
         np.testing.assert_array_equal(
-            wls._linelist_array, np.array([4500.0, 5500.0, 6500.0])
+            wls._linelist_df['WAVE'].values, np.array([4500.0, 5500.0, 6500.0])
         )
         assert _header_value(ml2.headers['PRIMARY'], 'LINELIST') == str(override)
 
@@ -642,16 +651,24 @@ class TestComputeWlsFrameRejection:
 
 class TestFitLinePositions:
 
-    def test_linelist_no_overlap_returns_empty(self):
-        """Linelist with no entries inside `wave1d` range yields empty arrays."""
+    def test_no_lines_returns_empty(self):
+        """No reference lines for the order yields empty arrays."""
         wls = WLS(FILE_LIST)
         flux = np.ones(100)
         wave = np.linspace(5000.0, 5100.0, 100)
-        wls._linelist_array = np.array([6000.0, 6100.0])  # entirely outside
 
-        result = wls.fit_line_positions_1d(flux, wave)
+        result = wls.fit_line_positions_1d(flux, wave, np.array([]))
         for key in ['wav', 'pix', 'std', 'amp', 'bad']:
             assert len(result[key]) == 0
+
+    def test_line_outside_rough_wls_range_raises(self):
+        """A reference line outside the order's rough WLS span is a CHIP/ORDER
+        labeling inconsistency and must fail loudly."""
+        wls = WLS(FILE_LIST)
+        flux = np.ones(100)
+        wave = np.linspace(5000.0, 5100.0, 100)
+        with pytest.raises(ValueError, match="outside the rough"):
+            wls.fit_line_positions_1d(flux, wave, np.array([6000.0]))
 
     def test_line_fit_qc_flags_centroid_outside_window(self):
         """A fitted centroid more than `window` pixels from its window center
@@ -673,9 +690,9 @@ class TestFitLinePositions:
         x = np.arange(ncol)
         wave = np.linspace(5000.0, 5100.0, ncol).astype(np.float32)
         flux = (1.0 + 50.0 * np.exp(-0.5 * ((x - 50) / 2.0) ** 2)).astype(np.float32)
-        wls._linelist_array = np.array([wave[50]], dtype=float)
+        line_waves = np.array([wave[50]], dtype=float)
 
-        result = wls.fit_line_positions_1d(flux, wave, lineprofile='gaussian')
+        result = wls.fit_line_positions_1d(flux, wave, line_waves, lineprofile='gaussian')
         assert len(result['wav']) == 1
         for key in ['wav', 'pix', 'std', 'amp']:
             assert result[key].dtype == np.float64
@@ -694,7 +711,7 @@ class TestFitLinePositions:
         wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
             np.linspace(6500.0, 6510.0, ncol), (norder, 1)
         )
-        wls._linelist_array = np.array([6502.0, 6505.0])
+        wls._linelist_df = _linelist_df('RED', norder, [6502.0, 6505.0])
 
         with pytest.warns(UserWarning, match=r"RED SCI1: no good lines retained"):
             result = wls.fit_line_positions_ffi(
@@ -717,7 +734,7 @@ class TestFitLinePositions:
         wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
             np.linspace(6500.0, 6510.0, ncol), (norder, 1)
         )
-        wls._linelist_array = np.array([6502.0, 6505.0, 6508.0])
+        wls._linelist_df = _linelist_df('RED', norder, [6502.0, 6505.0, 6508.0])
 
         wls.fit_line_positions_ffi(StubL2(), 'RED', ['SCI1'], verbose=False)
 
@@ -738,7 +755,7 @@ class TestFitLinePositions:
         wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
             np.linspace(6500.0, 6510.0, ncol), (norder, 1)
         )
-        wls._linelist_array = np.array([6502.0, 6505.0])
+        wls._linelist_df = _linelist_df('RED', norder, [6502.0, 6505.0])
 
         wls.fit_line_positions_ffi(StubL2(), 'RED', ['SCI1'], verbose=False)
 
