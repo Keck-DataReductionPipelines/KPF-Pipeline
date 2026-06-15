@@ -24,6 +24,8 @@ extraction_method = "box"
 [MODULE_WAVELENGTH_CALIBRATION]
 
 [MODULE_BARYCENTRIC_CORRECTION]
+use_gaia_astrometry = true
+use_wmko_fallback = false
 
 [MODULE_RADIAL_VELOCITY]
 ccf_mask_width = 0.5
