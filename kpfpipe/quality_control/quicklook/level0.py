@@ -47,8 +47,10 @@ class PlotL0:
         """Concatenate raw amplifier arrays into a single display image.
 
         Uses ImageAssembly to count amps and (for 4-amp mode) apply per-amp
-        orientation. Orientation is performed on a deepcopy of the L0 so
-        the caller's object is not mutated.
+        orientation, then applies the same blue -> red FFI orientation as
+        ImageAssembly so the L0 display matches the assembled output. Per-amp
+        orientation is performed on a deepcopy of the L0 so the caller's object
+        is not mutated.
         """
         chip = chip.upper()
 
@@ -62,8 +64,6 @@ class PlotL0:
                 (self.l0.data[f'{chip}_AMP1'], self.l0.data[f'{chip}_AMP2']),
                 axis=1,
             )
-            if chip == 'GREEN':
-                image = np.flipud(image)
         elif namp == 4:
             # orient_channels mutates l0.data, so operate on a copy.
             l0_copy = deepcopy(self.l0)
@@ -83,10 +83,7 @@ class PlotL0:
             top = np.concatenate((panels[3], panels[4]), axis=1)
             image = np.concatenate((bot, top), axis=0)
 
-            if chip == 'GREEN':
-                image = np.flipud(image)
-
-        return image
+        return ImageAssembly.orient_ffi(image, chip)
 
     def stitched_image(self, chip):
         """

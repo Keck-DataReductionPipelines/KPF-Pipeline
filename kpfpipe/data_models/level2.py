@@ -27,21 +27,29 @@ NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED   = DETECTOR['norder']['RED']
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
-_TRACE_MAP = pd.read_csv(_config_path / "L2-trace-map.csv")
-_L2_ALIASES = pd.read_csv(_config_path / "L2-aliases.csv")
+_TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
+_ALIASES = pd.read_csv(_config_path / "aliases.csv")
 
 # Extension name suffixes for each trace (e.g., TRACE3_FLUX, TRACE3_WAVE)
 _TRACE_SUFFIXES = ["FLUX", "WAVE", "VAR", "BLAZE"]
 
+# Per-order ancillary extensions (not traces) that also support chip-prefix
+# access, e.g. GREEN_BARYCORR_Z -> BARYCORR_Z[:NORDER_GREEN]. These are 1-D
+# (norder,) arrays aligned with the concatenated trace orders.
+_ANCILLARY_PER_ORDER = ["BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"]
+
 # Build a set of valid chip-prefix keys for fast membership testing.
-# e.g., {"GREEN_CAL_FLUX", "RED_CAL_FLUX", "GREEN_SCI1_FLUX", ...}
-_CHIP_PREFIX_KEYS = {}  # chip_fiber_suffix → (fiber_alias, chip)
+# e.g., {"GREEN_CAL_FLUX", "RED_CAL_FLUX", "GREEN_SCI1_FLUX", "GREEN_BARYCORR_Z", ...}
+_CHIP_PREFIX_KEYS = {}  # chip-prefixed key → (base_key, chip)
 for _, _row in _TRACE_MAP.iterrows():
     _fiber = str(_row["Fiber"]).strip()
     for _suffix in _TRACE_SUFFIXES:
         _fiber_alias = f"{_fiber}_{_suffix}"
         for _chip in ("GREEN", "RED"):
             _CHIP_PREFIX_KEYS[f"{_chip}_{_fiber}_{_suffix}"] = (_fiber_alias, _chip)
+for _ext in _ANCILLARY_PER_ORDER:
+    for _chip in ("GREEN", "RED"):
+        _CHIP_PREFIX_KEYS[f"{_chip}_{_ext}"] = (_ext, _chip)
 
 
 class _KPF2DataDict(AliasedOrderedDict):
@@ -63,11 +71,12 @@ class _KPF2DataDict(AliasedOrderedDict):
         if split is not None:
             fiber_alias, chip = split
             resolved = self._resolve(fiber_alias)
-            # Allocate full trace on first write (or if currently empty)
+            # Allocate the full concatenated array on first write (or if empty).
+            # value.shape[1:] keeps this correct for 2-D traces (norder, ncol)
+            # and 1-D per-order ancillary arrays (norder,).
             existing = super().__getitem__(resolved) if super().__contains__(resolved) else None
             if existing is None or np.size(existing) == 0:
-                ncol = value.shape[1]
-                full = np.zeros((NORDER_GREEN + NORDER_RED, ncol), dtype=value.dtype)
+                full = np.zeros((NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype)
                 super().__setitem__(resolved, full)
             arr = super().__getitem__(resolved)
             if chip == 'GREEN':
@@ -168,9 +177,9 @@ class KPF2(RV2):
     def _register_aliases(self):
         """Register KPF-friendly aliases from config CSVs."""
         # Simple 1:1 extension aliases (e.g., CA_HK → ANCILLARY_SPECTRUM)
-        for _, row in _L2_ALIASES.iterrows():
-            alias = str(row["Alias"]).strip()
-            canonical = str(row["Canonical"]).strip()
+        for _, row in _ALIASES.iterrows():
+            alias = str(row["KPF"]).strip()
+            canonical = str(row["EPRV"]).strip()
             if canonical in self.extensions:
                 self.extensions.register_alias(alias, canonical)
                 self.headers.register_alias(alias, canonical)
@@ -242,6 +251,11 @@ class KPF2(RV2):
         if "PRIMARY" in self.headers:
             for key, value in self.headers["PRIMARY"].items():
                 kpf4.headers["PRIMARY"][key] = value
+
+        # Carry forward INSTRUMENT_HEADER (TARGTEFF, TARGRADV, GAIAID, CCD*BJD, ...)
+        if "INSTRUMENT_HEADER" in self.headers and "INSTRUMENT_HEADER" in kpf4.headers:
+            for key, value in self.headers["INSTRUMENT_HEADER"].items():
+                kpf4.headers["INSTRUMENT_HEADER"][key] = value
 
         # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:

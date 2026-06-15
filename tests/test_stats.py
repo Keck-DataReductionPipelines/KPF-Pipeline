@@ -5,7 +5,46 @@ Tests for kpfpipe.utils.stats helpers.
 import numpy as np
 import pytest
 
-from kpfpipe.utils.stats import interpolate_bad_pixels
+from kpfpipe.utils.stats import (
+    interpolate_bad_pixels,
+    optimize_lsq,
+    gaussian_dist,
+    gaussian_jac,
+)
+
+
+class TestGaussianFit:
+    """The Gaussian width is fit as log(sigma); optimize_lsq untransforms it
+    back to sigma, which must therefore always be positive."""
+
+    def test_recovers_known_gaussian(self):
+        x = np.arange(-10, 11, dtype=float)
+        for sigma in (2.7, 1.1):
+            theta_true = [2.0, 50.0, 1.3, sigma]
+            y = gaussian_dist([2.0, 50.0, 1.3, np.log(sigma)], x)
+            theta, _ = optimize_lsq(x, y, 'gaussian')
+            np.testing.assert_allclose(theta, theta_true, rtol=1e-5, atol=1e-5)
+            assert theta[3] > 0
+
+    def test_sigma_is_positive(self):
+        # Sigma enters only as sigma**2, so the fit must never return a negative width.
+        x = np.arange(-8, 9, dtype=float)
+        y = gaussian_dist([1.0, 25.0, -0.6, np.log(2.0)], x)
+        theta, _ = optimize_lsq(x, y, 'gaussian')
+        assert theta[3] > 0
+
+    def test_jacobian_matches_finite_difference(self):
+        # Guards the d/d(log_sigma) chain-rule term in gaussian_jac.
+        x = np.linspace(-5, 5, 21)
+        theta = np.array([1.0, 4.0, 0.5, np.log(1.8)])   # [b, a, mu, log_sigma]
+        J = gaussian_jac(theta, x)
+        eps = 1e-6
+        for k in range(4):
+            tp, tm = theta.copy(), theta.copy()
+            tp[k] += eps
+            tm[k] -= eps
+            fd = (gaussian_dist(tp, x) - gaussian_dist(tm, x)) / (2 * eps)
+            np.testing.assert_allclose(J[:, k], fd, rtol=1e-4, atol=1e-6)
 
 
 class TestInterpolateBadPixels:

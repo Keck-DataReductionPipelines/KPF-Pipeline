@@ -23,7 +23,7 @@ DEFAULTS.update({
     'linelist': f'{REPO_ROOT}/reference/thar_line_list.csv',
     'lineprofile': 'gaussian',
     'polyorder_x': 6,
-    'polyorder_m': 3,
+    'polyorder_m': 6,
     'polyorder_f': 2,
 })
 
@@ -73,20 +73,19 @@ class WLS(BaseMasterModule):
 
     def _load_linelist(self, linelist=None):
         """
-        Return the cached line wavelength array, loading or reloading if needed.
+        Return the cached line list DataFrame, loading or reloading if needed.
 
-        Loads from disk when no array is cached yet, or when `linelist`
-        (a file path) differs from the cached `self.linelist`. Otherwise
-        returns the cache unchanged. The cache is transparently kept in
-        sync with the most recently passed-in file path.
+        Columns: CHIP, ORDER (0-indexed per chip), WAVE [Å, vacuum]. Loads from
+        disk when nothing is cached, or when `linelist` (a file path) differs
+        from the cached `self.linelist`; otherwise returns the cache unchanged.
         """
-        needs_load = not hasattr(self, '_linelist_array')
+        needs_load = not hasattr(self, '_linelist_df')
         if linelist is not None and linelist != self.linelist:
             self.linelist = linelist
             needs_load = True
         if needs_load:
-            self._linelist_array = pd.read_csv(self.linelist)['Wavelength'].values
-        return self._linelist_array
+            self._linelist_df = pd.read_csv(self.linelist)
+        return self._linelist_df
 
 
     def _load_rough_wls(self, rough_wls_file=None):
@@ -107,6 +106,11 @@ class WLS(BaseMasterModule):
             df = pd.read_csv(self.rough_wls_file)
 
             ncol = self.ccd['ncol']
+            # Per-order Legendre coefficients (C0..Cn) evaluated on the
+            # normalized pixel grid; see scripts/build_rough_wls_from_legacy_wls.py.
+            coeff_cols = sorted((c for c in df.columns if c.startswith('C') and c[1:].isdigit()),
+                                key=lambda c: int(c[1:]))
+            x = 2*np.arange(ncol)/(ncol - 1) - 1
             self.rough_wls = {}
 
             for chip in self.chips:
@@ -117,11 +121,8 @@ class WLS(BaseMasterModule):
 
                     for o in range(norder):
                         use = (df.CHIP == chip) & (df.ORDER == o)
-                        self.rough_wls[channel_ext][o] = np.linspace(
-                            df.loc[use, 'WAVE_MIN'].values[0],
-                            df.loc[use, 'WAVE_MAX'].values[0],
-                            ncol,
-                        )
+                        coeffs = df.loc[use, coeff_cols].values[0]
+                        self.rough_wls[channel_ext][o] = legendre.legval(x, coeffs)
 
         return self.rough_wls
     
@@ -137,6 +138,24 @@ class WLS(BaseMasterModule):
         l2_obj = spectral_extraction.perform(verbose=verbose)
 
         return l2_obj
+
+
+    def _line_fit_qc(self, lines, lineprofile, window, loc):
+        """
+        Quality-control the per-line fits and return a boolean flag array
+        (True = line failed QC), aligned with the per-line arrays in `lines`.
+
+        `loc` is the per-line window-center pixel; a centroid more than
+        `window` pixels from it is flagged as a runaway fit.
+        """
+        if lineprofile != 'gaussian':
+            raise ValueError(f"Unsupported lineprofile: {lineprofile}")
+
+        bad = (lines['amp'] < 0) | (lines['amp'] > 1.5e6) # 10x single-pixel saturation
+        bad |= (lines['std'] < 0.5) | (lines['std'] >= window)
+        bad |= np.abs(lines['pix'] - loc) > window
+
+        return bad
 
 
     # ------------------------------------------------------------------
@@ -192,19 +211,17 @@ class WLS(BaseMasterModule):
     def fit_line_positions_1d(self,
                               flux1d,
                               wave1d,
-                              linelist=None,
+                              line_waves,
                               lineprofile='gaussian',
                               window=5,
-                              qc_sigma=2.5,
                               ):
         """
         Fit line positions (in pixel space) along a 1D extracted order.
 
-        For each linelist entry within the wavelength range of `wave1d`,
-        fits a 1D line model over a ±`window` pixel neighborhood around
-        the rough wavelength match. Fits whose sigma or normalized RMS
-        deviate from the median by more than `qc_sigma` are rejected, as
-        are negative-amplitude fits.
+        Fits a 1D line model over a ±`window` pixel neighborhood around each
+        reference line in `line_waves` (the lines pre-selected for this order),
+        then quality-controls the fits via `_line_fit_qc`. The rough WLS span
+        of `wave1d` is a guardrail: a reference line outside it raises.
 
         Parameters
         ----------
@@ -212,18 +229,14 @@ class WLS(BaseMasterModule):
             1D extracted flux for a single order.
         wave1d : ndarray
             1D rough wavelength grid for the same order.
-        linelist : str, optional
-            Path to a CSV line list. If different from the currently
-            cached `self.linelist`, the file is reloaded and the cache
-            is updated. Defaults to `self.linelist` (no reload).
+        line_waves : ndarray
+            Reference line wavelengths to fit in this order [Å], already
+            selected for the order by the caller.
         lineprofile : str, optional
             Line profile model name. See kpfpipe.utils.stats._FUNCTIONS
             for supported values.
         window : int, optional
             Half-width of the fit window, in pixels.
-        qc_sigma : float, optional
-            Outlier rejection threshold (in MAD-stds) applied to the
-            line-by-line sigma and normalized RMS.
 
         Returns
         -------
@@ -239,26 +252,35 @@ class WLS(BaseMasterModule):
               'pix' - fitted pixel position
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
-              'rms' - normalized fit residual RMS
               'bad' - boolean QC flag (True = line failed QC)
         """
-        linelist_array = self._load_linelist(linelist)
-
         # Fit in float64 (wavelength solutions are float64).
         flux1d = np.asarray(flux1d, dtype=np.float64)
         wave1d = np.asarray(wave1d, dtype=np.float64)
+        line_waves = np.asarray(line_waves, dtype=np.float64)
 
         if len(flux1d) != len(wave1d):
             raise ValueError("length of flux and wave arrays are mismatched")
         ncol = len(flux1d)
 
-        lines = {k: np.zeros(0, dtype='float') for k in ['wav', 'pix', 'std', 'amp', 'rms']}
+        lines = {k: np.zeros(0, dtype='float') for k in ['wav', 'pix', 'std', 'amp']}
         lines['bad'] = np.zeros(0, dtype=bool)
 
         if not np.isfinite(flux1d).any():
             return lines
 
-        candidate_wavs = np.sort(linelist_array[(linelist_array > wave1d.min()) & (linelist_array < wave1d.max())])
+        candidate_wavs = np.sort(line_waves)
+
+        # Guardrail: supplied lines must lie within this order's rough WLS span;
+        # an out-of-range line signals a CHIP/ORDER labeling inconsistency.
+        lo, hi = wave1d.min(), wave1d.max()
+        outside = (candidate_wavs < lo) | (candidate_wavs > hi)
+        if np.any(outside):
+            raise ValueError(
+                f"{int(np.sum(outside))} reference line(s) outside the rough "
+                f"WLS range [{lo:.3f}, {hi:.3f}] A; line-list CHIP/ORDER labels "
+                f"are inconsistent with the rough WLS"
+            )
 
         keep = np.zeros(len(candidate_wavs), dtype=bool)
         for i, lw in enumerate(candidate_wavs):
@@ -273,33 +295,29 @@ class WLS(BaseMasterModule):
         if nlines == 0:
             return lines
 
-        for key in ['pix', 'std', 'amp', 'rms']:
+        for key in ['pix', 'std', 'amp']:
             lines[key] = np.zeros(nlines, dtype='float')
 
+        locs = np.zeros(nlines, dtype='float')
         for i, lw in enumerate(lines['wav']):
             loc = np.argmin(np.abs(wave1d - lw))
+            locs[i] = loc
             cols = np.arange(loc - window, loc + window + 1)
             cols = cols[(cols >= 0) & (cols < ncol)]
 
             x = cols
             y = flux1d[cols]
-            theta, rms = optimize_lsq(x, y, lineprofile)
+            theta, _ = optimize_lsq(x, y, lineprofile)
 
             if lineprofile == 'gaussian':
                 # gaussian_dist theta convention: [b, a, mu, sigma]
                 lines['pix'][i] = theta[2]
                 lines['std'][i] = theta[3]
                 lines['amp'][i] = theta[1]
-                lines['rms'][i] = rms / np.abs(theta[1] * np.sqrt(2*np.pi) * theta[3])
             else:
                 raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
-        if lineprofile == 'gaussian':
-            lines['bad'] = np.abs(lines['rms'] - np.median(lines['rms'])) / mad_std(lines['rms']) > qc_sigma
-            lines['bad'] |= np.abs(lines['std'] - np.median(lines['std'])) / mad_std(lines['std']) > qc_sigma
-            lines['bad'] |= lines['amp'] < 0
-        else:
-            raise ValueError(f"Unsupported lineprofile: {lineprofile}")
+        lines['bad'] = self._line_fit_qc(lines, lineprofile, window, locs)
 
         return lines
     
@@ -311,7 +329,6 @@ class WLS(BaseMasterModule):
                                linelist=None,
                                lineprofile=None,
                                window=5,
-                               qc_sigma=2.5,
                                verbose=True,
                                ):
         """
@@ -339,9 +356,6 @@ class WLS(BaseMasterModule):
             Line profile model name. See kpfpipe.utils.stats._FUNCTIONS.
         window : int, optional
             Half-width of the per-line fit window, in pixels.
-        qc_sigma : float, optional
-            Outlier rejection threshold passed through to
-            `fit_line_positions_1d`.
         verbose : bool, optional
             If True, print a progress line for each fiber.
 
@@ -352,25 +366,24 @@ class WLS(BaseMasterModule):
             regardless of QC status; the caller is responsible for
             filtering on 'bad' before downstream use. All per-line keys
             produced by `fit_line_positions_1d` are carried through, plus
-            'ord' and 'fib' which tag each line with its source order
+            'order' and 'fiber' which tag each line with its source order
             and fiber. Keys:
               'wav' - reference line wavelength
               'pix' - fitted pixel position
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
-              'rms' - normalized fit residual RMS
               'bad' - boolean QC flag (True = line failed QC)
-              'ord' - 1-indexed order number
-              'fib' - fiber name
+              'order' - 1-indexed order number
+              'fiber' - fiber name
         """
-        self._load_linelist(linelist)
+        linelist_df = self._load_linelist(linelist)
 
         if lineprofile is None:
             lineprofile = self.lineprofile
 
         norder = self.norder[chip]
         # keys mirror fit_line_positions_1d's output plus per-line provenance tags
-        keys = ('wav', 'pix', 'std', 'amp', 'rms', 'bad', 'ord', 'fib')
+        keys = ('wav', 'pix', 'std', 'amp', 'bad', 'order', 'fiber')
         lines = {k: [[None] * norder for _ in fibers] for k in keys}
 
         for i, fiber in enumerate(fibers):
@@ -384,13 +397,15 @@ class WLS(BaseMasterModule):
                 raise ValueError("shape mismatch between flux array and rough WLS")
 
             for o in range(norder):
+                line_waves = linelist_df.loc[
+                    (linelist_df['CHIP'] == chip) & (linelist_df['ORDER'] == o),
+                    'WAVE'].to_numpy(dtype=float)
                 line_dict = self.fit_line_positions_1d(
                     flux_arr[o],
                     wave_arr[o],
-                    linelist=linelist,
+                    line_waves,
                     lineprofile=lineprofile,
                     window=window,
-                    qc_sigma=qc_sigma,
                 )
 
                 nlines = len(line_dict['wav'])
@@ -399,8 +414,8 @@ class WLS(BaseMasterModule):
                         f"{chip} {fiber} order {o + 1}: orderlet skipped "
                         f"(no fittable lines; flux likely NaN-filled)"
                     )
-                line_dict['ord'] = (o + 1) * np.ones(nlines, dtype=int)
-                line_dict['fib'] = np.full(nlines, fiber)
+                line_dict['order'] = (o + 1) * np.ones(nlines, dtype=int)
+                line_dict['fiber'] = np.full(nlines, fiber)
 
                 for k in keys:
                     lines[k][i][o] = line_dict[k]
@@ -444,7 +459,7 @@ class WLS(BaseMasterModule):
         lines : dict of ndarray
             Flat 1D arrays as produced by `fit_line_positions_ffi`. Lines
             with `lines['bad']` set are excluded from the fit. Required
-            keys: 'wav', 'pix', 'ord', 'fib', 'bad'.
+            keys: 'wav', 'pix', 'order', 'fiber', 'bad'.
         norder : int
             Total number of spectral orders on the chip. Used to rescale
             the order axis to [-1, 1].
@@ -464,7 +479,7 @@ class WLS(BaseMasterModule):
 
         Notes
         -----
-        Raises ValueError if `lines['fib']` contains anything other than
+        Raises ValueError if `lines['fiber']` contains anything other than
         one fiber, all five fibers, or three SCI fibers (SCI1, SCI2, SCI3).
         """
         if polyorder_x is None:
@@ -477,8 +492,8 @@ class WLS(BaseMasterModule):
         good = ~lines['bad']
         wav = lines['wav'][good]
         pix = lines['pix'][good]
-        ord = lines['ord'][good]
-        fib = lines['fib'][good]
+        ord = lines['order'][good]
+        fib = lines['fiber'][good]
 
         fibers = list(set(fib))
 
@@ -586,6 +601,7 @@ class WLS(BaseMasterModule):
                                lineprofile=None,
                                window=5,
                                qc_sigma=2.5,
+                               max_bad_frac=0.05,
                                polyorder_x=None,
                                polyorder_m=None,
                                polyorder_f=None,
@@ -616,9 +632,12 @@ class WLS(BaseMasterModule):
         window : int, optional
             Half-width of the per-line fit window, in pixels.
         qc_sigma : float, optional
-            Outlier rejection threshold applied to per-frame Legendre
-            coefficients, and passed through to the per-line QC in
-            `fit_line_positions_1d`.
+            Outlier rejection threshold applied to the per-frame Legendre
+            coefficients when combining them.
+        max_bad_frac : float, optional
+            Maximum fraction of per-line fits allowed to fail QC before a
+            frame is rejected from the stack. Frames exceeding this are
+            dropped; if more than one frame is rejected, an error is raised.
         polyorder_x : int, optional
             Polynomial degree along the pixel axis.
         polyorder_m : int, optional
@@ -643,7 +662,10 @@ class WLS(BaseMasterModule):
         Notes
         -----
         Raises ValueError if `self._l2_obj_cache` is empty (i.e.,
-        `process_stack_l0_to_l2` has not been run).
+        `process_stack_l0_to_l2` has not been run), or if more than one
+        frame is rejected for having > `max_bad_frac` of its line fits fail
+        QC. Rejected frames are excluded from the returned `coeffs_stack`
+        and `lines_stack`.
         """
         self._load_linelist(linelist)
         if lineprofile is None:
@@ -667,22 +689,39 @@ class WLS(BaseMasterModule):
 
         lines_stack = [None]*nobs
         coeffs_stack = [None]*nobs
+        keep = np.ones(nobs, dtype=bool)
+        rejected = 0
 
         for i, l2_obj in enumerate(l2_obj_list):
             if verbose:
                 print(f"\n{i+1} of {nobs}")
-            
-            lines_stack[i] = self.fit_line_positions_ffi(l2_obj, 
-                                                         chip, 
-                                                         fibers, 
+
+            lines_stack[i] = self.fit_line_positions_ffi(l2_obj,
+                                                         chip,
+                                                         fibers,
                                                          linelist = linelist,
                                                          lineprofile = lineprofile,
-                                                         window = window, 
-                                                         qc_sigma = qc_sigma,
+                                                         window = window,
                                                          verbose = verbose,
                                                          )
 
+            nlines = len(lines_stack[i]['bad'])
+            bad_frac = np.sum(lines_stack[i]['bad']) / nlines if nlines else 0.0
 
+            if bad_frac > max_bad_frac:
+                keep[i] = False
+                rejected += 1
+                if rejected > 1:
+                    raise ValueError(
+                        f"{chip}: more than one frame rejected from stack "
+                        f"(> {max_bad_frac:.0%} of line fits failed QC)"
+                    )
+                if verbose:
+                    warnings.warn(
+                        f"{chip} frame {i+1}: {bad_frac:.1%} of line fits failed QC "
+                        f"(> {max_bad_frac:.0%}); frame rejected from stack"
+                    )
+                continue
 
             coeffs_stack[i] = self.calculate_wls_coeffs(lines_stack[i],
                                                         self.norder[chip],
@@ -691,11 +730,31 @@ class WLS(BaseMasterModule):
                                                         polyorder_f = polyorder_f,
                                                         )
 
+        lines_stack = [lines_stack[i] for i in range(nobs) if keep[i]]
+        coeffs_stack = [coeffs_stack[i] for i in range(nobs) if keep[i]]
+
         coeffs_stack = np.array(coeffs_stack)
+
+        # Non-finite coeffs compare False below and would silently poison the
+        # master WAVE grid; fail loudly instead.
+        if not np.isfinite(coeffs_stack).all():
+            bad_frames = [i + 1 for i in range(len(coeffs_stack))
+                          if not np.isfinite(coeffs_stack[i]).all()]
+            raise ValueError(
+                f"{chip}: non-finite Legendre coefficients from frame(s) "
+                f"{bad_frames}; a degenerate line fit poisoned the stack"
+            )
+
         diff = np.abs(coeffs_stack - np.median(coeffs_stack, axis=0))
         sigma = mad_std(coeffs_stack, axis=0)
         bad = diff > qc_sigma * sigma
-        coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0)/np.sum(~bad, axis=0)
+        denom = np.sum(~bad, axis=0)
+        if np.any(denom == 0):
+            raise ValueError(
+                f"{chip}: all frames rejected as outliers for at least one "
+                f"Legendre coefficient; cannot combine the coefficient stack"
+            )
+        coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0) / denom
 
         W = self.evaluate_wls_coeffs(coeffs_mean, self.ccd['ncol'], self.norder[chip], len(fibers))
 
@@ -858,8 +917,8 @@ class WLS(BaseMasterModule):
 
         Layout: /<chip>/coeffs_stack as a dataset, /<chip>/lines_stack/
         frame_<NNN>/<key> as per-frame subgroups, with every key from
-        the per-frame `lines` dict (e.g. wav, pix, ord, fib, bad, plus
-        diagnostics like std, amp, rms).
+        the per-frame `lines` dict (e.g. wav, pix, order, fiber, bad, plus
+        diagnostics like std, amp).
 
         Raises
         ------

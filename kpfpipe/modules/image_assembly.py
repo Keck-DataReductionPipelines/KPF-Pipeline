@@ -467,11 +467,23 @@ class ImageAssembly:
         else:
             raise ValueError(f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD")
 
-        if chip == 'GREEN':
-            ccd_ffi = np.flip(ccd_ffi, axis=0)
-            var_ffi = np.flip(var_ffi, axis=0)
+        ccd_ffi = self.orient_ffi(ccd_ffi, chip)
+        var_ffi = self.orient_ffi(var_ffi, chip)
 
         return ccd_ffi, var_ffi
+
+    @staticmethod
+    def orient_ffi(image, chip):
+        """
+        Flip an assembled image into the standard FFI orientation: dispersion
+        columns blue -> red (left -> right), and rows flipped for GREEN (whose
+        raw image is inverted relative to RED). Single source of truth for FFI
+        orientation, shared by stitch_ffi and the L0 quicklook.
+        """
+        image = np.flip(image, axis=1)
+        if chip.upper() == 'GREEN':
+            image = np.flip(image, axis=0)
+        return image
 
     # ------------------------------------------------------------------
     # Public entry point

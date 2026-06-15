@@ -6,12 +6,14 @@ from scipy.optimize import least_squares
 
 
 def gaussian_dist(theta, x):
-    b, a, mu, sigma = theta
+    b, a, mu, log_sigma = theta
+    sigma = np.exp(log_sigma)
     return b + a * np.exp(-(x-mu)**2/(2*sigma**2))
 
 
 def gaussian_jac(theta, x):
-    b, a, mu, sigma = theta
+    b, a, mu, log_sigma = theta
+    sigma = np.exp(log_sigma)
     dx = x - mu
     e = np.exp(-dx**2 / (2*sigma**2))
 
@@ -19,7 +21,7 @@ def gaussian_jac(theta, x):
     J[:, 0] = 1.0
     J[:, 1] = e
     J[:, 2] = a * e * dx / sigma**2
-    J[:, 3] = a * e * dx**2 / sigma**3
+    J[:, 3] = a * e * dx**2 / sigma**2   # d/d(log_sigma) = sigma * d/d(sigma)
 
     return J
 
@@ -29,12 +31,20 @@ def gaussian_theta0(x, y):
     a0 = np.max(y) - b0
     mu0 = x[np.argmax(y)]
     sigma0 = np.std(x)
-    
-    return [b0, a0, mu0, sigma0]
+
+    return [b0, a0, mu0, np.log(sigma0)]
 
 
+def gaussian_untransform(theta):
+    """Map fitted [b, a, mu, log_sigma] back to [b, a, mu, sigma]."""
+    b, a, mu, log_sigma = theta
+    return np.array([b, a, mu, np.exp(log_sigma)])
+
+
+# Each entry: (model, jacobian, theta0 initializer, untransform). untransform
+# maps the fitted parameters back to reported ones (identity if not needed).
 _FUNCTIONS = {
-    'gaussian': (gaussian_dist, gaussian_jac, gaussian_theta0),
+    'gaussian': (gaussian_dist, gaussian_jac, gaussian_theta0, gaussian_untransform),
 }
 
 
@@ -46,7 +56,7 @@ def optimize_lsq(x, y, linemodel):
     given lineprofile name and dispatches scipy.optimize.least_squares.
     """
     try:
-        func, jac, theta0_func = _FUNCTIONS[linemodel]
+        func, jac, theta0_func, untransform = _FUNCTIONS[linemodel]
     except KeyError:
         raise ValueError(f"Unsupported line function: {linemodel}")
 
@@ -64,7 +74,7 @@ def optimize_lsq(x, y, linemodel):
                            method='lm',
                            )
 
-    theta, rms = result.x, np.std(result.fun)
+    theta, rms = untransform(result.x), np.std(result.fun)
 
     return theta, rms
 

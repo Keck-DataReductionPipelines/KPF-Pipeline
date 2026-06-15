@@ -5,6 +5,7 @@ All sub-module I/O is mocked; no real data or FITS files are required.
 """
 import h5py
 import numpy as np
+import pandas as pd
 import pytest
 from unittest.mock import MagicMock
 
@@ -30,6 +31,14 @@ class MockL1:
 
 class MockL2:
     pass
+
+
+def _linelist_df(chip, norder, waves):
+    """Stub line list (CHIP, ORDER, WAVE): `waves` repeated for every order."""
+    return pd.DataFrame(
+        [(chip, o, w) for o in range(norder) for w in waves],
+        columns=['CHIP', 'ORDER', 'WAVE'],
+    )
 
 
 @pytest.fixture
@@ -178,12 +187,11 @@ def mock_make_master_l2(monkeypatch):
         lines_stack = [
             {'wav': np.array([5500.0, 5501.0]),
              'pix': np.array([100.5, 200.5]),
-             'ord': np.array([1, 2]),
-             'fib': np.array([fibers[0]] * 2),
+             'order': np.array([1, 2]),
+             'fiber': np.array([fibers[0]] * 2),
              'bad': np.array([False, False]),
              'std': np.array([0.5, 0.5]),
-             'amp': np.array([1.0, 1.0]),
-             'rms': np.array([0.01, 0.01])}
+             'amp': np.array([1.0, 1.0])}
             for _ in range(3)
         ]
         return W, coeffs, coeffs_stack, lines_stack
@@ -399,15 +407,15 @@ class TestMakeMasterL2:
                 assert len(frame_keys) == expected_nframes
 
                 sample = h5[chip]['lines_stack'][frame_keys[0]]
-                for key in ['wav', 'pix', 'ord', 'fib', 'bad', 'std', 'amp', 'rms']:
+                for key in ['wav', 'pix', 'order', 'fiber', 'bad', 'std', 'amp']:
                     assert key in sample
                 assert np.issubdtype(sample['wav'].dtype, np.floating)
                 assert np.issubdtype(sample['pix'].dtype, np.floating)
-                assert np.issubdtype(sample['ord'].dtype, np.integer)
+                assert np.issubdtype(sample['order'].dtype, np.integer)
                 assert sample['bad'].dtype == bool
-                assert h5py.check_string_dtype(sample['fib'].dtype) is not None
+                assert h5py.check_string_dtype(sample['fiber'].dtype) is not None
                 # finite values for all numeric per-line arrays
-                for key in ['wav', 'pix', 'std', 'amp', 'rms']:
+                for key in ['wav', 'pix', 'std', 'amp']:
                     assert np.all(np.isfinite(sample[key][...]))
 
     def test_nan_orderlet_emits_warning_and_does_not_crash(self):
@@ -428,7 +436,7 @@ class TestMakeMasterL2:
         wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
             np.linspace(6500.0, 6510.0, ncol), (norder, 1)
         )
-        wls._linelist_array = np.array([6502.0, 6505.0, 6508.0])
+        wls._linelist_df = _linelist_df('RED', norder, [6502.0, 6505.0, 6508.0])
 
         with pytest.warns(UserWarning, match=r"RED SCI1 order 1: orderlet skipped"):
             result = wls.fit_line_positions_ffi(
@@ -436,25 +444,25 @@ class TestMakeMasterL2:
             )
 
         # The NaN order contributed no lines; remaining orders did.
-        assert result['ord'].min() >= 2
+        assert result['order'].min() >= 2
         assert len(result['wav']) > 0
 
     def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
         """Override file is loaded into the cache and stamped to the header."""
         override = tmp_path / "alt_linelist.csv"
-        override.write_text("Wavelength\n4500.0\n5500.0\n6500.0\n")
+        override.write_text("CHIP,ORDER,WAVE\nGREEN,0,4500.0\nGREEN,1,5500.0\nRED,0,6500.0\n")
 
         wls = WLS(FILE_LIST)
         original_path = wls.linelist
-        original_array = wls._linelist_array.copy()
+        original_df = wls._linelist_df.copy()
 
         ml2 = wls.make_master_l2(linelist=str(override))
 
         assert wls.linelist == str(override)
         assert wls.linelist != original_path
-        assert not np.array_equal(wls._linelist_array, original_array)
+        assert not wls._linelist_df.equals(original_df)
         np.testing.assert_array_equal(
-            wls._linelist_array, np.array([4500.0, 5500.0, 6500.0])
+            wls._linelist_df['WAVE'].values, np.array([4500.0, 5500.0, 6500.0])
         )
         assert _header_value(ml2.headers['PRIMARY'], 'LINELIST') == str(override)
 
@@ -536,8 +544,8 @@ class TestCalculateWlsCoeffs:
         return {
             'wav': np.asarray(wav, dtype=float),
             'pix': np.asarray(pix, dtype=float),
-            'ord': np.asarray(ord_, dtype=int),
-            'fib': np.asarray(fib),
+            'order': np.asarray(ord_, dtype=int),
+            'fiber': np.asarray(fib),
             'bad': np.zeros(n * len(fibers), dtype=bool),
         }
 
@@ -563,21 +571,117 @@ class TestCalculateWlsCoeffs:
 
 
 # ---------------------------------------------------------------------------
+# TestComputeWlsFrameRejection
+# ---------------------------------------------------------------------------
+
+class TestComputeWlsFrameRejection:
+    """Frame-level QC in compute_wls_from_stack: drop frames whose line-fit
+    failure fraction exceeds max_bad_frac, and error if more than one is dropped."""
+
+    def _setup(self, monkeypatch, bad_fracs, nlines=100):
+        """Build a WLS whose stack yields one fake `lines` dict per entry in
+        `bad_fracs`, each with the requested fraction of bad line fits."""
+        wls = WLS(FILE_LIST)
+        wls._l2_obj_cache = [MockL2() for _ in bad_fracs]
+
+        frames = []
+        for frac in bad_fracs:
+            bad = np.zeros(nlines, dtype=bool)
+            bad[:int(round(frac * nlines))] = True
+            frames.append({'wav': np.zeros(nlines), 'bad': bad})
+        it = iter(frames)
+
+        monkeypatch.setattr(WLS, 'fit_line_positions_ffi',
+                            lambda self, *a, **k: next(it))
+        monkeypatch.setattr(WLS, 'calculate_wls_coeffs',
+                            lambda self, *a, **k: np.ones((2, 2)))
+        monkeypatch.setattr(WLS, 'evaluate_wls_coeffs',
+                            staticmethod(lambda *a, **k: np.zeros((3, 3))))
+        return wls
+
+    def test_all_clean_frames_kept(self, monkeypatch):
+        wls = self._setup(monkeypatch, [0.01, 0.02, 0.0, 0.03, 0.01])
+        _, _, coeffs_stack, lines_stack = wls.compute_wls_from_stack(
+            'GREEN', ['SCI1'], verbose=False)
+        assert len(coeffs_stack) == 5
+        assert len(lines_stack) == 5
+
+    def test_single_bad_frame_dropped(self, monkeypatch):
+        wls = self._setup(monkeypatch, [0.01, 0.22, 0.0, 0.03, 0.01])
+        _, _, coeffs_stack, lines_stack = wls.compute_wls_from_stack(
+            'GREEN', ['SCI1'], verbose=False)
+        # the 22%-bad frame is excluded from both stacks
+        assert len(coeffs_stack) == 4
+        assert len(lines_stack) == 4
+
+    def test_two_bad_frames_raises(self, monkeypatch):
+        wls = self._setup(monkeypatch, [0.22, 0.01, 0.34, 0.01, 0.01])
+        with pytest.raises(ValueError, match=r"more than one frame rejected"):
+            wls.compute_wls_from_stack('GREEN', ['SCI1'], verbose=False)
+
+    def test_threshold_is_inclusive_at_max_bad_frac(self, monkeypatch):
+        # exactly 5% bad is not > 5%, so the frame is kept
+        wls = self._setup(monkeypatch, [0.05, 0.01], nlines=100)
+        _, _, coeffs_stack, _ = wls.compute_wls_from_stack(
+            'GREEN', ['SCI1'], verbose=False)
+        assert len(coeffs_stack) == 2
+
+    def test_nonfinite_coeffs_raise(self, monkeypatch):
+        # a frame whose per-frame fit yields a NaN coefficient must fail loudly
+        # rather than silently poison the combined solution
+        wls = WLS(FILE_LIST)
+        wls._l2_obj_cache = [MockL2() for _ in range(3)]
+        lines = {'wav': np.zeros(100), 'bad': np.zeros(100, dtype=bool)}
+        coeffs = iter([np.ones((2, 2)),
+                       np.array([[1.0, np.nan], [1.0, 1.0]]),
+                       np.ones((2, 2))])
+        monkeypatch.setattr(WLS, 'fit_line_positions_ffi',
+                            lambda self, *a, **k: lines)
+        monkeypatch.setattr(WLS, 'calculate_wls_coeffs',
+                            lambda self, *a, **k: next(coeffs))
+        monkeypatch.setattr(WLS, 'evaluate_wls_coeffs',
+                            staticmethod(lambda *a, **k: np.zeros((3, 3))))
+        with pytest.raises(ValueError, match=r"non-finite Legendre coefficients"):
+            wls.compute_wls_from_stack('GREEN', ['SCI1'], verbose=False)
+
+
+# ---------------------------------------------------------------------------
 # TestFitLinePositions
 # ---------------------------------------------------------------------------
 
 class TestFitLinePositions:
 
-    def test_linelist_no_overlap_returns_empty(self):
-        """Linelist with no entries inside `wave1d` range yields empty arrays."""
+    def test_no_lines_returns_empty(self):
+        """No reference lines for the order yields empty arrays."""
         wls = WLS(FILE_LIST)
         flux = np.ones(100)
         wave = np.linspace(5000.0, 5100.0, 100)
-        wls._linelist_array = np.array([6000.0, 6100.0])  # entirely outside
 
-        result = wls.fit_line_positions_1d(flux, wave)
-        for key in ['wav', 'pix', 'std', 'amp', 'rms', 'bad']:
+        result = wls.fit_line_positions_1d(flux, wave, np.array([]))
+        for key in ['wav', 'pix', 'std', 'amp', 'bad']:
             assert len(result[key]) == 0
+
+    def test_line_outside_rough_wls_range_raises(self):
+        """A reference line outside the order's rough WLS span is a CHIP/ORDER
+        labeling inconsistency and must fail loudly."""
+        wls = WLS(FILE_LIST)
+        flux = np.ones(100)
+        wave = np.linspace(5000.0, 5100.0, 100)
+        with pytest.raises(ValueError, match="outside the rough"):
+            wls.fit_line_positions_1d(flux, wave, np.array([6000.0]))
+
+    def test_line_fit_qc_flags_centroid_outside_window(self):
+        """A fitted centroid more than `window` pixels from its window center
+        is flagged bad, even when amplitude and width are in range."""
+        wls = WLS(FILE_LIST)
+        lines = {
+            'amp': np.array([1.0, 1.0, 1.0]),
+            'std': np.array([1.0, 1.0, 1.0]),
+            'pix': np.array([100.0, 103.0, 120.0]),  # offsets 0, 3, 20
+        }
+        loc = np.full(3, 100.0)
+        bad = wls._line_fit_qc(lines, 'gaussian', window=5, loc=loc)
+        assert list(bad) == [False, False, True]
 
     def test_fit_returns_float64_from_float32_inputs(self):
         """float32 flux/wave inputs must not drag the line fit into float32."""
@@ -586,11 +690,11 @@ class TestFitLinePositions:
         x = np.arange(ncol)
         wave = np.linspace(5000.0, 5100.0, ncol).astype(np.float32)
         flux = (1.0 + 50.0 * np.exp(-0.5 * ((x - 50) / 2.0) ** 2)).astype(np.float32)
-        wls._linelist_array = np.array([wave[50]], dtype=float)
+        line_waves = np.array([wave[50]], dtype=float)
 
-        result = wls.fit_line_positions_1d(flux, wave, lineprofile='gaussian')
+        result = wls.fit_line_positions_1d(flux, wave, line_waves, lineprofile='gaussian')
         assert len(result['wav']) == 1
-        for key in ['wav', 'pix', 'std', 'amp', 'rms']:
+        for key in ['wav', 'pix', 'std', 'amp']:
             assert result[key].dtype == np.float64
 
     def test_all_nan_fiber_emits_fiber_level_warning(self):
@@ -607,7 +711,7 @@ class TestFitLinePositions:
         wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
             np.linspace(6500.0, 6510.0, ncol), (norder, 1)
         )
-        wls._linelist_array = np.array([6502.0, 6505.0])
+        wls._linelist_df = _linelist_df('RED', norder, [6502.0, 6505.0])
 
         with pytest.warns(UserWarning, match=r"RED SCI1: no good lines retained"):
             result = wls.fit_line_positions_ffi(
@@ -630,7 +734,7 @@ class TestFitLinePositions:
         wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
             np.linspace(6500.0, 6510.0, ncol), (norder, 1)
         )
-        wls._linelist_array = np.array([6502.0, 6505.0, 6508.0])
+        wls._linelist_df = _linelist_df('RED', norder, [6502.0, 6505.0, 6508.0])
 
         wls.fit_line_positions_ffi(StubL2(), 'RED', ['SCI1'], verbose=False)
 
@@ -651,7 +755,7 @@ class TestFitLinePositions:
         wls.rough_wls['RED_SCI1_WAVE'] = np.tile(
             np.linspace(6500.0, 6510.0, ncol), (norder, 1)
         )
-        wls._linelist_array = np.array([6502.0, 6505.0])
+        wls._linelist_df = _linelist_df('RED', norder, [6502.0, 6505.0])
 
         wls.fit_line_positions_ffi(StubL2(), 'RED', ['SCI1'], verbose=False)
 

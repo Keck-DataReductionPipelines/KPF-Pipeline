@@ -28,6 +28,7 @@ Follows the barycentric correction approach described in:
 - Butler et al. (1996)    — flux-weighted midpoint time
 """
 import re
+import warnings
 
 import numpy as np
 from astropy.coordinates import EarthLocation, SkyCoord
@@ -40,13 +41,19 @@ from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter, median_filter
 from scipy.special import erfcinv
 
-from kpfpipe import DETECTOR
-from kpfpipe.utils.astro import compute_doppler_shift
+from kpfpipe import DEFAULTS, DETECTOR
+from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.validation import strictly_increasing
 
 NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED   = DETECTOR['norder']['RED']
 NORDER       = NORDER_GREEN + NORDER_RED
+
+DEFAULTS.update({
+    'use_gaia_astrometry': True,
+    'use_wmko_fallback': False,
+})
 
 # WMKO site coordinates
 KECK_LOCATION = EarthLocation(
@@ -62,9 +69,9 @@ class BarycentricCorrection:
 
     Derives the flux-weighted midpoint time per expmeter channel (EXPMETER_SCI),
     averages it over the channels within each spectral order's wavelength range
-    (SCI2_WAVE), queries Gaia DR3 for the target's astrometry, and calls
-    barycorrpy to populate BJD_TDB / BARYCORR_KMS / BARYCORR_Z. WAVE arrays are
-    not modified.
+    (SCI2_WAVE), resolves the target's astrometry (Gaia DR3, with a WMKO header
+    fallback), and calls barycorrpy to populate BJD_TDB / BARYCORR_KMS /
+    BARYCORR_Z. WAVE arrays are not modified.
 
     Parameters
     ----------
@@ -73,18 +80,29 @@ class BarycentricCorrection:
         populated by WavelengthCalibration. INSTRUMENT_HEADER (the preserved
         L1 PRIMARY) must contain GAIAID, and DATE-BEG/DATE-END when extrapolating.
     config : None | dict | ConfigHandler
-        Accepted for interface consistency with sibling modules; unused (all
-        behavior toggles live on perform()).
+        Module configuration. Recognized keys: use_gaia_astrometry,
+        use_wmko_fallback.
     """
 
     def __init__(self, kpf2_obj, config=None):
-        if config is not None and not isinstance(config, (dict, ConfigHandler)):
+        self.kpf2_obj = kpf2_obj
+
+        if config is None:
+            params = {}
+        elif isinstance(config, dict):
+            params = config
+        elif isinstance(config, ConfigHandler):
+            params = config.get_params(["DATA_DIRS", "KPFPIPE", "MODULE_BARYCENTRIC_CORRECTION"])
+        else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        self.kpf2_obj = kpf2_obj
+        for k, v in DEFAULTS.items():
+            setattr(self, k, params.get(k, v))
+
         self._results = None
         self._em_cache = None  # (toggle_key, w_em, t_em) from the last integration
         self._skycoord = None  # cached Gaia DR3 SkyCoord
+        self._astrometry_source = None  # 'Gaia DR3' | 'WMKO header', set by _get_skycoord
 
     # ------------------------------------------------------------------
     # Private helpers — exposure-meter handling
@@ -117,9 +135,9 @@ class BarycentricCorrection:
             t_beg = Time(np.array(expmeter['Date-Beg']).astype(str), format='isot', scale='utc')
             t_end = Time(np.array(expmeter['Date-End']).astype(str), format='isot', scale='utc')
 
-        if not self._strictly_increasing(t_beg):
+        if not strictly_increasing(t_beg.jd):
             raise ValueError("EXPMETER_SCI Date-Beg timestamps are not strictly increasing")
-        if not self._strictly_increasing(t_end):
+        if not strictly_increasing(t_end.jd):
             raise ValueError("EXPMETER_SCI Date-End timestamps are not strictly increasing")
 
         t_mid = Time((t_beg.jd + t_end.jd) / 2, format='jd', scale='utc')
@@ -159,11 +177,6 @@ class BarycentricCorrection:
         f = f * 1.48424 / dispersion  # 1.48424 e-/ADU: exposure meter detector gain
 
         return w, f
-
-    @staticmethod
-    def _strictly_increasing(t):
-        """Return True if Time array is strictly increasing."""
-        return bool(np.all(t[:-1].jd < t[1:].jd))
 
     @staticmethod
     def _fix_expmeter_outliers(f, kernel_size=5):
@@ -314,7 +327,7 @@ class BarycentricCorrection:
     # Private helpers — barycorr handoffs
     # ------------------------------------------------------------------
 
-    def _query_gaia(self):
+    def _gaia_astrometry(self):
         """
         Query Gaia DR3 for the target's ICRS astrometry (cached).
 
@@ -348,6 +361,58 @@ class BarycentricCorrection:
                 frame='icrs',
             )
         return self._skycoord
+
+    def _wmko_astrometry(self):
+        """
+        Build a SkyCoord from WMKO/DCS astrometry in INSTRUMENT_HEADER.
+
+        Uses TARGRA/TARGDEC (TARGFRAM, FK5-default equinox J2000 = TARGEPOC)
+        with proper motion and parallax. TARGPMRA is in time-seconds/yr
+        (-> mas/yr via x15 cos(dec)); TARGPLAX is in mas (-> distance via
+        1e3/plax), matching the Gaia path.
+        """
+        inst = self.kpf2_obj.headers['INSTRUMENT_HEADER']
+        pos = SkyCoord(inst['TARGRA'], inst['TARGDEC'], unit=(u.hourangle, u.deg))
+        pm_ra_cosdec = float(inst['TARGPMRA']) * 15.0 * np.cos(pos.dec.rad) * 1e3
+        return SkyCoord(
+            ra=pos.ra, dec=pos.dec,
+            pm_ra_cosdec=pm_ra_cosdec * u.mas / u.yr,
+            pm_dec=float(inst['TARGPMDC']) * 1e3 * u.mas / u.yr,
+            distance=(1e3 / float(inst['TARGPLAX'])) * u.pc,
+            frame=str(inst['TARGFRAM']).lower(),
+            obstime=Time(float(inst['TARGEPOC']), format='jyear'),
+        )
+
+    def _get_skycoord(self):
+        """
+        Resolve target astrometry: Gaia DR3 first, then WMKO header fallback.
+
+        Each source is tried only if its config toggle is set. If neither
+        yields a SkyCoord, raises, surfacing the captured Gaia error so the
+        failure (our-side vs Gaia-server-side) is distinguishable.
+        """
+        gaia_error = None
+        if self.use_gaia_astrometry:
+            try:
+                skycoord = self._gaia_astrometry()
+                self._astrometry_source = 'Gaia DR3'
+                return skycoord
+            except Exception as e:
+                gaia_error = e
+        if self.use_wmko_fallback:
+            if gaia_error is not None:
+                warnings.warn(
+                    f"Gaia astrometry unavailable ({type(gaia_error).__name__}: "
+                    f"{gaia_error}); using WMKO header astrometry"
+                )
+            self._astrometry_source = 'WMKO header'
+            return self._wmko_astrometry()
+        raise ValueError(
+            "no target astrometry: Gaia "
+            + (f"failed ({type(gaia_error).__name__}: {gaia_error})"
+               if gaia_error else "disabled")
+            + ", WMKO fallback disabled"
+        )
 
     @staticmethod
     def _compute_barycorr(skycoord, obs_times, location, rv_mps=0.0):
@@ -528,7 +593,7 @@ class BarycentricCorrection:
             output=output, interpolate=interpolate, extrapolate=extrapolate,
             fix_expmeter_outliers=fix_expmeter_outliers,
         )
-        skycoord = self._query_gaia()
+        skycoord = self._get_skycoord()
 
         # TARGRADV is in km/s; barycorrpy expects rv in m/s. Missing → 0.
         inst = self.kpf2_obj.headers['INSTRUMENT_HEADER']
@@ -538,14 +603,15 @@ class BarycentricCorrection:
             skycoord, t_fwm, KECK_LOCATION, rv_mps=rv_mps,
         )
         bary_kms = bc_vel_mps / 1000.0
-        bary_z = np.asarray(compute_doppler_shift(bc_vel_mps * u.m / u.s))
+        bary_z = np.asarray(compute_redshift(bc_vel_mps * u.m / u.s))
         return bjd_tdb, bary_kms, bary_z
 
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, interpolate=True, extrapolate=True, fix_expmeter_outliers=True):
+    def perform(self, interpolate=True, extrapolate=True, fix_expmeter_outliers=True,
+                use_gaia_astrometry=None, use_wmko_fallback=None):
         """
         Compute per-order barycentric correction and store it on the KPF2.
 
@@ -554,14 +620,22 @@ class BarycentricCorrection:
         interpolate, extrapolate, fix_expmeter_outliers : bool, optional
             Forwarded to compute_flux_weighted_midpoint_times(). See that
             method for semantics.
+        use_gaia_astrometry, use_wmko_fallback : bool, optional
+            Override the configured astrometry-source toggles for this call.
 
         Returns
         -------
         kpf2_obj : KPF2
             Input KPF2 with BJD_TDB / BARYCORR_KMS / BARYCORR_Z populated,
-            per-CCD CCD{1,2}BJD/BKMS/BZ summaries written to
-            INSTRUMENT_HEADER, and a 'barycentric_correction' receipt entry.
+            per-CCD CCD{1,2}BJD/BKMS/BZ summaries and the astrometry source
+            (ASTRSRC) written to INSTRUMENT_HEADER, and a
+            'barycentric_correction' receipt entry.
         """
+        if use_gaia_astrometry is not None:
+            self.use_gaia_astrometry = use_gaia_astrometry
+        if use_wmko_fallback is not None:
+            self.use_wmko_fallback = use_wmko_fallback
+
         kwargs = dict(interpolate=interpolate, extrapolate=extrapolate,
                       fix_expmeter_outliers=fix_expmeter_outliers)
         bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(output='orders', **kwargs)
@@ -582,6 +656,9 @@ class BarycentricCorrection:
         inst['CCD2BKMS'] = float(ccd_kms[1])
         inst['CCD2BZ']   = float(ccd_z[1])
 
+        # Provenance: which astrometry source actually produced the correction
+        inst['ASTRSRC'] = self._astrometry_source
+
         self.kpf2_obj.receipt_add_entry('barycentric_correction', 'PASS')
 
         self._results = {
@@ -591,6 +668,7 @@ class BarycentricCorrection:
             'ccd_bjd':  np.asarray(ccd_bjd),
             'ccd_kms':  np.asarray(ccd_kms),
             'ccd_z':    np.asarray(ccd_z),
+            'astrometry_source': self._astrometry_source,
         }
         return self.kpf2_obj
 
@@ -607,6 +685,7 @@ class BarycentricCorrection:
             return
 
         r = self._results
+        print(f"  astrometry:  {r['astrometry_source']}")
         ccd_bjd, ccd_kms, ccd_z = r['ccd_bjd'], r['ccd_kms'], r['ccd_z']
 
         # Per-CCD summaries (match CCD1*/CCD2* in INSTRUMENT_HEADER).

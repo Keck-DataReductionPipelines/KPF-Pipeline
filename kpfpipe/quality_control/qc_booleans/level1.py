@@ -2,12 +2,8 @@
 
 import numpy as np
 
-from kpfpipe.quality_control.qc_binaries.base import QC
-
-_RN_KEYS    = ["RNGREEN1", "RNGREEN2", "RNGREEN3", "RNGREEN4",
-               "RNRED1",   "RNRED2",   "RNRED3",   "RNRED4"]
-_RNNG_KEYS  = ["RNNGGR1",  "RNNGGR2",  "RNNGGR3",  "RNNGGR4",
-               "RNNGRD1",  "RNNGRD2",  "RNNGRD3",  "RNNGRD4"]
+from kpfpipe.modules.image_assembly import _RN_KEYS
+from kpfpipe.quality_control.qc_booleans.base import QC
 
 _RN_LO,  _RN_HI   = 2.0,  6.0
 _RNNG_LO, _RNNG_HI = 0.8, 1.5
@@ -26,26 +22,32 @@ class QCL1(QC):
 
     LEVEL = "L1"
 
-    def read_noise_in_range(self):
-        """All 8 per-amp RN values in [2.0, 6.0] e-."""
+    def _present_rn_in_range(self, idx, lo, hi):
+        """Validate the idx-th RN keyword (0=RN, 1=non-Gaussian RN) for every
+        amplifier whose keyword is present, so 2-amp and 4-amp readouts both
+        pass. Absent amps are skipped; returns False if no RN keyword is
+        present at all (read noise should always be recorded)."""
         hdr = self.kpf.headers["PRIMARY"]
-        for k in _RN_KEYS:
-            v = _hdr_float(hdr, k)
-            if v is None or not (_RN_LO <= v <= _RN_HI):
+        found = False
+        for keys in _RN_KEYS.values():
+            v = _hdr_float(hdr, keys[idx])
+            if v is None:
+                continue
+            found = True
+            if not (lo <= v <= hi):
                 return False
-        return True
+        return found
+
+    def read_noise_in_range(self):
+        """Every per-amp RN value present in the header is in [2.0, 6.0] e-."""
+        return self._present_rn_in_range(0, _RN_LO, _RN_HI)
 
     read_noise_in_range._qc_key = "RNINRNG"
     read_noise_in_range._qc_comment = "QC: per-amp RN within 2.0-6.0 e-"
 
     def read_noise_nongauss(self):
-        """All 8 RNNG values in [0.8, 1.5]."""
-        hdr = self.kpf.headers["PRIMARY"]
-        for k in _RNNG_KEYS:
-            v = _hdr_float(hdr, k)
-            if v is None or not (_RNNG_LO <= v <= _RNNG_HI):
-                return False
-        return True
+        """Every non-Gaussian RN value present in the header is in [0.8, 1.5]."""
+        return self._present_rn_in_range(1, _RNNG_LO, _RNNG_HI)
 
     read_noise_nongauss._qc_key = "RNGAUSS"
     read_noise_nongauss._qc_comment = "QC: non-Gaussian RN within 0.8-1.5"
