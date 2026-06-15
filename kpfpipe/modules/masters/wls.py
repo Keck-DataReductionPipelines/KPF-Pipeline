@@ -141,16 +141,20 @@ class WLS(BaseMasterModule):
         return l2_obj
 
 
-    def _line_fit_qc(self, lines, lineprofile, window):
+    def _line_fit_qc(self, lines, lineprofile, window, loc):
         """
         Quality-control the per-line fits and return a boolean flag array
         (True = line failed QC), aligned with the per-line arrays in `lines`.
+
+        `loc` is the per-line window-center pixel; a centroid more than
+        `window` pixels from it is flagged as a runaway fit.
         """
         if lineprofile != 'gaussian':
             raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
         bad = (lines['amp'] < 0) | (lines['amp'] > 1.5e6) # 10x single-pixel saturation
         bad |= (lines['std'] < 0.5) | (lines['std'] >= window)
+        bad |= np.abs(lines['pix'] - loc) > window
 
         return bad
 
@@ -286,8 +290,10 @@ class WLS(BaseMasterModule):
         for key in ['pix', 'std', 'amp']:
             lines[key] = np.zeros(nlines, dtype='float')
 
+        locs = np.zeros(nlines, dtype='float')
         for i, lw in enumerate(lines['wav']):
             loc = np.argmin(np.abs(wave1d - lw))
+            locs[i] = loc
             cols = np.arange(loc - window, loc + window + 1)
             cols = cols[(cols >= 0) & (cols < ncol)]
 
@@ -303,7 +309,7 @@ class WLS(BaseMasterModule):
             else:
                 raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
-        lines['bad'] = self._line_fit_qc(lines, lineprofile, window)
+        lines['bad'] = self._line_fit_qc(lines, lineprofile, window, locs)
 
         return lines
     
@@ -717,10 +723,27 @@ class WLS(BaseMasterModule):
         coeffs_stack = [coeffs_stack[i] for i in range(nobs) if keep[i]]
 
         coeffs_stack = np.array(coeffs_stack)
+
+        # Non-finite coeffs compare False below and would silently poison the
+        # master WAVE grid; fail loudly instead.
+        if not np.isfinite(coeffs_stack).all():
+            bad_frames = [i + 1 for i in range(len(coeffs_stack))
+                          if not np.isfinite(coeffs_stack[i]).all()]
+            raise ValueError(
+                f"{chip}: non-finite Legendre coefficients from frame(s) "
+                f"{bad_frames}; a degenerate line fit poisoned the stack"
+            )
+
         diff = np.abs(coeffs_stack - np.median(coeffs_stack, axis=0))
         sigma = mad_std(coeffs_stack, axis=0)
         bad = diff > qc_sigma * sigma
-        coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0)/np.sum(~bad, axis=0)
+        denom = np.sum(~bad, axis=0)
+        if np.any(denom == 0):
+            raise ValueError(
+                f"{chip}: all frames rejected as outliers for at least one "
+                f"Legendre coefficient; cannot combine the coefficient stack"
+            )
+        coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0) / denom
 
         W = self.evaluate_wls_coeffs(coeffs_mean, self.ccd['ncol'], self.norder[chip], len(fibers))
 

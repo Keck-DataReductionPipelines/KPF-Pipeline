@@ -617,6 +617,24 @@ class TestComputeWlsFrameRejection:
             'GREEN', ['SCI1'], verbose=False)
         assert len(coeffs_stack) == 2
 
+    def test_nonfinite_coeffs_raise(self, monkeypatch):
+        # a frame whose per-frame fit yields a NaN coefficient must fail loudly
+        # rather than silently poison the combined solution
+        wls = WLS(FILE_LIST)
+        wls._l2_obj_cache = [MockL2() for _ in range(3)]
+        lines = {'wav': np.zeros(100), 'bad': np.zeros(100, dtype=bool)}
+        coeffs = iter([np.ones((2, 2)),
+                       np.array([[1.0, np.nan], [1.0, 1.0]]),
+                       np.ones((2, 2))])
+        monkeypatch.setattr(WLS, 'fit_line_positions_ffi',
+                            lambda self, *a, **k: lines)
+        monkeypatch.setattr(WLS, 'calculate_wls_coeffs',
+                            lambda self, *a, **k: next(coeffs))
+        monkeypatch.setattr(WLS, 'evaluate_wls_coeffs',
+                            staticmethod(lambda *a, **k: np.zeros((3, 3))))
+        with pytest.raises(ValueError, match=r"non-finite Legendre coefficients"):
+            wls.compute_wls_from_stack('GREEN', ['SCI1'], verbose=False)
+
 
 # ---------------------------------------------------------------------------
 # TestFitLinePositions
@@ -634,6 +652,19 @@ class TestFitLinePositions:
         result = wls.fit_line_positions_1d(flux, wave)
         for key in ['wav', 'pix', 'std', 'amp', 'bad']:
             assert len(result[key]) == 0
+
+    def test_line_fit_qc_flags_centroid_outside_window(self):
+        """A fitted centroid more than `window` pixels from its window center
+        is flagged bad, even when amplitude and width are in range."""
+        wls = WLS(FILE_LIST)
+        lines = {
+            'amp': np.array([1.0, 1.0, 1.0]),
+            'std': np.array([1.0, 1.0, 1.0]),
+            'pix': np.array([100.0, 103.0, 120.0]),  # offsets 0, 3, 20
+        }
+        loc = np.full(3, 100.0)
+        bad = wls._line_fit_qc(lines, 'gaussian', window=5, loc=loc)
+        assert list(bad) == [False, False, True]
 
     def test_fit_returns_float64_from_float32_inputs(self):
         """float32 flux/wave inputs must not drag the line fit into float32."""
