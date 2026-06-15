@@ -7,8 +7,8 @@ against a line mask, then collapsing the per-order CCFs into radial velocities
 per order, orderlet, and CCD (weighted where appropriate). Produces a KPF4 (L4)
 holding the CCFs and RVs.
 
-ESPRESSO line masks give in-air wavelengths
-Calibration line masks give vacuum wavelengths
+All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
+no air/vacuum conversion is performed.
 """
 from astropy.constants import c
 from astropy.stats import mad_std
@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe import REPO_ROOT, DEFAULTS, DETECTOR
-from kpfpipe.utils.astro import air_to_vac, compute_redshift
+from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 from kpfpipe.utils.validation import strictly_increasing
@@ -113,8 +113,7 @@ class RadialVelocity:
         mask_name = row['DEFAULT_MASK'].iloc[0]
         mask_path = f'{REPO_ROOT}/reference/line_masks/stellar_masks/{mask_name}.txt'
 
-        centers, weights = np.loadtxt(mask_path, unpack=True)
-        centers = air_to_vac(centers)
+        centers, weights = np.loadtxt(mask_path, unpack=True)  # vacuum wavelengths
         self._ccf_line_mask = {
             'center': centers,
             'weight': weights,
