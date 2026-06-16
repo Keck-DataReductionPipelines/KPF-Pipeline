@@ -469,6 +469,12 @@ class RadialVelocity:
         """
         chip = chip.upper()
         fiber = fiber.upper()
+        if width is None:
+            width = self.ccf_mask_width
+        if step_size is None:
+            step_size = self.ccf_step_size
+        if window is None:
+            window = self.ccf_window
 
         source = self._resolve_illumination_source(chip, fiber)
         if source['object'] == 'none':
