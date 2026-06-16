@@ -80,6 +80,7 @@ class RadialVelocity:
         self._ccf_line_mask = {}    # line mask, set by _build_ccf_line_mask()
         self._ccf_velocity_grid = {}  # velocity grid (center-shifted), set by _build_ccf_velocity_grid()
         self._ccf = {}              # CCF cube, set by compute_ccf()
+        self._order_weights_df = None  # CCF order-weight table, loaded by _order_weights()
         self._results = None        # populated by perform()
 
     # ------------------------------------------------------------------
@@ -234,6 +235,23 @@ class RadialVelocity:
         grid = np.arange(lo, hi + 1) * step_size + center
         self._ccf_velocity_grid[key] = grid
         return grid
+
+    def _order_weights(self, chip, mask_name):
+        """
+        Per-order CCF-combination weights for one chip and mask, from
+        reference/ccf_order_weights.csv. Returns a 1D ndarray of length
+        norder_chip, ordered by ORDER.
+        """
+        if self._order_weights_df is None:
+            self._order_weights_df = pd.read_csv(f'{REPO_ROOT}/reference/ccf_order_weights.csv')
+        df = self._order_weights_df
+        if mask_name not in df.columns:
+            raise KeyError(
+                f"no CCF order-weight column for mask {mask_name!r} in "
+                f"ccf_order_weights.csv; have "
+                f"{[c for c in df.columns if c not in ('CHIP', 'ORDER')]}")
+        rows = df[df['CHIP'] == chip.upper()].sort_values('ORDER')
+        return rows[mask_name].to_numpy(dtype=float)
 
 
     @staticmethod
@@ -531,7 +549,10 @@ class RadialVelocity:
 
     def compute_rv(self, chip, fiber, window=None, min_npts=9):
         """
-        Compute per-order radial velocities for one chip/fiber.
+        Compute per-order and combined (per-CCD) radial velocities for one
+        chip/fiber. The combined RV value is fit on the weighted, per-order-
+        normalized sum of the order CCFs; its error is fit on the raw unweighted
+        sum (count-scale, so the photon-noise estimate stays valid).
 
         Parameters
         ----------
@@ -549,7 +570,9 @@ class RadialVelocity:
         Returns
         -------
         dict
-            {'rv', 'rv_err'}, each a length-norder_chip ndarray [km/s].
+            {'rv', 'rv_err'} (length-norder_chip ndarrays [km/s]) plus
+            {'ccd_rv', 'ccd_rv_err'} (scalars [km/s]) — the combined per-CCD RV
+            and its photon-limited error.
 
         Raises
         ------
@@ -581,7 +604,38 @@ class RadialVelocity:
             rv[o], rv_err[o] = self._compute_rv(
                 velocity_grid, ccf[o], wave[o], window, min_npts)
 
-        return {'rv': rv, 'rv_err': rv_err}
+        ccd_rv, ccd_rv_err = self._combined_ccd_rv(
+            chip, fiber, ccf, velocity_grid, wave, window, min_npts)
+
+        return {'rv': rv, 'rv_err': rv_err, 'ccd_rv': ccd_rv, 'ccd_rv_err': ccd_rv_err}
+
+    def _combined_ccd_rv(self, chip, fiber, ccf, velocity_grid, wave, window, min_npts):
+        """
+        Combined per-CCD RV (value) and photon-limited error from the order CCFs.
+
+        Value: normalize each order's CCF to unit sum, scale by its weight, sum,
+        and fit. Error: fit the raw unweighted sum. Returns (rv, rv_err) [km/s];
+        NaN if no order carries weight.
+        """
+        mask_name = self._ccf_config_for_source(self._resolve_illumination(chip, fiber))[0]
+        weights = self._order_weights(chip, mask_name)
+
+        ccf_weighted = np.zeros(velocity_grid.size)
+        for o in range(ccf.shape[0]):
+            s = np.nansum(ccf[o])
+            if s > 0 and weights[o] != 0:
+                ccf_weighted += (ccf[o] / s) * weights[o]
+        ccf_summed = np.nansum(ccf, axis=0)
+
+        if not np.any(ccf_weighted):
+            return np.nan, np.nan
+
+        # The dispersion is ~uniform across the chip; use the strongest order's
+        # WAVE for the photon-noise velocity scale.
+        rep = int(np.argmax(np.nansum(ccf, axis=1)))
+        ccd_rv = self._compute_rv(velocity_grid, ccf_weighted, wave[rep], window, min_npts)[0]
+        ccd_rv_err = self._compute_rv(velocity_grid, ccf_summed, wave[rep], window, min_npts)[1]
+        return ccd_rv, ccd_rv_err
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -669,6 +723,7 @@ class RadialVelocity:
                 continue
             mask_name = config[0]
 
+            ccd_rv, ccd_rv_err = {}, {}
             for chip in chips:
                 ccf = self.compute_ccf(chip, fiber, ccf_mask_width, ccf_step_size, ccf_window,
                                        clip_edge_pixels=clip_edge_pixels)['ccf']
@@ -677,7 +732,10 @@ class RadialVelocity:
                 rows = slice(0, NORDER_GREEN) if chip == 'GREEN' else slice(NORDER_GREEN, NORDER)
                 rv[rows] = result['rv']
                 rv_err[rows] = result['rv_err']
-            self._results[fiber] = {'rv': rv, 'rv_err': rv_err, 'source': source}
+                ccd_rv[chip] = result['ccd_rv']
+                ccd_rv_err[chip] = result['ccd_rv_err']
+            self._results[fiber] = {'rv': rv, 'rv_err': rv_err, 'source': source,
+                                    'ccd_rv': ccd_rv, 'ccd_rv_err': ccd_rv_err}
 
             # Per-orderlet RV table, one row per spectral order.
             wave = np.asarray(self.l2_obj.data[f'{fiber}_WAVE'], dtype=np.float64)
@@ -703,6 +761,14 @@ class RadialVelocity:
             rv_hdr['RVMETHOD'] = ('CCF', 'RV derivation method')
             rv_hdr['SKYRMVD']  = (False, 'Sky model removed?')
             rv_hdr['TELLRMVD'] = (False, 'Telluric model removed?')
+            # Combined per-CCD RV/error (CCD1=GREEN, CCD2=RED), one fit to the
+            # weighted-summed CCF; error from the unweighted-summed CCF.
+            if 'GREEN' in ccd_rv:
+                rv_hdr['CCD1RV']  = (float(ccd_rv['GREEN']),     '[km/s] GREEN combined RV')
+                rv_hdr['CCD1RVE'] = (float(ccd_rv_err['GREEN']), '[km/s] GREEN combined RV error')
+            if 'RED' in ccd_rv:
+                rv_hdr['CCD2RV']  = (float(ccd_rv['RED']),     '[km/s] RED combined RV')
+                rv_hdr['CCD2RVE'] = (float(ccd_rv_err['RED']), '[km/s] RED combined RV error')
 
         # PRIMARY (EPRV L4): RV method only. Per-fiber velocity grids live on the
         # CCF extensions; SYSVEL is left UNDEFINED (absolute RVs, nothing removed).
@@ -731,25 +797,26 @@ class RadialVelocity:
         print(f"\n  CCF velocity grid: {self.ccf_window[0]:+.1f} to {self.ccf_window[1]:+.1f} km/s "
               f"about each fiber's center, step {self.ccf_step_size} km/s")
 
-        # Per-CCD, per-orderlet RV summary (median over valid orders). SOURCE is
-        # the illumination source; RV_ERR is the median formal photon error;
-        # RV_RMS is the order-to-order mad_std, both in m/s.
+        # Per-CCD, per-orderlet summary. SOURCE is the illumination source;
+        # CCD_RV/CCD_ERV are the combined per-CCD RV and its error; RV_RMS is the
+        # order-to-order mad_std (a diagnostic of per-order spread), in m/s.
         fiber_order = [f for f in ('SCI1', 'SCI2', 'SCI3', 'SKY', 'CAL')
                        if f in self._results]
         fiber_order += [f for f in self._results if f not in fiber_order]
 
         print(f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NVALID':>8s}"
-              f"{'RV [km/s]':>16s}{'RV_ERR [m/s]':>16s}{'RV_RMS [m/s]':>16s}")
+              f"{'CCD_RV [km/s]':>16s}{'CCD_ERV [m/s]':>16s}{'RV_RMS [m/s]':>16s}")
         print("  " + "-" * 82)
         for chip, rows in (('GREEN', slice(0, NORDER_GREEN)),
                            ('RED', slice(NORDER_GREEN, NORDER))):
             for fiber in fiber_order:
-                rv, rv_err = self._results[fiber]['rv'][rows], self._results[fiber]['rv_err'][rows]
-                source = self._results[fiber].get('source', '')
+                res = self._results[fiber]
+                rv = res['rv'][rows]
                 nvalid = int(np.sum(np.isfinite(rv)))
                 if nvalid == 0:
                     continue
+                ccd_rv = res.get('ccd_rv', {}).get(chip, np.nan)
+                ccd_erv = res.get('ccd_rv_err', {}).get(chip, np.nan)
                 rv_rms = mad_std(rv, ignore_nan=True) * 1e3 if nvalid >= 2 else np.nan
-                print(f"  {chip:<8s}{fiber:<8s}{source:<10s}{nvalid:>8d}"
-                      f"{np.nanmedian(rv):>+16.5f}{np.nanmedian(rv_err) * 1e3:>16.3f}"
-                      f"{rv_rms:>16.3f}")
+                print(f"  {chip:<8s}{fiber:<8s}{res.get('source', ''):<10s}{nvalid:>8d}"
+                      f"{ccd_rv:>+16.5f}{ccd_erv * 1e3:>16.3f}{rv_rms:>16.3f}")

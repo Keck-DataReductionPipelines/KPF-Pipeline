@@ -416,9 +416,10 @@ class TestComputeRVPublic:
     def test_returns_rv_dict(self, rv_module):
         rv_module.compute_ccf('GREEN', 'SCI2')
         res = rv_module.compute_rv('GREEN', 'SCI2')
-        assert set(res) == {'rv', 'rv_err'}
+        assert set(res) == {'rv', 'rv_err', 'ccd_rv', 'ccd_rv_err'}
         assert res['rv'].shape == (NORDER_GREEN,)
         assert res['rv_err'].shape == (NORDER_GREEN,)
+        assert np.isscalar(res['ccd_rv']) and np.isscalar(res['ccd_rv_err'])
 
     def test_raises_without_ccf(self, rv_module):
         with pytest.raises(RuntimeError, match="compute_ccf"):
@@ -429,10 +430,26 @@ class TestComputeRVPublic:
         rv = rv_module.compute_rv('GREEN', 'SCI2')['rv']
         np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
 
+    def test_combined_ccd_rv_recovers_injected(self, rv_module):
+        # The weighted-combined per-CCD RV recovers the injected velocity, with a
+        # finite positive error from the unweighted-summed CCF.
+        rv_module.compute_ccf('GREEN', 'SCI2')
+        res = rv_module.compute_rv('GREEN', 'SCI2')
+        assert res['ccd_rv'] == pytest.approx(_V_INJECT, abs=0.1)
+        assert np.isfinite(res['ccd_rv_err']) and res['ccd_rv_err'] > 0
+
     def test_errors_finite_and_positive(self, rv_module):
         rv_module.compute_ccf('GREEN', 'SCI2')
         rv_err = rv_module.compute_rv('GREEN', 'SCI2')['rv_err']
         assert np.all(np.isfinite(rv_err)) and np.all(rv_err > 0)
+
+    def test_order_weights_table(self, rv_module):
+        # Weights load per chip and mask column; thar uses the 'thar' column.
+        w = rv_module._order_weights('GREEN', 'G2_espresso')
+        assert w.shape == (NORDER_GREEN,) and np.all(w >= 0)
+        assert rv_module._order_weights('RED', 'thar').shape == (NORDER_RED,)
+        with pytest.raises(KeyError, match='order-weight column'):
+            rv_module._order_weights('GREEN', 'NOPE_mask')
 
 
 class TestPerform:
@@ -481,6 +498,14 @@ class TestPerform:
         assert rv_hdr['SKYRMVD'][0] is False
         assert rv_hdr['TELLRMVD'][0] is False
         assert l4.headers['PRIMARY']['RVMETHOD'][0] == 'CCF'
+
+    def test_per_ccd_rv_keywords(self, rv_module):
+        # Combined per-CCD RV/error on the RV extension: CCD1=GREEN, CCD2=RED.
+        l4 = rv_module.perform()
+        rv_hdr = l4.headers['SCI2_RV']
+        assert rv_hdr['CCD1RV'][0] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv_hdr['CCD2RV'][0] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv_hdr['CCD1RVE'][0] > 0 and rv_hdr['CCD2RVE'][0] > 0
 
     def test_thar_mask_recorded_for_cal(self, rv_module):
         # CAL on a ThAr lamp -> CCFMASK 'thar', instrument frame (no barycorr).
