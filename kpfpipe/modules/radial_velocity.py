@@ -7,6 +7,16 @@ against a line mask, then collapsing the per-order CCFs into radial velocities
 per order, orderlet, and CCD (weighted where appropriate). Produces a KPF4 (L4)
 holding the CCFs and RVs.
 
+Each fiber's mask, barycentric handling, and CCF grid center are dispatched from
+its illumination source (SCI-OBJ/SKY-OBJ/CAL-OBJ in INSTRUMENT_HEADER):
+
+  source   mask                 barycorr  grid center
+  target   TARGTEFF-lookup      yes       TARGRADV (systemic)
+  sky      G2_espresso (solar)  yes       0
+  thar     ThAr list (unit wt)  no        0
+  etalon   / lfc                                NotImplementedError
+  none     not illuminated -> skipped (no CCF/RV)
+
 All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.
 """
@@ -65,38 +75,77 @@ class RadialVelocity:
         for k, v in DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._ccf_line_mask = None     # cached by _build_ccf_line_mask()
-        self._ccf_velocity_grid = None  # cached by _build_ccf_velocity_grid()
-        self._ccf = {}              # cached by compute_ccf(), keyed by f'{chip}_{fiber}'
+        # Per-orderlet caches, all keyed by f'{chip}_{fiber}'.
+        self._illumination = {}     # illumination source, set by _resolve_illumination()
+        self._ccf_line_mask = {}    # line mask, set by _build_ccf_line_mask()
+        self._ccf_velocity_grid = {}  # velocity grid (center-shifted), set by _build_ccf_velocity_grid()
+        self._ccf = {}              # CCF cube, set by compute_ccf()
         self._results = None        # populated by perform()
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _build_ccf_line_mask(self, width=None):
+    # Fiber -> the INSTRUMENT_HEADER keyword giving its illumination source.
+    _OBJ_KEYWORD = {'SCI1': 'SCI-OBJ', 'SCI2': 'SCI-OBJ', 'SCI3': 'SCI-OBJ',
+                    'SKY': 'SKY-OBJ', 'CAL': 'CAL-OBJ'}
+
+    @staticmethod
+    def _normalize_source(value):
+        """Normalize a raw SCI-OBJ/SKY-OBJ/CAL-OBJ value to an illumination source."""
+        v = value[0] if isinstance(value, tuple) else value
+        v = str(v).strip().lower()
+        if v == 'target':                return 'target'
+        if v == 'sky':                   return 'sky'
+        if v in ('th_gold', 'th_daily'): return 'thar'
+        if v == 'lfcfiber':              return 'lfc'
+        if 'etalon' in v:                return 'etalon'
+        if v == 'none':                  return 'none'
+        raise ValueError(f"unrecognized illumination source {value!r}")
+
+    def _resolve_illumination(self, chip, fiber):
         """
-        Build (and cache) the CCF line mask for the TARGTEFF-selected stellar
-        mask: vacuum line centers, weights, and per-line top-hat edges at
-        velocity -/+ width about each center (relativistic Doppler).
-
-        Returns
-        -------
-        dict
-            Mask with keys 'center', 'weight', 'start', 'end', each a 1D ndarray
-            of length n_line; wavelengths are vacuum [Å].
-
-        Raises
-        ------
-        ValueError
-            If TARGTEFF is not available in INSTRUMENT_HEADER.
+        Resolve (and cache) the normalized illumination source for one orderlet
+        from its SCI-OBJ/SKY-OBJ/CAL-OBJ keyword in INSTRUMENT_HEADER.
         """
-        if self._ccf_line_mask is not None:
-            return self._ccf_line_mask
-        
-        if width is None:
-            width = self.ccf_mask_width
+        key = f'{chip.upper()}_{fiber.upper()}'
+        if key in self._illumination:
+            return self._illumination[key]
+        try:
+            keyword = self._OBJ_KEYWORD[fiber.upper()]
+        except KeyError:
+            raise ValueError(
+                f"unknown fiber {fiber!r}; expected one of {sorted(self._OBJ_KEYWORD)}")
+        inst = self.l2_obj.headers.get('INSTRUMENT_HEADER', {})
+        if keyword not in inst:
+            raise ValueError(
+                f"illumination keyword {keyword!r} not in INSTRUMENT_HEADER; "
+                f"cannot dispatch a mask for fiber {fiber}")
+        source = self._normalize_source(inst[keyword])
+        self._illumination[key] = source
+        return source
 
+    def _ccf_config_for_source(self, source):
+        """
+        Map an illumination source to its (mask_name, apply_barycorr, grid_center).
+
+        Returns None for 'none' (fiber not illuminated -> skip). Raises
+        NotImplementedError for sources whose CCF path is not yet built
+        (etalon, lfc, ...).
+        """
+        if source == 'none':
+            return None
+        if source == 'target':
+            return self._stellar_mask_name(), True, self._systemic_rv()
+        if source == 'sky':
+            return 'G2_espresso', True, 0.0
+        if source == 'thar':
+            return 'thar', False, 0.0
+        raise NotImplementedError(
+            f"CCF for '{source}'-illuminated fibers is not yet implemented")
+
+    def _stellar_mask_name(self):
+        """Select the stellar line-mask name from TARGTEFF via line_mask_lookup.csv."""
         inst = self.l2_obj.headers.get('INSTRUMENT_HEADER', {})
         try:
             teff = float(inst.get('TARGTEFF'))
@@ -105,51 +154,13 @@ class RadialVelocity:
         if teff is None or not np.isfinite(teff) or teff <= 0:
             raise ValueError(
                 "target effective temperature (TARGTEFF) not available in "
-                "INSTRUMENT_HEADER; cannot select a stellar line mask"
-            )
-
+                "INSTRUMENT_HEADER; cannot select a stellar line mask")
         line_map = pd.read_csv(f'{REPO_ROOT}/reference/line_masks/line_mask_lookup.csv')
         row = line_map[(line_map['TEFF_MIN'] <= teff) & (teff < line_map['TEFF_MAX'])]
-        mask_name = row['DEFAULT_MASK'].iloc[0]
-        mask_path = f'{REPO_ROOT}/reference/line_masks/stellar_masks/{mask_name}.txt'
+        return row['DEFAULT_MASK'].iloc[0]
 
-        centers, weights = np.loadtxt(mask_path, unpack=True)  # vacuum wavelengths
-        self._ccf_line_mask = {
-            'center': centers,
-            'weight': weights,
-            'start': centers * (1.0 + compute_redshift(-width * u.km / u.s)),
-            'end':   centers * (1.0 + compute_redshift(+width * u.km / u.s)),
-        }
-        return self._ccf_line_mask
-
-
-    def _build_ccf_velocity_grid(self, step_size=None, window=None):
-        """
-        Build (and cache) the evenly-spaced CCF velocity grid, centered on the
-        target's systemic RV (TARGRADV).
-
-        The [min, max] `window` is converted to an integer number of `step_size`
-        steps about TARGRADV, so the grid step is exact.
-
-        Returns
-        -------
-        ndarray
-            Velocity steps [km/s], spanning `window` about TARGRADV in
-            `step_size` increments.
-
-        Raises
-        ------
-        ValueError
-            If TARGRADV is not available in INSTRUMENT_HEADER.
-        """
-        if self._ccf_velocity_grid is not None:
-            return self._ccf_velocity_grid
-
-        if step_size is None:
-            step_size = self.ccf_step_size
-        if window is None:
-            window = self.ccf_window
-
+    def _systemic_rv(self):
+        """Target systemic RV (TARGRADV) [km/s] — the stellar CCF grid center."""
         inst = self.l2_obj.headers.get('INSTRUMENT_HEADER', {})
         try:
             star_rv = float(inst.get('TARGRADV'))
@@ -158,15 +169,71 @@ class RadialVelocity:
         if star_rv is None or not np.isfinite(star_rv):
             raise ValueError(
                 "target radial velocity (TARGRADV) not available in "
-                "INSTRUMENT_HEADER; cannot center the CCF velocity grid"
-            )
+                "INSTRUMENT_HEADER; cannot center the CCF velocity grid")
+        return star_rv
 
-        # Convert the [min, max] km/s window to integer step counts.
+    def _build_ccf_line_mask(self, chip, fiber, mask_name, width=None):
+        """
+        Build (and cache) the orderlet's CCF line mask: vacuum line centers,
+        weights, and per-line top-hat edges at velocity -/+ width about each
+        center (relativistic Doppler).
+
+        Stellar masks load from reference/line_masks/stellar_masks/; the 'thar'
+        mask is built from the ThAr line list with uniform weights.
+
+        Returns
+        -------
+        dict
+            Mask with keys 'center', 'weight', 'start', 'end', each a 1D ndarray
+            of length n_line; wavelengths are vacuum [Å].
+        """
+        if width is None:
+            width = self.ccf_mask_width
+        key = f'{chip.upper()}_{fiber.upper()}'
+        if key in self._ccf_line_mask:
+            return self._ccf_line_mask[key]
+
+        if mask_name == 'thar':
+            df = pd.read_csv(f'{REPO_ROOT}/reference/thar_line_list.csv')
+            # unique: lines recur across overlapping orders, would double-count
+            centers = np.unique(df['WAVE'].to_numpy(dtype=float))
+            weights = np.ones(centers.size)
+        else:
+            mask_path = f'{REPO_ROOT}/reference/line_masks/stellar_masks/{mask_name}.txt'
+            centers, weights = np.loadtxt(mask_path, unpack=True)  # vacuum wavelengths
+
+        mask = {
+            'center': centers,
+            'weight': weights,
+            'start': centers * (1.0 + compute_redshift(-width * u.km / u.s)),
+            'end':   centers * (1.0 + compute_redshift(+width * u.km / u.s)),
+        }
+        self._ccf_line_mask[key] = mask
+        return mask
+
+    def _build_ccf_velocity_grid(self, chip, fiber, center, step_size=None, window=None):
+        """
+        Build (and cache) the orderlet's CCF velocity grid: evenly spaced over
+        `window` about `center` in `step_size` increments.
+
+        The [min, max] `window` is converted to an integer number of `step_size`
+        steps (so the step is exact), then shifted by `center` — the systemic RV
+        (TARGRADV) for stellar fibers, 0 for sky/cal fibers.
+        """
+        if step_size is None:
+            step_size = self.ccf_step_size
+        if window is None:
+            window = self.ccf_window
+        key = f'{chip.upper()}_{fiber.upper()}'
+        if key in self._ccf_velocity_grid:
+            return self._ccf_velocity_grid[key]
+
         lo_kms, hi_kms = window
         lo = int(round(lo_kms / step_size))
         hi = int(round(hi_kms / step_size))
-        self._ccf_velocity_grid = np.arange(lo, hi + 1) * step_size + star_rv
-        return self._ccf_velocity_grid
+        grid = np.arange(lo, hi + 1) * step_size + center
+        self._ccf_velocity_grid[key] = grid
+        return grid
 
 
     @staticmethod
@@ -358,7 +425,7 @@ class RadialVelocity:
         step_size : float, optional
             CCF velocity step size [km/s]. Defaults to the configured value.
         window : list of float, optional
-            CCF velocity grid range [km/s] as [min, max] about the systemic RV.
+            CCF velocity grid range [km/s] as [min, max] about the grid center.
             Defaults to the configured value.
         clip_edge_pixels : list of int, optional
             Number of pixels to drop from the [short_wavelength_end,
@@ -367,15 +434,18 @@ class RadialVelocity:
 
         Returns
         -------
-        dict
+        dict or None
             {'velocity', 'ccf'}: the CCF velocity grid [km/s] and the CCF with
             shape (norder_chip, n_velocity_step). The CCF is also cached under
-            f'{chip}_{fiber}' for a subsequent compute_rv call.
+            f'{chip}_{fiber}' for a subsequent compute_rv call. Returns None if
+            the fiber is not illuminated (source 'none').
 
         Raises
         ------
         ValueError
-            If BARYCORR_Z is not populated on the L2.
+            If BARYCORR_Z is required (astronomical source) but not populated.
+        NotImplementedError
+            If the fiber's illumination source has no CCF path yet (etalon, lfc).
         """
         chip = chip.upper()
         fiber = fiber.upper()
@@ -386,14 +456,14 @@ class RadialVelocity:
         if window is None:
             window = self.ccf_window
 
-        if np.size(self.l2_obj.data.get('BARYCORR_Z', np.array([]))) == 0:
-            raise ValueError(
-                "per-order barycentric redshift (BARYCORR_Z) not populated; run BarycentricCorrection first"
-            )
+        source = self._resolve_illumination(chip, fiber)
+        config = self._ccf_config_for_source(source)
+        if config is None:
+            return None                  # fiber not illuminated; caller skips
+        mask_name, apply_barycorr, center = config
 
-        line_mask = self._build_ccf_line_mask(width)
-        velocity_grid = self._build_ccf_velocity_grid(step_size, window)
-        barycorr_z = np.asarray(self.l2_obj.data[f'{chip}_BARYCORR_Z'], dtype=np.float64)
+        line_mask = self._build_ccf_line_mask(chip, fiber, mask_name, width)
+        velocity_grid = self._build_ccf_velocity_grid(chip, fiber, center, step_size, window)
 
         flux = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_FLUX'], dtype=np.float64)
         wave = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_WAVE'], dtype=np.float64)
@@ -418,6 +488,19 @@ class RadialVelocity:
             wave = wave[:, cols]
 
         norder = flux.shape[0]
+
+        # Per-order barycentric redshift — only for astronomical sources (target,
+        # sky). Calibration sources (thar) stay in the instrument frame (z = 0).
+        if apply_barycorr:
+            if np.size(self.l2_obj.data.get('BARYCORR_Z', np.array([]))) == 0:
+                raise ValueError(
+                    "per-order barycentric redshift (BARYCORR_Z) not populated; "
+                    "run BarycentricCorrection first"
+                )
+            barycorr_z = np.asarray(self.l2_obj.data[f'{chip}_BARYCORR_Z'], dtype=np.float64)
+        else:
+            barycorr_z = np.zeros(norder)
+
         ccf = np.zeros((norder, velocity_grid.size))
 
         # Some orders legitimately yield a zero CCF (no mask lines fall within
@@ -488,7 +571,7 @@ class RadialVelocity:
             )
         ccf = self._ccf[ext]
 
-        velocity_grid = self._build_ccf_velocity_grid()
+        velocity_grid = self._ccf_velocity_grid[ext]   # the grid compute_ccf used
         wave = np.asarray(self.l2_obj.data[f'{chip}_{fiber}_WAVE'], dtype=np.float64)
         rv = np.full(ccf.shape[0], np.nan)
         rv_err = np.full(ccf.shape[0], np.nan)
@@ -526,7 +609,7 @@ class RadialVelocity:
         ccf_step_size : float, optional
             CCF velocity step size [km/s]. Overrides the configured value.
         ccf_window : list of float, optional
-            CCF velocity grid range [km/s] as [min, max] about the systemic RV.
+            CCF velocity grid range [km/s] as [min, max] about the grid center.
             Overrides the configured value.
         rv_window : list of float, optional
             [min, max] km/s window about the dip for the first-pass fit.
@@ -542,8 +625,11 @@ class RadialVelocity:
         -------
         l4_obj : KPF4
             L4 data product with one CCF cube and one per-order RV table per
-            orderlet (e.g. SCI2_CCF, SCI2_RV), the CCF velocity grid and
-            RVMETHOD written to PRIMARY, and a 'radial_velocity' receipt entry.
+            illuminated orderlet (e.g. SCI2_CCF, SCI2_RV); per-fiber velocity
+            grid and mask (VELSTART/VELSTEP/VELNSTEP/CCFMASK) on each CCF
+            extension and RVMETHOD/SKYRMVD/TELLRMVD on each RV extension;
+            RVMETHOD on PRIMARY; and a 'radial_velocity' receipt entry.
+            Unilluminated fibers ('none') are skipped (empty extensions).
         """
         if chips is None:
             chips = self.chips
@@ -571,6 +657,18 @@ class RadialVelocity:
         for fiber in fibers:
             rv = np.full(NORDER, np.nan)
             rv_err = np.full(NORDER, np.nan)
+
+            # Dispatch the mask/barycorr/grid-center from the fiber's illumination
+            # source; 'none' (unilluminated) is skipped with NaN RVs and no
+            # CCF/RV extension, while etalon/lfc fail loud (NotImplementedError).
+            source = self._resolve_illumination(chips[0], fiber)
+            config = self._ccf_config_for_source(source)
+            if config is None:
+                print(f"  {fiber}: illumination source 'none'; skipping (no CCF/RV)")
+                self._results[fiber] = {'rv': rv, 'rv_err': rv_err, 'source': source}
+                continue
+            mask_name = config[0]
+
             for chip in chips:
                 ccf = self.compute_ccf(chip, fiber, ccf_mask_width, ccf_step_size, ccf_window,
                                        clip_edge_pixels=clip_edge_pixels)['ccf']
@@ -579,7 +677,7 @@ class RadialVelocity:
                 rows = slice(0, NORDER_GREEN) if chip == 'GREEN' else slice(NORDER_GREEN, NORDER)
                 rv[rows] = result['rv']
                 rv_err[rows] = result['rv_err']
-            self._results[fiber] = {'rv': rv, 'rv_err': rv_err}
+            self._results[fiber] = {'rv': rv, 'rv_err': rv_err, 'source': source}
 
             # Per-orderlet RV table, one row per spectral order.
             wave = np.asarray(self.l2_obj.data[f'{fiber}_WAVE'], dtype=np.float64)
@@ -593,12 +691,22 @@ class RadialVelocity:
                 'RV_ERR':      rv_err,
             }))
 
-        # Record the CCF velocity grid (linear, shared by all CCFs) and method.
-        primary = l4_obj.headers['PRIMARY']
-        primary['RVMETHOD'] = ('CCF', 'RV derivation method')
-        primary['CCFVSTRT'] = (float(self._ccf_velocity_grid[0]), '[km/s] CCF velocity grid start')
-        primary['CCFVSTEP'] = (float(ccf_step_size), '[km/s] CCF velocity grid step')
-        primary['CCFNVEL'] = (int(self._ccf_velocity_grid.size), 'CCF velocity grid length')
+            # Per-orderlet CCF/RV extension headers (EPRV L4 standard). The
+            # velocity grid is per-fiber (center varies) but shared across chips.
+            grid = self._ccf_velocity_grid[f'{chips[-1]}_{fiber}']
+            ccf_hdr = l4_obj.headers[f'{fiber}_CCF']
+            ccf_hdr['VELSTART'] = (float(grid[0]), '[km/s] Velocity grid start')
+            ccf_hdr['VELSTEP']  = (float(ccf_step_size), '[km/s] Velocity grid step')
+            ccf_hdr['VELNSTEP'] = (int(grid.size), 'Number of velocity grid steps')
+            ccf_hdr['CCFMASK']  = (mask_name, 'Mask used to generate CCF')
+            rv_hdr = l4_obj.headers[f'{fiber}_RV']
+            rv_hdr['RVMETHOD'] = ('CCF', 'RV derivation method')
+            rv_hdr['SKYRMVD']  = (False, 'Sky model removed?')
+            rv_hdr['TELLRMVD'] = (False, 'Telluric model removed?')
+
+        # PRIMARY (EPRV L4): RV method only. Per-fiber velocity grids live on the
+        # CCF extensions; SYSVEL is left UNDEFINED (absolute RVs, nothing removed).
+        l4_obj.headers['PRIMARY']['RVMETHOD'] = ('CCF', 'RV derivation method')
 
         l4_obj.receipt_add_entry('radial_velocity', 'PASS')
         return l4_obj
@@ -619,29 +727,29 @@ class RadialVelocity:
             print("  perform() has not been called")
             return
 
-        # CCF velocity grid (linear, shared by all orderlets).
-        grid = self._ccf_velocity_grid
-        print(f"\n  CCF velocity grid: {grid[0]:+.2f} to {grid[-1]:+.2f} km/s, "
-              f"{grid.size} steps of {self.ccf_step_size} km/s")
+        # CCF velocity grid: per-fiber center, shared step/span.
+        print(f"\n  CCF velocity grid: {self.ccf_window[0]:+.1f} to {self.ccf_window[1]:+.1f} km/s "
+              f"about each fiber's center, step {self.ccf_step_size} km/s")
 
-        # Per-CCD, per-orderlet RV summary (median over valid orders). RV_ERR is
-        # the median formal photon error; RV_RMS is the order-to-order mad_std,
-        # both in m/s so the scatter can be compared to the formal error.
+        # Per-CCD, per-orderlet RV summary (median over valid orders). SOURCE is
+        # the illumination source; RV_ERR is the median formal photon error;
+        # RV_RMS is the order-to-order mad_std, both in m/s.
         fiber_order = [f for f in ('SCI1', 'SCI2', 'SCI3', 'SKY', 'CAL')
                        if f in self._results]
         fiber_order += [f for f in self._results if f not in fiber_order]
 
-        print(f"\n  {'CHIP':<8s}{'FIBER':<8s}{'NVALID':>8s}"
+        print(f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NVALID':>8s}"
               f"{'RV [km/s]':>16s}{'RV_ERR [m/s]':>16s}{'RV_RMS [m/s]':>16s}")
-        print("  " + "-" * 72)
+        print("  " + "-" * 82)
         for chip, rows in (('GREEN', slice(0, NORDER_GREEN)),
                            ('RED', slice(NORDER_GREEN, NORDER))):
             for fiber in fiber_order:
                 rv, rv_err = self._results[fiber]['rv'][rows], self._results[fiber]['rv_err'][rows]
+                source = self._results[fiber].get('source', '')
                 nvalid = int(np.sum(np.isfinite(rv)))
                 if nvalid == 0:
                     continue
                 rv_rms = mad_std(rv, ignore_nan=True) * 1e3 if nvalid >= 2 else np.nan
-                print(f"  {chip:<8s}{fiber:<8s}{nvalid:>8d}"
+                print(f"  {chip:<8s}{fiber:<8s}{source:<10s}{nvalid:>8d}"
                       f"{np.nanmedian(rv):>+16.5f}{np.nanmedian(rv_err) * 1e3:>16.3f}"
                       f"{rv_rms:>16.3f}")
