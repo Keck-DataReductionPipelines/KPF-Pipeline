@@ -35,7 +35,7 @@ NCOL = 2000
 # ---------------------------------------------------------------------------
 
 def _make_mask(centers, weights=None, width=0.5):
-    """Build a line-mask dict matching _build_ccf_line_mask's structure."""
+    """Build a line-mask dict matching _build_line_mask's structure."""
     centers = np.asarray(centers, dtype=np.float64)
     if weights is None:
         weights = np.ones_like(centers)
@@ -179,7 +179,7 @@ class TestComputeRV:
 
 
 # ---------------------------------------------------------------------------
-# _build_ccf_line_mask / _build_ccf_velocity_grid  (header-only fixture)
+# _build_line_mask / _build_velocity_grid  (header-only fixture)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
@@ -197,100 +197,108 @@ def header_kpf2():
 class TestDispatch:
     """Illumination-source resolution and per-source CCF configuration."""
 
-    @pytest.mark.parametrize('raw, source', [
+    @pytest.mark.parametrize('raw, obj', [
         ('Target', 'target'), ('Sky', 'sky'), ('Th_gold', 'thar'),
-        ('Th_daily', 'thar'), ('LFCFiber', 'lfc'), ('EtalonFiber', 'etalon'),
-        ('None', 'none'), ('TARGET', 'target'),
+        ('Th_daily', 'thar'), ('None', 'none'), ('TARGET', 'target'),
     ])
-    def test_normalize_source(self, raw, source):
-        assert RadialVelocity._normalize_source(raw) == source
+    def test_raw_value_normalizes_to_object(self, header_kpf2, raw, obj):
+        header_kpf2.headers['INSTRUMENT_HEADER']['CAL-OBJ'] = raw
+        assert RadialVelocity(header_kpf2)._resolve_illumination_source('GREEN', 'CAL')['object'] == obj
 
-    def test_normalize_source_unrecognized_raises(self):
+    def test_unrecognized_source_raises(self, header_kpf2):
+        header_kpf2.headers['INSTRUMENT_HEADER']['CAL-OBJ'] = 'Frobnicator'
         with pytest.raises(ValueError, match="unrecognized illumination"):
-            RadialVelocity._normalize_source('Frobnicator')
+            RadialVelocity(header_kpf2)._resolve_illumination_source('GREEN', 'CAL')
 
     def test_resolve_illumination_per_fiber(self, header_kpf2):
         rv = RadialVelocity(header_kpf2)
-        assert rv._resolve_illumination('GREEN', 'SCI2') == 'target'
-        assert rv._resolve_illumination('RED', 'SKY') == 'sky'
-        assert rv._resolve_illumination('GREEN', 'CAL') == 'none'
+        assert rv._resolve_illumination_source('GREEN', 'SCI2')['object'] == 'target'
+        assert rv._resolve_illumination_source('RED', 'SKY')['object'] == 'sky'
+        assert rv._resolve_illumination_source('GREEN', 'CAL')['object'] == 'none'
 
     def test_resolve_unknown_fiber_raises(self, header_kpf2):
         with pytest.raises(ValueError, match="unknown fiber"):
-            RadialVelocity(header_kpf2)._resolve_illumination('GREEN', 'BOGUS')
+            RadialVelocity(header_kpf2)._resolve_illumination_source('GREEN', 'BOGUS')
 
     def test_resolve_missing_keyword_raises(self, header_kpf2):
         del header_kpf2.headers['INSTRUMENT_HEADER']['CAL-OBJ']
         with pytest.raises(ValueError, match="CAL-OBJ"):
-            RadialVelocity(header_kpf2)._resolve_illumination('GREEN', 'CAL')
+            RadialVelocity(header_kpf2)._resolve_illumination_source('GREEN', 'CAL')
 
-    def test_config_target(self, header_kpf2):
-        header_kpf2.headers['INSTRUMENT_HEADER']['TARGRADV'] = 11.1
-        mask, barycorr, center = RadialVelocity(header_kpf2)._ccf_config_for_source('target')
-        assert mask == 'G2_espresso' and barycorr is True and center == 11.1
+    def test_settings_target(self, header_kpf2):
+        header_kpf2.headers['INSTRUMENT_HEADER']['TARGRADV'] = 11.1   # SCI-OBJ='Target'
+        s = RadialVelocity(header_kpf2)._resolve_illumination_source('GREEN', 'SCI2')
+        assert s == {'object': 'target', 'mask_name': 'G2_espresso',
+                     'apply_barycorr': True, 'vel_grid_center': 11.1}
 
-    def test_config_sky(self, header_kpf2):
-        mask, barycorr, center = RadialVelocity(header_kpf2)._ccf_config_for_source('sky')
-        assert mask == 'G2_espresso' and barycorr is True and center == 0.0
+    def test_settings_sky(self, header_kpf2):
+        s = RadialVelocity(header_kpf2)._resolve_illumination_source('GREEN', 'SKY')
+        assert s == {'object': 'sky', 'mask_name': 'G2_espresso',
+                     'apply_barycorr': True, 'vel_grid_center': 0.0}
 
-    def test_config_thar(self, header_kpf2):
-        mask, barycorr, center = RadialVelocity(header_kpf2)._ccf_config_for_source('thar')
-        assert mask == 'thar' and barycorr is False and center == 0.0
+    def test_settings_thar(self, header_kpf2):
+        header_kpf2.headers['INSTRUMENT_HEADER']['CAL-OBJ'] = 'Th_gold'
+        s = RadialVelocity(header_kpf2)._resolve_illumination_source('GREEN', 'CAL')
+        assert s == {'object': 'thar', 'mask_name': 'thar',
+                     'apply_barycorr': False, 'vel_grid_center': 0.0}
 
-    def test_config_none_skips(self, header_kpf2):
-        assert RadialVelocity(header_kpf2)._ccf_config_for_source('none') is None
+    def test_settings_none(self, header_kpf2):
+        s = RadialVelocity(header_kpf2)._resolve_illumination_source('GREEN', 'CAL')  # CAL-OBJ='None'
+        assert s == {'object': 'none', 'mask_name': None,
+                     'apply_barycorr': None, 'vel_grid_center': None}
 
-    @pytest.mark.parametrize('source', ['etalon', 'lfc'])
-    def test_config_unimplemented_raises(self, header_kpf2, source):
-        with pytest.raises(NotImplementedError, match=source):
-            RadialVelocity(header_kpf2)._ccf_config_for_source(source)
+    @pytest.mark.parametrize('raw, obj', [('EtalonFiber', 'etalon'), ('LFCFiber', 'lfc')])
+    def test_unimplemented_source_raises(self, header_kpf2, raw, obj):
+        header_kpf2.headers['INSTRUMENT_HEADER']['CAL-OBJ'] = raw
+        with pytest.raises(NotImplementedError, match=obj):
+            RadialVelocity(header_kpf2)._resolve_illumination_source('GREEN', 'CAL')
 
 
 class TestStellarMaskName:
 
     def test_targteff_selects_mask(self, header_kpf2):
         rv = RadialVelocity(header_kpf2)
-        assert rv._stellar_mask_name() == 'G2_espresso'      # 5772 K -> G2
+        assert rv._resolve_stellar_mask() == 'G2_espresso'      # 5772 K -> G2
         header_kpf2.headers['INSTRUMENT_HEADER']['TARGTEFF'] = 4000.0
-        assert RadialVelocity(header_kpf2)._stellar_mask_name() == 'K6_espresso'
+        assert RadialVelocity(header_kpf2)._resolve_stellar_mask() == 'K6_espresso'
 
     @pytest.mark.parametrize('teff', [0.0, -100.0, 'nan'])
     def test_invalid_targteff_raises(self, header_kpf2, teff):
         header_kpf2.headers['INSTRUMENT_HEADER']['TARGTEFF'] = teff
         with pytest.raises(ValueError, match="TARGTEFF"):
-            RadialVelocity(header_kpf2)._stellar_mask_name()
+            RadialVelocity(header_kpf2)._resolve_stellar_mask()
 
     def test_missing_targteff_raises(self, header_kpf2):
         del header_kpf2.headers['INSTRUMENT_HEADER']['TARGTEFF']
         with pytest.raises(ValueError, match="TARGTEFF"):
-            RadialVelocity(header_kpf2)._stellar_mask_name()
+            RadialVelocity(header_kpf2)._resolve_stellar_mask()
 
     def test_missing_targradv_raises(self, header_kpf2):
         del header_kpf2.headers['INSTRUMENT_HEADER']['TARGRADV']
         with pytest.raises(ValueError, match="TARGRADV"):
-            RadialVelocity(header_kpf2)._systemic_rv()
+            RadialVelocity(header_kpf2)._get_systemic_rv()
 
 
 class TestBuildLineMask:
 
     def test_keys_and_shapes(self, header_kpf2):
-        mask = RadialVelocity(header_kpf2)._build_ccf_line_mask('GREEN', 'SCI2', 'G2_espresso')
+        mask = RadialVelocity(header_kpf2)._build_line_mask('GREEN', 'SCI2')   # SCI-OBJ='Target' -> G2
         assert set(mask) == {'center', 'weight', 'start', 'end'}
         n = mask['center'].size
         assert all(mask[k].shape == (n,) for k in mask)
 
     def test_top_hat_edges_bracket_center(self, header_kpf2):
-        mask = RadialVelocity(header_kpf2)._build_ccf_line_mask('GREEN', 'SCI2', 'G2_espresso')
+        mask = RadialVelocity(header_kpf2)._build_line_mask('GREEN', 'SCI2')
         assert np.all(mask['start'] < mask['center'])
         assert np.all(mask['center'] < mask['end'])
 
     def test_cached(self, header_kpf2):
         rv = RadialVelocity(header_kpf2)
-        assert (rv._build_ccf_line_mask('GREEN', 'SCI2', 'G2_espresso')
-                is rv._build_ccf_line_mask('GREEN', 'SCI2', 'G2_espresso'))
+        assert rv._build_line_mask('GREEN', 'SCI2') is rv._build_line_mask('GREEN', 'SCI2')
 
     def test_thar_mask_uniform_weights(self, header_kpf2):
-        mask = RadialVelocity(header_kpf2)._build_ccf_line_mask('GREEN', 'CAL', 'thar')
+        header_kpf2.headers['INSTRUMENT_HEADER']['CAL-OBJ'] = 'Th_gold'   # -> thar mask
+        mask = RadialVelocity(header_kpf2)._build_line_mask('GREEN', 'CAL')
         assert np.all(mask['weight'] == 1.0)
         # ThAr centers are deduped and sorted (lines recur across overlapping orders).
         assert np.all(np.diff(mask['center']) > 0)
@@ -298,23 +306,23 @@ class TestBuildLineMask:
 
 class TestBuildVelocityGrid:
 
-    def test_centered_on_center(self, header_kpf2):
-        grid = RadialVelocity(header_kpf2)._build_ccf_velocity_grid('GREEN', 'SCI2', 10.0)
+    def test_centered_on_systemic_rv(self, header_kpf2):
+        header_kpf2.headers['INSTRUMENT_HEADER']['TARGRADV'] = 10.0   # SCI2 grid center = TARGRADV
+        grid = RadialVelocity(header_kpf2)._build_velocity_grid('GREEN', 'SCI2')
         assert grid.mean() == pytest.approx(10.0)
 
     def test_default_size_and_step(self, header_kpf2):
-        grid = RadialVelocity(header_kpf2)._build_ccf_velocity_grid('GREEN', 'SCI2', 0.0)
+        grid = RadialVelocity(header_kpf2)._build_velocity_grid('GREEN', 'SKY')   # SKY center = 0
         assert grid.size == 801                       # [-100, 100] km/s at 0.25 -> arange(-400, 401)
         np.testing.assert_allclose(np.diff(grid), 0.25)
 
     def test_symmetric_about_zero_center(self, header_kpf2):
-        grid = RadialVelocity(header_kpf2)._build_ccf_velocity_grid('GREEN', 'SCI2', 0.0)
+        grid = RadialVelocity(header_kpf2)._build_velocity_grid('GREEN', 'SKY')   # center 0
         np.testing.assert_allclose(grid.min(), -grid.max())
 
     def test_cached(self, header_kpf2):
         rv = RadialVelocity(header_kpf2)
-        assert (rv._build_ccf_velocity_grid('GREEN', 'SCI2', 0.0)
-                is rv._build_ccf_velocity_grid('GREEN', 'SCI2', 0.0))
+        assert rv._build_velocity_grid('GREEN', 'SCI2') is rv._build_velocity_grid('GREEN', 'SCI2')
 
 
 # ---------------------------------------------------------------------------
@@ -354,8 +362,8 @@ def rv_kpf2():
 def rv_module(rv_kpf2, monkeypatch):
     """RadialVelocity on a narrow grid with the line mask stubbed to _MASK_CENTERS."""
     mask = _make_mask(_MASK_CENTERS)
-    monkeypatch.setattr(RadialVelocity, '_build_ccf_line_mask',
-                        lambda self, chip, fiber, mask_name, width=None: mask)
+    monkeypatch.setattr(RadialVelocity, '_build_line_mask',
+                        lambda self, chip, fiber, width=None: mask)
     return RadialVelocity(rv_kpf2, config={'ccf_window': _RANGE_KMS})
 
 
@@ -385,8 +393,8 @@ class TestComputeCCFPublic:
         assert res['ccf'].shape == (NORDER_GREEN, _NVEL)
 
     def test_missing_barycorr_z_raises(self, rv_kpf2, monkeypatch):
-        monkeypatch.setattr(RadialVelocity, '_build_ccf_line_mask',
-                            lambda self, chip, fiber, mask_name, width=None: _make_mask(_MASK_CENTERS))
+        monkeypatch.setattr(RadialVelocity, '_build_line_mask',
+                            lambda self, chip, fiber, width=None: _make_mask(_MASK_CENTERS))
         rv_kpf2.set_data('BARYCORR_Z', np.array([]))
         rv = RadialVelocity(rv_kpf2, config={'ccf_window': _RANGE_KMS})
         with pytest.raises(ValueError, match="BARYCORR_Z"):
@@ -444,12 +452,20 @@ class TestComputeRVPublic:
         assert np.all(np.isfinite(rv_err)) and np.all(rv_err > 0)
 
     def test_order_weights_table(self, rv_module):
-        # Weights load per chip and mask column; thar uses the 'thar' column.
-        w = rv_module._order_weights('GREEN', 'G2_espresso')
+        # Weights load per orderlet; the column follows the orderlet's mask.
+        w = rv_module._get_order_weights('GREEN', 'SCI2')          # Target -> G2_espresso column
         assert w.shape == (NORDER_GREEN,) and np.all(w >= 0)
-        assert rv_module._order_weights('RED', 'thar').shape == (NORDER_RED,)
+        rv_module.l2_obj.headers['INSTRUMENT_HEADER']['CAL-OBJ'] = 'Th_gold'
+        assert rv_module._get_order_weights('RED', 'CAL').shape == (NORDER_RED,)   # thar column
+
+    def test_order_weights_missing_column_raises(self, rv_module):
+        # Defensive guard: a mask with no weight column fails loud. Seed the
+        # source cache with a bogus mask (no resolvable fiber yields one).
+        rv_module._illumination_source['GREEN_CAL'] = {
+            'object': 'x', 'mask_name': 'NOPE_mask',
+            'apply_barycorr': None, 'vel_grid_center': None}
         with pytest.raises(KeyError, match='order-weight column'):
-            rv_module._order_weights('GREEN', 'NOPE_mask')
+            rv_module._get_order_weights('GREEN', 'CAL')
 
 
 class TestPerform:
