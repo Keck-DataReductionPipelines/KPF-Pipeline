@@ -21,8 +21,6 @@ def gaussian_jac(theta, x):
     J[:, 0] = 1.0
     J[:, 1] = e
     J[:, 2] = a * e * dx / sigma**2
-    # d/d(log_sigma) = sigma * d/d(sigma) = sigma * (a*e*dx^2/sigma^3)
-    #                = a*e*dx^2/sigma^2  (the chain-rule sigma cancels one power)
     J[:, 3] = a * e * dx**2 / sigma**2
 
     return J
