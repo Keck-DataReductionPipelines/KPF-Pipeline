@@ -126,9 +126,10 @@ class TestScienceRecipe:
             assert arr.shape == (norder,), f"{ext} shape {arr.shape} != ({norder},)"
             assert np.all(np.isfinite(arr)), f"{ext} has non-finite values"
             assert np.issubdtype(arr.dtype, np.float64), f"{ext} is {arr.dtype}, expected float64"
-        # Sanity: barycentric Z should be very close to 1 (|v| << c).
+        # Sanity: BARYCORR_Z is the redshift z = lambda_obs/lambda_rest - 1
+        # (compute_redshift), so |z| = |v|/c << 1, not the 1+z factor near 1.
         z = np.asarray(l2.data['BARYCORR_Z'])
-        assert np.all(np.abs(z - 1.0) < 1e-3)
+        assert np.all(np.abs(z) < 1e-3)
 
     def test_per_ccd_barycorr_keywords(self, recipe_output):
         """Per-CCD scalar summaries should land on INSTRUMENT_HEADER."""

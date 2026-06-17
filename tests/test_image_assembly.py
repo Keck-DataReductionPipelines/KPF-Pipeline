@@ -237,6 +237,95 @@ class TestImageAssembly4Amp:
 
 
 # ---------------------------------------------------------------------------
+# orient_ffi: standard FFI orientation (load-bearing flux/wave co-orientation)
+# ---------------------------------------------------------------------------
+
+class TestOrientFFI:
+    """Unit tests for the static FFI orientation helper.
+
+    orient_ffi is the single source of truth for FFI orientation, shared by
+    stitch_ffi and the L0 quicklook. Flux and variance (and downstream wave)
+    frames are all run through it, so the correctness of the co-orientation
+    hinges entirely on this method applying the same deterministic flip.
+    """
+
+    # A small asymmetric array makes every flip unambiguous.
+    #   [[1, 2, 3],
+    #    [4, 5, 6]]
+    BASE = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float32)
+
+    def test_red_flips_columns_only(self):
+        """RED: dispersion columns blue->red means a left-right flip only."""
+        out = ImageAssembly.orient_ffi(self.BASE, "RED")
+        expected = np.array([[3, 2, 1], [6, 5, 4]], dtype=np.float32)
+        np.testing.assert_array_equal(out, expected)
+
+    def test_green_flips_both_axes(self):
+        """GREEN: raw image is inverted vs RED, so rows flip as well."""
+        out = ImageAssembly.orient_ffi(self.BASE, "GREEN")
+        expected = np.array([[6, 5, 4], [3, 2, 1]], dtype=np.float32)
+        np.testing.assert_array_equal(out, expected)
+
+    def test_green_is_red_plus_row_flip(self):
+        """GREEN orientation is exactly the RED orientation flipped in rows."""
+        red = ImageAssembly.orient_ffi(self.BASE, "RED")
+        green = ImageAssembly.orient_ffi(self.BASE, "GREEN")
+        np.testing.assert_array_equal(green, np.flip(red, axis=0))
+
+    def test_chip_name_is_case_insensitive(self):
+        """Lowercase / mixed-case chip names orient identically to uppercase."""
+        for name in ("green", "Green", "GREEN"):
+            np.testing.assert_array_equal(
+                ImageAssembly.orient_ffi(self.BASE, name),
+                ImageAssembly.orient_ffi(self.BASE, "GREEN"),
+            )
+        for name in ("red", "Red", "RED"):
+            np.testing.assert_array_equal(
+                ImageAssembly.orient_ffi(self.BASE, name),
+                ImageAssembly.orient_ffi(self.BASE, "RED"),
+            )
+
+    def test_does_not_mutate_input(self):
+        """orient_ffi must not modify the caller's array in place."""
+        original = self.BASE.copy()
+        ImageAssembly.orient_ffi(self.BASE, "GREEN")
+        np.testing.assert_array_equal(self.BASE, original)
+
+    def test_double_application_is_identity(self):
+        """Flips are involutions: orienting twice returns the original."""
+        for chip in ("GREEN", "RED"):
+            once = ImageAssembly.orient_ffi(self.BASE, chip)
+            twice = ImageAssembly.orient_ffi(once, chip)
+            np.testing.assert_array_equal(twice, self.BASE)
+
+    def test_flux_and_wave_are_co_oriented(self):
+        """The load-bearing property: two distinct frames of the same shape
+        (e.g. flux and its wavelength/variance counterpart) receive the
+        identical index remapping, so they stay pixel-aligned afterwards."""
+        flux = np.arange(12, dtype=np.float32).reshape(3, 4)
+        # Index markers track where each (row, col) lands under the transform.
+        rows = np.broadcast_to(np.arange(3)[:, None], (3, 4)).astype(np.float32)
+        cols = np.broadcast_to(np.arange(4)[None, :], (3, 4)).astype(np.float32)
+
+        for chip in ("GREEN", "RED"):
+            f = ImageAssembly.orient_ffi(flux, chip)
+            r = ImageAssembly.orient_ffi(rows, chip)
+            c = ImageAssembly.orient_ffi(cols, chip)
+            # For every output pixel, the flux value matches the flux that
+            # originally lived at the (row, col) the markers report.
+            for i in range(3):
+                for j in range(4):
+                    src_row, src_col = int(r[i, j]), int(c[i, j])
+                    assert f[i, j] == flux[src_row, src_col]
+
+    def test_unknown_chip_treated_as_non_green(self):
+        """Any non-GREEN chip (incl. unexpected names) flips columns only."""
+        out = ImageAssembly.orient_ffi(self.BASE, "BLUE")
+        expected = np.flip(self.BASE, axis=1)
+        np.testing.assert_array_equal(out, expected)
+
+
+# ---------------------------------------------------------------------------
 # Expmeter wavelength unit conversion (nm → Å at L0 → L1)
 # ---------------------------------------------------------------------------
 

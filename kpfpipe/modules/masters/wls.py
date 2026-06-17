@@ -10,7 +10,7 @@ import numpy as np
 from numpy.polynomial import legendre
 import pandas as pd
 
-from kpfpipe import DEFAULTS, REPO_ROOT
+from kpfpipe import REPO_ROOT
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.modules.calibration_association import CalibrationAssociation
@@ -18,14 +18,6 @@ from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
-
-DEFAULTS.update({
-    'linelist': f'{REPO_ROOT}/reference/thar_line_list.csv',
-    'lineprofile': 'gaussian',
-    'polyorder_x': 6,
-    'polyorder_m': 6,
-    'polyorder_f': 2,
-})
 
 _ROUGH_WLS_FILE = f'{REPO_ROOT}/reference/rough_wls_fallback.csv'
 
@@ -47,6 +39,15 @@ class WLS(BaseMasterModule):
         polyorder_x, polyorder_m, polyorder_f, chips, fibers,
         KPF_DATA_INPUT.
     """
+
+    _DEFAULTS = {**BaseMasterModule._DEFAULTS,
+        'linelist': f'{REPO_ROOT}/reference/thar_line_list.csv',
+        'lineprofile': 'gaussian',
+        'polyorder_x': 6,
+        'polyorder_m': 6,
+        'polyorder_f': 2,
+    }
+
     def __init__(self, l0_file_list, config=None):
         if config is None:
             params = {}

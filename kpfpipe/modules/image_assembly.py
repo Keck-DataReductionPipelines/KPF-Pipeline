@@ -8,10 +8,10 @@ from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
 
-DEFAULTS.update({
+_DEFAULTS = {**DEFAULTS,
     'overscan_method': 'rowmedian',
     'readnoise_sigma': 10.0,
-})
+}
 
 _RN_KEYS = {
     'GREEN_AMP1': ['RNGREEN1', 'RNNGGR1'],
@@ -50,7 +50,7 @@ class ImageAssembly:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in DEFAULTS.items():
+        for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
         for k, v in self.ccd.items():
