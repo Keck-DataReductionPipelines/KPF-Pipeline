@@ -465,8 +465,12 @@ class RadialVelocity:
         if not np.any(ccf_fit) or np.any(ccf_fit < 0):
             return rv, np.nan
 
+        # nan-aware: in the combined-CCF path `wave` is the full, unclipped order
+        # row, which may carry NaN edge pixels; plain np.median would NaN the error.
         vel_span_per_pixel = (
-            SPEED_OF_LIGHT_KMS * np.median(np.abs(np.diff(wave))) / np.median(wave)
+            SPEED_OF_LIGHT_KMS
+            * np.nanmedian(np.abs(np.diff(wave)))
+            / np.nanmedian(wave)
         )
         n_pix_per_vel_step = dv / vel_span_per_pixel  # dv: mean velocity-grid step
 
@@ -1007,6 +1011,10 @@ class RadialVelocity:
             # per-fiber (center varies) but shared across chips.
             grid = self._velocity_grid[f"{chips[-1]}_{fiber}"]
             ccf_hdr = fits.Header()
+            # CCF cube is (norder, n_velocity_step): FITS axis 1 = velocity,
+            # axis 2 = order (EXTNAME is stamped by rvdata on serialization).
+            ccf_hdr["CTYPE1"] = ("Velocity", "Name of axis 1")
+            ccf_hdr["CTYPE2"] = ("Order-N", "Name of axis 2")
             ccf_hdr["VELSTART"] = (float(grid[0]), "[km/s] Velocity grid start")
             ccf_hdr["VELSTEP"] = (float(ccf_step_size), "[km/s] Velocity grid step")
             ccf_hdr["VELNSTEP"] = (int(grid.size), "Number of velocity grid steps")
@@ -1014,6 +1022,9 @@ class RadialVelocity:
             l4_obj.set_header(f"{fiber}_CCF", ccf_hdr)
 
             rv_hdr = fits.Header()
+            # RV table has one row per spectral order: FITS axis 2 = order.
+            rv_hdr["CTYPE1"] = ("Columns", "Name of axis 1")
+            rv_hdr["CTYPE2"] = ("Order-N", "Name of axis 2")
             rv_hdr["RVMETHOD"] = ("CCF", "RV derivation method")
             rv_hdr["SKYRMVD"] = (False, "Sky model removed?")
             rv_hdr["TELLRMVD"] = (False, "Telluric model removed?")
