@@ -21,6 +21,7 @@ All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.
 """
 from astropy.constants import c
+from astropy.io import fits
 from astropy.stats import mad_std
 import astropy.units as u
 import numpy as np
@@ -747,26 +748,38 @@ class RadialVelocity:
                 'RV_ERR':      rv_err,
             }))
 
-            # Per-orderlet CCF/RV extension headers (EPRV L4 standard). The
-            # velocity grid is per-fiber (center varies) but shared across chips.
+            # Per-orderlet CCF/RV extension headers (EPRV L4 standard). Built as
+            # fits.Header objects and assigned via set_header: rvdata serializes
+            # non-PRIMARY extensions with fits.Header(headers[ext]), which rejects
+            # bare (value, comment) tuples in a plain dict. The velocity grid is
+            # per-fiber (center varies) but shared across chips.
             grid = self._velocity_grid[f'{chips[-1]}_{fiber}']
-            ccf_hdr = l4_obj.headers[f'{fiber}_CCF']
+            ccf_hdr = fits.Header()
             ccf_hdr['VELSTART'] = (float(grid[0]), '[km/s] Velocity grid start')
             ccf_hdr['VELSTEP']  = (float(ccf_step_size), '[km/s] Velocity grid step')
             ccf_hdr['VELNSTEP'] = (int(grid.size), 'Number of velocity grid steps')
             ccf_hdr['CCFMASK']  = (mask_name, 'Mask used to generate CCF')
-            rv_hdr = l4_obj.headers[f'{fiber}_RV']
+            l4_obj.set_header(f'{fiber}_CCF', ccf_hdr)
+
+            rv_hdr = fits.Header()
             rv_hdr['RVMETHOD'] = ('CCF', 'RV derivation method')
             rv_hdr['SKYRMVD']  = (False, 'Sky model removed?')
             rv_hdr['TELLRMVD'] = (False, 'Telluric model removed?')
             # Combined per-CCD RV/error (CCD1=GREEN, CCD2=RED), one fit to the
-            # weighted-summed CCF; error from the unweighted-summed CCF.
+            # weighted-summed CCF; error from the unweighted-summed CCF. A
+            # non-finite value (failed fit) is written as a FITS UNDEFINED card
+            # (None), never a bare NaN.
             if 'GREEN' in ccd_rv:
-                rv_hdr['CCD1RV']  = (float(ccd_rv['GREEN']),     '[km/s] GREEN combined RV')
-                rv_hdr['CCD1RVE'] = (float(ccd_rv_err['GREEN']), '[km/s] GREEN combined RV error')
+                rv_hdr['CCD1RV']  = (float(ccd_rv['GREEN']) if np.isfinite(ccd_rv['GREEN']) else None,
+                                     '[km/s] GREEN combined RV')
+                rv_hdr['CCD1RVE'] = (float(ccd_rv_err['GREEN']) if np.isfinite(ccd_rv_err['GREEN']) else None,
+                                     '[km/s] GREEN combined RV error')
             if 'RED' in ccd_rv:
-                rv_hdr['CCD2RV']  = (float(ccd_rv['RED']),     '[km/s] RED combined RV')
-                rv_hdr['CCD2RVE'] = (float(ccd_rv_err['RED']), '[km/s] RED combined RV error')
+                rv_hdr['CCD2RV']  = (float(ccd_rv['RED']) if np.isfinite(ccd_rv['RED']) else None,
+                                     '[km/s] RED combined RV')
+                rv_hdr['CCD2RVE'] = (float(ccd_rv_err['RED']) if np.isfinite(ccd_rv_err['RED']) else None,
+                                     '[km/s] RED combined RV error')
+            l4_obj.set_header(f'{fiber}_RV', rv_hdr)
 
         # PRIMARY (EPRV L4): RV method only. Per-fiber velocity grids live on the
         # CCF extensions; SYSVEL is left UNDEFINED (absolute RVs, nothing removed).

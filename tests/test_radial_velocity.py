@@ -10,6 +10,7 @@ a narrow velocity grid for speed.
 
 import numpy as np
 import pytest
+from astropy.io import fits
 
 from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN, NORDER_RED
 from kpfpipe.data_models.level4 import KPF4
@@ -504,30 +505,62 @@ class TestPerform:
     def test_per_fiber_ccf_and_rv_headers(self, rv_module):
         # EPRV L4 keywords on each orderlet's CCF/RV extension; RVMETHOD on PRIMARY.
         l4 = rv_module.perform()
+        # CCF/RV extension headers are fits.Header objects (set via set_header),
+        # so keyword access returns the scalar value. PRIMARY is still written
+        # in place as a (value, comment) tuple.
         ccf_hdr = l4.headers['SCI2_CCF']
-        assert ccf_hdr['VELNSTEP'][0] == _NVEL
-        assert ccf_hdr['VELSTEP'][0] == pytest.approx(0.25)
-        assert ccf_hdr['VELSTART'][0] == pytest.approx(_RANGE_KMS[0])   # center 0 (TARGRADV=0)
-        assert ccf_hdr['CCFMASK'][0] == 'G2_espresso'                   # 5772 K -> G2
+        assert ccf_hdr['VELNSTEP'] == _NVEL
+        assert ccf_hdr['VELSTEP'] == pytest.approx(0.25)
+        assert ccf_hdr['VELSTART'] == pytest.approx(_RANGE_KMS[0])   # center 0 (TARGRADV=0)
+        assert ccf_hdr['CCFMASK'] == 'G2_espresso'                   # 5772 K -> G2
         rv_hdr = l4.headers['SCI2_RV']
-        assert rv_hdr['RVMETHOD'][0] == 'CCF'
-        assert rv_hdr['SKYRMVD'][0] is False
-        assert rv_hdr['TELLRMVD'][0] is False
+        assert rv_hdr['RVMETHOD'] == 'CCF'
+        assert rv_hdr['SKYRMVD'] is False
+        assert rv_hdr['TELLRMVD'] is False
         assert l4.headers['PRIMARY']['RVMETHOD'][0] == 'CCF'
 
     def test_per_ccd_rv_keywords(self, rv_module):
         # Combined per-CCD RV/error on the RV extension: CCD1=GREEN, CCD2=RED.
         l4 = rv_module.perform()
         rv_hdr = l4.headers['SCI2_RV']
-        assert rv_hdr['CCD1RV'][0] == pytest.approx(_V_INJECT, abs=0.1)
-        assert rv_hdr['CCD2RV'][0] == pytest.approx(_V_INJECT, abs=0.1)
-        assert rv_hdr['CCD1RVE'][0] > 0 and rv_hdr['CCD2RVE'][0] > 0
+        assert rv_hdr['CCD1RV'] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv_hdr['CCD2RV'] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv_hdr['CCD1RVE'] > 0 and rv_hdr['CCD2RVE'] > 0
+
+    def test_l4_serializes_to_fits(self, rv_module, tmp_path):
+        # The CCF/RV extension headers must survive to_fits with comments intact:
+        # rvdata serializes non-PRIMARY extensions via fits.Header(headers[ext]),
+        # which rejects (value, comment) tuples, so they must be fits.Header
+        # objects set via set_header. SCI2 -> CCF3 / RV3.
+        l4 = rv_module.perform(fibers=['SCI2'])
+        path = tmp_path / 'kpf_SL4_20240405T000000.fits'
+        l4.to_fits(str(path))
+        with fits.open(path) as hdul:
+            ccf = hdul['CCF3'].header
+            assert ccf['VELNSTEP'] == _NVEL
+            assert ccf['VELSTART'] == pytest.approx(_RANGE_KMS[0])
+            assert ccf.comments['VELSTART']                 # comment preserved
+            rv = hdul['RV3'].header
+            assert rv['RVMETHOD'] == 'CCF'
+            assert rv['CCD1RV'] == pytest.approx(_V_INJECT, abs=0.1)
+
+    def test_failed_combined_fit_written_as_undefined(self, rv_module, monkeypatch):
+        # A non-finite combined RV (failed fit) is written as a FITS UNDEFINED
+        # card (present, value None), never a bare NaN.
+        def _nan_combined(*args, **kwargs):
+            return np.nan, np.nan
+        monkeypatch.setattr(rv_module, '_combined_ccd_rv', _nan_combined)
+
+        l4 = rv_module.perform(fibers=['SCI2'])
+        rv_hdr = l4.headers['SCI2_RV']
+        assert 'CCD1RV' in rv_hdr and rv_hdr['CCD1RV'] is None
+        assert 'CCD2RV' in rv_hdr and rv_hdr['CCD2RV'] is None
 
     def test_thar_mask_recorded_for_cal(self, rv_module):
         # CAL on a ThAr lamp -> CCFMASK 'thar', instrument frame (no barycorr).
         rv_module.l2_obj.headers['INSTRUMENT_HEADER']['CAL-OBJ'] = 'Th_gold'
         l4 = rv_module.perform(fibers=['CAL'])
-        assert l4.headers['CAL_CCF']['CCFMASK'][0] == 'thar'
+        assert l4.headers['CAL_CCF']['CCFMASK'] == 'thar'
         rv = np.asarray(l4.data['CAL_RV']['RV'])
         np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
 
