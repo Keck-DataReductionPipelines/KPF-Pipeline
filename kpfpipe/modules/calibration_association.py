@@ -13,9 +13,9 @@ from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import get_datecode, get_timestamp, kpf_timestamp_to_datetime
 
-DEFAULTS.update({
+_DEFAULTS = {**DEFAULTS,
     'masters_search_window_days': [-1, 0],
-})
+}
 
 # Level suffix of the master FITS file for each supported calibration type,
 # used to build the *_master_<cal_type>_<level>.fits glob.
@@ -70,7 +70,7 @@ class CalibrationAssociation:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in DEFAULTS.items():
+        for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
         self._data_root = params.get('KPF_DATA_INPUT')

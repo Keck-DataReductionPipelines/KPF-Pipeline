@@ -38,12 +38,12 @@ NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED   = DETECTOR['norder']['RED']
 NORDER       = NORDER_GREEN + NORDER_RED
 
-DEFAULTS.update({
+_DEFAULTS = {**DEFAULTS,
     'ccf_mask_width': 0.5,
     'ccf_step_size': 0.25,
     'ccf_window': [-100.0, 100.0],
     'rv_window': [-25.0, 25.0]
-})
+}
 
 
 class RadialVelocity:
@@ -73,7 +73,7 @@ class RadialVelocity:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in DEFAULTS.items():
+        for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
         # Lazily-populated caches; the per-orderlet ones are keyed by f'{chip}_{fiber}'.

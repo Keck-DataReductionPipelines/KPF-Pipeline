@@ -3,13 +3,10 @@ KPF Master Bias construction module.
 """
 import numpy as np
 
-from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
-
-DEFAULTS.update({'stack_sigma': 5.0})
 
 
 class Bias(BaseMasterModule):

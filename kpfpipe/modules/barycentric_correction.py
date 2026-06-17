@@ -50,10 +50,10 @@ NORDER_GREEN = DETECTOR['norder']['GREEN']
 NORDER_RED   = DETECTOR['norder']['RED']
 NORDER       = NORDER_GREEN + NORDER_RED
 
-DEFAULTS.update({
+_DEFAULTS = {**DEFAULTS,
     'use_gaia_astrometry': True,
     'use_wmko_fallback': False,
-})
+}
 
 # WMKO site coordinates
 KECK_LOCATION = EarthLocation(
@@ -96,7 +96,7 @@ class BarycentricCorrection:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in DEFAULTS.items():
+        for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
         self._results = None
