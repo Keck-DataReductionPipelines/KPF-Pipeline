@@ -26,7 +26,7 @@ def gaussian_jac(theta, x):
     return J
 
 
-def gaussian_theta0(x, y):
+def gaussian_theta0_generator(x, y):
     b0 = 0.25 * np.sum(y[:2] + y[-2:])
     a0 = np.max(y) - b0
     mu0 = x[np.argmax(y)]
@@ -44,7 +44,7 @@ def gaussian_untransform(theta):
 # Each entry: (model, jacobian, theta0 initializer, untransform). untransform
 # maps the fitted parameters back to reported ones (identity if not needed).
 _FUNCTIONS = {
-    'gaussian': (gaussian_dist, gaussian_jac, gaussian_theta0, gaussian_untransform),
+    'gaussian': (gaussian_dist, gaussian_jac, gaussian_theta0_generator, gaussian_untransform),
 }
 
 
@@ -56,7 +56,7 @@ def optimize_lsq(x, y, linemodel):
     given lineprofile name and dispatches scipy.optimize.least_squares.
     """
     try:
-        func, jac, theta0_func, untransform = _FUNCTIONS[linemodel]
+        func, jac, theta0_generator, untransform = _FUNCTIONS[linemodel]
     except KeyError:
         raise ValueError(f"Unsupported line function: {linemodel}")
 
@@ -65,8 +65,8 @@ def optimize_lsq(x, y, linemodel):
 
     def jacobian(theta):
         return jac(theta, x)
-
-    theta0 = theta0_func(x, y)
+    
+    theta0 = theta0_generator(x, y)
 
     result = least_squares(residual,
                            theta0,
