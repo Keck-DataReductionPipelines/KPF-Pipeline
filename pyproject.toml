@@ -20,7 +20,7 @@ dependencies = [
     "pandas==3.0.0",
     "scipy==1.17.0",
     "tqdm==4.67.3",
-    "rv-data-standard @ git+https://github.com/EPRV-RCN/RVData.git@develop"
+    "rv-data-standard @ git+https://github.com/EPRV-RCN/RVData.git@7413775939ca0366dbba0df8c2e5b48c76595634"
 ]
 
 # Optional dependencies for development (linting, testing, formatting)

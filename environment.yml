@@ -15,7 +15,7 @@ dependencies:
       - astropy==7.2.0
       - astroquery==0.4.11
       - barycorrpy==0.4.4
-      - rv-data-standard @ git+https://github.com/EPRV-RCN/RVData.git@develop
+      - rv-data-standard @ git+https://github.com/EPRV-RCN/RVData.git@7413775939ca0366dbba0df8c2e5b48c76595634
       # --- development tools --- #
       - ipykernel==7.2.0
       - jupyterlab==4.5.4

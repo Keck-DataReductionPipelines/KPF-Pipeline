@@ -15,7 +15,11 @@ KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reductio
 - **Python 3.14.3** (pinned exactly)
 - **Conda env**: `kpfpipe` — set up via `conda env create -f KPF-Pipeline/environment.yml`
 - **Install package**: `pip install -e KPF-Pipeline/` (editable install)
-- **Key dependency**: `rv-data-standard` (RVData) from `git+https://github.com/EPRV-RCN/RVData.git@develop`
+- **Key dependency**: `rv-data-standard` (RVData), pinned to a specific commit
+  (`git+https://github.com/EPRV-RCN/RVData.git@7413775…`) rather than the moving `@develop`
+  branch — RVData's `develop` has since introduced breaking changes (a `MinBitDepth` upcast
+  of WAVE arrays, and a `receipt_add_entry` signature change). Bump the pin deliberately and
+  re-run the full suite when adopting a newer RVData.
 
 ## Commands
 
