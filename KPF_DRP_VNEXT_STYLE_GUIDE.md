@@ -5,10 +5,17 @@ codebase, so that new code (whether written by a developer or by Claude) reads l
 the code already here. It was derived by surveying every subpackage — standard
 modules, masters, quality control, utils, recipes/configs, tests, and documentation.
 
-**Status of these rules.** These are *soft* requirements. They describe the dominant,
-prevailing pattern; where the codebase contradicts itself, the recommended variant is
-called out explicitly. When following a rule here would conflict with anything in
-[`KPF_DRP_VNEXT_CHARTER.md`](KPF_DRP_VNEXT_CHARTER.md) (the project charter — the single source of truth for intent, scope, scientific focus, calibration philosophy, and guardrails), **the charter wins.** Style yields to science.
+**Status of these rules.** These are *soft* requirements, and this guide sits at the **bottom**
+of the project's authority hierarchy:
+**1. the WMKO technical requirements ([`WMKO_REQUIREMENTS.md`](WMKO_REQUIREMENTS.md)) →
+2. the EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md)) →
+3. the project charter ([`KPF_DRP_VNEXT_CHARTER.md`](KPF_DRP_VNEXT_CHARTER.md)) → 4. this style
+guide.** They describe the dominant, prevailing pattern; where the codebase contradicts itself,
+the recommended variant is called out explicitly. When following a rule here would conflict
+with any of the three documents above — the WMKO requirements (Keck's binding technical
+requirements), the EPRV standard (data-product format), or the charter (intent, scope,
+scientific focus, calibration philosophy, guardrails) — **the higher document wins.** Style
+yields to science.
 
 Operational/technical guidance (environment, commands, architecture) lives in
 [`CLAUDE.md`](CLAUDE.md); this file covers *how code should look and be organized*.

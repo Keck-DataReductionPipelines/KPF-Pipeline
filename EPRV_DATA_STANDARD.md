@@ -7,11 +7,12 @@ changes slowly enough that we track it rather than pin a commit; re-scrape if it
 Only KPF-relevant content is reproduced; consult the source for the full standard (all
 instruments, L3, complete keyword tables, the translator API).
 
-**Authority precedence.** When design principles conflict, the order is:
-**1. this EPRV standard → 2. the project charter (`KPF_DRP_VNEXT_CHARTER.md`) → 3. the style
-guide (`KPF_DRP_VNEXT_STYLE_GUIDE.md`).** KPF L2 and L4 products are EPRV-compliant by
-contract, so the standard wins on data structure, extension/keyword names, units, and
-reference frames.
+**Authority precedence.** When requirements or design principles conflict, the order is:
+**1. the WMKO technical requirements (`WMKO_REQUIREMENTS.md`) → 2. this EPRV standard →
+3. the project charter (`KPF_DRP_VNEXT_CHARTER.md`) → 4. the style guide
+(`KPF_DRP_VNEXT_STYLE_GUIDE.md`).** The WMKO requirements outrank this standard; below them,
+KPF L2 and L4 products are EPRV-compliant by contract, so this standard wins on data
+structure, extension/keyword names, units, and reference frames.
 
 ---
 
