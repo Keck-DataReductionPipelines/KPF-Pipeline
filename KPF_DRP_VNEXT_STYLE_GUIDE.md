@@ -407,16 +407,18 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **TOML, loaded with stdlib `tomllib`.** One config per recipe, sharing the basename
   (`recipes/kpf_drp_science.py` ↔ `configs/kpf_drp_science.toml`).
 - **Sections are `UPPER_SNAKE` in brackets.** Two fixed globals `[DATA_DIRS]`,
-  `[KPFPIPE]`; per-module sections are **`[MODULE_<NAME>]`** matching the class
-  (`[MODULE_RADIAL_VELOCITY]` ↔ `RadialVelocity`). Every module calls
-  `config.get_params(["DATA_DIRS", "KPFPIPE", "MODULE_<NAME>"])`.
+  `[KPFPIPE]`; per-module sections in the **science** config are **`[MODULE_<NAME>]`**
+  matching the class (`[MODULE_RADIAL_VELOCITY]` ↔ `RadialVelocity`), and those modules
+  call `config.get_params(["DATA_DIRS", "KPFPIPE", "MODULE_<NAME>"])`.
+- **Masters config sections use the bare product name** — `[BIAS]`, `[DARK]`, `[FLAT]`,
+  `[WLS]` (no `MODULE_` prefix), matched by `get_params([..., "BIAS"])`. This is a
+  deliberate, accepted exception: masters are batch builders keyed by product, not the
+  `MODULE_`-prefixed transform stages. Keep it; do not "align" it to the science pattern.
 - **Key casing**: `lower_snake_case` everywhere except `[DATA_DIRS]` (which uses
   env-var-like `UPPER_SNAKE`). Booleans `true`/`false`; paths double-quoted; lists are
   TOML arrays with explicit `.0` on floats.
-- *Recommended (existing inconsistency):* the masters config uses bare `[BIAS]`/`[DARK]`/
-  `[FLAT]`/`[WLS]` sections without the `MODULE_` prefix — the dominant convention is the
-  prefix; either align masters or document it as a deliberate exception. The
-  `[DATA_DIRS]`+`[KPFPIPE]` blocks are duplicated verbatim across configs (drift risk).
+- *Minor note:* the `[DATA_DIRS]`+`[KPFPIPE]` blocks are duplicated verbatim across the
+  science and masters configs (drift risk, no shared-include mechanism).
 
 ### CSV config tables (`data_models/config/`)
 
@@ -538,10 +540,9 @@ documented, intentional ways — follow *its* conventions when adding masters co
 These are the genuine inconsistencies the survey surfaced where the codebase has no clear
 winner or contradicts a stated tool/command. Worth a deliberate project decision:
 
-1. **Masters config sections** — `[BIAS]` vs the dominant `[MODULE_<NAME>]` prefix.
-2. **Quicklook** — no shared base + tuple-based registration, unlike Diag/QC; plus DPI and
+1. **Quicklook** — no shared base + tuple-based registration, unlike Diag/QC; plus DPI and
    fontsize drift between L0/L1.
-3. **Tests** — no `conftest.py`; synthetic-FITS construction duplicated widely; misleading
+2. **Tests** — no `conftest.py`; synthetic-FITS construction duplicated widely; misleading
    "skip if no testdata" docstrings vs vendored data.
 
 Until decided, **match the dominant variant of the file/area you're editing**, and don't
@@ -551,6 +552,9 @@ churn unrelated files to "fix" style.
 
 Inconsistencies closed during the style-guide convergence work (newest first):
 
+- **Masters config sections → accepted as-is.** The bare `[BIAS]`/`[DARK]`/`[FLAT]`/`[WLS]`
+  sections (no `MODULE_` prefix) are a deliberate exception, not a defect. No code change;
+  documented in §11.
 - **Type hints → docstring types only.** Adopted the docstring-types-only stance; removed
   the only PEP 484 hints in the codebase (`utils/config.py`) and documented those types in
   its docstrings. `mypy` is not used (left as a vestigial dev dep / command, not enforced).
