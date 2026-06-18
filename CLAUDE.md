@@ -27,11 +27,13 @@ cd KPF-Pipeline && python -m pytest tests/ -v
 python -m pytest tests/test_data_models.py::TestKPF2Aliases -v
 python -m pytest tests/test_data_models.py::TestKPF2Aliases::test_chip_prefix_access -v
 
-# Formatting and linting
-black kpfpipe/ tests/
-isort kpfpipe/ tests/
-flake8 kpfpipe/ tests/
-mypy kpfpipe/
+# Formatting and linting (Ruff; config in pyproject.toml [tool.ruff])
+ruff format kpfpipe/ tests/ recipes/      # format (black-compatible)
+ruff check --fix kpfpipe/ tests/ recipes/ # lint + auto-fix
+
+# Pre-commit hook (enforces ruff format + lint on commit)
+pre-commit install          # one-time, after creating the env
+pre-commit run --all-files  # run all hooks across the repo
 ```
 
 ## Architecture

@@ -26,15 +26,14 @@ dependencies = [
 # Optional dependencies for development (linting, testing, formatting)
 [project.optional-dependencies]
 dev = [
-    "black==26.1.0",
-    "flake8==7.3.0",
     "ipykernel==7.2.0",
-    "isort==7.0.0",
     "jupyterlab==4.5.4",
     "line_profiler",
     "mypy==1.19.1",
     "notebook==7.5.3",
-    "pytest==9.0.2"
+    "pre-commit==4.6.0",
+    "pytest==9.0.2",
+    "ruff==0.15.17"
 ]
 
 [project.scripts]
@@ -49,3 +48,21 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["kpfpipe*", "tools*"]
+
+# Ruff is the unified formatter + linter (replaces black/isort/flake8).
+# Enforced via the pre-commit hook; see .pre-commit-config.yaml and style guide §8.
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+extend-exclude = ["legacy", "gjgilbert_notebooks"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I import-sorting, B bugbear, UP pyupgrade.
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kpfpipe"]
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__.py files re-export names; unused-import (F401) is expected.
+"__init__.py" = ["F401"]

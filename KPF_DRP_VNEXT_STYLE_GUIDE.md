@@ -147,8 +147,9 @@ class StageName:
 
 ## 3. Imports
 
-- **Three groups, blank-line separated, in isort/PEP 8 order**: (1) stdlib,
-  (2) third-party, (3) first-party `kpfpipe.*`. Alphabetical within each group.
+- **Three groups, blank-line separated, in PEP 8 order**: (1) stdlib,
+  (2) third-party, (3) first-party `kpfpipe.*`. Alphabetical within each group. Enforced and
+  auto-sorted by Ruff's import rules (`I`; `known-first-party = ["kpfpipe"]`).
 - **Absolute imports only.** Never relative (`from .base import ...` is not used —
   write `from kpfpipe.modules.masters.base import BaseMasterModule`).
 - **Standard aliases**: `import numpy as np`, `import pandas as pd`,
@@ -330,18 +331,23 @@ class StageName:
 
 ## 8. Formatting
 
-- **`black` with default settings is the standard**: 88-char target line length,
-  double-quote normalization. `black==26.1.0`, `isort==7.0.0`, `flake8==7.3.0` are pinned
-  dev deps; there is **no tool config override**, so black's defaults are canonical.
-- **Quote style → double quotes** (black default). The codebase was normalized to double
-  quotes following black's rule (prefer `"`, but keep `'` where switching would add
-  escapes — e.g. `'say "hi"'` stays single). Triple-quoted strings use `"""`; f-strings,
-  raw, and byte strings follow the same rule. Write new code with double quotes.
+- **`ruff` is the unified formatter + linter** (it replaced black/isort/flake8). The
+  formatter is black-compatible: **88-char target line length**, double-quote normalization.
+  Config lives in `pyproject.toml` under `[tool.ruff]`; `ruff==0.15.17` and
+  `pre-commit==4.6.0` are pinned dev deps. Enforced locally via a pre-commit hook — run
+  `pre-commit install` once after setting up the env.
+- **Lint ruleset** (`[tool.ruff.lint] select`): `E`/`W` (pycodestyle), `F` (pyflakes),
+  `I` (import sorting), `B` (flake8-bugbear), `UP` (pyupgrade). `__init__.py` is exempt from
+  `F401` (re-exports). `legacy/` and `gjgilbert_notebooks/` are excluded.
+- **Quote style → double quotes** (ruff/black default). The codebase follows the formatter's
+  rule (prefer `"`, but keep `'` where switching would add escapes — e.g. `'say "hi"'` stays
+  single). Triple-quoted strings use `"""`; f-strings, raw, and byte strings follow the same
+  rule. Write new code with double quotes.
 - **f-strings are the only interpolation style.** No `%` or `.format()` (except inside
   `datetime.strftime` codes, and deliberate numeric formatting like `format(x, "g")`).
   Use `{x!r}` for repr, `{x:05d}`/`{hh:02d}` for zero-padding.
-- **Let black own alignment** — don't hand-align assignments or dict values with extra
-  spaces; black will collapse them.
+- **Let the formatter own alignment** — don't hand-align assignments or dict values with
+  extra spaces; `ruff format` will collapse them.
 - 4-space indent; two blank lines between top-level defs, one between methods.
 
 ---
