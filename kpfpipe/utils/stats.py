@@ -1,21 +1,26 @@
-from astropy.stats import mad_std
 import numpy as np
+from astropy.stats import mad_std
 from scipy.interpolate import RegularGridInterpolator
-from scipy.ndimage import median_filter, gaussian_filter, convolve, distance_transform_edt
+from scipy.ndimage import (
+    convolve,
+    distance_transform_edt,
+    gaussian_filter,
+    median_filter,
+)
 from scipy.optimize import least_squares
 
 
 def gaussian_dist(theta, x):
     b, a, mu, log_sigma = theta
     sigma = np.exp(log_sigma)
-    return b + a * np.exp(-(x-mu)**2/(2*sigma**2))
+    return b + a * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
 def gaussian_jac(theta, x):
     b, a, mu, log_sigma = theta
     sigma = np.exp(log_sigma)
     dx = x - mu
-    e = np.exp(-dx**2 / (2*sigma**2))
+    e = np.exp(-(dx**2) / (2 * sigma**2))
 
     J = np.empty((x.size, 4))
     J[:, 0] = 1.0
@@ -44,7 +49,12 @@ def gaussian_untransform(theta):
 # Each entry: (model, jacobian, theta0 initializer, untransform). untransform
 # maps the fitted parameters back to reported ones (identity if not needed).
 _FUNCTIONS = {
-    "gaussian": (gaussian_dist, gaussian_jac, gaussian_theta0_generator, gaussian_untransform),
+    "gaussian": (
+        gaussian_dist,
+        gaussian_jac,
+        gaussian_theta0_generator,
+        gaussian_untransform,
+    ),
 }
 
 
@@ -65,14 +75,15 @@ def optimize_lsq(x, y, linemodel):
 
     def jacobian(theta):
         return jac(theta, x)
-    
+
     theta0 = theta0_generator(x, y)
 
-    result = least_squares(residual,
-                           theta0,
-                           jac=jacobian,
-                           method="lm",
-                           )
+    result = least_squares(
+        residual,
+        theta0,
+        jac=jacobian,
+        method="lm",
+    )
 
     theta, rms = untransform(result.x), np.std(result.fun)
 
@@ -115,9 +126,7 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
     # Cast kernel and weight mask to the input dtype so scipy.convolve does
     # not promote float32 image data to float64 in its intermediates.
     if method == "local":
-        kernel = np.array([[1,2,1],
-                           [2,0,2],
-                           [1,2,1]], dtype=data.dtype) / 12.0
+        kernel = np.array([[1, 2, 1], [2, 0, 2], [1, 2, 1]], dtype=data.dtype) / 12.0
 
         neighbor_sum = convolve(data * good, kernel, mode="mirror")
         weight = convolve(good.astype(data.dtype), kernel, mode="mirror")
@@ -128,13 +137,8 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
         if fill_outside:
             remaining = bad & (weight == 0)
             if np.any(remaining):
-                _, indices = distance_transform_edt(
-                    remaining,
-                    return_indices=True
-                )
-                data_interp[remaining] = data_interp[
-                    tuple(indices[:, remaining])
-                ]
+                _, indices = distance_transform_edt(remaining, return_indices=True)
+                data_interp[remaining] = data_interp[tuple(indices[:, remaining])]
 
     # global linear interpolation (robust to clumps of bad pixels)
     elif method == "global":
@@ -144,11 +148,7 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
         x = np.arange(nx)
 
         interp = RegularGridInterpolator(
-            (y, x),
-            data,
-            method="linear",
-            bounds_error=False,
-            fill_value=np.nan
+            (y, x), data, method="linear", bounds_error=False, fill_value=np.nan
         )
 
         coords = np.column_stack(np.nonzero(bad))
@@ -159,13 +159,8 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
         if fill_outside:
             nan_mask = np.isnan(data_interp)
             if np.any(nan_mask):
-                _, indices = distance_transform_edt(
-                    nan_mask,
-                    return_indices=True
-                )
-                data_interp[nan_mask] = data_interp[
-                    tuple(indices[:, nan_mask])
-                ]
+                _, indices = distance_transform_edt(nan_mask, return_indices=True)
+                data_interp[nan_mask] = data_interp[tuple(indices[:, nan_mask])]
 
     else:
         raise ValueError("method must be 'local' or 'global'")

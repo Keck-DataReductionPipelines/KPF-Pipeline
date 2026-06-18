@@ -1,5 +1,6 @@
-import numpy as np
 import warnings
+
+import numpy as np
 
 
 def strictly_increasing(x):
@@ -8,7 +9,9 @@ def strictly_increasing(x):
     return bool(np.all(x[:-1] < x[1:]))
 
 
-def validate_array(arr, context="array", response="warn", check_finite=True, check_positive=True):
+def validate_array(
+    arr, context="array", response="warn", check_finite=True, check_positive=True
+):
     """
     Validate that an array contains finite and/or positive values.
 

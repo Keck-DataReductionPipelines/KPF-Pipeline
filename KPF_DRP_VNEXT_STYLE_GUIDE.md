@@ -76,7 +76,7 @@ import warnings
 import numpy as np                          # 2. third-party (alphabetical)
 import pandas as pd
 
-from kpfpipe import DEFAULTS, DETECTOR       # 3. first-party (absolute only)
+from kpfpipe import DEFAULTS                 # 3. first-party (absolute only)
 from kpfpipe.utils.config import ConfigHandler
 
 _DEFAULTS = {**DEFAULTS, "module_param": ...}   # module constants are private (leading _)
@@ -152,8 +152,6 @@ class StageName:
 - **Deferred (in-function) imports are acceptable and used deliberately** in tests and
   occasionally to break import-cost/cycles — when you do it, add a one-line comment
   saying why.
-- *Recommended:* run `isort` — a few files (`stats.py`, `validation.py`,
-  `barycentric_correction.py`) have within-group ordering drift.
 
 ---
 
@@ -164,7 +162,6 @@ class StageName:
   them. (The masters and QC/Diag layers *do* share a base class — see §10/§11.)
 - **Canonical constructor signature**: `__init__(self, l<N>_obj, config=None)`. The data
   object is the first positional arg, named for its level (`l0_obj`, `l1_obj`, `l2_obj`).
-  *(Use `l2_obj`, not `kpf2_obj` — the latter is a lone outlier.)*
 - **The config-resolution block is the same everywhere** — copy it verbatim:
   ```python
   if config is None:
@@ -314,9 +311,8 @@ class StageName:
 - **Let black own alignment** — don't hand-align assignments or dict values with extra
   spaces; black will collapse them.
 - 4-space indent; two blank lines between top-level defs, one between methods.
-- **Run black before committing.** Several older/larger files predate a uniform black
-  pass (110–115-char lines, trailing whitespace, manual alignment survive) — converge
-  them opportunistically when editing.
+- **Run `black` before committing**; converge any not-yet-black-clean formatting in the
+  files you touch.
 
 ---
 
@@ -353,11 +349,6 @@ QC code must follow:
   save as `f"{obs_id}_L{N}_{plotname}_{chip}_zoomable.png"` with `plt.close(fig)` after
   each. Unimplemented plots are stubbed with a docstring citing the v2.12 source and
   `raise NotImplementedError(...)`.
-- *Recommended (existing inconsistencies):* Quicklook lacks a shared base class while
-  Diag/QC have one, and uses a `_PLOT_METHODS` tuple instead of method-tags — unifying it
-  would match the other two layers. Plot DPI (150 vs 600) and axis fontsizes (14 vs 18)
-  drift between L0 and L1; pick one. The `(value, comment)`-unwrap helper is duplicated
-  ~4× — factor a single shared helper.
 
 ---
 
@@ -378,13 +369,7 @@ documented, intentional ways — follow *its* conventions when adding masters co
   fences; accumulators are conceptually float64-for-stability, stored master is float32.
 - **Sigma-clipping** via `kpfpipe.utils.stats.flag_outliers(arr, sigma, axis=0)`; robust
   WLS-coefficient combination via `mad_std` + median.
-- **`info()` pretty-printer** (ASCII-table summary) is expected on every subclass —
-  the `Dark`/`Flat` stubs that lack one are incomplete.
-- *Recommended (existing inconsistencies):* the 5×-duplicated config block should be
-  factored into a base helper; the repeated `0.2` load-failure threshold should be a
-  named constant (`MAX_LOAD_FAILURE_FRAC`) and a stray `f""`-with-no-interpolation fixed;
-  keyword-arg call sites with spaces around `=` should be black-normalized; `ord` shadows
-  a builtin in `calculate_wls_coeffs`.
+- **`info()` pretty-printer** (ASCII-table summary) is expected on every subclass.
 
 ---
 
@@ -428,8 +413,6 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **Key casing**: `lower_snake_case` everywhere except `[DATA_DIRS]` (which uses
   env-var-like `UPPER_SNAKE`). Booleans `true`/`false`; paths double-quoted; lists are
   TOML arrays with explicit `.0` on floats.
-- *Minor note:* the `[DATA_DIRS]`+`[KPFPIPE]` blocks are duplicated verbatim across the
-  science and masters configs (drift risk, no shared-include mechanism).
 
 ### CSV config tables (`data_models/config/`)
 
@@ -480,16 +463,9 @@ documented, intentional ways — follow *its* conventions when adding masters co
   `_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`. This is the
   canonical accommodation.
 - **Determinism**: seed randomness with `np.random.default_rng(<int>)` (commonly `42`) —
-  the modern Generator API. Never `np.random.seed()`. *(A few `test_data_models.py`
-  fixtures use unseeded `np.random.random`; prefer seeded `default_rng` for new tests.)*
+  the modern Generator API. Never `np.random.seed()`.
 - **Constants come from `DETECTOR`** (`NORDER_GREEN = DETECTOR["norder"]["GREEN"]`) — never
   hardcode order/column counts.
-- *Recommended (existing gaps):* there is **no `conftest.py`**, and synthetic-FITS
-  construction is duplicated across many files — a shared factory fixture is the largest
-  structural improvement available. Several module docstrings claim
-  "skipped if KPF_TESTDATA not set" but no such skip exists (data is vendored) — either
-  implement the `@pytest.mark.skipif(... .is_file(), reason=...)` guard (as
-  `test_wavelength_calibration.py` does) or drop the misleading docstring.
 
 ---
 
@@ -529,55 +505,39 @@ documented, intentional ways — follow *its* conventions when adding masters co
   non-obvious argument should get full `Parameters`/`Returns` sections.
 - **`Examples` sections are not used.** Worked examples, where helpful, go in the prose of
   the summary (and double as test oracles for pure utils).
-- **Types are documented in the docstring, not the signature** (see §5 on the type-hint
-  gap). Array shapes/dtypes/units are stated in prose
+- **Types are documented in the docstring, not the signature** (see §5). Array
+  shapes/dtypes/units are stated in prose
   (`"(rvdata-standard ImageHDUs, shape (NORDER,))"`, `"WAVE [Å, vacuum]"`).
 - **Inline comments explain *why*, not *what*** — full sentences, capitalized. Annotate
   magic numbers with units/meaning inline (`* 1.48424  # e-/ADU: exposure meter gain`).
-- **Units use bracket notation** (`[km/s]`, `[Å]`, `[Å, vacuum]`, `e-/ADU`) in
-  docstrings/comments — not encoded in variable names (except constant suffixes like
-  `SPEED_OF_LIGHT_KMS`). State the **air/vacuum convention** wherever wavelengths appear;
+- **Units use bracket notation** (`[km/s]`, `[Å]`, `[Å, vacuum]`, `[e-/ADU]`) in
+  docstrings/comments — not encoded in variable names (except unit-suffixed names like
+  `..._KMS`). State the **air/vacuum convention** wherever wavelengths appear;
   use astropy `Quantity` for in-code units.
 - **`TODO` is the only task marker** (`# TODO: <imperative or open question>`); no
   `FIXME`/`XXX`/`HACK`/`NOTE:`. No issue/ticket linkage is the current norm.
-- **Provenance**: legacy v2.12 compatibility choices are flagged with inline `#` comments
-  ("Match legacy WLS header convention exactly"); generating scripts are cross-referenced
-  in comments ("see scripts/build_rough_wls_from_legacy_wls.py").
+- **Provenance**: legacy v2.12 compatibility choices are generally **not** annotated in
+  code — the `quicklook` module is the one exception (it documents the v2.12 plots it
+  ports). Generating scripts may be cross-referenced where it aids reproducibility
+  (`"see scripts/build_rough_wls_from_legacy_wls.py"`).
 
 ---
 
 ### Open Inconsistencies
 
-These are the genuine inconsistencies the survey surfaced where the codebase has no clear
-winner or contradicts a stated tool/command. Worth a deliberate project decision:
+Genuine inconsistencies in the codebase with no clear winner yet. Until decided, **match
+the dominant variant of the file/area you're editing**, and don't churn unrelated files to
+"fix" style.
 
-1. **Quicklook** — no shared base + tuple-based registration, unlike Diag/QC; plus DPI and
-   fontsize drift between L0/L1.
-2. **Tests** — no `conftest.py`; synthetic-FITS construction duplicated widely; misleading
-   "skip if no testdata" docstrings vs vendored data.
-
-Until decided, **match the dominant variant of the file/area you're editing**, and don't
-churn unrelated files to "fix" style.
-
-### Resolved
-
-Inconsistencies closed during the style-guide convergence work (newest first):
-
-- **Public module-level constants → removed.** `kpfpipe/modules/` no longer defines public
-  constants. Detector geometry is consumed from `DETECTOR` via `self.norder`/`self.ccd`
-  (with method-local handles for derived totals), physical constants come from `astropy`,
-  and `KECK_LOCATION` is now a `BarycentricCorrection` class attribute. The sole intentional
-  exception, `ImageAssembly.RN_KEYS`, was made public (was `_RN_KEYS`) and documented as a
-  special case. Touched `radial_velocity`, `barycentric_correction`, `masters/base`,
-  `image_assembly` + 2 QC importers + 2 tests; 750/750 pass. See §1/§3/§4.
-- **Masters config sections → accepted as-is.** The bare `[BIAS]`/`[DARK]`/`[FLAT]`/`[WLS]`
-  sections (no `MODULE_` prefix) are a deliberate exception, not a defect. No code change;
-  documented in §11.
-- **Type hints → docstring types only.** Adopted the docstring-types-only stance; removed
-  the only PEP 484 hints in the codebase (`utils/config.py`) and documented those types in
-  its docstrings. `mypy` is not used (left as a vestigial dev dep / command, not enforced).
-  See §5.
-- **Quote style → double quotes.** All `.py` files normalized to double quotes following
-  black's rule (1974 literals across 42 files), verified AST-identical and test-clean. See
-  §8. *(Excluded: `scripts/process_science_obs.py`, which does not parse — a stray prose
-  line at line 6 — pending a separate fix.)*
+1. **Quicklook** — no shared base class + tuple-based registration, unlike Diag/QC; DPI
+   (150 vs 600) and axis-fontsize (14 vs 18) drift between L0 and L1; the
+   `(value, comment)`-unwrap helper duplicated ~4×.
+2. **Masters** — the config-resolution block is duplicated 5× (could be a base helper); the
+   `0.2` load-failure threshold is an unnamed magic number with a stray `f""`; some
+   keyword-arg call sites have spaces around `=`; `ord` shadows a builtin in
+   `calculate_wls_coeffs`.
+3. **Tests** — no `conftest.py` and synthetic-FITS construction duplicated widely; a few
+   `test_data_models.py` fixtures use unseeded `np.random.random`; some module docstrings
+   claim "skip if no testdata" but no such skip exists (data is vendored).
+4. **Configs** — the `[DATA_DIRS]` + `[KPFPIPE]` blocks are duplicated verbatim across the
+   science and masters configs (no shared-include mechanism).

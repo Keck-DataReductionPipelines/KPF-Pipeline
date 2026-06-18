@@ -671,7 +671,7 @@ class TestPerform:
         assert isinstance(bc_monkeypatched.perform(), KPF2)
 
     def test_returns_same_object(self, bc_monkeypatched):
-        original = bc_monkeypatched.kpf2_obj
+        original = bc_monkeypatched.l2_obj
         assert bc_monkeypatched.perform() is original
 
     def test_bjd_tdb_extension_populated(self, bc_monkeypatched):
@@ -701,7 +701,7 @@ class TestPerform:
 
     def test_wave_arrays_untouched(self, bc_monkeypatched):
         """BarycentricCorrection should track but not apply: WAVE arrays unchanged."""
-        kpf2 = bc_monkeypatched.kpf2_obj
+        kpf2 = bc_monkeypatched.l2_obj
         orig = {f"{chip}_{fiber}_WAVE": kpf2.data[f"{chip}_{fiber}_WAVE"].copy()
                 for chip in ["GREEN", "RED"]
                 for fiber in ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]}
@@ -731,7 +731,7 @@ class TestPerform:
 
     def test_receipt_entry_added(self, bc_monkeypatched):
         bc_monkeypatched.perform()
-        modules = bc_monkeypatched.kpf2_obj.receipt["Module_Name"].values
+        modules = bc_monkeypatched.l2_obj.receipt["Module_Name"].values
         assert "barycentric_correction" in modules
 
     def test_targradv_converted_km_to_m_and_passed_through(self, synthetic_kpf2, monkeypatch):
