@@ -2,7 +2,18 @@ import tomllib
 from pathlib import Path
 
 class ConfigHandler:
-    def __init__(self, path: str | Path, overrides: dict | None = None):
+    """Load a TOML config file, with optional in-memory section overrides.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the TOML config file.
+    overrides : dict or None, optional
+        Per-section overrides applied after loading; each value is merged into
+        the matching section dict, or replaces the section if it is not a dict.
+    """
+
+    def __init__(self, path, overrides=None):
         self.path = Path(path)
         self.config = self.load_config()
         if overrides:
@@ -12,7 +23,7 @@ class ConfigHandler:
                 else:
                     self.config[section] = values
 
-    def load_config(self, path: str | Path | None = None):
+    def load_config(self, path=None):
         if path is not None:
             self.path = Path(path)
 

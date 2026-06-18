@@ -225,14 +225,13 @@ class StageName:
 
 ### Type hints
 
-- **Current reality: type hints are essentially absent.** Types are documented in NumPy
-  docstrings instead (the lone exception is `utils/config.py`, which uses modern
-  `str | Path` / `dict | None` unions).
-- **This is a known gap, not a deliberate prohibition** — `mypy kpfpipe/` is listed in
-  CLAUDE.md, implying hints are aspirational. *Recommended direction:* add PEP 484 hints
-  to new public functions using the modern `X | None` union syntax. Pending a project
-  decision, at minimum keep documenting types in the docstring. **Flag for the team to
-  adjudicate.**
+- **Adopted stance: docstring types only — no PEP 484 annotations.** Document parameter
+  and return types in NumPy-style docstrings (`name : str or pathlib.Path`), not in
+  signatures. Do not add inline type hints to new code; the codebase carries none.
+- **`mypy` is not used.** It still appears as a dev dependency (`pyproject.toml`,
+  `environment.yml`) and in CLAUDE.md's command list, but it is not run or enforced and
+  there are no annotations for it to check. Treat those entries as vestigial, not a
+  signal to start annotating.
 
 ---
 
@@ -539,13 +538,10 @@ documented, intentional ways — follow *its* conventions when adding masters co
 These are the genuine inconsistencies the survey surfaced where the codebase has no clear
 winner or contradicts a stated tool/command. Worth a deliberate project decision:
 
-1. **Type hints** — absent everywhere except `utils/config.py`, yet `mypy kpfpipe/` is a
-   documented command. Decide whether to adopt PEP 484 hints project-wide or formally
-   document the docstring-types-only stance and drop the mypy expectation.
-2. **Masters config sections** — `[BIAS]` vs the dominant `[MODULE_<NAME>]` prefix.
-3. **Quicklook** — no shared base + tuple-based registration, unlike Diag/QC; plus DPI and
+1. **Masters config sections** — `[BIAS]` vs the dominant `[MODULE_<NAME>]` prefix.
+2. **Quicklook** — no shared base + tuple-based registration, unlike Diag/QC; plus DPI and
    fontsize drift between L0/L1.
-4. **Tests** — no `conftest.py`; synthetic-FITS construction duplicated widely; misleading
+3. **Tests** — no `conftest.py`; synthetic-FITS construction duplicated widely; misleading
    "skip if no testdata" docstrings vs vendored data.
 
 Until decided, **match the dominant variant of the file/area you're editing**, and don't
@@ -555,6 +551,10 @@ churn unrelated files to "fix" style.
 
 Inconsistencies closed during the style-guide convergence work (newest first):
 
+- **Type hints → docstring types only.** Adopted the docstring-types-only stance; removed
+  the only PEP 484 hints in the codebase (`utils/config.py`) and documented those types in
+  its docstrings. `mypy` is not used (left as a vestigial dev dep / command, not enforced).
+  See §5.
 - **Quote style → double quotes.** All `.py` files normalized to double quotes following
   black's rule (1974 literals across 42 files), verified AST-identical and test-clean. See
   §8. *(Excluded: `scripts/process_science_obs.py`, which does not parse — a stray prose
