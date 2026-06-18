@@ -2,12 +2,9 @@
 Unit tests for CalibrationAssociation.
 """
 
-import os
-
 import pytest
 
 from kpfpipe.modules.calibration_association import CalibrationAssociation
-
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures

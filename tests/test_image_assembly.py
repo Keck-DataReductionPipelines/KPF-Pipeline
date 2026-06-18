@@ -18,7 +18,6 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
-
 TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
 L0_BIAS = str(TESTDATA_L0_DIR / "KP.20240405.03637.74.fits")
 L0_FLAT = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")

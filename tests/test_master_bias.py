@@ -16,7 +16,6 @@ import pytest
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
 
-
 TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
 TESTDATA_BIAS_FILES = sorted(
     [

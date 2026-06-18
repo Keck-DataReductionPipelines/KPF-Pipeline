@@ -5,7 +5,6 @@ from kpfpipe.modules.masters.bias import Bias
 # from kpfpipe.modules.masters.dark import Dark
 # from kpfpipe.modules.masters.flat import Flat
 from kpfpipe.modules.masters.wls import WLS
-
 from kpfpipe.utils.kpf import get_obs_id
 from kpfpipe.utils.pipeline import (
     build_filepath,

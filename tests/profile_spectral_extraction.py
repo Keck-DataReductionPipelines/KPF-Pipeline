@@ -1,12 +1,11 @@
 import os
-import sys
+
+from line_profiler import LineProfiler
 
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.kpf import get_datecode
-
-from line_profiler import LineProfiler
 
 
 def run():
@@ -22,7 +21,7 @@ def run():
     target_l1 = image_assembly.perform()
 
     spectral_extraction = SpectralExtraction(target_l1)
-    target_l2 = spectral_extraction.perform()
+    spectral_extraction.perform()
 
 
 if __name__ == "__main__":

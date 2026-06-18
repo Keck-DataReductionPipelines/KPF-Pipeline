@@ -129,7 +129,7 @@ class Bias(BaseMasterModule):
     def info(self):
         """Print a summary of the module configuration and stacking results."""
         print("Bias")
-        print(f"  l0_file_list:")
+        print("  l0_file_list:")
         for fn in self.l0_file_list:
             print(f"    {fn}")
         print(f"  chips:  {self.chips}")

@@ -1,21 +1,19 @@
 import os
 
 from kpfpipe.data_models.level0 import KPF0
-# from kpfpipe.data_models.level1 import KPF1
-
-from kpfpipe.modules.image_assembly import ImageAssembly
+from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 from kpfpipe.modules.calibration_association import CalibrationAssociation
+
+# from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
+from kpfpipe.modules.radial_velocity import RadialVelocity
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
-from kpfpipe.modules.barycentric_correction import BarycentricCorrection
-from kpfpipe.modules.radial_velocity import RadialVelocity
-
 from kpfpipe.quality_control.diagnostics import DiagL1, DiagL2
 from kpfpipe.quality_control.qc_booleans import QCL1, QCL2
 from kpfpipe.quality_control.quicklook.level0 import PlotL0
 from kpfpipe.quality_control.quicklook.level1 import PlotL1
-
 from kpfpipe.utils.pipeline import build_filepath, build_qlp_dir
 
 

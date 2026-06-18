@@ -9,7 +9,7 @@ with KPF-friendly extension aliases).
 
 from rvdata.core.models.base import RVDataModel
 
-from kpfpipe.utils.kpf import _OBS_ID_PATTERN, _DATECODE_PATTERN
+from kpfpipe.utils.kpf import _DATECODE_PATTERN, _OBS_ID_PATTERN
 
 
 class KPFDataModel(RVDataModel):

@@ -92,6 +92,7 @@ class KPFMasterL2(KPFMasterModel, KPF2):
                         warnings.warn(
                             f"Non-standard extension '{ext_name}' found in L2 file.",
                             UserWarning,
+                            stacklevel=2,
                         )
                     self.create_extension(ext_name, fits_type)
 

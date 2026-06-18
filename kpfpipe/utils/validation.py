@@ -56,7 +56,7 @@ def validate_array(
     msg = "; ".join(issues)
 
     if response == "warn":
-        warnings.warn(msg)
+        warnings.warn(msg, stacklevel=2)
     elif response == "error":
         raise ValueError(msg)
     # silent -> do nothing

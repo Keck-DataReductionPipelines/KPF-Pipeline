@@ -13,7 +13,6 @@ from kpfpipe.utils.kpf import (
     kpf_timestamp_to_eprv_timestamp,
 )
 
-
 _MINI_DB_KEYS = ["FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"]
 
 _OBJECT_MAP = {
@@ -71,7 +70,7 @@ def build_mini_database(data_dir, write=True):
         try:
             header = fits.getheader(fn, ext=0)
         except Exception as e:
-            warnings.warn(f"Could not read header from {fn}: {e}")
+            warnings.warn(f"Could not read header from {fn}: {e}", stacklevel=2)
             continue
 
         mini_db["FILENAME"].append(fn)
@@ -155,6 +154,7 @@ def build_l0_file_lists(
                     f"Mini database at {csv_path} is stale "
                     f"(+{len(added)} added, -{len(removed)} removed on disk); rebuilding.",
                     UserWarning,
+                    stacklevel=2,
                 )
                 mini_db = build_mini_database(data_dir)
         else:
@@ -176,7 +176,7 @@ def build_l0_file_lists(
         if not timed:
             continue
         cluster = [timed[0][1]]
-        for (prev_t, _), (t, fn) in zip(timed, timed[1:]):
+        for (prev_t, _), (t, fn) in zip(timed, timed[1:], strict=False):
             if t - prev_t > cluster_gap_seconds:
                 clusters.append(cluster)
                 cluster = [fn]

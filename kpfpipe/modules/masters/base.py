@@ -112,16 +112,16 @@ class BaseMasterModule:
                 if len(self._l1_obj_cache) < ncache:
                     self._l1_obj_cache[fn] = l1_obj
 
-            except (FileNotFoundError, IOError, OSError) as e:
+            except (FileNotFoundError, OSError) as e:
                 if verbose:
-                    warnings.warn(f"Failed to load {fn}: {e}")
+                    warnings.warn(f"Failed to load {fn}: {e}", stacklevel=2)
                 return None, failure
 
         try:
             self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
         except ValueError as e:
             if verbose:
-                warnings.warn(f"Exptime check failed for {fn}: {e}")
+                warnings.warn(f"Exptime check failed for {fn}: {e}", stacklevel=2)
             return None, failure
 
         return l1_obj, success
@@ -213,8 +213,6 @@ class BaseMasterModule:
         i = 0
         failure = 0
 
-        frame_indices = np.arange(len(l0_file_list))
-
         for fn in l0_file_list:
             if i >= nframe:
                 break
@@ -224,7 +222,7 @@ class BaseMasterModule:
             if not success:
                 failure += 1
                 if failure / len(l0_file_list) > 0.2:
-                    raise ValueError(f"more than 20% of frames in stack failed to load")
+                    raise ValueError("more than 20% of frames in stack failed to load")
                 continue
 
             exptime[i] = l1_obj.headers["PRIMARY"]["EXPTIME"]
@@ -379,13 +377,13 @@ class BaseMasterModule:
             if not success:
                 failure += 1
                 if failure / len(l0_file_list) > 0.2:
-                    raise ValueError(f"more than 20% of frames in stack failed to load")
+                    raise ValueError("more than 20% of frames in stack failed to load")
                 continue
 
             exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
             if zero_exptime != (exptime == 0):
-                raise ValueError(f"Exposure times must be all zero or all non-zero")
+                raise ValueError("Exposure times must be all zero or all non-zero")
 
             if exptime < 0:
                 raise ValueError("Exposure times cannot be negative")

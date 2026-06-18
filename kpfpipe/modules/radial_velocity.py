@@ -116,7 +116,7 @@ class RadialVelocity:
         except KeyError:
             raise ValueError(
                 f"unknown fiber {fiber!r}; expected one of {sorted(self._OBJ_KEYWORD)}"
-            )
+            ) from None
         inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
         if keyword not in inst:
             raise ValueError(
@@ -570,7 +570,7 @@ class RadialVelocity:
         width=None,
         step_size=None,
         window=None,
-        clip_edge_pixels=[500, 500],
+        clip_edge_pixels=None,
     ):
         """
         Cross-correlate every order of one chip/fiber against the line mask.
@@ -608,6 +608,8 @@ class RadialVelocity:
         NotImplementedError
             If the fiber's illumination source has no CCF path yet (etalon, lfc).
         """
+        if clip_edge_pixels is None:
+            clip_edge_pixels = [500, 500]
         chip = chip.upper()
         fiber = fiber.upper()
         if width is None:
@@ -861,7 +863,7 @@ class RadialVelocity:
         ccf_window=None,
         rv_window=None,
         min_npts=9,
-        clip_edge_pixels=[500, 500],
+        clip_edge_pixels=None,
     ):
         """
         Compute per-order CCFs and radial velocities and package them in a KPF4.
@@ -907,6 +909,8 @@ class RadialVelocity:
             science RV). Unilluminated ('none') fibers are skipped (empty
             extensions).
         """
+        if clip_edge_pixels is None:
+            clip_edge_pixels = [500, 500]
         if chips is None:
             chips = self.chips
         if fibers is None:

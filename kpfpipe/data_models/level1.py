@@ -10,9 +10,9 @@ infrastructure and receipt system.
 """
 
 import datetime
+import importlib.resources
 import os
 import warnings
-from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -21,8 +21,6 @@ from astropy.table import Table
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.kpf import get_obs_id
-
-import importlib.resources
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 L1_EXTENSIONS = pd.read_csv(_config_path / "L1-extensions.csv")
@@ -98,6 +96,7 @@ class KPF1(KPFDataModel):
                         warnings.warn(
                             f"Non-standard extension '{ext_name}' found in L1 file.",
                             UserWarning,
+                            stacklevel=2,
                         )
                     self.create_extension(ext_name, fits_type)
 

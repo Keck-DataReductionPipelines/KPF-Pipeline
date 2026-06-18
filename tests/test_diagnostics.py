@@ -6,7 +6,7 @@ from astropy.io import fits
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level1 import KPF1
-from kpfpipe.quality_control.diagnostics import Diagnostics, DiagL0, DiagL1, DiagL2
+from kpfpipe.quality_control.diagnostics import DiagL0, DiagL1, DiagL2, Diagnostics
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -161,7 +161,8 @@ def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0):
     buf = BytesIO()
     fits.HDUList([primary, green_ccd, green_var, red_ccd, red_var]).writeto(buf)
     buf.seek(0)
-    import tempfile, os
+    import os
+    import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".fits", delete=False) as tmp:
         tmp.write(buf.read())
@@ -214,8 +215,6 @@ class TestDiagL2NanCounts:
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
         primary.header["DATE-OBS"] = "2024-01-01T00:00:00"
-        for ext in ("GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR"):
-            primary  # noop
         hdul = fits.HDUList(
             [
                 primary,
@@ -232,7 +231,8 @@ class TestDiagL2NanCounts:
         buf = BytesIO()
         hdul.writeto(buf)
         buf.seek(0)
-        import tempfile, os
+        import os
+        import tempfile
 
         with tempfile.NamedTemporaryFile(suffix=".fits", delete=False) as tmp:
             tmp.write(buf.read())
@@ -289,7 +289,8 @@ class TestDiagL2ZeroFlux:
         buf = BytesIO()
         hdul.writeto(buf)
         buf.seek(0)
-        import tempfile, os
+        import os
+        import tempfile
 
         with tempfile.NamedTemporaryFile(suffix=".fits", delete=False) as tmp:
             tmp.write(buf.read())

@@ -1,10 +1,10 @@
 """L1 quicklook plots for assembled FFI."""
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 from kpfpipe.modules.image_assembly import RN_KEYS
 
@@ -117,7 +117,7 @@ class PlotL1:
             )
 
         # Timestamp
-        current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         plt.annotate(
             f"KPF QLP: {current_time} UT",
             xy=(1, 0),

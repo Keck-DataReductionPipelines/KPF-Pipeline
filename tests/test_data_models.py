@@ -4,9 +4,6 @@ Tests for KPF data models (KPF0, KPF1, KPF2, KPF4).
 Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
-import os
-import tempfile
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -14,11 +11,11 @@ from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
-from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.masters import KPFMasterL1, KPFMasterL2, KPFMasterL4
 from kpfpipe.data_models.masters.base import KPFMasterModel
 

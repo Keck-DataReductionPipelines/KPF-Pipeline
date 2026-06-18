@@ -1,11 +1,10 @@
 import os
-import sys
+
+from line_profiler import LineProfiler
 
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.utils.kpf import get_datecode
-
-from line_profiler import LineProfiler
 
 OBS_ID = "KP.20240405.49597.71"  # 2-amp mode
 # OBS_ID = 'KP.20250419.84046.71'    # 4-amp mode

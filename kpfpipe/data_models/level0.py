@@ -9,9 +9,9 @@ Subclasses RVDataModel (via KPFDataModel) to reuse its extension/header/data
 infrastructure and receipt system.
 """
 
+import importlib.resources
 import os
 import warnings
-from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -20,8 +20,6 @@ from astropy.table import Table
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.kpf import get_obs_id
-
-import importlib.resources
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
@@ -89,6 +87,7 @@ class KPF0(KPFDataModel):
                         warnings.warn(
                             f"Non-standard extension '{ext_name}' found in L0 file.",
                             UserWarning,
+                            stacklevel=2,
                         )
                     self.create_extension(ext_name, fits_type)
 

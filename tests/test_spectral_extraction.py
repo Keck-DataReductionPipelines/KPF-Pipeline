@@ -7,7 +7,6 @@ also require no real data. Regression tests using real L1 FITS files are
 skipped if KPF_TESTDATA is not set.
 """
 
-import os
 from pathlib import Path
 
 import numpy as np
@@ -16,11 +15,11 @@ import pytest
 from astropy.io import fits
 
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
-from kpfpipe.data_models.level0 import KPF0
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]

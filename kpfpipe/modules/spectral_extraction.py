@@ -2,12 +2,13 @@
 KPF Spectral Extraction module.
 """
 
+import warnings
+
 import numpy as np
 import pandas as pd
-import warnings
 from numpy.polynomial import polynomial
 
-from kpfpipe import REPO_ROOT, DEFAULTS
+from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import validate_array
 
@@ -75,7 +76,7 @@ class SpectralExtraction:
             self.order_trace_path = {}
 
         filepath = f"{REPO_ROOT}/reference/order_trace_{chip.lower()}.csv"
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             self.order_trace[chip.upper()] = (
                 pd.read_csv(f, index_col=0).set_index(["Fiber", "Order"]).sort_index()
             )
@@ -132,7 +133,9 @@ class SpectralExtraction:
         try:
             trace = self.order_trace[chip].loc[(fiber, order)]
         except KeyError:
-            raise LookupError(f"No trace found for {chip} {fiber} Order {order}")
+            raise LookupError(
+                f"No trace found for {chip} {fiber} Order {order}"
+            ) from None
 
         if trace.ndim != 1:
             raise ValueError(
@@ -350,7 +353,7 @@ class SpectralExtraction:
         except AttributeError:
             raise AttributeError(
                 f"Unsupported extraction method: '{extraction_method}'"
-            )
+            ) from None
 
         D, V, W, row_min, row_max = self._get_orderlet_pixels(
             chip, fiber, order, return_coords=True
@@ -442,6 +445,7 @@ class SpectralExtraction:
             warnings.warn(
                 f"1 orderlet failed to extract from the {chip} CCD; filled with NaN.",
                 UserWarning,
+                stacklevel=2,
             )
         elif failure > 1:
             raise LookupError(

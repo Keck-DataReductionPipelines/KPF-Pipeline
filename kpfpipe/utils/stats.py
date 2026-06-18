@@ -68,7 +68,7 @@ def optimize_lsq(x, y, linemodel):
     try:
         func, jac, theta0_generator, untransform = _FUNCTIONS[linemodel]
     except KeyError:
-        raise ValueError(f"Unsupported line function: {linemodel}")
+        raise ValueError(f"Unsupported line function: {linemodel}") from None
 
     def residual(theta):
         return func(theta, x) - y

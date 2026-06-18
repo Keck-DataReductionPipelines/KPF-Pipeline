@@ -280,8 +280,9 @@ class StageName:
 
 - **No `logging` module anywhere.** Don't introduce one without a project decision.
   - Human-facing status → `print()`, confined to `info()` reporters and recipe banners.
-  - In-pipeline recoverable/degraded conditions → `warnings.warn(...)`, gated behind a
-    `verbose` flag: `if verbose: warnings.warn(...)`.
+  - In-pipeline recoverable/degraded conditions → `warnings.warn(..., stacklevel=2)`, gated
+    behind a `verbose` flag: `if verbose: warnings.warn(..., stacklevel=2)`. The explicit
+    `stacklevel` is required (Ruff `B028`) so the warning points at the caller.
 - **Raise exceptions; do not catch-and-log.** Choose the semantically correct type:
   - `TypeError` — wrong `config` type (every `__init__`).
   - `ValueError` — bad domain value / failed validation (the workhorse).
@@ -294,9 +295,13 @@ class StageName:
 - **Validate early, fail fast**: check args at the top of the function before doing work.
 - **Error messages are f-strings that state the expectation and show the offending
   value with `!r`**: `raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")`.
-- **Narrow your `except`**: `except (FileNotFoundError, IOError, OSError) as e`, never
-  bare `except:`. Use `raise ... from e` when re-raising. Broad `except Exception` is
-  acceptable only around external I/O that converts to a warning-and-skip.
+- **Narrow your `except`**: `except (FileNotFoundError, OSError) as e`, never bare
+  `except:`. Broad `except Exception` is acceptable only around external I/O that converts
+  to a warning-and-skip.
+- **Always chain re-raises** (Ruff `B904`): `raise ... from e` to preserve the original
+  context, or `raise ... from None` when translating a low-level error (a `KeyError`/
+  `AttributeError` from a dict lookup or `getattr` dispatch) into a clearer domain error
+  whose message already says what the original would — suppressing the redundant chain.
 - **Predicate/validator split**: internal `_validate_*` raise; public `is_*` wrap them in
   `try/except` and return `bool` (never raise from the boolean API).
 - **Configurable severity**: validators that serve both soft and hard contexts take a

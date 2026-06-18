@@ -6,6 +6,7 @@ observation from tests/testdata/L0/20240405/.
 """
 
 import argparse
+import importlib.util
 import os
 from pathlib import Path
 
@@ -16,9 +17,6 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.pipeline import build_filepath
-
-import importlib.util
-
 
 # ---------------------------------------------------------------------------
 # Test data paths and constants

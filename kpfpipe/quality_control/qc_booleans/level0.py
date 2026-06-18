@@ -34,7 +34,7 @@ class QCL0(QC):
             # KPF0 stores None-data as array(None, dtype=object); treat as absent.
             if (
                 arr is None
-                or getattr(arr, "dtype", None) == object
+                or getattr(arr, "dtype", None) == np.dtype(object)
                 or np.size(arr) == 0
             ):
                 return False

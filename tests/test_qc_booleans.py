@@ -318,6 +318,7 @@ class TestQCL0:
 
     def test_not_junk_pass_not_in_list(self, tmp_path, monkeypatch):
         import pandas as pd
+
         import kpfpipe.quality_control.qc_booleans.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
@@ -329,6 +330,7 @@ class TestQCL0:
 
     def test_not_junk_fail_in_list(self, tmp_path, monkeypatch):
         import pandas as pd
+
         import kpfpipe.quality_control.qc_booleans.level0 as mod
 
         obs_id = "KP.20240405.00001.00"
@@ -342,6 +344,7 @@ class TestQCL0:
     def test_not_junk_pass_none_obs_id(self, tmp_path, monkeypatch):
         """obs_id=None → passes (can't be in junk list)."""
         import pandas as pd
+
         import kpfpipe.quality_control.qc_booleans.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
@@ -355,6 +358,7 @@ class TestQCL0:
     def test_not_junk_malformed_csv_raises(self, tmp_path, monkeypatch):
         """CSV without 'obs_id' column → raises ValueError."""
         import pandas as pd
+
         import kpfpipe.quality_control.qc_booleans.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"

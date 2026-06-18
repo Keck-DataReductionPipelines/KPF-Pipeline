@@ -6,9 +6,9 @@ synthetic KPF2 with a small EXPMETER_SCI table and populated SCI2_WAVE.
 Gaia and barycorrpy calls are stubbed via monkeypatching.
 """
 
+import astropy.units as u
 import numpy as np
 import pytest
-import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
 from astropy.time import Time

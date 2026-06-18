@@ -1,16 +1,14 @@
 """Tests for L1 quicklook plots."""
 
+import matplotlib
 import numpy as np
 import pytest
 from astropy.io import fits
-
-import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from kpfpipe.data_models.level1 import KPF1
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

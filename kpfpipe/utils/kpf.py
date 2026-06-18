@@ -2,7 +2,6 @@ import os
 import re
 from datetime import datetime, timedelta
 
-
 _OBS_ID_PATTERN = re.compile(r"(KP\.\d{8}\.\d{5}\.\d{2})")
 _DATECODE_PATTERN = re.compile(r"\d{8}")
 _KPF_TIMESTAMP_PATTERN = re.compile(r"(\d{8}\.\d{5}\.\d{2})")

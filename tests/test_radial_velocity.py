@@ -57,7 +57,7 @@ def _absorption_spectrum(wave, centers, weights=None, depth=0.6, sigma_kms=4.0):
     if weights is None:
         weights = np.ones_like(centers)
     flux = np.ones_like(wave)
-    for center, weight in zip(centers, weights):
+    for center, weight in zip(centers, weights, strict=False):
         sigma_a = center * sigma_kms / SPEED_OF_LIGHT_KMS
         flux -= (
             depth

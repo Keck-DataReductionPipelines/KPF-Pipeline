@@ -12,7 +12,6 @@ from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 from kpfpipe.utils.astro import air_to_vac
 from kpfpipe.utils.config import ConfigHandler
 
-
 _SCIENCE_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "kpf_drp_science.toml"
 
 # Truth-frame integration data (see TestSpectrumOrientation).
@@ -317,8 +316,8 @@ class TestSpectrumOrientation:
         # WLS master only carries those. Upstream modules are imported here, not
         # at module scope, to keep this WLS-application test file's surface small.
         from kpfpipe.data_models import KPF0
-        from kpfpipe.modules.image_assembly import ImageAssembly
         from kpfpipe.modules.calibration_association import CalibrationAssociation
+        from kpfpipe.modules.image_assembly import ImageAssembly
         from kpfpipe.modules.image_processing import ImageProcessing
         from kpfpipe.modules.spectral_extraction import SpectralExtraction
         from kpfpipe.utils.pipeline import build_filepath
@@ -393,7 +392,7 @@ class TestSpectrumOrientation:
         """Floor check: the Na D doublet must be a deep trough in the native
         pairing, so the discriminator cannot pass trivially on near-zero flux."""
         deepest = 0.0
-        for name, chip, fiber, o, wave, flux, lambda_air in self._anchor_cases(
+        for name, _chip, _fiber, _o, wave, flux, lambda_air in self._anchor_cases(
             science_l2
         ):
             if name in ("Na D1", "Na D2"):

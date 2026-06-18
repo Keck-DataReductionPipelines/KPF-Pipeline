@@ -1,16 +1,15 @@
 """Tests for L0 quicklook plots."""
 
-import os
+import matplotlib
 import numpy as np
 import pytest
 from astropy.io import fits
 
-import matplotlib
-
 matplotlib.use("Agg")
 
-from kpfpipe.data_models.level0 import KPF0
+import matplotlib.pyplot as plt
 
+from kpfpipe.data_models.level0 import KPF0
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -96,8 +95,6 @@ class TestPlotL0Constructor:
 # ---------------------------------------------------------------------------
 # Task 2: stitched_image
 # ---------------------------------------------------------------------------
-
-import matplotlib.pyplot as plt
 
 
 class TestStitchedImage4Amp:

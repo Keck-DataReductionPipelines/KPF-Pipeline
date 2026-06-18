@@ -8,9 +8,13 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.17
     hooks:
+      # Ruff scope is kpfpipe/, tests/, recipes/ (the pipeline package, its
+      # tests, and recipes). tools/ and scripts/ are intentionally outside it.
       - id: ruff-check
         args: [--fix]
+        files: ^(kpfpipe|tests|recipes)/
       - id: ruff-format
+        files: ^(kpfpipe|tests|recipes)/
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

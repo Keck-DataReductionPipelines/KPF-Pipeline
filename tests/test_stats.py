@@ -3,13 +3,12 @@ Tests for kpfpipe.utils.stats helpers.
 """
 
 import numpy as np
-import pytest
 
 from kpfpipe.utils.stats import (
-    interpolate_bad_pixels,
-    optimize_lsq,
     gaussian_dist,
     gaussian_jac,
+    interpolate_bad_pixels,
+    optimize_lsq,
 )
 
 

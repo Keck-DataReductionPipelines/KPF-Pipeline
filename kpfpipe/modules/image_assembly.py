@@ -89,10 +89,10 @@ class ImageAssembly:
         for chip in self.chips:
             chip = chip.upper()
             df = pd.DataFrame(self.amplifiers[chip]).set_index("channel_id")
-            self.orientation.update(dict(zip(df["ext_name"], df["flip"])))
-            self.gain.update(dict(zip(df["ext_name"], df["gain"])))
+            self.orientation.update(dict(zip(df["ext_name"], df["flip"], strict=False)))
+            self.gain.update(dict(zip(df["ext_name"], df["gain"], strict=False)))
 
-    def _get_overscan_pixels(self, chip, amp_no, buffer=[0, 0]):
+    def _get_overscan_pixels(self, chip, amp_no, buffer=None):
         """
         Extract overscan pixels for a given amplifier.
 
@@ -116,6 +116,8 @@ class ImageAssembly:
         -----
         Assumes image orientation has been standardized.
         """
+        if buffer is None:
+            buffer = [0, 0]
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f"{chip}_AMP{amp_no}"]
 
@@ -365,7 +367,7 @@ class ImageAssembly:
             channel_ext = f"{chip}_AMP{i + 1}"
             self.l0_obj.data[channel_ext] *= self.gain[channel_ext] / (2**16)
 
-    def measure_read_noise(self, chip, sigma=None, buffer=[5, 5]):
+    def measure_read_noise(self, chip, sigma=None, buffer=None):
         """
         Estimate read noise for each amplifier from overscan pixels.
 
@@ -388,6 +390,8 @@ class ImageAssembly:
         - `self.readnoise[channel_ext]` : standard deviation of cleaned overscan.
         - `self.rn_nongauss[channel_ext]` : non-Gaussian factor computed as std/mad.
         """
+        if buffer is None:
+            buffer = [5, 5]
         if sigma is None:
             sigma = self.readnoise_sigma
         if not hasattr(self, "readnoise"):
@@ -409,7 +413,7 @@ class ImageAssembly:
             self.readnoise[channel_ext] = std
             self.rn_nongauss[channel_ext] = np.sqrt(2 / np.pi) * std / mad
 
-    def subtract_overscan(self, chip, method=None, buffer=[0, 0]):
+    def subtract_overscan(self, chip, method=None, buffer=None):
         """
         Subtract overscan bias from imaging pixels for each amplifier. Also
         removes overscan region from amplifier channel, leaving only active
@@ -428,13 +432,17 @@ class ImageAssembly:
         -------
         None
         """
+        if buffer is None:
+            buffer = [0, 0]
         if method is None:
             method = self.overscan_method
 
         try:
             oscan_fxn = self.__getattribute__(f"_oscan_{method}")
-        except AttributeError as e:
-            raise AttributeError(f"Unsupported overscan subtraction method: '{method}'")
+        except AttributeError:
+            raise AttributeError(
+                f"Unsupported overscan subtraction method: '{method}'"
+            ) from None
 
         for i in range(self.namp[chip]):
             image = self._get_imaging_pixels(chip, i + 1)

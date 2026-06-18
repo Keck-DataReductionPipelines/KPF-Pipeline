@@ -4,15 +4,16 @@ Unit tests for the WLS module.
 All sub-module I/O is mocked; no real data or FITS files are required.
 """
 
+from unittest.mock import MagicMock
+
 import h5py
 import numpy as np
 import pandas as pd
 import pytest
-from unittest.mock import MagicMock
 
+import kpfpipe.modules.masters.wls as wls_module
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL2
-import kpfpipe.modules.masters.wls as wls_module
 from kpfpipe.modules.masters.wls import WLS
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
@@ -464,7 +465,7 @@ class TestMakeMasterL2:
         flux[0, :] = np.nan  # simulate failed-extraction orderlet
 
         class StubL2:
-            data = {f"RED_SCI1_FLUX": flux}
+            data = {"RED_SCI1_FLUX": flux}
 
         wls.rough_wls["RED_SCI1_WAVE"] = np.tile(
             np.linspace(6500.0, 6510.0, ncol), (norder, 1)

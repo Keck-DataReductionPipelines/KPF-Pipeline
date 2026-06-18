@@ -177,4 +177,3 @@ A stable, validated KPF DRP that:
 -   Is testable and maintainable.
 
 The current rebuild is the foundation of that.
-

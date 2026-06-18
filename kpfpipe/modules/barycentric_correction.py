@@ -431,7 +431,8 @@ class BarycentricCorrection:
             if gaia_error is not None:
                 warnings.warn(
                     f"Gaia astrometry unavailable ({type(gaia_error).__name__}: "
-                    f"{gaia_error}); using WMKO header astrometry"
+                    f"{gaia_error}); using WMKO header astrometry",
+                    stacklevel=2,
                 )
             self._astrometry_source = "WMKO header"
             return self._wmko_astrometry()

@@ -5,17 +5,17 @@ KPF Master Wavelength Solution construction module.
 import os
 import warnings
 
-from astropy.stats import mad_std
 import h5py
 import numpy as np
-from numpy.polynomial import legendre
 import pandas as pd
+from astropy.stats import mad_std
+from numpy.polynomial import legendre
 
 from kpfpipe import REPO_ROOT
 from kpfpipe.data_models.masters import KPFMasterL2
-from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_processing import ImageProcessing
+from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
@@ -206,7 +206,7 @@ class WLS(BaseMasterModule):
             if not success:
                 failure += 1
                 if failure / len(l0_file_list) > 0.2:
-                    raise ValueError(f"more than 20% of frames in stack failed to load")
+                    raise ValueError("more than 20% of frames in stack failed to load")
                 continue
 
             l2_obj = self._extract_frame(l1_obj, verbose=verbose)
@@ -419,7 +419,8 @@ class WLS(BaseMasterModule):
                 if nlines == 0 and verbose:
                     warnings.warn(
                         f"{chip} {fiber} order {o + 1}: orderlet skipped "
-                        f"(no fittable lines; flux likely NaN-filled)"
+                        f"(no fittable lines; flux likely NaN-filled)",
+                        stacklevel=2,
                     )
                 line_dict["order"] = (o + 1) * np.ones(nlines, dtype=int)
                 line_dict["fiber"] = np.full(nlines, fiber)
@@ -437,7 +438,8 @@ class WLS(BaseMasterModule):
             if n_good == 0 and verbose:
                 warnings.warn(
                     f"{chip} {fiber}: no good lines retained "
-                    f"({n_total} attempted; all rejected or NaN-filled)"
+                    f"({n_total} attempted; all rejected or NaN-filled)",
+                    stacklevel=2,
                 )
 
         for k in lines:
@@ -723,7 +725,8 @@ class WLS(BaseMasterModule):
                 if verbose:
                     warnings.warn(
                         f"{chip} frame {i + 1}: {bad_frac:.1%} of line fits failed QC "
-                        f"(> {max_bad_frac:.0%}); frame rejected from stack"
+                        f"(> {max_bad_frac:.0%}); frame rejected from stack",
+                        stacklevel=2,
                     )
                 continue
 
@@ -962,7 +965,7 @@ class WLS(BaseMasterModule):
     def info(self):
         """Print a summary of the module configuration and WLS results."""
         print("WLS")
-        print(f"  l0_file_list:")
+        print("  l0_file_list:")
         for fn in self.l0_file_list:
             print(f"    {fn}")
         print(f"  chips:           {self.chips}")

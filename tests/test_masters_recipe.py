@@ -10,19 +10,17 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import numpy as np
 import pandas as pd
 import pytest
 
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.pipeline import (
-    build_l0_file_lists,
     build_filepath,
+    build_l0_file_lists,
     build_mini_database,
     build_qlp_dir,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test data paths
@@ -520,7 +518,6 @@ class TestMastersRecipe:
 
 class TestMastersRecipeErrors:
     def _make_config(self, data_input, data_output):
-        import argparse
 
         return ConfigHandler(
             str(MASTERS_CONFIG_PATH),

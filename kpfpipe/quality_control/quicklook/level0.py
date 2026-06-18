@@ -2,10 +2,10 @@
 
 import os
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 from kpfpipe.modules.image_assembly import ImageAssembly
 
@@ -134,7 +134,7 @@ class PlotL0:
         plt.grid(False)
 
         # Timestamp annotation
-        current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(
             timestamp_label,

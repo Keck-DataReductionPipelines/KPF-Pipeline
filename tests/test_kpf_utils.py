@@ -5,18 +5,18 @@ Tests for kpfpipe.utils.kpf timestamp conversion utilities.
 import pytest
 
 from kpfpipe.utils.kpf import (
-    utc_to_hst,
-    hst_to_utc,
-    kpf_timestamp_to_eprv_timestamp,
     eprv_timestamp_to_kpf_timestamp,
-    kpf_timestamp_to_datetime,
-    get_obs_id,
     get_datecode,
-    get_timestamp,
+    get_obs_id,
     get_seconds_since_j2000,
-    is_obs_id,
+    get_timestamp,
+    hst_to_utc,
     is_datecode,
+    is_obs_id,
     is_timestamp,
+    kpf_timestamp_to_datetime,
+    kpf_timestamp_to_eprv_timestamp,
+    utc_to_hst,
 )
 
 

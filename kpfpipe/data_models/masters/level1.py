@@ -21,7 +21,6 @@ import importlib.resources
 import numpy as np
 import pandas as pd
 
-from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters.base import KPFMasterModel
 

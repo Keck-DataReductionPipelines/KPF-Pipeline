@@ -12,7 +12,6 @@ from astropy.io import fits
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.modules.image_processing import ImageProcessing
 
-
 _SHAPE = (4, 4)
 _CCD_VALUE = 10.0
 _BIAS_VALUE = 3.0

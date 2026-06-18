@@ -54,11 +54,15 @@ include = ["kpfpipe*", "tools*"]
 [tool.ruff]
 line-length = 88
 target-version = "py314"
-extend-exclude = ["legacy", "gjgilbert_notebooks"]
+# scripts/ holds unimplemented pseudocode stubs that don't parse as Python yet.
+extend-exclude = ["legacy", "gjgilbert_notebooks", "scripts"]
 
 [tool.ruff.lint]
 # E/W pycodestyle, F pyflakes, I import-sorting, B bugbear, UP pyupgrade.
 select = ["E", "F", "W", "I", "B", "UP"]
+# Line length is owned by `ruff format`; the residual E501s are unsplittable
+# strings/comments where manual wrapping only hurts readability.
+ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["kpfpipe"]
