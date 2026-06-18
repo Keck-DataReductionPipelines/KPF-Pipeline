@@ -20,11 +20,10 @@ from kpfpipe.utils.stats import flag_outliers
 class BaseMasterModule:
     """
     Base class for KPF masters generation.
-    The class should not be called directly, but is used for inheritance
-    of masters subclasses: Bias, Dark, Flat, WLS.
 
-    Masters modules read a stack of L0 files from disk and output
-    a masters L1 object.
+    The class should not be called directly, but is used for inheritance
+    of masters subclasses: Bias, Dark, Flat, WLS. Masters modules read a
+    stack of L0 files from disk and output a masters L1 object.
     """
 
     # Module defaults; subclasses extend via `{**BaseMasterModule._DEFAULTS, ...}`.

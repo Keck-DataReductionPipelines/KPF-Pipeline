@@ -32,12 +32,10 @@ class KPF0(KPFDataModel):
 
     Represents a raw CCD readout from the KPF instrument. Extensions
     vary between observations; the reader accepts whatever is present
-    in the FITS file.
-
-    Usage:
-        l0 = KPF0.from_fits("/path/to/KP.20240113.23249.10.fits")
-        l0.data["GREEN_AMP1"]   # numpy array
-        l0.headers["PRIMARY"]   # header dict
+    in the FITS file. Construct from a FITS file with
+    `KPF0.from_fits(path)`, then read amplifier arrays from `data`
+    (e.g. `data["GREEN_AMP1"]`) and header dicts from `headers`
+    (e.g. `headers["PRIMARY"]`).
     """
 
     def __init__(self):
@@ -49,10 +47,11 @@ class KPF0(KPFDataModel):
                 self.create_extension(row["Name"], row["DataType"])
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """Route L0 FITS reads to KPF0._read.
+        """
+        Route L0 FITS reads to `KPF0._read`.
 
-        RVDataModel.read has no lvl==0 dispatch branch, so the inherited
-        from_fits would never call into _read without this override.
+        `RVDataModel.read` has no lvl==0 dispatch branch, so the inherited
+        `from_fits` would never call into `_read` without this override.
         """
         self._read(hdul)
         if self.filename is not None:
@@ -156,7 +155,8 @@ class KPF0(KPFDataModel):
     ]
 
     def to_kpf1(self):
-        """Create a KPF1 scaffold from this L0, carrying over headers and
+        """
+        Create a KPF1 scaffold from this L0, carrying over headers and
         pass-through extensions.
 
         Returns a KPF1 with PRIMARY header, pass-through extensions (CA_HK,

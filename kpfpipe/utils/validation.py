@@ -1,3 +1,5 @@
+"""Array and value validators: monotonicity, finiteness, and positivity checks."""
+
 import warnings
 
 import numpy as np

@@ -59,9 +59,10 @@ class ImageProcessing:
     # ------------------------------------------------------------------
 
     def _resolve_bias(self, value):
-        """Resolve a `bias` kwarg into a KPFMasterL1 instance.
+        """
+        Resolve a `bias` kwarg into a `KPFMasterL1` instance.
 
-        See perform() for accepted input types. Updates self._bias_path
+        See `perform` for accepted input types. Updates `self._bias_path`
         so downstream reporting reflects what was actually used.
         """
         if isinstance(value, KPFMasterL1):
@@ -132,7 +133,7 @@ class ImageProcessing:
 
         Parameters
         ----------
-        master_bias : KPFMasterL1
+        bias_l1 : KPFMasterL1
             Master bias frame loaded from disk.
         chip : str
             CCD identifier, e.g. 'GREEN' or 'RED'.
@@ -140,7 +141,7 @@ class ImageProcessing:
         Returns
         -------
         None
-            Modifies l1_obj.data['{chip}_CCD'] in-place.
+            Modifies `l1_obj.data['{chip}_CCD']` in-place.
         """
         chip = chip.upper()
         self.l1_obj.data[f"{chip}_CCD"] -= bias_l1.data[f"{chip}_IMG"]

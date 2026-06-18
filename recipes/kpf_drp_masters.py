@@ -1,3 +1,13 @@
+"""
+KPF masters construction recipe.
+
+Builds the nightly calibration master products for a single datecode from its
+raw L0 frames: master bias (L1), and master wavelength solution (L2) from ThAr
+exposures. Dark and flat masters are scaffolded but not yet implemented. Each
+master is stacked by the corresponding module under `kpfpipe.modules.masters`
+and written to the output data root via the pipeline path helpers.
+"""
+
 import os
 
 from kpfpipe.modules.masters.bias import Bias
@@ -32,7 +42,8 @@ def main(config, args):
         raise SystemExit(f"L0 data directory not found: {l0_dir}")
     mini_db = build_mini_database(l0_dir)
 
-    # master bias
+    # Stack the bias frames into a master bias used to remove the detector
+    # offset from every science and calibration frame.
     for files in build_l0_file_lists("bias", mini_db=mini_db):
         bias_path = build_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_out, master="bias"
@@ -54,7 +65,8 @@ def main(config, args):
     #    flat_handler = Flat(files, config)
     #    flat_handler.make_master_l1(filepath=flat_path)
 
-    # master wavelength solution (ThAr)
+    # Stack the ThAr exposures into a master wavelength solution, since the
+    # emission-line spectrum anchors the per-order wavelength calibration.
     for files in build_l0_file_lists("thar", mini_db=mini_db):
         wls_master_path = build_filepath(
             get_obs_id(files[0]), "L2", data_root=data_root_out, master="thar"

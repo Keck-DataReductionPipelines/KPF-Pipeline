@@ -39,9 +39,8 @@ class KPFMasterL2(KPFMasterModel, KPF2):
     the KPF2 alias system (e.g., SCI2_WAVE -> TRACE3_WAVE, with chip-
     prefix access GREEN_SCI2_WAVE / RED_SCI2_WAVE).
 
-    Usage:
-        m2 = KPFMasterL2()
-        m2 = KPFMasterL2.from_fits("/path/to/master_l2.fits")
+    Construct empty with `KPFMasterL2()`, or load a product from disk with
+    `KPFMasterL2.from_fits(path)`.
     """
 
     _DATALVL = "ML2"
@@ -59,11 +58,12 @@ class KPFMasterL2(KPFMasterModel, KPF2):
                 self.create_extension(row["Name"], row["DataType"])
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """Route Masters L2 FITS reads to KPFMasterL2._read.
+        """
+        Route Masters L2 FITS reads to `KPFMasterL2._read`.
 
-        RVDataModel.read dispatches lvl==2 to RV2._read, which only knows
-        the EPRV standard L2 extensions and would KeyError on masters-
-        specific ones (INPUT_FILES, *_WLS_COEFFS).
+        `RVDataModel.read` dispatches lvl==2 to `RV2._read`, which only knows
+        the EPRV standard L2 extensions and would KeyError on masters-specific
+        ones (INPUT_FILES, *_WLS_COEFFS).
         """
         self._read(hdul)
 

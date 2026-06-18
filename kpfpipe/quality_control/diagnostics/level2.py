@@ -17,12 +17,19 @@ _NAN_KEYS = {
 
 
 class DiagL2(Diagnostics):
+    """Diagnostics for KPF Level 2 extracted spectra products."""
+
     LEVEL = "L2"
 
     def nan_counts(self):
-        """Per-fiber NaN counts in {CHIP}_{FIBER}_FLUX, summed across chips.
+        """Count NaN pixels per fiber in `{CHIP}_{FIBER}_FLUX`, summed across chips.
 
         Always emits all five keys; fibers with no extracted data report 0.
+
+        Returns
+        -------
+        dict
+            Maps each per-fiber NaN-count keyword to its ``(value, comment)``.
         """
         results = {}
         for fiber, (kw, comment) in _NAN_KEYS.items():
@@ -37,10 +44,17 @@ class DiagL2(Diagnostics):
     nan_counts._diag_name = "nan_counts"
 
     def zero_flux_fraction(self):
-        """Fraction of L2 flux pixels exactly equal to zero across all FLUX exts.
+        """Compute the fraction of L2 flux pixels exactly equal to zero.
 
-        Skipped (no key written) when no L2 data is present — QCL2.DATAPRL2
-        will have already failed in that case.
+        Counts across all `{CHIP}_{FIBER}_FLUX` extensions. Skipped (no key
+        written) when no L2 data is present — `QCL2.DATAPRL2` will have
+        already failed in that case.
+
+        Returns
+        -------
+        dict
+            ``{"ZEROFRAC": (fraction, comment)}``, or empty when no L2 data
+            is present.
         """
         total_zero = 0
         total_pix = 0

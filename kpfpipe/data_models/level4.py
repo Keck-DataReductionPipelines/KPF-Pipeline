@@ -12,12 +12,11 @@ The KPF name → extension mapping is therefore derived from the shared trace ma
 
 Each CCF stores green+red orders concatenated (green first), like TRACE*_FLUX,
 so per-chip access mirrors KPF2. RV tables hold one row per order (no chip
-prefix — slice by ORDER_INDEX instead):
-
-    kpf4.data["SCI2_CCF"]        is kpf4.data["CCF3"]        # True (alias)
-    kpf4.data["GREEN_SCI2_CCF"]  # CCF3[:NORDER_GREEN]  (green orders, a view)
-    kpf4.data["RED_SCI2_CCF"]    # CCF3[NORDER_GREEN:]  (red orders, a view)
-    kpf4.data["SCI2_RV"]         is kpf4.data["RV3"]         # True (alias)
+prefix — slice by ORDER_INDEX instead). As examples, `data["SCI2_CCF"]` is
+`data["CCF3"]` (alias) and `data["SCI2_RV"]` is `data["RV3"]` (alias), while
+`data["GREEN_SCI2_CCF"]` returns `CCF3[:NORDER_GREEN]` (the green orders, a
+view) and `data["RED_SCI2_CCF"]` returns `CCF3[NORDER_GREEN:]` (the red
+orders, a view).
 """
 
 import importlib.resources
@@ -58,13 +57,15 @@ for _, _row in _TRACE_MAP.iterrows():
 
 
 class _KPF4DataDict(AliasedOrderedDict):
-    """Data dict supporting GREEN_/RED_ chip-prefix access for CCF cubes and RV tables.
+    """
+    Data dict supporting GREEN_/RED_ chip-prefix access for CCF cubes and
+    RV tables.
 
-    Accessing d["GREEN_SCI2_CCF"] returns d["SCI2_CCF"][:NORDER_GREEN], a numpy
-    view into the first 35 orders of CCF3 (order axis is axis 0, like the trace
-    flux arrays). d["GREEN_SCI2_RV"] returns the green rows of the SCI2_RV table
-    (rows 0:NORDER_GREEN); RV chip-prefix access is read-only, since each RV
-    table is written whole.
+    Accessing `d["GREEN_SCI2_CCF"]` returns `d["SCI2_CCF"][:NORDER_GREEN]`, a
+    numpy view into the first 35 orders of CCF3 (order axis is axis 0, like the
+    trace flux arrays). `d["GREEN_SCI2_RV"]` returns the green rows of the
+    SCI2_RV table (rows 0:NORDER_GREEN); RV chip-prefix access is read-only,
+    since each RV table is written whole.
     """
 
     def _chip_split(self, key):
@@ -150,17 +151,12 @@ class KPF4(RV4):
 
     Each CCF holds green+red orders concatenated (35 green + 32 red = 67 orders
     total). Per-chip access via the GREEN_/RED_ prefix returns numpy views into
-    the concatenated array. RV tables hold one row per order.
-
-    Alias examples:
-        kpf4.data["SCI2_CCF"]    is kpf4.data["CCF3"]   # True
-        kpf4.data["SCI2_RV"]     is kpf4.data["RV3"]    # True
-
-    Per-chip access:
-        kpf4.data["GREEN_SCI2_CCF"]   # CCF3[:35]  (green orders, a numpy view)
-        kpf4.data["RED_SCI2_CCF"]     # CCF3[35:]  (red orders, a numpy view)
-        kpf4.data["GREEN_SCI2_RV"]    # RV3[:35]   (green rows; read-only)
-        kpf4.data["RED_SCI2_RV"]      # RV3[35:]   (red rows; read-only)
+    the concatenated array. RV tables hold one row per order. As examples of the
+    aliasing, `data["SCI2_CCF"]` is `data["CCF3"]` and `data["SCI2_RV"]` is
+    `data["RV3"]`; per-chip, `data["GREEN_SCI2_CCF"]` returns `CCF3[:35]` (green
+    orders, a numpy view), `data["RED_SCI2_CCF"]` returns `CCF3[35:]` (red
+    orders, a numpy view), and `data["GREEN_SCI2_RV"]` / `data["RED_SCI2_RV"]`
+    return the green / red rows of RV3 (read-only).
     """
 
     def __init__(self):
@@ -205,10 +201,12 @@ class KPF4(RV4):
                         d.register_alias(alias, canonical)
 
     def set_data(self, ext_name, data):
-        """Override to resolve aliases before the base class .keys() check.
+        """
+        Override to resolve aliases before the base class .keys() check.
+
         Chip-prefix keys (e.g. 'GREEN_SCI2_CCF') are routed directly through
-        _KPF4DataDict.__setitem__, which writes into the appropriate slice of
-        the concatenated CCF cube.
+        `_KPF4DataDict.__setitem__`, which writes into the appropriate slice
+        of the concatenated CCF cube.
         """
         if (
             hasattr(self.data, "_chip_split")
@@ -238,11 +236,12 @@ class KPF4(RV4):
         super().set_header(ext_name, header)
 
     def _create_hdul(self):
-        """Override to sync self.receipt into self.data["RECEIPT"] before writing.
+        """
+        Override to sync self.receipt into self.data["RECEIPT"] before writing.
 
-        rvdata's to_fits writes self.data["RECEIPT"] (the default empty table),
-        not self.receipt (the processing history DataFrame). This override syncs
-        them so the full receipt is written to the FITS file.
+        rvdata's `to_fits` writes `self.data["RECEIPT"]` (the default empty
+        table), not `self.receipt` (the processing history DataFrame). This
+        override syncs them so the full receipt is written to the FITS file.
         """
         if self.receipt is not None and not self.receipt.empty:
             self.data["RECEIPT"] = Table.from_pandas(self.receipt)

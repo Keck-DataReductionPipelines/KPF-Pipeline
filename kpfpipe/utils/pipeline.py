@@ -1,3 +1,5 @@
+"""L0 file-list discovery, calibration clustering, and the mini-database."""
+
 import glob
 import os
 import warnings
@@ -36,24 +38,25 @@ def build_mini_database(data_dir, write=True):
 
     Reads the PRIMARY header of each FITS file and extracts a standard
     set of keys used for frame selection (e.g. filtering by OBJECT to
-    identify bias, dark, flat, or thar frames).
+    identify bias, dark, flat, or thar frames). Assumes `data_dir` follows
+    the convention .../{level}/{datecode}/.
 
-    Assumes data_dir follows the convention .../{level}/{datecode}/.
+    Parameters
+    ----------
+    data_dir : str
+        Path to directory containing L0 FITS files.
+    write : bool, default True
+        Whether to write the mini database CSV to `data_dir`.
 
-    Args:
-        data_dir: path to directory containing L0 FITS files.
-
-    Returns:
-        pandas DataFrame with columns:
-            FILENAME -- absolute path to the FITS file
-            TARGNAME -- target name
-            IMTYPE   -- image type
-            OBJECT   -- object identifier (e.g. 'autocal-bias')
-            EXPTIME  -- requested exposure time (s)
-            ELAPSED  -- actual elapsed time (s)
-
-        Rows where a header key is missing are included with NaN for
-        that column and a warning is issued.
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with columns FILENAME (absolute path to the FITS file),
+        TARGNAME (target name), IMTYPE (image type), OBJECT (object
+        identifier, e.g. 'autocal-bias'), EXPTIME (requested exposure time
+        [s]), and ELAPSED (actual elapsed time [s]). Rows where a header key
+        is missing are included with NaN for that column and a warning is
+        issued.
     """
     data_dir = os.path.normpath(data_dir)
     datecode = os.path.basename(data_dir)
@@ -90,36 +93,45 @@ def build_l0_file_lists(
     imtype, *, data_dir=None, mini_db=None, min_file_count=5, cluster_gap_seconds=7200
 ):
     """
-    Return sorted file lists for all calibration clusters of the requested type.
+    Return sorted file lists for all calibration clusters of the requested
+    type.
 
-    Exactly one of data_dir or mini_db must be provided. When data_dir is given,
-    loads the mini database CSV if it exists, otherwise calls build_mini_database
-    to scan headers and write it. When mini_db is given, uses it directly to
-    avoid redundant I/O. Filters by OBJECT, then groups frames into clusters by
-    detecting >cluster_gap_seconds gaps between consecutive timestamps. Every
-    returned cluster must have at least min_file_count files; otherwise raises.
+    Exactly one of `data_dir` or `mini_db` must be provided. When `data_dir`
+    is given, loads the mini database CSV if it exists, otherwise calls
+    `build_mini_database` to scan headers and write it. When `mini_db` is
+    given, uses it directly to avoid redundant I/O. Filters by OBJECT, then
+    groups frames into clusters by detecting gaps larger than
+    `cluster_gap_seconds` between consecutive timestamps. Every returned
+    cluster must have at least `min_file_count` files; otherwise raises.
 
-    Args:
-        imtype:              calibration frame type. One of 'bias', 'dark',
-                             'flat', 'thar'.
-        data_dir:            path to directory containing L0 FITS files.
-        mini_db:             DataFrame returned by build_mini_database.
-        min_file_count:      minimum number of files required per cluster.
-                             Default is 5.
-        cluster_gap_seconds: gap (seconds) between consecutive frames that
-                             splits a calibration sequence into separate
-                             clusters. Default 7200 (2 hours) reliably
-                             distinguishes morning vs. evening KPF calibration
-                             clusters, which are separated by science obs.
+    Parameters
+    ----------
+    imtype : str
+        Calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
+    data_dir : str, optional
+        Path to directory containing L0 FITS files.
+    mini_db : pandas.DataFrame, optional
+        DataFrame returned by `build_mini_database`.
+    min_file_count : int, default 5
+        Minimum number of files required per cluster.
+    cluster_gap_seconds : int, default 7200
+        Gap [s] between consecutive frames that splits a calibration sequence
+        into separate clusters. The default of 7200 (2 hours) reliably
+        distinguishes morning vs. evening KPF calibration clusters, which are
+        separated by science obs.
 
-    Returns:
-        List of sorted file lists, one per cluster.
+    Returns
+    -------
+    list of list of str
+        Sorted file lists, one per cluster.
 
-    Raises:
-        ValueError: if imtype is not a recognized calibration type, if exactly
-                    one of data_dir or mini_db is not provided, if no
-                    calibration frames of the requested type are found, or if
-                    any cluster contains fewer than min_file_count files.
+    Raises
+    ------
+    ValueError
+        If `imtype` is not a recognized calibration type, if exactly one of
+        `data_dir` or `mini_db` is not provided, if no calibration frames of
+        the requested type are found, or if any cluster contains fewer than
+        `min_file_count` files.
     """
     if imtype not in _OBJECT_MAP:
         raise ValueError(
@@ -200,17 +212,25 @@ def build_qlp_dir(obs_id, level, *, data_root):
     """
     Build the QLP output directory for a given observation and level.
 
-    Args:
-        obs_id:    observation ID (e.g. 'KP.20240405.49597.71').
-        level:     data level string, one of 'L0', 'L1', 'L2', 'L4'.
-        data_root: root data directory (e.g. '/data/kpf-next/').
+    Parameters
+    ----------
+    obs_id : str
+        Observation ID (e.g. 'KP.20240405.49597.71').
+    level : str
+        Data level string, one of 'L0', 'L1', 'L2', 'L4'.
+    data_root : str
+        Root data directory (e.g. '/data/kpf-next/').
 
-    Returns:
-        Absolute path: {data_root}/QLP/{datecode}/{obs_id}/{level}/
+    Returns
+    -------
+    str
+        Absolute path {data_root}/QLP/{datecode}/{obs_id}/{level}/.
 
-    Raises:
-        ValueError: if obs_id is not a valid observation ID, or if
-                    data_root is not a non-empty string.
+    Raises
+    ------
+    ValueError
+        If `obs_id` is not a valid observation ID, or if `data_root` is not a
+        non-empty string.
     """
     if not isinstance(data_root, str) or not data_root:
         raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")
@@ -226,26 +246,34 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
     """
     Build a filepath for a KPF data product.
 
-    Args:
-        obs_id:    observation ID (e.g. 'KP.20240405.49597.71'). For master
-                   products this should be the obs_id of the first frame in
-                   the stack.
-        level:     data level string, one of 'L0', 'L1', 'L2', 'L4'.
-        data_root: root data directory (e.g. '/data/kpf/'). When None (the
-                   default), returns the bare filename. Otherwise must be a
-                   non-empty string and a full path is returned.
-        master:    master calibration type, one of 'bias', 'dark', 'flat',
-                   'thar'. If provided, builds a master calibration path.
-                   If omitted, builds a science data path.
+    Parameters
+    ----------
+    obs_id : str
+        Observation ID (e.g. 'KP.20240405.49597.71'). For master products
+        this should be the obs_id of the first frame in the stack.
+    level : str
+        Data level string, one of 'L0', 'L1', 'L2', 'L4'.
+    data_root : str or None, optional
+        Root data directory (e.g. '/data/kpf/'). When None (the default),
+        returns the bare filename. Otherwise must be a non-empty string and a
+        full path is returned.
+    master : str or None, optional
+        Master calibration type, one of 'bias', 'dark', 'flat', 'thar'. If
+        provided, builds a master calibration path. If omitted, builds a
+        science data path.
 
-    Returns:
-        Filepath as a string (full path if data_root is set, bare filename
-        if data_root is None).
+    Returns
+    -------
+    str
+        Filepath (full path if `data_root` is set, bare filename if
+        `data_root` is None).
 
-    Raises:
-        ValueError: if level is unrecognized, if obs_id is not a valid
-                    observation ID, if master type is unrecognized, or if
-                    data_root is not None and not a non-empty string.
+    Raises
+    ------
+    ValueError
+        If `level` is unrecognized, if `obs_id` is not a valid observation
+        ID, if `master` type is unrecognized, or if `data_root` is not None
+        and not a non-empty string.
     """
     if data_root is not None and (not isinstance(data_root, str) or not data_root):
         raise ValueError(

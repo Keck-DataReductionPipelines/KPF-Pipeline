@@ -144,7 +144,7 @@ class SpectralExtraction:
                 f"order trace reference file)"
             )
 
-        # track the trace position
+        # Evaluate the polynomial trace so each column gets its own row center.
         coeffs = np.array(trace[[f"Coeff{i}" for i in range(4)]], dtype=np.float32)
 
         trace_center = polynomial.polyval(np.arange(ncol, dtype=np.float32), coeffs)
@@ -172,14 +172,16 @@ class SpectralExtraction:
         edge_pixel_top = np.array(np.floor(trace_top - box_zeropt), dtype=int)
         edge_pixel_bottom = np.array(np.floor(trace_bottom - box_zeropt), dtype=int)
 
-        # broadcast vectors
+        # Reshape the per-column edge vectors so they broadcast against the box
+        # rows when building the weight array below.
         _row = np.arange(box_height)[:, None]
         _edge_pixel_top = edge_pixel_top[None, :]
         _edge_pixel_bottom = edge_pixel_bottom[None, :]
         _trace_top = trace_top[None, :]
         _trace_bottom = trace_bottom[None, :]
 
-        # make data, variance, and weight arrays
+        # Slice the bounding box out of the full detector for data and variance;
+        # the weight array is then filled per-pixel for fractional edge coverage.
         D = data_image[box_zeropt : box_zeropt + box_height]
         V = var_image[box_zeropt : box_zeropt + box_height]
 

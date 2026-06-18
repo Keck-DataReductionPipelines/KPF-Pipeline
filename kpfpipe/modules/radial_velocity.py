@@ -228,7 +228,8 @@ class RadialVelocity:
         mask_name = self._resolve_illumination_source(chip, fiber)["mask_name"]
         if mask_name == "thar":
             df = pd.read_csv(f"{REPO_ROOT}/reference/thar_line_list.csv")
-            # unique: lines recur across overlapping orders, would double-count
+            # Deduplicate: lines recur across overlapping orders and would
+            # otherwise be double-counted.
             centers = np.unique(df["WAVE"].to_numpy(dtype=float))
             weights = np.ones(centers.size)
         else:

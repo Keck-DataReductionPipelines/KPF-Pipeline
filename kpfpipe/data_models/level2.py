@@ -53,14 +53,16 @@ for _ext in _ANCILLARY_PER_ORDER:
 
 
 class _KPF2DataDict(AliasedOrderedDict):
-    """Data dict that supports GREEN_/RED_ chip-prefix access.
+    """
+    Data dict that supports GREEN_/RED_ chip-prefix access.
 
-    Accessing d["GREEN_SCI2_FLUX"] returns d["SCI2_FLUX"][:NORDER_GREEN],
+    Accessing `d["GREEN_SCI2_FLUX"]` returns `d["SCI2_FLUX"][:NORDER_GREEN]`,
     a numpy view into the first 35 orders of TRACE3_FLUX.
     """
 
     def _chip_split(self, key):
-        """If key is a chip-prefix pattern, return (fiber_alias, chip).
+        """
+        If key is a chip-prefix pattern, return (fiber_alias, chip).
 
         Returns None if key is not a chip-prefix pattern.
         """
@@ -145,16 +147,12 @@ class KPF2(RV2):
 
     Each trace contains green+red orders concatenated (35 green + 32 red
     = 67 orders total). Per-chip access via GREEN_/RED_ prefix returns
-    numpy views into the concatenated array.
-
-    Alias examples:
-        kpf2.data["SCI2_FLUX"]         is kpf2.data["TRACE3_FLUX"]       # True
-        kpf2.data["CAL_WAVE"]          is kpf2.data["TRACE1_WAVE"]       # True
-        kpf2.data["CA_HK"]             is kpf2.data["ANCILLARY_SPECTRUM"] # True
-
-    Per-chip access (returns numpy views):
-        kpf2.data["GREEN_SCI2_FLUX"]   # TRACE3_FLUX[:35]  (green orders)
-        kpf2.data["RED_SCI2_FLUX"]     # TRACE3_FLUX[35:]  (red orders)
+    numpy views into the concatenated array. As examples of the aliasing,
+    `data["SCI2_FLUX"]` is `data["TRACE3_FLUX"]`, `data["CAL_WAVE"]` is
+    `data["TRACE1_WAVE"]`, and `data["CA_HK"]` is
+    `data["ANCILLARY_SPECTRUM"]`; per-chip, `data["GREEN_SCI2_FLUX"]`
+    returns `TRACE3_FLUX[:35]` (the green orders) and
+    `data["RED_SCI2_FLUX"]` returns `TRACE3_FLUX[35:]` (the red orders).
     """
 
     def __init__(self):
@@ -207,10 +205,12 @@ class KPF2(RV2):
                     self.data.register_alias(alias, canonical)
 
     def set_data(self, ext_name, data):
-        """Override to resolve aliases before the base class .keys() check.
+        """
+        Override to resolve aliases before the base class .keys() check.
+
         Chip-prefix keys (e.g. 'GREEN_SCI2_FLUX') are routed directly through
-        _KPF2DataDict.__setitem__, which writes into the appropriate slice of
-        the concatenated trace array.
+        `_KPF2DataDict.__setitem__`, which writes into the appropriate slice
+        of the concatenated trace array.
         """
         if (
             hasattr(self.data, "_chip_split")
@@ -234,11 +234,12 @@ class KPF2(RV2):
             self.receipt = data.to_pandas()
 
     def _create_hdul(self):
-        """Override to sync self.receipt into self.data["RECEIPT"] before writing.
+        """
+        Override to sync self.receipt into self.data["RECEIPT"] before writing.
 
-        rvdata's to_fits writes self.data["RECEIPT"] (the default empty table),
-        not self.receipt (the processing history DataFrame). This override syncs
-        them so the full receipt is written to the FITS file.
+        rvdata's `to_fits` writes `self.data["RECEIPT"]` (the default empty
+        table), not `self.receipt` (the processing history DataFrame). This
+        override syncs them so the full receipt is written to the FITS file.
         """
         if self.receipt is not None and not self.receipt.empty:
             self.data["RECEIPT"] = Table.from_pandas(self.receipt)
@@ -251,7 +252,8 @@ class KPF2(RV2):
         super().set_header(ext_name, header)
 
     def to_kpf4(self):
-        """Create a KPF4 scaffold from this KPF2, carrying over headers and receipt.
+        """
+        Create a KPF4 scaffold from this KPF2, carrying over headers and receipt.
 
         Returns a KPF4 with PRIMARY header keywords forwarded from L2,
         and the receipt chain preserved. RV and CCF data extensions are

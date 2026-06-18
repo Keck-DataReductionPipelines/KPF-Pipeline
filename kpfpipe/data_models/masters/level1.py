@@ -41,9 +41,8 @@ class KPFMasterL1(KPFMasterModel, KPF1):
         GREEN_MASK  -- bad pixel mask, green chip (1=good, 0=bad)
         RED_IMG, RED_SNR, RED_MASK -- same for red chip
 
-    Usage:
-        m1 = KPFMasterL1()
-        m1 = KPFMasterL1.from_fits("/path/to/master_bias.fits")
+    Construct empty with `KPFMasterL1()`, or load a stacked product from
+    disk with `KPFMasterL1.from_fits(path)`.
     """
 
     _DATALVL = "ML1"

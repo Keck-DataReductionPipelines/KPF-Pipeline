@@ -534,9 +534,8 @@ documented, intentional ways — follow *its* conventions when adding masters co
 
 - **NumPy/numpydoc is the docstring standard.** Opening `"""` on its own line, summary
   on the next line, `Parameters`/`Returns`/`Raises`/`Notes` sections with the
-  `name : type` form. Wrap referenced identifiers in backticks. *(A handful of files use
-  Google `Args:` — `utils/kpf.py`, `utils/pipeline.py`, `quicklook/level0.py/level1.py`;
-  new code should use NumPy.)*
+  `name : type` form. Wrap referenced identifiers in backticks. The codebase is uniformly
+  numpydoc — no Google `Args:` style remains.
   ```python
   def compute_doppler_factor(v):
       """
@@ -596,9 +595,7 @@ the dominant variant of the file/area you're editing**, and don't churn unrelate
    (150 vs 600) and axis-fontsize (14 vs 18) drift between L0 and L1; the
    `(value, comment)`-unwrap helper duplicated ~4×.
 2. **Masters** — the config-resolution block is duplicated 5× (could be a base helper); the
-   `0.2` load-failure threshold is an unnamed magic number with a stray `f""`; some
-   keyword-arg call sites have spaces around `=`; `ord` shadows a builtin in
-   `calculate_wls_coeffs`.
+   `0.2` load-failure threshold is an unnamed magic number.
 3. **Tests** — no `conftest.py` and synthetic-FITS construction duplicated widely; a few
    `test_data_models.py` fixtures use unseeded `np.random.random`; some module docstrings
    claim "skip if no testdata" but no such skip exists (data is vendored).

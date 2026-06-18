@@ -1,3 +1,5 @@
+"""Statistical helpers: outlier flagging, robust line fits, bad-pixel interpolation."""
+
 import numpy as np
 from astropy.stats import mad_std
 from scipy.interpolate import RegularGridInterpolator
@@ -122,9 +124,9 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
 
     data_interp = data.copy()
 
-    # local convolution-based method (assumes isolated bad pixels).
-    # Cast kernel and weight mask to the input dtype so scipy.convolve does
-    # not promote float32 image data to float64 in its intermediates.
+    # The local convolution-based method assumes isolated bad pixels. Cast the
+    # kernel and weight mask to the input dtype so `scipy.convolve` does not
+    # promote float32 image data to float64 in its intermediates.
     if method == "local":
         kernel = np.array([[1, 2, 1], [2, 0, 2], [1, 2, 1]], dtype=data.dtype) / 12.0
 
@@ -140,7 +142,7 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
                 _, indices = distance_transform_edt(remaining, return_indices=True)
                 data_interp[remaining] = data_interp[tuple(indices[:, remaining])]
 
-    # global linear interpolation (robust to clumps of bad pixels)
+    # Global linear interpolation is robust to clumps of bad pixels.
     elif method == "global":
         ny, nx = data.shape
         y = np.arange(ny)

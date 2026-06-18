@@ -1,3 +1,5 @@
+"""ConfigHandler: load TOML config files with optional section overrides."""
+
 import tomllib
 from pathlib import Path
 

@@ -22,9 +22,12 @@ class PlotL1:
     is imported from ImageAssembly so there is one source of truth for which
     FITS keywords hold which amplifier's read noise.
 
-    Args:
-        l1_obj: KPF1 data object (post-ImageAssembly).
-        output_dir: Directory to save PNG files. None = return Figure only.
+    Parameters
+    ----------
+    l1_obj : KPF1
+        KPF1 data object (post-ImageAssembly).
+    output_dir : str or None
+        Directory to save PNG files. None returns the Figure only.
     """
 
     _PLOT_METHODS = ("image",)
@@ -56,11 +59,15 @@ class PlotL1:
 
         Replicates v2.12 plot_2D_image for the basic science-frame case.
 
-        Args:
-            chip: 'green' or 'red'.
+        Parameters
+        ----------
+        chip : str
+            'green' or 'red'.
 
-        Returns:
-            matplotlib.Figure
+        Returns
+        -------
+        matplotlib.Figure
+            The assembled-FFI figure.
         """
         chip_upper = chip.upper()
         ext = f"{chip_upper}_CCD"
@@ -178,17 +185,27 @@ class PlotL1:
 
     def run(self, which):
         """
-        Generate the requested plot(s) for every chip that has data,
-        saving each to `output_dir` and closing the matplotlib figure
-        so callers don't accumulate them.
+        Generate the requested plot(s) for every chip that has data.
 
-        Args:
-            which: 'all' to run every implemented plot, or the name of a
-                   single plot method (one of self._PLOT_METHODS).
+        Saves each to `output_dir` and closes the matplotlib figure so
+        callers don't accumulate them.
 
-        Returns:
-            dict mapping `{method_name}_{chip}` to matplotlib.Figure
-            (closed; useful for tests/introspection).
+        Parameters
+        ----------
+        which : str
+            'all' to run every implemented plot, or the name of a single
+            plot method (one of `self._PLOT_METHODS`).
+
+        Returns
+        -------
+        dict
+            Maps `{method_name}_{chip}` to its (closed) matplotlib.Figure;
+            useful for tests and introspection.
+
+        Raises
+        ------
+        ValueError
+            If `which` is neither 'all' nor a known plot method name.
         """
         if which == "all":
             names = self._PLOT_METHODS

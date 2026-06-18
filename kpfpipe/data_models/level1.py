@@ -39,11 +39,9 @@ class KPF1(KPFDataModel):
     pass-through extensions from L0 (CA_HK, exposure meter, telemetry).
 
     Also used for master calibration products (bias, dark, flat).
-
-    Usage:
-        l1 = KPF1.from_fits("/path/to/kpf_L1_20240113T102656.fits")
-        l1.data["GREEN_CCD"]  # numpy array, 4080x4080
-        l1.data["RED_CCD"]    # numpy array, 4080x4080
+    Construct from a FITS file with `KPF1.from_fits(path)`, then read the
+    assembled 4080x4080 frames from `data` (e.g. `data["GREEN_CCD"]`,
+    `data["RED_CCD"]`).
     """
 
     _DATALVL = "L1"
@@ -59,10 +57,11 @@ class KPF1(KPFDataModel):
                 self.create_extension(row["Name"], row["DataType"])
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """Route L1 FITS reads to KPF1._read.
+        """
+        Route L1 FITS reads to `KPF1._read`.
 
-        RVDataModel.read has no lvl==1 dispatch branch, so the inherited
-        from_fits would never call into _read without this override.
+        `RVDataModel.read` has no lvl==1 dispatch branch, so the inherited
+        `from_fits` would never call into `_read` without this override.
         """
         self._read(hdul)
         if self.filename is not None:
@@ -129,7 +128,8 @@ class KPF1(KPFDataModel):
     def generate_standard_filename(self):
         """
         KPF L1 filenames follow kpf_L1_YYYYMMDDThhmmss.fits convention.
-        Uses DATE-OBS from PRIMARY header.
+
+        Uses DATE-OBS from the PRIMARY header.
         """
         if "PRIMARY" in self.headers:
             date_obs = self.headers["PRIMARY"].get("DATE-OBS")
@@ -179,7 +179,8 @@ class KPF1(KPFDataModel):
     }
 
     def to_kpf2(self):
-        """Create a KPF2 scaffold from this L1, carrying over headers and
+        """
+        Create a KPF2 scaffold from this L1, carrying over headers and
         pass-through extensions.
 
         Returns a KPF2 with PRIMARY header keywords mapped from KPF-native
