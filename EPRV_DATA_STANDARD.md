@@ -123,6 +123,11 @@ optional** (supports non-CCF methods).
 L4 PRIMARY gains: `BJDTDB`, `RV`, `RVERR`, `BERV`, `RVMETHOD`, `SYSVEL`.
 `RV2`/`CCF2`/… replicate per trace.
 
+> **vNext note:** the `RV1` required column is listed above as `BC_VELOCITY` (the
+> standard's develop docs), but the pinned RVData (§8) and our code use `BERV`. The
+> code correctly emits `BERV`; this is the same doc-vs-pin drift as the
+> `receipt_add_entry` signature note in §7. Reconcile when bumping the pin.
+
 ---
 
 ## 6. PRIMARY header keywords (KPF-relevant subset)
@@ -213,6 +218,11 @@ translator; vNext may differ by design per the charter — confirm each is inten
 5. **Ca H&K naming.** We alias `CA_HK → ANCILLARY_SPECTRUM` (the standard's home for CaHK,
    so compliant); the KPF doc page names `CA_HK_SCI_WAVE`/`CA_HK_SCI_FLUX`. Verify the
    on-disk extension name we emit.
+6. **`ANCILLARY_SPECTRUM` HDU type.** §4 defines it as an `Image`, but vNext creates it as
+   an empty `BinTableHDU` placeholder (`data_models/level2.py`). Ca H&K extraction is still
+   WIP and existing master/L2 products (including the truth dataset) encode it as a
+   `BinTableHDU`, so flipping the model type breaks reading them back. Switch to `ImageHDU`
+   when Ca H&K is built and products are regenerated.
 
 **Instrument eras (`INSTERA`)**: the KPF era table is vendored at
 [`reference/kpf_instrument_eras.csv`](reference/kpf_instrument_eras.csv) (era tag, UT
