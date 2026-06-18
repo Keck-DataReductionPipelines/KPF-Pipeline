@@ -6,14 +6,11 @@ import warnings
 
 import numpy as np
 
-from kpfpipe import DEFAULTS, DETECTOR
+from kpfpipe import DEFAULTS
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
-
-NROW = DETECTOR["ccd"]["nrow"]
-NCOL = DETECTOR["ccd"]["ncol"]
 
 # TODO: throw out first frame in stack?
 # TODO: use start, middle, end of stack for initial datacube
@@ -202,12 +199,15 @@ class BaseMasterModule:
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
+        nrow = self.ccd["nrow"]
+        ncol = self.ccd["ncol"]
+
         data_cube = {}
         exptime = np.zeros(nframe,dtype=np.float32)
 
         for chip in self.chips:
-            data_cube[f"{chip}_CCD"] = np.zeros((nframe,NROW,NCOL),dtype=np.float32)
-            data_cube[f"{chip}_VAR"] = np.zeros((nframe,NROW,NCOL),dtype=np.float32)
+            data_cube[f"{chip}_CCD"] = np.zeros((nframe,nrow,ncol),dtype=np.float32)
+            data_cube[f"{chip}_VAR"] = np.zeros((nframe,nrow,ncol),dtype=np.float32)
 
         i = 0
         failure = 0
@@ -350,15 +350,18 @@ class BaseMasterModule:
         exptime_total = 0.0
         zero_exptime = exptime_direct == 0
 
+        nrow = self.ccd["nrow"]
+        ncol = self.ccd["ncol"]
+
         for chip in self.chips:
             for suffix in ["CCD", "VAR"]:
                 ext = f"{chip}_{suffix}"
 
                 exact_stats[ext] = {}
-                exact_stats[ext]["nframe"] = np.zeros((NROW,NCOL),dtype=np.int32)
-                exact_stats[ext]["total_sum"] = np.zeros((NROW,NCOL),dtype=np.float32)
-                exact_stats[ext]["rate_mean"] = np.zeros((NROW,NCOL),dtype=np.float32)
-                exact_stats[ext]["rate_M2"] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext]["nframe"] = np.zeros((nrow,ncol),dtype=np.int32)
+                exact_stats[ext]["total_sum"] = np.zeros((nrow,ncol),dtype=np.float32)
+                exact_stats[ext]["rate_mean"] = np.zeros((nrow,ncol),dtype=np.float32)
+                exact_stats[ext]["rate_M2"] = np.zeros((nrow,ncol),dtype=np.float32)
 
                 approx_mean = approx_stats[ext]["rate_mean"]
                 approx_rms = approx_stats[ext]["rate_rms"]
@@ -367,7 +370,7 @@ class BaseMasterModule:
                 approx_stats[ext]["rate_upper"] = approx_mean + approx_rms * sigma
 
         failure = 0
-        valid = np.ones((NROW, NCOL), dtype=bool)
+        valid = np.ones((nrow, ncol), dtype=bool)
 
         for fn in l0_file_list:
             l1_obj, success = self._load_frame(fn, verbose=verbose)

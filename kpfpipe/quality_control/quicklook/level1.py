@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import numpy as np
 import matplotlib.pyplot as plt
 
-from kpfpipe.modules.image_assembly import _RN_KEYS
+from kpfpipe.modules.image_assembly import RN_KEYS
 
 
 def _unwrap(val):
@@ -44,7 +44,7 @@ class PlotL1:
         rnng_values = []
         for i in range(1, 5):
             channel_ext = f"{chip.upper()}_AMP{i}"
-            rn_key, rnng_key = _RN_KEYS[channel_ext]
+            rn_key, rnng_key = RN_KEYS[channel_ext]
             if rn_key in primary and rnng_key in primary:
                 rn_values.append(float(_unwrap(primary[rn_key])))
                 rnng_values.append(float(_unwrap(primary[rnng_key])))

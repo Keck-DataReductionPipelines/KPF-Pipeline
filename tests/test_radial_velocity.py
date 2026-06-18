@@ -10,13 +10,15 @@ a narrow velocity grid for speed.
 
 import numpy as np
 import pytest
+from astropy.constants import c
 from astropy.io import fits
 
 from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN, NORDER_RED
 from kpfpipe.data_models.level4 import KPF4
-from kpfpipe.modules.radial_velocity import SPEED_OF_LIGHT_KMS, RadialVelocity
+from kpfpipe.modules.radial_velocity import RadialVelocity
 
 NORDER = NORDER_GREEN + NORDER_RED
+SPEED_OF_LIGHT_KMS = np.float64(c.to("km/s").value)
 _FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]  # all orderlets
 
 # Narrow CCF grid for fast integration tests; wide enough for the second-pass

@@ -41,26 +41,15 @@ from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter, median_filter
 from scipy.special import erfcinv
 
-from kpfpipe import DEFAULTS, DETECTOR
+from kpfpipe import DEFAULTS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import strictly_increasing
-
-NORDER_GREEN = DETECTOR["norder"]["GREEN"]
-NORDER_RED   = DETECTOR["norder"]["RED"]
-NORDER       = NORDER_GREEN + NORDER_RED
 
 _DEFAULTS = {**DEFAULTS,
     "use_gaia_astrometry": True,
     "use_wmko_fallback": False,
 }
-
-# WMKO site coordinates
-KECK_LOCATION = EarthLocation(
-    lat=19.8260 * u.deg,
-    lon=-155.474719 * u.deg,
-    height=4145.0 * u.m,
-)
 
 
 class BarycentricCorrection:
@@ -83,6 +72,13 @@ class BarycentricCorrection:
         Module configuration. Recognized keys: use_gaia_astrometry,
         use_wmko_fallback.
     """
+
+    # WMKO site coordinates
+    KECK_LOCATION = EarthLocation(
+        lat=19.8260 * u.deg,
+        lon=-155.474719 * u.deg,
+        height=4145.0 * u.m,
+    )
 
     def __init__(self, kpf2_obj, config=None):
         self.kpf2_obj = kpf2_obj
@@ -539,15 +535,17 @@ class BarycentricCorrection:
 
         # Weight each order by its SCI2 brightness (90th percentile, robust to
         # cosmics); NaN/failed orders get zero weight, uniform if SCI2_FLUX absent.
+        norder_green = self.norder["GREEN"]
+        norder = norder_green + self.norder["RED"]
         flux = self.kpf2_obj.data["SCI2_FLUX"]
         if flux is None or np.size(flux) == 0:
-            weights = np.ones(NORDER)
+            weights = np.ones(norder)
         else:
             weights = np.nanpercentile(np.asarray(flux, dtype=float), 90, axis=1)
         weights = np.nan_to_num(weights, nan=0.0)
 
-        green = slice(0, NORDER_GREEN)
-        red   = slice(NORDER_GREEN, NORDER)
+        green = slice(0, norder_green)
+        red   = slice(norder_green, norder)
         if weights[green].sum() <= 0 or weights[red].sum() <= 0:
             raise ValueError("all SCI2 order weights are zero for a CCD; "
                              "cannot compute per-CCD midpoint")
@@ -600,7 +598,7 @@ class BarycentricCorrection:
         rv_mps = float(inst.get("TARGRADV", 0.0) or 0.0) * 1000.0
 
         bc_vel_mps, bjd_tdb = self._compute_barycorr(
-            skycoord, t_fwm, KECK_LOCATION, rv_mps=rv_mps,
+            skycoord, t_fwm, self.KECK_LOCATION, rv_mps=rv_mps,
         )
         bary_kms = bc_vel_mps / 1000.0
         bary_z = np.asarray(compute_redshift(bc_vel_mps * u.m / u.s))

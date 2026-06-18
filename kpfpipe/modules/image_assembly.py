@@ -13,7 +13,11 @@ _DEFAULTS = {**DEFAULTS,
     "readnoise_sigma": 10.0,
 }
 
-_RN_KEYS = {
+# Public by design (special case): per-amplifier read-noise header keywords.
+# ImageAssembly is the first module to touch raw L0 and owns detector read-noise
+# metadata, so QC/Quicklook import this table rather than re-deriving it. This is
+# the one sanctioned public constant in kpfpipe/modules/ (see style guide §1).
+RN_KEYS = {
     "GREEN_AMP1": ["RNGREEN1", "RNNGGR1"],
     "GREEN_AMP2": ["RNGREEN2", "RNNGGR2"],
     "GREEN_AMP3": ["RNGREEN3", "RNNGGR3"],
@@ -198,7 +202,7 @@ class ImageAssembly:
         3. Overscan subtraction method (OSCANMET)
         """
         for channel_ext, rn in self.readnoise.items():
-            key_read, key_rnng = _RN_KEYS[channel_ext]
+            key_read, key_rnng = RN_KEYS[channel_ext]
             l1_obj.headers["PRIMARY"][key_read] = (
                 round(float(rn), 4), f"Read noise {channel_ext} [e-]"
             )

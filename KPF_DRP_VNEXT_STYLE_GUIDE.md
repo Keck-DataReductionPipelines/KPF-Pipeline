@@ -28,8 +28,8 @@ Operational/technical guidance (environment, commands, architecture) lives in
 | Predicates | `is_*`, return `bool` | `is_obs_id`, `is_timestamp` |
 | Converters | `<x>_to_<y>` | `air_to_vac`, `utc_to_hst`, `kpf_timestamp_to_eprv_timestamp` |
 | Private helpers | leading underscore | `_get_overscan_pixels`, `_resolve_illumination_source` |
-| Module constants | `UPPER_SNAKE` | `KECK_LOCATION`, `NORDER`, `SPEED_OF_LIGHT_KMS` |
-| Module-private constants | leading underscore | `_RN_KEYS`, `_DEFAULTS`, `_OBS_ID_PATTERN` |
+| Public constants | `UPPER_SNAKE`; allowed in `data_models/` and the package root, **never in `modules/`** | `REPO_ROOT`, `DEFAULTS`, `DETECTOR`, `L0_EXTENSIONS` |
+| Module constants | `UPPER_SNAKE` with a leading underscore — modules export **no** importable constants (one documented exception: `ImageAssembly.RN_KEYS`) | `_DEFAULTS`, `_LEVEL_BY_CAL_TYPE`, `_OBS_ID_PATTERN` |
 | Variables | `snake_case` | `datecode`, `file_list`, `oscan_srl` |
 
 - **One public class per module** is universal for the pipeline modules. The class name
@@ -39,11 +39,19 @@ Operational/technical guidance (environment, commands, architecture) lives in
   This is sanctioned *only* in numerical code and *only* when the symbols are documented
   in the surrounding docstring/comments. Use descriptive names everywhere else
   (I/O, path handling, orchestration).
-- **Module-private constants take a leading underscore** (`_DEFAULTS`, `_RN_KEYS`);
-  constants intended for export do not (`NORDER`, `KECK_LOCATION`). Be deliberate about
-  which you mean. *(Minor existing inconsistency: a few masters constants like
-  `NROW`/`NCOL` are public though module-internal — prefer the underscore for new
-  module-private constants.)*
+- **Modules define no public (importable) constants.** Every module-level constant in
+  `kpfpipe/modules/` is an implementation detail and takes a leading underscore
+  (`_DEFAULTS`, lookup/dispatch tables, internal file paths). Values other code needs are
+  *not* re-declared as module constants: pull detector geometry from `DETECTOR`/`detector.toml`
+  (already exposed on every instance as `self.norder`, `self.ccd`, …), take physical
+  constants from `astropy`, and attach fixed objects (e.g. a site `EarthLocation`) to the
+  class as a class attribute. Public `UPPER_SNAKE` constants are fine in `data_models/` and
+  the package root, where importing them is intended.
+- **One sanctioned exception:** `ImageAssembly.RN_KEYS` (the per-amplifier read-noise
+  header-keyword table) is public. `ImageAssembly` is the first module to touch raw L0 and
+  owns detector read-noise metadata that QC/Quicklook import rather than re-derive; the
+  exception is documented at its definition. Don't add new public module constants on this
+  precedent without the same justification.
 - **FITS keyword names**: ≤ 8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`,
   `RNINRNG`, `ISGOOD`). Encode the level into the keyword when needed for uniqueness
   (`DATAPRL0`, `L2NANOK`).
@@ -71,8 +79,8 @@ import pandas as pd
 from kpfpipe import DEFAULTS, DETECTOR       # 3. first-party (absolute only)
 from kpfpipe.utils.config import ConfigHandler
 
-_DEFAULTS = {**DEFAULTS, "module_param": ...}   # module constants: _DEFAULTS first
-NORDER_GREEN = DETECTOR["norder"]["GREEN"]      # then derived constants / lookup tables
+_DEFAULTS = {**DEFAULTS, "module_param": ...}   # module constants are private (leading _)
+_LOOKUP_TABLE = {...}                           # internal maps/paths only — no public constants
 
 
 class StageName:
@@ -138,9 +146,9 @@ class StageName:
 - **Standard aliases**: `import numpy as np`, `import pandas as pd`,
   `import astropy.units as u`, `import matplotlib.pyplot as plt`.
 - **Import shared helpers, don't duplicate them.** Detector-geometry helpers
-  (`count_amplifiers`, `orient_channels`, `_RN_KEYS`) are owned by `ImageAssembly`;
-  other layers import them. Reusable stats/validation live in `kpfpipe/utils/` and are
-  imported, never re-implemented (the project's **utils-first** rule).
+  (`count_amplifiers`, `orient_channels`) and the public `RN_KEYS` read-noise table are
+  owned by `ImageAssembly`; other layers import them. Reusable stats/validation live in
+  `kpfpipe/utils/` and are imported, never re-implemented (the project's **utils-first** rule).
 - **Deferred (in-function) imports are acceptable and used deliberately** in tests and
   occasionally to break import-cost/cycles — when you do it, add a one-line comment
   saying why.
@@ -182,8 +190,11 @@ class StageName:
   self._line_mask = {}       # line mask, set by _build_line_mask()
   self.ml1_obj = None        # populated by subclass make_master_l1()
   ```
-- **Constants come from `kpfpipe.constants` / `DETECTOR` / `detector.toml`**, pulled into
-  module-level constants once (`NORDER_GREEN = DETECTOR["norder"]["GREEN"]`). Never
+- **Detector geometry comes from `DETECTOR` (sourced from `detector.toml`), consumed on
+  the instance** — every module gets `self.norder` (`{GREEN, RED}` dict), `self.ccd`,
+  `self.chips`, `self.fibers` via the `_DEFAULTS` config loop. Do **not** re-declare them as
+  module-level constants; use `self.norder["GREEN"]` etc., with a method-local handle for a
+  verbose derived value (`norder = self.norder["GREEN"] + self.norder["RED"]`). Never
   hardcode order/column counts.
 - Use `@staticmethod` for pure functions that touch no instance state.
 - **Dispatch-by-name idiom** for pluggable methods:
@@ -535,7 +546,7 @@ documented, intentional ways — follow *its* conventions when adding masters co
 
 ---
 
-## 14. Cross-cutting open questions for the team
+### Open Inconsistencies
 
 These are the genuine inconsistencies the survey surfaced where the codebase has no clear
 winner or contradicts a stated tool/command. Worth a deliberate project decision:
@@ -552,6 +563,13 @@ churn unrelated files to "fix" style.
 
 Inconsistencies closed during the style-guide convergence work (newest first):
 
+- **Public module-level constants → removed.** `kpfpipe/modules/` no longer defines public
+  constants. Detector geometry is consumed from `DETECTOR` via `self.norder`/`self.ccd`
+  (with method-local handles for derived totals), physical constants come from `astropy`,
+  and `KECK_LOCATION` is now a `BarycentricCorrection` class attribute. The sole intentional
+  exception, `ImageAssembly.RN_KEYS`, was made public (was `_RN_KEYS`) and documented as a
+  special case. Touched `radial_velocity`, `barycentric_correction`, `masters/base`,
+  `image_assembly` + 2 QC importers + 2 tests; 750/750 pass. See §1/§3/§4.
 - **Masters config sections → accepted as-is.** The bare `[BIAS]`/`[DARK]`/`[FLAT]`/`[WLS]`
   sections (no `MODULE_` prefix) are a deliberate exception, not a defect. No code change;
   documented in §11.

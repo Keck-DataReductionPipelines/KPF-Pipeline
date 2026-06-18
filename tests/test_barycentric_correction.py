@@ -15,14 +15,12 @@ from astropy.time import Time
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
-from kpfpipe.modules.barycentric_correction import (
-    BarycentricCorrection,
-    NORDER_GREEN,
-    NORDER_RED,
-    NORDER,
-)
+from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 from kpfpipe.utils.validation import strictly_increasing
 
+NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED = DETECTOR["norder"]["RED"]
+NORDER = NORDER_GREEN + NORDER_RED
 NCOL = 50   # reduced column count for speed
 
 

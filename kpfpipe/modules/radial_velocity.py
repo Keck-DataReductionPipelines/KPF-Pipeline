@@ -27,17 +27,11 @@ from astropy.constants import c
 from astropy.io import fits
 from astropy.stats import mad_std
 
-from kpfpipe import DEFAULTS, DETECTOR, REPO_ROOT
+from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 from kpfpipe.utils.validation import strictly_increasing
-
-SPEED_OF_LIGHT_KMS = np.float64(c.to("km/s").value)  # km/s
-
-NORDER_GREEN = DETECTOR["norder"]["GREEN"]
-NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -467,8 +461,9 @@ class RadialVelocity:
 
         # nan-aware: in the combined-CCF path `wave` is the full, unclipped order
         # row, which may carry NaN edge pixels; plain np.median would NaN the error.
+        speed_of_light_kms = c.to("km/s").value
         vel_span_per_pixel = (
-            SPEED_OF_LIGHT_KMS
+            speed_of_light_kms
             * np.nanmedian(np.abs(np.diff(wave)))
             / np.nanmedian(wave)
         )
@@ -922,6 +917,9 @@ class RadialVelocity:
         chips = [c.upper() for c in chips]
         fibers = [f.upper() for f in fibers]
 
+        norder_green = self.norder["GREEN"]
+        norder = norder_green + self.norder["RED"]
+
         l4_obj = self.l2_obj.to_kpf4()
 
         # Per-order barycentric metadata, shared by every orderlet's RV table.
@@ -930,8 +928,8 @@ class RadialVelocity:
 
         self._results = {}
         for fiber in fibers:
-            rv = np.full(NORDER, np.nan)
-            rv_err = np.full(NORDER, np.nan)
+            rv = np.full(norder, np.nan)
+            rv_err = np.full(norder, np.nan)
 
             # Dispatch the mask/barycorr/grid-center from the fiber's illumination
             # source; 'none' (unilluminated) is skipped with NaN RVs and no
@@ -961,9 +959,9 @@ class RadialVelocity:
                     chip, fiber, rv_window, min_npts
                 )
                 rows = (
-                    slice(0, NORDER_GREEN)
+                    slice(0, norder_green)
                     if chip == "GREEN"
-                    else slice(NORDER_GREEN, NORDER)
+                    else slice(norder_green, norder)
                 )
                 rv[rows] = result["rv"]
                 rv_err[rows] = result["rv_err"]
@@ -993,7 +991,7 @@ class RadialVelocity:
                 f"{fiber}_RV",
                 pd.DataFrame(
                     {
-                        "ORDER_INDEX": np.arange(NORDER, dtype=np.int64),
+                        "ORDER_INDEX": np.arange(norder, dtype=np.int64),
                         "BJD_TDB": bjd_tdb,
                         "BERV": berv,
                         "WAVE_START": np.nanmin(wave, axis=1),
@@ -1201,9 +1199,11 @@ class RadialVelocity:
             f"{'CCD_RV [km/s]':>16s}{'CCD_ERV [m/s]':>16s}{'RV_RMS [m/s]':>16s}"
         )
         print("  " + "-" * 82)
+        norder_green = self.norder["GREEN"]
+        norder = norder_green + self.norder["RED"]
         for chip, rows in (
-            ("GREEN", slice(0, NORDER_GREEN)),
-            ("RED", slice(NORDER_GREEN, NORDER)),
+            ("GREEN", slice(0, norder_green)),
+            ("RED", slice(norder_green, norder)),
         ):
             for fiber in fiber_order:
                 res = self._results[fiber]

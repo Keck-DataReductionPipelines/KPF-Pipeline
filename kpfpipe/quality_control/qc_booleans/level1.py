@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from kpfpipe.modules.image_assembly import _RN_KEYS
+from kpfpipe.modules.image_assembly import RN_KEYS
 from kpfpipe.quality_control.qc_booleans.base import QC
 
 _RN_LO,  _RN_HI   = 2.0,  6.0
@@ -29,7 +29,7 @@ class QCL1(QC):
         present at all (read noise should always be recorded)."""
         hdr = self.kpf.headers["PRIMARY"]
         found = False
-        for keys in _RN_KEYS.values():
+        for keys in RN_KEYS.values():
             v = _hdr_float(hdr, keys[idx])
             if v is None:
                 continue
