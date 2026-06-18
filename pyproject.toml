@@ -53,7 +53,11 @@ include = ["kpfpipe*", "tools*"]
 # Enforced via the pre-commit hook; see .pre-commit-config.yaml and style guide §8.
 [tool.ruff]
 line-length = 88
-target-version = "py314"
+# Pinned below the runtime (3.14.3) on purpose: Pylance/Pyright doesn't yet parse
+# PEP 758's unparenthesized `except A, B:`, and at py314 `ruff format` strips the
+# parens to that form. py313 keeps the formatter on `except (A, B):` — valid under
+# every tool. See style guide §6/§8.
+target-version = "py313"
 # scripts/ holds unimplemented pseudocode stubs that don't parse as Python yet.
 extend-exclude = ["legacy", "gjgilbert_notebooks", "scripts"]
 

@@ -185,7 +185,7 @@ class BarycentricCorrection:
             try:
                 float(col)
                 wave_cols.append(col)
-            except ValueError, TypeError:
+            except (ValueError, TypeError):
                 pass
 
         w = np.array([float(col) for col in wave_cols])

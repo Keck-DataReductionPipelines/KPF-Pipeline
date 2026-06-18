@@ -250,7 +250,7 @@ class ImageAssembly:
             for col in list(table.colnames):
                 try:
                     wave_nm = float(col)
-                except ValueError, TypeError:
+                except (ValueError, TypeError):
                     continue
                 new_name = format(wave_nm * 10, "g")
                 if new_name != col:

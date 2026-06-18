@@ -66,7 +66,7 @@ class QCL0(QC):
             val = val[0]
         try:
             f = float(val)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return False
         return np.isfinite(f) and f >= 0
 

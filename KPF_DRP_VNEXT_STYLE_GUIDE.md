@@ -296,12 +296,11 @@ class StageName:
 - **Error messages are f-strings that state the expectation and show the offending
   value with `!r`**: `raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")`.
 - **Narrow your `except`**, never bare `except:`. Broad `except Exception` is acceptable
-  only around external I/O that converts to a warning-and-skip. For a multi-type clause,
-  write whatever `ruff format` normalizes to under Python 3.14: **unparenthesized when not
-  binding** (`except ValueError, TypeError:` — 3.14 makes this valid and it catches both),
-  but **parenthesized when binding** (`except (FileNotFoundError, OSError) as e:`, required
-  because bare `... as e` is a syntax error). Don't hand-add parens to the non-binding form;
-  the formatter strips them.
+  only around external I/O that converts to a warning-and-skip. **Always parenthesize a
+  multi-type clause** — `except (ValueError, TypeError):`, binding or not. PEP 758 makes the
+  bare `except A, B:` valid at runtime on 3.14, but Pylance/Pyright doesn't yet parse it and
+  flags every such clause; the parenthesized form is accepted by every tool. The formatter
+  leaves these parens in place because `target-version` is pinned to `py313` (see §8).
 - **Always chain re-raises** (Ruff `B904`): `raise ... from e` to preserve the original
   context, or `raise ... from None` when translating a low-level error (a `KeyError`/
   `AttributeError` from a dict lookup or `getattr` dispatch) into a clearer domain error
@@ -343,9 +342,11 @@ class StageName:
 - **Prefer Ruff's normalization for stylistic nits.** When the formatter has an opinion on a
   purely stylistic point (paren placement, line wrapping, quote style, blank lines), follow
   what `ruff format` produces rather than hand-styling against it — fighting the formatter
-  just churns. Deviate only with a strong, documented reason. (Example: under Python 3.14
-  Ruff drops the parens from a non-binding multi-type `except`; the house style is the bare
-  form because that is what the formatter emits — see §6.)
+  just churns. Deviate only with a strong, documented reason. (Example of such a reason:
+  Ruff's `target-version` is pinned to `py313`, one below the 3.14.3 runtime, *so that* the
+  formatter keeps the parens on a multi-type `except` instead of emitting PEP 758's bare form
+  — which Pylance/Pyright can't parse. The pin makes the formatter agree with the type
+  checker; see §6.)
 - **`ruff` is the unified formatter + linter** (it replaced black/isort/flake8). The
   formatter is black-compatible: **88-char target line length**, double-quote normalization.
   Config lives in `pyproject.toml` under `[tool.ruff]`; `ruff==0.15.17` and

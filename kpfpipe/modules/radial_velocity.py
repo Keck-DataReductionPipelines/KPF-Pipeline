@@ -178,7 +178,7 @@ class RadialVelocity:
         inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
         try:
             teff = float(inst.get("TARGTEFF"))
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             teff = None
         if teff is None or not np.isfinite(teff) or teff <= 0:
             raise ValueError(
@@ -194,7 +194,7 @@ class RadialVelocity:
         inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
         try:
             star_rv = float(inst.get("TARGRADV"))
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             star_rv = None
         if star_rv is None or not np.isfinite(star_rv):
             raise ValueError(
@@ -438,7 +438,7 @@ class RadialVelocity:
             return np.nan, np.nan
         try:
             theta = optimize_lsq(vel[win], -ccf[win], "gaussian")[0]
-        except RuntimeError, ValueError:
+        except (RuntimeError, ValueError):
             return np.nan, np.nan
         mu1, sigma1 = theta[2], theta[3]
         if not np.isfinite(mu1) or not np.isfinite(sigma1):
@@ -460,7 +460,7 @@ class RadialVelocity:
             mu2 = optimize_lsq(vel_fit, -ccf_fit, "gaussian")[0][2]
             if vel_fit.min() <= mu2 <= vel_fit.max():
                 rv = mu2
-        except RuntimeError, ValueError:
+        except (RuntimeError, ValueError):
             pass
 
         # Photon-limited RV uncertainty from the weighted CCF slope over the
