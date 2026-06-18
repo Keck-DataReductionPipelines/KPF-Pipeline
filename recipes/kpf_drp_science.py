@@ -28,12 +28,12 @@ def main(config, args):
     obs_id = args.obs_id
 
     data_dirs = config.get_params(['DATA_DIRS'])
-    data_root_in  = data_dirs['KPF_DATA_INPUT']
-    data_root_out = data_dirs['KPF_DATA_OUTPUT']
+    data_root_in      = data_dirs['KPF_DATA_INPUT']
+    data_root_science = data_dirs['KPF_SCIENCE_OUTPUT']
 
     l0 = KPF0.from_fits(build_filepath(obs_id, 'L0', data_root=data_root_in))
 
-    l0_qlp_dir = build_qlp_dir(obs_id, 'L0', data_root=data_root_out)
+    l0_qlp_dir = build_qlp_dir(obs_id, 'L0', data_root=data_root_science)
     PlotL0(l0, output_dir=l0_qlp_dir).run('all')
 
     # read raw L0 file and assemble into L1 full frame image (FFI)
@@ -42,7 +42,7 @@ def main(config, args):
 
     # L1 QLP is computed on the assembled (pre-bias-subtraction) image because
     # ImageProcessing mutates GREEN_CCD/RED_CCD in place during bias subtraction.
-    l1_qlp_dir = build_qlp_dir(obs_id, 'L1', data_root=data_root_out)
+    l1_qlp_dir = build_qlp_dir(obs_id, 'L1', data_root=data_root_science)
     PlotL1(l1, output_dir=l1_qlp_dir).run('all')
 
     # assign calibration masters (bias, dark, flat, wls) to this frame
@@ -74,7 +74,7 @@ def main(config, args):
     l2 = barycentric_correction.perform()
 
     # write L2 data product to disk
-    l2_out_path = build_filepath(obs_id, 'L2', data_root=data_root_out)
+    l2_out_path = build_filepath(obs_id, 'L2', data_root=data_root_science)
     os.makedirs(os.path.dirname(l2_out_path), exist_ok=True)
     l2.to_fits(l2_out_path)
 
@@ -83,7 +83,7 @@ def main(config, args):
     l4 = radial_velocity.perform()
 
     # write L4 data product to disk
-    l4_out_path = build_filepath(obs_id, 'L4', data_root=data_root_out)
+    l4_out_path = build_filepath(obs_id, 'L4', data_root=data_root_science)
     os.makedirs(os.path.dirname(l4_out_path), exist_ok=True)
     l4.to_fits(l4_out_path)
 

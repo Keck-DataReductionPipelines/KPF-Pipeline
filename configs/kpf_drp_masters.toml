@@ -1,6 +1,7 @@
 [DATA_DIRS]
 KPF_DATA_INPUT = "/data/kpf/"
-KPF_DATA_OUTPUT = "/data/kpf-next/"
+KPF_MASTERS_OUTPUT = "/data/kpf-next/masters-root/"
+KPF_SCIENCE_OUTPUT = "/data/kpf-next/science-root/"
 
 [KPFPIPE]
 chips = ["GREEN", "RED"]

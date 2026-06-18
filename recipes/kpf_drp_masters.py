@@ -18,8 +18,8 @@ def main(config, args):
     datecode = args.datecode
 
     data_dirs = config.get_params(['DATA_DIRS'])
-    data_root_in  = data_dirs['KPF_DATA_INPUT']
-    data_root_out = data_dirs['KPF_DATA_OUTPUT']
+    data_root_in      = data_dirs['KPF_DATA_INPUT']
+    data_root_masters = data_dirs['KPF_MASTERS_OUTPUT']
 
     l0_dir = os.path.join(data_root_in, 'L0', datecode)
     if not os.path.isdir(l0_dir):
@@ -28,25 +28,25 @@ def main(config, args):
 
     # master bias
     for files in build_l0_file_lists('bias', mini_db=mini_db):
-        bias_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='bias')
+        bias_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_masters, master='bias')
         bias_handler = Bias(files, config)
         bias_handler.make_master_l1(filepath=bias_path)
 
     # master dark (not yet implemented)
     #for files in build_l0_file_lists('dark', mini_db=mini_db):
-    #    dark_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='dark')
+    #    dark_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_masters, master='dark')
     #    dark_handler = Dark(files, config)
     #    dark_handler.make_master_l1(filepath=dark_path)
 
     # master flat (not yet implemented)
     #for files in build_l0_file_lists('flat', mini_db=mini_db):
-    #    flat_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='flat')
+    #    flat_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_masters, master='flat')
     #    flat_handler = Flat(files, config)
     #    flat_handler.make_master_l1(filepath=flat_path)
 
     # master wavelength solution (ThAr)
     for files in build_l0_file_lists('thar', mini_db=mini_db):
-        wls_master_path      = build_filepath(get_obs_id(files[0]), 'L2', data_root=data_root_out, master='thar')
+        wls_master_path      = build_filepath(get_obs_id(files[0]), 'L2', data_root=data_root_masters, master='thar')
         wls_diagnostics_path = wls_master_path[:-len('_L2.fits')] + '_diagnostics.h5'
 
         wls_handler = WLS(files, config)
