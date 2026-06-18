@@ -311,8 +311,6 @@ class StageName:
 - **Let black own alignment** — don't hand-align assignments or dict values with extra
   spaces; black will collapse them.
 - 4-space indent; two blank lines between top-level defs, one between methods.
-- **Run `black` before committing**; converge any not-yet-black-clean formatting in the
-  files you touch.
 
 ---
 
