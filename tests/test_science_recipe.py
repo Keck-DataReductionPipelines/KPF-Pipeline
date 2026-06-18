@@ -177,6 +177,11 @@ class TestScienceRecipe:
         assert (qlp_dir / f'{OBS_ID}_L1_image_green_zoomable.png').is_file()
         assert (qlp_dir / f'{OBS_ID}_L1_image_red_zoomable.png').is_file()
 
+    def test_qlp_l2_pngs_exist(self, recipe_output):
+        qlp_dir = Path(recipe_output).parents[2] / 'QLP' / '20240405' / OBS_ID / 'L2'
+        assert (qlp_dir / f'{OBS_ID}_L2_snr_per_order_green_zoomable.png').is_file()
+        assert (qlp_dir / f'{OBS_ID}_L2_snr_per_order_red_zoomable.png').is_file()
+
 
 # ---------------------------------------------------------------------------
 # Science recipe error paths
