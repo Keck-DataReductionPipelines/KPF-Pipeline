@@ -8,6 +8,7 @@ the masters directory and selecting the nearest-in-time match.
 
 import glob
 import os
+import warnings
 from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
@@ -84,7 +85,9 @@ class CalibrationAssociation:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _find_master_files(self, cal_type, date_obs, masters_search_window_days=None):
+    def _find_master_files(
+        self, cal_type, date_obs, masters_search_window_days=None, verbose=True
+    ):
         """
         Return a list of (filepath, timestamp) tuples for all available
         masters of the given calibration type within the search window.
@@ -99,6 +102,10 @@ class CalibrationAssociation:
         masters_search_window_days : [int, int], optional
             Search window as [days_before, days_after]. Defaults to
             self.masters_search_window_days.
+        verbose : bool, optional
+            If True (default), emit a UserWarning when a candidate master is
+            dropped because its filename has no parseable KPF timestamp
+            (a silent drop could invisibly shift which master is selected).
 
         Returns
         -------
@@ -135,9 +142,15 @@ class CalibrationAssociation:
             for filepath in sorted(glob.glob(pattern)):
                 try:
                     ts = get_timestamp(filepath)
-                    master_files.append((filepath, ts))
-                except ValueError:
-                    pass
+                except ValueError as e:
+                    if verbose:
+                        warnings.warn(
+                            f"dropping master with unparseable timestamp: "
+                            f"{filepath!r} ({e})",
+                            stacklevel=2,
+                        )
+                    continue
+                master_files.append((filepath, ts))
 
         return sorted(master_files, key=lambda x: x[1])
 
@@ -174,7 +187,7 @@ class CalibrationAssociation:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, cal_types, *, masters_search_window_days=None):
+    def perform(self, cal_types, *, masters_search_window_days=None, verbose=True):
         """
         Run calibration association for the given calibration types.
 
@@ -185,6 +198,9 @@ class CalibrationAssociation:
         masters_search_window_days : [int, int], optional
             Search window as [days_before, days_after]. Defaults to
             self.masters_search_window_days.
+        verbose : bool, optional
+            If True (default), warn when a candidate master is dropped for an
+            unparseable timestamp (passed through to _find_master_files).
 
         Returns
         -------
@@ -213,7 +229,7 @@ class CalibrationAssociation:
 
         for cal_type in cal_types:
             master_files = self._find_master_files(
-                cal_type, date_obs, masters_search_window_days
+                cal_type, date_obs, masters_search_window_days, verbose=verbose
             )
             filepath = self._select_nearest(date_obs, master_files)
             if filepath is None:

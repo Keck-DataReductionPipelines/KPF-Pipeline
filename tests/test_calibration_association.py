@@ -2,6 +2,8 @@
 Unit tests for CalibrationAssociation.
 """
 
+import warnings
+
 import pytest
 
 from kpfpipe.modules.calibration_association import CalibrationAssociation
@@ -108,6 +110,34 @@ class TestFindMasterFiles:
         result = mod._find_master_files("bias", "2024-04-05T11:08:33")
 
         assert result[0][1] < result[1][1]
+
+    def test_warns_and_drops_master_with_unparseable_timestamp(self, tmp_path):
+        d = tmp_path / "masters" / "20240405"
+        d.mkdir(parents=True)
+        _stub_master(d, "KP.20240405.03637.74", "bias")
+        # Matches the *_master_bias_L1.fits glob but has no KPF timestamp.
+        (d / "nostamp_master_bias_L1.fits").touch()
+
+        mod = _make_module(tmp_path)
+        with pytest.warns(UserWarning, match="unparseable timestamp"):
+            result = mod._find_master_files("bias", "2024-04-05T11:08:33")
+
+        assert len(result) == 1
+        assert result[0][0].endswith("KP.20240405.03637.74_master_bias_L1.fits")
+
+    def test_unparseable_timestamp_silent_when_verbose_false(self, tmp_path):
+        d = tmp_path / "masters" / "20240405"
+        d.mkdir(parents=True)
+        (d / "nostamp_master_bias_L1.fits").touch()
+
+        mod = _make_module(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            result = mod._find_master_files(
+                "bias", "2024-04-05T11:08:33", verbose=False
+            )
+
+        assert result == []
 
     def test_ignores_wrong_cal_type(self, tmp_path):
         d = tmp_path / "masters" / "20240405"
