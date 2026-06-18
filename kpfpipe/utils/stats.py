@@ -20,13 +20,13 @@ def gaussian_jac(theta, x):
     b, a, mu, log_sigma = theta
     sigma = np.exp(log_sigma)
     dx = x - mu
-    e = np.exp(-(dx**2) / (2 * sigma**2))
+    exp_term = np.exp(-(dx**2) / (2 * sigma**2))
 
     J = np.empty((x.size, 4))
     J[:, 0] = 1.0
-    J[:, 1] = e
-    J[:, 2] = a * e * dx / sigma**2
-    J[:, 3] = a * e * dx**2 / sigma**2
+    J[:, 1] = exp_term
+    J[:, 2] = a * exp_term * dx / sigma**2
+    J[:, 3] = a * exp_term * dx**2 / sigma**2
 
     return J
 

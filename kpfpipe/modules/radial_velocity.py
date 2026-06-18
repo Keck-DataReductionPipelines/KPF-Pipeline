@@ -360,25 +360,33 @@ class RadialVelocity:
         l_start, l_end = line_mask["start"][keep], line_mask["end"][keep]
         l_weight = line_mask["weight"][keep]
 
-        for v in range(velocity_grid.size):
-            a = l_start * shift[v]
-            b = l_end * shift[v]
-            ia = np.clip(np.searchsorted(edges, a, side="right") - 1, 0, n_pix - 1)
-            ib = np.clip(np.searchsorted(edges, b, side="right") - 1, 0, n_pix - 1)
+        for vi in range(velocity_grid.size):
+            line_lo = l_start * shift[vi]
+            line_hi = l_end * shift[vi]
+            idx_lo = np.clip(
+                np.searchsorted(edges, line_lo, side="right") - 1, 0, n_pix - 1
+            )
+            idx_hi = np.clip(
+                np.searchsorted(edges, line_hi, side="right") - 1, 0, n_pix - 1
+            )
 
             # Fractional overlap of each (narrow) line with the pixels it covers.
-            frac = np.zeros(n_pix)
-            for d in range(int((ib - ia).max()) + 1):
-                n = ia + d
-                sel = n <= ib
-                nn = n[sel]
-                overlap = np.minimum(edges[nn + 1], b[sel]) - np.maximum(
-                    edges[nn], a[sel]
-                )
+            overlap_frac = np.zeros(n_pix)
+            for offset in range(int((idx_hi - idx_lo).max()) + 1):
+                pix = idx_lo + offset
+                still_spanning = pix <= idx_hi
+                pix_sel = pix[still_spanning]
+                overlap = np.minimum(
+                    edges[pix_sel + 1], line_hi[still_spanning]
+                ) - np.maximum(edges[pix_sel], line_lo[still_spanning])
                 np.clip(overlap, 0.0, None, out=overlap)
-                np.add.at(frac, nn, l_weight[sel] * overlap / widths[nn])
+                np.add.at(
+                    overlap_frac,
+                    pix_sel,
+                    l_weight[still_spanning] * overlap / widths[pix_sel],
+                )
 
-            ccf[v] = np.nansum(flux * frac)
+            ccf[vi] = np.nansum(flux * overlap_frac)
 
         return ccf
 
@@ -442,10 +450,10 @@ class RadialVelocity:
             int(np.floor(3.0 * sigma1 / dv)), int(np.ceil((min_npts - 1) / 2))
         )
         center = int(np.argmin(np.abs(vel - mu1)))
-        lo, hi = center - half_pts, center + half_pts + 1
-        if lo < 0 or hi > vel.size:
+        idx_lo, idx_hi = center - half_pts, center + half_pts + 1
+        if idx_lo < 0 or idx_hi > vel.size:
             return mu1, np.nan  # symmetric window runs off the grid
-        vel_fit, ccf_fit = vel[lo:hi], ccf[lo:hi]
+        vel_fit, ccf_fit = vel[idx_lo:idx_hi], ccf[idx_lo:idx_hi]
         rv = mu1
         try:
             mu2 = optimize_lsq(vel_fit, -ccf_fit, "gaussian")[0][2]
@@ -542,9 +550,9 @@ class RadialVelocity:
 
         ccf_weighted = np.zeros(velocity_grid.size)
         for o in range(ccf.shape[0]):
-            s = np.nansum(ccf[o])
-            if s > 0 and weights[o] != 0:
-                ccf_weighted += (ccf[o] / s) * weights[o]
+            ccf_sum = np.nansum(ccf[o])
+            if ccf_sum > 0 and weights[o] != 0:
+                ccf_weighted += (ccf[o] / ccf_sum) * weights[o]
         ccf_summed = np.nansum(ccf, axis=0)
 
         # The dispersion is ~uniform across the chip; use the strongest order's

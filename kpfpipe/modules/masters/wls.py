@@ -493,10 +493,10 @@ class WLS(BaseMasterModule):
         good = ~lines["bad"]
         wav = lines["wav"][good]
         pix = lines["pix"][good]
-        ord = lines["order"][good]
-        fib = lines["fiber"][good]
+        order_num = lines["order"][good]
+        fiber_names = lines["fiber"][good]
 
-        fibers = list(set(fib))
+        fibers = list(set(fiber_names))
 
         if (len(fibers) != 1) and (len(fibers) != 3) and (len(fibers) != 5):
             raise ValueError(f"expected 1, 3, or 5 fibers, got {len(fibers)}")
@@ -528,13 +528,13 @@ class WLS(BaseMasterModule):
 
         # rescale position variables to [-1,1] for Legendre fitting
         x = 2*pix/(ncol - 1) - 1
-        m = 2*(ord - 1)/(norder - 1) - 1
+        m = 2*(order_num - 1)/(norder - 1) - 1
 
         if len(fibers) != 1:
             # map fibers to their positional rank then rescale to [-1, 1]
             canonical = sorted(expected_fibers, key=lambda fb: self.fiber_positions[fb])
             fiber_pos = {fb: i for i, fb in enumerate(canonical)}
-            f = np.array([fiber_pos[fb] for fb in fib], dtype=int)
+            f = np.array([fiber_pos[fb] for fb in fiber_names], dtype=int)
             f = 2*f/(len(canonical) - 1) - 1
 
 

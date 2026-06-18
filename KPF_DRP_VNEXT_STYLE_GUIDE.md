@@ -17,6 +17,14 @@ Operational/technical guidance (environment, commands, architecture) lives in
 
 ## 1. Naming
 
+- **Code is self-documenting.** Names — variables, functions, methods — should make intent
+  legible on their own, so a reader rarely needs a comment to understand *what* a line does.
+  This is the primary lever for the §13 rule that comments explain *why*, not *what*: if you
+  reach for an inline comment to say what a variable holds, prefer a clearer name instead.
+  Balance clarity against brevity — favor intelligible names, but keep sanctioned terse
+  notation (documented algorithm symbols; domain-standard short names like `chip`, `order`,
+  `oscan`) where it aids rather than hurts readability.
+
 | Thing | Convention | Examples |
 |---|---|---|
 | Modules (files) | `snake_case`, noun phrase = the algorithm stage | `image_assembly.py`, `spectral_extraction.py`, `calibration_association.py` |
@@ -539,7 +547,9 @@ documented, intentional ways — follow *its* conventions when adding masters co
   shapes/dtypes/units are stated in prose
   (`"(rvdata-standard ImageHDUs, shape (NORDER,))"`, `"WAVE [Å, vacuum]"`).
 - **Inline comments explain *why*, not *what*** — full sentences, capitalized. Annotate
-  magic numbers with units/meaning inline (`* 1.48424  # e-/ADU: exposure meter gain`).
+  magic numbers with units/meaning inline (`* 1.48424  # e-/ADU: exposure meter gain`). If a
+  comment is needed to explain *what* a variable holds, rename the variable instead (§1, code
+  is self-documenting).
 - **Units use bracket notation** (`[km/s]`, `[Å]`, `[Å, vacuum]`, `[e-/ADU]`) in
   docstrings/comments — not encoded in variable names (except unit-suffixed names like
   `..._KMS`). State the **air/vacuum convention** wherever wavelengths appear;

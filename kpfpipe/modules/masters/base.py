@@ -267,19 +267,19 @@ class BaseMasterModule:
 
             for suffix in ["CCD", "VAR"]:
                 ext = f"{chip}_{suffix}"
-                D = data_cube[ext]
-                R = D / T
+                frame_data = data_cube[ext]
+                R = frame_data / T
 
-                total_sum = np.sum(D, axis=0, where=valid)
+                total_sum = np.sum(frame_data, axis=0, where=valid)
 
                 rate_mean = np.zeros_like(R[0])
                 rate_mean[good] = np.sum(R, axis=0, where=valid)[good] / N[good]
 
                 diff2 = (R - rate_mean)**2
-                ssd = np.sum(diff2, axis=0, where=valid)
+                sum_sq_dev = np.sum(diff2, axis=0, where=valid)
 
                 rate_rms = np.zeros_like(R[0])
-                rate_rms[good] = np.sqrt(ssd[good] / (N[good] - 1))
+                rate_rms[good] = np.sqrt(sum_sq_dev[good] / (N[good] - 1))
 
                 stats[ext]["nframe"] = N
                 stats[ext]["total_sum"] = total_sum
@@ -370,7 +370,7 @@ class BaseMasterModule:
                 approx_stats[ext]["rate_upper"] = approx_mean + approx_rms * sigma
 
         failure = 0
-        valid = np.ones((nrow, ncol), dtype=bool)
+        clipping_mask = np.ones((nrow, ncol), dtype=bool)
 
         for fn in l0_file_list:
             l1_obj, success = self._load_frame(fn, verbose=verbose)
@@ -396,35 +396,35 @@ class BaseMasterModule:
             exptime_total += exptime
 
             for chip in self.chips:
-                valid[:] = True
+                clipping_mask[:] = True
                 R = {}
 
                 for suffix in ["CCD", "VAR"]:
                     ext = f"{chip}_{suffix}"
-                    D = l1_obj.data[ext]
-                    R[ext] = D / T
+                    frame_data = l1_obj.data[ext]
+                    R[ext] = frame_data / T
 
                     lower = approx_stats[ext]["rate_lower"]
                     upper = approx_stats[ext]["rate_upper"]
-                    valid &= (R[ext] >= lower) & (R[ext] <= upper)
+                    clipping_mask &= (R[ext] >= lower) & (R[ext] <= upper)
 
                 for suffix in ["CCD", "VAR"]:
                     ext = f"{chip}_{suffix}"
-                    D = l1_obj.data[ext]
+                    frame_data = l1_obj.data[ext]
                     rate = R[ext]
 
                     N = exact_stats[ext]["nframe"]
-                    N += valid
+                    N += clipping_mask
 
                     total_sum = exact_stats[ext]["total_sum"]
-                    total_sum += D * valid
+                    total_sum += frame_data * clipping_mask
 
                     # Welford algorithm accumulation begins
                     mean = exact_stats[ext]["rate_mean"]
                     safe_N = np.maximum(N, 1)
-                    delta = (rate - mean) * valid
+                    delta = (rate - mean) * clipping_mask
                     mean += delta / safe_N
-                    delta2 = (rate - mean) * valid
+                    delta2 = (rate - mean) * clipping_mask
                     M2 = exact_stats[ext]["rate_M2"]
                     M2 += delta * delta2
                     # Welford algorithm accumulation ends
