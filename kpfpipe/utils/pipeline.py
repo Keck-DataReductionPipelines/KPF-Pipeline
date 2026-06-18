@@ -152,7 +152,8 @@ def build_l0_file_lists(
                 removed = cached - on_disk
                 warnings.warn(
                     f"Mini database at {csv_path} is stale "
-                    f"(+{len(added)} added, -{len(removed)} removed on disk); rebuilding.",
+                    f"(+{len(added)} added, -{len(removed)} removed on disk); "
+                    "rebuilding.",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -164,7 +165,8 @@ def build_l0_file_lists(
 
     if cal_df.empty:
         raise ValueError(
-            f"No '{imtype}' calibration frames found in {data_dir or 'the provided mini_db'}"
+            f"No '{imtype}' calibration frames found in "
+            f"{data_dir or 'the provided mini_db'}"
         )
 
     # Cluster per-OBJECT (morning vs. evening thar etc. have different OBJECT
@@ -214,7 +216,8 @@ def build_qlp_dir(obs_id, level, *, data_root):
         raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")
     if not is_obs_id(obs_id):
         raise ValueError(
-            f"obs_id must be a valid observation ID (e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
+            "obs_id must be a valid observation ID "
+            f"(e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
         )
     return os.path.join(data_root, "QLP", get_datecode(obs_id), obs_id, level)
 
@@ -250,7 +253,8 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
         )
     if not is_obs_id(obs_id):
         raise ValueError(
-            f"obs_id must be a valid observation ID (e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
+            "obs_id must be a valid observation ID "
+            f"(e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
         )
 
     datecode = get_datecode(obs_id)
@@ -264,7 +268,8 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
             )
         if level not in ("L1", "L2", "L4"):
             raise ValueError(
-                f"'level' for master products must be 'L1', 'L2', or 'L4'; got '{level}'"
+                "'level' for master products must be 'L1', 'L2', or 'L4'; "
+                f"got '{level}'"
             )
         filename = f"{obs_id}_master_{master}_{level}.fits"
         if data_root is None:

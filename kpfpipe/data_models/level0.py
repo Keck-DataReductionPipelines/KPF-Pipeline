@@ -156,7 +156,8 @@ class KPF0(KPFDataModel):
     ]
 
     def to_kpf1(self):
-        """Create a KPF1 scaffold from this L0, carrying over headers and pass-through extensions.
+        """Create a KPF1 scaffold from this L0, carrying over headers and
+        pass-through extensions.
 
         Returns a KPF1 with PRIMARY header, pass-through extensions (CA_HK,
         EXPMETER_SCI/SKY, TELEMETRY, CONFIG), receipt, and obs_id copied over.

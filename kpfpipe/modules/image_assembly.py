@@ -300,7 +300,8 @@ class ImageAssembly:
             self.dims[chip] = (self.nrow // 2, self.ncol // 2)
         else:
             raise ValueError(
-                f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD"
+                f"Only 2-amp and 4-amp mode supported, "
+                f"detected {self.namp[chip]} on {chip} CCD"
             )
 
     def orient_channels(self, chip):
@@ -505,7 +506,8 @@ class ImageAssembly:
 
         else:
             raise ValueError(
-                f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD"
+                f"Only 2-amp and 4-amp mode supported, "
+                f"detected {self.namp[chip]} on {chip} CCD"
             )
 
         ccd_ffi = self.orient_ffi(ccd_ffi, chip)

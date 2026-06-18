@@ -43,7 +43,8 @@ class TestHstToUtc:
         assert hst_to_utc("20240405.07200.00") == "20240405.43200.00"
 
     def test_rollover_to_next_day(self):
-        # 17:00 HST = 03:00 UTC next day (61200 + 36000 = 97200 -> 97200 - 86400 = 10800)
+        # 17:00 HST = 03:00 UTC next day
+        # (61200 + 36000 = 97200 -> 97200 - 86400 = 10800)
         assert hst_to_utc("20240404.61200.00") == "20240405.10800.00"
 
     def test_frame_str_preserved(self):

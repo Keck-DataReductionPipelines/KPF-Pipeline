@@ -53,8 +53,10 @@ class BaseMasterModule:
 
         self._l1_obj_cache = {}
 
-        self.ml1_obj = None  # populated by subclass make_master_l1(); used by save_master('L1', ...)
-        self.ml2_obj = None  # populated by subclass make_master_l2(); used by save_master('L2', ...)
+        # populated by subclass make_master_l1(); used by save_master('L1', ...)
+        self.ml1_obj = None
+        # populated by subclass make_master_l2(); used by save_master('L2', ...)
+        self.ml2_obj = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -136,7 +138,8 @@ class BaseMasterModule:
         l1_obj : KPF1
             Assembled L1 object whose PRIMARY header contains EXPTIME and ELAPSED.
         exptime_tolerance : float
-            Maximum allowed excess of elapsed time over requested exposure time, in seconds.
+            Maximum allowed excess of elapsed time over requested exposure time,
+            in seconds.
 
         Raises
         ------

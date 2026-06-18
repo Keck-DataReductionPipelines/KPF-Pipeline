@@ -262,7 +262,8 @@ def kpf_timestamp_to_datetime(timestamp):
         datetime: naive UTC datetime at the timestamp's seconds-past-midnight.
 
     Example:
-        kpf_timestamp_to_datetime('20240405.40113.57') -> datetime(2024, 4, 5, 11, 8, 33)
+        kpf_timestamp_to_datetime('20240405.40113.57')
+            -> datetime(2024, 4, 5, 11, 8, 33)
     """
     _validate_kpf_timestamp(timestamp)
     date_str, seconds_str, _ = timestamp.split(".")

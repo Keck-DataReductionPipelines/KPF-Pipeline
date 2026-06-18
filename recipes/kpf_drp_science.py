@@ -22,7 +22,8 @@ def main(config, args):
 
     if not args.obs_id:
         raise SystemExit(
-            "Error: --obs_id is required for the science recipe (e.g. -o KP.20240405.40113.57)"
+            "Error: --obs_id is required for the science recipe "
+            "(e.g. -o KP.20240405.40113.57)"
         )
 
     obs_id = args.obs_id
@@ -53,7 +54,8 @@ def main(config, args):
     image_processing = ImageProcessing(l1, config)
     l1 = image_processing.perform()
 
-    # Run L1 diagnostics (compute and write metrics to PRIMARY) and QC (apply thresholds)
+    # Run L1 diagnostics (compute and write metrics to PRIMARY) and QC
+    # (apply thresholds)
     DiagL1(l1).run()
     QCL1(l1).run()
 

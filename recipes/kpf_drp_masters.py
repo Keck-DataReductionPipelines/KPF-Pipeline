@@ -42,13 +42,15 @@ def main(config, args):
 
     # master dark (not yet implemented)
     # for files in build_l0_file_lists('dark', mini_db=mini_db):
-    #    dark_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='dark')
+    #    dark_path = build_filepath(get_obs_id(files[0]), 'L1',
+    #                               data_root=data_root_out, master='dark')
     #    dark_handler = Dark(files, config)
     #    dark_handler.make_master_l1(filepath=dark_path)
 
     # master flat (not yet implemented)
     # for files in build_l0_file_lists('flat', mini_db=mini_db):
-    #    flat_path = build_filepath(get_obs_id(files[0]), 'L1', data_root=data_root_out, master='flat')
+    #    flat_path = build_filepath(get_obs_id(files[0]), 'L1',
+    #                               data_root=data_root_out, master='flat')
     #    flat_handler = Flat(files, config)
     #    flat_handler.make_master_l1(filepath=flat_path)
 

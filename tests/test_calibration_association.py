@@ -168,7 +168,8 @@ class TestSelectNearest:
     def test_prefers_same_day_over_previous_day(self, tmp_path):
         mod = _make_module(tmp_path)
         # Science at 2024-04-05 02:00 UTC (7200s).
-        # Previous-day master at 23:00 HST = 23:00 local ≈ 23*3600 = 82800s on 2024-04-04.
+        # Previous-day master at 23:00 HST = 23:00 local ≈ 23*3600 = 82800s
+        # on 2024-04-04.
         # Same-day master at 00:30 UTC on 2024-04-05 (1800s).
         result = mod._select_nearest(
             "2024-04-05T02:00:00",

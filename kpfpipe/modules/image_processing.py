@@ -74,7 +74,8 @@ class ImageProcessing:
         if value is True:
             return self.load_bias()
         raise TypeError(
-            f"bias must be bool, filepath str, or KPFMasterL1; got {type(value).__name__}"
+            f"bias must be bool, filepath str, or KPFMasterL1; "
+            f"got {type(value).__name__}"
         )
 
     # ------------------------------------------------------------------

@@ -409,7 +409,8 @@ class TestExpmeterWavelengthConversion:
 
     def test_sci_columns_converted_to_angstroms(self, l1):
         cols = l1.data["EXPMETER_SCI"].colnames
-        # nm labels (498.12, 604.38, 710.62, 816.88) → Å (4981.2, 6043.8, 7106.2, 8168.8)
+        # nm labels (498.12, 604.38, 710.62, 816.88)
+        # → Å (4981.2, 6043.8, 7106.2, 8168.8)
         for expected in ("4981.2", "6043.8", "7106.2", "8168.8"):
             assert expected in cols, f"missing Å column {expected!r}; got {cols}"
 

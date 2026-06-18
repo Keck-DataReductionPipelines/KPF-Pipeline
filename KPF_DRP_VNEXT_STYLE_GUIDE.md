@@ -295,9 +295,13 @@ class StageName:
 - **Validate early, fail fast**: check args at the top of the function before doing work.
 - **Error messages are f-strings that state the expectation and show the offending
   value with `!r`**: `raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")`.
-- **Narrow your `except`**: `except (FileNotFoundError, OSError) as e`, never bare
-  `except:`. Broad `except Exception` is acceptable only around external I/O that converts
-  to a warning-and-skip.
+- **Narrow your `except`**, never bare `except:`. Broad `except Exception` is acceptable
+  only around external I/O that converts to a warning-and-skip. For a multi-type clause,
+  write whatever `ruff format` normalizes to under Python 3.14: **unparenthesized when not
+  binding** (`except ValueError, TypeError:` — 3.14 makes this valid and it catches both),
+  but **parenthesized when binding** (`except (FileNotFoundError, OSError) as e:`, required
+  because bare `... as e` is a syntax error). Don't hand-add parens to the non-binding form;
+  the formatter strips them.
 - **Always chain re-raises** (Ruff `B904`): `raise ... from e` to preserve the original
   context, or `raise ... from None` when translating a low-level error (a `KeyError`/
   `AttributeError` from a dict lookup or `getattr` dispatch) into a clearer domain error
@@ -336,14 +340,22 @@ class StageName:
 
 ## 8. Formatting
 
+- **Prefer Ruff's normalization for stylistic nits.** When the formatter has an opinion on a
+  purely stylistic point (paren placement, line wrapping, quote style, blank lines), follow
+  what `ruff format` produces rather than hand-styling against it — fighting the formatter
+  just churns. Deviate only with a strong, documented reason. (Example: under Python 3.14
+  Ruff drops the parens from a non-binding multi-type `except`; the house style is the bare
+  form because that is what the formatter emits — see §6.)
 - **`ruff` is the unified formatter + linter** (it replaced black/isort/flake8). The
   formatter is black-compatible: **88-char target line length**, double-quote normalization.
   Config lives in `pyproject.toml` under `[tool.ruff]`; `ruff==0.15.17` and
   `pre-commit==4.6.0` are pinned dev deps. Enforced locally via a pre-commit hook — run
   `pre-commit install` once after setting up the env.
 - **Lint ruleset** (`[tool.ruff.lint] select`): `E`/`W` (pycodestyle), `F` (pyflakes),
-  `I` (import sorting), `B` (flake8-bugbear), `UP` (pyupgrade). `__init__.py` is exempt from
-  `F401` (re-exports). `legacy/` and `gjgilbert_notebooks/` are excluded.
+  `I` (import sorting), `B` (flake8-bugbear), `UP` (pyupgrade). Line length (`E501`) is
+  enforced at 88. `__init__.py` is exempt from `F401` (re-exports). Ruff's scope is
+  `kpfpipe/`, `tests/`, `recipes/`; `legacy/`, `gjgilbert_notebooks/`, and `scripts/`
+  (unimplemented pseudocode stubs) are excluded.
 - **Quote style → double quotes** (ruff/black default). The codebase follows the formatter's
   rule (prefer `"`, but keep `'` where switching would add escapes — e.g. `'say "hi"'` stays
   single). Triple-quoted strings use `"""`; f-strings, raw, and byte strings follow the same

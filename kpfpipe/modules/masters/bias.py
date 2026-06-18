@@ -142,5 +142,6 @@ class Bias(BaseMasterModule):
         print("  " + "-" * 56)
         for chip, stats in self._results.items():
             print(
-                f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} {stats['num_bad']} ({stats['pct_bad']:.3f}%)"
+                f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} "
+                f"{stats['num_bad']} ({stats['pct_bad']:.3f}%)"
             )

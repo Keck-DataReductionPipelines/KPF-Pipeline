@@ -3,9 +3,10 @@ Tests for the RadialVelocity module (KPF2 -> KPF4: per-orderlet CCFs and RVs).
 
 Static-method unit tests (_compute_ccf_1d, _compute_rv_1d) build synthetic spectra
 and CCFs with no fixtures. Build-helper tests use a header-only KPF2 and read
-the real on-disk line masks. Integration tests (compute_ccfs/compute_order_by_order_rvs/perform)
-use a synthetic KPF2 with absorption injected at a monkeypatched line mask, and
-a narrow velocity grid for speed.
+the real on-disk line masks. Integration tests
+(compute_ccfs/compute_order_by_order_rvs/perform) use a synthetic KPF2 with
+absorption injected at a monkeypatched line mask, and a narrow velocity grid
+for speed.
 """
 
 import numpy as np
@@ -378,7 +379,8 @@ class TestBuildVelocityGrid:
 
 
 # ---------------------------------------------------------------------------
-# compute_ccfs / compute_order_by_order_rvs / perform  (synthetic KPF2 + monkeypatched mask)
+# compute_ccfs / compute_order_by_order_rvs / perform
+# (synthetic KPF2 + monkeypatched mask)
 # ---------------------------------------------------------------------------
 
 

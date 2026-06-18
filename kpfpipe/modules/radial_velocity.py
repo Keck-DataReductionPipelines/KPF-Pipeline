@@ -76,7 +76,8 @@ class RadialVelocity:
             setattr(self, k, params.get(k, v))
 
         # Lazily-populated caches; the per-orderlet ones are keyed by f'{chip}_{fiber}'.
-        self._illumination_source = {}  # source dict, set by _resolve_illumination_source()
+        # source dict, set by _resolve_illumination_source()
+        self._illumination_source = {}
         self._line_mask = {}  # line mask, set by _build_line_mask()
         self._velocity_grid = {}  # velocity grid, set by _build_velocity_grid()
         self._ccf = {}  # CCF cube, set by compute_ccfs()
@@ -1071,7 +1072,8 @@ class RadialVelocity:
             # science RV is not applicable, so PRIMARY RV/RVERR/BERV/BJDTDB stay
             # UNDEFINED.
             print(
-                "  combined RV: no science orderlet requested; PRIMARY RV left UNDEFINED"
+                "  combined RV: no science orderlet requested; "
+                "PRIMARY RV left UNDEFINED"
             )
             l4_obj.receipt_add_entry("radial_velocity", "PASS")
             return l4_obj
@@ -1119,7 +1121,8 @@ class RadialVelocity:
         )
         if not np.isfinite(ccfrv):
             print(
-                "  combined RV: no finite per-CCD science RV; CCFRV/PRIMARY RV UNDEFINED"
+                "  combined RV: no finite per-CCD science RV; "
+                "CCFRV/PRIMARY RV UNDEFINED"
             )
 
         inst_hdr["CCFRV"] = float(ccfrv) if np.isfinite(ccfrv) else None
@@ -1192,7 +1195,8 @@ class RadialVelocity:
 
         # CCF velocity grid: per-fiber center, shared step/span.
         print(
-            f"\n  CCF velocity grid: {self.ccf_window[0]:+.1f} to {self.ccf_window[1]:+.1f} km/s "
+            f"\n  CCF velocity grid: {self.ccf_window[0]:+.1f} to "
+            f"{self.ccf_window[1]:+.1f} km/s "
             f"about each fiber's center, step {self.ccf_step_size} km/s"
         )
 

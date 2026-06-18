@@ -337,7 +337,8 @@ class TestSpectrumOrientation:
         return WavelengthCalibration(l2, config).perform()
 
     def _anchor_cases(self, l2):
-        """List in-coverage anchors as (name, chip, fiber, order, wave, flux, lambda_air)."""
+        """List in-coverage anchors as
+        (name, chip, fiber, order, wave, flux, lambda_air)."""
         cases = []
         for name, lambda_air in _FRAUNHOFER_AIR.items():
             for chip in _CHIPS:
@@ -353,7 +354,8 @@ class TestSpectrumOrientation:
         return cases
 
     def test_expected_anchors_in_coverage(self, science_l2):
-        """The observable Fraunhofer lines are found; the bluer ones are out of range."""
+        """The observable Fraunhofer lines are found; the bluer ones are out of
+        range."""
         names = {c[0] for c in self._anchor_cases(science_l2)}
         assert {"H-beta", "Na D2", "Na D1", "H-alpha"} <= names
         assert names.isdisjoint({"Ca II K", "Ca II H", "H-delta", "H-gamma"})
@@ -378,7 +380,8 @@ class TestSpectrumOrientation:
             natives.append(native)
             reverses.append(reverse)
             rows.append(
-                f"  {name} {chip} {fiber} ord{o}: native {native:.3f}  reversed {reverse:.3f}"
+                f"  {name} {chip} {fiber} ord{o}: native {native:.3f}  "
+                f"reversed {reverse:.3f}"
             )
 
         mean_native, mean_reverse = float(np.mean(natives)), float(np.mean(reverses))

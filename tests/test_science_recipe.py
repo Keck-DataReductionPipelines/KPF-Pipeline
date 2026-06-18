@@ -142,7 +142,8 @@ class TestScienceRecipe:
             assert np.isfinite(float(inst[key])), f"{key} not finite"
 
     def test_calibration_headers_set(self, recipe_output):
-        """CalibrationAssociation's L1 PRIMARY writes survive into L2 INSTRUMENT_HEADER."""
+        """CalibrationAssociation's L1 PRIMARY writes survive into L2
+        INSTRUMENT_HEADER."""
         l2 = KPF2.from_fits(recipe_output)
         inst = l2.headers["INSTRUMENT_HEADER"]
         # bias/dark/flat use basename + DIR + integer AGE
@@ -150,7 +151,8 @@ class TestScienceRecipe:
             assert f"{prefix}FILE" in inst
             assert f"{prefix}DIR" in inst
             assert f"AGE{prefix}" in inst
-        # thar uses legacy convention: WLSFILE = full path (no WLSDIR), AGEWLS = float days
+        # thar uses legacy convention: WLSFILE = full path (no WLSDIR),
+        # AGEWLS = float days
         assert "WLSFILE" in inst
         assert "WLSDIR" not in inst
         assert inst["WLSFILE"].endswith("_master_thar_L2.fits")

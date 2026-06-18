@@ -159,7 +159,10 @@ class PlotL1:
         raise NotImplementedError("PlotL1.order_trace_overlay not yet implemented")
 
     def bias_subtracted(self, chip):
-        """Image with master bias subtracted. Matches v2.12 plot_2D_image(subtract_master_bias=True)."""
+        """Image with master bias subtracted.
+
+        Matches v2.12 plot_2D_image(subtract_master_bias=True).
+        """
         raise NotImplementedError("PlotL1.bias_subtracted not yet implemented")
 
     def dark_subtracted(self, chip):

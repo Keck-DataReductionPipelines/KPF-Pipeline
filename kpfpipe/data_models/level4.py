@@ -42,7 +42,8 @@ _TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
 _ALIASES = pd.read_csv(_config_path / "aliases.csv")
 
 # Build a set of valid chip-prefix keys for fast membership testing.
-# e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"), "GREEN_SCI2_RV": ("SCI2_RV", "GREEN")}.
+# e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"),
+#        "GREEN_SCI2_RV": ("SCI2_RV", "GREEN")}.
 # Each maps a chip-prefixed key -> (fiber_alias, chip). CCF cubes are sliced on
 # their order axis (axis 0) and support chip-prefix read and write; RV tables are
 # row-sliced (green = rows 0:NORDER_GREEN, red the rest) and support read only —

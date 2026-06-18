@@ -569,7 +569,8 @@ class TestQCL2:
     def test_extraction_present_fail_one_trace_cleared(self):
         """Clearing a trace array (set to empty array) should fail the check."""
         kpf2 = _make_kpf2_with_flux()
-        # Resolve alias SKY_FLUX → TRACE1_FLUX and set to empty so chip views are size=0.
+        # Resolve alias SKY_FLUX → TRACE1_FLUX and set to empty so chip views
+        # are size=0.
         kpf2.data["SKY_FLUX"] = np.array([], dtype=np.float32)
         assert QCL2(kpf2).extraction_present() is False
 
@@ -641,7 +642,8 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def _write_l0_fixture(path, *, passing=True):
     """Write a minimal L0 FITS fixture at path.
 
-    passing=True  → all QCL0 checks pass (valid header keywords, finite EXPTIME, amps present).
+    passing=True  → all QCL0 checks pass (valid header keywords, finite EXPTIME,
+                    amps present).
     passing=False → inject a failure (negative EXPTIME so EXPTIMOK fails).
     """
     primary = fits.PrimaryHDU()

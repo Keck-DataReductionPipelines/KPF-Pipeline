@@ -974,7 +974,8 @@ class WLS(BaseMasterModule):
         print(f"  rough_wls_file:  {self.rough_wls_file}")
         print(f"  lineprofile:     {self.lineprofile}")
         print(
-            f"  polyorder:       x={self.polyorder_x}, m={self.polyorder_m}, f={self.polyorder_f}"
+            f"  polyorder:       x={self.polyorder_x}, m={self.polyorder_m}, "
+            f"f={self.polyorder_f}"
         )
 
         if self._results is None:
