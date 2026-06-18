@@ -10,7 +10,7 @@ import numpy as np
 from numpy.polynomial import legendre
 import pandas as pd
 
-from kpfpipe import DEFAULTS, REPO_ROOT
+from kpfpipe import REPO_ROOT
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.modules.calibration_association import CalibrationAssociation
@@ -18,14 +18,6 @@ from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
-
-DEFAULTS.update({
-    'linelist': f'{REPO_ROOT}/reference/thar_line_list.csv',
-    'lineprofile': 'gaussian',
-    'polyorder_x': 6,
-    'polyorder_m': 6,
-    'polyorder_f': 2,
-})
 
 _ROUGH_WLS_FILE = f'{REPO_ROOT}/reference/rough_wls_fallback.csv'
 
@@ -45,8 +37,17 @@ class WLS(BaseMasterModule):
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: linelist, lineprofile,
         polyorder_x, polyorder_m, polyorder_f, chips, fibers,
-        KPF_DATA_INPUT.
+        KPF_MASTERS_OUTPUT.
     """
+
+    _DEFAULTS = {**BaseMasterModule._DEFAULTS,
+        'linelist': f'{REPO_ROOT}/reference/thar_line_list.csv',
+        'lineprofile': 'gaussian',
+        'polyorder_x': 6,
+        'polyorder_m': 6,
+        'polyorder_f': 2,
+    }
+
     def __init__(self, l0_file_list, config=None):
         if config is None:
             params = {}
@@ -57,7 +58,11 @@ class WLS(BaseMasterModule):
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
-        self._data_root = params.get('KPF_DATA_INPUT')
+        # WLS extraction associates a master bias for each ThAr frame. Masters
+        # (including the bias the masters recipe just built) live under
+        # KPF_MASTERS_OUTPUT, which is also where CalibrationAssociation reads
+        # them, so there is no input/output mismatch.
+        self._masters_root = params.get('KPF_MASTERS_OUTPUT')
         self.rough_wls_file = _ROUGH_WLS_FILE
 
         self._load_rough_wls()
@@ -128,7 +133,7 @@ class WLS(BaseMasterModule):
     
 
     def _extract_frame(self, l1_obj, verbose=True):
-        calibration_association = CalibrationAssociation(l1_obj, {'KPF_DATA_INPUT': self._data_root})
+        calibration_association = CalibrationAssociation(l1_obj, {'KPF_MASTERS_OUTPUT': self._masters_root})
         l1_obj = calibration_association.perform(['bias'])
 
         image_processing = ImageProcessing(l1_obj)

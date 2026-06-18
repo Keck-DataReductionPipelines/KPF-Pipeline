@@ -4,7 +4,7 @@ Tests for kpfpipe.utils.astro Doppler/redshift helpers and air->vacuum.
 Convention under test: positive radial velocity = receding = redshift (z > 0),
 so the Doppler factor f = lambda_obs / lambda_rest = 1 + z, and z carries the
 same sign as the velocity. This is the convention BarycentricCorrection relies
-on when storing BARYCORR_Z for RadialVelocity._compute_ccf.
+on when storing BARYCORR_Z for RadialVelocity._compute_ccf_1d.
 """
 
 import astropy.units as u

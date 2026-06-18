@@ -8,6 +8,7 @@ import os
 import tempfile
 
 import numpy as np
+import pandas as pd
 import pytest
 from astropy.io import fits
 from astropy.table import Table
@@ -616,8 +617,23 @@ class TestKPF4:
         assert kpf4.data["SCI2_CCF"].shape == (NORDER, 5)
         np.testing.assert_array_equal(kpf4.data["GREEN_SCI2_CCF"], green)
         np.testing.assert_array_equal(kpf4.data["RED_SCI2_CCF"], red)
-        # RV tables are not chip-split
-        assert kpf4.data._chip_split("GREEN_SCI2_RV") is None
+
+    def test_rv_chip_prefix_views(self):
+        # RV tables are row-sliced (green = rows 0:NORDER_GREEN, red the rest).
+        kpf4 = KPF4()
+        kpf4.set_data("SCI2_RV", pd.DataFrame({
+            "ORDER_INDEX": np.arange(NORDER), "RV": np.arange(NORDER, dtype=float)}))
+        green, red = kpf4.data["GREEN_SCI2_RV"], kpf4.data["RED_SCI2_RV"]
+        assert len(green) == NORDER_GREEN and len(red) == NORDER - NORDER_GREEN
+        np.testing.assert_array_equal(np.asarray(green["ORDER_INDEX"]), np.arange(NORDER_GREEN))
+        np.testing.assert_array_equal(np.asarray(red["ORDER_INDEX"]), np.arange(NORDER_GREEN, NORDER))
+        assert "GREEN_SCI2_RV" in kpf4.data
+
+    def test_rv_chip_prefix_is_read_only(self):
+        # RV tables are written whole; a chip-prefixed write must fail loud.
+        kpf4 = KPF4()
+        with pytest.raises(KeyError, match="read-only"):
+            kpf4.set_data("GREEN_SCI2_RV", pd.DataFrame({"RV": np.zeros(NORDER_GREEN)}))
 
 
 @pytest.fixture

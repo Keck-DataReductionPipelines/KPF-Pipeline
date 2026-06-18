@@ -42,23 +42,28 @@ _TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
 _ALIASES = pd.read_csv(_config_path / "aliases.csv")
 
 # Build a set of valid chip-prefix keys for fast membership testing.
-# e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"), "RED_SCI2_CCF": (..., "RED")}.
-# Each maps a chip-prefixed key -> (fiber_alias, chip) for GREEN_/RED_ views
-# into the concatenated (NORDER, n_velocity_step) CCF cube. RV tables are not
-# chip-split (they are BinTables, sliced by ORDER_INDEX), so only CCF keys here.
+# e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"), "GREEN_SCI2_RV": ("SCI2_RV", "GREEN")}.
+# Each maps a chip-prefixed key -> (fiber_alias, chip). CCF cubes are sliced on
+# their order axis (axis 0) and support chip-prefix read and write; RV tables are
+# row-sliced (green = rows 0:NORDER_GREEN, red the rest) and support read only —
+# each is written whole (one BinTable per orderlet), so a chip-prefix write raises.
 _CHIP_PREFIX_KEYS = {}  # chip-prefixed key → (fiber_alias, chip)
 for _, _row in _TRACE_MAP.iterrows():
-    _fiber_alias = f"{str(_row['Fiber']).strip()}_CCF"
-    for _chip in ("GREEN", "RED"):
-        _CHIP_PREFIX_KEYS[f"{_chip}_{_fiber_alias}"] = (_fiber_alias, _chip)
+    _fiber = str(_row["Fiber"]).strip()
+    for _suffix in ("CCF", "RV"):
+        _fiber_alias = f"{_fiber}_{_suffix}"
+        for _chip in ("GREEN", "RED"):
+            _CHIP_PREFIX_KEYS[f"{_chip}_{_fiber_alias}"] = (_fiber_alias, _chip)
 
 
 class _KPF4DataDict(AliasedOrderedDict):
-    """Data dict that supports GREEN_/RED_ chip-prefix access for CCF cubes.
+    """Data dict supporting GREEN_/RED_ chip-prefix access for CCF cubes and RV tables.
 
     Accessing d["GREEN_SCI2_CCF"] returns d["SCI2_CCF"][:NORDER_GREEN], a numpy
-    view into the first 35 orders of CCF3. Mirrors _KPF2DataDict (the CCF order
-    axis is axis 0, just like the trace flux arrays).
+    view into the first 35 orders of CCF3 (order axis is axis 0, like the trace
+    flux arrays). d["GREEN_SCI2_RV"] returns the green rows of the SCI2_RV table
+    (rows 0:NORDER_GREEN); RV chip-prefix access is read-only, since each RV
+    table is written whole.
     """
 
     def _chip_split(self, key):
@@ -69,6 +74,12 @@ class _KPF4DataDict(AliasedOrderedDict):
         split = self._chip_split(key)
         if split is not None:
             fiber_alias, chip = split
+            # RV tables are written whole (one BinTable per orderlet); a
+            # chip-prefixed RV key is read-only.
+            if fiber_alias.endswith('_RV'):
+                raise KeyError(
+                    f"chip-prefixed RV key {key!r} is read-only; write the full "
+                    f"table via {fiber_alias!r} (rows are green-then-red)")
             resolved = self._resolve(fiber_alias)
             # Allocate the full concatenated cube on first write (or if empty).
             # value.shape[1:] keeps this correct for the (norder_chip, nvel) CCF.
@@ -136,9 +147,11 @@ class KPF4(RV4):
         kpf4.data["SCI2_CCF"]    is kpf4.data["CCF3"]   # True
         kpf4.data["SCI2_RV"]     is kpf4.data["RV3"]    # True
 
-    Per-chip access (returns numpy views):
-        kpf4.data["GREEN_SCI2_CCF"]   # CCF3[:35]  (green orders)
-        kpf4.data["RED_SCI2_CCF"]     # CCF3[35:]  (red orders)
+    Per-chip access:
+        kpf4.data["GREEN_SCI2_CCF"]   # CCF3[:35]  (green orders, a numpy view)
+        kpf4.data["RED_SCI2_CCF"]     # CCF3[35:]  (red orders, a numpy view)
+        kpf4.data["GREEN_SCI2_RV"]    # RV3[:35]   (green rows; read-only)
+        kpf4.data["RED_SCI2_RV"]      # RV3[35:]   (red rows; read-only)
     """
 
     def __init__(self):

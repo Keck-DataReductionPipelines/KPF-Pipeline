@@ -4,21 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reduction pipeline for the Keck Observatory. This is not a cosmetic refactor — it is a controlled reset aimed at restoring scientific confidence, deterministic behavior, and development agility.
+KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reduction pipeline for the Keck Observatory. The scientific priority is intermediate and long-term radial velocity (RV) stability.
 
-**The scientific priority is intermediate and long-term radial velocity (RV) stability.** Everything in this rebuild should serve: improving wavelength calibration robustness, improving drift modeling clarity, eliminating outliers, making calibration failure modes explicit, or enabling systematic regression testing. If a feature does not support RV stability or reproducibility, it is deprioritized.
-
-### Path 3: Simple Astronomy-Style Pipeline
-
-We are building explicit Python modules with file-in/file-out execution. No workflow framework, no service infrastructure, no database dependency, no orchestration engine, no premature architecture. The goal is clarity, reproducibility, and stability — not elegance. Path 2 (modern orchestration, containerization) is a future step once calibration logic stabilizes and RV performance is understood.
-
-### Calibration Philosophy
-
-The previous pipeline implicitly centered LFC as the foundational wavelength solution (WLS). In this rebuild: calibration paths (LFC, HCL, etalon) are separate, independently testable modules. No calibration source is trusted blindly. QC metrics must accompany every calibration product.
-
-### Guardrails
-
-Avoid: rebuilding a hidden framework unintentionally, adding implicit global state, embedding database dependencies in science code, introducing silent retries, overengineering abstractions.
+**The project charter — [`KPF_DRP_VNEXT_CONTEXT.md`](KPF_DRP_VNEXT_CONTEXT.md) (repo root) — is the single source of truth for project intent, scope, scientific focus, the Path-3 approach, calibration philosophy, guardrails, design principles, and success criteria. Read it before making design decisions. This file (CLAUDE.md) does not duplicate the charter; it covers only the operational and technical guidance not in it (environment, commands, architecture, conventions).**
 
 ## Development Environment
 
@@ -108,24 +96,9 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 **Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `_RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
 
-## Design Principles
+## Design Principles & Success Criteria
 
-From the project charter — these guide all implementation decisions:
+These live in the charter and are NOT restated here (the two copies drifted in the past — keep one source). See [`KPF_DRP_VNEXT_CONTEXT.md`](KPF_DRP_VNEXT_CONTEXT.md): §10 Core Design Principles, §9 Guardrails, §5 Calibration Philosophy, §3 Definition of Success, §6 (every major change must preserve deterministic behavior, run on the truth dataset, and document impact on RV metrics). Consult the charter before design decisions.
 
-1. No hidden state
-2. No implicit calibration assumptions
-3. Deterministic stacking and wavelength solution
-4. Fail loudly
-5. Log everything relevant to calibration and RV derivation
-6. Write QC metrics alongside products
-7. Prefer clarity over cleverness
-8. Implement everything in the simplest possible way.
-
-Every major change must: preserve deterministic behavior, run on the truth dataset, and document impact on RV metrics.
-
-- Keep this file updated as you make mistakes, learn lessons, and learn more efficient ways of coding or answering prompts.
-- Use this file as your long-term memory.
-
-## Success Criteria
-
-The pipeline is successful when: it runs deterministically, can reprocess a frozen truth dataset without random failures, supports an independent HCL-based WLS path, calibration strategies are explicit and comparable, RV performance on standard stars is stable and measurable, and silent failures are eliminated.
+- Keep this file (CLAUDE.md) updated with operational lessons, conventions, and more efficient workflows learned while coding.
+- Use CLAUDE.md as long-term memory for technical/operational guidance; use the charter for project intent and principles.

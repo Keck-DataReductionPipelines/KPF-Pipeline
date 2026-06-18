@@ -61,8 +61,9 @@ class TestScienceRecipe:
             str(CONFIG_PATH),
             overrides={
                 'DATA_DIRS': {
-                    'KPF_DATA_INPUT':  str(TESTDATA_DIR),
-                    'KPF_DATA_OUTPUT': str(tmp_path),
+                    'KPF_DATA_INPUT':     str(TESTDATA_DIR),
+                    'KPF_MASTERS_OUTPUT': str(TESTDATA_DIR),
+                    'KPF_SCIENCE_OUTPUT': str(tmp_path),
                 }
             },
         )
@@ -126,9 +127,10 @@ class TestScienceRecipe:
             assert arr.shape == (norder,), f"{ext} shape {arr.shape} != ({norder},)"
             assert np.all(np.isfinite(arr)), f"{ext} has non-finite values"
             assert np.issubdtype(arr.dtype, np.float64), f"{ext} is {arr.dtype}, expected float64"
-        # Sanity: barycentric Z should be very close to 1 (|v| << c).
+        # Sanity: BARYCORR_Z is the redshift z = lambda_obs/lambda_rest - 1
+        # (compute_redshift), so |z| = |v|/c << 1, not the 1+z factor near 1.
         z = np.asarray(l2.data['BARYCORR_Z'])
-        assert np.all(np.abs(z - 1.0) < 1e-3)
+        assert np.all(np.abs(z) < 1e-3)
 
     def test_per_ccd_barycorr_keywords(self, recipe_output):
         """Per-CCD scalar summaries should land on INSTRUMENT_HEADER."""
@@ -175,6 +177,11 @@ class TestScienceRecipe:
         assert (qlp_dir / f'{OBS_ID}_L1_image_green_zoomable.png').is_file()
         assert (qlp_dir / f'{OBS_ID}_L1_image_red_zoomable.png').is_file()
 
+    def test_qlp_l2_pngs_exist(self, recipe_output):
+        qlp_dir = Path(recipe_output).parents[2] / 'QLP' / '20240405' / OBS_ID / 'L2'
+        assert (qlp_dir / f'{OBS_ID}_L2_snr_per_order_green_zoomable.png').is_file()
+        assert (qlp_dir / f'{OBS_ID}_L2_snr_per_order_red_zoomable.png').is_file()
+
 
 # ---------------------------------------------------------------------------
 # Science recipe error paths
@@ -188,8 +195,9 @@ class TestScienceRecipeErrors:
             str(CONFIG_PATH),
             overrides={
                 'DATA_DIRS': {
-                    'KPF_DATA_INPUT':  str(tmp_path),
-                    'KPF_DATA_OUTPUT': str(tmp_path),
+                    'KPF_DATA_INPUT':     str(tmp_path),
+                    'KPF_MASTERS_OUTPUT': str(tmp_path),
+                    'KPF_SCIENCE_OUTPUT': str(tmp_path),
                 }
             },
         )
@@ -203,8 +211,9 @@ class TestScienceRecipeErrors:
             str(CONFIG_PATH),
             overrides={
                 'DATA_DIRS': {
-                    'KPF_DATA_INPUT':  str(tmp_path),
-                    'KPF_DATA_OUTPUT': str(tmp_path),
+                    'KPF_DATA_INPUT':     str(tmp_path),
+                    'KPF_MASTERS_OUTPUT': str(tmp_path),
+                    'KPF_SCIENCE_OUTPUT': str(tmp_path),
                 }
             },
         )

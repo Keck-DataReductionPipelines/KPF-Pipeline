@@ -7,11 +7,11 @@ from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 
-DEFAULTS.update({
+_DEFAULTS = {**DEFAULTS,
     'bias': True,
     'dark': False,
     'flat': False,
-})
+}
 
 
 class ImageProcessing:
@@ -44,7 +44,7 @@ class ImageProcessing:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in DEFAULTS.items():
+        for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
         self._bias_path = None  # set by load_bias()

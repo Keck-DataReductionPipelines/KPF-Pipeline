@@ -13,9 +13,9 @@ from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import get_datecode, get_timestamp, kpf_timestamp_to_datetime
 
-DEFAULTS.update({
+_DEFAULTS = {**DEFAULTS,
     'masters_search_window_days': [-1, 0],
-})
+}
 
 # Level suffix of the master FITS file for each supported calibration type,
 # used to build the *_master_<cal_type>_<level>.fits glob.
@@ -51,6 +51,10 @@ class CalibrationAssociation:
         observation timestamp is read from its PRIMARY header (DATE-OBS).
     config : None | dict | ConfigHandler
         Module configuration. Recognised keys:
+            KPF_MASTERS_OUTPUT : str
+                Root directory under which master calibration files live
+                (searched as {root}/masters/{datecode}/). This is where the
+                masters recipe writes its products.
             masters_search_window_days : [int, int]
                 Search window as [days_before, days_after] relative to the
                 science frame's observation date. Negative values are in the
@@ -70,10 +74,10 @@ class CalibrationAssociation:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in DEFAULTS.items():
+        for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._data_root = params.get('KPF_DATA_INPUT')
+        self._masters_root = params.get('KPF_MASTERS_OUTPUT')
         self._results = None  # populated by perform()
 
     # ------------------------------------------------------------------
@@ -123,7 +127,7 @@ class CalibrationAssociation:
             search_date = obs_date + timedelta(days=delta)
             datecode = search_date.strftime('%Y%m%d')
             pattern = os.path.join(
-                self._data_root, 'masters', datecode,
+                self._masters_root, 'masters', datecode,
                 f'*_master_{cal_type}_{level}.fits'
             )
             for filepath in sorted(glob.glob(pattern)):
@@ -237,7 +241,7 @@ class CalibrationAssociation:
         """Print a summary of the module configuration and association results."""
         print("CalibrationAssociation")
         print(f"  obs_id:        {self.l1_obj.obs_id}")
-        print(f"  data root:     {self._data_root}")
+        print(f"  masters root:  {self._masters_root}")
         print(f"  search window: {self.masters_search_window_days} days [before, after]")
 
         if self._results is None:

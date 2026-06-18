@@ -15,6 +15,8 @@ from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.utils.config import ConfigHandler
 
+_DEFAULTS = dict(DEFAULTS)
+
 
 class WavelengthCalibration:
     """
@@ -47,7 +49,7 @@ class WavelengthCalibration:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in DEFAULTS.items():
+        for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
         self._wls_path = None  # set by load_wls()

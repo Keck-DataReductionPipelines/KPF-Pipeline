@@ -10,7 +10,7 @@ from kpfpipe import REPO_ROOT, DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import validate_array
 
-DEFAULTS.update({'extraction_method': 'box'})
+_DEFAULTS = {**DEFAULTS, 'extraction_method': 'box'}
 
 class SpectralExtraction:
     """
@@ -43,7 +43,7 @@ class SpectralExtraction:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in DEFAULTS.items():
+        for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
         self._results = None  # populated by perform()

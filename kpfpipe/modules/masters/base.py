@@ -14,11 +14,6 @@ from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
 
-DEFAULTS.update({
-    'nframe_stream': 6,
-    'stack_sigma': 5.0,
-})
-
 NROW = DETECTOR['ccd']['nrow']
 NCOL = DETECTOR['ccd']['ncol']
 
@@ -35,6 +30,13 @@ class BaseMasterModule(ABC):
     Masters modules read a stack of L0 files from disk and output
     a masters L1 object.
     """
+
+    # Module defaults; subclasses extend via `{**BaseMasterModule._DEFAULTS, ...}`.
+    _DEFAULTS = {**DEFAULTS,
+        'nframe_stream': 6,
+        'stack_sigma': 5.0,
+    }
+
     def __init__(self, l0_file_list, config=None):
         if l0_file_list != sorted(l0_file_list):
             raise ValueError("l0_file_list must be sorted in ascending order")
@@ -49,7 +51,7 @@ class BaseMasterModule(ABC):
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in DEFAULTS.items():
+        for k, v in self._DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
         self._l1_obj_cache = {}
