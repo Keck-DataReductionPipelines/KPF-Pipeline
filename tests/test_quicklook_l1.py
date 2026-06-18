@@ -5,7 +5,7 @@ import pytest
 from astropy.io import fits
 
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from kpfpipe.data_models.level1 import KPF1
@@ -92,31 +92,31 @@ class TestImage:
     def test_returns_figure(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
-        fig = qlp.image('green')
+        fig = qlp.image("green")
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
 
     def test_title_green(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
-        fig = qlp.image('green')
+        fig = qlp.image("green")
         title = fig.axes[0].get_title()
-        assert 'L1 - Green CCD' in title
-        assert 'KP.20240405.00001.00' in title
-        assert 'synthetic-l1' in title
+        assert "L1 - Green CCD" in title
+        assert "KP.20240405.00001.00" in title
+        assert "synthetic-l1" in title
         plt.close(fig)
 
     def test_title_red(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
-        fig = qlp.image('red')
-        assert 'L1 - Red CCD' in fig.axes[0].get_title()
+        fig = qlp.image("red")
+        assert "L1 - Red CCD" in fig.axes[0].get_title()
         plt.close(fig)
 
     def test_has_colorbar(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
-        fig = qlp.image('green')
+        fig = qlp.image("green")
         # image axis + colorbar axis
         assert len(fig.axes) == 2
         plt.close(fig)
@@ -124,7 +124,7 @@ class TestImage:
     def test_image_shape(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
-        fig = qlp.image('green')
+        fig = qlp.image("green")
         img = fig.axes[0].get_images()[0].get_array()
         assert img.shape == _FIXTURE_SHAPE
         plt.close(fig)
@@ -132,18 +132,18 @@ class TestImage:
     def test_read_noise_annotation_present(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
-        fig = qlp.image('green')
+        fig = qlp.image("green")
         texts = [t.get_text() for t in fig.axes[0].texts]
         # Should have a read noise annotation containing 'RN:' prefix
-        assert any('RN:' in t for t in texts), f"texts found: {texts}"
+        assert any("RN:" in t for t in texts), f"texts found: {texts}"
         plt.close(fig)
 
     def test_no_read_noise_annotation_when_headers_missing(self, synthetic_l1_no_rn):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1_no_rn)
-        fig = qlp.image('green')
+        fig = qlp.image("green")
         texts = [t.get_text() for t in fig.axes[0].texts]
-        assert not any('RN:' in t for t in texts)
+        assert not any("RN:" in t for t in texts)
         plt.close(fig)
 
 
@@ -152,7 +152,7 @@ class TestFileSaving:
     def test_saves_png(self, synthetic_l1, tmp_path):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1, output_dir=str(tmp_path))
-        fig = qlp.image('green')
+        fig = qlp.image("green")
         expected = tmp_path / "KP.20240405.00001.00_L1_image_green_zoomable.png"
         assert expected.exists()
         assert expected.stat().st_size > 0
@@ -161,7 +161,7 @@ class TestFileSaving:
     def test_no_file_when_output_dir_none(self, synthetic_l1, tmp_path):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
-        fig = qlp.image('green')
+        fig = qlp.image("green")
         assert list(tmp_path.glob("*.png")) == []
         plt.close(fig)
 
@@ -171,22 +171,22 @@ class TestRun:
     def test_run_all_returns_dict(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
-        figs = qlp.run('all')
+        figs = qlp.run("all")
         assert isinstance(figs, dict)
-        assert 'image_green' in figs
-        assert 'image_red' in figs
+        assert "image_green" in figs
+        assert "image_red" in figs
 
     def test_run_single_plot_name(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
-        figs = qlp.run('image')
-        assert set(figs.keys()) == {'image_green', 'image_red'}
+        figs = qlp.run("image")
+        assert set(figs.keys()) == {"image_green", "image_red"}
 
     def test_run_unknown_which_raises(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(synthetic_l1)
         with pytest.raises(ValueError, match="unknown plot"):
-            qlp.run('bogus')
+            qlp.run("bogus")
 
     def test_run_requires_which(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
@@ -212,9 +212,9 @@ class TestRun:
         l1 = KPF1.from_fits(fn)
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
         qlp = PlotL1(l1)
-        figs = qlp.run('all')
-        assert 'image_green' in figs
-        assert 'image_red' not in figs
+        figs = qlp.run("all")
+        assert "image_green" in figs
+        assert "image_red" not in figs
 
 
 class TestStubs:
@@ -232,4 +232,4 @@ class TestStubs:
         qlp = PlotL1(synthetic_l1)
         method = getattr(qlp, method_name)
         with pytest.raises(NotImplementedError):
-            method('green')
+            method("green")

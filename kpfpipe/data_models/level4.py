@@ -30,8 +30,8 @@ from rvdata.core.models.level4 import RV4
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 
-NORDER_GREEN = DETECTOR['norder']['GREEN']
-NORDER_RED   = DETECTOR['norder']['RED']
+NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED   = DETECTOR["norder"]["RED"]
 NORDER       = NORDER_GREEN + NORDER_RED
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
@@ -76,7 +76,7 @@ class _KPF4DataDict(AliasedOrderedDict):
             fiber_alias, chip = split
             # RV tables are written whole (one BinTable per orderlet); a
             # chip-prefixed RV key is read-only.
-            if fiber_alias.endswith('_RV'):
+            if fiber_alias.endswith("_RV"):
                 raise KeyError(
                     f"chip-prefixed RV key {key!r} is read-only; write the full "
                     f"table via {fiber_alias!r} (rows are green-then-red)")
@@ -88,7 +88,7 @@ class _KPF4DataDict(AliasedOrderedDict):
                 full = np.zeros((NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype)
                 super().__setitem__(resolved, full)
             arr = super().__getitem__(resolved)
-            if chip == 'GREEN':
+            if chip == "GREEN":
                 arr[:NORDER_GREEN] = value
             else:
                 arr[NORDER_GREEN:] = value
@@ -201,10 +201,10 @@ class KPF4(RV4):
         _KPF4DataDict.__setitem__, which writes into the appropriate slice of
         the concatenated CCF cube.
         """
-        if hasattr(self.data, '_chip_split') and self.data._chip_split(ext_name) is not None:
+        if hasattr(self.data, "_chip_split") and self.data._chip_split(ext_name) is not None:
             self.data[ext_name] = data
             return
-        if hasattr(self.extensions, '_resolve'):
+        if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
         if (ext_name in self.extensions
@@ -219,7 +219,7 @@ class KPF4(RV4):
 
     def set_header(self, ext_name, header):
         """Override to resolve aliases before the base class .keys() check."""
-        if hasattr(self.extensions, '_resolve'):
+        if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         super().set_header(ext_name, header)
 

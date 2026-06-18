@@ -294,10 +294,10 @@ class StageName:
 - **`black` with default settings is the standard**: 88-char target line length,
   double-quote normalization. `black==26.1.0`, `isort==7.0.0`, `flake8==7.3.0` are pinned
   dev deps; there is **no tool config override**, so black's defaults are canonical.
-- **Quote style → double quotes** (black default). *This is the single most widespread
-  inconsistency in the repo*: roughly half the files use single quotes. New code should
-  use double quotes; run `black .` on files you touch to converge them. **Don't** hand-fix
-  quotes across files you aren't otherwise editing.
+- **Quote style → double quotes** (black default). The codebase was normalized to double
+  quotes following black's rule (prefer `"`, but keep `'` where switching would add
+  escapes — e.g. `'say "hi"'` stays single). Triple-quoted strings use `"""`; f-strings,
+  raw, and byte strings follow the same rule. Write new code with double quotes.
 - **f-strings are the only interpolation style.** No `%` or `.format()` (except inside
   `datetime.strftime` codes, and deliberate numeric formatting like `format(x, "g")`).
   Use `{x!r}` for repr, `{x:05d}`/`{hh:02d}` for zero-padding.
@@ -539,16 +539,23 @@ documented, intentional ways — follow *its* conventions when adding masters co
 These are the genuine inconsistencies the survey surfaced where the codebase has no clear
 winner or contradicts a stated tool/command. Worth a deliberate project decision:
 
-1. **Quote style** — single vs double split roughly 50/50 across files. Black's default is
-   double. *Recommendation:* adopt double, converge with `black .` opportunistically.
-2. **Type hints** — absent everywhere except `utils/config.py`, yet `mypy kpfpipe/` is a
+1. **Type hints** — absent everywhere except `utils/config.py`, yet `mypy kpfpipe/` is a
    documented command. Decide whether to adopt PEP 484 hints project-wide or formally
    document the docstring-types-only stance and drop the mypy expectation.
-3. **Masters config sections** — `[BIAS]` vs the dominant `[MODULE_<NAME>]` prefix.
-4. **Quicklook** — no shared base + tuple-based registration, unlike Diag/QC; plus DPI and
+2. **Masters config sections** — `[BIAS]` vs the dominant `[MODULE_<NAME>]` prefix.
+3. **Quicklook** — no shared base + tuple-based registration, unlike Diag/QC; plus DPI and
    fontsize drift between L0/L1.
-5. **Tests** — no `conftest.py`; synthetic-FITS construction duplicated widely; misleading
+4. **Tests** — no `conftest.py`; synthetic-FITS construction duplicated widely; misleading
    "skip if no testdata" docstrings vs vendored data.
 
 Until decided, **match the dominant variant of the file/area you're editing**, and don't
 churn unrelated files to "fix" style.
+
+### Resolved
+
+Inconsistencies closed during the style-guide convergence work (newest first):
+
+- **Quote style → double quotes.** All `.py` files normalized to double quotes following
+  black's rule (1974 literals across 42 files), verified AST-identical and test-clean. See
+  §8. *(Excluded: `scripts/process_science_obs.py`, which does not parse — a stray prose
+  line at line 6 — pending a separate fix.)*

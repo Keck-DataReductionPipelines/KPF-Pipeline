@@ -44,7 +44,7 @@ def gaussian_untransform(theta):
 # Each entry: (model, jacobian, theta0 initializer, untransform). untransform
 # maps the fitted parameters back to reported ones (identity if not needed).
 _FUNCTIONS = {
-    'gaussian': (gaussian_dist, gaussian_jac, gaussian_theta0_generator, gaussian_untransform),
+    "gaussian": (gaussian_dist, gaussian_jac, gaussian_theta0_generator, gaussian_untransform),
 }
 
 
@@ -71,7 +71,7 @@ def optimize_lsq(x, y, linemodel):
     result = least_squares(residual,
                            theta0,
                            jac=jacobian,
-                           method='lm',
+                           method="lm",
                            )
 
     theta, rms = untransform(result.x), np.std(result.fun)
@@ -79,18 +79,18 @@ def optimize_lsq(x, y, linemodel):
     return theta, rms
 
 
-def flag_outliers(x, sigma, method='median', axis=None, kernel_size=None):
+def flag_outliers(x, sigma, method="median", axis=None, kernel_size=None):
     """
     Flag outliers in an array above some sigma threshold
     """
     eps = 1e-12
 
-    if method == 'median':
+    if method == "median":
         med = np.nanmedian(x)
         mad = mad_std(x, ignore_nan=True)
         out = np.abs(x - med) / (mad + eps) > sigma
 
-    elif method == 'trend':
+    elif method == "trend":
         trend = gaussian_filter(median_filter(x, size=kernel_size), sigma=kernel_size)
         mad = mad_std(x - trend, ignore_nan=True)
         out = np.abs(x - trend) / (mad + eps) > sigma
@@ -101,7 +101,7 @@ def flag_outliers(x, sigma, method='median', axis=None, kernel_size=None):
     return out
 
 
-def interpolate_bad_pixels(data, mask, method='local', fill_outside=True):
+def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
     """
     Interpolate over bad pixels.
     """
@@ -114,13 +114,13 @@ def interpolate_bad_pixels(data, mask, method='local', fill_outside=True):
     # local convolution-based method (assumes isolated bad pixels).
     # Cast kernel and weight mask to the input dtype so scipy.convolve does
     # not promote float32 image data to float64 in its intermediates.
-    if method == 'local':
+    if method == "local":
         kernel = np.array([[1,2,1],
                            [2,0,2],
                            [1,2,1]], dtype=data.dtype) / 12.0
 
-        neighbor_sum = convolve(data * good, kernel, mode='mirror')
-        weight = convolve(good.astype(data.dtype), kernel, mode='mirror')
+        neighbor_sum = convolve(data * good, kernel, mode="mirror")
+        weight = convolve(good.astype(data.dtype), kernel, mode="mirror")
 
         valid = bad & (weight > 0)
         data_interp[valid] = neighbor_sum[valid] / weight[valid]
@@ -137,7 +137,7 @@ def interpolate_bad_pixels(data, mask, method='local', fill_outside=True):
                 ]
 
     # global linear interpolation (robust to clumps of bad pixels)
-    elif method == 'global':
+    elif method == "global":
 
         ny, nx = data.shape
         y = np.arange(ny)
@@ -146,7 +146,7 @@ def interpolate_bad_pixels(data, mask, method='local', fill_outside=True):
         interp = RegularGridInterpolator(
             (y, x),
             data,
-            method='linear',
+            method="linear",
             bounds_error=False,
             fill_value=np.nan
         )

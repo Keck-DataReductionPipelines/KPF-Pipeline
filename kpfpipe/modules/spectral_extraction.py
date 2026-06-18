@@ -10,7 +10,7 @@ from kpfpipe import REPO_ROOT, DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import validate_array
 
-_DEFAULTS = {**DEFAULTS, 'extraction_method': 'box'}
+_DEFAULTS = {**DEFAULTS, "extraction_method": "box"}
 
 class SpectralExtraction:
     """
@@ -66,16 +66,16 @@ class SpectralExtraction:
         The trace reference file is read from the repository reference
         directory and cached in `self.order_trace` to avoid repeated I/O.
         """
-        if not hasattr(self, 'order_trace'):
+        if not hasattr(self, "order_trace"):
             self.order_trace = {}
-        if not hasattr(self, 'order_trace_path'):
+        if not hasattr(self, "order_trace_path"):
             self.order_trace_path = {}
 
-        filepath = f'{REPO_ROOT}/reference/order_trace_{chip.lower()}.csv'
-        with open(filepath, 'r') as f:
+        filepath = f"{REPO_ROOT}/reference/order_trace_{chip.lower()}.csv"
+        with open(filepath, "r") as f:
             self.order_trace[chip.upper()] = (
                 pd.read_csv(f, index_col=0)
-                .set_index(['Fiber', 'Order'])
+                .set_index(["Fiber", "Order"])
                 .sort_index()
             )
         self.order_trace_path[chip.upper()] = filepath
@@ -122,11 +122,11 @@ class SpectralExtraction:
         chip = chip.upper()
         fiber = fiber.upper()
 
-        data_image = self.l1_obj.data[f'{chip}_CCD']
-        var_image = self.l1_obj.data[f'{chip}_VAR']
+        data_image = self.l1_obj.data[f"{chip}_CCD"]
+        var_image = self.l1_obj.data[f"{chip}_VAR"]
         nrow, ncol = data_image.shape
 
-        if not hasattr(self, 'order_trace') or chip not in self.order_trace:
+        if not hasattr(self, "order_trace") or chip not in self.order_trace:
             self._read_order_trace_reference(chip)
 
         try:
@@ -142,7 +142,7 @@ class SpectralExtraction:
             )
 
         # track the trace position
-        coeffs = np.array(trace[[f'Coeff{i}' for i in range(4)]], dtype=np.float32)
+        coeffs = np.array(trace[[f"Coeff{i}" for i in range(4)]], dtype=np.float32)
 
         trace_center = polynomial.polyval(np.arange(ncol, dtype=np.float32), coeffs)
         trace_top    = (trace_center + trace.TopEdge).astype(np.float32)
@@ -341,7 +341,7 @@ class SpectralExtraction:
             extraction_method = self.extraction_method
 
         try:
-            extraction_fxn = self.__getattribute__(f'_{extraction_method}_extraction')
+            extraction_fxn = self.__getattribute__(f"_{extraction_method}_extraction")
         except AttributeError:
             raise AttributeError(f"Unsupported extraction method: '{extraction_method}'")
 
@@ -351,9 +351,9 @@ class SpectralExtraction:
         # TODO: add bad pixel masking
         flux_1d, var_1d = extraction_fxn(D, V, W=W)
 
-        response = 'warn' if verbose else 'silent'
-        validate_array(flux_1d, context=f'flux_1d array: {chip} {fiber} {order}', response=response)
-        validate_array(var_1d, context=f'var_1d array: {chip} {fiber} {order}', response=response)
+        response = "warn" if verbose else "silent"
+        validate_array(flux_1d, context=f"flux_1d array: {chip} {fiber} {order}", response=response)
+        validate_array(var_1d, context=f"var_1d array: {chip} {fiber} {order}", response=response)
 
         return flux_1d, var_1d
 
@@ -396,12 +396,12 @@ class SpectralExtraction:
         fibers = [f.upper() for f in fibers]
 
         norder = self.norder[chip]
-        nrow, ncol = self.l1_obj.data[f'{chip}_CCD'].shape
+        nrow, ncol = self.l1_obj.data[f"{chip}_CCD"].shape
 
         l2_arrays = {}
         for fiber in fibers:
-            l2_arrays[f'{chip}_{fiber}_FLUX'] = np.empty((norder,ncol), dtype=np.float32)
-            l2_arrays[f'{chip}_{fiber}_VAR'] = np.empty((norder,ncol), dtype=np.float32)
+            l2_arrays[f"{chip}_{fiber}_FLUX"] = np.empty((norder,ncol), dtype=np.float32)
+            l2_arrays[f"{chip}_{fiber}_VAR"] = np.empty((norder,ncol), dtype=np.float32)
 
         failure = 0
         for order in range(1,norder+1):
@@ -413,8 +413,8 @@ class SpectralExtraction:
                     flux_1d = np.full(ncol, np.nan, dtype=np.float32)
                     var_1d  = np.full(ncol, np.nan, dtype=np.float32)
 
-                l2_arrays[f'{chip}_{fiber}_FLUX'][order-1] = flux_1d
-                l2_arrays[f'{chip}_{fiber}_VAR'][order-1] = var_1d
+                l2_arrays[f"{chip}_{fiber}_FLUX"][order-1] = flux_1d
+                l2_arrays[f"{chip}_{fiber}_VAR"][order-1] = var_1d
 
         # During some KPF eras one of the traces does not fall on the detector.
         # In this case a single failure is expected from this method. Allowing
@@ -474,13 +474,13 @@ class SpectralExtraction:
         for chip in chips:
             l2_arrays = self.extract_ffi(chip, fibers, extraction_method, verbose=verbose)
             for fiber in fibers:
-                l2_obj.set_data(f'{chip}_{fiber}_FLUX', l2_arrays[f'{chip}_{fiber}_FLUX'])
-                l2_obj.set_data(f'{chip}_{fiber}_VAR',  l2_arrays[f'{chip}_{fiber}_VAR'])
+                l2_obj.set_data(f"{chip}_{fiber}_FLUX", l2_arrays[f"{chip}_{fiber}_FLUX"])
+                l2_obj.set_data(f"{chip}_{fiber}_VAR",  l2_arrays[f"{chip}_{fiber}_VAR"])
 
-        l2_obj.receipt_add_entry('spectral_extraction', 'PASS')
+        l2_obj.receipt_add_entry("spectral_extraction", "PASS")
 
         self._results = {
-            chip: {'fibers': list(fibers), 'norder': self.norder[chip.upper()]}
+            chip: {"fibers": list(fibers), "norder": self.norder[chip.upper()]}
             for chip in chips
         }
 
@@ -499,5 +499,5 @@ class SpectralExtraction:
         print(f"\n  {'CHIP':<8s} {'FIBERS':<30s} {'NORDER'}")
         print("  " + "-" * 46)
         for chip, info in self._results.items():
-            fibers_str = ' '.join(info['fibers'])
+            fibers_str = " ".join(info["fibers"])
             print(f"  {chip:<8s} {fibers_str:<30s} {info['norder']}")

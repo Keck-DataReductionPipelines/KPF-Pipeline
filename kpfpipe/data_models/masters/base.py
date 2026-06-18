@@ -43,4 +43,4 @@ class KPFMasterModel(KPFDataModel):
 
     def set_input_files(self, file_list):
         """Record the input L0 file list in the INPUT_FILES extension."""
-        self.set_data('INPUT_FILES', pd.DataFrame({'FILENAME': file_list}))
+        self.set_data("INPUT_FILES", pd.DataFrame({"FILENAME": file_list}))

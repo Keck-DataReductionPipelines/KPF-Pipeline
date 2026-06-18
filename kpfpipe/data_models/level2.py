@@ -23,8 +23,8 @@ from rvdata.core.models.level2 import RV2
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 
-NORDER_GREEN = DETECTOR['norder']['GREEN']
-NORDER_RED   = DETECTOR['norder']['RED']
+NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED   = DETECTOR["norder"]["RED"]
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
@@ -79,7 +79,7 @@ class _KPF2DataDict(AliasedOrderedDict):
                 full = np.zeros((NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype)
                 super().__setitem__(resolved, full)
             arr = super().__getitem__(resolved)
-            if chip == 'GREEN':
+            if chip == "GREEN":
                 arr[:NORDER_GREEN] = value
             else:
                 arr[NORDER_GREEN:] = value
@@ -203,10 +203,10 @@ class KPF2(RV2):
         _KPF2DataDict.__setitem__, which writes into the appropriate slice of
         the concatenated trace array.
         """
-        if hasattr(self.data, '_chip_split') and self.data._chip_split(ext_name) is not None:
+        if hasattr(self.data, "_chip_split") and self.data._chip_split(ext_name) is not None:
             self.data[ext_name] = data
             return
-        if hasattr(self.extensions, '_resolve'):
+        if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
         if (ext_name in self.extensions
@@ -232,7 +232,7 @@ class KPF2(RV2):
 
     def set_header(self, ext_name, header):
         """Override to resolve aliases before the base class .keys() check."""
-        if hasattr(self.extensions, '_resolve'):
+        if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         super().set_header(ext_name, header)
 

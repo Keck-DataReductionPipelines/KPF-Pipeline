@@ -8,9 +8,9 @@ from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 
 _DEFAULTS = {**DEFAULTS,
-    'bias': True,
-    'dark': False,
-    'flat': False,
+    "bias": True,
+    "dark": False,
+    "flat": False,
 }
 
 
@@ -61,8 +61,8 @@ class ImageProcessing:
         so downstream reporting reflects what was actually used.
         """
         if isinstance(value, KPFMasterL1):
-            dirname = getattr(value, 'dirname', '') or ''
-            filename = getattr(value, 'filename', None)
+            dirname = getattr(value, "dirname", "") or ""
+            filename = getattr(value, "filename", None)
             self._bias_path = os.path.join(dirname, filename) if filename else None
             return value
         if isinstance(value, str):
@@ -103,9 +103,9 @@ class ImageProcessing:
             bias_path is not provided), or if the file does not exist on disk.
         """
         if bias_path is None:
-            header = self.l1_obj.headers['PRIMARY']
-            bias_file = header.get('BIASFILE')
-            bias_dir  = header.get('BIASDIR')
+            header = self.l1_obj.headers["PRIMARY"]
+            bias_file = header.get("BIASFILE")
+            bias_dir  = header.get("BIASDIR")
 
             if not bias_file or not bias_dir:
                 raise FileNotFoundError(
@@ -138,7 +138,7 @@ class ImageProcessing:
             Modifies l1_obj.data['{chip}_CCD'] in-place.
         """
         chip = chip.upper()
-        self.l1_obj.data[f'{chip}_CCD'] -= bias_l1.data[f'{chip}_IMG']
+        self.l1_obj.data[f"{chip}_CCD"] -= bias_l1.data[f"{chip}_IMG"]
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -198,10 +198,10 @@ class ImageProcessing:
             master_bias = self._resolve_bias(bias)
             for chip in chips:
                 self.subtract_bias(master_bias, chip)
-            self._results['bias'] = self._bias_path
+            self._results["bias"] = self._bias_path
 
-        self.l1_obj.headers['PRIMARY']['BIASUB'] = (bool(bias), 'Bias subtraction applied')
-        self.l1_obj.receipt_add_entry('image_processing', 'PASS')
+        self.l1_obj.headers["PRIMARY"]["BIASUB"] = (bool(bias), "Bias subtraction applied")
+        self.l1_obj.receipt_add_entry("image_processing", "PASS")
 
         return self.l1_obj
 

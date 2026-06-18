@@ -37,8 +37,8 @@ from numpy.polynomial import legendre
 
 from kpfpipe import DETECTOR, REPO_ROOT
 
-DEFAULT_OUTPUT = f'{REPO_ROOT}/reference/rough_wls_fallback.csv'
-DEFAULT_FIBER  = 'SCI2'
+DEFAULT_OUTPUT = f"{REPO_ROOT}/reference/rough_wls_fallback.csv"
+DEFAULT_FIBER  = "SCI2"
 DEFAULT_DEGREE = 9   # degree-9 Legendre reconstructs legacy WAVE to ~1e-11 A
 
 
@@ -67,14 +67,14 @@ def fit_rough_wls(legacy_file, fiber=DEFAULT_FIBER, degree=DEFAULT_DEGREE):
         Worst-case per-order max reconstruction residual, in Angstrom.
     """
     fiber_num = fiber[-1]   # 'SCI2' -> '2'
-    ncol = DETECTOR['ccd']['ncol']
+    ncol = DETECTOR["ccd"]["ncol"]
     x = 2 * np.arange(ncol) / (ncol - 1) - 1   # normalized pixel [-1, 1], ascending
 
     rows = []
     worst_resid = 0.0
     with fits.open(legacy_file) as h:
-        for chip, norder in DETECTOR['norder'].items():
-            wave = h[f'{chip}_SCI_WAVE{fiber_num}'].data[:, ::-1]   # reverse to ascending
+        for chip, norder in DETECTOR["norder"].items():
+            wave = h[f"{chip}_SCI_WAVE{fiber_num}"].data[:, ::-1]   # reverse to ascending
             for o in range(norder):
                 wave_o = wave[o].astype(np.float64)
                 coeffs = legendre.legfit(x, wave_o, degree)
@@ -87,25 +87,25 @@ def fit_rough_wls(legacy_file, fiber=DEFAULT_FIBER, degree=DEFAULT_DEGREE):
 
 def write_csv(rows, output, degree=DEFAULT_DEGREE):
     """Write rough WLS to CSV with columns CHIP,ORDER,WAVE_MIN,WAVE_MAX,C0..Cdegree."""
-    header = ','.join(['CHIP', 'ORDER', 'WAVE_MIN', 'WAVE_MAX'] + [f'C{i}' for i in range(degree + 1)])
-    with open(output, 'w') as f:
-        f.write(header + '\n')
+    header = ",".join(["CHIP", "ORDER", "WAVE_MIN", "WAVE_MAX"] + [f"C{i}" for i in range(degree + 1)])
+    with open(output, "w") as f:
+        f.write(header + "\n")
         for chip, order, wave_min, wave_max, coeffs in rows:
-            f.write(f'{chip},{order},{float(wave_min)!r},{float(wave_max)!r},'
-                    + ','.join(repr(float(c)) for c in coeffs) + '\n')
+            f.write(f"{chip},{order},{float(wave_min)!r},{float(wave_max)!r},"
+                    + ",".join(repr(float(c)) for c in coeffs) + "\n")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--legacy-file', required=True,
-                        help='Legacy KPF *_1D FITS file to fit.')
-    parser.add_argument('--output', default=DEFAULT_OUTPUT,
-                        help=f'Output CSV path (default: {DEFAULT_OUTPUT}).')
-    parser.add_argument('--fiber', default=DEFAULT_FIBER,
-                        help=f'SCI fiber to fit (default: {DEFAULT_FIBER}).')
-    parser.add_argument('--degree', type=int, default=DEFAULT_DEGREE,
-                        help=f'Legendre polynomial degree (default: {DEFAULT_DEGREE}).')
+    parser.add_argument("--legacy-file", required=True,
+                        help="Legacy KPF *_1D FITS file to fit.")
+    parser.add_argument("--output", default=DEFAULT_OUTPUT,
+                        help=f"Output CSV path (default: {DEFAULT_OUTPUT}).")
+    parser.add_argument("--fiber", default=DEFAULT_FIBER,
+                        help=f"SCI fiber to fit (default: {DEFAULT_FIBER}).")
+    parser.add_argument("--degree", type=int, default=DEFAULT_DEGREE,
+                        help=f"Legendre polynomial degree (default: {DEFAULT_DEGREE}).")
     args = parser.parse_args()
 
     rows, worst_resid = fit_rough_wls(args.legacy_file, fiber=args.fiber, degree=args.degree)
@@ -116,5 +116,5 @@ def main():
     print(f"  worst per-order reconstruction residual: {worst_resid:.3e} A")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -8,12 +8,12 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.quality_control.diagnostics import Diagnostics, DiagL0, DiagL1, DiagL2
 
-NORDER_GREEN = DETECTOR['norder']['GREEN']
-NORDER_RED   = DETECTOR['norder']['RED']
-NCOL         = DETECTOR['ccd']['ncol']
+NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED   = DETECTOR["norder"]["RED"]
+NCOL         = DETECTOR["ccd"]["ncol"]
 
-_FIBERS = ('SCI1', 'SCI2', 'SCI3', 'SKY', 'CAL')
-_NAN_KEYS = ('NANSCI1', 'NANSCI2', 'NANSCI3', 'NANSKY', 'NANCAL')
+_FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
+_NAN_KEYS = ("NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL")
 
 
 def _hval(raw):
@@ -162,9 +162,9 @@ def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0):
         os.unlink(tmp_path)
     kpf2 = l1.to_kpf2()
 
-    norder = {'GREEN': NORDER_GREEN, 'RED': NORDER_RED}
+    norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
     rng = np.random.default_rng(42)
-    for chip in ('GREEN', 'RED'):
+    for chip in ("GREEN", "RED"):
         for fiber in _FIBERS:
             n = norder[chip]
             arr = np.ones((n, NCOL), dtype=np.float32)
@@ -174,7 +174,7 @@ def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0):
             if zero_frac > 0:
                 # Zeros fall in the band [nan_frac, nan_frac+zero_frac)
                 arr[(mask >= nan_frac) & (mask < nan_frac + zero_frac)] = 0.0
-            kpf2.set_data(f'{chip}_{fiber}_FLUX', arr)
+            kpf2.set_data(f"{chip}_{fiber}_FLUX", arr)
     return kpf2
 
 
@@ -184,17 +184,17 @@ class TestDiagL2NanCounts:
         kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
-            assert key in kpf2.headers['PRIMARY'], f"missing {key}"
-            assert _hval(kpf2.headers['PRIMARY'][key]) == 0
+            assert key in kpf2.headers["PRIMARY"], f"missing {key}"
+            assert _hval(kpf2.headers["PRIMARY"][key]) == 0
 
     def test_counts_injected_nans_per_fiber(self):
         kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
         # Inject one NaN into GREEN_SCI1_FLUX; expect NANSCI1==1, others==0.
-        kpf2.data['GREEN_SCI1_FLUX'][0, 0] = np.nan
+        kpf2.data["GREEN_SCI1_FLUX"][0, 0] = np.nan
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers['PRIMARY']['NANSCI1']) == 1
-        for key in ('NANSCI2', 'NANSCI3', 'NANSKY', 'NANCAL'):
-            assert _hval(kpf2.headers['PRIMARY'][key]) == 0
+        assert _hval(kpf2.headers["PRIMARY"]["NANSCI1"]) == 1
+        for key in ("NANSCI2", "NANSCI3", "NANSKY", "NANCAL"):
+            assert _hval(kpf2.headers["PRIMARY"][key]) == 0
 
     def test_writes_keys_even_when_no_data(self):
         """KPF2 with no FLUX extensions populated should still write all 5
@@ -227,7 +227,7 @@ class TestDiagL2NanCounts:
         kpf2 = l1.to_kpf2()
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
-            assert _hval(kpf2.headers['PRIMARY'][key]) == 0
+            assert _hval(kpf2.headers["PRIMARY"][key]) == 0
 
 
 class TestDiagL2ZeroFlux:
@@ -235,19 +235,19 @@ class TestDiagL2ZeroFlux:
     def test_zerofrac_written_when_data_present(self):
         kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
         DiagL2(kpf2).run()
-        assert 'ZEROFRAC' in kpf2.headers['PRIMARY']
-        assert _hval(kpf2.headers['PRIMARY']['ZEROFRAC']) == pytest.approx(0.0)
+        assert "ZEROFRAC" in kpf2.headers["PRIMARY"]
+        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(0.0)
 
     def test_zerofrac_one_when_all_zero(self):
         kpf2 = _make_kpf2_with_flux(zero_frac=1.0)
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers['PRIMARY']['ZEROFRAC']) == pytest.approx(1.0)
+        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(1.0)
 
     def test_zerofrac_approximate_when_partial(self):
         """50% zeros sprinkled randomly → ZEROFRAC ≈ 0.5 within sampling error."""
         kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers['PRIMARY']['ZEROFRAC']) == pytest.approx(0.5, abs=0.01)
+        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(0.5, abs=0.01)
 
     def test_zerofrac_skipped_when_no_data(self):
         """KPF2 with no populated FLUX extensions → no ZEROFRAC key written."""
@@ -274,4 +274,4 @@ class TestDiagL2ZeroFlux:
             os.unlink(tmp_path)
         kpf2 = l1.to_kpf2()
         DiagL2(kpf2).run()
-        assert 'ZEROFRAC' not in kpf2.headers['PRIMARY']
+        assert "ZEROFRAC" not in kpf2.headers["PRIMARY"]

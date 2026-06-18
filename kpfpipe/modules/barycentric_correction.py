@@ -46,13 +46,13 @@ from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import strictly_increasing
 
-NORDER_GREEN = DETECTOR['norder']['GREEN']
-NORDER_RED   = DETECTOR['norder']['RED']
+NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED   = DETECTOR["norder"]["RED"]
 NORDER       = NORDER_GREEN + NORDER_RED
 
 _DEFAULTS = {**DEFAULTS,
-    'use_gaia_astrometry': True,
-    'use_wmko_fallback': False,
+    "use_gaia_astrometry": True,
+    "use_wmko_fallback": False,
 }
 
 # WMKO site coordinates
@@ -126,21 +126,21 @@ class BarycentricCorrection:
         Prefers corrected timestamps (Date-Beg-Corr / Date-End-Corr) when
         available, falling back to uncorrected values.
         """
-        expmeter = self.kpf2_obj.data['EXPMETER_SCI']
+        expmeter = self.kpf2_obj.data["EXPMETER_SCI"]
 
         try:
-            t_beg = Time(np.array(expmeter['Date-Beg-Corr']).astype(str), format='isot', scale='utc')
-            t_end = Time(np.array(expmeter['Date-End-Corr']).astype(str), format='isot', scale='utc')
+            t_beg = Time(np.array(expmeter["Date-Beg-Corr"]).astype(str), format="isot", scale="utc")
+            t_end = Time(np.array(expmeter["Date-End-Corr"]).astype(str), format="isot", scale="utc")
         except KeyError:
-            t_beg = Time(np.array(expmeter['Date-Beg']).astype(str), format='isot', scale='utc')
-            t_end = Time(np.array(expmeter['Date-End']).astype(str), format='isot', scale='utc')
+            t_beg = Time(np.array(expmeter["Date-Beg"]).astype(str), format="isot", scale="utc")
+            t_end = Time(np.array(expmeter["Date-End"]).astype(str), format="isot", scale="utc")
 
         if not strictly_increasing(t_beg.jd):
             raise ValueError("EXPMETER_SCI Date-Beg timestamps are not strictly increasing")
         if not strictly_increasing(t_end.jd):
             raise ValueError("EXPMETER_SCI Date-End timestamps are not strictly increasing")
 
-        t_mid = Time((t_beg.jd + t_end.jd) / 2, format='jd', scale='utc')
+        t_mid = Time((t_beg.jd + t_end.jd) / 2, format="jd", scale="utc")
         return t_beg, t_mid, t_end
 
     def _get_normalized_flux(self):
@@ -160,7 +160,7 @@ class BarycentricCorrection:
         f : ndarray, shape (ntime, nwave)
             Dispersion-normalized flux [e- / Å].
         """
-        expmeter = self.kpf2_obj.data['EXPMETER_SCI']
+        expmeter = self.kpf2_obj.data["EXPMETER_SCI"]
 
         wave_cols = []
         for col in expmeter.colnames:
@@ -205,14 +205,14 @@ class BarycentricCorrection:
         points_bad = np.column_stack((x[bad], y[bad]))
 
         f_fixed = f.copy()
-        f_fixed[bad] = griddata(points, values, points_bad, method='linear')
+        f_fixed[bad] = griddata(points, values, points_bad, method="linear")
 
         nan_mask = np.isnan(f_fixed)
         if np.any(nan_mask):
             f_fixed[nan_mask] = griddata(
                 points, values,
                 np.column_stack((x[nan_mask], y[nan_mask])),
-                method='nearest'
+                method="nearest"
             )
 
         return f_fixed
@@ -232,7 +232,7 @@ class BarycentricCorrection:
         rate = f / dt_exp
         rate_gap = 0.5 * (rate[1:] + rate[:-1])
 
-        t_gap = Time(t_end[:-1].jd + dt_gap / 2, format='jd', scale='utc')
+        t_gap = Time(t_end[:-1].jd + dt_gap / 2, format="jd", scale="utc")
         f_gap = rate_gap * dt_gap[:, None]
 
         return t_gap, f_gap
@@ -250,10 +250,10 @@ class BarycentricCorrection:
 
         if t0 < t_beg:
             dt_gap = (t_beg - t0).jd
-            t_ext = Time(t0.jd + dt_gap / 2, format='jd', scale='utc')
+            t_ext = Time(t0.jd + dt_gap / 2, format="jd", scale="utc")
         elif t0 > t_end:
             dt_gap = (t0 - t_end).jd
-            t_ext = Time(t_end.jd + dt_gap / 2, format='jd', scale='utc')
+            t_ext = Time(t_end.jd + dt_gap / 2, format="jd", scale="utc")
         else:
             raise ValueError("t0 must be before t_beg or after t_end")
 
@@ -295,22 +295,22 @@ class BarycentricCorrection:
 
         if interpolate:
             t_gap, f_gap = self._interpolate(t_beg, t_end, f)
-            t = Time(np.concatenate([t.jd, t_gap.jd]), format='jd', scale='utc')
+            t = Time(np.concatenate([t.jd, t_gap.jd]), format="jd", scale="utc")
             f = np.vstack([f, f_gap])
 
         if extrapolate:
-            hdr = self.kpf2_obj.headers['INSTRUMENT_HEADER']
-            obs_beg = Time(hdr['DATE-BEG'], format='isot', scale='utc')
-            obs_end = Time(hdr['DATE-END'], format='isot', scale='utc')
+            hdr = self.kpf2_obj.headers["INSTRUMENT_HEADER"]
+            obs_beg = Time(hdr["DATE-BEG"], format="isot", scale="utc")
+            obs_end = Time(hdr["DATE-END"], format="isot", scale="utc")
 
             if obs_beg < t_beg[0]:
                 t_ext, f_ext = self._extrapolate(obs_beg, t_beg[0], t_end[0], f_first_reading)
-                t = Time(np.concatenate([t.jd, [t_ext.jd]]), format='jd', scale='utc')
+                t = Time(np.concatenate([t.jd, [t_ext.jd]]), format="jd", scale="utc")
                 f = np.vstack([f, f_ext])
 
             if obs_end > t_end[-1]:
                 t_ext, f_ext = self._extrapolate(obs_end, t_beg[-1], t_end[-1], f_last_reading)
-                t = Time(np.concatenate([t.jd, [t_ext.jd]]), format='jd', scale='utc')
+                t = Time(np.concatenate([t.jd, [t_ext.jd]]), format="jd", scale="utc")
                 f = np.vstack([f, f_ext])
 
         flux_sum = np.sum(f, axis=0)
@@ -319,7 +319,7 @@ class BarycentricCorrection:
                              "cannot compute flux-weighted midpoint")
         t_em = Time(
             np.sum(t.jd[:, None] * f, axis=0) / flux_sum,
-            format='jd', scale='utc',
+            format="jd", scale="utc",
         )
         return w_em, t_em
 
@@ -337,8 +337,8 @@ class BarycentricCorrection:
         network query runs once and is reused across calls (one target/frame).
         """
         if self._skycoord is None:
-            gaia_id_raw = self.kpf2_obj.headers['INSTRUMENT_HEADER']['GAIAID']
-            gaia_id = re.split(r'\s+', str(gaia_id_raw).strip())[-1]
+            gaia_id_raw = self.kpf2_obj.headers["INSTRUMENT_HEADER"]["GAIAID"]
+            gaia_id = re.split(r"\s+", str(gaia_id_raw).strip())[-1]
             if not gaia_id.isdigit():
                 raise ValueError(
                     f"Gaia source_id must be all digits; got {gaia_id!r}"
@@ -352,13 +352,13 @@ class BarycentricCorrection:
             result = job.get_results()[0]
 
             self._skycoord = SkyCoord(
-                ra=result['ra'] * u.deg,
-                dec=result['dec'] * u.deg,
-                pm_ra_cosdec=result['pmra'] * u.mas / u.yr,
-                pm_dec=result['pmdec'] * u.mas / u.yr,
-                distance=(1e3 / result['parallax']) * u.pc,
-                obstime=Time(result['ref_epoch'], format='jyear'),
-                frame='icrs',
+                ra=result["ra"] * u.deg,
+                dec=result["dec"] * u.deg,
+                pm_ra_cosdec=result["pmra"] * u.mas / u.yr,
+                pm_dec=result["pmdec"] * u.mas / u.yr,
+                distance=(1e3 / result["parallax"]) * u.pc,
+                obstime=Time(result["ref_epoch"], format="jyear"),
+                frame="icrs",
             )
         return self._skycoord
 
@@ -371,16 +371,16 @@ class BarycentricCorrection:
         (-> mas/yr via x15 cos(dec)); TARGPLAX is in mas (-> distance via
         1e3/plax), matching the Gaia path.
         """
-        inst = self.kpf2_obj.headers['INSTRUMENT_HEADER']
-        pos = SkyCoord(inst['TARGRA'], inst['TARGDEC'], unit=(u.hourangle, u.deg))
-        pm_ra_cosdec = float(inst['TARGPMRA']) * 15.0 * np.cos(pos.dec.rad) * 1e3
+        inst = self.kpf2_obj.headers["INSTRUMENT_HEADER"]
+        pos = SkyCoord(inst["TARGRA"], inst["TARGDEC"], unit=(u.hourangle, u.deg))
+        pm_ra_cosdec = float(inst["TARGPMRA"]) * 15.0 * np.cos(pos.dec.rad) * 1e3
         return SkyCoord(
             ra=pos.ra, dec=pos.dec,
             pm_ra_cosdec=pm_ra_cosdec * u.mas / u.yr,
-            pm_dec=float(inst['TARGPMDC']) * 1e3 * u.mas / u.yr,
-            distance=(1e3 / float(inst['TARGPLAX'])) * u.pc,
-            frame=str(inst['TARGFRAM']).lower(),
-            obstime=Time(float(inst['TARGEPOC']), format='jyear'),
+            pm_dec=float(inst["TARGPMDC"]) * 1e3 * u.mas / u.yr,
+            distance=(1e3 / float(inst["TARGPLAX"])) * u.pc,
+            frame=str(inst["TARGFRAM"]).lower(),
+            obstime=Time(float(inst["TARGEPOC"]), format="jyear"),
         )
 
     def _get_skycoord(self):
@@ -395,7 +395,7 @@ class BarycentricCorrection:
         if self.use_gaia_astrometry:
             try:
                 skycoord = self._gaia_astrometry()
-                self._astrometry_source = 'Gaia DR3'
+                self._astrometry_source = "Gaia DR3"
                 return skycoord
             except Exception as e:
                 gaia_error = e
@@ -405,7 +405,7 @@ class BarycentricCorrection:
                     f"Gaia astrometry unavailable ({type(gaia_error).__name__}: "
                     f"{gaia_error}); using WMKO header astrometry"
                 )
-            self._astrometry_source = 'WMKO header'
+            self._astrometry_source = "WMKO header"
             return self._wmko_astrometry()
         raise ValueError(
             "no target astrometry: Gaia "
@@ -460,7 +460,7 @@ class BarycentricCorrection:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def compute_flux_weighted_midpoint_times(self, output='orders', interpolate=True,
+    def compute_flux_weighted_midpoint_times(self, output="orders", interpolate=True,
                                 extrapolate=True, fix_expmeter_outliers=True):
         """
         Compute the flux-weighted midpoint observation time.
@@ -494,7 +494,7 @@ class BarycentricCorrection:
         t_fwm : Time
             Flux-weighted midpoint time (JD-UTC) per output bin.
         """
-        if output not in ('expmeter', 'orders', 'ccds'):
+        if output not in ("expmeter", "orders", "ccds"):
             raise ValueError(
                 f"output must be 'expmeter', 'orders', or 'ccds'; "
                 f"got {output!r}"
@@ -511,10 +511,10 @@ class BarycentricCorrection:
             self._em_cache = (key, w_em, t_em)
         _, w_em, t_em = self._em_cache
 
-        if output == 'expmeter':
+        if output == "expmeter":
             return w_em, t_em
 
-        wave = self.kpf2_obj.data['SCI2_WAVE']
+        wave = self.kpf2_obj.data["SCI2_WAVE"]
         if wave is None or np.size(wave) == 0:
             raise KeyError(
                 "SCI2_WAVE missing or empty; run WavelengthCalibration first"
@@ -532,14 +532,14 @@ class BarycentricCorrection:
                 jd_per_order[i] = np.mean(t_em_jd[in_order])
             else:
                 jd_per_order[i] = t_em_jd[np.argmin(np.abs(w_em - w_orders[i]))]
-        t_orders = Time(jd_per_order, format='jd', scale='utc')
+        t_orders = Time(jd_per_order, format="jd", scale="utc")
 
-        if output == 'orders':
+        if output == "orders":
             return w_orders, t_orders
 
         # Weight each order by its SCI2 brightness (90th percentile, robust to
         # cosmics); NaN/failed orders get zero weight, uniform if SCI2_FLUX absent.
-        flux = self.kpf2_obj.data['SCI2_FLUX']
+        flux = self.kpf2_obj.data["SCI2_FLUX"]
         if flux is None or np.size(flux) == 0:
             weights = np.ones(NORDER)
         else:
@@ -558,11 +558,11 @@ class BarycentricCorrection:
         t_ccds = Time(
             [np.average(jd_per_order[green], weights=weights[green]),
              np.average(jd_per_order[red],   weights=weights[red])],
-            format='jd', scale='utc',
+            format="jd", scale="utc",
         )
         return w_ccds, t_ccds
 
-    def compute_barycentric_correction(self, output='orders', interpolate=True,
+    def compute_barycentric_correction(self, output="orders", interpolate=True,
                                 extrapolate=True, fix_expmeter_outliers=True):
         """
         Compute the barycentric correction at the flux-weighted photon-midpoint
@@ -596,8 +596,8 @@ class BarycentricCorrection:
         skycoord = self._get_skycoord()
 
         # TARGRADV is in km/s; barycorrpy expects rv in m/s. Missing → 0.
-        inst = self.kpf2_obj.headers['INSTRUMENT_HEADER']
-        rv_mps = float(inst.get('TARGRADV', 0.0) or 0.0) * 1000.0
+        inst = self.kpf2_obj.headers["INSTRUMENT_HEADER"]
+        rv_mps = float(inst.get("TARGRADV", 0.0) or 0.0) * 1000.0
 
         bc_vel_mps, bjd_tdb = self._compute_barycorr(
             skycoord, t_fwm, KECK_LOCATION, rv_mps=rv_mps,
@@ -638,44 +638,44 @@ class BarycentricCorrection:
 
         kwargs = dict(interpolate=interpolate, extrapolate=extrapolate,
                       fix_expmeter_outliers=fix_expmeter_outliers)
-        bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(output='orders', **kwargs)
-        ccd_bjd, ccd_kms, ccd_z   = self.compute_barycentric_correction(output='ccds', **kwargs)
+        bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(output="orders", **kwargs)
+        ccd_bjd, ccd_kms, ccd_z   = self.compute_barycentric_correction(output="ccds", **kwargs)
 
-        inst = self.kpf2_obj.headers['INSTRUMENT_HEADER']
+        inst = self.kpf2_obj.headers["INSTRUMENT_HEADER"]
 
         # Per-order extensions; WAVE arrays are left untouched
-        self.kpf2_obj.set_data('BJD_TDB',      np.asarray(bjd_tdb,  dtype=np.float64))
-        self.kpf2_obj.set_data('BARYCORR_KMS', np.asarray(bary_kms, dtype=np.float64))
-        self.kpf2_obj.set_data('BARYCORR_Z',   np.asarray(bary_z,   dtype=np.float64))
+        self.kpf2_obj.set_data("BJD_TDB",      np.asarray(bjd_tdb,  dtype=np.float64))
+        self.kpf2_obj.set_data("BARYCORR_KMS", np.asarray(bary_kms, dtype=np.float64))
+        self.kpf2_obj.set_data("BARYCORR_Z",   np.asarray(bary_z,   dtype=np.float64))
 
         # Per-CCD instrument header keyword (CCD1=GREEN, CCD2=RED)
-        inst['CCD1BJD']  = float(ccd_bjd[0])
-        inst['CCD1BKMS'] = float(ccd_kms[0])
-        inst['CCD1BZ']   = float(ccd_z[0])
-        inst['CCD2BJD']  = float(ccd_bjd[1])
-        inst['CCD2BKMS'] = float(ccd_kms[1])
-        inst['CCD2BZ']   = float(ccd_z[1])
+        inst["CCD1BJD"]  = float(ccd_bjd[0])
+        inst["CCD1BKMS"] = float(ccd_kms[0])
+        inst["CCD1BZ"]   = float(ccd_z[0])
+        inst["CCD2BJD"]  = float(ccd_bjd[1])
+        inst["CCD2BKMS"] = float(ccd_kms[1])
+        inst["CCD2BZ"]   = float(ccd_z[1])
 
         # Provenance: which astrometry source actually produced the correction
-        inst['ASTRSRC'] = self._astrometry_source
+        inst["ASTRSRC"] = self._astrometry_source
 
-        self.kpf2_obj.receipt_add_entry('barycentric_correction', 'PASS')
+        self.kpf2_obj.receipt_add_entry("barycentric_correction", "PASS")
 
         self._results = {
-            'bjd_tdb':  np.asarray(bjd_tdb),
-            'bary_kms': np.asarray(bary_kms),
-            'bary_z':   np.asarray(bary_z),
-            'ccd_bjd':  np.asarray(ccd_bjd),
-            'ccd_kms':  np.asarray(ccd_kms),
-            'ccd_z':    np.asarray(ccd_z),
-            'astrometry_source': self._astrometry_source,
+            "bjd_tdb":  np.asarray(bjd_tdb),
+            "bary_kms": np.asarray(bary_kms),
+            "bary_z":   np.asarray(bary_z),
+            "ccd_bjd":  np.asarray(ccd_bjd),
+            "ccd_kms":  np.asarray(ccd_kms),
+            "ccd_z":    np.asarray(ccd_z),
+            "astrometry_source": self._astrometry_source,
         }
         return self.kpf2_obj
 
     def info(self):
         """Print a summary of the barycentric correction results."""
         print("BarycentricCorrection")
-        obs_id = self.kpf2_obj.headers.get('PRIMARY', {}).get('ORIGID', 'unknown')
+        obs_id = self.kpf2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
         if isinstance(obs_id, tuple):
             obs_id = obs_id[0]
         print(f"  obs_id:  {obs_id}")
@@ -686,7 +686,7 @@ class BarycentricCorrection:
 
         r = self._results
         print(f"  astrometry:  {r['astrometry_source']}")
-        ccd_bjd, ccd_kms, ccd_z = r['ccd_bjd'], r['ccd_kms'], r['ccd_z']
+        ccd_bjd, ccd_kms, ccd_z = r["ccd_bjd"], r["ccd_kms"], r["ccd_z"]
 
         # Per-CCD summaries (match CCD1*/CCD2* in INSTRUMENT_HEADER).
         print(f"\n  {'':<8s}{'BJD_TDB':>18s}{'BARYCORR_KMS':>18s}{'BARYCORR_Z':>18s}")
@@ -694,6 +694,6 @@ class BarycentricCorrection:
         print(f"  {'GREEN':<8s}{ccd_bjd[0]:>18.6f}{ccd_kms[0]:>+18.4f}{ccd_z[0]:>18.10f}")
         print(f"  {'RED':<8s}{ccd_bjd[1]:>18.6f}{ccd_kms[1]:>+18.4f}{ccd_z[1]:>18.10f}")
 
-        bjd, kms = r['bjd_tdb'], r['bary_kms']
+        bjd, kms = r["bjd_tdb"], r["bary_kms"]
         print(f"\n  per-order spread:   BJD {np.ptp(bjd) * 86400:.3f} sec,"
               f" BARY {np.ptp(kms) * 1000:.3f} m/s")

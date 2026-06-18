@@ -88,13 +88,13 @@ class WavelengthCalibration:
             If the resolved path does not exist.
         """
         if wls_path is None:
-            inst_header = self.l2_obj.headers.get('INSTRUMENT_HEADER', {})
-            if 'WLSFILE' not in inst_header:
+            inst_header = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
+            if "WLSFILE" not in inst_header:
                 raise KeyError(
                     "WLSFILE missing from L2 INSTRUMENT_HEADER; "
                     "run CalibrationAssociation with 'thar' on the L1 first"
                 )
-            wls_path = inst_header['WLSFILE']
+            wls_path = inst_header["WLSFILE"]
 
         if not os.path.isfile(wls_path):
             raise FileNotFoundError(f"Master WLS file not found: {wls_path}")
@@ -142,7 +142,7 @@ class WavelengthCalibration:
 
         for chip in chips:
             for fiber in fibers:
-                key = f'{chip}_{fiber}_WAVE'
+                key = f"{chip}_{fiber}_WAVE"
                 src = master.data[key]
                 if src is None or np.size(src) == 0:
                     raise KeyError(
@@ -151,12 +151,12 @@ class WavelengthCalibration:
                     )
                 self.l2_obj.set_data(key, np.asarray(src, dtype=np.float64))
 
-        self.l2_obj.receipt_add_entry('wavelength_calibration', 'PASS')
+        self.l2_obj.receipt_add_entry("wavelength_calibration", "PASS")
 
         self._results = {
-            'wls_path': self._wls_path,
-            'chips': list(chips),
-            'fibers': list(fibers),
+            "wls_path": self._wls_path,
+            "chips": list(chips),
+            "fibers": list(fibers),
         }
 
         return self.l2_obj
@@ -164,7 +164,7 @@ class WavelengthCalibration:
     def info(self):
         """Print a summary of the module configuration and association results."""
         print("WavelengthCalibration")
-        obs_id = self.l2_obj.headers.get('PRIMARY', {}).get('ORIGID', 'unknown')
+        obs_id = self.l2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
         if isinstance(obs_id, tuple):
             obs_id = obs_id[0]
         print(f"  obs_id:  {obs_id}")
@@ -175,8 +175,8 @@ class WavelengthCalibration:
             print("  perform() has not been called")
             return
 
-        inst = self.l2_obj.headers.get('INSTRUMENT_HEADER', {})
-        agewls = inst.get('AGEWLS')
+        inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
+        agewls = inst.get("AGEWLS")
         print(f"  wls_path: {self._results['wls_path']}")
         if agewls is not None:
             print(f"  AGEWLS:   {agewls:+.4f} d  (master - obs)")

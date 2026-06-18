@@ -14,7 +14,7 @@ from astropy.constants import c
 
 from kpfpipe.utils.astro import air_to_vac, compute_doppler_factor, compute_redshift
 
-C_KMS = c.to('km/s').value
+C_KMS = c.to("km/s").value
 
 
 class TestComputeRedshift:

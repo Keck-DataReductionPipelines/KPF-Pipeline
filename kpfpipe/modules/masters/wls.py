@@ -19,7 +19,7 @@ from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 
-_ROUGH_WLS_FILE = f'{REPO_ROOT}/reference/rough_wls_fallback.csv'
+_ROUGH_WLS_FILE = f"{REPO_ROOT}/reference/rough_wls_fallback.csv"
 
 
 class WLS(BaseMasterModule):
@@ -41,11 +41,11 @@ class WLS(BaseMasterModule):
     """
 
     _DEFAULTS = {**BaseMasterModule._DEFAULTS,
-        'linelist': f'{REPO_ROOT}/reference/thar_line_list.csv',
-        'lineprofile': 'gaussian',
-        'polyorder_x': 6,
-        'polyorder_m': 6,
-        'polyorder_f': 2,
+        "linelist": f"{REPO_ROOT}/reference/thar_line_list.csv",
+        "lineprofile": "gaussian",
+        "polyorder_x": 6,
+        "polyorder_m": 6,
+        "polyorder_f": 2,
     }
 
     def __init__(self, l0_file_list, config=None):
@@ -58,7 +58,7 @@ class WLS(BaseMasterModule):
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
-        self._data_root = params.get('KPF_DATA_INPUT')
+        self._data_root = params.get("KPF_DATA_INPUT")
         self.rough_wls_file = _ROUGH_WLS_FILE
 
         self._load_rough_wls()
@@ -80,7 +80,7 @@ class WLS(BaseMasterModule):
         disk when nothing is cached, or when `linelist` (a file path) differs
         from the cached `self.linelist`; otherwise returns the cache unchanged.
         """
-        needs_load = not hasattr(self, '_linelist_df')
+        needs_load = not hasattr(self, "_linelist_df")
         if linelist is not None and linelist != self.linelist:
             self.linelist = linelist
             needs_load = True
@@ -99,17 +99,17 @@ class WLS(BaseMasterModule):
         cache is transparently kept in sync with the most recently
         passed-in file path.
         """
-        needs_load = not hasattr(self, 'rough_wls')
+        needs_load = not hasattr(self, "rough_wls")
         if rough_wls_file is not None and rough_wls_file != self.rough_wls_file:
             self.rough_wls_file = rough_wls_file
             needs_load = True
         if needs_load:
             df = pd.read_csv(self.rough_wls_file)
 
-            ncol = self.ccd['ncol']
+            ncol = self.ccd["ncol"]
             # Per-order Legendre coefficients (C0..Cn) evaluated on the
             # normalized pixel grid; see scripts/build_rough_wls_from_legacy_wls.py.
-            coeff_cols = sorted((c for c in df.columns if c.startswith('C') and c[1:].isdigit()),
+            coeff_cols = sorted((c for c in df.columns if c.startswith("C") and c[1:].isdigit()),
                                 key=lambda c: int(c[1:]))
             x = 2*np.arange(ncol)/(ncol - 1) - 1
             self.rough_wls = {}
@@ -117,7 +117,7 @@ class WLS(BaseMasterModule):
             for chip in self.chips:
                 norder = self.norder[chip]
                 for fiber in self.fibers:
-                    channel_ext = f'{chip}_{fiber}_WAVE'
+                    channel_ext = f"{chip}_{fiber}_WAVE"
                     self.rough_wls[channel_ext] = np.zeros((norder, ncol))
 
                     for o in range(norder):
@@ -129,8 +129,8 @@ class WLS(BaseMasterModule):
     
 
     def _extract_frame(self, l1_obj, verbose=True):
-        calibration_association = CalibrationAssociation(l1_obj, {'KPF_DATA_INPUT': self._data_root})
-        l1_obj = calibration_association.perform(['bias'])
+        calibration_association = CalibrationAssociation(l1_obj, {"KPF_DATA_INPUT": self._data_root})
+        l1_obj = calibration_association.perform(["bias"])
 
         image_processing = ImageProcessing(l1_obj)
         l1_obj = image_processing.perform()
@@ -149,12 +149,12 @@ class WLS(BaseMasterModule):
         `loc` is the per-line window-center pixel; a centroid more than
         `window` pixels from it is flagged as a runaway fit.
         """
-        if lineprofile != 'gaussian':
+        if lineprofile != "gaussian":
             raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
-        bad = (lines['amp'] < 0) | (lines['amp'] > 1.5e6) # 10x single-pixel saturation
-        bad |= (lines['std'] < 0.5) | (lines['std'] >= window)
-        bad |= np.abs(lines['pix'] - loc) > window
+        bad = (lines["amp"] < 0) | (lines["amp"] > 1.5e6) # 10x single-pixel saturation
+        bad |= (lines["std"] < 0.5) | (lines["std"] >= window)
+        bad |= np.abs(lines["pix"] - loc) > window
 
         return bad
 
@@ -213,7 +213,7 @@ class WLS(BaseMasterModule):
                               flux1d,
                               wave1d,
                               line_waves,
-                              lineprofile='gaussian',
+                              lineprofile="gaussian",
                               window=5,
                               ):
         """
@@ -264,8 +264,8 @@ class WLS(BaseMasterModule):
             raise ValueError("length of flux and wave arrays are mismatched")
         ncol = len(flux1d)
 
-        lines = {k: np.zeros(0, dtype='float') for k in ['wav', 'pix', 'std', 'amp']}
-        lines['bad'] = np.zeros(0, dtype=bool)
+        lines = {k: np.zeros(0, dtype="float") for k in ["wav", "pix", "std", "amp"]}
+        lines["bad"] = np.zeros(0, dtype=bool)
 
         if not np.isfinite(flux1d).any():
             return lines
@@ -290,17 +290,17 @@ class WLS(BaseMasterModule):
             cols = cols[(cols >= 0) & (cols < ncol)]
             keep[i] = np.isfinite(flux1d[cols]).all()
 
-        lines['wav'] = candidate_wavs[keep]
-        nlines = len(lines['wav'])
+        lines["wav"] = candidate_wavs[keep]
+        nlines = len(lines["wav"])
 
         if nlines == 0:
             return lines
 
-        for key in ['pix', 'std', 'amp']:
-            lines[key] = np.zeros(nlines, dtype='float')
+        for key in ["pix", "std", "amp"]:
+            lines[key] = np.zeros(nlines, dtype="float")
 
-        locs = np.zeros(nlines, dtype='float')
-        for i, lw in enumerate(lines['wav']):
+        locs = np.zeros(nlines, dtype="float")
+        for i, lw in enumerate(lines["wav"]):
             loc = np.argmin(np.abs(wave1d - lw))
             locs[i] = loc
             cols = np.arange(loc - window, loc + window + 1)
@@ -310,15 +310,15 @@ class WLS(BaseMasterModule):
             y = flux1d[cols]
             theta, _ = optimize_lsq(x, y, lineprofile)
 
-            if lineprofile == 'gaussian':
+            if lineprofile == "gaussian":
                 # gaussian_dist theta convention: [b, a, mu, sigma]
-                lines['pix'][i] = theta[2]
-                lines['std'][i] = theta[3]
-                lines['amp'][i] = theta[1]
+                lines["pix"][i] = theta[2]
+                lines["std"][i] = theta[3]
+                lines["amp"][i] = theta[1]
             else:
                 raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
-        lines['bad'] = self._line_fit_qc(lines, lineprofile, window, locs)
+        lines["bad"] = self._line_fit_qc(lines, lineprofile, window, locs)
 
         return lines
     
@@ -384,23 +384,23 @@ class WLS(BaseMasterModule):
 
         norder = self.norder[chip]
         # keys mirror fit_line_positions_1d's output plus per-line provenance tags
-        keys = ('wav', 'pix', 'std', 'amp', 'bad', 'order', 'fiber')
+        keys = ("wav", "pix", "std", "amp", "bad", "order", "fiber")
         lines = {k: [[None] * norder for _ in fibers] for k in keys}
 
         for i, fiber in enumerate(fibers):
             if verbose:
                 print(f"fitting {chip} {fiber} line positions")
 
-            flux_arr = l2_obj.data[f'{chip}_{fiber}_FLUX']
-            wave_arr = self.rough_wls[f'{chip}_{fiber}_WAVE']
+            flux_arr = l2_obj.data[f"{chip}_{fiber}_FLUX"]
+            wave_arr = self.rough_wls[f"{chip}_{fiber}_WAVE"]
 
             if np.shape(flux_arr) != np.shape(wave_arr):
                 raise ValueError("shape mismatch between flux array and rough WLS")
 
             for o in range(norder):
                 line_waves = linelist_df.loc[
-                    (linelist_df['CHIP'] == chip) & (linelist_df['ORDER'] == o),
-                    'WAVE'].to_numpy(dtype=float)
+                    (linelist_df["CHIP"] == chip) & (linelist_df["ORDER"] == o),
+                    "WAVE"].to_numpy(dtype=float)
                 line_dict = self.fit_line_positions_1d(
                     flux_arr[o],
                     wave_arr[o],
@@ -409,14 +409,14 @@ class WLS(BaseMasterModule):
                     window=window,
                 )
 
-                nlines = len(line_dict['wav'])
+                nlines = len(line_dict["wav"])
                 if nlines == 0 and verbose:
                     warnings.warn(
                         f"{chip} {fiber} order {o + 1}: orderlet skipped "
                         f"(no fittable lines; flux likely NaN-filled)"
                     )
-                line_dict['order'] = (o + 1) * np.ones(nlines, dtype=int)
-                line_dict['fiber'] = np.full(nlines, fiber)
+                line_dict["order"] = (o + 1) * np.ones(nlines, dtype=int)
+                line_dict["fiber"] = np.full(nlines, fiber)
 
                 for k in keys:
                     lines[k][i][o] = line_dict[k]
@@ -424,8 +424,8 @@ class WLS(BaseMasterModule):
             for k in lines:
                 lines[k][i] = np.hstack(lines[k][i])
 
-            n_total = len(lines['wav'][i])
-            n_good = int(np.sum(~lines['bad'][i]))
+            n_total = len(lines["wav"][i])
+            n_good = int(np.sum(~lines["bad"][i]))
             if verbose:
                 print(f"  {chip} {fiber}: {n_good}/{n_total} good lines")
             if n_good == 0 and verbose:
@@ -490,11 +490,11 @@ class WLS(BaseMasterModule):
         if polyorder_f is None:
             polyorder_f = self.polyorder_f
 
-        good = ~lines['bad']
-        wav = lines['wav'][good]
-        pix = lines['pix'][good]
-        ord = lines['order'][good]
-        fib = lines['fiber'][good]
+        good = ~lines["bad"]
+        wav = lines["wav"][good]
+        pix = lines["pix"][good]
+        ord = lines["order"][good]
+        fib = lines["fiber"][good]
 
         fibers = list(set(fib))
 
@@ -502,9 +502,9 @@ class WLS(BaseMasterModule):
             raise ValueError(f"expected 1, 3, or 5 fibers, got {len(fibers)}")
 
         if len(fibers) == 3:
-            expected_fibers = ['SCI1', 'SCI2', 'SCI3']
+            expected_fibers = ["SCI1", "SCI2", "SCI3"]
         elif len(fibers) == 5:
-            expected_fibers = ['SKY', 'SCI1', 'SCI2', 'SCI3', 'CAL']
+            expected_fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
         if len(fibers) != 1 and not (
             np.all(np.isin(fibers, expected_fibers)) and
@@ -524,7 +524,7 @@ class WLS(BaseMasterModule):
                 f"polyorder_f={polyorder_f}, fibers={sorted(fibers)})"
             )
 
-        ncol = self.ccd['ncol']
+        ncol = self.ccd["ncol"]
 
         # rescale position variables to [-1,1] for Legendre fitting
         x = 2*pix/(ncol - 1) - 1
@@ -679,7 +679,7 @@ class WLS(BaseMasterModule):
             polyorder_f = self.polyorder_f
 
         
-        if hasattr(self, '_l2_obj_cache'):
+        if hasattr(self, "_l2_obj_cache"):
             l2_obj_list = self._l2_obj_cache
         else:
             raise ValueError(
@@ -706,8 +706,8 @@ class WLS(BaseMasterModule):
                                                          verbose = verbose,
                                                          )
 
-            nlines = len(lines_stack[i]['bad'])
-            bad_frac = np.sum(lines_stack[i]['bad']) / nlines if nlines else 0.0
+            nlines = len(lines_stack[i]["bad"])
+            bad_frac = np.sum(lines_stack[i]["bad"]) / nlines if nlines else 0.0
 
             if bad_frac > max_bad_frac:
                 keep[i] = False
@@ -757,7 +757,7 @@ class WLS(BaseMasterModule):
             )
         coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0) / denom
 
-        W = self.evaluate_wls_coeffs(coeffs_mean, self.ccd['ncol'], self.norder[chip], len(fibers))
+        W = self.evaluate_wls_coeffs(coeffs_mean, self.ccd["ncol"], self.norder[chip], len(fibers))
 
         return W, coeffs_mean, coeffs_stack, lines_stack
 
@@ -865,46 +865,46 @@ class WLS(BaseMasterModule):
             W, coeffs_mean, coeffs_stack, lines_stack = result
 
             self._results[chip] = {
-                'n_total': sum(len(frame['wav']) for frame in lines_stack),
-                'n_fit':   sum(int(np.sum(~frame['bad'])) for frame in lines_stack),
+                "n_total": sum(len(frame["wav"]) for frame in lines_stack),
+                "n_fit":   sum(int(np.sum(~frame["bad"])) for frame in lines_stack),
             }
             self._coeffs_stack[chip] = coeffs_stack
             self._lines_stack[chip]  = lines_stack
 
             for i, fiber in enumerate(self.fibers):
                 if W.ndim == 2:
-                    self.ml2_obj.data[f'{chip}_{fiber}_WAVE'] = W
+                    self.ml2_obj.data[f"{chip}_{fiber}_WAVE"] = W
                 else:
-                    self.ml2_obj.data[f'{chip}_{fiber}_WAVE'] = W[:, :, i]
+                    self.ml2_obj.data[f"{chip}_{fiber}_WAVE"] = W[:, :, i]
 
-            coeffs_ext = f'{chip}_WLS_COEFFS'
+            coeffs_ext = f"{chip}_WLS_COEFFS"
             if coeffs_ext not in self.ml2_obj.extensions:
-                self.ml2_obj.create_extension(coeffs_ext, 'ImageHDU')
+                self.ml2_obj.create_extension(coeffs_ext, "ImageHDU")
             self.ml2_obj.set_data(coeffs_ext, coeffs_mean)
 
             # (value, comment) tuples are rejected for non-PRIMARY headers
             # by rvdata's fits.Header(dict) round-trip; keep these plain.
             coeffs_hdr = self.ml2_obj.headers[coeffs_ext]
-            coeffs_hdr['POLYORDX'] = polyorder_x
-            coeffs_hdr['POLYORDM'] = polyorder_m
-            coeffs_hdr['POLYORDF'] = polyorder_f
+            coeffs_hdr["POLYORDX"] = polyorder_x
+            coeffs_hdr["POLYORDM"] = polyorder_m
+            coeffs_hdr["POLYORDF"] = polyorder_f
 
         self.ml2_obj.set_input_files(l0_file_list)
 
-        primary = self.ml2_obj.headers['PRIMARY']
-        primary['ROUGHWLS'] = (self.rough_wls_file, 'Rough WLS reference file')
-        primary['LINELIST'] = (self.linelist, 'Line list reference file')
-        primary['LINEPROF'] = (lineprofile, 'Line profile model used in WLS fit')
-        primary['POLYORDX'] = (polyorder_x, 'WLS polynomial degree, pixel axis')
-        primary['POLYORDM'] = (polyorder_m, 'WLS polynomial degree, order axis')
-        primary['POLYORDF'] = (polyorder_f, 'WLS polynomial degree, fiber axis')
-        primary['CHIPS'] = (','.join(self.chips), 'Chips included in master WLS')
-        primary['FIBERS'] = (','.join(self.fibers), 'Fibers included in master WLS')
+        primary = self.ml2_obj.headers["PRIMARY"]
+        primary["ROUGHWLS"] = (self.rough_wls_file, "Rough WLS reference file")
+        primary["LINELIST"] = (self.linelist, "Line list reference file")
+        primary["LINEPROF"] = (lineprofile, "Line profile model used in WLS fit")
+        primary["POLYORDX"] = (polyorder_x, "WLS polynomial degree, pixel axis")
+        primary["POLYORDM"] = (polyorder_m, "WLS polynomial degree, order axis")
+        primary["POLYORDF"] = (polyorder_f, "WLS polynomial degree, fiber axis")
+        primary["CHIPS"] = (",".join(self.chips), "Chips included in master WLS")
+        primary["FIBERS"] = (",".join(self.fibers), "Fibers included in master WLS")
 
-        self.ml2_obj.receipt_add_entry('master_wls', 'PASS')
+        self.ml2_obj.receipt_add_entry("master_wls", "PASS")
 
         if master_path is not None:
-            self.save_master('L2', master_path, overwrite=True)
+            self.save_master("L2", master_path, overwrite=True)
 
         if diagnostics_path is not None:
             self.save_diagnostics(diagnostics_path)
@@ -931,18 +931,18 @@ class WLS(BaseMasterModule):
             raise RuntimeError("No diagnostics available; run make_master_l2() first")
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        str_dt = h5py.string_dtype(encoding='utf-8')
-        with h5py.File(path, 'w') as f:
+        str_dt = h5py.string_dtype(encoding="utf-8")
+        with h5py.File(path, "w") as f:
             for chip, coeffs_stack in self._coeffs_stack.items():
                 chip_group = f.create_group(chip)
-                chip_group.create_dataset('coeffs_stack', data=np.asarray(coeffs_stack))
+                chip_group.create_dataset("coeffs_stack", data=np.asarray(coeffs_stack))
 
-                lines_group = chip_group.create_group('lines_stack')
+                lines_group = chip_group.create_group("lines_stack")
                 for i, lines in enumerate(self._lines_stack[chip]):
-                    frame_group = lines_group.create_group(f'frame_{i:03d}')
+                    frame_group = lines_group.create_group(f"frame_{i:03d}")
                     for key, value in lines.items():
                         arr = np.asarray(value)
-                        if arr.dtype.kind in ('U', 'S', 'O'):
+                        if arr.dtype.kind in ("U", "S", "O"):
                             frame_group.create_dataset(key, data=arr.astype(object), dtype=str_dt)
                         else:
                             frame_group.create_dataset(key, data=arr)
@@ -968,6 +968,6 @@ class WLS(BaseMasterModule):
         print(f"\n  {'chip':<8s} {'n lines fit/total'}")
         print("  " + "-" * 40)
         for chip, stats in self._results.items():
-            n_fit, n_total = stats['n_fit'], stats['n_total']
+            n_fit, n_total = stats["n_fit"], stats["n_total"]
             pct = 100.0 * n_fit / n_total if n_total else 0.0
             print(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")

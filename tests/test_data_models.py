@@ -22,8 +22,8 @@ from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.masters import KPFMasterL1, KPFMasterL2, KPFMasterL4
 from kpfpipe.data_models.masters.base import KPFMasterModel
 
-NORDER_GREEN = DETECTOR['norder']['GREEN']
-NORDER_RED = DETECTOR['norder']['RED']
+NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED = DETECTOR["norder"]["RED"]
 NORDER = NORDER_GREEN + NORDER_RED
 
 

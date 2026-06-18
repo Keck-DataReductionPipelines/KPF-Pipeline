@@ -81,40 +81,40 @@ class Bias(BaseMasterModule):
         )
 
         for chip in self.chips:
-            img = l1_arrays[f'{chip}_IMG']
-            snr = l1_arrays[f'{chip}_SNR']
-            mask = l1_arrays[f'{chip}_MASK']
+            img = l1_arrays[f"{chip}_IMG"]
+            snr = l1_arrays[f"{chip}_SNR"]
+            mask = l1_arrays[f"{chip}_MASK"]
 
-            l1_arrays[f'{chip}_IMG'] = interpolate_bad_pixels(img, mask)
-            l1_arrays[f'{chip}_SNR'] = interpolate_bad_pixels(snr, mask)
+            l1_arrays[f"{chip}_IMG"] = interpolate_bad_pixels(img, mask)
+            l1_arrays[f"{chip}_SNR"] = interpolate_bad_pixels(snr, mask)
 
-            out = flag_outliers(l1_arrays[f'{chip}_IMG'], sigma, axis=0)
-            bad = ((l1_arrays[f'{chip}_SNR'] <= 0) | (l1_arrays[f'{chip}_IMG'] == 0))
+            out = flag_outliers(l1_arrays[f"{chip}_IMG"], sigma, axis=0)
+            bad = ((l1_arrays[f"{chip}_SNR"] <= 0) | (l1_arrays[f"{chip}_IMG"] == 0))
 
-            l1_arrays[f'{chip}_MASK'] = ~(bad | out)
+            l1_arrays[f"{chip}_MASK"] = ~(bad | out)
 
         self.ml1_obj = KPFMasterL1()
 
         for chip in self.chips:
-            self.ml1_obj.set_data(f'{chip}_IMG',  l1_arrays[f'{chip}_IMG'])
-            self.ml1_obj.set_data(f'{chip}_SNR',  l1_arrays[f'{chip}_SNR'])
-            self.ml1_obj.set_data(f'{chip}_MASK', l1_arrays[f'{chip}_MASK'])
+            self.ml1_obj.set_data(f"{chip}_IMG",  l1_arrays[f"{chip}_IMG"])
+            self.ml1_obj.set_data(f"{chip}_SNR",  l1_arrays[f"{chip}_SNR"])
+            self.ml1_obj.set_data(f"{chip}_MASK", l1_arrays[f"{chip}_MASK"])
 
         self.ml1_obj.set_input_files(l0_file_list)
-        self.ml1_obj.receipt_add_entry('master_bias', 'PASS')
+        self.ml1_obj.receipt_add_entry("master_bias", "PASS")
 
         self._results = {
             chip: {
-                'num_bad':   int(np.sum(~l1_arrays[f'{chip}_MASK'])),
-                'pct_bad': float(100.0 * np.mean(~l1_arrays[f'{chip}_MASK'])),
-                'median':  float(np.nanmedian(l1_arrays[f'{chip}_IMG'])),
-                'rms':     float(np.nanstd(l1_arrays[f'{chip}_IMG'])),
+                "num_bad":   int(np.sum(~l1_arrays[f"{chip}_MASK"])),
+                "pct_bad": float(100.0 * np.mean(~l1_arrays[f"{chip}_MASK"])),
+                "median":  float(np.nanmedian(l1_arrays[f"{chip}_IMG"])),
+                "rms":     float(np.nanstd(l1_arrays[f"{chip}_IMG"])),
             }
             for chip in self.chips
         }
 
         if filepath is not None:
-            self.save_master('L1', filepath, overwrite=True)
+            self.save_master("L1", filepath, overwrite=True)
 
         return self.ml1_obj
 

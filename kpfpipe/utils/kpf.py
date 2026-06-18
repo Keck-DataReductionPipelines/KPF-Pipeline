@@ -3,10 +3,10 @@ import re
 from datetime import datetime, timedelta
 
 
-_OBS_ID_PATTERN    = re.compile(r'(KP\.\d{8}\.\d{5}\.\d{2})')
-_DATECODE_PATTERN  = re.compile(r'\d{8}')
-_KPF_TIMESTAMP_PATTERN  = re.compile(r'(\d{8}\.\d{5}\.\d{2})')
-_EPRV_TIMESTAMP_PATTERN = re.compile(r'\d{8}T\d{6}')
+_OBS_ID_PATTERN    = re.compile(r"(KP\.\d{8}\.\d{5}\.\d{2})")
+_DATECODE_PATTERN  = re.compile(r"\d{8}")
+_KPF_TIMESTAMP_PATTERN  = re.compile(r"(\d{8}\.\d{5}\.\d{2})")
+_EPRV_TIMESTAMP_PATTERN = re.compile(r"\d{8}T\d{6}")
 
 # Seconds per day
 _SECONDS_PER_DAY = 86400
@@ -32,9 +32,9 @@ def _validate_kpf_timestamp(timestamp):
         raise ValueError(
             f"Invalid KPF timestamp format {timestamp!r}; expected 'YYYYMMDD.SSSSS.FF'"
         )
-    date_str, seconds_str, _ = timestamp.split('.')
+    date_str, seconds_str, _ = timestamp.split(".")
     try:
-        datetime.strptime(date_str, '%Y%m%d')
+        datetime.strptime(date_str, "%Y%m%d")
     except ValueError as e:
         raise ValueError(f"Invalid date in KPF timestamp {timestamp!r}: {date_str!r}") from e
     seconds = int(seconds_str)
@@ -61,7 +61,7 @@ def _validate_eprv_timestamp(timestamp):
         )
     date_str = timestamp[:8]
     try:
-        datetime.strptime(date_str, '%Y%m%d')
+        datetime.strptime(date_str, "%Y%m%d")
     except ValueError as e:
         raise ValueError(f"Invalid date in EPRV timestamp {timestamp!r}: {date_str!r}") from e
     hh = int(timestamp[9:11])
@@ -96,7 +96,7 @@ def is_datecode(s):
     if not isinstance(s, str) or not _DATECODE_PATTERN.fullmatch(s):
         return False
     try:
-        datetime.strptime(s, '%Y%m%d')
+        datetime.strptime(s, "%Y%m%d")
     except ValueError:
         return False
     return True
@@ -157,7 +157,7 @@ def get_datecode(s):
         raise ValueError(f"Cannot extract datecode from: {s}")
     obs_id = match.group(1)
     _validate_kpf_timestamp(obs_id[3:])
-    return obs_id.split('.')[1]
+    return obs_id.split(".")[1]
 
 
 def get_timestamp(s):
@@ -218,9 +218,9 @@ def utc_to_hst(timestamp):
         str: HST timestamp in the same KPF format
     """
     _validate_kpf_timestamp(timestamp)
-    date_str, seconds_str, frame_str = timestamp.split('.')
+    date_str, seconds_str, frame_str = timestamp.split(".")
     hst_seconds = int(seconds_str) - _HST_UTC_OFFSET_SECONDS
-    date = datetime.strptime(date_str, '%Y%m%d')
+    date = datetime.strptime(date_str, "%Y%m%d")
     if hst_seconds < 0:
         hst_seconds += _SECONDS_PER_DAY
         date -= timedelta(days=1)
@@ -238,9 +238,9 @@ def hst_to_utc(timestamp):
         str: UTC timestamp in the same KPF format
     """
     _validate_kpf_timestamp(timestamp)
-    date_str, seconds_str, frame_str = timestamp.split('.')
+    date_str, seconds_str, frame_str = timestamp.split(".")
     utc_seconds = int(seconds_str) + _HST_UTC_OFFSET_SECONDS
-    date = datetime.strptime(date_str, '%Y%m%d')
+    date = datetime.strptime(date_str, "%Y%m%d")
     if utc_seconds >= _SECONDS_PER_DAY:
         utc_seconds -= _SECONDS_PER_DAY
         date += timedelta(days=1)
@@ -262,8 +262,8 @@ def kpf_timestamp_to_datetime(timestamp):
         kpf_timestamp_to_datetime('20240405.40113.57') -> datetime(2024, 4, 5, 11, 8, 33)
     """
     _validate_kpf_timestamp(timestamp)
-    date_str, seconds_str, _ = timestamp.split('.')
-    return datetime.strptime(date_str, '%Y%m%d') + timedelta(seconds=int(seconds_str))
+    date_str, seconds_str, _ = timestamp.split(".")
+    return datetime.strptime(date_str, "%Y%m%d") + timedelta(seconds=int(seconds_str))
 
 
 def kpf_timestamp_to_eprv_timestamp(timestamp):
@@ -283,12 +283,12 @@ def kpf_timestamp_to_eprv_timestamp(timestamp):
         kpf_timestamp_to_eprv_timestamp('20240405.40113.57') -> '20240405T110833'
     """
     _validate_kpf_timestamp(timestamp)
-    date_str, seconds_str, _ = timestamp.split('.')
+    date_str, seconds_str, _ = timestamp.split(".")
     total_seconds = int(seconds_str)
     hh = total_seconds // 3600
     mm = (total_seconds % 3600) // 60
     ss = total_seconds % 60
-    return f'{date_str}T{hh:02d}{mm:02d}{ss:02d}'
+    return f"{date_str}T{hh:02d}{mm:02d}{ss:02d}"
 
 
 def eprv_timestamp_to_kpf_timestamp(timestamp):
@@ -313,4 +313,4 @@ def eprv_timestamp_to_kpf_timestamp(timestamp):
     mm = int(timestamp[11:13])
     ss = int(timestamp[13:15])
     total_seconds = hh * 3600 + mm * 60 + ss
-    return f'{date_str}.{total_seconds:05d}.00'
+    return f"{date_str}.{total_seconds:05d}.00"

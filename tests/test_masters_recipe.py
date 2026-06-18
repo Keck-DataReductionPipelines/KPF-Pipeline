@@ -28,15 +28,15 @@ from kpfpipe.utils.pipeline import (
 # Test data paths
 # ---------------------------------------------------------------------------
 
-TESTDATA_DIR    = Path(__file__).parent / 'testdata'
-TESTDATA_L0_DIR = TESTDATA_DIR / 'L0' / '20240405'
-MASTERS_CONFIG_PATH = Path(__file__).parent.parent / 'configs' / 'kpf_drp_masters.toml'
+TESTDATA_DIR    = Path(__file__).parent / "testdata"
+TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
+MASTERS_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "kpf_drp_masters.toml"
 
 
 def _load_masters_recipe():
     spec = importlib.util.spec_from_file_location(
-        'kpf_drp_masters',
-        Path(__file__).parent.parent / 'recipes' / 'kpf_drp_masters.py',
+        "kpf_drp_masters",
+        Path(__file__).parent.parent / "recipes" / "kpf_drp_masters.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -460,9 +460,9 @@ class TestMastersRecipeErrors:
         return ConfigHandler(
             str(MASTERS_CONFIG_PATH),
             overrides={
-                'DATA_DIRS': {
-                    'KPF_DATA_INPUT':  str(data_input),
-                    'KPF_DATA_OUTPUT': str(data_output),
+                "DATA_DIRS": {
+                    "KPF_DATA_INPUT":  str(data_input),
+                    "KPF_DATA_OUTPUT": str(data_output),
                 }
             },
         )
@@ -470,7 +470,7 @@ class TestMastersRecipeErrors:
     def test_nonexistent_l0_dir_raises(self, tmp_path):
         import argparse
         config = self._make_config(tmp_path, tmp_path)
-        args = argparse.Namespace(datecode='20240405', obs_id=None)
+        args = argparse.Namespace(datecode="20240405", obs_id=None)
         recipe = _load_masters_recipe()
         with pytest.raises(SystemExit, match="L0 data directory not found"):
             recipe.main(config, args)
