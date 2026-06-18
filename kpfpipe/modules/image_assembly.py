@@ -67,6 +67,12 @@ class ImageAssembly:
             setattr(self, k, v)
 
         self._results = None  # populated by perform()
+        self.orientation = {}  # amp ext -> flip; set by _parse_amplifier_reference()
+        self.gain = {}  # amp ext -> gain; set by _parse_amplifier_reference()
+        self.namp = {}  # chip -> n amps; set by count_amplifiers()
+        self.dims = {}  # chip -> amp shape; set by count_amplifiers()
+        self.readnoise = {}  # channel ext -> RN std; set by measure_read_noise()
+        self.rn_nongauss = {}  # channel ext -> std/mad; set by measure_read_noise()
         self._parse_amplifier_reference()
 
     # ------------------------------------------------------------------
@@ -81,11 +87,6 @@ class ImageAssembly:
         standard orientation (serial overscan on right, parallel overscan on bottom).
         Cached in `self.orientation` for repeated use.
         """
-        if not hasattr(self, "orientation"):
-            self.orientation = {}
-        if not hasattr(self, "gain"):
-            self.gain = {}
-
         for chip in self.chips:
             chip = chip.upper()
             df = pd.DataFrame(self.amplifiers[chip]).set_index("channel_id")
@@ -169,8 +170,11 @@ class ImageAssembly:
 
     def _oscan_zero(self, chip, amp_no, **kwargs):
         """
-        Returns overscan bias level of zero
+        Returns overscan bias level of zero. chip/amp_no/kwargs are unused here
+        but kept for the uniform `_oscan_*` dispatch signature (see
+        subtract_overscan()); `del` marks them intentionally discarded.
         """
+        del chip, amp_no, kwargs
         return 0.0
 
     def _oscan_median(self, chip, amp_no, **kwargs):
@@ -281,11 +285,6 @@ class ImageAssembly:
         - `self.dims[chip]` : shape of each amplifier channel.
         Only 2-amp and 4-amp configurations are supported.
         """
-        if not hasattr(self, "namp"):
-            self.namp = {}
-        if not hasattr(self, "dims"):
-            self.dims = {}
-
         chip = chip.upper()
 
         self.namp[chip] = 0
@@ -395,10 +394,6 @@ class ImageAssembly:
             buffer = [5, 5]
         if sigma is None:
             sigma = self.readnoise_sigma
-        if not hasattr(self, "readnoise"):
-            self.readnoise = {}
-        if not hasattr(self, "rn_nongauss"):
-            self.rn_nongauss = {}
 
         chip = chip.upper()
 
@@ -439,7 +434,7 @@ class ImageAssembly:
             method = self.overscan_method
 
         try:
-            oscan_fxn = self.__getattribute__(f"_oscan_{method}")
+            oscan_fxn = getattr(self, f"_oscan_{method}")
         except AttributeError:
             raise AttributeError(
                 f"Unsupported overscan subtraction method: '{method}'"
@@ -473,35 +468,38 @@ class ImageAssembly:
         """
         chip = chip.upper()
 
-        ccd_ffi = np.zeros((4080, 4080), dtype=np.float32)
-        var_ffi = np.zeros((4080, 4080), dtype=np.float32)
+        nrow, ncol = self.nrow, self.ncol
+        row_mid, col_mid = nrow // 2, ncol // 2
+
+        ccd_ffi = np.zeros((nrow, ncol), dtype=np.float32)
+        var_ffi = np.zeros((nrow, ncol), dtype=np.float32)
 
         if self.namp[chip] == 2:
-            ccd_ffi[:, :2040] = self.l0_obj.data[f"{chip}_AMP1"]
-            ccd_ffi[:, 2040:] = self.l0_obj.data[f"{chip}_AMP2"]
-            var_ffi[:, :2040] = (
-                np.abs(ccd_ffi[:, :2040]) + self.readnoise[f"{chip}_AMP1"]
+            ccd_ffi[:, :col_mid] = self.l0_obj.data[f"{chip}_AMP1"]
+            ccd_ffi[:, col_mid:] = self.l0_obj.data[f"{chip}_AMP2"]
+            var_ffi[:, :col_mid] = (
+                np.abs(ccd_ffi[:, :col_mid]) + self.readnoise[f"{chip}_AMP1"]
             )
-            var_ffi[:, 2040:] = (
-                np.abs(ccd_ffi[:, 2040:]) + self.readnoise[f"{chip}_AMP2"]
+            var_ffi[:, col_mid:] = (
+                np.abs(ccd_ffi[:, col_mid:]) + self.readnoise[f"{chip}_AMP2"]
             )
 
         elif self.namp[chip] == 4:
-            ccd_ffi[:2040, :2040] = self.l0_obj.data[f"{chip}_AMP1"]
-            ccd_ffi[:2040, 2040:] = self.l0_obj.data[f"{chip}_AMP2"]
-            ccd_ffi[2040:, :2040] = self.l0_obj.data[f"{chip}_AMP3"]
-            ccd_ffi[2040:, 2040:] = self.l0_obj.data[f"{chip}_AMP4"]
-            var_ffi[:2040, :2040] = (
-                np.abs(ccd_ffi[:2040, :2040]) + self.readnoise[f"{chip}_AMP1"]
+            ccd_ffi[:row_mid, :col_mid] = self.l0_obj.data[f"{chip}_AMP1"]
+            ccd_ffi[:row_mid, col_mid:] = self.l0_obj.data[f"{chip}_AMP2"]
+            ccd_ffi[row_mid:, :col_mid] = self.l0_obj.data[f"{chip}_AMP3"]
+            ccd_ffi[row_mid:, col_mid:] = self.l0_obj.data[f"{chip}_AMP4"]
+            var_ffi[:row_mid, :col_mid] = (
+                np.abs(ccd_ffi[:row_mid, :col_mid]) + self.readnoise[f"{chip}_AMP1"]
             )
-            var_ffi[:2040, 2040:] = (
-                np.abs(ccd_ffi[:2040, 2040:]) + self.readnoise[f"{chip}_AMP2"]
+            var_ffi[:row_mid, col_mid:] = (
+                np.abs(ccd_ffi[:row_mid, col_mid:]) + self.readnoise[f"{chip}_AMP2"]
             )
-            var_ffi[2040:, :2040] = (
-                np.abs(ccd_ffi[2040:, :2040]) + self.readnoise[f"{chip}_AMP3"]
+            var_ffi[row_mid:, :col_mid] = (
+                np.abs(ccd_ffi[row_mid:, :col_mid]) + self.readnoise[f"{chip}_AMP3"]
             )
-            var_ffi[2040:, 2040:] = (
-                np.abs(ccd_ffi[2040:, 2040:]) + self.readnoise[f"{chip}_AMP4"]
+            var_ffi[row_mid:, col_mid:] = (
+                np.abs(ccd_ffi[row_mid:, col_mid:]) + self.readnoise[f"{chip}_AMP4"]
             )
 
         else:

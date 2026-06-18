@@ -14,6 +14,7 @@ upstreamed into the rvdata standard.
 """
 
 import importlib.resources
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -130,8 +131,6 @@ class _KPF2DataDict(AliasedOrderedDict):
     def from_ordered_dict(cls, od):
         """Create a _KPF2DataDict from an existing OrderedDict."""
         aliased = cls()
-        from collections import OrderedDict
-
         for key, value in od.items():
             OrderedDict.__setitem__(aliased, key, value)
         return aliased
@@ -259,7 +258,7 @@ class KPF2(RV2):
         and the receipt chain preserved. RV and CCF data extensions are
         created but empty — the caller (RV computation) fills those in.
         """
-        from kpfpipe.data_models.level4 import KPF4
+        from kpfpipe.data_models.level4 import KPF4  # deferred: avoids circular import
 
         kpf4 = KPF4()
 

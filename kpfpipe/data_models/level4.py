@@ -20,6 +20,7 @@ orders, a view).
 """
 
 import importlib.resources
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -133,8 +134,6 @@ class _KPF4DataDict(AliasedOrderedDict):
     @classmethod
     def from_ordered_dict(cls, od):
         """Create a _KPF4DataDict from an existing OrderedDict."""
-        from collections import OrderedDict
-
         aliased = cls()
         for key, value in od.items():
             OrderedDict.__setitem__(aliased, key, value)

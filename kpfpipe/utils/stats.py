@@ -13,12 +13,14 @@ from scipy.optimize import least_squares
 
 
 def gaussian_dist(theta, x):
+    """Gaussian model at `x` for theta = [b, a, mu, log_sigma]."""
     b, a, mu, log_sigma = theta
     sigma = np.exp(log_sigma)
     return b + a * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
 def gaussian_jac(theta, x):
+    """Analytic Jacobian of `gaussian_dist` w.r.t. theta; shape (x.size, 4)."""
     b, a, mu, log_sigma = theta
     sigma = np.exp(log_sigma)
     dx = x - mu
@@ -34,6 +36,7 @@ def gaussian_jac(theta, x):
 
 
 def gaussian_theta0_generator(x, y):
+    """Initial-guess theta = [b, a, mu, log_sigma] for a Gaussian fit to (x, y)."""
     b0 = 0.25 * np.sum(y[:2] + y[-2:])
     a0 = np.max(y) - b0
     mu0 = x[np.argmax(y)]

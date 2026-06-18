@@ -191,7 +191,7 @@ class KPF1(KPFDataModel):
         CA_HK → ANCILLARY_SPECTRUM). Trace data arrays are created but
         empty — the caller (spectral extraction) fills those in.
         """
-        from kpfpipe.data_models.level2 import KPF2
+        from kpfpipe.data_models.level2 import KPF2  # deferred: avoids circular import
 
         kpf2 = KPF2()
 

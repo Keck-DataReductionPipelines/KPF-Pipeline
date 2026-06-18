@@ -164,7 +164,7 @@ class KPF0(KPFDataModel):
         GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created but empty —
         the caller (image assembly) fills those in.
         """
-        from kpfpipe.data_models.level1 import KPF1
+        from kpfpipe.data_models.level1 import KPF1  # deferred: avoids circular import
 
         l1 = KPF1()
 

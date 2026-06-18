@@ -16,7 +16,7 @@ from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.utils.config import ConfigHandler
 
-_DEFAULTS = dict(DEFAULTS)
+_DEFAULTS = {**DEFAULTS}
 
 
 class WavelengthCalibration:

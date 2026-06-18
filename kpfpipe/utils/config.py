@@ -31,6 +31,7 @@ class ConfigHandler:
                     self.config[section] = values
 
     def load_config(self, path=None):
+        """Load/reload the TOML into `self.config` (optional `path` override)."""
         if path is not None:
             self.path = Path(path)
 
@@ -40,6 +41,7 @@ class ConfigHandler:
         return self.config
 
     def get_params(self, sections=None):
+        """Flatten `sections` into one dict; nested dicts join as `key_subkey`."""
         if not self.config:
             self.load_config()
 

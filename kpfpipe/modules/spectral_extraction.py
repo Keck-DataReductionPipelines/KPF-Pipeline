@@ -351,7 +351,7 @@ class SpectralExtraction:
             extraction_method = self.extraction_method
 
         try:
-            extraction_fxn = self.__getattribute__(f"_{extraction_method}_extraction")
+            extraction_fxn = getattr(self, f"_{extraction_method}_extraction")
         except AttributeError:
             raise AttributeError(
                 f"Unsupported extraction method: '{extraction_method}'"

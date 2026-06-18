@@ -66,6 +66,7 @@ class WLS(BaseMasterModule):
         self._load_rough_wls()
         self._load_linelist()
 
+        self._l2_obj_cache = []  # populated by process_stack_l0_to_l2()
         self._results = None  # populated by make_master_l2()
         self._coeffs_stack = (
             None  # populated by make_master_l2(); used by save_diagnostics()
@@ -685,10 +686,9 @@ class WLS(BaseMasterModule):
         if polyorder_f is None:
             polyorder_f = self.polyorder_f
 
-        if hasattr(self, "_l2_obj_cache"):
-            l2_obj_list = self._l2_obj_cache
-        else:
+        if not self._l2_obj_cache:
             raise ValueError("No L2 objects found; please run process_stack_l0_to_l2")
+        l2_obj_list = self._l2_obj_cache
 
         nobs = len(l2_obj_list)
 
