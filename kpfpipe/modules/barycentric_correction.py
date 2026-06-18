@@ -685,22 +685,23 @@ class BarycentricCorrection:
 
     def perform(
         self,
+        *,
+        use_gaia_astrometry=None,
+        use_wmko_fallback=None,
         interpolate=True,
         extrapolate=True,
         fix_expmeter_outliers=True,
-        use_gaia_astrometry=None,
-        use_wmko_fallback=None,
     ):
         """
         Compute per-order barycentric correction and store it on the KPF2.
 
         Parameters
         ----------
+        use_gaia_astrometry, use_wmko_fallback : bool, optional
+            Override the configured astrometry-source toggles for this call.
         interpolate, extrapolate, fix_expmeter_outliers : bool, optional
             Forwarded to compute_flux_weighted_midpoint_times(). See that
             method for semantics.
-        use_gaia_astrometry, use_wmko_fallback : bool, optional
-            Override the configured astrometry-source toggles for this call.
 
         Returns
         -------

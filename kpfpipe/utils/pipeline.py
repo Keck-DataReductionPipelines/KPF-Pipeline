@@ -86,8 +86,8 @@ def build_mini_database(data_dir, write=True):
     return df
 
 
-def build_l0_file_lists(imtype, *, min_file_count=5, cluster_gap_seconds=7200,
-                        data_dir=None, mini_db=None):
+def build_l0_file_lists(imtype, *, data_dir=None, mini_db=None,
+                        min_file_count=5, cluster_gap_seconds=7200):
     """
     Return sorted file lists for all calibration clusters of the requested type.
 
@@ -101,6 +101,8 @@ def build_l0_file_lists(imtype, *, min_file_count=5, cluster_gap_seconds=7200,
     Args:
         imtype:              calibration frame type. One of 'bias', 'dark',
                              'flat', 'thar'.
+        data_dir:            path to directory containing L0 FITS files.
+        mini_db:             DataFrame returned by build_mini_database.
         min_file_count:      minimum number of files required per cluster.
                              Default is 5.
         cluster_gap_seconds: gap (seconds) between consecutive frames that
@@ -108,8 +110,6 @@ def build_l0_file_lists(imtype, *, min_file_count=5, cluster_gap_seconds=7200,
                              clusters. Default 7200 (2 hours) reliably
                              distinguishes morning vs. evening KPF calibration
                              clusters, which are separated by science obs.
-        data_dir:            path to directory containing L0 FITS files.
-        mini_db:             DataFrame returned by build_mini_database.
 
     Returns:
         List of sorted file lists, one per cluster.

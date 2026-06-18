@@ -43,7 +43,7 @@ class Bias(BaseMasterModule):
     # Public entry point
     # ------------------------------------------------------------------
 
-    def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None,
+    def make_master_l1(self, l0_file_list=None, *, nstream=None, sigma=None,
                        filepath=None, verbose=True):
         """
         Build master bias from stack.

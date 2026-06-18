@@ -211,7 +211,31 @@ class StageName:
           chips = self.chips
   ```
   This is the single most important and most universal convention in the codebase.
-- **Keyword-only args (`*`) for optional/tunable parameters** of public helpers:
+- **Canonical `perform()` signature**:
+  ```python
+  def perform(self, chips=None, fibers=None, *, <None-kwargs>, <default-value-kwargs>):
+  ```
+  - **`chips`, `fibers` are the only positional arguments** (each defaulting to `None`),
+    in that order. A module that doesn't operate on one of them simply omits it
+    (`perform(self, chips=None, *, ...)`); a module that operates on neither has no leading
+    positionals. A module whose primary selector is something else keeps that one required
+    positional in the same slot (e.g. `CalibrationAssociation.perform(self, cal_types, *, ...)`).
+  - **Everything else is keyword-only** — place a bare `*` after the positionals so all
+    tunables must be passed by name.
+  - **Order the keyword-only args in two groups**: first the *configurable* parameters that
+    default to `None` (the "`None` means use config" tunables), then the *semi-hidden*
+    parameters that carry a real default value (e.g. `min_npts=9`, `verbose=True`). Within
+    each group, keep a sensible domain order.
+- **The `make_master_*` entry points follow the same shape** (§10), with `l0_file_list`
+  as the sole positional in place of `chips`/`fibers`.
+- **Parameter ordering applies to *every* method**, not just the public entry points:
+  required positionals first, then defaulted parameters in two groups — `None`-defaults
+  (configurable) before real-value defaults (semi-hidden). This holds for algorithm step
+  methods, private helpers, and standalone utils alike.
+- **The `*` (forcing keyword-only) is reserved for public entry points** — `perform()` and
+  `make_master_*()`. Private/algorithm methods keep the same parameter *ordering* but do
+  **not** need a `*` added; their domain identifiers stay positional. A helper may still use
+  `*` where it already aids clarity (existing practice), but don't add one mechanically:
   ```python
   def build_filepath(obs_id, level, *, data_root=None, master=None): ...
   def _box_extraction(D, V, *, S=None, M=None, W=None): ...
@@ -356,7 +380,15 @@ The masters layer is a **batch/stack builder** and diverges from transform modul
 documented, intentional ways — follow *its* conventions when adding masters code:
 
 - **Constructed from a file list, not a data object**: `Bias(l0_file_list, config)`.
-- **Entry points are `make_master_l1(...)` / `make_master_l2(...)`**, not `perform()`.
+- **Entry points are `make_master_l1(...)` / `make_master_l2(...)`**, not `perform()`. They
+  follow the same positional-then-keyword-only shape as `perform()` (§5), with the input
+  file list standing in for `chips`/`fibers`:
+  ```python
+  def make_master_l1(self, l0_file_list=None, *, <None-kwargs>, <default-value-kwargs>):
+  ```
+  `l0_file_list` is the sole positional (defaulting to `None`, falling back to the list the
+  module was constructed with); every tunable is keyword-only after the `*`, ordered
+  configurable `None`-kwargs first, then semi-hidden default-value-kwargs (e.g. `verbose=True`).
 - **Shared base class `BaseMasterModule`** holds all heavy lifting (frame loading,
   stacking, Welford streaming, save). Subclasses (`Bias`, `Dark`, `Flat`, `WLS`) are thin:
   an `__init__` that selects the config section, the `make_master_*` entry point, and an

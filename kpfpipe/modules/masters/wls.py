@@ -600,12 +600,12 @@ class WLS(BaseMasterModule):
                                fibers,
                                linelist=None,
                                lineprofile=None,
-                               window=5,
-                               qc_sigma=2.5,
-                               max_bad_frac=0.05,
                                polyorder_x=None,
                                polyorder_m=None,
                                polyorder_f=None,
+                               window=5,
+                               qc_sigma=2.5,
+                               max_bad_frac=0.05,
                                verbose=True,
                                ):
         """
@@ -630,6 +630,12 @@ class WLS(BaseMasterModule):
             is updated. Defaults to `self.linelist` (no reload).
         lineprofile : str, optional
             Line profile model name. Defaults to self.lineprofile.
+        polyorder_x : int, optional
+            Polynomial degree along the pixel axis.
+        polyorder_m : int, optional
+            Polynomial degree along the order axis.
+        polyorder_f : int, optional
+            Polynomial degree along the fiber axis (only used for 3-fiber fits).
         window : int, optional
             Half-width of the per-line fit window, in pixels.
         qc_sigma : float, optional
@@ -639,12 +645,6 @@ class WLS(BaseMasterModule):
             Maximum fraction of per-line fits allowed to fail QC before a
             frame is rejected from the stack. Frames exceeding this are
             dropped; if more than one frame is rejected, an error is raised.
-        polyorder_x : int, optional
-            Polynomial degree along the pixel axis.
-        polyorder_m : int, optional
-            Polynomial degree along the order axis.
-        polyorder_f : int, optional
-            Polynomial degree along the fiber axis (only used for 3-fiber fits).
         verbose : bool, optional
             If True, print progress for each frame and fiber.
 
@@ -767,6 +767,7 @@ class WLS(BaseMasterModule):
 
     def make_master_l2(self,
                        l0_file_list=None,
+                       *,
                        linelist=None,
                        lineprofile=None,
                        polyorder_x=None,

@@ -850,6 +850,7 @@ class RadialVelocity:
         self,
         chips=None,
         fibers=None,
+        *,
         ccf_mask_width=None,
         ccf_step_size=None,
         ccf_window=None,

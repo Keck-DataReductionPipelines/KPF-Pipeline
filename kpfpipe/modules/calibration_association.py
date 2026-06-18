@@ -163,7 +163,7 @@ class CalibrationAssociation:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, cal_types, masters_search_window_days=None):
+    def perform(self, cal_types, *, masters_search_window_days=None):
         """
         Run calibration association for the given calibration types.
 

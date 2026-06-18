@@ -493,7 +493,7 @@ class ImageAssembly:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, overscan_method=None, readnoise_sigma=None):
+    def perform(self, chips=None, *, overscan_method=None, readnoise_sigma=None):
         """
         Execute the image assembly algorithm. Optional keyword arguments
         default to config settings.

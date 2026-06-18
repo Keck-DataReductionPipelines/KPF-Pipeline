@@ -144,7 +144,7 @@ class ImageProcessing:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, bias=None, dark=None, flat=None):
+    def perform(self, chips=None, *, bias=None, dark=None, flat=None):
         """
         Run image processing corrections on the L1 frame.
 

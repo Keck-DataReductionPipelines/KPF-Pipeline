@@ -106,7 +106,7 @@ class WavelengthCalibration:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, fibers=None, wls_path=None):
+    def perform(self, chips=None, fibers=None, *, wls_path=None):
         """
         Copy the master wavelength solution onto the science L2.
 

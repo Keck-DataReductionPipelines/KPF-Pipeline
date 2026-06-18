@@ -434,7 +434,7 @@ class SpectralExtraction:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, fibers=None, extraction_method=None, verbose=True):
+    def perform(self, chips=None, fibers=None, *, extraction_method=None, verbose=True):
         """
         Execute spectral extraction. Optional keyword arguments
         default to config settings.

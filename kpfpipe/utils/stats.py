@@ -90,7 +90,7 @@ def optimize_lsq(x, y, linemodel):
     return theta, rms
 
 
-def flag_outliers(x, sigma, method="median", axis=None, kernel_size=None):
+def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
     """
     Flag outliers in an array above some sigma threshold
     """

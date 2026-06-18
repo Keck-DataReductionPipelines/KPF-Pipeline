@@ -8,6 +8,8 @@ KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reductio
 
 **The project charter — [`KPF_DRP_VNEXT_CONTEXT.md`](KPF_DRP_VNEXT_CONTEXT.md) (repo root) — is the single source of truth for project intent, scope, scientific focus, the Path-3 approach, calibration philosophy, guardrails, design principles, and success criteria. Read it before making design decisions. This file (CLAUDE.md) does not duplicate the charter; it covers only the operational and technical guidance not in it (environment, commands, architecture, conventions).**
 
+**The coding style guide — [`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md) (repo root) — is the source of truth for code conventions: formatting, imports, naming, constants, docstrings, error handling, and the per-area exceptions (Open Inconsistencies). Consult and follow it when writing or modifying code. Its rules are soft and yield to the charter where they conflict. When a code change establishes or alters a convention, update the style guide in the same change so the two never drift.**
+
 ## Development Environment
 
 - **Python 3.14.3** (pinned exactly)
