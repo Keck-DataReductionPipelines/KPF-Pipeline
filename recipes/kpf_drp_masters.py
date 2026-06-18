@@ -35,7 +35,7 @@ def main(config, args):
 
     data_dirs = config.get_params(["DATA_DIRS"])
     data_root_in = data_dirs["KPF_DATA_INPUT"]
-    data_root_out = data_dirs["KPF_DATA_OUTPUT"]
+    data_root_masters = data_dirs["KPF_MASTERS_OUTPUT"]
 
     l0_dir = os.path.join(data_root_in, "L0", datecode)
     if not os.path.isdir(l0_dir):
@@ -46,7 +46,7 @@ def main(config, args):
     # offset from every science and calibration frame.
     for files in build_l0_file_lists("bias", mini_db=mini_db):
         bias_path = build_filepath(
-            get_obs_id(files[0]), "L1", data_root=data_root_out, master="bias"
+            get_obs_id(files[0]), "L1", data_root=data_root_masters, master="bias"
         )
         bias = Bias(files, config)
         bias.make_master_l1(filepath=bias_path)
@@ -54,14 +54,14 @@ def main(config, args):
     # master dark (not yet implemented)
     # for files in build_l0_file_lists('dark', mini_db=mini_db):
     #    dark_path = build_filepath(get_obs_id(files[0]), 'L1',
-    #                               data_root=data_root_out, master='dark')
+    #                               data_root=data_root_masters, master='dark')
     #    dark = Dark(files, config)
     #    dark.make_master_l1(filepath=dark_path)
 
     # master flat (not yet implemented)
     # for files in build_l0_file_lists('flat', mini_db=mini_db):
     #    flat_path = build_filepath(get_obs_id(files[0]), 'L1',
-    #                               data_root=data_root_out, master='flat')
+    #                               data_root=data_root_masters, master='flat')
     #    flat = Flat(files, config)
     #    flat.make_master_l1(filepath=flat_path)
 
@@ -69,7 +69,7 @@ def main(config, args):
     # emission-line spectrum anchors the per-order wavelength calibration.
     for files in build_l0_file_lists("thar", mini_db=mini_db):
         wls_master_path = build_filepath(
-            get_obs_id(files[0]), "L2", data_root=data_root_out, master="thar"
+            get_obs_id(files[0]), "L2", data_root=data_root_masters, master="thar"
         )
         wls_diagnostics_path = (
             wls_master_path.removesuffix("_L2.fits") + "_diagnostics.h5"

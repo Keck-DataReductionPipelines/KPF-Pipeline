@@ -47,8 +47,9 @@ def main():
     target = parser.add_mutually_exclusive_group()
     target.add_argument("-d", "--datecode", default=None, help="datecode, e.g. 20240405 (masters recipe only; mutually exclusive with -o)")
     target.add_argument("-o", "--obs_id",   default=None, help="obs_id, e.g. KP.20240405.40113.57 (science recipe only; mutually exclusive with -d)")
-    parser.add_argument("--data_input",  default=None, help="override KPF_DATA_INPUT directory")
-    parser.add_argument("--data_output", default=None, help="override KPF_DATA_OUTPUT directory")
+    parser.add_argument("--data_input",   default=None, help="override KPF_DATA_INPUT directory")
+    parser.add_argument("--data_masters", default=None, help="override KPF_MASTERS_OUTPUT directory")
+    parser.add_argument("--data_science", default=None, help="override KPF_SCIENCE_OUTPUT directory")
     parser.add_argument("--test", action="store_true",
                         help="shorthand to use tests/testdata/ for input and output")
     args = parser.parse_args()
@@ -72,16 +73,19 @@ def main():
         parser.error("science recipe takes -o/--obs_id, not -d/--datecode")
 
     if args.test:
-        args.data_input  = args.data_input  or _TESTDATA_DIR
-        args.data_output = args.data_output or _TESTDATA_DIR
+        args.data_input   = args.data_input   or _TESTDATA_DIR
+        args.data_masters = args.data_masters or _TESTDATA_DIR
+        args.data_science = args.data_science or _TESTDATA_DIR
 
     overrides = {}
-    if args.data_input or args.data_output:
+    if args.data_input or args.data_masters or args.data_science:
         overrides["DATA_DIRS"] = {}
         if args.data_input:
             overrides["DATA_DIRS"]["KPF_DATA_INPUT"] = args.data_input
-        if args.data_output:
-            overrides["DATA_DIRS"]["KPF_DATA_OUTPUT"] = args.data_output
+        if args.data_masters:
+            overrides["DATA_DIRS"]["KPF_MASTERS_OUTPUT"] = args.data_masters
+        if args.data_science:
+            overrides["DATA_DIRS"]["KPF_SCIENCE_OUTPUT"] = args.data_science
 
     config = ConfigHandler(args.config, overrides=overrides or None)
 

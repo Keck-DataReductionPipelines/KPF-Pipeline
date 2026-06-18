@@ -517,14 +517,13 @@ class TestMastersRecipe:
 
 
 class TestMastersRecipeErrors:
-    def _make_config(self, data_input, data_output):
-
+    def _make_config(self, data_input, data_masters):
         return ConfigHandler(
             str(MASTERS_CONFIG_PATH),
             overrides={
                 "DATA_DIRS": {
                     "KPF_DATA_INPUT": str(data_input),
-                    "KPF_DATA_OUTPUT": str(data_output),
+                    "KPF_MASTERS_OUTPUT": str(data_masters),
                 }
             },
         )

@@ -9,6 +9,9 @@ _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
 _NAN_KEYS = ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]
 
+# Minimum plausible science SNR; a fully failed extraction yields ~0.
+_MIN_SCI_SNR = 1.0
+
 
 def _hdr_float(hdr, key):
     """Return float value for a header key, or None if absent."""
@@ -69,3 +72,46 @@ class QCL2(QC):
 
     nonzero_flux._qc_key = "L2FLXOK"
     nonzero_flux._qc_comment = "QC: L2 zero-flux fraction < 0.5"
+
+    def variance_positive(self):
+        """No strictly-negative variance where the flux is finite.
+
+        A negative extracted variance is unphysical (box/optimal variance is a
+        sum of non-negative terms) and would corrupt downstream RV weighting.
+        Zero variance at off-detector / fully-masked columns is tolerated.
+        """
+        saw_data = False
+        for chip in _CHIPS:
+            for fiber in _FIBERS:
+                flux = self.kpf.data.get(f"{chip}_{fiber}_FLUX")
+                var = self.kpf.data.get(f"{chip}_{fiber}_VAR")
+                if flux is None or var is None:
+                    continue
+                flux = np.asarray(flux)
+                var = np.asarray(var)
+                if flux.size == 0 or var.shape != flux.shape:
+                    continue
+                saw_data = True
+                if np.any(np.isfinite(flux) & np.isfinite(var) & (var < 0)):
+                    return False
+        return saw_data
+
+    variance_positive._qc_key = "L2VARPOS"
+    variance_positive._qc_comment = "QC: no negative L2 variance where flux finite"
+
+    def science_snr(self):
+        """Science SNR is finite and above a minimum floor.
+
+        Reads the GSNRSCI/RSNRSCI metrics written by DiagL2.snr (run DiagL2
+        before QCL2, mirroring the flux_finite_fraction -> nan_counts
+        dependency). Guards against a silently failed extraction.
+        """
+        hdr = self.kpf.headers["PRIMARY"]
+        values = [_hdr_float(hdr, k) for k in ("GSNRSCI", "RSNRSCI")]
+        values = [v for v in values if v is not None]
+        if not values:
+            return False
+        return all(np.isfinite(v) and v > _MIN_SCI_SNR for v in values)
+
+    science_snr._qc_key = "L2SNROK"
+    science_snr._qc_comment = "QC: science SNR finite and above floor"

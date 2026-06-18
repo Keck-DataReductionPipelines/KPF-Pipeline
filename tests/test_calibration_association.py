@@ -24,7 +24,7 @@ class MockL1:
 
 def _make_module(tmp_path, date_obs="2024-04-05T11:08:33"):
     l1 = MockL1(date_obs)
-    return CalibrationAssociation(l1, config={"KPF_DATA_INPUT": str(tmp_path)})
+    return CalibrationAssociation(l1, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
 
 
 _LEVEL_BY_CAL_TYPE = {

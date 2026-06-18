@@ -138,6 +138,16 @@ def _make_kpf2_with_flux(*, nan_frac=0.0, zero_frac=0.1, missing_ext=None):
     return kpf2
 
 
+def _set_kpf2_var(kpf2, fill=1.0):
+    """Populate all {CHIP}_{FIBER}_VAR extensions with a constant fill."""
+    for chip in ["GREEN", "RED"]:
+        nrows = _NORDER[chip]
+        for fiber in ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]:
+            kpf2.set_data(
+                f"{chip}_{fiber}_VAR", np.full((nrows, _NCOLS), fill, dtype=np.float32)
+            )
+
+
 # ---------------------------------------------------------------------------
 # Task 2: QC base class runner
 # ---------------------------------------------------------------------------
@@ -619,11 +629,55 @@ class TestQCL2:
         kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
         assert QCL2(kpf2).nonzero_flux() is False
 
+    # --- variance_positive (L2VARPOS) ---
+
+    def test_variance_positive_pass(self):
+        kpf2 = _make_kpf2_with_flux()
+        _set_kpf2_var(kpf2, 1.0)
+        assert QCL2(kpf2).variance_positive() is True
+
+    def test_variance_positive_tolerates_zero(self):
+        kpf2 = _make_kpf2_with_flux()
+        _set_kpf2_var(kpf2, 0.0)  # zero variance is allowed
+        assert QCL2(kpf2).variance_positive() is True
+
+    def test_variance_positive_fail_negative(self):
+        kpf2 = _make_kpf2_with_flux()
+        _set_kpf2_var(kpf2, 1.0)
+        var = np.full((_NORDER["GREEN"], _NCOLS), 1.0, dtype=np.float32)
+        var[0, 0] = -1.0  # negative variance where flux is finite
+        kpf2.set_data("GREEN_SCI1_VAR", var)
+        assert QCL2(kpf2).variance_positive() is False
+
+    def test_variance_positive_fail_no_var(self):
+        kpf2 = _make_kpf2_with_flux()  # no VAR populated
+        assert QCL2(kpf2).variance_positive() is False
+
+    # --- science_snr (L2SNROK) ---
+
+    def test_science_snr_pass(self):
+        kpf2 = _make_kpf2_with_flux()
+        kpf2.headers["PRIMARY"]["GSNRSCI"] = (20.0, "g snr")
+        kpf2.headers["PRIMARY"]["RSNRSCI"] = (18.0, "r snr")
+        assert QCL2(kpf2).science_snr() is True
+
+    def test_science_snr_fail_missing(self):
+        kpf2 = _make_kpf2_with_flux()  # no GSNRSCI/RSNRSCI headers
+        assert QCL2(kpf2).science_snr() is False
+
+    def test_science_snr_fail_below_floor(self):
+        kpf2 = _make_kpf2_with_flux()
+        kpf2.headers["PRIMARY"]["GSNRSCI"] = (0.5, "g snr")  # below floor
+        kpf2.headers["PRIMARY"]["RSNRSCI"] = (18.0, "r snr")
+        assert QCL2(kpf2).science_snr() is False
+
     def test_qc_keys_correct(self):
         expected = {
             "extraction_present": "DATAPRL2",
             "flux_finite_fraction": "L2NANOK",
             "nonzero_flux": "L2FLXOK",
+            "variance_positive": "L2VARPOS",
+            "science_snr": "L2SNROK",
         }
         for method_name, key in expected.items():
             fn = QCL2.__dict__[method_name]

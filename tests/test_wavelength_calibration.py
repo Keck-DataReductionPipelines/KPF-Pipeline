@@ -323,7 +323,7 @@ class TestSpectrumOrientation:
         from kpfpipe.utils.pipeline import build_filepath
 
         config = {
-            "KPF_DATA_INPUT": str(TESTDATA_DIR),
+            "KPF_MASTERS_OUTPUT": str(TESTDATA_DIR),
             "chips": _CHIPS,
             "fibers": _SCI_FIBERS,
         }

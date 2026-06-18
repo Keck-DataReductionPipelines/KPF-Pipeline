@@ -54,6 +54,10 @@ class CalibrationAssociation:
         observation timestamp is read from its PRIMARY header (DATE-OBS).
     config : None | dict | ConfigHandler
         Module configuration. Recognised keys:
+            KPF_MASTERS_OUTPUT : str
+                Root directory under which master calibration files live
+                (searched as {root}/masters/{datecode}/). This is where the
+                masters recipe writes its products.
             masters_search_window_days : [int, int]
                 Search window as [days_before, days_after] relative to the
                 science frame's observation date. Negative values are in the
@@ -78,7 +82,7 @@ class CalibrationAssociation:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._data_root = params.get("KPF_DATA_INPUT")
+        self._masters_root = params.get("KPF_MASTERS_OUTPUT")
         self._results = None  # populated by perform()
 
     # ------------------------------------------------------------------
@@ -134,7 +138,7 @@ class CalibrationAssociation:
             search_date = obs_date + timedelta(days=delta)
             datecode = search_date.strftime("%Y%m%d")
             pattern = os.path.join(
-                self._data_root,
+                self._masters_root,
                 "masters",
                 datecode,
                 f"*_master_{cal_type}_{level}.fits",
@@ -266,7 +270,7 @@ class CalibrationAssociation:
         """Print a summary of the module configuration and association results."""
         print("CalibrationAssociation")
         print(f"  obs_id:        {self.l1_obj.obs_id}")
-        print(f"  data root:     {self._data_root}")
+        print(f"  masters root:  {self._masters_root}")
         print(
             f"  search window: {self.masters_search_window_days} days [before, after]"
         )

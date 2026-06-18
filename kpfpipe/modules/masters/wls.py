@@ -38,7 +38,7 @@ class WLS(BaseMasterModule):
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: linelist, lineprofile,
         polyorder_x, polyorder_m, polyorder_f, chips, fibers,
-        KPF_DATA_INPUT.
+        KPF_MASTERS_OUTPUT.
     """
 
     _DEFAULTS = {
@@ -60,7 +60,11 @@ class WLS(BaseMasterModule):
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
-        self._data_root = params.get("KPF_DATA_INPUT")
+        # WLS extraction associates a master bias for each ThAr frame. Masters
+        # (including the bias the masters recipe just built) live under
+        # KPF_MASTERS_OUTPUT, which is also where CalibrationAssociation reads
+        # them, so there is no input/output mismatch.
+        self._masters_root = params.get("KPF_MASTERS_OUTPUT")
         self.rough_wls_file = _ROUGH_WLS_FILE
 
         self._load_rough_wls()
@@ -137,7 +141,7 @@ class WLS(BaseMasterModule):
 
     def _extract_frame(self, l1_obj, verbose=True):
         calibration_association = CalibrationAssociation(
-            l1_obj, {"KPF_DATA_INPUT": self._data_root}
+            l1_obj, {"KPF_MASTERS_OUTPUT": self._masters_root}
         )
         l1_obj = calibration_association.perform(["bias"])
 
