@@ -13,6 +13,7 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
 
+
 class MockL1:
     def __init__(self, date_obs="2024-04-05T11:08:33"):
         self.headers = {"PRIMARY": {"DATE-OBS": date_obs}}
@@ -28,9 +29,9 @@ def _make_module(tmp_path, date_obs="2024-04-05T11:08:33"):
 
 
 _LEVEL_BY_CAL_TYPE = {
-    "bias":     "L1",
-    "dark":     "L1",
-    "flat":     "L1",
+    "bias": "L1",
+    "dark": "L1",
+    "flat": "L1",
     "thar": "L2",
 }
 
@@ -47,8 +48,8 @@ def _stub_master(directory, obs_id, cal_type):
 # TestFindMasterFiles
 # ---------------------------------------------------------------------------
 
-class TestFindMasterFiles:
 
+class TestFindMasterFiles:
     def test_returns_matching_files_within_window(self, tmp_path):
         d = tmp_path / "masters" / "20240405"
         d.mkdir(parents=True)
@@ -89,7 +90,9 @@ class TestFindMasterFiles:
         _stub_master(d, "KP.20240403.03637.74", "bias")
 
         mod = _make_module(tmp_path)
-        result = mod._find_master_files("bias", "2024-04-05T11:08:33", masters_search_window_days=[-2, 0])
+        result = mod._find_master_files(
+            "bias", "2024-04-05T11:08:33", masters_search_window_days=[-2, 0]
+        )
 
         assert len(result) == 1
 
@@ -124,15 +127,22 @@ class TestFindMasterFiles:
 # TestSelectNearest
 # ---------------------------------------------------------------------------
 
-class TestSelectNearest:
 
+class TestSelectNearest:
     def test_returns_single_candidate(self, tmp_path):
         mod = _make_module(tmp_path)
         result = mod._select_nearest(
             "2024-04-05T11:08:33",
-            [("/data/masters/20240405/KP.20240405.03637.74_master_bias_L1.fits", "20240405.03637.74")]
+            [
+                (
+                    "/data/masters/20240405/KP.20240405.03637.74_master_bias_L1.fits",
+                    "20240405.03637.74",
+                )
+            ],
         )
-        assert result == "/data/masters/20240405/KP.20240405.03637.74_master_bias_L1.fits"
+        assert (
+            result == "/data/masters/20240405/KP.20240405.03637.74_master_bias_L1.fits"
+        )
 
     def test_selects_nearest_of_two(self, tmp_path):
         mod = _make_module(tmp_path)
@@ -142,9 +152,15 @@ class TestSelectNearest:
         result = mod._select_nearest(
             "2024-04-05T11:08:33",
             [
-                ("/masters/KP.20240405.03637.74_master_bias_L1.fits", "20240405.03637.74"),
-                ("/masters/KP.20240405.36000.00_master_bias_L1.fits", "20240405.36000.00"),
-            ]
+                (
+                    "/masters/KP.20240405.03637.74_master_bias_L1.fits",
+                    "20240405.03637.74",
+                ),
+                (
+                    "/masters/KP.20240405.36000.00_master_bias_L1.fits",
+                    "20240405.36000.00",
+                ),
+            ],
         )
         assert "KP.20240405.36000.00" in result
 
@@ -160,9 +176,15 @@ class TestSelectNearest:
         result = mod._select_nearest(
             "2024-04-05T02:00:00",
             [
-                ("/masters/KP.20240404.82800.00_master_bias_L1.fits", "20240404.82800.00"),
-                ("/masters/KP.20240405.01800.00_master_bias_L1.fits", "20240405.01800.00"),
-            ]
+                (
+                    "/masters/KP.20240404.82800.00_master_bias_L1.fits",
+                    "20240404.82800.00",
+                ),
+                (
+                    "/masters/KP.20240405.01800.00_master_bias_L1.fits",
+                    "20240405.01800.00",
+                ),
+            ],
         )
         assert "KP.20240405.01800.00" in result
 
@@ -171,8 +193,8 @@ class TestSelectNearest:
 # TestPerform
 # ---------------------------------------------------------------------------
 
-class TestPerform:
 
+class TestPerform:
     @pytest.fixture
     def masters_dir(self, tmp_path):
         d = tmp_path / "masters" / "20240405"
@@ -194,7 +216,10 @@ class TestPerform:
     def test_sets_biasfile_header(self, masters_dir):
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        assert mod.l1_obj.headers["PRIMARY"]["BIASFILE"] == "KP.20240405.03637.74_master_bias_L1.fits"
+        assert (
+            mod.l1_obj.headers["PRIMARY"]["BIASFILE"]
+            == "KP.20240405.03637.74_master_bias_L1.fits"
+        )
 
     def test_sets_biasdir_header(self, masters_dir):
         mod = _make_module(masters_dir)

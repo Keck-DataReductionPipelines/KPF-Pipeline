@@ -1,6 +1,7 @@
 """
 KPF Spectral Extraction module.
 """
+
 import numpy as np
 import pandas as pd
 import warnings
@@ -12,6 +13,7 @@ from kpfpipe.utils.validation import validate_array
 
 _DEFAULTS = {**DEFAULTS, "extraction_method": "box"}
 
+
 class SpectralExtraction:
     """
     This class performs spectral extraction of the 1D spectrum.
@@ -19,7 +21,7 @@ class SpectralExtraction:
 
     Notes
     -----
-    Single-letter variable names for 2D images in this class follow 
+    Single-letter variable names for 2D images in this class follow
     Horne 1986 optimal extraction, with small modifcations:
       - D = data
       - V = variance
@@ -29,6 +31,7 @@ class SpectralExtraction:
       - M = mask
       - W = weight
     """
+
     def __init__(self, l1_obj, config=None):
         self.l1_obj = l1_obj
 
@@ -74,12 +77,9 @@ class SpectralExtraction:
         filepath = f"{REPO_ROOT}/reference/order_trace_{chip.lower()}.csv"
         with open(filepath, "r") as f:
             self.order_trace[chip.upper()] = (
-                pd.read_csv(f, index_col=0)
-                .set_index(["Fiber", "Order"])
-                .sort_index()
+                pd.read_csv(f, index_col=0).set_index(["Fiber", "Order"]).sort_index()
             )
         self.order_trace_path[chip.upper()] = filepath
-
 
     def _get_orderlet_pixels(self, chip, fiber, order, return_coords=False):
         """
@@ -145,16 +145,20 @@ class SpectralExtraction:
         coeffs = np.array(trace[[f"Coeff{i}" for i in range(4)]], dtype=np.float32)
 
         trace_center = polynomial.polyval(np.arange(ncol, dtype=np.float32), coeffs)
-        trace_top    = (trace_center + trace.TopEdge).astype(np.float32)
+        trace_top = (trace_center + trace.TopEdge).astype(np.float32)
         trace_bottom = (trace_center - trace.BottomEdge).astype(np.float32)
 
-        off_detector = (trace_top > nrow-1) | (trace_bottom < 0)
+        off_detector = (trace_top > nrow - 1) | (trace_bottom < 0)
 
         if np.any(off_detector):
-            trace_top[off_detector] = np.minimum(trace_top, nrow-1)[off_detector]
-            trace_center[off_detector] = np.minimum(trace_center, nrow-1)[off_detector]
-            trace_bottom[off_detector] = np.minimum(trace_bottom, nrow-1)[off_detector]
-    
+            trace_top[off_detector] = np.minimum(trace_top, nrow - 1)[off_detector]
+            trace_center[off_detector] = np.minimum(trace_center, nrow - 1)[
+                off_detector
+            ]
+            trace_bottom[off_detector] = np.minimum(trace_bottom, nrow - 1)[
+                off_detector
+            ]
+
             trace_top[off_detector] = np.maximum(trace_top, 0)[off_detector]
             trace_center[off_detector] = np.maximum(trace_center, 0)[off_detector]
             trace_bottom[off_detector] = np.maximum(trace_bottom, 0)[off_detector]
@@ -165,32 +169,33 @@ class SpectralExtraction:
         edge_pixel_top = np.array(np.floor(trace_top - box_zeropt), dtype=int)
         edge_pixel_bottom = np.array(np.floor(trace_bottom - box_zeropt), dtype=int)
 
-        # broadcast vectors            
-        _row = np.arange(box_height)[:,None]
-        _edge_pixel_top = edge_pixel_top[None,:]
-        _edge_pixel_bottom = edge_pixel_bottom[None,:]
-        _trace_top = trace_top[None,:]
-        _trace_bottom = trace_bottom[None,:]
+        # broadcast vectors
+        _row = np.arange(box_height)[:, None]
+        _edge_pixel_top = edge_pixel_top[None, :]
+        _edge_pixel_bottom = edge_pixel_bottom[None, :]
+        _trace_top = trace_top[None, :]
+        _trace_bottom = trace_bottom[None, :]
 
         # make data, variance, and weight arrays
-        D = data_image[box_zeropt:box_zeropt + box_height]
-        V = var_image[box_zeropt:box_zeropt + box_height]        
-        
+        D = data_image[box_zeropt : box_zeropt + box_height]
+        V = var_image[box_zeropt : box_zeropt + box_height]
+
         W = np.zeros_like(D, dtype=np.float32)
         W[(_row > _edge_pixel_bottom) & (_row < _edge_pixel_top)] = 1
 
         mask_top = _row == _edge_pixel_top
-        frac_top = np.tile((_trace_top - box_zeropt - _edge_pixel_top), (box_height,1))
+        frac_top = np.tile((_trace_top - box_zeropt - _edge_pixel_top), (box_height, 1))
         W[mask_top] = frac_top[mask_top]
 
         mask_bot = _row == _edge_pixel_bottom
-        frac_bot = np.tile((1 - (_trace_bottom - box_zeropt - _edge_pixel_bottom)), (box_height,1))
+        frac_bot = np.tile(
+            (1 - (_trace_bottom - box_zeropt - _edge_pixel_bottom)), (box_height, 1)
+        )
         W[mask_bot] = frac_bot[mask_bot]
-        
-        if return_coords:
-            return D, V, W, box_zeropt, box_zeropt+box_height
-        return D, V, W
 
+        if return_coords:
+            return D, V, W, box_zeropt, box_zeropt + box_height
+        return D, V, W
 
     @staticmethod
     def _box_extraction(D, V, *, S=None, M=None, W=None):
@@ -231,9 +236,8 @@ class SpectralExtraction:
 
         flux_1d = np.sum((D - S) * M * W, axis=0)
         var_1d = np.sum(V * (M * W) ** 2, axis=0)
-                        
-        return flux_1d, var_1d
 
+        return flux_1d, var_1d
 
     @staticmethod
     def _optimal_extraction(D, V, *, S=None, M=None, W=None, P=None):
@@ -267,7 +271,6 @@ class SpectralExtraction:
         Follows Horne (1986) optimal extraction algorithm.
         """
         raise NotImplementedError("optimal extraction not yet implemented")
-
 
     @staticmethod
     def _flat_relative_extraction(D, V, *, S=None, M=None, W=None, F=None):
@@ -306,7 +309,9 @@ class SpectralExtraction:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def extract_orderlet(self, chip, fiber, order, extraction_method=None, verbose=True):
+    def extract_orderlet(
+        self, chip, fiber, order, extraction_method=None, verbose=True
+    ):
         """
         Extract a single orderlet as a 1D spectrum.
 
@@ -343,20 +348,27 @@ class SpectralExtraction:
         try:
             extraction_fxn = self.__getattribute__(f"_{extraction_method}_extraction")
         except AttributeError:
-            raise AttributeError(f"Unsupported extraction method: '{extraction_method}'")
+            raise AttributeError(
+                f"Unsupported extraction method: '{extraction_method}'"
+            )
 
-        D, V, W, row_min, row_max = self._get_orderlet_pixels(chip, fiber, order, return_coords=True)
+        D, V, W, row_min, row_max = self._get_orderlet_pixels(
+            chip, fiber, order, return_coords=True
+        )
 
         # TODO: add sky background
         # TODO: add bad pixel masking
         flux_1d, var_1d = extraction_fxn(D, V, W=W)
 
         response = "warn" if verbose else "silent"
-        validate_array(flux_1d, context=f"flux_1d array: {chip} {fiber} {order}", response=response)
-        validate_array(var_1d, context=f"var_1d array: {chip} {fiber} {order}", response=response)
+        validate_array(
+            flux_1d, context=f"flux_1d array: {chip} {fiber} {order}", response=response
+        )
+        validate_array(
+            var_1d, context=f"var_1d array: {chip} {fiber} {order}", response=response
+        )
 
         return flux_1d, var_1d
-
 
     def extract_ffi(self, chip, fibers=None, extraction_method=None, verbose=True):
         """
@@ -400,21 +412,27 @@ class SpectralExtraction:
 
         l2_arrays = {}
         for fiber in fibers:
-            l2_arrays[f"{chip}_{fiber}_FLUX"] = np.empty((norder,ncol), dtype=np.float32)
-            l2_arrays[f"{chip}_{fiber}_VAR"] = np.empty((norder,ncol), dtype=np.float32)
+            l2_arrays[f"{chip}_{fiber}_FLUX"] = np.empty(
+                (norder, ncol), dtype=np.float32
+            )
+            l2_arrays[f"{chip}_{fiber}_VAR"] = np.empty(
+                (norder, ncol), dtype=np.float32
+            )
 
         failure = 0
-        for order in range(1,norder+1):
+        for order in range(1, norder + 1):
             for fiber in fibers:
                 try:
-                    flux_1d, var_1d = self.extract_orderlet(chip, fiber, order, extraction_method, verbose=verbose)
+                    flux_1d, var_1d = self.extract_orderlet(
+                        chip, fiber, order, extraction_method, verbose=verbose
+                    )
                 except LookupError:
                     failure += 1
                     flux_1d = np.full(ncol, np.nan, dtype=np.float32)
-                    var_1d  = np.full(ncol, np.nan, dtype=np.float32)
+                    var_1d = np.full(ncol, np.nan, dtype=np.float32)
 
-                l2_arrays[f"{chip}_{fiber}_FLUX"][order-1] = flux_1d
-                l2_arrays[f"{chip}_{fiber}_VAR"][order-1] = var_1d
+                l2_arrays[f"{chip}_{fiber}_FLUX"][order - 1] = flux_1d
+                l2_arrays[f"{chip}_{fiber}_VAR"][order - 1] = var_1d
 
         # During some KPF eras one of the traces does not fall on the detector.
         # In this case a single failure is expected from this method. Allowing
@@ -426,7 +444,9 @@ class SpectralExtraction:
                 UserWarning,
             )
         elif failure > 1:
-            raise LookupError(f"Failed to extract {failure} orderlets from the {chip} CCD")
+            raise LookupError(
+                f"Failed to extract {failure} orderlets from the {chip} CCD"
+            )
 
         return l2_arrays
 
@@ -472,10 +492,14 @@ class SpectralExtraction:
         l2_obj = self.l1_obj.to_kpf2()
 
         for chip in chips:
-            l2_arrays = self.extract_ffi(chip, fibers, extraction_method, verbose=verbose)
+            l2_arrays = self.extract_ffi(
+                chip, fibers, extraction_method, verbose=verbose
+            )
             for fiber in fibers:
-                l2_obj.set_data(f"{chip}_{fiber}_FLUX", l2_arrays[f"{chip}_{fiber}_FLUX"])
-                l2_obj.set_data(f"{chip}_{fiber}_VAR",  l2_arrays[f"{chip}_{fiber}_VAR"])
+                l2_obj.set_data(
+                    f"{chip}_{fiber}_FLUX", l2_arrays[f"{chip}_{fiber}_FLUX"]
+                )
+                l2_obj.set_data(f"{chip}_{fiber}_VAR", l2_arrays[f"{chip}_{fiber}_VAR"])
 
         l2_obj.receipt_add_entry("spectral_extraction", "PASS")
 

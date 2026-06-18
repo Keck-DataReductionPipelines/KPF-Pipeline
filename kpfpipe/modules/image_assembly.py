@@ -1,6 +1,7 @@
 """
 KPF Image Assembly module.
 """
+
 import numpy as np
 import pandas as pd
 
@@ -8,7 +9,8 @@ from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
 
-_DEFAULTS = {**DEFAULTS,
+_DEFAULTS = {
+    **DEFAULTS,
     "overscan_method": "rowmedian",
     "readnoise_sigma": 10.0,
 }
@@ -30,6 +32,7 @@ RN_KEYS = {
 
 # TODO: add overscan and readnoise params to main config
 
+
 class ImageAssembly:
     """
     This class performs CCD-level processing to convert L0 data to L1.
@@ -42,6 +45,7 @@ class ImageAssembly:
       - assembling full-frame images (FFI)
       - converting EXPMETER_SCI/SKY wavelengths from nm to Angstroms
     """
+
     def __init__(self, l0_obj, config=None):
         self.l0_obj = l0_obj
 
@@ -50,7 +54,9 @@ class ImageAssembly:
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE", "MODULE_IMAGE_ASSEMBLY"])
+            params = config.get_params(
+                ["DATA_DIRS", "KPFPIPE", "MODULE_IMAGE_ASSEMBLY"]
+            )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
@@ -86,7 +92,7 @@ class ImageAssembly:
             self.orientation.update(dict(zip(df["ext_name"], df["flip"])))
             self.gain.update(dict(zip(df["ext_name"], df["gain"])))
 
-    def _get_overscan_pixels(self, chip, amp_no, buffer=[0,0]):
+    def _get_overscan_pixels(self, chip, amp_no, buffer=[0, 0]):
         """
         Extract overscan pixels for a given amplifier.
 
@@ -116,8 +122,8 @@ class ImageAssembly:
         ncol_prescan = self.prescan
         nrow_imaging, ncol_imaging = self.dims[chip]
 
-        oscan_pix_srl = full_amplifier[:nrow_imaging,ncol_prescan+ncol_imaging:]
-        oscan_pix_prl = full_amplifier[nrow_imaging:,:ncol_prescan+ncol_imaging]
+        oscan_pix_srl = full_amplifier[:nrow_imaging, ncol_prescan + ncol_imaging :]
+        oscan_pix_prl = full_amplifier[nrow_imaging:, : ncol_prescan + ncol_imaging]
 
         start = buffer[0] if buffer[0] > 0 else None
         end = -buffer[1] if buffer[1] > 0 else None
@@ -153,7 +159,9 @@ class ImageAssembly:
         ncol_prescan = self.prescan
         nrow_imaging, ncol_imaging = self.dims[chip]
 
-        image_pix = full_amplifier[:nrow_imaging,ncol_prescan:ncol_prescan+ncol_imaging]
+        image_pix = full_amplifier[
+            :nrow_imaging, ncol_prescan : ncol_prescan + ncol_imaging
+        ]
 
         return image_pix
 
@@ -176,7 +184,7 @@ class ImageAssembly:
         Calculates row-by-row median of serial overscan region
         """
         oscan_srl, _ = self._get_overscan_pixels(chip, amp_no, **kwargs)
-        bias = np.nanmedian(oscan_srl, axis=1)[:,None]
+        bias = np.nanmedian(oscan_srl, axis=1)[:, None]
         return bias
 
     def _set_kpf1_headers(self, l1_obj):
@@ -204,14 +212,17 @@ class ImageAssembly:
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]
             l1_obj.headers["PRIMARY"][key_read] = (
-                round(float(rn), 4), f"Read noise {channel_ext} [e-]"
+                round(float(rn), 4),
+                f"Read noise {channel_ext} [e-]",
             )
             l1_obj.headers["PRIMARY"][key_rnng] = (
-                round(float(self.rn_nongauss[channel_ext]), 4), f"Non-Gaussian read noise {channel_ext}"
+                round(float(self.rn_nongauss[channel_ext]), 4),
+                f"Non-Gaussian read noise {channel_ext}",
             )
 
         l1_obj.headers["PRIMARY"]["OSCANMET"] = (
-            self.overscan_method, "Overscan subtraction method"
+            self.overscan_method,
+            "Overscan subtraction method",
         )
 
     @staticmethod
@@ -237,7 +248,7 @@ class ImageAssembly:
             for col in list(table.colnames):
                 try:
                     wave_nm = float(col)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     continue
                 new_name = format(wave_nm * 10, "g")
                 if new_name != col:
@@ -277,8 +288,8 @@ class ImageAssembly:
 
         self.namp[chip] = 0
         for i in range(4):
-            if f"{chip}_AMP{i+1}" in self.l0_obj.extensions:
-                if np.size(self.l0_obj.data[f"{chip}_AMP{i+1}"]) > 0:
+            if f"{chip}_AMP{i + 1}" in self.l0_obj.extensions:
+                if np.size(self.l0_obj.data[f"{chip}_AMP{i + 1}"]) > 0:
                     self.namp[chip] += 1
 
         if self.namp[chip] == 2:
@@ -286,7 +297,9 @@ class ImageAssembly:
         elif self.namp[chip] == 4:
             self.dims[chip] = (self.nrow // 2, self.ncol // 2)
         else:
-            raise ValueError(f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD")
+            raise ValueError(
+                f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD"
+            )
 
     def orient_channels(self, chip):
         """
@@ -309,20 +322,22 @@ class ImageAssembly:
         chip = chip.upper()
 
         for i in range(self.namp[chip]):
-            channel_ext = f"{chip.upper()}_AMP{i+1}"
+            channel_ext = f"{chip.upper()}_AMP{i + 1}"
             flip = self.orientation[channel_ext]
             image = self.l0_obj.data[channel_ext]
 
             if flip == "rows":
-                image_reoriented = np.flip(image,axis=0)
+                image_reoriented = np.flip(image, axis=0)
             elif flip == "cols":
-                image_reoriented = np.flip(image,axis=1)
+                image_reoriented = np.flip(image, axis=1)
             elif flip == "both":
-                image_reoriented = np.flip(image,axis=(0,1))
+                image_reoriented = np.flip(image, axis=(0, 1))
             elif flip == "none":
                 image_reoriented = image
             else:
-                raise ValueError("unexpected 'flip' entry found in orientation reference")
+                raise ValueError(
+                    "unexpected 'flip' entry found in orientation reference"
+                )
 
             self.l0_obj.data[channel_ext] = image_reoriented
 
@@ -347,10 +362,10 @@ class ImageAssembly:
         chip = chip.upper()
 
         for i in range(self.namp[chip]):
-            channel_ext = f"{chip}_AMP{i+1}"
-            self.l0_obj.data[channel_ext] *= self.gain[channel_ext] / (2 ** 16)
+            channel_ext = f"{chip}_AMP{i + 1}"
+            self.l0_obj.data[channel_ext] *= self.gain[channel_ext] / (2**16)
 
-    def measure_read_noise(self, chip, sigma=None, buffer=[5,5]):
+    def measure_read_noise(self, chip, sigma=None, buffer=[5, 5]):
         """
         Estimate read noise for each amplifier from overscan pixels.
 
@@ -383,18 +398,18 @@ class ImageAssembly:
         chip = chip.upper()
 
         for i in range(self.namp[chip]):
-            channel_ext = f"{chip}_AMP{i+1}"
+            channel_ext = f"{chip}_AMP{i + 1}"
 
-            oscan_srl, _ = self._get_overscan_pixels(chip, i+1, buffer)
+            oscan_srl, _ = self._get_overscan_pixels(chip, i + 1, buffer)
 
             out = flag_outliers(oscan_srl, sigma, method="median")
             std = np.nanstd(oscan_srl[~out])
             mad = np.nanmean(np.abs(oscan_srl[~out] - np.nanmean(oscan_srl[~out])))
 
             self.readnoise[channel_ext] = std
-            self.rn_nongauss[channel_ext] = np.sqrt(2/np.pi) * std / mad
+            self.rn_nongauss[channel_ext] = np.sqrt(2 / np.pi) * std / mad
 
-    def subtract_overscan(self, chip, method=None, buffer=[0,0]):
+    def subtract_overscan(self, chip, method=None, buffer=[0, 0]):
         """
         Subtract overscan bias from imaging pixels for each amplifier. Also
         removes overscan region from amplifier channel, leaving only active
@@ -422,9 +437,9 @@ class ImageAssembly:
             raise AttributeError(f"Unsupported overscan subtraction method: '{method}'")
 
         for i in range(self.namp[chip]):
-            image = self._get_imaging_pixels(chip, i+1)
-            bias = oscan_fxn(chip, i+1, buffer=buffer)
-            self.l0_obj.data[f"{chip.upper()}_AMP{i+1}"] = image - bias
+            image = self._get_imaging_pixels(chip, i + 1)
+            bias = oscan_fxn(chip, i + 1, buffer=buffer)
+            self.l0_obj.data[f"{chip.upper()}_AMP{i + 1}"] = image - bias
 
     def stitch_ffi(self, chip):
         """
@@ -449,27 +464,41 @@ class ImageAssembly:
         """
         chip = chip.upper()
 
-        ccd_ffi = np.zeros((4080,4080), dtype=np.float32)
-        var_ffi = np.zeros((4080,4080), dtype=np.float32)
+        ccd_ffi = np.zeros((4080, 4080), dtype=np.float32)
+        var_ffi = np.zeros((4080, 4080), dtype=np.float32)
 
         if self.namp[chip] == 2:
-            ccd_ffi[:,:2040] = self.l0_obj.data[f"{chip}_AMP1"]
-            ccd_ffi[:,2040:] = self.l0_obj.data[f"{chip}_AMP2"]
-            var_ffi[:,:2040] = np.abs(ccd_ffi[:,:2040]) + self.readnoise[f"{chip}_AMP1"]
-            var_ffi[:,2040:] = np.abs(ccd_ffi[:,2040:]) + self.readnoise[f"{chip}_AMP2"]
+            ccd_ffi[:, :2040] = self.l0_obj.data[f"{chip}_AMP1"]
+            ccd_ffi[:, 2040:] = self.l0_obj.data[f"{chip}_AMP2"]
+            var_ffi[:, :2040] = (
+                np.abs(ccd_ffi[:, :2040]) + self.readnoise[f"{chip}_AMP1"]
+            )
+            var_ffi[:, 2040:] = (
+                np.abs(ccd_ffi[:, 2040:]) + self.readnoise[f"{chip}_AMP2"]
+            )
 
         elif self.namp[chip] == 4:
-            ccd_ffi[:2040,:2040] = self.l0_obj.data[f"{chip}_AMP1"]
-            ccd_ffi[:2040,2040:] = self.l0_obj.data[f"{chip}_AMP2"]
-            ccd_ffi[2040:,:2040] = self.l0_obj.data[f"{chip}_AMP3"]
-            ccd_ffi[2040:,2040:] = self.l0_obj.data[f"{chip}_AMP4"]
-            var_ffi[:2040,:2040] = np.abs(ccd_ffi[:2040,:2040]) + self.readnoise[f"{chip}_AMP1"]
-            var_ffi[:2040,2040:] = np.abs(ccd_ffi[:2040,2040:]) + self.readnoise[f"{chip}_AMP2"]
-            var_ffi[2040:,:2040] = np.abs(ccd_ffi[2040:,:2040]) + self.readnoise[f"{chip}_AMP3"]
-            var_ffi[2040:,2040:] = np.abs(ccd_ffi[2040:,2040:]) + self.readnoise[f"{chip}_AMP4"]
+            ccd_ffi[:2040, :2040] = self.l0_obj.data[f"{chip}_AMP1"]
+            ccd_ffi[:2040, 2040:] = self.l0_obj.data[f"{chip}_AMP2"]
+            ccd_ffi[2040:, :2040] = self.l0_obj.data[f"{chip}_AMP3"]
+            ccd_ffi[2040:, 2040:] = self.l0_obj.data[f"{chip}_AMP4"]
+            var_ffi[:2040, :2040] = (
+                np.abs(ccd_ffi[:2040, :2040]) + self.readnoise[f"{chip}_AMP1"]
+            )
+            var_ffi[:2040, 2040:] = (
+                np.abs(ccd_ffi[:2040, 2040:]) + self.readnoise[f"{chip}_AMP2"]
+            )
+            var_ffi[2040:, :2040] = (
+                np.abs(ccd_ffi[2040:, :2040]) + self.readnoise[f"{chip}_AMP3"]
+            )
+            var_ffi[2040:, 2040:] = (
+                np.abs(ccd_ffi[2040:, 2040:]) + self.readnoise[f"{chip}_AMP4"]
+            )
 
         else:
-            raise ValueError(f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD")
+            raise ValueError(
+                f"Only 2-amp and 4-amp mode supported, detected {self.namp[chip]} on {chip} CCD"
+            )
 
         ccd_ffi = self.orient_ffi(ccd_ffi, chip)
         var_ffi = self.orient_ffi(var_ffi, chip)
@@ -555,9 +584,14 @@ class ImageAssembly:
         l1_obj.receipt_add_entry("image_assembly", "PASS")
 
         self._results = {
-            chip: {ch: (round(float(self.readnoise[ch]), 4),
-                        round(float(self.rn_nongauss[ch]), 4))
-                   for ch in self.readnoise if ch.startswith(chip.upper())}
+            chip: {
+                ch: (
+                    round(float(self.readnoise[ch]), 4),
+                    round(float(self.rn_nongauss[ch]), 4),
+                )
+                for ch in self.readnoise
+                if ch.startswith(chip.upper())
+            }
             for chip in chips
         }
 
@@ -569,7 +603,7 @@ class ImageAssembly:
         print(f"  obs_id:           {self.l0_obj.obs_id}")
         print(f"  overscan_method:  {self.overscan_method}")
         print(f"  readnoise_sigma:  {self.readnoise_sigma}")
-        
+
         if self._results is None:
             print("  perform() has not been called")
             return

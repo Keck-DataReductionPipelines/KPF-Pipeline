@@ -7,8 +7,9 @@ from kpfpipe.utils.kpf import get_datecode
 
 from line_profiler import LineProfiler
 
-OBS_ID = "KP.20240405.49597.71"    # 2-amp mode
-#OBS_ID = 'KP.20250419.84046.71'    # 4-amp mode
+OBS_ID = "KP.20240405.49597.71"  # 2-amp mode
+# OBS_ID = 'KP.20250419.84046.71'    # 4-amp mode
+
 
 def run():
     datecode = get_datecode(OBS_ID)
@@ -24,7 +25,7 @@ def run():
         image_assembly.measure_read_noise(chip)
         image_assembly.subtract_overscan(chip)
         image_assembly.orient_channels(chip)
-        
+
         ccd_ffi, var_ffi = image_assembly.stitch_ffi(chip)
 
 

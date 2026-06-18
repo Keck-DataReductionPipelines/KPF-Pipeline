@@ -46,7 +46,9 @@ class KPFMasterL2(KPFMasterModel, KPF2):
 
     _DATALVL = "ML2"
     _FILENAME_PREFIX = "kpf_ML2"
-    _known_extensions = set(_MASTERS_L2_EXTENSIONS["Name"]) | set(KPF2().extensions.keys())
+    _known_extensions = set(_MASTERS_L2_EXTENSIONS["Name"]) | set(
+        KPF2().extensions.keys()
+    )
 
     def __init__(self):
         KPF2.__init__(self)
@@ -99,8 +101,12 @@ class KPFMasterL2(KPFMasterModel, KPF2):
                 t = Table.read(hdu)
                 df = t.to_pandas()
                 receipt_columns = [
-                    "Time", "Code_Release", "Commit_Hash",
-                    "Branch_Name", "Module_Name", "Status"
+                    "Time",
+                    "Code_Release",
+                    "Commit_Hash",
+                    "Branch_Name",
+                    "Module_Name",
+                    "Status",
                 ]
                 if df.empty:
                     df = pd.DataFrame(columns=receipt_columns)

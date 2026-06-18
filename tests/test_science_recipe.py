@@ -24,15 +24,15 @@ import importlib.util
 # Test data paths and constants
 # ---------------------------------------------------------------------------
 
-TESTDATA_DIR    = Path(__file__).parent / "testdata"
+TESTDATA_DIR = Path(__file__).parent / "testdata"
 TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
-CONFIG_PATH     = Path(__file__).parent.parent / "configs" / "kpf_drp_science.toml"
+CONFIG_PATH = Path(__file__).parent.parent / "configs" / "kpf_drp_science.toml"
 
 OBS_ID = "KP.20240405.40113.57"
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
-NORDER_RED   = DETECTOR["norder"]["RED"]
-NCOL         = DETECTOR["ccd"]["ncol"]
+NORDER_RED = DETECTOR["norder"]["RED"]
+NCOL = DETECTOR["ccd"]["ncol"]
 
 
 def _load_recipe():
@@ -61,7 +61,7 @@ class TestScienceRecipe:
             str(CONFIG_PATH),
             overrides={
                 "DATA_DIRS": {
-                    "KPF_DATA_INPUT":  str(TESTDATA_DIR),
+                    "KPF_DATA_INPUT": str(TESTDATA_DIR),
                     "KPF_DATA_OUTPUT": str(tmp_path),
                 }
             },
@@ -75,7 +75,9 @@ class TestScienceRecipe:
         return out_path
 
     def test_output_file_exists(self, recipe_output):
-        assert os.path.isfile(recipe_output), f"Expected output not found: {recipe_output}"
+        assert os.path.isfile(recipe_output), (
+            f"Expected output not found: {recipe_output}"
+        )
 
     def test_output_filename_format(self, recipe_output):
         assert os.path.basename(recipe_output) == "kpf_SL2_20240405T110833.fits"
@@ -125,7 +127,9 @@ class TestScienceRecipe:
             arr = np.asarray(l2.data[ext])
             assert arr.shape == (norder,), f"{ext} shape {arr.shape} != ({norder},)"
             assert np.all(np.isfinite(arr)), f"{ext} has non-finite values"
-            assert np.issubdtype(arr.dtype, np.float64), f"{ext} is {arr.dtype}, expected float64"
+            assert np.issubdtype(arr.dtype, np.float64), (
+                f"{ext} is {arr.dtype}, expected float64"
+            )
         # Sanity: BARYCORR_Z is the redshift z = lambda_obs/lambda_rest - 1
         # (compute_redshift), so |z| = |v|/c << 1, not the 1+z factor near 1.
         z = np.asarray(l2.data["BARYCORR_Z"])
@@ -135,8 +139,7 @@ class TestScienceRecipe:
         """Per-CCD scalar summaries should land on INSTRUMENT_HEADER."""
         l2 = KPF2.from_fits(recipe_output)
         inst = l2.headers["INSTRUMENT_HEADER"]
-        for key in ("CCD1BJD", "CCD1BKMS", "CCD1BZ",
-                    "CCD2BJD", "CCD2BKMS", "CCD2BZ"):
+        for key in ("CCD1BJD", "CCD1BKMS", "CCD1BZ", "CCD2BJD", "CCD2BKMS", "CCD2BZ"):
             assert key in inst, f"{key} missing from INSTRUMENT_HEADER"
             assert np.isfinite(float(inst[key])), f"{key} not finite"
 
@@ -147,8 +150,8 @@ class TestScienceRecipe:
         # bias/dark/flat use basename + DIR + integer AGE
         for prefix in ("BIAS", "DARK", "FLAT"):
             assert f"{prefix}FILE" in inst
-            assert f"{prefix}DIR"  in inst
-            assert f"AGE{prefix}"  in inst
+            assert f"{prefix}DIR" in inst
+            assert f"AGE{prefix}" in inst
         # thar uses legacy convention: WLSFILE = full path (no WLSDIR), AGEWLS = float days
         assert "WLSFILE" in inst
         assert "WLSDIR" not in inst
@@ -159,12 +162,12 @@ class TestScienceRecipe:
         """WavelengthCalibration should fill the per-fiber WAVE extensions."""
         l2 = KPF2.from_fits(recipe_output)
         assert l2.data["GREEN_SCI2_WAVE"].shape == (NORDER_GREEN, NCOL)
-        assert l2.data["RED_SCI2_WAVE"].shape   == (NORDER_RED,   NCOL)
+        assert l2.data["RED_SCI2_WAVE"].shape == (NORDER_RED, NCOL)
         assert np.any(l2.data["GREEN_SCI2_WAVE"] != 0)
-        assert np.any(l2.data["RED_SCI2_WAVE"]   != 0)
+        assert np.any(l2.data["RED_SCI2_WAVE"] != 0)
         # Wavelength solutions are stored in float64.
         assert np.issubdtype(l2.data["GREEN_SCI2_WAVE"].dtype, np.float64)
-        assert np.issubdtype(l2.data["RED_SCI2_WAVE"].dtype,   np.float64)
+        assert np.issubdtype(l2.data["RED_SCI2_WAVE"].dtype, np.float64)
 
     def test_qlp_l0_pngs_exist(self, recipe_output):
         qlp_dir = Path(recipe_output).parents[2] / "QLP" / "20240405" / OBS_ID / "L0"
@@ -183,13 +186,12 @@ class TestScienceRecipe:
 
 
 class TestScienceRecipeErrors:
-
     def test_missing_l0_file_raises(self, tmp_path):
         config = ConfigHandler(
             str(CONFIG_PATH),
             overrides={
                 "DATA_DIRS": {
-                    "KPF_DATA_INPUT":  str(tmp_path),
+                    "KPF_DATA_INPUT": str(tmp_path),
                     "KPF_DATA_OUTPUT": str(tmp_path),
                 }
             },
@@ -204,7 +206,7 @@ class TestScienceRecipeErrors:
             str(CONFIG_PATH),
             overrides={
                 "DATA_DIRS": {
-                    "KPF_DATA_INPUT":  str(tmp_path),
+                    "KPF_DATA_INPUT": str(tmp_path),
                     "KPF_DATA_OUTPUT": str(tmp_path),
                 }
             },

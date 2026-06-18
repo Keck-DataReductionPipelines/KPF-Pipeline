@@ -24,7 +24,7 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
-NORDER_RED   = DETECTOR["norder"]["RED"]
+NORDER_RED = DETECTOR["norder"]["RED"]
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
@@ -74,9 +74,15 @@ class _KPF2DataDict(AliasedOrderedDict):
             # Allocate the full concatenated array on first write (or if empty).
             # value.shape[1:] keeps this correct for 2-D traces (norder, ncol)
             # and 1-D per-order ancillary arrays (norder,).
-            existing = super().__getitem__(resolved) if super().__contains__(resolved) else None
+            existing = (
+                super().__getitem__(resolved)
+                if super().__contains__(resolved)
+                else None
+            )
             if existing is None or np.size(existing) == 0:
-                full = np.zeros((NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype)
+                full = np.zeros(
+                    (NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype
+                )
                 super().__setitem__(resolved, full)
             arr = super().__getitem__(resolved)
             if chip == "GREEN":
@@ -123,6 +129,7 @@ class _KPF2DataDict(AliasedOrderedDict):
         """Create a _KPF2DataDict from an existing OrderedDict."""
         aliased = cls()
         from collections import OrderedDict
+
         for key, value in od.items():
             OrderedDict.__setitem__(aliased, key, value)
         return aliased
@@ -161,9 +168,11 @@ class KPF2(RV2):
                     self.create_extension(ext, "ImageHDU")
 
         # Pass-through extensions not in RV2 base
-        for ext, ext_type in [("ANCILLARY_SPECTRUM", "BinTableHDU"),
-                               ("EXPMETER", "BinTableHDU"),
-                               ("TELEMETRY", "BinTableHDU")]:
+        for ext, ext_type in [
+            ("ANCILLARY_SPECTRUM", "BinTableHDU"),
+            ("EXPMETER", "BinTableHDU"),
+            ("TELEMETRY", "BinTableHDU"),
+        ]:
             if ext not in self.extensions:
                 self.create_extension(ext, ext_type)
 
@@ -203,16 +212,21 @@ class KPF2(RV2):
         _KPF2DataDict.__setitem__, which writes into the appropriate slice of
         the concatenated trace array.
         """
-        if hasattr(self.data, "_chip_split") and self.data._chip_split(ext_name) is not None:
+        if (
+            hasattr(self.data, "_chip_split")
+            and self.data._chip_split(ext_name) is not None
+        ):
             self.data[ext_name] = data
             return
         if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
-        if (ext_name in self.extensions
-                and self.extensions[ext_name] == "BinTableHDU"
-                and isinstance(data, np.ndarray)
-                and data.dtype.names is not None):
+        if (
+            ext_name in self.extensions
+            and self.extensions[ext_name] == "BinTableHDU"
+            and isinstance(data, np.ndarray)
+            and data.dtype.names is not None
+        ):
             data = Table(data)
         super().set_data(ext_name, data)
         # Sync self.receipt when the RECEIPT extension is loaded from FITS.
@@ -272,7 +286,9 @@ class KPF2(RV2):
         else:
             print("Empty KPF2 data product")
 
-        print(f"\n{'Extension':<25s} {'Aliases':<25s} {'Type':<15s} {'Shape/Size':<20s}")
+        print(
+            f"\n{'Extension':<25s} {'Aliases':<25s} {'Type':<15s} {'Shape/Size':<20s}"
+        )
         print("=" * 85)
         for name, ext_type in self.extensions.items():
             if name == "PRIMARY":
@@ -283,7 +299,9 @@ class KPF2(RV2):
             alias_str = ", ".join(sorted(aliases)) if aliases else ""
             ext = self.data.get(name)
             if isinstance(ext, np.ndarray) and ext.size > 0:
-                print(f"{name:<25s} {alias_str:<25s} {'array':<15s} {str(ext.shape):<20s}")
+                print(
+                    f"{name:<25s} {alias_str:<25s} {'array':<15s} {str(ext.shape):<20s}"
+                )
             elif hasattr(ext, "__len__") and len(ext) > 0:
                 print(f"{name:<25s} {alias_str:<25s} {'table':<15s} {len(ext)} rows")
             else:

@@ -185,7 +185,7 @@ class BarycentricCorrection:
             try:
                 float(col)
                 wave_cols.append(col)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass
 
         w = np.array([float(col) for col in wave_cols])
@@ -550,7 +550,7 @@ class BarycentricCorrection:
         """
         if output not in ("expmeter", "orders", "ccds"):
             raise ValueError(
-                f"output must be 'expmeter', 'orders', or 'ccds'; " f"got {output!r}"
+                f"output must be 'expmeter', 'orders', or 'ccds'; got {output!r}"
             )
 
         # Reuse the cached integration when the toggles match (perform() asks

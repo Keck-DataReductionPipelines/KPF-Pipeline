@@ -1,7 +1,7 @@
 import os
 
 from kpfpipe.data_models.level0 import KPF0
-#from kpfpipe.data_models.level1 import KPF1
+# from kpfpipe.data_models.level1 import KPF1
 
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.calibration_association import CalibrationAssociation
@@ -23,12 +23,14 @@ def main(config, args):
     print("\n\n=== entering kpf_drp_science pipeline ===\n\n")
 
     if not args.obs_id:
-        raise SystemExit("Error: --obs_id is required for the science recipe (e.g. -o KP.20240405.40113.57)")
+        raise SystemExit(
+            "Error: --obs_id is required for the science recipe (e.g. -o KP.20240405.40113.57)"
+        )
 
     obs_id = args.obs_id
 
     data_dirs = config.get_params(["DATA_DIRS"])
-    data_root_in  = data_dirs["KPF_DATA_INPUT"]
+    data_root_in = data_dirs["KPF_DATA_INPUT"]
     data_root_out = data_dirs["KPF_DATA_OUTPUT"]
 
     l0 = KPF0.from_fits(build_filepath(obs_id, "L0", data_root=data_root_in))

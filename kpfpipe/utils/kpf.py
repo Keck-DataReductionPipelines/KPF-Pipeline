@@ -3,9 +3,9 @@ import re
 from datetime import datetime, timedelta
 
 
-_OBS_ID_PATTERN    = re.compile(r"(KP\.\d{8}\.\d{5}\.\d{2})")
-_DATECODE_PATTERN  = re.compile(r"\d{8}")
-_KPF_TIMESTAMP_PATTERN  = re.compile(r"(\d{8}\.\d{5}\.\d{2})")
+_OBS_ID_PATTERN = re.compile(r"(KP\.\d{8}\.\d{5}\.\d{2})")
+_DATECODE_PATTERN = re.compile(r"\d{8}")
+_KPF_TIMESTAMP_PATTERN = re.compile(r"(\d{8}\.\d{5}\.\d{2})")
 _EPRV_TIMESTAMP_PATTERN = re.compile(r"\d{8}T\d{6}")
 
 # Seconds per day
@@ -36,7 +36,9 @@ def _validate_kpf_timestamp(timestamp):
     try:
         datetime.strptime(date_str, "%Y%m%d")
     except ValueError as e:
-        raise ValueError(f"Invalid date in KPF timestamp {timestamp!r}: {date_str!r}") from e
+        raise ValueError(
+            f"Invalid date in KPF timestamp {timestamp!r}: {date_str!r}"
+        ) from e
     seconds = int(seconds_str)
     if seconds >= _SECONDS_PER_DAY:
         raise ValueError(
@@ -63,7 +65,9 @@ def _validate_eprv_timestamp(timestamp):
     try:
         datetime.strptime(date_str, "%Y%m%d")
     except ValueError as e:
-        raise ValueError(f"Invalid date in EPRV timestamp {timestamp!r}: {date_str!r}") from e
+        raise ValueError(
+            f"Invalid date in EPRV timestamp {timestamp!r}: {date_str!r}"
+        ) from e
     hh = int(timestamp[9:11])
     mm = int(timestamp[11:13])
     ss = int(timestamp[13:15])
@@ -224,7 +228,7 @@ def utc_to_hst(timestamp):
     if hst_seconds < 0:
         hst_seconds += _SECONDS_PER_DAY
         date -= timedelta(days=1)
-    return f'{date.strftime("%Y%m%d")}.{hst_seconds:05d}.{frame_str}'
+    return f"{date.strftime('%Y%m%d')}.{hst_seconds:05d}.{frame_str}"
 
 
 def hst_to_utc(timestamp):
@@ -244,7 +248,7 @@ def hst_to_utc(timestamp):
     if utc_seconds >= _SECONDS_PER_DAY:
         utc_seconds -= _SECONDS_PER_DAY
         date += timedelta(days=1)
-    return f'{date.strftime("%Y%m%d")}.{utc_seconds:05d}.{frame_str}'
+    return f"{date.strftime('%Y%m%d')}.{utc_seconds:05d}.{frame_str}"
 
 
 def kpf_timestamp_to_datetime(timestamp):

@@ -4,7 +4,7 @@ import numpy as np
 
 from kpfpipe.quality_control.qc_booleans.base import QC
 
-_CHIPS  = ["GREEN", "RED"]
+_CHIPS = ["GREEN", "RED"]
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
 _NAN_KEYS = ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]

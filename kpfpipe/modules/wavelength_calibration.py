@@ -7,6 +7,7 @@ which writes the full WLSFILE path to the L1 PRIMARY header. KPF1.to_kpf2()
 preserves the full L1 PRIMARY in the L2 INSTRUMENT_HEADER extension, where
 this module reads it from.
 """
+
 import os
 
 import numpy as np
@@ -45,7 +46,9 @@ class WavelengthCalibration:
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE", "MODULE_WAVELENGTH_CALIBRATION"])
+            params = config.get_params(
+                ["DATA_DIRS", "KPFPIPE", "MODULE_WAVELENGTH_CALIBRATION"]
+            )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
@@ -53,7 +56,7 @@ class WavelengthCalibration:
             setattr(self, k, params.get(k, v))
 
         self._wls_path = None  # set by load_wls()
-        self._results = None   # populated by perform()
+        self._results = None  # populated by perform()
 
     # ------------------------------------------------------------------
     # Algorithm steps

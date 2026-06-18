@@ -28,7 +28,7 @@ from kpfpipe.utils.pipeline import (
 # Test data paths
 # ---------------------------------------------------------------------------
 
-TESTDATA_DIR    = Path(__file__).parent / "testdata"
+TESTDATA_DIR = Path(__file__).parent / "testdata"
 TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
 MASTERS_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "kpf_drp_masters.toml"
 
@@ -43,8 +43,6 @@ def _load_masters_recipe():
     return module
 
 
-
-
 # ---------------------------------------------------------------------------
 # Synthetic test data setup (unit tests only)
 # ---------------------------------------------------------------------------
@@ -52,22 +50,82 @@ def _load_masters_recipe():
 # Synthetic filenames: KP.YYYYMMDD.SSSSS.FF.fits
 # Two bias clusters separated by a >2hr gap; one dark cluster; two ThAr clusters
 # (morning and evening) with different OBJECT suffixes; science frames.
-_BIAS_A     = [f"/data/L0/20240405/KP.20240405.0{3600 + i*100:04d}.00.fits" for i in range(5)]  # 03600–04000
-_BIAS_B     = [f"/data/L0/20240405/KP.20240405.{14000 + i*100:05d}.00.fits" for i in range(5)]  # 14000–14400
-_DARK_A     = [f"/data/L0/20240405/KP.20240405.{18000 + i*100:05d}.00.fits" for i in range(3)]  # 18000–18200
-_THAR_MORN  = [f"/data/L0/20240405/KP.20240405.{60000 + i*100:05d}.00.fits" for i in range(5)]  # 60000–60400
-_THAR_EVE   = [f"/data/L0/20240405/KP.20240405.{75000 + i*100:05d}.00.fits" for i in range(5)]  # 75000–75400
-_SCI_A      = [f"/data/L0/20240405/KP.20240405.{50000 + i*100:05d}.00.fits" for i in range(2)]  # 50000–50100
+_BIAS_A = [
+    f"/data/L0/20240405/KP.20240405.0{3600 + i * 100:04d}.00.fits" for i in range(5)
+]  # 03600–04000
+_BIAS_B = [
+    f"/data/L0/20240405/KP.20240405.{14000 + i * 100:05d}.00.fits" for i in range(5)
+]  # 14000–14400
+_DARK_A = [
+    f"/data/L0/20240405/KP.20240405.{18000 + i * 100:05d}.00.fits" for i in range(3)
+]  # 18000–18200
+_THAR_MORN = [
+    f"/data/L0/20240405/KP.20240405.{60000 + i * 100:05d}.00.fits" for i in range(5)
+]  # 60000–60400
+_THAR_EVE = [
+    f"/data/L0/20240405/KP.20240405.{75000 + i * 100:05d}.00.fits" for i in range(5)
+]  # 75000–75400
+_SCI_A = [
+    f"/data/L0/20240405/KP.20240405.{50000 + i * 100:05d}.00.fits" for i in range(2)
+]  # 50000–50100
 
 
 def _make_mini_db():
     rows = (
-        [{"FILENAME": f, "IMTYPE": "Bias",    "OBJECT": "autocal-bias",           "TARGNAME": None} for f in _BIAS_A]
-      + [{"FILENAME": f, "IMTYPE": "Bias",    "OBJECT": "autocal-bias",           "TARGNAME": None} for f in _BIAS_B]
-      + [{"FILENAME": f, "IMTYPE": "Dark",    "OBJECT": "autocal-dark",           "TARGNAME": None} for f in _DARK_A]
-      + [{"FILENAME": f, "IMTYPE": "Arclamp", "OBJECT": "autocal-thar-all-morn",  "TARGNAME": None} for f in _THAR_MORN]
-      + [{"FILENAME": f, "IMTYPE": "Arclamp", "OBJECT": "autocal-thar-all-eve",   "TARGNAME": None} for f in _THAR_EVE]
-      + [{"FILENAME": f, "IMTYPE": "Object",  "OBJECT": "185144",                 "TARGNAME": "185144"} for f in _SCI_A]
+        [
+            {
+                "FILENAME": f,
+                "IMTYPE": "Bias",
+                "OBJECT": "autocal-bias",
+                "TARGNAME": None,
+            }
+            for f in _BIAS_A
+        ]
+        + [
+            {
+                "FILENAME": f,
+                "IMTYPE": "Bias",
+                "OBJECT": "autocal-bias",
+                "TARGNAME": None,
+            }
+            for f in _BIAS_B
+        ]
+        + [
+            {
+                "FILENAME": f,
+                "IMTYPE": "Dark",
+                "OBJECT": "autocal-dark",
+                "TARGNAME": None,
+            }
+            for f in _DARK_A
+        ]
+        + [
+            {
+                "FILENAME": f,
+                "IMTYPE": "Arclamp",
+                "OBJECT": "autocal-thar-all-morn",
+                "TARGNAME": None,
+            }
+            for f in _THAR_MORN
+        ]
+        + [
+            {
+                "FILENAME": f,
+                "IMTYPE": "Arclamp",
+                "OBJECT": "autocal-thar-all-eve",
+                "TARGNAME": None,
+            }
+            for f in _THAR_EVE
+        ]
+        + [
+            {
+                "FILENAME": f,
+                "IMTYPE": "Object",
+                "OBJECT": "185144",
+                "TARGNAME": "185144",
+            }
+            for f in _SCI_A
+        ]
     )
     df = pd.DataFrame(rows)
     df["EXPTIME"] = 60.0
@@ -106,7 +164,6 @@ def _at(data_dir, synthetic_paths):
 
 
 class TestBuildL0FileLists:
-
     @pytest.fixture(scope="class")
     def data_dir(self, tmp_path_factory):
         tmp_path = tmp_path_factory.mktemp("l0data")
@@ -214,7 +271,6 @@ class TestBuildL0FileLists:
 
 
 class TestBuildL0FileListsRealData:
-
     @pytest.fixture(scope="class")
     def l0_dir(self):
         return str(TESTDATA_L0_DIR)
@@ -244,13 +300,16 @@ class TestBuildL0FileListsRealData:
 
 
 class TestBuildFilepath:
-
     def test_master_bias_with_obs_id(self):
-        path = build_filepath("KP.20240405.03600.00", "L1", data_root="/data", master="bias")
+        path = build_filepath(
+            "KP.20240405.03600.00", "L1", data_root="/data", master="bias"
+        )
         assert path == "/data/masters/20240405/KP.20240405.03600.00_master_bias_L1.fits"
 
     def test_master_flat_with_obs_id(self):
-        path = build_filepath("KP.20240405.14000.00", "L1", data_root="/data", master="flat")
+        path = build_filepath(
+            "KP.20240405.14000.00", "L1", data_root="/data", master="flat"
+        )
         assert path == "/data/masters/20240405/KP.20240405.14000.00_master_flat_L1.fits"
 
     def test_master_bare_filename(self):
@@ -307,7 +366,9 @@ class TestBuildFilepath:
         assert name == "kpf_SL2_20240405T110833.fits"
 
     def test_master_thar_with_obs_id(self):
-        path = build_filepath("KP.20240405.03600.00", "L2", data_root="/data", master="thar")
+        path = build_filepath(
+            "KP.20240405.03600.00", "L2", data_root="/data", master="thar"
+        )
         assert path == "/data/masters/20240405/KP.20240405.03600.00_master_thar_L2.fits"
 
     def test_invalid_obs_id_raises(self):
@@ -315,11 +376,15 @@ class TestBuildFilepath:
             build_filepath("20240405", "L1")
 
     def test_invalid_data_root_empty_string_raises(self):
-        with pytest.raises(ValueError, match="data_root must be None or a non-empty string"):
+        with pytest.raises(
+            ValueError, match="data_root must be None or a non-empty string"
+        ):
             build_filepath("KP.20240405.40113.57", "L2", data_root="")
 
     def test_invalid_data_root_non_string_raises(self):
-        with pytest.raises(ValueError, match="data_root must be None or a non-empty string"):
+        with pytest.raises(
+            ValueError, match="data_root must be None or a non-empty string"
+        ):
             build_filepath("KP.20240405.40113.57", "L2", data_root=12345)
 
 
@@ -329,7 +394,6 @@ class TestBuildFilepath:
 
 
 class TestBuildQlpDir:
-
     def test_l0(self):
         path = build_qlp_dir("KP.20240405.49597.71", "L0", data_root="/data")
         assert path == "/data/QLP/20240405/KP.20240405.49597.71/L0"
@@ -357,7 +421,6 @@ class TestBuildQlpDir:
 
 
 class TestBuildMiniDatabase:
-
     @pytest.fixture(scope="class")
     def mini_db(self):
         return build_mini_database(str(TESTDATA_L0_DIR), write=False)
@@ -405,8 +468,10 @@ class TestMastersRecipe:
         output_paths = []
         for files in build_l0_file_lists("bias", data_dir=str(TESTDATA_L0_DIR)):
             bias_handler = Bias(files)
-            bias_l1      = bias_handler.make_master_l1()
-            out_path     = build_filepath(get_obs_id(files[0]), "L1", data_root=data_root_out, master="bias")
+            bias_l1 = bias_handler.make_master_l1()
+            out_path = build_filepath(
+                get_obs_id(files[0]), "L1", data_root=data_root_out, master="bias"
+            )
             os.makedirs(os.path.dirname(out_path), exist_ok=True)
             bias_l1.to_fits(out_path)
             output_paths.append(out_path)
@@ -454,14 +519,14 @@ class TestMastersRecipe:
 
 
 class TestMastersRecipeErrors:
-
     def _make_config(self, data_input, data_output):
         import argparse
+
         return ConfigHandler(
             str(MASTERS_CONFIG_PATH),
             overrides={
                 "DATA_DIRS": {
-                    "KPF_DATA_INPUT":  str(data_input),
+                    "KPF_DATA_INPUT": str(data_input),
                     "KPF_DATA_OUTPUT": str(data_output),
                 }
             },
@@ -469,6 +534,7 @@ class TestMastersRecipeErrors:
 
     def test_nonexistent_l0_dir_raises(self, tmp_path):
         import argparse
+
         config = self._make_config(tmp_path, tmp_path)
         args = argparse.Namespace(datecode="20240405", obs_id=None)
         recipe = _load_masters_recipe()
@@ -477,6 +543,7 @@ class TestMastersRecipeErrors:
 
     def test_missing_datecode_raises(self, tmp_path):
         import argparse
+
         config = self._make_config(tmp_path, tmp_path)
         args = argparse.Namespace(datecode=None, obs_id=None)
         recipe = _load_masters_recipe()

@@ -98,8 +98,12 @@ class KPF0(KPFDataModel):
                 t = Table.read(hdu)
                 df = t.to_pandas()
                 receipt_columns = [
-                    "Time", "Code_Release", "Commit_Hash",
-                    "Branch_Name", "Module_Name", "Status"
+                    "Time",
+                    "Code_Release",
+                    "Commit_Hash",
+                    "Branch_Name",
+                    "Module_Name",
+                    "Status",
                 ]
                 if df.empty:
                     df = pd.DataFrame(columns=receipt_columns)
@@ -131,7 +135,8 @@ class KPF0(KPFDataModel):
 
         if "PRIMARY" in self.headers:
             self.headers["PRIMARY"]["FILENAME"] = (
-                os.path.basename(fn), "Name of the FITS file"
+                os.path.basename(fn),
+                "Name of the FITS file",
             )
 
         hdu_list = self._create_hdul()
@@ -143,7 +148,13 @@ class KPF0(KPFDataModel):
         hdul.close()
         return fn
 
-    _L0_TO_L1_PASSTHROUGH = ["CA_HK", "EXPMETER_SCI", "EXPMETER_SKY", "TELEMETRY", "CONFIG"]
+    _L0_TO_L1_PASSTHROUGH = [
+        "CA_HK",
+        "EXPMETER_SCI",
+        "EXPMETER_SKY",
+        "TELEMETRY",
+        "CONFIG",
+    ]
 
     def to_kpf1(self):
         """Create a KPF1 scaffold from this L0, carrying over headers and pass-through extensions.

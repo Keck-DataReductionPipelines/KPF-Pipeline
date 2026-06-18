@@ -1,6 +1,7 @@
 import tomllib
 from pathlib import Path
 
+
 class ConfigHandler:
     """Load a TOML config file, with optional in-memory section overrides.
 
@@ -18,7 +19,11 @@ class ConfigHandler:
         self.config = self.load_config()
         if overrides:
             for section, values in overrides.items():
-                if section in self.config and isinstance(self.config[section], dict) and isinstance(values, dict):
+                if (
+                    section in self.config
+                    and isinstance(self.config[section], dict)
+                    and isinstance(values, dict)
+                ):
                     self.config[section].update(values)
                 else:
                     self.config[section] = values

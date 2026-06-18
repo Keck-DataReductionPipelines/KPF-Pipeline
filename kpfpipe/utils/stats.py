@@ -142,7 +142,6 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
 
     # global linear interpolation (robust to clumps of bad pixels)
     elif method == "global":
-
         ny, nx = data.shape
         y = np.arange(ny)
         x = np.arange(nx)

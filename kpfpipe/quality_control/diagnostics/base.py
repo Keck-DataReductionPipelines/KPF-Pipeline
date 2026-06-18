@@ -33,9 +33,7 @@ class Diagnostics:
             try:
                 output = fn()
             except Exception as e:
-                raise RuntimeError(
-                    f"Diagnostic {name!r} raised: {e}"
-                ) from e
+                raise RuntimeError(f"Diagnostic {name!r} raised: {e}") from e
 
             if not output:
                 continue

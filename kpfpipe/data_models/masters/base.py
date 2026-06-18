@@ -19,7 +19,7 @@ avoid confusion: units and normalization conventions differ by
 calibration type (bias, dark, flat) and are not the same as raw
 science counts (e.g., GREEN_CCD).
 
-Filename convention: masters products follow WMKO filename format 
+Filename convention: masters products follow WMKO filename format
 (KP.YYYYMMDD.NNNNN.NN.fits), not the EPRV per-level convention.
 """
 

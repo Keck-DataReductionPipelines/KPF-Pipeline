@@ -17,9 +17,9 @@ from kpfpipe.utils.kpf import (
 _MINI_DB_KEYS = ["FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"]
 
 _OBJECT_MAP = {
-    "bias":     ["autocal-bias"],
-    "dark":     ["autocal-dark"],
-    "flat":     ["autocal-flat-all"],
+    "bias": ["autocal-bias"],
+    "dark": ["autocal-dark"],
+    "flat": ["autocal-flat-all"],
     "thar": [
         "autocal-thar-all-morn",
         "autocal-thar-all-midday",
@@ -28,6 +28,7 @@ _OBJECT_MAP = {
         "autocal-thar-all-midnight",
     ],
 }
+
 
 def build_mini_database(data_dir, write=True):
     """
@@ -86,8 +87,9 @@ def build_mini_database(data_dir, write=True):
     return df
 
 
-def build_l0_file_lists(imtype, *, data_dir=None, mini_db=None,
-                        min_file_count=5, cluster_gap_seconds=7200):
+def build_l0_file_lists(
+    imtype, *, data_dir=None, mini_db=None, min_file_count=5, cluster_gap_seconds=7200
+):
     """
     Return sorted file lists for all calibration clusters of the requested type.
 
@@ -138,9 +140,14 @@ def build_l0_file_lists(imtype, *, data_dir=None, mini_db=None,
             mini_db = pd.read_csv(csv_path)
             # Normalize both sides via realpath so symlinks and relative
             # paths don't trigger gratuitous rebuilds.
-            on_disk = {os.path.realpath(p) for p in glob.glob(os.path.join(data_dir, "*.fits"))}
-            cached = {os.path.realpath(p) for p in mini_db["FILENAME"]} \
-                if "FILENAME" in mini_db.columns else set()
+            on_disk = {
+                os.path.realpath(p) for p in glob.glob(os.path.join(data_dir, "*.fits"))
+            }
+            cached = (
+                {os.path.realpath(p) for p in mini_db["FILENAME"]}
+                if "FILENAME" in mini_db.columns
+                else set()
+            )
             if on_disk != cached:
                 added = on_disk - cached
                 removed = cached - on_disk
@@ -206,7 +213,9 @@ def build_qlp_dir(obs_id, level, *, data_root):
     if not isinstance(data_root, str) or not data_root:
         raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")
     if not is_obs_id(obs_id):
-        raise ValueError(f"obs_id must be a valid observation ID (e.g. 'KP.20240405.49597.71'); got '{obs_id}'")
+        raise ValueError(
+            f"obs_id must be a valid observation ID (e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
+        )
     return os.path.join(data_root, "QLP", get_datecode(obs_id), obs_id, level)
 
 
@@ -236,9 +245,13 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
                     data_root is not None and not a non-empty string.
     """
     if data_root is not None and (not isinstance(data_root, str) or not data_root):
-        raise ValueError(f"data_root must be None or a non-empty string; got {data_root!r}")
+        raise ValueError(
+            f"data_root must be None or a non-empty string; got {data_root!r}"
+        )
     if not is_obs_id(obs_id):
-        raise ValueError(f"obs_id must be a valid observation ID (e.g. 'KP.20240405.49597.71'); got '{obs_id}'")
+        raise ValueError(
+            f"obs_id must be a valid observation ID (e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
+        )
 
     datecode = get_datecode(obs_id)
 
@@ -246,9 +259,13 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
         # Masters: {data_root}/masters/{datecode}/{obs_id}_master_{master}_{level}.fits
         # Level is in the filename only — no level subdirectory.
         if master not in ("bias", "dark", "flat", "thar"):
-            raise ValueError(f"'master' must be 'bias', 'dark', 'flat', or 'thar'; got '{master}'")
+            raise ValueError(
+                f"'master' must be 'bias', 'dark', 'flat', or 'thar'; got '{master}'"
+            )
         if level not in ("L1", "L2", "L4"):
-            raise ValueError(f"'level' for master products must be 'L1', 'L2', or 'L4'; got '{level}'")
+            raise ValueError(
+                f"'level' for master products must be 'L1', 'L2', or 'L4'; got '{level}'"
+            )
         filename = f"{obs_id}_master_{master}_{level}.fits"
         if data_root is None:
             return filename

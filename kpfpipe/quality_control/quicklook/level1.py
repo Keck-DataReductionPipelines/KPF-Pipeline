@@ -73,8 +73,12 @@ class PlotL1:
 
         fig = plt.figure(figsize=(10, 8), tight_layout=True)
         plt.imshow(
-            image, cmap="viridis", origin="lower", interpolation="None",
-            vmin=vmin, vmax=vmax,
+            image,
+            cmap="viridis",
+            origin="lower",
+            interpolation="None",
+            vmin=vmin,
+            vmax=vmax,
         )
 
         plt.title(
@@ -96,20 +100,34 @@ class PlotL1:
         if rn_values:
             rn_text = "RN: " + ", ".join(f"{v:.2f}" for v in rn_values)
             rn_text += r" e- (stdev(overscan); 10-$\sigma$ outlier rej.)"
-            rn_text += "\nNon-Gaussian RN: " + ", ".join(f"{v:.3f}" for v in rnng_values)
+            rn_text += "\nNon-Gaussian RN: " + ", ".join(
+                f"{v:.3f}" for v in rnng_values
+            )
             rn_text += r" (0.80$\times$stdev/mad in overscan)"
             plt.annotate(
-                rn_text, xy=(0, 0), xycoords="axes fraction",
-                fontsize=8, color="darkgray", ha="left", va="top",
-                xytext=(-50, -21), textcoords="offset points",
+                rn_text,
+                xy=(0, 0),
+                xycoords="axes fraction",
+                fontsize=8,
+                color="darkgray",
+                ha="left",
+                va="top",
+                xytext=(-50, -21),
+                textcoords="offset points",
             )
 
         # Timestamp
         current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         plt.annotate(
-            f"KPF QLP: {current_time} UT", xy=(1, 0), xycoords="axes fraction",
-            fontsize=8, color="darkgray", ha="right", va="top",
-            xytext=(100, -21), textcoords="offset points",
+            f"KPF QLP: {current_time} UT",
+            xy=(1, 0),
+            xycoords="axes fraction",
+            fontsize=8,
+            color="darkgray",
+            ha="right",
+            va="top",
+            xytext=(100, -21),
+            textcoords="offset points",
         )
         plt.subplots_adjust(bottom=0.1)
 

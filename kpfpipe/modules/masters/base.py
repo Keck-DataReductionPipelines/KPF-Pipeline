@@ -1,6 +1,7 @@
 """
 Base class for KPF Masters modules.
 """
+
 import os
 import warnings
 
@@ -27,7 +28,8 @@ class BaseMasterModule:
     """
 
     # Module defaults; subclasses extend via `{**BaseMasterModule._DEFAULTS, ...}`.
-    _DEFAULTS = {**DEFAULTS,
+    _DEFAULTS = {
+        **DEFAULTS,
         "nframe_stream": 6,
         "stack_sigma": 5.0,
     }
@@ -54,7 +56,6 @@ class BaseMasterModule:
         self.ml1_obj = None  # populated by subclass make_master_l1(); used by save_master('L1', ...)
         self.ml2_obj = None  # populated by subclass make_master_l2(); used by save_master('L2', ...)
 
-
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -70,7 +71,7 @@ class BaseMasterModule:
         ncache : int, optional
             Maximum number of L1 objects to retain in internal cache.
         exptime_tolerance : float
-            Maximum allowed excess of elapsed time over requested exposure time, 
+            Maximum allowed excess of elapsed time over requested exposure time,
             in seconds (default = 0.1).
         verbose : bool, optional
             If True (default), emit a progress print and propagate load /
@@ -125,7 +126,6 @@ class BaseMasterModule:
 
         return l1_obj, success
 
-
     @staticmethod
     def _check_exptime_vs_elapsed(l1_obj, exptime_tolerance):
         """
@@ -153,8 +153,9 @@ class BaseMasterModule:
         if delta > exptime_tolerance:
             raise ValueError(f"elapsed time - requested time > {exptime_tolerance}")
 
-
-    def _compute_stats_from_datacube(self, l0_file_list=None, nframe=None, sigma=None, verbose=True):
+    def _compute_stats_from_datacube(
+        self, l0_file_list=None, nframe=None, sigma=None, verbose=True
+    ):
         """
         Compute stacked statistics using an in-memory data cube.
 
@@ -194,7 +195,7 @@ class BaseMasterModule:
         if sigma is None:
             sigma = self.stack_sigma
 
-        nframe = np.min([nframe,len(l0_file_list)])
+        nframe = np.min([nframe, len(l0_file_list)])
 
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
@@ -203,11 +204,11 @@ class BaseMasterModule:
         ncol = self.ccd["ncol"]
 
         data_cube = {}
-        exptime = np.zeros(nframe,dtype=np.float32)
+        exptime = np.zeros(nframe, dtype=np.float32)
 
         for chip in self.chips:
-            data_cube[f"{chip}_CCD"] = np.zeros((nframe,nrow,ncol),dtype=np.float32)
-            data_cube[f"{chip}_VAR"] = np.zeros((nframe,nrow,ncol),dtype=np.float32)
+            data_cube[f"{chip}_CCD"] = np.zeros((nframe, nrow, ncol), dtype=np.float32)
+            data_cube[f"{chip}_VAR"] = np.zeros((nframe, nrow, ncol), dtype=np.float32)
 
         i = 0
         failure = 0
@@ -247,7 +248,9 @@ class BaseMasterModule:
         elif np.all(exptime == 0):
             T = np.ones_like(exptime)[:, None, None]
         else:
-            raise ValueError(f"Exposure times must be all zero or all non-zero; exptime = {exptime}")
+            raise ValueError(
+                f"Exposure times must be all zero or all non-zero; exptime = {exptime}"
+            )
 
         stats = {}
         exptime_total = np.sum(exptime)
@@ -256,10 +259,9 @@ class BaseMasterModule:
             stats[f"{chip}_CCD"] = {}
             stats[f"{chip}_VAR"] = {}
 
-            out = (
-                flag_outliers(data_cube[f"{chip}_CCD"] / T, sigma, axis=0) |
-                flag_outliers(data_cube[f"{chip}_VAR"] / T, sigma, axis=0)
-            )
+            out = flag_outliers(
+                data_cube[f"{chip}_CCD"] / T, sigma, axis=0
+            ) | flag_outliers(data_cube[f"{chip}_VAR"] / T, sigma, axis=0)
 
             valid = ~out
             N = np.sum(~out, axis=0)
@@ -275,7 +277,7 @@ class BaseMasterModule:
                 rate_mean = np.zeros_like(R[0])
                 rate_mean[good] = np.sum(R, axis=0, where=valid)[good] / N[good]
 
-                diff2 = (R - rate_mean)**2
+                diff2 = (R - rate_mean) ** 2
                 sum_sq_dev = np.sum(diff2, axis=0, where=valid)
 
                 rate_rms = np.zeros_like(R[0])
@@ -288,8 +290,9 @@ class BaseMasterModule:
 
         return stats, exptime_total
 
-
-    def _compute_stats_from_stream(self, l0_file_list=None, ndirect=None, sigma=None, verbose=True):
+    def _compute_stats_from_stream(
+        self, l0_file_list=None, ndirect=None, sigma=None, verbose=True
+    ):
         """
         Compute stacked statistics using streaming Welford accumulation.
 
@@ -334,13 +337,11 @@ class BaseMasterModule:
         if sigma is None:
             sigma = self.stack_sigma
 
-        approx_stats, exptime_direct = (
-            self._compute_stats_from_datacube(
-                l0_file_list=l0_file_list,
-                nframe=ndirect,
-                sigma=sigma,
-                verbose=verbose,
-            )
+        approx_stats, exptime_direct = self._compute_stats_from_datacube(
+            l0_file_list=l0_file_list,
+            nframe=ndirect,
+            sigma=sigma,
+            verbose=verbose,
         )
 
         if len(l0_file_list) <= ndirect:
@@ -358,10 +359,10 @@ class BaseMasterModule:
                 ext = f"{chip}_{suffix}"
 
                 exact_stats[ext] = {}
-                exact_stats[ext]["nframe"] = np.zeros((nrow,ncol),dtype=np.int32)
-                exact_stats[ext]["total_sum"] = np.zeros((nrow,ncol),dtype=np.float32)
-                exact_stats[ext]["rate_mean"] = np.zeros((nrow,ncol),dtype=np.float32)
-                exact_stats[ext]["rate_M2"] = np.zeros((nrow,ncol),dtype=np.float32)
+                exact_stats[ext]["nframe"] = np.zeros((nrow, ncol), dtype=np.int32)
+                exact_stats[ext]["total_sum"] = np.zeros((nrow, ncol), dtype=np.float32)
+                exact_stats[ext]["rate_mean"] = np.zeros((nrow, ncol), dtype=np.float32)
+                exact_stats[ext]["rate_M2"] = np.zeros((nrow, ncol), dtype=np.float32)
 
                 approx_mean = approx_stats[ext]["rate_mean"]
                 approx_rms = approx_stats[ext]["rate_rms"]
@@ -447,7 +448,6 @@ class BaseMasterModule:
 
         return exact_stats, exptime_total
 
-
     # ------------------------------------------------------------------
     # Algorithm steps
     # ------------------------------------------------------------------
@@ -499,25 +499,30 @@ class BaseMasterModule:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
         if nframe < nstream:
-            stats, exptime = self._compute_stats_from_datacube(l0_file_list, nstream - 1, sigma, verbose=verbose)
+            stats, exptime = self._compute_stats_from_datacube(
+                l0_file_list, nstream - 1, sigma, verbose=verbose
+            )
         else:
-            stats, exptime = self._compute_stats_from_stream(l0_file_list, nstream - 1, sigma, verbose=verbose)
+            stats, exptime = self._compute_stats_from_stream(
+                l0_file_list, nstream - 1, sigma, verbose=verbose
+            )
 
         # TODO: add check that nframe is consistent between CCD and VAR
         for chip in self.chips:
             if np.any(stats[f"{chip}_CCD"]["nframe"] != stats[f"{chip}_VAR"]["nframe"]):
-                raise ValueError(f"mismatched frame count between {chip}_CCD and {chip}_VAR")
+                raise ValueError(
+                    f"mismatched frame count between {chip}_CCD and {chip}_VAR"
+                )
 
         l1_arrays = {}
         for chip in self.chips:
-
             img = stats[f"{chip}_CCD"]["rate_mean"]
             tot = stats[f"{chip}_CCD"]["total_sum"]
             var = stats[f"{chip}_VAR"]["total_sum"]
 
             good = var > 0
 
-            for suffix in ["CCD","VAR"]:
+            for suffix in ["CCD", "VAR"]:
                 ext = f"{chip}_{suffix}"
                 good &= stats[ext]["nframe"] > 0.5 * nframe
 
@@ -533,7 +538,6 @@ class BaseMasterModule:
             l1_arrays[f"{chip}_MASK"] = good
 
         return l1_arrays
-
 
     # ------------------------------------------------------------------
     # Public methods

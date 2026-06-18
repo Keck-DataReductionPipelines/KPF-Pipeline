@@ -25,8 +25,8 @@ class AliasedOrderedDict(OrderedDict):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._aliases = {}      # alias → canonical name
-        self._reverse = {}      # canonical → set of aliases
+        self._aliases = {}  # alias → canonical name
+        self._reverse = {}  # canonical → set of aliases
 
     def register_alias(self, alias, canonical):
         """Register alias as a synonym for canonical."""

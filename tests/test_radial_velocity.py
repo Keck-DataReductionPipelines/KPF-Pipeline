@@ -351,9 +351,9 @@ class TestBuildLineMask:
 
 class TestBuildVelocityGrid:
     def test_centered_on_systemic_rv(self, header_kpf2):
-        header_kpf2.headers["INSTRUMENT_HEADER"][
-            "TARGRADV"
-        ] = 10.0  # SCI2 grid center = TARGRADV
+        header_kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = (
+            10.0  # SCI2 grid center = TARGRADV
+        )
         grid = RadialVelocity(header_kpf2)._build_velocity_grid("GREEN", "SCI2")
         assert grid.mean() == pytest.approx(10.0)
 

@@ -36,7 +36,7 @@ class TestGaussianFit:
     def test_jacobian_matches_finite_difference(self):
         # Guards the d/d(log_sigma) chain-rule term in gaussian_jac.
         x = np.linspace(-5, 5, 21)
-        theta = np.array([1.0, 4.0, 0.5, np.log(1.8)])   # [b, a, mu, log_sigma]
+        theta = np.array([1.0, 4.0, 0.5, np.log(1.8)])  # [b, a, mu, log_sigma]
         J = gaussian_jac(theta, x)
         eps = 1e-6
         for k in range(4):
@@ -48,7 +48,6 @@ class TestGaussianFit:
 
 
 class TestInterpolateBadPixels:
-
     def test_preserves_float32_dtype(self):
         data = np.ones((8, 8), dtype=np.float32)
         mask = np.ones((8, 8), dtype=bool)

@@ -77,7 +77,9 @@ class PlotL0:
 
             panels = {}
             for i in range(1, 5):
-                panels[i] = l0_copy.data[f"{chip}_AMP{i}"][:nrow_img, prescan:prescan + ncol_img]
+                panels[i] = l0_copy.data[f"{chip}_AMP{i}"][
+                    :nrow_img, prescan : prescan + ncol_img
+                ]
 
             bot = np.concatenate((panels[1], panels[2]), axis=1)
             top = np.concatenate((panels[3], panels[4]), axis=1)
@@ -109,7 +111,9 @@ class PlotL0:
 
         fig = plt.figure(figsize=(10, 8), tight_layout=True)
         plt.imshow(
-            image, cmap="viridis", origin="lower",
+            image,
+            cmap="viridis",
+            origin="lower",
             vmin=np.percentile(image, 1),
             vmax=np.percentile(image, 99.5),
         )
@@ -133,9 +137,15 @@ class PlotL0:
         current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(
-            timestamp_label, xy=(1, 0), xycoords="axes fraction",
-            fontsize=8, color="darkgray", ha="right", va="top",
-            xytext=(100, -21), textcoords="offset points",
+            timestamp_label,
+            xy=(1, 0),
+            xycoords="axes fraction",
+            fontsize=8,
+            color="darkgray",
+            ha="right",
+            va="top",
+            xytext=(100, -21),
+            textcoords="offset points",
         )
         plt.subplots_adjust(bottom=0.1)
 

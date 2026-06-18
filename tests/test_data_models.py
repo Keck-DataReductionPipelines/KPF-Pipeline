@@ -55,7 +55,9 @@ def synthetic_l0_file(tmp_path):
     telemetry_hdu = fits.BinTableHDU(data=telemetry)
     telemetry_hdu.name = "TELEMETRY"
 
-    hdul = fits.HDUList([primary, green_amp1, green_amp2, red_amp1, ca_hk, telemetry_hdu])
+    hdul = fits.HDUList(
+        [primary, green_amp1, green_amp2, red_amp1, ca_hk, telemetry_hdu]
+    )
     hdul.writeto(fn, overwrite=True)
     hdul.close()
 
@@ -387,7 +389,9 @@ class TestToKPF2:
         assert l1.obs_id == "KP.20240113.23249.10"
         kpf2 = l1.to_kpf2()
         origid = kpf2.headers["PRIMARY"]["ORIGID"]
-        assert (origid[0] if isinstance(origid, tuple) else origid) == "KP.20240113.23249.10"
+        assert (
+            origid[0] if isinstance(origid, tuple) else origid
+        ) == "KP.20240113.23249.10"
 
 
 class TestAliasedOrderedDict:
@@ -430,6 +434,7 @@ class TestAliasedOrderedDict:
 
     def test_from_ordered_dict(self):
         from collections import OrderedDict
+
         od = OrderedDict([("A", 1), ("B", 2)])
         aliased = AliasedOrderedDict.from_ordered_dict(od)
         assert aliased["A"] == 1
@@ -449,6 +454,7 @@ class TestAliasedOrderedDict:
 class TestKPF2Aliases:
     def test_kpf2_inherits_rv2(self):
         from rvdata.core.models.level2 import RV2
+
         kpf2 = KPF2()
         assert isinstance(kpf2, RV2)
         assert kpf2.level == 2
@@ -480,7 +486,13 @@ class TestKPF2Aliases:
     def test_all_trace_aliases_registered(self):
         kpf2 = KPF2()
         # Check all 5 fibers x 4 suffixes = 20 aliases
-        for fiber, trace in [("CAL", 1), ("SCI1", 2), ("SCI2", 3), ("SCI3", 4), ("SKY", 5)]:
+        for fiber, trace in [
+            ("CAL", 1),
+            ("SCI1", 2),
+            ("SCI2", 3),
+            ("SCI3", 4),
+            ("SKY", 5),
+        ]:
             for suffix in ["FLUX", "WAVE", "VAR", "BLAZE"]:
                 alias = f"{fiber}_{suffix}"
                 canonical = f"TRACE{trace}_{suffix}"
@@ -546,7 +558,9 @@ class TestKPF2Aliases:
         """set_data() should route chip-prefix keys through __setitem__."""
         kpf2 = KPF2()
         n_pix = 50
-        green_data = np.arange(NORDER_GREEN * n_pix, dtype=np.float32).reshape(NORDER_GREEN, n_pix)
+        green_data = np.arange(NORDER_GREEN * n_pix, dtype=np.float32).reshape(
+            NORDER_GREEN, n_pix
+        )
 
         kpf2.set_data("GREEN_SCI2_FLUX", green_data)
         np.testing.assert_array_equal(kpf2.data["GREEN_SCI2_FLUX"], green_data)
@@ -588,6 +602,7 @@ class TestToKPF4:
 class TestKPF4:
     def test_kpf4_inherits_rv4(self):
         from rvdata.core.models.level4 import RV4
+
         kpf4 = KPF4()
         assert isinstance(kpf4, RV4)
         assert kpf4.level == 4
@@ -621,12 +636,20 @@ class TestKPF4:
     def test_rv_chip_prefix_views(self):
         # RV tables are row-sliced (green = rows 0:NORDER_GREEN, red the rest).
         kpf4 = KPF4()
-        kpf4.set_data("SCI2_RV", pd.DataFrame({
-            "ORDER_INDEX": np.arange(NORDER), "RV": np.arange(NORDER, dtype=float)}))
+        kpf4.set_data(
+            "SCI2_RV",
+            pd.DataFrame(
+                {"ORDER_INDEX": np.arange(NORDER), "RV": np.arange(NORDER, dtype=float)}
+            ),
+        )
         green, red = kpf4.data["GREEN_SCI2_RV"], kpf4.data["RED_SCI2_RV"]
         assert len(green) == NORDER_GREEN and len(red) == NORDER - NORDER_GREEN
-        np.testing.assert_array_equal(np.asarray(green["ORDER_INDEX"]), np.arange(NORDER_GREEN))
-        np.testing.assert_array_equal(np.asarray(red["ORDER_INDEX"]), np.arange(NORDER_GREEN, NORDER))
+        np.testing.assert_array_equal(
+            np.asarray(green["ORDER_INDEX"]), np.arange(NORDER_GREEN)
+        )
+        np.testing.assert_array_equal(
+            np.asarray(red["ORDER_INDEX"]), np.arange(NORDER_GREEN, NORDER)
+        )
         assert "GREEN_SCI2_RV" in kpf4.data
 
     def test_rv_chip_prefix_is_read_only(self):
@@ -664,8 +687,9 @@ def synthetic_masters_l1_file(tmp_path):
     red_mask = fits.ImageHDU(data=np.ones((32, 32), dtype=np.uint8))
     red_mask.name = "RED_MASK"
 
-    hdul = fits.HDUList([primary, green_img, green_snr, green_mask,
-                         red_img, red_snr, red_mask])
+    hdul = fits.HDUList(
+        [primary, green_img, green_snr, green_mask, red_img, red_snr, red_mask]
+    )
     hdul.writeto(fn, overwrite=True)
     hdul.close()
 
@@ -675,8 +699,16 @@ def synthetic_masters_l1_file(tmp_path):
 class TestKPFMasterL1:
     def test_required_extensions_created(self):
         m = KPFMasterL1()
-        for ext in ["PRIMARY", "GREEN_IMG", "GREEN_SNR", "GREEN_MASK",
-                    "RED_IMG", "RED_SNR", "RED_MASK", "RECEIPT"]:
+        for ext in [
+            "PRIMARY",
+            "GREEN_IMG",
+            "GREEN_SNR",
+            "GREEN_MASK",
+            "RED_IMG",
+            "RED_SNR",
+            "RED_MASK",
+            "RECEIPT",
+        ]:
             assert ext in m.extensions
 
     def test_no_science_extensions(self):
@@ -729,6 +761,7 @@ class TestKPFMasterL1:
 
     def test_no_warning_on_known_extensions(self, synthetic_masters_l1_file):
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
             KPFMasterL1.from_fits(synthetic_masters_l1_file)
@@ -765,10 +798,22 @@ def synthetic_masters_l2_file(tmp_path):
 class TestKPFMasterL2:
     def test_required_extensions_created(self):
         m = KPFMasterL2()
-        for ext in ["PRIMARY", "RECEIPT",
-                    "TRACE1_FLUX", "TRACE1_WAVE", "TRACE1_VAR", "TRACE1_BLAZE",
-                    "TRACE3_FLUX", "TRACE3_WAVE", "TRACE3_VAR", "TRACE3_BLAZE",
-                    "TRACE5_FLUX", "TRACE5_WAVE", "TRACE5_VAR", "TRACE5_BLAZE"]:
+        for ext in [
+            "PRIMARY",
+            "RECEIPT",
+            "TRACE1_FLUX",
+            "TRACE1_WAVE",
+            "TRACE1_VAR",
+            "TRACE1_BLAZE",
+            "TRACE3_FLUX",
+            "TRACE3_WAVE",
+            "TRACE3_VAR",
+            "TRACE3_BLAZE",
+            "TRACE5_FLUX",
+            "TRACE5_WAVE",
+            "TRACE5_VAR",
+            "TRACE5_BLAZE",
+        ]:
             assert ext in m.extensions
 
     def test_aliases_work(self):
@@ -780,7 +825,9 @@ class TestKPFMasterL2:
     def test_chip_prefix_access(self):
         m = KPFMasterL2()
         n_pix = 32
-        trace_data = np.random.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float32)
+        trace_data = np.random.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(
+            np.float32
+        )
         m.data["TRACE3_WAVE"] = trace_data
 
         green = m.data["GREEN_SCI2_WAVE"]
@@ -830,6 +877,7 @@ class TestKPFMasterL2:
 
     def test_no_warning_on_known_extensions(self, synthetic_masters_l2_file):
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
             KPFMasterL2.from_fits(synthetic_masters_l2_file)
@@ -874,12 +922,14 @@ class TestKPFMasterStubs:
 
     def test_master_l4_inherits_kpf4(self):
         from kpfpipe.data_models.level4 import KPF4
+
         assert issubclass(KPFMasterL4, KPF4)
 
 
 class TestImports:
     def test_data_models_import(self):
         from kpfpipe.data_models import KPF0, KPF1, KPF2, KPF4
+
         assert KPF0 is not None
         assert KPF1 is not None
         assert KPF2 is not None
@@ -887,6 +937,7 @@ class TestImports:
 
     def test_masters_data_models_import(self):
         from kpfpipe.data_models.masters import KPFMasterL1, KPFMasterL2, KPFMasterL4
+
         assert KPFMasterL1 is not None
         assert KPFMasterL2 is not None
         assert KPFMasterL4 is not None
@@ -894,5 +945,6 @@ class TestImports:
     def test_rvdata_import(self):
         from rvdata.core.models.level2 import RV2
         from rvdata.core.models.level4 import RV4
+
         assert RV2 is not None
         assert RV4 is not None

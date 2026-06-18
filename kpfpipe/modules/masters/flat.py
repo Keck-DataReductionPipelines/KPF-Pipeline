@@ -1,6 +1,7 @@
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
 
+
 class Flat(BaseMasterModule):
     def __init__(self, l0_file_list, config=None):
         if config is None:

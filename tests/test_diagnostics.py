@@ -9,8 +9,8 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.quality_control.diagnostics import Diagnostics, DiagL0, DiagL1, DiagL2
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
-NORDER_RED   = DETECTOR["norder"]["RED"]
-NCOL         = DETECTOR["ccd"]["ncol"]
+NORDER_RED = DETECTOR["norder"]["RED"]
+NCOL = DETECTOR["ccd"]["ncol"]
 
 _FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
 _NAN_KEYS = ("NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL")
@@ -25,12 +25,13 @@ def _hval(raw):
 # Diagnostics base class
 # ---------------------------------------------------------------------------
 
-class TestDiagnosticsBase:
 
+class TestDiagnosticsBase:
     def _make_obj(self):
         class _FakeObj:
             headers = {"PRIMARY": {}}
             data = {}
+
         return _FakeObj()
 
     def test_writes_returned_keys_to_primary(self):
@@ -39,6 +40,7 @@ class TestDiagnosticsBase:
         class MyDiag(Diagnostics):
             def metric_a(self):
                 return {"KEYA": (3.14, "metric a")}
+
             metric_a._diag_name = "metric_a"
 
         results = MyDiag(obj).run()
@@ -51,6 +53,7 @@ class TestDiagnosticsBase:
         class MyDiag(Diagnostics):
             def multi(self):
                 return {"K1": (1, "one"), "K2": (2, "two")}
+
             multi._diag_name = "multi"
 
         MyDiag(obj).run()
@@ -63,6 +66,7 @@ class TestDiagnosticsBase:
         class MyDiag(Diagnostics):
             def skipped(self):
                 return {}
+
             skipped._diag_name = "skipped"
 
         results = MyDiag(obj).run()
@@ -75,6 +79,7 @@ class TestDiagnosticsBase:
         class MyDiag(Diagnostics):
             def boom(self):
                 raise ValueError("boom!")
+
             boom._diag_name = "boom"
 
         with pytest.raises(RuntimeError, match="Diagnostic 'boom' raised"):
@@ -87,6 +92,7 @@ class TestDiagnosticsBase:
         class MyDiag(Diagnostics):
             def metric(self):
                 return {"VAL": (self.kpf.value, "value")}
+
             metric._diag_name = "metric"
 
         d = MyDiag(obj)
@@ -111,12 +117,13 @@ class TestDiagnosticsBase:
 # DiagL0 / DiagL1 — currently empty placeholders
 # ---------------------------------------------------------------------------
 
-class TestEmptyLevels:
 
+class TestEmptyLevels:
     def _make_obj(self):
         class _FakeObj:
             headers = {"PRIMARY": {}}
             data = {}
+
         return _FakeObj()
 
     def test_diag_l0_runs_cleanly(self):
@@ -132,6 +139,7 @@ class TestEmptyLevels:
 # DiagL2 — NaN counts + zero-flux fraction
 # ---------------------------------------------------------------------------
 
+
 def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0):
     """Build a minimal KPF1, convert to KPF2, populate FLUX/VAR extensions
     with controllable NaN and zero fractions across all (chip, fiber) pairs.
@@ -140,19 +148,21 @@ def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0):
     to ones, then a fraction is replaced with NaN, then a fraction with 0.0.
     """
     from io import BytesIO
+
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
     primary.header["DATE-OBS"] = "2024-01-01T00:00:00"
     green_ccd = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_CCD")
     green_var = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_VAR")
-    red_ccd   = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD")
-    red_var   = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR")
+    red_ccd = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD")
+    red_var = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR")
 
     # Round-trip via in-memory FITS to produce a valid KPF1 → to_kpf2().
     buf = BytesIO()
     fits.HDUList([primary, green_ccd, green_var, red_ccd, red_var]).writeto(buf)
     buf.seek(0)
     import tempfile, os
+
     with tempfile.NamedTemporaryFile(suffix=".fits", delete=False) as tmp:
         tmp.write(buf.read())
         tmp_path = tmp.name
@@ -179,7 +189,6 @@ def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0):
 
 
 class TestDiagL2NanCounts:
-
     def test_writes_all_five_keys_with_zero_when_clean(self):
         kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
         DiagL2(kpf2).run()
@@ -201,22 +210,30 @@ class TestDiagL2NanCounts:
         keys with value 0 (consistent header schema)."""
         # Build a KPF2 without populating any FLUX arrays.
         from io import BytesIO
+
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
         primary.header["DATE-OBS"] = "2024-01-01T00:00:00"
         for ext in ("GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR"):
             primary  # noop
-        hdul = fits.HDUList([
-            primary,
-            fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_CCD"),
-            fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_VAR"),
-            fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD"),
-            fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR"),
-        ])
+        hdul = fits.HDUList(
+            [
+                primary,
+                fits.ImageHDU(
+                    data=np.zeros((4, 4), dtype=np.float32), name="GREEN_CCD"
+                ),
+                fits.ImageHDU(
+                    data=np.zeros((4, 4), dtype=np.float32), name="GREEN_VAR"
+                ),
+                fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD"),
+                fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR"),
+            ]
+        )
         buf = BytesIO()
         hdul.writeto(buf)
         buf.seek(0)
         import tempfile, os
+
         with tempfile.NamedTemporaryFile(suffix=".fits", delete=False) as tmp:
             tmp.write(buf.read())
             tmp_path = tmp.name
@@ -231,7 +248,6 @@ class TestDiagL2NanCounts:
 
 
 class TestDiagL2ZeroFlux:
-
     def test_zerofrac_written_when_data_present(self):
         kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
         DiagL2(kpf2).run()
@@ -247,24 +263,34 @@ class TestDiagL2ZeroFlux:
         """50% zeros sprinkled randomly → ZEROFRAC ≈ 0.5 within sampling error."""
         kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(0.5, abs=0.01)
+        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(
+            0.5, abs=0.01
+        )
 
     def test_zerofrac_skipped_when_no_data(self):
         """KPF2 with no populated FLUX extensions → no ZEROFRAC key written."""
         from io import BytesIO
+
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-01-01T00:00:00"
-        hdul = fits.HDUList([
-            primary,
-            fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_CCD"),
-            fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_VAR"),
-            fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD"),
-            fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR"),
-        ])
+        hdul = fits.HDUList(
+            [
+                primary,
+                fits.ImageHDU(
+                    data=np.zeros((4, 4), dtype=np.float32), name="GREEN_CCD"
+                ),
+                fits.ImageHDU(
+                    data=np.zeros((4, 4), dtype=np.float32), name="GREEN_VAR"
+                ),
+                fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD"),
+                fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR"),
+            ]
+        )
         buf = BytesIO()
         hdul.writeto(buf)
         buf.seek(0)
         import tempfile, os
+
         with tempfile.NamedTemporaryFile(suffix=".fits", delete=False) as tmp:
             tmp.write(buf.read())
             tmp_path = tmp.name

@@ -5,6 +5,7 @@ Given a KPF observation frame, finds the most appropriate master calibration
 file for each calibration type (bias, dark, flat, thar) by searching
 the masters directory and selecting the nearest-in-time match.
 """
+
 import glob
 import os
 from datetime import datetime, timedelta
@@ -13,24 +14,25 @@ from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import get_datecode, get_timestamp, kpf_timestamp_to_datetime
 
-_DEFAULTS = {**DEFAULTS,
+_DEFAULTS = {
+    **DEFAULTS,
     "masters_search_window_days": [-1, 0],
 }
 
 # Level suffix of the master FITS file for each supported calibration type,
 # used to build the *_master_<cal_type>_<level>.fits glob.
 _LEVEL_BY_CAL_TYPE = {
-    "bias":     "L1",
-    "dark":     "L1",
-    "flat":     "L1",
+    "bias": "L1",
+    "dark": "L1",
+    "flat": "L1",
     "thar": "L2",
 }
 
 # PRIMARY header prefix written for each supported calibration type.
 _HEADER_PREFIX = {
-    "bias":     "BIAS",
-    "dark":     "DARK",
-    "flat":     "FLAT",
+    "bias": "BIAS",
+    "dark": "DARK",
+    "flat": "FLAT",
     "thar": "WLS",
 }
 
@@ -66,7 +68,9 @@ class CalibrationAssociation:
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE", "MODULE_CALIBRATION_ASSOCIATION"])
+            params = config.get_params(
+                ["DATA_DIRS", "KPFPIPE", "MODULE_CALIBRATION_ASSOCIATION"]
+            )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
@@ -123,8 +127,10 @@ class CalibrationAssociation:
             search_date = obs_date + timedelta(days=delta)
             datecode = search_date.strftime("%Y%m%d")
             pattern = os.path.join(
-                self._data_root, "masters", datecode,
-                f"*_master_{cal_type}_{level}.fits"
+                self._data_root,
+                "masters",
+                datecode,
+                f"*_master_{cal_type}_{level}.fits",
             )
             for filepath in sorted(glob.glob(pattern)):
                 try:
@@ -157,7 +163,12 @@ class CalibrationAssociation:
             return None
 
         obs_dt = datetime.fromisoformat(date_obs)
-        return min(master_files, key=lambda x: abs((kpf_timestamp_to_datetime(x[1]) - obs_dt).total_seconds()))[0]
+        return min(
+            master_files,
+            key=lambda x: abs(
+                (kpf_timestamp_to_datetime(x[1]) - obs_dt).total_seconds()
+            ),
+        )[0]
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -201,7 +212,9 @@ class CalibrationAssociation:
         primary = self.l1_obj.headers["PRIMARY"]
 
         for cal_type in cal_types:
-            master_files = self._find_master_files(cal_type, date_obs, masters_search_window_days)
+            master_files = self._find_master_files(
+                cal_type, date_obs, masters_search_window_days
+            )
             filepath = self._select_nearest(date_obs, master_files)
             if filepath is None:
                 raise FileNotFoundError(
@@ -217,13 +230,13 @@ class CalibrationAssociation:
                 obs_dt = datetime.fromisoformat(date_obs)
                 master_dt = kpf_timestamp_to_datetime(get_timestamp(filepath))
                 primary["WLSFILE"] = filepath
-                primary["AGEWLS"]  = (master_dt - obs_dt).total_seconds() / 86400.0
+                primary["AGEWLS"] = (master_dt - obs_dt).total_seconds() / 86400.0
             else:
                 prefix = _HEADER_PREFIX[cal_type]
                 master_date = datetime.strptime(get_datecode(filepath), "%Y%m%d").date()
                 primary[f"{prefix}FILE"] = os.path.basename(filepath)
-                primary[f"{prefix}DIR"]  = os.path.dirname(filepath)
-                primary[f"AGE{prefix}"]  = (obs_date - master_date).days
+                primary[f"{prefix}DIR"] = os.path.dirname(filepath)
+                primary[f"AGE{prefix}"] = (obs_date - master_date).days
 
         self._results = {
             cal_type: primary[f"{_HEADER_PREFIX[cal_type]}FILE"]
@@ -238,7 +251,9 @@ class CalibrationAssociation:
         print("CalibrationAssociation")
         print(f"  obs_id:        {self.l1_obj.obs_id}")
         print(f"  data root:     {self._data_root}")
-        print(f"  search window: {self.masters_search_window_days} days [before, after]")
+        print(
+            f"  search window: {self.masters_search_window_days} days [before, after]"
+        )
 
         if self._results is None:
             print("  perform() has not been called")

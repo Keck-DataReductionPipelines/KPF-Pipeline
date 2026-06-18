@@ -107,8 +107,12 @@ class KPF1(KPFDataModel):
                 t = Table.read(hdu)
                 df = t.to_pandas()
                 receipt_columns = [
-                    "Time", "Code_Release", "Commit_Hash",
-                    "Branch_Name", "Module_Name", "Status"
+                    "Time",
+                    "Code_Release",
+                    "Commit_Hash",
+                    "Branch_Name",
+                    "Module_Name",
+                    "Status",
                 ]
                 if df.empty:
                     df = pd.DataFrame(columns=receipt_columns)
@@ -153,7 +157,8 @@ class KPF1(KPFDataModel):
 
         if "PRIMARY" in self.headers:
             self.headers["PRIMARY"]["FILENAME"] = (
-                os.path.basename(fn), "Name of the FITS file"
+                os.path.basename(fn),
+                "Name of the FITS file",
             )
             self.headers["PRIMARY"]["DATALVL"] = (self._DATALVL, "Data product level")
 
@@ -194,7 +199,11 @@ class KPF1(KPFDataModel):
             l1_header = self.headers["PRIMARY"]
             for _, row in _HEADER_MAP.iterrows():
                 standard_key = str(row["STANDARD"]).strip()
-                instrument_key = str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""
+                instrument_key = (
+                    str(row["INSTRUMENT"]).strip()
+                    if pd.notna(row["INSTRUMENT"])
+                    else ""
+                )
                 default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
 
                 if instrument_key and instrument_key in l1_header:
@@ -205,7 +214,9 @@ class KPF1(KPFDataModel):
 
             # Store full L1 PRIMARY header in INSTRUMENT_HEADER (ImageHDU: scalar values only)
             for key, value in l1_header.items():
-                kpf2.headers["INSTRUMENT_HEADER"][key] = value[0] if isinstance(value, tuple) else value
+                kpf2.headers["INSTRUMENT_HEADER"][key] = (
+                    value[0] if isinstance(value, tuple) else value
+                )
 
         # Pass-through extensions with renaming
         for l1_ext, kpf2_ext in self._L1_TO_KPF2_PASSTHROUGH.items():
@@ -227,7 +238,10 @@ class KPF1(KPFDataModel):
 
         # Store obs_id for traceability
         if self.obs_id is not None:
-            kpf2.headers["PRIMARY"]["ORIGID"] = (self.obs_id, "Original L0 observation ID")
+            kpf2.headers["PRIMARY"]["ORIGID"] = (
+                self.obs_id,
+                "Original L0 observation ID",
+            )
 
         kpf2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
         kpf2.receipt_add_entry("to_kpf2", "PASS")

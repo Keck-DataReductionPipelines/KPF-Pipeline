@@ -3,6 +3,7 @@ Unit tests for the WLS module.
 
 All sub-module I/O is mocked; no real data or FITS files are required.
 """
+
 import h5py
 import numpy as np
 import pandas as pd
@@ -24,6 +25,7 @@ FILE_LIST = sorted([f"KP.20240101.{i:05d}.00.fits" for i in range(8)])
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
 
 class MockL1:
     pass
@@ -71,8 +73,8 @@ def mock_pipeline(monkeypatch):
 # TestInit
 # ---------------------------------------------------------------------------
 
-class TestInit:
 
+class TestInit:
     def test_none_config_sets_data_input_none(self):
         wls = WLS(FILE_LIST)
         assert wls._data_root is None
@@ -90,8 +92,8 @@ class TestInit:
 # TestExtractFrame
 # ---------------------------------------------------------------------------
 
-class TestExtractFrame:
 
+class TestExtractFrame:
     def test_returns_l2_obj(self, mock_pipeline):
         wls = WLS(FILE_LIST)
         result = wls._extract_frame(MockL1())
@@ -120,24 +122,30 @@ class TestExtractFrame:
 # TestProcessIndividualFrames
 # ---------------------------------------------------------------------------
 
-class TestProcessIndividualFrames:
 
+class TestProcessIndividualFrames:
     def test_returns_l2_objects_for_all_frames(self, mock_pipeline, monkeypatch):
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(wls, "_load_frame", lambda fn, ncache=0, **kwargs:(MockL1(), True))
+        monkeypatch.setattr(
+            wls, "_load_frame", lambda fn, ncache=0, **kwargs: (MockL1(), True)
+        )
         result = wls.process_stack_l0_to_l2()
         assert len(result) == len(FILE_LIST)
         assert all(r is mock_pipeline for r in result)
 
     def test_file_list_override(self, mock_pipeline, monkeypatch):
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(wls, "_load_frame", lambda fn, ncache=0, **kwargs:(MockL1(), True))
+        monkeypatch.setattr(
+            wls, "_load_frame", lambda fn, ncache=0, **kwargs: (MockL1(), True)
+        )
         result = wls.process_stack_l0_to_l2(l0_file_list=FILE_LIST[:3])
         assert len(result) == 3
 
     def test_raises_when_failures_exceed_threshold(self, monkeypatch):
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(wls, "_load_frame", lambda fn, ncache=0, **kwargs:(None, False))
+        monkeypatch.setattr(
+            wls, "_load_frame", lambda fn, ncache=0, **kwargs: (None, False)
+        )
         with pytest.raises(ValueError, match="20%"):
             wls.process_stack_l0_to_l2()
 
@@ -145,7 +153,9 @@ class TestProcessIndividualFrames:
         # 1 failure out of 8 = 12.5%, below the 20% threshold
         calls = iter([(None, False)] + [(MockL1(), True)] * 7)
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(wls, "_load_frame", lambda fn, ncache=0, **kwargs:next(calls))
+        monkeypatch.setattr(
+            wls, "_load_frame", lambda fn, ncache=0, **kwargs: next(calls)
+        )
         result = wls.process_stack_l0_to_l2()
         assert len(result) == 7
 
@@ -154,6 +164,7 @@ class TestProcessIndividualFrames:
 # TestMakeMasterL2
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_make_master_l2(monkeypatch):
     """
@@ -161,14 +172,21 @@ def mock_make_master_l2(monkeypatch):
     without touching disk or real spectra. compute_wls_from_stack returns
     synthetic W and coefficient arrays with chip-correct shapes.
     """
-    monkeypatch.setattr(WLS, "_load_frame",
-                        lambda self, fn, ncache=0, **kwargs: (MockL1(), True))
-    monkeypatch.setattr(WLS, "_extract_frame",
-                        lambda self, l1, **kwargs: MockL2())
+    monkeypatch.setattr(
+        WLS, "_load_frame", lambda self, fn, ncache=0, **kwargs: (MockL1(), True)
+    )
+    monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kwargs: MockL2())
 
-    def mock_compute(self, chip, fibers, lineprofile=None,
-                     polyorder_x=None, polyorder_m=None, polyorder_f=None,
-                     **kwargs):
+    def mock_compute(
+        self,
+        chip,
+        fibers,
+        lineprofile=None,
+        polyorder_x=None,
+        polyorder_m=None,
+        polyorder_f=None,
+        **kwargs,
+    ):
         polyorder_x = polyorder_x if polyorder_x is not None else self.polyorder_x
         polyorder_m = polyorder_m if polyorder_m is not None else self.polyorder_m
         polyorder_f = polyorder_f if polyorder_f is not None else self.polyorder_f
@@ -185,13 +203,15 @@ def mock_make_master_l2(monkeypatch):
 
         coeffs_stack = np.array([coeffs] * 3)
         lines_stack = [
-            {"wav": np.array([5500.0, 5501.0]),
-             "pix": np.array([100.5, 200.5]),
-             "order": np.array([1, 2]),
-             "fiber": np.array([fibers[0]] * 2),
-             "bad": np.array([False, False]),
-             "std": np.array([0.5, 0.5]),
-             "amp": np.array([1.0, 1.0])}
+            {
+                "wav": np.array([5500.0, 5501.0]),
+                "pix": np.array([100.5, 200.5]),
+                "order": np.array([1, 2]),
+                "fiber": np.array([fibers[0]] * 2),
+                "bad": np.array([False, False]),
+                "std": np.array([0.5, 0.5]),
+                "amp": np.array([1.0, 1.0]),
+            }
             for _ in range(3)
         ]
         return W, coeffs, coeffs_stack, lines_stack
@@ -206,7 +226,6 @@ def _header_value(header, key):
 
 
 class TestMakeMasterL2:
-
     def test_returns_kpf_master_l2(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         result = wls.make_master_l2()
@@ -229,17 +248,26 @@ class TestMakeMasterL2:
             assert ext in ml2.extensions
             coeffs = ml2.data[ext]
             assert coeffs is not None
-            assert coeffs.shape == (wls.polyorder_x + 1,
-                                    wls.polyorder_m + 1,
-                                    wls.polyorder_f + 1)
+            assert coeffs.shape == (
+                wls.polyorder_x + 1,
+                wls.polyorder_m + 1,
+                wls.polyorder_f + 1,
+            )
 
     def test_primary_header_keywords(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
         primary = ml2.headers["PRIMARY"]
-        for key in ["ROUGHWLS", "LINELIST", "LINEPROF",
-                    "POLYORDX", "POLYORDM", "POLYORDF",
-                    "CHIPS", "FIBERS"]:
+        for key in [
+            "ROUGHWLS",
+            "LINELIST",
+            "LINEPROF",
+            "POLYORDX",
+            "POLYORDM",
+            "POLYORDF",
+            "CHIPS",
+            "FIBERS",
+        ]:
             assert key in primary
 
     def test_coeffs_extension_header_keywords(self, mock_make_master_l2):
@@ -262,11 +290,14 @@ class TestMakeMasterL2:
 
     def test_polyorder_override_stamped(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
-        override_x = wls.polyorder_x + 4   # ensure different from default
+        override_x = wls.polyorder_x + 4  # ensure different from default
         ml2 = wls.make_master_l2(polyorder_x=override_x)
         assert _header_value(ml2.headers["PRIMARY"], "POLYORDX") == override_x
         for chip in wls.chips:
-            assert _header_value(ml2.headers[f"{chip}_WLS_COEFFS"], "POLYORDX") == override_x
+            assert (
+                _header_value(ml2.headers[f"{chip}_WLS_COEFFS"], "POLYORDX")
+                == override_x
+            )
             # verify the override actually propagated into the fit, not just the header
             coeffs = ml2.data[f"{chip}_WLS_COEFFS"]
             assert coeffs.shape[0] == override_x + 1
@@ -358,7 +389,9 @@ class TestMakeMasterL2:
         wls.save_master("L2", str(master_path))
         assert master_path.exists()
 
-    def test_save_master_refuses_overwrite_by_default(self, mock_make_master_l2, tmp_path):
+    def test_save_master_refuses_overwrite_by_default(
+        self, mock_make_master_l2, tmp_path
+    ):
         wls = WLS(FILE_LIST)
         wls.make_master_l2()
         master_path = tmp_path / "master.fits"
@@ -440,7 +473,9 @@ class TestMakeMasterL2:
 
         with pytest.warns(UserWarning, match=r"RED SCI1 order 1: orderlet skipped"):
             result = wls.fit_line_positions_ffi(
-                StubL2(), "RED", ["SCI1"],
+                StubL2(),
+                "RED",
+                ["SCI1"],
             )
 
         # The NaN order contributed no lines; remaining orders did.
@@ -450,7 +485,9 @@ class TestMakeMasterL2:
     def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
         """Override file is loaded into the cache and stamped to the header."""
         override = tmp_path / "alt_linelist.csv"
-        override.write_text("CHIP,ORDER,WAVE\nGREEN,0,4500.0\nGREEN,1,5500.0\nRED,0,6500.0\n")
+        override.write_text(
+            "CHIP,ORDER,WAVE\nGREEN,0,4500.0\nGREEN,1,5500.0\nRED,0,6500.0\n"
+        )
 
         wls = WLS(FILE_LIST)
         original_path = wls.linelist
@@ -531,8 +568,8 @@ class TestMakeMasterL2:
 # TestCalculateWlsCoeffs
 # ---------------------------------------------------------------------------
 
-class TestCalculateWlsCoeffs:
 
+class TestCalculateWlsCoeffs:
     def _make_lines(self, n, fibers=("SCI1",)):
         """Build a minimal `lines` dict with `n` lines per fiber."""
         wav, pix, ord_, fib = [], [], [], []
@@ -574,6 +611,7 @@ class TestCalculateWlsCoeffs:
 # TestComputeWlsFrameRejection
 # ---------------------------------------------------------------------------
 
+
 class TestComputeWlsFrameRejection:
     """Frame-level QC in compute_wls_from_stack: drop frames whose line-fit
     failure fraction exceeds max_bad_frac, and error if more than one is dropped."""
@@ -587,29 +625,34 @@ class TestComputeWlsFrameRejection:
         frames = []
         for frac in bad_fracs:
             bad = np.zeros(nlines, dtype=bool)
-            bad[:int(round(frac * nlines))] = True
+            bad[: int(round(frac * nlines))] = True
             frames.append({"wav": np.zeros(nlines), "bad": bad})
         it = iter(frames)
 
-        monkeypatch.setattr(WLS, "fit_line_positions_ffi",
-                            lambda self, *a, **k: next(it))
-        monkeypatch.setattr(WLS, "calculate_wls_coeffs",
-                            lambda self, *a, **k: np.ones((2, 2)))
-        monkeypatch.setattr(WLS, "evaluate_wls_coeffs",
-                            staticmethod(lambda *a, **k: np.zeros((3, 3))))
+        monkeypatch.setattr(
+            WLS, "fit_line_positions_ffi", lambda self, *a, **k: next(it)
+        )
+        monkeypatch.setattr(
+            WLS, "calculate_wls_coeffs", lambda self, *a, **k: np.ones((2, 2))
+        )
+        monkeypatch.setattr(
+            WLS, "evaluate_wls_coeffs", staticmethod(lambda *a, **k: np.zeros((3, 3)))
+        )
         return wls
 
     def test_all_clean_frames_kept(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.01, 0.02, 0.0, 0.03, 0.01])
         _, _, coeffs_stack, lines_stack = wls.compute_wls_from_stack(
-            "GREEN", ["SCI1"], verbose=False)
+            "GREEN", ["SCI1"], verbose=False
+        )
         assert len(coeffs_stack) == 5
         assert len(lines_stack) == 5
 
     def test_single_bad_frame_dropped(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.01, 0.22, 0.0, 0.03, 0.01])
         _, _, coeffs_stack, lines_stack = wls.compute_wls_from_stack(
-            "GREEN", ["SCI1"], verbose=False)
+            "GREEN", ["SCI1"], verbose=False
+        )
         # the 22%-bad frame is excluded from both stacks
         assert len(coeffs_stack) == 4
         assert len(lines_stack) == 4
@@ -623,7 +666,8 @@ class TestComputeWlsFrameRejection:
         # exactly 5% bad is not > 5%, so the frame is kept
         wls = self._setup(monkeypatch, [0.05, 0.01], nlines=100)
         _, _, coeffs_stack, _ = wls.compute_wls_from_stack(
-            "GREEN", ["SCI1"], verbose=False)
+            "GREEN", ["SCI1"], verbose=False
+        )
         assert len(coeffs_stack) == 2
 
     def test_nonfinite_coeffs_raise(self, monkeypatch):
@@ -632,15 +676,16 @@ class TestComputeWlsFrameRejection:
         wls = WLS(FILE_LIST)
         wls._l2_obj_cache = [MockL2() for _ in range(3)]
         lines = {"wav": np.zeros(100), "bad": np.zeros(100, dtype=bool)}
-        coeffs = iter([np.ones((2, 2)),
-                       np.array([[1.0, np.nan], [1.0, 1.0]]),
-                       np.ones((2, 2))])
-        monkeypatch.setattr(WLS, "fit_line_positions_ffi",
-                            lambda self, *a, **k: lines)
-        monkeypatch.setattr(WLS, "calculate_wls_coeffs",
-                            lambda self, *a, **k: next(coeffs))
-        monkeypatch.setattr(WLS, "evaluate_wls_coeffs",
-                            staticmethod(lambda *a, **k: np.zeros((3, 3))))
+        coeffs = iter(
+            [np.ones((2, 2)), np.array([[1.0, np.nan], [1.0, 1.0]]), np.ones((2, 2))]
+        )
+        monkeypatch.setattr(WLS, "fit_line_positions_ffi", lambda self, *a, **k: lines)
+        monkeypatch.setattr(
+            WLS, "calculate_wls_coeffs", lambda self, *a, **k: next(coeffs)
+        )
+        monkeypatch.setattr(
+            WLS, "evaluate_wls_coeffs", staticmethod(lambda *a, **k: np.zeros((3, 3)))
+        )
         with pytest.raises(ValueError, match=r"non-finite Legendre coefficients"):
             wls.compute_wls_from_stack("GREEN", ["SCI1"], verbose=False)
 
@@ -649,8 +694,8 @@ class TestComputeWlsFrameRejection:
 # TestFitLinePositions
 # ---------------------------------------------------------------------------
 
-class TestFitLinePositions:
 
+class TestFitLinePositions:
     def test_no_lines_returns_empty(self):
         """No reference lines for the order yields empty arrays."""
         wls = WLS(FILE_LIST)
@@ -692,7 +737,9 @@ class TestFitLinePositions:
         flux = (1.0 + 50.0 * np.exp(-0.5 * ((x - 50) / 2.0) ** 2)).astype(np.float32)
         line_waves = np.array([wave[50]], dtype=float)
 
-        result = wls.fit_line_positions_1d(flux, wave, line_waves, lineprofile="gaussian")
+        result = wls.fit_line_positions_1d(
+            flux, wave, line_waves, lineprofile="gaussian"
+        )
         assert len(result["wav"]) == 1
         for key in ["wav", "pix", "std", "amp"]:
             assert result[key].dtype == np.float64
@@ -715,7 +762,9 @@ class TestFitLinePositions:
 
         with pytest.warns(UserWarning, match=r"RED SCI1: no good lines retained"):
             result = wls.fit_line_positions_ffi(
-                StubL2(), "RED", ["SCI1"],
+                StubL2(),
+                "RED",
+                ["SCI1"],
             )
         assert len(result["wav"]) == 0
 
@@ -767,8 +816,8 @@ class TestFitLinePositions:
 # TestRoughWlsLoading
 # ---------------------------------------------------------------------------
 
-class TestRoughWlsLoading:
 
+class TestRoughWlsLoading:
     def test_missing_rough_wls_file_raises(self):
         wls = WLS(FILE_LIST)
         with pytest.raises(FileNotFoundError):

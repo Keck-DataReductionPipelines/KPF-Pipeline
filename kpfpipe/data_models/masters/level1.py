@@ -12,7 +12,7 @@ differ from science L1 to reflect masters-specific normalization:
     GREEN_MASK -- boolean bad pixel mask (1=good, 0=bad)
     RED_IMG, RED_SNR, RED_MASK -- same for red chip
 
-Filename convention: masters products follow WMKO filename format 
+Filename convention: masters products follow WMKO filename format
 (KP.YYYYMMDD.NNNNN.NN.fits), not the EPRV per-level convention.
 """
 

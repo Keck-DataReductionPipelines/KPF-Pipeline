@@ -1,13 +1,15 @@
 """
 KPF Image Processing module.
 """
+
 import os
 
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 
-_DEFAULTS = {**DEFAULTS,
+_DEFAULTS = {
+    **DEFAULTS,
     "bias": True,
     "dark": False,
     "flat": False,
@@ -40,7 +42,9 @@ class ImageProcessing:
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE", "MODULE_IMAGE_PROCESSING"])
+            params = config.get_params(
+                ["DATA_DIRS", "KPFPIPE", "MODULE_IMAGE_PROCESSING"]
+            )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
@@ -48,7 +52,7 @@ class ImageProcessing:
             setattr(self, k, params.get(k, v))
 
         self._bias_path = None  # set by load_bias()
-        self._results = None    # populated by perform()
+        self._results = None  # populated by perform()
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -105,7 +109,7 @@ class ImageProcessing:
         if bias_path is None:
             header = self.l1_obj.headers["PRIMARY"]
             bias_file = header.get("BIASFILE")
-            bias_dir  = header.get("BIASDIR")
+            bias_dir = header.get("BIASDIR")
 
             if not bias_file or not bias_dir:
                 raise FileNotFoundError(
@@ -200,7 +204,10 @@ class ImageProcessing:
                 self.subtract_bias(master_bias, chip)
             self._results["bias"] = self._bias_path
 
-        self.l1_obj.headers["PRIMARY"]["BIASUB"] = (bool(bias), "Bias subtraction applied")
+        self.l1_obj.headers["PRIMARY"]["BIASUB"] = (
+            bool(bias),
+            "Bias subtraction applied",
+        )
         self.l1_obj.receipt_add_entry("image_processing", "PASS")
 
         return self.l1_obj

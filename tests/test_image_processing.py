@@ -4,6 +4,7 @@ Tests for the ImageProcessing module (L1 bias subtraction).
 Unit tests use synthetic arrays and MockL1 objects; no real data or FITS
 files are required except where a master bias file must exist on disk.
 """
+
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -13,13 +14,14 @@ from kpfpipe.modules.image_processing import ImageProcessing
 
 
 _SHAPE = (4, 4)
-_CCD_VALUE  = 10.0
-_BIAS_VALUE =  3.0
+_CCD_VALUE = 10.0
+_BIAS_VALUE = 3.0
 
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
 
 class MockL1:
     def __init__(self):
@@ -27,7 +29,7 @@ class MockL1:
         self.headers = {"PRIMARY": {}}
         self.data = {
             "GREEN_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
-            "RED_CCD":   np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
+            "RED_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
         }
         self._receipt = []
 
@@ -38,7 +40,7 @@ class MockL1:
 class MockMasterBias:
     data = {
         "GREEN_IMG": np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32),
-        "RED_IMG":   np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32),
+        "RED_IMG": np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32),
     }
 
 
@@ -54,8 +56,12 @@ def _make_module(bias_file=None, bias_dir=None):
 def _write_master_bias(path):
     """Write a minimal master bias FITS file to path."""
     primary = fits.PrimaryHDU()
-    green   = fits.ImageHDU(data=np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32), name="GREEN_IMG")
-    red     = fits.ImageHDU(data=np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32), name="RED_IMG")
+    green = fits.ImageHDU(
+        data=np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32), name="GREEN_IMG"
+    )
+    red = fits.ImageHDU(
+        data=np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32), name="RED_IMG"
+    )
     fits.HDUList([primary, green, red]).writeto(path, overwrite=True)
 
 
@@ -63,8 +69,8 @@ def _write_master_bias(path):
 # TestInit
 # ---------------------------------------------------------------------------
 
-class TestInit:
 
+class TestInit:
     def test_none_config(self):
         ip = ImageProcessing(MockL1())
         assert ip.chips == ["GREEN", "RED"]
@@ -89,8 +95,8 @@ class TestInit:
 # TestLoadBias
 # ---------------------------------------------------------------------------
 
-class TestLoadBias:
 
+class TestLoadBias:
     def test_raises_when_biasfile_missing(self):
         mod = _make_module(bias_dir="/some/dir")
         with pytest.raises(FileNotFoundError, match="BIASFILE"):
@@ -139,8 +145,8 @@ class TestLoadBias:
 # TestSubtractBias
 # ---------------------------------------------------------------------------
 
-class TestSubtractBias:
 
+class TestSubtractBias:
     def test_subtracts_correct_values_green(self):
         mod = _make_module()
         mod.subtract_bias(MockMasterBias(), "GREEN")
@@ -162,15 +168,17 @@ class TestSubtractBias:
     def test_chip_name_case_insensitive(self):
         mod = _make_module()
         mod.subtract_bias(MockMasterBias(), "green")
-        np.testing.assert_allclose(mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
+        np.testing.assert_allclose(
+            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestPerform
 # ---------------------------------------------------------------------------
 
-class TestPerform:
 
+class TestPerform:
     @pytest.fixture
     def mod_with_bias(self, tmp_path, monkeypatch):
         bias_path = str(tmp_path / "master_bias.fits")
@@ -213,9 +221,7 @@ class TestPerform:
             mod_with_bias.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
         )
         # RED_CCD should be untouched
-        np.testing.assert_allclose(
-            mod_with_bias.l1_obj.data["RED_CCD"], _CCD_VALUE
-        )
+        np.testing.assert_allclose(mod_with_bias.l1_obj.data["RED_CCD"], _CCD_VALUE)
 
     def test_raises_when_headers_missing(self):
         mod = _make_module()  # no BIASFILE / BIASDIR

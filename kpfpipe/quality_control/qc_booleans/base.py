@@ -27,9 +27,7 @@ class QC:
             try:
                 passed = fn()
             except Exception as e:
-                raise RuntimeError(
-                    f"QC check {name!r} raised: {e}"
-                ) from e
+                raise RuntimeError(f"QC check {name!r} raised: {e}") from e
 
             kw = fn._qc_key
             comment = fn._qc_comment

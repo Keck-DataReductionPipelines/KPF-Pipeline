@@ -21,10 +21,10 @@ OBS_ID = "KP.20240405.40113.57"  # a bright G-type RV-standard exposure
 
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
-NORDER_RED   = DETECTOR["norder"]["RED"]
+NORDER_RED = DETECTOR["norder"]["RED"]
 
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
-_CHIPS  = ["GREEN", "RED"]
+_CHIPS = ["GREEN", "RED"]
 
 # Small detector width for fast tests; the WLS copy is agnostic to NCOL.
 NCOL = 32
@@ -33,6 +33,7 @@ NCOL = 32
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_master_l2(seed=42):
     """Build a KPFMasterL2 with deterministic, distinct per-fiber WAVE arrays.
@@ -78,11 +79,11 @@ def master_wls_path(tmp_path):
 # Constructor / config plumbing
 # ---------------------------------------------------------------------------
 
-class TestConstructor:
 
+class TestConstructor:
     def test_default_chips_and_fibers(self):
         mod = WavelengthCalibration(_make_science_l2())
-        assert mod.chips  == _CHIPS
+        assert mod.chips == _CHIPS
         assert mod.fibers == _FIBERS
 
     def test_dict_config_override(self):
@@ -90,13 +91,13 @@ class TestConstructor:
             _make_science_l2(),
             config={"chips": ["GREEN"], "fibers": ["SCI2"]},
         )
-        assert mod.chips  == ["GREEN"]
+        assert mod.chips == ["GREEN"]
         assert mod.fibers == ["SCI2"]
 
     def test_config_handler_accepted(self):
         config = ConfigHandler(str(_SCIENCE_CONFIG_PATH))
         mod = WavelengthCalibration(_make_science_l2(), config=config)
-        assert mod.chips  == _CHIPS
+        assert mod.chips == _CHIPS
         assert mod.fibers == _FIBERS
 
     def test_invalid_config_type(self):
@@ -116,8 +117,8 @@ class TestConstructor:
 # load_wls()
 # ---------------------------------------------------------------------------
 
-class TestLoadWLS:
 
+class TestLoadWLS:
     def test_raises_when_wlsfile_missing(self):
         mod = WavelengthCalibration(_make_science_l2())
         with pytest.raises(KeyError, match="WLSFILE"):
@@ -147,8 +148,8 @@ class TestLoadWLS:
 # perform()
 # ---------------------------------------------------------------------------
 
-class TestPerform:
 
+class TestPerform:
     def test_returns_l2_obj(self, master_wls_path):
         l2 = _make_science_l2(wls_path=master_wls_path)
         mod = WavelengthCalibration(l2)
@@ -164,8 +165,8 @@ class TestPerform:
         mod = WavelengthCalibration(l2)
         mod.perform()
         assert mod._results["wls_path"] == master_wls_path
-        assert mod._results["chips"]    == _CHIPS
-        assert mod._results["fibers"]   == _FIBERS
+        assert mod._results["chips"] == _CHIPS
+        assert mod._results["fibers"] == _FIBERS
 
     def test_copies_all_wave_arrays(self, master_wls_path):
         # Every (chip, fiber) WAVE array on the science L2 should match the master.
@@ -259,9 +260,9 @@ _FRAUNHOFER_AIR = {
     "Ca II H": 3968.47,
     "H-delta": 4101.74,
     "H-gamma": 4340.47,
-    "H-beta":  4861.34,
-    "Na D2":   5889.95,
-    "Na D1":   5895.92,
+    "H-beta": 4861.34,
+    "Na D2": 5889.95,
+    "Na D1": 5895.92,
     "H-alpha": 6562.79,
 }
 
@@ -324,12 +325,14 @@ class TestSpectrumOrientation:
 
         config = {
             "KPF_DATA_INPUT": str(TESTDATA_DIR),
-            "chips":  _CHIPS,
+            "chips": _CHIPS,
             "fibers": _SCI_FIBERS,
         }
         l0 = KPF0.from_fits(build_filepath(OBS_ID, "L0", data_root=str(TESTDATA_DIR)))
         l1 = ImageAssembly(l0, config).perform()
-        l1 = CalibrationAssociation(l1, config).perform(["bias", "dark", "flat", "thar"])
+        l1 = CalibrationAssociation(l1, config).perform(
+            ["bias", "dark", "flat", "thar"]
+        )
         l1 = ImageProcessing(l1, config).perform()
         l2 = SpectralExtraction(l1, config).perform(verbose=False)
         return WavelengthCalibration(l2, config).perform()
@@ -344,7 +347,9 @@ class TestSpectrumOrientation:
                     flux = np.asarray(l2.data[f"{chip}_{fiber}_FLUX"], dtype=float)
                     for o in range(wave.shape[0]):
                         if wave[o].min() + 4 < lambda_air < wave[o].max() - 4:
-                            cases.append((name, chip, fiber, o, wave[o], flux[o], lambda_air))
+                            cases.append(
+                                (name, chip, fiber, o, wave[o], flux[o], lambda_air)
+                            )
                             break
         return cases
 
@@ -373,7 +378,9 @@ class TestSpectrumOrientation:
                 continue
             natives.append(native)
             reverses.append(reverse)
-            rows.append(f"  {name} {chip} {fiber} ord{o}: native {native:.3f}  reversed {reverse:.3f}")
+            rows.append(
+                f"  {name} {chip} {fiber} ord{o}: native {native:.3f}  reversed {reverse:.3f}"
+            )
 
         mean_native, mean_reverse = float(np.mean(natives)), float(np.mean(reverses))
         assert mean_native > mean_reverse + 0.15, (
@@ -386,9 +393,13 @@ class TestSpectrumOrientation:
         """Floor check: the Na D doublet must be a deep trough in the native
         pairing, so the discriminator cannot pass trivially on near-zero flux."""
         deepest = 0.0
-        for name, chip, fiber, o, wave, flux, lambda_air in self._anchor_cases(science_l2):
+        for name, chip, fiber, o, wave, flux, lambda_air in self._anchor_cases(
+            science_l2
+        ):
             if name in ("Na D1", "Na D2"):
                 d = _trough_depth(wave, flux, lambda_air)
                 if d is not None:
                     deepest = max(deepest, d)
-        assert deepest > 0.7, f"deepest native Na D trough only {deepest:.3f}; expected a deep line"
+        assert deepest > 0.7, (
+            f"deepest native Na D trough only {deepest:.3f}; expected a deep line"
+        )

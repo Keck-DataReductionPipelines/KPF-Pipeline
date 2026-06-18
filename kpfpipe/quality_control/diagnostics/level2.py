@@ -12,8 +12,8 @@ _NAN_KEYS = {
     "SCI1": ("NANSCI1", "NaN pixel count, SCI1 (green+red)"),
     "SCI2": ("NANSCI2", "NaN pixel count, SCI2 (green+red)"),
     "SCI3": ("NANSCI3", "NaN pixel count, SCI3 (green+red)"),
-    "SKY":  ("NANSKY",  "NaN pixel count, SKY (green+red)"),
-    "CAL":  ("NANCAL",  "NaN pixel count, CAL (green+red)"),
+    "SKY": ("NANSKY", "NaN pixel count, SKY (green+red)"),
+    "CAL": ("NANCAL", "NaN pixel count, CAL (green+red)"),
 }
 
 
@@ -34,6 +34,7 @@ class DiagL2(Diagnostics):
                     count += int(np.sum(np.isnan(arr)))
             results[kw] = (count, comment)
         return results
+
     nan_counts._diag_name = "nan_counts"
 
     def zero_flux_fraction(self):
@@ -57,4 +58,5 @@ class DiagL2(Diagnostics):
 
         frac = round(float(total_zero / total_pix), 6)
         return {"ZEROFRAC": (frac, "Fraction of L2 flux pixels equal to zero")}
+
     zero_flux_fraction._diag_name = "zero_flux_fraction"

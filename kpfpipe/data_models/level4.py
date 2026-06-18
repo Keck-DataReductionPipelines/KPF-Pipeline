@@ -31,8 +31,8 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
-NORDER_RED   = DETECTOR["norder"]["RED"]
-NORDER       = NORDER_GREEN + NORDER_RED
+NORDER_RED = DETECTOR["norder"]["RED"]
+NORDER = NORDER_GREEN + NORDER_RED
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 # CCF and RV extensions reuse the shared trace map (CCF{n}/RV{n} <-> TRACE{n});
@@ -79,13 +79,20 @@ class _KPF4DataDict(AliasedOrderedDict):
             if fiber_alias.endswith("_RV"):
                 raise KeyError(
                     f"chip-prefixed RV key {key!r} is read-only; write the full "
-                    f"table via {fiber_alias!r} (rows are green-then-red)")
+                    f"table via {fiber_alias!r} (rows are green-then-red)"
+                )
             resolved = self._resolve(fiber_alias)
             # Allocate the full concatenated cube on first write (or if empty).
             # value.shape[1:] keeps this correct for the (norder_chip, nvel) CCF.
-            existing = super().__getitem__(resolved) if super().__contains__(resolved) else None
+            existing = (
+                super().__getitem__(resolved)
+                if super().__contains__(resolved)
+                else None
+            )
             if existing is None or np.size(existing) == 0:
-                full = np.zeros((NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype)
+                full = np.zeros(
+                    (NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype
+                )
                 super().__setitem__(resolved, full)
             arr = super().__getitem__(resolved)
             if chip == "GREEN":
@@ -125,6 +132,7 @@ class _KPF4DataDict(AliasedOrderedDict):
     def from_ordered_dict(cls, od):
         """Create a _KPF4DataDict from an existing OrderedDict."""
         from collections import OrderedDict
+
         aliased = cls()
         for key, value in od.items():
             OrderedDict.__setitem__(aliased, key, value)
@@ -201,16 +209,21 @@ class KPF4(RV4):
         _KPF4DataDict.__setitem__, which writes into the appropriate slice of
         the concatenated CCF cube.
         """
-        if hasattr(self.data, "_chip_split") and self.data._chip_split(ext_name) is not None:
+        if (
+            hasattr(self.data, "_chip_split")
+            and self.data._chip_split(ext_name) is not None
+        ):
             self.data[ext_name] = data
             return
         if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
-        if (ext_name in self.extensions
-                and self.extensions[ext_name] == "BinTableHDU"
-                and isinstance(data, np.ndarray)
-                and data.dtype.names is not None):
+        if (
+            ext_name in self.extensions
+            and self.extensions[ext_name] == "BinTableHDU"
+            and isinstance(data, np.ndarray)
+            and data.dtype.names is not None
+        ):
             data = Table(data)
         super().set_data(ext_name, data)
         # Sync self.receipt when the RECEIPT extension is loaded from FITS.
@@ -241,7 +254,9 @@ class KPF4(RV4):
         else:
             print("Empty KPF4 data product")
 
-        print(f"\n{'Extension':<25s} {'Aliases':<25s} {'Type':<15s} {'Shape/Size':<20s}")
+        print(
+            f"\n{'Extension':<25s} {'Aliases':<25s} {'Type':<15s} {'Shape/Size':<20s}"
+        )
         print("=" * 85)
         for name, ext_type in self.extensions.items():
             if name == "PRIMARY":
@@ -252,7 +267,9 @@ class KPF4(RV4):
             alias_str = ", ".join(sorted(aliases)) if aliases else ""
             ext = self.data.get(name)
             if isinstance(ext, np.ndarray) and ext.size > 0:
-                print(f"{name:<25s} {alias_str:<25s} {'array':<15s} {str(ext.shape):<20s}")
+                print(
+                    f"{name:<25s} {alias_str:<25s} {'array':<15s} {str(ext.shape):<20s}"
+                )
             elif hasattr(ext, "__len__") and len(ext) > 0:
                 print(f"{name:<25s} {alias_str:<25s} {'table':<15s} {len(ext)} rows")
             else:
