@@ -8,7 +8,7 @@ modules, masters, quality control, utils, recipes/configs, tests, and documentat
 **Status of these rules.** These are *soft* requirements. They describe the dominant,
 prevailing pattern; where the codebase contradicts itself, the recommended variant is
 called out explicitly. When following a rule here would conflict with anything in
-[`KPF_DRP_VNEXT_CONTEXT.md`](KPF_DRP_VNEXT_CONTEXT.md) (the project charter — the single source of truth for intent, scope, scientific focus, calibration philosophy, and guardrails), **the charter wins.** Style yields to science.
+[`KPF_DRP_VNEXT_CHARTER.md`](KPF_DRP_VNEXT_CHARTER.md) (the project charter — the single source of truth for intent, scope, scientific focus, calibration philosophy, and guardrails), **the charter wins.** Style yields to science.
 
 Operational/technical guidance (environment, commands, architecture) lives in
 [`CLAUDE.md`](CLAUDE.md); this file covers *how code should look and be organized*.
