@@ -1,15 +1,16 @@
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # By default use both CCDs and all five fibers
-DEFAULTS = { 
-    'chips' : ['GREEN', 'RED'], 
-    'fibers' : ['SKY','SCI1','SCI2','SCI3','CAL'],
+DEFAULTS = {
+    "chips": ["GREEN", "RED"],
+    "fibers": ["SKY", "SCI1", "SCI2", "SCI3", "CAL"],
 }
 
 # Lazy-load the detector config on first access
+
 
 def load_detector_config():
     path = Path(REPO_ROOT) / "reference/detector.toml"
@@ -19,8 +20,11 @@ def load_detector_config():
     def traverse(obj):
         if isinstance(obj, dict):
             return {
-                (k.upper() if isinstance(k, str) and k.lower() in ("red", "green") else k):
-                traverse(v)
+                (
+                    k.upper()
+                    if isinstance(k, str) and k.lower() in ("red", "green")
+                    else k
+                ): traverse(v)
                 for k, v in obj.items()
             }
         if isinstance(obj, list):
@@ -30,6 +34,7 @@ def load_detector_config():
     _detector = dict(traverse(config))
 
     return _detector
+
 
 DETECTOR = load_detector_config()
 DEFAULTS.update(DETECTOR)

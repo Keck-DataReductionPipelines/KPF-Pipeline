@@ -9,24 +9,21 @@ from collections import OrderedDict
 
 
 class AliasedOrderedDict(OrderedDict):
-    """OrderedDict with transparent name aliases.
+    """
+    OrderedDict with transparent name aliases.
 
-    Register an alias with register_alias(alias, canonical). After that,
-    __getitem__, __setitem__, __contains__, and get() all resolve the alias
-    to the canonical key before performing the lookup.
-
-    Usage:
-        d = AliasedOrderedDict()
-        d["TRACE3_FLUX"] = some_array
-        d.register_alias("SCI2_FLUX", "TRACE3_FLUX")
-        d["SCI2_FLUX"]  # returns some_array (same object)
-        "SCI2_FLUX" in d  # True
+    Register an alias with `register_alias(alias, canonical)`. After that,
+    `__getitem__`, `__setitem__`, `__contains__`, and `get()` all resolve the
+    alias to the canonical key before performing the lookup. For example, once
+    "SCI2_FLUX" is registered as an alias for "TRACE3_FLUX", reading
+    `d["SCI2_FLUX"]` returns the same object stored under "TRACE3_FLUX" and
+    `"SCI2_FLUX" in d` is True.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._aliases = {}      # alias → canonical name
-        self._reverse = {}      # canonical → set of aliases
+        self._aliases = {}  # alias → canonical name
+        self._reverse = {}  # canonical → set of aliases
 
     def register_alias(self, alias, canonical):
         """Register alias as a synonym for canonical."""

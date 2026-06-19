@@ -1,5 +1,8 @@
-import numpy as np
+"""Array and value validators: monotonicity, finiteness, and positivity checks."""
+
 import warnings
+
+import numpy as np
 
 
 def strictly_increasing(x):
@@ -8,7 +11,9 @@ def strictly_increasing(x):
     return bool(np.all(x[:-1] < x[1:]))
 
 
-def validate_array(arr, context="array", response="warn", check_finite=True, check_positive=True):
+def validate_array(
+    arr, context="array", response="warn", check_finite=True, check_positive=True
+):
     """
     Validate that an array contains finite and/or positive values.
 
@@ -53,7 +58,7 @@ def validate_array(arr, context="array", response="warn", check_finite=True, che
     msg = "; ".join(issues)
 
     if response == "warn":
-        warnings.warn(msg)
+        warnings.warn(msg, stacklevel=2)
     elif response == "error":
         raise ValueError(msg)
     # silent -> do nothing

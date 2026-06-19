@@ -18,15 +18,15 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
-
-TESTDATA_L0_DIR = Path(__file__).parent / 'testdata' / 'L0' / '20240405'
-L0_BIAS = str(TESTDATA_L0_DIR / 'KP.20240405.03637.74.fits')
-L0_FLAT = str(TESTDATA_L0_DIR / 'KP.20240405.00020.86.fits')
+TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
+L0_BIAS = str(TESTDATA_L0_DIR / "KP.20240405.03637.74.fits")
+L0_FLAT = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
 
 
 # ---------------------------------------------------------------------------
 # Synthetic 4-amp L0 fixture (no real data needed)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def synthetic_4amp_l0(tmp_path):
@@ -61,6 +61,7 @@ def synthetic_4amp_l0(tmp_path):
 # ---------------------------------------------------------------------------
 # 2-amp regression tests (real data)
 # ---------------------------------------------------------------------------
+
 
 class TestImageAssemblyBias:
     """Regression tests using a bias frame (no signal, 2-amp mode)."""
@@ -133,7 +134,7 @@ class TestImageAssemblyBias:
         # 2-amp mode: expect RNNGGR1, RNNGGR2, RNNGRD1, RNNGRD2
         assert "RNNGGR1" in l1.headers["PRIMARY"]
         assert "RNNGRD1" in l1.headers["PRIMARY"]
-        
+
     def test_overscan_method_in_header(self, l1_bias):
         l1, _ = l1_bias
         oscan = l1.headers["PRIMARY"]["OSCANMET"]
@@ -181,6 +182,7 @@ class TestImageAssemblyFlat:
 # 4-amp mode tests (synthetic data)
 # ---------------------------------------------------------------------------
 
+
 class TestImageAssembly4Amp:
     """Test 4-amp mode assembly using synthetic data."""
 
@@ -209,13 +211,29 @@ class TestImageAssembly4Amp:
 
         # 4-amp mode: should have 8 read noise measurements
         assert len(ia.readnoise) == 8
-        for channel_ext in ["GREEN_AMP1", "GREEN_AMP2", "GREEN_AMP3", "GREEN_AMP4",
-                            "RED_AMP1", "RED_AMP2", "RED_AMP3", "RED_AMP4"]:
+        for channel_ext in [
+            "GREEN_AMP1",
+            "GREEN_AMP2",
+            "GREEN_AMP3",
+            "GREEN_AMP4",
+            "RED_AMP1",
+            "RED_AMP2",
+            "RED_AMP3",
+            "RED_AMP4",
+        ]:
             assert channel_ext in ia.readnoise
 
         # All 8 RN keywords in header
-        for key in ["RNGREEN1", "RNGREEN2", "RNGREEN3", "RNGREEN4",
-                     "RNRED1", "RNRED2", "RNRED3", "RNRED4"]:
+        for key in [
+            "RNGREEN1",
+            "RNGREEN2",
+            "RNGREEN3",
+            "RNGREEN4",
+            "RNRED1",
+            "RNRED2",
+            "RNRED3",
+            "RNRED4",
+        ]:
             assert key in l1.headers["PRIMARY"]
 
     def test_4amp_bias_near_zero(self, synthetic_4amp_l0):
@@ -239,6 +257,7 @@ class TestImageAssembly4Amp:
 # ---------------------------------------------------------------------------
 # orient_ffi: standard FFI orientation (load-bearing flux/wave co-orientation)
 # ---------------------------------------------------------------------------
+
 
 class TestOrientFFI:
     """Unit tests for the static FFI orientation helper.
@@ -329,6 +348,7 @@ class TestOrientFFI:
 # Expmeter wavelength unit conversion (nm → Å at L0 → L1)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def synthetic_4amp_l0_with_expmeter(tmp_path):
     """Synthetic 4-amp L0 with EXPMETER_SCI/SKY tables labeled in nm.
@@ -345,8 +365,8 @@ def synthetic_4amp_l0_with_expmeter(tmp_path):
 
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"]   = "synthetic-expmeter"
-    primary.header["IMTYPE"]   = "Bias"
+    primary.header["OBJECT"] = "synthetic-expmeter"
+    primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-01-01T00:00:01"
 
     hdus = [primary]
@@ -356,18 +376,23 @@ def synthetic_4amp_l0_with_expmeter(tmp_path):
             hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
 
     # EXPMETER tables: Date-Beg/Date-End + a handful of channels in nm
-    wave_nm_labels = ['498.12', '604.38', '710.62', '816.88']
+    wave_nm_labels = ["498.12", "604.38", "710.62", "816.88"]
     nrows = 3
-    for ext_name in ['EXPMETER_SCI', 'EXPMETER_SKY']:
+    for ext_name in ["EXPMETER_SCI", "EXPMETER_SKY"]:
         cols = [
-            fits.Column(name='Date-Beg', format='25A',
-                        array=['2024-01-01T00:00:00.000'] * nrows),
-            fits.Column(name='Date-End', format='25A',
-                        array=['2024-01-01T00:00:01.000'] * nrows),
+            fits.Column(
+                name="Date-Beg", format="25A", array=["2024-01-01T00:00:00.000"] * nrows
+            ),
+            fits.Column(
+                name="Date-End", format="25A", array=["2024-01-01T00:00:01.000"] * nrows
+            ),
         ]
         for w in wave_nm_labels:
-            cols.append(fits.Column(name=w, format='E',
-                                     array=np.full(nrows, 100.0, dtype=np.float32)))
+            cols.append(
+                fits.Column(
+                    name=w, format="E", array=np.full(nrows, 100.0, dtype=np.float32)
+                )
+            )
         hdus.append(fits.BinTableHDU.from_columns(cols, name=ext_name))
 
     fits.HDUList(hdus).writeto(fn, overwrite=True)
@@ -383,30 +408,31 @@ class TestExpmeterWavelengthConversion:
         return ImageAssembly(l0).perform()
 
     def test_sci_columns_converted_to_angstroms(self, l1):
-        cols = l1.data['EXPMETER_SCI'].colnames
-        # nm labels (498.12, 604.38, 710.62, 816.88) → Å (4981.2, 6043.8, 7106.2, 8168.8)
-        for expected in ('4981.2', '6043.8', '7106.2', '8168.8'):
+        cols = l1.data["EXPMETER_SCI"].colnames
+        # nm labels (498.12, 604.38, 710.62, 816.88)
+        # → Å (4981.2, 6043.8, 7106.2, 8168.8)
+        for expected in ("4981.2", "6043.8", "7106.2", "8168.8"):
             assert expected in cols, f"missing Å column {expected!r}; got {cols}"
 
     def test_sky_columns_converted_to_angstroms(self, l1):
-        cols = l1.data['EXPMETER_SKY'].colnames
-        for expected in ('4981.2', '6043.8', '7106.2', '8168.8'):
+        cols = l1.data["EXPMETER_SKY"].colnames
+        for expected in ("4981.2", "6043.8", "7106.2", "8168.8"):
             assert expected in cols
 
     def test_nm_labels_removed(self, l1):
-        cols = l1.data['EXPMETER_SCI'].colnames
-        for nm_label in ('498.12', '604.38', '710.62', '816.88'):
+        cols = l1.data["EXPMETER_SCI"].colnames
+        for nm_label in ("498.12", "604.38", "710.62", "816.88"):
             assert nm_label not in cols, f"nm label {nm_label!r} should be gone"
 
     def test_non_numeric_columns_preserved(self, l1):
-        cols = l1.data['EXPMETER_SCI'].colnames
-        assert 'Date-Beg' in cols
-        assert 'Date-End' in cols
+        cols = l1.data["EXPMETER_SCI"].colnames
+        assert "Date-Beg" in cols
+        assert "Date-End" in cols
 
     def test_values_preserved(self, l1):
         # Underlying flux values shouldn't be touched by the rename.
         np.testing.assert_array_equal(
-            np.asarray(l1.data['EXPMETER_SCI']['4981.2']),
+            np.asarray(l1.data["EXPMETER_SCI"]["4981.2"]),
             np.full(3, 100.0, dtype=np.float32),
         )
 
@@ -415,13 +441,14 @@ class TestExpmeterWavelengthConversion:
         l0 = KPF0.from_fits(synthetic_4amp_l0)
         l1 = ImageAssembly(l0).perform()
         # EXPMETER_SCI exists in the extension registry but is empty/None
-        em = l1.data.get('EXPMETER_SCI')
-        assert em is None or not hasattr(em, 'colnames') or len(em.colnames) == 0
+        em = l1.data.get("EXPMETER_SCI")
+        assert em is None or not hasattr(em, "colnames") or len(em.colnames) == 0
 
 
 # ---------------------------------------------------------------------------
 # FITS round-trip tests (real data)
 # ---------------------------------------------------------------------------
+
 
 class TestImageAssemblyRoundTrip:
     """Test that L1 can be written to FITS and read back."""

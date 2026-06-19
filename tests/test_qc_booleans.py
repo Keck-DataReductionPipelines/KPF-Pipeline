@@ -37,8 +37,10 @@ _NCOLS = 10  # small column count for fast tests
 # Helpers: build minimal synthetic KPF objects in memory
 # ---------------------------------------------------------------------------
 
-def _make_kpf0(tmp_path, *, with_amps=True, exptime=60.0,
-               obs_id="KP.20240405.00001.00"):
+
+def _make_kpf0(
+    tmp_path, *, with_amps=True, exptime=60.0, obs_id="KP.20240405.00001.00"
+):
     """Minimal 4-amp KPF0 object with required headers."""
     fn = str(tmp_path / f"{obs_id}.fits")
     primary = fits.PrimaryHDU()
@@ -60,9 +62,17 @@ def _make_kpf0(tmp_path, *, with_amps=True, exptime=60.0,
     return KPF0.from_fits(fn)
 
 
-def _make_kpf1(tmp_path, *, with_rn=True, biasub=True,
-               agebias=1.0, agedark=5.0, ageflat=10.0,
-               finite_ccd=True, shape=(20, 20)):
+def _make_kpf1(
+    tmp_path,
+    *,
+    with_rn=True,
+    biasub=True,
+    agebias=1.0,
+    agedark=5.0,
+    ageflat=10.0,
+    finite_ccd=True,
+    shape=(20, 20),
+):
     """Minimal KPF1 with all L1 QC-relevant headers."""
     fn = str(tmp_path / "kpf_L1_20240405T010037.fits")
     primary = fits.PrimaryHDU()
@@ -77,9 +87,9 @@ def _make_kpf1(tmp_path, *, with_rn=True, biasub=True,
     if with_rn:
         for i in range(1, 5):
             primary.header[f"RNGREEN{i}"] = (3.5, "RN e-")
-            primary.header[f"RNRED{i}"]   = (4.0, "RN e-")
-            primary.header[f"RNNGGR{i}"]  = (1.0, "RNNG")
-            primary.header[f"RNNGRD{i}"]  = (1.0, "RNNG")
+            primary.header[f"RNRED{i}"] = (4.0, "RN e-")
+            primary.header[f"RNNGGR{i}"] = (1.0, "RNNG")
+            primary.header[f"RNNGRD{i}"] = (1.0, "RNNG")
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -103,7 +113,7 @@ def _make_kpf2_with_flux(*, nan_frac=0.0, zero_frac=0.1, missing_ext=None):
     zero_frac: value written to ZEROFRAC header.
     missing_ext: optional chip_fiber key to leave empty (e.g. "GREEN_SKY_FLUX").
     """
-    chips  = ["GREEN", "RED"]
+    chips = ["GREEN", "RED"]
     fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
     ncols = _NCOLS
 
@@ -133,22 +143,26 @@ def _set_kpf2_var(kpf2, fill=1.0):
     for chip in ["GREEN", "RED"]:
         nrows = _NORDER[chip]
         for fiber in ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]:
-            kpf2.set_data(f"{chip}_{fiber}_VAR",
-                          np.full((nrows, _NCOLS), fill, dtype=np.float32))
+            kpf2.set_data(
+                f"{chip}_{fiber}_VAR", np.full((nrows, _NCOLS), fill, dtype=np.float32)
+            )
 
 
 # ---------------------------------------------------------------------------
 # Task 2: QC base class runner
 # ---------------------------------------------------------------------------
 
+
 class TestQCBase:
     """Runner behaviour: aggregation, failure, raises, empty."""
 
     def _make_obj(self):
         """Minimal object with a headers dict."""
+
         class _FakeObj:
             headers = {"PRIMARY": {}}
             data = {}
+
         return _FakeObj()
 
     def test_all_passing_isgood_1(self):
@@ -157,11 +171,13 @@ class TestQCBase:
         class MyQC(QC):
             def check_a(self):
                 return True
+
             check_a._qc_key = "CHECKA"
             check_a._qc_comment = "check a"
 
             def check_b(self):
                 return True
+
             check_b._qc_key = "CHECKB"
             check_b._qc_comment = "check b"
 
@@ -178,17 +194,19 @@ class TestQCBase:
         class MyQC(QC):
             def check_ok(self):
                 return True
+
             check_ok._qc_key = "CHKOK"
             check_ok._qc_comment = "passes"
 
             def check_fail(self):
                 return False
+
             check_fail._qc_key = "CHKFAIL"
             check_fail._qc_comment = "fails"
 
         MyQC(obj).run()
         assert obj.headers["PRIMARY"]["ISGOOD"] == (0, "QC: one or more checks failed")
-        assert obj.headers["PRIMARY"]["CHKOK"]   == (1, "passes")
+        assert obj.headers["PRIMARY"]["CHKOK"] == (1, "passes")
         assert obj.headers["PRIMARY"]["CHKFAIL"] == (0, "fails")
 
     def test_raising_check_propagates_runtime_error(self):
@@ -197,6 +215,7 @@ class TestQCBase:
         class MyQC(QC):
             def check_boom(self):
                 raise ValueError("boom!")
+
             check_boom._qc_key = "BOOM"
             check_boom._qc_comment = "raises"
 
@@ -226,6 +245,7 @@ class TestQCBase:
         class MyQC(QC):
             def check_flag(self):
                 return self.kpf.flag
+
             check_flag._qc_key = "FLAG"
             check_flag._qc_comment = "flag check"
 
@@ -244,8 +264,8 @@ class TestQCBase:
 # Task 3: QCL0 checks
 # ---------------------------------------------------------------------------
 
-class TestQCL0:
 
+class TestQCL0:
     def test_data_l0_red_green_pass(self, tmp_path):
         l0 = _make_kpf0(tmp_path, with_amps=True)
         assert QCL0(l0).data_l0_red_green() is True
@@ -299,12 +319,16 @@ class TestQCL0:
     def test_not_junk_pass_no_file(self, tmp_path, monkeypatch):
         """No junk CSV → pass by default."""
         import kpfpipe.quality_control.qc_booleans.level0 as mod
-        monkeypatch.setattr(mod, "_JUNK_CSV", tmp_path / "reference" / "junk_observations.csv")
+
+        monkeypatch.setattr(
+            mod, "_JUNK_CSV", tmp_path / "reference" / "junk_observations.csv"
+        )
         l0 = _make_kpf0(tmp_path)
         assert QCL0(l0).not_junk() is True
 
     def test_not_junk_pass_not_in_list(self, tmp_path, monkeypatch):
         import pandas as pd
+
         import kpfpipe.quality_control.qc_booleans.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
@@ -316,6 +340,7 @@ class TestQCL0:
 
     def test_not_junk_fail_in_list(self, tmp_path, monkeypatch):
         import pandas as pd
+
         import kpfpipe.quality_control.qc_booleans.level0 as mod
 
         obs_id = "KP.20240405.00001.00"
@@ -329,6 +354,7 @@ class TestQCL0:
     def test_not_junk_pass_none_obs_id(self, tmp_path, monkeypatch):
         """obs_id=None → passes (can't be in junk list)."""
         import pandas as pd
+
         import kpfpipe.quality_control.qc_booleans.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
@@ -342,6 +368,7 @@ class TestQCL0:
     def test_not_junk_malformed_csv_raises(self, tmp_path, monkeypatch):
         """CSV without 'obs_id' column → raises ValueError."""
         import pandas as pd
+
         import kpfpipe.quality_control.qc_booleans.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
@@ -366,8 +393,8 @@ class TestQCL0:
 # Task 4: QCL1 checks
 # ---------------------------------------------------------------------------
 
-class TestQCL1:
 
+class TestQCL1:
     def test_read_noise_in_range_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
         assert QCL1(l1).read_noise_in_range() is True
@@ -478,25 +505,27 @@ class TestQCL1:
 
     def test_qc_keys_correct(self):
         expected = {
-            "read_noise_in_range":  "RNINRNG",
-            "read_noise_nongauss":  "RNGAUSS",
-            "bias_subtracted":      "BIASOK",
-            "bias_age_ok":          "BIASAGE",
-            "dark_age_ok":          "DARKAGE",
-            "flat_age_ok":          "FLATAGE",
-            "ffi_finite":           "FFIFIN",
+            "read_noise_in_range": "RNINRNG",
+            "read_noise_nongauss": "RNGAUSS",
+            "bias_subtracted": "BIASOK",
+            "bias_age_ok": "BIASAGE",
+            "dark_age_ok": "DARKAGE",
+            "flat_age_ok": "FLATAGE",
+            "ffi_finite": "FFIFIN",
         }
         for method_name, key in expected.items():
             fn = QCL1.__dict__[method_name]
-            assert fn._qc_key == key, f"{method_name}: expected {key!r}, got {fn._qc_key!r}"
+            assert fn._qc_key == key, (
+                f"{method_name}: expected {key!r}, got {fn._qc_key!r}"
+            )
 
 
 # ---------------------------------------------------------------------------
 # Task 4 integration: full QCL1 run on all-good synthetic L1
 # ---------------------------------------------------------------------------
 
-class TestQCL1Run:
 
+class TestQCL1Run:
     def test_all_good_isgood_1(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
         results = QCL1(l1).run()
@@ -504,8 +533,15 @@ class TestQCL1Run:
         isgood = l1.headers["PRIMARY"]["ISGOOD"]
         assert (isgood[0] if isinstance(isgood, tuple) else isgood) == 1
 
-        expected_keys = ["RNINRNG", "RNGAUSS", "BIASOK",
-                         "BIASAGE", "DARKAGE", "FLATAGE", "FFIFIN"]
+        expected_keys = [
+            "RNINRNG",
+            "RNGAUSS",
+            "BIASOK",
+            "BIASAGE",
+            "DARKAGE",
+            "FLATAGE",
+            "FFIFIN",
+        ]
         for k in expected_keys:
             val = l1.headers["PRIMARY"][k]
             v = val[0] if isinstance(val, tuple) else val
@@ -526,8 +562,8 @@ class TestQCL1Run:
 # Task 5: QCL2 checks
 # ---------------------------------------------------------------------------
 
-class TestQCL2:
 
+class TestQCL2:
     def test_extraction_present_pass(self):
         kpf2 = _make_kpf2_with_flux()
         assert QCL2(kpf2).extraction_present() is True
@@ -543,7 +579,8 @@ class TestQCL2:
     def test_extraction_present_fail_one_trace_cleared(self):
         """Clearing a trace array (set to empty array) should fail the check."""
         kpf2 = _make_kpf2_with_flux()
-        # Resolve alias SKY_FLUX → TRACE1_FLUX and set to empty so chip views are size=0.
+        # Resolve alias SKY_FLUX → TRACE1_FLUX and set to empty so chip views
+        # are size=0.
         kpf2.data["SKY_FLUX"] = np.array([], dtype=np.float32)
         assert QCL2(kpf2).extraction_present() is False
 
@@ -636,15 +673,17 @@ class TestQCL2:
 
     def test_qc_keys_correct(self):
         expected = {
-            "extraction_present":    "DATAPRL2",
-            "flux_finite_fraction":  "L2NANOK",
-            "nonzero_flux":          "L2FLXOK",
-            "variance_positive":     "L2VARPOS",
-            "science_snr":           "L2SNROK",
+            "extraction_present": "DATAPRL2",
+            "flux_finite_fraction": "L2NANOK",
+            "nonzero_flux": "L2FLXOK",
+            "variance_positive": "L2VARPOS",
+            "science_snr": "L2SNROK",
         }
         for method_name, key in expected.items():
             fn = QCL2.__dict__[method_name]
-            assert fn._qc_key == key, f"{method_name}: expected {key!r}, got {fn._qc_key!r}"
+            assert fn._qc_key == key, (
+                f"{method_name}: expected {key!r}, got {fn._qc_key!r}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -657,7 +696,8 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def _write_l0_fixture(path, *, passing=True):
     """Write a minimal L0 FITS fixture at path.
 
-    passing=True  → all QCL0 checks pass (valid header keywords, finite EXPTIME, amps present).
+    passing=True  → all QCL0 checks pass (valid header keywords, finite EXPTIME,
+                    amps present).
     passing=False → inject a failure (negative EXPTIME so EXPTIMOK fails).
     """
     primary = fits.PrimaryHDU()
@@ -678,12 +718,18 @@ def _write_l0_fixture(path, *, passing=True):
 
 def _run_qc_script(fixture_path, level="L0", extra_args=None):
     """Run scripts/qc.py via subprocess and return the CompletedProcess."""
-    cmd = [sys.executable, "scripts/qc.py", "--input", str(fixture_path), "--level", level]
+    cmd = [
+        sys.executable,
+        "scripts/qc.py",
+        "--input",
+        str(fixture_path),
+        "--level",
+        level,
+    ]
     if extra_args:
         cmd.extend(extra_args)
     env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
-    return subprocess.run(cmd, cwd=_REPO_ROOT, env=env,
-                          capture_output=True, text=True)
+    return subprocess.run(cmd, cwd=_REPO_ROOT, env=env, capture_output=True, text=True)
 
 
 class TestQCScript:
@@ -730,6 +776,9 @@ class TestQCScript:
         env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
         result = subprocess.run(
             [sys.executable, "scripts/qc.py"],
-            cwd=_REPO_ROOT, env=env, capture_output=True, text=True
+            cwd=_REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
         )
         assert result.returncode != 0

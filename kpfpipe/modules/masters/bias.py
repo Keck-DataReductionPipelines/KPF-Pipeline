@@ -1,6 +1,7 @@
 """
 KPF Master Bias construction module.
 """
+
 import numpy as np
 
 from kpfpipe.data_models.masters import KPFMasterL1
@@ -25,6 +26,7 @@ class Bias(BaseMasterModule):
         Module configuration. Recognized keys: nframe_stream, stack_sigma,
         exptime_tolerance, chips.
     """
+
     def __init__(self, l0_file_list, config=None):
         if config is None:
             params = {}
@@ -38,13 +40,19 @@ class Bias(BaseMasterModule):
 
         self._results = None  # populated by make_master_l1()
 
-
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
-    def make_master_l1(self, l0_file_list=None, nstream=None, sigma=None,
-                       filepath=None, verbose=True):
+    def make_master_l1(
+        self,
+        l0_file_list=None,
+        *,
+        nstream=None,
+        sigma=None,
+        filepath=None,
+        verbose=True,
+    ):
         """
         Build master bias from stack.
 
@@ -81,47 +89,47 @@ class Bias(BaseMasterModule):
         )
 
         for chip in self.chips:
-            img = l1_arrays[f'{chip}_IMG']
-            snr = l1_arrays[f'{chip}_SNR']
-            mask = l1_arrays[f'{chip}_MASK']
+            img = l1_arrays[f"{chip}_IMG"]
+            snr = l1_arrays[f"{chip}_SNR"]
+            mask = l1_arrays[f"{chip}_MASK"]
 
-            l1_arrays[f'{chip}_IMG'] = interpolate_bad_pixels(img, mask)
-            l1_arrays[f'{chip}_SNR'] = interpolate_bad_pixels(snr, mask)
+            l1_arrays[f"{chip}_IMG"] = interpolate_bad_pixels(img, mask)
+            l1_arrays[f"{chip}_SNR"] = interpolate_bad_pixels(snr, mask)
 
-            out = flag_outliers(l1_arrays[f'{chip}_IMG'], sigma, axis=0)
-            bad = ((l1_arrays[f'{chip}_SNR'] <= 0) | (l1_arrays[f'{chip}_IMG'] == 0))
+            out = flag_outliers(l1_arrays[f"{chip}_IMG"], sigma, axis=0)
+            bad = (l1_arrays[f"{chip}_SNR"] <= 0) | (l1_arrays[f"{chip}_IMG"] == 0)
 
-            l1_arrays[f'{chip}_MASK'] = ~(bad | out)
+            l1_arrays[f"{chip}_MASK"] = ~(bad | out)
 
         self.ml1_obj = KPFMasterL1()
 
         for chip in self.chips:
-            self.ml1_obj.set_data(f'{chip}_IMG',  l1_arrays[f'{chip}_IMG'])
-            self.ml1_obj.set_data(f'{chip}_SNR',  l1_arrays[f'{chip}_SNR'])
-            self.ml1_obj.set_data(f'{chip}_MASK', l1_arrays[f'{chip}_MASK'])
+            self.ml1_obj.set_data(f"{chip}_IMG", l1_arrays[f"{chip}_IMG"])
+            self.ml1_obj.set_data(f"{chip}_SNR", l1_arrays[f"{chip}_SNR"])
+            self.ml1_obj.set_data(f"{chip}_MASK", l1_arrays[f"{chip}_MASK"])
 
         self.ml1_obj.set_input_files(l0_file_list)
-        self.ml1_obj.receipt_add_entry('master_bias', 'PASS')
+        self.ml1_obj.receipt_add_entry("master_bias", "PASS")
 
         self._results = {
             chip: {
-                'num_bad':   int(np.sum(~l1_arrays[f'{chip}_MASK'])),
-                'pct_bad': float(100.0 * np.mean(~l1_arrays[f'{chip}_MASK'])),
-                'median':  float(np.nanmedian(l1_arrays[f'{chip}_IMG'])),
-                'rms':     float(np.nanstd(l1_arrays[f'{chip}_IMG'])),
+                "num_bad": int(np.sum(~l1_arrays[f"{chip}_MASK"])),
+                "pct_bad": float(100.0 * np.mean(~l1_arrays[f"{chip}_MASK"])),
+                "median": float(np.nanmedian(l1_arrays[f"{chip}_IMG"])),
+                "rms": float(np.nanstd(l1_arrays[f"{chip}_IMG"])),
             }
             for chip in self.chips
         }
 
         if filepath is not None:
-            self.save_master('L1', filepath, overwrite=True)
+            self.save_master("L1", filepath, overwrite=True)
 
         return self.ml1_obj
 
     def info(self):
         """Print a summary of the module configuration and stacking results."""
         print("Bias")
-        print(f"  l0_file_list:")
+        print("  l0_file_list:")
         for fn in self.l0_file_list:
             print(f"    {fn}")
         print(f"  chips:  {self.chips}")
@@ -133,4 +141,7 @@ class Bias(BaseMasterModule):
         print(f"\n  {'chip':<8s} {'median [e-]':<15s} {'rms [e-]':<10s} {'bad pixels'}")
         print("  " + "-" * 56)
         for chip, stats in self._results.items():
-            print(f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} {stats['num_bad']} ({stats['pct_bad']:.3f}%)")
+            print(
+                f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} "
+                f"{stats['num_bad']} ({stats['pct_bad']:.3f}%)"
+            )

@@ -3,20 +3,23 @@ Tests for the RadialVelocity module (KPF2 -> KPF4: per-orderlet CCFs and RVs).
 
 Static-method unit tests (_compute_ccf_1d, _compute_rv_1d) build synthetic spectra
 and CCFs with no fixtures. Build-helper tests use a header-only KPF2 and read
-the real on-disk line masks. Integration tests (compute_ccfs/compute_order_by_order_rvs/perform)
-use a synthetic KPF2 with absorption injected at a monkeypatched line mask, and
-a narrow velocity grid for speed.
+the real on-disk line masks. Integration tests
+(compute_ccfs/compute_order_by_order_rvs/perform) use a synthetic KPF2 with
+absorption injected at a monkeypatched line mask, and a narrow velocity grid
+for speed.
 """
 
 import numpy as np
 import pytest
+from astropy.constants import c
 from astropy.io import fits
 
 from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN, NORDER_RED
 from kpfpipe.data_models.level4 import KPF4
-from kpfpipe.modules.radial_velocity import SPEED_OF_LIGHT_KMS, RadialVelocity
+from kpfpipe.modules.radial_velocity import RadialVelocity
 
 NORDER = NORDER_GREEN + NORDER_RED
+SPEED_OF_LIGHT_KMS = np.float64(c.to("km/s").value)
 _FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]  # all orderlets
 
 # Narrow CCF grid for fast integration tests; wide enough for the second-pass
@@ -55,7 +58,7 @@ def _absorption_spectrum(wave, centers, weights=None, depth=0.6, sigma_kms=4.0):
     if weights is None:
         weights = np.ones_like(centers)
     flux = np.ones_like(wave)
-    for center, weight in zip(centers, weights):
+    for center, weight in zip(centers, weights, strict=False):
         sigma_a = center * sigma_kms / SPEED_OF_LIGHT_KMS
         flux -= (
             depth
@@ -349,9 +352,9 @@ class TestBuildLineMask:
 
 class TestBuildVelocityGrid:
     def test_centered_on_systemic_rv(self, header_kpf2):
-        header_kpf2.headers["INSTRUMENT_HEADER"][
-            "TARGRADV"
-        ] = 10.0  # SCI2 grid center = TARGRADV
+        header_kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = (
+            10.0  # SCI2 grid center = TARGRADV
+        )
         grid = RadialVelocity(header_kpf2)._build_velocity_grid("GREEN", "SCI2")
         assert grid.mean() == pytest.approx(10.0)
 
@@ -376,7 +379,8 @@ class TestBuildVelocityGrid:
 
 
 # ---------------------------------------------------------------------------
-# compute_ccfs / compute_order_by_order_rvs / perform  (synthetic KPF2 + monkeypatched mask)
+# compute_ccfs / compute_order_by_order_rvs / perform
+# (synthetic KPF2 + monkeypatched mask)
 # ---------------------------------------------------------------------------
 
 

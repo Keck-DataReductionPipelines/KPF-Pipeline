@@ -6,6 +6,7 @@ observation from tests/testdata/L0/20240405/.
 """
 
 import argparse
+import importlib.util
 import os
 from pathlib import Path
 
@@ -17,28 +18,25 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.pipeline import build_filepath
 
-import importlib.util
-
-
 # ---------------------------------------------------------------------------
 # Test data paths and constants
 # ---------------------------------------------------------------------------
 
-TESTDATA_DIR    = Path(__file__).parent / 'testdata'
-TESTDATA_L0_DIR = TESTDATA_DIR / 'L0' / '20240405'
-CONFIG_PATH     = Path(__file__).parent.parent / 'configs' / 'kpf_drp_science.toml'
+TESTDATA_DIR = Path(__file__).parent / "testdata"
+TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
+CONFIG_PATH = Path(__file__).parent.parent / "configs" / "kpf_drp_science.toml"
 
-OBS_ID = 'KP.20240405.40113.57'
+OBS_ID = "KP.20240405.40113.57"
 
-NORDER_GREEN = DETECTOR['norder']['GREEN']
-NORDER_RED   = DETECTOR['norder']['RED']
-NCOL         = DETECTOR['ccd']['ncol']
+NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED = DETECTOR["norder"]["RED"]
+NCOL = DETECTOR["ccd"]["ncol"]
 
 
 def _load_recipe():
     spec = importlib.util.spec_from_file_location(
-        'kpf_drp_science',
-        Path(__file__).parent.parent / 'recipes' / 'kpf_drp_science.py',
+        "kpf_drp_science",
+        Path(__file__).parent.parent / "recipes" / "kpf_drp_science.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -53,17 +51,17 @@ def _load_recipe():
 class TestScienceRecipe:
     """End-to-end recipe test: KPF0 → ImageAssembly → SpectralExtraction → KPF2."""
 
-    @pytest.fixture(scope='class')
+    @pytest.fixture(scope="class")
     def recipe_output(self, tmp_path_factory):
-        tmp_path = tmp_path_factory.mktemp('science_out')
+        tmp_path = tmp_path_factory.mktemp("science_out")
 
         config = ConfigHandler(
             str(CONFIG_PATH),
             overrides={
-                'DATA_DIRS': {
-                    'KPF_DATA_INPUT':     str(TESTDATA_DIR),
-                    'KPF_MASTERS_OUTPUT': str(TESTDATA_DIR),
-                    'KPF_SCIENCE_OUTPUT': str(tmp_path),
+                "DATA_DIRS": {
+                    "KPF_DATA_INPUT": str(TESTDATA_DIR),
+                    "KPF_MASTERS_OUTPUT": str(TESTDATA_DIR),
+                    "KPF_SCIENCE_OUTPUT": str(tmp_path),
                 }
             },
         )
@@ -72,14 +70,16 @@ class TestScienceRecipe:
         recipe = _load_recipe()
         recipe.main(config, args)
 
-        out_path = build_filepath(OBS_ID, 'L2', data_root=str(tmp_path))
+        out_path = build_filepath(OBS_ID, "L2", data_root=str(tmp_path))
         return out_path
 
     def test_output_file_exists(self, recipe_output):
-        assert os.path.isfile(recipe_output), f"Expected output not found: {recipe_output}"
+        assert os.path.isfile(recipe_output), (
+            f"Expected output not found: {recipe_output}"
+        )
 
     def test_output_filename_format(self, recipe_output):
-        assert os.path.basename(recipe_output) == 'kpf_SL2_20240405T110833.fits'
+        assert os.path.basename(recipe_output) == "kpf_SL2_20240405T110833.fits"
 
     def test_output_is_valid_kpf2(self, recipe_output):
         l2 = KPF2.from_fits(recipe_output)
@@ -87,100 +87,103 @@ class TestScienceRecipe:
 
     def test_green_sci2_flux_shape(self, recipe_output):
         l2 = KPF2.from_fits(recipe_output)
-        assert l2.data['GREEN_SCI2_FLUX'].shape == (NORDER_GREEN, NCOL)
+        assert l2.data["GREEN_SCI2_FLUX"].shape == (NORDER_GREEN, NCOL)
 
     def test_red_sci2_flux_shape(self, recipe_output):
         l2 = KPF2.from_fits(recipe_output)
-        assert l2.data['RED_SCI2_FLUX'].shape == (NORDER_RED, NCOL)
+        assert l2.data["RED_SCI2_FLUX"].shape == (NORDER_RED, NCOL)
 
     def test_full_trace_shape(self, recipe_output):
         l2 = KPF2.from_fits(recipe_output)
-        assert l2.data['SCI2_FLUX'].shape == (NORDER_GREEN + NORDER_RED, NCOL)
+        assert l2.data["SCI2_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
 
     def test_flux_positive(self, recipe_output):
         """Star flux should be positive after extraction."""
         l2 = KPF2.from_fits(recipe_output)
-        assert np.nanmedian(l2.data['GREEN_SCI2_FLUX']) > 0
-        assert np.nanmedian(l2.data['RED_SCI2_FLUX']) > 0
+        assert np.nanmedian(l2.data["GREEN_SCI2_FLUX"]) > 0
+        assert np.nanmedian(l2.data["RED_SCI2_FLUX"]) > 0
 
     def test_variance_positive(self, recipe_output):
         l2 = KPF2.from_fits(recipe_output)
-        assert np.nanmin(l2.data['GREEN_SCI2_VAR']) >= 0
-        assert np.nanmin(l2.data['RED_SCI2_VAR']) >= 0
+        assert np.nanmin(l2.data["GREEN_SCI2_VAR"]) >= 0
+        assert np.nanmin(l2.data["RED_SCI2_VAR"]) >= 0
 
     def test_receipt_chain(self, recipe_output):
         l2 = KPF2.from_fits(recipe_output)
-        modules = l2.receipt['Module_Name'].values
-        assert 'image_assembly' in modules
-        assert 'calibration_association' in modules
-        assert 'spectral_extraction' in modules
-        assert 'wavelength_calibration' in modules
-        assert 'barycentric_correction' in modules
+        modules = l2.receipt["Module_Name"].values
+        assert "image_assembly" in modules
+        assert "calibration_association" in modules
+        assert "spectral_extraction" in modules
+        assert "wavelength_calibration" in modules
+        assert "barycentric_correction" in modules
 
     def test_barycorr_extensions_populated(self, recipe_output):
         """BarycentricCorrection should populate the rvdata-standard extensions
         per-order, with finite values."""
         l2 = KPF2.from_fits(recipe_output)
         norder = NORDER_GREEN + NORDER_RED
-        for ext in ('BJD_TDB', 'BARYCORR_KMS', 'BARYCORR_Z'):
+        for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             arr = np.asarray(l2.data[ext])
             assert arr.shape == (norder,), f"{ext} shape {arr.shape} != ({norder},)"
             assert np.all(np.isfinite(arr)), f"{ext} has non-finite values"
-            assert np.issubdtype(arr.dtype, np.float64), f"{ext} is {arr.dtype}, expected float64"
+            assert np.issubdtype(arr.dtype, np.float64), (
+                f"{ext} is {arr.dtype}, expected float64"
+            )
         # Sanity: BARYCORR_Z is the redshift z = lambda_obs/lambda_rest - 1
         # (compute_redshift), so |z| = |v|/c << 1, not the 1+z factor near 1.
-        z = np.asarray(l2.data['BARYCORR_Z'])
+        z = np.asarray(l2.data["BARYCORR_Z"])
         assert np.all(np.abs(z) < 1e-3)
 
     def test_per_ccd_barycorr_keywords(self, recipe_output):
         """Per-CCD scalar summaries should land on INSTRUMENT_HEADER."""
         l2 = KPF2.from_fits(recipe_output)
-        inst = l2.headers['INSTRUMENT_HEADER']
-        for key in ('CCD1BJD', 'CCD1BKMS', 'CCD1BZ',
-                    'CCD2BJD', 'CCD2BKMS', 'CCD2BZ'):
+        inst = l2.headers["INSTRUMENT_HEADER"]
+        for key in ("CCD1BJD", "CCD1BKMS", "CCD1BZ", "CCD2BJD", "CCD2BKMS", "CCD2BZ"):
             assert key in inst, f"{key} missing from INSTRUMENT_HEADER"
             assert np.isfinite(float(inst[key])), f"{key} not finite"
 
     def test_calibration_headers_set(self, recipe_output):
-        """CalibrationAssociation's L1 PRIMARY writes survive into L2 INSTRUMENT_HEADER."""
+        """CalibrationAssociation's L1 PRIMARY writes survive into L2
+        INSTRUMENT_HEADER."""
         l2 = KPF2.from_fits(recipe_output)
-        inst = l2.headers['INSTRUMENT_HEADER']
+        inst = l2.headers["INSTRUMENT_HEADER"]
         # bias/dark/flat use basename + DIR + integer AGE
-        for prefix in ('BIAS', 'DARK', 'FLAT'):
-            assert f'{prefix}FILE' in inst
-            assert f'{prefix}DIR'  in inst
-            assert f'AGE{prefix}'  in inst
-        # thar uses legacy convention: WLSFILE = full path (no WLSDIR), AGEWLS = float days
-        assert 'WLSFILE' in inst
-        assert 'WLSDIR' not in inst
-        assert inst['WLSFILE'].endswith('_master_thar_L2.fits')
-        assert isinstance(inst['AGEWLS'], float)
+        for prefix in ("BIAS", "DARK", "FLAT"):
+            assert f"{prefix}FILE" in inst
+            assert f"{prefix}DIR" in inst
+            assert f"AGE{prefix}" in inst
+        # thar uses legacy convention: WLSFILE = full path (no WLSDIR),
+        # AGEWLS = float days
+        assert "WLSFILE" in inst
+        assert "WLSDIR" not in inst
+        assert inst["WLSFILE"].endswith("_master_thar_L2.fits")
+        assert isinstance(inst["AGEWLS"], float)
 
     def test_wave_arrays_populated(self, recipe_output):
         """WavelengthCalibration should fill the per-fiber WAVE extensions."""
         l2 = KPF2.from_fits(recipe_output)
-        assert l2.data['GREEN_SCI2_WAVE'].shape == (NORDER_GREEN, NCOL)
-        assert l2.data['RED_SCI2_WAVE'].shape   == (NORDER_RED,   NCOL)
-        assert np.any(l2.data['GREEN_SCI2_WAVE'] != 0)
-        assert np.any(l2.data['RED_SCI2_WAVE']   != 0)
+        assert l2.data["GREEN_SCI2_WAVE"].shape == (NORDER_GREEN, NCOL)
+        assert l2.data["RED_SCI2_WAVE"].shape == (NORDER_RED, NCOL)
+        assert np.any(l2.data["GREEN_SCI2_WAVE"] != 0)
+        assert np.any(l2.data["RED_SCI2_WAVE"] != 0)
         # Wavelength solutions are stored in float64.
-        assert np.issubdtype(l2.data['GREEN_SCI2_WAVE'].dtype, np.float64)
-        assert np.issubdtype(l2.data['RED_SCI2_WAVE'].dtype,   np.float64)
+        assert np.issubdtype(l2.data["GREEN_SCI2_WAVE"].dtype, np.float64)
+        assert np.issubdtype(l2.data["RED_SCI2_WAVE"].dtype, np.float64)
 
     def test_qlp_l0_pngs_exist(self, recipe_output):
-        qlp_dir = Path(recipe_output).parents[2] / 'QLP' / '20240405' / OBS_ID / 'L0'
-        assert (qlp_dir / f'{OBS_ID}_L0_stitched_image_green_zoomable.png').is_file()
-        assert (qlp_dir / f'{OBS_ID}_L0_stitched_image_red_zoomable.png').is_file()
+        qlp_dir = Path(recipe_output).parents[2] / "QLP" / "20240405" / OBS_ID / "L0"
+        assert (qlp_dir / f"{OBS_ID}_L0_stitched_image_green_zoomable.png").is_file()
+        assert (qlp_dir / f"{OBS_ID}_L0_stitched_image_red_zoomable.png").is_file()
 
     def test_qlp_l1_pngs_exist(self, recipe_output):
-        qlp_dir = Path(recipe_output).parents[2] / 'QLP' / '20240405' / OBS_ID / 'L1'
-        assert (qlp_dir / f'{OBS_ID}_L1_image_green_zoomable.png').is_file()
-        assert (qlp_dir / f'{OBS_ID}_L1_image_red_zoomable.png').is_file()
+        qlp_dir = Path(recipe_output).parents[2] / "QLP" / "20240405" / OBS_ID / "L1"
+        assert (qlp_dir / f"{OBS_ID}_L1_image_green_zoomable.png").is_file()
+        assert (qlp_dir / f"{OBS_ID}_L1_image_red_zoomable.png").is_file()
 
     def test_qlp_l2_pngs_exist(self, recipe_output):
-        qlp_dir = Path(recipe_output).parents[2] / 'QLP' / '20240405' / OBS_ID / 'L2'
-        assert (qlp_dir / f'{OBS_ID}_L2_snr_per_order_green_zoomable.png').is_file()
-        assert (qlp_dir / f'{OBS_ID}_L2_snr_per_order_red_zoomable.png').is_file()
+        qlp_dir = Path(recipe_output).parents[2] / "QLP" / "20240405" / OBS_ID / "L2"
+        assert (qlp_dir / f"{OBS_ID}_L2_snr_per_order_green_zoomable.png").is_file()
+        assert (qlp_dir / f"{OBS_ID}_L2_snr_per_order_red_zoomable.png").is_file()
 
 
 # ---------------------------------------------------------------------------
@@ -189,15 +192,14 @@ class TestScienceRecipe:
 
 
 class TestScienceRecipeErrors:
-
     def test_missing_l0_file_raises(self, tmp_path):
         config = ConfigHandler(
             str(CONFIG_PATH),
             overrides={
-                'DATA_DIRS': {
-                    'KPF_DATA_INPUT':     str(tmp_path),
-                    'KPF_MASTERS_OUTPUT': str(tmp_path),
-                    'KPF_SCIENCE_OUTPUT': str(tmp_path),
+                "DATA_DIRS": {
+                    "KPF_DATA_INPUT": str(tmp_path),
+                    "KPF_MASTERS_OUTPUT": str(tmp_path),
+                    "KPF_SCIENCE_OUTPUT": str(tmp_path),
                 }
             },
         )
@@ -210,10 +212,10 @@ class TestScienceRecipeErrors:
         config = ConfigHandler(
             str(CONFIG_PATH),
             overrides={
-                'DATA_DIRS': {
-                    'KPF_DATA_INPUT':     str(tmp_path),
-                    'KPF_MASTERS_OUTPUT': str(tmp_path),
-                    'KPF_SCIENCE_OUTPUT': str(tmp_path),
+                "DATA_DIRS": {
+                    "KPF_DATA_INPUT": str(tmp_path),
+                    "KPF_MASTERS_OUTPUT": str(tmp_path),
+                    "KPF_SCIENCE_OUTPUT": str(tmp_path),
                 }
             },
         )

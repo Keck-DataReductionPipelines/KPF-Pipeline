@@ -1,19 +1,17 @@
 """
 Base class for KPF Masters modules.
 """
+
 import os
 import warnings
 
 import numpy as np
 
-from kpfpipe import DEFAULTS, DETECTOR
+from kpfpipe import DEFAULTS
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
-
-NROW = DETECTOR['ccd']['nrow']
-NCOL = DETECTOR['ccd']['ncol']
 
 # TODO: throw out first frame in stack?
 # TODO: use start, middle, end of stack for initial datacube
@@ -22,17 +20,17 @@ NCOL = DETECTOR['ccd']['ncol']
 class BaseMasterModule:
     """
     Base class for KPF masters generation.
-    The class should not be called directly, but is used for inheritance
-    of masters subclasses: Bias, Dark, Flat, WLS.
 
-    Masters modules read a stack of L0 files from disk and output
-    a masters L1 object.
+    The class should not be called directly, but is used for inheritance
+    of masters subclasses: Bias, Dark, Flat, WLS. Masters modules read a
+    stack of L0 files from disk and output a masters L1 object.
     """
 
     # Module defaults; subclasses extend via `{**BaseMasterModule._DEFAULTS, ...}`.
-    _DEFAULTS = {**DEFAULTS,
-        'nframe_stream': 6,
-        'stack_sigma': 5.0,
+    _DEFAULTS = {
+        **DEFAULTS,
+        "nframe_stream": 6,
+        "stack_sigma": 5.0,
     }
 
     def __init__(self, l0_file_list, config=None):
@@ -54,9 +52,10 @@ class BaseMasterModule:
 
         self._l1_obj_cache = {}
 
-        self.ml1_obj = None  # populated by subclass make_master_l1(); used by save_master('L1', ...)
-        self.ml2_obj = None  # populated by subclass make_master_l2(); used by save_master('L2', ...)
-
+        # populated by subclass make_master_l1(); used by save_master('L1', ...)
+        self.ml1_obj = None
+        # populated by subclass make_master_l2(); used by save_master('L2', ...)
+        self.ml2_obj = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -73,7 +72,7 @@ class BaseMasterModule:
         ncache : int, optional
             Maximum number of L1 objects to retain in internal cache.
         exptime_tolerance : float
-            Maximum allowed excess of elapsed time over requested exposure time, 
+            Maximum allowed excess of elapsed time over requested exposure time,
             in seconds (default = 0.1).
         verbose : bool, optional
             If True (default), emit a progress print and propagate load /
@@ -114,20 +113,19 @@ class BaseMasterModule:
                 if len(self._l1_obj_cache) < ncache:
                     self._l1_obj_cache[fn] = l1_obj
 
-            except (FileNotFoundError, IOError, OSError) as e:
+            except (FileNotFoundError, OSError) as e:
                 if verbose:
-                    warnings.warn(f"Failed to load {fn}: {e}")
+                    warnings.warn(f"Failed to load {fn}: {e}", stacklevel=2)
                 return None, failure
 
         try:
             self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
         except ValueError as e:
             if verbose:
-                warnings.warn(f"Exptime check failed for {fn}: {e}")
+                warnings.warn(f"Exptime check failed for {fn}: {e}", stacklevel=2)
             return None, failure
 
         return l1_obj, success
-
 
     @staticmethod
     def _check_exptime_vs_elapsed(l1_obj, exptime_tolerance):
@@ -139,7 +137,8 @@ class BaseMasterModule:
         l1_obj : KPF1
             Assembled L1 object whose PRIMARY header contains EXPTIME and ELAPSED.
         exptime_tolerance : float
-            Maximum allowed excess of elapsed time over requested exposure time, in seconds.
+            Maximum allowed excess of elapsed time over requested exposure time,
+            in seconds.
 
         Raises
         ------
@@ -147,8 +146,8 @@ class BaseMasterModule:
             If elapsed time is less than requested (premature readout), or if the
             excess exceeds exptime_tolerance.
         """
-        exptime = l1_obj.headers['PRIMARY']['EXPTIME']
-        elapsed = l1_obj.headers['PRIMARY']['ELAPSED']
+        exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
+        elapsed = l1_obj.headers["PRIMARY"]["ELAPSED"]
 
         delta = elapsed - exptime
         if delta < 0:
@@ -156,8 +155,9 @@ class BaseMasterModule:
         if delta > exptime_tolerance:
             raise ValueError(f"elapsed time - requested time > {exptime_tolerance}")
 
-
-    def _compute_stats_from_datacube(self, l0_file_list=None, nframe=None, sigma=None, verbose=True):
+    def _compute_stats_from_datacube(
+        self, l0_file_list=None, nframe=None, sigma=None, verbose=True
+    ):
         """
         Compute stacked statistics using an in-memory data cube.
 
@@ -197,22 +197,23 @@ class BaseMasterModule:
         if sigma is None:
             sigma = self.stack_sigma
 
-        nframe = np.min([nframe,len(l0_file_list)])
+        nframe = np.min([nframe, len(l0_file_list)])
 
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
+        nrow = self.ccd["nrow"]
+        ncol = self.ccd["ncol"]
+
         data_cube = {}
-        exptime = np.zeros(nframe,dtype=np.float32)
+        exptime = np.zeros(nframe, dtype=np.float32)
 
         for chip in self.chips:
-            data_cube[f'{chip}_CCD'] = np.zeros((nframe,NROW,NCOL),dtype=np.float32)
-            data_cube[f'{chip}_VAR'] = np.zeros((nframe,NROW,NCOL),dtype=np.float32)
+            data_cube[f"{chip}_CCD"] = np.zeros((nframe, nrow, ncol), dtype=np.float32)
+            data_cube[f"{chip}_VAR"] = np.zeros((nframe, nrow, ncol), dtype=np.float32)
 
         i = 0
         failure = 0
-
-        frame_indices = np.arange(len(l0_file_list))
 
         for fn in l0_file_list:
             if i >= nframe:
@@ -223,14 +224,14 @@ class BaseMasterModule:
             if not success:
                 failure += 1
                 if failure / len(l0_file_list) > 0.2:
-                    raise ValueError(f"more than 20% of frames in stack failed to load")
+                    raise ValueError("more than 20% of frames in stack failed to load")
                 continue
 
-            exptime[i] = l1_obj.headers['PRIMARY']['EXPTIME']
+            exptime[i] = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
             for chip in self.chips:
-                data_cube[f'{chip}_CCD'][i] = l1_obj.data[f'{chip}_CCD']
-                data_cube[f'{chip}_VAR'][i] = l1_obj.data[f'{chip}_VAR']
+                data_cube[f"{chip}_CCD"][i] = l1_obj.data[f"{chip}_CCD"]
+                data_cube[f"{chip}_VAR"][i] = l1_obj.data[f"{chip}_VAR"]
 
             i += 1
 
@@ -247,49 +248,51 @@ class BaseMasterModule:
         elif np.all(exptime == 0):
             T = np.ones_like(exptime)[:, None, None]
         else:
-            raise ValueError(f"Exposure times must be all zero or all non-zero; exptime = {exptime}")
+            raise ValueError(
+                f"Exposure times must be all zero or all non-zero; exptime = {exptime}"
+            )
 
         stats = {}
         exptime_total = np.sum(exptime)
 
         for chip in self.chips:
-            stats[f'{chip}_CCD'] = {}
-            stats[f'{chip}_VAR'] = {}
+            stats[f"{chip}_CCD"] = {}
+            stats[f"{chip}_VAR"] = {}
 
-            out = (
-                flag_outliers(data_cube[f'{chip}_CCD'] / T, sigma, axis=0) |
-                flag_outliers(data_cube[f'{chip}_VAR'] / T, sigma, axis=0)
-            )
+            out = flag_outliers(
+                data_cube[f"{chip}_CCD"] / T, sigma, axis=0
+            ) | flag_outliers(data_cube[f"{chip}_VAR"] / T, sigma, axis=0)
 
             valid = ~out
             N = np.sum(~out, axis=0)
             good = N > 1
 
-            for suffix in ['CCD', 'VAR']:
-                ext = f'{chip}_{suffix}'
-                D = data_cube[ext]
-                R = D / T
+            for suffix in ["CCD", "VAR"]:
+                ext = f"{chip}_{suffix}"
+                frame_data = data_cube[ext]
+                R = frame_data / T
 
-                total_sum = np.sum(D, axis=0, where=valid)
+                total_sum = np.sum(frame_data, axis=0, where=valid)
 
                 rate_mean = np.zeros_like(R[0])
                 rate_mean[good] = np.sum(R, axis=0, where=valid)[good] / N[good]
 
-                diff2 = (R - rate_mean)**2
-                ssd = np.sum(diff2, axis=0, where=valid)
+                diff2 = (R - rate_mean) ** 2
+                sum_sq_dev = np.sum(diff2, axis=0, where=valid)
 
                 rate_rms = np.zeros_like(R[0])
-                rate_rms[good] = np.sqrt(ssd[good] / (N[good] - 1))
+                rate_rms[good] = np.sqrt(sum_sq_dev[good] / (N[good] - 1))
 
-                stats[ext]['nframe'] = N
-                stats[ext]['total_sum'] = total_sum
-                stats[ext]['rate_mean'] = rate_mean
-                stats[ext]['rate_rms'] = rate_rms
+                stats[ext]["nframe"] = N
+                stats[ext]["total_sum"] = total_sum
+                stats[ext]["rate_mean"] = rate_mean
+                stats[ext]["rate_rms"] = rate_rms
 
         return stats, exptime_total
 
-
-    def _compute_stats_from_stream(self, l0_file_list=None, ndirect=None, sigma=None, verbose=True):
+    def _compute_stats_from_stream(
+        self, l0_file_list=None, ndirect=None, sigma=None, verbose=True
+    ):
         """
         Compute stacked statistics using streaming Welford accumulation.
 
@@ -334,13 +337,11 @@ class BaseMasterModule:
         if sigma is None:
             sigma = self.stack_sigma
 
-        approx_stats, exptime_direct = (
-            self._compute_stats_from_datacube(
-                l0_file_list=l0_file_list,
-                nframe=ndirect,
-                sigma=sigma,
-                verbose=verbose,
-            )
+        approx_stats, exptime_direct = self._compute_stats_from_datacube(
+            l0_file_list=l0_file_list,
+            nframe=ndirect,
+            sigma=sigma,
+            verbose=verbose,
         )
 
         if len(l0_file_list) <= ndirect:
@@ -350,24 +351,27 @@ class BaseMasterModule:
         exptime_total = 0.0
         zero_exptime = exptime_direct == 0
 
+        nrow = self.ccd["nrow"]
+        ncol = self.ccd["ncol"]
+
         for chip in self.chips:
-            for suffix in ['CCD', 'VAR']:
-                ext = f'{chip}_{suffix}'
+            for suffix in ["CCD", "VAR"]:
+                ext = f"{chip}_{suffix}"
 
                 exact_stats[ext] = {}
-                exact_stats[ext]['nframe'] = np.zeros((NROW,NCOL),dtype=np.int32)
-                exact_stats[ext]['total_sum'] = np.zeros((NROW,NCOL),dtype=np.float32)
-                exact_stats[ext]['rate_mean'] = np.zeros((NROW,NCOL),dtype=np.float32)
-                exact_stats[ext]['rate_M2'] = np.zeros((NROW,NCOL),dtype=np.float32)
+                exact_stats[ext]["nframe"] = np.zeros((nrow, ncol), dtype=np.int32)
+                exact_stats[ext]["total_sum"] = np.zeros((nrow, ncol), dtype=np.float32)
+                exact_stats[ext]["rate_mean"] = np.zeros((nrow, ncol), dtype=np.float32)
+                exact_stats[ext]["rate_M2"] = np.zeros((nrow, ncol), dtype=np.float32)
 
-                approx_mean = approx_stats[ext]['rate_mean']
-                approx_rms = approx_stats[ext]['rate_rms']
+                approx_mean = approx_stats[ext]["rate_mean"]
+                approx_rms = approx_stats[ext]["rate_rms"]
 
-                approx_stats[ext]['rate_lower'] = approx_mean - approx_rms * sigma
-                approx_stats[ext]['rate_upper'] = approx_mean + approx_rms * sigma
+                approx_stats[ext]["rate_lower"] = approx_mean - approx_rms * sigma
+                approx_stats[ext]["rate_upper"] = approx_mean + approx_rms * sigma
 
         failure = 0
-        valid = np.ones((NROW, NCOL), dtype=bool)
+        clipping_mask = np.ones((nrow, ncol), dtype=bool)
 
         for fn in l0_file_list:
             l1_obj, success = self._load_frame(fn, verbose=verbose)
@@ -375,13 +379,13 @@ class BaseMasterModule:
             if not success:
                 failure += 1
                 if failure / len(l0_file_list) > 0.2:
-                    raise ValueError(f"more than 20% of frames in stack failed to load")
+                    raise ValueError("more than 20% of frames in stack failed to load")
                 continue
 
-            exptime = l1_obj.headers['PRIMARY']['EXPTIME']
+            exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
             if zero_exptime != (exptime == 0):
-                raise ValueError(f"Exposure times must be all zero or all non-zero")
+                raise ValueError("Exposure times must be all zero or all non-zero")
 
             if exptime < 0:
                 raise ValueError("Exposure times cannot be negative")
@@ -393,57 +397,56 @@ class BaseMasterModule:
             exptime_total += exptime
 
             for chip in self.chips:
-                valid[:] = True
+                clipping_mask[:] = True
                 R = {}
 
-                for suffix in ['CCD', 'VAR']:
-                    ext = f'{chip}_{suffix}'
-                    D = l1_obj.data[ext]
-                    R[ext] = D / T
+                for suffix in ["CCD", "VAR"]:
+                    ext = f"{chip}_{suffix}"
+                    frame_data = l1_obj.data[ext]
+                    R[ext] = frame_data / T
 
-                    lower = approx_stats[ext]['rate_lower']
-                    upper = approx_stats[ext]['rate_upper']
-                    valid &= (R[ext] >= lower) & (R[ext] <= upper)
+                    lower = approx_stats[ext]["rate_lower"]
+                    upper = approx_stats[ext]["rate_upper"]
+                    clipping_mask &= (R[ext] >= lower) & (R[ext] <= upper)
 
-                for suffix in ['CCD', 'VAR']:
-                    ext = f'{chip}_{suffix}'
-                    D = l1_obj.data[ext]
+                for suffix in ["CCD", "VAR"]:
+                    ext = f"{chip}_{suffix}"
+                    frame_data = l1_obj.data[ext]
                     rate = R[ext]
 
-                    N = exact_stats[ext]['nframe']
-                    N += valid
+                    N = exact_stats[ext]["nframe"]
+                    N += clipping_mask
 
-                    total_sum = exact_stats[ext]['total_sum']
-                    total_sum += D * valid
+                    total_sum = exact_stats[ext]["total_sum"]
+                    total_sum += frame_data * clipping_mask
 
                     # Welford algorithm accumulation begins
-                    mean = exact_stats[ext]['rate_mean']
+                    mean = exact_stats[ext]["rate_mean"]
                     safe_N = np.maximum(N, 1)
-                    delta = (rate - mean) * valid
+                    delta = (rate - mean) * clipping_mask
                     mean += delta / safe_N
-                    delta2 = (rate - mean) * valid
-                    M2 = exact_stats[ext]['rate_M2']
+                    delta2 = (rate - mean) * clipping_mask
+                    M2 = exact_stats[ext]["rate_M2"]
                     M2 += delta * delta2
                     # Welford algorithm accumulation ends
 
-                    exact_stats[ext]['total_sum'] = total_sum
-                    exact_stats[ext]['rate_mean'] = mean
-                    exact_stats[ext]['rate_M2'] = M2
+                    exact_stats[ext]["total_sum"] = total_sum
+                    exact_stats[ext]["rate_mean"] = mean
+                    exact_stats[ext]["rate_M2"] = M2
 
         for chip in self.chips:
-            for suffix in ['CCD', 'VAR']:
-                ext = f'{chip}_{suffix}'
+            for suffix in ["CCD", "VAR"]:
+                ext = f"{chip}_{suffix}"
 
-                N = exact_stats[ext]['nframe']
-                mean = exact_stats[ext]['rate_mean']
-                M2 = exact_stats[ext]['rate_M2']
+                N = exact_stats[ext]["nframe"]
+                mean = exact_stats[ext]["rate_mean"]
+                M2 = exact_stats[ext]["rate_M2"]
                 rms = np.sqrt(np.where(N > 1, M2 / (N - 1), 0))
 
-                exact_stats[ext]['rate_rms'] = rms
-                del exact_stats[ext]['rate_M2']
+                exact_stats[ext]["rate_rms"] = rms
+                del exact_stats[ext]["rate_M2"]
 
         return exact_stats, exptime_total
-
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -496,27 +499,32 @@ class BaseMasterModule:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
         if nframe < nstream:
-            stats, exptime = self._compute_stats_from_datacube(l0_file_list, nstream - 1, sigma, verbose=verbose)
+            stats, exptime = self._compute_stats_from_datacube(
+                l0_file_list, nstream - 1, sigma, verbose=verbose
+            )
         else:
-            stats, exptime = self._compute_stats_from_stream(l0_file_list, nstream - 1, sigma, verbose=verbose)
+            stats, exptime = self._compute_stats_from_stream(
+                l0_file_list, nstream - 1, sigma, verbose=verbose
+            )
 
         # TODO: add check that nframe is consistent between CCD and VAR
         for chip in self.chips:
-            if np.any(stats[f'{chip}_CCD']['nframe'] != stats[f'{chip}_VAR']['nframe']):
-                raise ValueError(f"mismatched frame count between {chip}_CCD and {chip}_VAR")
+            if np.any(stats[f"{chip}_CCD"]["nframe"] != stats[f"{chip}_VAR"]["nframe"]):
+                raise ValueError(
+                    f"mismatched frame count between {chip}_CCD and {chip}_VAR"
+                )
 
         l1_arrays = {}
         for chip in self.chips:
-
-            img = stats[f'{chip}_CCD']['rate_mean']
-            tot = stats[f'{chip}_CCD']['total_sum']
-            var = stats[f'{chip}_VAR']['total_sum']
+            img = stats[f"{chip}_CCD"]["rate_mean"]
+            tot = stats[f"{chip}_CCD"]["total_sum"]
+            var = stats[f"{chip}_VAR"]["total_sum"]
 
             good = var > 0
 
-            for suffix in ['CCD','VAR']:
-                ext = f'{chip}_{suffix}'
-                good &= stats[ext]['nframe'] > 0.5 * nframe
+            for suffix in ["CCD", "VAR"]:
+                ext = f"{chip}_{suffix}"
+                good &= stats[ext]["nframe"] > 0.5 * nframe
 
             snr = np.zeros_like(img)
             snr[good] = np.abs(tot[good]) / np.sqrt(var[good])
@@ -525,12 +533,11 @@ class BaseMasterModule:
             # the stored master image fits comfortably in float32 (bias signal
             # is a few-ADU offset with ~5 e- read noise) and halves the
             # on-disk size of the IMG and SNR extensions.
-            l1_arrays[f'{chip}_IMG'] = img.astype(np.float32)
-            l1_arrays[f'{chip}_SNR'] = snr.astype(np.float32)
-            l1_arrays[f'{chip}_MASK'] = good
+            l1_arrays[f"{chip}_IMG"] = img.astype(np.float32)
+            l1_arrays[f"{chip}_SNR"] = snr.astype(np.float32)
+            l1_arrays[f"{chip}_MASK"] = good
 
         return l1_arrays
-
 
     # ------------------------------------------------------------------
     # Public methods
@@ -566,10 +573,10 @@ class BaseMasterModule:
             If the corresponding make_master_lN() has not been run yet,
             or raised before constructing the master.
         """
-        if level not in ('L1', 'L2'):
+        if level not in ("L1", "L2"):
             raise ValueError(f"level must be 'L1' or 'L2'; got {level!r}")
 
-        attr = f'ml{level[1]}_obj'
+        attr = f"ml{level[1]}_obj"
         obj = getattr(self, attr, None)
         if obj is None:
             raise RuntimeError(

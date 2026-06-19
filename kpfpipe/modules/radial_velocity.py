@@ -20,6 +20,7 @@ its illumination source (SCI-OBJ/SKY-OBJ/CAL-OBJ in INSTRUMENT_HEADER):
 All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.
 """
+
 import astropy.units as u
 import numpy as np
 import pandas as pd
@@ -27,17 +28,11 @@ from astropy.constants import c
 from astropy.io import fits
 from astropy.stats import mad_std
 
-from kpfpipe import DEFAULTS, DETECTOR, REPO_ROOT
+from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 from kpfpipe.utils.validation import strictly_increasing
-
-SPEED_OF_LIGHT_KMS = np.float64(c.to("km/s").value)  # km/s
-
-NORDER_GREEN = DETECTOR["norder"]["GREEN"]
-NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -81,9 +76,8 @@ class RadialVelocity:
             setattr(self, k, params.get(k, v))
 
         # Lazily-populated caches; the per-orderlet ones are keyed by f'{chip}_{fiber}'.
-        self._illumination_source = (
-            {}
-        )  # source dict, set by _resolve_illumination_source()
+        # source dict, set by _resolve_illumination_source()
+        self._illumination_source = {}
         self._line_mask = {}  # line mask, set by _build_line_mask()
         self._velocity_grid = {}  # velocity grid, set by _build_velocity_grid()
         self._ccf = {}  # CCF cube, set by compute_ccfs()
@@ -123,7 +117,7 @@ class RadialVelocity:
         except KeyError:
             raise ValueError(
                 f"unknown fiber {fiber!r}; expected one of {sorted(self._OBJ_KEYWORD)}"
-            )
+            ) from None
         inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
         if keyword not in inst:
             raise ValueError(
@@ -234,7 +228,8 @@ class RadialVelocity:
         mask_name = self._resolve_illumination_source(chip, fiber)["mask_name"]
         if mask_name == "thar":
             df = pd.read_csv(f"{REPO_ROOT}/reference/thar_line_list.csv")
-            # unique: lines recur across overlapping orders, would double-count
+            # Deduplicate: lines recur across overlapping orders and would
+            # otherwise be double-counted.
             centers = np.unique(df["WAVE"].to_numpy(dtype=float))
             weights = np.ones(centers.size)
         else:
@@ -366,25 +361,33 @@ class RadialVelocity:
         l_start, l_end = line_mask["start"][keep], line_mask["end"][keep]
         l_weight = line_mask["weight"][keep]
 
-        for v in range(velocity_grid.size):
-            a = l_start * shift[v]
-            b = l_end * shift[v]
-            ia = np.clip(np.searchsorted(edges, a, side="right") - 1, 0, n_pix - 1)
-            ib = np.clip(np.searchsorted(edges, b, side="right") - 1, 0, n_pix - 1)
+        for vi in range(velocity_grid.size):
+            line_lo = l_start * shift[vi]
+            line_hi = l_end * shift[vi]
+            idx_lo = np.clip(
+                np.searchsorted(edges, line_lo, side="right") - 1, 0, n_pix - 1
+            )
+            idx_hi = np.clip(
+                np.searchsorted(edges, line_hi, side="right") - 1, 0, n_pix - 1
+            )
 
             # Fractional overlap of each (narrow) line with the pixels it covers.
-            frac = np.zeros(n_pix)
-            for d in range(int((ib - ia).max()) + 1):
-                n = ia + d
-                sel = n <= ib
-                nn = n[sel]
-                overlap = np.minimum(edges[nn + 1], b[sel]) - np.maximum(
-                    edges[nn], a[sel]
-                )
+            overlap_frac = np.zeros(n_pix)
+            for offset in range(int((idx_hi - idx_lo).max()) + 1):
+                pix = idx_lo + offset
+                still_spanning = pix <= idx_hi
+                pix_sel = pix[still_spanning]
+                overlap = np.minimum(
+                    edges[pix_sel + 1], line_hi[still_spanning]
+                ) - np.maximum(edges[pix_sel], line_lo[still_spanning])
                 np.clip(overlap, 0.0, None, out=overlap)
-                np.add.at(frac, nn, l_weight[sel] * overlap / widths[nn])
+                np.add.at(
+                    overlap_frac,
+                    pix_sel,
+                    l_weight[still_spanning] * overlap / widths[pix_sel],
+                )
 
-            ccf[v] = np.nansum(flux * frac)
+            ccf[vi] = np.nansum(flux * overlap_frac)
 
         return ccf
 
@@ -448,10 +451,10 @@ class RadialVelocity:
             int(np.floor(3.0 * sigma1 / dv)), int(np.ceil((min_npts - 1) / 2))
         )
         center = int(np.argmin(np.abs(vel - mu1)))
-        lo, hi = center - half_pts, center + half_pts + 1
-        if lo < 0 or hi > vel.size:
+        idx_lo, idx_hi = center - half_pts, center + half_pts + 1
+        if idx_lo < 0 or idx_hi > vel.size:
             return mu1, np.nan  # symmetric window runs off the grid
-        vel_fit, ccf_fit = vel[lo:hi], ccf[lo:hi]
+        vel_fit, ccf_fit = vel[idx_lo:idx_hi], ccf[idx_lo:idx_hi]
         rv = mu1
         try:
             mu2 = optimize_lsq(vel_fit, -ccf_fit, "gaussian")[0][2]
@@ -467,8 +470,9 @@ class RadialVelocity:
 
         # nan-aware: in the combined-CCF path `wave` is the full, unclipped order
         # row, which may carry NaN edge pixels; plain np.median would NaN the error.
+        speed_of_light_kms = c.to("km/s").value
         vel_span_per_pixel = (
-            SPEED_OF_LIGHT_KMS
+            speed_of_light_kms
             * np.nanmedian(np.abs(np.diff(wave)))
             / np.nanmedian(wave)
         )
@@ -547,17 +551,15 @@ class RadialVelocity:
 
         ccf_weighted = np.zeros(velocity_grid.size)
         for o in range(ccf.shape[0]):
-            s = np.nansum(ccf[o])
-            if s > 0 and weights[o] != 0:
-                ccf_weighted += (ccf[o] / s) * weights[o]
+            ccf_sum = np.nansum(ccf[o])
+            if ccf_sum > 0 and weights[o] != 0:
+                ccf_weighted += (ccf[o] / ccf_sum) * weights[o]
         ccf_summed = np.nansum(ccf, axis=0)
 
         # The dispersion is ~uniform across the chip; use the strongest order's
         # WAVE for the photon-noise velocity scale.
         rep = int(np.argmax(np.nansum(ccf, axis=1)))
         return velocity_grid, ccf_weighted, ccf_summed, wave[rep]
-
-
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -570,7 +572,7 @@ class RadialVelocity:
         width=None,
         step_size=None,
         window=None,
-        clip_edge_pixels=[500, 500],
+        clip_edge_pixels=None,
     ):
         """
         Cross-correlate every order of one chip/fiber against the line mask.
@@ -608,6 +610,8 @@ class RadialVelocity:
         NotImplementedError
             If the fiber's illumination source has no CCF path yet (etalon, lfc).
         """
+        if clip_edge_pixels is None:
+            clip_edge_pixels = [500, 500]
         chip = chip.upper()
         fiber = fiber.upper()
         if width is None:
@@ -855,12 +859,13 @@ class RadialVelocity:
         self,
         chips=None,
         fibers=None,
+        *,
         ccf_mask_width=None,
         ccf_step_size=None,
         ccf_window=None,
         rv_window=None,
         min_npts=9,
-        clip_edge_pixels=[500, 500],
+        clip_edge_pixels=None,
     ):
         """
         Compute per-order CCFs and radial velocities and package them in a KPF4.
@@ -906,6 +911,8 @@ class RadialVelocity:
             science RV). Unilluminated ('none') fibers are skipped (empty
             extensions).
         """
+        if clip_edge_pixels is None:
+            clip_edge_pixels = [500, 500]
         if chips is None:
             chips = self.chips
         if fibers is None:
@@ -922,6 +929,9 @@ class RadialVelocity:
         chips = [c.upper() for c in chips]
         fibers = [f.upper() for f in fibers]
 
+        norder_green = self.norder["GREEN"]
+        norder = norder_green + self.norder["RED"]
+
         l4_obj = self.l2_obj.to_kpf4()
 
         # Per-order barycentric metadata, shared by every orderlet's RV table.
@@ -930,8 +940,8 @@ class RadialVelocity:
 
         self._results = {}
         for fiber in fibers:
-            rv = np.full(NORDER, np.nan)
-            rv_err = np.full(NORDER, np.nan)
+            rv = np.full(norder, np.nan)
+            rv_err = np.full(norder, np.nan)
 
             # Dispatch the mask/barycorr/grid-center from the fiber's illumination
             # source; 'none' (unilluminated) is skipped with NaN RVs and no
@@ -961,9 +971,9 @@ class RadialVelocity:
                     chip, fiber, rv_window, min_npts
                 )
                 rows = (
-                    slice(0, NORDER_GREEN)
+                    slice(0, norder_green)
                     if chip == "GREEN"
-                    else slice(NORDER_GREEN, NORDER)
+                    else slice(norder_green, norder)
                 )
                 rv[rows] = result["rv"]
                 rv_err[rows] = result["rv_err"]
@@ -993,7 +1003,7 @@ class RadialVelocity:
                 f"{fiber}_RV",
                 pd.DataFrame(
                     {
-                        "ORDER_INDEX": np.arange(NORDER, dtype=np.int64),
+                        "ORDER_INDEX": np.arange(norder, dtype=np.int64),
                         "BJD_TDB": bjd_tdb,
                         "BERV": berv,
                         "WAVE_START": np.nanmin(wave, axis=1),
@@ -1063,7 +1073,8 @@ class RadialVelocity:
             # science RV is not applicable, so PRIMARY RV/RVERR/BERV/BJDTDB stay
             # UNDEFINED.
             print(
-                "  combined RV: no science orderlet requested; PRIMARY RV left UNDEFINED"
+                "  combined RV: no science orderlet requested; "
+                "PRIMARY RV left UNDEFINED"
             )
             l4_obj.receipt_add_entry("radial_velocity", "PASS")
             return l4_obj
@@ -1111,7 +1122,8 @@ class RadialVelocity:
         )
         if not np.isfinite(ccfrv):
             print(
-                "  combined RV: no finite per-CCD science RV; CCFRV/PRIMARY RV UNDEFINED"
+                "  combined RV: no finite per-CCD science RV; "
+                "CCFRV/PRIMARY RV UNDEFINED"
             )
 
         inst_hdr["CCFRV"] = float(ccfrv) if np.isfinite(ccfrv) else None
@@ -1184,7 +1196,8 @@ class RadialVelocity:
 
         # CCF velocity grid: per-fiber center, shared step/span.
         print(
-            f"\n  CCF velocity grid: {self.ccf_window[0]:+.1f} to {self.ccf_window[1]:+.1f} km/s "
+            f"\n  CCF velocity grid: {self.ccf_window[0]:+.1f} to "
+            f"{self.ccf_window[1]:+.1f} km/s "
             f"about each fiber's center, step {self.ccf_step_size} km/s"
         )
 
@@ -1201,9 +1214,11 @@ class RadialVelocity:
             f"{'CCD_RV [km/s]':>16s}{'CCD_ERV [m/s]':>16s}{'RV_RMS [m/s]':>16s}"
         )
         print("  " + "-" * 82)
+        norder_green = self.norder["GREEN"]
+        norder = norder_green + self.norder["RED"]
         for chip, rows in (
-            ("GREEN", slice(0, NORDER_GREEN)),
-            ("RED", slice(NORDER_GREEN, NORDER)),
+            ("GREEN", slice(0, norder_green)),
+            ("RED", slice(norder_green, norder)),
         ):
             for fiber in fiber_order:
                 res = self._results[fiber]

@@ -20,21 +20,20 @@ dependencies = [
     "pandas==3.0.0",
     "scipy==1.17.0",
     "tqdm==4.67.3",
-    "rv-data-standard @ git+https://github.com/EPRV-RCN/RVData.git@develop"
+    "rv-data-standard @ git+https://github.com/EPRV-RCN/RVData.git@7413775939ca0366dbba0df8c2e5b48c76595634"
 ]
 
 # Optional dependencies for development (linting, testing, formatting)
 [project.optional-dependencies]
 dev = [
-    "black==26.1.0",
-    "flake8==7.3.0",
     "ipykernel==7.2.0",
-    "isort==7.0.0",
     "jupyterlab==4.5.4",
     "line_profiler",
     "mypy==1.19.1",
     "notebook==7.5.3",
-    "pytest==9.0.2"
+    "pre-commit==4.6.0",
+    "pytest==9.0.2",
+    "ruff==0.15.17"
 ]
 
 [project.scripts]
@@ -49,3 +48,26 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["kpfpipe*", "tools*"]
+
+# Ruff is the unified formatter + linter (replaces black/isort/flake8).
+# Enforced via the pre-commit hook; see .pre-commit-config.yaml and style guide §8.
+[tool.ruff]
+line-length = 88
+# Pinned below the runtime (3.14.3) on purpose: Pylance/Pyright doesn't yet parse
+# PEP 758's unparenthesized `except A, B:`, and at py314 `ruff format` strips the
+# parens to that form. py313 keeps the formatter on `except (A, B):` — valid under
+# every tool. See style guide §6/§8.
+target-version = "py313"
+# scripts/ holds unimplemented pseudocode stubs that don't parse as Python yet.
+extend-exclude = ["legacy", "gjgilbert_notebooks", "scripts"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I import-sorting, B bugbear, UP pyupgrade.
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kpfpipe"]
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__.py files re-export names; unused-import (F401) is expected.
+"__init__.py" = ["F401"]

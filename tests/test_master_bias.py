@@ -16,15 +16,16 @@ import pytest
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
 
-
-TESTDATA_L0_DIR = Path(__file__).parent / 'testdata' / 'L0' / '20240405'
-TESTDATA_BIAS_FILES = sorted([
-    str(TESTDATA_L0_DIR / 'KP.20240405.03637.74.fits'),
-    str(TESTDATA_L0_DIR / 'KP.20240405.03687.64.fits'),
-    str(TESTDATA_L0_DIR / 'KP.20240405.03737.52.fits'),
-    str(TESTDATA_L0_DIR / 'KP.20240405.03787.42.fits'),
-    str(TESTDATA_L0_DIR / 'KP.20240405.03837.33.fits'),
-])
+TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
+TESTDATA_BIAS_FILES = sorted(
+    [
+        str(TESTDATA_L0_DIR / "KP.20240405.03637.74.fits"),
+        str(TESTDATA_L0_DIR / "KP.20240405.03687.64.fits"),
+        str(TESTDATA_L0_DIR / "KP.20240405.03737.52.fits"),
+        str(TESTDATA_L0_DIR / "KP.20240405.03787.42.fits"),
+        str(TESTDATA_L0_DIR / "KP.20240405.03837.33.fits"),
+    ]
+)
 
 CHIPS = ["GREEN", "RED"]
 NROW, NCOL = 10, 10  # small arrays for unit tests
@@ -37,7 +38,9 @@ def make_l1_arrays(rng=None):
     arrays = {}
     for chip in CHIPS:
         arrays[f"{chip}_IMG"] = rng.normal(0.0, 5.0, (NROW, NCOL)).astype(np.float32)
-        arrays[f"{chip}_SNR"] = np.abs(rng.normal(10.0, 1.0, (NROW, NCOL))).astype(np.float32)
+        arrays[f"{chip}_SNR"] = np.abs(rng.normal(10.0, 1.0, (NROW, NCOL))).astype(
+            np.float32
+        )
         arrays[f"{chip}_MASK"] = np.ones((NROW, NCOL), dtype=bool)
     return arrays
 
@@ -216,7 +219,7 @@ class TestMasterBiasSaveMaster:
     def test_save_master_before_make_raises(self):
         bias = Bias(FILE_LIST)
         with pytest.raises(RuntimeError, match="run make_master_l1"):
-            bias.save_master('L1', '/tmp/should_not_be_created.fits')
+            bias.save_master("L1", "/tmp/should_not_be_created.fits")
 
     def test_save_master_refuses_overwrite_by_default(self, tmp_path):
         synthetic = make_l1_arrays()
@@ -226,7 +229,7 @@ class TestMasterBiasSaveMaster:
         with patch.object(bias, "stack_frames", return_value=synthetic):
             bias.make_master_l1()  # populates ml1_obj
         with pytest.raises(FileExistsError, match="overwrite=True"):
-            bias.save_master('L1', str(master_path))
+            bias.save_master("L1", str(master_path))
 
 
 # ---------------------------------------------------------------------------

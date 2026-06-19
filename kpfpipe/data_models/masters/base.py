@@ -5,21 +5,18 @@ Base class for all masters calibration data models. Inherits from
 KPFDataModel and initializes the data model infrastructure without
 creating any science-level extensions.
 
-Level-specific masters classes use double inheritance, e.g.:
-
-    class KPFMasterL1(KPFMasterModel, KPF1):
-        ...
-
-This gives the level-specific class access to science model methods
-(from_fits, to_fits, _read, info, etc.) while the extension setup is
-controlled entirely by KPFMasterModel and its subclasses.
+Level-specific masters classes use double inheritance (e.g. KPFMasterL1
+subclasses both KPFMasterModel and KPF1). This gives the level-specific
+class access to science model methods (from_fits, to_fits, _read, info,
+etc.) while the extension setup is controlled entirely by KPFMasterModel
+and its subclasses.
 
 Masters products differ from science products in extension naming to
 avoid confusion: units and normalization conventions differ by
 calibration type (bias, dark, flat) and are not the same as raw
 science counts (e.g., GREEN_CCD).
 
-Filename convention: masters products follow WMKO filename format 
+Filename convention: masters products follow WMKO filename format
 (KP.YYYYMMDD.NNNNN.NN.fits), not the EPRV per-level convention.
 """
 
@@ -43,4 +40,4 @@ class KPFMasterModel(KPFDataModel):
 
     def set_input_files(self, file_list):
         """Record the input L0 file list in the INPUT_FILES extension."""
-        self.set_data('INPUT_FILES', pd.DataFrame({'FILENAME': file_list}))
+        self.set_data("INPUT_FILES", pd.DataFrame({"FILENAME": file_list}))

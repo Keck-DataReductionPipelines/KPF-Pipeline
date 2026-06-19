@@ -1,12 +1,12 @@
 """L1 quicklook plots for assembled FFI."""
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
-from kpfpipe.modules.image_assembly import _RN_KEYS
+from kpfpipe.modules.image_assembly import RN_KEYS
 
 
 def _unwrap(val):
@@ -22,29 +22,32 @@ class PlotL1:
     is imported from ImageAssembly so there is one source of truth for which
     FITS keywords hold which amplifier's read noise.
 
-    Args:
-        l1_obj: KPF1 data object (post-ImageAssembly).
-        output_dir: Directory to save PNG files. None = return Figure only.
+    Parameters
+    ----------
+    l1_obj : KPF1
+        KPF1 data object (post-ImageAssembly).
+    output_dir : str or None
+        Directory to save PNG files. None returns the Figure only.
     """
 
-    _PLOT_METHODS = ('image',)
+    _PLOT_METHODS = ("image",)
 
     def __init__(self, l1_obj, output_dir=None):
         self.l1 = l1_obj
         self.output_dir = output_dir
-        self.obs_id = getattr(l1_obj, 'obs_id', None) or ''
-        self.name = ''
-        if 'PRIMARY' in l1_obj.headers:
-            self.name = l1_obj.headers['PRIMARY'].get('OBJECT', '')
+        self.obs_id = getattr(l1_obj, "obs_id", None) or ""
+        self.name = ""
+        if "PRIMARY" in l1_obj.headers:
+            self.name = l1_obj.headers["PRIMARY"].get("OBJECT", "")
 
     def _read_noise_values(self, chip):
         """Return (rn_list, rnng_list) from PRIMARY header, or ([], []) if absent."""
-        primary = self.l1.headers.get('PRIMARY', {})
+        primary = self.l1.headers.get("PRIMARY", {})
         rn_values = []
         rnng_values = []
         for i in range(1, 5):
-            channel_ext = f'{chip.upper()}_AMP{i}'
-            rn_key, rnng_key = _RN_KEYS[channel_ext]
+            channel_ext = f"{chip.upper()}_AMP{i}"
+            rn_key, rnng_key = RN_KEYS[channel_ext]
             if rn_key in primary and rnng_key in primary:
                 rn_values.append(float(_unwrap(primary[rn_key])))
                 rnng_values.append(float(_unwrap(primary[rnng_key])))
@@ -56,14 +59,18 @@ class PlotL1:
 
         Replicates v2.12 plot_2D_image for the basic science-frame case.
 
-        Args:
-            chip: 'green' or 'red'.
+        Parameters
+        ----------
+        chip : str
+            'green' or 'red'.
 
-        Returns:
-            matplotlib.Figure
+        Returns
+        -------
+        matplotlib.Figure
+            The assembled-FFI figure.
         """
         chip_upper = chip.upper()
-        ext = f'{chip_upper}_CCD'
+        ext = f"{chip_upper}_CCD"
         image = np.asarray(self.l1.data[ext])
 
         # Interior percentile (strip 100-pixel border to avoid edge effects)
@@ -73,20 +80,24 @@ class PlotL1:
 
         fig = plt.figure(figsize=(10, 8), tight_layout=True)
         plt.imshow(
-            image, cmap='viridis', origin='lower', interpolation='None',
-            vmin=vmin, vmax=vmax,
+            image,
+            cmap="viridis",
+            origin="lower",
+            interpolation="None",
+            vmin=vmin,
+            vmax=vmax,
         )
 
         plt.title(
-            f'L1 - {chip_upper.capitalize()} CCD: {self.obs_id} - {self.name}',
+            f"L1 - {chip_upper.capitalize()} CCD: {self.obs_id} - {self.name}",
             fontsize=14,
         )
-        plt.xlabel('Column (pixel number)', fontsize=18)
-        plt.ylabel('Row (pixel number)', fontsize=18)
+        plt.xlabel("Column (pixel number)", fontsize=18)
+        plt.ylabel("Row (pixel number)", fontsize=18)
         plt.xticks(fontsize=14)
         plt.yticks(fontsize=14)
 
-        cbar = plt.colorbar(label='Counts (e-)')
+        cbar = plt.colorbar(label="Counts (e-)")
         cbar.ax.yaxis.label.set_size(18)
         cbar.ax.tick_params(labelsize=14)
         plt.grid(False)
@@ -94,31 +105,45 @@ class PlotL1:
         # Read noise annotation (from L1 headers populated by ImageAssembly)
         rn_values, rnng_values = self._read_noise_values(chip_upper)
         if rn_values:
-            rn_text = 'RN: ' + ', '.join(f'{v:.2f}' for v in rn_values)
-            rn_text += r' e- (stdev(overscan); 10-$\sigma$ outlier rej.)'
-            rn_text += '\nNon-Gaussian RN: ' + ', '.join(f'{v:.3f}' for v in rnng_values)
-            rn_text += r' (0.80$\times$stdev/mad in overscan)'
+            rn_text = "RN: " + ", ".join(f"{v:.2f}" for v in rn_values)
+            rn_text += r" e- (stdev(overscan); 10-$\sigma$ outlier rej.)"
+            rn_text += "\nNon-Gaussian RN: " + ", ".join(
+                f"{v:.3f}" for v in rnng_values
+            )
+            rn_text += r" (0.80$\times$stdev/mad in overscan)"
             plt.annotate(
-                rn_text, xy=(0, 0), xycoords='axes fraction',
-                fontsize=8, color='darkgray', ha='left', va='top',
-                xytext=(-50, -21), textcoords='offset points',
+                rn_text,
+                xy=(0, 0),
+                xycoords="axes fraction",
+                fontsize=8,
+                color="darkgray",
+                ha="left",
+                va="top",
+                xytext=(-50, -21),
+                textcoords="offset points",
             )
 
         # Timestamp
-        current_time = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         plt.annotate(
-            f'KPF QLP: {current_time} UT', xy=(1, 0), xycoords='axes fraction',
-            fontsize=8, color='darkgray', ha='right', va='top',
-            xytext=(100, -21), textcoords='offset points',
+            f"KPF QLP: {current_time} UT",
+            xy=(1, 0),
+            xycoords="axes fraction",
+            fontsize=8,
+            color="darkgray",
+            ha="right",
+            va="top",
+            xytext=(100, -21),
+            textcoords="offset points",
         )
         plt.subplots_adjust(bottom=0.1)
 
         if self.output_dir is not None:
             fig_path = os.path.join(
                 self.output_dir,
-                f'{self.obs_id}_L1_image_{chip.lower()}_zoomable.png',
+                f"{self.obs_id}_L1_image_{chip.lower()}_zoomable.png",
             )
-            fig.savefig(fig_path, dpi=600, facecolor='w')
+            fig.savefig(fig_path, dpi=600, facecolor="w")
 
         return fig
 
@@ -141,7 +166,10 @@ class PlotL1:
         raise NotImplementedError("PlotL1.order_trace_overlay not yet implemented")
 
     def bias_subtracted(self, chip):
-        """Image with master bias subtracted. Matches v2.12 plot_2D_image(subtract_master_bias=True)."""
+        """Image with master bias subtracted.
+
+        Matches v2.12 plot_2D_image(subtract_master_bias=True).
+        """
         raise NotImplementedError("PlotL1.bias_subtracted not yet implemented")
 
     def dark_subtracted(self, chip):
@@ -150,26 +178,36 @@ class PlotL1:
         raise NotImplementedError("PlotL1.dark_subtracted not yet implemented")
 
     def _has_chip(self, chip):
-        ext = f'{chip.upper()}_CCD'
+        ext = f"{chip.upper()}_CCD"
         if ext not in self.l1.data or self.l1.data[ext] is None:
             return False
         return np.size(self.l1.data[ext]) > 0
 
     def run(self, which):
         """
-        Generate the requested plot(s) for every chip that has data,
-        saving each to `output_dir` and closing the matplotlib figure
-        so callers don't accumulate them.
+        Generate the requested plot(s) for every chip that has data.
 
-        Args:
-            which: 'all' to run every implemented plot, or the name of a
-                   single plot method (one of self._PLOT_METHODS).
+        Saves each to `output_dir` and closes the matplotlib figure so
+        callers don't accumulate them.
 
-        Returns:
-            dict mapping `{method_name}_{chip}` to matplotlib.Figure
-            (closed; useful for tests/introspection).
+        Parameters
+        ----------
+        which : str
+            'all' to run every implemented plot, or the name of a single
+            plot method (one of `self._PLOT_METHODS`).
+
+        Returns
+        -------
+        dict
+            Maps `{method_name}_{chip}` to its (closed) matplotlib.Figure;
+            useful for tests and introspection.
+
+        Raises
+        ------
+        ValueError
+            If `which` is neither 'all' nor a known plot method name.
         """
-        if which == 'all':
+        if which == "all":
             names = self._PLOT_METHODS
         elif which in self._PLOT_METHODS:
             names = (which,)
@@ -182,11 +220,11 @@ class PlotL1:
             os.makedirs(self.output_dir, exist_ok=True)
 
         figures = {}
-        for chip in ['green', 'red']:
+        for chip in ["green", "red"]:
             if not self._has_chip(chip):
                 continue
             for name in names:
                 fig = getattr(self, name)(chip)
-                figures[f'{name}_{chip}'] = fig
+                figures[f"{name}_{chip}"] = fig
                 plt.close(fig)
         return figures

@@ -9,9 +9,9 @@ Subclasses RVDataModel (via KPFDataModel) to reuse its extension/header/data
 infrastructure and receipt system.
 """
 
+import importlib.resources
 import os
 import warnings
-from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -20,8 +20,6 @@ from astropy.table import Table
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.kpf import get_obs_id
-
-import importlib.resources
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
@@ -34,12 +32,10 @@ class KPF0(KPFDataModel):
 
     Represents a raw CCD readout from the KPF instrument. Extensions
     vary between observations; the reader accepts whatever is present
-    in the FITS file.
-
-    Usage:
-        l0 = KPF0.from_fits("/path/to/KP.20240113.23249.10.fits")
-        l0.data["GREEN_AMP1"]   # numpy array
-        l0.headers["PRIMARY"]   # header dict
+    in the FITS file. Construct from a FITS file with
+    `KPF0.from_fits(path)`, then read amplifier arrays from `data`
+    (e.g. `data["GREEN_AMP1"]`) and header dicts from `headers`
+    (e.g. `headers["PRIMARY"]`).
     """
 
     def __init__(self):
@@ -51,10 +47,11 @@ class KPF0(KPFDataModel):
                 self.create_extension(row["Name"], row["DataType"])
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """Route L0 FITS reads to KPF0._read.
+        """
+        Route L0 FITS reads to `KPF0._read`.
 
-        RVDataModel.read has no lvl==0 dispatch branch, so the inherited
-        from_fits would never call into _read without this override.
+        `RVDataModel.read` has no lvl==0 dispatch branch, so the inherited
+        `from_fits` would never call into `_read` without this override.
         """
         self._read(hdul)
         if self.filename is not None:
@@ -89,6 +86,7 @@ class KPF0(KPFDataModel):
                         warnings.warn(
                             f"Non-standard extension '{ext_name}' found in L0 file.",
                             UserWarning,
+                            stacklevel=2,
                         )
                     self.create_extension(ext_name, fits_type)
 
@@ -98,8 +96,12 @@ class KPF0(KPFDataModel):
                 t = Table.read(hdu)
                 df = t.to_pandas()
                 receipt_columns = [
-                    "Time", "Code_Release", "Commit_Hash",
-                    "Branch_Name", "Module_Name", "Status"
+                    "Time",
+                    "Code_Release",
+                    "Commit_Hash",
+                    "Branch_Name",
+                    "Module_Name",
+                    "Status",
                 ]
                 if df.empty:
                     df = pd.DataFrame(columns=receipt_columns)
@@ -131,7 +133,8 @@ class KPF0(KPFDataModel):
 
         if "PRIMARY" in self.headers:
             self.headers["PRIMARY"]["FILENAME"] = (
-                os.path.basename(fn), "Name of the FITS file"
+                os.path.basename(fn),
+                "Name of the FITS file",
             )
 
         hdu_list = self._create_hdul()
@@ -143,17 +146,25 @@ class KPF0(KPFDataModel):
         hdul.close()
         return fn
 
-    _L0_TO_L1_PASSTHROUGH = ["CA_HK", "EXPMETER_SCI", "EXPMETER_SKY", "TELEMETRY", "CONFIG"]
+    _L0_TO_L1_PASSTHROUGH = [
+        "CA_HK",
+        "EXPMETER_SCI",
+        "EXPMETER_SKY",
+        "TELEMETRY",
+        "CONFIG",
+    ]
 
     def to_kpf1(self):
-        """Create a KPF1 scaffold from this L0, carrying over headers and pass-through extensions.
+        """
+        Create a KPF1 scaffold from this L0, carrying over headers and
+        pass-through extensions.
 
         Returns a KPF1 with PRIMARY header, pass-through extensions (CA_HK,
         EXPMETER_SCI/SKY, TELEMETRY, CONFIG), receipt, and obs_id copied over.
         GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created but empty —
         the caller (image assembly) fills those in.
         """
-        from kpfpipe.data_models.level1 import KPF1
+        from kpfpipe.data_models.level1 import KPF1  # deferred: avoids circular import
 
         l1 = KPF1()
 

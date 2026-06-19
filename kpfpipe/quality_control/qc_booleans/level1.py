@@ -2,10 +2,10 @@
 
 import numpy as np
 
-from kpfpipe.modules.image_assembly import _RN_KEYS
+from kpfpipe.modules.image_assembly import RN_KEYS
 from kpfpipe.quality_control.qc_booleans.base import QC
 
-_RN_LO,  _RN_HI   = 2.0,  6.0
+_RN_LO, _RN_HI = 2.0, 6.0
 _RNNG_LO, _RNNG_HI = 0.8, 1.5
 
 
@@ -23,13 +23,31 @@ class QCL1(QC):
     LEVEL = "L1"
 
     def _present_rn_in_range(self, idx, lo, hi):
-        """Validate the idx-th RN keyword (0=RN, 1=non-Gaussian RN) for every
-        amplifier whose keyword is present, so 2-amp and 4-amp readouts both
-        pass. Absent amps are skipped; returns False if no RN keyword is
-        present at all (read noise should always be recorded)."""
+        """Validate a read-noise keyword across every amplifier present.
+
+        Checks the ``idx``-th RN keyword for every amplifier whose keyword is
+        present, so 2-amp and 4-amp readouts both pass. Absent amps are
+        skipped.
+
+        Parameters
+        ----------
+        idx : int
+            Index into each amp's RN keyword pair (0 = RN, 1 = non-Gaussian RN).
+        lo : float
+            Lower bound of the accepted range, inclusive.
+        hi : float
+            Upper bound of the accepted range, inclusive.
+
+        Returns
+        -------
+        bool
+            True if all present values fall in ``[lo, hi]``. False if any is
+            out of range, or if no RN keyword is present at all (read noise
+            should always be recorded).
+        """
         hdr = self.kpf.headers["PRIMARY"]
         found = False
-        for keys in _RN_KEYS.values():
+        for keys in RN_KEYS.values():
             v = _hdr_float(hdr, keys[idx])
             if v is None:
                 continue

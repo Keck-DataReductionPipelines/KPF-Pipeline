@@ -12,7 +12,7 @@ differ from science L1 to reflect masters-specific normalization:
     GREEN_MASK -- boolean bad pixel mask (1=good, 0=bad)
     RED_IMG, RED_SNR, RED_MASK -- same for red chip
 
-Filename convention: masters products follow WMKO filename format 
+Filename convention: masters products follow WMKO filename format
 (KP.YYYYMMDD.NNNNN.NN.fits), not the EPRV per-level convention.
 """
 
@@ -21,7 +21,6 @@ import importlib.resources
 import numpy as np
 import pandas as pd
 
-from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters.base import KPFMasterModel
 
@@ -42,9 +41,8 @@ class KPFMasterL1(KPFMasterModel, KPF1):
         GREEN_MASK  -- bad pixel mask, green chip (1=good, 0=bad)
         RED_IMG, RED_SNR, RED_MASK -- same for red chip
 
-    Usage:
-        m1 = KPFMasterL1()
-        m1 = KPFMasterL1.from_fits("/path/to/master_bias.fits")
+    Construct empty with `KPFMasterL1()`, or load a stacked product from
+    disk with `KPFMasterL1.from_fits(path)`.
     """
 
     _DATALVL = "ML1"

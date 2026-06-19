@@ -7,7 +7,6 @@ also require no real data. Regression tests using real L1 FITS files are
 skipped if KPF_TESTDATA is not set.
 """
 
-import os
 from pathlib import Path
 
 import numpy as np
@@ -16,23 +15,24 @@ import pytest
 from astropy.io import fits
 
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
-from kpfpipe.data_models.level0 import KPF0
 
-NORDER_GREEN = DETECTOR['norder']['GREEN']
-NORDER_RED   = DETECTOR['norder']['RED']
-NCOL         = DETECTOR['ccd']['ncol']
+NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED = DETECTOR["norder"]["RED"]
+NCOL = DETECTOR["ccd"]["ncol"]
 
-TESTDATA_L0_DIR = Path(__file__).parent / 'testdata' / 'L0' / '20240405'
-L0_FILE = str(TESTDATA_L0_DIR / 'KP.20240405.00020.86.fits')
+TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
+L0_FILE = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
 
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def minimal_l1(tmp_path):
@@ -43,9 +43,11 @@ def minimal_l1(tmp_path):
     primary.header["DATE-OBS"] = "2024-01-01T00:00:00"
     green_ccd = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_CCD")
     green_var = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_VAR")
-    red_ccd   = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD")
-    red_var   = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR")
-    fits.HDUList([primary, green_ccd, green_var, red_ccd, red_var]).writeto(fn, overwrite=True)
+    red_ccd = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD")
+    red_var = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR")
+    fits.HDUList([primary, green_ccd, green_var, red_ccd, red_var]).writeto(
+        fn, overwrite=True
+    )
     return KPF1.from_fits(fn)
 
 
@@ -53,8 +55,8 @@ def minimal_l1(tmp_path):
 # Box extraction (unit tests — no data or fixtures required)
 # ---------------------------------------------------------------------------
 
-class TestBoxExtraction:
 
+class TestBoxExtraction:
     def test_basic_extraction(self):
         D = np.ones((5, 10), dtype=np.float32)
         V = np.ones((5, 10), dtype=np.float32)
@@ -71,13 +73,13 @@ class TestBoxExtraction:
         W[0, :] = 0.5
         W[-1, :] = 0.5
         flux_full, _ = SpectralExtraction._box_extraction(D, V)
-        flux_w,    _ = SpectralExtraction._box_extraction(D, V, W=W)
+        flux_w, _ = SpectralExtraction._box_extraction(D, V, W=W)
         assert np.all(flux_w < flux_full)
 
     def test_with_sky_subtraction(self):
         D = np.full((5, 10), 10.0, dtype=np.float32)
         V = np.ones((5, 10), dtype=np.float32)
-        S = np.full((5, 10),  3.0, dtype=np.float32)
+        S = np.full((5, 10), 3.0, dtype=np.float32)
         flux, _ = SpectralExtraction._box_extraction(D, V, S=S)
         np.testing.assert_allclose(flux, 5 * (10.0 - 3.0))
 
@@ -110,8 +112,8 @@ class TestBoxExtraction:
 # Unimplemented extraction stubs
 # ---------------------------------------------------------------------------
 
-class TestUnimplementedExtraction:
 
+class TestUnimplementedExtraction:
     def test_optimal_raises(self):
         D = V = np.ones((5, 10))
         with pytest.raises(NotImplementedError):
@@ -127,6 +129,7 @@ class TestUnimplementedExtraction:
 # perform() shape tests (monkeypatched — no real data or trace files needed)
 # ---------------------------------------------------------------------------
 
+
 class TestPerformShapes:
     """Verify perform() assembles GREEN and RED arrays into correctly shaped
     KPF2 traces. extract_ffi is monkeypatched to return pre-built arrays."""
@@ -134,106 +137,120 @@ class TestPerformShapes:
     @pytest.fixture
     def mock_ffi_arrays(self):
         """Return pre-built (chip, fiber) arrays matching real detector dims."""
-        chips  = ['GREEN', 'RED']
-        fibers = ['CAL', 'SCI1', 'SCI2', 'SCI3', 'SKY']
-        norder = {'GREEN': NORDER_GREEN, 'RED': NORDER_RED}
+        chips = ["GREEN", "RED"]
+        fibers = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
+        norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
         arrays = {}
         for chip in chips:
             for fiber in fibers:
                 n = norder[chip]
-                arrays[f'{chip}_{fiber}_FLUX'] = np.ones((n, NCOL), dtype=np.float32)
-                arrays[f'{chip}_{fiber}_VAR']  = np.ones((n, NCOL), dtype=np.float32)
+                arrays[f"{chip}_{fiber}_FLUX"] = np.ones((n, NCOL), dtype=np.float32)
+                arrays[f"{chip}_{fiber}_VAR"] = np.ones((n, NCOL), dtype=np.float32)
         return arrays
 
     def test_returns_kpf2(self, minimal_l1, mock_ffi_arrays, monkeypatch):
-        monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, extraction_method, **kwargs: {
-                                k: v for k, v in mock_ffi_arrays.items()
-                                if k.startswith(chip)
-                            })
+        monkeypatch.setattr(
+            SpectralExtraction,
+            "extract_ffi",
+            lambda self, chip, fibers, extraction_method, **kwargs: {
+                k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
+            },
+        )
         se = SpectralExtraction(minimal_l1)
         l2 = se.perform()
         assert isinstance(l2, KPF2)
         assert l2.level == 2
 
     def test_green_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
-        monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, extraction_method, **kwargs: {
-                                k: v for k, v in mock_ffi_arrays.items()
-                                if k.startswith(chip)
-                            })
+        monkeypatch.setattr(
+            SpectralExtraction,
+            "extract_ffi",
+            lambda self, chip, fibers, extraction_method, **kwargs: {
+                k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
+            },
+        )
         se = SpectralExtraction(minimal_l1)
         l2 = se.perform()
-        assert l2.data['GREEN_SCI2_FLUX'].shape == (NORDER_GREEN, NCOL)
+        assert l2.data["GREEN_SCI2_FLUX"].shape == (NORDER_GREEN, NCOL)
 
     def test_red_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
-        monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, extraction_method, **kwargs: {
-                                k: v for k, v in mock_ffi_arrays.items()
-                                if k.startswith(chip)
-                            })
+        monkeypatch.setattr(
+            SpectralExtraction,
+            "extract_ffi",
+            lambda self, chip, fibers, extraction_method, **kwargs: {
+                k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
+            },
+        )
         se = SpectralExtraction(minimal_l1)
         l2 = se.perform()
-        assert l2.data['RED_SCI2_FLUX'].shape == (NORDER_RED, NCOL)
+        assert l2.data["RED_SCI2_FLUX"].shape == (NORDER_RED, NCOL)
 
     def test_full_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
-        monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, extraction_method, **kwargs: {
-                                k: v for k, v in mock_ffi_arrays.items()
-                                if k.startswith(chip)
-                            })
+        monkeypatch.setattr(
+            SpectralExtraction,
+            "extract_ffi",
+            lambda self, chip, fibers, extraction_method, **kwargs: {
+                k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
+            },
+        )
         se = SpectralExtraction(minimal_l1)
         l2 = se.perform()
-        assert l2.data['SCI2_FLUX'].shape == (NORDER_GREEN + NORDER_RED, NCOL)
+        assert l2.data["SCI2_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
 
     def test_all_fibers_populated(self, minimal_l1, mock_ffi_arrays, monkeypatch):
-        monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, extraction_method, **kwargs: {
-                                k: v for k, v in mock_ffi_arrays.items()
-                                if k.startswith(chip)
-                            })
+        monkeypatch.setattr(
+            SpectralExtraction,
+            "extract_ffi",
+            lambda self, chip, fibers, extraction_method, **kwargs: {
+                k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
+            },
+        )
         se = SpectralExtraction(minimal_l1)
         l2 = se.perform()
-        for fiber in ['CAL', 'SCI1', 'SCI2', 'SCI3', 'SKY']:
-            assert l2.data[f'{fiber}_FLUX'].shape == (NORDER_GREEN + NORDER_RED, NCOL)
-            assert l2.data[f'{fiber}_VAR'].shape  == (NORDER_GREEN + NORDER_RED, NCOL)
+        for fiber in ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]:
+            assert l2.data[f"{fiber}_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
+            assert l2.data[f"{fiber}_VAR"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
 
     def test_green_red_slices_independent(self, minimal_l1, monkeypatch):
         """GREEN and RED slices should contain distinct values."""
+
         def mock_extract(self, chip, fibers, extraction_method, **kwargs):
-            fill = 1.0 if chip == 'GREEN' else 2.0
-            n = NORDER_GREEN if chip == 'GREEN' else NORDER_RED
+            fill = 1.0 if chip == "GREEN" else 2.0
+            n = NORDER_GREEN if chip == "GREEN" else NORDER_RED
             return {
-                f'{chip}_SCI2_FLUX': np.full((n, NCOL), fill, dtype=np.float32),
-                f'{chip}_SCI2_VAR':  np.full((n, NCOL), fill, dtype=np.float32),
+                f"{chip}_SCI2_FLUX": np.full((n, NCOL), fill, dtype=np.float32),
+                f"{chip}_SCI2_VAR": np.full((n, NCOL), fill, dtype=np.float32),
             }
-        monkeypatch.setattr(SpectralExtraction, 'extract_ffi', mock_extract)
 
-        se = SpectralExtraction(minimal_l1, config={'fibers': ['SCI2']})
-        l2 = se.perform(fibers=['SCI2'])
+        monkeypatch.setattr(SpectralExtraction, "extract_ffi", mock_extract)
 
-        np.testing.assert_array_equal(l2.data['GREEN_SCI2_FLUX'], 1.0)
-        np.testing.assert_array_equal(l2.data['RED_SCI2_FLUX'],   2.0)
+        se = SpectralExtraction(minimal_l1, config={"fibers": ["SCI2"]})
+        l2 = se.perform(fibers=["SCI2"])
+
+        np.testing.assert_array_equal(l2.data["GREEN_SCI2_FLUX"], 1.0)
+        np.testing.assert_array_equal(l2.data["RED_SCI2_FLUX"], 2.0)
 
     def test_receipt_chain(self, minimal_l1, mock_ffi_arrays, monkeypatch):
-        monkeypatch.setattr(SpectralExtraction, 'extract_ffi',
-                            lambda self, chip, fibers, extraction_method, **kwargs: {
-                                k: v for k, v in mock_ffi_arrays.items()
-                                if k.startswith(chip)
-                            })
+        monkeypatch.setattr(
+            SpectralExtraction,
+            "extract_ffi",
+            lambda self, chip, fibers, extraction_method, **kwargs: {
+                k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
+            },
+        )
         se = SpectralExtraction(minimal_l1)
         l2 = se.perform()
-        modules = l2.receipt['Module_Name'].values
-        assert 'to_kpf2' in modules
-        assert 'spectral_extraction' in modules
+        modules = l2.receipt["Module_Name"].values
+        assert "to_kpf2" in modules
+        assert "spectral_extraction" in modules
 
 
 # ---------------------------------------------------------------------------
 # Regression tests (real L0 data → assemble L1 → extract)
 # ---------------------------------------------------------------------------
 
-class TestSpectralExtractionRealData:
 
+class TestSpectralExtractionRealData:
     @pytest.fixture(scope="class")
     def l2_from_flat(self):
         l0 = KPF0.from_fits(L0_FILE)
@@ -248,76 +265,102 @@ class TestSpectralExtractionRealData:
 
     def test_green_sci2_flux_shape(self, l2_from_flat):
         l2, _ = l2_from_flat
-        assert l2.data['GREEN_SCI2_FLUX'].shape == (NORDER_GREEN, NCOL)
+        assert l2.data["GREEN_SCI2_FLUX"].shape == (NORDER_GREEN, NCOL)
 
     def test_red_sci2_flux_shape(self, l2_from_flat):
         l2, _ = l2_from_flat
-        assert l2.data['RED_SCI2_FLUX'].shape == (NORDER_RED, NCOL)
+        assert l2.data["RED_SCI2_FLUX"].shape == (NORDER_RED, NCOL)
 
     def test_full_trace_shape(self, l2_from_flat):
         l2, _ = l2_from_flat
-        assert l2.data['SCI2_FLUX'].shape == (NORDER_GREEN + NORDER_RED, NCOL)
+        assert l2.data["SCI2_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
 
     def test_flux_positive(self, l2_from_flat):
         """Flat lamp flux should be positive after extraction."""
         l2, _ = l2_from_flat
-        assert np.nanmedian(l2.data['GREEN_SCI2_FLUX']) > 0
-        assert np.nanmedian(l2.data['RED_SCI2_FLUX']) > 0
+        assert np.nanmedian(l2.data["GREEN_SCI2_FLUX"]) > 0
+        assert np.nanmedian(l2.data["RED_SCI2_FLUX"]) > 0
 
     def test_variance_positive(self, l2_from_flat):
         l2, _ = l2_from_flat
-        assert np.all(l2.data['GREEN_SCI2_VAR'] >= 0)
-        assert np.all(l2.data['RED_SCI2_VAR'] >= 0)
+        assert np.all(l2.data["GREEN_SCI2_VAR"] >= 0)
+        assert np.all(l2.data["RED_SCI2_VAR"] >= 0)
 
     def test_receipt_chain(self, l2_from_flat):
         l2, _ = l2_from_flat
-        modules = l2.receipt['Module_Name'].values
-        assert 'image_assembly' in modules
-        assert 'spectral_extraction' in modules
+        modules = l2.receipt["Module_Name"].values
+        assert "image_assembly" in modules
+        assert "spectral_extraction" in modules
 
 
 # ---------------------------------------------------------------------------
 # TestOrderTraceErrors
 # ---------------------------------------------------------------------------
 
+
 class TestOrderTraceErrors:
     """Errors raised from _get_orderlet_pixels via extract_orderlet."""
 
-    _TRACE_COLS = ['TopEdge', 'BottomEdge', 'Coeff0', 'Coeff1', 'Coeff2', 'Coeff3']
+    _TRACE_COLS = ["TopEdge", "BottomEdge", "Coeff0", "Coeff1", "Coeff2", "Coeff3"]
 
     def _make_se(self, rows):
         """Build a SpectralExtraction with a pre-populated order_trace cache."""
+
         class StubL1:
             data = {
-                'GREEN_CCD': np.zeros((100, 100), dtype=np.float32),
-                'GREEN_VAR': np.ones((100, 100), dtype=np.float32),
+                "GREEN_CCD": np.zeros((100, 100), dtype=np.float32),
+                "GREEN_VAR": np.ones((100, 100), dtype=np.float32),
             }
-            headers = {'PRIMARY': {}}
+            headers = {"PRIMARY": {}}
 
-        df = pd.DataFrame(rows).set_index(['Fiber', 'Order']).sort_index()
+        df = pd.DataFrame(rows).set_index(["Fiber", "Order"]).sort_index()
         se = SpectralExtraction(StubL1())
-        se.order_trace = {'GREEN': df}
-        se.order_trace_path = {'GREEN': '<stub>'}
+        se.order_trace = {"GREEN": df}
+        se.order_trace_path = {"GREEN": "<stub>"}
         return se
 
     def test_missing_trace_raises_lookup_error(self):
         # Table has SCI1 order 1 only; asking for order 2 misses.
         rows = [
-            {'Fiber': 'SCI1', 'Order': 1, 'TopEdge': 5.0, 'BottomEdge': 5.0,
-             'Coeff0': 50.0, 'Coeff1': 0.0, 'Coeff2': 0.0, 'Coeff3': 0.0},
+            {
+                "Fiber": "SCI1",
+                "Order": 1,
+                "TopEdge": 5.0,
+                "BottomEdge": 5.0,
+                "Coeff0": 50.0,
+                "Coeff1": 0.0,
+                "Coeff2": 0.0,
+                "Coeff3": 0.0,
+            },
         ]
         se = self._make_se(rows)
         with pytest.raises(LookupError, match="No trace found"):
-            se.extract_orderlet('GREEN', 'SCI1', 2)
+            se.extract_orderlet("GREEN", "SCI1", 2)
 
     def test_duplicate_trace_raises_value_error(self):
         # Two rows for the same (Fiber, Order) — a corrupt reference file.
         rows = [
-            {'Fiber': 'SCI1', 'Order': 1, 'TopEdge': 5.0, 'BottomEdge': 5.0,
-             'Coeff0': 50.0, 'Coeff1': 0.0, 'Coeff2': 0.0, 'Coeff3': 0.0},
-            {'Fiber': 'SCI1', 'Order': 1, 'TopEdge': 5.0, 'BottomEdge': 5.0,
-             'Coeff0': 50.0, 'Coeff1': 0.0, 'Coeff2': 0.0, 'Coeff3': 0.0},
+            {
+                "Fiber": "SCI1",
+                "Order": 1,
+                "TopEdge": 5.0,
+                "BottomEdge": 5.0,
+                "Coeff0": 50.0,
+                "Coeff1": 0.0,
+                "Coeff2": 0.0,
+                "Coeff3": 0.0,
+            },
+            {
+                "Fiber": "SCI1",
+                "Order": 1,
+                "TopEdge": 5.0,
+                "BottomEdge": 5.0,
+                "Coeff0": 50.0,
+                "Coeff1": 0.0,
+                "Coeff2": 0.0,
+                "Coeff3": 0.0,
+            },
         ]
         se = self._make_se(rows)
         with pytest.raises(ValueError, match="Expected exactly one row"):
-            se.extract_orderlet('GREEN', 'SCI1', 1)
+            se.extract_orderlet("GREEN", "SCI1", 1)
