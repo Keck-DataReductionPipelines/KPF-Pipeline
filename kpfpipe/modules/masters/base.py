@@ -112,7 +112,7 @@ class BaseMasterModule:
         return l1_obj, success
 
     # ------------------------------------------------------------------
-    # Private helpers for stacking.
+    # Private helpers for frame handling (loading, calibration, etc.).
     # ------------------------------------------------------------------
 
     def _load_frame(self, fn, ncache=None, exptime_tolerance=0.1, verbose=True):
@@ -181,37 +181,6 @@ class BaseMasterModule:
 
         return l1_obj, success
 
-    @staticmethod
-    def _check_exptime_vs_elapsed(l1_obj, exptime_tolerance):
-        """
-        Validate that elapsed readout time is consistent with requested exposure time.
-
-        Parameters
-        ----------
-        l1_obj : KPF1
-            Assembled L1 object whose PRIMARY header contains EXPTIME and ELAPSED.
-        exptime_tolerance : float
-            Maximum allowed excess of elapsed time over requested exposure time,
-            in seconds.
-
-        Raises
-        ------
-        ValueError
-            If elapsed time is less than requested (premature readout), or if the
-            excess exceeds exptime_tolerance.
-        """
-        exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
-        elapsed = l1_obj.headers["PRIMARY"]["ELAPSED"]
-
-        delta = elapsed - exptime
-        if delta < 0:
-            raise ValueError("premature frame readout detected")
-        if delta > exptime_tolerance:
-            raise ValueError(f"elapsed time - requested time > {exptime_tolerance}")
-
-    # ------------------------------------------------------------------
-    # Per-frame calibration hooks (shared across masters subclasses)
-    # ------------------------------------------------------------------
 
     def _process_frame(self, l1_obj):
         """
@@ -250,6 +219,7 @@ class BaseMasterModule:
 
         return l1_obj
 
+
     def _extract_frame(self, l1_obj, verbose=True):
         """
         Calibrate a frame and extract it to L2 (for spectral masters, e.g. WLS).
@@ -272,6 +242,39 @@ class BaseMasterModule:
         l1_obj = self._process_frame(l1_obj)
         spectral_extraction = SpectralExtraction(l1_obj)
         return spectral_extraction.perform(verbose=verbose)
+
+
+    @staticmethod
+    def _check_exptime_vs_elapsed(l1_obj, exptime_tolerance):
+        """
+        Validate that elapsed readout time is consistent with requested exposure time.
+
+        Parameters
+        ----------
+        l1_obj : KPF1
+            Assembled L1 object whose PRIMARY header contains EXPTIME and ELAPSED.
+        exptime_tolerance : float
+            Maximum allowed excess of elapsed time over requested exposure time,
+            in seconds.
+
+        Raises
+        ------
+        ValueError
+            If elapsed time is less than requested (premature readout), or if the
+            excess exceeds exptime_tolerance.
+        """
+        exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
+        elapsed = l1_obj.headers["PRIMARY"]["ELAPSED"]
+
+        delta = elapsed - exptime
+        if delta < 0:
+            raise ValueError("premature frame readout detected")
+        if delta > exptime_tolerance:
+            raise ValueError(f"elapsed time - requested time > {exptime_tolerance}")
+
+    # ------------------------------------------------------------------
+    # Private helpers for frame stacking.
+    # ------------------------------------------------------------------
 
     def _compute_stats_from_datacube(
         self, l0_file_list=None, nframe=None, sigma=None, verbose=True
@@ -571,7 +574,30 @@ class BaseMasterModule:
         return exact_stats, exptime_total
 
     # ------------------------------------------------------------------
-    # Algorithm steps
+    # Private helpers for tracking results.
+    # ------------------------------------------------------------------
+
+    def _compute_results(self, l1_arrays):
+        """
+        Summarize per-chip master statistics for `info()` and tests.
+
+        Returns
+        -------
+        dict
+            Per-chip {'num_bad', 'pct_bad', 'median', 'rms'}.
+        """
+        return {
+            chip: {
+                "num_bad": int(np.sum(~l1_arrays[f"{chip}_MASK"])),
+                "pct_bad": float(100.0 * np.mean(~l1_arrays[f"{chip}_MASK"])),
+                "median": float(np.nanmedian(l1_arrays[f"{chip}_IMG"])),
+                "rms": float(np.nanstd(l1_arrays[f"{chip}_IMG"])),
+            }
+            for chip in self.chips
+        }
+
+    # ------------------------------------------------------------------
+    # Public methods
     # ------------------------------------------------------------------
 
     def stack_frames(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
@@ -661,11 +687,8 @@ class BaseMasterModule:
 
         return l1_arrays
 
-    # ------------------------------------------------------------------
-    # Post-stack helpers (shared by image-stacking masters: Bias, Dark)
-    # ------------------------------------------------------------------
 
-    def _finalize_l1_arrays(self, l1_arrays, sigma):
+    def finalize_l1_arrays(self, l1_arrays, sigma):
         """
         Interpolate bad pixels and recompute the bad-pixel mask per chip.
 
@@ -697,7 +720,7 @@ class BaseMasterModule:
 
         return l1_arrays
 
-    def _build_master_l1(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
+    def build_master_l1(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
         """
         Assemble a KPFMasterL1 from finalized per-chip arrays.
 
@@ -732,28 +755,6 @@ class BaseMasterModule:
 
         return ml1_obj
 
-    def _compute_results(self, l1_arrays):
-        """
-        Summarize per-chip master statistics for `info()` and tests.
-
-        Returns
-        -------
-        dict
-            Per-chip {'num_bad', 'pct_bad', 'median', 'rms'}.
-        """
-        return {
-            chip: {
-                "num_bad": int(np.sum(~l1_arrays[f"{chip}_MASK"])),
-                "pct_bad": float(100.0 * np.mean(~l1_arrays[f"{chip}_MASK"])),
-                "median": float(np.nanmedian(l1_arrays[f"{chip}_IMG"])),
-                "rms": float(np.nanstd(l1_arrays[f"{chip}_IMG"])),
-            }
-            for chip in self.chips
-        }
-
-    # ------------------------------------------------------------------
-    # Public methods
-    # ------------------------------------------------------------------
 
     def save_master(self, level, path, *, overwrite=False):
         """

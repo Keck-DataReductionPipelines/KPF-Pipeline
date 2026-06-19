@@ -83,9 +83,9 @@ class Bias(BaseMasterModule):
             sigma=sigma,
             verbose=verbose,
         )
-        l1_arrays = self._finalize_l1_arrays(l1_arrays, sigma)
+        l1_arrays = self.finalize_l1_arrays(l1_arrays, sigma)
 
-        self.ml1_obj = self._build_master_l1(
+        self.ml1_obj = self.build_master_l1(
             l1_arrays, l0_file_list, receipt_key="master_bias"
         )
         self._results = self._compute_results(l1_arrays)
