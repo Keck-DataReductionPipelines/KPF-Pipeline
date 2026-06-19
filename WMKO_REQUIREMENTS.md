@@ -1,10 +1,9 @@
 # KPF DRP — WMKO Technical Requirements (mirror)
 
-> Transcribed from `WMKO_REQUIREMENTS.pdf` — *Keck Planet Finder Data Reduction Pipeline,
-> Technical Requirements* (W. M. Keck Observatory, Scientific Software Engineering),
-> revision 0.3 (2026-03-16). The PDF is the authoritative source; this Markdown mirror exists
-> so the requirements are greppable and linkable alongside the code. Re-transcribe if the PDF
-> is revised. Requirement text is reproduced faithfully (including the source's wording).
+> Transcribed from *Keck Planet Finder Data Reduction Pipeline, Technical Requirements*
+> (W. M. Keck Observatory, Scientific Software Engineering), revision 0.3 (2026-03-16).
+> This Markdown mirror exists so the requirements are greppable and linkable alongside the
+> code. Re-transcribe if the requirements are revised.
 
 **Authority precedence (highest first).** The WMKO technical requirements are the **top** of
 the project's reference hierarchy — they outrank every other governing document:
