@@ -28,6 +28,10 @@ class WLS(BaseMasterModule):
     line positions across the stack are combined to derive per-fiber
     wavelength solutions.
 
+    Standard reduction: like science, a WLS frame is bias- and dark-subtracted
+    before extraction (`_STANDARD_CORRECTIONS = ("bias", "dark")`); flat
+    division is part of the standard but stays off until it is implemented.
+
     Parameters
     ----------
     l0_file_list : list of str
@@ -47,9 +51,9 @@ class WLS(BaseMasterModule):
         "polyorder_f": 2,
     }
 
-    # Subtract the associated master bias from each frame before extraction;
-    # `_extract_frame` (inherited from BaseMasterModule) consumes this.
-    _CAL_TYPES = ["bias"]
+    # Bias+dark subtraction is standard for WLS; `_process_frame` (run before
+    # `_extract_frame`) applies whichever of these the config has enabled.
+    _STANDARD_CORRECTIONS = ("bias", "dark")
 
     def __init__(self, l0_file_list, config=None):
         if config is None:
@@ -57,7 +61,9 @@ class WLS(BaseMasterModule):
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE", "WLS"])
+            params = config.get_params(
+                ["DATA_DIRS", "KPFPIPE", "WLS", "MODULE_IMAGE_PROCESSING"]
+            )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
@@ -778,6 +784,9 @@ class WLS(BaseMasterModule):
         polyorder_x=None,
         polyorder_m=None,
         polyorder_f=None,
+        bias=None,
+        dark=None,
+        flat=None,
         master_path=None,
         diagnostics_path=None,
         verbose=True,
@@ -812,6 +821,9 @@ class WLS(BaseMasterModule):
         polyorder_f : int, optional
             Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
             Defaults to self.polyorder_f.
+        bias, dark, flat : bool, optional
+            Per-call correction overrides (clamped by the WLS standard of
+            bias+dark). E.g. `dark=False` extracts with bias subtraction only.
         master_path : str, optional
             If provided, calls `self.save_master('L2', master_path)` at
             the end to persist the master L2 to a FITS file at this path.
@@ -846,6 +858,10 @@ class WLS(BaseMasterModule):
             polyorder_m = self.polyorder_m
         if polyorder_f is None:
             polyorder_f = self.polyorder_f
+
+        self._active_corrections = self._resolve_corrections(
+            bias=bias, dark=dark, flat=flat
+        )
 
         self._load_linelist(linelist)
 

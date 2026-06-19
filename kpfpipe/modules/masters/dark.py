@@ -10,8 +10,9 @@ class Dark(BaseMasterModule):
     """
     Construct a master dark frame from a stack of L0 dark exposures.
 
-    Subtracts the associated master bias from each frame (via the shared
-    `_process_frame` hook, which runs CalibrationAssociation + ImageProcessing)
+    Standard reduction: a dark is bias-subtracted (`_STANDARD_CORRECTIONS =
+    ("bias",)`). The associated master bias is subtracted from each frame via
+    the shared `_process_frame` hook (CalibrationAssociation + ImageProcessing)
     before stacking with sigma-clipped statistics, interpolating bad pixels,
     and performing a final outlier pass. Outputs a KPFMasterL1 containing
     per-chip IMG, SNR, and MASK extensions, with IMG in electrons/sec.
@@ -25,8 +26,7 @@ class Dark(BaseMasterModule):
         exptime_tolerance, chips.
     """
 
-    # Subtract the associated master bias from each frame before stacking.
-    _CAL_TYPES = ["bias"]
+    _STANDARD_CORRECTIONS = ("bias",)
 
     def __init__(self, l0_file_list, config=None):
         if config is None:
@@ -34,7 +34,9 @@ class Dark(BaseMasterModule):
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE", "DARK"])
+            params = config.get_params(
+                ["DATA_DIRS", "KPFPIPE", "DARK", "MODULE_IMAGE_PROCESSING"]
+            )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
@@ -51,6 +53,9 @@ class Dark(BaseMasterModule):
         *,
         nstream=None,
         sigma=None,
+        bias=None,
+        dark=None,
+        flat=None,
         filepath=None,
         verbose=True,
     ):
@@ -69,6 +74,10 @@ class Dark(BaseMasterModule):
             Stream threshold passed to stack_frames.
         sigma : float, optional
             Outlier rejection threshold passed to stack_frames.
+        bias, dark, flat : bool, optional
+            Per-call correction overrides (clamped by the master's standard).
+            A dark's standard is bias-only, so e.g. `bias=False` skips the bias
+            subtraction; enabling dark/flat here is a no-op.
         filepath : str, optional
             If provided, calls `self.save_master('L1', filepath)` at
             the end to persist the master L1 to a FITS file at this filepath.
@@ -81,6 +90,10 @@ class Dark(BaseMasterModule):
             nstream = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
+
+        self._active_corrections = self._resolve_corrections(
+            bias=bias, dark=dark, flat=flat
+        )
 
         l1_arrays = self.stack_frames(
             l0_file_list=l0_file_list,

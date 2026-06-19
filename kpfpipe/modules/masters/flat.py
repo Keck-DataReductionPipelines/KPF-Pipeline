@@ -8,6 +8,9 @@ class Flat(BaseMasterModule):
     """
     Construct a master flat frame from a stack of L0 flat exposures.
 
+    Standard reduction: a flat is bias- and dark-subtracted
+    (`_STANDARD_CORRECTIONS = ("bias", "dark")`). Not yet implemented.
+
     Parameters
     ----------
     l0_file_list : list of str
@@ -17,13 +20,17 @@ class Flat(BaseMasterModule):
         exptime_tolerance, chips.
     """
 
+    _STANDARD_CORRECTIONS = ("bias", "dark")
+
     def __init__(self, l0_file_list, config=None):
         if config is None:
             params = {}
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE", "FLAT"])
+            params = config.get_params(
+                ["DATA_DIRS", "KPFPIPE", "FLAT", "MODULE_IMAGE_PROCESSING"]
+            )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)

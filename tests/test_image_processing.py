@@ -298,6 +298,8 @@ class TestPerform:
         bias_path = str(tmp_path / "master_bias.fits")
         _write_master_bias(bias_path)
         mod = _make_module(bias_file="master_bias.fits", bias_dir=str(tmp_path))
+        # These tests exercise bias subtraction in isolation; dark defaults on.
+        mod.dark = False
         return mod
 
     def test_returns_l1_obj(self, mod_with_bias):
@@ -344,7 +346,7 @@ class TestPerform:
 
     def test_bias_false_skips_subtraction(self):
         mod = _make_module()  # no BIASFILE / BIASDIR needed when bias is off
-        result = mod.perform(bias=False)
+        result = mod.perform(bias=False, dark=False)
         # CCDs untouched
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE)
         np.testing.assert_allclose(result.data["RED_CCD"], _CCD_VALUE)
@@ -366,7 +368,7 @@ class TestPerform:
         bias_path = str(tmp_path / "explicit_bias.fits")
         _write_master_bias(bias_path)
         mod = _make_module(bias_file="wrong.fits", bias_dir="/wrong/dir")
-        result = mod.perform(bias=bias_path)
+        result = mod.perform(bias=bias_path, dark=False)
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
         np.testing.assert_allclose(result.data["RED_CCD"], _CCD_VALUE - _BIAS_VALUE)
         assert result.headers["PRIMARY"]["BIASUB"][0] is True
@@ -378,7 +380,7 @@ class TestPerform:
         _write_master_bias(bias_path)
         preloaded = KPFMasterL1.from_fits(bias_path)
         mod = _make_module()  # no BIASFILE / BIASDIR needed
-        result = mod.perform(bias=preloaded)
+        result = mod.perform(bias=preloaded, dark=False)
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
         assert result.headers["PRIMARY"]["BIASUB"][0] is True
         # _bias_path should reflect the in-memory object's filename
@@ -422,6 +424,16 @@ class TestPerformDark:
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
+
+    def test_defaults_apply_bias_and_dark(self, mod_with_bias_dark):
+        # No explicit toggles: the _DEFAULTS now enable bias and dark.
+        mod_with_bias_dark.perform()
+        expected = _CCD_VALUE - _BIAS_VALUE - _DARK_VALUE * _EXPTIME
+        np.testing.assert_allclose(
+            mod_with_bias_dark.l1_obj.data["GREEN_CCD"], expected
+        )
+        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["BIASUB"][0] is True
+        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is True
 
     def test_bias_then_dark_combined(self, mod_with_bias_dark):
         mod_with_bias_dark.perform(bias=True, dark=True)

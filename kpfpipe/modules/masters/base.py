@@ -28,19 +28,36 @@ class BaseMasterModule:
     The class should not be called directly, but is used for inheritance
     of masters subclasses: Bias, Dark, Flat, WLS. Masters modules read a
     stack of L0 files from disk and output a masters L1 object.
+
+    Each frame is calibrated before stacking/extraction following standard CCD
+    reduction: bias gets no correction, dark is bias-subtracted, flat is
+    bias+dark-subtracted, and WLS (like science) is bias+dark-subtracted then
+    flat-divided. Each subclass declares its standard set via
+    `_STANDARD_CORRECTIONS`. Which of those actually run is the standard set
+    intersected with the resolved bias/dark/flat flags
+    (DEFAULTS < [MODULE_IMAGE_PROCESSING] config < make_master kwargs): a flag
+    can only turn a standard correction off, never enable one a master type
+    does not use.
     """
 
     # Module defaults; subclasses extend via `{**BaseMasterModule._DEFAULTS, ...}`.
+    # bias/dark/flat are the globally-enabled corrections (the no-config
+    # fallback; in practice resolved from the shared [MODULE_IMAGE_PROCESSING]
+    # config and make_master kwargs). Keep in sync with the same keys in
+    # image_processing._DEFAULTS.
     _DEFAULTS = {
         **DEFAULTS,
         "nframe_stream": 6,
         "stack_sigma": 5.0,
+        "bias": True,
+        "dark": True,
+        "flat": False,
     }
 
-    # Calibration types `_process_frame` associates and subtracts from each
-    # frame before stacking. Empty (default) stacks raw frames as-is (e.g.
-    # Bias); subclasses override (e.g. Dark sets ["bias"]).
-    _CAL_TYPES = []
+    # The corrections that are standard for this master type (the ceiling).
+    # `_process_frame` applies the intersection of this set with the resolved
+    # bias/dark/flat flags. Subclasses override (e.g. Dark -> ("bias",)).
+    _STANDARD_CORRECTIONS = ()
 
     def __init__(self, l0_file_list, config=None):
         if l0_file_list != sorted(l0_file_list):
@@ -69,6 +86,10 @@ class BaseMasterModule:
         self.ml1_obj = None
         # populated by subclass make_master_l2(); used by save_master('L2', ...)
         self.ml2_obj = None
+
+        # Effective per-frame corrections (standard set masked by the resolved
+        # flags); make_master_l1/l2 re-resolve this with any kwarg overrides.
+        self._active_corrections = self._resolve_corrections()
 
     # ------------------------------------------------------------------
     # Private helpers for masters.
@@ -186,15 +207,47 @@ class BaseMasterModule:
 
         return l1_obj, success
 
+    def _resolve_corrections(self, *, bias=None, dark=None, flat=None):
+        """
+        Resolve which corrections to apply to each frame, as {name: bool}.
+
+        For each correction, the effective value is the per-master standard
+        (`_STANDARD_CORRECTIONS`) AND the resolved flag, where the flag is the
+        make_master kwarg if given, else the config-resolved `self.<name>`
+        (DEFAULTS < [MODULE_IMAGE_PROCESSING]). A flag can only turn a standard
+        correction off; it can never enable one outside the master's standard.
+
+        Parameters
+        ----------
+        bias, dark, flat : bool, optional
+            Per-call overrides; None means "use the resolved config value".
+
+        Returns
+        -------
+        dict
+            {'bias': bool, 'dark': bool, 'flat': bool}.
+        """
+        overrides = {"bias": bias, "dark": dark, "flat": flat}
+        return {
+            name: bool(
+                name in self._STANDARD_CORRECTIONS
+                and (
+                    overrides[name]
+                    if overrides[name] is not None
+                    else getattr(self, name)
+                )
+            )
+            for name in ("bias", "dark", "flat")
+        }
+
     def _process_frame(self, l1_obj):
         """
-        Apply the calibrations this module requires to an assembled frame.
+        Apply this module's active calibrations to an assembled frame.
 
-        Associates the masters named in `_CAL_TYPES` (writing their paths into
-        the PRIMARY header) and subtracts them via ImageProcessing, reusing the
-        standard science-path modules rather than reimplementing the math.
-        Modules that stack raw frames leave `_CAL_TYPES` empty and receive the
-        frame unchanged.
+        Associates the active masters (writing their paths into the PRIMARY
+        header) and subtracts them via ImageProcessing, reusing the standard
+        science-path modules rather than reimplementing the math. Modules with
+        no active corrections receive the frame unchanged.
 
         Parameters
         ----------
@@ -204,21 +257,23 @@ class BaseMasterModule:
         Returns
         -------
         KPF1
-            The same frame with the requested calibrations applied.
+            The same frame with the active calibrations applied.
         """
-        if not self._CAL_TYPES:
+        corrections = self._active_corrections
+        cal_types = [name for name in ("bias", "dark", "flat") if corrections[name]]
+        if not cal_types:
             return l1_obj
 
         calibration_association = CalibrationAssociation(
             l1_obj, {"KPF_MASTERS_OUTPUT": self._masters_root}
         )
-        l1_obj = calibration_association.perform(self._CAL_TYPES)
+        l1_obj = calibration_association.perform(cal_types)
 
         image_processing = ImageProcessing(l1_obj)
         l1_obj = image_processing.perform(
-            bias="bias" in self._CAL_TYPES,
-            dark="dark" in self._CAL_TYPES,
-            flat="flat" in self._CAL_TYPES,
+            bias=corrections["bias"],
+            dark=corrections["dark"],
+            flat=corrections["flat"],
         )
 
         return l1_obj

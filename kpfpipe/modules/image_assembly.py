@@ -1,5 +1,11 @@
 """
 KPF Image Assembly module.
+
+Assembles a raw L0 readout into a single L1 full-frame image (overscan
+correction, amplifier stitching). It applies no calibration corrections:
+bias/dark/flat are handled downstream by ImageProcessing following the
+standard CCD reduction sequence (bias subtraction, then exposure-scaled dark
+subtraction, then flat division), gated per file type by the masters modules.
 """
 
 import numpy as np

@@ -227,3 +227,39 @@ class TestProcessFrame:
         )
 
         assert result is processed
+
+
+# ---------------------------------------------------------------------------
+# _resolve_corrections: standard ∩ resolved(bias/dark/flat) clamp
+# ---------------------------------------------------------------------------
+
+
+class TestResolveCorrections:
+    """Effective corrections = the per-master standard intersected with the
+    resolved flags; flags can only turn standard corrections off."""
+
+    def test_default_is_bias_only(self):
+        # Dark's standard is ("bias",); the enabled defaults are (bias, dark).
+        dark = Dark(FILE_LIST)
+        assert dark._resolve_corrections() == {
+            "bias": True,
+            "dark": False,
+            "flat": False,
+        }
+
+    def test_kwarg_can_disable_standard_correction(self):
+        dark = Dark(FILE_LIST)
+        assert dark._resolve_corrections(bias=False)["bias"] is False
+
+    def test_illogical_enable_is_clamped(self):
+        # dark/flat are outside a dark master's standard -> stay off.
+        dark = Dark(FILE_LIST)
+        assert dark._resolve_corrections(dark=True, flat=True) == {
+            "bias": True,
+            "dark": False,
+            "flat": False,
+        }
+
+    def test_config_can_disable_standard_bias(self):
+        dark = Dark(FILE_LIST, config={"bias": False})
+        assert dark._resolve_corrections()["bias"] is False
