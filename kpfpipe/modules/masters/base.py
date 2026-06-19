@@ -94,6 +94,11 @@ class BaseMasterModule:
             Assembled L1 data object if successful, otherwise None.
         success : bool
             True if file was successfully loaded and processed, False otherwise.
+
+        Notes
+        -----
+        Delegates the FITS read to `ImageProcessing._load_master`, which caches
+        masters by path so a file is not re-read once loaded.
         """
         if verbose:
             print(f"loading {fn}")
@@ -102,7 +107,7 @@ class BaseMasterModule:
         failure = False
 
         try:
-            l1_obj = KPFMasterL1.from_fits(fn)
+            l1_obj = ImageProcessing._load_master(fn)
 
         except (FileNotFoundError, OSError) as e:
             if verbose:
@@ -181,7 +186,6 @@ class BaseMasterModule:
 
         return l1_obj, success
 
-
     def _process_frame(self, l1_obj):
         """
         Apply the calibrations this module requires to an assembled frame.
@@ -219,7 +223,6 @@ class BaseMasterModule:
 
         return l1_obj
 
-
     def _extract_frame(self, l1_obj, verbose=True):
         """
         Calibrate a frame and extract it to L2 (for spectral masters, e.g. WLS).
@@ -242,7 +245,6 @@ class BaseMasterModule:
         l1_obj = self._process_frame(l1_obj)
         spectral_extraction = SpectralExtraction(l1_obj)
         return spectral_extraction.perform(verbose=verbose)
-
 
     @staticmethod
     def _check_exptime_vs_elapsed(l1_obj, exptime_tolerance):
@@ -687,7 +689,6 @@ class BaseMasterModule:
 
         return l1_arrays
 
-
     def finalize_l1_arrays(self, l1_arrays, sigma):
         """
         Interpolate bad pixels and recompute the bad-pixel mask per chip.
@@ -754,7 +755,6 @@ class BaseMasterModule:
         ml1_obj.receipt_add_entry(receipt_key, "PASS")
 
         return ml1_obj
-
 
     def save_master(self, level, path, *, overwrite=False):
         """
