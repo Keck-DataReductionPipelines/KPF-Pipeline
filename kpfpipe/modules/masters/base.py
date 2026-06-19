@@ -225,15 +225,16 @@ class BaseMasterModule:
 
     def _extract_frame(self, l1_obj, verbose=True):
         """
-        Calibrate a frame and extract it to L2 (for spectral masters, e.g. WLS).
+        Extract an assembled frame to L2 (for spectral masters, e.g. WLS).
 
-        Runs `_process_frame` (calibration association + image processing) then
-        spectral extraction, mirroring the science path's L1 -> L2 step.
+        Performs spectral extraction only. Calibration is not implicit here:
+        callers that need bias/dark applied must run `_process_frame` on the
+        frame first.
 
         Parameters
         ----------
         l1_obj : KPF1
-            Assembled L1 frame to calibrate and extract.
+            Assembled (and, where needed, already calibrated) L1 frame.
         verbose : bool, optional
             If True (default), emit progress prints during extraction.
 
@@ -242,7 +243,6 @@ class BaseMasterModule:
         KPF2
             The extracted L2 spectra.
         """
-        l1_obj = self._process_frame(l1_obj)
         spectral_extraction = SpectralExtraction(l1_obj)
         return spectral_extraction.perform(verbose=verbose)
 

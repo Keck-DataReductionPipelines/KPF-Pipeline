@@ -48,7 +48,8 @@ def _linelist_df(chip, norder, waves):
 def mock_pipeline(monkeypatch):
     """
     Patch CalibrationAssociation, ImageProcessing, and SpectralExtraction so
-    that _extract_frame runs without touching disk or real data.
+    that _process_frame and _extract_frame run without touching disk or real
+    data.
 
     Returns the MockL2 instance that SpectralExtraction.perform() will return.
     """
@@ -109,7 +110,8 @@ class TestExtractFrame:
         assert result is mock_pipeline
 
     def test_passes_masters_root_to_calibration_association(self, monkeypatch):
-        # _extract_frame must associate the bias from KPF_MASTERS_OUTPUT.
+        # _process_frame (run before _extract_frame) associates the bias from
+        # KPF_MASTERS_OUTPUT; _extract_frame itself no longer does calibration.
         mock_ca = MagicMock()
         mock_ca.return_value.perform.return_value = MockL1()
         mock_ip = MagicMock()
@@ -122,7 +124,7 @@ class TestExtractFrame:
         monkeypatch.setattr(base_module, "SpectralExtraction", mock_se)
 
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
-        wls._extract_frame(MockL1())
+        wls._process_frame(MockL1())
 
         call_args = mock_ca.call_args[0]
         assert call_args[1].get("KPF_MASTERS_OUTPUT") == "/masters"
@@ -185,6 +187,7 @@ def mock_make_master_l2(monkeypatch):
     monkeypatch.setattr(
         WLS, "_load_frame", lambda self, fn, ncache=0, **kwargs: (MockL1(), True)
     )
+    monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kwargs: l1)
     monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kwargs: MockL2())
 
     def mock_compute(

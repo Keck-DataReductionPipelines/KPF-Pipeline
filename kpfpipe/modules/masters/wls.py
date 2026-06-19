@@ -201,6 +201,7 @@ class WLS(BaseMasterModule):
                     raise ValueError("more than 20% of frames in stack failed to load")
                 continue
 
+            l1_obj = self._process_frame(l1_obj)
             l2_obj = self._extract_frame(l1_obj, verbose=verbose)
             self._l2_obj_cache.append(l2_obj)
 
