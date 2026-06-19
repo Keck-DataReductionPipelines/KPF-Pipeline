@@ -2,10 +2,10 @@
 
 import os
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 from kpfpipe.modules.image_assembly import ImageAssembly
 
@@ -19,25 +19,28 @@ class PlotL0:
     orientation delegate to ImageAssembly so detector-geometry knowledge
     has a single home.
 
-    Args:
-        l0_obj: KPF0 data object.
-        output_dir: Directory to save PNG files. None = return Figure only.
+    Parameters
+    ----------
+    l0_obj : KPF0
+        KPF0 data object.
+    output_dir : str or None
+        Directory to save PNG files. None returns the Figure only.
     """
 
-    _PLOT_METHODS = ('stitched_image',)
+    _PLOT_METHODS = ("stitched_image",)
 
     def __init__(self, l0_obj, output_dir=None):
         self.l0 = l0_obj
         self.output_dir = output_dir
-        self.obs_id = getattr(l0_obj, 'obs_id', None) or ''
-        self.name = ''
-        if 'PRIMARY' in l0_obj.headers:
-            self.name = l0_obj.headers['PRIMARY'].get('OBJECT', '')
+        self.obs_id = getattr(l0_obj, "obs_id", None) or ""
+        self.name = ""
+        if "PRIMARY" in l0_obj.headers:
+            self.name = l0_obj.headers["PRIMARY"].get("OBJECT", "")
 
     def _has_chip(self, chip):
         """Return True if any AMP extension for the chip holds data."""
         for i in range(1, 5):
-            ext = f'{chip.upper()}_AMP{i}'
+            ext = f"{chip.upper()}_AMP{i}"
             arr = self.l0.data.get(ext)
             if arr is not None and np.size(arr) > 0:
                 return True
@@ -61,7 +64,7 @@ class PlotL0:
 
         if namp == 2:
             image = np.concatenate(
-                (self.l0.data[f'{chip}_AMP1'], self.l0.data[f'{chip}_AMP2']),
+                (self.l0.data[f"{chip}_AMP1"], self.l0.data[f"{chip}_AMP2"]),
                 axis=1,
             )
         elif namp == 4:
@@ -77,7 +80,9 @@ class PlotL0:
 
             panels = {}
             for i in range(1, 5):
-                panels[i] = l0_copy.data[f'{chip}_AMP{i}'][:nrow_img, prescan:prescan + ncol_img]
+                panels[i] = l0_copy.data[f"{chip}_AMP{i}"][
+                    :nrow_img, prescan : prescan + ncol_img
+                ]
 
             bot = np.concatenate((panels[1], panels[2]), axis=1)
             top = np.concatenate((panels[3], panels[4]), axis=1)
@@ -91,11 +96,15 @@ class PlotL0:
 
         Replicates v2.12 plot_L0_stitched_image.
 
-        Args:
-            chip: 'green' or 'red'.
+        Parameters
+        ----------
+        chip : str
+            'green' or 'red'.
 
-        Returns:
-            matplotlib.Figure
+        Returns
+        -------
+        matplotlib.Figure
+            The stitched-image figure.
         """
         chip_upper = chip.upper()
 
@@ -109,60 +118,78 @@ class PlotL0:
 
         fig = plt.figure(figsize=(10, 8), tight_layout=True)
         plt.imshow(
-            image, cmap='viridis', origin='lower',
+            image,
+            cmap="viridis",
+            origin="lower",
             vmin=np.percentile(image, 1),
             vmax=np.percentile(image, 99.5),
         )
 
         plt.title(
-            f'L0 - {chip_upper.capitalize()} CCD: {self.obs_id} - {self.name}',
+            f"L0 - {chip_upper.capitalize()} CCD: {self.obs_id} - {self.name}",
             fontsize=14,
         )
-        plt.xlabel('Column (pixel number)', fontsize=14)
-        plt.ylabel('Row (pixel number)', fontsize=14)
+        plt.xlabel("Column (pixel number)", fontsize=14)
+        plt.ylabel("Row (pixel number)", fontsize=14)
 
-        cbar_label = 'ADU'
+        cbar_label = "ADU"
         if twotosixteen:
-            cbar_label += r' / $2^{16}$'
+            cbar_label += r" / $2^{16}$"
         cbar = plt.colorbar(shrink=0.95, label=cbar_label)
         cbar.ax.yaxis.label.set_size(14)
         cbar.ax.tick_params(labelsize=12)
         plt.grid(False)
 
         # Timestamp annotation
-        current_time = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-        timestamp_label = f'KPF QLP: {current_time} UT'
+        current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+        timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(
-            timestamp_label, xy=(1, 0), xycoords='axes fraction',
-            fontsize=8, color='darkgray', ha='right', va='top',
-            xytext=(100, -21), textcoords='offset points',
+            timestamp_label,
+            xy=(1, 0),
+            xycoords="axes fraction",
+            fontsize=8,
+            color="darkgray",
+            ha="right",
+            va="top",
+            xytext=(100, -21),
+            textcoords="offset points",
         )
         plt.subplots_adjust(bottom=0.1)
 
         if self.output_dir is not None:
             fig_path = os.path.join(
                 self.output_dir,
-                f'{self.obs_id}_L0_stitched_image_{chip.lower()}_zoomable.png',
+                f"{self.obs_id}_L0_stitched_image_{chip.lower()}_zoomable.png",
             )
-            fig.savefig(fig_path, dpi=150, facecolor='w')
+            fig.savefig(fig_path, dpi=150, facecolor="w")
 
         return fig
 
     def run(self, which):
         """
-        Generate the requested plot(s) for every chip that has data,
-        saving each to `output_dir` and closing the matplotlib figure
-        so callers don't accumulate them.
+        Generate the requested plot(s) for every chip that has data.
 
-        Args:
-            which: 'all' to run every implemented plot, or the name of a
-                   single plot method (one of self._PLOT_METHODS).
+        Saves each to `output_dir` and closes the matplotlib figure so
+        callers don't accumulate them.
 
-        Returns:
-            dict mapping `{method_name}_{chip}` to matplotlib.Figure
-            (closed; useful for tests/introspection).
+        Parameters
+        ----------
+        which : str
+            'all' to run every implemented plot, or the name of a single
+            plot method (one of `self._PLOT_METHODS`).
+
+        Returns
+        -------
+        dict
+            Maps `{method_name}_{chip}` to its (closed) matplotlib.Figure;
+            useful for tests and introspection.
+
+        Raises
+        ------
+        ValueError
+            If `which` is neither 'all' nor a known plot method name.
         """
-        if which == 'all':
+        if which == "all":
             names = self._PLOT_METHODS
         elif which in self._PLOT_METHODS:
             names = (which,)
@@ -175,11 +202,11 @@ class PlotL0:
             os.makedirs(self.output_dir, exist_ok=True)
 
         figures = {}
-        for chip in ['green', 'red']:
+        for chip in ["green", "red"]:
             if not self._has_chip(chip):
                 continue
             for name in names:
                 fig = getattr(self, name)(chip)
-                figures[f'{name}_{chip}'] = fig
+                figures[f"{name}_{chip}"] = fig
                 plt.close(fig)
         return figures

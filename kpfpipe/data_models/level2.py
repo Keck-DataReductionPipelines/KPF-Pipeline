@@ -14,6 +14,7 @@ upstreamed into the rvdata standard.
 """
 
 import importlib.resources
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -23,8 +24,8 @@ from rvdata.core.models.level2 import RV2
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 
-NORDER_GREEN = DETECTOR['norder']['GREEN']
-NORDER_RED   = DETECTOR['norder']['RED']
+NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED = DETECTOR["norder"]["RED"]
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
@@ -53,14 +54,16 @@ for _ext in _ANCILLARY_PER_ORDER:
 
 
 class _KPF2DataDict(AliasedOrderedDict):
-    """Data dict that supports GREEN_/RED_ chip-prefix access.
+    """
+    Data dict that supports GREEN_/RED_ chip-prefix access.
 
-    Accessing d["GREEN_SCI2_FLUX"] returns d["SCI2_FLUX"][:NORDER_GREEN],
+    Accessing `d["GREEN_SCI2_FLUX"]` returns `d["SCI2_FLUX"][:NORDER_GREEN]`,
     a numpy view into the first 35 orders of TRACE3_FLUX.
     """
 
     def _chip_split(self, key):
-        """If key is a chip-prefix pattern, return (fiber_alias, chip).
+        """
+        If key is a chip-prefix pattern, return (fiber_alias, chip).
 
         Returns None if key is not a chip-prefix pattern.
         """
@@ -74,12 +77,18 @@ class _KPF2DataDict(AliasedOrderedDict):
             # Allocate the full concatenated array on first write (or if empty).
             # value.shape[1:] keeps this correct for 2-D traces (norder, ncol)
             # and 1-D per-order ancillary arrays (norder,).
-            existing = super().__getitem__(resolved) if super().__contains__(resolved) else None
+            existing = (
+                super().__getitem__(resolved)
+                if super().__contains__(resolved)
+                else None
+            )
             if existing is None or np.size(existing) == 0:
-                full = np.zeros((NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype)
+                full = np.zeros(
+                    (NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype
+                )
                 super().__setitem__(resolved, full)
             arr = super().__getitem__(resolved)
-            if chip == 'GREEN':
+            if chip == "GREEN":
                 arr[:NORDER_GREEN] = value
             else:
                 arr[NORDER_GREEN:] = value
@@ -122,7 +131,6 @@ class _KPF2DataDict(AliasedOrderedDict):
     def from_ordered_dict(cls, od):
         """Create a _KPF2DataDict from an existing OrderedDict."""
         aliased = cls()
-        from collections import OrderedDict
         for key, value in od.items():
             OrderedDict.__setitem__(aliased, key, value)
         return aliased
@@ -138,16 +146,12 @@ class KPF2(RV2):
 
     Each trace contains green+red orders concatenated (35 green + 32 red
     = 67 orders total). Per-chip access via GREEN_/RED_ prefix returns
-    numpy views into the concatenated array.
-
-    Alias examples:
-        kpf2.data["SCI2_FLUX"]         is kpf2.data["TRACE3_FLUX"]       # True
-        kpf2.data["CAL_WAVE"]          is kpf2.data["TRACE1_WAVE"]       # True
-        kpf2.data["CA_HK"]             is kpf2.data["ANCILLARY_SPECTRUM"] # True
-
-    Per-chip access (returns numpy views):
-        kpf2.data["GREEN_SCI2_FLUX"]   # TRACE3_FLUX[:35]  (green orders)
-        kpf2.data["RED_SCI2_FLUX"]     # TRACE3_FLUX[35:]  (red orders)
+    numpy views into the concatenated array. As examples of the aliasing,
+    `data["SCI2_FLUX"]` is `data["TRACE3_FLUX"]`, `data["CAL_WAVE"]` is
+    `data["TRACE1_WAVE"]`, and `data["CA_HK"]` is
+    `data["ANCILLARY_SPECTRUM"]`; per-chip, `data["GREEN_SCI2_FLUX"]`
+    returns `TRACE3_FLUX[:35]` (the green orders) and
+    `data["RED_SCI2_FLUX"]` returns `TRACE3_FLUX[35:]` (the red orders).
     """
 
     def __init__(self):
@@ -160,10 +164,17 @@ class KPF2(RV2):
                 if ext not in self.extensions:
                     self.create_extension(ext, "ImageHDU")
 
-        # Pass-through extensions not in RV2 base
-        for ext, ext_type in [("ANCILLARY_SPECTRUM", "BinTableHDU"),
-                               ("EXPMETER", "BinTableHDU"),
-                               ("TELEMETRY", "BinTableHDU")]:
+        # Pass-through extensions not in RV2 base. NB: the EPRV standard defines
+        # ANCILLARY_SPECTRUM (Ca H&K) as an ImageHDU, but we keep it a BinTableHDU
+        # placeholder for now -- Ca H&K extraction is still WIP and existing master/
+        # L2 products (incl. the truth dataset) encode it as BinTableHDU, so flipping
+        # the type breaks reading them back. Switch to ImageHDU when Ca H&K is built
+        # and products are regenerated. See EPRV_DATA_STANDARD.md §8 (deviations).
+        for ext, ext_type in [
+            ("ANCILLARY_SPECTRUM", "BinTableHDU"),
+            ("EXPMETER", "BinTableHDU"),
+            ("TELEMETRY", "BinTableHDU"),
+        ]:
             if ext not in self.extensions:
                 self.create_extension(ext, ext_type)
 
@@ -198,21 +209,28 @@ class KPF2(RV2):
                     self.data.register_alias(alias, canonical)
 
     def set_data(self, ext_name, data):
-        """Override to resolve aliases before the base class .keys() check.
-        Chip-prefix keys (e.g. 'GREEN_SCI2_FLUX') are routed directly through
-        _KPF2DataDict.__setitem__, which writes into the appropriate slice of
-        the concatenated trace array.
         """
-        if hasattr(self.data, '_chip_split') and self.data._chip_split(ext_name) is not None:
+        Override to resolve aliases before the base class .keys() check.
+
+        Chip-prefix keys (e.g. 'GREEN_SCI2_FLUX') are routed directly through
+        `_KPF2DataDict.__setitem__`, which writes into the appropriate slice
+        of the concatenated trace array.
+        """
+        if (
+            hasattr(self.data, "_chip_split")
+            and self.data._chip_split(ext_name) is not None
+        ):
             self.data[ext_name] = data
             return
-        if hasattr(self.extensions, '_resolve'):
+        if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
-        if (ext_name in self.extensions
-                and self.extensions[ext_name] == "BinTableHDU"
-                and isinstance(data, np.ndarray)
-                and data.dtype.names is not None):
+        if (
+            ext_name in self.extensions
+            and self.extensions[ext_name] == "BinTableHDU"
+            and isinstance(data, np.ndarray)
+            and data.dtype.names is not None
+        ):
             data = Table(data)
         super().set_data(ext_name, data)
         # Sync self.receipt when the RECEIPT extension is loaded from FITS.
@@ -220,11 +238,12 @@ class KPF2(RV2):
             self.receipt = data.to_pandas()
 
     def _create_hdul(self):
-        """Override to sync self.receipt into self.data["RECEIPT"] before writing.
+        """
+        Override to sync self.receipt into self.data["RECEIPT"] before writing.
 
-        rvdata's to_fits writes self.data["RECEIPT"] (the default empty table),
-        not self.receipt (the processing history DataFrame). This override syncs
-        them so the full receipt is written to the FITS file.
+        rvdata's `to_fits` writes `self.data["RECEIPT"]` (the default empty
+        table), not `self.receipt` (the processing history DataFrame). This
+        override syncs them so the full receipt is written to the FITS file.
         """
         if self.receipt is not None and not self.receipt.empty:
             self.data["RECEIPT"] = Table.from_pandas(self.receipt)
@@ -232,18 +251,19 @@ class KPF2(RV2):
 
     def set_header(self, ext_name, header):
         """Override to resolve aliases before the base class .keys() check."""
-        if hasattr(self.extensions, '_resolve'):
+        if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         super().set_header(ext_name, header)
 
     def to_kpf4(self):
-        """Create a KPF4 scaffold from this KPF2, carrying over headers and receipt.
+        """
+        Create a KPF4 scaffold from this KPF2, carrying over headers and receipt.
 
         Returns a KPF4 with PRIMARY header keywords forwarded from L2,
         and the receipt chain preserved. RV and CCF data extensions are
         created but empty — the caller (RV computation) fills those in.
         """
-        from kpfpipe.data_models.level4 import KPF4
+        from kpfpipe.data_models.level4 import KPF4  # deferred: avoids circular import
 
         kpf4 = KPF4()
 
@@ -272,7 +292,9 @@ class KPF2(RV2):
         else:
             print("Empty KPF2 data product")
 
-        print(f"\n{'Extension':<25s} {'Aliases':<25s} {'Type':<15s} {'Shape/Size':<20s}")
+        print(
+            f"\n{'Extension':<25s} {'Aliases':<25s} {'Type':<15s} {'Shape/Size':<20s}"
+        )
         print("=" * 85)
         for name, ext_type in self.extensions.items():
             if name == "PRIMARY":
@@ -283,7 +305,9 @@ class KPF2(RV2):
             alias_str = ", ".join(sorted(aliases)) if aliases else ""
             ext = self.data.get(name)
             if isinstance(ext, np.ndarray) and ext.size > 0:
-                print(f"{name:<25s} {alias_str:<25s} {'array':<15s} {str(ext.shape):<20s}")
+                print(
+                    f"{name:<25s} {alias_str:<25s} {'array':<15s} {str(ext.shape):<20s}"
+                )
             elif hasattr(ext, "__len__") and len(ext) > 0:
                 print(f"{name:<25s} {alias_str:<25s} {'table':<15s} {len(ext)} rows")
             else:

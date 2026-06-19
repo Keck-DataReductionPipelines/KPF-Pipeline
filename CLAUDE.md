@@ -6,14 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reduction pipeline for the Keck Observatory. The scientific priority is intermediate and long-term radial velocity (RV) stability.
 
-**The project charter — [`KPF_DRP_VNEXT_CONTEXT.md`](KPF_DRP_VNEXT_CONTEXT.md) (repo root) — is the single source of truth for project intent, scope, scientific focus, the Path-3 approach, calibration philosophy, guardrails, design principles, and success criteria. Read it before making design decisions. This file (CLAUDE.md) does not duplicate the charter; it covers only the operational and technical guidance not in it (environment, commands, architecture, conventions).**
+**Four authoritative references govern this project, in strict precedence — when they conflict, the higher one wins:**
+
+**1. The WMKO technical requirements — [`WMKO_REQUIREMENTS.md`](WMKO_REQUIREMENTS.md) (repo root; faithful mirror of `WMKO_REQUIREMENTS.pdf`) — are the highest authority: the W. M. Keck Observatory's binding technical requirements for the DRP (development, installation/build, runtime, archive). They outrank every reference below. The pipeline is still in active development, so MOST of these requirements are not yet met — this is expected. Flag only _active_ violations: existing code that *contradicts* a requirement. Do NOT flag _passive_ violations: a requirement unmet simply because the relevant code/feature does not exist yet. A missing capability is not a violation; code that does the wrong thing is.**
+
+**2. The EPRV data standard — [`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md) (repo root) — is the source of truth for KPF's data products (L2/L4): FITS structure, extension and header-keyword names, units, and reference frames (vacuum wavelengths, BJD_TDB, barycentric frame). KPF L2/L4 are EPRV-compliant by contract, so the standard takes priority on anything touching data format. It mirrors the KPF-relevant portions of <https://eprv-data-standard.readthedocs.io/en/develop/>; re-scrape if the standard has moved.**
+
+**3. The project charter — [`KPF_DRP_VNEXT_CHARTER.md`](KPF_DRP_VNEXT_CHARTER.md) (repo root) — is the single source of truth for project intent, scope, scientific focus, the Path-3 approach, calibration philosophy, guardrails, design principles, and success criteria. Read it before making design decisions. This file (CLAUDE.md) does not duplicate the charter; it covers only the operational and technical guidance not in it (environment, commands, architecture, conventions).**
+
+**4. The coding style guide — [`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md) (repo root) — is the source of truth for code conventions: formatting, imports, naming, constants, docstrings, error handling, and the per-area exceptions (Open Inconsistencies). Consult and follow it when writing or modifying code. Its rules are soft and yield to the WMKO requirements, the EPRV standard, and the charter where they conflict. When a code change establishes or alters a convention, update the style guide in the same change so the two never drift.**
 
 ## Development Environment
 
 - **Python 3.14.3** (pinned exactly)
 - **Conda env**: `kpfpipe` — set up via `conda env create -f KPF-Pipeline/environment.yml`
 - **Install package**: `pip install -e KPF-Pipeline/` (editable install)
-- **Key dependency**: `rv-data-standard` (RVData) from `git+https://github.com/EPRV-RCN/RVData.git@develop`
+- **Key dependency**: `rv-data-standard` (RVData), pinned to a specific commit
+  (`git+https://github.com/EPRV-RCN/RVData.git@7413775…`) rather than the moving `@develop`
+  branch — RVData's `develop` has since introduced breaking changes (a `MinBitDepth` upcast
+  of WAVE arrays, and a `receipt_add_entry` signature change). Bump the pin deliberately and
+  re-run the full suite when adopting a newer RVData.
 
 ## Commands
 
@@ -25,11 +37,13 @@ cd KPF-Pipeline && python -m pytest tests/ -v
 python -m pytest tests/test_data_models.py::TestKPF2Aliases -v
 python -m pytest tests/test_data_models.py::TestKPF2Aliases::test_chip_prefix_access -v
 
-# Formatting and linting
-black kpfpipe/ tests/
-isort kpfpipe/ tests/
-flake8 kpfpipe/ tests/
-mypy kpfpipe/
+# Formatting and linting (Ruff; config in pyproject.toml [tool.ruff])
+ruff format kpfpipe/ tests/ recipes/      # format (black-compatible)
+ruff check --fix kpfpipe/ tests/ recipes/ # lint + auto-fix
+
+# Pre-commit hook (enforces ruff format + lint on commit)
+pre-commit install          # one-time, after creating the env
+pre-commit run --all-files  # run all hooks across the repo
 ```
 
 ## Architecture
@@ -98,7 +112,7 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 ## Design Principles & Success Criteria
 
-These live in the charter and are NOT restated here (the two copies drifted in the past — keep one source). See [`KPF_DRP_VNEXT_CONTEXT.md`](KPF_DRP_VNEXT_CONTEXT.md): §10 Core Design Principles, §9 Guardrails, §5 Calibration Philosophy, §3 Definition of Success, §6 (every major change must preserve deterministic behavior, run on the truth dataset, and document impact on RV metrics). Consult the charter before design decisions.
+These live in the charter and are NOT restated here (the two copies drifted in the past — keep one source). See [`KPF_DRP_VNEXT_CHARTER.md`](KPF_DRP_VNEXT_CHARTER.md): §10 Core Design Principles, §9 Guardrails, §5 Calibration Philosophy, §3 Definition of Success, §6 (every major change must preserve deterministic behavior, run on the truth dataset, and document impact on RV metrics). Consult the charter before design decisions.
 
 - Keep this file (CLAUDE.md) updated with operational lessons, conventions, and more efficient workflows learned while coding.
 - Use CLAUDE.md as long-term memory for technical/operational guidance; use the charter for project intent and principles.

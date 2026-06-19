@@ -11,8 +11,14 @@ _JUNK_CSV = REPO_ROOT / "reference" / "junk_observations.csv"
 _L0_REQUIRED_KEYS = ["DATE-OBS", "EXPTIME", "OBJECT", "OFNAME", "IMTYPE"]
 
 _AMP_EXTENSIONS = [
-    "GREEN_AMP1", "GREEN_AMP2", "GREEN_AMP3", "GREEN_AMP4",
-    "RED_AMP1",   "RED_AMP2",   "RED_AMP3",   "RED_AMP4",
+    "GREEN_AMP1",
+    "GREEN_AMP2",
+    "GREEN_AMP3",
+    "GREEN_AMP4",
+    "RED_AMP1",
+    "RED_AMP2",
+    "RED_AMP3",
+    "RED_AMP4",
 ]
 
 
@@ -26,7 +32,11 @@ class QCL0(QC):
         for ext in _AMP_EXTENSIONS:
             arr = self.kpf.data.get(ext)
             # KPF0 stores None-data as array(None, dtype=object); treat as absent.
-            if arr is None or getattr(arr, "dtype", None) == object or np.size(arr) == 0:
+            if (
+                arr is None
+                or getattr(arr, "dtype", None) == np.dtype(object)
+                or np.size(arr) == 0
+            ):
                 return False
         return True
 

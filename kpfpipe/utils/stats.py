@@ -1,32 +1,42 @@
-from astropy.stats import mad_std
+"""Statistical helpers: outlier flagging, robust line fits, bad-pixel interpolation."""
+
 import numpy as np
+from astropy.stats import mad_std
 from scipy.interpolate import RegularGridInterpolator
-from scipy.ndimage import median_filter, gaussian_filter, convolve, distance_transform_edt
+from scipy.ndimage import (
+    convolve,
+    distance_transform_edt,
+    gaussian_filter,
+    median_filter,
+)
 from scipy.optimize import least_squares
 
 
 def gaussian_dist(theta, x):
+    """Gaussian model at `x` for theta = [b, a, mu, log_sigma]."""
     b, a, mu, log_sigma = theta
     sigma = np.exp(log_sigma)
-    return b + a * np.exp(-(x-mu)**2/(2*sigma**2))
+    return b + a * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
 def gaussian_jac(theta, x):
+    """Analytic Jacobian of `gaussian_dist` w.r.t. theta; shape (x.size, 4)."""
     b, a, mu, log_sigma = theta
     sigma = np.exp(log_sigma)
     dx = x - mu
-    e = np.exp(-dx**2 / (2*sigma**2))
+    exp_term = np.exp(-(dx**2) / (2 * sigma**2))
 
     J = np.empty((x.size, 4))
     J[:, 0] = 1.0
-    J[:, 1] = e
-    J[:, 2] = a * e * dx / sigma**2
-    J[:, 3] = a * e * dx**2 / sigma**2
+    J[:, 1] = exp_term
+    J[:, 2] = a * exp_term * dx / sigma**2
+    J[:, 3] = a * exp_term * dx**2 / sigma**2
 
     return J
 
 
 def gaussian_theta0_generator(x, y):
+    """Initial-guess theta = [b, a, mu, log_sigma] for a Gaussian fit to (x, y)."""
     b0 = 0.25 * np.sum(y[:2] + y[-2:])
     a0 = np.max(y) - b0
     mu0 = x[np.argmax(y)]
@@ -44,7 +54,12 @@ def gaussian_untransform(theta):
 # Each entry: (model, jacobian, theta0 initializer, untransform). untransform
 # maps the fitted parameters back to reported ones (identity if not needed).
 _FUNCTIONS = {
-    'gaussian': (gaussian_dist, gaussian_jac, gaussian_theta0_generator, gaussian_untransform),
+    "gaussian": (
+        gaussian_dist,
+        gaussian_jac,
+        gaussian_theta0_generator,
+        gaussian_untransform,
+    ),
 }
 
 
@@ -58,39 +73,40 @@ def optimize_lsq(x, y, linemodel):
     try:
         func, jac, theta0_generator, untransform = _FUNCTIONS[linemodel]
     except KeyError:
-        raise ValueError(f"Unsupported line function: {linemodel}")
+        raise ValueError(f"Unsupported line function: {linemodel}") from None
 
     def residual(theta):
         return func(theta, x) - y
 
     def jacobian(theta):
         return jac(theta, x)
-    
+
     theta0 = theta0_generator(x, y)
 
-    result = least_squares(residual,
-                           theta0,
-                           jac=jacobian,
-                           method='lm',
-                           )
+    result = least_squares(
+        residual,
+        theta0,
+        jac=jacobian,
+        method="lm",
+    )
 
     theta, rms = untransform(result.x), np.std(result.fun)
 
     return theta, rms
 
 
-def flag_outliers(x, sigma, method='median', axis=None, kernel_size=None):
+def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
     """
     Flag outliers in an array above some sigma threshold
     """
     eps = 1e-12
 
-    if method == 'median':
+    if method == "median":
         med = np.nanmedian(x)
         mad = mad_std(x, ignore_nan=True)
         out = np.abs(x - med) / (mad + eps) > sigma
 
-    elif method == 'trend':
+    elif method == "trend":
         trend = gaussian_filter(median_filter(x, size=kernel_size), sigma=kernel_size)
         mad = mad_std(x - trend, ignore_nan=True)
         out = np.abs(x - trend) / (mad + eps) > sigma
@@ -101,7 +117,7 @@ def flag_outliers(x, sigma, method='median', axis=None, kernel_size=None):
     return out
 
 
-def interpolate_bad_pixels(data, mask, method='local', fill_outside=True):
+def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
     """
     Interpolate over bad pixels.
     """
@@ -111,16 +127,14 @@ def interpolate_bad_pixels(data, mask, method='local', fill_outside=True):
 
     data_interp = data.copy()
 
-    # local convolution-based method (assumes isolated bad pixels).
-    # Cast kernel and weight mask to the input dtype so scipy.convolve does
-    # not promote float32 image data to float64 in its intermediates.
-    if method == 'local':
-        kernel = np.array([[1,2,1],
-                           [2,0,2],
-                           [1,2,1]], dtype=data.dtype) / 12.0
+    # The local convolution-based method assumes isolated bad pixels. Cast the
+    # kernel and weight mask to the input dtype so `scipy.convolve` does not
+    # promote float32 image data to float64 in its intermediates.
+    if method == "local":
+        kernel = np.array([[1, 2, 1], [2, 0, 2], [1, 2, 1]], dtype=data.dtype) / 12.0
 
-        neighbor_sum = convolve(data * good, kernel, mode='mirror')
-        weight = convolve(good.astype(data.dtype), kernel, mode='mirror')
+        neighbor_sum = convolve(data * good, kernel, mode="mirror")
+        weight = convolve(good.astype(data.dtype), kernel, mode="mirror")
 
         valid = bad & (weight > 0)
         data_interp[valid] = neighbor_sum[valid] / weight[valid]
@@ -128,27 +142,17 @@ def interpolate_bad_pixels(data, mask, method='local', fill_outside=True):
         if fill_outside:
             remaining = bad & (weight == 0)
             if np.any(remaining):
-                _, indices = distance_transform_edt(
-                    remaining,
-                    return_indices=True
-                )
-                data_interp[remaining] = data_interp[
-                    tuple(indices[:, remaining])
-                ]
+                _, indices = distance_transform_edt(remaining, return_indices=True)
+                data_interp[remaining] = data_interp[tuple(indices[:, remaining])]
 
-    # global linear interpolation (robust to clumps of bad pixels)
-    elif method == 'global':
-
+    # Global linear interpolation is robust to clumps of bad pixels.
+    elif method == "global":
         ny, nx = data.shape
         y = np.arange(ny)
         x = np.arange(nx)
 
         interp = RegularGridInterpolator(
-            (y, x),
-            data,
-            method='linear',
-            bounds_error=False,
-            fill_value=np.nan
+            (y, x), data, method="linear", bounds_error=False, fill_value=np.nan
         )
 
         coords = np.column_stack(np.nonzero(bad))
@@ -159,13 +163,8 @@ def interpolate_bad_pixels(data, mask, method='local', fill_outside=True):
         if fill_outside:
             nan_mask = np.isnan(data_interp)
             if np.any(nan_mask):
-                _, indices = distance_transform_edt(
-                    nan_mask,
-                    return_indices=True
-                )
-                data_interp[nan_mask] = data_interp[
-                    tuple(indices[:, nan_mask])
-                ]
+                _, indices = distance_transform_edt(nan_mask, return_indices=True)
+                data_interp[nan_mask] = data_interp[tuple(indices[:, nan_mask])]
 
     else:
         raise ValueError("method must be 'local' or 'global'")

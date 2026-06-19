@@ -5,23 +5,22 @@ Tests for kpfpipe.utils.kpf timestamp conversion utilities.
 import pytest
 
 from kpfpipe.utils.kpf import (
-    utc_to_hst,
-    hst_to_utc,
-    kpf_timestamp_to_eprv_timestamp,
     eprv_timestamp_to_kpf_timestamp,
-    kpf_timestamp_to_datetime,
-    get_obs_id,
     get_datecode,
-    get_timestamp,
+    get_obs_id,
     get_seconds_since_j2000,
-    is_obs_id,
+    get_timestamp,
+    hst_to_utc,
     is_datecode,
+    is_obs_id,
     is_timestamp,
+    kpf_timestamp_to_datetime,
+    kpf_timestamp_to_eprv_timestamp,
+    utc_to_hst,
 )
 
 
 class TestUtcToHst:
-
     def test_midday_no_rollover(self):
         # 12:00 UTC = 02:00 HST same day (43200 - 36000 = 7200)
         assert utc_to_hst("20240405.43200.00") == "20240405.07200.00"
@@ -39,13 +38,13 @@ class TestUtcToHst:
 
 
 class TestHstToUtc:
-
     def test_midday_no_rollover(self):
         # 02:00 HST = 12:00 UTC same day (7200 + 36000 = 43200)
         assert hst_to_utc("20240405.07200.00") == "20240405.43200.00"
 
     def test_rollover_to_next_day(self):
-        # 17:00 HST = 03:00 UTC next day (61200 + 36000 = 97200 -> 97200 - 86400 = 10800)
+        # 17:00 HST = 03:00 UTC next day
+        # (61200 + 36000 = 97200 -> 97200 - 86400 = 10800)
         assert hst_to_utc("20240404.61200.00") == "20240405.10800.00"
 
     def test_frame_str_preserved(self):
@@ -61,7 +60,6 @@ class TestHstToUtc:
 
 
 class TestKpfTimestampToEprv:
-
     def test_basic_conversion(self):
         # 40113s = 11:08:33
         assert kpf_timestamp_to_eprv_timestamp("20240405.40113.57") == "20240405T110833"
@@ -84,7 +82,6 @@ class TestKpfTimestampToEprv:
 
 
 class TestEprvTimestampToKpf:
-
     def test_basic_conversion(self):
         # 11:08:33 = 11*3600 + 8*60 + 33 = 40113
         assert eprv_timestamp_to_kpf_timestamp("20240405T110833") == "20240405.40113.00"
@@ -104,16 +101,21 @@ class TestEprvTimestampToKpf:
     def test_roundtrip(self):
         # Round-trip loses frame field (becomes .00)
         ts = "20240405.40113.57"
-        assert eprv_timestamp_to_kpf_timestamp(kpf_timestamp_to_eprv_timestamp(ts)) == "20240405.40113.00"
+        assert (
+            eprv_timestamp_to_kpf_timestamp(kpf_timestamp_to_eprv_timestamp(ts))
+            == "20240405.40113.00"
+        )
 
 
 class TestGetObsId:
-
     def test_extracts_from_bare_obs_id(self):
         assert get_obs_id("KP.20240405.40113.57") == "KP.20240405.40113.57"
 
     def test_extracts_from_path(self):
-        assert get_obs_id("/data/L0/20240405/KP.20240405.40113.57.fits") == "KP.20240405.40113.57"
+        assert (
+            get_obs_id("/data/L0/20240405/KP.20240405.40113.57.fits")
+            == "KP.20240405.40113.57"
+        )
 
     def test_no_match_raises(self):
         with pytest.raises(ValueError, match="No obs_id found"):
@@ -121,7 +123,6 @@ class TestGetObsId:
 
 
 class TestGetDatecode:
-
     def test_extracts_from_obs_id(self):
         assert get_datecode("KP.20240405.40113.57") == "20240405"
 
@@ -131,12 +132,14 @@ class TestGetDatecode:
 
 
 class TestGetTimestamp:
-
     def test_extracts_from_obs_id(self):
         assert get_timestamp("KP.20240405.40113.57") == "20240405.40113.57"
 
     def test_extracts_from_path(self):
-        assert get_timestamp("/data/L0/20240405/KP.20240405.40113.57.fits") == "20240405.40113.57"
+        assert (
+            get_timestamp("/data/L0/20240405/KP.20240405.40113.57.fits")
+            == "20240405.40113.57"
+        )
 
     def test_no_match_raises(self):
         with pytest.raises(ValueError, match="No KPF timestamp found"):
@@ -149,7 +152,6 @@ class TestGetTimestamp:
 
 
 class TestIsObsId:
-
     def test_valid_obs_id(self):
         assert is_obs_id("KP.20240405.40113.57") is True
 
@@ -170,7 +172,6 @@ class TestIsObsId:
 
 
 class TestIsDatecode:
-
     def test_valid_datecode(self):
         assert is_datecode("20240405") is True
 
@@ -187,7 +188,6 @@ class TestIsDatecode:
 
 
 class TestIsTimestamp:
-
     def test_valid_timestamp(self):
         assert is_timestamp("20240405.40113.57") is True
 
@@ -210,7 +210,6 @@ class TestIsTimestamp:
 
 
 class TestGetObsIdValidation:
-
     def test_raises_on_invalid_date(self):
         with pytest.raises(ValueError, match="Invalid date"):
             get_obs_id("KP.20249999.40113.57.fits")
@@ -225,7 +224,6 @@ class TestGetObsIdValidation:
 
 
 class TestGetDatecodeValidation:
-
     def test_raises_on_invalid_date(self):
         with pytest.raises(ValueError, match="Invalid date"):
             get_datecode("KP.20249999.40113.57")
@@ -240,7 +238,6 @@ class TestGetDatecodeValidation:
 
 
 class TestGetTimestampValidation:
-
     def test_raises_on_invalid_date(self):
         with pytest.raises(ValueError, match="Invalid date"):
             get_timestamp("KP.20249999.40113.57.fits")
@@ -262,7 +259,6 @@ class TestGetTimestampValidation:
 
 
 class TestKpfTimestampToDatetimeValidation:
-
     def test_raises_on_seconds_out_of_range(self):
         # Previously: silently rolled over into the next day.
         with pytest.raises(ValueError, match="seconds-past-midnight"):
@@ -278,7 +274,6 @@ class TestKpfTimestampToDatetimeValidation:
 
 
 class TestUtcToHstValidation:
-
     def test_raises_on_seconds_out_of_range(self):
         with pytest.raises(ValueError, match="seconds-past-midnight"):
             utc_to_hst("20240405.99999.57")
@@ -289,7 +284,6 @@ class TestUtcToHstValidation:
 
 
 class TestHstToUtcValidation:
-
     def test_raises_on_seconds_out_of_range(self):
         with pytest.raises(ValueError, match="seconds-past-midnight"):
             hst_to_utc("20240405.99999.57")
@@ -300,7 +294,6 @@ class TestHstToUtcValidation:
 
 
 class TestKpfTimestampToEprvValidation:
-
     def test_raises_on_seconds_out_of_range(self):
         # Previously: produced 'YYYYMMDDT273739' with hh=27.
         with pytest.raises(ValueError, match="seconds-past-midnight"):
@@ -312,7 +305,6 @@ class TestKpfTimestampToEprvValidation:
 
 
 class TestEprvTimestampToKpfValidation:
-
     def test_raises_on_non_T_separator(self):
         # Previously: silently accepted any char at position 8.
         with pytest.raises(ValueError, match="Invalid EPRV timestamp format"):
@@ -341,7 +333,6 @@ class TestEprvTimestampToKpfValidation:
 
 
 class TestGetSecondsSinceJ2000:
-
     def test_basic(self):
         # J2000.0 itself: 2000-01-01 12:00 UTC = '20000101.43200.00'
         assert get_seconds_since_j2000("20000101.43200.00") == 0

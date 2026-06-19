@@ -12,15 +12,15 @@ The KPF name → extension mapping is therefore derived from the shared trace ma
 
 Each CCF stores green+red orders concatenated (green first), like TRACE*_FLUX,
 so per-chip access mirrors KPF2. RV tables hold one row per order (no chip
-prefix — slice by ORDER_INDEX instead):
-
-    kpf4.data["SCI2_CCF"]        is kpf4.data["CCF3"]        # True (alias)
-    kpf4.data["GREEN_SCI2_CCF"]  # CCF3[:NORDER_GREEN]  (green orders, a view)
-    kpf4.data["RED_SCI2_CCF"]    # CCF3[NORDER_GREEN:]  (red orders, a view)
-    kpf4.data["SCI2_RV"]         is kpf4.data["RV3"]         # True (alias)
+prefix — slice by ORDER_INDEX instead). As examples, `data["SCI2_CCF"]` is
+`data["CCF3"]` (alias) and `data["SCI2_RV"]` is `data["RV3"]` (alias), while
+`data["GREEN_SCI2_CCF"]` returns `CCF3[:NORDER_GREEN]` (the green orders, a
+view) and `data["RED_SCI2_CCF"]` returns `CCF3[NORDER_GREEN:]` (the red
+orders, a view).
 """
 
 import importlib.resources
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -30,9 +30,9 @@ from rvdata.core.models.level4 import RV4
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 
-NORDER_GREEN = DETECTOR['norder']['GREEN']
-NORDER_RED   = DETECTOR['norder']['RED']
-NORDER       = NORDER_GREEN + NORDER_RED
+NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED = DETECTOR["norder"]["RED"]
+NORDER = NORDER_GREEN + NORDER_RED
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 # CCF and RV extensions reuse the shared trace map (CCF{n}/RV{n} <-> TRACE{n});
@@ -42,7 +42,8 @@ _TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
 _ALIASES = pd.read_csv(_config_path / "aliases.csv")
 
 # Build a set of valid chip-prefix keys for fast membership testing.
-# e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"), "GREEN_SCI2_RV": ("SCI2_RV", "GREEN")}.
+# e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"),
+#        "GREEN_SCI2_RV": ("SCI2_RV", "GREEN")}.
 # Each maps a chip-prefixed key -> (fiber_alias, chip). CCF cubes are sliced on
 # their order axis (axis 0) and support chip-prefix read and write; RV tables are
 # row-sliced (green = rows 0:NORDER_GREEN, red the rest) and support read only —
@@ -57,13 +58,15 @@ for _, _row in _TRACE_MAP.iterrows():
 
 
 class _KPF4DataDict(AliasedOrderedDict):
-    """Data dict supporting GREEN_/RED_ chip-prefix access for CCF cubes and RV tables.
+    """
+    Data dict supporting GREEN_/RED_ chip-prefix access for CCF cubes and
+    RV tables.
 
-    Accessing d["GREEN_SCI2_CCF"] returns d["SCI2_CCF"][:NORDER_GREEN], a numpy
-    view into the first 35 orders of CCF3 (order axis is axis 0, like the trace
-    flux arrays). d["GREEN_SCI2_RV"] returns the green rows of the SCI2_RV table
-    (rows 0:NORDER_GREEN); RV chip-prefix access is read-only, since each RV
-    table is written whole.
+    Accessing `d["GREEN_SCI2_CCF"]` returns `d["SCI2_CCF"][:NORDER_GREEN]`, a
+    numpy view into the first 35 orders of CCF3 (order axis is axis 0, like the
+    trace flux arrays). `d["GREEN_SCI2_RV"]` returns the green rows of the
+    SCI2_RV table (rows 0:NORDER_GREEN); RV chip-prefix access is read-only,
+    since each RV table is written whole.
     """
 
     def _chip_split(self, key):
@@ -76,19 +79,26 @@ class _KPF4DataDict(AliasedOrderedDict):
             fiber_alias, chip = split
             # RV tables are written whole (one BinTable per orderlet); a
             # chip-prefixed RV key is read-only.
-            if fiber_alias.endswith('_RV'):
+            if fiber_alias.endswith("_RV"):
                 raise KeyError(
                     f"chip-prefixed RV key {key!r} is read-only; write the full "
-                    f"table via {fiber_alias!r} (rows are green-then-red)")
+                    f"table via {fiber_alias!r} (rows are green-then-red)"
+                )
             resolved = self._resolve(fiber_alias)
             # Allocate the full concatenated cube on first write (or if empty).
             # value.shape[1:] keeps this correct for the (norder_chip, nvel) CCF.
-            existing = super().__getitem__(resolved) if super().__contains__(resolved) else None
+            existing = (
+                super().__getitem__(resolved)
+                if super().__contains__(resolved)
+                else None
+            )
             if existing is None or np.size(existing) == 0:
-                full = np.zeros((NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype)
+                full = np.zeros(
+                    (NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype
+                )
                 super().__setitem__(resolved, full)
             arr = super().__getitem__(resolved)
-            if chip == 'GREEN':
+            if chip == "GREEN":
                 arr[:NORDER_GREEN] = value
             else:
                 arr[NORDER_GREEN:] = value
@@ -124,7 +134,6 @@ class _KPF4DataDict(AliasedOrderedDict):
     @classmethod
     def from_ordered_dict(cls, od):
         """Create a _KPF4DataDict from an existing OrderedDict."""
-        from collections import OrderedDict
         aliased = cls()
         for key, value in od.items():
             OrderedDict.__setitem__(aliased, key, value)
@@ -141,17 +150,12 @@ class KPF4(RV4):
 
     Each CCF holds green+red orders concatenated (35 green + 32 red = 67 orders
     total). Per-chip access via the GREEN_/RED_ prefix returns numpy views into
-    the concatenated array. RV tables hold one row per order.
-
-    Alias examples:
-        kpf4.data["SCI2_CCF"]    is kpf4.data["CCF3"]   # True
-        kpf4.data["SCI2_RV"]     is kpf4.data["RV3"]    # True
-
-    Per-chip access:
-        kpf4.data["GREEN_SCI2_CCF"]   # CCF3[:35]  (green orders, a numpy view)
-        kpf4.data["RED_SCI2_CCF"]     # CCF3[35:]  (red orders, a numpy view)
-        kpf4.data["GREEN_SCI2_RV"]    # RV3[:35]   (green rows; read-only)
-        kpf4.data["RED_SCI2_RV"]      # RV3[35:]   (red rows; read-only)
+    the concatenated array. RV tables hold one row per order. As examples of the
+    aliasing, `data["SCI2_CCF"]` is `data["CCF3"]` and `data["SCI2_RV"]` is
+    `data["RV3"]`; per-chip, `data["GREEN_SCI2_CCF"]` returns `CCF3[:35]` (green
+    orders, a numpy view), `data["RED_SCI2_CCF"]` returns `CCF3[35:]` (red
+    orders, a numpy view), and `data["GREEN_SCI2_RV"]` / `data["RED_SCI2_RV"]`
+    return the green / red rows of RV3 (read-only).
     """
 
     def __init__(self):
@@ -196,21 +200,28 @@ class KPF4(RV4):
                         d.register_alias(alias, canonical)
 
     def set_data(self, ext_name, data):
-        """Override to resolve aliases before the base class .keys() check.
-        Chip-prefix keys (e.g. 'GREEN_SCI2_CCF') are routed directly through
-        _KPF4DataDict.__setitem__, which writes into the appropriate slice of
-        the concatenated CCF cube.
         """
-        if hasattr(self.data, '_chip_split') and self.data._chip_split(ext_name) is not None:
+        Override to resolve aliases before the base class .keys() check.
+
+        Chip-prefix keys (e.g. 'GREEN_SCI2_CCF') are routed directly through
+        `_KPF4DataDict.__setitem__`, which writes into the appropriate slice
+        of the concatenated CCF cube.
+        """
+        if (
+            hasattr(self.data, "_chip_split")
+            and self.data._chip_split(ext_name) is not None
+        ):
             self.data[ext_name] = data
             return
-        if hasattr(self.extensions, '_resolve'):
+        if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
-        if (ext_name in self.extensions
-                and self.extensions[ext_name] == "BinTableHDU"
-                and isinstance(data, np.ndarray)
-                and data.dtype.names is not None):
+        if (
+            ext_name in self.extensions
+            and self.extensions[ext_name] == "BinTableHDU"
+            and isinstance(data, np.ndarray)
+            and data.dtype.names is not None
+        ):
             data = Table(data)
         super().set_data(ext_name, data)
         # Sync self.receipt when the RECEIPT extension is loaded from FITS.
@@ -219,16 +230,17 @@ class KPF4(RV4):
 
     def set_header(self, ext_name, header):
         """Override to resolve aliases before the base class .keys() check."""
-        if hasattr(self.extensions, '_resolve'):
+        if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         super().set_header(ext_name, header)
 
     def _create_hdul(self):
-        """Override to sync self.receipt into self.data["RECEIPT"] before writing.
+        """
+        Override to sync self.receipt into self.data["RECEIPT"] before writing.
 
-        rvdata's to_fits writes self.data["RECEIPT"] (the default empty table),
-        not self.receipt (the processing history DataFrame). This override syncs
-        them so the full receipt is written to the FITS file.
+        rvdata's `to_fits` writes `self.data["RECEIPT"]` (the default empty
+        table), not `self.receipt` (the processing history DataFrame). This
+        override syncs them so the full receipt is written to the FITS file.
         """
         if self.receipt is not None and not self.receipt.empty:
             self.data["RECEIPT"] = Table.from_pandas(self.receipt)
@@ -241,7 +253,9 @@ class KPF4(RV4):
         else:
             print("Empty KPF4 data product")
 
-        print(f"\n{'Extension':<25s} {'Aliases':<25s} {'Type':<15s} {'Shape/Size':<20s}")
+        print(
+            f"\n{'Extension':<25s} {'Aliases':<25s} {'Type':<15s} {'Shape/Size':<20s}"
+        )
         print("=" * 85)
         for name, ext_type in self.extensions.items():
             if name == "PRIMARY":
@@ -252,7 +266,9 @@ class KPF4(RV4):
             alias_str = ", ".join(sorted(aliases)) if aliases else ""
             ext = self.data.get(name)
             if isinstance(ext, np.ndarray) and ext.size > 0:
-                print(f"{name:<25s} {alias_str:<25s} {'array':<15s} {str(ext.shape):<20s}")
+                print(
+                    f"{name:<25s} {alias_str:<25s} {'array':<15s} {str(ext.shape):<20s}"
+                )
             elif hasattr(ext, "__len__") and len(ext) > 0:
                 print(f"{name:<25s} {alias_str:<25s} {'table':<15s} {len(ext)} rows")
             else:

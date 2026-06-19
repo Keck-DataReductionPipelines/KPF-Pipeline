@@ -1,5 +1,15 @@
 # KPF-DRP vNext: Project Context and Intent
 
+> **Authority precedence.** This charter is the single source of truth for project intent
+> and design, but it is not the top of the hierarchy. Two documents outrank it:
+> **1. the WMKO technical requirements ([`WMKO_REQUIREMENTS.md`](WMKO_REQUIREMENTS.md)) →
+> 2. the EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md)) → 3. this
+> charter → 4. the style guide ([`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md)).**
+> When they conflict, the higher one wins. The WMKO requirements are Keck's binding technical
+> requirements for the DRP; most are not yet met because the pipeline is in active development
+> — flag only *active* violations (existing code that contradicts a requirement), not *passive*
+> ones (a requirement unmet because the feature does not exist yet).
+
 ## 1. Why We Are Rebuilding
 
 The current DRP has reached a point where:
@@ -177,4 +187,3 @@ A stable, validated KPF DRP that:
 -   Is testable and maintainable.
 
 The current rebuild is the foundation of that.
-

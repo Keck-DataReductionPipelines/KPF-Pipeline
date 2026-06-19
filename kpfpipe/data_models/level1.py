@@ -10,9 +10,9 @@ infrastructure and receipt system.
 """
 
 import datetime
+import importlib.resources
 import os
 import warnings
-from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -21,8 +21,6 @@ from astropy.table import Table
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.kpf import get_obs_id
-
-import importlib.resources
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 L1_EXTENSIONS = pd.read_csv(_config_path / "L1-extensions.csv")
@@ -41,11 +39,9 @@ class KPF1(KPFDataModel):
     pass-through extensions from L0 (CA_HK, exposure meter, telemetry).
 
     Also used for master calibration products (bias, dark, flat).
-
-    Usage:
-        l1 = KPF1.from_fits("/path/to/kpf_L1_20240113T102656.fits")
-        l1.data["GREEN_CCD"]  # numpy array, 4080x4080
-        l1.data["RED_CCD"]    # numpy array, 4080x4080
+    Construct from a FITS file with `KPF1.from_fits(path)`, then read the
+    assembled 4080x4080 frames from `data` (e.g. `data["GREEN_CCD"]`,
+    `data["RED_CCD"]`).
     """
 
     _DATALVL = "L1"
@@ -61,10 +57,11 @@ class KPF1(KPFDataModel):
                 self.create_extension(row["Name"], row["DataType"])
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """Route L1 FITS reads to KPF1._read.
+        """
+        Route L1 FITS reads to `KPF1._read`.
 
-        RVDataModel.read has no lvl==1 dispatch branch, so the inherited
-        from_fits would never call into _read without this override.
+        `RVDataModel.read` has no lvl==1 dispatch branch, so the inherited
+        `from_fits` would never call into `_read` without this override.
         """
         self._read(hdul)
         if self.filename is not None:
@@ -98,6 +95,7 @@ class KPF1(KPFDataModel):
                         warnings.warn(
                             f"Non-standard extension '{ext_name}' found in L1 file.",
                             UserWarning,
+                            stacklevel=2,
                         )
                     self.create_extension(ext_name, fits_type)
 
@@ -107,8 +105,12 @@ class KPF1(KPFDataModel):
                 t = Table.read(hdu)
                 df = t.to_pandas()
                 receipt_columns = [
-                    "Time", "Code_Release", "Commit_Hash",
-                    "Branch_Name", "Module_Name", "Status"
+                    "Time",
+                    "Code_Release",
+                    "Commit_Hash",
+                    "Branch_Name",
+                    "Module_Name",
+                    "Status",
                 ]
                 if df.empty:
                     df = pd.DataFrame(columns=receipt_columns)
@@ -126,7 +128,8 @@ class KPF1(KPFDataModel):
     def generate_standard_filename(self):
         """
         KPF L1 filenames follow kpf_L1_YYYYMMDDThhmmss.fits convention.
-        Uses DATE-OBS from PRIMARY header.
+
+        Uses DATE-OBS from the PRIMARY header.
         """
         if "PRIMARY" in self.headers:
             date_obs = self.headers["PRIMARY"].get("DATE-OBS")
@@ -153,7 +156,8 @@ class KPF1(KPFDataModel):
 
         if "PRIMARY" in self.headers:
             self.headers["PRIMARY"]["FILENAME"] = (
-                os.path.basename(fn), "Name of the FITS file"
+                os.path.basename(fn),
+                "Name of the FITS file",
             )
             self.headers["PRIMARY"]["DATALVL"] = (self._DATALVL, "Data product level")
 
@@ -175,7 +179,9 @@ class KPF1(KPFDataModel):
     }
 
     def to_kpf2(self):
-        """Create a KPF2 scaffold from this L1, carrying over headers and pass-through extensions.
+        """
+        Create a KPF2 scaffold from this L1, carrying over headers and
+        pass-through extensions.
 
         Returns a KPF2 with PRIMARY header keywords mapped from KPF-native
         to EPRV standard (using rvdata's header_map.csv), the full L1 PRIMARY
@@ -185,7 +191,7 @@ class KPF1(KPFDataModel):
         CA_HK → ANCILLARY_SPECTRUM). Trace data arrays are created but
         empty — the caller (spectral extraction) fills those in.
         """
-        from kpfpipe.data_models.level2 import KPF2
+        from kpfpipe.data_models.level2 import KPF2  # deferred: avoids circular import
 
         kpf2 = KPF2()
 
@@ -194,7 +200,11 @@ class KPF1(KPFDataModel):
             l1_header = self.headers["PRIMARY"]
             for _, row in _HEADER_MAP.iterrows():
                 standard_key = str(row["STANDARD"]).strip()
-                instrument_key = str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""
+                instrument_key = (
+                    str(row["INSTRUMENT"]).strip()
+                    if pd.notna(row["INSTRUMENT"])
+                    else ""
+                )
                 default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
 
                 if instrument_key and instrument_key in l1_header:
@@ -203,9 +213,12 @@ class KPF1(KPFDataModel):
                 elif default_val is not None and str(default_val).strip():
                     kpf2.headers["PRIMARY"][standard_key] = default_val
 
-            # Store full L1 PRIMARY header in INSTRUMENT_HEADER (ImageHDU: scalar values only)
+            # Store full L1 PRIMARY header in INSTRUMENT_HEADER
+            # (ImageHDU: scalar values only)
             for key, value in l1_header.items():
-                kpf2.headers["INSTRUMENT_HEADER"][key] = value[0] if isinstance(value, tuple) else value
+                kpf2.headers["INSTRUMENT_HEADER"][key] = (
+                    value[0] if isinstance(value, tuple) else value
+                )
 
         # Pass-through extensions with renaming
         for l1_ext, kpf2_ext in self._L1_TO_KPF2_PASSTHROUGH.items():
@@ -227,7 +240,10 @@ class KPF1(KPFDataModel):
 
         # Store obs_id for traceability
         if self.obs_id is not None:
-            kpf2.headers["PRIMARY"]["ORIGID"] = (self.obs_id, "Original L0 observation ID")
+            kpf2.headers["PRIMARY"]["ORIGID"] = (
+                self.obs_id,
+                "Original L0 observation ID",
+            )
 
         kpf2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
         kpf2.receipt_add_entry("to_kpf2", "PASS")
