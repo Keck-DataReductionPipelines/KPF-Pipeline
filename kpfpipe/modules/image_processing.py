@@ -25,7 +25,7 @@ _DEFAULTS = {
 
 class ImageProcessing:
     """
-    Apply calibration corrections to an assembled KPF L1 frame.
+    Apply calibrations to an assembled KPF L1 frame.
 
     Implements bias and dark subtraction. Flat division will be added in a
     future update; requesting it now raises NotImplementedError.
@@ -35,10 +35,10 @@ class ImageProcessing:
     l1_obj : KPF1
         Assembled L1 frame. The PRIMARY header must contain the {BIAS,DARK}FILE
         and {BIAS,DARK}DIR keywords (written by CalibrationAssociation) for any
-        correction requested via the header lookup.
+        calibration requested via the header lookup.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: bias, dark, flat
-        (boolean flags toggling each correction).
+        (boolean flags toggling each calibration).
     """
 
     # Loaded masters, keyed by absolute path and shared across instances.
@@ -111,7 +111,7 @@ class ImageProcessing:
         """
         Build a master path from the {PREFIX}FILE/{PREFIX}DIR PRIMARY headers.
 
-        `cal_type` is the lowercase correction name ('bias' or 'dark'); the
+        `cal_type` is the lowercase calibration name ('bias' or 'dark'); the
         header prefix is its uppercase form (BIAS, DARK), written by
         CalibrationAssociation.
         """
@@ -266,7 +266,7 @@ class ImageProcessing:
 
     def perform(self, chips=None, *, bias=None, dark=None, flat=None):
         """
-        Run image processing corrections on the L1 frame.
+        Run image processing calibrations on the L1 frame.
 
         Parameters
         ----------

@@ -9,7 +9,7 @@ class Flat(BaseMasterModule):
     Construct a master flat frame from a stack of L0 flat exposures.
 
     Standard reduction: a flat is bias- and dark-subtracted
-    (`_STANDARD_CORRECTIONS = ("bias", "dark")`). Not yet implemented.
+    (`_STANDARD_CALIBRATIONS = ("bias", "dark")`). Not yet implemented.
 
     Parameters
     ----------
@@ -20,7 +20,7 @@ class Flat(BaseMasterModule):
         exptime_tolerance, chips.
     """
 
-    _STANDARD_CORRECTIONS = ("bias", "dark")
+    _STANDARD_CALIBRATIONS = ("bias", "dark")
 
     def __init__(self, l0_file_list, config=None):
         if config is None:

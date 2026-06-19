@@ -275,6 +275,6 @@ class TestMasterBiasRegression:
 
 class TestMasterBiasSignature:
     @pytest.mark.parametrize("kwarg", ["bias", "dark", "flat"])
-    def test_correction_kwargs_rejected(self, kwarg):
+    def test_calibration_kwargs_rejected(self, kwarg):
         with pytest.raises(TypeError):
             Bias(FILE_LIST).make_master_l1(**{kwarg: True})

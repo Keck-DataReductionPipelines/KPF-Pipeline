@@ -30,18 +30,18 @@ class BaseMasterModule:
     stack of L0 files from disk and output a masters L1 object.
 
     Each frame is calibrated before stacking/extraction following standard CCD
-    reduction: bias gets no correction, dark is bias-subtracted, flat is
+    reduction: bias gets no calibration, dark is bias-subtracted, flat is
     bias+dark-subtracted, and WLS (like science) is bias+dark-subtracted then
     flat-divided. Each subclass declares its standard set via
-    `_STANDARD_CORRECTIONS`. Which of those actually run is the standard set
+    `_STANDARD_CALIBRATIONS`. Which of those actually run is the standard set
     intersected with the resolved bias/dark/flat flags
     (DEFAULTS < [MODULE_IMAGE_PROCESSING] config < make_master kwargs): a flag
-    can only turn a standard correction off, never enable one a master type
+    can only turn a standard calibration off, never enable one a master type
     does not use.
     """
 
     # Module defaults; subclasses extend via `{**BaseMasterModule._DEFAULTS, ...}`.
-    # bias/dark/flat are the globally-enabled corrections (the no-config
+    # bias/dark/flat are the globally-enabled calibrations (the no-config
     # fallback; in practice resolved from the shared [MODULE_IMAGE_PROCESSING]
     # config and make_master kwargs). Keep in sync with the same keys in
     # image_processing._DEFAULTS.
@@ -54,10 +54,10 @@ class BaseMasterModule:
         "flat": False,
     }
 
-    # The corrections that are standard for this master type (the ceiling).
+    # The calibrations that are standard for this master type (the ceiling).
     # `_process_frame` applies the intersection of this set with the resolved
     # bias/dark/flat flags. Subclasses override (e.g. Dark -> ("bias",)).
-    _STANDARD_CORRECTIONS = ()
+    _STANDARD_CALIBRATIONS = ()
 
     def __init__(self, l0_file_list, config=None):
         if l0_file_list != sorted(l0_file_list):
@@ -87,9 +87,9 @@ class BaseMasterModule:
         # populated by subclass make_master_l2(); used by save_master('L2', ...)
         self.ml2_obj = None
 
-        # Effective per-frame corrections (standard set masked by the resolved
+        # Effective per-frame calibrations (standard set masked by the resolved
         # flags); make_master_l1/l2 re-resolve this with any kwarg overrides.
-        self._active_corrections = self._resolve_corrections()
+        self._active_calibrations = self._resolve_calibrations()
 
     # ------------------------------------------------------------------
     # Private helpers for masters.
@@ -207,15 +207,15 @@ class BaseMasterModule:
 
         return l1_obj, success
 
-    def _resolve_corrections(self, *, bias=None, dark=None, flat=None):
+    def _resolve_calibrations(self, *, bias=None, dark=None, flat=None):
         """
-        Resolve which corrections to apply to each frame.
+        Resolve which calibrations to apply to each frame.
 
-        For each correction, the value is the per-call override (the make_master
+        For each calibration, the value is the per-call override (the make_master
         kwarg if not None, else the config-resolved `self.<name>`, i.e.
-        DEFAULTS < [MODULE_IMAGE_PROCESSING]) — but only if the correction is in
-        the per-master standard (`_STANDARD_CORRECTIONS`); otherwise it is forced
-        off. A flag/path can only turn a standard correction off (or aim it at a
+        DEFAULTS < [MODULE_IMAGE_PROCESSING]) — but only if the calibration is in
+        the per-master standard (`_STANDARD_CALIBRATIONS`); otherwise it is forced
+        off. A flag/path can only turn a standard calibration off (or aim it at a
         specific master); it can never enable one outside the master's standard.
 
         Parameters
@@ -233,7 +233,7 @@ class BaseMasterModule:
         overrides = {"bias": bias, "dark": dark, "flat": flat}
         resolved = {}
         for name in ("bias", "dark", "flat"):
-            if name not in self._STANDARD_CORRECTIONS:
+            if name not in self._STANDARD_CALIBRATIONS:
                 resolved[name] = False
                 continue
             request = (
@@ -247,11 +247,11 @@ class BaseMasterModule:
         Apply this module's active calibrations to an assembled frame.
 
         Subtracts the active masters via ImageProcessing, reusing the standard
-        science-path modules rather than reimplementing the math. Corrections
+        science-path modules rather than reimplementing the math. Calibrations
         requested as `True` are associated first (CalibrationAssociation writes
-        their nearest-in-time master into the PRIMARY header); corrections given
+        their nearest-in-time master into the PRIMARY header); calibrations given
         as an explicit filepath or KPFMasterL1 object skip association and are
-        passed straight through. Modules with no active corrections receive the
+        passed straight through. Modules with no active calibrations receive the
         frame unchanged.
 
         Parameters
@@ -264,13 +264,13 @@ class BaseMasterModule:
         KPF1
             The same frame with the active calibrations applied.
         """
-        corrections = self._active_corrections
-        if not any(corrections.values()):
+        calibrations = self._active_calibrations
+        if not any(calibrations.values()):
             return l1_obj
 
-        # Only header-driven (True) corrections need association; explicit
+        # Only header-driven (True) calibrations need association; explicit
         # filepath / KPFMasterL1 overrides are loaded directly by ImageProcessing.
-        cal_types = [name for name, value in corrections.items() if value is True]
+        cal_types = [name for name, value in calibrations.items() if value is True]
         if cal_types:
             calibration_association = CalibrationAssociation(
                 l1_obj, {"KPF_MASTERS_OUTPUT": self._masters_root}
@@ -279,9 +279,9 @@ class BaseMasterModule:
 
         image_processing = ImageProcessing(l1_obj)
         l1_obj = image_processing.perform(
-            bias=corrections["bias"],
-            dark=corrections["dark"],
-            flat=corrections["flat"],
+            bias=calibrations["bias"],
+            dark=calibrations["dark"],
+            flat=calibrations["flat"],
         )
 
         return l1_obj

@@ -10,7 +10,7 @@ class Dark(BaseMasterModule):
     """
     Construct a master dark frame from a stack of L0 dark exposures.
 
-    Standard reduction: a dark is bias-subtracted (`_STANDARD_CORRECTIONS =
+    Standard reduction: a dark is bias-subtracted (`_STANDARD_CALIBRATIONS =
     ("bias",)`). The associated master bias is subtracted from each frame via
     the shared `_process_frame` hook (CalibrationAssociation + ImageProcessing)
     before stacking with sigma-clipped statistics, interpolating bad pixels,
@@ -26,7 +26,7 @@ class Dark(BaseMasterModule):
         exptime_tolerance, chips.
     """
 
-    _STANDARD_CORRECTIONS = ("bias",)
+    _STANDARD_CALIBRATIONS = ("bias",)
 
     def __init__(self, l0_file_list, config=None):
         if config is None:
@@ -91,7 +91,7 @@ class Dark(BaseMasterModule):
         if sigma is None:
             sigma = self.stack_sigma
 
-        self._active_corrections = self._resolve_corrections(bias=bias)
+        self._active_calibrations = self._resolve_calibrations(bias=bias)
 
         l1_arrays = self.stack_frames(
             l0_file_list=l0_file_list,

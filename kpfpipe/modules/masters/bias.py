@@ -14,8 +14,8 @@ class Bias(BaseMasterModule):
     and performs a final outlier pass on the combined image. Outputs a
     KPFMasterL1 containing per-chip IMG, SNR, and MASK extensions.
 
-    Standard reduction: a bias receives no calibration correction
-    (`_STANDARD_CORRECTIONS` is empty), so raw frames are stacked as-is.
+    Standard reduction: a bias receives no calibration
+    (`_STANDARD_CALIBRATIONS` is empty), so raw frames are stacked as-is.
 
     Parameters
     ----------
@@ -61,7 +61,7 @@ class Bias(BaseMasterModule):
         `self.ml1_obj`; pass `filepath` to also persist it to disk
         via `save_master('L1', ...)`.
 
-        A bias receives no calibration corrections, so there are no bias/dark/
+        A bias receives no calibrations, so there are no bias/dark/
         flat overrides (unlike Dark/WLS).
 
         Parameters

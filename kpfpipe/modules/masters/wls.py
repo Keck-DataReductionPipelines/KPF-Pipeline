@@ -29,7 +29,7 @@ class WLS(BaseMasterModule):
     wavelength solutions.
 
     Standard reduction: like science, a WLS frame is bias- and dark-subtracted
-    before extraction (`_STANDARD_CORRECTIONS = ("bias", "dark")`); flat
+    before extraction (`_STANDARD_CALIBRATIONS = ("bias", "dark")`); flat
     division is part of the standard but stays off until it is implemented.
 
     Parameters
@@ -53,7 +53,7 @@ class WLS(BaseMasterModule):
 
     # Bias+dark subtraction is standard for WLS; `_process_frame` (run before
     # `_extract_frame`) applies whichever of these the config has enabled.
-    _STANDARD_CORRECTIONS = ("bias", "dark")
+    _STANDARD_CALIBRATIONS = ("bias", "dark")
 
     def __init__(self, l0_file_list, config=None):
         if config is None:
@@ -822,7 +822,7 @@ class WLS(BaseMasterModule):
             Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
             Defaults to self.polyorder_f.
         bias, dark, flat : bool | str | KPFMasterL1, optional
-            Per-call correction overrides (same forms as ImageProcessing.perform:
+            Per-call calibration overrides (same forms as ImageProcessing.perform:
             bool, a master filepath, or a KPFMasterL1 object), clamped by the WLS
             standard of bias+dark. E.g. `dark=False` extracts with bias only, and
             `dark="/path/master_dark.fits"` uses a specific master.
@@ -861,7 +861,7 @@ class WLS(BaseMasterModule):
         if polyorder_f is None:
             polyorder_f = self.polyorder_f
 
-        self._active_corrections = self._resolve_corrections(
+        self._active_calibrations = self._resolve_calibrations(
             bias=bias, dark=dark, flat=flat
         )
 
