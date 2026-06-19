@@ -228,6 +228,55 @@ class TestProcessFrame:
 
         assert result is processed
 
+    def test_explicit_override_skips_association(self):
+        # A bias given as a master object (not True) needs no association.
+        dark = Dark(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
+        master_obj = MagicMock(name="master_bias")
+        dark._active_corrections = {"bias": master_obj, "dark": False, "flat": False}
+        frame_in = MagicMock(name="l1_in")
+        processed = MagicMock(name="l1_processed")
+
+        with (
+            patch("kpfpipe.modules.masters.base.CalibrationAssociation") as mock_ca,
+            patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
+        ):
+            mock_ip.return_value.perform.return_value = processed
+            result = dark._process_frame(frame_in)
+
+        mock_ca.assert_not_called()
+        mock_ip.assert_called_once_with(frame_in)
+        mock_ip.return_value.perform.assert_called_once_with(
+            bias=master_obj, dark=False, flat=False
+        )
+        assert result is processed
+
+    def test_mixed_true_and_explicit_associates_only_true(self):
+        # True corrections are associated; explicit paths pass straight through.
+        dark = Dark(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
+        dark._active_corrections = {
+            "bias": True,
+            "dark": "/p/master_dark.fits",
+            "flat": False,
+        }
+        frame_in = MagicMock(name="l1_in")
+        associated = MagicMock(name="l1_associated")
+        processed = MagicMock(name="l1_processed")
+
+        with (
+            patch("kpfpipe.modules.masters.base.CalibrationAssociation") as mock_ca,
+            patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
+        ):
+            mock_ca.return_value.perform.return_value = associated
+            mock_ip.return_value.perform.return_value = processed
+            result = dark._process_frame(frame_in)
+
+        mock_ca.return_value.perform.assert_called_once_with(["bias"])
+        mock_ip.assert_called_once_with(associated)
+        mock_ip.return_value.perform.assert_called_once_with(
+            bias=True, dark="/p/master_dark.fits", flat=False
+        )
+        assert result is processed
+
 
 # ---------------------------------------------------------------------------
 # _resolve_corrections: standard ∩ resolved(bias/dark/flat) clamp
@@ -263,3 +312,21 @@ class TestResolveCorrections:
     def test_config_can_disable_standard_bias(self):
         dark = Dark(FILE_LIST, config={"bias": False})
         assert dark._resolve_corrections()["bias"] is False
+
+    def test_str_override_passes_through_for_standard_correction(self):
+        dark = Dark(FILE_LIST)
+        assert dark._resolve_corrections(bias="/p/master_bias.fits") == {
+            "bias": "/p/master_bias.fits",
+            "dark": False,
+            "flat": False,
+        }
+
+    def test_object_override_passes_through_for_standard_correction(self):
+        dark = Dark(FILE_LIST)
+        sentinel = object()  # stands in for a KPFMasterL1 instance
+        assert dark._resolve_corrections(bias=sentinel)["bias"] is sentinel
+
+    def test_str_override_outside_standard_is_clamped(self):
+        # flat is not in a dark master's standard -> ignored even as a path.
+        dark = Dark(FILE_LIST)
+        assert dark._resolve_corrections(flat="/p/master_flat.fits")["flat"] is False

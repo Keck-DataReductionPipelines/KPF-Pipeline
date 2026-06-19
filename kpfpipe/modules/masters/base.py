@@ -209,45 +209,50 @@ class BaseMasterModule:
 
     def _resolve_corrections(self, *, bias=None, dark=None, flat=None):
         """
-        Resolve which corrections to apply to each frame, as {name: bool}.
+        Resolve which corrections to apply to each frame.
 
-        For each correction, the effective value is the per-master standard
-        (`_STANDARD_CORRECTIONS`) AND the resolved flag, where the flag is the
-        make_master kwarg if given, else the config-resolved `self.<name>`
-        (DEFAULTS < [MODULE_IMAGE_PROCESSING]). A flag can only turn a standard
-        correction off; it can never enable one outside the master's standard.
+        For each correction, the value is the per-call override (the make_master
+        kwarg if not None, else the config-resolved `self.<name>`, i.e.
+        DEFAULTS < [MODULE_IMAGE_PROCESSING]) — but only if the correction is in
+        the per-master standard (`_STANDARD_CORRECTIONS`); otherwise it is forced
+        off. A flag/path can only turn a standard correction off (or aim it at a
+        specific master); it can never enable one outside the master's standard.
 
         Parameters
         ----------
-        bias, dark, flat : bool, optional
-            Per-call overrides; None means "use the resolved config value".
+        bias, dark, flat : bool | str | KPFMasterL1, optional
+            Per-call overrides (same accepted forms as `ImageProcessing.perform`:
+            True → header-associated master, str → filepath, KPFMasterL1 → that
+            object). None means "use the resolved config value".
 
         Returns
         -------
         dict
-            {'bias': bool, 'dark': bool, 'flat': bool}.
+            {name: False | True | str | KPFMasterL1} for name in bias/dark/flat.
         """
         overrides = {"bias": bias, "dark": dark, "flat": flat}
-        return {
-            name: bool(
-                name in self._STANDARD_CORRECTIONS
-                and (
-                    overrides[name]
-                    if overrides[name] is not None
-                    else getattr(self, name)
-                )
+        resolved = {}
+        for name in ("bias", "dark", "flat"):
+            if name not in self._STANDARD_CORRECTIONS:
+                resolved[name] = False
+                continue
+            request = (
+                overrides[name] if overrides[name] is not None else getattr(self, name)
             )
-            for name in ("bias", "dark", "flat")
-        }
+            resolved[name] = request
+        return resolved
 
     def _process_frame(self, l1_obj):
         """
         Apply this module's active calibrations to an assembled frame.
 
-        Associates the active masters (writing their paths into the PRIMARY
-        header) and subtracts them via ImageProcessing, reusing the standard
-        science-path modules rather than reimplementing the math. Modules with
-        no active corrections receive the frame unchanged.
+        Subtracts the active masters via ImageProcessing, reusing the standard
+        science-path modules rather than reimplementing the math. Corrections
+        requested as `True` are associated first (CalibrationAssociation writes
+        their nearest-in-time master into the PRIMARY header); corrections given
+        as an explicit filepath or KPFMasterL1 object skip association and are
+        passed straight through. Modules with no active corrections receive the
+        frame unchanged.
 
         Parameters
         ----------
@@ -260,14 +265,17 @@ class BaseMasterModule:
             The same frame with the active calibrations applied.
         """
         corrections = self._active_corrections
-        cal_types = [name for name in ("bias", "dark", "flat") if corrections[name]]
-        if not cal_types:
+        if not any(corrections.values()):
             return l1_obj
 
-        calibration_association = CalibrationAssociation(
-            l1_obj, {"KPF_MASTERS_OUTPUT": self._masters_root}
-        )
-        l1_obj = calibration_association.perform(cal_types)
+        # Only header-driven (True) corrections need association; explicit
+        # filepath / KPFMasterL1 overrides are loaded directly by ImageProcessing.
+        cal_types = [name for name, value in corrections.items() if value is True]
+        if cal_types:
+            calibration_association = CalibrationAssociation(
+                l1_obj, {"KPF_MASTERS_OUTPUT": self._masters_root}
+            )
+            l1_obj = calibration_association.perform(cal_types)
 
         image_processing = ImageProcessing(l1_obj)
         l1_obj = image_processing.perform(

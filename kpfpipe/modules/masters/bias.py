@@ -72,9 +72,11 @@ class Bias(BaseMasterModule):
             Stream threshold passed to stack_frames.
         sigma : float, optional
             Outlier rejection threshold passed to stack_frames.
-        bias, dark, flat : bool, optional
-            Per-call correction overrides (clamped by the master's standard).
-            A bias has no standard corrections, so these are no-ops here.
+        bias, dark, flat : bool | str | KPFMasterL1, optional
+            Per-call correction overrides (same forms as ImageProcessing.perform:
+            bool, a master filepath, or a KPFMasterL1 object), clamped by the
+            master's standard. A bias has no standard corrections, so these are
+            no-ops here.
         filepath : str, optional
             If provided, calls `self.save_master('L1', filepath)` at
             the end to persist the master L1 to a FITS file at this filepath.

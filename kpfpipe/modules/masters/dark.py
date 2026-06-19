@@ -74,10 +74,12 @@ class Dark(BaseMasterModule):
             Stream threshold passed to stack_frames.
         sigma : float, optional
             Outlier rejection threshold passed to stack_frames.
-        bias, dark, flat : bool, optional
-            Per-call correction overrides (clamped by the master's standard).
-            A dark's standard is bias-only, so e.g. `bias=False` skips the bias
-            subtraction; enabling dark/flat here is a no-op.
+        bias, dark, flat : bool | str | KPFMasterL1, optional
+            Per-call correction overrides (same forms as ImageProcessing.perform:
+            bool, a master filepath, or a KPFMasterL1 object), clamped by the
+            master's standard. A dark's standard is bias-only, so e.g.
+            `bias=False` skips bias subtraction and `bias="/path/master_bias.fits"`
+            uses a specific master; enabling dark/flat here is a no-op.
         filepath : str, optional
             If provided, calls `self.save_master('L1', filepath)` at
             the end to persist the master L1 to a FITS file at this filepath.

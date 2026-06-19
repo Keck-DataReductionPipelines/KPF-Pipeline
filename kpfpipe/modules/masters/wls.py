@@ -821,9 +821,11 @@ class WLS(BaseMasterModule):
         polyorder_f : int, optional
             Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
             Defaults to self.polyorder_f.
-        bias, dark, flat : bool, optional
-            Per-call correction overrides (clamped by the WLS standard of
-            bias+dark). E.g. `dark=False` extracts with bias subtraction only.
+        bias, dark, flat : bool | str | KPFMasterL1, optional
+            Per-call correction overrides (same forms as ImageProcessing.perform:
+            bool, a master filepath, or a KPFMasterL1 object), clamped by the WLS
+            standard of bias+dark. E.g. `dark=False` extracts with bias only, and
+            `dark="/path/master_dark.fits"` uses a specific master.
         master_path : str, optional
             If provided, calls `self.save_master('L2', master_path)` at
             the end to persist the master L2 to a FITS file at this path.
