@@ -266,3 +266,15 @@ class TestMasterBiasRegression:
 
     def test_receipt_chain(self, master_bias):
         assert "master_bias" in master_bias.receipt["Module_Name"].values
+
+
+# ---------------------------------------------------------------------------
+# Signature: a bias applies no calibrations, so no bias/dark/flat kwargs
+# ---------------------------------------------------------------------------
+
+
+class TestMasterBiasSignature:
+    @pytest.mark.parametrize("kwarg", ["bias", "dark", "flat"])
+    def test_correction_kwargs_rejected(self, kwarg):
+        with pytest.raises(TypeError):
+            Bias(FILE_LIST).make_master_l1(**{kwarg: True})

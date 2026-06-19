@@ -330,3 +330,22 @@ class TestResolveCorrections:
         # flat is not in a dark master's standard -> ignored even as a path.
         dark = Dark(FILE_LIST)
         assert dark._resolve_corrections(flat="/p/master_flat.fits")["flat"] is False
+
+
+# ---------------------------------------------------------------------------
+# Signature: a dark is only bias-subtracted, so make_master_l1 takes bias only
+# ---------------------------------------------------------------------------
+
+
+class TestMasterDarkSignature:
+    @pytest.mark.parametrize("kwarg", ["dark", "flat"])
+    def test_dark_flat_kwargs_rejected(self, kwarg):
+        with pytest.raises(TypeError):
+            Dark(FILE_LIST).make_master_l1(**{kwarg: True})
+
+    def test_bias_kwarg_accepted(self):
+        synthetic = make_l1_arrays()
+        dark = Dark(FILE_LIST)
+        with patch.object(dark, "stack_frames", return_value=synthetic):
+            ml1 = dark.make_master_l1(bias=False)
+        assert isinstance(ml1, KPFMasterL1)

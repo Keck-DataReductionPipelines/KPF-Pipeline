@@ -51,9 +51,6 @@ class Bias(BaseMasterModule):
         *,
         nstream=None,
         sigma=None,
-        bias=None,
-        dark=None,
-        flat=None,
         filepath=None,
         verbose=True,
     ):
@@ -64,6 +61,9 @@ class Bias(BaseMasterModule):
         `self.ml1_obj`; pass `filepath` to also persist it to disk
         via `save_master('L1', ...)`.
 
+        A bias receives no calibration corrections, so there are no bias/dark/
+        flat overrides (unlike Dark/WLS).
+
         Parameters
         ----------
         l0_file_list : list of str, optional
@@ -72,11 +72,6 @@ class Bias(BaseMasterModule):
             Stream threshold passed to stack_frames.
         sigma : float, optional
             Outlier rejection threshold passed to stack_frames.
-        bias, dark, flat : bool | str | KPFMasterL1, optional
-            Per-call correction overrides (same forms as ImageProcessing.perform:
-            bool, a master filepath, or a KPFMasterL1 object), clamped by the
-            master's standard. A bias has no standard corrections, so these are
-            no-ops here.
         filepath : str, optional
             If provided, calls `self.save_master('L1', filepath)` at
             the end to persist the master L1 to a FITS file at this filepath.
@@ -89,10 +84,6 @@ class Bias(BaseMasterModule):
             nstream = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
-
-        self._active_corrections = self._resolve_corrections(
-            bias=bias, dark=dark, flat=flat
-        )
 
         l1_arrays = self.stack_frames(
             l0_file_list=l0_file_list,

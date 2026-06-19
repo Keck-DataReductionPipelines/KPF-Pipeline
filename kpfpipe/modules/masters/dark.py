@@ -54,8 +54,6 @@ class Dark(BaseMasterModule):
         nstream=None,
         sigma=None,
         bias=None,
-        dark=None,
-        flat=None,
         filepath=None,
         verbose=True,
     ):
@@ -74,12 +72,12 @@ class Dark(BaseMasterModule):
             Stream threshold passed to stack_frames.
         sigma : float, optional
             Outlier rejection threshold passed to stack_frames.
-        bias, dark, flat : bool | str | KPFMasterL1, optional
-            Per-call correction overrides (same forms as ImageProcessing.perform:
-            bool, a master filepath, or a KPFMasterL1 object), clamped by the
-            master's standard. A dark's standard is bias-only, so e.g.
-            `bias=False` skips bias subtraction and `bias="/path/master_bias.fits"`
-            uses a specific master; enabling dark/flat here is a no-op.
+        bias : bool | str | KPFMasterL1, optional
+            Per-call master-bias override (same forms as ImageProcessing.perform:
+            bool, a master filepath, or a KPFMasterL1 object). A dark's standard
+            is bias-only, so `bias=False` skips bias subtraction and
+            `bias="/path/master_bias.fits"` uses a specific master. Dark/flat are
+            never applied to a dark, so they are not accepted.
         filepath : str, optional
             If provided, calls `self.save_master('L1', filepath)` at
             the end to persist the master L1 to a FITS file at this filepath.
@@ -93,9 +91,7 @@ class Dark(BaseMasterModule):
         if sigma is None:
             sigma = self.stack_sigma
 
-        self._active_corrections = self._resolve_corrections(
-            bias=bias, dark=dark, flat=flat
-        )
+        self._active_corrections = self._resolve_corrections(bias=bias)
 
         l1_arrays = self.stack_frames(
             l0_file_list=l0_file_list,
