@@ -744,7 +744,7 @@ class BaseMasterModule:
 
         return l1_arrays
 
-    def finalize_l1_arrays(self, l1_arrays, sigma):
+    def clean_l1_arrays(self, l1_arrays, sigma):
         """
         Interpolate bad pixels and recompute the bad-pixel mask per chip.
 
@@ -776,7 +776,7 @@ class BaseMasterModule:
 
         return l1_arrays
 
-    def build_master_l1(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
+    def build_ml1_obj(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
         """
         Assemble a KPFMasterL1 from finalized per-chip arrays.
 

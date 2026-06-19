@@ -101,11 +101,11 @@ class Dark(BaseMasterModule):
             sigma=sigma,
             verbose=verbose,
         )
-        l1_arrays = self.finalize_l1_arrays(l1_arrays, sigma)
+        l1_arrays = self.clean_l1_arrays(l1_arrays, sigma)
 
         # Dark current is a rate: stack_frames normalizes each frame by its
         # exposure time, so the master dark IMG is in electrons/sec.
-        self.ml1_obj = self.build_master_l1(
+        self.ml1_obj = self.build_ml1_obj(
             l1_arrays, l0_file_list, receipt_key="master_dark", bunit="electrons/sec"
         )
         self._results = self._compute_results(l1_arrays)
