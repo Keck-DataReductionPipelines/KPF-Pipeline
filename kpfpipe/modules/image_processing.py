@@ -41,16 +41,6 @@ class ImageProcessing:
         (boolean flags toggling each calibration).
     """
 
-    # Loaded masters, keyed by absolute path and shared across instances.
-    # Masters are read-only after loading, so caching them avoids re-reading
-    # the same file for every frame in a stack. Cleared via clear_master_cache.
-    _master_cache = {}
-
-    @classmethod
-    def clear_master_cache(cls):
-        """Drop all cached master frames (used for test isolation)."""
-        cls._master_cache.clear()
-
     def __init__(self, l1_obj, config=None):
         self.l1_obj = l1_obj
 
@@ -68,8 +58,12 @@ class ImageProcessing:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._bias_path = None  # set by load_bias()
-        self._dark_path = None  # set by load_dark()
+        # Resolved masters and their paths, cached per instance by
+        # _resolve_master() during perform() so a master is read at most once.
+        self._bias_ml1 = None
+        self._dark_ml1 = None
+        self._bias_path = None
+        self._dark_path = None
         self._results = None  # populated by perform()
 
     # ------------------------------------------------------------------
@@ -79,10 +73,10 @@ class ImageProcessing:
     @classmethod
     def _load_master(cls, master_path):
         """
-        Load a master frame from an explicit path, caching by absolute path.
+        Load a master frame from an explicit path.
 
         The single FITS-read chokepoint for masters; `BaseMasterModule` also
-        delegates here so the cache is shared across the pipeline.
+        delegates here.
 
         Parameters
         ----------
@@ -92,7 +86,7 @@ class ImageProcessing:
         Returns
         -------
         KPFMasterL1
-            The loaded master (a cached instance on a repeat path).
+            The loaded master.
 
         Raises
         ------
@@ -102,10 +96,7 @@ class ImageProcessing:
         if not os.path.isfile(master_path):
             raise FileNotFoundError(f"Master file not found: {master_path}")
 
-        key = os.path.abspath(master_path)
-        if key not in cls._master_cache:
-            cls._master_cache[key] = KPFMasterL1.from_fits(master_path)
-        return cls._master_cache[key]
+        return KPFMasterL1.from_fits(master_path)
 
     def _header_master_path(self, cal_type):
         """
@@ -132,111 +123,63 @@ class ImageProcessing:
         """
         Resolve a `bias`/`dark` kwarg into a `KPFMasterL1` instance.
 
-        See `perform` for accepted input types. Records `self._{cal_type}_path`
-        (after a successful load) so downstream reporting reflects what was used.
+        See `perform` for accepted input types. The resolved master is cached
+        on `self._{cal_type}_ml1` (with its path on `self._{cal_type}_path`) so
+        repeat calls — e.g. once per chip — reuse it instead of re-reading.
         """
+        cached = getattr(self, f"_{cal_type}_ml1")
+        if cached is not None:
+            return cached
+
         if isinstance(value, KPFMasterL1):
             dirname = getattr(value, "dirname", "") or ""
             filename = getattr(value, "filename", None)
             path = os.path.join(dirname, filename) if filename else None
-            setattr(self, f"_{cal_type}_path", path)
-            return value
-
-        if isinstance(value, str):
+            master = value
+        elif isinstance(value, str):
             path = value
+            master = self._load_master(path)
         elif value is True:
             path = self._header_master_path(cal_type)
+            master = self._load_master(path)
         else:
             raise TypeError(
                 f"{cal_type} must be bool, filepath str, or KPFMasterL1; "
                 f"got {type(value).__name__}"
             )
 
-        master = self._load_master(path)
         setattr(self, f"_{cal_type}_path", path)
+        setattr(self, f"_{cal_type}_ml1", master)
         return master
 
     # ------------------------------------------------------------------
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def load_bias(self, bias_path=None):
+    def subtract_bias(self, chip, bias=None):
         """
-        Load the master bias frame from disk.
-
-        If bias_path is provided it is used directly, bypassing the header
-        lookup. Otherwise the path is constructed from BIASDIR and BIASFILE
-        in the L1 PRIMARY header (written by CalibrationAssociation).
+        Subtract the master bias image from the CCD data for a single chip.
 
         Parameters
         ----------
-        bias_path : str, optional
-            Explicit path to the master bias FITS file. When given, BIASFILE
-            and BIASDIR headers are ignored.
-
-        Returns
-        -------
-        KPFMasterL1
-            Master bias frame loaded from disk.
-
-        Raises
-        ------
-        FileNotFoundError
-            If BIASFILE or BIASDIR is absent from the PRIMARY header (when
-            bias_path is not provided), or if the file does not exist on disk.
-        """
-        return self._resolve_master(
-            "bias", bias_path if bias_path is not None else True
-        )
-
-    def load_dark(self, dark_path=None):
-        """
-        Load the master dark frame from disk.
-
-        Mirrors `load_bias`: uses `dark_path` if given, otherwise builds the
-        path from DARKDIR and DARKFILE in the L1 PRIMARY header.
-
-        Parameters
-        ----------
-        dark_path : str, optional
-            Explicit path to the master dark FITS file. When given, DARKFILE
-            and DARKDIR headers are ignored.
-
-        Returns
-        -------
-        KPFMasterL1
-            Master dark frame loaded from disk.
-
-        Raises
-        ------
-        FileNotFoundError
-            If DARKFILE or DARKDIR is absent from the PRIMARY header (when
-            dark_path is not provided), or if the file does not exist on disk.
-        """
-        return self._resolve_master(
-            "dark", dark_path if dark_path is not None else True
-        )
-
-    def subtract_bias(self, bias_l1, chip):
-        """
-        Subtract master bias image from the CCD data for a single chip.
-
-        Parameters
-        ----------
-        bias_l1 : KPFMasterL1
-            Master bias frame loaded from disk.
         chip : str
             CCD identifier, e.g. 'GREEN' or 'RED'.
+        bias : bool | str | KPFMasterL1, optional
+            Master bias source, resolved via `_resolve_master` (see `perform`
+            for the accepted input types). Defaults to self.bias.
 
         Returns
         -------
         None
             Modifies `l1_obj.data['{chip}_CCD']` in-place.
         """
+        if bias is None:
+            bias = self.bias
+        bias_l1 = self._resolve_master("bias", bias)
         chip = chip.upper()
         self.l1_obj.data[f"{chip}_CCD"] -= bias_l1.data[f"{chip}_IMG"]
 
-    def subtract_dark(self, dark_l1, chip):
+    def subtract_dark(self, chip, dark=None):
         """
         Subtract the master dark from the CCD data for a single chip.
 
@@ -246,16 +189,20 @@ class ImageProcessing:
 
         Parameters
         ----------
-        dark_l1 : KPFMasterL1
-            Master dark frame loaded from disk (in electrons/sec).
         chip : str
             CCD identifier, e.g. 'GREEN' or 'RED'.
+        dark : bool | str | KPFMasterL1, optional
+            Master dark source, resolved via `_resolve_master` (see `perform`
+            for the accepted input types). Defaults to self.dark.
 
         Returns
         -------
         None
             Modifies `l1_obj.data['{chip}_CCD']` in-place.
         """
+        if dark is None:
+            dark = self.dark
+        dark_l1 = self._resolve_master("dark", dark)
         chip = chip.upper()
         exptime = self.l1_obj.headers["PRIMARY"]["EXPTIME"]
         self.l1_obj.data[f"{chip}_CCD"] -= dark_l1.data[f"{chip}_IMG"] * exptime
@@ -294,45 +241,43 @@ class ImageProcessing:
         Raises
         ------
         FileNotFoundError
-            Propagated from load_bias()/load_dark() if a master cannot be located.
+            Propagated from _resolve_master() if a master cannot be located.
         NotImplementedError
             If flat is truthy.
         TypeError
             If `bias` or `dark` is not bool, str, or KPFMasterL1.
         """
-        if chips is None:
-            chips = self.chips
-        if bias is None:
-            bias = self.bias
-        if dark is None:
-            dark = self.dark
-        if flat is None:
-            flat = self.flat
+        # Per-call kwargs override the instance config; subtract_bias/
+        # subtract_dark then read the resolved sources from self.
+        if chips is not None:
+            self.chips = chips
+        if bias is not None:
+            self.bias = bias
+        if dark is not None:
+            self.dark = dark
+        if flat is not None:
+            self.flat = flat
 
-        if flat:
+        if self.flat:
             raise NotImplementedError("flat division not yet implemented")
 
         self._results = {}
-        if bias:
-            master_bias = self._resolve_master("bias", bias)
-            for chip in chips:
-                self.subtract_bias(master_bias, chip)
+        if self.bias:
+            for chip in self.chips:
+                self.subtract_bias(chip)
             self._results["bias"] = self._bias_path
 
-        # Dark subtraction follows bias: the bias offset must be removed before
-        # the (exposure-scaled) dark current is subtracted.
-        if dark:
-            master_dark = self._resolve_master("dark", dark)
-            for chip in chips:
-                self.subtract_dark(master_dark, chip)
+        if self.dark:
+            for chip in self.chips:
+                self.subtract_dark(chip)
             self._results["dark"] = self._dark_path
 
         self.l1_obj.headers["PRIMARY"]["BIASUB"] = (
-            bool(bias),
+            bool(self.bias),
             "Bias subtraction applied",
         )
         self.l1_obj.headers["PRIMARY"]["DARKSUB"] = (
-            bool(dark),
+            bool(self.dark),
             "Dark subtraction applied",
         )
         self.l1_obj.receipt_add_entry("image_processing", "PASS")

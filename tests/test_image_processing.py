@@ -1,8 +1,8 @@
 """
-Tests for the ImageProcessing module (L1 bias subtraction).
+Tests for the ImageProcessing module (L1 bias and dark subtraction).
 
 Unit tests use synthetic arrays and MockL1 objects; no real data or FITS
-files are required except where a master bias file must exist on disk.
+files are required except where a master file must exist on disk.
 """
 
 import numpy as np
@@ -38,20 +38,6 @@ class MockL1:
         self._receipt.append((name, status))
 
 
-class MockMasterBias:
-    data = {
-        "GREEN_IMG": np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32),
-        "RED_IMG": np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32),
-    }
-
-
-class MockMasterDark:
-    data = {
-        "GREEN_IMG": np.full(_SHAPE, _DARK_VALUE, dtype=np.float32),
-        "RED_IMG": np.full(_SHAPE, _DARK_VALUE, dtype=np.float32),
-    }
-
-
 def _make_module(bias_file=None, bias_dir=None, dark_file=None, dark_dir=None):
     l1 = MockL1()
     if bias_file is not None:
@@ -85,12 +71,18 @@ def _write_master_dark(path):
     _write_master(path, _DARK_VALUE)
 
 
-@pytest.fixture(autouse=True)
-def _clear_master_cache():
-    """Isolate the shared ImageProcessing master cache between tests."""
-    ImageProcessing.clear_master_cache()
-    yield
-    ImageProcessing.clear_master_cache()
+def _master_bias(tmp_path):
+    """Write and load a master bias as a KPFMasterL1 object."""
+    path = str(tmp_path / "master_bias.fits")
+    _write_master_bias(path)
+    return KPFMasterL1.from_fits(path)
+
+
+def _master_dark(tmp_path):
+    """Write and load a master dark as a KPFMasterL1 object."""
+    path = str(tmp_path / "master_dark.fits")
+    _write_master_dark(path)
+    return KPFMasterL1.from_fits(path)
 
 
 # ---------------------------------------------------------------------------
@@ -115,61 +107,83 @@ class TestInit:
     def test_results_none_before_perform(self):
         assert ImageProcessing(MockL1())._results is None
 
-    def test_bias_path_none_before_load(self):
+    def test_bias_path_none_before_perform(self):
         assert ImageProcessing(MockL1())._bias_path is None
 
-    def test_dark_path_none_before_load(self):
+    def test_dark_path_none_before_perform(self):
         assert ImageProcessing(MockL1())._dark_path is None
 
+    def test_master_caches_none_before_perform(self):
+        mod = ImageProcessing(MockL1())
+        assert mod._bias_ml1 is None
+        assert mod._dark_ml1 is None
+
 
 # ---------------------------------------------------------------------------
-# TestLoadBias
+# TestBiasResolution — perform() resolves the bias source (bool | str |
+# KPFMasterL1) and records its path. Dark is disabled to isolate bias.
 # ---------------------------------------------------------------------------
 
 
-class TestLoadBias:
+class TestBiasResolution:
     def test_raises_when_biasfile_missing(self):
         mod = _make_module(bias_dir="/some/dir")
         with pytest.raises(FileNotFoundError, match="BIASFILE"):
-            mod.load_bias()
+            mod.perform(dark=False)
 
     def test_raises_when_biasdir_missing(self):
         mod = _make_module(bias_file="master_bias.fits")
         with pytest.raises(FileNotFoundError, match="BIASDIR"):
-            mod.load_bias()
+            mod.perform(dark=False)
 
     def test_raises_when_file_not_on_disk(self, tmp_path):
         mod = _make_module(bias_file="missing.fits", bias_dir=str(tmp_path))
         with pytest.raises(FileNotFoundError, match="missing.fits"):
-            mod.load_bias()
+            mod.perform(dark=False)
 
-    def test_sets_bias_path_attribute(self, tmp_path):
+    def test_header_lookup_sets_path_and_subtracts(self, tmp_path):
         bias_path = str(tmp_path / "master_bias.fits")
         _write_master_bias(bias_path)
         mod = _make_module(bias_file="master_bias.fits", bias_dir=str(tmp_path))
-        mod.load_bias()
+        mod.perform(dark=False)
         assert mod._bias_path == bias_path
-
-    def test_returns_kpfmaster_l1(self, tmp_path):
-        bias_path = str(tmp_path / "master_bias.fits")
-        _write_master_bias(bias_path)
-        mod = _make_module(bias_file="master_bias.fits", bias_dir=str(tmp_path))
-        result = mod.load_bias()
-        assert isinstance(result, KPFMasterL1)
+        assert mod._results["bias"] == bias_path
+        np.testing.assert_allclose(
+            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
+        )
 
     def test_explicit_path_overrides_headers(self, tmp_path):
         bias_path = str(tmp_path / "master_bias.fits")
         _write_master_bias(bias_path)
         # Headers point nowhere valid — explicit path should win.
         mod = _make_module(bias_file="wrong.fits", bias_dir="/wrong/dir")
-        result = mod.load_bias(bias_path=bias_path)
-        assert isinstance(result, KPFMasterL1)
+        mod.perform(bias=bias_path, dark=False)
         assert mod._bias_path == bias_path
+        np.testing.assert_allclose(
+            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
+        )
 
     def test_explicit_path_raises_when_missing(self, tmp_path):
         mod = _make_module()
         with pytest.raises(FileNotFoundError):
-            mod.load_bias(bias_path=str(tmp_path / "nonexistent.fits"))
+            mod.perform(bias=str(tmp_path / "nonexistent.fits"), dark=False)
+
+    def test_kpfmaster_object_passthrough(self, tmp_path):
+        bias_path = str(tmp_path / "master_bias.fits")
+        _write_master_bias(bias_path)
+        master = KPFMasterL1.from_fits(bias_path)
+        # No BIAS headers — the object is used directly, no disk lookup.
+        mod = _make_module()
+        mod.perform(bias=master, dark=False)
+        assert "bias" in mod._results
+        np.testing.assert_allclose(
+            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
+        )
+
+    def test_bad_type_raises(self):
+        mod = _make_module()
+        with pytest.raises(TypeError, match="bias must be bool"):
+            mod.perform(bias=42, dark=False)
 
 
 # ---------------------------------------------------------------------------
@@ -178,73 +192,85 @@ class TestLoadBias:
 
 
 class TestSubtractBias:
-    def test_subtracts_correct_values_green(self):
+    def test_subtracts_correct_values_green(self, tmp_path):
         mod = _make_module()
-        mod.subtract_bias(MockMasterBias(), "GREEN")
+        mod.subtract_bias("GREEN", _master_bias(tmp_path))
         expected = _CCD_VALUE - _BIAS_VALUE
         np.testing.assert_allclose(mod.l1_obj.data["GREEN_CCD"], expected)
 
-    def test_subtracts_correct_values_red(self):
+    def test_subtracts_correct_values_red(self, tmp_path):
         mod = _make_module()
-        mod.subtract_bias(MockMasterBias(), "RED")
+        mod.subtract_bias("RED", _master_bias(tmp_path))
         expected = _CCD_VALUE - _BIAS_VALUE
         np.testing.assert_allclose(mod.l1_obj.data["RED_CCD"], expected)
 
-    def test_modifies_in_place(self):
+    def test_modifies_in_place(self, tmp_path):
         mod = _make_module()
         original = mod.l1_obj.data["GREEN_CCD"]
-        mod.subtract_bias(MockMasterBias(), "GREEN")
+        mod.subtract_bias("GREEN", _master_bias(tmp_path))
         assert mod.l1_obj.data["GREEN_CCD"] is original
 
-    def test_chip_name_case_insensitive(self):
+    def test_chip_name_case_insensitive(self, tmp_path):
         mod = _make_module()
-        mod.subtract_bias(MockMasterBias(), "green")
+        mod.subtract_bias("green", _master_bias(tmp_path))
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
         )
 
 
 # ---------------------------------------------------------------------------
-# TestLoadDark
+# TestDarkResolution — perform() resolves the dark source (bool | str |
+# KPFMasterL1) and records its path. Bias is disabled to isolate dark.
 # ---------------------------------------------------------------------------
 
 
-class TestLoadDark:
+class TestDarkResolution:
     def test_raises_when_darkfile_missing(self):
         mod = _make_module(dark_dir="/some/dir")
         with pytest.raises(FileNotFoundError, match="DARKFILE"):
-            mod.load_dark()
+            mod.perform(bias=False)
 
     def test_raises_when_darkdir_missing(self):
         mod = _make_module(dark_file="master_dark.fits")
         with pytest.raises(FileNotFoundError, match="DARKDIR"):
-            mod.load_dark()
+            mod.perform(bias=False)
 
     def test_raises_when_file_not_on_disk(self, tmp_path):
         mod = _make_module(dark_file="missing.fits", dark_dir=str(tmp_path))
         with pytest.raises(FileNotFoundError, match="missing.fits"):
-            mod.load_dark()
+            mod.perform(bias=False)
 
-    def test_sets_dark_path_attribute(self, tmp_path):
+    def test_header_lookup_sets_path_and_subtracts(self, tmp_path):
         dark_path = str(tmp_path / "master_dark.fits")
         _write_master_dark(dark_path)
         mod = _make_module(dark_file="master_dark.fits", dark_dir=str(tmp_path))
-        mod.load_dark()
+        mod.perform(bias=False)
         assert mod._dark_path == dark_path
-
-    def test_returns_kpfmaster_l1(self, tmp_path):
-        dark_path = str(tmp_path / "master_dark.fits")
-        _write_master_dark(dark_path)
-        mod = _make_module(dark_file="master_dark.fits", dark_dir=str(tmp_path))
-        assert isinstance(mod.load_dark(), KPFMasterL1)
+        assert mod._results["dark"] == dark_path
+        np.testing.assert_allclose(
+            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
+        )
 
     def test_explicit_path_overrides_headers(self, tmp_path):
         dark_path = str(tmp_path / "master_dark.fits")
         _write_master_dark(dark_path)
         mod = _make_module(dark_file="wrong.fits", dark_dir="/wrong/dir")
-        result = mod.load_dark(dark_path=dark_path)
-        assert isinstance(result, KPFMasterL1)
+        mod.perform(bias=False, dark=dark_path)
         assert mod._dark_path == dark_path
+        np.testing.assert_allclose(
+            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
+        )
+
+    def test_kpfmaster_object_passthrough(self, tmp_path):
+        dark_path = str(tmp_path / "master_dark.fits")
+        _write_master_dark(dark_path)
+        master = KPFMasterL1.from_fits(dark_path)
+        mod = _make_module()
+        mod.perform(bias=False, dark=master)
+        assert "dark" in mod._results
+        np.testing.assert_allclose(
+            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -253,35 +279,35 @@ class TestLoadDark:
 
 
 class TestSubtractDark:
-    def test_subtracts_scaled_by_exptime_green(self):
+    def test_subtracts_scaled_by_exptime_green(self, tmp_path):
         mod = _make_module()
-        mod.subtract_dark(MockMasterDark(), "GREEN")
+        mod.subtract_dark("GREEN", _master_dark(tmp_path))
         expected = _CCD_VALUE - _DARK_VALUE * _EXPTIME
         np.testing.assert_allclose(mod.l1_obj.data["GREEN_CCD"], expected)
 
-    def test_subtracts_scaled_by_exptime_red(self):
+    def test_subtracts_scaled_by_exptime_red(self, tmp_path):
         mod = _make_module()
-        mod.subtract_dark(MockMasterDark(), "RED")
+        mod.subtract_dark("RED", _master_dark(tmp_path))
         expected = _CCD_VALUE - _DARK_VALUE * _EXPTIME
         np.testing.assert_allclose(mod.l1_obj.data["RED_CCD"], expected)
 
-    def test_scaling_is_applied_not_raw_subtraction(self):
+    def test_scaling_is_applied_not_raw_subtraction(self, tmp_path):
         # Guard against a literal copy of subtract_bias (no exptime factor):
         # the result must reflect dark_IMG * EXPTIME, not dark_IMG alone.
         mod = _make_module()
-        mod.subtract_dark(MockMasterDark(), "GREEN")
+        mod.subtract_dark("GREEN", _master_dark(tmp_path))
         unscaled = _CCD_VALUE - _DARK_VALUE
         assert not np.allclose(mod.l1_obj.data["GREEN_CCD"], unscaled)
 
-    def test_modifies_in_place(self):
+    def test_modifies_in_place(self, tmp_path):
         mod = _make_module()
         original = mod.l1_obj.data["GREEN_CCD"]
-        mod.subtract_dark(MockMasterDark(), "GREEN")
+        mod.subtract_dark("GREEN", _master_dark(tmp_path))
         assert mod.l1_obj.data["GREEN_CCD"] is original
 
-    def test_chip_name_case_insensitive(self):
+    def test_chip_name_case_insensitive(self, tmp_path):
         mod = _make_module()
-        mod.subtract_dark(MockMasterDark(), "green")
+        mod.subtract_dark("green", _master_dark(tmp_path))
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
@@ -485,19 +511,32 @@ class TestPerformDark:
 
 
 class TestMasterCache:
-    def test_same_path_returns_cached_object(self, tmp_path):
+    def test_resolve_caches_within_instance(self, tmp_path):
+        # Resolving the same calibration twice (e.g. once per chip) reuses the
+        # cached master object instead of re-reading from disk.
+        path = str(tmp_path / "master_bias.fits")
+        _write_master_bias(path)
+        mod = _make_module()
+        first = mod._resolve_master("bias", path)
+        second = mod._resolve_master("bias", path)
+        assert first is second
+        assert mod._bias_ml1 is first
+
+    def test_separate_instances_do_not_share(self, tmp_path):
+        # The cache is per instance — there is no class-level sharing.
+        path = str(tmp_path / "master_bias.fits")
+        _write_master_bias(path)
+        a = _make_module()
+        b = _make_module()
+        assert a._resolve_master("bias", path) is not b._resolve_master("bias", path)
+
+    def test_load_master_reads_fresh_each_call(self, tmp_path):
+        # _load_master itself no longer caches; callers cache as needed.
         path = str(tmp_path / "master_bias.fits")
         _write_master_bias(path)
         first = ImageProcessing._load_master(path)
         second = ImageProcessing._load_master(path)
-        assert first is second
-
-    def test_clear_master_cache_forces_reload(self, tmp_path):
-        path = str(tmp_path / "master_bias.fits")
-        _write_master_bias(path)
-        first = ImageProcessing._load_master(path)
-        ImageProcessing.clear_master_cache()
-        assert ImageProcessing._load_master(path) is not first
+        assert first is not second
 
     def test_missing_file_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="Master file not found"):

@@ -118,8 +118,7 @@ class BaseMasterModule:
 
         Notes
         -----
-        Delegates the FITS read to `ImageProcessing._load_master`, which caches
-        masters by path so a file is not re-read once loaded.
+        Delegates the FITS read to `ImageProcessing._load_master`.
         """
         if verbose:
             print(f"loading {fn}")
