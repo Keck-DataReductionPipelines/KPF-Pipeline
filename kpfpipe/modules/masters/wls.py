@@ -77,7 +77,7 @@ class WLS(BaseMasterModule):
         self._load_rough_wls()
         self._load_linelist()
 
-        self._l2_obj_cache = []  # populated by process_stack_l0_to_l2()
+        self._l2_obj_cache = []  # populated by _process_stack_l0_to_l2()
         self._results = None  # populated by make_master_l2()
         self._coeffs_stack = (
             None  # populated by make_master_l2(); used by save_diagnostics()
@@ -167,7 +167,7 @@ class WLS(BaseMasterModule):
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def process_stack_l0_to_l2(self, l0_file_list=None, verbose=True):
+    def _process_stack_l0_to_l2(self, l0_file_list=None, verbose=True):
         """
         Run each L0 frame in the stack through the L0→L2 pipeline.
 
@@ -213,7 +213,7 @@ class WLS(BaseMasterModule):
 
         return self._l2_obj_cache
 
-    def fit_line_positions_1d(
+    def _fit_line_positions_1d(
         self,
         flux1d,
         wave1d,
@@ -327,7 +327,7 @@ class WLS(BaseMasterModule):
 
         return lines
 
-    def fit_line_positions_ffi(
+    def _fit_line_positions_ffi(
         self,
         l2_obj,
         chip,
@@ -340,7 +340,7 @@ class WLS(BaseMasterModule):
         """
         Fit line positions across all orders and fibers of one chip.
 
-        Loops over the requested fibers, calling `fit_line_positions_1d`
+        Loops over the requested fibers, calling `_fit_line_positions_1d`
         on each (order, fiber) extracted spectrum, and concatenates the
         surviving lines into flat arrays tagged with their order number
         and fiber name.
@@ -371,7 +371,7 @@ class WLS(BaseMasterModule):
             Flat 1D arrays, all of equal length. All lines are retained
             regardless of QC status; the caller is responsible for
             filtering on 'bad' before downstream use. All per-line keys
-            produced by `fit_line_positions_1d` are carried through, plus
+            produced by `_fit_line_positions_1d` are carried through, plus
             'order' and 'fiber' which tag each line with its source order
             and fiber. Keys:
               'wav' - reference line wavelength
@@ -388,7 +388,7 @@ class WLS(BaseMasterModule):
             lineprofile = self.lineprofile
 
         norder = self.norder[chip]
-        # keys mirror fit_line_positions_1d's output plus per-line provenance tags
+        # keys mirror _fit_line_positions_1d's output plus per-line provenance tags
         keys = ("wav", "pix", "std", "amp", "bad", "order", "fiber")
         lines = {k: [[None] * norder for _ in fibers] for k in keys}
 
@@ -406,7 +406,7 @@ class WLS(BaseMasterModule):
                 line_waves = linelist_df.loc[
                     (linelist_df["CHIP"] == chip) & (linelist_df["ORDER"] == o), "WAVE"
                 ].to_numpy(dtype=float)
-                line_dict = self.fit_line_positions_1d(
+                line_dict = self._fit_line_positions_1d(
                     flux_arr[o],
                     wave_arr[o],
                     line_waves,
@@ -446,7 +446,7 @@ class WLS(BaseMasterModule):
 
         return lines
 
-    def calculate_wls_coeffs(
+    def _calculate_wls_coeffs(
         self,
         lines,
         norder,
@@ -465,7 +465,7 @@ class WLS(BaseMasterModule):
         Parameters
         ----------
         lines : dict of ndarray
-            Flat 1D arrays as produced by `fit_line_positions_ffi`. Lines
+            Flat 1D arrays as produced by `_fit_line_positions_ffi`. Lines
             with `lines['bad']` set are excluded from the fit. Required
             keys: 'wav', 'pix', 'order', 'fiber', 'bad'.
         norder : int
@@ -561,14 +561,14 @@ class WLS(BaseMasterModule):
         return coeffs
 
     @staticmethod
-    def evaluate_wls_coeffs(coeffs, ncol, norder, nfiber):
+    def _evaluate_wls_coeffs(coeffs, ncol, norder, nfiber):
         """
         Evaluate a Legendre wavelength solution onto a regular grid.
 
         Parameters
         ----------
         coeffs : ndarray
-            Legendre coefficient array from `calculate_wls_coeffs`. Either
+            Legendre coefficient array from `_calculate_wls_coeffs`. Either
             2D (single-fiber) or 3D (three-fiber).
         ncol : int
             Number of detector columns at which to evaluate.
@@ -600,7 +600,7 @@ class WLS(BaseMasterModule):
 
         return W
 
-    def compute_wls_from_stack(
+    def _compute_wls_from_stack(
         self,
         chip,
         fibers,
@@ -618,7 +618,7 @@ class WLS(BaseMasterModule):
         Compute a master wavelength solution from a stack of extracted L2 frames.
 
         For each L2 frame in `self._l2_obj_cache` (populated by
-        `process_stack_l0_to_l2`), fits line positions across the requested
+        `_process_stack_l0_to_l2`), fits line positions across the requested
         fibers, fits a Legendre WLS to those line positions, then combines
         the per-frame coefficient sets via per-coefficient outlier-rejected
         averaging. The averaged coefficients are evaluated to produce a
@@ -664,12 +664,12 @@ class WLS(BaseMasterModule):
         coeffs_stack : ndarray
             Per-frame coefficient arrays (stacked).
         lines_stack : list of dict
-            Per-frame line dicts from `fit_line_positions_ffi`.
+            Per-frame line dicts from `_fit_line_positions_ffi`.
 
         Notes
         -----
         Raises ValueError if `self._l2_obj_cache` is empty (i.e.,
-        `process_stack_l0_to_l2` has not been run), or if more than one
+        `_process_stack_l0_to_l2` has not been run), or if more than one
         frame is rejected for having > `max_bad_frac` of its line fits fail
         QC. Rejected frames are excluded from the returned `coeffs_stack`
         and `lines_stack`.
@@ -685,7 +685,7 @@ class WLS(BaseMasterModule):
             polyorder_f = self.polyorder_f
 
         if not self._l2_obj_cache:
-            raise ValueError("No L2 objects found; please run process_stack_l0_to_l2")
+            raise ValueError("No L2 objects found; please run _process_stack_l0_to_l2")
         l2_obj_list = self._l2_obj_cache
 
         nobs = len(l2_obj_list)
@@ -699,7 +699,7 @@ class WLS(BaseMasterModule):
             if verbose:
                 print(f"\n{i + 1} of {nobs}")
 
-            lines_stack[i] = self.fit_line_positions_ffi(
+            lines_stack[i] = self._fit_line_positions_ffi(
                 l2_obj,
                 chip,
                 fibers,
@@ -728,7 +728,7 @@ class WLS(BaseMasterModule):
                     )
                 continue
 
-            coeffs_stack[i] = self.calculate_wls_coeffs(
+            coeffs_stack[i] = self._calculate_wls_coeffs(
                 lines_stack[i],
                 self.norder[chip],
                 polyorder_x=polyorder_x,
@@ -765,7 +765,7 @@ class WLS(BaseMasterModule):
             )
         coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0) / denom
 
-        W = self.evaluate_wls_coeffs(
+        W = self._evaluate_wls_coeffs(
             coeffs_mean, self.ccd["ncol"], self.norder[chip], len(fibers)
         )
 
@@ -796,7 +796,7 @@ class WLS(BaseMasterModule):
 
         Processes each input L0 frame through the L0-to-L2 pipeline, then
         computes per-chip Legendre wavelength solutions using
-        `compute_wls_from_stack`. The resulting wavelength arrays are
+        `_compute_wls_from_stack`. The resulting wavelength arrays are
         written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
         which is returned and cached on `self.ml2_obj`; pass `master_path`
         to also persist it to disk via `save_master('L2', ...)`. Per-frame
@@ -867,8 +867,8 @@ class WLS(BaseMasterModule):
 
         self._load_linelist(linelist)
 
-        # process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
-        self.process_stack_l0_to_l2(l0_file_list=l0_file_list, verbose=verbose)
+        # _process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
+        self._process_stack_l0_to_l2(l0_file_list=l0_file_list, verbose=verbose)
 
         self.ml2_obj = KPFMasterL2()
 
@@ -877,7 +877,7 @@ class WLS(BaseMasterModule):
         self._results = {}
 
         for chip in self.chips:
-            result = self.compute_wls_from_stack(
+            result = self._compute_wls_from_stack(
                 chip=chip,
                 fibers=self.fibers,
                 lineprofile=lineprofile,

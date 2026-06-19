@@ -69,9 +69,9 @@ class Bias(BaseMasterModule):
         l0_file_list : list of str, optional
             L0 files to stack. Defaults to self.l0_file_list.
         nstream : int, optional
-            Stream threshold passed to stack_frames.
+            Stream threshold passed to _stack_frames.
         sigma : float, optional
-            Outlier rejection threshold passed to stack_frames.
+            Outlier rejection threshold passed to _stack_frames.
         filepath : str, optional
             If provided, calls `self.save_master('L1', filepath)` at
             the end to persist the master L1 to a FITS file at this filepath.
@@ -85,15 +85,15 @@ class Bias(BaseMasterModule):
         if sigma is None:
             sigma = self.stack_sigma
 
-        l1_arrays = self.stack_frames(
+        l1_arrays = self._stack_frames(
             l0_file_list=l0_file_list,
             nstream=nstream,
             sigma=sigma,
             verbose=verbose,
         )
-        l1_arrays = self.clean_l1_arrays(l1_arrays, sigma)
+        l1_arrays = self._clean_l1_arrays(l1_arrays, sigma)
 
-        self.ml1_obj = self.build_ml1_obj(
+        self.ml1_obj = self._build_ml1_obj(
             l1_arrays, l0_file_list, receipt_key="master_bias"
         )
         self._results = self._compute_results(l1_arrays)

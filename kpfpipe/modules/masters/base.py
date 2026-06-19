@@ -665,7 +665,7 @@ class BaseMasterModule:
     # Public methods
     # ------------------------------------------------------------------
 
-    def stack_frames(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
+    def _stack_frames(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
         """
         Stack full-frame images to produce masters L1.
 
@@ -752,14 +752,14 @@ class BaseMasterModule:
 
         return l1_arrays
 
-    def clean_l1_arrays(self, l1_arrays, sigma):
+    def _clean_l1_arrays(self, l1_arrays, sigma):
         """
         Interpolate bad pixels and recompute the bad-pixel mask per chip.
 
         Parameters
         ----------
         l1_arrays : dict
-            Per-chip '{chip}_IMG/_SNR/_MASK' arrays from `stack_frames`.
+            Per-chip '{chip}_IMG/_SNR/_MASK' arrays from `_stack_frames`.
         sigma : float
             Sigma threshold for the final outlier pass on the combined image.
 
@@ -784,7 +784,7 @@ class BaseMasterModule:
 
         return l1_arrays
 
-    def build_ml1_obj(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
+    def _build_ml1_obj(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
         """
         Assemble a KPFMasterL1 from finalized per-chip arrays.
 
