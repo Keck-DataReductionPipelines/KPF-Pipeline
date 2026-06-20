@@ -60,6 +60,7 @@ def mock_pipeline(monkeypatch):
 
     mock_ip = MagicMock()
     mock_ip.return_value.perform.return_value = MockL1()
+    mock_ip.calibration_applied.return_value = False  # frame not yet calibrated
 
     mock_se = MagicMock()
     mock_se.return_value.perform.return_value = l2
@@ -119,6 +120,7 @@ class TestExtractFrame:
         mock_ca.return_value.perform.return_value = MockL1()
         mock_ip = MagicMock()
         mock_ip.return_value.perform.return_value = MockL1()
+        mock_ip.calibration_applied.return_value = False  # frame not yet calibrated
         mock_se = MagicMock()
         mock_se.return_value.perform.return_value = MockL2()
 

@@ -219,6 +219,7 @@ class TestProcessFrame:
         ):
             mock_ca.return_value.perform.return_value = associated
             mock_ip.return_value.perform.return_value = processed
+            mock_ip.calibration_applied.return_value = False  # frame not yet calibrated
 
             result = dark._process_frame(frame_in)
 
@@ -250,6 +251,7 @@ class TestProcessFrame:
             patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
         ):
             mock_ip.return_value.perform.return_value = processed
+            mock_ip.calibration_applied.return_value = False  # frame not yet calibrated
             result = dark._process_frame(frame_in)
 
         mock_ca.assert_not_called()
@@ -287,6 +289,7 @@ class TestProcessFrame:
         ):
             mock_ca.return_value.perform.return_value = associated
             mock_ip.return_value.perform.return_value = processed
+            mock_ip.calibration_applied.return_value = False  # frame not yet calibrated
             result = dark._process_frame(frame_in)
 
         # Only the True (bias) calibration is associated; the explicit dark is not.
@@ -296,6 +299,24 @@ class TestProcessFrame:
             bias=loaded["bias"], dark=loaded["dark"], flat=False
         )
         assert result is processed
+
+    def test_skips_frame_already_calibrated(self):
+        # A frame whose active calibrations are already flagged applied (e.g. a
+        # cached frame revisited by the streaming pass) is returned untouched,
+        # so calibrations are never subtracted twice.
+        dark = Dark(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
+        frame_in = MagicMock(name="l1_in")
+
+        with (
+            patch("kpfpipe.modules.masters.base.CalibrationAssociation") as mock_ca,
+            patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
+        ):
+            mock_ip.calibration_applied.return_value = True  # bias already applied
+            result = dark._process_frame(frame_in)
+
+        mock_ca.assert_not_called()
+        mock_ip.assert_not_called()
+        assert result is frame_in
 
 
 # ---------------------------------------------------------------------------

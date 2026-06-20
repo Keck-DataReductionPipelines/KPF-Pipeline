@@ -271,7 +271,13 @@ class BaseMasterModule:
             The same frame with the active calibrations applied.
         """
         calibrations = self._active_calibrations
-        if not any(calibrations.values()):
+        active = [name for name, value in calibrations.items() if value]
+        if not active:
+            return l1_obj
+
+        # Skip frames already calibrated (e.g. a cached frame revisited by the
+        # streaming pass) so calibrations are never subtracted twice.
+        if all(ImageProcessing.calibration_applied(l1_obj, name) for name in active):
             return l1_obj
 
         # Only header-driven (True) calibrations need association; explicit

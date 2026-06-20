@@ -71,11 +71,11 @@ class QCL1(QC):
     read_noise_nongauss._qc_comment = "QC: non-Gaussian RN within 0.8-1.5"
 
     def bias_subtracted(self):
-        """BIASUB == True."""
+        """BIASSUB == True."""
         hdr = self.kpf.headers["PRIMARY"]
-        if "BIASUB" not in hdr:
+        if "BIASSUB" not in hdr:
             return False
-        val = hdr["BIASUB"]
+        val = hdr["BIASSUB"]
         if isinstance(val, tuple):
             val = val[0]
         return bool(val)

@@ -349,9 +349,9 @@ class TestPerform:
         assert "bias" in mod_with_bias._results
         assert mod_with_bias._results["bias"] == str(tmp_path / "master_bias.fits")
 
-    def test_biasub_header_set(self, mod_with_bias):
+    def test_biassub_header_set(self, mod_with_bias):
         mod_with_bias.perform()
-        assert mod_with_bias.l1_obj.headers["PRIMARY"]["BIASUB"][0] is True
+        assert mod_with_bias.l1_obj.headers["PRIMARY"]["BIASSUB"][0] is True
 
     def test_receipt_entry_added(self, mod_with_bias):
         mod_with_bias.perform()
@@ -376,8 +376,8 @@ class TestPerform:
         # CCDs untouched
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE)
         np.testing.assert_allclose(result.data["RED_CCD"], _CCD_VALUE)
-        # BIASUB header reflects the choice
-        assert result.headers["PRIMARY"]["BIASUB"][0] is False
+        # BIASSUB header reflects the choice
+        assert result.headers["PRIMARY"]["BIASSUB"][0] is False
         # No bias path recorded
         assert "bias" not in mod._results
 
@@ -397,7 +397,7 @@ class TestPerform:
         result = mod.perform(bias=bias_path, dark=False)
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
         np.testing.assert_allclose(result.data["RED_CCD"], _CCD_VALUE - _BIAS_VALUE)
-        assert result.headers["PRIMARY"]["BIASUB"][0] is True
+        assert result.headers["PRIMARY"]["BIASSUB"][0] is True
         assert mod._results["bias"] == bias_path
 
     def test_bias_master_l1_object_used_directly(self, tmp_path):
@@ -408,7 +408,7 @@ class TestPerform:
         mod = _make_module()  # no BIASFILE / BIASDIR needed
         result = mod.perform(bias=preloaded, dark=False)
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
-        assert result.headers["PRIMARY"]["BIASUB"][0] is True
+        assert result.headers["PRIMARY"]["BIASSUB"][0] is True
         # _bias_path should reflect the in-memory object's filename
         assert mod._results["bias"] == bias_path
 
@@ -458,7 +458,7 @@ class TestPerformDark:
         np.testing.assert_allclose(
             mod_with_bias_dark.l1_obj.data["GREEN_CCD"], expected
         )
-        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["BIASUB"][0] is True
+        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["BIASSUB"][0] is True
         assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is True
 
     def test_bias_then_dark_combined(self, mod_with_bias_dark):
@@ -503,6 +503,74 @@ class TestPerformDark:
         mod = _make_module()
         with pytest.raises(TypeError, match="dark must be"):
             mod.perform(bias=False, dark=42)
+
+
+# ---------------------------------------------------------------------------
+# TestCalibrationGuard
+# ---------------------------------------------------------------------------
+
+
+class TestCalibrationGuard:
+    """perform() must refuse to subtract a calibration already applied."""
+
+    def _bias_module(self, tmp_path):
+        _write_master_bias(str(tmp_path / "master_bias.fits"))
+        mod = _make_module(bias_file="master_bias.fits", bias_dir=str(tmp_path))
+        mod.dark = False
+        return mod
+
+    def _dark_module(self, tmp_path):
+        _write_master_dark(str(tmp_path / "master_dark.fits"))
+        mod = _make_module(dark_file="master_dark.fits", dark_dir=str(tmp_path))
+        mod.bias = False
+        return mod
+
+    def test_calibration_applied_false_before_perform(self, tmp_path):
+        mod = self._bias_module(tmp_path)
+        assert ImageProcessing.calibration_applied(mod.l1_obj, "bias") is False
+
+    def test_calibration_applied_true_after_perform(self, tmp_path):
+        mod = self._bias_module(tmp_path)
+        mod.perform()
+        assert ImageProcessing.calibration_applied(mod.l1_obj, "bias") is True
+
+    def test_second_bias_perform_raises(self, tmp_path):
+        mod = self._bias_module(tmp_path)
+        mod.perform()
+        with pytest.raises(RuntimeError, match="bias already subtracted"):
+            mod.perform()
+
+    def test_second_dark_perform_raises(self, tmp_path):
+        mod = self._dark_module(tmp_path)
+        mod.perform()
+        with pytest.raises(RuntimeError, match="dark already subtracted"):
+            mod.perform()
+
+    def test_guard_does_not_mutate_on_raise(self, tmp_path):
+        # A blocked re-run must leave the (already-calibrated) data untouched.
+        mod = self._bias_module(tmp_path)
+        mod.perform()
+        once = mod.l1_obj.data["GREEN_CCD"].copy()
+        with pytest.raises(RuntimeError):
+            mod.perform()
+        np.testing.assert_array_equal(mod.l1_obj.data["GREEN_CCD"], once)
+
+    def test_sequential_bias_then_dark_preserves_both_flags(self, tmp_path):
+        # Applying dark after bias must not clear the recorded bias flag.
+        _write_master_bias(str(tmp_path / "master_bias.fits"))
+        _write_master_dark(str(tmp_path / "master_dark.fits"))
+        mod = _make_module(
+            bias_file="master_bias.fits",
+            bias_dir=str(tmp_path),
+            dark_file="master_dark.fits",
+            dark_dir=str(tmp_path),
+        )
+        mod.perform(bias=True, dark=False)
+        mod.perform(bias=False, dark=True)
+        assert mod.l1_obj.headers["PRIMARY"]["BIASSUB"][0] is True
+        assert mod.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is True
+        expected = _CCD_VALUE - _BIAS_VALUE - _DARK_VALUE * _EXPTIME
+        np.testing.assert_allclose(mod.l1_obj.data["GREEN_CCD"], expected)
 
 
 # ---------------------------------------------------------------------------

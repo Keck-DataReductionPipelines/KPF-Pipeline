@@ -23,6 +23,14 @@ _DEFAULTS = {
     "flat": False,  # flat division not yet implemented
 }
 
+# PRIMARY-header flag marking a calibration as applied (single source of truth
+# for these keyword names). FLATSUB is reserved for when flat division lands.
+_CALIBRATION_HEADER_KEYS = {
+    "bias": "BIASSUB",
+    "dark": "DARKSUB",
+    "flat": "FLATSUB",
+}
+
 
 class ImageProcessing:
     """
@@ -191,6 +199,32 @@ class ImageProcessing:
     # Public entry point
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def calibration_applied(l1_obj, cal_type):
+        """
+        Return True if `cal_type` is already flagged applied on `l1_obj`.
+
+        Reads the PRIMARY-header flag (`_CALIBRATION_HEADER_KEYS`) written by a
+        prior `perform`. Lets callers — and `perform` itself — avoid applying a
+        calibration twice (e.g. a cached frame revisited during stacking).
+
+        Parameters
+        ----------
+        l1_obj : KPF1
+            Frame whose PRIMARY header is inspected.
+        cal_type : str
+            Calibration name: 'bias', 'dark', or 'flat'.
+
+        Returns
+        -------
+        bool
+            True if the calibration's header flag is present and truthy.
+        """
+        val = l1_obj.headers["PRIMARY"].get(_CALIBRATION_HEADER_KEYS[cal_type])
+        if isinstance(val, tuple):  # Headers store (value, comment) tuples.
+            val = val[0]
+        return bool(val)
+
     def perform(self, chips=None, *, bias=None, dark=None, flat=None):
         """
         Run image processing calibrations on the L1 frame.
@@ -226,6 +260,9 @@ class ImageProcessing:
             If flat is truthy.
         TypeError
             If `bias` or `dark` is not bool, str, or KPFMasterL1.
+        RuntimeError
+            If a requested calibration is already flagged applied on the frame
+            (BIASSUB/DARKSUB), guarding against double subtraction.
         """
         # Per-call kwargs override the instance config; subtract_bias/
         # subtract_dark then read the resolved sources from self.
@@ -241,6 +278,15 @@ class ImageProcessing:
         if self.flat:
             raise NotImplementedError("flat division not yet implemented")
 
+        # Guard against re-applying a calibration already subtracted from this
+        # frame (e.g. a double perform() call); checked before any mutation.
+        prior_bias = self.calibration_applied(self.l1_obj, "bias")
+        prior_dark = self.calibration_applied(self.l1_obj, "dark")
+        if self.bias and prior_bias:
+            raise RuntimeError("bias already subtracted from this frame (BIASSUB=True)")
+        if self.dark and prior_dark:
+            raise RuntimeError("dark already subtracted from this frame (DARKSUB=True)")
+
         self._results = {}
         if self.bias:
             for chip in self.chips:
@@ -252,12 +298,14 @@ class ImageProcessing:
                 self.subtract_dark(chip)
             self._results["dark"] = self._dark_path
 
-        self.l1_obj.headers["PRIMARY"]["BIASUB"] = (
-            bool(self.bias),
+        # OR with the prior flag so applying one calibration never clears
+        # another already recorded on the frame.
+        self.l1_obj.headers["PRIMARY"]["BIASSUB"] = (
+            bool(self.bias) or prior_bias,
             "Bias subtraction applied",
         )
         self.l1_obj.headers["PRIMARY"]["DARKSUB"] = (
-            bool(self.dark),
+            bool(self.dark) or prior_dark,
             "Dark subtraction applied",
         )
         self.l1_obj.receipt_add_entry("image_processing", "PASS")
