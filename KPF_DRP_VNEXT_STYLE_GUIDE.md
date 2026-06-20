@@ -526,10 +526,15 @@ documented, intentional ways — follow *its* conventions when adding masters co
   source; per-level naming follows `data_models/` (`test_quicklook_l0.py`).
 - **Section the file with the same 66-dash banner comments** used in source modules.
   Open with a module docstring stating scope and data requirements.
-- **Fixtures** (`@pytest.fixture`): module-level when shared, nested in a class when
-  scoped to it; named for the object produced (`synthetic_l0_file`, `l2_from_flat`). Use
-  `scope="class"` for expensive real-data pipelines (with `tmp_path_factory`, since
-  `tmp_path` is function-scoped). Returning `(result, helper_obj)` tuples is common.
+- **Fixtures** (`@pytest.fixture`): named for the object produced (`synthetic_l0_file`,
+  `l2_from_flat`). Fixtures used by **more than one file live in `tests/conftest.py`**
+  (e.g. `synthetic_l0_file`/`synthetic_l1_file` and the seeded `image_hdu` builder); keep
+  single-consumer fixtures local. Use `scope="class"` for expensive real-data pipelines
+  (with `tmp_path_factory`, since `tmp_path` is function-scoped). Returning
+  `(result, helper_obj)` tuples is common.
+- **Shared non-fixture helpers** go in an underscore-prefixed module that pytest does not
+  collect (`tests/_masters.py`), imported relatively (`from ._masters import ...`) — do not
+  duplicate a builder across files or hang it off `conftest.py` (which is for fixtures/hooks).
 - **Test data**: real KPF FITS lives under `tests/testdata/<LEVEL>/<date>/`,
   referenced via `Path(__file__).parent / "testdata" / ...` assigned to `UPPER_CASE`
   module constants. Two explicit tiers, documented in the module docstring: **synthetic
@@ -540,6 +545,11 @@ documented, intentional ways — follow *its* conventions when adding masters co
   and don't hunt for or build a fixture-generation script — there isn't one, by design.**
   If an integration test needs a missing/stale testdata file, regenerate it **locally** and
   note in the response that the shared copy needs the same update.
+- **Markers** (registered in `conftest.py`): mark integration / heavy-compute classes
+  `@pytest.mark.slow`, and truth-frame-gated classes `@pytest.mark.requires_testdata`
+  (auto-skipped when `tests/testdata/` is absent). The fast pre-commit subset is
+  `-m "not slow"`; *when* to run the subset vs the full suite is policy and lives in
+  `CLAUDE.md`, not here.
 - **Float tolerances** (use the prevailing pattern for the situation):
   - Analytic recovery → `np.testing.assert_allclose(rtol=1e-5, atol=1e-5)`.
   - FITS round-trips → `assert_array_almost_equal(decimal=4)`.
@@ -553,7 +563,11 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **Isolation**: `monkeypatch` is the dominant tool (stub expensive/data-dependent steps);
   `unittest.mock` (`MagicMock`/`patch`) where call objects are needed; hand-rolled stub
   classes for lightweight fakes; `tmp_path`/`tmp_path_factory` for filesystem isolation.
-- **Git-receipt / cwd constraint**: in-process tests don't `cd`; CLI tests run a
+- **Parallel-safe**: the suite runs under `pytest-xdist` (`-n auto --dist loadscope`), so
+  every test must be parallel-safe — write outputs only under `tmp_path`, keep no shared
+  mutable module/global state, and never depend on a fixed on-disk path or test order.
+- **Git-receipt / cwd constraint**: in-process tests don't `cd` — **never `chdir` outside
+  the repo**, which breaks the receipt's git-SHA provenance stamping. CLI tests run a
   subprocess with `cwd=_REPO_ROOT` and `PYTHONPATH=_REPO_ROOT`, where
   `_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`. This is the
   canonical accommodation.
@@ -630,8 +644,5 @@ the dominant variant of the file/area you're editing**, and don't churn unrelate
    `(value, comment)`-unwrap helper duplicated ~4×.
 2. **Masters** — the config-resolution block is duplicated 5× (could be a base helper); the
    `0.2` load-failure threshold is an unnamed magic number.
-3. **Tests** — no `conftest.py` and synthetic-FITS construction duplicated widely; a few
-   `test_data_models.py` fixtures use unseeded `np.random.random`; some module docstrings
-   claim "skip if no testdata" but no such skip exists (data is vendored).
-4. **Configs** — the `[DATA_DIRS]` + `[KPFPIPE]` blocks are duplicated verbatim across the
+3. **Configs** — the `[DATA_DIRS]` + `[KPFPIPE]` blocks are duplicated verbatim across the
    science and masters configs (no shared-include mechanism).

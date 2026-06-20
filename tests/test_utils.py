@@ -1,7 +1,10 @@
 """
 Tests for kpfpipe.utils helpers: astro (astro.py), KPF timestamp/obs_id
-conversions (kpf.py), and statistics (stats.py).
+conversions (kpf.py), statistics (stats.py), validation (validation.py), and
+config loading (config.py).
 """
+
+import warnings
 
 import astropy.units as u
 import numpy as np
@@ -9,6 +12,7 @@ import pytest
 from astropy.constants import c
 
 from kpfpipe.utils.astro import air_to_vac, compute_doppler_factor, compute_redshift
+from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import (
     eprv_timestamp_to_kpf_timestamp,
     get_datecode,
@@ -24,11 +28,13 @@ from kpfpipe.utils.kpf import (
     utc_to_hst,
 )
 from kpfpipe.utils.stats import (
+    flag_outliers,
     gaussian_dist,
     gaussian_jac,
     interpolate_bad_pixels,
     optimize_lsq,
 )
+from kpfpipe.utils.validation import strictly_increasing, validate_array
 
 C_KMS = c.to("km/s").value
 
@@ -500,3 +506,148 @@ class TestInterpolateBadPixels:
         out = interpolate_bad_pixels(data, mask)
         good_pixels = mask
         np.testing.assert_array_equal(out[good_pixels], original[good_pixels])
+
+    def test_global_method_fills_bad_pixel_clump(self):
+        # Global linear interpolation handles clumps; NaN-flagged pixels are filled.
+        data = np.full((6, 6), 5.0, dtype=np.float64)
+        mask = np.ones((6, 6), dtype=bool)
+        mask[2:4, 2:4] = False  # 2x2 clump
+        data[2:4, 2:4] = np.nan
+        out = interpolate_bad_pixels(data, mask, method="global")
+        assert np.all(np.isfinite(out))
+        assert out[0, 0] == 5.0  # good pixel untouched
+
+    def test_unsupported_method_raises(self):
+        data = np.ones((4, 4), dtype=np.float32)
+        mask = np.ones((4, 4), dtype=bool)
+        with pytest.raises(ValueError, match="method must be 'local' or 'global'"):
+            interpolate_bad_pixels(data, mask, method="bogus")
+
+
+class TestOptimizeLsqErrors:
+    def test_unsupported_line_model_raises(self):
+        x = np.arange(5.0)
+        y = np.zeros(5)
+        with pytest.raises(ValueError, match="Unsupported line function"):
+            optimize_lsq(x, y, "not_a_model")
+
+
+class TestFlagOutliers:
+    def test_median_method_flags_spike(self):
+        x = np.full(50, 10.0)
+        x[25] = 1000.0
+        out = flag_outliers(x, sigma=5.0, method="median")
+        assert out[25] and not out[0]
+
+    def test_trend_method_flags_spike(self):
+        # The trend method detrends with a median+gaussian filter before flagging.
+        x = np.full(50, 10.0)
+        x[25] = 1000.0
+        out = flag_outliers(x, sigma=5.0, kernel_size=5, method="trend")
+        assert out[25]
+
+    def test_unsupported_method_raises(self):
+        with pytest.raises(ValueError, match="method must be 'median' or 'trend'"):
+            flag_outliers(np.arange(10.0), sigma=5.0, method="bogus")
+
+
+# ===========================================================================
+# validation.py — array/value validators
+# ===========================================================================
+
+
+class TestStrictlyIncreasing:
+    def test_true_for_increasing(self):
+        assert strictly_increasing([1.0, 2.0, 3.0]) is True
+
+    def test_false_for_non_increasing(self):
+        assert strictly_increasing([1.0, 1.0, 2.0]) is False
+        assert strictly_increasing([3.0, 2.0, 1.0]) is False
+
+
+class TestValidateArray:
+    def test_invalid_response_raises(self):
+        with pytest.raises(ValueError, match="response must be"):
+            validate_array([1.0, 2.0], response="bogus")
+
+    def test_clean_array_is_silent(self):
+        # A finite, positive array produces no warning and returns None.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert validate_array(np.array([1.0, 2.0, 3.0])) is None
+
+    def test_nan_warns(self):
+        with pytest.warns(UserWarning, match="NaN values detected"):
+            validate_array(np.array([1.0, np.nan, 3.0]))
+
+    def test_inf_warns(self):
+        with pytest.warns(UserWarning, match="Non-finite values detected"):
+            validate_array(np.array([1.0, np.inf, 3.0]), check_positive=False)
+
+    def test_negative_warns(self):
+        with pytest.warns(UserWarning, match="Negative values detected"):
+            validate_array(np.array([1.0, -2.0, 3.0]), check_finite=False)
+
+    def test_error_response_raises_with_all_issues(self):
+        with pytest.raises(ValueError, match="NaN values detected"):
+            validate_array(np.array([np.nan, -1.0]), response="error")
+
+    def test_silent_response_suppresses(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert validate_array(np.array([np.nan, -1.0]), response="silent") is None
+
+
+# ===========================================================================
+# config.py — ConfigHandler (TOML loading + section overrides)
+# ===========================================================================
+
+
+def _write_toml(tmp_path, text, name="cfg.toml"):
+    path = tmp_path / name
+    path.write_text(text)
+    return str(path)
+
+
+class TestConfigHandler:
+    def test_loads_sections(self, tmp_path):
+        cfg = _write_toml(tmp_path, '[DATA_DIRS]\nroot = "/data"\n[KPFPIPE]\nn = 3\n')
+        handler = ConfigHandler(cfg)
+        assert handler.config["DATA_DIRS"]["root"] == "/data"
+
+    def test_get_params_default_sections(self, tmp_path):
+        cfg = _write_toml(tmp_path, '[DATA_DIRS]\nroot = "/data"\n[KPFPIPE]\nn = 3\n')
+        params = ConfigHandler(cfg).get_params()  # sections=None -> defaults
+        assert params == {"root": "/data", "n": 3}
+
+    def test_get_params_flattens_nested_dict(self, tmp_path):
+        toml = "[KPFPIPE]\nsimple = 1\n[KPFPIPE.nested]\nsub = 2\n"
+        cfg = _write_toml(tmp_path, toml)
+        params = ConfigHandler(cfg).get_params(["KPFPIPE"])
+        assert params["simple"] == 1
+        assert params["nested_sub"] == 2
+
+    def test_override_merges_into_dict_section(self, tmp_path):
+        cfg = _write_toml(tmp_path, '[DATA_DIRS]\nroot = "/data"\n')
+        handler = ConfigHandler(cfg, overrides={"DATA_DIRS": {"out": "/out"}})
+        assert handler.config["DATA_DIRS"] == {"root": "/data", "out": "/out"}
+
+    def test_override_replaces_when_section_absent_or_non_dict(self, tmp_path):
+        cfg = _write_toml(tmp_path, '[DATA_DIRS]\nroot = "/data"\n')
+        handler = ConfigHandler(cfg, overrides={"NEW_SECTION": 42})
+        assert handler.config["NEW_SECTION"] == 42
+
+    def test_load_config_with_explicit_path_switches_file(self, tmp_path):
+        cfg1 = _write_toml(tmp_path, "[KPFPIPE]\nn = 1\n", name="a.toml")
+        cfg2 = _write_toml(tmp_path, "[KPFPIPE]\nn = 2\n", name="b.toml")
+        handler = ConfigHandler(cfg1)
+        handler.load_config(cfg2)
+        assert str(handler.path).endswith("b.toml")
+        assert handler.config["KPFPIPE"]["n"] == 2
+
+    def test_get_params_reloads_when_config_empty(self, tmp_path):
+        cfg = _write_toml(tmp_path, "[KPFPIPE]\nn = 7\n")
+        handler = ConfigHandler(cfg)
+        handler.config = {}  # force the reload branch in get_params
+        params = handler.get_params(["KPFPIPE"])
+        assert params["n"] == 7

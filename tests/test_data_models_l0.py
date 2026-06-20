@@ -4,8 +4,12 @@ Tests for the KPF0 (raw CCD / L0) data model.
 Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
+import os
+
 import numpy as np
 import pytest
+from astropy.io import fits
+from astropy.table import Table
 
 from kpfpipe.data_models.level0 import KPF0
 
@@ -68,3 +72,57 @@ class TestKPF0:
             f.write("hello")
         with pytest.raises(IOError):
             KPF0.from_fits(fn)
+
+
+class TestKPF0ErrorPaths:
+    """Malformed-input, provenance, and write-path guards."""
+
+    def _minimal_l0(self, tmp_path, extra_hdus=()):
+        fn = str(tmp_path / "KP.20240113.00002.00.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["INSTRUME"] = "KPF"
+        primary.header["DATE-OBS"] = "2024-01-13T00:00:02"
+        hdul = fits.HDUList([primary, *extra_hdus])
+        hdul.writeto(fn, overwrite=True)
+        hdul.close()
+        return fn
+
+    def test_warns_on_unknown_extension(self, tmp_path):
+        weird = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="MYSTERY")
+        fn = self._minimal_l0(tmp_path, extra_hdus=[weird])
+        with pytest.warns(UserWarning, match="Non-standard extension"):
+            KPF0.from_fits(fn)
+
+    def test_parses_receipt_with_entries(self, tmp_path):
+        receipt = Table({"Module_Name": ["init"], "Status": ["PASS"]})
+        rec_hdu = fits.BinTableHDU(data=receipt, name="RECEIPT")
+        fn = self._minimal_l0(tmp_path, extra_hdus=[rec_hdu])
+        l0 = KPF0.from_fits(fn)
+        assert "init" in l0.receipt["Module_Name"].values
+        # The receipt is reindexed to include the standard provenance columns.
+        assert "Commit_Hash" in l0.receipt.columns
+
+    def test_parses_empty_receipt(self, tmp_path):
+        receipt = Table(names=["Module_Name"], dtype=["U10"])  # zero rows
+        rec_hdu = fits.BinTableHDU(data=receipt, name="RECEIPT")
+        fn = self._minimal_l0(tmp_path, extra_hdus=[rec_hdu])
+        l0 = KPF0.from_fits(fn)
+        # An empty receipt is seeded with the standard columns; from_fits then
+        # appends its own entry.
+        assert "Code_Release" in l0.receipt.columns
+        assert "from_fits" in l0.receipt["Module_Name"].values
+
+    def test_generate_filename_without_obs_id_raises(self):
+        with pytest.raises(ValueError, match="obs_id not set"):
+            KPF0().generate_standard_filename()
+
+    def test_to_fits_rejects_non_fits_name(self, synthetic_l0_file, tmp_path):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        with pytest.raises(NameError, match="must end with .fits"):
+            l0.to_fits(str(tmp_path / "output.txt"))
+
+    def test_to_fits_creates_parent_dirs(self, synthetic_l0_file, tmp_path):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        out = str(tmp_path / "nested" / "sub" / "out.fits")
+        l0.to_fits(out)
+        assert os.path.isfile(out)

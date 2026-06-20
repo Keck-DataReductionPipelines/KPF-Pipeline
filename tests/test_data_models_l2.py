@@ -239,7 +239,7 @@ class TestKPF2Aliases:
 
     def test_set_data_via_alias(self):
         kpf2 = KPF2()
-        test_data = np.random.random((10, 100)).astype(np.float64)
+        test_data = np.random.default_rng(42).random((10, 100))
         kpf2.set_data("SCI2_FLUX", test_data)
         np.testing.assert_array_equal(kpf2.data["TRACE3_FLUX"], test_data)
 
@@ -263,7 +263,8 @@ class TestKPF2Aliases:
         """Test GREEN_/RED_ prefix returns correct slices of concatenated trace."""
         kpf2 = KPF2()
         n_pix = 100
-        trace_data = np.random.random((NORDER_GREEN + NORDER_RED, n_pix))
+        rng = np.random.default_rng(42)
+        trace_data = rng.random((NORDER_GREEN + NORDER_RED, n_pix))
         kpf2.set_data("TRACE3_FLUX", trace_data)
 
         green = kpf2.data["GREEN_SCI2_FLUX"]
@@ -356,8 +357,10 @@ class TestKPFMasterL2:
     def test_chip_prefix_access(self):
         m = KPFMasterL2()
         n_pix = 32
-        trace_data = np.random.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(
-            np.float32
+        trace_data = (
+            np.random.default_rng(42)
+            .random((NORDER_GREEN + NORDER_RED, n_pix))
+            .astype(np.float32)
         )
         m.data["TRACE3_WAVE"] = trace_data
 

@@ -111,6 +111,18 @@ class TestKPF4:
         with pytest.raises(KeyError, match="read-only"):
             kpf4.set_data("GREEN_SCI2_RV", pd.DataFrame({"RV": np.zeros(NORDER_GREEN)}))
 
+    def test_data_get_chip_prefix_returns_slice(self):
+        # .get() honors chip-prefix slicing, like __getitem__.
+        kpf4 = KPF4()
+        kpf4.set_data("SCI2_CCF", np.ones((NORDER, 5)))
+        green = kpf4.data.get("GREEN_SCI2_CCF")
+        assert green.shape == (NORDER_GREEN, 5)
+
+    def test_data_get_plain_key_and_default(self):
+        kpf4 = KPF4()
+        assert kpf4.data.get("CCF1") is not None  # canonical extension exists
+        assert kpf4.data.get("NOT_A_KEY", "fallback") == "fallback"
+
 
 class TestKPFMasterStubs:
     def test_master_l4_not_implemented(self):

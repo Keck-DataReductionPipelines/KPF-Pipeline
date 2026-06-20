@@ -178,6 +178,48 @@ class TestMasterDarkSaveMaster:
 
 
 # ---------------------------------------------------------------------------
+# Base-class fail-loudly paths (construction + frame loading)
+# ---------------------------------------------------------------------------
+
+
+class TestMasterBaseErrors:
+    """Error/guard paths shared by all master modules (BaseMasterModule)."""
+
+    def test_unsorted_l0_list_raises(self):
+        # The base requires a sorted L0 list so stacking order is deterministic.
+        with pytest.raises(ValueError, match="sorted in ascending order"):
+            Dark(["KP.20240101.00002.00.fits", "KP.20240101.00001.00.fits"])
+
+    def test_bad_config_type_raises(self):
+        with pytest.raises(
+            TypeError, match="config must be None, dict, or ConfigHandler"
+        ):
+            Dark(FILE_LIST, config="not-a-config")
+
+    def test_load_frame_missing_file_warns_and_skips(self):
+        # A missing/unreadable L0 frame warns and returns (None, failure), not a crash.
+        fn = "/nonexistent/KP.20240101.00001.00.fits"
+        m = Dark([fn])
+        with pytest.warns(UserWarning, match="Failed to load"):
+            l1_obj, success = m._load_frame(fn, verbose=True)
+        assert l1_obj is None and success is False
+
+    def test_load_frame_exptime_failure_warns_and_skips(self, monkeypatch):
+        # A frame failing the exptime-vs-elapsed check is warned and skipped.
+        m = Dark(FILE_LIST)
+        fn = FILE_LIST[0]
+        m._l1_obj_cache[fn] = object()  # cache hit bypasses real I/O
+
+        def bad_check(l1_obj, exptime_tolerance):
+            raise ValueError("elapsed exceeds exptime")
+
+        monkeypatch.setattr(m, "_check_exptime_vs_elapsed", bad_check)
+        with pytest.warns(UserWarning, match="Exptime check failed"):
+            l1_obj, success = m._load_frame(fn, verbose=True)
+        assert l1_obj is None and success is False
+
+
+# ---------------------------------------------------------------------------
 # _process_frame: bias subtraction via CalibrationAssociation + ImageProcessing
 # ---------------------------------------------------------------------------
 
