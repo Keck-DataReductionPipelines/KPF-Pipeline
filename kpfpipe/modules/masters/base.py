@@ -9,9 +9,14 @@ import numpy as np
 
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.level0 import KPF0
+from kpfpipe.data_models.masters.level1 import KPFMasterL1
+from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_assembly import ImageAssembly
+from kpfpipe.modules.image_processing import ImageProcessing
+from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.stats import flag_outliers
+from kpfpipe.utils.io import build_master_path_from_fits_header
+from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 # TODO: throw out first frame in stack?
 # TODO: use start, middle, end of stack for initial datacube
@@ -24,14 +29,36 @@ class BaseMasterModule:
     The class should not be called directly, but is used for inheritance
     of masters subclasses: Bias, Dark, Flat, WLS. Masters modules read a
     stack of L0 files from disk and output a masters L1 object.
+
+    Each frame is calibrated before stacking/extraction following standard CCD
+    reduction: bias gets no calibration, dark is bias-subtracted, flat is
+    bias+dark-subtracted, and WLS (like science) is bias+dark-subtracted then
+    flat-divided. Each subclass declares its standard set via
+    `_STANDARD_CALIBRATIONS`. Which of those actually run is the standard set
+    intersected with the resolved bias/dark/flat flags
+    (DEFAULTS < [MODULE_IMAGE_PROCESSING] config < make_master kwargs): a flag
+    can only turn a standard calibration off, never enable one a master type
+    does not use.
     """
 
     # Module defaults; subclasses extend via `{**BaseMasterModule._DEFAULTS, ...}`.
+    # bias/dark/flat are the globally-enabled calibrations (the no-config
+    # fallback; in practice resolved from the shared [MODULE_IMAGE_PROCESSING]
+    # config and make_master kwargs). Keep in sync with the same keys in
+    # image_processing._DEFAULTS.
     _DEFAULTS = {
         **DEFAULTS,
         "nframe_stream": 6,
         "stack_sigma": 5.0,
+        "bias": True,
+        "dark": True,
+        "flat": False,
     }
+
+    # The calibrations that are standard for this master type (the ceiling).
+    # `_process_frame` applies the intersection of this set with the resolved
+    # bias/dark/flat flags. Subclasses override (e.g. Dark -> ("bias",)).
+    _STANDARD_CALIBRATIONS = ()
 
     def __init__(self, l0_file_list, config=None):
         if l0_file_list != sorted(l0_file_list):
@@ -52,14 +79,112 @@ class BaseMasterModule:
 
         self._l1_obj_cache = {}
 
+        # Masters output root; CalibrationAssociation reads masters from here
+        # when `_process_frame` associates a calibration for a stacked frame.
+        self._masters_root = params.get("KPF_MASTERS_OUTPUT")
+
+        # Forwarded to CalibrationAssociation in `_process_frame` so an operator's
+        # configured search window is honored, not silently reset to the default.
+        self._masters_search_window_days = params.get("masters_search_window_days")
+
+        # One cached master (KPFMasterL1) and its path per calibration type.
+        # Frames in a stack are taken close in time and so almost always
+        # associate the same nearest master; caching lets `_process_frame`
+        # read each master from disk once rather than once per frame.
+        self._master_ml1 = {}
+        self._master_paths = {}
+
         # populated by subclass make_master_l1(); used by save_master('L1', ...)
         self.ml1_obj = None
         # populated by subclass make_master_l2(); used by save_master('L2', ...)
         self.ml2_obj = None
 
+        # Effective per-frame calibrations (standard set masked by the resolved
+        # flags); make_master_l1/l2 re-resolve this with any kwarg overrides.
+        self._active_calibrations = self._resolve_calibrations()
+
     # ------------------------------------------------------------------
-    # Private helpers
+    # Private helpers for frame handling (loading, calibration, etc.).
     # ------------------------------------------------------------------
+
+    def _resolve_calibrations(self, *, bias=None, dark=None, flat=None):
+        """
+        Resolve which calibrations to apply to each frame.
+
+        For each calibration, the value is the per-call override (the make_master
+        kwarg if not None, else the config-resolved `self.<name>`, i.e.
+        DEFAULTS < [MODULE_IMAGE_PROCESSING]) — but only if the calibration is in
+        the per-master standard (`_STANDARD_CALIBRATIONS`); otherwise it is forced
+        off. A flag/path can only turn a standard calibration off (or aim it at a
+        specific master); it can never enable one outside the master's standard.
+
+        Parameters
+        ----------
+        bias, dark, flat : bool | str | KPFMasterL1, optional
+            Per-call overrides (same accepted forms as `ImageProcessing.perform`:
+            True → header-associated master, str → filepath, KPFMasterL1 → that
+            object). None means "use the resolved config value".
+
+        Returns
+        -------
+        dict
+            {name: False | True | str | KPFMasterL1} for name in bias/dark/flat.
+        """
+        overrides = {"bias": bias, "dark": dark, "flat": flat}
+        resolved = {}
+        for name in ("bias", "dark", "flat"):
+            if name not in self._STANDARD_CALIBRATIONS:
+                resolved[name] = False
+                continue
+            request = (
+                overrides[name] if overrides[name] is not None else getattr(self, name)
+            )
+            resolved[name] = request
+        return resolved
+
+    def _load_calibration(self, l1_obj, cal_type):
+        """
+        Resolve one active calibration to a master, caching one per type.
+
+        The source comes from `self._active_calibrations[cal_type]`: True → the
+        master associated into the frame header, str → a filepath, KPFMasterL1 →
+        an in-memory master. A disk-backed master is read only when its path
+        differs from the one already cached for `cal_type`; frames in a stack
+        almost always share the same master, so each is read from disk once.
+        Falsy (inactive) values and in-memory KPFMasterL1 objects are returned
+        unchanged.
+
+        Parameters
+        ----------
+        l1_obj : KPF1
+            The frame being calibrated; its PRIMARY header supplies the
+            associated master path for a True calibration.
+        cal_type : str
+            Calibration name: 'bias', 'dark', or 'flat'.
+
+        Returns
+        -------
+        bool | str | KPFMasterL1
+            A cached KPFMasterL1 for a disk-backed calibration; otherwise the
+            source value unchanged (so ImageProcessing handles falsy/invalid).
+        """
+        value = self._active_calibrations[cal_type]
+        if not value or isinstance(value, KPFMasterL1):
+            return value
+
+        if isinstance(value, str):
+            path = value
+        elif value is True:
+            path = build_master_path_from_fits_header(l1_obj, cal_type)
+        else:
+            return value  # let ImageProcessing raise the TypeError
+
+        if self._master_paths.get(cal_type) != path:
+            if not os.path.isfile(path):
+                raise FileNotFoundError(f"Master file not found: {path}")
+            self._master_ml1[cal_type] = KPFMasterL1.from_fits(path)
+            self._master_paths[cal_type] = path
+        return self._master_ml1[cal_type]
 
     def _load_frame(self, fn, ncache=None, exptime_tolerance=0.1, verbose=True):
         """
@@ -127,6 +252,84 @@ class BaseMasterModule:
 
         return l1_obj, success
 
+    def _process_frame(self, l1_obj):
+        """
+        Apply this module's active calibrations to an assembled frame.
+
+        Subtracts the active masters via ImageProcessing, reusing the standard
+        science-path modules rather than reimplementing the math. Calibrations
+        requested as `True` are associated first (CalibrationAssociation writes
+        their nearest-in-time master into the PRIMARY header); calibrations given
+        as an explicit filepath or KPFMasterL1 object skip association and are
+        passed straight through. Modules with no active calibrations receive the
+        frame unchanged.
+
+        Parameters
+        ----------
+        l1_obj : KPF1
+            Assembled L1 frame to calibrate, mutated in place.
+
+        Returns
+        -------
+        KPF1
+            The same frame with the active calibrations applied.
+        """
+        calibrations = self._active_calibrations
+        active = [name for name, value in calibrations.items() if value]
+        if not active:
+            return l1_obj
+
+        # Skip frames already calibrated (e.g. a cached frame revisited by the
+        # streaming pass) so calibrations are never subtracted twice.
+        if all(ImageProcessing.calibration_applied(l1_obj, name) for name in active):
+            return l1_obj
+
+        # Only header-driven (True) calibrations need association; explicit
+        # filepath / KPFMasterL1 overrides are loaded directly by ImageProcessing.
+        cal_types = [name for name, value in calibrations.items() if value is True]
+        if cal_types:
+            ca_config = {"KPF_MASTERS_OUTPUT": self._masters_root}
+            if self._masters_search_window_days is not None:
+                ca_config["masters_search_window_days"] = (
+                    self._masters_search_window_days
+                )
+            calibration_association = CalibrationAssociation(l1_obj, ca_config)
+            l1_obj = calibration_association.perform(cal_types)
+
+        # Load (and cache) each active master here, then hand the in-memory
+        # masters to ImageProcessing so a shared master is read once per stack.
+        image_processing = ImageProcessing(l1_obj)
+        l1_obj = image_processing.perform(
+            bias=self._load_calibration(l1_obj, "bias"),
+            dark=self._load_calibration(l1_obj, "dark"),
+            flat=self._load_calibration(l1_obj, "flat"),
+        )
+
+        return l1_obj
+
+    def _extract_frame(self, l1_obj, verbose=True):
+        """
+        Extract an assembled frame to L2 (for spectral masters, e.g. WLS).
+
+        Performs spectral extraction only. Calibration is not implicit here:
+        callers that need bias/dark applied must run `_process_frame` on the
+        frame first.
+
+        Parameters
+        ----------
+        l1_obj : KPF1
+            Assembled (and, where needed, already calibrated) L1 frame.
+        verbose : bool, optional
+            If True (default), emit progress prints during extraction.
+
+        Returns
+        -------
+        KPF2
+            The extracted L2 spectra.
+        """
+        spectral_extraction = SpectralExtraction(l1_obj)
+        return spectral_extraction.perform(verbose=verbose)
+
     @staticmethod
     def _check_exptime_vs_elapsed(l1_obj, exptime_tolerance):
         """
@@ -155,6 +358,10 @@ class BaseMasterModule:
         if delta > exptime_tolerance:
             raise ValueError(f"elapsed time - requested time > {exptime_tolerance}")
 
+    # ------------------------------------------------------------------
+    # Private helpers for frame stacking.
+    # ------------------------------------------------------------------
+
     def _compute_stats_from_datacube(
         self, l0_file_list=None, nframe=None, sigma=None, verbose=True
     ):
@@ -177,18 +384,26 @@ class BaseMasterModule:
         -------
         stats : dict
             Per-extension statistics including:
-            - 'nframe'     : number of valid frames per pixel
-            - 'total_sum'  : summed counts across valid frames
-            - 'rate_mean'  : exposure-time-normalized mean
-            - 'rate_rms'   : frame-to-frame sample RMS
-        exptime_total : float
-            Total integrated exposure time across included frames.
+            - 'nframe'      : number of valid frames per pixel
+            - 'counts_sum'  : summed counts across valid frames
+            - 'rate_mean'   : equal-weight mean of per-frame rates (the center
+                              used for streaming clip bounds, not the master IMG)
+            - 'rate_rms'    : frame-to-frame sample RMS of the per-frame rates
+            On the '{chip}_CCD' entry only:
+            - 'exptime_sum' : per-pixel total exposure time over valid frames
+                              (the denominator of the exposure-weighted rate in
+                              stack_frames; equals the valid-frame count for a
+                              bias stack, where T = 1)
+        zero_exptime : bool
+            True if this is a bias stack (all frames have EXPTIME == 0), used
+            by the streaming path to validate per-frame exposure consistency.
 
         Notes
         -----
-        Outlier rejection is performed jointly on CCD and VAR extensions.
-        Exposure times must be either all zero or all strictly positive.
-        Raises an error if more than 20% of frames fail to load.
+        Outlier rejection is performed jointly on CCD and VAR extensions, in
+        rate space, so frames of differing exposure are comparable. Exposure
+        times must be either all zero or all strictly positive. Raises an error
+        if more than 20% of frames fail to load.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -227,6 +442,8 @@ class BaseMasterModule:
                     raise ValueError("more than 20% of frames in stack failed to load")
                 continue
 
+            l1_obj = self._process_frame(l1_obj)
+
             exptime[i] = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
             for chip in self.chips:
@@ -244,8 +461,10 @@ class BaseMasterModule:
             raise ValueError(f"Exposure times cannot be negative; exptime = {exptime}")
 
         if np.all(exptime > 0):
+            zero_exptime = False
             T = exptime[:, None, None]
         elif np.all(exptime == 0):
+            zero_exptime = True
             T = np.ones_like(exptime)[:, None, None]
         else:
             raise ValueError(
@@ -253,7 +472,6 @@ class BaseMasterModule:
             )
 
         stats = {}
-        exptime_total = np.sum(exptime)
 
         for chip in self.chips:
             stats[f"{chip}_CCD"] = {}
@@ -267,12 +485,19 @@ class BaseMasterModule:
             N = np.sum(~out, axis=0)
             good = N > 1
 
+            # Per-pixel total exposure time over the surviving frames; this is
+            # the denominator of the exposure-weighted rate estimate (see
+            # stack_frames). T is 1 for a bias stack, so it reduces to N.
+            stats[f"{chip}_CCD"]["exptime_sum"] = np.sum(
+                np.where(valid, T, 0.0), axis=0
+            )
+
             for suffix in ["CCD", "VAR"]:
                 ext = f"{chip}_{suffix}"
                 frame_data = data_cube[ext]
                 R = frame_data / T
 
-                total_sum = np.sum(frame_data, axis=0, where=valid)
+                counts_sum = np.sum(frame_data, axis=0, where=valid)
 
                 rate_mean = np.zeros_like(R[0])
                 rate_mean[good] = np.sum(R, axis=0, where=valid)[good] / N[good]
@@ -284,17 +509,17 @@ class BaseMasterModule:
                 rate_rms[good] = np.sqrt(sum_sq_dev[good] / (N[good] - 1))
 
                 stats[ext]["nframe"] = N
-                stats[ext]["total_sum"] = total_sum
+                stats[ext]["counts_sum"] = counts_sum
                 stats[ext]["rate_mean"] = rate_mean
                 stats[ext]["rate_rms"] = rate_rms
 
-        return stats, exptime_total
+        return stats, zero_exptime
 
     def _compute_stats_from_stream(
         self, l0_file_list=None, ndirect=None, sigma=None, verbose=True
     ):
         """
-        Compute stacked statistics using streaming Welford accumulation.
+        Compute stacked statistics with a single streaming pass over the frames.
 
         Parameters
         ----------
@@ -312,19 +537,22 @@ class BaseMasterModule:
         Returns
         -------
         exact_stats : dict
-            Per-extension statistics including:
+            Per-extension statistics needed by `stack_frames`:
             - 'nframe'     : number of valid frames per pixel
-            - 'total_sum'  : summed counts across valid frames
-            - 'rate_mean'  : per-pixel rate mean, normalized by exposure time
-            - 'rate_rms'   : frame-to-frame rate rms deviation
-        exptime_total : float
-            Total integrated exposure time across included frames.
+            - 'counts_sum' : summed counts across valid frames
+            On the '{chip}_CCD' entry only:
+            - 'exptime_sum' : per-pixel total exposure time over valid frames
+            (Unlike `_compute_stats_from_datacube`, the streaming pass does not
+            produce 'rate_mean'/'rate_rms': clip bounds come from the datacube
+            approximation below, and the master IMG is counts_sum / exptime_sum.)
+        zero_exptime : bool
+            True if this is a bias stack (all frames have EXPTIME == 0).
 
         Notes
         -----
         An initial subset of frames is processed using the direct data cube
-        method to estimate approximate mean and RMS. These estimates define
-        per-pixel clipping bounds for the streaming pass.
+        method to estimate approximate rate mean and RMS. These estimates define
+        the per-pixel clipping bounds for the streaming pass.
 
         Optimized to reduce memory usage at the expense of compute speed.
         Raises an error if more than 20% of frames fail to load or if exposure
@@ -337,7 +565,7 @@ class BaseMasterModule:
         if sigma is None:
             sigma = self.stack_sigma
 
-        approx_stats, exptime_direct = self._compute_stats_from_datacube(
+        approx_stats, zero_exptime = self._compute_stats_from_datacube(
             l0_file_list=l0_file_list,
             nframe=ndirect,
             sigma=sigma,
@@ -345,11 +573,9 @@ class BaseMasterModule:
         )
 
         if len(l0_file_list) <= ndirect:
-            return approx_stats, exptime_direct
+            return approx_stats, zero_exptime
 
         exact_stats = {}
-        exptime_total = 0.0
-        zero_exptime = exptime_direct == 0
 
         nrow = self.ccd["nrow"]
         ncol = self.ccd["ncol"]
@@ -360,15 +586,23 @@ class BaseMasterModule:
 
                 exact_stats[ext] = {}
                 exact_stats[ext]["nframe"] = np.zeros((nrow, ncol), dtype=np.int32)
-                exact_stats[ext]["total_sum"] = np.zeros((nrow, ncol), dtype=np.float32)
-                exact_stats[ext]["rate_mean"] = np.zeros((nrow, ncol), dtype=np.float32)
-                exact_stats[ext]["rate_M2"] = np.zeros((nrow, ncol), dtype=np.float32)
+                exact_stats[ext]["counts_sum"] = np.zeros(
+                    (nrow, ncol), dtype=np.float32
+                )
 
                 approx_mean = approx_stats[ext]["rate_mean"]
                 approx_rms = approx_stats[ext]["rate_rms"]
 
                 approx_stats[ext]["rate_lower"] = approx_mean - approx_rms * sigma
                 approx_stats[ext]["rate_upper"] = approx_mean + approx_rms * sigma
+
+            # Total exposure time per pixel, tracked once per chip (CCD and VAR
+            # share a survivor mask); the denominator of the exposure-weighted
+            # rate in stack_frames. Reduces to the survivor count for a bias
+            # stack, where T = 1.
+            exact_stats[f"{chip}_CCD"]["exptime_sum"] = np.zeros(
+                (nrow, ncol), dtype=np.float32
+            )
 
         failure = 0
         clipping_mask = np.ones((nrow, ncol), dtype=bool)
@@ -382,6 +616,8 @@ class BaseMasterModule:
                     raise ValueError("more than 20% of frames in stack failed to load")
                 continue
 
+            l1_obj = self._process_frame(l1_obj)
+
             exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
             if zero_exptime != (exptime == 0):
@@ -394,62 +630,119 @@ class BaseMasterModule:
             else:
                 T = exptime
 
-            exptime_total += exptime
-
             for chip in self.chips:
+                # Clip each pixel against the rate bounds (joint over CCD/VAR),
+                # then accumulate counts and exposure time over the survivors.
                 clipping_mask[:] = True
-                R = {}
 
                 for suffix in ["CCD", "VAR"]:
                     ext = f"{chip}_{suffix}"
-                    frame_data = l1_obj.data[ext]
-                    R[ext] = frame_data / T
-
+                    rate = l1_obj.data[ext] / T
                     lower = approx_stats[ext]["rate_lower"]
                     upper = approx_stats[ext]["rate_upper"]
-                    clipping_mask &= (R[ext] >= lower) & (R[ext] <= upper)
+                    clipping_mask &= (rate >= lower) & (rate <= upper)
+
+                exact_stats[f"{chip}_CCD"]["exptime_sum"] += T * clipping_mask
 
                 for suffix in ["CCD", "VAR"]:
                     ext = f"{chip}_{suffix}"
-                    frame_data = l1_obj.data[ext]
-                    rate = R[ext]
+                    exact_stats[ext]["nframe"] += clipping_mask
+                    exact_stats[ext]["counts_sum"] += l1_obj.data[ext] * clipping_mask
 
-                    N = exact_stats[ext]["nframe"]
-                    N += clipping_mask
+        return exact_stats, zero_exptime
 
-                    total_sum = exact_stats[ext]["total_sum"]
-                    total_sum += frame_data * clipping_mask
+    def _clean_l1_arrays(self, l1_arrays, sigma):
+        """
+        Interpolate bad pixels and recompute the bad-pixel mask per chip.
 
-                    # Welford algorithm accumulation begins
-                    mean = exact_stats[ext]["rate_mean"]
-                    safe_N = np.maximum(N, 1)
-                    delta = (rate - mean) * clipping_mask
-                    mean += delta / safe_N
-                    delta2 = (rate - mean) * clipping_mask
-                    M2 = exact_stats[ext]["rate_M2"]
-                    M2 += delta * delta2
-                    # Welford algorithm accumulation ends
+        Parameters
+        ----------
+        l1_arrays : dict
+            Per-chip '{chip}_IMG/_SNR/_MASK' arrays from `stack_frames`.
+        sigma : float
+            Sigma threshold for the final outlier pass on the combined image.
 
-                    exact_stats[ext]["total_sum"] = total_sum
-                    exact_stats[ext]["rate_mean"] = mean
-                    exact_stats[ext]["rate_M2"] = M2
-
+        Returns
+        -------
+        dict
+            The same dict with IMG/SNR interpolated over bad pixels and MASK
+            recomputed (True = good).
+        """
         for chip in self.chips:
-            for suffix in ["CCD", "VAR"]:
-                ext = f"{chip}_{suffix}"
+            img = l1_arrays[f"{chip}_IMG"]
+            snr = l1_arrays[f"{chip}_SNR"]
+            mask = l1_arrays[f"{chip}_MASK"]
 
-                N = exact_stats[ext]["nframe"]
-                mean = exact_stats[ext]["rate_mean"]
-                M2 = exact_stats[ext]["rate_M2"]
-                rms = np.sqrt(np.where(N > 1, M2 / (N - 1), 0))
+            l1_arrays[f"{chip}_IMG"] = interpolate_bad_pixels(img, mask)
+            l1_arrays[f"{chip}_SNR"] = interpolate_bad_pixels(snr, mask)
 
-                exact_stats[ext]["rate_rms"] = rms
-                del exact_stats[ext]["rate_M2"]
+            out = flag_outliers(l1_arrays[f"{chip}_IMG"], sigma, axis=0)
+            bad = (l1_arrays[f"{chip}_SNR"] <= 0) | (l1_arrays[f"{chip}_IMG"] == 0)
 
-        return exact_stats, exptime_total
+            l1_arrays[f"{chip}_MASK"] = ~(bad | out)
+
+        return l1_arrays
 
     # ------------------------------------------------------------------
-    # Algorithm steps
+    # Private helpers for building outputs and tracking results.
+    # ------------------------------------------------------------------
+
+    def _build_ml1_obj(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
+        """
+        Assemble a KPFMasterL1 from finalized per-chip arrays.
+
+        Parameters
+        ----------
+        l1_arrays : dict
+            Finalized '{chip}_IMG/_SNR/_MASK' arrays.
+        l0_file_list : list of str
+            L0 files that went into the stack; recorded via set_input_files.
+        receipt_key : str
+            Receipt entry name (e.g. 'master_bias', 'master_dark').
+        bunit : str, optional
+            If given, written as the BUNIT header on each '{chip}_IMG'.
+
+        Returns
+        -------
+        KPFMasterL1
+            The populated master L1 object.
+        """
+        ml1_obj = KPFMasterL1()
+
+        for chip in self.chips:
+            ml1_obj.set_data(f"{chip}_IMG", l1_arrays[f"{chip}_IMG"])
+            ml1_obj.set_data(f"{chip}_SNR", l1_arrays[f"{chip}_SNR"])
+            ml1_obj.set_data(f"{chip}_MASK", l1_arrays[f"{chip}_MASK"])
+
+            if bunit is not None:
+                ml1_obj.headers[f"{chip}_IMG"]["BUNIT"] = bunit
+
+        ml1_obj.set_input_files(l0_file_list)
+        ml1_obj.receipt_add_entry(receipt_key, "PASS")
+
+        return ml1_obj
+
+    def _populate_results(self, l1_arrays):
+        """
+        Summarize per-chip master statistics for `info()` and tests.
+
+        Returns
+        -------
+        dict
+            Per-chip {'num_bad', 'pct_bad', 'median', 'rms'}.
+        """
+        return {
+            chip: {
+                "num_bad": int(np.sum(~l1_arrays[f"{chip}_MASK"])),
+                "pct_bad": float(100.0 * np.mean(~l1_arrays[f"{chip}_MASK"])),
+                "median": float(np.nanmedian(l1_arrays[f"{chip}_IMG"])),
+                "rms": float(np.nanstd(l1_arrays[f"{chip}_IMG"])),
+            }
+            for chip in self.chips
+        }
+
+    # ------------------------------------------------------------------
+    # Public methods
     # ------------------------------------------------------------------
 
     def stack_frames(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
@@ -471,7 +764,8 @@ class BaseMasterModule:
         Returns
         -------
         l1_arrays : dict
-            Dictionary containing per-chip stacked products:
+            Dictionary containing per-chip stacked products, with bad pixels
+            interpolated and the bad-pixel mask recomputed (`_clean_l1_arrays`):
             - '{chip}_IMG'  : mean count rate FFI
             - '{chip}_SNR'  : signal-to-noise ratio FFI
             - '{chip}_MASK' : boolean bad pixel mask (1 = good, 0 = bad)
@@ -479,8 +773,8 @@ class BaseMasterModule:
         Notes
         -----
         If number of frames is less than `nstream`, statistics are computed
-        directly from a full data cube. Otherwise, streaming Welford statistics
-        are used to reduce memory usage.
+        directly from a full data cube. Otherwise, a single-pass streaming
+        accumulation is used to bound memory usage.
 
         An initial subset of frames is processed using the direct data cube
         method to estimate approximate mean and rms. These estimates define
@@ -499,11 +793,11 @@ class BaseMasterModule:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
         if nframe < nstream:
-            stats, exptime = self._compute_stats_from_datacube(
+            stats, _ = self._compute_stats_from_datacube(
                 l0_file_list, nstream - 1, sigma, verbose=verbose
             )
         else:
-            stats, exptime = self._compute_stats_from_stream(
+            stats, _ = self._compute_stats_from_stream(
                 l0_file_list, nstream - 1, sigma, verbose=verbose
             )
 
@@ -516,32 +810,39 @@ class BaseMasterModule:
 
         l1_arrays = {}
         for chip in self.chips:
-            img = stats[f"{chip}_CCD"]["rate_mean"]
-            tot = stats[f"{chip}_CCD"]["total_sum"]
-            var = stats[f"{chip}_VAR"]["total_sum"]
+            counts = stats[f"{chip}_CCD"]["counts_sum"]
+            var_sum = stats[f"{chip}_VAR"]["counts_sum"]
+            exptime_sum = stats[f"{chip}_CCD"]["exptime_sum"]
 
-            good = var > 0
+            good = var_sum > 0
 
             for suffix in ["CCD", "VAR"]:
                 ext = f"{chip}_{suffix}"
                 good &= stats[ext]["nframe"] > 0.5 * nframe
 
-            snr = np.zeros_like(img)
-            snr[good] = np.abs(tot[good]) / np.sqrt(var[good])
+            good &= exptime_sum > 0
 
-            # Welford accumulators run in float64 for numerical stability;
-            # the stored master image fits comfortably in float32 (bias signal
-            # is a few-ADU offset with ~5 e- read noise) and halves the
+            # Exposure-weighted rate estimate: total counts over total exposure
+            # time across the surviving frames (the ML rate under Poisson
+            # statistics, correct for mixed exposures). For a bias stack
+            # exptime_sum is the survivor count, so this is the mean in electrons.
+            img = np.zeros_like(counts)
+            img[good] = counts[good] / exptime_sum[good]
+
+            # SNR of the rate is invariant to the exposure normalization: the
+            # total exposure cancels in |sum(counts)| / sqrt(sum(var)).
+            snr = np.zeros_like(img)
+            snr[good] = np.abs(counts[good]) / np.sqrt(var_sum[good])
+
+            # The stored master image fits comfortably in float32 (bias signal
+            # is a few-ADU offset with ~5 e- read noise), which halves the
             # on-disk size of the IMG and SNR extensions.
             l1_arrays[f"{chip}_IMG"] = img.astype(np.float32)
             l1_arrays[f"{chip}_SNR"] = snr.astype(np.float32)
             l1_arrays[f"{chip}_MASK"] = good
 
-        return l1_arrays
-
-    # ------------------------------------------------------------------
-    # Public methods
-    # ------------------------------------------------------------------
+        # Interpolate bad pixels and recompute the bad-pixel mask before return.
+        return self._clean_l1_arrays(l1_arrays, sigma)
 
     def save_master(self, level, path, *, overwrite=False):
         """

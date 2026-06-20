@@ -16,7 +16,7 @@ import pytest
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.pipeline import build_filepath
+from kpfpipe.utils.io import build_filepath
 
 # ---------------------------------------------------------------------------
 # Test data paths and constants

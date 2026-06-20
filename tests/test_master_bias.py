@@ -255,6 +255,12 @@ class TestMasterBiasRegression:
         good = master_bias.data["GREEN_MASK"]
         assert np.all(master_bias.data["GREEN_SNR"][good] > 0)
 
+    def test_snr_never_negative(self, master_bias):
+        # SNR is non-negative by construction (|counts| / sqrt(var)); bad pixels
+        # are exactly zero, never negative.
+        for chip in ("GREEN", "RED"):
+            assert np.all(master_bias.data[f"{chip}_SNR"] >= 0)
+
     def test_mask_has_good_pixels(self, master_bias):
         assert np.sum(master_bias.data["GREEN_MASK"]) > 0
         assert np.sum(master_bias.data["RED_MASK"]) > 0
@@ -266,3 +272,15 @@ class TestMasterBiasRegression:
 
     def test_receipt_chain(self, master_bias):
         assert "master_bias" in master_bias.receipt["Module_Name"].values
+
+
+# ---------------------------------------------------------------------------
+# Signature: a bias applies no calibrations, so no bias/dark/flat kwargs
+# ---------------------------------------------------------------------------
+
+
+class TestMasterBiasSignature:
+    @pytest.mark.parametrize("kwarg", ["bias", "dark", "flat"])
+    def test_calibration_kwargs_rejected(self, kwarg):
+        with pytest.raises(TypeError):
+            Bias(FILE_LIST).make_master_l1(**{kwarg: True})

@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import kpfpipe.modules.masters.wls as wls_module
+import kpfpipe.modules.masters.base as base_module
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
@@ -48,7 +48,8 @@ def _linelist_df(chip, norder, waves):
 def mock_pipeline(monkeypatch):
     """
     Patch CalibrationAssociation, ImageProcessing, and SpectralExtraction so
-    that _extract_frame runs without touching disk or real data.
+    that _process_frame and _extract_frame run without touching disk or real
+    data.
 
     Returns the MockL2 instance that SpectralExtraction.perform() will return.
     """
@@ -59,13 +60,17 @@ def mock_pipeline(monkeypatch):
 
     mock_ip = MagicMock()
     mock_ip.return_value.perform.return_value = MockL1()
+    mock_ip.calibration_applied.return_value = False  # frame not yet calibrated
 
     mock_se = MagicMock()
     mock_se.return_value.perform.return_value = l2
 
-    monkeypatch.setattr(wls_module, "CalibrationAssociation", mock_ca)
-    monkeypatch.setattr(wls_module, "ImageProcessing", mock_ip)
-    monkeypatch.setattr(wls_module, "SpectralExtraction", mock_se)
+    monkeypatch.setattr(base_module, "CalibrationAssociation", mock_ca)
+    monkeypatch.setattr(base_module, "ImageProcessing", mock_ip)
+    monkeypatch.setattr(base_module, "SpectralExtraction", mock_se)
+    monkeypatch.setattr(
+        base_module.BaseMasterModule, "_load_calibration", lambda self, l1, cal: False
+    )
 
     return l2
 
@@ -109,20 +114,27 @@ class TestExtractFrame:
         assert result is mock_pipeline
 
     def test_passes_masters_root_to_calibration_association(self, monkeypatch):
-        # _extract_frame must associate the bias from KPF_MASTERS_OUTPUT.
+        # _process_frame (run before _extract_frame) associates the bias from
+        # KPF_MASTERS_OUTPUT; _extract_frame itself no longer does calibration.
         mock_ca = MagicMock()
         mock_ca.return_value.perform.return_value = MockL1()
         mock_ip = MagicMock()
         mock_ip.return_value.perform.return_value = MockL1()
+        mock_ip.calibration_applied.return_value = False  # frame not yet calibrated
         mock_se = MagicMock()
         mock_se.return_value.perform.return_value = MockL2()
 
-        monkeypatch.setattr(wls_module, "CalibrationAssociation", mock_ca)
-        monkeypatch.setattr(wls_module, "ImageProcessing", mock_ip)
-        monkeypatch.setattr(wls_module, "SpectralExtraction", mock_se)
+        monkeypatch.setattr(base_module, "CalibrationAssociation", mock_ca)
+        monkeypatch.setattr(base_module, "ImageProcessing", mock_ip)
+        monkeypatch.setattr(base_module, "SpectralExtraction", mock_se)
+        monkeypatch.setattr(
+            base_module.BaseMasterModule,
+            "_load_calibration",
+            lambda self, l1, cal: False,
+        )
 
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
-        wls._extract_frame(MockL1())
+        wls._process_frame(MockL1())
 
         call_args = mock_ca.call_args[0]
         assert call_args[1].get("KPF_MASTERS_OUTPUT") == "/masters"
@@ -139,7 +151,7 @@ class TestProcessIndividualFrames:
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, ncache=0, **kwargs: (MockL1(), True)
         )
-        result = wls.process_stack_l0_to_l2()
+        result = wls._process_stack_l0_to_l2()
         assert len(result) == len(FILE_LIST)
         assert all(r is mock_pipeline for r in result)
 
@@ -148,7 +160,7 @@ class TestProcessIndividualFrames:
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, ncache=0, **kwargs: (MockL1(), True)
         )
-        result = wls.process_stack_l0_to_l2(l0_file_list=FILE_LIST[:3])
+        result = wls._process_stack_l0_to_l2(l0_file_list=FILE_LIST[:3])
         assert len(result) == 3
 
     def test_raises_when_failures_exceed_threshold(self, monkeypatch):
@@ -157,7 +169,7 @@ class TestProcessIndividualFrames:
             wls, "_load_frame", lambda fn, ncache=0, **kwargs: (None, False)
         )
         with pytest.raises(ValueError, match="20%"):
-            wls.process_stack_l0_to_l2()
+            wls._process_stack_l0_to_l2()
 
     def test_tolerates_minority_failure(self, mock_pipeline, monkeypatch):
         # 1 failure out of 8 = 12.5%, below the 20% threshold
@@ -166,7 +178,7 @@ class TestProcessIndividualFrames:
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, ncache=0, **kwargs: next(calls)
         )
-        result = wls.process_stack_l0_to_l2()
+        result = wls._process_stack_l0_to_l2()
         assert len(result) == 7
 
 
@@ -178,13 +190,14 @@ class TestProcessIndividualFrames:
 @pytest.fixture
 def mock_make_master_l2(monkeypatch):
     """
-    Patch frame loading and compute_wls_from_stack so make_master_l2 runs
-    without touching disk or real spectra. compute_wls_from_stack returns
+    Patch frame loading and _compute_wls_from_stack so make_master_l2 runs
+    without touching disk or real spectra. _compute_wls_from_stack returns
     synthetic W and coefficient arrays with chip-correct shapes.
     """
     monkeypatch.setattr(
         WLS, "_load_frame", lambda self, fn, ncache=0, **kwargs: (MockL1(), True)
     )
+    monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kwargs: l1)
     monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kwargs: MockL2())
 
     def mock_compute(
@@ -226,7 +239,7 @@ def mock_make_master_l2(monkeypatch):
         ]
         return W, coeffs, coeffs_stack, lines_stack
 
-    monkeypatch.setattr(WLS, "compute_wls_from_stack", mock_compute)
+    monkeypatch.setattr(WLS, "_compute_wls_from_stack", mock_compute)
 
 
 def _header_value(header, key):
@@ -482,7 +495,7 @@ class TestMakeMasterL2:
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
 
         with pytest.warns(UserWarning, match=r"RED SCI1 order 1: orderlet skipped"):
-            result = wls.fit_line_positions_ffi(
+            result = wls._fit_line_positions_ffi(
                 StubL2(),
                 "RED",
                 ["SCI1"],
@@ -601,19 +614,19 @@ class TestCalculateWlsCoeffs:
         wls = WLS(FILE_LIST)
         lines = self._make_lines(5, fibers=("SCI1",))
         with pytest.raises(ValueError, match=r"underconstrained"):
-            wls.calculate_wls_coeffs(lines, norder=30)
+            wls._calculate_wls_coeffs(lines, norder=30)
 
     def test_underconstrained_multi_fiber_raises(self):
         # 5-fiber → 7*4*3 = 84 free params; 10 lines per fiber * 5 = 50 < 84
         wls = WLS(FILE_LIST)
         lines = self._make_lines(10, fibers=("SKY", "SCI1", "SCI2", "SCI3", "CAL"))
         with pytest.raises(ValueError, match=r"underconstrained"):
-            wls.calculate_wls_coeffs(lines, norder=30)
+            wls._calculate_wls_coeffs(lines, norder=30)
 
     def test_sufficient_lines_does_not_raise(self):
         wls = WLS(FILE_LIST)
         lines = self._make_lines(50, fibers=("SCI1",))
-        coeffs = wls.calculate_wls_coeffs(lines, norder=30)
+        coeffs = wls._calculate_wls_coeffs(lines, norder=30)
         assert coeffs.shape == (wls.polyorder_x + 1, wls.polyorder_m + 1)
 
 
@@ -623,7 +636,7 @@ class TestCalculateWlsCoeffs:
 
 
 class TestComputeWlsFrameRejection:
-    """Frame-level QC in compute_wls_from_stack: drop frames whose line-fit
+    """Frame-level QC in _compute_wls_from_stack: drop frames whose line-fit
     failure fraction exceeds max_bad_frac, and error if more than one is dropped."""
 
     def _setup(self, monkeypatch, bad_fracs, nlines=100):
@@ -640,19 +653,19 @@ class TestComputeWlsFrameRejection:
         it = iter(frames)
 
         monkeypatch.setattr(
-            WLS, "fit_line_positions_ffi", lambda self, *a, **k: next(it)
+            WLS, "_fit_line_positions_ffi", lambda self, *a, **k: next(it)
         )
         monkeypatch.setattr(
-            WLS, "calculate_wls_coeffs", lambda self, *a, **k: np.ones((2, 2))
+            WLS, "_calculate_wls_coeffs", lambda self, *a, **k: np.ones((2, 2))
         )
         monkeypatch.setattr(
-            WLS, "evaluate_wls_coeffs", staticmethod(lambda *a, **k: np.zeros((3, 3)))
+            WLS, "_evaluate_wls_coeffs", staticmethod(lambda *a, **k: np.zeros((3, 3)))
         )
         return wls
 
     def test_all_clean_frames_kept(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.01, 0.02, 0.0, 0.03, 0.01])
-        _, _, coeffs_stack, lines_stack = wls.compute_wls_from_stack(
+        _, _, coeffs_stack, lines_stack = wls._compute_wls_from_stack(
             "GREEN", ["SCI1"], verbose=False
         )
         assert len(coeffs_stack) == 5
@@ -660,7 +673,7 @@ class TestComputeWlsFrameRejection:
 
     def test_single_bad_frame_dropped(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.01, 0.22, 0.0, 0.03, 0.01])
-        _, _, coeffs_stack, lines_stack = wls.compute_wls_from_stack(
+        _, _, coeffs_stack, lines_stack = wls._compute_wls_from_stack(
             "GREEN", ["SCI1"], verbose=False
         )
         # the 22%-bad frame is excluded from both stacks
@@ -670,12 +683,12 @@ class TestComputeWlsFrameRejection:
     def test_two_bad_frames_raises(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.22, 0.01, 0.34, 0.01, 0.01])
         with pytest.raises(ValueError, match=r"more than one frame rejected"):
-            wls.compute_wls_from_stack("GREEN", ["SCI1"], verbose=False)
+            wls._compute_wls_from_stack("GREEN", ["SCI1"], verbose=False)
 
     def test_threshold_is_inclusive_at_max_bad_frac(self, monkeypatch):
         # exactly 5% bad is not > 5%, so the frame is kept
         wls = self._setup(monkeypatch, [0.05, 0.01], nlines=100)
-        _, _, coeffs_stack, _ = wls.compute_wls_from_stack(
+        _, _, coeffs_stack, _ = wls._compute_wls_from_stack(
             "GREEN", ["SCI1"], verbose=False
         )
         assert len(coeffs_stack) == 2
@@ -689,15 +702,15 @@ class TestComputeWlsFrameRejection:
         coeffs = iter(
             [np.ones((2, 2)), np.array([[1.0, np.nan], [1.0, 1.0]]), np.ones((2, 2))]
         )
-        monkeypatch.setattr(WLS, "fit_line_positions_ffi", lambda self, *a, **k: lines)
+        monkeypatch.setattr(WLS, "_fit_line_positions_ffi", lambda self, *a, **k: lines)
         monkeypatch.setattr(
-            WLS, "calculate_wls_coeffs", lambda self, *a, **k: next(coeffs)
+            WLS, "_calculate_wls_coeffs", lambda self, *a, **k: next(coeffs)
         )
         monkeypatch.setattr(
-            WLS, "evaluate_wls_coeffs", staticmethod(lambda *a, **k: np.zeros((3, 3)))
+            WLS, "_evaluate_wls_coeffs", staticmethod(lambda *a, **k: np.zeros((3, 3)))
         )
         with pytest.raises(ValueError, match=r"non-finite Legendre coefficients"):
-            wls.compute_wls_from_stack("GREEN", ["SCI1"], verbose=False)
+            wls._compute_wls_from_stack("GREEN", ["SCI1"], verbose=False)
 
 
 # ---------------------------------------------------------------------------
@@ -712,7 +725,7 @@ class TestFitLinePositions:
         flux = np.ones(100)
         wave = np.linspace(5000.0, 5100.0, 100)
 
-        result = wls.fit_line_positions_1d(flux, wave, np.array([]))
+        result = wls._fit_line_positions_1d(flux, wave, np.array([]))
         for key in ["wav", "pix", "std", "amp", "bad"]:
             assert len(result[key]) == 0
 
@@ -723,7 +736,7 @@ class TestFitLinePositions:
         flux = np.ones(100)
         wave = np.linspace(5000.0, 5100.0, 100)
         with pytest.raises(ValueError, match="outside the rough"):
-            wls.fit_line_positions_1d(flux, wave, np.array([6000.0]))
+            wls._fit_line_positions_1d(flux, wave, np.array([6000.0]))
 
     def test_line_fit_qc_flags_centroid_outside_window(self):
         """A fitted centroid more than `window` pixels from its window center
@@ -747,7 +760,7 @@ class TestFitLinePositions:
         flux = (1.0 + 50.0 * np.exp(-0.5 * ((x - 50) / 2.0) ** 2)).astype(np.float32)
         line_waves = np.array([wave[50]], dtype=float)
 
-        result = wls.fit_line_positions_1d(
+        result = wls._fit_line_positions_1d(
             flux, wave, line_waves, lineprofile="gaussian"
         )
         assert len(result["wav"]) == 1
@@ -771,7 +784,7 @@ class TestFitLinePositions:
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0])
 
         with pytest.warns(UserWarning, match=r"RED SCI1: no good lines retained"):
-            result = wls.fit_line_positions_ffi(
+            result = wls._fit_line_positions_ffi(
                 StubL2(),
                 "RED",
                 ["SCI1"],
@@ -795,7 +808,7 @@ class TestFitLinePositions:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
 
-        wls.fit_line_positions_ffi(StubL2(), "RED", ["SCI1"], verbose=False)
+        wls._fit_line_positions_ffi(StubL2(), "RED", ["SCI1"], verbose=False)
 
         skipped = [w for w in recwarn if "orderlet skipped" in str(w.message)]
         assert len(skipped) == 0
@@ -816,7 +829,7 @@ class TestFitLinePositions:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0])
 
-        wls.fit_line_positions_ffi(StubL2(), "RED", ["SCI1"], verbose=False)
+        wls._fit_line_positions_ffi(StubL2(), "RED", ["SCI1"], verbose=False)
 
         fiber_level = [w for w in recwarn if "no good lines retained" in str(w.message)]
         assert len(fiber_level) == 0

@@ -15,7 +15,7 @@ import pytest
 
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.pipeline import (
+from kpfpipe.utils.io import (
     build_filepath,
     build_l0_file_lists,
     build_mini_database,
@@ -232,7 +232,7 @@ class TestBuildL0FileLists:
     def test_rebuilds_db_if_csv_missing(self, tmp_path):
         data_dir = str(tmp_path / "L0" / "20240405")
         os.makedirs(data_dir)
-        with patch("kpfpipe.utils.pipeline.build_mini_database") as mock_bmd:
+        with patch("kpfpipe.utils.io.build_mini_database") as mock_bmd:
             mock_bmd.return_value = _make_mini_db()
             lists = build_l0_file_lists("bias", data_dir=data_dir)
         mock_bmd.assert_called_once_with(data_dir)
@@ -244,7 +244,7 @@ class TestBuildL0FileLists:
         data_dir = _write_test_csv(tmp_path, _make_mini_db())
         open(os.path.join(data_dir, "KP.20240405.99999.99.fits"), "w").close()
 
-        with patch("kpfpipe.utils.pipeline.build_mini_database") as mock_bmd:
+        with patch("kpfpipe.utils.io.build_mini_database") as mock_bmd:
             mock_bmd.return_value = _make_mini_db()
             with pytest.warns(UserWarning, match=r"stale.*\+1 added"):
                 build_l0_file_lists("bias", data_dir=data_dir)
@@ -256,7 +256,7 @@ class TestBuildL0FileLists:
         data_dir = _write_test_csv(tmp_path, _make_mini_db())
         os.unlink(os.path.join(data_dir, os.path.basename(_BIAS_A[0])))
 
-        with patch("kpfpipe.utils.pipeline.build_mini_database") as mock_bmd:
+        with patch("kpfpipe.utils.io.build_mini_database") as mock_bmd:
             mock_bmd.return_value = _make_mini_db()
             with pytest.warns(UserWarning, match=r"stale.*-1 removed"):
                 build_l0_file_lists("bias", data_dir=data_dir)

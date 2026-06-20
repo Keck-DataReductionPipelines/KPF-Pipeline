@@ -66,7 +66,7 @@ def _make_kpf1(
     tmp_path,
     *,
     with_rn=True,
-    biasub=True,
+    biassub=True,
     agebias=1.0,
     agedark=5.0,
     ageflat=10.0,
@@ -79,7 +79,7 @@ def _make_kpf1(
     primary.header["INSTRUME"] = "KPF"
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
     primary.header["EXPTIME"] = 300.0
-    primary.header["BIASUB"] = (biasub, "Bias subtraction applied")
+    primary.header["BIASSUB"] = (biassub, "Bias subtraction applied")
     primary.header["AGEBIAS"] = (agebias, "Age of bias master [days]")
     primary.header["AGEDARK"] = (agedark, "Age of dark master [days]")
     primary.header["AGEFLAT"] = (ageflat, "Age of flat master [days]")
@@ -438,16 +438,16 @@ class TestQCL1:
         assert QCL1(l1).read_noise_nongauss() is True
 
     def test_bias_subtracted_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biasub=True)
+        l1 = _make_kpf1(tmp_path, biassub=True)
         assert QCL1(l1).bias_subtracted() is True
 
     def test_bias_subtracted_fail_false(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biasub=False)
+        l1 = _make_kpf1(tmp_path, biassub=False)
         assert QCL1(l1).bias_subtracted() is False
 
     def test_bias_subtracted_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
-        del l1.headers["PRIMARY"]["BIASUB"]
+        del l1.headers["PRIMARY"]["BIASSUB"]
         assert QCL1(l1).bias_subtracted() is False
 
     def test_bias_age_ok_pass(self, tmp_path):
@@ -549,7 +549,7 @@ class TestQCL1Run:
             assert k in results
 
     def test_one_bad_check_isgood_0(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biasub=False)
+        l1 = _make_kpf1(tmp_path, biassub=False)
         QCL1(l1).run()
         isgood = l1.headers["PRIMARY"]["ISGOOD"]
         assert (isgood[0] if isinstance(isgood, tuple) else isgood) == 0

@@ -27,7 +27,7 @@ from kpfpipe.quality_control.qc_booleans import QCL1, QCL2
 from kpfpipe.quality_control.quicklook.level0 import PlotL0
 from kpfpipe.quality_control.quicklook.level1 import PlotL1
 from kpfpipe.quality_control.quicklook.level2 import PlotL2
-from kpfpipe.utils.pipeline import build_filepath, build_qlp_dir
+from kpfpipe.utils.io import build_filepath, build_qlp_dir
 
 
 def main(config, args):

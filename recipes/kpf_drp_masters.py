@@ -2,25 +2,25 @@
 KPF masters construction recipe.
 
 Builds the nightly calibration master products for a single datecode from its
-raw L0 frames: master bias (L1), and master wavelength solution (L2) from ThAr
-exposures. Dark and flat masters are scaffolded but not yet implemented. Each
-master is stacked by the corresponding module under `kpfpipe.modules.masters`
+raw L0 frames: master bias and master dark (L1), and master wavelength solution
+(L2) from ThAr exposures. Flat masters are scaffolded but not yet implemented.
+Each master is stacked by the corresponding module under `kpfpipe.modules.masters`
 and written to the output data root via the pipeline path helpers.
 """
 
 import os
 
 from kpfpipe.modules.masters.bias import Bias
+from kpfpipe.modules.masters.dark import Dark
 
-# from kpfpipe.modules.masters.dark import Dark
 # from kpfpipe.modules.masters.flat import Flat
 from kpfpipe.modules.masters.wls import WLS
-from kpfpipe.utils.kpf import get_obs_id
-from kpfpipe.utils.pipeline import (
+from kpfpipe.utils.io import (
     build_filepath,
     build_l0_file_lists,
     build_mini_database,
 )
+from kpfpipe.utils.kpf import get_obs_id
 
 
 def main(config, args):
@@ -51,12 +51,15 @@ def main(config, args):
         bias = Bias(files, config)
         bias.make_master_l1(filepath=bias_path)
 
-    # master dark (not yet implemented)
-    # for files in build_l0_file_lists('dark', mini_db=mini_db):
-    #    dark_path = build_filepath(get_obs_id(files[0]), 'L1',
-    #                               data_root=data_root_masters, master='dark')
-    #    dark = Dark(files, config)
-    #    dark.make_master_l1(filepath=dark_path)
+    # Stack the dark frames into a master dark used to remove dark current.
+    # Runs after the master bias so CalibrationAssociation can subtract that
+    # bias from each dark frame (via _process_frame) before stacking.
+    for files in build_l0_file_lists("dark", mini_db=mini_db):
+        dark_path = build_filepath(
+            get_obs_id(files[0]), "L1", data_root=data_root_masters, master="dark"
+        )
+        dark = Dark(files, config)
+        dark.make_master_l1(filepath=dark_path)
 
     # master flat (not yet implemented)
     # for files in build_l0_file_lists('flat', mini_db=mini_db):

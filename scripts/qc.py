@@ -21,7 +21,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.quality_control.qc_booleans import QCL0, QCL1, QCL2
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.pipeline import build_filepath
+from kpfpipe.utils.io import build_filepath
 
 _LEVEL_MAP = {
     "L0": (KPF0, QCL0),
@@ -32,17 +32,23 @@ _LEVEL_MAP = {
 
 def main():
     parser = argparse.ArgumentParser(description="KPF QC Runner")
-    parser.add_argument("--obs_id", type=str,
-                        help="Observation ID (e.g. KP.20240405.03637.74)")
-    parser.add_argument("--input", type=str,
-                        help="Direct path to input FITS file")
-    parser.add_argument("--level", type=str, required=True,
-                        choices=["L0", "L1", "L2"],
-                        help="Data level to QC")
-    parser.add_argument("--config", type=str,
-                        help="Path to TOML config file")
-    parser.add_argument("--write", action="store_true",
-                        help="Persist QC keywords back to the source FITS file")
+    parser.add_argument(
+        "--obs_id", type=str, help="Observation ID (e.g. KP.20240405.03637.74)"
+    )
+    parser.add_argument("--input", type=str, help="Direct path to input FITS file")
+    parser.add_argument(
+        "--level",
+        type=str,
+        required=True,
+        choices=["L0", "L1", "L2"],
+        help="Data level to QC",
+    )
+    parser.add_argument("--config", type=str, help="Path to TOML config file")
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Persist QC keywords back to the source FITS file",
+    )
     args = parser.parse_args()
 
     # ------------------------------------------------------------------ #
@@ -72,7 +78,9 @@ def main():
         print(f"Error loading {input_file}: {exc}", file=sys.stderr)
         sys.exit(2)
 
-    obs_id = args.obs_id or getattr(data, "obs_id", None) or os.path.basename(input_file)
+    obs_id = (
+        args.obs_id or getattr(data, "obs_id", None) or os.path.basename(input_file)
+    )
 
     # ------------------------------------------------------------------ #
     # Run QC

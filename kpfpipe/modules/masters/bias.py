@@ -2,12 +2,8 @@
 KPF Master Bias construction module.
 """
 
-import numpy as np
-
-from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 
 class Bias(BaseMasterModule):
@@ -17,6 +13,9 @@ class Bias(BaseMasterModule):
     Stacks frames using sigma-clipped statistics, interpolates bad pixels,
     and performs a final outlier pass on the combined image. Outputs a
     KPFMasterL1 containing per-chip IMG, SNR, and MASK extensions.
+
+    Standard reduction: a bias receives no calibration
+    (`_STANDARD_CALIBRATIONS` is empty), so raw frames are stacked as-is.
 
     Parameters
     ----------
@@ -33,7 +32,9 @@ class Bias(BaseMasterModule):
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE", "BIAS"])
+            params = config.get_params(
+                ["DATA_DIRS", "KPFPIPE", "BIAS", "MODULE_IMAGE_PROCESSING"]
+            )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
@@ -59,6 +60,9 @@ class Bias(BaseMasterModule):
         The constructed KPFMasterL1 is returned and cached on
         `self.ml1_obj`; pass `filepath` to also persist it to disk
         via `save_master('L1', ...)`.
+
+        A bias receives no calibrations, so there are no bias/dark/
+        flat overrides (unlike Dark/WLS).
 
         Parameters
         ----------
@@ -88,38 +92,10 @@ class Bias(BaseMasterModule):
             verbose=verbose,
         )
 
-        for chip in self.chips:
-            img = l1_arrays[f"{chip}_IMG"]
-            snr = l1_arrays[f"{chip}_SNR"]
-            mask = l1_arrays[f"{chip}_MASK"]
-
-            l1_arrays[f"{chip}_IMG"] = interpolate_bad_pixels(img, mask)
-            l1_arrays[f"{chip}_SNR"] = interpolate_bad_pixels(snr, mask)
-
-            out = flag_outliers(l1_arrays[f"{chip}_IMG"], sigma, axis=0)
-            bad = (l1_arrays[f"{chip}_SNR"] <= 0) | (l1_arrays[f"{chip}_IMG"] == 0)
-
-            l1_arrays[f"{chip}_MASK"] = ~(bad | out)
-
-        self.ml1_obj = KPFMasterL1()
-
-        for chip in self.chips:
-            self.ml1_obj.set_data(f"{chip}_IMG", l1_arrays[f"{chip}_IMG"])
-            self.ml1_obj.set_data(f"{chip}_SNR", l1_arrays[f"{chip}_SNR"])
-            self.ml1_obj.set_data(f"{chip}_MASK", l1_arrays[f"{chip}_MASK"])
-
-        self.ml1_obj.set_input_files(l0_file_list)
-        self.ml1_obj.receipt_add_entry("master_bias", "PASS")
-
-        self._results = {
-            chip: {
-                "num_bad": int(np.sum(~l1_arrays[f"{chip}_MASK"])),
-                "pct_bad": float(100.0 * np.mean(~l1_arrays[f"{chip}_MASK"])),
-                "median": float(np.nanmedian(l1_arrays[f"{chip}_IMG"])),
-                "rms": float(np.nanstd(l1_arrays[f"{chip}_IMG"])),
-            }
-            for chip in self.chips
-        }
+        self.ml1_obj = self._build_ml1_obj(
+            l1_arrays, l0_file_list, receipt_key="master_bias"
+        )
+        self._results = self._populate_results(l1_arrays)
 
         if filepath is not None:
             self.save_master("L1", filepath, overwrite=True)
