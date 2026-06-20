@@ -18,16 +18,23 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.quality_control.quicklook.level0 import PlotL0
 from kpfpipe.quality_control.quicklook.level1 import PlotL1
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.io import build_filepath
 from kpfpipe.utils.kpf import get_datecode
-from kpfpipe.utils.pipeline import build_filepath
 
 
 def main():
     parser = argparse.ArgumentParser(description="KPF Quicklook Plot Generator")
-    parser.add_argument("--obs_id", type=str, help="Observation ID (e.g. KP.20240405.03637.74)")
+    parser.add_argument(
+        "--obs_id", type=str, help="Observation ID (e.g. KP.20240405.03637.74)"
+    )
     parser.add_argument("--input", type=str, help="Direct path to input FITS file")
-    parser.add_argument("--level", type=str, required=True, choices=["L0", "L1"],
-                        help="Data level to plot")
+    parser.add_argument(
+        "--level",
+        type=str,
+        required=True,
+        choices=["L0", "L1"],
+        help="Data level to plot",
+    )
     parser.add_argument("--config", type=str, help="Path to TOML config file")
     parser.add_argument("--output_dir", type=str, help="Output directory for plots")
     args = parser.parse_args()
