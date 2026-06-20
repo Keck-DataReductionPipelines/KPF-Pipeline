@@ -20,31 +20,14 @@ from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.dark import Dark
 from kpfpipe.utils.io import build_l0_file_lists
 
+from ._masters import make_l1_arrays
+
 CHIPS = ["GREEN", "RED"]
 NROW, NCOL = 10, 10  # small arrays for unit tests
+# make_l1_arrays() — shared synthetic stack_frames builder — lives in _masters.py
 
 TESTDATA_DIR = Path(__file__).parent / "testdata"
 TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
-
-
-def make_l1_arrays(rng=None):
-    """Return a synthetic stack_frames output dict.
-
-    Seeded for deterministic shape/dtype/sign fixtures; the values themselves
-    are not asserted numerically (real numeric behavior is pinned by
-    TestMasterDarkRegression and the stacking unit tests).
-    """
-    if rng is None:
-        rng = np.random.default_rng(42)
-    arrays = {}
-    for chip in CHIPS:
-        arrays[f"{chip}_IMG"] = rng.normal(0.0, 5.0, (NROW, NCOL)).astype(np.float32)
-        arrays[f"{chip}_SNR"] = np.abs(rng.normal(10.0, 1.0, (NROW, NCOL))).astype(
-            np.float32
-        )
-        arrays[f"{chip}_MASK"] = np.ones((NROW, NCOL), dtype=bool)
-    return arrays
-
 
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
@@ -72,17 +55,9 @@ class TestMasterDarkUnit:
     def test_returns_kpf_master_l1(self, master_dark):
         assert isinstance(master_dark, KPFMasterL1)
 
-    def test_green_img_shape(self, master_dark):
-        assert master_dark.data["GREEN_IMG"].shape == (NROW, NCOL)
-
-    def test_red_img_shape(self, master_dark):
-        assert master_dark.data["RED_IMG"].shape == (NROW, NCOL)
-
-    def test_green_snr_shape(self, master_dark):
-        assert master_dark.data["GREEN_SNR"].shape == (NROW, NCOL)
-
-    def test_red_snr_shape(self, master_dark):
-        assert master_dark.data["RED_SNR"].shape == (NROW, NCOL)
+    @pytest.mark.parametrize("ext", ["GREEN_IMG", "RED_IMG", "GREEN_SNR", "RED_SNR"])
+    def test_extension_shape(self, master_dark, ext):
+        assert master_dark.data[ext].shape == (NROW, NCOL)
 
     def test_mask_is_boolean(self, master_dark):
         assert master_dark.data["GREEN_MASK"].dtype == bool

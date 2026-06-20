@@ -77,15 +77,11 @@ class TestImageAssemblyBias:
         assert isinstance(l1, KPF1)
         assert l1.level == 1
 
-    def test_green_ccd_shape(self, l1_bias):
+    @pytest.mark.parametrize("chip", ["GREEN", "RED"])
+    def test_ccd_shape(self, l1_bias, chip):
         l1, _ = l1_bias
-        assert l1.data["GREEN_CCD"].shape == (4080, 4080)
-        assert l1.data["GREEN_CCD"].dtype == np.float32
-
-    def test_red_ccd_shape(self, l1_bias):
-        l1, _ = l1_bias
-        assert l1.data["RED_CCD"].shape == (4080, 4080)
-        assert l1.data["RED_CCD"].dtype == np.float32
+        assert l1.data[f"{chip}_CCD"].shape == (4080, 4080)
+        assert l1.data[f"{chip}_CCD"].dtype == np.float32
 
     def test_variance_frames_exist(self, l1_bias):
         l1, _ = l1_bias

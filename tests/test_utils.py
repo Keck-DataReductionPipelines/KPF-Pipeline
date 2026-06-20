@@ -1,9 +1,14 @@
 """
-Tests for kpfpipe.utils.kpf timestamp conversion utilities.
+Tests for kpfpipe.utils helpers: astro (astro.py), KPF timestamp/obs_id
+conversions (kpf.py), and statistics (stats.py).
 """
 
+import astropy.units as u
+import numpy as np
 import pytest
+from astropy.constants import c
 
+from kpfpipe.utils.astro import air_to_vac, compute_doppler_factor, compute_redshift
 from kpfpipe.utils.kpf import (
     eprv_timestamp_to_kpf_timestamp,
     get_datecode,
@@ -18,6 +23,82 @@ from kpfpipe.utils.kpf import (
     kpf_timestamp_to_eprv_timestamp,
     utc_to_hst,
 )
+from kpfpipe.utils.stats import (
+    gaussian_dist,
+    gaussian_jac,
+    interpolate_bad_pixels,
+    optimize_lsq,
+)
+
+C_KMS = c.to("km/s").value
+
+
+# ===========================================================================
+# astro.py — Doppler/redshift helpers and air->vacuum
+#
+# Convention under test: positive radial velocity = receding = redshift (z > 0),
+# so the Doppler factor f = lambda_obs / lambda_rest = 1 + z, and z carries the
+# same sign as the velocity. This is the convention BarycentricCorrection relies
+# on when storing BARYCORR_Z for RadialVelocity._compute_ccf_1d.
+# ===========================================================================
+
+
+class TestComputeRedshift:
+    def test_sign_matches_velocity(self):
+        # Receding (v > 0) -> positive redshift; approaching -> negative.
+        assert compute_redshift(+18.508 * u.km / u.s) > 0
+        assert compute_redshift(-18.508 * u.km / u.s) < 0
+
+    def test_nonrelativistic_magnitude(self):
+        # For v << c, z ~ v/c.
+        v = -18.508 * u.km / u.s
+        assert compute_redshift(v) == pytest.approx(v.value / C_KMS, rel=1e-4)
+
+    def test_factor_is_one_plus_z(self):
+        v = 30.0 * u.km / u.s
+        assert compute_doppler_factor(v) == pytest.approx(1.0 + compute_redshift(v))
+
+    def test_unit_agnostic(self):
+        # Same physical velocity in different units -> same result.
+        assert compute_redshift(-18.508 * u.km / u.s) == pytest.approx(
+            compute_redshift(-18508.0 * u.m / u.s)
+        )
+
+    def test_zero_velocity(self):
+        assert compute_redshift(0.0 * u.km / u.s) == pytest.approx(0.0)
+        assert compute_doppler_factor(0.0 * u.km / u.s) == pytest.approx(1.0)
+
+    def test_array_input(self):
+        v = np.array([-10.0, 0.0, 10.0]) * u.km / u.s
+        z = compute_redshift(v)
+        assert z.shape == (3,)
+        assert z[0] < 0 < z[2] and z[1] == pytest.approx(0.0)
+
+    def test_bare_value_raises(self):
+        # Units must stay explicit; a unitless argument fails loudly.
+        with pytest.raises(u.UnitsError):
+            compute_redshift(-18508.0)
+
+    def test_factor_direction(self):
+        # Receding source is redshifted (f > 1); approaching is blueshifted.
+        assert compute_doppler_factor(+18.508 * u.km / u.s) > 1.0
+        assert compute_doppler_factor(-18.508 * u.km / u.s) < 1.0
+
+
+class TestAirToVac:
+    def test_vacuum_longer_than_air(self):
+        wave_air = np.array([5000.0, 6000.0, 7000.0])
+        wave_vac = air_to_vac(wave_air)
+        assert np.all(wave_vac > wave_air)
+
+    def test_below_2000A_unchanged(self):
+        wave_air = np.array([1500.0, 1800.0])
+        np.testing.assert_array_equal(air_to_vac(wave_air), wave_air)
+
+
+# ===========================================================================
+# kpf.py — timestamp conversion utilities
+# ===========================================================================
 
 
 class TestUtcToHst:
@@ -350,3 +431,72 @@ class TestGetSecondsSinceJ2000:
     def test_raises_when_no_timestamp_found(self):
         with pytest.raises(ValueError, match="No KPF timestamp found"):
             get_seconds_since_j2000("notimestamp.fits")
+
+
+# ===========================================================================
+# stats.py — Gaussian fitting and bad-pixel interpolation
+# ===========================================================================
+
+
+class TestGaussianFit:
+    """The Gaussian width is fit as log(sigma); optimize_lsq untransforms it
+    back to sigma, which must therefore always be positive."""
+
+    def test_recovers_known_gaussian(self):
+        x = np.arange(-10, 11, dtype=float)
+        for sigma in (2.7, 1.1):
+            theta_true = [2.0, 50.0, 1.3, sigma]
+            y = gaussian_dist([2.0, 50.0, 1.3, np.log(sigma)], x)
+            theta, _ = optimize_lsq(x, y, "gaussian")
+            np.testing.assert_allclose(theta, theta_true, rtol=1e-5, atol=1e-5)
+            assert theta[3] > 0
+
+    def test_sigma_is_positive(self):
+        # Sigma enters only as sigma**2, so the fit must never return a negative width.
+        x = np.arange(-8, 9, dtype=float)
+        y = gaussian_dist([1.0, 25.0, -0.6, np.log(2.0)], x)
+        theta, _ = optimize_lsq(x, y, "gaussian")
+        assert theta[3] > 0
+
+    def test_jacobian_matches_finite_difference(self):
+        # Guards the d/d(log_sigma) chain-rule term in gaussian_jac.
+        x = np.linspace(-5, 5, 21)
+        theta = np.array([1.0, 4.0, 0.5, np.log(1.8)])  # [b, a, mu, log_sigma]
+        J = gaussian_jac(theta, x)
+        eps = 1e-6
+        for k in range(4):
+            tp, tm = theta.copy(), theta.copy()
+            tp[k] += eps
+            tm[k] -= eps
+            fd = (gaussian_dist(tp, x) - gaussian_dist(tm, x)) / (2 * eps)
+            np.testing.assert_allclose(J[:, k], fd, rtol=1e-4, atol=1e-6)
+
+
+class TestInterpolateBadPixels:
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64])
+    def test_preserves_dtype(self, dtype):
+        data = np.ones((8, 8), dtype=dtype)
+        mask = np.ones((8, 8), dtype=bool)
+        mask[3, 3] = False
+        data[3, 3] = 1e6  # bad pixel
+        out = interpolate_bad_pixels(data, mask)
+        assert out.dtype == dtype
+
+    def test_replaces_bad_pixel_with_neighbor_mean(self):
+        data = np.ones((5, 5), dtype=np.float32) * 2.0
+        mask = np.ones((5, 5), dtype=bool)
+        mask[2, 2] = False
+        data[2, 2] = 1e6
+        out = interpolate_bad_pixels(data, mask)
+        # 8 neighbors all = 2.0 → interpolated value should be ~2.0
+        assert np.isclose(out[2, 2], 2.0, atol=1e-5)
+
+    def test_good_pixels_unchanged(self):
+        rng = np.random.default_rng(0)
+        data = rng.normal(0.0, 1.0, (10, 10)).astype(np.float32)
+        mask = np.ones((10, 10), dtype=bool)
+        mask[5, 5] = False
+        original = data.copy()
+        out = interpolate_bad_pixels(data, mask)
+        good_pixels = mask
+        np.testing.assert_array_equal(out[good_pixels], original[good_pixels])

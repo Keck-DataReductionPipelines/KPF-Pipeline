@@ -294,10 +294,7 @@ def _trough_depth(wave_order, flux_order, lambda_air, halfwin=3.0):
     return 1.0 - np.nanmin(window) / continuum
 
 
-@pytest.mark.skipif(
-    not (TESTDATA_DIR / "L0" / "20240405" / f"{OBS_ID}.fits").is_file(),
-    reason="truth-frame test data not present",
-)
+@pytest.mark.requires_testdata
 class TestSpectrumOrientation:
     """
     Discriminator: the WLS-calibrated L2 must have its flux co-oriented with the

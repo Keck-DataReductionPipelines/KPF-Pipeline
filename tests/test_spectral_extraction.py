@@ -161,7 +161,17 @@ class TestPerformShapes:
         assert isinstance(l2, KPF2)
         assert l2.level == 2
 
-    def test_green_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
+    @pytest.mark.parametrize(
+        "key, expected_rows",
+        [
+            ("GREEN_SCI2_FLUX", NORDER_GREEN),
+            ("RED_SCI2_FLUX", NORDER_RED),
+            ("SCI2_FLUX", NORDER_GREEN + NORDER_RED),
+        ],
+    )
+    def test_trace_shape(
+        self, minimal_l1, mock_ffi_arrays, monkeypatch, key, expected_rows
+    ):
         monkeypatch.setattr(
             SpectralExtraction,
             "extract_ffi",
@@ -171,31 +181,7 @@ class TestPerformShapes:
         )
         se = SpectralExtraction(minimal_l1)
         l2 = se.perform()
-        assert l2.data["GREEN_SCI2_FLUX"].shape == (NORDER_GREEN, NCOL)
-
-    def test_red_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
-        monkeypatch.setattr(
-            SpectralExtraction,
-            "extract_ffi",
-            lambda self, chip, fibers, extraction_method, **kwargs: {
-                k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
-            },
-        )
-        se = SpectralExtraction(minimal_l1)
-        l2 = se.perform()
-        assert l2.data["RED_SCI2_FLUX"].shape == (NORDER_RED, NCOL)
-
-    def test_full_trace_shape(self, minimal_l1, mock_ffi_arrays, monkeypatch):
-        monkeypatch.setattr(
-            SpectralExtraction,
-            "extract_ffi",
-            lambda self, chip, fibers, extraction_method, **kwargs: {
-                k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
-            },
-        )
-        se = SpectralExtraction(minimal_l1)
-        l2 = se.perform()
-        assert l2.data["SCI2_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
+        assert l2.data[key].shape == (expected_rows, NCOL)
 
     def test_all_fibers_populated(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(
@@ -263,17 +249,17 @@ class TestSpectralExtractionRealData:
         l2, _ = l2_from_flat
         assert isinstance(l2, KPF2)
 
-    def test_green_sci2_flux_shape(self, l2_from_flat):
+    @pytest.mark.parametrize(
+        "key, expected_rows",
+        [
+            ("GREEN_SCI2_FLUX", NORDER_GREEN),
+            ("RED_SCI2_FLUX", NORDER_RED),
+            ("SCI2_FLUX", NORDER_GREEN + NORDER_RED),
+        ],
+    )
+    def test_sci2_flux_shape(self, l2_from_flat, key, expected_rows):
         l2, _ = l2_from_flat
-        assert l2.data["GREEN_SCI2_FLUX"].shape == (NORDER_GREEN, NCOL)
-
-    def test_red_sci2_flux_shape(self, l2_from_flat):
-        l2, _ = l2_from_flat
-        assert l2.data["RED_SCI2_FLUX"].shape == (NORDER_RED, NCOL)
-
-    def test_full_trace_shape(self, l2_from_flat):
-        l2, _ = l2_from_flat
-        assert l2.data["SCI2_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
+        assert l2.data[key].shape == (expected_rows, NCOL)
 
     def test_flux_positive(self, l2_from_flat):
         """Flat lamp flux should be positive after extraction."""

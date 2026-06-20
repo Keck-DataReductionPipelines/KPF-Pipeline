@@ -85,17 +85,17 @@ class TestScienceRecipe:
         l2 = KPF2.from_fits(recipe_output)
         assert isinstance(l2, KPF2)
 
-    def test_green_sci2_flux_shape(self, recipe_output):
+    @pytest.mark.parametrize(
+        "key, expected_rows",
+        [
+            ("GREEN_SCI2_FLUX", NORDER_GREEN),
+            ("RED_SCI2_FLUX", NORDER_RED),
+            ("SCI2_FLUX", NORDER_GREEN + NORDER_RED),
+        ],
+    )
+    def test_sci2_flux_shape(self, recipe_output, key, expected_rows):
         l2 = KPF2.from_fits(recipe_output)
-        assert l2.data["GREEN_SCI2_FLUX"].shape == (NORDER_GREEN, NCOL)
-
-    def test_red_sci2_flux_shape(self, recipe_output):
-        l2 = KPF2.from_fits(recipe_output)
-        assert l2.data["RED_SCI2_FLUX"].shape == (NORDER_RED, NCOL)
-
-    def test_full_trace_shape(self, recipe_output):
-        l2 = KPF2.from_fits(recipe_output)
-        assert l2.data["SCI2_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
+        assert l2.data[key].shape == (expected_rows, NCOL)
 
     def test_flux_positive(self, recipe_output):
         """Star flux should be positive after extraction."""
