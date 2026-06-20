@@ -585,6 +585,7 @@ class TestComputeRVPublic:
             rv_module._get_order_weights("GREEN", "CAL")
 
 
+@pytest.mark.slow
 class TestPerform:
     _ILLUMINATED = ["SCI1", "SCI2", "SCI3", "SKY"]  # CAL-OBJ='None' -> skipped
 

@@ -294,6 +294,7 @@ def _trough_depth(wave_order, flux_order, lambda_air, halfwin=3.0):
     return 1.0 - np.nanmin(window) / continuum
 
 
+@pytest.mark.slow
 @pytest.mark.requires_testdata
 class TestSpectrumOrientation:
     """

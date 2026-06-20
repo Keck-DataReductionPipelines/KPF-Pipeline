@@ -30,12 +30,20 @@ KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reductio
 ## Commands
 
 ```bash
-# Run all tests (must run from KPF-Pipeline/ due to git receipt system requirement)
-cd KPF-Pipeline && python -m pytest tests/ -v
+# All test commands must run from KPF-Pipeline/ (git receipt system requirement).
+# Tests run in parallel via pytest-xdist; --dist loadscope keeps each class on one
+# worker so class-scoped integration fixtures run once, not once per worker.
 
-# Run a single test class or test
-python -m pytest tests/test_data_models.py::TestKPF2Aliases -v
-python -m pytest tests/test_data_models.py::TestKPF2Aliases::test_chip_prefix_access -v
+# Fast pre-commit subset (everything except @pytest.mark.slow) — the default
+make test-fast      # == python -m pytest tests/ -m "not slow" -n auto --dist loadscope
+
+# Full suite (parallel) — see "Running tests" below for WHEN to use this
+make test           # == python -m pytest tests/ -n auto --dist loadscope
+make test-serial    # serial fallback for debugging parallel/receipt issues
+
+# Run a single test class or test (use these while iterating on one area)
+python -m pytest tests/test_data_models_l2.py::TestKPF2Aliases -v
+python -m pytest tests/test_data_models_l2.py::TestKPF2Aliases::test_chip_prefix_access -v
 
 # Formatting and linting (Ruff; config in pyproject.toml [tool.ruff])
 ruff format kpfpipe/ tests/ recipes/      # format (black-compatible)
@@ -45,6 +53,40 @@ ruff check --fix kpfpipe/ tests/ recipes/ # lint + auto-fix
 pre-commit install          # one-time, after creating the env
 pre-commit run --all-files  # run all hooks across the repo
 ```
+
+## Running tests — subset vs full
+
+This is about **which tier of tests to run, not how often to run them**. No git
+hook runs tests — `pre-commit` is ruff-only — so testing is a judgment call, made
+*continuously while working*, not deferred to commit/PR time. Run tests as you
+change code; just match the scope to the change instead of defaulting to the full
+suite "just to be safe".
+
+The suite is split by the `slow` marker: `slow` covers the real-`testdata`
+integration tests and a few heavy-compute synthetic tests; everything else is the
+fast subset. The three tiers, smallest first:
+
+- **Continuously, while iterating (most runs):** run only the file(s)/tests for
+  the code you just touched (`python -m pytest tests/test_<area>.py`). This is the
+  default and should happen many times per task, not once at the end.
+- **Before wrapping up a change / before committing:** `make test-fast` (the
+  `-m "not slow"` subset, ~16s). Confirms the change didn't break unrelated unit
+  coverage. "Before committing" names *when this tier is appropriate*, not the
+  only time tests run.
+- **The FULL suite (`make test`)** — reserved for when the blast radius is wide:
+  - opening or updating a PR;
+  - changing a **core/shared module** other tests depend on — the data models
+    (`kpfpipe/data_models/`), `kpfpipe/constants`, base classes, or anything the
+    integration tests exercise;
+  - a **major or cross-cutting refactor**.
+
+Reaching for the full suite on a small, localized change is the habit to avoid —
+a targeted run plus the fast subset catches those regressions far cheaper.
+
+The fast subset deliberately skips full L0→L2 recipe integration, real-frame
+assembly/overscan, master stacking on real frames, and WLS spectrum orientation;
+those live only in `slow` tests, which is why the triggers above run the full
+suite. Pre-commit itself runs only ruff (no tests) — running tests is on you.
 
 ## Architecture
 

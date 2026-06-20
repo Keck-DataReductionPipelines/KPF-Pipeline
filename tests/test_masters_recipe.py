@@ -268,6 +268,7 @@ class TestBuildL0FileLists:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestBuildL0FileListsRealData:
     @pytest.fixture(scope="class")
     def l0_dir(self):
@@ -418,6 +419,7 @@ class TestBuildQlpDir:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestBuildMiniDatabase:
     @pytest.fixture(scope="class")
     def mini_db(self):
@@ -452,6 +454,7 @@ class TestBuildMiniDatabase:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestMastersRecipe:
     """End-to-end recipe test: build_l0_file_lists → Bias.make_master_l1 → to_fits."""
 

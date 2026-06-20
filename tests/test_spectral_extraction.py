@@ -236,6 +236,7 @@ class TestPerformShapes:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestSpectralExtractionRealData:
     @pytest.fixture(scope="class")
     def l2_from_flat(self):

@@ -38,6 +38,11 @@ def pytest_configure(config):
         "requires_testdata: needs the gitignored tests/testdata truth frames; "
         "skipped when they are absent",
     )
+    config.addinivalue_line(
+        "markers",
+        "slow: slow integration or heavy-compute test; excluded from the fast "
+        "pre-commit subset (`-m 'not slow'`), run in the full suite",
+    )
 
 
 def pytest_collection_modifyitems(config, items):

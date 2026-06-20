@@ -48,6 +48,7 @@ def _load_recipe():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestScienceRecipe:
     """End-to-end recipe test: KPF0 → ImageAssembly → SpectralExtraction → KPF2."""
 

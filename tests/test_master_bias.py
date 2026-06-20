@@ -214,6 +214,7 @@ class TestMasterBiasSaveMaster:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestMasterBiasRegression:
     """Regression tests against a real stack of L0 bias frames."""
 

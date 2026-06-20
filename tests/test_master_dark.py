@@ -827,6 +827,7 @@ class TestMasterDarkSignature:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestMasterDarkRegression:
     """End-to-end master dark from real L0 frames. The five bundled darks span
     two default-gap clusters, so cluster_gap_seconds is widened to stack them;

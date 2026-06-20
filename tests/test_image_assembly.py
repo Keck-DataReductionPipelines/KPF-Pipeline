@@ -63,6 +63,7 @@ def synthetic_4amp_l0(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestImageAssemblyBias:
     """Regression tests using a bias frame (no signal, 2-amp mode)."""
 
@@ -154,6 +155,7 @@ class TestImageAssemblyBias:
         assert not np.any(np.isnan(l1.data["RED_CCD"]))
 
 
+@pytest.mark.slow
 class TestImageAssemblyFlat:
     """Regression tests using a flat lamp frame (has signal)."""
 
@@ -446,6 +448,7 @@ class TestExpmeterWavelengthConversion:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestImageAssemblyRoundTrip:
     """Test that L1 can be written to FITS and read back."""
 
