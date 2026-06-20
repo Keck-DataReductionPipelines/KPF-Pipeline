@@ -62,16 +62,17 @@ class WLS(BaseMasterModule):
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "WLS", "MODULE_IMAGE_PROCESSING"]
+                [
+                    "DATA_DIRS",
+                    "KPFPIPE",
+                    "WLS",
+                    "MODULE_CALIBRATION_ASSOCIATION",
+                    "MODULE_IMAGE_PROCESSING",
+                ]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
-        # WLS extraction associates a master bias for each ThAr frame. Masters
-        # (including the bias the masters recipe just built) live under
-        # KPF_MASTERS_OUTPUT, which is also where CalibrationAssociation reads
-        # them, so there is no input/output mismatch.
-        self._masters_root = params.get("KPF_MASTERS_OUTPUT")
         self.rough_wls_file = _ROUGH_WLS_FILE
 
         self._load_rough_wls()

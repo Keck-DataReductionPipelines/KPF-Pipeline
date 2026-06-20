@@ -83,6 +83,10 @@ class BaseMasterModule:
         # when `_process_frame` associates a calibration for a stacked frame.
         self._masters_root = params.get("KPF_MASTERS_OUTPUT")
 
+        # Forwarded to CalibrationAssociation in `_process_frame` so an operator's
+        # configured search window is honored, not silently reset to the default.
+        self._masters_search_window_days = params.get("masters_search_window_days")
+
         # One cached master (KPFMasterL1) and its path per calibration type.
         # Frames in a stack are taken close in time and so almost always
         # associate the same nearest master; caching lets `_process_frame`
@@ -284,9 +288,12 @@ class BaseMasterModule:
         # filepath / KPFMasterL1 overrides are loaded directly by ImageProcessing.
         cal_types = [name for name, value in calibrations.items() if value is True]
         if cal_types:
-            calibration_association = CalibrationAssociation(
-                l1_obj, {"KPF_MASTERS_OUTPUT": self._masters_root}
-            )
+            ca_config = {"KPF_MASTERS_OUTPUT": self._masters_root}
+            if self._masters_search_window_days is not None:
+                ca_config["masters_search_window_days"] = (
+                    self._masters_search_window_days
+                )
+            calibration_association = CalibrationAssociation(l1_obj, ca_config)
             l1_obj = calibration_association.perform(cal_types)
 
         # Load (and cache) each active master here, then hand the in-memory

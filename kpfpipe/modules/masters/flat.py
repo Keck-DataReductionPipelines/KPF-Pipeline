@@ -29,7 +29,13 @@ class Flat(BaseMasterModule):
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "FLAT", "MODULE_IMAGE_PROCESSING"]
+                [
+                    "DATA_DIRS",
+                    "KPFPIPE",
+                    "FLAT",
+                    "MODULE_CALIBRATION_ASSOCIATION",
+                    "MODULE_IMAGE_PROCESSING",
+                ]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")

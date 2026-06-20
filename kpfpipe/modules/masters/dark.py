@@ -35,7 +35,13 @@ class Dark(BaseMasterModule):
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "DARK", "MODULE_IMAGE_PROCESSING"]
+                [
+                    "DATA_DIRS",
+                    "KPFPIPE",
+                    "DARK",
+                    "MODULE_CALIBRATION_ASSOCIATION",
+                    "MODULE_IMAGE_PROCESSING",
+                ]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
@@ -124,7 +130,10 @@ class Dark(BaseMasterModule):
             print("  make_master_l1() has not been called")
             return
 
-        print(f"\n  {'chip':<8s} {'median [e-]':<15s} {'rms [e-]':<10s} {'bad pixels'}")
+        print(
+            f"\n  {'chip':<8s} {'median [e-/s]':<15s} "
+            f"{'rms [e-/s]':<10s} {'bad pixels'}"
+        )
         print("  " + "-" * 56)
         for chip, stats in self._results.items():
             print(

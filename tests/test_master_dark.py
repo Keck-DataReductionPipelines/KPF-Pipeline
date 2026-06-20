@@ -318,6 +318,46 @@ class TestProcessFrame:
         mock_ip.assert_not_called()
         assert result is frame_in
 
+    def test_forwards_configured_search_window(self):
+        # A configured search window must reach CalibrationAssociation rather
+        # than silently falling back to the module default.
+        dark = Dark(
+            FILE_LIST,
+            config={
+                "KPF_MASTERS_OUTPUT": "/masters",
+                "masters_search_window_days": [-3, 1],
+            },
+        )
+        frame_in = MagicMock(name="l1_in")
+
+        with (
+            patch("kpfpipe.modules.masters.base.CalibrationAssociation") as mock_ca,
+            patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
+            patch.object(dark, "_load_calibration", lambda l1, cal: False),
+        ):
+            mock_ip.calibration_applied.return_value = False
+            dark._process_frame(frame_in)
+
+        ca_config = mock_ca.call_args[0][1]
+        assert ca_config["masters_search_window_days"] == [-3, 1]
+
+    def test_omits_search_window_when_unset(self):
+        # Without a configured window, the key is left out so CalibrationAssociation
+        # applies its own default.
+        dark = Dark(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
+        frame_in = MagicMock(name="l1_in")
+
+        with (
+            patch("kpfpipe.modules.masters.base.CalibrationAssociation") as mock_ca,
+            patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
+            patch.object(dark, "_load_calibration", lambda l1, cal: False),
+        ):
+            mock_ip.calibration_applied.return_value = False
+            dark._process_frame(frame_in)
+
+        ca_config = mock_ca.call_args[0][1]
+        assert "masters_search_window_days" not in ca_config
+
 
 # ---------------------------------------------------------------------------
 # _load_calibration: resolve a calibration to a master, caching one per type
