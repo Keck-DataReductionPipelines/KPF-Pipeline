@@ -485,6 +485,12 @@ documented, intentional ways — follow *its* conventions when adding masters co
   `[WLS]` (no `MODULE_` prefix), matched by `get_params([..., "BIAS"])`. This is a
   deliberate, accepted exception: masters are batch builders keyed by product, not the
   `MODULE_`-prefixed transform stages. Keep it; do not "align" it to the science pattern.
+- **Masters that calibrate frames also merge the shared transform-stage sections**
+  the per-frame calibration reuses — Dark/Flat/WLS pass
+  `get_params([..., "<PRODUCT>", "MODULE_CALIBRATION_ASSOCIATION", "MODULE_IMAGE_PROCESSING"])`
+  so the same `bias`/`dark`/`flat` flags and `masters_search_window_days` drive both the
+  science path and `_process_frame`. Order matters: `MODULE_IMAGE_PROCESSING` comes **last**
+  so its flags win on any key collision. Bias (no per-frame calibration) omits both.
 - **Key casing**: `lower_snake_case` everywhere except `[DATA_DIRS]` (which uses
   env-var-like `UPPER_SNAKE`). Booleans `true`/`false`; paths double-quoted; lists are
   TOML arrays with explicit `.0` on floats.

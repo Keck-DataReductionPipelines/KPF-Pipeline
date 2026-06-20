@@ -1,15 +1,16 @@
 """
-Unit tests for the master dark module.
+Unit and regression tests for the master dark module.
 
-Uses mocked stack_frames for unit tests (no real data needed). A real-data
-regression suite (as in test_master_bias.py) is not viable here: the bundled
-dark testdata forms two undersized clusters, so a full dark stack cannot be
-built from it. Bias subtraction (via the shared `_process_frame` hook) is
-covered separately with mocked CalibrationAssociation/ImageProcessing.
+Unit tests use mocked stack_frames (no real data needed); the orchestration
+hooks (_process_frame / _load_calibration) are covered with mocked
+CalibrationAssociation/ImageProcessing. TestMasterDarkRegression builds a real
+master dark from the bundled L0 darks: the five frames span two default-gap
+clusters, so it widens cluster_gap_seconds to group them into one stack.
 """
 
 import os
 import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -17,13 +18,22 @@ import pytest
 
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.dark import Dark
+from kpfpipe.utils.io import build_l0_file_lists
 
 CHIPS = ["GREEN", "RED"]
 NROW, NCOL = 10, 10  # small arrays for unit tests
 
+TESTDATA_DIR = Path(__file__).parent / "testdata"
+TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
+
 
 def make_l1_arrays(rng=None):
-    """Return a synthetic stack_frames output dict."""
+    """Return a synthetic stack_frames output dict.
+
+    Seeded for deterministic shape/dtype/sign fixtures; the values themselves
+    are not asserted numerically (real numeric behavior is pinned by
+    TestMasterDarkRegression and the stacking unit tests).
+    """
     if rng is None:
         rng = np.random.default_rng(42)
     arrays = {}
@@ -497,7 +507,8 @@ class TestRateEstimator:
         np.testing.assert_allclose(self._stacked_img(frames), 6.0, rtol=1e-5)
 
     def test_zero_exptime_is_mean_counts(self):
-        # bias: T = 1, so the estimate is the mean in electrons: (100 + 140)/2.
+        # Zero-exptime (bias-like) branch: T = 1, so the estimate is the mean
+        # in electrons: (100 + 140) / 2.
         frames = [_stack_frame(0.0, 100.0, 10.0), _stack_frame(0.0, 140.0, 10.0)]
         np.testing.assert_allclose(self._stacked_img(frames), 120.0, rtol=1e-5)
 
@@ -691,6 +702,78 @@ class TestCleanL1Arrays:
 
 
 # ---------------------------------------------------------------------------
+# Stacking input validation (the ValueErrors raised by stack_frames /
+# _compute_stats_from_datacube on malformed stacks)
+# ---------------------------------------------------------------------------
+
+
+class TestStackingValidation:
+    """Malformed stacks must raise rather than silently produce a bad master."""
+
+    @staticmethod
+    def _dark(n):
+        dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
+        dark.chips = ["GREEN"]
+        dark.ccd = {"nrow": 2, "ncol": 2}
+        return dark
+
+    def _stack_with_frames(self, frames):
+        dark = self._dark(len(frames))
+        by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
+        with (
+            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+        ):
+            return dark.stack_frames()
+
+    def test_fewer_than_two_frames_raises(self):
+        dark = self._dark(1)
+        with pytest.raises(ValueError, match="at least two frames"):
+            dark.stack_frames()
+
+    def test_negative_exptime_raises(self):
+        frames = [_stack_frame(-5.0, 100.0, 10.0), _stack_frame(-5.0, 100.0, 10.0)]
+        with pytest.raises(ValueError, match="cannot be negative"):
+            self._stack_with_frames(frames)
+
+    def test_mixed_zero_and_nonzero_exptime_raises(self):
+        frames = [_stack_frame(0.0, 100.0, 10.0), _stack_frame(10.0, 100.0, 10.0)]
+        with pytest.raises(ValueError, match="all zero or all non-zero"):
+            self._stack_with_frames(frames)
+
+    def test_excessive_load_failures_raises(self):
+        dark = self._dark(5)
+        with (
+            patch.object(dark, "_load_frame", lambda fn, **k: (None, False)),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+        ):
+            with pytest.raises(ValueError, match="more than 20%"):
+                dark.stack_frames()
+
+    def test_ccd_var_frame_count_mismatch_raises(self):
+        # CCD and VAR normally share a survivor mask; a mismatch signals a bug
+        # and must not be averaged into a master.
+        dark = self._dark(3)
+        ones = np.ones((2, 2), dtype=np.float32)
+        stats = {
+            "GREEN_CCD": {
+                "counts_sum": ones.copy(),
+                "exptime_sum": ones * 3,
+                "nframe": np.full((2, 2), 3, dtype=np.int32),
+            },
+            "GREEN_VAR": {
+                "counts_sum": ones.copy(),
+                "nframe": np.full((2, 2), 2, dtype=np.int32),
+            },
+        }
+        with patch.object(
+            dark, "_compute_stats_from_datacube", return_value=(stats, False)
+        ):
+            with pytest.raises(ValueError, match="mismatched frame count"):
+                dark.stack_frames()
+
+
+# ---------------------------------------------------------------------------
 # _resolve_calibrations: standard ∩ resolved(bias/dark/flat) clamp
 # ---------------------------------------------------------------------------
 
@@ -761,3 +844,55 @@ class TestMasterDarkSignature:
         with patch.object(dark, "stack_frames", return_value=synthetic):
             ml1 = dark.make_master_l1(bias=False)
         assert isinstance(ml1, KPFMasterL1)
+
+
+# ---------------------------------------------------------------------------
+# Regression: a real master dark from the bundled L0 darks (bias-subtracted,
+# real flag_outliers rejection, real bad-pixel cleaning)
+# ---------------------------------------------------------------------------
+
+
+class TestMasterDarkRegression:
+    """End-to-end master dark from real L0 frames. The five bundled darks span
+    two default-gap clusters, so cluster_gap_seconds is widened to stack them;
+    each frame is bias-subtracted against the bundled master bias."""
+
+    @pytest.fixture(scope="class")
+    def master_dark(self):
+        files = build_l0_file_lists(
+            "dark",
+            data_dir=str(TESTDATA_L0_DIR),
+            min_file_count=5,
+            cluster_gap_seconds=24 * 3600,
+        )
+        assert len(files) == 1 and len(files[0]) == 5
+        config = {"KPF_MASTERS_OUTPUT": str(TESTDATA_DIR)}
+        return Dark(files[0], config=config).make_master_l1()
+
+    def test_returns_kpf_master_l1(self, master_dark):
+        assert isinstance(master_dark, KPFMasterL1)
+
+    def test_dark_current_is_small_and_positive(self, master_dark):
+        # KPF dark current is a small positive rate (electrons/sec).
+        for chip in CHIPS:
+            median = np.nanmedian(master_dark.data[f"{chip}_IMG"])
+            assert 0 < median < 1.0
+
+    def test_bunit_is_rate(self, master_dark):
+        for chip in CHIPS:
+            bunit = _header_value(master_dark.headers[f"{chip}_IMG"]["BUNIT"])
+            assert bunit == "electrons/sec"
+
+    def test_snr_never_negative(self, master_dark):
+        for chip in CHIPS:
+            assert np.all(master_dark.data[f"{chip}_SNR"] >= 0)
+
+    def test_mask_mostly_good(self, master_dark):
+        # A clean detector stack should keep the large majority of pixels.
+        for chip in CHIPS:
+            mask = master_dark.data[f"{chip}_MASK"]
+            assert mask.dtype == bool
+            assert np.mean(mask) > 0.9
+
+    def test_bias_subtracted_via_receipt(self, master_dark):
+        assert "master_dark" in master_dark.receipt["Module_Name"].values

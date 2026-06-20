@@ -679,13 +679,23 @@ class TestMasterCache:
         b = _make_module()
         assert a._resolve_master("bias", path) is not b._resolve_master("bias", path)
 
-    def test_load_master_reads_fresh_each_call(self, tmp_path):
-        # _load_master itself no longer caches; callers cache as needed.
+    def test_load_master_reads_master_from_disk(self, tmp_path):
+        # _load_master returns a valid master with the on-disk data.
         path = str(tmp_path / "master_bias.fits")
         _write_master_bias(path)
-        first = ImageProcessing._load_master(path)
-        second = ImageProcessing._load_master(path)
-        assert first is not second
+        master = ImageProcessing._load_master(path)
+        assert isinstance(master, KPFMasterL1)
+        np.testing.assert_allclose(master.data["GREEN_IMG"], _BIAS_VALUE)
+        np.testing.assert_allclose(master.data["GREEN_SNR"], _BIAS_SNR)
+
+    def test_load_master_is_stateless(self, tmp_path):
+        # Deliberate contract: caching lives in _resolve_master, not here, so
+        # each call re-reads rather than returning a shared object.
+        path = str(tmp_path / "master_bias.fits")
+        _write_master_bias(path)
+        assert ImageProcessing._load_master(path) is not ImageProcessing._load_master(
+            path
+        )
 
     def test_missing_file_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="Master file not found"):
