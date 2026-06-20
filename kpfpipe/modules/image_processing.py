@@ -11,6 +11,8 @@ science applies the full sequence. Flat division is not yet implemented.
 
 import os
 
+import numpy as np
+
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
@@ -140,6 +142,36 @@ class ImageProcessing:
         setattr(self, f"_{cal_type}_ml1", master)
         return master
 
+    @staticmethod
+    def _master_image_variance(img, snr):
+        """
+        Recover the per-pixel variance of a master IMG from its stored SNR.
+
+        A master stores IMG = counts / exptime and SNR = |counts| / sqrt(var),
+        so the variance of the IMG value is (IMG / SNR)**2 (= var / exptime**2).
+        This is the bias/dark uncertainty propagated into the science VAR. A
+        master is built from many frames, so this term is small relative to the
+        per-frame image variance. SNR is non-negative by construction and is
+        exactly zero only at bad / zero-flux pixels; those contribute zero
+        variance rather than inf/NaN.
+
+        Parameters
+        ----------
+        img : numpy.ndarray
+            Master IMG array ('{chip}_IMG'); electrons for bias, electrons/sec
+            for dark.
+        snr : numpy.ndarray
+            Matching master SNR array ('{chip}_SNR').
+
+        Returns
+        -------
+        numpy.ndarray
+            Per-pixel variance of the master IMG, in IMG units squared.
+        """
+        ratio = np.zeros_like(img, dtype=np.float32)
+        np.divide(img, snr, out=ratio, where=snr > 0)
+        return ratio**2
+
     # ------------------------------------------------------------------
     # Algorithm steps
     # ------------------------------------------------------------------
@@ -159,13 +191,17 @@ class ImageProcessing:
         Returns
         -------
         None
-            Modifies `l1_obj.data['{chip}_CCD']` in-place.
+            Modifies `l1_obj.data['{chip}_CCD']` and `['{chip}_VAR']` in-place:
+            the bias is subtracted from CCD and its variance added to VAR.
         """
         if bias is None:
             bias = self.bias
         bias_l1 = self._resolve_master("bias", bias)
         chip = chip.upper()
-        self.l1_obj.data[f"{chip}_CCD"] -= bias_l1.data[f"{chip}_IMG"]
+        img = bias_l1.data[f"{chip}_IMG"]
+        snr = bias_l1.data[f"{chip}_SNR"]
+        self.l1_obj.data[f"{chip}_CCD"] -= img
+        self.l1_obj.data[f"{chip}_VAR"] += self._master_image_variance(img, snr)
 
     def subtract_dark(self, chip, dark=None):
         """
@@ -186,14 +222,21 @@ class ImageProcessing:
         Returns
         -------
         None
-            Modifies `l1_obj.data['{chip}_CCD']` in-place.
+            Modifies `l1_obj.data['{chip}_CCD']` and `['{chip}_VAR']` in-place:
+            the exposure-scaled dark is subtracted from CCD and its variance
+            (scaled by exptime**2) added to VAR.
         """
         if dark is None:
             dark = self.dark
         dark_l1 = self._resolve_master("dark", dark)
         chip = chip.upper()
         exptime = self.l1_obj.headers["PRIMARY"]["EXPTIME"]
-        self.l1_obj.data[f"{chip}_CCD"] -= dark_l1.data[f"{chip}_IMG"] * exptime
+        img = dark_l1.data[f"{chip}_IMG"]
+        snr = dark_l1.data[f"{chip}_SNR"]
+        self.l1_obj.data[f"{chip}_CCD"] -= img * exptime
+        self.l1_obj.data[f"{chip}_VAR"] += exptime**2 * self._master_image_variance(
+            img, snr
+        )
 
     # ------------------------------------------------------------------
     # Public entry point

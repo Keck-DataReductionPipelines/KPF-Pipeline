@@ -14,8 +14,11 @@ from kpfpipe.modules.image_processing import ImageProcessing
 
 _SHAPE = (4, 4)
 _CCD_VALUE = 10.0
+_VAR_VALUE = 12.0  # science image variance [electrons^2]
 _BIAS_VALUE = 3.0
+_BIAS_SNR = 50.0  # master bias SNR; var contribution = (IMG/SNR)^2
 _DARK_VALUE = 2.0  # master dark rate [electrons/sec]
+_DARK_SNR = 40.0  # master dark SNR
 _EXPTIME = 4.0  # != 1 so dark scaling is observable
 
 
@@ -31,6 +34,8 @@ class MockL1:
         self.data = {
             "GREEN_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
             "RED_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
+            "GREEN_VAR": np.full(_SHAPE, _VAR_VALUE, dtype=np.float32),
+            "RED_VAR": np.full(_SHAPE, _VAR_VALUE, dtype=np.float32),
         }
         self._receipt = []
 
@@ -51,24 +56,31 @@ def _make_module(bias_file=None, bias_dir=None, dark_file=None, dark_dir=None):
     return ImageProcessing(l1)
 
 
-def _write_master(path, value):
-    """Write a minimal master FITS file (GREEN_IMG/RED_IMG = value) to path."""
-    primary = fits.PrimaryHDU()
-    green = fits.ImageHDU(
-        data=np.full(_SHAPE, value, dtype=np.float32), name="GREEN_IMG"
-    )
-    red = fits.ImageHDU(data=np.full(_SHAPE, value, dtype=np.float32), name="RED_IMG")
-    fits.HDUList([primary, green, red]).writeto(path, overwrite=True)
+def _write_master(path, value, snr):
+    """Write a minimal master FITS file (per-chip IMG = value, SNR = snr)."""
+    hdus = [fits.PrimaryHDU()]
+    for chip in ("GREEN", "RED"):
+        hdus.append(
+            fits.ImageHDU(
+                data=np.full(_SHAPE, value, dtype=np.float32), name=f"{chip}_IMG"
+            )
+        )
+        hdus.append(
+            fits.ImageHDU(
+                data=np.full(_SHAPE, snr, dtype=np.float32), name=f"{chip}_SNR"
+            )
+        )
+    fits.HDUList(hdus).writeto(path, overwrite=True)
 
 
 def _write_master_bias(path):
     """Write a minimal master bias FITS file to path."""
-    _write_master(path, _BIAS_VALUE)
+    _write_master(path, _BIAS_VALUE, _BIAS_SNR)
 
 
 def _write_master_dark(path):
     """Write a minimal master dark FITS file to path."""
-    _write_master(path, _DARK_VALUE)
+    _write_master(path, _DARK_VALUE, _DARK_SNR)
 
 
 def _master_bias(tmp_path):
@@ -217,6 +229,37 @@ class TestSubtractBias:
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
         )
 
+    def test_propagates_variance(self, tmp_path):
+        mod = _make_module()
+        mod.subtract_bias("GREEN", _master_bias(tmp_path))
+        expected = _VAR_VALUE + (_BIAS_VALUE / _BIAS_SNR) ** 2
+        np.testing.assert_allclose(mod.l1_obj.data["GREEN_VAR"], expected, rtol=1e-5)
+
+    def test_zero_snr_pixel_adds_no_variance(self, tmp_path):
+        # A master pixel with SNR == 0 (bad / zero-flux) must not inject inf/NaN.
+        path = str(tmp_path / "master_bias.fits")
+        snr = np.full(_SHAPE, _BIAS_SNR, dtype=np.float32)
+        snr[0, 0] = 0.0
+        hdus = [fits.PrimaryHDU()]
+        for chip in ("GREEN", "RED"):
+            hdus.append(
+                fits.ImageHDU(
+                    data=np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32),
+                    name=f"{chip}_IMG",
+                )
+            )
+            hdus.append(fits.ImageHDU(data=snr.copy(), name=f"{chip}_SNR"))
+        fits.HDUList(hdus).writeto(path, overwrite=True)
+
+        mod = _make_module()
+        mod.subtract_bias("GREEN", KPFMasterL1.from_fits(path))
+        var = mod.l1_obj.data["GREEN_VAR"]
+        assert np.all(np.isfinite(var))
+        np.testing.assert_allclose(var[0, 0], _VAR_VALUE)
+        np.testing.assert_allclose(
+            var[1, 1], _VAR_VALUE + (_BIAS_VALUE / _BIAS_SNR) ** 2, rtol=1e-5
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestDarkResolution — perform() resolves the dark source (bool | str |
@@ -311,6 +354,12 @@ class TestSubtractDark:
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
+
+    def test_propagates_variance_scaled_by_exptime(self, tmp_path):
+        mod = _make_module()
+        mod.subtract_dark("GREEN", _master_dark(tmp_path))
+        expected = _VAR_VALUE + (_EXPTIME * _DARK_VALUE / _DARK_SNR) ** 2
+        np.testing.assert_allclose(mod.l1_obj.data["GREEN_VAR"], expected, rtol=1e-5)
 
 
 # ---------------------------------------------------------------------------
@@ -503,6 +552,38 @@ class TestPerformDark:
         mod = _make_module()
         with pytest.raises(TypeError, match="dark must be"):
             mod.perform(bias=False, dark=42)
+
+    def test_perform_propagates_bias_and_dark_variance(self, mod_with_bias_dark):
+        mod_with_bias_dark.perform()
+        expected = (
+            _VAR_VALUE
+            + (_BIAS_VALUE / _BIAS_SNR) ** 2
+            + (_EXPTIME * _DARK_VALUE / _DARK_SNR) ** 2
+        )
+        np.testing.assert_allclose(
+            mod_with_bias_dark.l1_obj.data["GREEN_VAR"], expected, rtol=1e-5
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestVarianceBudget — bias/dark add only a small fraction to the error budget
+# ---------------------------------------------------------------------------
+
+
+class TestVarianceBudget:
+    def test_bias_and_dark_contribution_is_small(self, tmp_path):
+        _write_master_bias(str(tmp_path / "master_bias.fits"))
+        _write_master_dark(str(tmp_path / "master_dark.fits"))
+        mod = _make_module(
+            bias_file="master_bias.fits",
+            bias_dir=str(tmp_path),
+            dark_file="master_dark.fits",
+            dark_dir=str(tmp_path),
+        )
+        mod.perform()
+        added = mod.l1_obj.data["GREEN_VAR"] - _VAR_VALUE
+        assert np.all(added > 0)
+        assert np.all(added < 0.01 * _VAR_VALUE)
 
 
 # ---------------------------------------------------------------------------
