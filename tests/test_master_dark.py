@@ -1,7 +1,7 @@
 """
 Unit tests for the master dark module.
 
-Uses mocked _stack_frames for unit tests (no real data needed). A real-data
+Uses mocked stack_frames for unit tests (no real data needed). A real-data
 regression suite (as in test_master_bias.py) is not viable here: the bundled
 dark testdata forms two undersized clusters, so a full dark stack cannot be
 built from it. Bias subtraction (via the shared `_process_frame` hook) is
@@ -23,7 +23,7 @@ NROW, NCOL = 10, 10  # small arrays for unit tests
 
 
 def make_l1_arrays(rng=None):
-    """Return a synthetic _stack_frames output dict."""
+    """Return a synthetic stack_frames output dict."""
     if rng is None:
         rng = np.random.default_rng(42)
     arrays = {}
@@ -45,18 +45,18 @@ def _header_value(value):
 
 
 # ---------------------------------------------------------------------------
-# Unit tests (mocked _stack_frames)
+# Unit tests (mocked stack_frames)
 # ---------------------------------------------------------------------------
 
 
 class TestMasterDarkUnit:
-    """Unit tests using a mocked _stack_frames — no real data needed."""
+    """Unit tests using a mocked stack_frames — no real data needed."""
 
     @pytest.fixture(scope="class")
     def master_dark(self):
         synthetic = make_l1_arrays()
         dark = Dark(FILE_LIST)
-        with patch.object(dark, "_stack_frames", return_value=synthetic):
+        with patch.object(dark, "stack_frames", return_value=synthetic):
             return dark.make_master_l1()
 
     def test_returns_kpf_master_l1(self, master_dark):
@@ -112,7 +112,7 @@ class TestMasterDarkInfo:
     def test_info_after_make_master_l1(self, capsys):
         synthetic = make_l1_arrays()
         dark = Dark(FILE_LIST)
-        with patch.object(dark, "_stack_frames", return_value=synthetic):
+        with patch.object(dark, "stack_frames", return_value=synthetic):
             dark.make_master_l1()
         dark.info()
         out = capsys.readouterr().out
@@ -123,7 +123,7 @@ class TestMasterDarkInfo:
 
 
 # ---------------------------------------------------------------------------
-# FITS round-trip (mocked _stack_frames)
+# FITS round-trip (mocked stack_frames)
 # ---------------------------------------------------------------------------
 
 
@@ -133,7 +133,7 @@ class TestMasterDarkRoundTrip:
     def test_roundtrip_arrays(self):
         synthetic = make_l1_arrays()
         dark = Dark(FILE_LIST)
-        with patch.object(dark, "_stack_frames", return_value=synthetic):
+        with patch.object(dark, "stack_frames", return_value=synthetic):
             ml1 = dark.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -151,7 +151,7 @@ class TestMasterDarkRoundTrip:
     def test_roundtrip_datalvl(self):
         synthetic = make_l1_arrays()
         dark = Dark(FILE_LIST)
-        with patch.object(dark, "_stack_frames", return_value=synthetic):
+        with patch.object(dark, "stack_frames", return_value=synthetic):
             ml1 = dark.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -174,7 +174,7 @@ class TestMasterDarkSaveMaster:
         synthetic = make_l1_arrays()
         dark = Dark(FILE_LIST)
         master_path = tmp_path / "master_dark.fits"
-        with patch.object(dark, "_stack_frames", return_value=synthetic):
+        with patch.object(dark, "stack_frames", return_value=synthetic):
             dark.make_master_l1(filepath=str(master_path))
         assert master_path.exists()
 
@@ -182,7 +182,7 @@ class TestMasterDarkSaveMaster:
         synthetic = make_l1_arrays()
         dark = Dark(FILE_LIST)
         master_path = tmp_path / "nested" / "subdir" / "master_dark.fits"
-        with patch.object(dark, "_stack_frames", return_value=synthetic):
+        with patch.object(dark, "stack_frames", return_value=synthetic):
             dark.make_master_l1(filepath=str(master_path))
         assert master_path.exists()
 
@@ -422,7 +422,7 @@ class TestRateEstimator:
             patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
-            return dark._stack_frames()["GREEN_IMG"]
+            return dark.stack_frames()["GREEN_IMG"]
 
     def test_mixed_exptime_is_exposure_weighted(self):
         # rates per frame are 10 and 3.33; an equal-weight mean would give
@@ -473,9 +473,13 @@ class TestPerPixelRejection:
         ]
         outlier = np.zeros((n, nrow, ncol), dtype=bool)
         outlier[4, 0, 0] = True
+        # Reject frame 4 at (0, 0) during stacking (3D cube input); return no
+        # outliers for the 2D bad-pixel pass in _clean_l1_arrays.
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.flag_outliers",
-            lambda arr, sigma, axis=0: outlier,
+            lambda arr, sigma, axis=0: (
+                outlier if arr.ndim == 3 else np.zeros(arr.shape, dtype=bool)
+            ),
         )
 
         dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
@@ -486,7 +490,7 @@ class TestPerPixelRejection:
             patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
-            arrays = dark._stack_frames()
+            arrays = dark.stack_frames()
 
         img, snr = arrays["GREEN_IMG"], arrays["GREEN_SNR"]
         # Rate is the same at the 4/5 pixel (400/40) as at the 5/5 pixels
@@ -520,7 +524,7 @@ class TestPerPixelRejection:
             patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
-            img = dark._stack_frames()["GREEN_IMG"]
+            img = dark.stack_frames()["GREEN_IMG"]
 
         # (95 + 105 + 100) / (3 * 10) = 10 e-/sec; the outlier is excluded from
         # numerator and denominator alike. A mismatch would give 300/40 = 7.5.
@@ -595,6 +599,6 @@ class TestMasterDarkSignature:
     def test_bias_kwarg_accepted(self):
         synthetic = make_l1_arrays()
         dark = Dark(FILE_LIST)
-        with patch.object(dark, "_stack_frames", return_value=synthetic):
+        with patch.object(dark, "stack_frames", return_value=synthetic):
             ml1 = dark.make_master_l1(bias=False)
         assert isinstance(ml1, KPFMasterL1)

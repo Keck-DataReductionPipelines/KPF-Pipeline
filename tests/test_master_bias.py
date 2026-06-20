@@ -1,7 +1,7 @@
 """
 Unit and regression tests for the master bias module.
 
-Uses mocked _stack_frames for unit tests (no real data needed).
+Uses mocked stack_frames for unit tests (no real data needed).
 Real-data regression tests are gated on KPF_TESTDATA env var.
 """
 
@@ -32,7 +32,7 @@ NROW, NCOL = 10, 10  # small arrays for unit tests
 
 
 def make_l1_arrays(rng=None):
-    """Return a synthetic _stack_frames output dict."""
+    """Return a synthetic stack_frames output dict."""
     if rng is None:
         rng = np.random.default_rng(42)
     arrays = {}
@@ -49,18 +49,18 @@ FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
 # ---------------------------------------------------------------------------
-# Unit tests (mocked _stack_frames)
+# Unit tests (mocked stack_frames)
 # ---------------------------------------------------------------------------
 
 
 class TestMasterBiasUnit:
-    """Unit tests using a mocked _stack_frames — no real data needed."""
+    """Unit tests using a mocked stack_frames — no real data needed."""
 
     @pytest.fixture(scope="class")
     def master_bias(self):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        with patch.object(bias, "_stack_frames", return_value=synthetic):
+        with patch.object(bias, "stack_frames", return_value=synthetic):
             return bias.make_master_l1()
 
     def test_returns_kpf_master_l1(self, master_bias):
@@ -117,7 +117,7 @@ class TestMasterBiasInfo:
     def test_info_after_make_master_l1(self, capsys):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        with patch.object(bias, "_stack_frames", return_value=synthetic):
+        with patch.object(bias, "stack_frames", return_value=synthetic):
             bias.make_master_l1()
         bias.info()
         out = capsys.readouterr().out
@@ -128,7 +128,7 @@ class TestMasterBiasInfo:
 
 
 # ---------------------------------------------------------------------------
-# FITS round-trip (mocked _stack_frames)
+# FITS round-trip (mocked stack_frames)
 # ---------------------------------------------------------------------------
 
 
@@ -138,7 +138,7 @@ class TestMasterBiasRoundTrip:
     def test_roundtrip_arrays(self):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        with patch.object(bias, "_stack_frames", return_value=synthetic):
+        with patch.object(bias, "stack_frames", return_value=synthetic):
             ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -156,7 +156,7 @@ class TestMasterBiasRoundTrip:
     def test_roundtrip_datalvl(self):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        with patch.object(bias, "_stack_frames", return_value=synthetic):
+        with patch.object(bias, "stack_frames", return_value=synthetic):
             ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -171,7 +171,7 @@ class TestMasterBiasRoundTrip:
     def test_roundtrip_mask_dtype(self):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        with patch.object(bias, "_stack_frames", return_value=synthetic):
+        with patch.object(bias, "stack_frames", return_value=synthetic):
             ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -195,7 +195,7 @@ class TestMasterBiasSaveMaster:
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         master_path = tmp_path / "master_bias.fits"
-        with patch.object(bias, "_stack_frames", return_value=synthetic):
+        with patch.object(bias, "stack_frames", return_value=synthetic):
             bias.make_master_l1(filepath=str(master_path))
         assert master_path.exists()
 
@@ -203,7 +203,7 @@ class TestMasterBiasSaveMaster:
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         master_path = tmp_path / "nested" / "subdir" / "master_bias.fits"
-        with patch.object(bias, "_stack_frames", return_value=synthetic):
+        with patch.object(bias, "stack_frames", return_value=synthetic):
             bias.make_master_l1(filepath=str(master_path))
         assert master_path.exists()
 
@@ -212,7 +212,7 @@ class TestMasterBiasSaveMaster:
         bias = Bias(FILE_LIST)
         master_path = tmp_path / "master_bias.fits"
         master_path.touch()
-        with patch.object(bias, "_stack_frames", return_value=synthetic):
+        with patch.object(bias, "stack_frames", return_value=synthetic):
             bias.make_master_l1(filepath=str(master_path))
         assert master_path.read_bytes()[:6] == b"SIMPLE"
 
@@ -226,7 +226,7 @@ class TestMasterBiasSaveMaster:
         bias = Bias(FILE_LIST)
         master_path = tmp_path / "master_bias.fits"
         master_path.touch()
-        with patch.object(bias, "_stack_frames", return_value=synthetic):
+        with patch.object(bias, "stack_frames", return_value=synthetic):
             bias.make_master_l1()  # populates ml1_obj
         with pytest.raises(FileExistsError, match="overwrite=True"):
             bias.save_master("L1", str(master_path))

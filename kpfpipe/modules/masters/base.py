@@ -379,7 +379,7 @@ class BaseMasterModule:
             On the '{chip}_CCD' entry only:
             - 'exptime_sum' : per-pixel total exposure time over valid frames
                               (the denominator of the exposure-weighted rate in
-                              _stack_frames; equals the valid-frame count for a
+                              stack_frames; equals the valid-frame count for a
                               bias stack, where T = 1)
         zero_exptime : bool
             True if this is a bias stack (all frames have EXPTIME == 0), used
@@ -474,7 +474,7 @@ class BaseMasterModule:
 
             # Per-pixel total exposure time over the surviving frames; this is
             # the denominator of the exposure-weighted rate estimate (see
-            # _stack_frames). T is 1 for a bias stack, so it reduces to N.
+            # stack_frames). T is 1 for a bias stack, so it reduces to N.
             stats[f"{chip}_CCD"]["exptime_sum"] = np.sum(
                 np.where(valid, T, 0.0), axis=0
             )
@@ -524,7 +524,7 @@ class BaseMasterModule:
         Returns
         -------
         exact_stats : dict
-            Per-extension statistics needed by `_stack_frames`:
+            Per-extension statistics needed by `stack_frames`:
             - 'nframe'     : number of valid frames per pixel
             - 'counts_sum' : summed counts across valid frames
             On the '{chip}_CCD' entry only:
@@ -585,7 +585,7 @@ class BaseMasterModule:
 
             # Total exposure time per pixel, tracked once per chip (CCD and VAR
             # share a survivor mask); the denominator of the exposure-weighted
-            # rate in _stack_frames. Reduces to the survivor count for a bias
+            # rate in stack_frames. Reduces to the survivor count for a bias
             # stack, where T = 1.
             exact_stats[f"{chip}_CCD"]["exptime_sum"] = np.zeros(
                 (nrow, ncol), dtype=np.float32
@@ -638,11 +638,78 @@ class BaseMasterModule:
 
         return exact_stats, zero_exptime
 
+    def _clean_l1_arrays(self, l1_arrays, sigma):
+        """
+        Interpolate bad pixels and recompute the bad-pixel mask per chip.
+
+        Parameters
+        ----------
+        l1_arrays : dict
+            Per-chip '{chip}_IMG/_SNR/_MASK' arrays from `stack_frames`.
+        sigma : float
+            Sigma threshold for the final outlier pass on the combined image.
+
+        Returns
+        -------
+        dict
+            The same dict with IMG/SNR interpolated over bad pixels and MASK
+            recomputed (True = good).
+        """
+        for chip in self.chips:
+            img = l1_arrays[f"{chip}_IMG"]
+            snr = l1_arrays[f"{chip}_SNR"]
+            mask = l1_arrays[f"{chip}_MASK"]
+
+            l1_arrays[f"{chip}_IMG"] = interpolate_bad_pixels(img, mask)
+            l1_arrays[f"{chip}_SNR"] = interpolate_bad_pixels(snr, mask)
+
+            out = flag_outliers(l1_arrays[f"{chip}_IMG"], sigma, axis=0)
+            bad = (l1_arrays[f"{chip}_SNR"] <= 0) | (l1_arrays[f"{chip}_IMG"] == 0)
+
+            l1_arrays[f"{chip}_MASK"] = ~(bad | out)
+
+        return l1_arrays
+
     # ------------------------------------------------------------------
-    # Private helpers for tracking results.
+    # Private helpers for building outputs and tracking results.
     # ------------------------------------------------------------------
 
-    def _compute_results(self, l1_arrays):
+    def _build_ml1_obj(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
+        """
+        Assemble a KPFMasterL1 from finalized per-chip arrays.
+
+        Parameters
+        ----------
+        l1_arrays : dict
+            Finalized '{chip}_IMG/_SNR/_MASK' arrays.
+        l0_file_list : list of str
+            L0 files that went into the stack; recorded via set_input_files.
+        receipt_key : str
+            Receipt entry name (e.g. 'master_bias', 'master_dark').
+        bunit : str, optional
+            If given, written as the BUNIT header on each '{chip}_IMG'.
+
+        Returns
+        -------
+        KPFMasterL1
+            The populated master L1 object.
+        """
+        ml1_obj = KPFMasterL1()
+
+        for chip in self.chips:
+            ml1_obj.set_data(f"{chip}_IMG", l1_arrays[f"{chip}_IMG"])
+            ml1_obj.set_data(f"{chip}_SNR", l1_arrays[f"{chip}_SNR"])
+            ml1_obj.set_data(f"{chip}_MASK", l1_arrays[f"{chip}_MASK"])
+
+            if bunit is not None:
+                ml1_obj.headers[f"{chip}_IMG"]["BUNIT"] = bunit
+
+        ml1_obj.set_input_files(l0_file_list)
+        ml1_obj.receipt_add_entry(receipt_key, "PASS")
+
+        return ml1_obj
+
+    def _populate_results(self, l1_arrays):
         """
         Summarize per-chip master statistics for `info()` and tests.
 
@@ -665,7 +732,7 @@ class BaseMasterModule:
     # Public methods
     # ------------------------------------------------------------------
 
-    def _stack_frames(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
+    def stack_frames(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
         """
         Stack full-frame images to produce masters L1.
 
@@ -684,7 +751,8 @@ class BaseMasterModule:
         Returns
         -------
         l1_arrays : dict
-            Dictionary containing per-chip stacked products:
+            Dictionary containing per-chip stacked products, with bad pixels
+            interpolated and the bad-pixel mask recomputed (`_clean_l1_arrays`):
             - '{chip}_IMG'  : mean count rate FFI
             - '{chip}_SNR'  : signal-to-noise ratio FFI
             - '{chip}_MASK' : boolean bad pixel mask (1 = good, 0 = bad)
@@ -760,74 +828,8 @@ class BaseMasterModule:
             l1_arrays[f"{chip}_SNR"] = snr.astype(np.float32)
             l1_arrays[f"{chip}_MASK"] = good
 
-        return l1_arrays
-
-    def _clean_l1_arrays(self, l1_arrays, sigma):
-        """
-        Interpolate bad pixels and recompute the bad-pixel mask per chip.
-
-        Parameters
-        ----------
-        l1_arrays : dict
-            Per-chip '{chip}_IMG/_SNR/_MASK' arrays from `_stack_frames`.
-        sigma : float
-            Sigma threshold for the final outlier pass on the combined image.
-
-        Returns
-        -------
-        dict
-            The same dict with IMG/SNR interpolated over bad pixels and MASK
-            recomputed (True = good).
-        """
-        for chip in self.chips:
-            img = l1_arrays[f"{chip}_IMG"]
-            snr = l1_arrays[f"{chip}_SNR"]
-            mask = l1_arrays[f"{chip}_MASK"]
-
-            l1_arrays[f"{chip}_IMG"] = interpolate_bad_pixels(img, mask)
-            l1_arrays[f"{chip}_SNR"] = interpolate_bad_pixels(snr, mask)
-
-            out = flag_outliers(l1_arrays[f"{chip}_IMG"], sigma, axis=0)
-            bad = (l1_arrays[f"{chip}_SNR"] <= 0) | (l1_arrays[f"{chip}_IMG"] == 0)
-
-            l1_arrays[f"{chip}_MASK"] = ~(bad | out)
-
-        return l1_arrays
-
-    def _build_ml1_obj(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
-        """
-        Assemble a KPFMasterL1 from finalized per-chip arrays.
-
-        Parameters
-        ----------
-        l1_arrays : dict
-            Finalized '{chip}_IMG/_SNR/_MASK' arrays.
-        l0_file_list : list of str
-            L0 files that went into the stack; recorded via set_input_files.
-        receipt_key : str
-            Receipt entry name (e.g. 'master_bias', 'master_dark').
-        bunit : str, optional
-            If given, written as the BUNIT header on each '{chip}_IMG'.
-
-        Returns
-        -------
-        KPFMasterL1
-            The populated master L1 object.
-        """
-        ml1_obj = KPFMasterL1()
-
-        for chip in self.chips:
-            ml1_obj.set_data(f"{chip}_IMG", l1_arrays[f"{chip}_IMG"])
-            ml1_obj.set_data(f"{chip}_SNR", l1_arrays[f"{chip}_SNR"])
-            ml1_obj.set_data(f"{chip}_MASK", l1_arrays[f"{chip}_MASK"])
-
-            if bunit is not None:
-                ml1_obj.headers[f"{chip}_IMG"]["BUNIT"] = bunit
-
-        ml1_obj.set_input_files(l0_file_list)
-        ml1_obj.receipt_add_entry(receipt_key, "PASS")
-
-        return ml1_obj
+        # Interpolate bad pixels and recompute the bad-pixel mask before return.
+        return self._clean_l1_arrays(l1_arrays, sigma)
 
     def save_master(self, level, path, *, overwrite=False):
         """

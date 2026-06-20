@@ -69,9 +69,9 @@ class Dark(BaseMasterModule):
         l0_file_list : list of str, optional
             L0 files to stack. Defaults to self.l0_file_list.
         nstream : int, optional
-            Stream threshold passed to _stack_frames.
+            Stream threshold passed to stack_frames.
         sigma : float, optional
-            Outlier rejection threshold passed to _stack_frames.
+            Outlier rejection threshold passed to stack_frames.
         bias : bool | str | KPFMasterL1, optional
             Per-call master-bias override (same forms as ImageProcessing.perform:
             bool, a master filepath, or a KPFMasterL1 object). A dark's standard
@@ -93,20 +93,19 @@ class Dark(BaseMasterModule):
 
         self._active_calibrations = self._resolve_calibrations(bias=bias)
 
-        l1_arrays = self._stack_frames(
+        l1_arrays = self.stack_frames(
             l0_file_list=l0_file_list,
             nstream=nstream,
             sigma=sigma,
             verbose=verbose,
         )
-        l1_arrays = self._clean_l1_arrays(l1_arrays, sigma)
 
-        # Dark current is a rate: _stack_frames normalizes each frame by its
+        # Dark current is a rate: stack_frames normalizes each frame by its
         # exposure time, so the master dark IMG is in electrons/sec.
         self.ml1_obj = self._build_ml1_obj(
             l1_arrays, l0_file_list, receipt_key="master_dark", bunit="electrons/sec"
         )
-        self._results = self._compute_results(l1_arrays)
+        self._results = self._populate_results(l1_arrays)
 
         if filepath is not None:
             self.save_master("L1", filepath, overwrite=True)

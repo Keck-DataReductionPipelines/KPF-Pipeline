@@ -439,11 +439,12 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **Sigma-clipping** via `kpfpipe.utils.stats.flag_outliers(arr, sigma, axis=0)`; robust
   WLS-coefficient combination via `mad_std` + median.
 - **`info()` pretty-printer** (ASCII-table summary) is expected on every subclass.
-- **Public API surface is `make_master*`, `save*`, and `info` only.** Every other
-  method on `BaseMasterModule` and its subclasses — frame loading, stacking, line
-  fitting, coefficient solving, and all other algorithm/helper steps — takes a
-  leading underscore. Tests that exercise these internals call (and patch) the
-  underscored names directly.
+- **Public API surface is `make_master*`, `save*`, `stack_frames`, and `info`.**
+  `stack_frames` is public so callers can build a stacked frame without the full
+  `make_master_*` wrapper. Every other method on `BaseMasterModule` and its
+  subclasses — frame loading, calibration, line fitting, coefficient solving, and
+  the other algorithm/helper steps — takes a leading underscore. Tests that
+  exercise those internals call (and patch) the underscored names directly.
 
 ---
 
