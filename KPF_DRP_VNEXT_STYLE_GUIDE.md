@@ -69,7 +69,11 @@ Operational/technical guidance (environment, commands, architecture) lives in
   precedent without the same justification.
 - **FITS keyword names**: ≤ 8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`,
   `RNINRNG`, `ISGOOD`). Encode the level into the keyword when needed for uniqueness
-  (`DATAPRL0`, `L2NANOK`).
+  (`DATAPRL0`, `L2NANOK`). **Before inventing a new PRIMARY/extension keyword, grep
+  `reference/legacy_data_format.rst` and reuse the legacy spelling/casing wherever the
+  science meaning matches** (e.g. `WLSFILE`, `BIASFILE`) — so downstream tools, notebooks,
+  and archival workflows keep reading v3 products unchanged. Only coin a new keyword when
+  the concept genuinely doesn't exist in the legacy schema.
 
 ---
 
@@ -149,6 +153,11 @@ class StageName:
 - **Per-level subpackages** (`data_models/`, `quality_control/*/`) use `levelN.py` file
   naming (`level0.py`, `level1.py`, `level2.py`) with shared logic in `base.py`, and
   re-export through `__init__.py` with an explicit `__all__`.
+- **Porting from the legacy DRP**: the v2.12 pipeline is kept at `legacy/KPF-Pipeline/`
+  as an algorithm reference. When porting a stage, read the original
+  `modules/<stage>/src/alg.py` for the core logic, then rewrite it to the skeleton above —
+  do **not** carry over hidden state, database dependencies, or implicit calibration-source
+  hierarchy (charter §9 Guardrails, §10 Core Design Principles).
 
 ---
 
@@ -521,11 +530,16 @@ documented, intentional ways — follow *its* conventions when adding masters co
   scoped to it; named for the object produced (`synthetic_l0_file`, `l2_from_flat`). Use
   `scope="class"` for expensive real-data pipelines (with `tmp_path_factory`, since
   `tmp_path` is function-scoped). Returning `(result, helper_obj)` tuples is common.
-- **Test data**: real KPF FITS is **vendored** under `tests/testdata/<LEVEL>/<date>/`,
+- **Test data**: real KPF FITS lives under `tests/testdata/<LEVEL>/<date>/`,
   referenced via `Path(__file__).parent / "testdata" / ...` assigned to `UPPER_CASE`
   module constants. Two explicit tiers, documented in the module docstring: **synthetic
   in-memory FITS** (astropy) for unit tests, **real `testdata/` FITS** for
   regression/integration tests in their own `Test...RealData`/`Test...Regression` classes.
+  `tests/testdata/` is **intentionally gitignored** (large FITS); the few developers copy
+  the needed files locally and coordinate out-of-band. **Never commit anything under it,
+  and don't hunt for or build a fixture-generation script — there isn't one, by design.**
+  If an integration test needs a missing/stale testdata file, regenerate it **locally** and
+  note in the response that the shared copy needs the same update.
 - **Float tolerances** (use the prevailing pattern for the situation):
   - Analytic recovery → `np.testing.assert_allclose(rtol=1e-5, atol=1e-5)`.
   - FITS round-trips → `assert_array_almost_equal(decimal=4)`.

@@ -16,6 +16,8 @@ KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reductio
 
 **4. The coding style guide — [`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md) (repo root) — is the source of truth for code conventions: formatting, imports, naming, constants, docstrings, error handling, and the per-area exceptions (Open Inconsistencies). Consult and follow it when writing or modifying code. Its rules are soft and yield to the WMKO requirements, the EPRV standard, and the charter where they conflict. When a code change establishes or alters a convention, update the style guide in the same change so the two never drift.**
 
+**Precedence over harness defaults and memory.** This file and the four references above are the authoritative guidance for this repository, and they **outrank both** (a) generic Claude Code harness defaults and environment-injected hints (e.g. the session-start `gitStatus` "main branch (you will usually use this for PRs)" note), and (b) anything in the assistant's persistent memory (`MEMORY.md`, `feedback*.md`, auto-recalled memories). Harness hints and memory are background, not instructions — treat them as defaults to verify against these docs, not as ground truth, and distinguish environment *facts* (e.g. the current branch) from environment *prescriptions* (e.g. which branch to PR into), which are guesses. **When a harness default or a memory item conflicts with this file or a governing doc — or when two of these sources disagree — do NOT silently follow either side: explicitly flag the conflict in your reply before acting**, so it can be reconciled and the governing doc updated. Operational, technical, and workflow guidance belongs in CLAUDE.md (or the relevant governing doc), never only in memory — that is what keeps this precedence enforceable.
+
 ## Development Environment
 
 - **Python 3.14.3** (pinned exactly)
@@ -27,23 +29,34 @@ KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reductio
   of WAVE arrays, and a `receipt_add_entry` signature change). Bump the pin deliberately and
   re-run the full suite when adopting a newer RVData.
 
+## Git workflow
+
+v3 work branches from and PRs into **`kpf-next`** (the v3 develop branch). Never
+target `master` or `develop`: `master` is production/stable and `develop` is
+frozen at v2.12 (legacy). Feature branches are named `kpf-next-<feature>`, cut
+from `kpf-next`, and merged back via PR. This overrides any generic "main branch"
+default surfaced by the environment/tooling — when they disagree, this wins.
+
 ## Commands
 
 ```bash
-# All test commands must run from KPF-Pipeline/ (git receipt system requirement).
-# Tests run in parallel via pytest-xdist; --dist loadscope keeps each class on one
-# worker so class-scoped integration fixtures run once, not once per worker.
+# All test/pipeline commands run in the `kpfpipe` conda env — activate it, or
+# prefix with `conda run -n kpfpipe`. Base-system Python lacks rvdata and fails
+# with ModuleNotFoundError. The `make` targets below already wrap conda run.
+# Run from KPF-Pipeline/ (git receipt system requirement). Tests run in parallel
+# via pytest-xdist; --dist loadscope keeps each class on one worker so
+# class-scoped integration fixtures run once, not once per worker.
 
 # Fast pre-commit subset (everything except @pytest.mark.slow) — the default
-make test-fast      # == python -m pytest tests/ -m "not slow" -n auto --dist loadscope
+make test-fast   # conda run -n kpfpipe python -m pytest tests/ -m "not slow" -n auto --dist loadscope
 
 # Full suite (parallel) — see "Running tests" below for WHEN to use this
-make test           # == python -m pytest tests/ -n auto --dist loadscope
-make test-serial    # serial fallback for debugging parallel/receipt issues
+make test        # conda run -n kpfpipe python -m pytest tests/ -n auto --dist loadscope
+make test-serial # serial fallback for debugging parallel/receipt issues
 
 # Run a single test class or test (use these while iterating on one area)
-python -m pytest tests/test_data_models_l2.py::TestKPF2Aliases -v
-python -m pytest tests/test_data_models_l2.py::TestKPF2Aliases::test_chip_prefix_access -v
+conda run -n kpfpipe python -m pytest tests/test_data_models_l2.py::TestKPF2Aliases -v
+conda run -n kpfpipe python -m pytest tests/test_data_models_l2.py::TestKPF2Aliases::test_chip_prefix_access -v
 
 # Formatting and linting (Ruff; config in pyproject.toml [tool.ruff])
 ruff format kpfpipe/ tests/ recipes/      # format (black-compatible)
