@@ -371,18 +371,26 @@ class BaseMasterModule:
         -------
         stats : dict
             Per-extension statistics including:
-            - 'nframe'     : number of valid frames per pixel
-            - 'total_sum'  : summed counts across valid frames
-            - 'rate_mean'  : exposure-time-normalized mean
-            - 'rate_rms'   : frame-to-frame sample RMS
-        exptime_total : float
-            Total integrated exposure time across included frames.
+            - 'nframe'      : number of valid frames per pixel
+            - 'counts_sum'  : summed counts across valid frames
+            - 'rate_mean'   : equal-weight mean of per-frame rates (the center
+                              used for streaming clip bounds, not the master IMG)
+            - 'rate_rms'    : frame-to-frame sample RMS of the per-frame rates
+            On the '{chip}_CCD' entry only:
+            - 'exptime_sum' : per-pixel total exposure time over valid frames
+                              (the denominator of the exposure-weighted rate in
+                              _stack_frames; equals the valid-frame count for a
+                              bias stack, where T = 1)
+        zero_exptime : bool
+            True if this is a bias stack (all frames have EXPTIME == 0), used
+            by the streaming path to validate per-frame exposure consistency.
 
         Notes
         -----
-        Outlier rejection is performed jointly on CCD and VAR extensions.
-        Exposure times must be either all zero or all strictly positive.
-        Raises an error if more than 20% of frames fail to load.
+        Outlier rejection is performed jointly on CCD and VAR extensions, in
+        rate space, so frames of differing exposure are comparable. Exposure
+        times must be either all zero or all strictly positive. Raises an error
+        if more than 20% of frames fail to load.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -440,8 +448,10 @@ class BaseMasterModule:
             raise ValueError(f"Exposure times cannot be negative; exptime = {exptime}")
 
         if np.all(exptime > 0):
+            zero_exptime = False
             T = exptime[:, None, None]
         elif np.all(exptime == 0):
+            zero_exptime = True
             T = np.ones_like(exptime)[:, None, None]
         else:
             raise ValueError(
@@ -449,7 +459,6 @@ class BaseMasterModule:
             )
 
         stats = {}
-        exptime_total = np.sum(exptime)
 
         for chip in self.chips:
             stats[f"{chip}_CCD"] = {}
@@ -463,12 +472,19 @@ class BaseMasterModule:
             N = np.sum(~out, axis=0)
             good = N > 1
 
+            # Per-pixel total exposure time over the surviving frames; this is
+            # the denominator of the exposure-weighted rate estimate (see
+            # _stack_frames). T is 1 for a bias stack, so it reduces to N.
+            stats[f"{chip}_CCD"]["exptime_sum"] = np.sum(
+                np.where(valid, T, 0.0), axis=0
+            )
+
             for suffix in ["CCD", "VAR"]:
                 ext = f"{chip}_{suffix}"
                 frame_data = data_cube[ext]
                 R = frame_data / T
 
-                total_sum = np.sum(frame_data, axis=0, where=valid)
+                counts_sum = np.sum(frame_data, axis=0, where=valid)
 
                 rate_mean = np.zeros_like(R[0])
                 rate_mean[good] = np.sum(R, axis=0, where=valid)[good] / N[good]
@@ -480,17 +496,17 @@ class BaseMasterModule:
                 rate_rms[good] = np.sqrt(sum_sq_dev[good] / (N[good] - 1))
 
                 stats[ext]["nframe"] = N
-                stats[ext]["total_sum"] = total_sum
+                stats[ext]["counts_sum"] = counts_sum
                 stats[ext]["rate_mean"] = rate_mean
                 stats[ext]["rate_rms"] = rate_rms
 
-        return stats, exptime_total
+        return stats, zero_exptime
 
     def _compute_stats_from_stream(
         self, l0_file_list=None, ndirect=None, sigma=None, verbose=True
     ):
         """
-        Compute stacked statistics using streaming Welford accumulation.
+        Compute stacked statistics with a single streaming pass over the frames.
 
         Parameters
         ----------
@@ -508,19 +524,22 @@ class BaseMasterModule:
         Returns
         -------
         exact_stats : dict
-            Per-extension statistics including:
+            Per-extension statistics needed by `_stack_frames`:
             - 'nframe'     : number of valid frames per pixel
-            - 'total_sum'  : summed counts across valid frames
-            - 'rate_mean'  : per-pixel rate mean, normalized by exposure time
-            - 'rate_rms'   : frame-to-frame rate rms deviation
-        exptime_total : float
-            Total integrated exposure time across included frames.
+            - 'counts_sum' : summed counts across valid frames
+            On the '{chip}_CCD' entry only:
+            - 'exptime_sum' : per-pixel total exposure time over valid frames
+            (Unlike `_compute_stats_from_datacube`, the streaming pass does not
+            produce 'rate_mean'/'rate_rms': clip bounds come from the datacube
+            approximation below, and the master IMG is counts_sum / exptime_sum.)
+        zero_exptime : bool
+            True if this is a bias stack (all frames have EXPTIME == 0).
 
         Notes
         -----
         An initial subset of frames is processed using the direct data cube
-        method to estimate approximate mean and RMS. These estimates define
-        per-pixel clipping bounds for the streaming pass.
+        method to estimate approximate rate mean and RMS. These estimates define
+        the per-pixel clipping bounds for the streaming pass.
 
         Optimized to reduce memory usage at the expense of compute speed.
         Raises an error if more than 20% of frames fail to load or if exposure
@@ -533,7 +552,7 @@ class BaseMasterModule:
         if sigma is None:
             sigma = self.stack_sigma
 
-        approx_stats, exptime_direct = self._compute_stats_from_datacube(
+        approx_stats, zero_exptime = self._compute_stats_from_datacube(
             l0_file_list=l0_file_list,
             nframe=ndirect,
             sigma=sigma,
@@ -541,11 +560,9 @@ class BaseMasterModule:
         )
 
         if len(l0_file_list) <= ndirect:
-            return approx_stats, exptime_direct
+            return approx_stats, zero_exptime
 
         exact_stats = {}
-        exptime_total = 0.0
-        zero_exptime = exptime_direct == 0
 
         nrow = self.ccd["nrow"]
         ncol = self.ccd["ncol"]
@@ -556,15 +573,23 @@ class BaseMasterModule:
 
                 exact_stats[ext] = {}
                 exact_stats[ext]["nframe"] = np.zeros((nrow, ncol), dtype=np.int32)
-                exact_stats[ext]["total_sum"] = np.zeros((nrow, ncol), dtype=np.float32)
-                exact_stats[ext]["rate_mean"] = np.zeros((nrow, ncol), dtype=np.float32)
-                exact_stats[ext]["rate_M2"] = np.zeros((nrow, ncol), dtype=np.float32)
+                exact_stats[ext]["counts_sum"] = np.zeros(
+                    (nrow, ncol), dtype=np.float32
+                )
 
                 approx_mean = approx_stats[ext]["rate_mean"]
                 approx_rms = approx_stats[ext]["rate_rms"]
 
                 approx_stats[ext]["rate_lower"] = approx_mean - approx_rms * sigma
                 approx_stats[ext]["rate_upper"] = approx_mean + approx_rms * sigma
+
+            # Total exposure time per pixel, tracked once per chip (CCD and VAR
+            # share a survivor mask); the denominator of the exposure-weighted
+            # rate in _stack_frames. Reduces to the survivor count for a bias
+            # stack, where T = 1.
+            exact_stats[f"{chip}_CCD"]["exptime_sum"] = np.zeros(
+                (nrow, ncol), dtype=np.float32
+            )
 
         failure = 0
         clipping_mask = np.ones((nrow, ncol), dtype=bool)
@@ -592,59 +617,26 @@ class BaseMasterModule:
             else:
                 T = exptime
 
-            exptime_total += exptime
-
             for chip in self.chips:
+                # Clip each pixel against the rate bounds (joint over CCD/VAR),
+                # then accumulate counts and exposure time over the survivors.
                 clipping_mask[:] = True
-                R = {}
 
                 for suffix in ["CCD", "VAR"]:
                     ext = f"{chip}_{suffix}"
-                    frame_data = l1_obj.data[ext]
-                    R[ext] = frame_data / T
-
+                    rate = l1_obj.data[ext] / T
                     lower = approx_stats[ext]["rate_lower"]
                     upper = approx_stats[ext]["rate_upper"]
-                    clipping_mask &= (R[ext] >= lower) & (R[ext] <= upper)
+                    clipping_mask &= (rate >= lower) & (rate <= upper)
+
+                exact_stats[f"{chip}_CCD"]["exptime_sum"] += T * clipping_mask
 
                 for suffix in ["CCD", "VAR"]:
                     ext = f"{chip}_{suffix}"
-                    frame_data = l1_obj.data[ext]
-                    rate = R[ext]
+                    exact_stats[ext]["nframe"] += clipping_mask
+                    exact_stats[ext]["counts_sum"] += l1_obj.data[ext] * clipping_mask
 
-                    N = exact_stats[ext]["nframe"]
-                    N += clipping_mask
-
-                    total_sum = exact_stats[ext]["total_sum"]
-                    total_sum += frame_data * clipping_mask
-
-                    # Welford algorithm accumulation begins
-                    mean = exact_stats[ext]["rate_mean"]
-                    safe_N = np.maximum(N, 1)
-                    delta = (rate - mean) * clipping_mask
-                    mean += delta / safe_N
-                    delta2 = (rate - mean) * clipping_mask
-                    M2 = exact_stats[ext]["rate_M2"]
-                    M2 += delta * delta2
-                    # Welford algorithm accumulation ends
-
-                    exact_stats[ext]["total_sum"] = total_sum
-                    exact_stats[ext]["rate_mean"] = mean
-                    exact_stats[ext]["rate_M2"] = M2
-
-        for chip in self.chips:
-            for suffix in ["CCD", "VAR"]:
-                ext = f"{chip}_{suffix}"
-
-                N = exact_stats[ext]["nframe"]
-                mean = exact_stats[ext]["rate_mean"]
-                M2 = exact_stats[ext]["rate_M2"]
-                rms = np.sqrt(np.where(N > 1, M2 / (N - 1), 0))
-
-                exact_stats[ext]["rate_rms"] = rms
-                del exact_stats[ext]["rate_M2"]
-
-        return exact_stats, exptime_total
+        return exact_stats, zero_exptime
 
     # ------------------------------------------------------------------
     # Private helpers for tracking results.
@@ -700,8 +692,8 @@ class BaseMasterModule:
         Notes
         -----
         If number of frames is less than `nstream`, statistics are computed
-        directly from a full data cube. Otherwise, streaming Welford statistics
-        are used to reduce memory usage.
+        directly from a full data cube. Otherwise, a single-pass streaming
+        accumulation is used to bound memory usage.
 
         An initial subset of frames is processed using the direct data cube
         method to estimate approximate mean and rms. These estimates define
@@ -720,11 +712,11 @@ class BaseMasterModule:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
         if nframe < nstream:
-            stats, exptime = self._compute_stats_from_datacube(
+            stats, _ = self._compute_stats_from_datacube(
                 l0_file_list, nstream - 1, sigma, verbose=verbose
             )
         else:
-            stats, exptime = self._compute_stats_from_stream(
+            stats, _ = self._compute_stats_from_stream(
                 l0_file_list, nstream - 1, sigma, verbose=verbose
             )
 
@@ -737,22 +729,32 @@ class BaseMasterModule:
 
         l1_arrays = {}
         for chip in self.chips:
-            img = stats[f"{chip}_CCD"]["rate_mean"]
-            tot = stats[f"{chip}_CCD"]["total_sum"]
-            var = stats[f"{chip}_VAR"]["total_sum"]
+            counts = stats[f"{chip}_CCD"]["counts_sum"]
+            var_sum = stats[f"{chip}_VAR"]["counts_sum"]
+            exptime_sum = stats[f"{chip}_CCD"]["exptime_sum"]
 
-            good = var > 0
+            good = var_sum > 0
 
             for suffix in ["CCD", "VAR"]:
                 ext = f"{chip}_{suffix}"
                 good &= stats[ext]["nframe"] > 0.5 * nframe
 
-            snr = np.zeros_like(img)
-            snr[good] = np.abs(tot[good]) / np.sqrt(var[good])
+            good &= exptime_sum > 0
 
-            # Welford accumulators run in float64 for numerical stability;
-            # the stored master image fits comfortably in float32 (bias signal
-            # is a few-ADU offset with ~5 e- read noise) and halves the
+            # Exposure-weighted rate estimate: total counts over total exposure
+            # time across the surviving frames (the ML rate under Poisson
+            # statistics, correct for mixed exposures). For a bias stack
+            # exptime_sum is the survivor count, so this is the mean in electrons.
+            img = np.zeros_like(counts)
+            img[good] = counts[good] / exptime_sum[good]
+
+            # SNR of the rate is invariant to the exposure normalization: the
+            # total exposure cancels in |sum(counts)| / sqrt(sum(var)).
+            snr = np.zeros_like(img)
+            snr[good] = np.abs(counts[good]) / np.sqrt(var_sum[good])
+
+            # The stored master image fits comfortably in float32 (bias signal
+            # is a few-ADU offset with ~5 e- read noise), which halves the
             # on-disk size of the IMG and SNR extensions.
             l1_arrays[f"{chip}_IMG"] = img.astype(np.float32)
             l1_arrays[f"{chip}_SNR"] = snr.astype(np.float32)

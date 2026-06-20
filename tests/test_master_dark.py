@@ -387,6 +387,147 @@ class TestLoadMaster:
 
 
 # ---------------------------------------------------------------------------
+# Rate estimator: master IMG = total counts / total exposure time
+# ---------------------------------------------------------------------------
+
+
+def _stack_frame(exptime, ccd_val, var_val, shape=(2, 2)):
+    """A synthetic assembled frame with uniform CCD/VAR and a given EXPTIME."""
+    frame = MagicMock()
+    frame.headers = {"PRIMARY": {"EXPTIME": exptime}}
+    frame.data = {
+        "GREEN_CCD": np.full(shape, ccd_val, dtype=np.float32),
+        "GREEN_VAR": np.full(shape, var_val, dtype=np.float32),
+    }
+    return frame
+
+
+class TestRateEstimator:
+    """The master IMG is the exposure-weighted rate (total counts / total
+    exposure time), correct even when the stack mixes exposure times. Outlier
+    rejection is disabled (large sigma) so the arithmetic is exact."""
+
+    @staticmethod
+    def _stacked_img(frames, *, nframe_stream=6):
+        file_list = sorted(f"f{i}.fits" for i in range(len(frames)))
+        dark = Dark(file_list)
+        dark.chips = ["GREEN"]
+        dark.ccd = {"nrow": 2, "ncol": 2}
+        dark.stack_sigma = 1e6  # effectively no clipping
+        dark.nframe_stream = nframe_stream
+        # Keyed by filename: the streaming path re-reads its first frames for
+        # the approximate (clip-bound) pass, so a frame may be loaded twice.
+        by_fn = dict(zip(file_list, frames, strict=True))
+        with (
+            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+        ):
+            return dark._stack_frames()["GREEN_IMG"]
+
+    def test_mixed_exptime_is_exposure_weighted(self):
+        # rates per frame are 10 and 3.33; an equal-weight mean would give
+        # ~6.67, but the correct estimate is (100+100)/(10+30) = 5.0 e-/sec.
+        frames = [_stack_frame(10.0, 100.0, 10.0), _stack_frame(30.0, 100.0, 10.0)]
+        np.testing.assert_allclose(self._stacked_img(frames), 5.0, rtol=1e-5)
+
+    def test_equal_exptime_is_counts_over_exptime(self):
+        # (100 + 140) / (20 + 20) = 6.0 e-/sec.
+        frames = [_stack_frame(20.0, 100.0, 10.0), _stack_frame(20.0, 140.0, 10.0)]
+        np.testing.assert_allclose(self._stacked_img(frames), 6.0, rtol=1e-5)
+
+    def test_zero_exptime_is_mean_counts(self):
+        # bias: T = 1, so the estimate is the mean in electrons: (100 + 140)/2.
+        frames = [_stack_frame(0.0, 100.0, 10.0), _stack_frame(0.0, 140.0, 10.0)]
+        np.testing.assert_allclose(self._stacked_img(frames), 120.0, rtol=1e-5)
+
+    def test_streaming_path_matches(self):
+        # Force the streaming path (nframe >= nframe_stream) with mixed
+        # exposures: (4*100) / (10+30+10+30) = 5.0 e-/sec.
+        frames = [
+            _stack_frame(10.0, 100.0, 10.0),
+            _stack_frame(30.0, 100.0, 10.0),
+            _stack_frame(10.0, 100.0, 10.0),
+            _stack_frame(30.0, 100.0, 10.0),
+        ]
+        img = self._stacked_img(frames, nframe_stream=3)
+        np.testing.assert_allclose(img, 5.0, rtol=1e-5)
+
+
+# ---------------------------------------------------------------------------
+# Per-pixel-per-frame rejection in the final normalization
+# ---------------------------------------------------------------------------
+
+
+class TestPerPixelRejection:
+    """Counts and exposure time are summed over the SAME per-pixel survivor set,
+    so a pixel with fewer good frames yields the same rate as a fully-sampled
+    pixel — only its SNR drops (photon statistics)."""
+
+    def test_datacube_partial_rejection_preserves_rate(self, monkeypatch):
+        # 5 identical frames (100 e- over 10 s -> 10 e-/sec). flag_outliers is
+        # stubbed to reject frame 4 at pixel (0, 0) only; all other pixels keep
+        # all 5 frames.
+        n, nrow, ncol = 5, 2, 2
+        frames = [
+            _stack_frame(10.0, 100.0, 100.0, shape=(nrow, ncol)) for _ in range(n)
+        ]
+        outlier = np.zeros((n, nrow, ncol), dtype=bool)
+        outlier[4, 0, 0] = True
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.flag_outliers",
+            lambda arr, sigma, axis=0: outlier,
+        )
+
+        dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
+        dark.chips = ["GREEN"]
+        dark.ccd = {"nrow": nrow, "ncol": ncol}
+        by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
+        with (
+            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+        ):
+            arrays = dark._stack_frames()
+
+        img, snr = arrays["GREEN_IMG"], arrays["GREEN_SNR"]
+        # Rate is the same at the 4/5 pixel (400/40) as at the 5/5 pixels
+        # (500/50): both 10 e-/sec. A bug summing exptime over all frames would
+        # give 400/50 = 8 at (0, 0).
+        np.testing.assert_allclose(img, 10.0, rtol=1e-5)
+        # SNR drops at the rejected pixel by sqrt(4/5) (one fewer frame's
+        # photons): 400/sqrt(400) vs 500/sqrt(500).
+        assert snr[0, 0] < snr[1, 1]
+        np.testing.assert_allclose(snr[0, 0] / snr[1, 1], np.sqrt(4 / 5), rtol=1e-4)
+
+    def test_streaming_rejection_keeps_rate_consistent(self, monkeypatch):
+        # Force the streaming path; a clear outlier frame must drop out of BOTH
+        # the counts sum and the exposure-time sum, leaving the rate correct.
+        n = 4
+        counts = [95.0, 105.0, 100.0, 1e5]  # last frame is a gross outlier
+        frames = [_stack_frame(10.0, c, 100.0) for c in counts]
+        # No outliers in the approx pass; the exact pass clips via rate bounds.
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.flag_outliers",
+            lambda arr, sigma, axis=0: np.zeros(arr.shape, dtype=bool),
+        )
+
+        dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
+        dark.chips = ["GREEN"]
+        dark.ccd = {"nrow": 2, "ncol": 2}
+        dark.nframe_stream = 3  # ndirect = 2 -> approx from frames 0, 1
+        dark.stack_sigma = 5.0
+        by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
+        with (
+            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+        ):
+            img = dark._stack_frames()["GREEN_IMG"]
+
+        # (95 + 105 + 100) / (3 * 10) = 10 e-/sec; the outlier is excluded from
+        # numerator and denominator alike. A mismatch would give 300/40 = 7.5.
+        np.testing.assert_allclose(img, 10.0, rtol=1e-5)
+
+
+# ---------------------------------------------------------------------------
 # _resolve_calibrations: standard ∩ resolved(bias/dark/flat) clamp
 # ---------------------------------------------------------------------------
 

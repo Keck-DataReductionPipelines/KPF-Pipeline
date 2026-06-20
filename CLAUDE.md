@@ -90,7 +90,7 @@ Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/
 
 ### Masters Pipeline
 
-`kpfpipe/modules/masters/` — stacks multiple observations to create bias, dark, flat, and wavelength solution (WLS) calibration products. Uses sigma-clipped statistics with streaming Welford's algorithm for large stacks.
+`kpfpipe/modules/masters/` — stacks multiple observations to create bias, dark, flat, and wavelength solution (WLS) calibration products. Uses sigma-clipped statistics with a single-pass streaming accumulation (per-pixel counts and exposure time) for large stacks; the master image is the exposure-weighted rate `counts_sum / exptime_sum`.
 
 ### RVDataModel Base Class
 

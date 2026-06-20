@@ -50,7 +50,7 @@ Operational/technical guidance (environment, commands, architecture) lives in
 - **One public class per module** is universal for the pipeline modules. The class name
   is the CamelCase of the file name.
 - **Math-heavy locals may be terse single-capital letters** when they mirror a published
-  algorithm's notation (e.g. Horne 1986 `D, V, S, F, P, M, W`; Welford `M2`, `N`, `delta`).
+  algorithm's notation (e.g. Horne 1986 `D, V, S, F, P, M, W`).
   This is sanctioned *only* in numerical code and *only* when the symbols are documented
   in the surrounding docstring/comments. Use descriptive names everywhere else
   (I/O, path handling, orchestration).
@@ -429,13 +429,13 @@ documented, intentional ways — follow *its* conventions when adding masters co
   module was constructed with); every tunable is keyword-only after the `*`, ordered
   configurable `None`-kwargs first, then semi-hidden default-value-kwargs (e.g. `verbose=True`).
 - **Shared base class `BaseMasterModule`** holds all heavy lifting (frame loading,
-  stacking, Welford streaming, save). Subclasses (`Bias`, `Dark`, `Flat`, `WLS`) are thin:
+  stacking, streaming accumulation, save). Subclasses (`Bias`, `Dark`, `Flat`, `WLS`) are thin:
   an `__init__` that selects the config section, the `make_master_*` entry point, and an
   `info()`. `_DEFAULTS` extends the base: `{**BaseMasterModule._DEFAULTS, ...}`.
-- **Two stacking backends switched by frame count**: in-memory datacube below
-  `nframe_stream`, streaming **Welford** accumulation above it (to bound memory). Welford
-  runs are delimited by explicit `# Welford algorithm accumulation begins/ends` comment
-  fences; accumulators are conceptually float64-for-stability, stored master is float32.
+- **Two stacking backends switched by frame count**: an in-memory datacube below
+  `nframe_stream`, and a single-pass streaming accumulation above it (to bound memory).
+  Both sum counts and exposure time per pixel over the surviving (sigma-clipped) frames;
+  the master IMG is the exposure-weighted rate `counts_sum / exptime_sum`, stored float32.
 - **Sigma-clipping** via `kpfpipe.utils.stats.flag_outliers(arr, sigma, axis=0)`; robust
   WLS-coefficient combination via `mad_std` + median.
 - **`info()` pretty-printer** (ASCII-table summary) is expected on every subclass.
