@@ -14,6 +14,7 @@ import os
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.pipeline import build_master_path_from_fits_header
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -98,27 +99,6 @@ class ImageProcessing:
 
         return KPFMasterL1.from_fits(master_path)
 
-    def _header_master_path(self, cal_type):
-        """
-        Build a master path from the {PREFIX}FILE/{PREFIX}DIR PRIMARY headers.
-
-        `cal_type` is the lowercase calibration name ('bias' or 'dark'); the
-        header prefix is its uppercase form (BIAS, DARK), written by
-        CalibrationAssociation.
-        """
-        prefix = cal_type.upper()
-        header = self.l1_obj.headers["PRIMARY"]
-        master_file = header.get(f"{prefix}FILE")
-        master_dir = header.get(f"{prefix}DIR")
-
-        if not master_file or not master_dir:
-            raise FileNotFoundError(
-                f"{prefix}FILE and {prefix}DIR must be present in the L1 PRIMARY "
-                "header. Run CalibrationAssociation before ImageProcessing."
-            )
-
-        return os.path.join(master_dir, master_file)
-
     def _resolve_master(self, cal_type, value):
         """
         Resolve a `bias`/`dark` kwarg into a `KPFMasterL1` instance.
@@ -140,7 +120,7 @@ class ImageProcessing:
             path = value
             master = self._load_master(path)
         elif value is True:
-            path = self._header_master_path(cal_type)
+            path = build_master_path_from_fits_header(self.l1_obj, cal_type)
             master = self._load_master(path)
         else:
             raise TypeError(

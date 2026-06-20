@@ -206,10 +206,16 @@ class TestProcessFrame:
         frame_in = MagicMock(name="l1_in")
         associated = MagicMock(name="l1_associated")
         processed = MagicMock(name="l1_processed")
+        loaded_bias = MagicMock(name="loaded_bias")
 
         with (
             patch("kpfpipe.modules.masters.base.CalibrationAssociation") as mock_ca,
             patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
+            patch.object(
+                dark,
+                "_load_calibration",
+                side_effect=lambda l1, cal: loaded_bias if cal == "bias" else False,
+            ) as mock_load,
         ):
             mock_ca.return_value.perform.return_value = associated
             mock_ip.return_value.perform.return_value = processed
@@ -220,10 +226,13 @@ class TestProcessFrame:
         mock_ca.assert_called_once_with(frame_in, {"KPF_MASTERS_OUTPUT": "/masters"})
         mock_ca.return_value.perform.assert_called_once_with(["bias"])
 
-        # Subtract the bias (and only the bias) from the associated frame.
+        # The bias master is loaded (and cached) from the associated frame...
+        mock_load.assert_any_call(associated, "bias")
+
+        # ...then the loaded bias (and only the bias) is subtracted.
         mock_ip.assert_called_once_with(associated)
         mock_ip.return_value.perform.assert_called_once_with(
-            bias=True, dark=False, flat=False
+            bias=loaded_bias, dark=False, flat=False
         )
 
         assert result is processed
@@ -251,7 +260,8 @@ class TestProcessFrame:
         assert result is processed
 
     def test_mixed_true_and_explicit_associates_only_true(self):
-        # True calibrations are associated; explicit paths pass straight through.
+        # True calibrations are associated; explicit paths skip association but
+        # are still loaded by the module before ImageProcessing runs.
         dark = Dark(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
         dark._active_calibrations = {
             "bias": True,
@@ -261,21 +271,119 @@ class TestProcessFrame:
         frame_in = MagicMock(name="l1_in")
         associated = MagicMock(name="l1_associated")
         processed = MagicMock(name="l1_processed")
+        loaded = {
+            "bias": MagicMock(name="loaded_bias"),
+            "dark": MagicMock(name="loaded_dark"),
+        }
 
         with (
             patch("kpfpipe.modules.masters.base.CalibrationAssociation") as mock_ca,
             patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
+            patch.object(
+                dark,
+                "_load_calibration",
+                side_effect=lambda l1, cal: loaded.get(cal, False),
+            ),
         ):
             mock_ca.return_value.perform.return_value = associated
             mock_ip.return_value.perform.return_value = processed
             result = dark._process_frame(frame_in)
 
+        # Only the True (bias) calibration is associated; the explicit dark is not.
         mock_ca.return_value.perform.assert_called_once_with(["bias"])
         mock_ip.assert_called_once_with(associated)
         mock_ip.return_value.perform.assert_called_once_with(
-            bias=True, dark="/p/master_dark.fits", flat=False
+            bias=loaded["bias"], dark=loaded["dark"], flat=False
         )
         assert result is processed
+
+
+# ---------------------------------------------------------------------------
+# _load_calibration: resolve a calibration to a master, caching one per type
+# ---------------------------------------------------------------------------
+
+
+class TestLoadMaster:
+    """A master shared across a stack is read from disk once; a different
+    associated master replaces the cached one (reload-and-replace)."""
+
+    @staticmethod
+    def _frame(biasfile="master_bias.fits", biasdir="/m"):
+        frame = MagicMock(name="l1")
+        frame.headers = {"PRIMARY": {"BIASFILE": biasfile, "BIASDIR": biasdir}}
+        return frame
+
+    def test_falsy_value_returns_unchanged_without_loading(self, monkeypatch):
+        dark = Dark(FILE_LIST)
+        dark._active_calibrations = {"bias": False, "dark": False, "flat": False}
+        reads = []
+        monkeypatch.setattr(KPFMasterL1, "from_fits", staticmethod(reads.append))
+        assert dark._load_calibration(self._frame(), "bias") is False
+        assert reads == []
+
+    def test_kpfmaster_object_passes_through_without_loading(self, monkeypatch):
+        dark = Dark(FILE_LIST)
+        obj = KPFMasterL1()
+        dark._active_calibrations = {"bias": obj, "dark": False, "flat": False}
+        reads = []
+        monkeypatch.setattr(KPFMasterL1, "from_fits", staticmethod(reads.append))
+        assert dark._load_calibration(self._frame(), "bias") is obj
+        assert reads == []
+
+    def test_str_path_loaded_and_cached(self, monkeypatch):
+        dark = Dark(FILE_LIST)
+        dark._active_calibrations = {"bias": "/m/b.fits", "dark": False, "flat": False}
+        reads = []
+        sentinel = MagicMock(name="bias_ml1")
+        monkeypatch.setattr(os.path, "isfile", lambda p: True)
+        monkeypatch.setattr(
+            KPFMasterL1,
+            "from_fits",
+            staticmethod(lambda p: reads.append(p) or sentinel),
+        )
+        first = dark._load_calibration(self._frame(), "bias")
+        second = dark._load_calibration(self._frame(), "bias")
+        assert first is sentinel and second is sentinel
+        assert reads == ["/m/b.fits"]  # read once
+
+    def test_header_master_loaded_once_across_frames(self, monkeypatch):
+        dark = Dark(FILE_LIST)
+        dark._active_calibrations = {"bias": True, "dark": False, "flat": False}
+        reads = []
+        monkeypatch.setattr(os.path, "isfile", lambda p: True)
+        monkeypatch.setattr(
+            KPFMasterL1,
+            "from_fits",
+            staticmethod(lambda p: reads.append(p) or MagicMock()),
+        )
+        dark._load_calibration(self._frame(), "bias")
+        dark._load_calibration(self._frame(), "bias")  # same associated path
+        assert reads == ["/m/master_bias.fits"]
+
+    def test_reloads_when_associated_master_changes(self, monkeypatch):
+        dark = Dark(FILE_LIST)
+        dark._active_calibrations = {"bias": True, "dark": False, "flat": False}
+        reads = []
+        monkeypatch.setattr(os.path, "isfile", lambda p: True)
+        monkeypatch.setattr(
+            KPFMasterL1,
+            "from_fits",
+            staticmethod(lambda p: reads.append(p) or MagicMock()),
+        )
+        dark._load_calibration(self._frame(biasfile="b1.fits"), "bias")
+        dark._load_calibration(self._frame(biasfile="b2.fits"), "bias")
+        assert reads == ["/m/b1.fits", "/m/b2.fits"]
+
+    def test_missing_file_raises(self, monkeypatch):
+        dark = Dark(FILE_LIST)
+        dark._active_calibrations = {
+            "bias": "/m/missing.fits",
+            "dark": False,
+            "flat": False,
+        }
+        monkeypatch.setattr(os.path, "isfile", lambda p: False)
+        with pytest.raises(FileNotFoundError, match="Master file not found"):
+            dark._load_calibration(self._frame(), "bias")
 
 
 # ---------------------------------------------------------------------------

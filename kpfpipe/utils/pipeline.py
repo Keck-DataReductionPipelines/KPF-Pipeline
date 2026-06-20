@@ -319,3 +319,47 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
     if data_root is None:
         return filename
     return os.path.join(data_root, level, datecode, filename)
+
+
+def build_master_path_from_fits_header(kpf_obj, cal_type):
+    """
+    Build a master calibration path from a KPF object's PRIMARY header.
+
+    Reads the `{PREFIX}FILE` / `{PREFIX}DIR` keywords (written by
+    CalibrationAssociation) and joins them into a path, where `PREFIX` is the
+    uppercase calibration name. Used by the image-processing and masters layers
+    to locate the master associated with a frame. Accepts any KPF data object
+    (L1/L2/L4): the association keywords are carried downstream in PRIMARY.
+
+    Parameters
+    ----------
+    kpf_obj : KPFDataModel
+        Any KPF data object whose PRIMARY header holds the associated master
+        keywords (e.g. KPF1, KPF2, KPF4).
+    cal_type : str
+        Lowercase calibration name (e.g. 'bias' or 'dark'); its uppercase form
+        is the header keyword prefix (BIAS, DARK).
+
+    Returns
+    -------
+    str
+        Path to the associated master, `{master_dir}/{master_file}`.
+
+    Raises
+    ------
+    FileNotFoundError
+        If `{PREFIX}FILE` or `{PREFIX}DIR` is absent from the PRIMARY header
+        (i.e. CalibrationAssociation has not run for this calibration).
+    """
+    prefix = cal_type.upper()
+    header = kpf_obj.headers["PRIMARY"]
+    master_file = header.get(f"{prefix}FILE")
+    master_dir = header.get(f"{prefix}DIR")
+
+    if not master_file or not master_dir:
+        raise FileNotFoundError(
+            f"{prefix}FILE and {prefix}DIR must be present in the PRIMARY "
+            "header. Run CalibrationAssociation before ImageProcessing."
+        )
+
+    return os.path.join(master_dir, master_file)

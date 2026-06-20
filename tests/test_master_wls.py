@@ -67,6 +67,9 @@ def mock_pipeline(monkeypatch):
     monkeypatch.setattr(base_module, "CalibrationAssociation", mock_ca)
     monkeypatch.setattr(base_module, "ImageProcessing", mock_ip)
     monkeypatch.setattr(base_module, "SpectralExtraction", mock_se)
+    monkeypatch.setattr(
+        base_module.BaseMasterModule, "_load_calibration", lambda self, l1, cal: False
+    )
 
     return l2
 
@@ -122,6 +125,11 @@ class TestExtractFrame:
         monkeypatch.setattr(base_module, "CalibrationAssociation", mock_ca)
         monkeypatch.setattr(base_module, "ImageProcessing", mock_ip)
         monkeypatch.setattr(base_module, "SpectralExtraction", mock_se)
+        monkeypatch.setattr(
+            base_module.BaseMasterModule,
+            "_load_calibration",
+            lambda self, l1, cal: False,
+        )
 
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
         wls._process_frame(MockL1())

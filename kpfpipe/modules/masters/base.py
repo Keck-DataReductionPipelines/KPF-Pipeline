@@ -15,6 +15,7 @@ from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.pipeline import build_master_path_from_fits_header
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 # TODO: throw out first frame in stack?
@@ -82,6 +83,13 @@ class BaseMasterModule:
         # when `_process_frame` associates a calibration for a stacked frame.
         self._masters_root = params.get("KPF_MASTERS_OUTPUT")
 
+        # One cached master (KPFMasterL1) and its path per calibration type.
+        # Frames in a stack are taken close in time and so almost always
+        # associate the same nearest master; caching lets `_process_frame`
+        # read each master from disk once rather than once per frame.
+        self._master_ml1 = {}
+        self._master_paths = {}
+
         # populated by subclass make_master_l1(); used by save_master('L1', ...)
         self.ml1_obj = None
         # populated by subclass make_master_l2(); used by save_master('L2', ...)
@@ -92,53 +100,87 @@ class BaseMasterModule:
         self._active_calibrations = self._resolve_calibrations()
 
     # ------------------------------------------------------------------
-    # Private helpers for masters.
+    # Private helpers for frame handling (loading, calibration, etc.).
     # ------------------------------------------------------------------
 
-    def _load_master(self, fn, verbose=True):
+    def _resolve_calibrations(self, *, bias=None, dark=None, flat=None):
         """
-        Load a master file into an L1 object.
+        Resolve which calibrations to apply to each frame.
+
+        For each calibration, the value is the per-call override (the make_master
+        kwarg if not None, else the config-resolved `self.<name>`, i.e.
+        DEFAULTS < [MODULE_IMAGE_PROCESSING]) — but only if the calibration is in
+        the per-master standard (`_STANDARD_CALIBRATIONS`); otherwise it is forced
+        off. A flag/path can only turn a standard calibration off (or aim it at a
+        specific master); it can never enable one outside the master's standard.
 
         Parameters
         ----------
-        fn : str
-            Path to master L1 FITS file.
-        verbose : bool, optional
-            If True (default), emit a progress print and propagate load /
-            exptime-check failures as UserWarnings. If False, all such
-            output is suppressed; the (None, False) failure return value
-            still signals the caller.
+        bias, dark, flat : bool | str | KPFMasterL1, optional
+            Per-call overrides (same accepted forms as `ImageProcessing.perform`:
+            True → header-associated master, str → filepath, KPFMasterL1 → that
+            object). None means "use the resolved config value".
 
         Returns
         -------
-        l1_obj : KPF1 or None
-            Assembled L1 data object if successful, otherwise None.
-        success : bool
-            True if file was successfully loaded and processed, False otherwise.
-
-        Notes
-        -----
-        Delegates the FITS read to `ImageProcessing._load_master`.
+        dict
+            {name: False | True | str | KPFMasterL1} for name in bias/dark/flat.
         """
-        if verbose:
-            print(f"loading {fn}")
+        overrides = {"bias": bias, "dark": dark, "flat": flat}
+        resolved = {}
+        for name in ("bias", "dark", "flat"):
+            if name not in self._STANDARD_CALIBRATIONS:
+                resolved[name] = False
+                continue
+            request = (
+                overrides[name] if overrides[name] is not None else getattr(self, name)
+            )
+            resolved[name] = request
+        return resolved
 
-        success = True
-        failure = False
+    def _load_calibration(self, l1_obj, cal_type):
+        """
+        Resolve one active calibration to a master, caching one per type.
 
-        try:
-            l1_obj = ImageProcessing._load_master(fn)
+        The source comes from `self._active_calibrations[cal_type]`: True → the
+        master associated into the frame header, str → a filepath, KPFMasterL1 →
+        an in-memory master. A disk-backed master is read only when its path
+        differs from the one already cached for `cal_type`; frames in a stack
+        almost always share the same master, so each is read from disk once.
+        Falsy (inactive) values and in-memory KPFMasterL1 objects are returned
+        unchanged.
 
-        except (FileNotFoundError, OSError) as e:
-            if verbose:
-                warnings.warn(f"Failed to load {fn}: {e}", stacklevel=2)
-            return None, failure
+        Parameters
+        ----------
+        l1_obj : KPF1
+            The frame being calibrated; its PRIMARY header supplies the
+            associated master path for a True calibration.
+        cal_type : str
+            Calibration name: 'bias', 'dark', or 'flat'.
 
-        return l1_obj, success
+        Returns
+        -------
+        bool | str | KPFMasterL1
+            A cached KPFMasterL1 for a disk-backed calibration; otherwise the
+            source value unchanged (so ImageProcessing handles falsy/invalid).
+        """
+        value = self._active_calibrations[cal_type]
+        if not value or isinstance(value, KPFMasterL1):
+            return value
 
-    # ------------------------------------------------------------------
-    # Private helpers for frame handling (loading, calibration, etc.).
-    # ------------------------------------------------------------------
+        if isinstance(value, str):
+            path = value
+        elif value is True:
+            path = build_master_path_from_fits_header(l1_obj, cal_type)
+        else:
+            return value  # let ImageProcessing raise the TypeError
+
+        if self._master_paths.get(cal_type) != path:
+            if not os.path.isfile(path):
+                raise FileNotFoundError(f"Master file not found: {path}")
+            self._master_ml1[cal_type] = KPFMasterL1.from_fits(path)
+            self._master_paths[cal_type] = path
+        return self._master_ml1[cal_type]
 
     def _load_frame(self, fn, ncache=None, exptime_tolerance=0.1, verbose=True):
         """
@@ -206,41 +248,6 @@ class BaseMasterModule:
 
         return l1_obj, success
 
-    def _resolve_calibrations(self, *, bias=None, dark=None, flat=None):
-        """
-        Resolve which calibrations to apply to each frame.
-
-        For each calibration, the value is the per-call override (the make_master
-        kwarg if not None, else the config-resolved `self.<name>`, i.e.
-        DEFAULTS < [MODULE_IMAGE_PROCESSING]) — but only if the calibration is in
-        the per-master standard (`_STANDARD_CALIBRATIONS`); otherwise it is forced
-        off. A flag/path can only turn a standard calibration off (or aim it at a
-        specific master); it can never enable one outside the master's standard.
-
-        Parameters
-        ----------
-        bias, dark, flat : bool | str | KPFMasterL1, optional
-            Per-call overrides (same accepted forms as `ImageProcessing.perform`:
-            True → header-associated master, str → filepath, KPFMasterL1 → that
-            object). None means "use the resolved config value".
-
-        Returns
-        -------
-        dict
-            {name: False | True | str | KPFMasterL1} for name in bias/dark/flat.
-        """
-        overrides = {"bias": bias, "dark": dark, "flat": flat}
-        resolved = {}
-        for name in ("bias", "dark", "flat"):
-            if name not in self._STANDARD_CALIBRATIONS:
-                resolved[name] = False
-                continue
-            request = (
-                overrides[name] if overrides[name] is not None else getattr(self, name)
-            )
-            resolved[name] = request
-        return resolved
-
     def _process_frame(self, l1_obj):
         """
         Apply this module's active calibrations to an assembled frame.
@@ -276,11 +283,13 @@ class BaseMasterModule:
             )
             l1_obj = calibration_association.perform(cal_types)
 
+        # Load (and cache) each active master here, then hand the in-memory
+        # masters to ImageProcessing so a shared master is read once per stack.
         image_processing = ImageProcessing(l1_obj)
         l1_obj = image_processing.perform(
-            bias=calibrations["bias"],
-            dark=calibrations["dark"],
-            flat=calibrations["flat"],
+            bias=self._load_calibration(l1_obj, "bias"),
+            dark=self._load_calibration(l1_obj, "dark"),
+            flat=self._load_calibration(l1_obj, "flat"),
         )
 
         return l1_obj
