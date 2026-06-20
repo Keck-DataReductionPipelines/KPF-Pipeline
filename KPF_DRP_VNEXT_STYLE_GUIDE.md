@@ -334,11 +334,21 @@ class StageName:
   temporaries. Loops only for inherently sequential work.
 - **Be NaN-aware by default**: `np.nanmedian`, `np.nanstd`, `np.nanmean`; fill missing
   data with `np.full(..., np.nan, dtype=np.float32)`.
-- **Be explicit about dtype, and document why when it's not obvious**:
-  - Science/storage arrays → `np.float32`.
-  - Wavelength solutions, physical constants, fit accumulators → `np.float64`
-    (precision/stability); cast with `np.asarray(..., dtype=np.float64)`.
-  - Cast kernels/weights to the input `dtype` to stop scipy promoting float32→float64.
+- **Dtype precision is a contract — guard both directions.** Never upscale
+  `float32→float64` (memory/throughput regression) nor downscale `float64→float32`
+  (precision loss → wrong RVs). The policy — single source of truth, also encoded for
+  tests in [`tests/_dtype_policy.py`](tests/_dtype_policy.py):
+  - **float32** — L1 `*_CCD`/`*_VAR`, master `*_IMG`/`*_SNR`, L2 `*_FLUX`/`*_VAR`/`*_BLAZE`.
+  - **float64** — every `*_WAVE`, `BJD_TDB`, `BARYCORR_KMS`/`_Z`, CCF cubes, and the L4
+    RV-table floats (`RV`/`RV_ERR`/`BERV`/`WAVE_START`/`WAVE_END`). `*_WAVE`, `BJD_TDB`,
+    `WAVE_START`/`WAVE_END` are **EPRV-mandated 64-bit** (EPRV §2/§3, *born-64 at every
+    state* — never rely on RVData's upcast); the rest is KPF precision policy.
+  - **bool** in memory / **uint8** (8-bit) on disk — quality masks (`*_MASK`).
+  - L0 amps stay native-int or float32 — **never float64**.
+  Be explicit at allocation (`np.zeros(..., dtype=...)`, `np.asarray(..., dtype=...)`),
+  and cast kernels/weights to the input `dtype` so scipy doesn't promote float32→float64.
+  A **deliberate** precision change that produces a higher-precision *result* (a float64
+  CCF accumulated from float32 flux) is fine — the result's dtype governs.
 - **Prefer robust statistics**: median + MAD (`astropy.stats.mad_std(..., ignore_nan=True)`)
   over mean/std for outlier work; guard divisions with a small `eps` (`1e-12`) or
   `np.maximum(N, 1)`.
@@ -575,6 +585,12 @@ documented, intentional ways — follow *its* conventions when adding masters co
   the modern Generator API. Never `np.random.seed()`.
 - **Constants come from `DETECTOR`** (`NORDER_GREEN = DETECTOR["norder"]["GREEN"]`) — never
   hardcode order/column counts.
+- **Dtype provenance**: each module test file has a `TestDtypeProvenance` class asserting
+  the §7 float32/float64/uint8/bool policy at the extension boundaries, the internal
+  math-bearing functions (typed-input → output dtype), and across a FITS round-trip, using
+  the shared rubric [`tests/_dtype_policy.py`](tests/_dtype_policy.py). Assert *precision*
+  (kind + itemsize via `assert_dtype`), **not** the exact dtype object — FITS round-trips
+  to big-endian, so `>f4` is still float32.
 
 ---
 

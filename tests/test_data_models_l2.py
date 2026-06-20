@@ -18,8 +18,11 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.data_models.masters.base import KPFMasterModel
 
+from ._dtype_policy import FLUX, WAVE, assert_dtype, assert_roundtrip_dtype
+
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
+NORDER = NORDER_GREEN + NORDER_RED
 
 # synthetic_l1_file fixture lives in tests/conftest.py
 
@@ -325,6 +328,28 @@ class TestKPF2Aliases:
 
         kpf2.set_data("GREEN_SCI2_FLUX", green_data)
         np.testing.assert_array_equal(kpf2.data["GREEN_SCI2_FLUX"], green_data)
+
+
+class TestDtypeProvenance:
+    """The data-model storage layer preserves dtype (no coercion); FITS
+    round-trip preserves precision (float32 -> BITPIX -32, float64 -> -64)."""
+
+    def _populated(self):
+        kpf2 = KPF2()
+        kpf2.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
+        kpf2.set_data("TRACE3_FLUX", np.ones((NORDER, 8), dtype=np.float32))
+        kpf2.set_data("TRACE3_WAVE", np.ones((NORDER, 8), dtype=np.float64))
+        return kpf2
+
+    def test_set_data_preserves_dtype(self):
+        kpf2 = self._populated()
+        assert_dtype(kpf2.data["TRACE3_FLUX"], FLUX, "TRACE3_FLUX in-mem")
+        assert_dtype(kpf2.data["TRACE3_WAVE"], WAVE, "TRACE3_WAVE in-mem")
+
+    def test_roundtrip_preserves_precision(self, tmp_path):
+        kpf2 = self._populated()
+        assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_FLUX", FLUX, tmp_path)
+        assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_WAVE", WAVE, tmp_path)
 
 
 class TestKPFMasterL2:

@@ -18,6 +18,13 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
+from ._dtype_policy import (
+    L1_IMAGE,
+    assert_dtype,
+    assert_not_float64,
+    assert_roundtrip_dtype,
+)
+
 TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
 L0_BIAS = str(TESTDATA_L0_DIR / "KP.20240405.03637.74.fits")
 L0_FLAT = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
@@ -255,6 +262,22 @@ class TestImageAssembly4Amp:
 # ---------------------------------------------------------------------------
 # orient_ffi: standard FFI orientation (load-bearing flux/wave co-orientation)
 # ---------------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """L1 CCD/VAR are float32; L0 amps never upscale to float64."""
+
+    def test_l1_ccd_var_float32_and_roundtrip(self, synthetic_4amp_l0, tmp_path):
+        l0 = KPF0.from_fits(synthetic_4amp_l0)
+        l1 = ImageAssembly(l0).perform()
+        for ext in ("GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR"):
+            assert_dtype(l1.data[ext], L1_IMAGE, ext)
+        assert_roundtrip_dtype(KPF1, l1, "GREEN_CCD", L1_IMAGE, tmp_path)
+
+    def test_l0_amps_not_float64(self, synthetic_4amp_l0):
+        l0 = KPF0.from_fits(synthetic_4amp_l0)
+        for ext in ("GREEN_AMP1", "RED_AMP1"):
+            assert_not_float64(l0.data[ext], ext)
 
 
 class TestOrientFFI:

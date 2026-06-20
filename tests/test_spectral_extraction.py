@@ -21,6 +21,8 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 
+from ._dtype_policy import FLUX, assert_dtype
+
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NCOL = DETECTOR["ccd"]["ncol"]
@@ -111,6 +113,36 @@ class TestBoxExtraction:
 # ---------------------------------------------------------------------------
 # Unimplemented extraction stubs
 # ---------------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """L2 FLUX/VAR are float32; the box-extraction kernel preserves float32."""
+
+    def test_box_extraction_preserves_float32(self):
+        D = np.ones((5, 32), dtype=np.float32)
+        V = np.ones((5, 32), dtype=np.float32)
+        flux_1d, var_1d = SpectralExtraction._box_extraction(D, V)
+        assert_dtype(flux_1d, FLUX, "box flux_1d")
+        assert_dtype(var_1d, FLUX, "box var_1d")
+
+    def test_l2_flux_var_float32(self, minimal_l1, monkeypatch):
+        norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
+        arrays = {
+            f"{chip}_{fiber}_{q}": np.ones((norder[chip], NCOL), dtype=np.float32)
+            for chip in ("GREEN", "RED")
+            for fiber in ("CAL", "SCI1", "SCI2", "SCI3", "SKY")
+            for q in ("FLUX", "VAR")
+        }
+        monkeypatch.setattr(
+            SpectralExtraction,
+            "extract_ffi",
+            lambda self, chip, fibers, extraction_method, **kw: {
+                k: v for k, v in arrays.items() if k.startswith(chip)
+            },
+        )
+        l2 = SpectralExtraction(minimal_l1).perform()
+        assert_dtype(l2.data["SCI2_FLUX"], FLUX, "L2 SCI2_FLUX")
+        assert_dtype(l2.data["SCI2_VAR"], FLUX, "L2 SCI2_VAR")
 
 
 class TestUnimplementedExtraction:

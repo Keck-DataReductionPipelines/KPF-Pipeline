@@ -18,6 +18,8 @@ from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN, NORDER_RED
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.radial_velocity import RadialVelocity
 
+from ._dtype_policy import CCF, RV_FLOAT, assert_dtype
+
 NORDER = NORDER_GREEN + NORDER_RED
 SPEED_OF_LIGHT_KMS = np.float64(c.to("km/s").value)
 _FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]  # all orderlets
@@ -126,6 +128,38 @@ class TestComputeCCF:
         vel = np.arange(-402, 403) * 0.25
         ccf = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
         assert not np.any(ccf)
+
+
+# ---------------------------------------------------------------------------
+# Dtype provenance (see tests/_dtype_policy.py)
+# ---------------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """CCF cubes and RV-table floats are float64; a float64 CCF from float32
+    flux is the intended deliberate upcast, governed by the result's dtype."""
+
+    def _order(self, v_dip=0.0):
+        wave = np.linspace(5000.0, 5050.0, 2000)
+        centers = np.linspace(5008.0, 5042.0, 20)
+        mask = _make_mask(centers)
+        flux = _absorption_spectrum(wave, centers)
+        vel = np.arange(-402, 403) * 0.25
+        return wave, flux, mask, vel
+
+    def test_ccf_1d_is_float64_from_float32_flux(self):
+        wave, flux, mask, vel = self._order()
+        ccf = RadialVelocity._compute_ccf_1d(
+            wave, flux.astype(np.float32), mask, vel, 0.0
+        )
+        assert_dtype(ccf, CCF, "CCF (_compute_ccf_1d, float32 flux in)")
+
+    def test_compute_rv_1d_returns_float64(self):
+        wave, flux, mask, vel = self._order()
+        ccf = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        assert_dtype(np.asarray(rv), RV_FLOAT, "RV scalar")
+        assert_dtype(np.asarray(rv_err), RV_FLOAT, "RV_ERR scalar")
 
 
 # ---------------------------------------------------------------------------
@@ -637,6 +671,7 @@ class TestPerform:
         assert isinstance(l4, KPF4)
         for fiber in self._ILLUMINATED:
             assert l4.data[f"{fiber}_CCF"].shape == (NORDER, _NVEL)
+            assert_dtype(l4.data[f"{fiber}_CCF"], CCF, f"{fiber}_CCF")
             table = l4.data[f"{fiber}_RV"]
             assert len(table) == NORDER
             assert set(table.columns) >= {
