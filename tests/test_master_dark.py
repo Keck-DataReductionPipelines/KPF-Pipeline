@@ -593,6 +593,104 @@ class TestPerPixelRejection:
 
 
 # ---------------------------------------------------------------------------
+# Real sigma-clipping in the datacube path (un-stubbed flag_outliers)
+# ---------------------------------------------------------------------------
+
+
+class TestDatacubeClipping:
+    """The datacube path runs the real flag_outliers rejection (unlike
+    TestRateEstimator, which disables clipping, and TestPerPixelRejection, which
+    stubs flag_outliers). A gross outlier frame is dropped from both the counts
+    and exposure-time sums, leaving the surviving rate correct."""
+
+    def test_outlier_frame_is_rejected(self):
+        # Five identical frames (100 e- over 10 s -> 10 e-/sec) plus one gross
+        # outlier frame; nframe_stream is set high to stay on the datacube path.
+        nrow, ncol = 3, 3
+        good = [_stack_frame(10.0, 100.0, 100.0, shape=(nrow, ncol)) for _ in range(5)]
+        outlier = _stack_frame(10.0, 1e5, 100.0, shape=(nrow, ncol))
+        frames = good[:2] + [outlier] + good[2:]  # outlier in the middle
+
+        dark = Dark(sorted(f"f{i}.fits" for i in range(len(frames))))
+        dark.chips = ["GREEN"]
+        dark.ccd = {"nrow": nrow, "ncol": ncol}
+        dark.nframe_stream = 10  # > nframe, so the datacube path is used
+        dark.stack_sigma = 5.0
+        by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
+        with (
+            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+        ):
+            arrays = dark.stack_frames()
+
+        # Outlier excluded from numerator and denominator: (5*100)/(5*10) = 10.
+        # Without rejection it would be (5*100 + 1e5) / (6*10) ~= 1675.
+        np.testing.assert_allclose(arrays["GREEN_IMG"], 10.0, rtol=1e-5)
+        # Dropping one of six frames still leaves every pixel well-sampled.
+        assert np.all(arrays["GREEN_MASK"])
+
+
+# ---------------------------------------------------------------------------
+# _clean_l1_arrays: bad-pixel interpolation and mask recompute
+# ---------------------------------------------------------------------------
+
+
+class TestCleanL1Arrays:
+    """_clean_l1_arrays interpolates masked-bad pixels, then recomputes the mask
+    from the repaired image (so a successfully-filled pixel is restored to good,
+    while pixels still bad in the final image are flagged)."""
+
+    @staticmethod
+    def _dark():
+        dark = Dark(FILE_LIST)
+        dark.chips = ["GREEN"]
+        return dark
+
+    @staticmethod
+    def _arrays(img, snr, mask):
+        return {"GREEN_IMG": img, "GREEN_SNR": snr, "GREEN_MASK": mask}
+
+    def test_rejected_pixel_is_interpolated_and_restored(self):
+        # A pixel rejected by stacking (IMG/SNR = 0, mask False) is filled from
+        # its neighbors rather than left at zero; once repaired it reads as good.
+        img = np.full((5, 5), 10.0, dtype=np.float32)
+        snr = np.full((5, 5), 20.0, dtype=np.float32)
+        mask = np.ones((5, 5), dtype=bool)
+        img[2, 2], snr[2, 2], mask[2, 2] = 0.0, 0.0, False
+
+        out = self._dark()._clean_l1_arrays(self._arrays(img, snr, mask), sigma=5.0)
+
+        np.testing.assert_allclose(out["GREEN_IMG"][2, 2], 10.0, rtol=1e-5)
+        np.testing.assert_allclose(out["GREEN_SNR"][2, 2], 20.0, rtol=1e-5)
+        assert bool(out["GREEN_MASK"][2, 2]) is True
+
+    def test_final_image_outlier_is_flagged(self):
+        # A pixel consistent across frames (so it survives stacking, mask True)
+        # but extreme in the combined image is caught by the final outlier pass.
+        img = np.full((5, 5), 10.0, dtype=np.float32)
+        snr = np.full((5, 5), 20.0, dtype=np.float32)
+        mask = np.ones((5, 5), dtype=bool)
+        img[1, 3] = 1000.0
+
+        out = self._dark()._clean_l1_arrays(self._arrays(img, snr, mask), sigma=5.0)
+
+        assert bool(out["GREEN_MASK"][1, 3]) is False
+        assert bool(out["GREEN_MASK"][0, 0]) is True
+
+    def test_zero_value_pixel_is_flagged(self):
+        # A good-masked zero pixel is not interpolated (only masked-bad pixels
+        # are) and is flagged by the IMG == 0 rule in the mask recompute.
+        img = np.full((5, 5), 10.0, dtype=np.float32)
+        snr = np.full((5, 5), 20.0, dtype=np.float32)
+        mask = np.ones((5, 5), dtype=bool)
+        img[4, 4] = 0.0
+
+        out = self._dark()._clean_l1_arrays(self._arrays(img, snr, mask), sigma=5.0)
+
+        assert bool(out["GREEN_MASK"][4, 4]) is False
+
+
+# ---------------------------------------------------------------------------
 # _resolve_calibrations: standard ∩ resolved(bias/dark/flat) clamp
 # ---------------------------------------------------------------------------
 
