@@ -15,7 +15,7 @@ from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.pipeline import build_master_path_from_fits_header
+from kpfpipe.utils.io import build_master_path_from_fits_header
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 # TODO: throw out first frame in stack?

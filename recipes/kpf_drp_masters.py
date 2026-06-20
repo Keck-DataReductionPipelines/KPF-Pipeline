@@ -15,12 +15,12 @@ from kpfpipe.modules.masters.dark import Dark
 
 # from kpfpipe.modules.masters.flat import Flat
 from kpfpipe.modules.masters.wls import WLS
-from kpfpipe.utils.kpf import get_obs_id
-from kpfpipe.utils.pipeline import (
+from kpfpipe.utils.io import (
     build_filepath,
     build_l0_file_lists,
     build_mini_database,
 )
+from kpfpipe.utils.kpf import get_obs_id
 
 
 def main(config, args):

@@ -320,7 +320,7 @@ class TestSpectrumOrientation:
         from kpfpipe.modules.image_assembly import ImageAssembly
         from kpfpipe.modules.image_processing import ImageProcessing
         from kpfpipe.modules.spectral_extraction import SpectralExtraction
-        from kpfpipe.utils.pipeline import build_filepath
+        from kpfpipe.utils.io import build_filepath
 
         config = {
             "KPF_MASTERS_OUTPUT": str(TESTDATA_DIR),

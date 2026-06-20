@@ -14,7 +14,7 @@ import os
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.pipeline import build_master_path_from_fits_header
+from kpfpipe.utils.io import build_master_path_from_fits_header
 
 _DEFAULTS = {
     **DEFAULTS,
