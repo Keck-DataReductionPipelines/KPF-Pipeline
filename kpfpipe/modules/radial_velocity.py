@@ -361,6 +361,11 @@ class RadialVelocity:
         l_start, l_end = line_mask["start"][keep], line_mask["end"][keep]
         l_weight = line_mask["weight"][keep]
 
+        # NaN-clean flux once: np.nansum replaces NaNs with 0 before summing, so
+        # summing flux_clean * overlap_frac (overlap weights are always finite)
+        # is identical but skips the per-step NaN mask.
+        flux_clean = np.nan_to_num(flux)
+
         for vi in range(velocity_grid.size):
             line_lo = l_start * shift[vi]
             line_hi = l_end * shift[vi]
@@ -380,14 +385,14 @@ class RadialVelocity:
                 overlap = np.minimum(
                     edges[pix_sel + 1], line_hi[still_spanning]
                 ) - np.maximum(edges[pix_sel], line_lo[still_spanning])
-                np.clip(overlap, 0.0, None, out=overlap)
+                np.maximum(overlap, 0.0, out=overlap)
                 np.add.at(
                     overlap_frac,
                     pix_sel,
                     l_weight[still_spanning] * overlap / widths[pix_sel],
                 )
 
-            ccf[vi] = np.nansum(flux * overlap_frac)
+            ccf[vi] = np.sum(flux_clean * overlap_frac)
 
         return ccf
 
