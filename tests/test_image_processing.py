@@ -12,6 +12,8 @@ from astropy.io import fits
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.modules.image_processing import ImageProcessing
 
+from ._dtype_policy import L1_IMAGE, assert_dtype
+
 _SHAPE = (4, 4)
 _CCD_VALUE = 10.0
 _VAR_VALUE = 12.0  # science image variance [electrons^2]
@@ -100,6 +102,27 @@ def _master_dark(tmp_path):
 # ---------------------------------------------------------------------------
 # TestInit
 # ---------------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """L1 CCD/VAR must stay float32 through bias AND dark subtraction — the
+    dark*exptime(float64) scaling is the prime upcast trap."""
+
+    def _module_bias_dark(self, tmp_path):
+        _write_master_bias(str(tmp_path / "master_bias.fits"))
+        _write_master_dark(str(tmp_path / "master_dark.fits"))
+        return _make_module(
+            bias_file="master_bias.fits",
+            bias_dir=str(tmp_path),
+            dark_file="master_dark.fits",
+            dark_dir=str(tmp_path),
+        )
+
+    def test_ccd_var_stay_float32_after_bias_dark(self, tmp_path):
+        mod = self._module_bias_dark(tmp_path)
+        mod.perform()
+        for ext in ("GREEN_CCD", "RED_CCD", "GREEN_VAR", "RED_VAR"):
+            assert_dtype(mod.l1_obj.data[ext], L1_IMAGE, f"{ext} after bias+dark")
 
 
 class TestInit:

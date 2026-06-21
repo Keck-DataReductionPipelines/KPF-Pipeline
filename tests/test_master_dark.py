@@ -20,31 +20,14 @@ from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.dark import Dark
 from kpfpipe.utils.io import build_l0_file_lists
 
+from ._masters import make_l1_arrays
+
 CHIPS = ["GREEN", "RED"]
 NROW, NCOL = 10, 10  # small arrays for unit tests
+# make_l1_arrays() — shared synthetic stack_frames builder — lives in _masters.py
 
 TESTDATA_DIR = Path(__file__).parent / "testdata"
 TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
-
-
-def make_l1_arrays(rng=None):
-    """Return a synthetic stack_frames output dict.
-
-    Seeded for deterministic shape/dtype/sign fixtures; the values themselves
-    are not asserted numerically (real numeric behavior is pinned by
-    TestMasterDarkRegression and the stacking unit tests).
-    """
-    if rng is None:
-        rng = np.random.default_rng(42)
-    arrays = {}
-    for chip in CHIPS:
-        arrays[f"{chip}_IMG"] = rng.normal(0.0, 5.0, (NROW, NCOL)).astype(np.float32)
-        arrays[f"{chip}_SNR"] = np.abs(rng.normal(10.0, 1.0, (NROW, NCOL))).astype(
-            np.float32
-        )
-        arrays[f"{chip}_MASK"] = np.ones((NROW, NCOL), dtype=bool)
-    return arrays
-
 
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
@@ -72,17 +55,9 @@ class TestMasterDarkUnit:
     def test_returns_kpf_master_l1(self, master_dark):
         assert isinstance(master_dark, KPFMasterL1)
 
-    def test_green_img_shape(self, master_dark):
-        assert master_dark.data["GREEN_IMG"].shape == (NROW, NCOL)
-
-    def test_red_img_shape(self, master_dark):
-        assert master_dark.data["RED_IMG"].shape == (NROW, NCOL)
-
-    def test_green_snr_shape(self, master_dark):
-        assert master_dark.data["GREEN_SNR"].shape == (NROW, NCOL)
-
-    def test_red_snr_shape(self, master_dark):
-        assert master_dark.data["RED_SNR"].shape == (NROW, NCOL)
+    @pytest.mark.parametrize("ext", ["GREEN_IMG", "RED_IMG", "GREEN_SNR", "RED_SNR"])
+    def test_extension_shape(self, master_dark, ext):
+        assert master_dark.data[ext].shape == (NROW, NCOL)
 
     def test_mask_is_boolean(self, master_dark):
         assert master_dark.data["GREEN_MASK"].dtype == bool
@@ -200,6 +175,48 @@ class TestMasterDarkSaveMaster:
         dark = Dark(FILE_LIST)
         with pytest.raises(RuntimeError, match="run make_master_l1"):
             dark.save_master("L1", "/tmp/should_not_be_created.fits")
+
+
+# ---------------------------------------------------------------------------
+# Base-class fail-loudly paths (construction + frame loading)
+# ---------------------------------------------------------------------------
+
+
+class TestMasterBaseErrors:
+    """Error/guard paths shared by all master modules (BaseMasterModule)."""
+
+    def test_unsorted_l0_list_raises(self):
+        # The base requires a sorted L0 list so stacking order is deterministic.
+        with pytest.raises(ValueError, match="sorted in ascending order"):
+            Dark(["KP.20240101.00002.00.fits", "KP.20240101.00001.00.fits"])
+
+    def test_bad_config_type_raises(self):
+        with pytest.raises(
+            TypeError, match="config must be None, dict, or ConfigHandler"
+        ):
+            Dark(FILE_LIST, config="not-a-config")
+
+    def test_load_frame_missing_file_warns_and_skips(self):
+        # A missing/unreadable L0 frame warns and returns (None, failure), not a crash.
+        fn = "/nonexistent/KP.20240101.00001.00.fits"
+        m = Dark([fn])
+        with pytest.warns(UserWarning, match="Failed to load"):
+            l1_obj, success = m._load_frame(fn, verbose=True)
+        assert l1_obj is None and success is False
+
+    def test_load_frame_exptime_failure_warns_and_skips(self, monkeypatch):
+        # A frame failing the exptime-vs-elapsed check is warned and skipped.
+        m = Dark(FILE_LIST)
+        fn = FILE_LIST[0]
+        m._l1_obj_cache[fn] = object()  # cache hit bypasses real I/O
+
+        def bad_check(l1_obj, exptime_tolerance):
+            raise ValueError("elapsed exceeds exptime")
+
+        monkeypatch.setattr(m, "_check_exptime_vs_elapsed", bad_check)
+        with pytest.warns(UserWarning, match="Exptime check failed"):
+            l1_obj, success = m._load_frame(fn, verbose=True)
+        assert l1_obj is None and success is False
 
 
 # ---------------------------------------------------------------------------
@@ -852,6 +869,7 @@ class TestMasterDarkSignature:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestMasterDarkRegression:
     """End-to-end master dark from real L0 frames. The five bundled darks span
     two default-gap clusters, so cluster_gap_seconds is widened to stack them;

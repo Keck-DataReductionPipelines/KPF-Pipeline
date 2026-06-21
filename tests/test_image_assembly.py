@@ -18,6 +18,13 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
+from ._dtype_policy import (
+    L1_IMAGE,
+    assert_dtype,
+    assert_not_float64,
+    assert_roundtrip_dtype,
+)
+
 TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
 L0_BIAS = str(TESTDATA_L0_DIR / "KP.20240405.03637.74.fits")
 L0_FLAT = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
@@ -63,6 +70,7 @@ def synthetic_4amp_l0(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestImageAssemblyBias:
     """Regression tests using a bias frame (no signal, 2-amp mode)."""
 
@@ -77,15 +85,11 @@ class TestImageAssemblyBias:
         assert isinstance(l1, KPF1)
         assert l1.level == 1
 
-    def test_green_ccd_shape(self, l1_bias):
+    @pytest.mark.parametrize("chip", ["GREEN", "RED"])
+    def test_ccd_shape(self, l1_bias, chip):
         l1, _ = l1_bias
-        assert l1.data["GREEN_CCD"].shape == (4080, 4080)
-        assert l1.data["GREEN_CCD"].dtype == np.float32
-
-    def test_red_ccd_shape(self, l1_bias):
-        l1, _ = l1_bias
-        assert l1.data["RED_CCD"].shape == (4080, 4080)
-        assert l1.data["RED_CCD"].dtype == np.float32
+        assert l1.data[f"{chip}_CCD"].shape == (4080, 4080)
+        assert l1.data[f"{chip}_CCD"].dtype == np.float32
 
     def test_variance_frames_exist(self, l1_bias):
         l1, _ = l1_bias
@@ -158,6 +162,7 @@ class TestImageAssemblyBias:
         assert not np.any(np.isnan(l1.data["RED_CCD"]))
 
 
+@pytest.mark.slow
 class TestImageAssemblyFlat:
     """Regression tests using a flat lamp frame (has signal)."""
 
@@ -257,6 +262,22 @@ class TestImageAssembly4Amp:
 # ---------------------------------------------------------------------------
 # orient_ffi: standard FFI orientation (load-bearing flux/wave co-orientation)
 # ---------------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """L1 CCD/VAR are float32; L0 amps never upscale to float64."""
+
+    def test_l1_ccd_var_float32_and_roundtrip(self, synthetic_4amp_l0, tmp_path):
+        l0 = KPF0.from_fits(synthetic_4amp_l0)
+        l1 = ImageAssembly(l0).perform()
+        for ext in ("GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR"):
+            assert_dtype(l1.data[ext], L1_IMAGE, ext)
+        assert_roundtrip_dtype(KPF1, l1, "GREEN_CCD", L1_IMAGE, tmp_path)
+
+    def test_l0_amps_not_float64(self, synthetic_4amp_l0):
+        l0 = KPF0.from_fits(synthetic_4amp_l0)
+        for ext in ("GREEN_AMP1", "RED_AMP1"):
+            assert_not_float64(l0.data[ext], ext)
 
 
 class TestOrientFFI:
@@ -450,6 +471,7 @@ class TestExpmeterWavelengthConversion:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestImageAssemblyRoundTrip:
     """Test that L1 can be written to FITS and read back."""
 

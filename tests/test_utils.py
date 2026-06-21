@@ -1,9 +1,18 @@
 """
-Tests for kpfpipe.utils.kpf timestamp conversion utilities.
+Tests for kpfpipe.utils helpers: astro (astro.py), KPF timestamp/obs_id
+conversions (kpf.py), statistics (stats.py), validation (validation.py), and
+config loading (config.py).
 """
 
-import pytest
+import warnings
 
+import astropy.units as u
+import numpy as np
+import pytest
+from astropy.constants import c
+
+from kpfpipe.utils.astro import air_to_vac, compute_doppler_factor, compute_redshift
+from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import (
     eprv_timestamp_to_kpf_timestamp,
     get_datecode,
@@ -18,6 +27,84 @@ from kpfpipe.utils.kpf import (
     kpf_timestamp_to_eprv_timestamp,
     utc_to_hst,
 )
+from kpfpipe.utils.stats import (
+    flag_outliers,
+    gaussian_dist,
+    gaussian_jac,
+    interpolate_bad_pixels,
+    optimize_lsq,
+)
+from kpfpipe.utils.validation import strictly_increasing, validate_array
+
+C_KMS = c.to("km/s").value
+
+
+# ===========================================================================
+# astro.py — Doppler/redshift helpers and air->vacuum
+#
+# Convention under test: positive radial velocity = receding = redshift (z > 0),
+# so the Doppler factor f = lambda_obs / lambda_rest = 1 + z, and z carries the
+# same sign as the velocity. This is the convention BarycentricCorrection relies
+# on when storing BARYCORR_Z for RadialVelocity._compute_ccf_1d.
+# ===========================================================================
+
+
+class TestComputeRedshift:
+    def test_sign_matches_velocity(self):
+        # Receding (v > 0) -> positive redshift; approaching -> negative.
+        assert compute_redshift(+18.508 * u.km / u.s) > 0
+        assert compute_redshift(-18.508 * u.km / u.s) < 0
+
+    def test_nonrelativistic_magnitude(self):
+        # For v << c, z ~ v/c.
+        v = -18.508 * u.km / u.s
+        assert compute_redshift(v) == pytest.approx(v.value / C_KMS, rel=1e-4)
+
+    def test_factor_is_one_plus_z(self):
+        v = 30.0 * u.km / u.s
+        assert compute_doppler_factor(v) == pytest.approx(1.0 + compute_redshift(v))
+
+    def test_unit_agnostic(self):
+        # Same physical velocity in different units -> same result.
+        assert compute_redshift(-18.508 * u.km / u.s) == pytest.approx(
+            compute_redshift(-18508.0 * u.m / u.s)
+        )
+
+    def test_zero_velocity(self):
+        assert compute_redshift(0.0 * u.km / u.s) == pytest.approx(0.0)
+        assert compute_doppler_factor(0.0 * u.km / u.s) == pytest.approx(1.0)
+
+    def test_array_input(self):
+        v = np.array([-10.0, 0.0, 10.0]) * u.km / u.s
+        z = compute_redshift(v)
+        assert z.shape == (3,)
+        assert z[0] < 0 < z[2] and z[1] == pytest.approx(0.0)
+
+    def test_bare_value_raises(self):
+        # Units must stay explicit; a unitless argument fails loudly.
+        with pytest.raises(u.UnitsError):
+            compute_redshift(-18508.0)
+
+    def test_factor_direction(self):
+        # Receding source is redshifted (f > 1); approaching is blueshifted.
+        assert compute_doppler_factor(+18.508 * u.km / u.s) > 1.0
+        assert compute_doppler_factor(-18.508 * u.km / u.s) < 1.0
+
+
+class TestAirToVac:
+    def test_vacuum_longer_than_air(self):
+        wave_air = np.array([5000.0, 6000.0, 7000.0])
+        wave_vac = air_to_vac(wave_air)
+        assert np.all(wave_vac > wave_air)
+
+    def test_below_2000A_unchanged(self):
+        wave_air = np.array([1500.0, 1800.0])
+        np.testing.assert_array_equal(air_to_vac(wave_air), wave_air)
+
+
+# ===========================================================================
+# kpf.py — timestamp conversion utilities
+# ===========================================================================
 
 
 class TestUtcToHst:
@@ -350,3 +437,217 @@ class TestGetSecondsSinceJ2000:
     def test_raises_when_no_timestamp_found(self):
         with pytest.raises(ValueError, match="No KPF timestamp found"):
             get_seconds_since_j2000("notimestamp.fits")
+
+
+# ===========================================================================
+# stats.py — Gaussian fitting and bad-pixel interpolation
+# ===========================================================================
+
+
+class TestGaussianFit:
+    """The Gaussian width is fit as log(sigma); optimize_lsq untransforms it
+    back to sigma, which must therefore always be positive."""
+
+    def test_recovers_known_gaussian(self):
+        x = np.arange(-10, 11, dtype=float)
+        for sigma in (2.7, 1.1):
+            theta_true = [2.0, 50.0, 1.3, sigma]
+            y = gaussian_dist([2.0, 50.0, 1.3, np.log(sigma)], x)
+            theta, _ = optimize_lsq(x, y, "gaussian")
+            np.testing.assert_allclose(theta, theta_true, rtol=1e-5, atol=1e-5)
+            assert theta[3] > 0
+
+    def test_sigma_is_positive(self):
+        # Sigma enters only as sigma**2, so the fit must never return a negative width.
+        x = np.arange(-8, 9, dtype=float)
+        y = gaussian_dist([1.0, 25.0, -0.6, np.log(2.0)], x)
+        theta, _ = optimize_lsq(x, y, "gaussian")
+        assert theta[3] > 0
+
+    def test_jacobian_matches_finite_difference(self):
+        # Guards the d/d(log_sigma) chain-rule term in gaussian_jac.
+        x = np.linspace(-5, 5, 21)
+        theta = np.array([1.0, 4.0, 0.5, np.log(1.8)])  # [b, a, mu, log_sigma]
+        J = gaussian_jac(theta, x)
+        eps = 1e-6
+        for k in range(4):
+            tp, tm = theta.copy(), theta.copy()
+            tp[k] += eps
+            tm[k] -= eps
+            fd = (gaussian_dist(tp, x) - gaussian_dist(tm, x)) / (2 * eps)
+            np.testing.assert_allclose(J[:, k], fd, rtol=1e-4, atol=1e-6)
+
+
+class TestInterpolateBadPixels:
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64])
+    def test_preserves_dtype(self, dtype):
+        data = np.ones((8, 8), dtype=dtype)
+        mask = np.ones((8, 8), dtype=bool)
+        mask[3, 3] = False
+        data[3, 3] = 1e6  # bad pixel
+        out = interpolate_bad_pixels(data, mask)
+        assert out.dtype == dtype
+
+    def test_replaces_bad_pixel_with_neighbor_mean(self):
+        data = np.ones((5, 5), dtype=np.float32) * 2.0
+        mask = np.ones((5, 5), dtype=bool)
+        mask[2, 2] = False
+        data[2, 2] = 1e6
+        out = interpolate_bad_pixels(data, mask)
+        # 8 neighbors all = 2.0 → interpolated value should be ~2.0
+        assert np.isclose(out[2, 2], 2.0, atol=1e-5)
+
+    def test_good_pixels_unchanged(self):
+        rng = np.random.default_rng(0)
+        data = rng.normal(0.0, 1.0, (10, 10)).astype(np.float32)
+        mask = np.ones((10, 10), dtype=bool)
+        mask[5, 5] = False
+        original = data.copy()
+        out = interpolate_bad_pixels(data, mask)
+        good_pixels = mask
+        np.testing.assert_array_equal(out[good_pixels], original[good_pixels])
+
+    def test_global_method_fills_bad_pixel_clump(self):
+        # Global linear interpolation handles clumps; NaN-flagged pixels are filled.
+        data = np.full((6, 6), 5.0, dtype=np.float64)
+        mask = np.ones((6, 6), dtype=bool)
+        mask[2:4, 2:4] = False  # 2x2 clump
+        data[2:4, 2:4] = np.nan
+        out = interpolate_bad_pixels(data, mask, method="global")
+        assert np.all(np.isfinite(out))
+        assert out[0, 0] == 5.0  # good pixel untouched
+
+    def test_unsupported_method_raises(self):
+        data = np.ones((4, 4), dtype=np.float32)
+        mask = np.ones((4, 4), dtype=bool)
+        with pytest.raises(ValueError, match="method must be 'local' or 'global'"):
+            interpolate_bad_pixels(data, mask, method="bogus")
+
+
+class TestOptimizeLsqErrors:
+    def test_unsupported_line_model_raises(self):
+        x = np.arange(5.0)
+        y = np.zeros(5)
+        with pytest.raises(ValueError, match="Unsupported line function"):
+            optimize_lsq(x, y, "not_a_model")
+
+
+class TestFlagOutliers:
+    def test_median_method_flags_spike(self):
+        x = np.full(50, 10.0)
+        x[25] = 1000.0
+        out = flag_outliers(x, sigma=5.0, method="median")
+        assert out[25] and not out[0]
+
+    def test_trend_method_flags_spike(self):
+        # The trend method detrends with a median+gaussian filter before flagging.
+        x = np.full(50, 10.0)
+        x[25] = 1000.0
+        out = flag_outliers(x, sigma=5.0, kernel_size=5, method="trend")
+        assert out[25]
+
+    def test_unsupported_method_raises(self):
+        with pytest.raises(ValueError, match="method must be 'median' or 'trend'"):
+            flag_outliers(np.arange(10.0), sigma=5.0, method="bogus")
+
+
+# ===========================================================================
+# validation.py — array/value validators
+# ===========================================================================
+
+
+class TestStrictlyIncreasing:
+    def test_true_for_increasing(self):
+        assert strictly_increasing([1.0, 2.0, 3.0]) is True
+
+    def test_false_for_non_increasing(self):
+        assert strictly_increasing([1.0, 1.0, 2.0]) is False
+        assert strictly_increasing([3.0, 2.0, 1.0]) is False
+
+
+class TestValidateArray:
+    def test_invalid_response_raises(self):
+        with pytest.raises(ValueError, match="response must be"):
+            validate_array([1.0, 2.0], response="bogus")
+
+    def test_clean_array_is_silent(self):
+        # A finite, positive array produces no warning and returns None.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert validate_array(np.array([1.0, 2.0, 3.0])) is None
+
+    def test_nan_warns(self):
+        with pytest.warns(UserWarning, match="NaN values detected"):
+            validate_array(np.array([1.0, np.nan, 3.0]))
+
+    def test_inf_warns(self):
+        with pytest.warns(UserWarning, match="Non-finite values detected"):
+            validate_array(np.array([1.0, np.inf, 3.0]), check_positive=False)
+
+    def test_negative_warns(self):
+        with pytest.warns(UserWarning, match="Negative values detected"):
+            validate_array(np.array([1.0, -2.0, 3.0]), check_finite=False)
+
+    def test_error_response_raises_with_all_issues(self):
+        with pytest.raises(ValueError, match="NaN values detected"):
+            validate_array(np.array([np.nan, -1.0]), response="error")
+
+    def test_silent_response_suppresses(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert validate_array(np.array([np.nan, -1.0]), response="silent") is None
+
+
+# ===========================================================================
+# config.py — ConfigHandler (TOML loading + section overrides)
+# ===========================================================================
+
+
+def _write_toml(tmp_path, text, name="cfg.toml"):
+    path = tmp_path / name
+    path.write_text(text)
+    return str(path)
+
+
+class TestConfigHandler:
+    def test_loads_sections(self, tmp_path):
+        cfg = _write_toml(tmp_path, '[DATA_DIRS]\nroot = "/data"\n[KPFPIPE]\nn = 3\n')
+        handler = ConfigHandler(cfg)
+        assert handler.config["DATA_DIRS"]["root"] == "/data"
+
+    def test_get_params_default_sections(self, tmp_path):
+        cfg = _write_toml(tmp_path, '[DATA_DIRS]\nroot = "/data"\n[KPFPIPE]\nn = 3\n')
+        params = ConfigHandler(cfg).get_params()  # sections=None -> defaults
+        assert params == {"root": "/data", "n": 3}
+
+    def test_get_params_flattens_nested_dict(self, tmp_path):
+        toml = "[KPFPIPE]\nsimple = 1\n[KPFPIPE.nested]\nsub = 2\n"
+        cfg = _write_toml(tmp_path, toml)
+        params = ConfigHandler(cfg).get_params(["KPFPIPE"])
+        assert params["simple"] == 1
+        assert params["nested_sub"] == 2
+
+    def test_override_merges_into_dict_section(self, tmp_path):
+        cfg = _write_toml(tmp_path, '[DATA_DIRS]\nroot = "/data"\n')
+        handler = ConfigHandler(cfg, overrides={"DATA_DIRS": {"out": "/out"}})
+        assert handler.config["DATA_DIRS"] == {"root": "/data", "out": "/out"}
+
+    def test_override_replaces_when_section_absent_or_non_dict(self, tmp_path):
+        cfg = _write_toml(tmp_path, '[DATA_DIRS]\nroot = "/data"\n')
+        handler = ConfigHandler(cfg, overrides={"NEW_SECTION": 42})
+        assert handler.config["NEW_SECTION"] == 42
+
+    def test_load_config_with_explicit_path_switches_file(self, tmp_path):
+        cfg1 = _write_toml(tmp_path, "[KPFPIPE]\nn = 1\n", name="a.toml")
+        cfg2 = _write_toml(tmp_path, "[KPFPIPE]\nn = 2\n", name="b.toml")
+        handler = ConfigHandler(cfg1)
+        handler.load_config(cfg2)
+        assert str(handler.path).endswith("b.toml")
+        assert handler.config["KPFPIPE"]["n"] == 2
+
+    def test_get_params_reloads_when_config_empty(self, tmp_path):
+        cfg = _write_toml(tmp_path, "[KPFPIPE]\nn = 7\n")
+        handler = ConfigHandler(cfg)
+        handler.config = {}  # force the reload branch in get_params
+        params = handler.get_params(["KPFPIPE"])
+        assert params["n"] == 7

@@ -12,6 +12,8 @@ from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 from kpfpipe.utils.astro import air_to_vac
 from kpfpipe.utils.config import ConfigHandler
 
+from ._dtype_policy import WAVE, assert_dtype, assert_roundtrip_dtype
+
 _SCIENCE_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "kpf_drp_science.toml"
 
 # Truth-frame integration data (see TestSpectrumOrientation).
@@ -198,6 +200,13 @@ class TestPerform:
             l2.data["GREEN_SCI2_WAVE"], master.data["GREEN_SCI2_WAVE"]
         )
 
+    def test_l2_wave_float64_survives_roundtrip(self, master_wls_path, tmp_path):
+        # Born-64 is strict: WAVE must still be float64 (BITPIX -64) on disk.
+        l2 = _make_science_l2(wls_path=master_wls_path)
+        WavelengthCalibration(l2).perform()
+        assert_dtype(l2.data["TRACE3_WAVE"], WAVE, "L2 TRACE3_WAVE")
+        assert_roundtrip_dtype(KPF2, l2, "TRACE3_WAVE", WAVE, tmp_path)
+
     def test_subset_chips_and_fibers(self, master_wls_path):
         # Only the requested (chip, fiber) blocks are copied; everything
         # else stays zero — both un-requested fibers within the requested
@@ -294,10 +303,8 @@ def _trough_depth(wave_order, flux_order, lambda_air, halfwin=3.0):
     return 1.0 - np.nanmin(window) / continuum
 
 
-@pytest.mark.skipif(
-    not (TESTDATA_DIR / "L0" / "20240405" / f"{OBS_ID}.fits").is_file(),
-    reason="truth-frame test data not present",
-)
+@pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestSpectrumOrientation:
     """
     Discriminator: the WLS-calibrated L2 must have its flux co-oriented with the

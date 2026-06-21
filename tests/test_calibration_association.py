@@ -326,3 +326,22 @@ class TestPerform:
         mod2 = _make_module(tmp_path)
         mod2.perform(["bias"], masters_search_window_days=[-2, 0])  # should succeed
         assert "BIASFILE" in mod2.l1_obj.headers["PRIMARY"]
+
+
+# ---------------------------------------------------------------------------
+# Fail-loudly paths (construction + cal_type validation)
+# ---------------------------------------------------------------------------
+
+
+class TestErrorPaths:
+    def test_bad_config_type_raises(self):
+        with pytest.raises(
+            TypeError, match="config must be None, dict, or ConfigHandler"
+        ):
+            CalibrationAssociation(MockL1(), config="not-a-config")
+
+    def test_unsupported_cal_type_raises(self, tmp_path):
+        # cal_type is validated before date_obs is used, so the value is irrelevant.
+        mod = _make_module(tmp_path)
+        with pytest.raises(ValueError, match="unsupported cal_type"):
+            mod._find_master_files("nonsense", None)

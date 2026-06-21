@@ -226,6 +226,7 @@ class TestRun:
 
     def test_run_skips_missing_chip(self, tmp_path):
         # KPF1 with only green CCD, no red
+        rng = np.random.default_rng(42)
         fn = str(tmp_path / "KP.20240405.00003.00_L1.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
@@ -234,10 +235,10 @@ class TestRun:
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
         primary.header["EXPTIME"] = 300.0
         green_ccd = fits.ImageHDU(
-            data=np.random.random((100, 100)).astype(np.float32), name="GREEN_CCD"
+            data=rng.random((100, 100)).astype(np.float32), name="GREEN_CCD"
         )
         green_var = fits.ImageHDU(
-            data=np.random.random((100, 100)).astype(np.float32), name="GREEN_VAR"
+            data=rng.random((100, 100)).astype(np.float32), name="GREEN_VAR"
         )
         hdul = fits.HDUList([primary, green_ccd, green_var])
         hdul.writeto(fn, overwrite=True)

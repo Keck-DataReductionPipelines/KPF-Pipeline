@@ -18,6 +18,8 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 from kpfpipe.utils.validation import strictly_increasing
 
+from ._dtype_policy import BARYCORR, BJD, assert_dtype
+
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NORDER = NORDER_GREEN + NORDER_RED
@@ -774,6 +776,7 @@ class TestPerform:
         bjd = np.asarray(kpf2.data["BJD_TDB"])
         assert bjd.shape == (NORDER,)
         assert np.all(np.isfinite(bjd))
+        assert bjd.dtype == np.float64  # EPRV: BJD_TDB is 64-bit
 
     def test_barycorr_kms_extension_populated(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
@@ -795,6 +798,13 @@ class TestPerform:
             TestPerform.DELTA_RV_MPS / c.to("m/s").value, rel=1e-4
         )
         assert 0.0 < z[0] < 1e-3
+
+    def test_barycorr_and_bjd_are_float64(self, bc_monkeypatched):
+        # Correction arrays feed the RV redshift; float64 protects RV precision.
+        kpf2 = bc_monkeypatched.perform()
+        assert_dtype(kpf2.data["BARYCORR_KMS"], BARYCORR, "BARYCORR_KMS")
+        assert_dtype(kpf2.data["BARYCORR_Z"], BARYCORR, "BARYCORR_Z")
+        assert_dtype(kpf2.data["BJD_TDB"], BJD, "BJD_TDB")
 
     def test_wave_arrays_untouched(self, bc_monkeypatched):
         """BarycentricCorrection should track but not apply: WAVE arrays unchanged."""

@@ -18,6 +18,8 @@ from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN, NORDER_RED
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.radial_velocity import RadialVelocity
 
+from ._dtype_policy import CCF, RV_FLOAT, assert_dtype
+
 NORDER = NORDER_GREEN + NORDER_RED
 SPEED_OF_LIGHT_KMS = np.float64(c.to("km/s").value)
 _FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]  # all orderlets
@@ -129,6 +131,38 @@ class TestComputeCCF:
 
 
 # ---------------------------------------------------------------------------
+# Dtype provenance (see tests/_dtype_policy.py)
+# ---------------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """CCF cubes and RV-table floats are float64; a float64 CCF from float32
+    flux is the intended deliberate upcast, governed by the result's dtype."""
+
+    def _order(self, v_dip=0.0):
+        wave = np.linspace(5000.0, 5050.0, 2000)
+        centers = np.linspace(5008.0, 5042.0, 20)
+        mask = _make_mask(centers)
+        flux = _absorption_spectrum(wave, centers)
+        vel = np.arange(-402, 403) * 0.25
+        return wave, flux, mask, vel
+
+    def test_ccf_1d_is_float64_from_float32_flux(self):
+        wave, flux, mask, vel = self._order()
+        ccf = RadialVelocity._compute_ccf_1d(
+            wave, flux.astype(np.float32), mask, vel, 0.0
+        )
+        assert_dtype(ccf, CCF, "CCF (_compute_ccf_1d, float32 flux in)")
+
+    def test_compute_rv_1d_returns_float64(self):
+        wave, flux, mask, vel = self._order()
+        ccf = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        assert_dtype(np.asarray(rv), RV_FLOAT, "RV scalar")
+        assert_dtype(np.asarray(rv_err), RV_FLOAT, "RV_ERR scalar")
+
+
+# ---------------------------------------------------------------------------
 # _compute_rv_1d (staticmethod)
 # ---------------------------------------------------------------------------
 
@@ -187,6 +221,49 @@ class TestComputeRV:
         rv21, _ = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 21)
         assert rv9 == pytest.approx(1.0, abs=0.05)
         assert rv21 == pytest.approx(1.0, abs=0.05)
+
+    def test_narrow_window_returns_nan(self):
+        # A first-pass window narrower than min_npts grid points -> NaN, NaN.
+        vel, ccf, wave = self._ccf(v0=0.0)
+        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-0.1, 0.1], 11)
+        assert np.isnan(rv) and np.isnan(rv_err)
+
+    def test_first_pass_fit_failure_returns_nan(self, monkeypatch):
+        # optimize_lsq raising on the first pass fails loudly as NaN, not a crash.
+        vel, ccf, wave = self._ccf(v0=0.0)
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("singular matrix")
+
+        monkeypatch.setattr("kpfpipe.modules.radial_velocity.optimize_lsq", boom)
+        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        assert np.isnan(rv) and np.isnan(rv_err)
+
+    def test_nonfinite_fit_params_return_nan(self, monkeypatch):
+        # A fit returning a non-finite mean/sigma is rejected as NaN.
+        vel, ccf, wave = self._ccf(v0=0.0)
+
+        def bad_fit(*args, **kwargs):
+            return np.array([100.0, 30.0, np.nan, 4.0]), None
+
+        monkeypatch.setattr("kpfpipe.modules.radial_velocity.optimize_lsq", bad_fit)
+        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        assert np.isnan(rv) and np.isnan(rv_err)
+
+    def test_second_pass_fit_failure_keeps_first_pass_rv(self, monkeypatch):
+        # If the refinement (second) fit raises, the first-pass mean is retained.
+        vel, ccf, wave = self._ccf(v0=0.0)
+        calls = []
+
+        def flaky(*args, **kwargs):
+            calls.append(1)
+            if len(calls) == 1:
+                return np.array([100.0, 30.0, 0.0, 4.0]), None
+            raise RuntimeError("refinement failed")
+
+        monkeypatch.setattr("kpfpipe.modules.radial_velocity.optimize_lsq", flaky)
+        rv, _ = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        assert np.isfinite(rv) and rv == pytest.approx(0.0, abs=1e-9)
 
 
 # ---------------------------------------------------------------------------
@@ -585,6 +662,7 @@ class TestComputeRVPublic:
             rv_module._get_order_weights("GREEN", "CAL")
 
 
+@pytest.mark.slow
 class TestPerform:
     _ILLUMINATED = ["SCI1", "SCI2", "SCI3", "SKY"]  # CAL-OBJ='None' -> skipped
 
@@ -593,6 +671,7 @@ class TestPerform:
         assert isinstance(l4, KPF4)
         for fiber in self._ILLUMINATED:
             assert l4.data[f"{fiber}_CCF"].shape == (NORDER, _NVEL)
+            assert_dtype(l4.data[f"{fiber}_CCF"], CCF, f"{fiber}_CCF")
             table = l4.data[f"{fiber}_RV"]
             assert len(table) == NORDER
             assert set(table.columns) >= {
@@ -604,6 +683,11 @@ class TestPerform:
                 "RV",
                 "RV_ERR",
             }
+            # EPRV L4: time/wavelength columns are 64-bit; order index is integer.
+            assert table["BJD_TDB"].dtype == np.float64
+            assert table["WAVE_START"].dtype == np.float64
+            assert table["WAVE_END"].dtype == np.float64
+            assert np.issubdtype(table["ORDER_INDEX"].dtype, np.integer)
 
     def test_unilluminated_fiber_skipped(self, rv_module):
         # CAL-OBJ='None' -> no CCF cube or RV table written.

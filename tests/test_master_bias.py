@@ -16,6 +16,15 @@ import pytest
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
 
+from ._dtype_policy import (
+    L1_IMAGE,
+    MASK_DISK,
+    MASK_MEM,
+    assert_dtype,
+    assert_roundtrip_dtype,
+)
+from ._masters import make_l1_arrays
+
 TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
 TESTDATA_BIAS_FILES = sorted(
     [
@@ -29,23 +38,43 @@ TESTDATA_BIAS_FILES = sorted(
 
 CHIPS = ["GREEN", "RED"]
 NROW, NCOL = 10, 10  # small arrays for unit tests
-
-
-def make_l1_arrays(rng=None):
-    """Return a synthetic stack_frames output dict."""
-    if rng is None:
-        rng = np.random.default_rng(42)
-    arrays = {}
-    for chip in CHIPS:
-        arrays[f"{chip}_IMG"] = rng.normal(0.0, 5.0, (NROW, NCOL)).astype(np.float32)
-        arrays[f"{chip}_SNR"] = np.abs(rng.normal(10.0, 1.0, (NROW, NCOL))).astype(
-            np.float32
-        )
-        arrays[f"{chip}_MASK"] = np.ones((NROW, NCOL), dtype=bool)
-    return arrays
-
+# make_l1_arrays() — shared synthetic stack_frames builder — lives in _masters.py
 
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
+
+
+# ---------------------------------------------------------------------------
+# Dtype provenance (shared master-L1 path; see tests/_dtype_policy.py)
+# ---------------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """Master IMG/SNR are float32; MASK is bool in memory, uint8 (8-bit) on disk."""
+
+    @pytest.fixture(scope="class")
+    def master(self):
+        bias = Bias(FILE_LIST)
+        with patch.object(bias, "stack_frames", return_value=make_l1_arrays()):
+            return bias.make_master_l1()
+
+    def test_img_snr_float32(self, master):
+        for ext in ("GREEN_IMG", "RED_IMG", "GREEN_SNR", "RED_SNR"):
+            assert_dtype(master.data[ext], L1_IMAGE, ext)
+
+    def test_mask_bool_in_memory(self, master):
+        for ext in ("GREEN_MASK", "RED_MASK"):
+            assert_dtype(master.data[ext], MASK_MEM, ext)
+
+    def test_roundtrip_img_float32_mask_uint8(self, master, tmp_path):
+        assert_roundtrip_dtype(KPFMasterL1, master, "GREEN_IMG", L1_IMAGE, tmp_path)
+        assert_roundtrip_dtype(
+            KPFMasterL1,
+            master,
+            "GREEN_MASK",
+            MASK_MEM,
+            tmp_path,
+            expected_disk=MASK_DISK,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -66,23 +95,12 @@ class TestMasterBiasUnit:
     def test_returns_kpf_master_l1(self, master_bias):
         assert isinstance(master_bias, KPFMasterL1)
 
-    def test_green_img_shape(self, master_bias):
-        assert master_bias.data["GREEN_IMG"].shape == (NROW, NCOL)
-
-    def test_red_img_shape(self, master_bias):
-        assert master_bias.data["RED_IMG"].shape == (NROW, NCOL)
-
-    def test_green_snr_shape(self, master_bias):
-        assert master_bias.data["GREEN_SNR"].shape == (NROW, NCOL)
-
-    def test_red_snr_shape(self, master_bias):
-        assert master_bias.data["RED_SNR"].shape == (NROW, NCOL)
-
-    def test_green_mask_shape(self, master_bias):
-        assert master_bias.data["GREEN_MASK"].shape == (NROW, NCOL)
-
-    def test_red_mask_shape(self, master_bias):
-        assert master_bias.data["RED_MASK"].shape == (NROW, NCOL)
+    @pytest.mark.parametrize(
+        "ext",
+        ["GREEN_IMG", "RED_IMG", "GREEN_SNR", "RED_SNR", "GREEN_MASK", "RED_MASK"],
+    )
+    def test_extension_shape(self, master_bias, ext):
+        assert master_bias.data[ext].shape == (NROW, NCOL)
 
     def test_mask_is_boolean(self, master_bias):
         assert master_bias.data["GREEN_MASK"].dtype == bool
@@ -237,6 +255,7 @@ class TestMasterBiasSaveMaster:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestMasterBiasRegression:
     """Regression tests against a real stack of L0 bias frames."""
 

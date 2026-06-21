@@ -16,6 +16,8 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
 
+from ._dtype_policy import WAVE, assert_dtype, assert_roundtrip_dtype
+
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NCOL_TEST = 16
@@ -262,6 +264,16 @@ class TestMakeMasterL2:
                 wave = ml2.data[f"{chip}_{fiber}_WAVE"]
                 assert np.size(wave) > 0
                 assert np.all(wave == 5500.0)
+
+    def test_wave_is_float64_and_survives_roundtrip(
+        self, mock_make_master_l2, tmp_path
+    ):
+        # Master WLS wavelengths are born-64 (EPRV); must not downcast on disk.
+        wls = WLS(FILE_LIST)
+        ml2 = wls.make_master_l2()
+        assert_dtype(ml2.data["TRACE3_WAVE"], WAVE, "master TRACE3_WAVE")
+        ml2.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
+        assert_roundtrip_dtype(KPFMasterL2, ml2, "TRACE3_WAVE", WAVE, tmp_path)
 
     def test_coeffs_extensions_populated(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)

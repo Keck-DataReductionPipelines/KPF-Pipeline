@@ -69,7 +69,11 @@ Operational/technical guidance (environment, commands, architecture) lives in
   precedent without the same justification.
 - **FITS keyword names**: ≤ 8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`,
   `RNINRNG`, `ISGOOD`). Encode the level into the keyword when needed for uniqueness
-  (`DATAPRL0`, `L2NANOK`).
+  (`DATAPRL0`, `L2NANOK`). **Before inventing a new PRIMARY/extension keyword, grep
+  `reference/legacy_data_format.rst` and reuse the legacy spelling/casing wherever the
+  science meaning matches** (e.g. `WLSFILE`, `BIASFILE`) — so downstream tools, notebooks,
+  and archival workflows keep reading v3 products unchanged. Only coin a new keyword when
+  the concept genuinely doesn't exist in the legacy schema.
 
 ---
 
@@ -149,6 +153,11 @@ class StageName:
 - **Per-level subpackages** (`data_models/`, `quality_control/*/`) use `levelN.py` file
   naming (`level0.py`, `level1.py`, `level2.py`) with shared logic in `base.py`, and
   re-export through `__init__.py` with an explicit `__all__`.
+- **Porting from the legacy DRP**: the v2.12 pipeline is kept at `legacy/KPF-Pipeline/`
+  as an algorithm reference. When porting a stage, read the original
+  `modules/<stage>/src/alg.py` for the core logic, then rewrite it to the skeleton above —
+  do **not** carry over hidden state, database dependencies, or implicit calibration-source
+  hierarchy (charter §9 Guardrails, §10 Core Design Principles).
 
 ---
 
@@ -325,11 +334,21 @@ class StageName:
   temporaries. Loops only for inherently sequential work.
 - **Be NaN-aware by default**: `np.nanmedian`, `np.nanstd`, `np.nanmean`; fill missing
   data with `np.full(..., np.nan, dtype=np.float32)`.
-- **Be explicit about dtype, and document why when it's not obvious**:
-  - Science/storage arrays → `np.float32`.
-  - Wavelength solutions, physical constants, fit accumulators → `np.float64`
-    (precision/stability); cast with `np.asarray(..., dtype=np.float64)`.
-  - Cast kernels/weights to the input `dtype` to stop scipy promoting float32→float64.
+- **Dtype precision is a contract — guard both directions.** Never upscale
+  `float32→float64` (memory/throughput regression) nor downscale `float64→float32`
+  (precision loss → wrong RVs). The policy — single source of truth, also encoded for
+  tests in [`tests/_dtype_policy.py`](tests/_dtype_policy.py):
+  - **float32** — L1 `*_CCD`/`*_VAR`, master `*_IMG`/`*_SNR`, L2 `*_FLUX`/`*_VAR`/`*_BLAZE`.
+  - **float64** — every `*_WAVE`, `BJD_TDB`, `BARYCORR_KMS`/`_Z`, CCF cubes, and the L4
+    RV-table floats (`RV`/`RV_ERR`/`BERV`/`WAVE_START`/`WAVE_END`). `*_WAVE`, `BJD_TDB`,
+    `WAVE_START`/`WAVE_END` are **EPRV-mandated 64-bit** (EPRV §2/§3, *born-64 at every
+    state* — never rely on RVData's upcast); the rest is KPF precision policy.
+  - **bool** in memory / **uint8** (8-bit) on disk — quality masks (`*_MASK`).
+  - L0 amps stay native-int or float32 — **never float64**.
+  Be explicit at allocation (`np.zeros(..., dtype=...)`, `np.asarray(..., dtype=...)`),
+  and cast kernels/weights to the input `dtype` so scipy doesn't promote float32→float64.
+  A **deliberate** precision change that produces a higher-precision *result* (a float64
+  CCF accumulated from float32 flux) is fine — the result's dtype governs.
 - **Prefer robust statistics**: median + MAD (`astropy.stats.mad_std(..., ignore_nan=True)`)
   over mean/std for outlier work; guard divisions with a small `eps` (`1e-12`) or
   `np.maximum(N, 1)`.
@@ -517,15 +536,30 @@ documented, intentional ways — follow *its* conventions when adding masters co
   source; per-level naming follows `data_models/` (`test_quicklook_l0.py`).
 - **Section the file with the same 66-dash banner comments** used in source modules.
   Open with a module docstring stating scope and data requirements.
-- **Fixtures** (`@pytest.fixture`): module-level when shared, nested in a class when
-  scoped to it; named for the object produced (`synthetic_l0_file`, `l2_from_flat`). Use
-  `scope="class"` for expensive real-data pipelines (with `tmp_path_factory`, since
-  `tmp_path` is function-scoped). Returning `(result, helper_obj)` tuples is common.
-- **Test data**: real KPF FITS is **vendored** under `tests/testdata/<LEVEL>/<date>/`,
+- **Fixtures** (`@pytest.fixture`): named for the object produced (`synthetic_l0_file`,
+  `l2_from_flat`). Fixtures used by **more than one file live in `tests/conftest.py`**
+  (e.g. `synthetic_l0_file`/`synthetic_l1_file` and the seeded `image_hdu` builder); keep
+  single-consumer fixtures local. Use `scope="class"` for expensive real-data pipelines
+  (with `tmp_path_factory`, since `tmp_path` is function-scoped). Returning
+  `(result, helper_obj)` tuples is common.
+- **Shared non-fixture helpers** go in an underscore-prefixed module that pytest does not
+  collect (`tests/_masters.py`), imported relatively (`from ._masters import ...`) — do not
+  duplicate a builder across files or hang it off `conftest.py` (which is for fixtures/hooks).
+- **Test data**: real KPF FITS lives under `tests/testdata/<LEVEL>/<date>/`,
   referenced via `Path(__file__).parent / "testdata" / ...` assigned to `UPPER_CASE`
   module constants. Two explicit tiers, documented in the module docstring: **synthetic
   in-memory FITS** (astropy) for unit tests, **real `testdata/` FITS** for
   regression/integration tests in their own `Test...RealData`/`Test...Regression` classes.
+  `tests/testdata/` is **intentionally gitignored** (large FITS); the few developers copy
+  the needed files locally and coordinate out-of-band. **Never commit anything under it,
+  and don't hunt for or build a fixture-generation script — there isn't one, by design.**
+  If an integration test needs a missing/stale testdata file, regenerate it **locally** and
+  note in the response that the shared copy needs the same update.
+- **Markers** (registered in `conftest.py`): mark integration / heavy-compute classes
+  `@pytest.mark.slow`, and truth-frame-gated classes `@pytest.mark.requires_testdata`
+  (auto-skipped when `tests/testdata/` is absent). The fast pre-commit subset is
+  `-m "not slow"`; *when* to run the subset vs the full suite is policy and lives in
+  `CLAUDE.md`, not here.
 - **Float tolerances** (use the prevailing pattern for the situation):
   - Analytic recovery → `np.testing.assert_allclose(rtol=1e-5, atol=1e-5)`.
   - FITS round-trips → `assert_array_almost_equal(decimal=4)`.
@@ -539,7 +573,11 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **Isolation**: `monkeypatch` is the dominant tool (stub expensive/data-dependent steps);
   `unittest.mock` (`MagicMock`/`patch`) where call objects are needed; hand-rolled stub
   classes for lightweight fakes; `tmp_path`/`tmp_path_factory` for filesystem isolation.
-- **Git-receipt / cwd constraint**: in-process tests don't `cd`; CLI tests run a
+- **Parallel-safe**: the suite runs under `pytest-xdist` (`-n auto --dist loadscope`), so
+  every test must be parallel-safe — write outputs only under `tmp_path`, keep no shared
+  mutable module/global state, and never depend on a fixed on-disk path or test order.
+- **Git-receipt / cwd constraint**: in-process tests don't `cd` — **never `chdir` outside
+  the repo**, which breaks the receipt's git-SHA provenance stamping. CLI tests run a
   subprocess with `cwd=_REPO_ROOT` and `PYTHONPATH=_REPO_ROOT`, where
   `_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`. This is the
   canonical accommodation.
@@ -547,6 +585,12 @@ documented, intentional ways — follow *its* conventions when adding masters co
   the modern Generator API. Never `np.random.seed()`.
 - **Constants come from `DETECTOR`** (`NORDER_GREEN = DETECTOR["norder"]["GREEN"]`) — never
   hardcode order/column counts.
+- **Dtype provenance**: each module test file has a `TestDtypeProvenance` class asserting
+  the §7 float32/float64/uint8/bool policy at the extension boundaries, the internal
+  math-bearing functions (typed-input → output dtype), and across a FITS round-trip, using
+  the shared rubric [`tests/_dtype_policy.py`](tests/_dtype_policy.py). Assert *precision*
+  (kind + itemsize via `assert_dtype`), **not** the exact dtype object — FITS round-trips
+  to big-endian, so `>f4` is still float32.
 
 ---
 
@@ -616,8 +660,5 @@ the dominant variant of the file/area you're editing**, and don't churn unrelate
    `(value, comment)`-unwrap helper duplicated ~4×.
 2. **Masters** — the config-resolution block is duplicated 5× (could be a base helper); the
    `0.2` load-failure threshold is an unnamed magic number.
-3. **Tests** — no `conftest.py` and synthetic-FITS construction duplicated widely; a few
-   `test_data_models.py` fixtures use unseeded `np.random.random`; some module docstrings
-   claim "skip if no testdata" but no such skip exists (data is vendored).
-4. **Configs** — the `[DATA_DIRS]` + `[KPFPIPE]` blocks are duplicated verbatim across the
+3. **Configs** — the `[DATA_DIRS]` + `[KPFPIPE]` blocks are duplicated verbatim across the
    science and masters configs (no shared-include mechanism).

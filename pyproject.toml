@@ -49,6 +49,16 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["kpfpipe*", "tools*"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # astropy truncates over-long FITS card comments; the masters INPUT_FILES
+    # round-trip deliberately writes long paths, so this is expected, not a bug.
+    "ignore:Card is too long, comment will be truncated:astropy.io.fits.verify.VerifyWarning",
+]
+# The `requires_testdata` marker is registered in tests/conftest.py
+# (pytest_configure), which also skips those tests when tests/testdata is absent.
+
 # Ruff is the unified formatter + linter (replaces black/isort/flake8).
 # Enforced via the pre-commit hook; see .pre-commit-config.yaml and style guide §8.
 [tool.ruff]
