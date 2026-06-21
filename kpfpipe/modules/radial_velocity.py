@@ -366,15 +366,23 @@ class RadialVelocity:
         # is identical but skips the per-step NaN mask.
         flux_clean = np.nan_to_num(flux)
 
+        # Shifted line edges and their covering-pixel indices for every velocity
+        # step at once: searchsorted takes an array of any shape, so one batched
+        # call over the (nv, nline) grid replaces a per-step call (same result).
+        line_lo_all = shift[:, None] * l_start[None, :]
+        line_hi_all = shift[:, None] * l_end[None, :]
+        idx_lo_all = np.clip(
+            np.searchsorted(edges, line_lo_all, side="right") - 1, 0, n_pix - 1
+        )
+        idx_hi_all = np.clip(
+            np.searchsorted(edges, line_hi_all, side="right") - 1, 0, n_pix - 1
+        )
+
         for vi in range(velocity_grid.size):
-            line_lo = l_start * shift[vi]
-            line_hi = l_end * shift[vi]
-            idx_lo = np.clip(
-                np.searchsorted(edges, line_lo, side="right") - 1, 0, n_pix - 1
-            )
-            idx_hi = np.clip(
-                np.searchsorted(edges, line_hi, side="right") - 1, 0, n_pix - 1
-            )
+            line_lo = line_lo_all[vi]
+            line_hi = line_hi_all[vi]
+            idx_lo = idx_lo_all[vi]
+            idx_hi = idx_hi_all[vi]
 
             # Fractional overlap of each (narrow) line with the pixels it covers.
             overlap_frac = np.zeros(n_pix)
