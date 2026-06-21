@@ -101,6 +101,56 @@ assembly/overscan, master stacking on real frames, and WLS spectrum orientation;
 those live only in `slow` tests, which is why the triggers above run the full
 suite. Pre-commit itself runs only ruff (no tests) — running tests is on you.
 
+## Profiling
+
+The profiling suite finds and reports performance bottlenecks. It follows a
+**"tallest tentpole"** philosophy: we only care about the most critical
+bottlenecks, and **optimization must never compromise scientific accuracy or
+slow forward development** (charter §6/§9/§10). A profiling result of "no action
+needed" is a perfectly good outcome.
+
+```bash
+make profile                       # run every harness, regenerate all reports
+make profile-science               # end-to-end science pipeline (L0 -> L4)
+make profile-masters               # end-to-end masters pipeline (bias/dark/WLS)
+make profile-radial_velocity       # a single module (any of PROFILE_MODULES)
+conda run -n kpfpipe python -m tests.profile_radial_velocity   # equivalent
+```
+
+**Design** (parallels the test suite; shared logic in `tests/_profiling.py`,
+which like `tests/_masters.py` is *not* a `test_*.py` file so pytest never
+collects it):
+
+- **Two passes per harness.** Pass 1 runs the target under `cProfile` and ranks
+  *every* function call by own time; pass 2 drills into each **tentpole** with
+  `line_profiler` for a line-by-line breakdown.
+- **Multi-tentpole detection.** Any own-code function (or module) over
+  `TENTPOLE_FRACTION` (25%) of the own-time budget is a tentpole — so 2-3
+  co-dominant hotspots are all surfaced, not just the single biggest (which is
+  always included). Lower thresholds (`FLAG_FRACTION`, `FLAG_ABS_SECONDS`,
+  `MODULE_FLAG_FRACTION`) drive the auto-generated flags. Tune these constants in
+  `tests/_profiling.py`.
+- **Structure.** The profiling files mirror the test files **1-to-1**
+  (`test_<x>.py` ↔ `profile_<x>.py`). Two end-to-end recipe harnesses —
+  `profile_science_recipe.py` and `profile_masters_recipe.py` (optimized
+  independently) — rank functions *across* modules to show which stage dominates.
+  Per-module `tests/profile_<module>.py` files drill into a single module (useful
+  when re-running one module repeatedly during algorithm development). `flat` is
+  skipped while stubbed; `profile_master_base.py` (the shared stacking engine)
+  has no 1-to-1 test counterpart by design.
+- **Data.** Real (gitignored) `tests/testdata` frames at realistic sizes; each
+  harness skips cleanly (exit 0) when the frames are absent, mirroring the
+  `requires_testdata` test pattern.
+- **Reports.** Each run prints a human-readable summary to stdout *and* writes a
+  Markdown report to `tests/profiling/reports/` (gitignored, regenerable). The
+  reports are fully auto-generated and self-contained — the suite runs with no
+  manual input.
+- **Curated analysis: `PROFILING.md`** (repo root, committed). The single source
+  of ranked, concrete recommendations — expected gain × refactor ease × bug risk,
+  including explicit "no action needed" verdicts — authored from a real run.
+  **When the suite or the pipeline's performance profile changes, regenerate the
+  reports and update `PROFILING.md` from the new numbers in the same change.**
+
 ## Architecture
 
 ### Data Model Hierarchy

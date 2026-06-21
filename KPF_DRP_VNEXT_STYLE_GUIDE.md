@@ -545,6 +545,14 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **Shared non-fixture helpers** go in an underscore-prefixed module that pytest does not
   collect (`tests/_masters.py`), imported relatively (`from ._masters import ...`) — do not
   duplicate a builder across files or hang it off `conftest.py` (which is for fixtures/hooks).
+- **Profiling harnesses** (`tests/profile_<module>.py`, `tests/profile_*_recipe.py`, and the
+  shared `tests/_profiling.py`) are *not* pytest tests — the `profile_` prefix keeps them out
+  of collection so `make test` stays fast. They **mirror the test files 1-to-1**
+  (`test_<x>.py` ↔ `profile_<x>.py`). They are standalone scripts run via `make profile*`
+  (see CLAUDE.md `## Profiling`), must run with **no interactive input**, and must contain
+  **no references to Claude** (that convention lives in CLAUDE.md / this guide, not in the
+  suite). New profiling logic belongs in `tests/_profiling.py`, not duplicated per file; each
+  `profile_<module>.py` is a thin `setup`/`call` wrapper over `run_profile`.
 - **Test data**: real KPF FITS lives under `tests/testdata/<LEVEL>/<date>/`,
   referenced via `Path(__file__).parent / "testdata" / ...` assigned to `UPPER_CASE`
   module constants. Two explicit tiers, documented in the module docstring: **synthetic
