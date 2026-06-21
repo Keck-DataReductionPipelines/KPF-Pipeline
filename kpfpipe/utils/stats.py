@@ -12,16 +12,14 @@ from scipy.optimize import leastsq
 
 
 def _gaussian_dist(theta, x):
-    """Gaussian model at `x` for theta = [b, a, mu, log_sigma]."""
-    b, a, mu, log_sigma = theta
-    sigma = np.exp(log_sigma)
+    """Gaussian model at `x` for theta = [b, a, mu, sigma]."""
+    b, a, mu, sigma = theta
     return b + a * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
 def _gaussian_jac(theta, x):
     """Analytic Jacobian of `_gaussian_dist` w.r.t. theta; shape (x.size, 4)."""
-    b, a, mu, log_sigma = theta
-    sigma = np.exp(log_sigma)
+    b, a, mu, sigma = theta
     dx = x - mu
     exp_term = np.exp(-(dx**2) / (2 * sigma**2))
 
@@ -29,25 +27,37 @@ def _gaussian_jac(theta, x):
     J[:, 0] = 1.0
     J[:, 1] = exp_term
     J[:, 2] = a * exp_term * dx / sigma**2
-    J[:, 3] = a * exp_term * dx**2 / sigma**2  # s**2 (not s**3) is chain-rule correct
+    J[:, 3] = a * exp_term * dx**2 / sigma**3
 
     return J
 
 
 def _gaussian_theta0_generator(x, y):
-    """Initial-guess theta = [b, a, mu, log_sigma] for a Gaussian fit to (x, y)."""
+    """Initial-guess theta = [b, a, mu, sigma] for a Gaussian fit to (x, y)."""
     b0 = 0.25 * np.sum(y[:2] + y[-2:])
     a0 = np.max(y) - b0
     mu0 = x[np.argmax(y)]
-    sigma0 = np.std(x)
 
-    return [b0, a0, mu0, np.log(sigma0)]
+    # Seed sigma from the line's FWHM: the span of x clearing the half-maximum
+    # level (b0 + a0/2), floored at one grid step so a barely-resolved line
+    # still gets a positive width. FWHM = 2*sqrt(2*ln2) * sigma.
+    above = x[y >= b0 + 0.5 * a0]
+    fwhm = max(above.max() - above.min(), (x.max() - x.min()) / (x.size - 1))
+    sigma0 = fwhm / 2.3548200450309493
+
+    return [b0, a0, mu0, sigma0]
 
 
 def _gaussian_untransform(theta):
-    """Map fitted [b, a, mu, log_sigma] back to [b, a, mu, sigma]."""
-    b, a, mu, log_sigma = theta
-    return np.array([b, a, mu, np.exp(log_sigma)])
+    """Report fitted [b, a, mu, sigma], forcing sigma >= 0.
+
+    The model depends only on ``sigma**2``, so the fit may converge to a
+    negative sigma; ``abs`` picks the physical (positive) width. Fitting sigma
+    directly (rather than log-sigma) avoids the per-evaluation ``exp``/``log``
+    round-trip that constrained it positive.
+    """
+    b, a, mu, sigma = theta
+    return np.array([b, a, mu, np.abs(sigma)])
 
 
 # Each entry: (model, jacobian, theta0 initializer, untransform). untransform
@@ -135,7 +145,7 @@ def _smooth_filter(x, size=None, *, axes=None):
     )
 
 
-def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median", k=0.1):
+def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
     """
     Flag elements of `x` more than `sigma` robust deviations from their peers.
 
@@ -150,21 +160,13 @@ def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median", k=0.1)
       that varies smoothly along `axis` (e.g. illumination along dispersion).
 
     ``axis=None`` compares every element to a single global statistic.
-
-    For the median method a degenerate near-zero MAD (a slice whose values
-    agree across `axis`) is floored at ``k`` times the global MAD of `x`, so
-    trivial deviations are not amplified into spurious flags. With
-    ``axis=None`` the per-slice and global MAD coincide, so the floor is inert
-    and the result matches a plain ``mad_std`` threshold.
     """
     eps = 1e-12
 
     if method == "median":
         med = np.nanmedian(x, axis=axis, keepdims=True)
-        local_mad = _mad_std(x, med=med, axis=axis, keepdims=True)
-        global_mad = _mad_std(x)
-        denom = np.maximum(local_mad, k * global_mad) + eps
-        out = np.abs(x - med) / denom > sigma
+        mad = _mad_std(x, med=med, axis=axis, keepdims=True)
+        out = np.abs(x - med) / (mad + eps) > sigma
 
     elif method == "trend":
         trend = _smooth_filter(x, size=kernel_size, axes=axis)
