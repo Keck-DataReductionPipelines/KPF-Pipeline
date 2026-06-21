@@ -131,7 +131,7 @@ class TestComputeCCF:
 
 
 # ---------------------------------------------------------------------------
-# Dtype provenance (see tests/_dtype_policy.py)
+# Dtype provenance (see tests/regression/_dtype_policy.py)
 # ---------------------------------------------------------------------------
 
 

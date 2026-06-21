@@ -14,10 +14,12 @@ from kpfpipe.utils.config import ConfigHandler
 
 from ._dtype_policy import WAVE, assert_dtype, assert_roundtrip_dtype
 
-_SCIENCE_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "kpf_drp_science.toml"
+_SCIENCE_CONFIG_PATH = (
+    Path(__file__).parent.parent.parent / "configs" / "kpf_drp_science.toml"
+)
 
 # Truth-frame integration data (see TestSpectrumOrientation).
-TESTDATA_DIR = Path(__file__).parent / "testdata"
+TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 OBS_ID = "KP.20240405.40113.57"  # a bright G-type RV-standard exposure
 
 

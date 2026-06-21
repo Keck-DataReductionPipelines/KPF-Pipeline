@@ -26,15 +26,17 @@ from kpfpipe.utils.io import (
 # Test data paths
 # ---------------------------------------------------------------------------
 
-TESTDATA_DIR = Path(__file__).parent / "testdata"
+TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
-MASTERS_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "kpf_drp_masters.toml"
+MASTERS_CONFIG_PATH = (
+    Path(__file__).parent.parent.parent / "configs" / "kpf_drp_masters.toml"
+)
 
 
 def _load_masters_recipe():
     spec = importlib.util.spec_from_file_location(
         "kpf_drp_masters",
-        Path(__file__).parent.parent / "recipes" / "kpf_drp_masters.py",
+        Path(__file__).parent.parent.parent / "recipes" / "kpf_drp_masters.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

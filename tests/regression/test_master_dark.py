@@ -26,7 +26,7 @@ CHIPS = ["GREEN", "RED"]
 NROW, NCOL = 10, 10  # small arrays for unit tests
 # make_l1_arrays() — shared synthetic stack_frames builder — lives in _masters.py
 
-TESTDATA_DIR = Path(__file__).parent / "testdata"
+TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
 
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]

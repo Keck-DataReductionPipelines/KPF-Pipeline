@@ -27,7 +27,7 @@ NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NCOL = DETECTOR["ccd"]["ncol"]
 
-TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
+TESTDATA_L0_DIR = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
 L0_FILE = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
 
 

@@ -1,12 +1,12 @@
 """Profile ``WavelengthCalibration.perform`` (attach the WLS to L2 spectra).
 
 Run with ``make profile-wavelength_calibration`` or
-``python tests/profile_wavelength_calibration.py``. Requires real frames in
+``python tests/profiling/profile_wavelength_calibration.py``. Requires real frames in
 ``tests/testdata`` (skips cleanly otherwise).
 """
 
-try:  # works both as `python -m tests.profile_*` and `python tests/profile_*.py`
-    from tests import _profiling as P
+try:  # importable via `-m tests.profiling.profile_*` or runnable as a script
+    from tests.profiling import _profiling as P
 except ModuleNotFoundError:
     import _profiling as P
 

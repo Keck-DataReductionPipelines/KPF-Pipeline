@@ -25,7 +25,7 @@ from ._dtype_policy import (
 )
 from ._masters import make_l1_arrays
 
-TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
+TESTDATA_L0_DIR = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
 TESTDATA_BIAS_FILES = sorted(
     [
         str(TESTDATA_L0_DIR / "KP.20240405.03637.74.fits"),
@@ -44,7 +44,7 @@ FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
 # ---------------------------------------------------------------------------
-# Dtype provenance (shared master-L1 path; see tests/_dtype_policy.py)
+# Dtype provenance (shared master-L1 path; see tests/regression/_dtype_policy.py)
 # ---------------------------------------------------------------------------
 
 
