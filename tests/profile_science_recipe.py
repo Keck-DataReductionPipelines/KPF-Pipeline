@@ -62,6 +62,7 @@ def run():
         call=recipe.main,
         candidate_modules=PIPELINE_MODULES,
         line_pass=False,
+        recipe=True,
     )
 
 

@@ -27,6 +27,7 @@ frames are absent (mirrors the ``requires_testdata`` test pattern).
 import cProfile
 import inspect
 import io
+import os
 import pstats
 import tempfile
 from datetime import UTC, datetime
@@ -51,6 +52,47 @@ FLAG_FRACTION = 0.05  # >= this share of own time -> flagged
 FLAG_ABS_SECONDS = 1.0  # >= this many seconds of own time -> flagged
 MODULE_FLAG_FRACTION = 0.10  # >= this share for a whole module -> flagged
 TOP_N = 25  # rows in the ranking table
+
+# --- recipe-report classification -------------------------------------------
+# Network time is quarantined from the recipe reports: it is a nondeterministic
+# IERS download during barycentric correction, so it would make run-to-run
+# comparison meaningless. Matched as substrings against each row's "<file>
+# <func>" string.
+NETWORK_MARKERS = (
+    "_ssl",
+    "SSLSocket",
+    "ssl.py",
+    "socket",
+    "urllib",
+    "http",
+    "do_handshake",
+    "certifi",
+)
+
+# Disk read/write markers, for the masters recipe's I/O-vs-compute split (own
+# time of every disk call across the run; see _io_compute_split). Checksum
+# hashing is deliberately *not* here — it is CPU work and counts as compute;
+# network (above) is excluded entirely. Tested after network so an SSL read is
+# never miscounted as disk I/O.
+IO_MARKERS = (
+    "_io.",
+    "io.open",
+    "FileIO",
+    "BufferedReader",
+    "BufferedWriter",
+    "mmap",
+    "numpy.fromfile",
+    "numpy.tofile",
+    "/astropy/io/",
+    "gzip",
+)
+
+# Labels for the recipe "High-level summary" (cumulative wall-clock per stage,
+# a clean partition of the recipe runtime; see _recipe_summary).
+IO_SUMMARY_LABEL = "I/O (data-product read/write)"
+QUICKLOOK_LABEL = "quicklook (all levels)"
+QC_LABEL = "QC + diagnostics (all levels)"
+OVERHEAD_LABEL = "(orchestration / overhead)"
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +238,30 @@ def _is_own_code(filename):
     return "/kpfpipe/" in filename and "/site-packages/" not in filename
 
 
+_KPF_PKG_DIR = None
+
+
+def _kpf_pkg_dir():
+    """Absolute path of the installed ``kpfpipe`` package directory (cached)."""
+    global _KPF_PKG_DIR
+    if _KPF_PKG_DIR is None:
+        import kpfpipe
+
+        _KPF_PKG_DIR = os.path.dirname(os.path.abspath(kpfpipe.__file__))
+    return _KPF_PKG_DIR
+
+
+def _is_kpf_module(filename):
+    """True for genuine KPF source under the editable-install package dir.
+
+    Anchored to ``kpfpipe.__file__`` rather than the ``/kpfpipe/`` substring used
+    by :func:`_is_own_code`: the conda env is itself named ``kpfpipe``, so its
+    stdlib lives under ``.../envs/kpfpipe/lib/python3.14/`` and the substring test
+    misclassifies every stdlib module as own code. Used by the recipe reports.
+    """
+    return filename.startswith(_kpf_pkg_dir() + os.sep)
+
+
 def _module_label(filename):
     """Human label for a kpfpipe source file, e.g. ``modules/radial_velocity.py``."""
     marker = "/kpfpipe/"
@@ -250,6 +316,182 @@ def _by_module(rows, total):
         agg[label] = agg.get(label, 0.0) + r["tottime"]
     items = sorted(agg.items(), key=lambda kv: kv[1], reverse=True)
     return [(lbl, t, t / total) for lbl, t in items]
+
+
+def _network_own(rows):
+    """Total own time of network calls (SSL/socket), for the separate report line.
+
+    Network is a nondeterministic IERS download during barycentric correction, so
+    it is quarantined from the recipe's High-level summary.
+    """
+    return sum(
+        r["tottime"]
+        for r in rows
+        if any(m in f"{r['file']} {r['name']}" for m in NETWORK_MARKERS)
+    )
+
+
+def _io_compute_split(rows):
+    """Whole-run own time partitioned into disk I/O vs compute (network excluded).
+
+    Answers "is the recipe read/write-bound or compute-bound?" by summing the own
+    time of every disk call across all modules — including I/O buried inside the
+    masters' per-frame stacking, which the cumulative High-level summary folds
+    into its product rows. Returns ``io``/``compute`` seconds and their ``total``
+    (the non-network runtime, used as the percentage base).
+    """
+    io_s = compute_s = 0.0
+    for r in rows:
+        blob = f"{r['file']} {r['name']}"
+        if any(m in blob for m in NETWORK_MARKERS):
+            continue  # nondeterministic; excluded from the split
+        if any(m in blob for m in IO_MARKERS):
+            io_s += r["tottime"]
+        else:
+            compute_s += r["tottime"]
+    return {"io": io_s, "compute": compute_s, "total": (io_s + compute_s) or 1e-12}
+
+
+def _is_quicklook(filename):
+    return _is_kpf_module(filename) and _module_label(filename).startswith(
+        "quality_control/quicklook/"
+    )
+
+
+def _plot_class(filename):
+    """``quality_control/quicklook/level0.py`` -> ``PlotL0`` (the QLP class)."""
+    stem = _module_label(filename).rsplit("/", 1)[-1].removesuffix(".py")  # "level0"
+    return "PlotL" + stem.removeprefix("level")
+
+
+def _quicklook_breakdown(stats):
+    """Per-plot wall-clock within the quicklook stage (science recipe).
+
+    ``PlotL0/L1/L2.run`` dispatch to each public plot method via ``getattr``
+    (e.g. ``PlotL0.stitched_image``), so each method is a direct child of a
+    ``run`` and its cumulative time — including the matplotlib render and PNG
+    save — is that plot's cost. Underscore helpers (``_has_chip``) and non-
+    quicklook children (``os.makedirs``, ``plt.close``) are skipped. Returns
+    ``rows`` (``(label, seconds, fraction)``) and the quicklook ``total`` (sum of
+    the ``run`` cumtimes); empty when the recipe runs no quicklook (masters).
+    """
+    run_keys = [k for k in stats.stats if _is_quicklook(k[0]) and k[2] == "run"]
+    if not run_keys:
+        return {"rows": [], "total": 0.0}
+    total = sum(stats.stats[k][3] for k in run_keys)  # cumtime of each run call
+
+    agg = {}
+    for func, (_cc, _nc, _tt, _ct, callers) in stats.stats.items():
+        filename, _ln, name = func
+        if name.startswith("_") or not _is_quicklook(filename):
+            continue
+        ct = sum(callers[r][3] for r in run_keys if r in callers)
+        if ct > 0:  # a plot method dispatched from run()
+            label = f"{_plot_class(filename)}.{name}"
+            agg[label] = agg.get(label, 0.0) + ct
+
+    base = total or 1e-12
+    rows = sorted(
+        ((lbl, s, s / base) for lbl, s in agg.items()),
+        key=lambda e: e[1],
+        reverse=True,
+    )
+    overhead = total - sum(agg.values())
+    if overhead > 0:
+        rows.append(("(dispatch / figure close)", overhead, overhead / base))
+    return {"rows": rows, "total": total}
+
+
+def _stage_name(module_label):
+    """``modules/radial_velocity.py`` -> ``radial_velocity``; ``modules/masters/
+    bias.py`` -> ``bias`` (the product, per the masters "by product" rule)."""
+    return module_label[len("modules/") :].removesuffix(".py").split("/")[-1]
+
+
+def _summary_bucket(filename, name):
+    """Map a recipe-``main`` direct child to a (label, kind) High-level bucket.
+
+    ``from_fits``/``to_fits`` are the data-product reads/writes (I/O); the KPF
+    pipeline stages, quicklook, and QC/diagnostics map to their respective rows;
+    barycentric correction is quarantined; everything else (path helpers, config,
+    glue) is orchestration overhead. ``utils``/``data_models`` are deliberately
+    *not* their own rows — their time is absorbed into the calling stage.
+    """
+    if name in ("from_fits", "to_fits"):
+        return IO_SUMMARY_LABEL, "io"
+    if _is_kpf_module(filename):
+        label = _module_label(filename)
+        if label.endswith("barycentric_correction.py"):
+            return "barycentric", "barycentric"
+        if label.startswith("quality_control/quicklook/"):
+            return QUICKLOOK_LABEL, "quicklook"
+        if label.startswith(
+            ("quality_control/qc_booleans/", "quality_control/diagnostics/")
+        ):
+            return QC_LABEL, "qc"
+        if label.startswith("modules/"):
+            return _stage_name(label), "stage"
+    return OVERHEAD_LABEL, "overhead"
+
+
+def _find_main_key(stats, call):
+    """pstats key ``(file, lineno, "main")`` for the profiled recipe entry."""
+    code = call.__code__
+    key = (code.co_filename, code.co_firstlineno, code.co_name)
+    if key in stats.stats:
+        return key
+    for k in stats.stats:
+        if k[2] == code.co_name and k[0] == code.co_filename:
+            return k
+    return None
+
+
+def _recipe_summary(stats, call, network_own):
+    """Partition recipe wall-clock among its top-level operations (cumulative).
+
+    Each function records its cumulative time *per caller* (cProfile), so every
+    direct child call of the recipe's ``main`` is a disjoint slice of wall-clock.
+    Grouping those slices by bucket therefore yields a clean partition that sums
+    to the recipe runtime — including, e.g., the masters-read I/O nested inside
+    ``calibration_association`` (it lands in that stage, never double-counted).
+
+    Barycentric correction is quarantined (nondeterministic IERS fetch): its
+    slice is reported separately and excluded from the denominator. Returns the
+    sorted ``rows`` (``(label, seconds, fraction, kind)``), the ``denominator``
+    (wall-clock minus barycentric), ``bary_seconds``, and ``network_seconds``.
+    """
+    main_key = _find_main_key(stats, call)
+    buckets = {}
+    kinds = {}
+    bary_seconds = 0.0
+    if main_key is not None:
+        for func, (_cc, _nc, _tt, _ct, callers) in stats.stats.items():
+            if main_key not in callers:
+                continue
+            ct = callers[main_key][3]  # cumulative time of this call from main
+            label, kind = _summary_bucket(func[0], func[2])
+            if kind == "barycentric":
+                bary_seconds += ct
+                continue
+            buckets[label] = buckets.get(label, 0.0) + ct
+            kinds[label] = kind
+        # main's own time = recipe glue not inside any child call.
+        main_own = stats.stats[main_key][2]
+        buckets[OVERHEAD_LABEL] = buckets.get(OVERHEAD_LABEL, 0.0) + main_own
+        kinds[OVERHEAD_LABEL] = "overhead"
+
+    denominator = sum(buckets.values()) or 1e-12
+    rows = sorted(
+        ((lbl, s, s / denominator, kinds[lbl]) for lbl, s in buckets.items()),
+        key=lambda e: e[1],
+        reverse=True,
+    )
+    return {
+        "rows": rows,
+        "denominator": denominator,
+        "bary_seconds": bary_seconds,
+        "network_seconds": network_own,
+    }
 
 
 def _note(r):
@@ -392,6 +634,118 @@ def _render(title, total, rows, tentpoles, flags, modules, line_text):
     return "\n".join(out)
 
 
+def _render_recipe(title, summary, split=None, quicklook=None):
+    """Render an end-to-end recipe report.
+
+    Just the cumulative **High-level summary** (wall-clock per pipeline stage, a
+    clean partition of the recipe runtime; :func:`_recipe_summary`) plus the
+    separately-reported network/barycentric totals. Function-level detail
+    (tentpoles, flags, line drill-down) is relegated to the per-module reports
+    (:func:`_render`). Network and barycentric correction are quarantined because
+    they are nondeterministic.
+
+    ``split`` (optional, from :func:`_io_compute_split`) adds a whole-run I/O-vs-
+    compute breakdown — used by the masters recipe, whose I/O lives *inside* the
+    modules and so is not otherwise visible in the per-stage summary.
+    ``quicklook`` (optional, from :func:`_quicklook_breakdown`) adds a per-plot
+    breakdown of the quicklook stage; rendered only when non-empty (science).
+    """
+    ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    denom = summary["denominator"]
+    has_bary = summary["bary_seconds"] > 0
+    out = []
+    w = out.append
+
+    w(f"# Profiling report: {title}")
+    w("")
+    excl = " (excl. barycentric)" if has_bary else ""
+    w(f"_Generated {ts} • recipe wall-clock{excl}: {denom:.3f} s._")
+    w("")
+    quarantined = (
+        "The barycentric-correction stage and network time are reported "
+        "separately (excluded from the rows) because they are nondeterministic. "
+        if has_bary
+        else "Network time is reported separately because it is nondeterministic. "
+    )
+    w(
+        "> Auto-generated by `tests/_profiling.py`. The High-level summary is "
+        "cumulative wall-clock per pipeline stage (each stage includes every "
+        "function it calls), partitioned so the rows sum to the recipe runtime. "
+        f"{quarantined}Function-level detail is in the per-module reports. "
+        "Curated recommendations live in the committed `PROFILING.md`."
+    )
+    w("")
+
+    # High-level summary (cumulative wall-clock per stage) -----------------
+    w("## High-level summary")
+    w("")
+    w("| stage / bucket | % wall | s |")
+    w("|---|---:|---:|")
+    for lbl, secs, frac, _kind in summary["rows"]:
+        w(f"| `{lbl}` | {frac:.1%} | {secs:.3f} |")
+    w("")
+
+    # Quarantined (nondeterministic) totals, reported separately ----------
+    excluded = []
+    if summary["bary_seconds"] > 0:
+        excluded.append(
+            f"- **Barycentric correction stage** — {summary['bary_seconds']:.3f} s "
+            "wall-clock (excluded; triggers a nondeterministic IERS network fetch)."
+        )
+    if summary["network_seconds"] > 0:
+        whence = "mostly inside barycentric" if has_bary else "not disk I/O"
+        excluded.append(
+            f"- **Network** (SSL/socket) — {summary['network_seconds']:.3f} s own "
+            f"time (excluded; nondeterministic, {whence})."
+        )
+    w("**Excluded from the summary above (reported separately):**")
+    w("")
+    out.extend(excluded or ["- _None — fully deterministic disk + compute._"])
+    w("")
+
+    # I/O vs compute (whole run; masters recipe) --------------------------
+    if split is not None:
+        base = split["total"]
+        io_frac = split["io"] / base
+        w("## I/O vs compute (whole run)")
+        w("")
+        w(
+            "Own time across every module (including I/O inside the per-frame "
+            "stacking, which the summary folds into the product rows). Network "
+            "excluded."
+        )
+        w("")
+        w("| category | % | s |")
+        w("|---|---:|---:|")
+        w(f"| compute | {1 - io_frac:.1%} | {split['compute']:.3f} |")
+        w(f"| I/O (disk read/write) | {io_frac:.1%} | {split['io']:.3f} |")
+        w("")
+        verdict = "compute-dominated" if io_frac < 0.5 else "I/O-dominated"
+        w(
+            f"_Runtime is **{verdict}** "
+            f"({1 - io_frac:.0%} compute / {io_frac:.0%} I/O)._"
+        )
+        w("")
+
+    # Quicklook plot breakdown (science recipe) ---------------------------
+    if quicklook and quicklook["rows"]:
+        w("## Quicklook plot breakdown")
+        w("")
+        w(
+            f"Wall-clock per plot within the quicklook stage "
+            f"({quicklook['total']:.3f} s total; % of that). Each plot includes "
+            "its matplotlib render and PNG save."
+        )
+        w("")
+        w("| plot | % | s |")
+        w("|---|---:|---:|")
+        for lbl, secs, frac in quicklook["rows"]:
+            w(f"| `{lbl}` | {frac:.1%} | {secs:.3f} |")
+        w("")
+
+    return "\n".join(out)
+
+
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
@@ -405,6 +759,8 @@ def run_profile(
     candidate_modules,
     kwargs=None,
     line_pass=True,
+    recipe=False,
+    io_compute=False,
 ):
     """Profile ``call(*setup())`` and write a tentpole report.
 
@@ -429,6 +785,17 @@ def run_profile(
         Run the second :mod:`line_profiler` pass over the tentpoles. Disable for
         whole-pipeline harnesses where re-running everything is too costly and
         the per-module reports already provide line detail.
+    recipe : bool, default False
+        Use the end-to-end recipe report layout: a cumulative High-level summary
+        of wall-clock per pipeline stage (quicklook and QC/diagnostics collapsed
+        across levels), with network and barycentric correction quarantined and
+        reported separately. The two ``profile_*_recipe.py`` harnesses set this;
+        per-module harnesses use the default own-time layout. Implies no line
+        pass, and replaces the function-level sections (those live per module).
+    io_compute : bool, default False
+        Add a whole-run I/O-vs-compute breakdown below the summary (recipe only).
+        For the masters recipe, whose disk I/O lives *inside* the product modules
+        and so is not a visible row in the per-stage summary.
     """
     require_testdata()
     print(f"\n=== profiling: {title} ===\n")
@@ -445,6 +812,15 @@ def run_profile(
 
     stats = pstats.Stats(pr)
     rows, total = _rank(stats)
+
+    if recipe:
+        summary = _recipe_summary(stats, call, _network_own(rows))
+        split = _io_compute_split(rows) if io_compute else None
+        quicklook = _quicklook_breakdown(stats)
+        report = _render_recipe(title, summary, split, quicklook)
+        print(report)
+        return _write_report(report, report_name)
+
     tentpoles = _tentpoles(rows)
     flags = _flags(rows)
     modules = _by_module(rows, total)
@@ -463,7 +839,10 @@ def run_profile(
 
     report = _render(title, total, rows, tentpoles, flags, modules, line_text)
     print(report)
+    return _write_report(report, report_name)
 
+
+def _write_report(report, report_name):
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = REPORTS_DIR / f"{report_name}.md"
     out_path.write_text(report + "\n")

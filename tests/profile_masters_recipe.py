@@ -62,6 +62,8 @@ def run():
         call=recipe.main,
         candidate_modules=MASTERS_MODULES,
         line_pass=False,
+        recipe=True,
+        io_compute=True,
     )
 
 
