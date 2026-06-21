@@ -9,7 +9,7 @@ from scipy.ndimage import (
     gaussian_filter,
     median_filter,
 )
-from scipy.optimize import least_squares
+from scipy.optimize import leastsq
 
 
 def gaussian_dist(theta, x):
@@ -83,14 +83,24 @@ def optimize_lsq(x, y, linemodel):
 
     theta0 = theta0_generator(x, y)
 
-    result = least_squares(
+    # Call MINPACK's lmder directly via `leastsq` instead of `least_squares`.
+    # Both bottom out in the same Fortran routine, but for `method="lm"` with no
+    # bounds the `least_squares` wrapper adds per-call overhead (input checks, an
+    # extra residual evaluation, building OptimizeResult) that dominates for the
+    # many tiny line fits here. The tolerances and `maxfev` below are exactly what
+    # `least_squares` forwards to lmder, so the fit is bit-for-bit identical.
+    sol, _cov, info, _msg, _ier = leastsq(
         residual,
         theta0,
-        jac=jacobian,
-        method="lm",
+        Dfun=jacobian,
+        ftol=1e-8,
+        xtol=1e-8,
+        gtol=1e-8,
+        maxfev=100 * len(theta0),
+        full_output=True,
     )
 
-    theta, rms = untransform(result.x), np.std(result.fun)
+    theta, rms = untransform(sol), np.std(info["fvec"])
 
     return theta, rms
 
