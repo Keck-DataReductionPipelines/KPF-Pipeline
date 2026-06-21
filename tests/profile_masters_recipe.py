@@ -4,8 +4,8 @@ Builds the nightly calibration masters for one real datecode (master bias and
 dark L1, then the master WLS L2 from ThAr) under cProfile and ranks functions
 across all master modules, so the report shows which stage dominates the masters
 run. Optimized independently of the science recipe. Per-module line detail is in
-``profile_master_base.py`` / ``profile_master_wls.py``, so the second
-line-profiler pass is disabled here.
+``profile_master_bias.py`` / ``profile_master_dark.py`` / ``profile_master_wls.py``,
+so the second line-profiler pass is disabled here.
 
 The bundled darks span two default-gap clusters, so the recipe's
 ``build_l0_file_lists`` is wrapped to widen ``cluster_gap_seconds`` (the same

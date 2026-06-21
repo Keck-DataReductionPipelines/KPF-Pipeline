@@ -143,8 +143,10 @@ collects it):
   independently) — rank functions *across* modules to show which stage dominates.
   Per-module `tests/profile_<module>.py` files drill into a single module (useful
   when re-running one module repeatedly during algorithm development). `flat` is
-  skipped while stubbed; `profile_master_base.py` (the shared stacking engine)
-  has no 1-to-1 test counterpart by design.
+  skipped while stubbed. The shared stacking engine (`masters/base.py`) has no
+  dedicated harness: attribution charges its work to the right `base.py` methods
+  inside `profile_master_bias.py` / `profile_master_dark.py`, so a separate
+  engine profile would be redundant.
 - **Data.** Real (gitignored) `tests/testdata` frames at realistic sizes; each
   harness skips cleanly (exit 0) when the frames are absent, mirroring the
   `requires_testdata` test pattern.

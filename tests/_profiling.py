@@ -27,6 +27,7 @@ frames are absent (mirrors the ``requires_testdata`` test pattern).
 
 import ast
 import cProfile
+import functools
 import inspect
 import io
 import os
@@ -72,23 +73,15 @@ NETWORK_MARKERS = (
     "certifi",
 )
 
-# Disk read/write markers, for the masters recipe's I/O-vs-compute split (own
-# time of every disk call across the run; see _io_compute_split). Checksum
-# hashing is deliberately *not* here — it is CPU work and counts as compute;
-# network (above) is excluded entirely. Tested after network so an SSL read is
-# never miscounted as disk I/O.
-IO_MARKERS = (
-    "_io.",
-    "io.open",
-    "FileIO",
-    "BufferedReader",
-    "BufferedWriter",
-    "mmap",
-    "numpy.fromfile",
-    "numpy.tofile",
-    "/astropy/io/",
-    "gzip",
-)
+# The masters I/O-vs-compute split measures disk I/O at the data-model
+# serialization boundary rather than by low-level primitives: every read is a
+# `from_fits` call (in base._load_frame and base._load_calibration) and every
+# write a `to_fits` call (in base.save_master). Their cumulative time captures the
+# full read/write + parse cost (a leaf-marker heuristic missed ~75% of it — most
+# of from_fits is astropy/numpy array construction, not a marked primitive) while
+# excluding the compute they sit next to (ImageAssembly runs *after* from_fits
+# returns in _load_frame, so it stays in "compute"). See _io_compute_split.
+SERIALIZATION_NAMES = frozenset({"from_fits", "to_fits"})
 
 # Labels for the recipe "High-level summary" (cumulative wall-clock per stage,
 # a clean partition of the recipe runtime; see _recipe_summary).
@@ -400,25 +393,32 @@ def _network_own(rows):
     )
 
 
-def _io_compute_split(rows):
-    """Whole-run own time partitioned into disk I/O vs compute (network excluded).
+def _io_compute_split(stats):
+    """Whole-run time partitioned into disk I/O vs compute (masters recipe).
 
-    Answers "is the recipe read/write-bound or compute-bound?" by summing the own
-    time of every disk call across all modules — including I/O buried inside the
-    masters' per-frame stacking, which the cumulative High-level summary folds
-    into its product rows. Returns ``io``/``compute`` seconds and their ``total``
-    (the non-network runtime, used as the percentage base).
+    Answers "is the recipe read/write-bound or compute-bound?". I/O is the
+    cumulative time of the data-model serialization calls — ``from_fits`` (reads,
+    in ``base._load_frame`` / ``base._load_calibration``) and ``to_fits`` (writes,
+    in ``base.save_master``) — which is where every disk read/write happens. Only
+    the *outermost* serialization frame is counted (a caller that is not itself a
+    serialization call), so an overridden or otherwise nested ``from_fits`` is not
+    double-counted. Compute is the remaining budget — including the image assembly
+    that ``_load_frame`` runs *after* the read. Returns ``io``/``compute`` seconds
+    and their ``total`` (the percentage base).
     """
-    io_s = compute_s = 0.0
-    for r in rows:
-        blob = f"{r['file']} {r['name']}"
-        if any(m in blob for m in NETWORK_MARKERS):
-            continue  # nondeterministic; excluded from the split
-        if any(m in blob for m in IO_MARKERS):
-            io_s += r["tottime"]
-        else:
-            compute_s += r["tottime"]
-    return {"io": io_s, "compute": compute_s, "total": (io_s + compute_s) or 1e-12}
+    total = stats.total_tt or 1e-12
+    io_s = 0.0
+    for (_fn, _ln, name), (_cc, _nc, _tt, ct, callers) in stats.stats.items():
+        if name not in SERIALIZATION_NAMES:
+            continue
+        if not callers:
+            io_s += ct  # top-level serialization call (no recorded caller)
+            continue
+        for (_cfn, _cln, cname), caller_vals in callers.items():
+            if cname not in SERIALIZATION_NAMES:
+                io_s += caller_vals[3]  # per-caller cumtime; outermost frames only
+    io_s = min(io_s, total)
+    return {"io": io_s, "compute": total - io_s, "total": total}
 
 
 def _is_quicklook(filename):
@@ -582,26 +582,43 @@ def _note(r):
 def _own_functions(modules):
     """Map (filename, first_lineno) -> function object for line-profiler lookup.
 
-    Walks module-level functions and class methods so a tentpole identified by
+    Walks module-level functions and class methods so a hotspot identified by
     cProfile (keyed on filename + def-line) can be bridged to the live function
-    object that ``line_profiler`` needs.
+    object that ``line_profiler`` needs. Methods are unwrapped to their underlying
+    function so ``@classmethod`` / ``@staticmethod`` and bound methods all register
+    — a classmethod surfaces from :func:`inspect.getmembers` as a *bound method*
+    (not a function), so a plain ``isfunction`` filter would silently drop it.
     """
     registry = {}
 
-    def add(func):
-        try:
-            code = func.__code__
-        except AttributeError:
-            return
-        registry[(code.co_filename, code.co_firstlineno)] = func
+    def add(obj):
+        # Unwrap descriptors/bound methods to the underlying function object —
+        # the descriptor itself has no __code__, so without this every classmethod
+        # (and property) would be silently dropped from the drill-down.
+        if isinstance(obj, (staticmethod, classmethod)):
+            obj = obj.__func__
+        elif inspect.ismethod(obj):  # bound method, e.g. a classmethod on the class
+            obj = obj.__func__
+        elif isinstance(obj, property):
+            obj = obj.fget
+        elif isinstance(obj, functools.cached_property):
+            obj = obj.func
+        code = getattr(obj, "__code__", None)
+        if code is not None:
+            registry[(code.co_filename, code.co_firstlineno)] = obj
 
     for mod in modules:
         for _, obj in inspect.getmembers(mod):
             if inspect.isfunction(obj):
                 add(obj)
             elif inspect.isclass(obj):
-                for _, meth in inspect.getmembers(obj, inspect.isfunction):
-                    add(meth)
+                # vars() exposes static/class methods as their raw descriptors;
+                # getmembers resolves them (classmethods -> bound methods). Scan
+                # both so every method kind is captured and unwrapped.
+                for member in list(vars(obj).values()):
+                    add(member)
+                for _, member in inspect.getmembers(obj):
+                    add(member)
     return registry
 
 
@@ -812,9 +829,10 @@ def _render_recipe(title, summary, split=None, quicklook=None):
         w("## I/O vs compute (whole run)")
         w("")
         w(
-            "Own time across every module (including I/O inside the per-frame "
-            "stacking, which the summary folds into the product rows). Network "
-            "excluded."
+            "I/O is the cumulative time of the data-model read/write calls "
+            "(`from_fits` / `to_fits`) — where every disk read and write happens; "
+            "compute is the rest of the budget (including the image assembly run "
+            "while loading each frame)."
         )
         w("")
         w("| category | % | s |")
@@ -917,7 +935,7 @@ def run_profile(
     if recipe:
         rows, _total = _rank(stats)
         summary = _recipe_summary(stats, call, _network_own(rows))
-        split = _io_compute_split(rows) if io_compute else None
+        split = _io_compute_split(stats) if io_compute else None
         quicklook = _quicklook_breakdown(stats)
         report = _render_recipe(title, summary, split, quicklook)
         print(report)
