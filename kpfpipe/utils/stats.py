@@ -1,7 +1,6 @@
 """Statistical helpers: outlier flagging, robust line fits, bad-pixel interpolation."""
 
 import numpy as np
-from astropy.stats import mad_std
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import (
     convolve,
@@ -105,20 +104,71 @@ def optimize_lsq(x, y, linemodel):
     return theta, rms
 
 
-def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
+def _mad_std(x, med=None, axis=None, keepdims=False):
+    """Lightweight NaN-aware drop-in for ``astropy.stats.mad_std``.
+
+    Returns the MAD scaled to a Gaussian sigma, ``MAD / norm.ppf(0.75)`` =
+    ``1.482602218505602 * median(|x - median(x)|)``, reduced over ``axis``
+    (ignoring NaNs). Adds two things astropy's ``mad_std`` lacks: a reusable
+    pre-computed median ``med`` (must be reduced over the same ``axis`` with
+    ``keepdims=True`` so it broadcasts against ``x``) to skip a redundant
+    median, and ``axis``/``keepdims`` control over the final MAD reduction
+    (matching ``np.median`` semantics).
     """
-    Flag outliers in an array above some sigma threshold
+    if med is None:
+        med = np.nanmedian(x, axis=axis, keepdims=True)
+    return 1.482602218505602 * np.nanmedian(
+        np.abs(x - med), axis=axis, keepdims=keepdims
+    )
+
+
+def _smooth_filter(x, size=None, *, axes=None):
+    """Median- then Gaussian-smooth `x`; a drop-in for chaining scipy's
+    ``median_filter`` and ``gaussian_filter``.
+
+    `size` sets both the median window and the Gaussian sigma; `axes` restricts
+    the smoothing to those axes (all axes when None), so the trend follows
+    structure along them without blurring across the others.
+    """
+    return gaussian_filter(
+        median_filter(x, size=size, axes=axes), sigma=size, axes=axes
+    )
+
+
+def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median", k=0.1):
+    """
+    Flag elements of `x` more than `sigma` robust deviations from their peers.
+
+    `axis` selects the axis along which each element is compared to its peers:
+
+    - ``method="median"`` computes the median and MAD *reducing over* `axis`,
+      so each element is judged against the others sharing its remaining
+      indices (e.g. ``axis=0`` on a (frame, row, col) cube flags, per pixel,
+      the frames that deviate across the stack).
+    - ``method="trend"`` smooths `x` *along* `axis` (see `_smooth_filter`) and
+      judges each element against that local trend, so it tolerates structure
+      that varies smoothly along `axis` (e.g. illumination along dispersion).
+
+    ``axis=None`` compares every element to a single global statistic.
+
+    For the median method a degenerate near-zero MAD (a slice whose values
+    agree across `axis`) is floored at ``k`` times the global MAD of `x`, so
+    trivial deviations are not amplified into spurious flags. With
+    ``axis=None`` the per-slice and global MAD coincide, so the floor is inert
+    and the result matches a plain ``mad_std`` threshold.
     """
     eps = 1e-12
 
     if method == "median":
-        med = np.nanmedian(x)
-        mad = mad_std(x, ignore_nan=True)
-        out = np.abs(x - med) / (mad + eps) > sigma
+        med = np.nanmedian(x, axis=axis, keepdims=True)
+        local_mad = _mad_std(x, med=med, axis=axis, keepdims=True)
+        global_mad = _mad_std(x)
+        denom = np.maximum(local_mad, k * global_mad) + eps
+        out = np.abs(x - med) / denom > sigma
 
     elif method == "trend":
-        trend = gaussian_filter(median_filter(x, size=kernel_size), sigma=kernel_size)
-        mad = mad_std(x - trend, ignore_nan=True)
+        trend = _smooth_filter(x, size=kernel_size, axes=axis)
+        mad = _mad_std(x - trend)
         out = np.abs(x - trend) / (mad + eps) > sigma
 
     else:
@@ -152,7 +202,9 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
         if fill_outside:
             remaining = bad & (weight == 0)
             if np.any(remaining):
-                _, indices = distance_transform_edt(remaining, return_indices=True)
+                indices = distance_transform_edt(
+                    remaining, return_distances=False, return_indices=True
+                )
                 data_interp[remaining] = data_interp[tuple(indices[:, remaining])]
 
     # Global linear interpolation is robust to clumps of bad pixels.
@@ -173,7 +225,9 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
         if fill_outside:
             nan_mask = np.isnan(data_interp)
             if np.any(nan_mask):
-                _, indices = distance_transform_edt(nan_mask, return_indices=True)
+                indices = distance_transform_edt(
+                    nan_mask, return_distances=False, return_indices=True
+                )
                 data_interp[nan_mask] = data_interp[tuple(indices[:, nan_mask])]
 
     else:

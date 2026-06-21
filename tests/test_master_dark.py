@@ -566,7 +566,7 @@ class TestPerPixelRejection:
         # outliers for the 2D bad-pixel pass in _clean_l1_arrays.
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.flag_outliers",
-            lambda arr, sigma, axis=0: (
+            lambda arr, sigma, axis=0, **kwargs: (
                 outlier if arr.ndim == 3 else np.zeros(arr.shape, dtype=bool)
             ),
         )
@@ -600,7 +600,7 @@ class TestPerPixelRejection:
         # No outliers in the approx pass; the exact pass clips via rate bounds.
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.flag_outliers",
-            lambda arr, sigma, axis=0: np.zeros(arr.shape, dtype=bool),
+            lambda arr, sigma, axis=0, **kwargs: np.zeros(arr.shape, dtype=bool),
         )
 
         dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
@@ -664,9 +664,10 @@ class TestDatacubeClipping:
 
 
 class TestCleanL1Arrays:
-    """_clean_l1_arrays interpolates masked-bad pixels, then recomputes the mask
-    from the repaired image (so a successfully-filled pixel is restored to good,
-    while pixels still bad in the final image are flagged)."""
+    """_clean_l1_arrays interpolates masked-bad pixels for the final IMG/SNR, but
+    the recomputed mask is the union of all rejections (across-stack, bad
+    SNR/IMG, FFI outliers): a repaired pixel keeps its filled value yet stays
+    flagged, preserving provenance."""
 
     @staticmethod
     def _dark():
@@ -678,9 +679,11 @@ class TestCleanL1Arrays:
     def _arrays(img, snr, mask):
         return {"GREEN_IMG": img, "GREEN_SNR": snr, "GREEN_MASK": mask}
 
-    def test_rejected_pixel_is_interpolated_and_restored(self):
+    def test_rejected_pixel_is_interpolated_but_stays_masked(self):
         # A pixel rejected by stacking (IMG/SNR = 0, mask False) is filled from
-        # its neighbors rather than left at zero; once repaired it reads as good.
+        # its neighbors rather than left at zero, but it stays flagged: the
+        # across-stack rejection is one of the three checks the final mask
+        # unions, so a repair does not restore it to good.
         img = np.full((5, 5), 10.0, dtype=np.float32)
         snr = np.full((5, 5), 20.0, dtype=np.float32)
         mask = np.ones((5, 5), dtype=bool)
@@ -690,7 +693,7 @@ class TestCleanL1Arrays:
 
         np.testing.assert_allclose(out["GREEN_IMG"][2, 2], 10.0, rtol=1e-5)
         np.testing.assert_allclose(out["GREEN_SNR"][2, 2], 20.0, rtol=1e-5)
-        assert bool(out["GREEN_MASK"][2, 2]) is True
+        assert bool(out["GREEN_MASK"][2, 2]) is False
 
     def test_final_image_outlier_is_flagged(self):
         # A pixel consistent across frames (so it survives stacking, mask True)

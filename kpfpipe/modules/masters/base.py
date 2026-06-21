@@ -477,6 +477,10 @@ class BaseMasterModule:
             stats[f"{chip}_CCD"] = {}
             stats[f"{chip}_VAR"] = {}
 
+            # Per-pixel frame-to-frame rejection: at each pixel, flag the frames
+            # whose rate deviates from the across-frame median (axis=0 is the
+            # frame axis). A frame is rejected if it is an outlier in either the
+            # counts rate or the variance rate.
             out = flag_outliers(
                 data_cube[f"{chip}_CCD"] / T, sigma, axis=0
             ) | flag_outliers(data_cube[f"{chip}_VAR"] / T, sigma, axis=0)
@@ -651,7 +655,7 @@ class BaseMasterModule:
 
         return exact_stats, zero_exptime
 
-    def _clean_l1_arrays(self, l1_arrays, sigma):
+    def _clean_l1_arrays(self, l1_arrays, sigma, cal_type=None):
         """
         Interpolate bad pixels and recompute the bad-pixel mask per chip.
 
@@ -661,6 +665,20 @@ class BaseMasterModule:
             Per-chip '{chip}_IMG/_SNR/_MASK' arrays from `stack_frames`.
         sigma : float
             Sigma threshold for the final outlier pass on the combined image.
+        cal_type : {'bias', 'dark', 'flat', None}, optional
+            Selects the final outlier-flagging mode. The detector is illuminated
+            only for flats, so each cal type compares a pixel to a different
+            notion of "normal" (in the assembled image dispersion runs along
+            axis=1, cross-dispersion along axis=0):
+
+            - 'bias' : per-column median (axis=0) -- each pixel is judged against
+              its own cross-dispersion column, removing the CCD's column-wise
+              bias structure.
+            - 'dark' : global median (no illumination or column structure to
+              preserve). `None` falls back to this conservative mode.
+            - 'flat' : residual deviation from the smooth illumination trend
+              along dispersion (axis=1), tolerating the blaze while catching
+              pixels that depart from it.
 
         Returns
         -------
@@ -673,13 +691,28 @@ class BaseMasterModule:
             snr = l1_arrays[f"{chip}_SNR"]
             mask = l1_arrays[f"{chip}_MASK"]
 
-            l1_arrays[f"{chip}_IMG"] = interpolate_bad_pixels(img, mask)
-            l1_arrays[f"{chip}_SNR"] = interpolate_bad_pixels(snr, mask)
+            img_fixed = interpolate_bad_pixels(img, mask)
 
-            out = flag_outliers(l1_arrays[f"{chip}_IMG"], sigma, axis=0)
-            bad = (l1_arrays[f"{chip}_SNR"] <= 0) | (l1_arrays[f"{chip}_IMG"] == 0)
+            if cal_type == "bias":
+                out = flag_outliers(img_fixed, sigma, axis=0, method="median")
+            elif cal_type == "flat":
+                out = flag_outliers(
+                    img_fixed, sigma, axis=1, kernel_size=32, method="trend"
+                )
+            elif cal_type in ("dark", None):
+                out = flag_outliers(img_fixed, sigma, method="median")
+            else:
+                raise ValueError(
+                    f"unknown cal_type {cal_type!r}; expected 'bias', 'dark', or 'flat'"
+                )
 
-            l1_arrays[f"{chip}_MASK"] = ~(bad | out)
+            bad = (img == 0) | (snr <= 0)
+
+            # TODO: revisit whether to interpolate over bad pixels
+            good = mask & ~(bad | out)
+            l1_arrays[f"{chip}_MASK"] = good
+            l1_arrays[f"{chip}_IMG"] = interpolate_bad_pixels(img, good)
+            l1_arrays[f"{chip}_SNR"] = interpolate_bad_pixels(snr, good)
 
         return l1_arrays
 
@@ -745,7 +778,9 @@ class BaseMasterModule:
     # Public methods
     # ------------------------------------------------------------------
 
-    def stack_frames(self, l0_file_list=None, nstream=None, sigma=None, verbose=True):
+    def stack_frames(
+        self, l0_file_list=None, nstream=None, sigma=None, verbose=True, cal_type=None
+    ):
         """
         Stack full-frame images to produce masters L1.
 
@@ -760,6 +795,10 @@ class BaseMasterModule:
         verbose : bool, optional
             If True (default), emit per-frame progress prints and load
             failure warnings during stacking.
+        cal_type : {'bias', 'dark', 'flat', None}, optional
+            Calibration type, forwarded to `_clean_l1_arrays` to select the
+            final outlier-flagging mode. Defaults to the conservative
+            global-median mode.
 
         Returns
         -------
@@ -842,7 +881,7 @@ class BaseMasterModule:
             l1_arrays[f"{chip}_MASK"] = good
 
         # Interpolate bad pixels and recompute the bad-pixel mask before return.
-        return self._clean_l1_arrays(l1_arrays, sigma)
+        return self._clean_l1_arrays(l1_arrays, sigma, cal_type=cal_type)
 
     def save_master(self, level, path, *, overwrite=False):
         """
