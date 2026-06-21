@@ -11,15 +11,15 @@ from scipy.ndimage import (
 from scipy.optimize import leastsq
 
 
-def gaussian_dist(theta, x):
+def _gaussian_dist(theta, x):
     """Gaussian model at `x` for theta = [b, a, mu, log_sigma]."""
     b, a, mu, log_sigma = theta
     sigma = np.exp(log_sigma)
     return b + a * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
-def gaussian_jac(theta, x):
-    """Analytic Jacobian of `gaussian_dist` w.r.t. theta; shape (x.size, 4)."""
+def _gaussian_jac(theta, x):
+    """Analytic Jacobian of `_gaussian_dist` w.r.t. theta; shape (x.size, 4)."""
     b, a, mu, log_sigma = theta
     sigma = np.exp(log_sigma)
     dx = x - mu
@@ -34,7 +34,7 @@ def gaussian_jac(theta, x):
     return J
 
 
-def gaussian_theta0_generator(x, y):
+def _gaussian_theta0_generator(x, y):
     """Initial-guess theta = [b, a, mu, log_sigma] for a Gaussian fit to (x, y)."""
     b0 = 0.25 * np.sum(y[:2] + y[-2:])
     a0 = np.max(y) - b0
@@ -44,7 +44,7 @@ def gaussian_theta0_generator(x, y):
     return [b0, a0, mu0, np.log(sigma0)]
 
 
-def gaussian_untransform(theta):
+def _gaussian_untransform(theta):
     """Map fitted [b, a, mu, log_sigma] back to [b, a, mu, sigma]."""
     b, a, mu, log_sigma = theta
     return np.array([b, a, mu, np.exp(log_sigma)])
@@ -54,10 +54,10 @@ def gaussian_untransform(theta):
 # maps the fitted parameters back to reported ones (identity if not needed).
 _FUNCTIONS = {
     "gaussian": (
-        gaussian_dist,
-        gaussian_jac,
-        gaussian_theta0_generator,
-        gaussian_untransform,
+        _gaussian_dist,
+        _gaussian_jac,
+        _gaussian_theta0_generator,
+        _gaussian_untransform,
     ),
 }
 

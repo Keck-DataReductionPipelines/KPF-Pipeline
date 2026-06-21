@@ -317,7 +317,7 @@ class WLS(BaseMasterModule):
             theta, _ = optimize_lsq(x, y, lineprofile)
 
             if lineprofile == "gaussian":
-                # gaussian_dist theta convention: [b, a, mu, sigma]
+                # _gaussian_dist theta convention: [b, a, mu, sigma]
                 lines["pix"][i] = theta[2]
                 lines["std"][i] = theta[3]
                 lines["amp"][i] = theta[1]
