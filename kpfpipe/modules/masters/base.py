@@ -18,9 +18,6 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import build_master_path_from_fits_header
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
-# TODO: throw out first frame in stack?
-# TODO: use start, middle, end of stack for initial datacube
-
 
 class BaseMasterModule:
     """
@@ -708,7 +705,6 @@ class BaseMasterModule:
 
             bad = (img == 0) | (snr <= 0)
 
-            # TODO: revisit whether to interpolate over bad pixels
             good = mask & ~(bad | out)
             l1_arrays[f"{chip}_MASK"] = good
             l1_arrays[f"{chip}_IMG"] = interpolate_bad_pixels(img, good)
@@ -840,7 +836,6 @@ class BaseMasterModule:
                 l0_file_list, nstream - 1, sigma, verbose=verbose
             )
 
-        # TODO: add check that nframe is consistent between CCD and VAR
         for chip in self.chips:
             if np.any(stats[f"{chip}_CCD"]["nframe"] != stats[f"{chip}_VAR"]["nframe"]):
                 raise ValueError(
