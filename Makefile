@@ -26,7 +26,7 @@ test-serial:
 # NOT named test_*.py, so pytest never collects them and `make test` stays fast.
 # They run on the real frames in tests/testdata and skip cleanly when absent.
 # Auto-generated reports land in tests/profiling/reports/ (gitignored). See the
-# "## Profiling" section of CLAUDE.md; curated analysis lives in PROFILING.md.
+# "## Profiling" section of CLAUDE.md.
 # ---------------------------------------------------------------------------
 
 # Per-module: `make profile-radial_velocity`, `make profile-master_wls`, etc.

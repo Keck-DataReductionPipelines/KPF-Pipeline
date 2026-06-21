@@ -122,14 +122,14 @@ which like `tests/_masters.py` is *not* a `test_*.py` file so pytest never
 collects it):
 
 - **Two passes per harness.** Pass 1 runs the target under `cProfile` and ranks
-  *every* function call by own time; pass 2 drills into each **tentpole** with
-  `line_profiler` for a line-by-line breakdown.
-- **Multi-tentpole detection.** Any own-code function (or module) over
-  `TENTPOLE_FRACTION` (25%) of the own-time budget is a tentpole — so 2-3
-  co-dominant hotspots are all surfaced, not just the single biggest (which is
-  always included). Lower thresholds (`FLAG_FRACTION`, `FLAG_ABS_SECONDS`,
-  `MODULE_FLAG_FRACTION`) drive the auto-generated flags. Tune these constants in
-  `tests/_profiling.py`.
+  *every* function call by own time (the report lists those over
+  `TOP_FUNCTION_MIN_FRACTION`, 2%); pass 2 drills into each **tentpole** with
+  `line_profiler` for a line-by-line breakdown (docstring lines are stripped).
+- **Multi-tentpole detection.** Any own-code function over `TENTPOLE_FRACTION`
+  (25%) of the own-time budget is a tentpole — so 2-3 co-dominant hotspots are all
+  surfaced, not just the single biggest (which is always included). Lower
+  thresholds (`FLAG_FRACTION`, `FLAG_ABS_SECONDS`) drive the per-module report's
+  **Recommended actions**. Tune these constants in `tests/_profiling.py`.
 - **Structure.** The profiling files mirror the test files **1-to-1**
   (`test_<x>.py` ↔ `profile_<x>.py`). Two end-to-end recipe harnesses —
   `profile_science_recipe.py` and `profile_masters_recipe.py` (optimized
@@ -144,12 +144,8 @@ collects it):
 - **Reports.** Each run prints a human-readable summary to stdout *and* writes a
   Markdown report to `tests/profiling/reports/` (gitignored, regenerable). The
   reports are fully auto-generated and self-contained — the suite runs with no
-  manual input.
-- **Curated analysis: `PROFILING.md`** (repo root, committed). The single source
-  of ranked, concrete recommendations — expected gain × refactor ease × bug risk,
-  including explicit "no action needed" verdicts — authored from a real run.
-  **When the suite or the pipeline's performance profile changes, regenerate the
-  reports and update `PROFILING.md` from the new numbers in the same change.**
+  manual input. **When the suite or the pipeline's performance profile changes,
+  regenerate the reports.**
 
 ## Architecture
 
