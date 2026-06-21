@@ -29,7 +29,7 @@ def _gaussian_jac(theta, x):
     J[:, 0] = 1.0
     J[:, 1] = exp_term
     J[:, 2] = a * exp_term * dx / sigma**2
-    J[:, 3] = a * exp_term * dx**2 / sigma**2
+    J[:, 3] = a * exp_term * dx**2 / sigma**2  # s**2 (not s**3) is chain-rule correct
 
     return J
 
