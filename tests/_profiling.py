@@ -9,15 +9,16 @@ Strategy
 --------
 We only care about the most critical bottlenecks ("tentpoles"). Each harness:
 
-1. Runs the target under :mod:`cProfile` (pass 1) to rank *every* function call
-   by own time (``tottime``) and cumulative time (``cumtime``).
-2. Detects the **tentpoles** — every own-code function contributing more than
-   :data:`TENTPOLE_FRACTION` of the own-time budget (so 1-3 dominant hotspots,
-   not just the single biggest, which is always included).
-3. Drills into each tentpole line-by-line with :mod:`line_profiler` (pass 2).
+1. Runs the target under :mod:`cProfile` (pass 1) and charges every function's own
+   time to the nearest enclosing **KPF method** (attribution), so the ranking
+   points at the method to optimize rather than the library leaf it bottoms out in.
+2. Flags the **hotspots** — KPF methods with >= :data:`HOTSPOT_FRACTION` attributed
+   time AND >= :data:`HOTSPOT_MIN_SECONDS`. "No hotspot" is a fine outcome.
+3. Drills into each hotspot method line-by-line with :mod:`line_profiler` (pass 2)
+   to show where inside it the time goes.
 4. Emits a human-readable report to stdout *and* to a gitignored Markdown file
-   under :data:`REPORTS_DIR`, auto-flagging anything over the thresholds with a
-   generic, rule-based optimization note.
+   under :data:`REPORTS_DIR`, with a generic, rule-based optimization note per
+   hotspot.
 
 Profiling is meaningful only at realistic array sizes, so the harnesses run on
 the real (gitignored) frames in ``tests/testdata`` and skip cleanly when those
@@ -49,9 +50,10 @@ MASTERS_DATECODE = "20240405"
 
 # --- thresholds (fractions are of the total own-time budget) ----------------
 
-TENTPOLE_FRACTION = 0.25  # > this share of own time -> a "tentpole"
-FLAG_FRACTION = 0.05  # >= this share of own time -> flagged
-FLAG_ABS_SECONDS = 1.0  # >= this many seconds of own time -> flagged
+# A function is a "hotspot" (a tentpole to drill into, and a Recommended action)
+# when it clears BOTH of these — a dominant share AND a non-trivial absolute cost.
+HOTSPOT_FRACTION = 0.20  # >= this share of own time AND ...
+HOTSPOT_MIN_SECONDS = 1.0  # ... >= this many seconds of own time -> a hotspot
 TOP_FUNCTION_MIN_FRACTION = 0.02  # >= this share of own time -> listed in the ranking
 
 # --- recipe-report classification -------------------------------------------
@@ -291,21 +293,98 @@ def _rank(stats):
     return rows, total
 
 
-def _tentpoles(rows):
-    """Own-code functions over the tentpole threshold; always at least one."""
-    own = [r for r in rows if r["own"]]
-    tps = [r for r in own if r["tot_frac"] > TENTPOLE_FRACTION]
-    if not tps and own:
-        tps = [own[0]]  # always surface the single tallest own-code hotspot
-    return tps
+def _kpf_attributed(stats):
+    """Charge each function's own time to the nearest enclosing KPF method.
+
+    cProfile aggregates by function, so a bottleneck surfaces as a library *leaf*
+    (e.g. ``numpy.partition``) with no hint of *which* KPF method drives it. To
+    locate the bottleneck in our own code, push every non-KPF function's own time
+    up the caller graph — weighted by per-caller cumulative time — until it lands
+    on a KPF method, which intercepts it. A KPF method therefore keeps its own
+    Python time *plus* the library/builtin time it directly drives; nested KPF
+    methods each get their own row, so the charge stops at the nearest one.
+
+    Returns ``{kpf_func_key: attributed_seconds}`` (``func_key`` is cProfile's
+    ``(filename, lineno, funcname)``).
+    """
+    raw = stats.stats  # {func: (cc, nc, tt, ct, {caller: (cc, nc, tt, ct)})}
+    cache = {}
+
+    def lift(func, stack):
+        """Distribution ``{kpf_func: weight}`` of ``func``'s own time onto methods."""
+        if _is_kpf_module(func[0]):
+            return {func: 1.0}  # a KPF method is its own nearest ancestor
+        if func in cache:
+            return cache[func]
+        if func in stack:  # recursion cycle: break it (this weight escapes)
+            return {}
+        entry = raw.get(func)
+        if entry is None:
+            return {}
+        callers = entry[4]
+        # Weight callers by the cumtime each contributes; fall back to call counts.
+        weights = {c: v[3] for c, v in callers.items() if v[3] > 0}
+        if not weights:
+            weights = {c: v[1] for c, v in callers.items() if v[1] > 0}
+        tot = sum(weights.values())
+        if tot <= 0:
+            return {}  # no caller info -> unattributable (weight escapes)
+        dist = {}
+        sub_stack = stack | {func}
+        for c, wt in weights.items():
+            frac = wt / tot
+            for m, mw in lift(c, sub_stack).items():
+                dist[m] = dist.get(m, 0.0) + mw * frac
+        cache[func] = dist
+        return dist
+
+    attributed = {}
+    empty = frozenset()
+    for func, vals in raw.items():
+        own = vals[2]  # tottime
+        if own <= 0:
+            continue
+        for m, wt in lift(func, empty).items():
+            attributed[m] = attributed.get(m, 0.0) + own * wt
+    return attributed
+
+
+def _kpf_rows(stats):
+    """KPF-method rows ranked by attributed time (see :func:`_kpf_attributed`)."""
+    total = stats.total_tt or 1e-12
+    raw = stats.stats
+    rows = []
+    for func, secs in _kpf_attributed(stats).items():
+        fn, ln, name = func
+        _cc, nc, tt, ct, _callers = raw[func]
+        rows.append(
+            {
+                "file": fn,
+                "line": ln,
+                "name": name,
+                "ncalls": nc,
+                "own_s": tt,
+                "cumtime": ct,
+                "attr_s": secs,
+                "attr_frac": secs / total,
+            }
+        )
+    rows.sort(key=lambda r: r["attr_s"], reverse=True)
+    return rows, total
+
+
+def _is_hotspot(r):
+    """Unified selection rule for the drill-down and Recommended actions.
+
+    A KPF method is a hotspot when its **attributed** time is >= both
+    :data:`HOTSPOT_FRACTION` of the budget and :data:`HOTSPOT_MIN_SECONDS`.
+    """
+    return r["attr_frac"] >= HOTSPOT_FRACTION and r["attr_s"] >= HOTSPOT_MIN_SECONDS
 
 
 def _flags(rows):
-    return [
-        r
-        for r in rows
-        if r["tot_frac"] >= FLAG_FRACTION and r["tottime"] >= FLAG_ABS_SECONDS
-    ]
+    """Hotspot KPF methods — both the Recommended actions and the drill-down set."""
+    return [r for r in rows if _is_hotspot(r)]
 
 
 def _network_own(rows):
@@ -485,17 +564,19 @@ def _recipe_summary(stats, call, network_own):
 
 
 def _note(r):
-    """Generic, rule-based optimization hint for a flagged row."""
-    if not r["own"]:
-        return "library/C call — reduce call count or use a better-batched API"
+    """Generic, rule-based optimization hint for a flagged KPF method."""
+    # Most of the cost is in the library/builtin calls this method makes.
+    if r["attr_s"] - r["own_s"] >= 0.5 * r["attr_s"]:
+        return (
+            "cost is mostly in library calls it makes — see the drill-down for the "
+            "hot line; cut the call count or batch the array op"
+        )
     if r["ncalls"] >= 100_000:
         return "very high call count — push the Python loop into a numpy vectorized op"
-    if r["tot_frac"] > TENTPOLE_FRACTION:
-        return (
-            "dominant own-time hotspot — vectorize / Numba-JIT the inner loop "
-            "or cache repeated work"
-        )
-    return "notable own-time — check for redundant computation or vectorization"
+    return (
+        "own-time hotspot in Python — vectorize / Numba-JIT the inner loop "
+        "or cache repeated work"
+    )
 
 
 def _own_functions(modules):
@@ -585,8 +666,7 @@ def _line_drilldown(call, args, kwargs, funcs):
 
 
 def _fmt_func(r):
-    where = _module_label(r["file"]) if r["own"] else r["file"].split("/")[-1]
-    return f"`{where}:{r['name']}`"
+    return f"`{_module_label(r['file'])}:{r['name']}`"
 
 
 def _render(title, total, rows, flags, line_text):
@@ -599,45 +679,55 @@ def _render(title, total, rows, flags, line_text):
     w(f"_Generated {ts} • total profiled own-time budget: {total:.3f} s_")
     w("")
     w(
-        "> Auto-generated by `tests/_profiling.py`. The line-level drill-down "
-        f"covers the tentpoles (own-code functions over {TENTPOLE_FRACTION:.0%} "
-        "of the own-time budget)."
+        "> Auto-generated by `tests/_profiling.py`. Each KPF method is charged the "
+        "own time of the library/builtin calls it drives (**attributed time**), so "
+        "the ranking points at the method to optimize rather than the library leaf "
+        f"it bottoms out in. A **hotspot** has ≥ {HOTSPOT_FRACTION:.0%} attributed "
+        f"time and ≥ {HOTSPOT_MIN_SECONDS:.0f} s; the line-level drill-down shows "
+        "where inside it the time goes."
     )
     w("")
 
     # Recommended actions --------------------------------------------------
     w(
-        f"## Recommended actions (≥ {FLAG_FRACTION:.0%} own time "
-        f"and ≥ {FLAG_ABS_SECONDS:.0f} s)"
+        f"## Recommended actions (≥ {HOTSPOT_FRACTION:.0%} attributed time "
+        f"and ≥ {HOTSPOT_MIN_SECONDS:.0f} s)"
     )
     w("")
     if flags:
         for r in flags:
             w(
-                f"- {_fmt_func(r)} — {r['tot_frac']:.1%} "
-                f"({r['tottime']:.3f} s): {_note(r)}"
+                f"- {_fmt_func(r)} — {r['attr_frac']:.1%} "
+                f"({r['attr_s']:.3f} s): {_note(r)}"
             )
     else:
         w("_Nothing over threshold — **no action needed**._")
     w("")
 
-    # Function ranking -----------------------------------------------------
-    w(f"## Functions ≥ {TOP_FUNCTION_MIN_FRACTION:.0%} own time")
+    # KPF-method ranking ---------------------------------------------------
+    w(f"## KPF methods ≥ {TOP_FUNCTION_MIN_FRACTION:.0%} of runtime (attributed)")
     w("")
-    w("| function | own % | own s | cum s | calls |")
+    w("| method | attributed % | attributed s | own s | calls |")
     w("|---|---:|---:|---:|---:|")
     for r in rows:
-        if r["tot_frac"] < TOP_FUNCTION_MIN_FRACTION:
+        if r["attr_frac"] < TOP_FUNCTION_MIN_FRACTION:
             continue
         w(
-            f"| {_fmt_func(r)} | {r['tot_frac']:.1%} | {r['tottime']:.3f} | "
-            f"{r['cumtime']:.3f} | {r['ncalls']} |"
+            f"| {_fmt_func(r)} | {r['attr_frac']:.1%} | {r['attr_s']:.3f} | "
+            f"{r['own_s']:.3f} | {r['ncalls']} |"
         )
+    w("")
+    covered = sum(r["attr_s"] for r in rows)
+    w(
+        f"_KPF methods account for {covered:.3f} s ({covered / total:.0%}) of the "
+        f"{total:.3f} s budget; the rest is library/driver code with no KPF caller "
+        "(e.g. test setup, I/O)._"
+    )
     w("")
 
     # Line drill-down ------------------------------------------------------
     if line_text:
-        w("## Line-level drill-down (tentpoles)")
+        w("## Line-level drill-down (hotspot methods)")
         w("")
         w("```")
         w(line_text.rstrip())
@@ -823,9 +913,9 @@ def run_profile(
     pr.disable()
 
     stats = pstats.Stats(pr)
-    rows, total = _rank(stats)
 
     if recipe:
+        rows, _total = _rank(stats)
         summary = _recipe_summary(stats, call, _network_own(rows))
         split = _io_compute_split(rows) if io_compute else None
         quicklook = _quicklook_breakdown(stats)
@@ -833,20 +923,21 @@ def run_profile(
         print(report)
         return _write_report(report, report_name)
 
-    tentpoles = _tentpoles(rows)
+    # Per-module report: attribute time to the KPF method that drives it.
+    rows, total = _kpf_rows(stats)
     flags = _flags(rows)
 
-    # Pass 2: line-level drill-down of each tentpole.
+    # Pass 2: line-level drill-down of each hotspot method.
     line_text = ""
-    if line_pass:
+    if line_pass and flags:
         registry = _own_functions(candidate_modules)
-        tp_funcs = [
+        hot_funcs = [
             registry[(r["file"], r["line"])]
-            for r in tentpoles
+            for r in flags
             if (r["file"], r["line"]) in registry
         ]
-        if tp_funcs:
-            line_text = _line_drilldown(call, _as_args(setup()), kwargs, tp_funcs)
+        if hot_funcs:
+            line_text = _line_drilldown(call, _as_args(setup()), kwargs, hot_funcs)
 
     report = _render(title, total, rows, flags, line_text)
     print(report)

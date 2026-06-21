@@ -121,15 +121,22 @@ conda run -n kpfpipe python -m tests.profile_radial_velocity   # equivalent
 which like `tests/_masters.py` is *not* a `test_*.py` file so pytest never
 collects it):
 
-- **Two passes per harness.** Pass 1 runs the target under `cProfile` and ranks
-  *every* function call by own time (the report lists those over
-  `TOP_FUNCTION_MIN_FRACTION`, 2%); pass 2 drills into each **tentpole** with
-  `line_profiler` for a line-by-line breakdown (docstring lines are stripped).
-- **Multi-tentpole detection.** Any own-code function over `TENTPOLE_FRACTION`
-  (25%) of the own-time budget is a tentpole — so 2-3 co-dominant hotspots are all
-  surfaced, not just the single biggest (which is always included). Lower
-  thresholds (`FLAG_FRACTION`, `FLAG_ABS_SECONDS`) drive the per-module report's
-  **Recommended actions**. Tune these constants in `tests/_profiling.py`.
+- **Attribute to KPF methods.** Pass 1 runs the target under `cProfile`, then
+  charges each library/builtin leaf's own time *up the caller graph to the nearest
+  enclosing KPF method* (`_kpf_attributed`). This is the key move: a bottleneck
+  like `numpy.partition` shows up against the KPF method that drives it (e.g.
+  `utils/stats.py:flag_outliers`), not as an un-actionable library leaf. The
+  per-module report ranks KPF methods by this **attributed time** (listing those
+  over `TOP_FUNCTION_MIN_FRACTION`, 2%); pass 2 drills into each hotspot method
+  with `line_profiler` to show *where inside it* the time goes (docstring lines
+  stripped).
+- **Unified hotspot rule.** A KPF method is a **hotspot** when its attributed time
+  is `HOTSPOT_FRACTION` (20%) of the budget **and** `HOTSPOT_MIN_SECONDS` (1 s) — a
+  dominant share *and* a non-trivial absolute cost. The same set drives both the
+  drill-down and the **Recommended actions**. No hotspot ⇒ no drill-down and "no
+  action needed", which is a fine outcome. Tune these constants in
+  `tests/_profiling.py`. (The two recipe reports use a different, stage-level
+  wall-clock partition — attribution applies to the per-module reports.)
 - **Structure.** The profiling files mirror the test files **1-to-1**
   (`test_<x>.py` ↔ `profile_<x>.py`). Two end-to-end recipe harnesses —
   `profile_science_recipe.py` and `profile_masters_recipe.py` (optimized
