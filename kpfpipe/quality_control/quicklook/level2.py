@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
+from kpfpipe.quality_control.quicklook._save_png import save_png
+
 _DPI = 200
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 _SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
@@ -152,7 +154,7 @@ class PlotL2:
             path = os.path.join(
                 self.output_dir, f"{prefix}L2_{plot_name}_{chip.lower()}_zoomable.png"
             )
-            fig.savefig(path, dpi=_DPI, facecolor="w")
+            save_png(fig, path, dpi=_DPI, compress_level=6)
         return fig
 
     # ------------------------------------------------------------------

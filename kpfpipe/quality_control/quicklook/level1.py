@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from kpfpipe.modules.image_assembly import RN_KEYS
+from kpfpipe.quality_control.quicklook._save_png import save_png
 
 
 def _unwrap(val):
@@ -143,7 +144,7 @@ class PlotL1:
                 self.output_dir,
                 f"{self.obs_id}_L1_image_{chip.lower()}_zoomable.png",
             )
-            fig.savefig(fig_path, dpi=600, facecolor="w")
+            save_png(fig, fig_path, dpi=600, compress_level=1)
 
         return fig
 
