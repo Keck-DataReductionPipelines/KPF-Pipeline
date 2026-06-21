@@ -36,7 +36,7 @@ MASTERS_MODULES = [m_base, m_bias, m_dark, m_wls]
 
 
 def _load_recipe():
-    path = Path(__file__).parent.parent / "recipes" / "kpf_drp_masters.py"
+    path = Path(__file__).parent.parent.parent / "recipes" / "kpf_drp_masters.py"
     spec = importlib.util.spec_from_file_location("kpf_drp_masters", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

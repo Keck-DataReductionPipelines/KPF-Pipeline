@@ -41,7 +41,7 @@ PIPELINE_MODULES = [
 
 
 def _load_recipe():
-    path = Path(__file__).parent.parent / "recipes" / "kpf_drp_science.py"
+    path = Path(__file__).parent.parent.parent / "recipes" / "kpf_drp_science.py"
     spec = importlib.util.spec_from_file_location("kpf_drp_science", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
