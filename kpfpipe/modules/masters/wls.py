@@ -200,7 +200,7 @@ class WLS(BaseMasterModule):
         failure = 0
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(fn, ncache=0, verbose=verbose)
+            l1_obj, success = self._load_frame(fn, cache=False, verbose=verbose)
 
             if not success:
                 failure += 1

@@ -151,7 +151,7 @@ class TestProcessIndividualFrames:
     def test_returns_l2_objects_for_all_frames(self, mock_pipeline, monkeypatch):
         wls = WLS(FILE_LIST)
         monkeypatch.setattr(
-            wls, "_load_frame", lambda fn, ncache=0, **kwargs: (MockL1(), True)
+            wls, "_load_frame", lambda fn, cache=False, **kwargs: (MockL1(), True)
         )
         result = wls._process_stack_l0_to_l2()
         assert len(result) == len(FILE_LIST)
@@ -160,7 +160,7 @@ class TestProcessIndividualFrames:
     def test_file_list_override(self, mock_pipeline, monkeypatch):
         wls = WLS(FILE_LIST)
         monkeypatch.setattr(
-            wls, "_load_frame", lambda fn, ncache=0, **kwargs: (MockL1(), True)
+            wls, "_load_frame", lambda fn, cache=False, **kwargs: (MockL1(), True)
         )
         result = wls._process_stack_l0_to_l2(l0_file_list=FILE_LIST[:3])
         assert len(result) == 3
@@ -168,7 +168,7 @@ class TestProcessIndividualFrames:
     def test_raises_when_failures_exceed_threshold(self, monkeypatch):
         wls = WLS(FILE_LIST)
         monkeypatch.setattr(
-            wls, "_load_frame", lambda fn, ncache=0, **kwargs: (None, False)
+            wls, "_load_frame", lambda fn, cache=False, **kwargs: (None, False)
         )
         with pytest.raises(ValueError, match="20%"):
             wls._process_stack_l0_to_l2()
@@ -178,7 +178,7 @@ class TestProcessIndividualFrames:
         calls = iter([(None, False)] + [(MockL1(), True)] * 7)
         wls = WLS(FILE_LIST)
         monkeypatch.setattr(
-            wls, "_load_frame", lambda fn, ncache=0, **kwargs: next(calls)
+            wls, "_load_frame", lambda fn, cache=False, **kwargs: next(calls)
         )
         result = wls._process_stack_l0_to_l2()
         assert len(result) == 7
@@ -197,7 +197,7 @@ def mock_make_master_l2(monkeypatch):
     synthetic W and coefficient arrays with chip-correct shapes.
     """
     monkeypatch.setattr(
-        WLS, "_load_frame", lambda self, fn, ncache=0, **kwargs: (MockL1(), True)
+        WLS, "_load_frame", lambda self, fn, cache=False, **kwargs: (MockL1(), True)
     )
     monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kwargs: l1)
     monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kwargs: MockL2())

@@ -45,7 +45,6 @@ class BaseMasterModule:
     # image_processing._DEFAULTS.
     _DEFAULTS = {
         **DEFAULTS,
-        "nframe_stream": 6,
         "stack_sigma": 5.0,
         "bias": True,
         "dark": True,
@@ -183,7 +182,7 @@ class BaseMasterModule:
             self._master_paths[cal_type] = path
         return self._master_ml1[cal_type]
 
-    def _load_frame(self, fn, ncache=None, exptime_tolerance=0.1, verbose=True):
+    def _load_frame(self, fn, cache, exptime_tolerance=0.1, verbose=True):
         """
         Load an L0 file and perform image assembly to produce an L1 object.
 
@@ -191,8 +190,11 @@ class BaseMasterModule:
         ----------
         fn : str
             Path to L0 FITS file.
-        ncache : int, optional
-            Maximum number of L1 objects to retain in internal cache.
+        cache : bool
+            If True, retain the assembled L1 in the internal cache for reuse.
+            The caller decides which frames are worth caching (see the streaming
+            stats path). A frame already cached is returned from the cache
+            regardless of this flag.
         exptime_tolerance : float
             Maximum allowed excess of elapsed time over requested exposure time,
             in seconds (default = 0.1).
@@ -211,15 +213,12 @@ class BaseMasterModule:
 
         Notes
         -----
-        Successfully processed frames may be cached to reduce redundant I/O and
-        recomputation. Cache size is limited by `ncache`, which defaults to
-        `nframe_stream - 1`.
+        When `cache=True`, the successfully processed frame is retained to
+        reduce redundant I/O and recomputation. The streaming stats path caches
+        its approximation-pass frames so the exact pass reuses them.
         """
         if verbose:
             print(f"loading {fn}")
-
-        if ncache is None:
-            ncache = self.nframe_stream - 1
 
         success = True
         failure = False
@@ -232,7 +231,7 @@ class BaseMasterModule:
                 l0_obj = KPF0.from_fits(fn)
                 l1_obj = ImageAssembly(l0_obj).perform()
 
-                if len(self._l1_obj_cache) < ncache:
+                if cache:
                     self._l1_obj_cache[fn] = l1_obj
 
             except (FileNotFoundError, OSError) as e:
@@ -360,7 +359,7 @@ class BaseMasterModule:
     # ------------------------------------------------------------------
 
     def _compute_stats_from_datacube(
-        self, l0_file_list=None, nframe=None, sigma=None, verbose=True
+        self, l0_file_list=None, *, sigma=None, verbose=True, cache=False
     ):
         """
         Compute stacked statistics using an in-memory data cube.
@@ -368,14 +367,18 @@ class BaseMasterModule:
         Parameters
         ----------
         l0_file_list : list of str, optional
-            List of L0 FITS filenames to process.
-        nframe : int, optional
-            Maximum number of successfully loaded frames to include.
+            List of L0 FITS filenames to process. The full list is stacked;
+            the caller is responsible for passing the desired subset (e.g. the
+            streaming path passes only its approximation-pass frames).
         sigma : float, optional
             Sigma threshold for outlier rejection across frames.
         verbose : bool, optional
             If True (default), emit per-frame progress prints and load
             failure warnings from `_load_frame`.
+        cache : bool, optional
+            If True, cache each loaded frame so a later pass (the streaming
+            exact pass) can reuse it without re-reading from disk. Defaults to
+            False, since the standalone datacube path reads each frame once.
 
         Returns
         -------
@@ -404,12 +407,10 @@ class BaseMasterModule:
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if nframe is None:
-            nframe = self.nframe_stream - 1
         if sigma is None:
             sigma = self.stack_sigma
 
-        nframe = np.min([nframe, len(l0_file_list)])
+        nframe = len(l0_file_list)
 
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
@@ -428,10 +429,7 @@ class BaseMasterModule:
         failure = 0
 
         for fn in l0_file_list:
-            if i >= nframe:
-                break
-
-            l1_obj, success = self._load_frame(fn, verbose=verbose)
+            l1_obj, success = self._load_frame(fn, cache=cache, verbose=verbose)
 
             if not success:
                 failure += 1
@@ -517,7 +515,7 @@ class BaseMasterModule:
         return stats, zero_exptime
 
     def _compute_stats_from_stream(
-        self, l0_file_list=None, ndirect=None, sigma=None, verbose=True
+        self, l0_file_list=None, *, nstream, sigma=None, verbose=True
     ):
         """
         Compute stacked statistics with a single streaming pass over the frames.
@@ -526,9 +524,9 @@ class BaseMasterModule:
         ----------
         l0_file_list : list of str, optional
             List of L0 FITS filenames to process.
-        ndirect : int, optional
-            Number of initial frames used to estimate approximate statistics
-            for defining clipping thresholds.
+        nstream : int
+            Streaming threshold; the first `nstream - 1` frames form the
+            approximation pass that estimates the per-pixel clipping bounds.
         sigma : float, optional
             Sigma threshold for outlier rejection.
         verbose : bool, optional
@@ -561,16 +559,19 @@ class BaseMasterModule:
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if ndirect is None:
-            ndirect = self.nframe_stream - 1
         if sigma is None:
             sigma = self.stack_sigma
 
+        ndirect = nstream - 1
+
+        # The approximation pass stacks only the first `ndirect` frames; cache
+        # them so the streaming exact pass below reuses them instead of
+        # re-reading those files from disk.
         approx_stats, zero_exptime = self._compute_stats_from_datacube(
-            l0_file_list=l0_file_list,
-            nframe=ndirect,
+            l0_file_list=l0_file_list[:ndirect],
             sigma=sigma,
             verbose=verbose,
+            cache=True,
         )
 
         if len(l0_file_list) <= ndirect:
@@ -609,7 +610,9 @@ class BaseMasterModule:
         clipping_mask = np.ones((nrow, ncol), dtype=bool)
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(fn, verbose=verbose)
+            # The first `ndirect` frames are cache hits from the approximation
+            # pass above; the rest are read once here and not worth caching.
+            l1_obj, success = self._load_frame(fn, cache=False, verbose=verbose)
 
             if not success:
                 failure += 1
@@ -780,7 +783,7 @@ class BaseMasterModule:
     # ------------------------------------------------------------------
 
     def stack_frames(
-        self, l0_file_list=None, nstream=None, sigma=None, verbose=True, cal_type=None
+        self, l0_file_list=None, nstream=6, sigma=None, verbose=True, cal_type=None
     ):
         """
         Stack full-frame images to produce masters L1.
@@ -790,7 +793,9 @@ class BaseMasterModule:
         l0_file_list : list of str, optional
             List of L0 FITS filenames to stack.
         nstream : int, optional
-            Threshold number of frames above which streaming statistics are used.
+            Threshold number of frames at or above which the memory-light
+            streaming path is used instead of the in-memory data cube.
+            Defaults to 6.
         sigma : float, optional
             Sigma threshold for frame-to-frame outlier rejection.
         verbose : bool, optional
@@ -822,8 +827,6 @@ class BaseMasterModule:
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if nstream is None:
-            nstream = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
 
@@ -834,11 +837,11 @@ class BaseMasterModule:
 
         if nframe < nstream:
             stats, _ = self._compute_stats_from_datacube(
-                l0_file_list, nstream - 1, sigma, verbose=verbose
+                l0_file_list, sigma=sigma, verbose=verbose
             )
         else:
             stats, _ = self._compute_stats_from_stream(
-                l0_file_list, nstream - 1, sigma, verbose=verbose
+                l0_file_list, nstream=nstream, sigma=sigma, verbose=verbose
             )
 
         for chip in self.chips:
