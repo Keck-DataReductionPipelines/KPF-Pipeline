@@ -28,9 +28,9 @@ from kpfpipe.utils.kpf import (
     utc_to_hst,
 )
 from kpfpipe.utils.stats import (
+    _gaussian_dist,
+    _gaussian_jac,
     flag_outliers,
-    gaussian_dist,
-    gaussian_jac,
     interpolate_bad_pixels,
     optimize_lsq,
 )
@@ -445,14 +445,15 @@ class TestGetSecondsSinceJ2000:
 
 
 class TestGaussianFit:
-    """The Gaussian width is fit as log(sigma); optimize_lsq untransforms it
-    back to sigma, which must therefore always be positive."""
+    """The Gaussian width is fit directly as sigma; optimize_lsq reports
+    abs(sigma), which must therefore always be positive (the model depends
+    only on sigma**2)."""
 
     def test_recovers_known_gaussian(self):
         x = np.arange(-10, 11, dtype=float)
         for sigma in (2.7, 1.1):
             theta_true = [2.0, 50.0, 1.3, sigma]
-            y = gaussian_dist([2.0, 50.0, 1.3, np.log(sigma)], x)
+            y = _gaussian_dist(theta_true, x)
             theta, _ = optimize_lsq(x, y, "gaussian")
             np.testing.assert_allclose(theta, theta_true, rtol=1e-5, atol=1e-5)
             assert theta[3] > 0
@@ -460,21 +461,21 @@ class TestGaussianFit:
     def test_sigma_is_positive(self):
         # Sigma enters only as sigma**2, so the fit must never return a negative width.
         x = np.arange(-8, 9, dtype=float)
-        y = gaussian_dist([1.0, 25.0, -0.6, np.log(2.0)], x)
+        y = _gaussian_dist([1.0, 25.0, -0.6, 2.0], x)
         theta, _ = optimize_lsq(x, y, "gaussian")
         assert theta[3] > 0
 
     def test_jacobian_matches_finite_difference(self):
-        # Guards the d/d(log_sigma) chain-rule term in gaussian_jac.
+        # Guards the d/d(sigma) term (a*E*dx**2/sigma**3) in _gaussian_jac.
         x = np.linspace(-5, 5, 21)
-        theta = np.array([1.0, 4.0, 0.5, np.log(1.8)])  # [b, a, mu, log_sigma]
-        J = gaussian_jac(theta, x)
+        theta = np.array([1.0, 4.0, 0.5, 1.8])  # [b, a, mu, sigma]
+        J = _gaussian_jac(theta, x)
         eps = 1e-6
         for k in range(4):
             tp, tm = theta.copy(), theta.copy()
             tp[k] += eps
             tm[k] -= eps
-            fd = (gaussian_dist(tp, x) - gaussian_dist(tm, x)) / (2 * eps)
+            fd = (_gaussian_dist(tp, x) - _gaussian_dist(tm, x)) / (2 * eps)
             np.testing.assert_allclose(J[:, k], fd, rtol=1e-4, atol=1e-6)
 
 

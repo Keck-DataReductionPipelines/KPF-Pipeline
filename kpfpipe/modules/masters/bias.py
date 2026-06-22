@@ -90,6 +90,7 @@ class Bias(BaseMasterModule):
             nstream=nstream,
             sigma=sigma,
             verbose=verbose,
+            cal_type="bias",
         )
 
         self.ml1_obj = self._build_ml1_obj(

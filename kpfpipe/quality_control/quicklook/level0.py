@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from kpfpipe.modules.image_assembly import ImageAssembly
+from kpfpipe.quality_control.quicklook._save_png import save_png
 
 
 class PlotL0:
@@ -161,7 +162,7 @@ class PlotL0:
                 self.output_dir,
                 f"{self.obs_id}_L0_stitched_image_{chip.lower()}_zoomable.png",
             )
-            fig.savefig(fig_path, dpi=150, facecolor="w")
+            save_png(fig, fig_path, dpi=150, compress_level=1)
 
         return fig
 

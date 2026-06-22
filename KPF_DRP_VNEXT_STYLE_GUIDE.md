@@ -337,7 +337,7 @@ class StageName:
 - **Dtype precision is a contract — guard both directions.** Never upscale
   `float32→float64` (memory/throughput regression) nor downscale `float64→float32`
   (precision loss → wrong RVs). The policy — single source of truth, also encoded for
-  tests in [`tests/_dtype_policy.py`](tests/_dtype_policy.py):
+  tests in [`tests/regression/_dtype_policy.py`](tests/regression/_dtype_policy.py):
   - **float32** — L1 `*_CCD`/`*_VAR`, master `*_IMG`/`*_SNR`, L2 `*_FLUX`/`*_VAR`/`*_BLAZE`.
   - **float64** — every `*_WAVE`, `BJD_TDB`, `BARYCORR_KMS`/`_Z`, CCF cubes, and the L4
     RV-table floats (`RV`/`RV_ERR`/`BERV`/`WAVE_START`/`WAVE_END`). `*_WAVE`, `BJD_TDB`,
@@ -543,8 +543,16 @@ documented, intentional ways — follow *its* conventions when adding masters co
   (with `tmp_path_factory`, since `tmp_path` is function-scoped). Returning
   `(result, helper_obj)` tuples is common.
 - **Shared non-fixture helpers** go in an underscore-prefixed module that pytest does not
-  collect (`tests/_masters.py`), imported relatively (`from ._masters import ...`) — do not
+  collect (`tests/regression/_masters.py`), imported relatively (`from ._masters import ...`) — do not
   duplicate a builder across files or hang it off `conftest.py` (which is for fixtures/hooks).
+- **Profiling harnesses** (`tests/profiling/profile_<module>.py`, `tests/profiling/profile_*_recipe.py`, and
+  the shared `tests/profiling/_profiling.py`) are *not* pytest tests — the `profile_` prefix keeps them out
+  of collection so `make test` stays fast. They **mirror the test files 1-to-1**
+  (`test_<x>.py` ↔ `profile_<x>.py`). They are standalone scripts run via `make profile*`
+  (see CLAUDE.md `## Profiling`), must run with **no interactive input**, and must contain
+  **no references to Claude** (that convention lives in CLAUDE.md / this guide, not in the
+  suite). New profiling logic belongs in `tests/profiling/_profiling.py`, not duplicated per file; each
+  `profile_<module>.py` is a thin `setup`/`call` wrapper over `run_profile`.
 - **Test data**: real KPF FITS lives under `tests/testdata/<LEVEL>/<date>/`,
   referenced via `Path(__file__).parent / "testdata" / ...` assigned to `UPPER_CASE`
   module constants. Two explicit tiers, documented in the module docstring: **synthetic
@@ -588,7 +596,7 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **Dtype provenance**: each module test file has a `TestDtypeProvenance` class asserting
   the §7 float32/float64/uint8/bool policy at the extension boundaries, the internal
   math-bearing functions (typed-input → output dtype), and across a FITS round-trip, using
-  the shared rubric [`tests/_dtype_policy.py`](tests/_dtype_policy.py). Assert *precision*
+  the shared rubric [`tests/regression/_dtype_policy.py`](tests/regression/_dtype_policy.py). Assert *precision*
   (kind + itemsize via `assert_dtype`), **not** the exact dtype object — FITS round-trips
   to big-endian, so `>f4` is still float32.
 

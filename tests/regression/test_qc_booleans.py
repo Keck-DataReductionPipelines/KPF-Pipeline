@@ -690,7 +690,9 @@ class TestQCL2:
 # Task 6: CLI smoke tests
 # ---------------------------------------------------------------------------
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 
 
 def _write_l0_fixture(path, *, passing=True):

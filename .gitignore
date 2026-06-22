@@ -212,3 +212,13 @@ __marimo__/
 # KPF test data — never tracked. FITS files, generated mini-db CSVs,
 # WLS diagnostics HDF5s, etc. all live outside the repo.
 tests/testdata/
+
+# Auto-generated profiling reports — regenerable via `make profile*`, so not
+# tracked (would churn on every run). The reports are self-contained.
+tests/profiling/reports/
+
+# macOS Finder metadata — junk, never tracked (anywhere in the tree).
+.DS_Store
+
+# Local working notes / scratch task lists — personal, never tracked.
+notes/

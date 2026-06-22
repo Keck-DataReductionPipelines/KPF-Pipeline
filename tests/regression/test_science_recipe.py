@@ -22,9 +22,9 @@ from kpfpipe.utils.io import build_filepath
 # Test data paths and constants
 # ---------------------------------------------------------------------------
 
-TESTDATA_DIR = Path(__file__).parent / "testdata"
+TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
-CONFIG_PATH = Path(__file__).parent.parent / "configs" / "kpf_drp_science.toml"
+CONFIG_PATH = Path(__file__).parent.parent.parent / "configs" / "kpf_drp_science.toml"
 
 OBS_ID = "KP.20240405.40113.57"
 
@@ -36,7 +36,7 @@ NCOL = DETECTOR["ccd"]["ncol"]
 def _load_recipe():
     spec = importlib.util.spec_from_file_location(
         "kpf_drp_science",
-        Path(__file__).parent.parent / "recipes" / "kpf_drp_science.py",
+        Path(__file__).parent.parent.parent / "recipes" / "kpf_drp_science.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

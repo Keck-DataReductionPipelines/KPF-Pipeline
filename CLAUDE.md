@@ -55,8 +55,8 @@ make test        # conda run -n kpfpipe python -m pytest tests/ -n auto --dist l
 make test-serial # serial fallback for debugging parallel/receipt issues
 
 # Run a single test class or test (use these while iterating on one area)
-conda run -n kpfpipe python -m pytest tests/test_data_models_l2.py::TestKPF2Aliases -v
-conda run -n kpfpipe python -m pytest tests/test_data_models_l2.py::TestKPF2Aliases::test_chip_prefix_access -v
+conda run -n kpfpipe python -m pytest tests/regression/test_data_models_l2.py::TestKPF2Aliases -v
+conda run -n kpfpipe python -m pytest tests/regression/test_data_models_l2.py::TestKPF2Aliases::test_chip_prefix_access -v
 
 # Formatting and linting (Ruff; config in pyproject.toml [tool.ruff])
 ruff format kpfpipe/ tests/ recipes/      # format (black-compatible)
@@ -80,7 +80,7 @@ integration tests and a few heavy-compute synthetic tests; everything else is th
 fast subset. The three tiers, smallest first:
 
 - **Continuously, while iterating (most runs):** run only the file(s)/tests for
-  the code you just touched (`python -m pytest tests/test_<area>.py`). This is the
+  the code you just touched (`python -m pytest tests/regression/test_<area>.py`). This is the
   default and should happen many times per task, not once at the end.
 - **Before wrapping up a change / before committing:** `make test-fast` (the
   `-m "not slow"` subset, ~16s). Confirms the change didn't break unrelated unit
@@ -100,6 +100,68 @@ The fast subset deliberately skips full L0→L2 recipe integration, real-frame
 assembly/overscan, master stacking on real frames, and WLS spectrum orientation;
 those live only in `slow` tests, which is why the triggers above run the full
 suite. Pre-commit itself runs only ruff (no tests) — running tests is on you.
+
+## Profiling
+
+The profiling suite finds and reports performance bottlenecks. It follows a
+**"tallest tentpole"** philosophy: we only care about the most critical
+bottlenecks, and **optimization must never compromise scientific accuracy or
+slow forward development** (charter §6/§9/§10). A profiling result of "no action
+needed" is a perfectly good outcome.
+
+```bash
+make profile                       # run every harness, regenerate all reports
+make profile-science               # end-to-end science pipeline (L0 -> L4)
+make profile-masters               # end-to-end masters pipeline (bias/dark/WLS)
+make profile-radial_velocity       # a single module (any of PROFILE_MODULES)
+conda run -n kpfpipe python -m tests.profiling.profile_radial_velocity   # equivalent
+```
+
+Layout: the regression tests live in `tests/regression/` (`test_*.py` plus the
+test-only helpers `_masters.py` / `_dtype_policy.py`); the profiling harnesses
+live in `tests/profiling/` (`profile_*.py` plus the shared `_profiling.py` and
+the `reports/` output dir). `tests/conftest.py` stays at the `tests/` root so its
+fixtures and the `requires_testdata` marker apply to both, and the real frames
+stay at `tests/testdata`.
+
+**Design** (parallels the test suite; shared logic in `tests/profiling/_profiling.py`,
+which like `tests/regression/_masters.py` is *not* a `test_*.py` file so pytest never
+collects it):
+
+- **Attribute to KPF methods.** Pass 1 runs the target under `cProfile`, then
+  charges each library/builtin leaf's own time *up the caller graph to the nearest
+  enclosing KPF method* (`_kpf_attributed`). This is the key move: a bottleneck
+  like `numpy.partition` shows up against the KPF method that drives it (e.g.
+  `utils/stats.py:flag_outliers`), not as an un-actionable library leaf. The
+  per-module report ranks KPF methods by this **attributed time** (listing those
+  over `TOP_FUNCTION_MIN_FRACTION`, 2%); pass 2 drills into each hotspot method
+  with `line_profiler` to show *where inside it* the time goes (docstring lines
+  stripped).
+- **Unified hotspot rule.** A KPF method is a **hotspot** when its attributed time
+  is `HOTSPOT_FRACTION` (20%) of the budget **and** `HOTSPOT_MIN_SECONDS` (1 s) — a
+  dominant share *and* a non-trivial absolute cost. The same set drives both the
+  drill-down and the **Recommended actions**. No hotspot ⇒ no drill-down and "no
+  action needed", which is a fine outcome. Tune these constants in
+  `tests/profiling/_profiling.py`. (The two recipe reports use a different, stage-level
+  wall-clock partition — attribution applies to the per-module reports.)
+- **Structure.** The profiling files mirror the test files **1-to-1**
+  (`regression/test_<x>.py` ↔ `profiling/profile_<x>.py`). Two end-to-end recipe harnesses —
+  `profile_science_recipe.py` and `profile_masters_recipe.py` (optimized
+  independently) — rank functions *across* modules to show which stage dominates.
+  Per-module `tests/profiling/profile_<module>.py` files drill into a single module (useful
+  when re-running one module repeatedly during algorithm development). `flat` is
+  skipped while stubbed. The shared stacking engine (`masters/base.py`) has no
+  dedicated harness: attribution charges its work to the right `base.py` methods
+  inside `profile_master_bias.py` / `profile_master_dark.py`, so a separate
+  engine profile would be redundant.
+- **Data.** Real (gitignored) `tests/testdata` frames at realistic sizes; each
+  harness skips cleanly (exit 0) when the frames are absent, mirroring the
+  `requires_testdata` test pattern.
+- **Reports.** Each run prints a human-readable summary to stdout *and* writes a
+  Markdown report to `tests/profiling/reports/` (gitignored, regenerable). The
+  reports are fully auto-generated and self-contained — the suite runs with no
+  manual input. **When the suite or the pipeline's performance profile changes,
+  regenerate the reports.**
 
 ## Architecture
 
