@@ -255,10 +255,12 @@ class StageName:
     the configured `self.<attr>` (the "`None` means use config" tunables); then the
     *semi-hidden* parameters — rarely-tuned knobs left exposed for developer experimentation,
     carrying a real literal default (e.g. `min_npts=9`, `verbose=True`) and intentionally
-    **absent** from both `_DEFAULTS` and config. (A semi-hidden param needing a mutable
-    default still uses the `None`-sentinel form with an in-body literal fallback, e.g.
-    `clip_edge_pixels=None → [500, 500]`; it is grouped and documented as semi-hidden, not
-    configurable.) Within each group, keep a sensible domain order.
+    **absent** from both `_DEFAULTS` and config. The invariant is that a tunable's tier is
+    legible from the signature alone: **`=None` ⇒ configurable** (resolves to `self.<attr>`),
+    **literal default ⇒ semi-hidden**. So a semi-hidden param needing a sequence default uses
+    an *immutable literal* (a tuple, safe as a default argument), e.g.
+    `clip_edge_pixels=(500, 500)`, never the `None`-sentinel + in-body list fallback. Within
+    each group, keep a sensible domain order.
 - **The `make_master_*` entry points follow the same shape** (§10), with `l0_file_list`
   as the sole positional in place of `chips`/`fibers`.
 - **Parameter ordering applies to *every* method**, not just the public entry points:

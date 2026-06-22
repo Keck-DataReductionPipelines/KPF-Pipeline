@@ -588,7 +588,7 @@ class RadialVelocity:
         width=None,
         step_size=None,
         window=None,
-        clip_edge_pixels=None,
+        clip_edge_pixels=(500, 500),
     ):
         """
         Cross-correlate every order of one chip/fiber against the line mask.
@@ -606,10 +606,10 @@ class RadialVelocity:
         window : list of float, optional
             CCF velocity grid range [km/s] as [min, max] about the grid center.
             Defaults to the configured value.
-        clip_edge_pixels : list of int, optional
-            Number of pixels to drop from the [short_wavelength_end,
-            long_wavelength_end] of each order before correlating, removing the
-            blaze-faint, low-S/N order edges. Defaults to [500, 500].
+        clip_edge_pixels : tuple of int, optional
+            Number of pixels to drop from the (short_wavelength_end,
+            long_wavelength_end) of each order before correlating, removing the
+            blaze-faint, low-S/N order edges. Defaults to (500, 500).
 
         Returns
         -------
@@ -626,8 +626,6 @@ class RadialVelocity:
         NotImplementedError
             If the fiber's illumination source has no CCF path yet (etalon, lfc).
         """
-        if clip_edge_pixels is None:
-            clip_edge_pixels = [500, 500]
         chip = chip.upper()
         fiber = fiber.upper()
         if width is None:
@@ -899,7 +897,7 @@ class RadialVelocity:
         rv_window=None,
         fit_nsigma=3.0,
         min_npts=9,
-        clip_edge_pixels=None,
+        clip_edge_pixels=(500, 500),
     ):
         """
         Compute per-order CCFs and radial velocities and package them in a KPF4.
@@ -932,9 +930,9 @@ class RadialVelocity:
         min_npts : int, optional
             Minimum number of grid points to use in each fit window. Not a
             configurable parameter; set in code (default 9).
-        clip_edge_pixels : list of int, optional
-            Pixels to drop from the [short_wavelength_end, long_wavelength_end]
-            of each order before correlating. Defaults to [500, 500].
+        clip_edge_pixels : tuple of int, optional
+            Pixels to drop from the (short_wavelength_end, long_wavelength_end)
+            of each order before correlating. Defaults to (500, 500).
 
         Returns
         -------
@@ -948,8 +946,6 @@ class RadialVelocity:
             science RV). Unilluminated ('none') fibers are skipped (empty
             extensions).
         """
-        if clip_edge_pixels is None:
-            clip_edge_pixels = [500, 500]
         if chips is None:
             chips = self.chips
         if fibers is None:

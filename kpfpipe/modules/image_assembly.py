@@ -97,7 +97,7 @@ class ImageAssembly:
             self.orientation.update(dict(zip(df["ext_name"], df["flip"], strict=False)))
             self.gain.update(dict(zip(df["ext_name"], df["gain"], strict=False)))
 
-    def _get_overscan_pixels(self, chip, amp_no, buffer=None):
+    def _get_overscan_pixels(self, chip, amp_no, buffer=(0, 0)):
         """
         Extract overscan pixels for a given amplifier.
 
@@ -107,8 +107,8 @@ class ImageAssembly:
             CCD identifier, e.g., 'GREEN' or 'RED'.
         amp_no : int
             Amplifier number (1-4).
-        buffer : list of int, optional
-            Number of pixels to ignore at edges [start, end].
+        buffer : tuple of int, optional
+            Number of pixels to ignore at edges (start, end). Defaults to (0, 0).
 
         Returns
         -------
@@ -121,8 +121,6 @@ class ImageAssembly:
         -----
         Assumes image orientation has been standardized.
         """
-        if buffer is None:
-            buffer = [0, 0]
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f"{chip}_AMP{amp_no}"]
 
@@ -371,7 +369,7 @@ class ImageAssembly:
             channel_ext = f"{chip}_AMP{i + 1}"
             self.l0_obj.data[channel_ext] *= self.gain[channel_ext] / (2**16)
 
-    def measure_read_noise(self, chip, sigma=None, buffer=None):
+    def measure_read_noise(self, chip, sigma=None, buffer=(5, 5)):
         """
         Estimate read noise for each amplifier from overscan pixels.
 
@@ -381,8 +379,8 @@ class ImageAssembly:
             CCD identifier, e.g., 'GREEN' or 'RED'.
         sigma : float, optional
             Threshold for sigma clipping overscan pixels.
-        buffer : list of int, optional
-            Number of pixels to ignore at the edges [start, end].
+        buffer : tuple of int, optional
+            Number of pixels to ignore at the edges (start, end). Defaults to (5, 5).
 
         Returns
         -------
@@ -394,8 +392,6 @@ class ImageAssembly:
         - `self.readnoise[channel_ext]` : standard deviation of cleaned overscan.
         - `self.rn_nongauss[channel_ext]` : non-Gaussian factor computed as std/mad.
         """
-        if buffer is None:
-            buffer = [5, 5]
         if sigma is None:
             sigma = self.readnoise_sigma
 
@@ -413,7 +409,7 @@ class ImageAssembly:
             self.readnoise[channel_ext] = std
             self.rn_nongauss[channel_ext] = np.sqrt(2 / np.pi) * std / mad
 
-    def subtract_overscan(self, chip, method=None, buffer=None):
+    def subtract_overscan(self, chip, method=None, buffer=(0, 0)):
         """
         Subtract overscan bias from imaging pixels for each amplifier. Also
         removes overscan region from amplifier channel, leaving only active
@@ -425,15 +421,13 @@ class ImageAssembly:
             CCD identifier, e.g., 'GREEN' or 'RED'.
         method : str
             Overscan subtraction method ('zero', 'median', 'rowmedian').
-        buffer : list of int, optional
-            Number of pixels to ignore at edges.
+        buffer : tuple of int, optional
+            Number of pixels to ignore at edges. Defaults to (0, 0).
 
         Returns
         -------
         None
         """
-        if buffer is None:
-            buffer = [0, 0]
         if method is None:
             method = self.overscan_method
 
