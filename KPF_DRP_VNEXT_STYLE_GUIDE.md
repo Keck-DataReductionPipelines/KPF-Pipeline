@@ -266,7 +266,7 @@ class StageName:
   def _box_extraction(D, V, *, S=None, M=None, W=None): ...
   ```
   Required positionals first; everything tunable after the `*`.
-- **String-enum mode parameters** (e.g. `method`, `response`, `imtype`) are validated
+- **String-enum mode parameters** (e.g. `method`, `response`, `cal_type`) are validated
   against an explicit allowed set, raising `ValueError` that names the valid options.
 - **Return patterns**:
   - A transform's `perform()` returns the next-level data object after mutating
@@ -481,10 +481,17 @@ documented, intentional ways — follow *its* conventions when adding masters co
   - Transform modules → `.perform()`; QC/Diag/Quicklook → `.run()` (or `.run("all")`);
     masters → `.make_master_l1/l2()`. The constructor takes the **whole `ConfigHandler`**,
     not pre-extracted params — each module pulls its own section internally.
-- **All path construction goes through utils helpers** (`build_filepath`, `build_qlp_dir`,
-  `build_l0_file_lists`, `get_obs_id`), never string concatenation. Level passed as a
-  literal `"L0"/"L1"/"L2"/"L4"`. `os.makedirs(os.path.dirname(path), exist_ok=True)`
-  before every `.to_fits()`.
+- **Product paths go through the `utils/io.py` helpers** (`build_filepath`, `glob_masters`,
+  `build_qlp_dir`, `build_l0_file_lists`, `get_obs_id`) — never re-derived by string
+  concatenation in modules/recipes. These helpers are the single definition of the on-disk
+  layout and filename conventions, built inline within each (no shared layout/filename
+  constant or directory helper — that abstraction was deliberately removed as more confusing
+  than the duplication). Where a convention is necessarily encoded twice — the masters
+  *writer* (`build_filepath`) and *reader* (`glob_masters`) build their paths independently —
+  keep them in lock-step with a **drift test** (`test_glob_masters_matches_build_filepath`),
+  not a shared helper. Plain `os.path.join` is fine for incidental input-directory assembly
+  (e.g. an L0 scan dir). Level passed as a literal `"L0"/"L1"/"L2"/"L4"`;
+  `os.makedirs(os.path.dirname(path), exist_ok=True)` before every `.to_fits()`.
 - **Arg validation**: guard at the top, `raise SystemExit("Error: --obs_id is required …")`
   with an example.
 - **Recipe comments** are terse, lowercase, imperative, and explain the *why* (science

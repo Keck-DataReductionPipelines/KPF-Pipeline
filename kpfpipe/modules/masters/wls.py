@@ -914,7 +914,7 @@ class WLS(BaseMasterModule):
             coeffs_hdr["POLYORDM"] = polyorder_m
             coeffs_hdr["POLYORDF"] = polyorder_f
 
-        self.ml2_obj.set_input_files(l0_file_list)
+        self.ml2_obj.set_input_files(l0_file_list, "thar")
 
         primary = self.ml2_obj.headers["PRIMARY"]
         primary["ROUGHWLS"] = (self.rough_wls_file, "Rough WLS reference file")

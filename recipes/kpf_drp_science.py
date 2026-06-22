@@ -10,8 +10,6 @@ Diagnostics, QC, and quicklook layers run at each level, and the L2 and L4
 data products are written to the output data root.
 """
 
-import os
-
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 from kpfpipe.modules.calibration_association import CalibrationAssociation
@@ -101,9 +99,9 @@ def main(config, args):
     PlotL2(l2, output_dir=l2_qlp_dir, obs_id=obs_id).run("all")
 
     # Write the L2 data product to disk before the RV step so the calibrated
-    # spectra are preserved even if RV computation fails.
+    # spectra are preserved even if RV computation fails. to_fits creates the
+    # parent directory as needed.
     l2_out_path = build_filepath(obs_id, "L2", data_root=data_root_science)
-    os.makedirs(os.path.dirname(l2_out_path), exist_ok=True)
     l2.to_fits(l2_out_path)
 
     # Compute the radial velocity (RV) from the cross-correlation function
@@ -111,9 +109,9 @@ def main(config, args):
     radial_velocity = RadialVelocity(l2, config)
     l4 = radial_velocity.perform()
 
-    # Write the final L4 data product (RVs and CCFs) to disk.
+    # Write the final L4 data product (RVs and CCFs) to disk; to_fits creates
+    # the parent directory as needed.
     l4_out_path = build_filepath(obs_id, "L4", data_root=data_root_science)
-    os.makedirs(os.path.dirname(l4_out_path), exist_ok=True)
     l4.to_fits(l4_out_path)
 
     print("\n\n=== exiting kpf_drp_science pipeline ===\n\n")

@@ -716,7 +716,9 @@ class BaseMasterModule:
     # Private helpers for building outputs and tracking results.
     # ------------------------------------------------------------------
 
-    def _build_ml1_obj(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
+    def _build_ml1_obj(
+        self, l1_arrays, l0_file_list, *, master_type, receipt_key, bunit=None
+    ):
         """
         Assemble a KPFMasterL1 from finalized per-chip arrays.
 
@@ -726,6 +728,9 @@ class BaseMasterModule:
             Finalized '{chip}_IMG/_SNR/_MASK' arrays.
         l0_file_list : list of str
             L0 files that went into the stack; recorded via set_input_files.
+        master_type : str
+            WMKO filename token for the product ('bias', 'dark', 'flat'),
+            recorded via set_input_files for the compliant output filename.
         receipt_key : str
             Receipt entry name (e.g. 'master_bias', 'master_dark').
         bunit : str, optional
@@ -746,7 +751,7 @@ class BaseMasterModule:
             if bunit is not None:
                 ml1_obj.headers[f"{chip}_IMG"]["BUNIT"] = bunit
 
-        ml1_obj.set_input_files(l0_file_list)
+        ml1_obj.set_input_files(l0_file_list, master_type)
         ml1_obj.receipt_add_entry(receipt_key, "PASS")
 
         return ml1_obj
@@ -923,5 +928,5 @@ class BaseMasterModule:
                 f"{path} already exists; pass overwrite=True to replace it"
             )
 
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # obj.to_fits creates the parent directory as needed.
         obj.to_fits(path)

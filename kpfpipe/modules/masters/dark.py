@@ -110,7 +110,11 @@ class Dark(BaseMasterModule):
         # Dark current is a rate: stack_frames normalizes each frame by its
         # exposure time, so the master dark IMG is in electrons/sec.
         self.ml1_obj = self._build_ml1_obj(
-            l1_arrays, l0_file_list, receipt_key="master_dark", bunit="electrons/sec"
+            l1_arrays,
+            l0_file_list,
+            master_type="dark",
+            receipt_key="master_dark",
+            bunit="electrons/sec",
         )
         self._results = self._populate_results(l1_arrays)
 

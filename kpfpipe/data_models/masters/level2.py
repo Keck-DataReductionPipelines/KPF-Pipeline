@@ -11,8 +11,10 @@ SCI2_WAVE and the standard names like TRACE3_WAVE). Only masters-
 specific additions (INPUT_FILES) are declared in
 Masters-L2-extensions.csv.
 
-Filename convention: masters products follow WMKO filename format
-(KP.YYYYMMDD.NNNNN.NN.fits), not the EPRV per-level convention.
+Filename convention (WMKO DRP-RUN-05): masters are written as
+{KOAID-of-first-input}_master_{type}_L2.fits (e.g.
+KP.20240405.49597.71_master_thar_L2.fits), built by
+KPFMasterModel.generate_standard_filename().
 """
 
 import importlib.resources
@@ -44,7 +46,6 @@ class KPFMasterL2(KPFMasterModel, KPF2):
     """
 
     _DATALVL = "ML2"
-    _FILENAME_PREFIX = "kpf_ML2"
     _known_extensions = set(_MASTERS_L2_EXTENSIONS["Name"]) | set(
         KPF2().extensions.keys()
     )

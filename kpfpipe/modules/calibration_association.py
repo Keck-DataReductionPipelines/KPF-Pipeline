@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.io import glob_masters
 from kpfpipe.utils.kpf import get_datecode, get_timestamp, kpf_timestamp_to_datetime
 
 _DEFAULTS = {
@@ -137,12 +138,7 @@ class CalibrationAssociation:
         for delta in range(days_before, days_after + 1):
             search_date = obs_date + timedelta(days=delta)
             datecode = search_date.strftime("%Y%m%d")
-            pattern = os.path.join(
-                self._masters_root,
-                "masters",
-                datecode,
-                f"*_master_{cal_type}_{level}.fits",
-            )
+            pattern = glob_masters(self._masters_root, cal_type, level, datecode)
             for filepath in sorted(glob.glob(pattern)):
                 try:
                     ts = get_timestamp(filepath)

@@ -205,6 +205,12 @@ L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 
 Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/config/`). Detector parameters (CCD dimensions, order counts) live in `data_models/config/detector.toml` and are exposed via `kpfpipe.constants`.
 
+### Filename conventions
+
+Science: `L0 = {obs_id}.fits` (KPF-native `KP.*`); `L1 = kpf_L1_{YYYYMMDD}T{HHmmss}.fits` — note **no EPRV "S"**, because the EPRV standard defines no L1 (its filename regex only accepts `SL2`/`SL3`/`SL4`); `L2/L4 = kpf_SL{N}_…` (EPRV-standard). Masters (WMKO DRP-RUN-05): `{KOAID-of-first-input}_master_{type}_L{N}.fits`.
+
+Two authorities encode this rule and **must agree per level**: `build_filepath(obs_id, level, …)` (`utils/io.py`) is the pipeline's path builder (directory + filename, from an obs_id string) and is what recipes use to write; `<model>.generate_standard_filename()` builds only the basename from a populated object's headers and is the `to_fits(fn=None)` fallback — **rvdata-owned for the standard levels L2/L4** (do not override), **KPF-overridden for the non-standard L0/L1**. `TestFilenameConsistency` (in `tests/regression/test_masters_recipe.py`) enforces that the two never drift.
+
 ### Masters Pipeline
 
 `kpfpipe/modules/masters/` — stacks multiple observations to create bias, dark, flat, and wavelength solution (WLS) calibration products. Uses sigma-clipped statistics with a single-pass streaming accumulation (per-pixel counts and exposure time) for large stacks; the master image is the exposure-weighted rate `counts_sum / exptime_sum`.

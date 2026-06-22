@@ -94,7 +94,7 @@ class Bias(BaseMasterModule):
         )
 
         self.ml1_obj = self._build_ml1_obj(
-            l1_arrays, l0_file_list, receipt_key="master_bias"
+            l1_arrays, l0_file_list, master_type="bias", receipt_key="master_bias"
         )
         self._results = self._populate_results(l1_arrays)
 

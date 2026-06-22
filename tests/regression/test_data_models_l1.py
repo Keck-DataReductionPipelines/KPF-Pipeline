@@ -26,7 +26,7 @@ from kpfpipe.data_models.masters.base import KPFMasterModel
 def synthetic_masters_l1_file(tmp_path):
     """Create a minimal synthetic Masters L1 FITS file."""
     rng = np.random.default_rng(20240113)
-    fn = str(tmp_path / "kpf_ML1_20240113T102656.fits")
+    fn = str(tmp_path / "KP.20240113.23249.10_master_bias_L1.fits")
 
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
@@ -209,7 +209,6 @@ class TestKPFMasterL1:
 
     def test_class_attributes(self):
         assert KPFMasterL1._DATALVL == "ML1"
-        assert KPFMasterL1._FILENAME_PREFIX == "kpf_ML1"
 
     def test_from_fits(self, synthetic_masters_l1_file):
         m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
@@ -236,11 +235,21 @@ class TestKPFMasterL1:
         with fits.open(out_fn) as hdul:
             assert hdul["PRIMARY"].header["DATALVL"] == "ML1"
 
-    def test_generate_filename(self, synthetic_masters_l1_file):
-        m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
-        fn = m.generate_standard_filename()
-        assert fn.startswith("kpf_ML1_")
-        assert fn.endswith(".fits")
+    def test_generate_filename(self):
+        m = KPFMasterL1()
+        m.set_input_files(
+            ["KP.20240113.23249.10.fits", "KP.20240113.23310.00.fits"], "bias"
+        )
+        assert (
+            m.generate_standard_filename() == "KP.20240113.23249.10_master_bias_L1.fits"
+        )
+
+    def test_generate_filename_requires_inputs(self):
+        # A master can never produce a non-compliant name: with no recorded
+        # inputs / type, generate_standard_filename raises rather than falling
+        # back to a KOAID-less name.
+        with pytest.raises(ValueError):
+            KPFMasterL1().generate_standard_filename()
 
     def test_no_warning_on_known_extensions(self, synthetic_masters_l1_file):
         import warnings
@@ -252,5 +261,6 @@ class TestKPFMasterL1:
     def test_set_input_files(self):
         m = KPFMasterL1()
         files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]
-        m.set_input_files(files)
+        m.set_input_files(files, "bias")
         assert m.data["INPUT_FILES"]["FILENAME"].tolist() == files
+        assert m.headers["PRIMARY"]["MASTYPE"] == "bias"

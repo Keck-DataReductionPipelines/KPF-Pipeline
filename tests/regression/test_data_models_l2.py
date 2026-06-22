@@ -35,7 +35,7 @@ NORDER = NORDER_GREEN + NORDER_RED
 def synthetic_masters_l2_file(tmp_path):
     """Create a minimal synthetic Masters L2 FITS file."""
     rng = np.random.default_rng(20240113)
-    fn = str(tmp_path / "kpf_ML2_20240113T102656.fits")
+    fn = str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
 
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
@@ -406,7 +406,6 @@ class TestKPFMasterL2:
 
     def test_class_attributes(self):
         assert KPFMasterL2._DATALVL == "ML2"
-        assert KPFMasterL2._FILENAME_PREFIX == "kpf_ML2"
 
     def test_from_fits(self, synthetic_masters_l2_file):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
@@ -444,13 +443,14 @@ class TestKPFMasterL2:
     def test_set_input_files(self):
         m = KPFMasterL2()
         files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]
-        m.set_input_files(files)
+        m.set_input_files(files, "thar")
         assert m.data["INPUT_FILES"]["FILENAME"].tolist() == files
+        assert m.headers["PRIMARY"]["MASTYPE"] == "thar"
 
     def test_input_files_roundtrip(self, tmp_path):
         m = KPFMasterL2()
         files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]
-        m.set_input_files(files)
+        m.set_input_files(files, "thar")
         m.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
 
         out_fn = str(tmp_path / "ml2_input_files.fits")
