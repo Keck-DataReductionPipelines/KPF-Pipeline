@@ -6,12 +6,12 @@ orderlet, and solves the per-fiber Legendre WLS — the heaviest master product.
 The line-level pass re-runs the whole stack, so this harness is slow.
 
 Run with ``make profile-master_wls`` or
-``python tests/profile_master_wls.py``. Requires real frames in
+``python tests/profiling/profile_master_wls.py``. Requires real frames in
 ``tests/testdata`` (skips cleanly otherwise).
 """
 
-try:  # works both as `python -m tests.profile_*` and `python tests/profile_*.py`
-    from tests import _profiling as P
+try:  # importable via `-m tests.profiling.profile_*` or runnable as a script
+    from tests.profiling import _profiling as P
 except ModuleNotFoundError:
     import _profiling as P
 

@@ -18,6 +18,7 @@ dependencies = [
     "matplotlib==3.10.8",
     "numpy==2.4.2",
     "pandas==3.0.0",
+    "pillow==12.1.1",
     "scipy==1.17.0",
     "tqdm==4.67.3",
     "rv-data-standard @ git+https://github.com/EPRV-RCN/RVData.git@7413775939ca0366dbba0df8c2e5b48c76595634"

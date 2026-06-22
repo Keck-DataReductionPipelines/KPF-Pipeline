@@ -104,6 +104,7 @@ class Dark(BaseMasterModule):
             nstream=nstream,
             sigma=sigma,
             verbose=verbose,
+            cal_type="dark",
         )
 
         # Dark current is a rate: stack_frames normalizes each frame by its

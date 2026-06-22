@@ -12,7 +12,8 @@ The bundled darks span two default-gap clusters, so the recipe's
 accommodation the master-dark regression test makes) — otherwise the recipe
 raises on a too-small dark cluster.
 
-Run with ``make profile-masters`` or ``python tests/profile_masters_recipe.py``.
+Run with ``make profile-masters`` or
+``python tests/profiling/profile_masters_recipe.py``.
 Requires the real frames in ``tests/testdata`` (skips cleanly otherwise).
 """
 
@@ -21,8 +22,8 @@ import functools
 import importlib.util
 from pathlib import Path
 
-try:  # works both as `python -m tests.profile_*` and `python tests/profile_*.py`
-    from tests import _profiling as P
+try:  # importable via `-m tests.profiling.profile_*` or runnable as a script
+    from tests.profiling import _profiling as P
 except ModuleNotFoundError:
     import _profiling as P
 
@@ -35,7 +36,7 @@ MASTERS_MODULES = [m_base, m_bias, m_dark, m_wls]
 
 
 def _load_recipe():
-    path = Path(__file__).parent.parent / "recipes" / "kpf_drp_masters.py"
+    path = Path(__file__).parent.parent.parent / "recipes" / "kpf_drp_masters.py"
     spec = importlib.util.spec_from_file_location("kpf_drp_masters", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

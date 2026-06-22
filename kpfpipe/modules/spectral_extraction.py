@@ -361,8 +361,6 @@ class SpectralExtraction:
             chip, fiber, order, return_coords=True
         )
 
-        # TODO: add sky background
-        # TODO: add bad pixel masking
         flux_1d, var_1d = extraction_fxn(D, V, W=W)
 
         response = "warn" if verbose else "silent"

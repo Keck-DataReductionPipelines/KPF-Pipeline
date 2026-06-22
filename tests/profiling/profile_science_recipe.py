@@ -6,7 +6,8 @@ science run — the first thing to know before optimizing anything. Per-module
 line-level detail lives in the individual ``profile_<module>.py`` harnesses, so
 the (expensive) second line-profiler pass is disabled here.
 
-Run with ``make profile-science`` or ``python tests/profile_science_recipe.py``.
+Run with ``make profile-science`` or
+``python tests/profiling/profile_science_recipe.py``.
 Requires the real frames in ``tests/testdata`` (skips cleanly otherwise).
 """
 
@@ -14,8 +15,8 @@ import argparse
 import importlib.util
 from pathlib import Path
 
-try:  # works both as `python -m tests.profile_*` and `python tests/profile_*.py`
-    from tests import _profiling as P
+try:  # importable via `-m tests.profiling.profile_*` or runnable as a script
+    from tests.profiling import _profiling as P
 except ModuleNotFoundError:
     import _profiling as P
 
@@ -40,7 +41,7 @@ PIPELINE_MODULES = [
 
 
 def _load_recipe():
-    path = Path(__file__).parent.parent / "recipes" / "kpf_drp_science.py"
+    path = Path(__file__).parent.parent.parent / "recipes" / "kpf_drp_science.py"
     spec = importlib.util.spec_from_file_location("kpf_drp_science", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

@@ -219,3 +219,6 @@ tests/profiling/reports/
 
 # macOS Finder metadata — junk, never tracked (anywhere in the tree).
 .DS_Store
+
+# Local working notes / scratch task lists — personal, never tracked.
+notes/

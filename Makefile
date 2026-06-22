@@ -22,8 +22,8 @@ test-serial:
 	conda run -n kpfpipe python -m pytest tests/
 
 # ---------------------------------------------------------------------------
-# Profiling ("tallest tentpole" suite). Standalone harnesses in tests/ that are
-# NOT named test_*.py, so pytest never collects them and `make test` stays fast.
+# Profiling ("tallest tentpole" suite). Standalone harnesses in tests/profiling/
+# (not named test_*.py, so pytest never collects them and `make test` stays fast).
 # They run on the real frames in tests/testdata and skip cleanly when absent.
 # Auto-generated reports land in tests/profiling/reports/ (gitignored). See the
 # "## Profiling" section of CLAUDE.md.
@@ -40,11 +40,11 @@ profile: profile-masters profile-science $(addprefix profile-,$(PROFILE_MODULES)
 
 # End-to-end recipes (ranked across modules to find the dominant stage).
 profile-science:
-	conda run -n kpfpipe python -m tests.profile_science_recipe
+	conda run -n kpfpipe python -m tests.profiling.profile_science_recipe
 
 profile-masters:
-	conda run -n kpfpipe python -m tests.profile_masters_recipe
+	conda run -n kpfpipe python -m tests.profiling.profile_masters_recipe
 
-# Generic per-module rule: profile-<module> -> tests/profile_<module>.py
+# Generic per-module rule: profile-<module> -> tests/profiling/profile_<module>.py
 profile-%:
-	conda run -n kpfpipe python -m tests.profile_$*
+	conda run -n kpfpipe python -m tests.profiling.profile_$*

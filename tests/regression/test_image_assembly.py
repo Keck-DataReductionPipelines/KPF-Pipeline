@@ -25,7 +25,7 @@ from ._dtype_policy import (
     assert_roundtrip_dtype,
 )
 
-TESTDATA_L0_DIR = Path(__file__).parent / "testdata" / "L0" / "20240405"
+TESTDATA_L0_DIR = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
 L0_BIAS = str(TESTDATA_L0_DIR / "KP.20240405.03637.74.fits")
 L0_FLAT = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
 

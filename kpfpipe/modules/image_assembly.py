@@ -36,8 +36,6 @@ RN_KEYS = {
     "RED_AMP4": ["RNRED4", "RNNGRD4"],
 }
 
-# TODO: add overscan and readnoise params to main config
-
 
 class ImageAssembly:
     """
