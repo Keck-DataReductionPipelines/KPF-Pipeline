@@ -119,6 +119,8 @@ class KPF1(KPFDataModel):
                     df = df.reindex(columns=all_cols).fillna("")
                 self.receipt = df
             elif fits_type == "ImageHDU":
+                # np.array (not asarray) materializes the memmapped HDU into RAM
+                # before from_fits closes the file; a view would dangle afterward.
                 self.set_data(ext_name, np.array(hdu.data))
             elif fits_type == "BinTableHDU":
                 self.set_data(ext_name, Table.read(hdu))
