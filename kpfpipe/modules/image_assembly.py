@@ -514,10 +514,7 @@ class ImageAssembly:
     @staticmethod
     def orient_ffi(image, chip):
         """
-        Flip an assembled image into the standard FFI orientation: dispersion
-        columns blue -> red (left -> right), and rows flipped for GREEN (whose
-        raw image is inverted relative to RED). Single source of truth for FFI
-        orientation, shared by stitch_ffi and the L0 quicklook.
+        Flip an assembled image into the standard FFI orientation.
         """
         image = np.flip(image, axis=1)
         if chip.upper() == "GREEN":

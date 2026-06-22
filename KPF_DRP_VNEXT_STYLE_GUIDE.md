@@ -366,6 +366,13 @@ class StageName:
   kwarg of `np.sum` et al. for masked reductions.
 - **Views vs copies are deliberate**: slicing yields views on purpose (consistent with
   the data-model "view not copy" philosophy); `.copy()` when you must mutate.
+- **Row/col nomenclature is numpy, not KPF.** All image/spectrum arrays use the numpy axis
+  convention throughout: **axis 0** (`row`/`nrow`) = **cross-dispersion** (across orders, flux
+  varies rapidly); **axis 1** (`col`/`ncol`) = **dispersion** (along an order, flux varies
+  slowly). This is the *transpose* of the KPF/observatory physical convention (where a "row"
+  runs along dispersion), so a reader expecting KPF physical directions will misread the code's
+  `row`/`col` — but the code is uniform and self-consistent.
+  `# Axis convention: axis 0 = cross-dispersion (KPF col); axis 1 = dispersion (KPF row).`
 - **Delegate shared numerics to `kpfpipe/utils/`** (`flag_outliers`, `optimize_lsq`,
   `interpolate_bad_pixels`, `compute_redshift`, `strictly_increasing`). `scipy` is the
   numerical backend (`least_squares` with an analytic Jacobian, `ndimage`,
