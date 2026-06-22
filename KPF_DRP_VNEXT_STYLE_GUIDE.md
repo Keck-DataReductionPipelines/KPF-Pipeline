@@ -203,8 +203,11 @@ class StageName:
   Tunable params become instance attributes via the `_DEFAULTS` setattr loop.
 - **`_DEFAULTS` merges the global defaults**: `_DEFAULTS = {**DEFAULTS, "key": ...}`
   (use the `{**DEFAULTS, ...}` spread form, not `dict(DEFAULTS)`).
-- **Defaults live in the module, not the config file.** Config (TOML) values are
-  *overrides* applied on top of `_DEFAULTS` via `params.get(k, v)`.
+- **Defaults live in the module, not the config file.** Resolution is a three-tier
+  override chain, lowest precedence first: `_DEFAULTS` (the in-module default) → config
+  (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword
+  argument on a method call (overrides both). Config is the production override path;
+  direct kwargs are the developer/interactive path (e.g. notebooks), not used in production.
 - **Declare every lazily-populated attribute in `__init__`, set to `None`/`{}`, with a
   trailing comment naming the method that fills it** — this is a defining house style:
   ```python
@@ -247,10 +250,15 @@ class StageName:
     positional in the same slot (e.g. `CalibrationAssociation.perform(self, cal_types, *, ...)`).
   - **Everything else is keyword-only** — place a bare `*` after the positionals so all
     tunables must be passed by name.
-  - **Order the keyword-only args in two groups**: first the *configurable* parameters that
-    default to `None` (the "`None` means use config" tunables), then the *semi-hidden*
-    parameters that carry a real default value (e.g. `min_npts=9`, `verbose=True`). Within
-    each group, keep a sensible domain order.
+  - **Order the keyword-only args in two groups**: first the *configurable* parameters —
+    backed by a `_DEFAULTS` key and a config entry, defaulting to `None` and resolving to
+    the configured `self.<attr>` (the "`None` means use config" tunables); then the
+    *semi-hidden* parameters — rarely-tuned knobs left exposed for developer experimentation,
+    carrying a real literal default (e.g. `min_npts=9`, `verbose=True`) and intentionally
+    **absent** from both `_DEFAULTS` and config. (A semi-hidden param needing a mutable
+    default still uses the `None`-sentinel form with an in-body literal fallback, e.g.
+    `clip_edge_pixels=None → [500, 500]`; it is grouped and documented as semi-hidden, not
+    configurable.) Within each group, keep a sensible domain order.
 - **The `make_master_*` entry points follow the same shape** (§10), with `l0_file_list`
   as the sole positional in place of `chips`/`fibers`.
 - **Parameter ordering applies to *every* method**, not just the public entry points:

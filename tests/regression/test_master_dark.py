@@ -765,7 +765,7 @@ class TestStackingValidation:
             patch.object(dark, "_load_frame", lambda fn, **k: (None, False)),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
-            with pytest.raises(ValueError, match="more than 20%"):
+            with pytest.raises(ValueError, match="too many frames failed to load"):
                 dark.stack_frames()
 
     def test_ccd_var_frame_count_mismatch_raises(self):

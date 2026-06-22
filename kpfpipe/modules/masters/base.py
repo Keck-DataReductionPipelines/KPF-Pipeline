@@ -358,8 +358,44 @@ class BaseMasterModule:
     # Private helpers for frame stacking.
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _check_load_failures(failure, n_total, max_fail_fraction, max_fail_number):
+        """
+        Raise if cumulative frame-load failures exceed either limit.
+
+        Parameters
+        ----------
+        failure : int
+            Number of frames that have failed to load so far.
+        n_total : int
+            Total number of frames in the stack.
+        max_fail_fraction : float
+            Maximum allowed fraction of failed frames.
+        max_fail_number : int
+            Maximum allowed absolute number of failed frames.
+
+        Raises
+        ------
+        ValueError
+            If either limit is exceeded.
+        """
+        if failure / n_total > max_fail_fraction or failure > max_fail_number:
+            raise ValueError(
+                f"too many frames failed to load "
+                f"({failure} of {n_total}); limits are "
+                f"max_fail_fraction={max_fail_fraction:.0%}, "
+                f"max_fail_number={max_fail_number}"
+            )
+
     def _compute_stats_from_datacube(
-        self, l0_file_list=None, *, sigma=None, verbose=True, cache=False
+        self,
+        l0_file_list=None,
+        *,
+        sigma=None,
+        verbose=True,
+        cache=False,
+        max_fail_fraction=0.2,
+        max_fail_number=2,
     ):
         """
         Compute stacked statistics using an in-memory data cube.
@@ -379,6 +415,13 @@ class BaseMasterModule:
             If True, cache each loaded frame so a later pass (the streaming
             exact pass) can reuse it without re-reading from disk. Defaults to
             False, since the standalone datacube path reads each frame once.
+        max_fail_fraction : float, optional
+            Maximum fraction of frames allowed to fail loading before raising.
+            Defaults to 0.2.
+        max_fail_number : int, optional
+            Maximum absolute number of frames allowed to fail loading before
+            raising. Defaults to 2. Stacking raises when either limit is
+            exceeded.
 
         Returns
         -------
@@ -403,7 +446,7 @@ class BaseMasterModule:
         Outlier rejection is performed jointly on CCD and VAR extensions, in
         rate space, so frames of differing exposure are comparable. Exposure
         times must be either all zero or all strictly positive. Raises an error
-        if more than 20% of frames fail to load.
+        if more than `max_fail_fraction` of frames fail to load.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -433,8 +476,9 @@ class BaseMasterModule:
 
             if not success:
                 failure += 1
-                if failure / len(l0_file_list) > 0.2:
-                    raise ValueError("more than 20% of frames in stack failed to load")
+                self._check_load_failures(
+                    failure, len(l0_file_list), max_fail_fraction, max_fail_number
+                )
                 continue
 
             l1_obj = self._process_frame(l1_obj)
@@ -515,7 +559,14 @@ class BaseMasterModule:
         return stats, zero_exptime
 
     def _compute_stats_from_stream(
-        self, l0_file_list=None, *, nstream, sigma=None, verbose=True
+        self,
+        l0_file_list=None,
+        *,
+        nstream,
+        sigma=None,
+        verbose=True,
+        max_fail_fraction=0.2,
+        max_fail_number=2,
     ):
         """
         Compute stacked statistics with a single streaming pass over the frames.
@@ -532,6 +583,13 @@ class BaseMasterModule:
         verbose : bool, optional
             If True (default), emit per-frame progress prints and load
             failure warnings from `_load_frame`.
+        max_fail_fraction : float, optional
+            Maximum fraction of frames allowed to fail loading before raising.
+            Defaults to 0.2.
+        max_fail_number : int, optional
+            Maximum absolute number of frames allowed to fail loading before
+            raising. Defaults to 2. Stacking raises when either limit is
+            exceeded.
 
         Returns
         -------
@@ -554,8 +612,8 @@ class BaseMasterModule:
         the per-pixel clipping bounds for the streaming pass.
 
         Optimized to reduce memory usage at the expense of compute speed.
-        Raises an error if more than 20% of frames fail to load or if exposure
-        times are inconsistent.
+        Raises an error if frame load failures exceed `max_fail_fraction` or
+        `max_fail_number`, or if exposure times are inconsistent.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -572,6 +630,8 @@ class BaseMasterModule:
             sigma=sigma,
             verbose=verbose,
             cache=True,
+            max_fail_fraction=max_fail_fraction,
+            max_fail_number=max_fail_number,
         )
 
         if len(l0_file_list) <= ndirect:
@@ -616,8 +676,9 @@ class BaseMasterModule:
 
             if not success:
                 failure += 1
-                if failure / len(l0_file_list) > 0.2:
-                    raise ValueError("more than 20% of frames in stack failed to load")
+                self._check_load_failures(
+                    failure, len(l0_file_list), max_fail_fraction, max_fail_number
+                )
                 continue
 
             l1_obj = self._process_frame(l1_obj)
@@ -783,7 +844,14 @@ class BaseMasterModule:
     # ------------------------------------------------------------------
 
     def stack_frames(
-        self, l0_file_list=None, nstream=6, sigma=None, verbose=True, cal_type=None
+        self,
+        l0_file_list=None,
+        nstream=6,
+        sigma=None,
+        verbose=True,
+        cal_type=None,
+        max_fail_fraction=0.2,
+        max_fail_number=2,
     ):
         """
         Stack full-frame images to produce masters L1.
@@ -805,6 +873,13 @@ class BaseMasterModule:
             Calibration type, forwarded to `_clean_l1_arrays` to select the
             final outlier-flagging mode. Defaults to the conservative
             global-median mode.
+        max_fail_fraction : float, optional
+            Maximum fraction of frames allowed to fail loading before raising.
+            Defaults to 0.2.
+        max_fail_number : int, optional
+            Maximum absolute number of frames allowed to fail loading before
+            raising. Defaults to 2. Stacking raises when either limit is
+            exceeded.
 
         Returns
         -------
@@ -837,11 +912,20 @@ class BaseMasterModule:
 
         if nframe < nstream:
             stats, _ = self._compute_stats_from_datacube(
-                l0_file_list, sigma=sigma, verbose=verbose
+                l0_file_list,
+                sigma=sigma,
+                verbose=verbose,
+                max_fail_fraction=max_fail_fraction,
+                max_fail_number=max_fail_number,
             )
         else:
             stats, _ = self._compute_stats_from_stream(
-                l0_file_list, nstream=nstream, sigma=sigma, verbose=verbose
+                l0_file_list,
+                nstream=nstream,
+                sigma=sigma,
+                verbose=verbose,
+                max_fail_fraction=max_fail_fraction,
+                max_fail_number=max_fail_number,
             )
 
         for chip in self.chips:

@@ -197,13 +197,14 @@ class BarycentricCorrection:
         return w, f
 
     @staticmethod
-    def _fix_expmeter_outliers(f, kernel_size=5):
+    def _fix_expmeter_outliers(f, kernel_size=5, k=3.0):
         """
         Detect and interpolate outlier pixels in an expmeter flux array.
 
-        Outlier threshold is adaptive (Chauvenet-like criterion based on
-        array size). Replacement uses scipy.griddata linear interpolation,
-        falling back to nearest for any remaining NaNs.
+        Outlier threshold is adaptive (Chauvenet-like criterion based on array
+        size), scaled by the coefficient `k` (larger rejects fewer points).
+        Replacement uses scipy.griddata linear interpolation, falling back to
+        nearest for any remaining NaNs.
 
         Returns a copy of f with outliers replaced; shape unchanged.
         """
@@ -211,7 +212,7 @@ class BarycentricCorrection:
             median_filter(f, size=kernel_size), sigma=kernel_size
         )
 
-        eta = 3 * np.sqrt(2) * erfcinv(1 / np.min(np.shape(f)))
+        eta = k * np.sqrt(2) * erfcinv(1 / np.min(np.shape(f)))
         bad = np.abs(f - f_smooth) / mad_std(f - f_smooth) > eta
 
         if np.sum(bad) == 0:
@@ -516,6 +517,7 @@ class BarycentricCorrection:
         interpolate=True,
         extrapolate=True,
         fix_expmeter_outliers=True,
+        weight_percentile=90,
     ):
         """
         Compute the flux-weighted midpoint observation time.
@@ -541,6 +543,9 @@ class BarycentricCorrection:
             INSTRUMENT_HEADER.
         fix_expmeter_outliers : bool, optional
             If True (default), detect and replace outlier expmeter readings.
+        weight_percentile : float, optional
+            Per-order SCI2 brightness percentile used to weight orders for the
+            'ccds' output (robust to cosmics). Defaults to 90.
 
         Returns
         -------
@@ -592,15 +597,18 @@ class BarycentricCorrection:
         if output == "orders":
             return w_orders, t_orders
 
-        # Weight each order by its SCI2 brightness (90th percentile, robust to
-        # cosmics); NaN/failed orders get zero weight, uniform if SCI2_FLUX absent.
+        # Weight each order by its SCI2 brightness (`weight_percentile`, robust
+        # to cosmics); NaN/failed orders get zero weight, uniform if SCI2_FLUX
+        # absent.
         norder_green = self.norder["GREEN"]
         norder = norder_green + self.norder["RED"]
         flux = self.l2_obj.data["SCI2_FLUX"]
         if flux is None or np.size(flux) == 0:
             weights = np.ones(norder)
         else:
-            weights = np.nanpercentile(np.asarray(flux, dtype=float), 90, axis=1)
+            weights = np.nanpercentile(
+                np.asarray(flux, dtype=float), weight_percentile, axis=1
+            )
         weights = np.nan_to_num(weights, nan=0.0)
 
         green = slice(0, norder_green)

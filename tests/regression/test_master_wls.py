@@ -170,7 +170,7 @@ class TestProcessIndividualFrames:
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, cache=False, **kwargs: (None, False)
         )
-        with pytest.raises(ValueError, match="20%"):
+        with pytest.raises(ValueError, match="too many frames failed to load"):
             wls._process_stack_l0_to_l2()
 
     def test_tolerates_minority_failure(self, mock_pipeline, monkeypatch):

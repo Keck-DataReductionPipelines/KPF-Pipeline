@@ -405,15 +405,15 @@ class RadialVelocity:
         return ccf
 
     @staticmethod
-    def _compute_rv_1d(vel, ccf, wave, window, min_npts=9):
+    def _compute_rv_1d(vel, ccf, wave, window, fit_nsigma=3.0, min_npts=9):
         """
         Two-pass Gaussian fit to a CCF dip, with a photon-limited error.
 
         The first pass fits the `window` ([min, max] km/s) about the CCF
         minimum, yielding a mean and sigma. The second pass refits a window of
-        +/-3 sigma about that mean (symmetric about it); those points also set
-        the error estimate (Bouchy et al. 2001). Both windows use at least
-        min_npts grid points.
+        +/-`fit_nsigma` sigma about that mean (symmetric about it); those points
+        also set the error estimate (Bouchy et al. 2001). Both windows use at
+        least min_npts grid points.
 
         Parameters
         ----------
@@ -426,6 +426,9 @@ class RadialVelocity:
             scale used in the error estimate.
         window : list of float
             [min, max] km/s velocity window about the dip for the first pass.
+        fit_nsigma : float
+            Half-width of the second-pass fit window, in units of the
+            first-pass fitted sigma.
         min_npts : int
             Minimum number of grid points to use in each fit window.
 
@@ -457,11 +460,11 @@ class RadialVelocity:
         if not np.isfinite(mu1) or not np.isfinite(sigma1):
             return np.nan, np.nan
 
-        # Second pass: +/-3 sigma about the first-pass mean, symmetric, with at
-        # least min_npts points; these points also set the error estimate.
+        # Second pass: +/-fit_nsigma sigma about the first-pass mean, symmetric,
+        # with at least min_npts points; these points also set the error estimate.
         dv = np.mean(np.diff(vel))
         half_pts = max(
-            int(np.floor(3.0 * sigma1 / dv)), int(np.ceil((min_npts - 1) / 2))
+            int(np.floor(fit_nsigma * sigma1 / dv)), int(np.ceil((min_npts - 1) / 2))
         )
         center = int(np.argmin(np.abs(vel - mu1)))
         idx_lo, idx_hi = center - half_pts, center + half_pts + 1
@@ -710,7 +713,9 @@ class RadialVelocity:
 
         return {"velocity": velocity_grid, "ccf": ccf}
 
-    def compute_order_by_order_rvs(self, chip, fiber, window=None, min_npts=9):
+    def compute_order_by_order_rvs(
+        self, chip, fiber, window=None, fit_nsigma=3.0, min_npts=9
+    ):
         """
         Per-order radial velocities for one chip/fiber, from the cached CCF.
 
@@ -723,6 +728,9 @@ class RadialVelocity:
         window : list of float, optional
             [min, max] km/s window about the dip for the first-pass fit.
             Defaults to the configured value.
+        fit_nsigma : float, optional
+            Half-width of the second-pass fit window in units of the first-pass
+            sigma. Not a configurable parameter; set in code (default 3.0).
         min_npts : int, optional
             Minimum number of grid points to use in each fit window. Not a
             configurable parameter; set in code (default 9).
@@ -760,13 +768,20 @@ class RadialVelocity:
             if not np.any(ccf[o]):
                 continue
             rv[o], rv_err[o] = self._compute_rv_1d(
-                velocity_grid, ccf[o], wave[o], window, min_npts
+                velocity_grid, ccf[o], wave[o], window, fit_nsigma, min_npts
             )
 
         return {"rv": rv, "rv_err": rv_err}
 
     def compute_weighted_rvs(
-        self, chips, fibers, combine_fibers, combine_ccds, window=None, min_npts=9
+        self,
+        chips,
+        fibers,
+        combine_fibers,
+        combine_ccds,
+        window=None,
+        fit_nsigma=3.0,
+        min_npts=9,
     ):
         """
         Weighted-combined RVs from the cached CCFs, collapsing orders (and
@@ -798,6 +813,9 @@ class RadialVelocity:
         window : list of float, optional
             [min, max] km/s window about the dip for the first-pass fit.
             Defaults to the configured value.
+        fit_nsigma : float, optional
+            Half-width of the second-pass fit window in units of the first-pass
+            sigma. Not a configurable parameter; set in code (default 3.0).
         min_npts : int, optional
             Minimum number of grid points to use in each fit window.
 
@@ -841,8 +859,10 @@ class RadialVelocity:
             if not np.any(ccf_w):
                 per_chip[chip] = (np.nan, np.nan)
                 continue
-            rv = self._compute_rv_1d(grid, ccf_w, wave, window, min_npts)[0]
-            rv_err = self._compute_rv_1d(grid, ccf_s, wave, window, min_npts)[1]
+            rv = self._compute_rv_1d(grid, ccf_w, wave, window, fit_nsigma, min_npts)[0]
+            rv_err = self._compute_rv_1d(
+                grid, ccf_s, wave, window, fit_nsigma, min_npts
+            )[1]
             per_chip[chip] = (rv, rv_err)
 
         if not combine_ccds:
@@ -877,6 +897,7 @@ class RadialVelocity:
         ccf_step_size=None,
         ccf_window=None,
         rv_window=None,
+        fit_nsigma=3.0,
         min_npts=9,
         clip_edge_pixels=None,
     ):
@@ -905,6 +926,9 @@ class RadialVelocity:
         rv_window : list of float, optional
             [min, max] km/s window about the dip for the first-pass fit.
             Overrides the configured value.
+        fit_nsigma : float, optional
+            Half-width of the second-pass fit window in units of the first-pass
+            sigma. Not a configurable parameter; set in code (default 3.0).
         min_npts : int, optional
             Minimum number of grid points to use in each fit window. Not a
             configurable parameter; set in code (default 9).
@@ -981,7 +1005,7 @@ class RadialVelocity:
                 )["ccf"]
                 l4_obj.set_data(f"{chip}_{fiber}_CCF", ccf)
                 result = self.compute_order_by_order_rvs(
-                    chip, fiber, rv_window, min_npts
+                    chip, fiber, rv_window, fit_nsigma, min_npts
                 )
                 rows = (
                     slice(0, norder_green)
@@ -998,6 +1022,7 @@ class RadialVelocity:
                 combine_fibers=False,
                 combine_ccds=False,
                 window=rv_window,
+                fit_nsigma=fit_nsigma,
                 min_npts=min_npts,
             )
             ccd_rv = {chip: per_ccd[chip][0] for chip in chips}
@@ -1110,6 +1135,7 @@ class RadialVelocity:
             combine_fibers=True,
             combine_ccds=False,
             window=rv_window,
+            fit_nsigma=fit_nsigma,
             min_npts=min_npts,
         )
         for chip in chips:
@@ -1131,6 +1157,7 @@ class RadialVelocity:
             combine_fibers=True,
             combine_ccds=True,
             window=rv_window,
+            fit_nsigma=fit_nsigma,
             min_npts=min_npts,
         )
         if not np.isfinite(ccfrv):
