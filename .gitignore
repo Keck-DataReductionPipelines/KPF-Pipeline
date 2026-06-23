@@ -222,3 +222,6 @@ tests/profiling/reports/
 
 # Local working notes / scratch task lists — personal, never tracked.
 notes/
+
+__pycache__
+kpf_drp.egg-info

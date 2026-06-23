@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from kpfpipe.modules.image_assembly import ImageAssembly
-from kpfpipe.quality_control.quicklook._save_png import save_png
+from kpfpipe.quality_control.quicklook._save_png import save_image_png, save_png
 
 
 class PlotL0:
@@ -26,13 +26,17 @@ class PlotL0:
         KPF0 data object.
     output_dir : str or None
         Directory to save PNG files. None returns the Figure only.
+    full_res : bool
+        Save full 1:1 pixel-resolution PNGs instead of the default downsampled
+        figure PNGs. Full-resolution files can be tens of MB per chip.
     """
 
     _PLOT_METHODS = ("stitched_image",)
 
-    def __init__(self, l0_obj, output_dir=None):
+    def __init__(self, l0_obj, output_dir=None, full_res=False):
         self.l0 = l0_obj
         self.output_dir = output_dir
+        self.full_res = full_res
         self.obs_id = getattr(l0_obj, "obs_id", None) or ""
         self.name = ""
         if "PRIMARY" in l0_obj.headers:
@@ -91,7 +95,7 @@ class PlotL0:
 
         return ImageAssembly.orient_ffi(image, chip)
 
-    def stitched_image(self, chip):
+    def stitched_image(self, chip, *, full_res=None):
         """
         Plot the stitched raw detector image for one CCD.
 
@@ -101,12 +105,18 @@ class PlotL0:
         ----------
         chip : str
             'green' or 'red'.
+        full_res : bool or None
+            Save a native-size, one-output-pixel-per-CCD-pixel PNG when true.
+            None uses the constructor's `full_res` setting.
 
         Returns
         -------
         matplotlib.Figure
             The stitched-image figure.
         """
+        if full_res is None:
+            full_res = self.full_res
+
         chip_upper = chip.upper()
 
         image = self._stitch(chip_upper)
@@ -118,12 +128,15 @@ class PlotL0:
             image = image / 2**16
 
         fig = plt.figure(figsize=(10, 8), tight_layout=True)
+        cmap = "viridis"
+        vmin = np.percentile(image, 1)
+        vmax = np.percentile(image, 99.5)
         plt.imshow(
             image,
-            cmap="viridis",
+            cmap=cmap,
             origin="lower",
-            vmin=np.percentile(image, 1),
-            vmax=np.percentile(image, 99.5),
+            vmin=vmin,
+            vmax=vmax,
         )
 
         plt.title(
@@ -158,15 +171,29 @@ class PlotL0:
         plt.subplots_adjust(bottom=0.1)
 
         if self.output_dir is not None:
-            fig_path = os.path.join(
-                self.output_dir,
-                f"{self.obs_id}_L0_stitched_image_{chip.lower()}_zoomable.png",
-            )
-            save_png(fig, fig_path, dpi=150, compress_level=1)
+            if full_res:
+                fig_path = os.path.join(
+                    self.output_dir,
+                    f"{self.obs_id}_L0_stitched_image_{chip.lower()}_full_res.png",
+                )
+                save_image_png(
+                    image,
+                    fig_path,
+                    cmap=cmap,
+                    vmin=vmin,
+                    vmax=vmax,
+                    compress_level=1,
+                )
+            else:
+                fig_path = os.path.join(
+                    self.output_dir,
+                    f"{self.obs_id}_L0_stitched_image_{chip.lower()}_zoomable.png",
+                )
+                save_png(fig, fig_path, dpi=150, compress_level=1)
 
         return fig
 
-    def run(self, which):
+    def run(self, which, *, full_res=None):
         """
         Generate the requested plot(s) for every chip that has data.
 
@@ -178,6 +205,9 @@ class PlotL0:
         which : str
             'all' to run every implemented plot, or the name of a single
             plot method (one of `self._PLOT_METHODS`).
+        full_res : bool or None
+            Save native-size PNGs when true. None uses the constructor's
+            `full_res` setting.
 
         Returns
         -------
@@ -203,11 +233,13 @@ class PlotL0:
             os.makedirs(self.output_dir, exist_ok=True)
 
         figures = {}
+        if full_res is None:
+            full_res = self.full_res
         for chip in ["green", "red"]:
             if not self._has_chip(chip):
                 continue
             for name in names:
-                fig = getattr(self, name)(chip)
+                fig = getattr(self, name)(chip, full_res=full_res)
                 figures[f"{name}_{chip}"] = fig
                 plt.close(fig)
         return figures

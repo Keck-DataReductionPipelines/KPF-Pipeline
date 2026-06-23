@@ -1,6 +1,8 @@
 """Shared figure-saving helper for quicklook plots."""
 
 import numpy as np
+from matplotlib import colormaps
+from matplotlib.colors import Normalize
 from PIL import Image
 
 
@@ -29,4 +31,27 @@ def save_png(fig, path, dpi, compress_level):
     rgb = np.asarray(fig.canvas.buffer_rgba())[..., :3]
     Image.fromarray(rgb, "RGB").save(
         path, format="png", dpi=(dpi, dpi), compress_level=compress_level
+    )
+
+
+def save_image_png(image, path, cmap, vmin, vmax, origin="lower", compress_level=1):
+    """Save `image` directly as a native-size RGB PNG.
+
+    This bypasses matplotlib's figure rasterization so the output dimensions are
+    exactly one PNG pixel per input array pixel. `origin="lower"` mirrors the
+    display orientation used by `imshow(..., origin="lower")`.
+    """
+    arr = np.asarray(image)
+    if origin == "lower":
+        arr = np.flipud(arr)
+    elif origin != "upper":
+        raise ValueError(f"origin must be 'lower' or 'upper'; got {origin!r}")
+
+    masked = np.ma.masked_invalid(arr)
+    norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
+    cmap_obj = colormaps[cmap].copy()
+    cmap_obj.set_bad("black")
+    rgb = cmap_obj(norm(masked), bytes=True)[..., :3]
+    Image.fromarray(rgb, "RGB").save(
+        path, format="png", compress_level=compress_level
     )

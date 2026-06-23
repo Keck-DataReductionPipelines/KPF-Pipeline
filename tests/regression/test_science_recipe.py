@@ -49,6 +49,7 @@ def _load_recipe():
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestScienceRecipe:
     """End-to-end recipe test: KPF0 → ImageAssembly → SpectralExtraction → KPF2."""
 
@@ -153,11 +154,15 @@ class TestScienceRecipe:
         keywords) survive into the L2 PRIMARY."""
         l2 = KPF2.from_fits(recipe_output)
         prim = l2.headers["PRIMARY"]
-        # bias/dark/flat use basename + DIR + integer AGE
-        for prefix in ("BIAS", "DARK", "FLAT"):
+        # bias/dark use basename + DIR + integer AGE. Flat association is not
+        # part of the basic runnable path until flat processing is implemented.
+        for prefix in ("BIAS", "DARK"):
             assert f"{prefix}FILE" in prim
             assert f"{prefix}DIR" in prim
             assert f"AGE{prefix}" in prim
+        assert "FLATFILE" not in prim
+        assert "FLATDIR" not in prim
+        assert "AGEFLAT" not in prim
         # thar uses legacy convention: WLSFILE = full path (no WLSDIR),
         # AGEWLS = float days
         assert "WLSFILE" in prim
