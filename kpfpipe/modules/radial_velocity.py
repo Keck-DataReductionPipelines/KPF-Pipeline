@@ -1076,7 +1076,7 @@ class RadialVelocity:
 
             # Combined per-CCD RV/error are KPF legacy carryovers, not EPRV RV1
             # keywords. They are registered KPF-pipeline PRIMARY keywords
-            # (config/KPFPIPE-PRIMARY-keywords.csv) under the legacy per-fiber
+            # (config/L4-headers.csv) under the legacy per-fiber
             # suffix scheme CCD<n>RV<sfx>/CCD<n>ERV<sfx> (n: GREEN=1, RED=2; sfx:
             # 1/2/3=SCI1/2/3, C=CAL, S=SKY). The bare CCD<n>RV/CCD<n>ERV names
             # stay reserved for the SCI-combined RV. A non-finite value (failed

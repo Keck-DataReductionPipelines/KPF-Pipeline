@@ -11,7 +11,7 @@ Outputs (rvdata-standard ImageHDUs, shape (NORDER,)):
 
 Per-CCD scalar summaries (at each chip's flux-weighted photon-midpoint time)
 written to PRIMARY as registered KPF-pipeline keywords
-(config/KPFPIPE-PRIMARY-keywords.csv):
+(config/L2-headers.csv):
   - CCD1BJD       GREEN photon-weighted mid-time (BJD_TDB)
   - CCD1BKMS      GREEN barycentric velocity [km/s]
   - CCD1BZ        GREEN barycentric redshift
@@ -747,7 +747,7 @@ class BarycentricCorrection:
         self.l2_obj.set_data("BARYCORR_Z", np.asarray(bary_z, dtype=np.float64))
 
         # Per-CCD PRIMARY keywords (CCD1=GREEN, CCD2=RED); registered
-        # KPF-pipeline keywords (config/KPFPIPE-PRIMARY-keywords.csv).
+        # KPF-pipeline keywords (config/L2-headers.csv).
         prim["CCD1BJD"] = (float(ccd_bjd[0]), "[BJD_TDB] GREEN mid-time")
         prim["CCD1BKMS"] = (float(ccd_kms[0]), "[km/s] GREEN barycentric velocity")
         prim["CCD1BZ"] = (float(ccd_z[0]), "GREEN barycentric redshift z")

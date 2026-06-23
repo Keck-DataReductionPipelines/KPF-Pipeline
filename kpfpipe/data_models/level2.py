@@ -263,7 +263,7 @@ class KPF2(RV2):
         and the receipt chain preserved. RV and CCF data extensions are
         created but empty — the caller (RV computation) fills those in.
         """
-        from kpfpipe.data_models.header_standard import validate_eprv_primary
+        from kpfpipe.data_models.headers import validate_eprv_primary
         from kpfpipe.data_models.level4 import KPF4  # deferred: avoids circular import
 
         kpf4 = KPF4()

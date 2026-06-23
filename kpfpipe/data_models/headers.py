@@ -15,7 +15,7 @@ header. The conversion lives here, in exactly one place:
 
 KPF-pipeline keywords that are written directly to PRIMARY (read noise, QC
 booleans, diagnostics, RV/barycentric cards, …) are catalogued in the packaged
-registry ``config/KPFPIPE-PRIMARY-keywords.csv`` and allowed by the validator.
+registry (``config/L{0,1,2,4}-headers.csv``) and allowed by the validator.
 """
 
 import fnmatch
@@ -47,7 +47,16 @@ def _load_keyword_csv(handle):
 
 _L2_KW = _load_keyword_csv(_rv_cfg / "L2-PRIMARY-keywords.csv")
 _L4_KW = _load_keyword_csv(_rv_cfg / "L4-PRIMARY-keywords.csv")
-_KPFPIPE_KW = pd.read_csv(_kpf_data_cfg / "KPFPIPE-PRIMARY-keywords.csv")
+# KPF-pipeline keyword registry, split by the level that first writes the
+# keyword (config/L{0,1,2,4}-headers.csv). All levels are combined into one
+# allowlist, since a keyword written at an earlier level persists on PRIMARY.
+_KPFPIPE_KW = pd.concat(
+    [
+        pd.read_csv(_kpf_data_cfg / f"L{level}-headers.csv")
+        for level in ("0", "1", "2", "4")
+    ],
+    ignore_index=True,
+)
 
 
 # The EPRV keyword CSVs encode per-target/per-telescope families as a
@@ -250,7 +259,7 @@ def validate_eprv_primary(header, level):
        been converted or left in INSTRUMENT_HEADER.
     2. **Unregistered keyword** — a card that is neither an EPRV-standard
        keyword, a header_map STANDARD target, a registered KPF-pipeline keyword
-       (``config/KPFPIPE-PRIMARY-keywords.csv``), nor a structural card.
+       (``config/L{0,1,2,4}-headers.csv``), nor a structural card.
     3. **Missing required** — a Required EPRV PRIMARY keyword is absent.
 
     Parameters
@@ -286,7 +295,7 @@ def validate_eprv_primary(header, level):
             )
         raise ValueError(
             f"unregistered keyword {key!r} on {level} PRIMARY; add it to "
-            "config/KPFPIPE-PRIMARY-keywords.csv or fix the writer"
+            "config/L{0,1,2,4}-headers.csv or fix the writer"
         )
 
     missing = sorted(k for k in required_keys if k not in header)

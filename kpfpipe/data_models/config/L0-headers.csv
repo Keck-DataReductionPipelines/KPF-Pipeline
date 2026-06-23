@@ -1,0 +1,6 @@
+keyword,populated_by,comment
+DATAPRL0,QCL0,QC: L0 data present
+KWRDPRL0,QCL0,QC: required L0 keywords present
+EXPTIMOK,QCL0,QC: exposure time valid
+NOTJUNK,QCL0,QC: frame not junk
+ISGOOD,QC,QC: aggregate pass/fail

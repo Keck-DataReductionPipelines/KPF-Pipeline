@@ -192,7 +192,7 @@ class KPF1(KPFDataModel):
         arrays are created but empty — the caller (spectral extraction) fills
         those in.
         """
-        from kpfpipe.data_models.header_standard import validate_eprv_primary
+        from kpfpipe.data_models.headers import validate_eprv_primary
         from kpfpipe.data_models.level2 import KPF2  # deferred: avoids circular import
 
         kpf2 = KPF2()

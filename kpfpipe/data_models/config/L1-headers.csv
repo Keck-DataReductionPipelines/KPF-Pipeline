@@ -1,0 +1,29 @@
+keyword,populated_by,comment
+RNGREEN?,ImageAssembly,Per-amp read noise GREEN [e-] (RNGREEN1-4)
+RNRED?,ImageAssembly,Per-amp read noise RED [e-] (RNRED1-4)
+RNNGGR?,ImageAssembly,Per-amp non-Gaussian read noise GREEN (RNNGGR1-4)
+RNNGRD?,ImageAssembly,Per-amp non-Gaussian read noise RED (RNNGRD1-4)
+OSCANMET,ImageAssembly,Overscan subtraction method
+BIASSUB,ImageProcessing,Bias subtraction applied
+DARKSUB,ImageProcessing,Dark subtraction applied
+FLATSUB,ImageProcessing,Flat division applied (reserved)
+BIASFILE,CalibrationAssociation,Master bias filename
+BIASDIR,CalibrationAssociation,Master bias directory
+AGEBIAS,CalibrationAssociation,Master bias age [days]
+DARKFILE,CalibrationAssociation,Master dark filename
+DARKDIR,CalibrationAssociation,Master dark directory
+AGEDARK,CalibrationAssociation,Master dark age [days]
+FLATFILE,CalibrationAssociation,Master flat filename
+FLATDIR,CalibrationAssociation,Master flat directory
+AGEFLAT,CalibrationAssociation,Master flat age [days]
+WLSFILE,CalibrationAssociation,WLS master full path (legacy convention)
+AGEWLS,CalibrationAssociation,WLS master age [days]
+DRPVERNO,KPF0.to_kpf1,Pipeline version (WMKO DRP-RUN-11; EPRV equivalent is DRPTAG)
+MASTYPE,KPFMaster,Master calibration type (masters products only)
+RNINRNG,QCL1,QC: per-amp RN within range
+RNGAUSS,QCL1,QC: non-Gaussian RN within range
+BIASOK,QCL1,QC: bias subtraction applied
+BIASAGE,QCL1,QC: bias master age ok
+DARKAGE,QCL1,QC: dark master age ok
+FLATAGE,QCL1,QC: flat master age ok
+FFIFIN,QCL1,QC: assembled CCDs all finite

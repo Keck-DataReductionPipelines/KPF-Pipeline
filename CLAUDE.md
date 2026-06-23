@@ -204,7 +204,7 @@ L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 ### Header standardization (EPRV PRIMARY)
 
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place**:
-`KPF0.to_kpf1()`, via `kpfpipe/data_models/header_standard.py` (which drives rvdata's
+`KPF0.to_kpf1()`, via `kpfpipe/data_models/headers.py` (which drives rvdata's
 `header_map.csv`). Consequences every contributor must respect:
 
 - **L1 PRIMARY is already EPRV-standard.** From L1 onward, PRIMARY holds EPRV keyword *names*
@@ -215,7 +215,7 @@ The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one plac
   `INSTRUMENT_HEADER`, not PRIMARY.
 - **KPF-pipeline keywords are written directly to PRIMARY** (read noise, OSCANMET, BIASSUB/
   DARKSUB, calibration ages/paths, QC booleans, diagnostics, and the RV/barycentric cards). Every
-  such keyword must be registered in `data_models/config/KPFPIPE-PRIMARY-keywords.csv` (entries
+  such keyword must be registered in the per-level registry `data_models/config/L{0,1,2,4}-headers.csv` (entries
   may be fnmatch patterns, e.g. `RNGREEN?`). **Add new PRIMARY keywords there** or the validator
   will reject the product.
 - **`to_kpf2`/`to_kpf4` are pure pass-throughs** that call `validate_eprv_primary()` and **fail

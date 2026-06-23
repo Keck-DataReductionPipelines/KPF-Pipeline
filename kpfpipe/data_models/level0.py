@@ -163,7 +163,7 @@ class KPF0(KPFDataModel):
 
         The raw WMKO PRIMARY header is converted to EPRV-standard keyword names
         and values here (the single conversion site; see
-        `kpfpipe.data_models.header_standard`), so the L1 PRIMARY is already
+        `kpfpipe.data_models.headers`), so the L1 PRIMARY is already
         EPRV-standard. The verbatim raw L0 PRIMARY is preserved in the
         immutable INSTRUMENT_HEADER extension. Downstream stages read raw
         instrument keywords from INSTRUMENT_HEADER and write EPRV/registered
@@ -174,7 +174,7 @@ class KPF0(KPFDataModel):
         obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
         but empty — the caller (image assembly) fills those in.
         """
-        from kpfpipe.data_models.header_standard import (
+        from kpfpipe.data_models.headers import (
             build_instrument_header,
             convert_native_to_eprv,
         )

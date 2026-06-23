@@ -1,0 +1,5 @@
+keyword,populated_by,comment
+CCD?RV*,RadialVelocity,Per-CCD/per-fiber RV [km/s] (legacy carryover)
+CCD?ERV*,RadialVelocity,Per-CCD/per-fiber RV error [km/s] (legacy carryover)
+CCFRV,RadialVelocity,Cross-CCD combined science RV [km/s] (legacy)
+CCFERV,RadialVelocity,Cross-CCD combined RV error [km/s] (legacy)
