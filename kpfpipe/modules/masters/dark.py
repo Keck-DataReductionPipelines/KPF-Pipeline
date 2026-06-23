@@ -22,7 +22,7 @@ class Dark(BaseMasterModule):
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to stack.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: nframe_stream, stack_sigma,
+        Module configuration. Recognized keys: stack_sigma,
         exptime_tolerance, chips.
     """
 
@@ -57,7 +57,7 @@ class Dark(BaseMasterModule):
         self,
         l0_file_list=None,
         *,
-        nstream=None,
+        nstream=6,
         sigma=None,
         bias=None,
         filepath=None,
@@ -92,8 +92,6 @@ class Dark(BaseMasterModule):
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if nstream is None:
-            nstream = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
 
@@ -110,7 +108,11 @@ class Dark(BaseMasterModule):
         # Dark current is a rate: stack_frames normalizes each frame by its
         # exposure time, so the master dark IMG is in electrons/sec.
         self.ml1_obj = self._build_ml1_obj(
-            l1_arrays, l0_file_list, receipt_key="master_dark", bunit="electrons/sec"
+            l1_arrays,
+            l0_file_list,
+            master_type="dark",
+            receipt_key="master_dark",
+            bunit="electrons/sec",
         )
         self._results = self._populate_results(l1_arrays)
 

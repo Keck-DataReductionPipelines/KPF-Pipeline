@@ -203,8 +203,11 @@ class StageName:
   Tunable params become instance attributes via the `_DEFAULTS` setattr loop.
 - **`_DEFAULTS` merges the global defaults**: `_DEFAULTS = {**DEFAULTS, "key": ...}`
   (use the `{**DEFAULTS, ...}` spread form, not `dict(DEFAULTS)`).
-- **Defaults live in the module, not the config file.** Config (TOML) values are
-  *overrides* applied on top of `_DEFAULTS` via `params.get(k, v)`.
+- **Defaults live in the module, not the config file.** Resolution is a three-tier
+  override chain, lowest precedence first: `_DEFAULTS` (the in-module default) → config
+  (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword
+  argument on a method call (overrides both). Config is the production override path;
+  direct kwargs are the developer/interactive path (e.g. notebooks), not used in production.
 - **Declare every lazily-populated attribute in `__init__`, set to `None`/`{}`, with a
   trailing comment naming the method that fills it** — this is a defining house style:
   ```python
@@ -247,9 +250,16 @@ class StageName:
     positional in the same slot (e.g. `CalibrationAssociation.perform(self, cal_types, *, ...)`).
   - **Everything else is keyword-only** — place a bare `*` after the positionals so all
     tunables must be passed by name.
-  - **Order the keyword-only args in two groups**: first the *configurable* parameters that
-    default to `None` (the "`None` means use config" tunables), then the *semi-hidden*
-    parameters that carry a real default value (e.g. `min_npts=9`, `verbose=True`). Within
+  - **Order the keyword-only args in two groups**: first the *configurable* parameters —
+    backed by a `_DEFAULTS` key and a config entry, defaulting to `None` and resolving to
+    the configured `self.<attr>` (the "`None` means use config" tunables); then the
+    *semi-hidden* parameters — rarely-tuned knobs left exposed for developer experimentation,
+    carrying a real literal default (e.g. `min_npts=9`, `verbose=True`) and intentionally
+    **absent** from both `_DEFAULTS` and config. The invariant is that a tunable's tier is
+    legible from the signature alone: **`=None` ⇒ configurable** (resolves to `self.<attr>`),
+    **literal default ⇒ semi-hidden**. So a semi-hidden param needing a sequence default uses
+    an *immutable literal* (a tuple, safe as a default argument), e.g.
+    `clip_edge_pixels=(500, 500)`, never the `None`-sentinel + in-body list fallback. Within
     each group, keep a sensible domain order.
 - **The `make_master_*` entry points follow the same shape** (§10), with `l0_file_list`
   as the sole positional in place of `chips`/`fibers`.
@@ -266,7 +276,7 @@ class StageName:
   def _box_extraction(D, V, *, S=None, M=None, W=None): ...
   ```
   Required positionals first; everything tunable after the `*`.
-- **String-enum mode parameters** (e.g. `method`, `response`, `imtype`) are validated
+- **String-enum mode parameters** (e.g. `method`, `response`, `cal_type`) are validated
   against an explicit allowed set, raising `ValueError` that names the valid options.
 - **Return patterns**:
   - A transform's `perform()` returns the next-level data object after mutating
@@ -356,6 +366,13 @@ class StageName:
   kwarg of `np.sum` et al. for masked reductions.
 - **Views vs copies are deliberate**: slicing yields views on purpose (consistent with
   the data-model "view not copy" philosophy); `.copy()` when you must mutate.
+- **Row/col nomenclature is numpy, not KPF.** All image/spectrum arrays use the numpy axis
+  convention throughout: **axis 0** (`row`/`nrow`) = **cross-dispersion** (across orders, flux
+  varies rapidly); **axis 1** (`col`/`ncol`) = **dispersion** (along an order, flux varies
+  slowly). This is the *transpose* of the KPF/observatory physical convention (where a "row"
+  runs along dispersion), so a reader expecting KPF physical directions will misread the code's
+  `row`/`col` — but the code is uniform and self-consistent.
+  `# Axis convention: axis 0 = cross-dispersion (KPF col); axis 1 = dispersion (KPF row).`
 - **Delegate shared numerics to `kpfpipe/utils/`** (`flag_outliers`, `optimize_lsq`,
   `interpolate_bad_pixels`, `compute_redshift`, `strictly_increasing`). `scipy` is the
   numerical backend (`least_squares` with an analytic Jacobian, `ndimage`,
@@ -481,10 +498,17 @@ documented, intentional ways — follow *its* conventions when adding masters co
   - Transform modules → `.perform()`; QC/Diag/Quicklook → `.run()` (or `.run("all")`);
     masters → `.make_master_l1/l2()`. The constructor takes the **whole `ConfigHandler`**,
     not pre-extracted params — each module pulls its own section internally.
-- **All path construction goes through utils helpers** (`build_filepath`, `build_qlp_dir`,
-  `build_l0_file_lists`, `get_obs_id`), never string concatenation. Level passed as a
-  literal `"L0"/"L1"/"L2"/"L4"`. `os.makedirs(os.path.dirname(path), exist_ok=True)`
-  before every `.to_fits()`.
+- **Product paths go through the `utils/io.py` helpers** (`build_filepath`, `glob_masters`,
+  `build_qlp_dir`, `build_l0_file_lists`, `get_obs_id`) — never re-derived by string
+  concatenation in modules/recipes. These helpers are the single definition of the on-disk
+  layout and filename conventions, built inline within each (no shared layout/filename
+  constant or directory helper — that abstraction was deliberately removed as more confusing
+  than the duplication). Where a convention is necessarily encoded twice — the masters
+  *writer* (`build_filepath`) and *reader* (`glob_masters`) build their paths independently —
+  keep them in lock-step with a **drift test** (`test_glob_masters_matches_build_filepath`),
+  not a shared helper. Plain `os.path.join` is fine for incidental input-directory assembly
+  (e.g. an L0 scan dir). Level passed as a literal `"L0"/"L1"/"L2"/"L4"`;
+  `os.makedirs(os.path.dirname(path), exist_ok=True)` before every `.to_fits()`.
 - **Arg validation**: guard at the top, `raise SystemExit("Error: --obs_id is required …")`
   with an example.
 - **Recipe comments** are terse, lowercase, imperative, and explain the *why* (science

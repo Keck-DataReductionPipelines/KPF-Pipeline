@@ -13,6 +13,10 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
+from kpfpipe.data_models.level0 import KPF0
+from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.data_models.level2 import KPF2
+from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import (
@@ -20,6 +24,7 @@ from kpfpipe.utils.io import (
     build_l0_file_lists,
     build_mini_database,
     build_qlp_dir,
+    glob_masters,
 )
 
 # ---------------------------------------------------------------------------
@@ -201,7 +206,7 @@ class TestBuildL0FileLists:
             build_l0_file_lists("dark", data_dir=data_dir)
 
     def test_invalid_imtype_raises(self, data_dir):
-        with pytest.raises(ValueError, match="imtype must be one of"):
+        with pytest.raises(ValueError, match="cal_type must be one of"):
             build_l0_file_lists("bogus", data_dir=data_dir)
 
     def test_thar_returns_two_clusters(self, data_dir):
@@ -322,18 +327,19 @@ class TestBuildFilepath:
         assert path == "/data/L0/20240405/KP.20240405.49597.71.fits"
 
     def test_science_l1(self):
-        # Science L1 uses EPRV naming: KP.20240405.49597.71 → 49597s = 13:46:37
+        # Science L1 keeps the KPF "kpf_L1" prefix (no EPRV "S": no L1 standard).
+        # KP.20240405.49597.71 → 49597s = 13:46:37
         path = build_filepath("KP.20240405.49597.71", "L1", data_root="/data")
-        assert path == "/data/L1/20240405/kpf_SL1_20240405T134637.fits"
+        assert path == "/data/L1/20240405/kpf_L1_20240405T134637.fits"
 
     def test_science_bare_filename_l0(self):
         name = build_filepath("KP.20240405.49597.71", "L0")
         assert name == "KP.20240405.49597.71.fits"
 
     def test_science_bare_filename_l1(self):
-        # 49597s = 13:46:37
+        # 49597s = 13:46:37; L1 keeps the "kpf_L1" prefix (no EPRV "S")
         name = build_filepath("KP.20240405.49597.71", "L1")
-        assert name == "kpf_SL1_20240405T134637.fits"
+        assert name == "kpf_L1_20240405T134637.fits"
 
     def test_invalid_master_type_raises(self):
         with pytest.raises(ValueError, match="'master' must be"):
@@ -387,6 +393,73 @@ class TestBuildFilepath:
             ValueError, match="data_root must be None or a non-empty string"
         ):
             build_filepath("KP.20240405.40113.57", "L2", data_root=12345)
+
+
+# ---------------------------------------------------------------------------
+# glob_masters
+# ---------------------------------------------------------------------------
+
+
+class TestGlobMasters:
+    """`glob_masters` (the masters finder pattern) and `build_filepath` (the
+    masters writer) build the same path independently. These guard that the two
+    inline f-strings can't drift — same directory and `_master_{type}_{level}`
+    filename, with the KOAID wildcarded in the finder."""
+
+    def test_glob_masters(self):
+        assert (
+            glob_masters("/data", "bias", "L1", "20240405")
+            == "/data/masters/20240405/*_master_bias_L1.fits"
+        )
+
+    @pytest.mark.parametrize(
+        "cal_type,level",
+        [("bias", "L1"), ("dark", "L1"), ("flat", "L1"), ("thar", "L2")],
+    )
+    def test_glob_masters_matches_build_filepath(self, cal_type, level):
+        # The finder pattern must equal a written master path with only the
+        # KOAID wildcarded — same directory, same filename convention.
+        obs_id = "KP.20240405.03600.00"
+        written = build_filepath(obs_id, level, data_root="/data", master=cal_type)
+        assert glob_masters("/data", cal_type, level, "20240405") == written.replace(
+            obs_id, "*"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Filename-convention consistency contract
+# ---------------------------------------------------------------------------
+
+
+class TestFilenameConsistency:
+    """`build_filepath` (the pipeline's path builder, from an obs_id) and a data
+    model's `generate_standard_filename` (the to_fits fallback, from headers) are
+    two independent encodings of the same naming rule. This contract asserts they
+    agree on the basename for every level, so the two can never silently drift
+    (the kind of divergence behind the old `kpf_SL1` bug).
+
+    L0/L1 use KPF overrides (no EPRV name for raw/assembled frames); L2/L4 use the
+    EPRV-standard name inherited from rvdata. Both paths are exercised here.
+    """
+
+    OBS_ID = "KP.20240405.49597.71"  # 49597 s of day = 13:46:37 UT
+    DATE_OBS = "2024-04-05T13:46:37"
+
+    def _make(self, level):
+        if level == "L0":
+            obj = KPF0()
+            obj.obs_id = self.OBS_ID
+            return obj
+        obj = {"L1": KPF1, "L2": KPF2, "L4": KPF4}[level]()
+        obj.headers["PRIMARY"]["INSTRUME"] = "KPF"
+        obj.headers["PRIMARY"]["DATE-OBS"] = self.DATE_OBS
+        return obj
+
+    @pytest.mark.parametrize("level", ["L0", "L1", "L2", "L4"])
+    def test_generate_standard_filename_matches_build_filepath(self, level):
+        obj = self._make(level)
+        expected = os.path.basename(build_filepath(self.OBS_ID, level))
+        assert obj.generate_standard_filename() == expected
 
 
 # ---------------------------------------------------------------------------

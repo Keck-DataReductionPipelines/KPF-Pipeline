@@ -90,7 +90,7 @@ def build_mini_database(data_dir, write=True):
 
 
 def build_l0_file_lists(
-    imtype, *, data_dir=None, mini_db=None, min_file_count=5, cluster_gap_seconds=7200
+    cal_type, *, data_dir=None, mini_db=None, min_file_count=5, cluster_gap_seconds=7200
 ):
     """
     Return sorted file lists for all calibration clusters of the requested
@@ -106,7 +106,7 @@ def build_l0_file_lists(
 
     Parameters
     ----------
-    imtype : str
+    cal_type : str
         Calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
     data_dir : str, optional
         Path to directory containing L0 FITS files.
@@ -128,14 +128,14 @@ def build_l0_file_lists(
     Raises
     ------
     ValueError
-        If `imtype` is not a recognized calibration type, if exactly one of
+        If `cal_type` is not a recognized calibration type, if exactly one of
         `data_dir` or `mini_db` is not provided, if no calibration frames of
         the requested type are found, or if any cluster contains fewer than
         `min_file_count` files.
     """
-    if imtype not in _OBJECT_MAP:
+    if cal_type not in _OBJECT_MAP:
         raise ValueError(
-            f"imtype must be one of {list(_OBJECT_MAP.keys())}; got '{imtype}'"
+            f"cal_type must be one of {list(_OBJECT_MAP.keys())}; got '{cal_type}'"
         )
 
     if (data_dir is None) == (mini_db is None):
@@ -173,11 +173,11 @@ def build_l0_file_lists(
         else:
             mini_db = build_mini_database(data_dir)
 
-    cal_df = mini_db[mini_db["OBJECT"].isin(_OBJECT_MAP[imtype])]
+    cal_df = mini_db[mini_db["OBJECT"].isin(_OBJECT_MAP[cal_type])]
 
     if cal_df.empty:
         raise ValueError(
-            f"No '{imtype}' calibration frames found in "
+            f"No '{cal_type}' calibration frames found in "
             f"{data_dir or 'the provided mini_db'}"
         )
 
@@ -202,7 +202,7 @@ def build_l0_file_lists(
     short = [c for c in clusters if len(c) < min_file_count]
     if short:
         raise ValueError(
-            f"'{imtype}' has {len(short)} cluster(s) below "
+            f"'{cal_type}' has {len(short)} cluster(s) below "
             f"min_file_count={min_file_count}; sizes: {[len(c) for c in short]}"
         )
     return clusters
@@ -245,6 +245,15 @@ def build_qlp_dir(obs_id, level, *, data_root):
 def build_filepath(obs_id, level, *, data_root=None, master=None):
     """
     Build a filepath for a KPF data product.
+
+    This is the pipeline's authoritative path builder: it constructs the output
+    path (directory layout + filename) from an obs_id string, before/without a
+    populated data object, and is what every recipe uses to decide where to
+    write. The parallel `<model>.generate_standard_filename()` builds only the
+    basename from a populated object's headers and is the `to_fits(fn=None)`
+    fallback (rvdata-owned for the EPRV-standard levels L2/L4, KPF-overridden for
+    the non-standard levels L0/L1). The two encode the same naming rule and must
+    agree per level; `TestFilenameConsistency` enforces that contract.
 
     Parameters
     ----------
@@ -305,8 +314,9 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
         return os.path.join(data_root, "masters", datecode, filename)
 
     # Science paths by level:
-    #   L0:       {obs_id}.fits                                       (KPF-native)
-    #   L1/L2/L4: kpf_SL{N}_{YYYYMMDD}T{HHmmss}.fits                (EPRV standard)
+    #   L0:    {obs_id}.fits                            (KPF-native)
+    #   L1:    kpf_L1_{YYYYMMDD}T{HHmmss}.fits          (no EPRV "S": no L1 standard)
+    #   L2/L4: kpf_SL{N}_{YYYYMMDD}T{HHmmss}.fits       (EPRV standard)
     if level not in ("L0", "L1", "L2", "L4"):
         raise ValueError(f"'level' must be 'L0', 'L1', 'L2', or 'L4'; got '{level}'")
 
@@ -314,7 +324,10 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
         filename = f"{obs_id}.fits"
     else:
         eprv_ts = kpf_timestamp_to_eprv_timestamp(get_timestamp(obs_id))
-        filename = f"kpf_SL{level[1]}_{eprv_ts}.fits"
+        # L1 has no EPRV standard, so it keeps the KPF "kpf_L1" prefix (no "S");
+        # L2/L4 use the EPRV "kpf_SL{N}" prefix.
+        prefix = "kpf_L1" if level == "L1" else f"kpf_SL{level[1]}"
+        filename = f"{prefix}_{eprv_ts}.fits"
 
     if data_root is None:
         return filename
@@ -363,3 +376,18 @@ def build_master_path_from_fits_header(kpf_obj, cal_type):
         )
 
     return os.path.join(master_dir, master_file)
+
+
+def glob_masters(data_root, cal_type, level, datecode):
+    """
+    Glob pattern matching every ``cal_type``/``level`` master written under
+    ``data_root`` for ``datecode`` (the KOAID prefix wildcarded):
+    ``{data_root}/masters/{datecode}/*_master_{cal_type}_{level}.fits``.
+
+    The reader counterpart to a `build_filepath` master path — it builds the same
+    masters directory and filename independently, with the KOAID wildcarded.
+    `test_glob_masters_matches_build_filepath` guards that the two stay in step.
+    """
+    return os.path.join(
+        data_root, "masters", datecode, f"*_master_{cal_type}_{level}.fits"
+    )

@@ -45,7 +45,6 @@ class BaseMasterModule:
     # image_processing._DEFAULTS.
     _DEFAULTS = {
         **DEFAULTS,
-        "nframe_stream": 6,
         "stack_sigma": 5.0,
         "bias": True,
         "dark": True,
@@ -183,7 +182,7 @@ class BaseMasterModule:
             self._master_paths[cal_type] = path
         return self._master_ml1[cal_type]
 
-    def _load_frame(self, fn, ncache=None, exptime_tolerance=0.1, verbose=True):
+    def _load_frame(self, fn, cache, exptime_tolerance=0.1, verbose=True):
         """
         Load an L0 file and perform image assembly to produce an L1 object.
 
@@ -191,8 +190,11 @@ class BaseMasterModule:
         ----------
         fn : str
             Path to L0 FITS file.
-        ncache : int, optional
-            Maximum number of L1 objects to retain in internal cache.
+        cache : bool
+            If True, retain the assembled L1 in the internal cache for reuse.
+            The caller decides which frames are worth caching (see the streaming
+            stats path). A frame already cached is returned from the cache
+            regardless of this flag.
         exptime_tolerance : float
             Maximum allowed excess of elapsed time over requested exposure time,
             in seconds (default = 0.1).
@@ -211,15 +213,12 @@ class BaseMasterModule:
 
         Notes
         -----
-        Successfully processed frames may be cached to reduce redundant I/O and
-        recomputation. Cache size is limited by `ncache`, which defaults to
-        `nframe_stream - 1`.
+        When `cache=True`, the successfully processed frame is retained to
+        reduce redundant I/O and recomputation. The streaming stats path caches
+        its approximation-pass frames so the exact pass reuses them.
         """
         if verbose:
             print(f"loading {fn}")
-
-        if ncache is None:
-            ncache = self.nframe_stream - 1
 
         success = True
         failure = False
@@ -232,7 +231,7 @@ class BaseMasterModule:
                 l0_obj = KPF0.from_fits(fn)
                 l1_obj = ImageAssembly(l0_obj).perform()
 
-                if len(self._l1_obj_cache) < ncache:
+                if cache:
                     self._l1_obj_cache[fn] = l1_obj
 
             except (FileNotFoundError, OSError) as e:
@@ -359,8 +358,44 @@ class BaseMasterModule:
     # Private helpers for frame stacking.
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _check_load_failures(failure, n_total, max_fail_fraction, max_fail_number):
+        """
+        Raise if cumulative frame-load failures exceed either limit.
+
+        Parameters
+        ----------
+        failure : int
+            Number of frames that have failed to load so far.
+        n_total : int
+            Total number of frames in the stack.
+        max_fail_fraction : float
+            Maximum allowed fraction of failed frames.
+        max_fail_number : int
+            Maximum allowed absolute number of failed frames.
+
+        Raises
+        ------
+        ValueError
+            If either limit is exceeded.
+        """
+        if failure / n_total > max_fail_fraction or failure > max_fail_number:
+            raise ValueError(
+                f"too many frames failed to load "
+                f"({failure} of {n_total}); limits are "
+                f"max_fail_fraction={max_fail_fraction:.0%}, "
+                f"max_fail_number={max_fail_number}"
+            )
+
     def _compute_stats_from_datacube(
-        self, l0_file_list=None, nframe=None, sigma=None, verbose=True
+        self,
+        l0_file_list=None,
+        *,
+        sigma=None,
+        verbose=True,
+        cache=False,
+        max_fail_fraction=0.2,
+        max_fail_number=2,
     ):
         """
         Compute stacked statistics using an in-memory data cube.
@@ -368,14 +403,25 @@ class BaseMasterModule:
         Parameters
         ----------
         l0_file_list : list of str, optional
-            List of L0 FITS filenames to process.
-        nframe : int, optional
-            Maximum number of successfully loaded frames to include.
+            List of L0 FITS filenames to process. The full list is stacked;
+            the caller is responsible for passing the desired subset (e.g. the
+            streaming path passes only its approximation-pass frames).
         sigma : float, optional
             Sigma threshold for outlier rejection across frames.
         verbose : bool, optional
             If True (default), emit per-frame progress prints and load
             failure warnings from `_load_frame`.
+        cache : bool, optional
+            If True, cache each loaded frame so a later pass (the streaming
+            exact pass) can reuse it without re-reading from disk. Defaults to
+            False, since the standalone datacube path reads each frame once.
+        max_fail_fraction : float, optional
+            Maximum fraction of frames allowed to fail loading before raising.
+            Defaults to 0.2.
+        max_fail_number : int, optional
+            Maximum absolute number of frames allowed to fail loading before
+            raising. Defaults to 2. Stacking raises when either limit is
+            exceeded.
 
         Returns
         -------
@@ -400,16 +446,14 @@ class BaseMasterModule:
         Outlier rejection is performed jointly on CCD and VAR extensions, in
         rate space, so frames of differing exposure are comparable. Exposure
         times must be either all zero or all strictly positive. Raises an error
-        if more than 20% of frames fail to load.
+        if more than `max_fail_fraction` of frames fail to load.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if nframe is None:
-            nframe = self.nframe_stream - 1
         if sigma is None:
             sigma = self.stack_sigma
 
-        nframe = np.min([nframe, len(l0_file_list)])
+        nframe = len(l0_file_list)
 
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
@@ -428,15 +472,13 @@ class BaseMasterModule:
         failure = 0
 
         for fn in l0_file_list:
-            if i >= nframe:
-                break
-
-            l1_obj, success = self._load_frame(fn, verbose=verbose)
+            l1_obj, success = self._load_frame(fn, cache=cache, verbose=verbose)
 
             if not success:
                 failure += 1
-                if failure / len(l0_file_list) > 0.2:
-                    raise ValueError("more than 20% of frames in stack failed to load")
+                self._check_load_failures(
+                    failure, len(l0_file_list), max_fail_fraction, max_fail_number
+                )
                 continue
 
             l1_obj = self._process_frame(l1_obj)
@@ -517,7 +559,14 @@ class BaseMasterModule:
         return stats, zero_exptime
 
     def _compute_stats_from_stream(
-        self, l0_file_list=None, ndirect=None, sigma=None, verbose=True
+        self,
+        l0_file_list=None,
+        *,
+        nstream,
+        sigma=None,
+        verbose=True,
+        max_fail_fraction=0.2,
+        max_fail_number=2,
     ):
         """
         Compute stacked statistics with a single streaming pass over the frames.
@@ -526,14 +575,21 @@ class BaseMasterModule:
         ----------
         l0_file_list : list of str, optional
             List of L0 FITS filenames to process.
-        ndirect : int, optional
-            Number of initial frames used to estimate approximate statistics
-            for defining clipping thresholds.
+        nstream : int
+            Streaming threshold; the first `nstream - 1` frames form the
+            approximation pass that estimates the per-pixel clipping bounds.
         sigma : float, optional
             Sigma threshold for outlier rejection.
         verbose : bool, optional
             If True (default), emit per-frame progress prints and load
             failure warnings from `_load_frame`.
+        max_fail_fraction : float, optional
+            Maximum fraction of frames allowed to fail loading before raising.
+            Defaults to 0.2.
+        max_fail_number : int, optional
+            Maximum absolute number of frames allowed to fail loading before
+            raising. Defaults to 2. Stacking raises when either limit is
+            exceeded.
 
         Returns
         -------
@@ -556,21 +612,26 @@ class BaseMasterModule:
         the per-pixel clipping bounds for the streaming pass.
 
         Optimized to reduce memory usage at the expense of compute speed.
-        Raises an error if more than 20% of frames fail to load or if exposure
-        times are inconsistent.
+        Raises an error if frame load failures exceed `max_fail_fraction` or
+        `max_fail_number`, or if exposure times are inconsistent.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if ndirect is None:
-            ndirect = self.nframe_stream - 1
         if sigma is None:
             sigma = self.stack_sigma
 
+        ndirect = nstream - 1
+
+        # The approximation pass stacks only the first `ndirect` frames; cache
+        # them so the streaming exact pass below reuses them instead of
+        # re-reading those files from disk.
         approx_stats, zero_exptime = self._compute_stats_from_datacube(
-            l0_file_list=l0_file_list,
-            nframe=ndirect,
+            l0_file_list=l0_file_list[:ndirect],
             sigma=sigma,
             verbose=verbose,
+            cache=True,
+            max_fail_fraction=max_fail_fraction,
+            max_fail_number=max_fail_number,
         )
 
         if len(l0_file_list) <= ndirect:
@@ -609,12 +670,15 @@ class BaseMasterModule:
         clipping_mask = np.ones((nrow, ncol), dtype=bool)
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(fn, verbose=verbose)
+            # The first `ndirect` frames are cache hits from the approximation
+            # pass above; the rest are read once here and not worth caching.
+            l1_obj, success = self._load_frame(fn, cache=False, verbose=verbose)
 
             if not success:
                 failure += 1
-                if failure / len(l0_file_list) > 0.2:
-                    raise ValueError("more than 20% of frames in stack failed to load")
+                self._check_load_failures(
+                    failure, len(l0_file_list), max_fail_fraction, max_fail_number
+                )
                 continue
 
             l1_obj = self._process_frame(l1_obj)
@@ -716,7 +780,9 @@ class BaseMasterModule:
     # Private helpers for building outputs and tracking results.
     # ------------------------------------------------------------------
 
-    def _build_ml1_obj(self, l1_arrays, l0_file_list, *, receipt_key, bunit=None):
+    def _build_ml1_obj(
+        self, l1_arrays, l0_file_list, *, master_type, receipt_key, bunit=None
+    ):
         """
         Assemble a KPFMasterL1 from finalized per-chip arrays.
 
@@ -726,6 +792,9 @@ class BaseMasterModule:
             Finalized '{chip}_IMG/_SNR/_MASK' arrays.
         l0_file_list : list of str
             L0 files that went into the stack; recorded via set_input_files.
+        master_type : str
+            WMKO filename token for the product ('bias', 'dark', 'flat'),
+            recorded via set_input_files for the compliant output filename.
         receipt_key : str
             Receipt entry name (e.g. 'master_bias', 'master_dark').
         bunit : str, optional
@@ -746,7 +815,7 @@ class BaseMasterModule:
             if bunit is not None:
                 ml1_obj.headers[f"{chip}_IMG"]["BUNIT"] = bunit
 
-        ml1_obj.set_input_files(l0_file_list)
+        ml1_obj.set_input_files(l0_file_list, master_type)
         ml1_obj.receipt_add_entry(receipt_key, "PASS")
 
         return ml1_obj
@@ -775,7 +844,14 @@ class BaseMasterModule:
     # ------------------------------------------------------------------
 
     def stack_frames(
-        self, l0_file_list=None, nstream=None, sigma=None, verbose=True, cal_type=None
+        self,
+        l0_file_list=None,
+        nstream=6,
+        sigma=None,
+        verbose=True,
+        cal_type=None,
+        max_fail_fraction=0.2,
+        max_fail_number=2,
     ):
         """
         Stack full-frame images to produce masters L1.
@@ -785,7 +861,9 @@ class BaseMasterModule:
         l0_file_list : list of str, optional
             List of L0 FITS filenames to stack.
         nstream : int, optional
-            Threshold number of frames above which streaming statistics are used.
+            Threshold number of frames at or above which the memory-light
+            streaming path is used instead of the in-memory data cube.
+            Defaults to 6.
         sigma : float, optional
             Sigma threshold for frame-to-frame outlier rejection.
         verbose : bool, optional
@@ -795,6 +873,13 @@ class BaseMasterModule:
             Calibration type, forwarded to `_clean_l1_arrays` to select the
             final outlier-flagging mode. Defaults to the conservative
             global-median mode.
+        max_fail_fraction : float, optional
+            Maximum fraction of frames allowed to fail loading before raising.
+            Defaults to 0.2.
+        max_fail_number : int, optional
+            Maximum absolute number of frames allowed to fail loading before
+            raising. Defaults to 2. Stacking raises when either limit is
+            exceeded.
 
         Returns
         -------
@@ -817,8 +902,6 @@ class BaseMasterModule:
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if nstream is None:
-            nstream = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
 
@@ -829,11 +912,20 @@ class BaseMasterModule:
 
         if nframe < nstream:
             stats, _ = self._compute_stats_from_datacube(
-                l0_file_list, nstream - 1, sigma, verbose=verbose
+                l0_file_list,
+                sigma=sigma,
+                verbose=verbose,
+                max_fail_fraction=max_fail_fraction,
+                max_fail_number=max_fail_number,
             )
         else:
             stats, _ = self._compute_stats_from_stream(
-                l0_file_list, nstream - 1, sigma, verbose=verbose
+                l0_file_list,
+                nstream=nstream,
+                sigma=sigma,
+                verbose=verbose,
+                max_fail_fraction=max_fail_fraction,
+                max_fail_number=max_fail_number,
             )
 
         for chip in self.chips:
@@ -923,5 +1015,5 @@ class BaseMasterModule:
                 f"{path} already exists; pass overwrite=True to replace it"
             )
 
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # obj.to_fits creates the parent directory as needed.
         obj.to_fits(path)

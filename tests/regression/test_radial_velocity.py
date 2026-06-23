@@ -31,7 +31,7 @@ _STEP_KMS = 0.25  # matches the module default
 _NVEL = round((_RANGE_KMS[1] - _RANGE_KMS[0]) / _STEP_KMS) + 1
 _V_INJECT = 1.5  # injected RV [km/s], on the grid
 _MASK_CENTERS = np.linspace(5015.0, 5035.0, 30)  # vacuum line centers [Å]
-# Wide enough that the default compute_ccfs clip (clip_edge_pixels=[500, 500])
+# Wide enough that the default compute_ccfs clip (clip_edge_pixels=(500, 500))
 # trims the order edges but leaves the 5015-5035 Å mask lines well inside.
 NCOL = 2000
 

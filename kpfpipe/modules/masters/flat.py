@@ -16,7 +16,7 @@ class Flat(BaseMasterModule):
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to stack.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: nframe_stream, stack_sigma,
+        Module configuration. Recognized keys: stack_sigma,
         exptime_tolerance, chips.
     """
 

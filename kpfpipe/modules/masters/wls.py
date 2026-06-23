@@ -147,19 +147,21 @@ class WLS(BaseMasterModule):
 
         return self.rough_wls
 
-    def _line_fit_qc(self, lines, lineprofile, window, loc):
+    def _line_fit_qc(self, lines, lineprofile, window, loc, amp_max=1.5e6, std_min=0.5):
         """
         Quality-control the per-line fits and return a boolean flag array
         (True = line failed QC), aligned with the per-line arrays in `lines`.
 
         `loc` is the per-line window-center pixel; a centroid more than
-        `window` pixels from it is flagged as a runaway fit.
+        `window` pixels from it is flagged as a runaway fit. Fitted amplitudes
+        outside [0, `amp_max`] (default 1.5e6, ~10x single-pixel saturation)
+        and Gaussian sigmas outside [`std_min`, `window`] px are also flagged.
         """
         if lineprofile != "gaussian":
             raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
-        bad = (lines["amp"] < 0) | (lines["amp"] > 1.5e6)  # 10x single-pixel saturation
-        bad |= (lines["std"] < 0.5) | (lines["std"] >= window)
+        bad = (lines["amp"] < 0) | (lines["amp"] > amp_max)
+        bad |= (lines["std"] < std_min) | (lines["std"] >= window)
         bad |= np.abs(lines["pix"] - loc) > window
 
         return bad
@@ -168,7 +170,13 @@ class WLS(BaseMasterModule):
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def _process_stack_l0_to_l2(self, l0_file_list=None, verbose=True):
+    def _process_stack_l0_to_l2(
+        self,
+        l0_file_list=None,
+        verbose=True,
+        max_fail_fraction=0.2,
+        max_fail_number=2,
+    ):
         """
         Run each L0 frame in the stack through the L0→L2 pipeline.
 
@@ -179,6 +187,12 @@ class WLS(BaseMasterModule):
         verbose : bool, optional
             If True (default), emit progress prints and per-frame warnings
             from the underlying L0 → L1 → L2 calls.
+        max_fail_fraction : float, optional
+            Maximum fraction of frames allowed to fail loading before raising.
+            Defaults to 0.2.
+        max_fail_number : int, optional
+            Maximum absolute number of frames allowed to fail loading before
+            raising. Defaults to 2. Raises when either limit is exceeded.
 
         Returns
         -------
@@ -187,8 +201,8 @@ class WLS(BaseMasterModule):
 
         Notes
         -----
-        Resets self._l2_obj_cache at entry. Raises ValueError if more than
-        20% of frames fail to load.
+        Resets self._l2_obj_cache at entry. Raises ValueError if frame load
+        failures exceed `max_fail_fraction` or `max_fail_number`.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -200,12 +214,13 @@ class WLS(BaseMasterModule):
         failure = 0
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(fn, ncache=0, verbose=verbose)
+            l1_obj, success = self._load_frame(fn, cache=False, verbose=verbose)
 
             if not success:
                 failure += 1
-                if failure / len(l0_file_list) > 0.2:
-                    raise ValueError("more than 20% of frames in stack failed to load")
+                self._check_load_failures(
+                    failure, len(l0_file_list), max_fail_fraction, max_fail_number
+                )
                 continue
 
             l1_obj = self._process_frame(l1_obj)
@@ -914,7 +929,7 @@ class WLS(BaseMasterModule):
             coeffs_hdr["POLYORDM"] = polyorder_m
             coeffs_hdr["POLYORDF"] = polyorder_f
 
-        self.ml2_obj.set_input_files(l0_file_list)
+        self.ml2_obj.set_input_files(l0_file_list, "thar")
 
         primary = self.ml2_obj.headers["PRIMARY"]
         primary["ROUGHWLS"] = (self.rough_wls_file, "Rough WLS reference file")

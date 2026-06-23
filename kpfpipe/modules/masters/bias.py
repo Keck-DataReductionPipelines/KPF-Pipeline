@@ -22,7 +22,7 @@ class Bias(BaseMasterModule):
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to stack.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: nframe_stream, stack_sigma,
+        Module configuration. Recognized keys: stack_sigma,
         exptime_tolerance, chips.
     """
 
@@ -49,7 +49,7 @@ class Bias(BaseMasterModule):
         self,
         l0_file_list=None,
         *,
-        nstream=None,
+        nstream=6,
         sigma=None,
         filepath=None,
         verbose=True,
@@ -80,8 +80,6 @@ class Bias(BaseMasterModule):
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
-        if nstream is None:
-            nstream = self.nframe_stream
         if sigma is None:
             sigma = self.stack_sigma
 
@@ -94,7 +92,7 @@ class Bias(BaseMasterModule):
         )
 
         self.ml1_obj = self._build_ml1_obj(
-            l1_arrays, l0_file_list, receipt_key="master_bias"
+            l1_arrays, l0_file_list, master_type="bias", receipt_key="master_bias"
         )
         self._results = self._populate_results(l1_arrays)
 

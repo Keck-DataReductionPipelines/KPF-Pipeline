@@ -12,8 +12,10 @@ differ from science L1 to reflect masters-specific normalization:
     GREEN_MASK -- boolean bad pixel mask (1=good, 0=bad)
     RED_IMG, RED_SNR, RED_MASK -- same for red chip
 
-Filename convention: masters products follow WMKO filename format
-(KP.YYYYMMDD.NNNNN.NN.fits), not the EPRV per-level convention.
+Filename convention (WMKO DRP-RUN-05): masters are written as
+{KOAID-of-first-input}_master_{type}_L1.fits (e.g.
+KP.20240405.49597.71_master_bias_L1.fits), built by
+KPFMasterModel.generate_standard_filename().
 """
 
 import importlib.resources
@@ -46,7 +48,6 @@ class KPFMasterL1(KPFMasterModel, KPF1):
     """
 
     _DATALVL = "ML1"
-    _FILENAME_PREFIX = "kpf_ML1"
     _known_extensions = set(_MASTERS_L1_EXTENSIONS["Name"])
 
     def __init__(self):

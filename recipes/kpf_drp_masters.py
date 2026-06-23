@@ -71,11 +71,14 @@ def main(config, args):
     # Stack the ThAr exposures into a master wavelength solution, since the
     # emission-line spectrum anchors the per-order wavelength calibration.
     for files in build_l0_file_lists("thar", mini_db=mini_db):
+        obs_id = get_obs_id(files[0])
         wls_master_path = build_filepath(
-            get_obs_id(files[0]), "L2", data_root=data_root_masters, master="thar"
+            obs_id, "L2", data_root=data_root_masters, master="thar"
         )
-        wls_diagnostics_path = (
-            wls_master_path.removesuffix("_L2.fits") + "_diagnostics.h5"
+        # The diagnostics HDF5 is a sidecar of the master, in the same directory
+        # and sharing its '{obs_id}_master_thar' stem.
+        wls_diagnostics_path = os.path.join(
+            os.path.dirname(wls_master_path), f"{obs_id}_master_thar_diagnostics.h5"
         )
 
         wls = WLS(files, config)

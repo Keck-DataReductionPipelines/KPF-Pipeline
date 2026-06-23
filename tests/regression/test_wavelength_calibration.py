@@ -73,7 +73,7 @@ def _make_science_l2(wls_path=None):
 def master_wls_path(tmp_path):
     """Write a synthetic KPFMasterL2 to disk and return its path."""
     master = _make_master_l2()
-    path = str(tmp_path / "kpf_ML2_20240405T010037.fits")
+    path = str(tmp_path / "KP.20240405.03637.00_master_thar_L2.fits")
     master.to_fits(path)
     return path
 

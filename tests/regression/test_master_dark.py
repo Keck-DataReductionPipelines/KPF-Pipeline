@@ -201,7 +201,7 @@ class TestMasterBaseErrors:
         fn = "/nonexistent/KP.20240101.00001.00.fits"
         m = Dark([fn])
         with pytest.warns(UserWarning, match="Failed to load"):
-            l1_obj, success = m._load_frame(fn, verbose=True)
+            l1_obj, success = m._load_frame(fn, cache=False, verbose=True)
         assert l1_obj is None and success is False
 
     def test_load_frame_exptime_failure_warns_and_skips(self, monkeypatch):
@@ -215,7 +215,7 @@ class TestMasterBaseErrors:
 
         monkeypatch.setattr(m, "_check_exptime_vs_elapsed", bad_check)
         with pytest.warns(UserWarning, match="Exptime check failed"):
-            l1_obj, success = m._load_frame(fn, verbose=True)
+            l1_obj, success = m._load_frame(fn, cache=False, verbose=True)
         assert l1_obj is None and success is False
 
 
@@ -496,13 +496,12 @@ class TestRateEstimator:
     rejection is disabled (large sigma) so the arithmetic is exact."""
 
     @staticmethod
-    def _stacked_img(frames, *, nframe_stream=6):
+    def _stacked_img(frames, *, nstream=6):
         file_list = sorted(f"f{i}.fits" for i in range(len(frames)))
         dark = Dark(file_list)
         dark.chips = ["GREEN"]
         dark.ccd = {"nrow": 2, "ncol": 2}
         dark.stack_sigma = 1e6  # effectively no clipping
-        dark.nframe_stream = nframe_stream
         # Keyed by filename: the streaming path re-reads its first frames for
         # the approximate (clip-bound) pass, so a frame may be loaded twice.
         by_fn = dict(zip(file_list, frames, strict=True))
@@ -510,7 +509,7 @@ class TestRateEstimator:
             patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
-            return dark.stack_frames()["GREEN_IMG"]
+            return dark.stack_frames(nstream=nstream)["GREEN_IMG"]
 
     def test_mixed_exptime_is_exposure_weighted(self):
         # rates per frame are 10 and 3.33; an equal-weight mean would give
@@ -530,7 +529,7 @@ class TestRateEstimator:
         np.testing.assert_allclose(self._stacked_img(frames), 120.0, rtol=1e-5)
 
     def test_streaming_path_matches(self):
-        # Force the streaming path (nframe >= nframe_stream) with mixed
+        # Force the streaming path (nframe >= nstream) with mixed
         # exposures: (4*100) / (10+30+10+30) = 5.0 e-/sec.
         frames = [
             _stack_frame(10.0, 100.0, 10.0),
@@ -538,7 +537,7 @@ class TestRateEstimator:
             _stack_frame(10.0, 100.0, 10.0),
             _stack_frame(30.0, 100.0, 10.0),
         ]
-        img = self._stacked_img(frames, nframe_stream=3)
+        img = self._stacked_img(frames, nstream=3)
         np.testing.assert_allclose(img, 5.0, rtol=1e-5)
 
 
@@ -606,14 +605,14 @@ class TestPerPixelRejection:
         dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
         dark.chips = ["GREEN"]
         dark.ccd = {"nrow": 2, "ncol": 2}
-        dark.nframe_stream = 3  # ndirect = 2 -> approx from frames 0, 1
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
             patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
-            img = dark.stack_frames()["GREEN_IMG"]
+            # nstream = 3 -> ndirect = 2 -> approx from frames 0, 1
+            img = dark.stack_frames(nstream=3)["GREEN_IMG"]
 
         # (95 + 105 + 100) / (3 * 10) = 10 e-/sec; the outlier is excluded from
         # numerator and denominator alike. A mismatch would give 300/40 = 7.5.
@@ -633,7 +632,7 @@ class TestDatacubeClipping:
 
     def test_outlier_frame_is_rejected(self):
         # Five identical frames (100 e- over 10 s -> 10 e-/sec) plus one gross
-        # outlier frame; nframe_stream is set high to stay on the datacube path.
+        # outlier frame; nstream is set high to stay on the datacube path.
         nrow, ncol = 3, 3
         good = [_stack_frame(10.0, 100.0, 100.0, shape=(nrow, ncol)) for _ in range(5)]
         outlier = _stack_frame(10.0, 1e5, 100.0, shape=(nrow, ncol))
@@ -642,14 +641,13 @@ class TestDatacubeClipping:
         dark = Dark(sorted(f"f{i}.fits" for i in range(len(frames))))
         dark.chips = ["GREEN"]
         dark.ccd = {"nrow": nrow, "ncol": ncol}
-        dark.nframe_stream = 10  # > nframe, so the datacube path is used
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
             patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
-            arrays = dark.stack_frames()
+            arrays = dark.stack_frames(nstream=10)  # > nframe, so datacube path
 
         # Outlier excluded from numerator and denominator: (5*100)/(5*10) = 10.
         # Without rejection it would be (5*100 + 1e5) / (6*10) ~= 1675.
@@ -767,7 +765,7 @@ class TestStackingValidation:
             patch.object(dark, "_load_frame", lambda fn, **k: (None, False)),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
-            with pytest.raises(ValueError, match="more than 20%"):
+            with pytest.raises(ValueError, match="too many frames failed to load"):
                 dark.stack_frames()
 
     def test_ccd_var_frame_count_mismatch_raises(self):
