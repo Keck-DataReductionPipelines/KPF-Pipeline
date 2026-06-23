@@ -223,7 +223,7 @@ class CalibrationAssociation:
                 f"expected subset of {sorted(_HEADER_PREFIX)}"
             )
 
-        date_obs = self.l1_obj.headers["PRIMARY"]["DATE-OBS"]
+        date_obs = self.l1_obj.headers["INSTRUMENT_HEADER"]["DATE-OBS"]
         obs_date = datetime.fromisoformat(date_obs).date()
         primary = self.l1_obj.headers["PRIMARY"]
 

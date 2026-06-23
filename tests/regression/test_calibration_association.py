@@ -15,7 +15,9 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 
 class MockL1:
     def __init__(self, date_obs="2024-04-05T11:08:33"):
-        self.headers = {"PRIMARY": {"DATE-OBS": date_obs}}
+        # DATE-OBS is a raw WMKO native read from INSTRUMENT_HEADER; the
+        # calibration ages/paths are KPF-pipeline keywords written to PRIMARY.
+        self.headers = {"PRIMARY": {}, "INSTRUMENT_HEADER": {"DATE-OBS": date_obs}}
         self._receipt = []
 
     def receipt_add_entry(self, name, status):

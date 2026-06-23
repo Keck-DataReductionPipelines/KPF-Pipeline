@@ -1,0 +1,58 @@
+keyword,data_type,populated_by,vnext_level,comment
+RNGREEN?,float,ImageAssembly,L1,Per-amp read noise GREEN [e-] (RNGREEN1-4)
+RNRED?,float,ImageAssembly,L1,Per-amp read noise RED [e-] (RNRED1-4)
+RNNGGR?,float,ImageAssembly,L1,Per-amp non-Gaussian read noise GREEN (RNNGGR1-4)
+RNNGRD?,float,ImageAssembly,L1,Per-amp non-Gaussian read noise RED (RNNGRD1-4)
+OSCANMET,str,ImageAssembly,L1,Overscan subtraction method
+BIASSUB,bool,ImageProcessing,L1,Bias subtraction applied
+DARKSUB,bool,ImageProcessing,L1,Dark subtraction applied
+FLATSUB,bool,ImageProcessing,L1,Flat division applied (reserved)
+BIASFILE,str,CalibrationAssociation,L1,Master bias filename
+BIASDIR,str,CalibrationAssociation,L1,Master bias directory
+AGEBIAS,int,CalibrationAssociation,L1,Master bias age [days]
+DARKFILE,str,CalibrationAssociation,L1,Master dark filename
+DARKDIR,str,CalibrationAssociation,L1,Master dark directory
+AGEDARK,int,CalibrationAssociation,L1,Master dark age [days]
+FLATFILE,str,CalibrationAssociation,L1,Master flat filename
+FLATDIR,str,CalibrationAssociation,L1,Master flat directory
+AGEFLAT,int,CalibrationAssociation,L1,Master flat age [days]
+WLSFILE,str,CalibrationAssociation,L1,WLS master full path (legacy convention)
+AGEWLS,float,CalibrationAssociation,L1,WLS master age [days]
+DRPVERNO,str,KPF0.to_kpf1,L1,Pipeline version (WMKO DRP-RUN-11; EPRV equivalent is DRPTAG)
+MASTYPE,str,KPFMaster,L1,Master calibration type (masters products only)
+DATAPRL0,int,QCL0,L0,QC: L0 data present
+KWRDPRL0,int,QCL0,L0,QC: required L0 keywords present
+EXPTIMOK,int,QCL0,L0,QC: exposure time valid
+NOTJUNK,int,QCL0,L0,QC: frame not junk
+RNINRNG,int,QCL1,L1,QC: per-amp RN within range
+RNGAUSS,int,QCL1,L1,QC: non-Gaussian RN within range
+BIASOK,int,QCL1,L1,QC: bias subtraction applied
+BIASAGE,int,QCL1,L1,QC: bias master age ok
+DARKAGE,int,QCL1,L1,QC: dark master age ok
+FLATAGE,int,QCL1,L1,QC: flat master age ok
+FFIFIN,int,QCL1,L1,QC: assembled CCDs all finite
+DATAPRL2,int,QCL2,L2,QC: L2 data present
+L2NANOK,int,QCL2,L2,QC: L2 NaN count ok
+L2FLXOK,int,QCL2,L2,QC: L2 zero-flux fraction ok
+L2VARPOS,int,QCL2,L2,QC: L2 variance positive
+L2SNROK,int,QCL2,L2,QC: L2 SNR ok
+ISGOOD,int,QC,L0,QC: aggregate pass/fail
+NANSCI?,int,DiagL2,L2,NaN pixel count per SCI fiber green+red (NANSCI1-3)
+NANSKY,int,DiagL2,L2,NaN pixel count SKY (green+red)
+NANCAL,int,DiagL2,L2,NaN pixel count CAL (green+red)
+ZEROFRAC,float,DiagL2,L2,Fraction of L2 flux pixels equal to zero
+?SNRSCI,float,DiagL2,L2,Median 95th-pctile SNR summed SCI (G/R prefix)
+?SNRSKY,float,DiagL2,L2,Median 95th-pctile SNR SKY (G/R prefix)
+?SNRCAL,float,DiagL2,L2,Median 95th-pctile SNR CAL (G/R prefix)
+?FR12,float,DiagL2,L2,Median flux ratio SCI1/SCI2 (G/R prefix)
+?FR32,float,DiagL2,L2,Median flux ratio SCI3/SCI2 (G/R prefix)
+?FRS2,float,DiagL2,L2,Median flux ratio SKY/SCI2 (G/R prefix)
+?FRC2,float,DiagL2,L2,Median flux ratio CAL/SCI2 (G/R prefix)
+CCD?BJD,float,BarycentricCorrection,L2,Per-CCD photon-weighted mid-time [BJD_TDB]
+CCD?BKMS,float,BarycentricCorrection,L2,Per-CCD barycentric velocity [km/s]
+CCD?BZ,float,BarycentricCorrection,L2,Per-CCD barycentric redshift z
+ASTRSRC,str,BarycentricCorrection,L2,Astrometry source used for barycentric correction
+CCD?RV*,float,RadialVelocity,L4,Per-CCD/per-fiber RV [km/s] (legacy carryover)
+CCD?ERV*,float,RadialVelocity,L4,Per-CCD/per-fiber RV error [km/s] (legacy carryover)
+CCFRV,float,RadialVelocity,L4,Cross-CCD combined science RV [km/s] (legacy)
+CCFERV,float,RadialVelocity,L4,Cross-CCD combined RV error [km/s] (legacy)

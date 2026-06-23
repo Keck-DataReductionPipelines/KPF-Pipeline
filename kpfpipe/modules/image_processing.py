@@ -230,7 +230,7 @@ class ImageProcessing:
             dark = self.dark
         dark_l1 = self._resolve_master("dark", dark)
         chip = chip.upper()
-        exptime = self.l1_obj.headers["PRIMARY"]["EXPTIME"]
+        exptime = self.l1_obj.headers["INSTRUMENT_HEADER"]["EXPTIME"]
         img = dark_l1.data[f"{chip}_IMG"]
         snr = dark_l1.data[f"{chip}_SNR"]
         self.l1_obj.data[f"{chip}_CCD"] -= img * exptime

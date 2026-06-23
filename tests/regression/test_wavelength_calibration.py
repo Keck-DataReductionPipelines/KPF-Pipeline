@@ -63,9 +63,9 @@ def _make_science_l2(wls_path=None):
     l2.headers["PRIMARY"]["INSTRUME"] = "KPF"
     l2.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T11:08:33"
     if wls_path is not None:
-        # WLSFILE lives in INSTRUMENT_HEADER on L2 (preserves the L1 PRIMARY
-        # written by CalibrationAssociation).
-        l2.headers["INSTRUMENT_HEADER"]["WLSFILE"] = wls_path
+        # WLSFILE is a registered KPF-pipeline PRIMARY keyword (written by
+        # CalibrationAssociation on the L1 PRIMARY and carried through by to_kpf2).
+        l2.headers["PRIMARY"]["WLSFILE"] = wls_path
     return l2
 
 
@@ -133,7 +133,7 @@ class TestLoadWLS:
         with pytest.raises(FileNotFoundError, match="Master WLS file not found"):
             mod.load_wls()
 
-    def test_reads_wlsfile_from_instrument_header(self, master_wls_path):
+    def test_reads_wlsfile_from_primary(self, master_wls_path):
         mod = WavelengthCalibration(_make_science_l2(wls_path=master_wls_path))
         loaded = mod.load_wls()
         assert isinstance(loaded, KPFMasterL2)

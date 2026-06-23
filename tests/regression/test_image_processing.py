@@ -32,7 +32,9 @@ _EXPTIME = 4.0  # != 1 so dark scaling is observable
 class MockL1:
     def __init__(self):
         self.obs_id = "KP.20240405.40113.57"
-        self.headers = {"PRIMARY": {"EXPTIME": _EXPTIME}}
+        # EXPTIME is a raw WMKO native, so it lives in INSTRUMENT_HEADER (where
+        # to_kpf1 preserves it); KPF-pipeline keywords go on PRIMARY.
+        self.headers = {"PRIMARY": {}, "INSTRUMENT_HEADER": {"EXPTIME": _EXPTIME}}
         self.data = {
             "GREEN_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
             "RED_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
