@@ -58,13 +58,15 @@ def main(config, args):
     l1_qlp_dir = build_qlp_dir(obs_id, "L1", data_root=data_root_science)
     PlotL1(l1, output_dir=l1_qlp_dir).run("all")
 
-    # Associate the calibration masters (bias, dark, flat, WLS) closest to this
-    # frame so that image processing and wavelength calibration use them.
+    # Associate the implemented calibration masters closest to this frame so
+    # image processing and wavelength calibration can use them. Flat frames are
+    # still part of the desired data set, but master-flat construction and flat
+    # division are not implemented yet, so the basic path does not require them.
     calibration_association = CalibrationAssociation(l1, config)
-    l1 = calibration_association.perform(["bias", "dark", "flat", "thar"])
+    l1 = calibration_association.perform(["bias", "dark", "thar"])
 
-    # Apply standard FFI image processing (bias, dark, flat) to remove the
-    # detector signature before the flux is extracted.
+    # Apply standard FFI image processing. The current runnable path performs
+    # bias and dark subtraction; flat correction remains disabled in config.
     image_processing = ImageProcessing(l1, config)
     l1 = image_processing.perform()
 

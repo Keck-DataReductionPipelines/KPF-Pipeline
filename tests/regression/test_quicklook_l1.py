@@ -4,6 +4,7 @@ import matplotlib
 import numpy as np
 import pytest
 from astropy.io import fits
+from PIL import Image
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -192,6 +193,19 @@ class TestFileSaving:
         assert list(tmp_path.glob("*.png")) == []
         plt.close(fig)
 
+    def test_full_res_saves_native_dimensions(self, synthetic_l1, tmp_path):
+        from kpfpipe.quality_control.quicklook.level1 import PlotL1
+
+        qlp = PlotL1(synthetic_l1, output_dir=str(tmp_path), full_res=True)
+        fig = qlp.image("green")
+        expected = tmp_path / "KP.20240405.00001.00_L1_image_green_full_res.png"
+        default = tmp_path / "KP.20240405.00001.00_L1_image_green_zoomable.png"
+        assert expected.exists()
+        assert not default.exists()
+        with Image.open(expected) as png:
+            assert png.size == (_FIXTURE_SHAPE[1], _FIXTURE_SHAPE[0])
+        plt.close(fig)
+
 
 class TestRun:
     def test_run_all_returns_dict(self, synthetic_l1):
@@ -209,6 +223,15 @@ class TestRun:
         qlp = PlotL1(synthetic_l1)
         figs = qlp.run("image")
         assert set(figs.keys()) == {"image_green", "image_red"}
+
+    def test_run_full_res_override_saves_native(self, synthetic_l1, tmp_path):
+        from kpfpipe.quality_control.quicklook.level1 import PlotL1
+
+        qlp = PlotL1(synthetic_l1, output_dir=str(tmp_path))
+        qlp.run("image", full_res=True)
+        expected = tmp_path / "KP.20240405.00001.00_L1_image_red_full_res.png"
+        with Image.open(expected) as png:
+            assert png.size == (_FIXTURE_SHAPE[1], _FIXTURE_SHAPE[0])
 
     def test_run_unknown_which_raises(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1

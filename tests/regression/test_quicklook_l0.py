@@ -4,6 +4,7 @@ import matplotlib
 import numpy as np
 import pytest
 from astropy.io import fits
+from PIL import Image
 
 matplotlib.use("Agg")
 
@@ -62,6 +63,32 @@ def synthetic_2amp_l0(tmp_path):
     for chip in ["GREEN", "RED"]:
         for amp in range(1, 3):
             data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
+            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
+
+    hdul = fits.HDUList(hdus)
+    hdul.writeto(fn, overwrite=True)
+    hdul.close()
+    return KPF0.from_fits(fn)
+
+
+@pytest.fixture
+def small_2amp_l0(tmp_path):
+    """Create a small two-amp KPF0 for native-resolution PNG tests."""
+    fn = str(tmp_path / "KP.20240405.00004.00.fits")
+    rng = np.random.default_rng(123)
+
+    nrow, ncol = 32, 24
+
+    primary = fits.PrimaryHDU()
+    primary.header["INSTRUME"] = "KPF"
+    primary.header["OBJECT"] = "small-2amp"
+    primary.header["IMTYPE"] = "Bias"
+    primary.header["DATE-OBS"] = "2024-04-05T01:00:39"
+
+    hdus = [primary]
+    for chip in ["GREEN", "RED"]:
+        for amp in range(1, 3):
+            data = rng.normal(1000.0, 3.0, (nrow, ncol)).astype(np.float32)
             hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
 
     hdul = fits.HDUList(hdus)
@@ -244,6 +271,23 @@ class TestPlotL0FileSaving:
         assert pngs == []
         plt.close(fig)
 
+    def test_full_res_saves_native_dimensions(self, small_2amp_l0, tmp_path):
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
+
+        qlp = PlotL0(small_2amp_l0, output_dir=str(tmp_path), full_res=True)
+        fig = qlp.stitched_image("green")
+        expected_path = (
+            tmp_path / "KP.20240405.00004.00_L0_stitched_image_green_full_res.png"
+        )
+        default_path = (
+            tmp_path / "KP.20240405.00004.00_L0_stitched_image_green_zoomable.png"
+        )
+        assert expected_path.exists()
+        assert not default_path.exists()
+        with Image.open(expected_path) as png:
+            assert png.size == (48, 32)
+        plt.close(fig)
+
 
 class TestPlotL0Run:
     def test_run_all_returns_dict_of_figures(self, synthetic_4amp_l0):
@@ -262,6 +306,17 @@ class TestPlotL0Run:
         qlp = PlotL0(synthetic_4amp_l0)
         figs = qlp.run("stitched_image")
         assert set(figs.keys()) == {"stitched_image_green", "stitched_image_red"}
+
+    def test_run_full_res_override_saves_native(self, small_2amp_l0, tmp_path):
+        from kpfpipe.quality_control.quicklook.level0 import PlotL0
+
+        qlp = PlotL0(small_2amp_l0, output_dir=str(tmp_path))
+        qlp.run("stitched_image", full_res=True)
+        expected_path = (
+            tmp_path / "KP.20240405.00004.00_L0_stitched_image_red_full_res.png"
+        )
+        with Image.open(expected_path) as png:
+            assert png.size == (48, 32)
 
     def test_run_unknown_which_raises(self, synthetic_4amp_l0):
         from kpfpipe.quality_control.quicklook.level0 import PlotL0

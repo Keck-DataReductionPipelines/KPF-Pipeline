@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from kpfpipe.modules.image_assembly import RN_KEYS
-from kpfpipe.quality_control.quicklook._save_png import save_png
+from kpfpipe.quality_control.quicklook._save_png import save_image_png, save_png
 
 
 def _unwrap(val):
@@ -29,13 +29,17 @@ class PlotL1:
         KPF1 data object (post-ImageAssembly).
     output_dir : str or None
         Directory to save PNG files. None returns the Figure only.
+    full_res : bool
+        Save full 1:1 pixel-resolution PNGs instead of the default downsampled
+        figure PNGs. Full-resolution files can be tens of MB per chip.
     """
 
     _PLOT_METHODS = ("image",)
 
-    def __init__(self, l1_obj, output_dir=None):
+    def __init__(self, l1_obj, output_dir=None, full_res=False):
         self.l1 = l1_obj
         self.output_dir = output_dir
+        self.full_res = full_res
         self.obs_id = getattr(l1_obj, "obs_id", None) or ""
         self.name = ""
         if "PRIMARY" in l1_obj.headers:
@@ -54,7 +58,7 @@ class PlotL1:
                 rnng_values.append(float(_unwrap(primary[rnng_key])))
         return rn_values, rnng_values
 
-    def image(self, chip):
+    def image(self, chip, *, full_res=None):
         """
         Plot the assembled FFI for one CCD.
 
@@ -64,12 +68,18 @@ class PlotL1:
         ----------
         chip : str
             'green' or 'red'.
+        full_res : bool or None
+            Save a native-size, one-output-pixel-per-CCD-pixel PNG when true.
+            None uses the constructor's `full_res` setting.
 
         Returns
         -------
         matplotlib.Figure
             The assembled-FFI figure.
         """
+        if full_res is None:
+            full_res = self.full_res
+
         chip_upper = chip.upper()
         ext = f"{chip_upper}_CCD"
         image = np.asarray(self.l1.data[ext])
@@ -80,9 +90,10 @@ class PlotL1:
         vmax = np.nanpercentile(interior, 99.0)
 
         fig = plt.figure(figsize=(10, 8), tight_layout=True)
+        cmap = "viridis"
         plt.imshow(
             image,
-            cmap="viridis",
+            cmap=cmap,
             origin="lower",
             interpolation="None",
             vmin=vmin,
@@ -140,11 +151,25 @@ class PlotL1:
         plt.subplots_adjust(bottom=0.1)
 
         if self.output_dir is not None:
-            fig_path = os.path.join(
-                self.output_dir,
-                f"{self.obs_id}_L1_image_{chip.lower()}_zoomable.png",
-            )
-            save_png(fig, fig_path, dpi=600, compress_level=1)
+            if full_res:
+                fig_path = os.path.join(
+                    self.output_dir,
+                    f"{self.obs_id}_L1_image_{chip.lower()}_full_res.png",
+                )
+                save_image_png(
+                    image,
+                    fig_path,
+                    cmap=cmap,
+                    vmin=vmin,
+                    vmax=vmax,
+                    compress_level=1,
+                )
+            else:
+                fig_path = os.path.join(
+                    self.output_dir,
+                    f"{self.obs_id}_L1_image_{chip.lower()}_zoomable.png",
+                )
+                save_png(fig, fig_path, dpi=600, compress_level=1)
 
         return fig
 
@@ -184,7 +209,7 @@ class PlotL1:
             return False
         return np.size(self.l1.data[ext]) > 0
 
-    def run(self, which):
+    def run(self, which, *, full_res=None):
         """
         Generate the requested plot(s) for every chip that has data.
 
@@ -196,6 +221,9 @@ class PlotL1:
         which : str
             'all' to run every implemented plot, or the name of a single
             plot method (one of `self._PLOT_METHODS`).
+        full_res : bool or None
+            Save native-size PNGs when true. None uses the constructor's
+            `full_res` setting.
 
         Returns
         -------
@@ -221,11 +249,13 @@ class PlotL1:
             os.makedirs(self.output_dir, exist_ok=True)
 
         figures = {}
+        if full_res is None:
+            full_res = self.full_res
         for chip in ["green", "red"]:
             if not self._has_chip(chip):
                 continue
             for name in names:
-                fig = getattr(self, name)(chip)
+                fig = getattr(self, name)(chip, full_res=full_res)
                 figures[f"{name}_{chip}"] = fig
                 plt.close(fig)
         return figures
