@@ -18,7 +18,6 @@ booleans, diagnostics, RV/barycentric cards, …) are catalogued in the packaged
 registry (``config/L{0,1,2,4}-headers.csv``) and allowed by the validator.
 """
 
-import fnmatch
 import importlib.metadata
 import importlib.resources
 
@@ -121,9 +120,10 @@ NATIVE_PRIMARY_KEYS = {
     and str(r["INSTRUMENT"]).strip() != str(r["STANDARD"]).strip()
 }
 
-# KPF-pipeline keywords legitimately written to PRIMARY. Entries may be
-# fnmatch patterns (e.g. ``RNGREEN?``) covering an enumerated family.
-KPFPIPE_PRIMARY_PATTERNS = [str(k).strip() for k in _KPFPIPE_KW["keyword"]]
+# KPF-pipeline keywords legitimately written to PRIMARY. Each registry entry
+# is an explicit 8-character-max FITS keyword (no wildcards); families are
+# enumerated per member (e.g. RNGREEN1-4, CCD1BJD/CCD2BJD).
+KPFPIPE_PRIMARY_KEYS = {str(k).strip() for k in _KPFPIPE_KW["keyword"]}
 
 # FITS structural / bookkeeping cards plus KPF-internal PRIMARY keys that are
 # neither EPRV nor in the registry but are always permitted.
@@ -246,7 +246,7 @@ def build_instrument_header(native_primary):
 
 
 def _is_registered_kpfpipe(key):
-    return any(fnmatch.fnmatchcase(key, pat) for pat in KPFPIPE_PRIMARY_PATTERNS)
+    return key in KPFPIPE_PRIMARY_KEYS
 
 
 def validate_eprv_primary(header, level):

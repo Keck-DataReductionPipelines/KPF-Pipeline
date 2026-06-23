@@ -1,8 +1,20 @@
 keyword,populated_by,comment
-RNGREEN?,ImageAssembly,Per-amp read noise GREEN [e-] (RNGREEN1-4)
-RNRED?,ImageAssembly,Per-amp read noise RED [e-] (RNRED1-4)
-RNNGGR?,ImageAssembly,Per-amp non-Gaussian read noise GREEN (RNNGGR1-4)
-RNNGRD?,ImageAssembly,Per-amp non-Gaussian read noise RED (RNNGRD1-4)
+RNGREEN1,ImageAssembly,Read noise GREEN amp 1 [e-]
+RNGREEN2,ImageAssembly,Read noise GREEN amp 2 [e-]
+RNGREEN3,ImageAssembly,Read noise GREEN amp 3 [e-]
+RNGREEN4,ImageAssembly,Read noise GREEN amp 4 [e-]
+RNRED1,ImageAssembly,Read noise RED amp 1 [e-]
+RNRED2,ImageAssembly,Read noise RED amp 2 [e-]
+RNRED3,ImageAssembly,Read noise RED amp 3 [e-]
+RNRED4,ImageAssembly,Read noise RED amp 4 [e-]
+RNNGGR1,ImageAssembly,Non-Gaussian read noise GREEN amp 1
+RNNGGR2,ImageAssembly,Non-Gaussian read noise GREEN amp 2
+RNNGGR3,ImageAssembly,Non-Gaussian read noise GREEN amp 3
+RNNGGR4,ImageAssembly,Non-Gaussian read noise GREEN amp 4
+RNNGRD1,ImageAssembly,Non-Gaussian read noise RED amp 1
+RNNGRD2,ImageAssembly,Non-Gaussian read noise RED amp 2
+RNNGRD3,ImageAssembly,Non-Gaussian read noise RED amp 3
+RNNGRD4,ImageAssembly,Non-Gaussian read noise RED amp 4
 OSCANMET,ImageAssembly,Overscan subtraction method
 BIASSUB,ImageProcessing,Bias subtraction applied
 DARKSUB,ImageProcessing,Dark subtraction applied

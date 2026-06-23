@@ -551,8 +551,9 @@ documented, intentional ways — follow *its* conventions when adding masters co
   names in sync across `trace-map.csv`, `[KPFPIPE].fibers`, and `detector.toml`.
 - **`L{0,1,2,4}-headers.csv`** register every KPF-pipeline keyword written to the EPRV
   PRIMARY header, split by the level that first writes the keyword (the combined set is the
-  `validate_eprv_primary` allowlist). Columns are `keyword,populated_by,comment`; the `keyword`
-  column accepts fnmatch patterns for enumerated families (e.g. `RNGREEN?`, `CCD?RV*`).
+  `validate_eprv_primary` allowlist). Columns are `keyword,populated_by,comment`. Each `keyword`
+  is an explicit FITS keyword of **≤8 characters** with no wildcards — enumerate every member of
+  a family on its own row (e.g. `RNGREEN1`-`RNGREEN4`, `CCD1RV`/`CCD2RV`), never a `?`/`*` stand-in.
 
 ### FITS PRIMARY header conventions
 
