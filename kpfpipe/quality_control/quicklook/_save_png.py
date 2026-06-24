@@ -52,6 +52,4 @@ def save_image_png(image, path, cmap, vmin, vmax, origin="lower", compress_level
     cmap_obj = colormaps[cmap].copy()
     cmap_obj.set_bad("black")
     rgb = cmap_obj(norm(masked), bytes=True)[..., :3]
-    Image.fromarray(rgb, "RGB").save(
-        path, format="png", compress_level=compress_level
-    )
+    Image.fromarray(rgb, "RGB").save(path, format="png", compress_level=compress_level)

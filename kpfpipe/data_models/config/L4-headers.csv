@@ -1,6 +1,4 @@
 keyword,populated_by,comment
-PROGID,Provenance,WMKO program ID (DRP-RUN-19)
-KOAID,Provenance,KOA archive ID (DRP-RUN-19)
 CCD1RV,RadialVelocity,GREEN SCI-combined RV [km/s] (legacy)
 CCD2RV,RadialVelocity,RED SCI-combined RV [km/s] (legacy)
 CCD1ERV,RadialVelocity,GREEN SCI-combined RV error [km/s] (legacy)

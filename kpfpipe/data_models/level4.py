@@ -29,7 +29,7 @@ from rvdata.core.models.level4 import RV4
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import apply_provenance_metadata, sync_receipt_extension
+from kpfpipe.data_models.base import update_drpstatus
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -243,9 +243,15 @@ class KPF4(RV4):
         table), not `self.receipt` (the processing history DataFrame). This
         override syncs them so the full receipt is written to the FITS file.
         """
-        apply_provenance_metadata(self)
-        sync_receipt_extension(self)
+        if self.receipt is not None and not self.receipt.empty:
+            self.data["RECEIPT"] = Table.from_pandas(self.receipt)
         return super()._create_hdul()
+
+    def receipt_add_entry(self, module, status):
+        """Record a processing step, and update DRPSTATU for pipeline modules."""
+        super().receipt_add_entry(module, status)
+        if status == "PASS":
+            update_drpstatus(self, module)
 
     def info(self):
         """Print summary of KPF4 data model contents."""

@@ -6,6 +6,7 @@ observation from tests/testdata/L0/20240405/.
 """
 
 import argparse
+import importlib.metadata
 import importlib.util
 import os
 from pathlib import Path
@@ -169,6 +170,17 @@ class TestScienceRecipe:
         assert "WLSDIR" not in prim
         assert self._hval(prim, "WLSFILE").endswith("_master_thar_L2.fits")
         assert isinstance(self._hval(prim, "WLSAGE"), float)
+
+    def test_provenance_keywords_set(self, recipe_output):
+        """DRP version/provenance/status keywords survive onto the L2 PRIMARY."""
+        prim = KPF2.from_fits(recipe_output).headers["PRIMARY"]
+        version = importlib.metadata.version("kpfpipe")
+        assert self._hval(prim, "DRPVERNO") == version
+        assert self._hval(prim, "DRPTAG") == version
+        assert "PROGID" in prim
+        assert "KOAID" in prim
+        # BarycentricCorrection is the last module to run before the L2 write.
+        assert self._hval(prim, "DRPSTATU") == "Barycentric Correction module complete"
 
     def test_wave_arrays_populated(self, recipe_output):
         """WavelengthCalibration should fill the per-fiber WAVE extensions."""

@@ -152,6 +152,10 @@ _STRUCTURAL_KEYS = {
 # default of 65 is wrong — see notes/header_audit.md A2).
 _NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
 
+# Initial DRPSTATU value on the L1 EPRV PRIMARY, before any pipeline module runs.
+# Each module overwrites it via the receipt_add_entry override (see base.py).
+_DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
+
 
 def _scalar(value):
     """Return a header value, dropping any (value, comment) tuple wrapper."""
@@ -160,14 +164,7 @@ def _scalar(value):
 
 def _drp_version():
     """Exact DRP version (WMKO DRP-RUN-11), from the installed package metadata."""
-    for package in ("kpfpipe", "kpf-drp"):
-        try:
-            return importlib.metadata.version(package)
-        except importlib.metadata.PackageNotFoundError:
-            continue
-    raise RuntimeError(
-        "Cannot determine KPF DRP package version; tried kpfpipe, kpf-drp"
-    )
+    return importlib.metadata.version("kpfpipe")
 
 
 def _full_jd_utc(native_primary):
@@ -229,6 +226,15 @@ def convert_native_to_eprv(native_primary):
     version = _drp_version()
     out["DRPTAG"] = (version, "DRP version")
     out["DRPVERNO"] = (version, "DRP version (WMKO DRP-RUN-11)")
+
+    # WMKO provenance (DRP-RUN-19): native PROGID/KOAID, or 'UNKNOWN' if absent.
+    out["PROGID"] = (
+        _scalar(native_primary.get("PROGID")) or "UNKNOWN",
+        "WMKO program ID",
+    )
+    out["KOAID"] = (_scalar(native_primary.get("KOAID")) or "UNKNOWN", "KOA archive ID")
+    # Initial reduction status (DRP-RUN-20); modules overwrite it as they run.
+    out["DRPSTATU"] = (_DRPSTATU_DEFAULT, "DRP reduction status")
     return out
 
 

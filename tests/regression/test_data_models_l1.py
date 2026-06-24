@@ -5,11 +5,12 @@ and the KPFMasterL1 calibration product.
 Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
+import importlib.metadata
+
 import numpy as np
 import pytest
 from astropy.io import fits
 
-from kpfpipe.data_models.base import kpf_drp_version
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
@@ -96,6 +97,20 @@ class TestKPF1:
         l1.to_fits(out_fn)
         assert "to_fits" in l1.receipt["Module_Name"].values
 
+    def test_receipt_survives_roundtrip(self, synthetic_l1_file, tmp_path):
+        """The processing history must be written to the FITS RECEIPT extension,
+        not just held in memory. rvdata's _create_hdul serializes
+        self.data["RECEIPT"], so KPFDataModel._create_hdul syncs self.receipt
+        into it before writing; without that the receipt is silently lost."""
+        l1 = KPF1.from_fits(synthetic_l1_file)
+        l1.receipt_add_entry("image_assembly", "PASS")
+        out_fn = str(tmp_path / "roundtrip_l1.fits")
+        l1.to_fits(out_fn)
+
+        modules = KPF1.from_fits(out_fn).receipt["Module_Name"].values
+        assert "image_assembly" in modules
+        assert "to_fits" in modules
+
     def test_generate_filename(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
         fn = l1.generate_standard_filename()
@@ -174,7 +189,7 @@ class TestToL1:
         assert self._scalar(prim["NUMORDER"]) == 67  # 35 green + 32 red, not 65
         # JD_UTC is the full Julian Date of DATE-OBS (not a raw MJD).
         assert self._scalar(prim["JD_UTC"]) == pytest.approx(2460322.93537, abs=1e-3)
-        version = kpf_drp_version()
+        version = importlib.metadata.version("kpfpipe")
         assert self._scalar(prim["DRPTAG"]) == version
         assert self._scalar(prim["DRPVERNO"]) == version
 

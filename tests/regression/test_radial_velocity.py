@@ -863,9 +863,12 @@ class TestPerform:
         rv = np.asarray(l4.data["CAL_RV"]["RV"])
         np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
 
-    def test_etalon_fiber_skipped(self, rv_module):
-        rv_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "EtalonFiber"
-        with pytest.warns(UserWarning, match="etalon.*not implemented"):
+    @pytest.mark.parametrize(
+        "raw, obj", [("EtalonFiber", "etalon"), ("LFCFiber", "lfc")]
+    )
+    def test_unimplemented_fiber_skipped(self, rv_module, raw, obj):
+        rv_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = raw
+        with pytest.warns(UserWarning, match=f"{obj}.*not implemented"):
             l4 = rv_module.perform(fibers=["CAL"])
         assert l4.data["CAL_CCF"].size == 0
         assert len(l4.data["CAL_RV"]) == 0
