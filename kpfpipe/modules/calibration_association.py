@@ -83,7 +83,7 @@ class CalibrationAssociation:
             setattr(self, k, params.get(k, v))
 
         self._masters_root = params.get("KPF_MASTERS_OUTPUT")
-        self._calibrations = None  # per-cal {filepath, age_days} for _set_kpf1_headers
+        self._calibrations = None  # per-cal {filepath, age_days} for _set_headers
         self._info = None
 
     # ------------------------------------------------------------------
@@ -183,7 +183,17 @@ class CalibrationAssociation:
             ),
         )[0]
 
-    def _set_kpf1_headers(self, l1_obj):
+    # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {
+            cal_type: dict(cal) for cal_type, cal in self._calibrations.items()
+        }
+
+    def _set_headers(self, l1_obj):
         """Write all PRIMARY-header keywords for calibration association.
 
         Reads self._calibrations (populated by perform()); the single place this
@@ -258,17 +268,11 @@ class CalibrationAssociation:
             age_days = (master_dt - obs_dt).total_seconds() / 86400.0
             self._calibrations[cal_type] = {"filepath": filepath, "age_days": age_days}
 
-        self._set_kpf1_headers(self.l1_obj)
+        self._set_headers(self.l1_obj)
         self._track_info()
         self.l1_obj.receipt_add_entry("calibration_association", "PASS")
 
         return self.l1_obj
-
-    def _track_info(self):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {
-            cal_type: dict(cal) for cal_type, cal in self._calibrations.items()
-        }
 
     def info(self):
         """Print a summary of the module configuration and association results."""

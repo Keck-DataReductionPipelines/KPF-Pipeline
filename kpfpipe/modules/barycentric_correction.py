@@ -102,7 +102,7 @@ class BarycentricCorrection:
             setattr(self, k, params.get(k, v))
 
         self._info = None
-        self._ccd_bjd = None  # Per-CCD [GREEN, RED] arrays for _set_kpf2_headers
+        self._ccd_bjd = None  # Per-CCD [GREEN, RED] arrays for _set_headers
         self._ccd_kms = None
         self._ccd_z = None
         self._exposure_meter = None  # (toggle_key, w_em, t_em)
@@ -694,6 +694,41 @@ class BarycentricCorrection:
         return bjd_tdb, bary_kms, bary_z
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {
+            "bjd_tdb": np.asarray(self.l2_obj.data["BJD_TDB"]),
+            "bary_kms": np.asarray(self.l2_obj.data["BARYCORR_KMS"]),
+            "ccd_bjd": np.asarray(self._ccd_bjd),
+            "ccd_kms": np.asarray(self._ccd_kms),
+            "ccd_z": np.asarray(self._ccd_z),
+            "astrometry_source": self._astrometry_source,
+        }
+
+    def _set_headers(self, l2_obj):
+        """Write all PRIMARY-header keywords for barycentric correction.
+
+        Reads self._ccd_bjd/_ccd_kms/_ccd_z and self._astrometry_source
+        (populated by perform()); the single place this module writes PRIMARY,
+        called just before the receipt entry. Per-CCD keywords are registered
+        KPF-pipeline keywords (config/L2-headers.csv); CCD1=GREEN, CCD2=RED.
+        """
+        prim = l2_obj.headers["PRIMARY"]
+        prim["CCD1BJD"] = (float(self._ccd_bjd[0]), "[BJD_TDB] GREEN mid-time")
+        prim["CCD1BKMS"] = (
+            float(self._ccd_kms[0]),
+            "[km/s] GREEN barycentric velocity",
+        )
+        prim["CCD1BZ"] = (float(self._ccd_z[0]), "GREEN barycentric redshift z")
+        prim["CCD2BJD"] = (float(self._ccd_bjd[1]), "[BJD_TDB] RED mid-time")
+        prim["CCD2BKMS"] = (float(self._ccd_kms[1]), "[km/s] RED barycentric velocity")
+        prim["CCD2BZ"] = (float(self._ccd_z[1]), "RED barycentric redshift z")
+        prim["ASTRSRC"] = (self._astrometry_source, "Astrometry source")
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
@@ -738,7 +773,7 @@ class BarycentricCorrection:
         bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(
             output="orders", **kwargs
         )
-        # Per-CCD summaries [GREEN, RED], consumed by _set_kpf2_headers.
+        # Per-CCD summaries [GREEN, RED], consumed by _set_headers.
         self._ccd_bjd, self._ccd_kms, self._ccd_z = self.compute_barycentric_correction(
             output="ccds", **kwargs
         )
@@ -748,42 +783,11 @@ class BarycentricCorrection:
         self.l2_obj.set_data("BARYCORR_KMS", np.asarray(bary_kms, dtype=np.float64))
         self.l2_obj.set_data("BARYCORR_Z", np.asarray(bary_z, dtype=np.float64))
 
-        self._set_kpf2_headers(self.l2_obj)
+        self._set_headers(self.l2_obj)
         self._track_info()
         self.l2_obj.receipt_add_entry("barycentric_correction", "PASS")
 
         return self.l2_obj
-
-    def _track_info(self):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {
-            "bjd_tdb": np.asarray(self.l2_obj.data["BJD_TDB"]),
-            "bary_kms": np.asarray(self.l2_obj.data["BARYCORR_KMS"]),
-            "ccd_bjd": np.asarray(self._ccd_bjd),
-            "ccd_kms": np.asarray(self._ccd_kms),
-            "ccd_z": np.asarray(self._ccd_z),
-            "astrometry_source": self._astrometry_source,
-        }
-
-    def _set_kpf2_headers(self, l2_obj):
-        """Write all PRIMARY-header keywords for barycentric correction.
-
-        Reads self._ccd_bjd/_ccd_kms/_ccd_z and self._astrometry_source
-        (populated by perform()); the single place this module writes PRIMARY,
-        called just before the receipt entry. Per-CCD keywords are registered
-        KPF-pipeline keywords (config/L2-headers.csv); CCD1=GREEN, CCD2=RED.
-        """
-        prim = l2_obj.headers["PRIMARY"]
-        prim["CCD1BJD"] = (float(self._ccd_bjd[0]), "[BJD_TDB] GREEN mid-time")
-        prim["CCD1BKMS"] = (
-            float(self._ccd_kms[0]),
-            "[km/s] GREEN barycentric velocity",
-        )
-        prim["CCD1BZ"] = (float(self._ccd_z[0]), "GREEN barycentric redshift z")
-        prim["CCD2BJD"] = (float(self._ccd_bjd[1]), "[BJD_TDB] RED mid-time")
-        prim["CCD2BKMS"] = (float(self._ccd_kms[1]), "[km/s] RED barycentric velocity")
-        prim["CCD2BZ"] = (float(self._ccd_z[1]), "RED barycentric redshift z")
-        prim["ASTRSRC"] = (self._astrometry_source, "Astrometry source")
 
     def info(self):
         """Print a summary of the barycentric correction results."""

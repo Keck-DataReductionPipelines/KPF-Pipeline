@@ -75,7 +75,7 @@ class ImageProcessing:
         self._dark_ml1 = None
         self._bias_path = None
         self._dark_path = None
-        self._biassub = None  # applied flags for _set_kpf1_headers
+        self._biassub = None  # applied flags for _set_headers
         self._darksub = None
         self._info = None
 
@@ -241,6 +241,33 @@ class ImageProcessing:
         )
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {}
+        if self.bias:
+            self._info["bias"] = self._bias_path
+        if self.dark:
+            self._info["dark"] = self._dark_path
+
+    def _set_headers(self, l1_obj):
+        """Write all PRIMARY-header keywords for image processing.
+
+        Reads the applied-flag attributes populated by perform(); the single
+        place this module writes PRIMARY, called just before the receipt entry.
+        """
+        l1_obj.headers["PRIMARY"]["BIASSUB"] = (
+            self._biassub,
+            "Bias subtraction applied",
+        )
+        l1_obj.headers["PRIMARY"]["DARKSUB"] = (
+            self._darksub,
+            "Dark subtraction applied",
+        )
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
@@ -269,21 +296,6 @@ class ImageProcessing:
         if isinstance(val, tuple):  # Headers store (value, comment) tuples.
             val = val[0]
         return bool(val)
-
-    def _set_kpf1_headers(self, l1_obj):
-        """Write all PRIMARY-header keywords for image processing.
-
-        Reads the applied-flag attributes populated by perform(); the single
-        place this module writes PRIMARY, called just before the receipt entry.
-        """
-        l1_obj.headers["PRIMARY"]["BIASSUB"] = (
-            self._biassub,
-            "Bias subtraction applied",
-        )
-        l1_obj.headers["PRIMARY"]["DARKSUB"] = (
-            self._darksub,
-            "Dark subtraction applied",
-        )
 
     def perform(self, chips=None, *, bias=None, dark=None, flat=None):
         """
@@ -360,19 +372,11 @@ class ImageProcessing:
         self._biassub = bool(self.bias) or prior_bias
         self._darksub = bool(self.dark) or prior_dark
 
-        self._set_kpf1_headers(self.l1_obj)
+        self._set_headers(self.l1_obj)
         self._track_info()
         self.l1_obj.receipt_add_entry("image_processing", "PASS")
 
         return self.l1_obj
-
-    def _track_info(self):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {}
-        if self.bias:
-            self._info["bias"] = self._bias_path
-        if self.dark:
-            self._info["dark"] = self._dark_path
 
     def info(self):
         """Print a summary of the module configuration and processing results."""

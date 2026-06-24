@@ -105,6 +105,22 @@ class WavelengthCalibration:
         return KPFMasterL2.from_fits(wls_path)
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {"wls_path": self._wls_path}
+
+    def _set_headers(self, l2_obj):
+        """Write all PRIMARY-header keywords for wavelength calibration.
+
+        Reserved: this module writes no PRIMARY metadata yet. Present so every
+        module consolidates header writes in one place, called just before the
+        receipt entry.
+        """
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
@@ -153,23 +169,11 @@ class WavelengthCalibration:
                     )
                 self.l2_obj.set_data(key, np.asarray(src, dtype=np.float64))
 
-        self._set_kpf2_headers(self.l2_obj)
+        self._set_headers(self.l2_obj)
         self._track_info()
         self.l2_obj.receipt_add_entry("wavelength_calibration", "PASS")
 
         return self.l2_obj
-
-    def _set_kpf2_headers(self, l2_obj):
-        """Write all PRIMARY-header keywords for wavelength calibration.
-
-        Reserved: this module writes no PRIMARY metadata yet. Present so every
-        module consolidates header writes in one place, called just before the
-        receipt entry.
-        """
-
-    def _track_info(self):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {"wls_path": self._wls_path}
 
     def info(self):
         """Print a summary of the module configuration and association results."""

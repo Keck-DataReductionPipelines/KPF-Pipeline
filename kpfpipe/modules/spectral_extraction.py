@@ -455,6 +455,25 @@ class SpectralExtraction:
         return l2_arrays
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self, chips, fibers):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {
+            chip: {"fibers": list(fibers), "norder": self.norder[chip.upper()]}
+            for chip in chips
+        }
+
+    def _set_headers(self, l2_obj):
+        """Write all PRIMARY-header keywords for spectral extraction.
+
+        Reserved: this module writes no PRIMARY metadata yet. Present so every
+        module consolidates header writes in one place, called just before the
+        receipt entry.
+        """
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
@@ -505,26 +524,11 @@ class SpectralExtraction:
                 )
                 l2_obj.set_data(f"{chip}_{fiber}_VAR", l2_arrays[f"{chip}_{fiber}_VAR"])
 
-        self._set_kpf2_headers(l2_obj)
+        self._set_headers(l2_obj)
         self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "PASS")
 
         return l2_obj
-
-    def _set_kpf2_headers(self, l2_obj):
-        """Write all PRIMARY-header keywords for spectral extraction.
-
-        Reserved: this module writes no PRIMARY metadata yet. Present so every
-        module consolidates header writes in one place, called just before the
-        receipt entry.
-        """
-
-    def _track_info(self, chips, fibers):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {
-            chip: {"fibers": list(fibers), "norder": self.norder[chip.upper()]}
-            for chip in chips
-        }
 
     def info(self):
         """Print a summary of the module configuration and extraction results."""
