@@ -29,6 +29,7 @@ from rvdata.core.models.level4 import RV4
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+from kpfpipe.data_models.base import apply_provenance_metadata, sync_receipt_extension
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -242,8 +243,8 @@ class KPF4(RV4):
         table), not `self.receipt` (the processing history DataFrame). This
         override syncs them so the full receipt is written to the FITS file.
         """
-        if self.receipt is not None and not self.receipt.empty:
-            self.data["RECEIPT"] = Table.from_pandas(self.receipt)
+        apply_provenance_metadata(self)
+        sync_receipt_extension(self)
         return super()._create_hdul()
 
     def info(self):
