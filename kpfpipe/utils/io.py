@@ -90,7 +90,12 @@ def build_mini_database(data_dir, write=True):
 
 
 def build_l0_file_lists(
-    cal_type, *, data_dir=None, mini_db=None, min_file_count=5, cluster_gap_seconds=7200
+    cal_type,
+    *,
+    data_dir=None,
+    mini_db=None,
+    min_file_count=3,
+    cluster_gap_seconds=21600,
 ):
     """
     Return sorted file lists for all calibration clusters of the requested
@@ -112,26 +117,26 @@ def build_l0_file_lists(
         Path to directory containing L0 FITS files.
     mini_db : pandas.DataFrame, optional
         DataFrame returned by `build_mini_database`.
-    min_file_count : int, default 5
+    min_file_count : int, default 3
         Minimum number of files required per cluster.
-    cluster_gap_seconds : int, default 7200
+    cluster_gap_seconds : int, default 21600
         Gap [s] between consecutive frames that splits a calibration sequence
-        into separate clusters. The default of 7200 (2 hours) reliably
+        into separate clusters. The default of 21600 (6 hours) reliably
         distinguishes morning vs. evening KPF calibration clusters, which are
         separated by science obs.
 
     Returns
     -------
     list of list of str
-        Sorted file lists, one per cluster.
+        Sorted file lists, one per cluster. Clusters with fewer than
+        `min_file_count` files are skipped with a warning.
 
     Raises
     ------
     ValueError
         If `cal_type` is not a recognized calibration type, if exactly one of
-        `data_dir` or `mini_db` is not provided, if no calibration frames of
-        the requested type are found, or if any cluster contains fewer than
-        `min_file_count` files.
+        `data_dir` or `mini_db` is not provided, or if no calibration frames of
+        the requested type are found.
     """
     if cal_type not in _OBJECT_MAP:
         raise ValueError(
@@ -201,11 +206,14 @@ def build_l0_file_lists(
 
     short = [c for c in clusters if len(c) < min_file_count]
     if short:
-        raise ValueError(
+        warnings.warn(
             f"'{cal_type}' has {len(short)} cluster(s) below "
-            f"min_file_count={min_file_count}; sizes: {[len(c) for c in short]}"
+            f"min_file_count={min_file_count}; sizes: {[len(c) for c in short]}. "
+            "Skipping undersized cluster(s).",
+            UserWarning,
+            stacklevel=2,
         )
-    return clusters
+    return [c for c in clusters if len(c) >= min_file_count]
 
 
 def build_qlp_dir(obs_id, level, *, data_root):

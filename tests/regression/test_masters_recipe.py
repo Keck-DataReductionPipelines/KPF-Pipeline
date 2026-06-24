@@ -176,34 +176,43 @@ class TestBuildL0FileLists:
         return _write_test_csv(tmp_path, db)
 
     def test_two_bias_clusters_returned_separately(self, data_dir):
-        lists = build_l0_file_lists("bias", data_dir=data_dir)
+        lists = build_l0_file_lists("bias", data_dir=data_dir, cluster_gap_seconds=7200)
         assert len(lists) == 2
 
     def test_bias_cluster_a_files(self, data_dir):
-        lists = build_l0_file_lists("bias", data_dir=data_dir)
+        lists = build_l0_file_lists("bias", data_dir=data_dir, cluster_gap_seconds=7200)
         assert lists[0] == sorted(_at(data_dir, _BIAS_A))
 
     def test_bias_cluster_b_files(self, data_dir):
-        lists = build_l0_file_lists("bias", data_dir=data_dir)
+        lists = build_l0_file_lists("bias", data_dir=data_dir, cluster_gap_seconds=7200)
         assert lists[1] == sorted(_at(data_dir, _BIAS_B))
 
     def test_files_are_sorted(self, data_dir):
         for lst in build_l0_file_lists("bias", data_dir=data_dir):
             assert lst == sorted(lst)
 
-    def test_raises_when_any_cluster_below_min(self, data_dir):
-        # min_file_count=6: both bias clusters (5 files each) fall below → raises.
-        with pytest.raises(ValueError, match="below min_file_count=6"):
-            build_l0_file_lists("bias", min_file_count=6, data_dir=data_dir)
+    def test_skips_clusters_below_min(self, data_dir):
+        # min_file_count=6: both bias clusters (5 files each) fall below.
+        with pytest.warns(UserWarning, match="below min_file_count=6"):
+            lists = build_l0_file_lists(
+                "bias",
+                min_file_count=6,
+                data_dir=data_dir,
+                cluster_gap_seconds=7200,
+            )
+        assert lists == []
 
     def test_raises_when_no_frames_found(self, data_dir):
         with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
             build_l0_file_lists("flat", data_dir=data_dir)
 
-    def test_raises_when_dark_cluster_below_default_min(self, data_dir):
-        # dark cluster has only 3 files; default min_file_count=5 → raises.
-        with pytest.raises(ValueError, match="below min_file_count=5"):
-            build_l0_file_lists("dark", data_dir=data_dir)
+    def test_skips_dark_cluster_below_min(self, data_dir):
+        # dark cluster has only 3 files; min_file_count=5 skips it.
+        with pytest.warns(UserWarning, match="below min_file_count=5"):
+            lists = build_l0_file_lists(
+                "dark", data_dir=data_dir, min_file_count=5
+            )
+        assert lists == []
 
     def test_invalid_imtype_raises(self, data_dir):
         with pytest.raises(ValueError, match="cal_type must be one of"):
@@ -232,7 +241,9 @@ class TestBuildL0FileLists:
             build_l0_file_lists("bias", data_dir=data_dir, mini_db=_make_mini_db())
 
     def test_accepts_mini_db_directly(self):
-        lists = build_l0_file_lists("bias", mini_db=_make_mini_db())
+        lists = build_l0_file_lists(
+            "bias", mini_db=_make_mini_db(), cluster_gap_seconds=7200
+        )
         assert len(lists) == 2
         assert lists[0] == sorted(_BIAS_A)
 
@@ -241,7 +252,9 @@ class TestBuildL0FileLists:
         os.makedirs(data_dir)
         with patch("kpfpipe.utils.io.build_mini_database") as mock_bmd:
             mock_bmd.return_value = _make_mini_db()
-            lists = build_l0_file_lists("bias", data_dir=data_dir)
+            lists = build_l0_file_lists(
+                "bias", data_dir=data_dir, cluster_gap_seconds=7200
+            )
         mock_bmd.assert_called_once_with(data_dir)
         assert len(lists) == 2
 
@@ -293,11 +306,12 @@ class TestBuildL0FileListsRealData:
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
-    def test_dark_raises_on_undersized_clusters(self, l0_dir):
+    def test_dark_skips_undersized_clusters(self, l0_dir):
         # The testdata has two dark clusters of 2 and 3 frames — both below
-        # the default min_file_count=5 → raises.
-        with pytest.raises(ValueError, match="below min_file_count=5"):
-            build_l0_file_lists("dark", data_dir=l0_dir)
+        # the default min_file_count=5.
+        with pytest.warns(UserWarning, match="below min_file_count=5"):
+            lists = build_l0_file_lists("dark", data_dir=l0_dir)
+        assert lists == []
 
 
 # ---------------------------------------------------------------------------
