@@ -160,7 +160,14 @@ def _scalar(value):
 
 def _drp_version():
     """Exact DRP version (WMKO DRP-RUN-11), from the installed package metadata."""
-    return importlib.metadata.version("kpfpipe")
+    for package in ("kpfpipe", "kpf-drp"):
+        try:
+            return importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    raise RuntimeError(
+        "Cannot determine KPF DRP package version; tried kpfpipe, kpf-drp"
+    )
 
 
 def _full_jd_utc(native_primary):

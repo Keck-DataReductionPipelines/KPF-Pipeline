@@ -14,7 +14,7 @@ from rvdata.core.models.base import RVDataModel
 
 from kpfpipe.utils.kpf import _DATECODE_PATTERN, _OBS_ID_PATTERN
 
-_KPF_DRP_PACKAGE = "kpf-drp"
+_KPF_DRP_PACKAGES = ("kpfpipe", "kpf-drp")
 _PROVENANCE_KEYS = ("PROGID", "KOAID")
 
 
@@ -27,12 +27,15 @@ def _header_value(value):
 
 def kpf_drp_version():
     """Return the installed KPF DRP package version used for FITS metadata."""
-    try:
-        return version(_KPF_DRP_PACKAGE)
-    except PackageNotFoundError as exc:
-        raise RuntimeError(
-            f"Cannot determine {_KPF_DRP_PACKAGE} package version for DRPVERNO"
-        ) from exc
+    for package in _KPF_DRP_PACKAGES:
+        try:
+            return version(package)
+        except PackageNotFoundError:
+            continue
+    raise RuntimeError(
+        f"Cannot determine KPF DRP package version for DRPVERNO; tried "
+        f"{', '.join(_KPF_DRP_PACKAGES)}"
+    )
 
 
 def apply_provenance_metadata(data_model):

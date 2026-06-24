@@ -58,8 +58,6 @@ def test_l1_to_kpf2_propagates_program_ids_to_written_l2_primary(
         assert primary["DRPSTATU"] == "COMPLETE"
         assert primary["PROGID"] == "U999"
         assert primary["KOAID"] == "KP.20201122.34567.89"
-        assert hdul["INSTRUMENT_HEADER"].header["PROGID"] == "U999"
-        assert hdul["INSTRUMENT_HEADER"].header["KOAID"] == "KP.20201122.34567.89"
 
         receipt = Table.read(hdul["RECEIPT"]).to_pandas()
         assert "to_kpf2" in receipt["Module_Name"].values

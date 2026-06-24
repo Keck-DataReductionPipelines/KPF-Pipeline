@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+from kpfpipe.data_models.base import kpf_drp_version
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
@@ -167,15 +168,13 @@ class TestToL1:
 
     def test_to_l1_fixes_value_bugs(self, synthetic_l0_file):
         """NUMORDER, JD_UTC, and the DRP version keywords are corrected/stamped."""
-        import importlib.metadata
-
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         prim = l1.headers["PRIMARY"]
         assert self._scalar(prim["NUMORDER"]) == 67  # 35 green + 32 red, not 65
         # JD_UTC is the full Julian Date of DATE-OBS (not a raw MJD).
         assert self._scalar(prim["JD_UTC"]) == pytest.approx(2460322.93537, abs=1e-3)
-        version = importlib.metadata.version("kpfpipe")
+        version = kpf_drp_version()
         assert self._scalar(prim["DRPTAG"]) == version
         assert self._scalar(prim["DRPVERNO"]) == version
 

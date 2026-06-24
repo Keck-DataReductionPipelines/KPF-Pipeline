@@ -1,4 +1,6 @@
 keyword,populated_by,comment
+PROGID,Provenance,WMKO program ID (DRP-RUN-19)
+KOAID,Provenance,KOA archive ID (DRP-RUN-19)
 DATAPRL2,QCL2,QC: L2 data present
 L2NANOK,QCL2,QC: L2 NaN count ok
 L2FLXOK,QCL2,QC: L2 zero-flux fraction ok
