@@ -17,6 +17,14 @@ def _hdr_float(hdr, key):
     return float(val[0] if isinstance(val, tuple) else val)
 
 
+def _hdr_flag(hdr, key):
+    """Return bool value for a header key, or False if absent."""
+    if key not in hdr:
+        return False
+    val = hdr[key]
+    return bool(val[0] if isinstance(val, tuple) else val)
+
+
 class QCL1(QC):
     """QC checks for KPF Level 1 assembled FFI products."""
 
@@ -70,17 +78,18 @@ class QCL1(QC):
     read_noise_nongauss._qc_key = "RNGAUSS"
     read_noise_nongauss._qc_comment = "QC: non-Gaussian RN within 0.8-1.5"
 
+    def overscan_subtracted(self):
+        """OSCANSUB == True."""
+        return _hdr_flag(self.kpf.headers["PRIMARY"], "OSCANSUB")
+
+    overscan_subtracted._qc_key = "OSCANSUB"
+    overscan_subtracted._qc_comment = "QC: overscan subtraction applied"
+
     def bias_subtracted(self):
         """BIASSUB == True."""
-        hdr = self.kpf.headers["PRIMARY"]
-        if "BIASSUB" not in hdr:
-            return False
-        val = hdr["BIASSUB"]
-        if isinstance(val, tuple):
-            val = val[0]
-        return bool(val)
+        return _hdr_flag(self.kpf.headers["PRIMARY"], "BIASSUB")
 
-    bias_subtracted._qc_key = "BIASOK"
+    bias_subtracted._qc_key = "BIASSUB"
     bias_subtracted._qc_comment = "QC: bias subtraction applied"
 
     def bias_age_ok(self):
@@ -91,6 +100,13 @@ class QCL1(QC):
     bias_age_ok._qc_key = "BIASAGEQ"
     bias_age_ok._qc_comment = "QC: bias master age <= 7 days"
 
+    def dark_subtracted(self):
+        """DARKSUB == True."""
+        return _hdr_flag(self.kpf.headers["PRIMARY"], "DARKSUB")
+
+    dark_subtracted._qc_key = "DARKSUB"
+    dark_subtracted._qc_comment = "QC: dark subtraction applied"
+
     def dark_age_ok(self):
         """abs(DARKAGE) <= 14 days."""
         v = _hdr_float(self.kpf.headers["PRIMARY"], "DARKAGE")
@@ -98,6 +114,13 @@ class QCL1(QC):
 
     dark_age_ok._qc_key = "DARKAGEQ"
     dark_age_ok._qc_comment = "QC: dark master age <= 14 days"
+
+    def flat_divided(self):
+        """FLATDIV == True."""
+        return _hdr_flag(self.kpf.headers["PRIMARY"], "FLATDIV")
+
+    flat_divided._qc_key = "FLATDIV"
+    flat_divided._qc_comment = "QC: flat division applied"
 
     def flat_age_ok(self):
         """abs(FLATAGE) <= 30 days."""

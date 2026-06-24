@@ -26,11 +26,11 @@ _DEFAULTS = {
 }
 
 # PRIMARY-header flag marking a calibration as applied (single source of truth
-# for these keyword names). FLATSUB is reserved for when flat division lands.
+# for these keyword names). FLATDIV is reserved for when flat division lands.
 _CALIBRATION_HEADER_KEYS = {
     "bias": "BIASSUB",
     "dark": "DARKSUB",
-    "flat": "FLATSUB",
+    "flat": "FLATDIV",
 }
 
 
