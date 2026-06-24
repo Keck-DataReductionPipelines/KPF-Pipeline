@@ -15,7 +15,7 @@ RNNGRD1,ImageAssembly,Non-Gaussian read noise RED amp 1
 RNNGRD2,ImageAssembly,Non-Gaussian read noise RED amp 2
 RNNGRD3,ImageAssembly,Non-Gaussian read noise RED amp 3
 RNNGRD4,ImageAssembly,Non-Gaussian read noise RED amp 4
-OSCANMET,ImageAssembly,Overscan subtraction method
+OSCANSUB,ImageAssembly,Overscan subtraction applied
 BIASSUB,ImageProcessing,Bias subtraction applied
 DARKSUB,ImageProcessing,Dark subtraction applied
 FLATDIV,ImageProcessing,Flat division applied (reserved)

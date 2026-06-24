@@ -215,7 +215,7 @@ class ImageAssembly:
         Header updates:
         1. Read noise per amplifier channel (e.g. RNGRN1)
         2. Non-Gaussian read noise per amplifier channel (e.g. RNNGGR1)
-        3. Overscan subtraction method (OSCANMET)
+        3. Overscan subtraction applied (OSCANSUB)
         """
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]
@@ -228,9 +228,10 @@ class ImageAssembly:
                 f"Non-Gaussian read noise {channel_ext}",
             )
 
-        l1_obj.headers["PRIMARY"]["OSCANMET"] = (
-            self.overscan_method,
-            "Overscan subtraction method",
+        # "zero" is the explicit no-op method (strips overscan, subtracts none).
+        l1_obj.headers["PRIMARY"]["OSCANSUB"] = (
+            self.overscan_method != "zero",
+            "Overscan subtraction applied",
         )
 
     @staticmethod
@@ -594,8 +595,8 @@ class ImageAssembly:
             l1_obj.set_data(f"{chip}_CCD", ccd_ffi)
             l1_obj.set_data(f"{chip}_VAR", var_ffi)
 
-        self._set_kpf1_headers(l1_obj)
         self._convert_expmeter_wavelengths_to_angstroms(l1_obj)
+        self._set_kpf1_headers(l1_obj)
         l1_obj.receipt_add_entry("image_assembly", "PASS")
 
         self._results = {
