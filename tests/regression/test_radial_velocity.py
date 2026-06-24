@@ -369,10 +369,18 @@ class TestDispatch:
     @pytest.mark.parametrize(
         "raw, obj", [("EtalonFiber", "etalon"), ("LFCFiber", "lfc")]
     )
-    def test_unimplemented_source_raises(self, header_kpf2, raw, obj):
+    def test_unimplemented_source_warns_and_skips(self, header_kpf2, raw, obj):
         header_kpf2.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = raw
-        with pytest.raises(NotImplementedError, match=obj):
-            RadialVelocity(header_kpf2)._resolve_illumination_source("GREEN", "CAL")
+        with pytest.warns(UserWarning, match=f"{obj}.*not implemented"):
+            source = RadialVelocity(header_kpf2)._resolve_illumination_source(
+                "GREEN", "CAL"
+            )
+        assert source == {
+            "object": obj,
+            "mask_name": None,
+            "apply_barycorr": None,
+            "vel_grid_center": None,
+        }
 
 
 class TestStellarMaskName:
@@ -854,10 +862,12 @@ class TestPerform:
         rv = np.asarray(l4.data["CAL_RV"]["RV"])
         np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
 
-    def test_etalon_fiber_raises(self, rv_module):
+    def test_etalon_fiber_skipped(self, rv_module):
         rv_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "EtalonFiber"
-        with pytest.raises(NotImplementedError, match="etalon"):
-            rv_module.perform(fibers=["CAL"])
+        with pytest.warns(UserWarning, match="etalon.*not implemented"):
+            l4 = rv_module.perform(fibers=["CAL"])
+        assert l4.data["CAL_CCF"].size == 0
+        assert len(l4.data["CAL_RV"]) == 0
 
     def test_explicit_chips_and_fibers(self, rv_module):
         l4 = rv_module.perform(chips=["GREEN"], fibers=["SCI1", "SCI2", "SCI3"])

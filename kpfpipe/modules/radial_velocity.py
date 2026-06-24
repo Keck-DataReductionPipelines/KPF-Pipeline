@@ -14,12 +14,14 @@ its illumination source (SCI-OBJ/SKY-OBJ/CAL-OBJ in INSTRUMENT_HEADER):
   target   TARGTEFF-lookup      yes       TARGRADV (systemic)
   sky      G2_espresso (solar)  yes       0
   thar     ThAr list (unit wt)  no        0
-  etalon   / lfc                                NotImplementedError
+  etalon   / lfc                                skipped (no CCF/RV; not implemented)
   none     not illuminated -> skipped (no CCF/RV)
 
 All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.
 """
+
+import warnings
 
 import astropy.units as u
 import numpy as np
@@ -106,8 +108,8 @@ class RadialVelocity:
 
         Returns a dict with keys 'object' (the normalized source), 'mask_name',
         'apply_barycorr', and 'vel_grid_center'. An unilluminated fiber ('none')
-        has None mask/barycorr/center. Raises NotImplementedError for sources
-        whose CCF path is not yet built (etalon, lfc).
+        has None mask/barycorr/center. Sources whose CCF path is not yet built
+        (etalon, lfc) are skipped the same way, with a warning.
         """
         key = f"{chip.upper()}_{fiber.upper()}"
         if key in self._illumination_source:
@@ -160,12 +162,30 @@ class RadialVelocity:
                 "vel_grid_center": None,
             }
         elif v == "lfcfiber":
-            raise NotImplementedError(
-                "CCF for 'lfc'-illuminated fibers is not yet implemented"
+            source = {
+                "object": "lfc",
+                "mask_name": None,
+                "apply_barycorr": None,
+                "vel_grid_center": None,
+            }
+            warnings.warn(
+                f"{fiber.upper()} is lfc-illuminated; CCF is not implemented. "
+                "Skipping this fiber.",
+                UserWarning,
+                stacklevel=2,
             )
         elif "etalon" in v:
-            raise NotImplementedError(
-                "CCF for 'etalon'-illuminated fibers is not yet implemented"
+            source = {
+                "object": "etalon",
+                "mask_name": None,
+                "apply_barycorr": None,
+                "vel_grid_center": None,
+            }
+            warnings.warn(
+                f"{fiber.upper()} is etalon-illuminated; CCF is not implemented. "
+                "Skipping this fiber.",
+                UserWarning,
+                stacklevel=2,
             )
         else:
             raise ValueError(f"unrecognized illumination source {raw!r}")
@@ -977,11 +997,14 @@ class RadialVelocity:
             rv_err = np.full(norder, np.nan)
 
             # Dispatch the mask/barycorr/grid-center from the fiber's illumination
-            # source; 'none' (unilluminated) is skipped with NaN RVs and no
-            # CCF/RV extension, while etalon/lfc fail loud (NotImplementedError).
+            # source; unilluminated or not-yet-implemented sources are skipped
+            # with NaN RVs and no CCF/RV extension.
             source = self._resolve_illumination_source(chips[0], fiber)
-            if source["object"] == "none":
-                print(f"  {fiber}: illumination source 'none'; skipping (no CCF/RV)")
+            if source["mask_name"] is None:
+                print(
+                    f"  {fiber}: illumination source {source['object']!r}; "
+                    "skipping (no CCF/RV)"
+                )
                 self._results[fiber] = {
                     "rv": rv,
                     "rv_err": rv_err,
