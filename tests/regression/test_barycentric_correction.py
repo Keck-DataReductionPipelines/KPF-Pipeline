@@ -889,14 +889,14 @@ class TestPerform:
         assert captured["rv_mps"] == 0.0
 
     def test_state_populated(self, bc_monkeypatched):
-        assert bc_monkeypatched._ccd_bary is None
+        for attr in ("_ccd_bjd", "_ccd_kms", "_ccd_z"):
+            assert getattr(bc_monkeypatched, attr) is None
         kpf2 = bc_monkeypatched.perform()
         assert bc_monkeypatched._astrometry_source == "Gaia DR3"
         for key in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             assert len(kpf2.data[key]) == NORDER
-        assert set(bc_monkeypatched._ccd_bary) == {1, 2}
-        for ccd in (1, 2):
-            assert set(bc_monkeypatched._ccd_bary[ccd]) == {"bjd", "kms", "z"}
+        for attr in ("_ccd_bjd", "_ccd_kms", "_ccd_z"):
+            assert len(getattr(bc_monkeypatched, attr)) == 2
 
     def test_records_gaia_provenance(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
