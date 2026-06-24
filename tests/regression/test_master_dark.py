@@ -398,7 +398,8 @@ class TestLoadMaster:
     @staticmethod
     def _frame(biasfile="master_bias.fits", biasdir="/m"):
         frame = MagicMock(name="l1")
-        frame.headers = {"PRIMARY": {"BIASFILE": biasfile, "BIASDIR": biasdir}}
+        # BIASFILE holds the master's full path (no separate BIASDIR).
+        frame.headers = {"PRIMARY": {"BIASFILE": os.path.join(biasdir, biasfile)}}
         return frame
 
     def test_falsy_value_returns_unchanged_without_loading(self, monkeypatch):
@@ -482,7 +483,9 @@ class TestLoadMaster:
 def _stack_frame(exptime, ccd_val, var_val, shape=(2, 2)):
     """A synthetic assembled frame with uniform CCD/VAR and a given EXPTIME."""
     frame = MagicMock()
-    frame.headers = {"PRIMARY": {"EXPTIME": exptime}}
+    # EXPTIME is a raw WMKO native read from INSTRUMENT_HEADER (where to_kpf1
+    # preserves it).
+    frame.headers = {"PRIMARY": {}, "INSTRUMENT_HEADER": {"EXPTIME": exptime}}
     frame.data = {
         "GREEN_CCD": np.full(shape, ccd_val, dtype=np.float32),
         "GREEN_VAR": np.full(shape, var_val, dtype=np.float32),

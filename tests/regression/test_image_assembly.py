@@ -139,11 +139,11 @@ class TestImageAssemblyBias:
         assert "RNNGGR1" in l1.headers["PRIMARY"]
         assert "RNNGRD1" in l1.headers["PRIMARY"]
 
-    def test_overscan_method_in_header(self, l1_bias):
+    def test_overscan_applied_in_header(self, l1_bias):
         l1, _ = l1_bias
-        oscan = l1.headers["PRIMARY"]["OSCANMET"]
+        oscan = l1.headers["PRIMARY"]["OSCANSUB"]
         val = oscan[0] if isinstance(oscan, tuple) else oscan
-        assert val == "rowmedian"
+        assert val is True
 
     def test_receipt_chain(self, l1_bias):
         l1, _ = l1_bias

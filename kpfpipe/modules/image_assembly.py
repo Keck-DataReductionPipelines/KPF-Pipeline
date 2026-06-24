@@ -184,16 +184,16 @@ class ImageAssembly:
         Calculates single-value median of serial overscan region
         """
         oscan_srl, _ = self._get_overscan_pixels(chip, amp_no, **kwargs)
-        bias = np.nanmedian(oscan_srl)
-        return bias
+        oscan_bias = np.nanmedian(oscan_srl)
+        return oscan_bias
 
     def _oscan_rowmedian(self, chip, amp_no, **kwargs):
         """
         Calculates row-by-row median of serial overscan region
         """
         oscan_srl, _ = self._get_overscan_pixels(chip, amp_no, **kwargs)
-        bias = np.nanmedian(oscan_srl, axis=1)[:, None]
-        return bias
+        oscan_bias = np.nanmedian(oscan_srl, axis=1)[:, None]
+        return oscan_bias
 
     def _set_kpf1_headers(self, l1_obj):
         """
@@ -215,7 +215,7 @@ class ImageAssembly:
         Header updates:
         1. Read noise per amplifier channel (e.g. RNGRN1)
         2. Non-Gaussian read noise per amplifier channel (e.g. RNNGGR1)
-        3. Overscan subtraction method (OSCANMET)
+        3. Overscan subtraction applied (OSCANSUB)
         """
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]
@@ -228,9 +228,10 @@ class ImageAssembly:
                 f"Non-Gaussian read noise {channel_ext}",
             )
 
-        l1_obj.headers["PRIMARY"]["OSCANMET"] = (
-            self.overscan_method,
-            "Overscan subtraction method",
+        # "zero" is the explicit no-op method (strips overscan, subtracts none).
+        l1_obj.headers["PRIMARY"]["OSCANSUB"] = (
+            self.overscan_method != "zero",
+            "Overscan subtraction applied",
         )
 
     @staticmethod
@@ -321,7 +322,11 @@ class ImageAssembly:
 
         Notes
         -----
-        The transformations are flips; calling twice will undo the operation.
+        The transformations are flips, so each is its own inverse — calling
+        twice restores the input. measure_read_noise and subtract_overscan use
+        this to orient to standard, do their work, then restore the original
+        orientation, so a non-standard orientation never propagates between
+        steps; it is also called directly by Quicklook for its L0 display.
         """
         chip = chip.upper()
 
@@ -397,6 +402,9 @@ class ImageAssembly:
 
         chip = chip.upper()
 
+        # Overscan extraction assumes standard orientation; restore the original
+        # afterward so a flipped channel never propagates to the next step.
+        self.orient_channels(chip)
         for i in range(self.namp[chip]):
             channel_ext = f"{chip}_AMP{i + 1}"
 
@@ -408,6 +416,7 @@ class ImageAssembly:
 
             self.readnoise[channel_ext] = std
             self.rn_nongauss[channel_ext] = np.sqrt(2 / np.pi) * std / mad
+        self.orient_channels(chip)
 
     def subtract_overscan(self, chip, method=None, buffer=(0, 0)):
         """
@@ -438,10 +447,14 @@ class ImageAssembly:
                 f"Unsupported overscan subtraction method: '{method}'"
             ) from None
 
+        # Imaging/overscan extraction assumes standard orientation; restore the
+        # original afterward so stitch_ffi consumes channels as it always has.
+        self.orient_channels(chip)
         for i in range(self.namp[chip]):
             image = self._get_imaging_pixels(chip, i + 1)
-            bias = oscan_fxn(chip, i + 1, buffer=buffer)
-            self.l0_obj.data[f"{chip.upper()}_AMP{i + 1}"] = image - bias
+            oscan_bias = oscan_fxn(chip, i + 1, buffer=buffer)
+            self.l0_obj.data[f"{chip.upper()}_AMP{i + 1}"] = image - oscan_bias
+        self.orient_channels(chip)
 
     def stitch_ffi(self, chip):
         """
@@ -549,13 +562,15 @@ class ImageAssembly:
         -----
         Pipeline steps:
         1. Count amplifiers and determine dimensions
-        2. Orient amplifier channels
-        3. Apply gain conversion (ADU --> electrons)
-        4. Measure read noise
-        5. Subtract overscan bias
-        6. Re-orient channels if needed
-        7. Stitch channels into a full-frame image
-        8. Convert EXPMETER_SCI/SKY wavelength column labels from nm to Å
+        2. Apply gain conversion (ADU --> electrons)
+        3. Measure read noise
+        4. Subtract overscan bias
+        5. Stitch channels into a full-frame image
+        6. Convert EXPMETER_SCI/SKY wavelength column labels from nm to Å
+
+        Amplifier-channel orientation is handled on-the-fly inside
+        measure_read_noise and subtract_overscan (each restores the original
+        orientation afterward), not as a separate top-level step.
         """
         if chips is None:
             chips = self.chips
@@ -572,18 +587,16 @@ class ImageAssembly:
 
         for chip in chips:
             self.count_amplifiers(chip)
-            self.orient_channels(chip)
             self.apply_gain_conversion(chip)
             self.measure_read_noise(chip, readnoise_sigma)
             self.subtract_overscan(chip, overscan_method)
-            self.orient_channels(chip)
 
             ccd_ffi, var_ffi = self.stitch_ffi(chip)
             l1_obj.set_data(f"{chip}_CCD", ccd_ffi)
             l1_obj.set_data(f"{chip}_VAR", var_ffi)
 
-        self._set_kpf1_headers(l1_obj)
         self._convert_expmeter_wavelengths_to_angstroms(l1_obj)
+        self._set_kpf1_headers(l1_obj)
         l1_obj.receipt_add_entry("image_assembly", "PASS")
 
         self._results = {

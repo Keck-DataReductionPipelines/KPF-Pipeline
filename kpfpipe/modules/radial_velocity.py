@@ -960,11 +960,11 @@ class RadialVelocity:
             L4 with a CCF cube and per-order RV table per illuminated orderlet.
             Each CCF extension carries VELSTART/VELSTEP/VELNSTEP/CCFMASK; each RV
             extension carries RVMETHOD/SKYRMVD/TELLRMVD. The legacy combined-RV
-            keywords live on INSTRUMENT_HEADER: per-fiber CCD<n>RV<sfx>/CCD<n>ERV<sfx>,
-            the SCI-combined CCD<n>RV/CCD<n>ERV, and CCFRV/CCFERV. PRIMARY carries
-            the EPRV keywords RVMETHOD and RV/RVERR/BERV/BJDTDB (the combined
-            science RV). Unilluminated ('none') fibers are skipped (empty
-            extensions).
+            keywords are registered KPF-pipeline PRIMARY keywords: per-fiber
+            CCD<n>RV<sfx>/CCD<n>ERV<sfx>, the SCI-combined CCD<n>RV/CCD<n>ERV,
+            and CCFRV/CCFERV. PRIMARY also carries the EPRV keywords RVMETHOD and
+            RV/RVERR/BERV/BJDTDB (the combined science RV). Unilluminated
+            ('none') fibers are skipped (empty extensions).
         """
         if chips is None:
             chips = self.chips
@@ -1098,20 +1098,19 @@ class RadialVelocity:
             l4_obj.set_header(f"{fiber}_RV", rv_hdr)
 
             # Combined per-CCD RV/error are KPF legacy carryovers, not EPRV RV1
-            # keywords, so they go on INSTRUMENT_HEADER under the legacy per-fiber
+            # keywords. They are registered KPF-pipeline PRIMARY keywords
+            # (config/L4-headers.csv) under the legacy per-fiber
             # suffix scheme CCD<n>RV<sfx>/CCD<n>ERV<sfx> (n: GREEN=1, RED=2; sfx:
             # 1/2/3=SCI1/2/3, C=CAL, S=SKY). The bare CCD<n>RV/CCD<n>ERV names
-            # stay reserved for the SCI-combined RV. INSTRUMENT_HEADER is a plain
-            # dict serialized via fits.Header(), which rejects (value, comment)
-            # tuples, so values are written bare; a non-finite value (failed fit)
-            # becomes a FITS UNDEFINED card (None), never a NaN.
-            inst_hdr = l4_obj.headers["INSTRUMENT_HEADER"]
+            # stay reserved for the SCI-combined RV. A non-finite value (failed
+            # fit) is written as None so it becomes a FITS UNDEFINED card, not a NaN.
+            prim = l4_obj.headers["PRIMARY"]
             sfx = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}[fiber]
             for chip in ccd_rv:
                 n = 1 if chip == "GREEN" else 2
                 v, e = ccd_rv[chip], ccd_rv_err[chip]
-                inst_hdr[f"CCD{n}RV{sfx}"] = float(v) if np.isfinite(v) else None
-                inst_hdr[f"CCD{n}ERV{sfx}"] = float(e) if np.isfinite(e) else None
+                prim[f"CCD{n}RV{sfx}"] = float(v) if np.isfinite(v) else None
+                prim[f"CCD{n}ERV{sfx}"] = float(e) if np.isfinite(e) else None
 
         # PRIMARY (EPRV L4): always record the RV method.
         prim = l4_obj.headers["PRIMARY"]
@@ -1141,7 +1140,6 @@ class RadialVelocity:
                 "cannot form a combined RV"
             )
         rep = sci[0]
-        inst_hdr = l4_obj.headers["INSTRUMENT_HEADER"]
         if len(chips) == 1:
             print(f"  combined RV: only chip {chips[0]} present; CCFRV uses it alone")
 
@@ -1164,8 +1162,8 @@ class RadialVelocity:
                     f"  combined RV: {chip} science fit non-finite; excluded from CCFRV"
                 )
             n = 1 if chip == "GREEN" else 2
-            inst_hdr[f"CCD{n}RV"] = float(v) if np.isfinite(v) else None
-            inst_hdr[f"CCD{n}ERV"] = float(e) if np.isfinite(e) else None
+            prim[f"CCD{n}RV"] = float(v) if np.isfinite(v) else None
+            prim[f"CCD{n}ERV"] = float(e) if np.isfinite(e) else None
 
         # Cross-chip weighted RV (CCFRV) and inverse-variance error (CCFERV): the
         # per-CCD science RVs combined at the RV level by their summed order
@@ -1185,8 +1183,8 @@ class RadialVelocity:
                 "CCFRV/PRIMARY RV UNDEFINED"
             )
 
-        inst_hdr["CCFRV"] = float(ccfrv) if np.isfinite(ccfrv) else None
-        inst_hdr["CCFERV"] = float(ccferv) if np.isfinite(ccferv) else None
+        prim["CCFRV"] = float(ccfrv) if np.isfinite(ccfrv) else None
+        prim["CCFERV"] = float(ccferv) if np.isfinite(ccferv) else None
 
         # PRIMARY BERV/BJDTDB: chip-weighted mean of the per-CCD photon-weighted
         # bary summaries (CCD<n>BKMS/CCD<n>BJD from BarycentricCorrection), using
@@ -1196,7 +1194,11 @@ class RadialVelocity:
         for chip in chips:
             n = 1 if chip == "GREEN" else 2
             w = float(np.nansum(self._get_order_weights(chip, rep)))
-            bkms, bjd = inst_hdr.get(f"CCD{n}BKMS"), inst_hdr.get(f"CCD{n}BJD")
+            bkms, bjd = prim.get(f"CCD{n}BKMS"), prim.get(f"CCD{n}BJD")
+            if isinstance(bkms, tuple):  # PRIMARY stores (value, comment)
+                bkms = bkms[0]
+            if isinstance(bjd, tuple):
+                bjd = bjd[0]
             if (
                 w > 0
                 and bkms is not None

@@ -161,19 +161,40 @@ class KPF0(KPFDataModel):
         Create a KPF1 scaffold from this L0, carrying over headers and
         pass-through extensions.
 
-        Returns a KPF1 with PRIMARY header, pass-through extensions (CA_HK,
-        EXPMETER_SCI/SKY, TELEMETRY, CONFIG), receipt, and obs_id copied over.
-        GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created but empty —
-        the caller (image assembly) fills those in.
+        The raw WMKO PRIMARY header is converted to EPRV-standard keyword names
+        and values here (the single conversion site; see
+        `kpfpipe.data_models.headers`), so the L1 PRIMARY is already
+        EPRV-standard. The verbatim raw L0 PRIMARY is preserved in the
+        immutable INSTRUMENT_HEADER extension. Downstream stages read raw
+        instrument keywords from INSTRUMENT_HEADER and write EPRV/registered
+        KPF keywords to PRIMARY.
+
+        Returns a KPF1 with EPRV PRIMARY header, INSTRUMENT_HEADER, pass-through
+        extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, CONFIG), receipt, and
+        obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
+        but empty — the caller (image assembly) fills those in.
         """
+        from kpfpipe.data_models.headers import (
+            build_instrument_header,
+            convert_native_to_eprv,
+        )
         from kpfpipe.data_models.level1 import KPF1  # deferred: avoids circular import
 
         l1 = KPF1()
 
-        # Copy PRIMARY header
+        # Convert the raw WMKO PRIMARY to EPRV-standard names/values, and
+        # preserve the verbatim raw L0 PRIMARY in INSTRUMENT_HEADER (immutable
+        # pure pass-through — nothing else ever writes to it).
         if "PRIMARY" in self.headers:
-            for key, value in self.headers["PRIMARY"].items():
+            native_primary = self.headers["PRIMARY"]
+            for key, value in convert_native_to_eprv(native_primary).items():
                 l1.headers["PRIMARY"][key] = value
+
+            if "INSTRUMENT_HEADER" not in l1.extensions:
+                l1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
+            instrument_header = l1.headers["INSTRUMENT_HEADER"]
+            for key, value in build_instrument_header(native_primary).items():
+                instrument_header[key] = value
 
         # Copy pass-through extensions (data + header)
         for ext_name in self._L0_TO_L1_PASSTHROUGH:

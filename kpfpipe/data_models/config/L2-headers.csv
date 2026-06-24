@@ -1,0 +1,33 @@
+keyword,populated_by,comment
+DATAPRL2,QCL2,QC: L2 data present
+L2NANOK,QCL2,QC: L2 NaN count ok
+L2FLXOK,QCL2,QC: L2 zero-flux fraction ok
+L2VARPOS,QCL2,QC: L2 variance positive
+L2SNROK,QCL2,QC: L2 SNR ok
+NANSCI1,DiagL2,NaN pixel count SCI1 (green+red)
+NANSCI2,DiagL2,NaN pixel count SCI2 (green+red)
+NANSCI3,DiagL2,NaN pixel count SCI3 (green+red)
+NANSKY,DiagL2,NaN pixel count SKY (green+red)
+NANCAL,DiagL2,NaN pixel count CAL (green+red)
+ZEROFRAC,DiagL2,Fraction of L2 flux pixels equal to zero
+GSNRSCI,DiagL2,Median 95th-pctile SNR summed SCI GREEN
+RSNRSCI,DiagL2,Median 95th-pctile SNR summed SCI RED
+GSNRSKY,DiagL2,Median 95th-pctile SNR SKY GREEN
+RSNRSKY,DiagL2,Median 95th-pctile SNR SKY RED
+GSNRCAL,DiagL2,Median 95th-pctile SNR CAL GREEN
+RSNRCAL,DiagL2,Median 95th-pctile SNR CAL RED
+GFR12,DiagL2,Median flux ratio SCI1/SCI2 GREEN
+RFR12,DiagL2,Median flux ratio SCI1/SCI2 RED
+GFR32,DiagL2,Median flux ratio SCI3/SCI2 GREEN
+RFR32,DiagL2,Median flux ratio SCI3/SCI2 RED
+GFRS2,DiagL2,Median flux ratio SKY/SCI2 GREEN
+RFRS2,DiagL2,Median flux ratio SKY/SCI2 RED
+GFRC2,DiagL2,Median flux ratio CAL/SCI2 GREEN
+RFRC2,DiagL2,Median flux ratio CAL/SCI2 RED
+CCD1BJD,BarycentricCorrection,GREEN photon-weighted mid-time [BJD_TDB]
+CCD2BJD,BarycentricCorrection,RED photon-weighted mid-time [BJD_TDB]
+CCD1BKMS,BarycentricCorrection,GREEN barycentric velocity [km/s]
+CCD2BKMS,BarycentricCorrection,RED barycentric velocity [km/s]
+CCD1BZ,BarycentricCorrection,GREEN barycentric redshift z
+CCD2BZ,BarycentricCorrection,RED barycentric redshift z
+ASTRSRC,BarycentricCorrection,Astrometry source used for barycentric correction

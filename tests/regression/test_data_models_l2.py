@@ -13,6 +13,7 @@ from astropy.table import Table
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.masters import KPFMasterL2
@@ -54,42 +55,62 @@ def synthetic_masters_l2_file(tmp_path):
     return fn
 
 
+@pytest.fixture
+def converted_l1(synthetic_l0_file):
+    """An L1 produced via KPF0.to_kpf1 — already EPRV-standard PRIMARY plus a
+    populated INSTRUMENT_HEADER (the input to_kpf2 expects in production)."""
+    return KPF0.from_fits(synthetic_l0_file).to_kpf1()
+
+
+def _scalar(value):
+    return value[0] if isinstance(value, tuple) else value
+
+
 class TestToKPF2:
-    def test_to_kpf2_creates_kpf2(self, synthetic_l1_file):
-        l1 = KPF1.from_fits(synthetic_l1_file)
-        kpf2 = l1.to_kpf2()
+    def test_to_kpf2_creates_kpf2(self, converted_l1):
+        kpf2 = converted_l1.to_kpf2()
         assert kpf2.level == 2
         assert isinstance(kpf2, KPF2)
 
-    def test_to_kpf2_maps_header_keywords(self, synthetic_l1_file):
-        l1 = KPF1.from_fits(synthetic_l1_file)
-        l1.headers["PRIMARY"]["ELAPSED"] = 300.0
-        l1.headers["PRIMARY"]["IMTYPE"] = "Object"
-        l1.headers["PRIMARY"]["GROBSERV"] = "Smith"
-        kpf2 = l1.to_kpf2()
-        assert kpf2.headers["PRIMARY"]["EXPTIME"] == 300.0
-        assert kpf2.headers["PRIMARY"]["OBSTYPE"] == "Object"
-        assert kpf2.headers["PRIMARY"]["OBSERVER"] == "Smith"
+    def test_to_kpf2_passes_through_eprv_primary(self, converted_l1):
+        """Conversion happened in to_kpf1; to_kpf2 forwards the EPRV PRIMARY."""
+        kpf2 = converted_l1.to_kpf2()
+        prim = kpf2.headers["PRIMARY"]
+        assert _scalar(prim["EXPTIME"]) == 300.0  # from ELAPSED, set in to_kpf1
+        assert _scalar(prim["OBSTYPE"]) == "Object"  # from IMTYPE
+        assert _scalar(prim["OBSERVER"]) == "Smith"  # from GROBSERV
+        # Raw natives never reach the EPRV PRIMARY.
+        assert "ELAPSED" not in prim
+        assert "IMTYPE" not in prim
 
-    def test_to_kpf2_copies_same_name_keywords(self, synthetic_l1_file):
-        l1 = KPF1.from_fits(synthetic_l1_file)
-        kpf2 = l1.to_kpf2()
-        assert kpf2.headers["PRIMARY"]["INSTRUME"] == "KPF"
-        assert kpf2.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
+    def test_to_kpf2_copies_same_name_keywords(self, converted_l1):
+        kpf2 = converted_l1.to_kpf2()
+        assert _scalar(kpf2.headers["PRIMARY"]["INSTRUME"]) == "KPF"
+        assert _scalar(kpf2.headers["PRIMARY"]["DATE-OBS"]) == "2024-01-13T10:26:56"
 
-    def test_to_kpf2_sets_defaults(self, synthetic_l1_file):
-        l1 = KPF1.from_fits(synthetic_l1_file)
-        kpf2 = l1.to_kpf2()
-        datalvl = kpf2.headers["PRIMARY"]["DATALVL"]
-        assert (datalvl[0] if isinstance(datalvl, tuple) else datalvl) == "L2"
+    def test_to_kpf2_sets_defaults(self, converted_l1):
+        kpf2 = converted_l1.to_kpf2()
+        assert _scalar(kpf2.headers["PRIMARY"]["DATALVL"]) == "L2"
         origin = kpf2.headers["PRIMARY"].get("ORIGIN")
         assert origin is not None
 
-    def test_to_kpf2_sets_instrument_header(self, synthetic_l1_file):
-        l1 = KPF1.from_fits(synthetic_l1_file)
-        kpf2 = l1.to_kpf2()
-        assert "INSTRUME" in kpf2.headers["INSTRUMENT_HEADER"]
+    def test_to_kpf2_carries_instrument_header(self, converted_l1):
+        """INSTRUMENT_HEADER (raw natives) is forwarded unchanged from L1."""
+        kpf2 = converted_l1.to_kpf2()
         assert kpf2.headers["INSTRUMENT_HEADER"]["INSTRUME"] == "KPF"
+        assert kpf2.headers["INSTRUMENT_HEADER"]["ELAPSED"] == 300.0
+
+    def test_to_kpf2_rejects_native_leak(self, converted_l1):
+        """A raw WMKO keyword left on PRIMARY fails loudly."""
+        converted_l1.headers["PRIMARY"]["ELAPSED"] = 300.0
+        with pytest.raises(ValueError, match="native WMKO keyword 'ELAPSED'"):
+            converted_l1.to_kpf2()
+
+    def test_to_kpf2_rejects_unregistered_keyword(self, converted_l1):
+        """An unregistered keyword on PRIMARY fails loudly."""
+        converted_l1.headers["PRIMARY"]["BOGUSKEY"] = 1
+        with pytest.raises(ValueError, match="unregistered keyword 'BOGUSKEY'"):
+            converted_l1.to_kpf2()
 
     def test_to_kpf2_maps_passthrough_extensions(self, tmp_path):
         """Build an L1 with TELEMETRY and CA_HK, verify they map to KPF2 extensions."""

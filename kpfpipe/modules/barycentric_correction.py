@@ -10,7 +10,8 @@ Outputs (rvdata-standard ImageHDUs, shape (NORDER,)):
   - BARYCORR_Z    barycentric redshift per spectral order
 
 Per-CCD scalar summaries (at each chip's flux-weighted photon-midpoint time)
-written to INSTRUMENT_HEADER:
+written to PRIMARY as registered KPF-pipeline keywords
+(config/L2-headers.csv):
   - CCD1BJD       GREEN photon-weighted mid-time (BJD_TDB)
   - CCD1BKMS      GREEN barycentric velocity [km/s]
   - CCD1BZ        GREEN barycentric redshift
@@ -19,7 +20,8 @@ written to INSTRUMENT_HEADER:
   - CCD2BZ        RED   barycentric redshift
 
 CCD1BJD/CCD2BJD match the legacy keyword names and semantics; the *BKMS/*BZ
-companions follow the same CCD{n} naming pattern.
+companions follow the same CCD{n} naming pattern. INSTRUMENT_HEADER is an
+immutable pure pass-through of the raw instrument header and is never written.
 
 Notes
 -----
@@ -737,23 +739,24 @@ class BarycentricCorrection:
             output="ccds", **kwargs
         )
 
-        inst = self.l2_obj.headers["INSTRUMENT_HEADER"]
+        prim = self.l2_obj.headers["PRIMARY"]
 
         # Per-order extensions; WAVE arrays are left untouched
         self.l2_obj.set_data("BJD_TDB", np.asarray(bjd_tdb, dtype=np.float64))
         self.l2_obj.set_data("BARYCORR_KMS", np.asarray(bary_kms, dtype=np.float64))
         self.l2_obj.set_data("BARYCORR_Z", np.asarray(bary_z, dtype=np.float64))
 
-        # Per-CCD instrument header keyword (CCD1=GREEN, CCD2=RED)
-        inst["CCD1BJD"] = float(ccd_bjd[0])
-        inst["CCD1BKMS"] = float(ccd_kms[0])
-        inst["CCD1BZ"] = float(ccd_z[0])
-        inst["CCD2BJD"] = float(ccd_bjd[1])
-        inst["CCD2BKMS"] = float(ccd_kms[1])
-        inst["CCD2BZ"] = float(ccd_z[1])
+        # Per-CCD PRIMARY keywords (CCD1=GREEN, CCD2=RED); registered
+        # KPF-pipeline keywords (config/L2-headers.csv).
+        prim["CCD1BJD"] = (float(ccd_bjd[0]), "[BJD_TDB] GREEN mid-time")
+        prim["CCD1BKMS"] = (float(ccd_kms[0]), "[km/s] GREEN barycentric velocity")
+        prim["CCD1BZ"] = (float(ccd_z[0]), "GREEN barycentric redshift z")
+        prim["CCD2BJD"] = (float(ccd_bjd[1]), "[BJD_TDB] RED mid-time")
+        prim["CCD2BKMS"] = (float(ccd_kms[1]), "[km/s] RED barycentric velocity")
+        prim["CCD2BZ"] = (float(ccd_z[1]), "RED barycentric redshift z")
 
         # Provenance: which astrometry source actually produced the correction
-        inst["ASTRSRC"] = self._astrometry_source
+        prim["ASTRSRC"] = (self._astrometry_source, "Astrometry source")
 
         self.l2_obj.receipt_add_entry("barycentric_correction", "PASS")
 

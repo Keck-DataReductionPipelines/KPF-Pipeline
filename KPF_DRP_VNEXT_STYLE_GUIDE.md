@@ -549,6 +549,25 @@ documented, intentional ways — follow *its* conventions when adding masters co
   `trace-map.csv` → `Trace,Fiber,Description` (trace/fiber aliases derived at runtime).
 - These CSVs are the source of truth for HDU layout and alias registration — keep fiber
   names in sync across `trace-map.csv`, `[KPFPIPE].fibers`, and `detector.toml`.
+- **`L{0,1,2,4}-headers.csv`** register every KPF-pipeline keyword written to the EPRV
+  PRIMARY header, split by the level that first writes the keyword (the combined set is the
+  `validate_eprv_primary` allowlist). Columns are `keyword,populated_by,comment`. Each `keyword`
+  is an explicit FITS keyword of **≤8 characters** with no wildcards — enumerate every member of
+  a family on its own row (e.g. `RNGREEN1`-`RNGREEN4`, `CCD1RV`/`CCD2RV`), never a `?`/`*` stand-in.
+
+### FITS PRIMARY header conventions
+
+The WMKO-native → EPRV-standard conversion happens **only** in `KPF0.to_kpf1`
+(`data_models/headers.py`); see CLAUDE.md *Header standardization* for the full rule.
+What this means when writing code:
+
+- **Reading a raw instrument keyword** (`ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`,
+  `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]`, never from PRIMARY. No silent
+  fallback — let a missing key raise.
+- **Writing a KPF-pipeline keyword**: write it to `headers["PRIMARY"]` *and* add it to
+  the matching `config/L{0,1,2,4}-headers.csv`, or `to_kpf2`/`to_kpf4` validation will reject the
+  product. Never write to `INSTRUMENT_HEADER` (it is an immutable raw-instrument snapshot).
+- Use EPRV keyword *names* on PRIMARY (e.g. `EXPTIME`, not `ELAPSED`; `OBSTYPE`, not `IMTYPE`).
 
 ---
 

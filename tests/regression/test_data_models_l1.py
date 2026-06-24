@@ -137,6 +137,48 @@ class TestToL1:
         assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
         assert l1.headers["PRIMARY"]["OBJECT"] == "HD_10700"
 
+    @staticmethod
+    def _scalar(value):
+        return value[0] if isinstance(value, tuple) else value
+
+    def test_to_l1_converts_native_to_eprv(self, synthetic_l0_file):
+        """to_kpf1 renames WMKO natives to their EPRV PRIMARY counterparts."""
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l1 = l0.to_kpf1()
+        prim = l1.headers["PRIMARY"]
+        assert self._scalar(prim["OBSTYPE"]) == "Object"  # IMTYPE -> OBSTYPE
+        assert self._scalar(prim["EXPTIME"]) == 300.0  # ELAPSED -> EXPTIME
+        assert self._scalar(prim["OBSERVER"]) == "Smith"  # GROBSERV -> OBSERVER
+        # Raw native names must not remain on the EPRV PRIMARY.
+        assert "IMTYPE" not in prim
+        assert "ELAPSED" not in prim
+        assert "GROBSERV" not in prim
+
+    def test_to_l1_preserves_raw_header_in_instrument_header(self, synthetic_l0_file):
+        """INSTRUMENT_HEADER is a verbatim copy of the raw L0 PRIMARY."""
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l1 = l0.to_kpf1()
+        assert "INSTRUMENT_HEADER" in l1.extensions
+        inst = l1.headers["INSTRUMENT_HEADER"]
+        assert inst["IMTYPE"] == "Object"
+        assert inst["ELAPSED"] == 300.0
+        assert inst["GROBSERV"] == "Smith"
+        assert inst["INSTRUME"] == "KPF"
+
+    def test_to_l1_fixes_value_bugs(self, synthetic_l0_file):
+        """NUMORDER, JD_UTC, and the DRP version keywords are corrected/stamped."""
+        import importlib.metadata
+
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l1 = l0.to_kpf1()
+        prim = l1.headers["PRIMARY"]
+        assert self._scalar(prim["NUMORDER"]) == 67  # 35 green + 32 red, not 65
+        # JD_UTC is the full Julian Date of DATE-OBS (not a raw MJD).
+        assert self._scalar(prim["JD_UTC"]) == pytest.approx(2460322.93537, abs=1e-3)
+        version = importlib.metadata.version("kpfpipe")
+        assert self._scalar(prim["DRPTAG"]) == version
+        assert self._scalar(prim["DRPVERNO"]) == version
+
     def test_to_l1_copies_passthrough_extensions(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()

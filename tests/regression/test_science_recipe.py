@@ -136,34 +136,39 @@ class TestScienceRecipe:
         z = np.asarray(l2.data["BARYCORR_Z"])
         assert np.all(np.abs(z) < 1e-3)
 
+    @staticmethod
+    def _hval(header, key):
+        v = header[key]
+        return v[0] if isinstance(v, tuple) else v
+
     def test_per_ccd_barycorr_keywords(self, recipe_output):
-        """Per-CCD scalar summaries should land on INSTRUMENT_HEADER."""
+        """Per-CCD scalar summaries should land on PRIMARY."""
         l2 = KPF2.from_fits(recipe_output)
-        inst = l2.headers["INSTRUMENT_HEADER"]
+        prim = l2.headers["PRIMARY"]
         for key in ("CCD1BJD", "CCD1BKMS", "CCD1BZ", "CCD2BJD", "CCD2BKMS", "CCD2BZ"):
-            assert key in inst, f"{key} missing from INSTRUMENT_HEADER"
-            assert np.isfinite(float(inst[key])), f"{key} not finite"
+            assert key in prim, f"{key} missing from PRIMARY"
+            assert np.isfinite(float(self._hval(prim, key))), f"{key} not finite"
 
     def test_calibration_headers_set(self, recipe_output):
-        """CalibrationAssociation's L1 PRIMARY writes survive into L2
-        INSTRUMENT_HEADER."""
+        """CalibrationAssociation's PRIMARY writes (registered KPF-pipeline
+        keywords) survive into the L2 PRIMARY."""
         l2 = KPF2.from_fits(recipe_output)
-        inst = l2.headers["INSTRUMENT_HEADER"]
-        # bias/dark use basename + DIR + integer AGE. Flat association is not
-        # part of the basic runnable path until flat processing is implemented.
+        prim = l2.headers["PRIMARY"]
+        # bias/dark use full-path FILE + float AGE (no DIR). Flat association is
+        # not part of the basic runnable path until flat processing is
+        # implemented.
         for prefix in ("BIAS", "DARK"):
-            assert f"{prefix}FILE" in inst
-            assert f"{prefix}DIR" in inst
-            assert f"AGE{prefix}" in inst
-        assert "FLATFILE" not in inst
-        assert "FLATDIR" not in inst
-        assert "AGEFLAT" not in inst
-        # thar uses legacy convention: WLSFILE = full path (no WLSDIR),
-        # AGEWLS = float days
-        assert "WLSFILE" in inst
-        assert "WLSDIR" not in inst
-        assert inst["WLSFILE"].endswith("_master_thar_L2.fits")
-        assert isinstance(inst["AGEWLS"], float)
+            assert f"{prefix}FILE" in prim
+            assert f"{prefix}DIR" not in prim
+            assert f"{prefix}AGE" in prim
+        assert "FLATFILE" not in prim
+        assert "FLATAGE" not in prim
+        # thar uses the same convention: WLSFILE = full path (no WLSDIR),
+        # WLSAGE = float days
+        assert "WLSFILE" in prim
+        assert "WLSDIR" not in prim
+        assert self._hval(prim, "WLSFILE").endswith("_master_thar_L2.fits")
+        assert isinstance(self._hval(prim, "WLSAGE"), float)
 
     def test_wave_arrays_populated(self, recipe_output):
         """WavelengthCalibration should fill the per-fiber WAVE extensions."""

@@ -1,6 +1,6 @@
 [project]
-name = "kpf-drp"
-version = "0.1.0"
+name = "kpfpipe"
+version = "3.0.0"
 description = "KPF Data Reduction Pipeline"
 authors = [
     { name = "Greg Gilbert", email = "gjgilbert@caltech.edu" },

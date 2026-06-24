@@ -264,6 +264,7 @@ class KPF2(RV2):
         and the receipt chain preserved. RV and CCF data extensions are
         created but empty — the caller (RV computation) fills those in.
         """
+        from kpfpipe.data_models.headers import validate_eprv_primary
         from kpfpipe.data_models.level4 import KPF4  # deferred: avoids circular import
 
         kpf4 = KPF4()
@@ -283,6 +284,7 @@ class KPF2(RV2):
             kpf4.receipt = self.receipt.copy()
 
         kpf4.headers["PRIMARY"]["DATALVL"] = ("L4", "Data product level")
+        validate_eprv_primary(kpf4.headers["PRIMARY"], "L4")
         kpf4.receipt_add_entry("to_kpf4", "PASS")
         return kpf4
 

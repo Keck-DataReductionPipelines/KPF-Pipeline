@@ -334,7 +334,7 @@ class BaseMasterModule:
         Parameters
         ----------
         l1_obj : KPF1
-            Assembled L1 object whose PRIMARY header contains EXPTIME and ELAPSED.
+            Assembled L1 object whose INSTRUMENT_HEADER contains EXPTIME and ELAPSED.
         exptime_tolerance : float
             Maximum allowed excess of elapsed time over requested exposure time,
             in seconds.
@@ -345,8 +345,8 @@ class BaseMasterModule:
             If elapsed time is less than requested (premature readout), or if the
             excess exceeds exptime_tolerance.
         """
-        exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
-        elapsed = l1_obj.headers["PRIMARY"]["ELAPSED"]
+        exptime = l1_obj.headers["INSTRUMENT_HEADER"]["EXPTIME"]
+        elapsed = l1_obj.headers["INSTRUMENT_HEADER"]["ELAPSED"]
 
         delta = elapsed - exptime
         if delta < 0:
@@ -483,7 +483,7 @@ class BaseMasterModule:
 
             l1_obj = self._process_frame(l1_obj)
 
-            exptime[i] = l1_obj.headers["PRIMARY"]["EXPTIME"]
+            exptime[i] = l1_obj.headers["INSTRUMENT_HEADER"]["EXPTIME"]
 
             for chip in self.chips:
                 data_cube[f"{chip}_CCD"][i] = l1_obj.data[f"{chip}_CCD"]
@@ -683,7 +683,7 @@ class BaseMasterModule:
 
             l1_obj = self._process_frame(l1_obj)
 
-            exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
+            exptime = l1_obj.headers["INSTRUMENT_HEADER"]["EXPTIME"]
 
             if zero_exptime != (exptime == 0):
                 raise ValueError("Exposure times must be all zero or all non-zero")

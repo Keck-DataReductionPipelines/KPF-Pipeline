@@ -5,6 +5,8 @@ Unit tests use synthetic arrays and MockL1 objects; no real data or FITS
 files are required except where a master file must exist on disk.
 """
 
+import os
+
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -32,7 +34,9 @@ _EXPTIME = 4.0  # != 1 so dark scaling is observable
 class MockL1:
     def __init__(self):
         self.obs_id = "KP.20240405.40113.57"
-        self.headers = {"PRIMARY": {"EXPTIME": _EXPTIME}}
+        # EXPTIME is a raw WMKO native, so it lives in INSTRUMENT_HEADER (where
+        # to_kpf1 preserves it); KPF-pipeline keywords go on PRIMARY.
+        self.headers = {"PRIMARY": {}, "INSTRUMENT_HEADER": {"EXPTIME": _EXPTIME}}
         self.data = {
             "GREEN_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
             "RED_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
@@ -46,15 +50,17 @@ class MockL1:
 
 
 def _make_module(bias_file=None, bias_dir=None, dark_file=None, dark_dir=None):
+    # {BIAS,DARK}FILE hold the master's full path (no separate DIR keyword), so
+    # join the optional dir onto the filename when composing the header.
     l1 = MockL1()
     if bias_file is not None:
-        l1.headers["PRIMARY"]["BIASFILE"] = bias_file
-    if bias_dir is not None:
-        l1.headers["PRIMARY"]["BIASDIR"] = bias_dir
+        l1.headers["PRIMARY"]["BIASFILE"] = (
+            os.path.join(bias_dir, bias_file) if bias_dir is not None else bias_file
+        )
     if dark_file is not None:
-        l1.headers["PRIMARY"]["DARKFILE"] = dark_file
-    if dark_dir is not None:
-        l1.headers["PRIMARY"]["DARKDIR"] = dark_dir
+        l1.headers["PRIMARY"]["DARKFILE"] = (
+            os.path.join(dark_dir, dark_file) if dark_dir is not None else dark_file
+        )
     return ImageProcessing(l1)
 
 
@@ -162,13 +168,8 @@ class TestInit:
 
 class TestBiasResolution:
     def test_raises_when_biasfile_missing(self):
-        mod = _make_module(bias_dir="/some/dir")
+        mod = _make_module()
         with pytest.raises(FileNotFoundError, match="BIASFILE"):
-            mod.perform(dark=False)
-
-    def test_raises_when_biasdir_missing(self):
-        mod = _make_module(bias_file="master_bias.fits")
-        with pytest.raises(FileNotFoundError, match="BIASDIR"):
             mod.perform(dark=False)
 
     def test_raises_when_file_not_on_disk(self, tmp_path):
@@ -292,13 +293,8 @@ class TestSubtractBias:
 
 class TestDarkResolution:
     def test_raises_when_darkfile_missing(self):
-        mod = _make_module(dark_dir="/some/dir")
+        mod = _make_module()
         with pytest.raises(FileNotFoundError, match="DARKFILE"):
-            mod.perform(bias=False)
-
-    def test_raises_when_darkdir_missing(self):
-        mod = _make_module(dark_file="master_dark.fits")
-        with pytest.raises(FileNotFoundError, match="DARKDIR"):
             mod.perform(bias=False)
 
     def test_raises_when_file_not_on_disk(self, tmp_path):
@@ -438,12 +434,12 @@ class TestPerform:
         np.testing.assert_allclose(mod_with_bias.l1_obj.data["RED_CCD"], _CCD_VALUE)
 
     def test_raises_when_headers_missing(self):
-        mod = _make_module()  # no BIASFILE / BIASDIR
+        mod = _make_module()  # no BIASFILE
         with pytest.raises(FileNotFoundError):
             mod.perform()
 
     def test_bias_false_skips_subtraction(self):
-        mod = _make_module()  # no BIASFILE / BIASDIR needed when bias is off
+        mod = _make_module()  # no BIASFILE needed when bias is off
         result = mod.perform(bias=False, dark=False)
         # CCDs untouched
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE)
@@ -477,7 +473,7 @@ class TestPerform:
         bias_path = str(tmp_path / "preloaded_bias.fits")
         _write_master_bias(bias_path)
         preloaded = KPFMasterL1.from_fits(bias_path)
-        mod = _make_module()  # no BIASFILE / BIASDIR needed
+        mod = _make_module()  # no BIASFILE needed
         result = mod.perform(bias=preloaded, dark=False)
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
         assert result.headers["PRIMARY"]["BIASSUB"][0] is True
@@ -564,7 +560,7 @@ class TestPerformDark:
         dark_path = str(tmp_path / "preloaded_dark.fits")
         _write_master_dark(dark_path)
         preloaded = KPFMasterL1.from_fits(dark_path)
-        mod = _make_module()  # no DARKFILE / DARKDIR needed
+        mod = _make_module()  # no DARKFILE needed
         mod.perform(bias=False, dark=preloaded)
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME

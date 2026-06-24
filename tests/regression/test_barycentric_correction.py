@@ -824,14 +824,14 @@ class TestPerform:
                 err_msg=f"{key} should be unmodified",
             )
 
-    def test_per_ccd_instrument_header_keywords(self, bc_monkeypatched):
+    def test_per_ccd_primary_keywords(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
-        inst = kpf2.headers["INSTRUMENT_HEADER"]
+        prim = kpf2.headers["PRIMARY"]
         for key in ["CCD1BJD", "CCD1BKMS", "CCD1BZ", "CCD2BJD", "CCD2BKMS", "CCD2BZ"]:
-            assert key in inst, f"{key} missing from INSTRUMENT_HEADER"
+            assert key in prim, f"{key} missing from PRIMARY"
 
         def _v(k):
-            x = inst[k]
+            x = prim[k]
             return x[0] if isinstance(x, tuple) else x
 
         # All orders had the same delta_rv → green and red means are equal
@@ -909,7 +909,8 @@ class TestPerform:
 
     def test_records_gaia_provenance(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
-        assert kpf2.headers["INSTRUMENT_HEADER"]["ASTRSRC"] == "Gaia DR3"
+        astrsrc = kpf2.headers["PRIMARY"]["ASTRSRC"]
+        assert (astrsrc[0] if isinstance(astrsrc, tuple) else astrsrc) == "Gaia DR3"
 
     def test_perform_falls_back_and_records_wmko_provenance(
         self, synthetic_kpf2, monkeypatch
@@ -939,7 +940,8 @@ class TestPerform:
                 use_wmko_fallback=True
             )  # override the toggle for this call
 
-        assert kpf2.headers["INSTRUMENT_HEADER"]["ASTRSRC"] == "WMKO header"
+        astrsrc = kpf2.headers["PRIMARY"]["ASTRSRC"]
+        assert (astrsrc[0] if isinstance(astrsrc, tuple) else astrsrc) == "WMKO header"
         assert bc._results["astrometry_source"] == "WMKO header"
 
     def test_real_outlier_filter_runs_end_to_end(self, synthetic_kpf2, monkeypatch):

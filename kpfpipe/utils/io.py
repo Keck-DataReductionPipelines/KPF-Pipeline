@@ -344,13 +344,13 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
 
 def build_master_path_from_fits_header(kpf_obj, cal_type):
     """
-    Build a master calibration path from a KPF object's PRIMARY header.
+    Read a master calibration path from a KPF object's PRIMARY header.
 
-    Reads the `{PREFIX}FILE` / `{PREFIX}DIR` keywords (written by
-    CalibrationAssociation) and joins them into a path, where `PREFIX` is the
-    uppercase calibration name. Used by the image-processing and masters layers
-    to locate the master associated with a frame. Accepts any KPF data object
-    (L1/L2/L4): the association keywords are carried downstream in PRIMARY.
+    Returns the `{PREFIX}FILE` keyword (written by CalibrationAssociation as the
+    master's full path), where `PREFIX` is the uppercase calibration name. Used
+    by the image-processing and masters layers to locate the master associated
+    with a frame. Accepts any KPF data object (L1/L2/L4): the association
+    keywords are carried downstream in PRIMARY.
 
     Parameters
     ----------
@@ -364,26 +364,25 @@ def build_master_path_from_fits_header(kpf_obj, cal_type):
     Returns
     -------
     str
-        Path to the associated master, `{master_dir}/{master_file}`.
+        Full path to the associated master, from `{PREFIX}FILE`.
 
     Raises
     ------
     FileNotFoundError
-        If `{PREFIX}FILE` or `{PREFIX}DIR` is absent from the PRIMARY header
-        (i.e. CalibrationAssociation has not run for this calibration).
+        If `{PREFIX}FILE` is absent from the PRIMARY header (i.e.
+        CalibrationAssociation has not run for this calibration).
     """
     prefix = cal_type.upper()
     header = kpf_obj.headers["PRIMARY"]
     master_file = header.get(f"{prefix}FILE")
-    master_dir = header.get(f"{prefix}DIR")
 
-    if not master_file or not master_dir:
+    if not master_file:
         raise FileNotFoundError(
-            f"{prefix}FILE and {prefix}DIR must be present in the PRIMARY "
-            "header. Run CalibrationAssociation before ImageProcessing."
+            f"{prefix}FILE must be present in the PRIMARY header. "
+            "Run CalibrationAssociation before ImageProcessing."
         )
 
-    return os.path.join(master_dir, master_file)
+    return master_file
 
 
 def glob_masters(data_root, cal_type, level, datecode):

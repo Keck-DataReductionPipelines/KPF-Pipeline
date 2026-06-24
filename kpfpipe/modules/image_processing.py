@@ -26,11 +26,11 @@ _DEFAULTS = {
 }
 
 # PRIMARY-header flag marking a calibration as applied (single source of truth
-# for these keyword names). FLATSUB is reserved for when flat division lands.
+# for these keyword names). FLATDIV is reserved for when flat division lands.
 _CALIBRATION_HEADER_KEYS = {
     "bias": "BIASSUB",
     "dark": "DARKSUB",
-    "flat": "FLATSUB",
+    "flat": "FLATDIV",
 }
 
 
@@ -45,8 +45,8 @@ class ImageProcessing:
     ----------
     l1_obj : KPF1
         Assembled L1 frame. The PRIMARY header must contain the {BIAS,DARK}FILE
-        and {BIAS,DARK}DIR keywords (written by CalibrationAssociation) for any
-        calibration requested via the header lookup.
+        keyword (the master's full path, written by CalibrationAssociation) for
+        any calibration requested via the header lookup.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: bias, dark, flat
         (boolean flags toggling each calibration).
@@ -230,7 +230,7 @@ class ImageProcessing:
             dark = self.dark
         dark_l1 = self._resolve_master("dark", dark)
         chip = chip.upper()
-        exptime = self.l1_obj.headers["PRIMARY"]["EXPTIME"]
+        exptime = self.l1_obj.headers["INSTRUMENT_HEADER"]["EXPTIME"]
         img = dark_l1.data[f"{chip}_IMG"]
         snr = dark_l1.data[f"{chip}_SNR"]
         self.l1_obj.data[f"{chip}_CCD"] -= img * exptime
@@ -278,11 +278,11 @@ class ImageProcessing:
             CCD chips to process. Defaults to self.chips.
         bias : bool | str | KPFMasterL1, optional
             How to source the master bias. Falsy → skip. True → load via
-            BIASFILE/BIASDIR in the PRIMARY header. str → treat as an
-            explicit filepath. KPFMasterL1 → use this object directly
-            (no disk I/O). Defaults to self.bias.
+            BIASFILE (the master's full path) in the PRIMARY header. str →
+            treat as an explicit filepath. KPFMasterL1 → use this object
+            directly (no disk I/O). Defaults to self.bias.
         dark : bool | str | KPFMasterL1, optional
-            Same shape as `bias`, sourced from DARKFILE/DARKDIR. Applied
+            Same shape as `bias`, sourced from DARKFILE. Applied
             after bias subtraction and scaled by the frame's exposure time.
             Defaults to self.dark.
         flat : bool | str | KPFMasterL1, optional
