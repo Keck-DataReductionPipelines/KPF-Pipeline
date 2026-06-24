@@ -15,7 +15,7 @@ RNNGRD1,ImageAssembly,Non-Gaussian read noise RED amp 1
 RNNGRD2,ImageAssembly,Non-Gaussian read noise RED amp 2
 RNNGRD3,ImageAssembly,Non-Gaussian read noise RED amp 3
 RNNGRD4,ImageAssembly,Non-Gaussian read noise RED amp 4
-OSCANMET,ImageAssembly,Overscan subtraction method
+OSCANSUB,ImageAssembly,Overscan subtraction applied
 BIASSUB,ImageProcessing,Bias subtraction applied
 DARKSUB,ImageProcessing,Dark subtraction applied
 FLATDIV,ImageProcessing,Flat division applied (reserved)
@@ -31,7 +31,6 @@ DRPVERNO,KPF0.to_kpf1,Pipeline version (WMKO DRP-RUN-11; EPRV equivalent is DRPT
 MASTYPE,KPFMaster,Master calibration type (masters products only)
 RNINRNG,QCL1,QC: per-amp RN within range
 RNGAUSS,QCL1,QC: non-Gaussian RN within range
-BIASOK,QCL1,QC: bias subtraction applied
 BIASAGEQ,QCL1,QC: bias master age ok
 DARKAGEQ,QCL1,QC: dark master age ok
 FLATAGEQ,QCL1,QC: flat master age ok
