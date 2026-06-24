@@ -244,46 +244,58 @@ class TestPerform:
         assert ("calibration_association", "PASS") in mod.l1_obj._receipt
 
     def test_sets_biasfile_header(self, masters_dir):
+        # BIASFILE is the master's full path (no separate BIASDIR).
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        assert (
-            mod.l1_obj.headers["PRIMARY"]["BIASFILE"]
-            == "KP.20240405.03637.74_master_bias_L1.fits"
+        expected = str(
+            masters_dir
+            / "masters"
+            / "20240405"
+            / "KP.20240405.03637.74_master_bias_L1.fits"
         )
+        assert mod.l1_obj.headers["PRIMARY"]["BIASFILE"] == expected
 
-    def test_sets_biasdir_header(self, masters_dir):
+    def test_no_biasdir_header(self, masters_dir):
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        expected_dir = str(masters_dir / "masters" / "20240405")
-        assert mod.l1_obj.headers["PRIMARY"]["BIASDIR"] == expected_dir
+        assert "BIASDIR" not in mod.l1_obj.headers["PRIMARY"]
 
-    def test_sets_agebias_same_day(self, masters_dir):
+    def test_sets_biasage_same_day(self, masters_dir):
+        # BIASAGE is a signed fractional-day float (master - obs). The master
+        # shares the obs's date but sits at 01:00:37 UTC vs obs 11:08:33 UTC,
+        # giving -0.422176 days.
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        assert mod.l1_obj.headers["PRIMARY"]["AGEBIAS"] == 0
+        age = mod.l1_obj.headers["PRIMARY"]["BIASAGE"]
+        assert isinstance(age, float)
+        assert age == pytest.approx(-0.422176, abs=1e-5)
 
-    def test_sets_agebias_previous_day(self, tmp_path):
+    def test_sets_biasage_previous_day(self, tmp_path):
+        # Master at 2024-04-04 22:00:00 UTC vs obs 2024-04-05 11:08:33 UTC gives
+        # delta = -13h 08m 33s = -47313 s = -0.547604 days.
         d = tmp_path / "masters" / "20240404"
         d.mkdir(parents=True)
         _stub_master(d, "KP.20240404.79200.00", "bias")
 
         mod = _make_module(tmp_path)
         mod.perform(["bias"])
-        assert mod.l1_obj.headers["PRIMARY"]["AGEBIAS"] == 1
+        assert mod.l1_obj.headers["PRIMARY"]["BIASAGE"] == pytest.approx(
+            -0.547604, abs=1e-5
+        )
 
     def test_sets_headers_for_dark_and_flat(self, masters_dir):
         mod = _make_module(masters_dir)
         mod.perform(["bias", "dark", "flat"])
         for prefix in ("BIAS", "DARK", "FLAT"):
             assert f"{prefix}FILE" in mod.l1_obj.headers["PRIMARY"]
-            assert f"{prefix}DIR" in mod.l1_obj.headers["PRIMARY"]
-            assert f"AGE{prefix}" in mod.l1_obj.headers["PRIMARY"]
+            assert f"{prefix}DIR" not in mod.l1_obj.headers["PRIMARY"]
+            assert f"{prefix}AGE" in mod.l1_obj.headers["PRIMARY"]
 
     def test_sets_headers_for_thar(self, masters_dir):
-        # Legacy WLS convention: WLSFILE holds the full path (no WLSDIR), and
-        # AGEWLS is float days with sign = (master_dt - obs_dt). Master at
-        # 2024-04-05 01:00:37 UTC vs obs at 2024-04-05 11:08:33 UTC gives
-        # delta = -10h 07m 56s = -36476 s = -0.422176 days.
+        # WLS follows the same unified convention: WLSFILE holds the full path
+        # (no WLSDIR), and WLSAGE is float days with sign = (master_dt -
+        # obs_dt). Master at 2024-04-05 01:00:37 UTC vs obs at 2024-04-05
+        # 11:08:33 UTC gives delta = -10h 07m 56s = -36476 s = -0.422176 days.
         d = masters_dir / "masters" / "20240405"
         _stub_master(d, "KP.20240405.03637.74", "thar")
 
@@ -292,8 +304,8 @@ class TestPerform:
         h = mod.l1_obj.headers["PRIMARY"]
         assert h["WLSFILE"] == str(d / "KP.20240405.03637.74_master_thar_L2.fits")
         assert "WLSDIR" not in h
-        assert isinstance(h["AGEWLS"], float)
-        assert h["AGEWLS"] == pytest.approx(-0.422176, abs=1e-5)
+        assert isinstance(h["WLSAGE"], float)
+        assert h["WLSAGE"] == pytest.approx(-0.422176, abs=1e-5)
 
     def test_raises_on_unknown_cal_type(self, masters_dir):
         mod = _make_module(masters_dir)

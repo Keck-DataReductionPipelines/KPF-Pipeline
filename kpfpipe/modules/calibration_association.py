@@ -7,14 +7,13 @@ the masters directory and selecting the nearest-in-time match.
 """
 
 import glob
-import os
 import warnings
 from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import glob_masters
-from kpfpipe.utils.kpf import get_datecode, get_timestamp, kpf_timestamp_to_datetime
+from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -224,7 +223,7 @@ class CalibrationAssociation:
             )
 
         date_obs = self.l1_obj.headers["INSTRUMENT_HEADER"]["DATE-OBS"]
-        obs_date = datetime.fromisoformat(date_obs).date()
+        obs_dt = datetime.fromisoformat(date_obs)
         primary = self.l1_obj.headers["PRIMARY"]
 
         for cal_type in cal_types:
@@ -238,21 +237,15 @@ class CalibrationAssociation:
                     f"within window {masters_search_window_days} days"
                 )
 
-            if cal_type == "thar":
-                # Match legacy WLS header convention exactly: full path in
-                # WLSFILE (no WLSDIR), AGEWLS in fractional days using the
-                # master and obs timestamps (sign convention: master - obs,
-                # so AGEWLS is negative when the master predates the obs).
-                obs_dt = datetime.fromisoformat(date_obs)
-                master_dt = kpf_timestamp_to_datetime(get_timestamp(filepath))
-                primary["WLSFILE"] = filepath
-                primary["AGEWLS"] = (master_dt - obs_dt).total_seconds() / 86400.0
-            else:
-                prefix = _HEADER_PREFIX[cal_type]
-                master_date = datetime.strptime(get_datecode(filepath), "%Y%m%d").date()
-                primary[f"{prefix}FILE"] = os.path.basename(filepath)
-                primary[f"{prefix}DIR"] = os.path.dirname(filepath)
-                primary[f"AGE{prefix}"] = (obs_date - master_date).days
+            # Uniform master-association convention for every cal type: the full
+            # path in {PREFIX}FILE (no {PREFIX}DIR), and the master age in
+            # {PREFIX}AGE as a signed fractional-day float from the master and
+            # obs timestamps (sign convention: master - obs, so the age is
+            # negative when the master predates the obs).
+            prefix = _HEADER_PREFIX[cal_type]
+            master_dt = kpf_timestamp_to_datetime(get_timestamp(filepath))
+            primary[f"{prefix}FILE"] = filepath
+            primary[f"{prefix}AGE"] = (master_dt - obs_dt).total_seconds() / 86400.0
 
         self._results = {
             cal_type: primary[f"{_HEADER_PREFIX[cal_type]}FILE"]
@@ -280,7 +273,7 @@ class CalibrationAssociation:
         h = self.l1_obj.headers["PRIMARY"]
         for cal_type, filename in self._results.items():
             prefix = _HEADER_PREFIX[cal_type]
-            age = h.get(f"AGE{prefix}", "n/a")
+            age = h.get(f"{prefix}AGE", "n/a")
             print(f"  {cal_type:<12s} {filename}")
             print(f"  {'':12s} age = {age}d")
             print()

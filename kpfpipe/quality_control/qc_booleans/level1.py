@@ -84,27 +84,27 @@ class QCL1(QC):
     bias_subtracted._qc_comment = "QC: bias subtraction applied"
 
     def bias_age_ok(self):
-        """abs(AGEBIAS) <= 7 days."""
-        v = _hdr_float(self.kpf.headers["PRIMARY"], "AGEBIAS")
+        """abs(BIASAGE) <= 7 days."""
+        v = _hdr_float(self.kpf.headers["PRIMARY"], "BIASAGE")
         return v is not None and abs(v) <= 7
 
-    bias_age_ok._qc_key = "BIASAGE"
+    bias_age_ok._qc_key = "BIASAGEQ"
     bias_age_ok._qc_comment = "QC: bias master age <= 7 days"
 
     def dark_age_ok(self):
-        """abs(AGEDARK) <= 14 days."""
-        v = _hdr_float(self.kpf.headers["PRIMARY"], "AGEDARK")
+        """abs(DARKAGE) <= 14 days."""
+        v = _hdr_float(self.kpf.headers["PRIMARY"], "DARKAGE")
         return v is not None and abs(v) <= 14
 
-    dark_age_ok._qc_key = "DARKAGE"
+    dark_age_ok._qc_key = "DARKAGEQ"
     dark_age_ok._qc_comment = "QC: dark master age <= 14 days"
 
     def flat_age_ok(self):
-        """abs(AGEFLAT) <= 30 days."""
-        v = _hdr_float(self.kpf.headers["PRIMARY"], "AGEFLAT")
+        """abs(FLATAGE) <= 30 days."""
+        v = _hdr_float(self.kpf.headers["PRIMARY"], "FLATAGE")
         return v is not None and abs(v) <= 30
 
-    flat_age_ok._qc_key = "FLATAGE"
+    flat_age_ok._qc_key = "FLATAGEQ"
     flat_age_ok._qc_comment = "QC: flat master age <= 30 days"
 
     def ffi_finite(self):

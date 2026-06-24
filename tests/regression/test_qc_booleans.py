@@ -80,9 +80,9 @@ def _make_kpf1(
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
     primary.header["EXPTIME"] = 300.0
     primary.header["BIASSUB"] = (biassub, "Bias subtraction applied")
-    primary.header["AGEBIAS"] = (agebias, "Age of bias master [days]")
-    primary.header["AGEDARK"] = (agedark, "Age of dark master [days]")
-    primary.header["AGEFLAT"] = (ageflat, "Age of flat master [days]")
+    primary.header["BIASAGE"] = (agebias, "Age of bias master [days]")
+    primary.header["DARKAGE"] = (agedark, "Age of dark master [days]")
+    primary.header["FLATAGE"] = (ageflat, "Age of flat master [days]")
 
     if with_rn:
         for i in range(1, 5):
@@ -460,7 +460,7 @@ class TestQCL1:
 
     def test_bias_age_ok_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
-        del l1.headers["PRIMARY"]["AGEBIAS"]
+        del l1.headers["PRIMARY"]["BIASAGE"]
         assert QCL1(l1).bias_age_ok() is False
 
     def test_dark_age_ok_pass(self, tmp_path):
@@ -473,7 +473,7 @@ class TestQCL1:
 
     def test_dark_age_ok_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
-        del l1.headers["PRIMARY"]["AGEDARK"]
+        del l1.headers["PRIMARY"]["DARKAGE"]
         assert QCL1(l1).dark_age_ok() is False
 
     def test_flat_age_ok_pass(self, tmp_path):
@@ -486,7 +486,7 @@ class TestQCL1:
 
     def test_flat_age_ok_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
-        del l1.headers["PRIMARY"]["AGEFLAT"]
+        del l1.headers["PRIMARY"]["FLATAGE"]
         assert QCL1(l1).flat_age_ok() is False
 
     def test_ffi_finite_pass(self, tmp_path):
@@ -508,9 +508,9 @@ class TestQCL1:
             "read_noise_in_range": "RNINRNG",
             "read_noise_nongauss": "RNGAUSS",
             "bias_subtracted": "BIASOK",
-            "bias_age_ok": "BIASAGE",
-            "dark_age_ok": "DARKAGE",
-            "flat_age_ok": "FLATAGE",
+            "bias_age_ok": "BIASAGEQ",
+            "dark_age_ok": "DARKAGEQ",
+            "flat_age_ok": "FLATAGEQ",
             "ffi_finite": "FFIFIN",
         }
         for method_name, key in expected.items():
@@ -537,9 +537,9 @@ class TestQCL1Run:
             "RNINRNG",
             "RNGAUSS",
             "BIASOK",
-            "BIASAGE",
-            "DARKAGE",
-            "FLATAGE",
+            "BIASAGEQ",
+            "DARKAGEQ",
+            "FLATAGEQ",
             "FFIFIN",
         ]
         for k in expected_keys:

@@ -178,7 +178,7 @@ class WavelengthCalibration:
             return
 
         inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
-        agewls = inst.get("AGEWLS")
+        agewls = inst.get("WLSAGE")
         print(f"  wls_path: {self._results['wls_path']}")
         if agewls is not None:
-            print(f"  AGEWLS:   {agewls:+.4f} d  (master - obs)")
+            print(f"  WLSAGE:   {agewls:+.4f} d  (master - obs)")
