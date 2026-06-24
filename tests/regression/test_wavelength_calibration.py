@@ -107,10 +107,6 @@ class TestConstructor:
         with pytest.raises(TypeError):
             WavelengthCalibration(_make_science_l2(), config="not a dict")
 
-    def test_results_is_none_before_perform(self):
-        mod = WavelengthCalibration(_make_science_l2())
-        assert mod._results is None
-
     def test_wls_path_is_none_before_load(self):
         mod = WavelengthCalibration(_make_science_l2())
         assert mod._wls_path is None
@@ -163,13 +159,13 @@ class TestPerform:
         WavelengthCalibration(l2).perform()
         assert (l2.receipt["Module_Name"] == "wavelength_calibration").any()
 
-    def test_results_populated_after_perform(self, master_wls_path):
+    def test_attributes_populated_after_perform(self, master_wls_path):
         l2 = _make_science_l2(wls_path=master_wls_path)
         mod = WavelengthCalibration(l2)
         mod.perform()
-        assert mod._results["wls_path"] == master_wls_path
-        assert mod._results["chips"] == _CHIPS
-        assert mod._results["fibers"] == _FIBERS
+        assert mod._wls_path == master_wls_path
+        assert mod.chips == _CHIPS
+        assert mod.fibers == _FIBERS
 
     def test_copies_all_wave_arrays(self, master_wls_path):
         # Every (chip, fiber) WAVE array on the science L2 should match the master.

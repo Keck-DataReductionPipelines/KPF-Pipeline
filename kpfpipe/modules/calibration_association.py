@@ -83,7 +83,8 @@ class CalibrationAssociation:
             setattr(self, k, params.get(k, v))
 
         self._masters_root = params.get("KPF_MASTERS_OUTPUT")
-        self._results = None  # populated by perform()
+        self._calibrations = None  # per-cal {filepath, age_days} for _set_kpf1_headers
+        self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -182,6 +183,20 @@ class CalibrationAssociation:
             ),
         )[0]
 
+    def _set_kpf1_headers(self, l1_obj):
+        """Write all PRIMARY-header keywords for calibration association.
+
+        Reads self._calibrations (populated by perform()); the single place this
+        module writes PRIMARY, called just before the receipt entry. Each cal
+        type contributes {PREFIX}FILE (full master path) and {PREFIX}AGE (signed
+        fractional-day age).
+        """
+        primary = l1_obj.headers["PRIMARY"]
+        for cal_type, cal in self._calibrations.items():
+            prefix = _HEADER_PREFIX[cal_type]
+            primary[f"{prefix}FILE"] = cal["filepath"]
+            primary[f"{prefix}AGE"] = cal["age_days"]
+
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
@@ -224,8 +239,8 @@ class CalibrationAssociation:
 
         date_obs = self.l1_obj.headers["INSTRUMENT_HEADER"]["DATE-OBS"]
         obs_dt = datetime.fromisoformat(date_obs)
-        primary = self.l1_obj.headers["PRIMARY"]
 
+        self._calibrations = {}
         for cal_type in cal_types:
             master_files = self._find_master_files(
                 cal_type, date_obs, masters_search_window_days, verbose=verbose
@@ -237,22 +252,18 @@ class CalibrationAssociation:
                     f"within window {masters_search_window_days} days"
                 )
 
-            # Uniform master-association convention for every cal type: the full
-            # path in {PREFIX}FILE (no {PREFIX}DIR), and the master age in
-            # {PREFIX}AGE as a signed fractional-day float from the master and
-            # obs timestamps (sign convention: master - obs, so the age is
-            # negative when the master predates the obs).
-            prefix = _HEADER_PREFIX[cal_type]
+            # Signed fractional-day age (master - obs): negative when the master
+            # predates the obs.
             master_dt = kpf_timestamp_to_datetime(get_timestamp(filepath))
-            primary[f"{prefix}FILE"] = filepath
-            primary[f"{prefix}AGE"] = (master_dt - obs_dt).total_seconds() / 86400.0
+            age_days = (master_dt - obs_dt).total_seconds() / 86400.0
+            self._calibrations[cal_type] = {"filepath": filepath, "age_days": age_days}
 
-        self._results = {
-            cal_type: primary[f"{_HEADER_PREFIX[cal_type]}FILE"]
-            for cal_type in cal_types
-        }
+        self._set_kpf1_headers(self.l1_obj)
         self.l1_obj.receipt_add_entry("calibration_association", "PASS")
 
+        self._info = {
+            cal_type: dict(cal) for cal_type, cal in self._calibrations.items()
+        }
         return self.l1_obj
 
     def info(self):
@@ -264,16 +275,13 @@ class CalibrationAssociation:
             f"  search window: {self.masters_search_window_days} days [before, after]"
         )
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
         print(f"\n  {'cal_type':<12s} {'master file'}")
         print("  " + "-" * 60)
-        h = self.l1_obj.headers["PRIMARY"]
-        for cal_type, filename in self._results.items():
-            prefix = _HEADER_PREFIX[cal_type]
-            age = h.get(f"{prefix}AGE", "n/a")
-            print(f"  {cal_type:<12s} {filename}")
-            print(f"  {'':12s} age = {age}d")
+        for cal_type, cal in self._info.items():
+            print(f"  {cal_type:<12s} {cal['filepath']}")
+            print(f"  {'':12s} age = {cal['age_days']}d")
             print()

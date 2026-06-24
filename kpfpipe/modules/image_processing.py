@@ -75,7 +75,9 @@ class ImageProcessing:
         self._dark_ml1 = None
         self._bias_path = None
         self._dark_path = None
-        self._results = None  # populated by perform()
+        self._biassub = None  # applied flags for _set_kpf1_headers
+        self._darksub = None
+        self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -268,6 +270,21 @@ class ImageProcessing:
             val = val[0]
         return bool(val)
 
+    def _set_kpf1_headers(self, l1_obj):
+        """Write all PRIMARY-header keywords for image processing.
+
+        Reads the applied-flag attributes populated by perform(); the single
+        place this module writes PRIMARY, called just before the receipt entry.
+        """
+        l1_obj.headers["PRIMARY"]["BIASSUB"] = (
+            self._biassub,
+            "Bias subtraction applied",
+        )
+        l1_obj.headers["PRIMARY"]["DARKSUB"] = (
+            self._darksub,
+            "Dark subtraction applied",
+        )
+
     def perform(self, chips=None, *, bias=None, dark=None, flat=None):
         """
         Run image processing calibrations on the L1 frame.
@@ -330,27 +347,23 @@ class ImageProcessing:
         if self.dark and prior_dark:
             raise RuntimeError("dark already subtracted from this frame (DARKSUB=True)")
 
-        self._results = {}
+        self._info = {}
         if self.bias:
             for chip in self.chips:
                 self.subtract_bias(chip)
-            self._results["bias"] = self._bias_path
+            self._info["bias"] = self._bias_path
 
         if self.dark:
             for chip in self.chips:
                 self.subtract_dark(chip)
-            self._results["dark"] = self._dark_path
+            self._info["dark"] = self._dark_path
 
         # OR with the prior flag so applying one calibration never clears
         # another already recorded on the frame.
-        self.l1_obj.headers["PRIMARY"]["BIASSUB"] = (
-            bool(self.bias) or prior_bias,
-            "Bias subtraction applied",
-        )
-        self.l1_obj.headers["PRIMARY"]["DARKSUB"] = (
-            bool(self.dark) or prior_dark,
-            "Dark subtraction applied",
-        )
+        self._biassub = bool(self.bias) or prior_bias
+        self._darksub = bool(self.dark) or prior_dark
+
+        self._set_kpf1_headers(self.l1_obj)
         self.l1_obj.receipt_add_entry("image_processing", "PASS")
 
         return self.l1_obj
@@ -361,11 +374,11 @@ class ImageProcessing:
         print(f"  obs_id: {self.l1_obj.obs_id}")
         print(f"  chips:  {self.chips}")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
         print(f"\n  {'cal_type':<10s} {'master file'}")
         print("  " + "-" * 60)
-        for cal_type, path in self._results.items():
+        for cal_type, path in self._info.items():
             print(f"  {cal_type:<10s} {path}")

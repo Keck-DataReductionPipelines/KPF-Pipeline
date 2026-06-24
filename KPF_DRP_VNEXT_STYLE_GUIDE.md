@@ -116,7 +116,7 @@ class StageName:
     def __init__(self, l1_obj, config=None):
         self.l1_obj = l1_obj
         # ... canonical config block (see §4) ...
-        self._results = None  # populated by perform()
+        self._info = None  # info() summary only
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -132,16 +132,28 @@ class StageName:
     # Public entry point
     # ------------------------------------------------------------------
     def perform(self, chips=None):
-        ...
+        ...                                    # populate header-source attributes
+        self._set_kpf2_headers(self.l2_obj)    # consolidates ALL PRIMARY writes
         self.l2_obj.receipt_add_entry("stage_name", "PASS")
+        self._info = {...}                     # info() summary only
         return self.l2_obj
+
+    def _set_kpf2_headers(self, l2_obj):
+        """Sole place this module writes PRIMARY; reads instance attributes."""
+        l2_obj.headers["PRIMARY"][KEY] = (self._attr, "comment")
 
     def info(self): ...   # human-readable reporter, always last
 ```
 
 - **Method order is fixed and marked with 66-dash banner comments**:
-  `__init__` → *Private helpers* → *Algorithm steps* → *Public entry point* (`perform`)
-  → `info()`.
+  `__init__` → *Private helpers* → *Algorithm steps* → *Public entry point* (`perform`,
+  then `_set_kpf{level}_headers`) → `info()`.
+- **Header consolidation & `_info`.** A module writes PRIMARY in exactly one place — a private
+  `_set_kpf{level}_headers(obj)` that sources its values from instance attributes (never recomputes,
+  never reads another product), called immediately before `receipt_add_entry`. `{level}` is the
+  module's *output* level; modules that write no PRIMARY keep an empty helper for uniformity.
+  `_info` (formerly `_results`) is a pruned, human-readable summary consumed **only** by `info()` —
+  never the science/header chain, and never tests (tests assert on the underlying attributes).
 - The banner is exactly:
   ```python
       # ------------------------------------------------------------------
@@ -208,12 +220,13 @@ class StageName:
   (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword
   argument on a method call (overrides both). Config is the production override path;
   direct kwargs are the developer/interactive path (e.g. notebooks), not used in production.
-- **Declare every lazily-populated attribute in `__init__`, set to `None`/`{}`, with a
-  trailing comment naming the method that fills it** — this is a defining house style:
+- **Declare every lazily-populated attribute in `__init__`, set to `None`/`{}`.** Add a
+  trailing comment naming the filling method (and its shape) **only where that isn't obvious**;
+  keep comments minimal otherwise. Conventional attributes (`_info`) stay bare:
   ```python
-  self._results = None       # populated by perform()
-  self._line_mask = {}       # line mask, set by _build_line_mask()
-  self.ml1_obj = None        # populated by subclass make_master_l1()
+  self._info = None
+  self._ccd_bary = None  # per-CCD {bjd, kms, z} for _set_kpf2_headers
+  self._line_mask = {}   # set by _build_line_mask()
   ```
 - **Detector geometry comes from `DETECTOR` (sourced from `detector.toml`), consumed on
   the instance** — every module gets `self.norder` (`{GREEN, RED}` dict), `self.ccd`,

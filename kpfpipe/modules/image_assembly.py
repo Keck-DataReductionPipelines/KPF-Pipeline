@@ -70,7 +70,7 @@ class ImageAssembly:
         for k, v in self.ccd.items():
             setattr(self, k, v)
 
-        self._results = None  # populated by perform()
+        self._info = None
         self.orientation = {}  # amp ext -> flip; set by _parse_amplifier_reference()
         self.gain = {}  # amp ext -> gain; set by _parse_amplifier_reference()
         self.namp = {}  # chip -> n amps; set by count_amplifiers()
@@ -599,7 +599,7 @@ class ImageAssembly:
         self._set_kpf1_headers(l1_obj)
         l1_obj.receipt_add_entry("image_assembly", "PASS")
 
-        self._results = {
+        self._info = {
             chip: {
                 ch: (
                     round(float(self.readnoise[ch]), 4),
@@ -620,13 +620,13 @@ class ImageAssembly:
         print(f"  overscan_method:  {self.overscan_method}")
         print(f"  readnoise_sigma:  {self.readnoise_sigma}")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
         print(f"\n  {'channel':<14s} {'read noise [e-]':<18s} {'non-gaussian'}")
         print("  " + "-" * 48)
-        for chip in self._results:
-            for channel, (rn, rnng) in self._results[chip].items():
+        for chip in self._info:
+            for channel, (rn, rnng) in self._info[chip].items():
                 print(f"  {channel:<14s} {rn:<18} {rnng}")
             print()

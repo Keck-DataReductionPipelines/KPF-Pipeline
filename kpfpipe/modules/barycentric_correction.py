@@ -101,7 +101,8 @@ class BarycentricCorrection:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._results = None
+        self._info = None
+        self._ccd_bary = None  # per-CCD {bjd, kms, z} for _set_kpf2_headers
         self._em_cache = None  # (toggle_key, w_em, t_em) from the last integration
         self._skycoord = None  # cached Gaia DR3 SkyCoord
         self._astrometry_source = (
@@ -739,37 +740,55 @@ class BarycentricCorrection:
             output="ccds", **kwargs
         )
 
-        prim = self.l2_obj.headers["PRIMARY"]
-
         # Per-order extensions; WAVE arrays are left untouched
         self.l2_obj.set_data("BJD_TDB", np.asarray(bjd_tdb, dtype=np.float64))
         self.l2_obj.set_data("BARYCORR_KMS", np.asarray(bary_kms, dtype=np.float64))
         self.l2_obj.set_data("BARYCORR_Z", np.asarray(bary_z, dtype=np.float64))
 
-        # Per-CCD PRIMARY keywords (CCD1=GREEN, CCD2=RED); registered
-        # KPF-pipeline keywords (config/L2-headers.csv).
-        prim["CCD1BJD"] = (float(ccd_bjd[0]), "[BJD_TDB] GREEN mid-time")
-        prim["CCD1BKMS"] = (float(ccd_kms[0]), "[km/s] GREEN barycentric velocity")
-        prim["CCD1BZ"] = (float(ccd_z[0]), "GREEN barycentric redshift z")
-        prim["CCD2BJD"] = (float(ccd_bjd[1]), "[BJD_TDB] RED mid-time")
-        prim["CCD2BKMS"] = (float(ccd_kms[1]), "[km/s] RED barycentric velocity")
-        prim["CCD2BZ"] = (float(ccd_z[1]), "RED barycentric redshift z")
+        # Per-CCD summaries (CCD1=GREEN, CCD2=RED), consumed by _set_kpf2_headers.
+        self._ccd_bary = {
+            1: {
+                "bjd": float(ccd_bjd[0]),
+                "kms": float(ccd_kms[0]),
+                "z": float(ccd_z[0]),
+            },
+            2: {
+                "bjd": float(ccd_bjd[1]),
+                "kms": float(ccd_kms[1]),
+                "z": float(ccd_z[1]),
+            },
+        }
 
-        # Provenance: which astrometry source actually produced the correction
-        prim["ASTRSRC"] = (self._astrometry_source, "Astrometry source")
-
+        self._set_kpf2_headers(self.l2_obj)
         self.l2_obj.receipt_add_entry("barycentric_correction", "PASS")
 
-        self._results = {
+        self._info = {
             "bjd_tdb": np.asarray(bjd_tdb),
             "bary_kms": np.asarray(bary_kms),
-            "bary_z": np.asarray(bary_z),
             "ccd_bjd": np.asarray(ccd_bjd),
             "ccd_kms": np.asarray(ccd_kms),
             "ccd_z": np.asarray(ccd_z),
             "astrometry_source": self._astrometry_source,
         }
         return self.l2_obj
+
+    def _set_kpf2_headers(self, l2_obj):
+        """Write all PRIMARY-header keywords for barycentric correction.
+
+        Reads self._ccd_bary and self._astrometry_source (populated by
+        perform()); the single place this module writes PRIMARY, called just
+        before the receipt entry. Per-CCD keywords are registered KPF-pipeline
+        keywords (config/L2-headers.csv); CCD1=GREEN, CCD2=RED.
+        """
+        prim = l2_obj.headers["PRIMARY"]
+        green, red = self._ccd_bary[1], self._ccd_bary[2]
+        prim["CCD1BJD"] = (green["bjd"], "[BJD_TDB] GREEN mid-time")
+        prim["CCD1BKMS"] = (green["kms"], "[km/s] GREEN barycentric velocity")
+        prim["CCD1BZ"] = (green["z"], "GREEN barycentric redshift z")
+        prim["CCD2BJD"] = (red["bjd"], "[BJD_TDB] RED mid-time")
+        prim["CCD2BKMS"] = (red["kms"], "[km/s] RED barycentric velocity")
+        prim["CCD2BZ"] = (red["z"], "RED barycentric redshift z")
+        prim["ASTRSRC"] = (self._astrometry_source, "Astrometry source")
 
     def info(self):
         """Print a summary of the barycentric correction results."""
@@ -779,11 +798,11 @@ class BarycentricCorrection:
             obs_id = obs_id[0]
         print(f"  obs_id:  {obs_id}")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
-        r = self._results
+        r = self._info
         print(f"  astrometry:  {r['astrometry_source']}")
         ccd_bjd, ccd_kms, ccd_z = r["ccd_bjd"], r["ccd_kms"], r["ccd_z"]
 
