@@ -66,7 +66,10 @@ def _make_kpf1(
     tmp_path,
     *,
     with_rn=True,
+    oscansub=True,
     biassub=True,
+    darksub=True,
+    flatdiv=True,
     agebias=1.0,
     agedark=5.0,
     ageflat=10.0,
@@ -79,7 +82,10 @@ def _make_kpf1(
     primary.header["INSTRUME"] = "KPF"
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
     primary.header["EXPTIME"] = 300.0
+    primary.header["OSCANSUB"] = (oscansub, "Overscan subtraction applied")
     primary.header["BIASSUB"] = (biassub, "Bias subtraction applied")
+    primary.header["DARKSUB"] = (darksub, "Dark subtraction applied")
+    primary.header["FLATDIV"] = (flatdiv, "Flat division applied")
     primary.header["BIASAGE"] = (agebias, "Age of bias master [days]")
     primary.header["DARKAGE"] = (agedark, "Age of dark master [days]")
     primary.header["FLATAGE"] = (ageflat, "Age of flat master [days]")
@@ -437,6 +443,19 @@ class TestQCL1:
             del l1.headers["PRIMARY"][f"RNNGRD{i}"]
         assert QCL1(l1).read_noise_nongauss() is True
 
+    def test_overscan_subtracted_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, oscansub=True)
+        assert QCL1(l1).overscan_subtracted() is True
+
+    def test_overscan_subtracted_fail_false(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, oscansub=False)
+        assert QCL1(l1).overscan_subtracted() is False
+
+    def test_overscan_subtracted_fail_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        del l1.headers["PRIMARY"]["OSCANSUB"]
+        assert QCL1(l1).overscan_subtracted() is False
+
     def test_bias_subtracted_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=True)
         assert QCL1(l1).bias_subtracted() is True
@@ -449,6 +468,32 @@ class TestQCL1:
         l1 = _make_kpf1(tmp_path)
         del l1.headers["PRIMARY"]["BIASSUB"]
         assert QCL1(l1).bias_subtracted() is False
+
+    def test_dark_subtracted_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, darksub=True)
+        assert QCL1(l1).dark_subtracted() is True
+
+    def test_dark_subtracted_fail_false(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, darksub=False)
+        assert QCL1(l1).dark_subtracted() is False
+
+    def test_dark_subtracted_fail_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        del l1.headers["PRIMARY"]["DARKSUB"]
+        assert QCL1(l1).dark_subtracted() is False
+
+    def test_flat_divided_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, flatdiv=True)
+        assert QCL1(l1).flat_divided() is True
+
+    def test_flat_divided_fail_false(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, flatdiv=False)
+        assert QCL1(l1).flat_divided() is False
+
+    def test_flat_divided_fail_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        del l1.headers["PRIMARY"]["FLATDIV"]
+        assert QCL1(l1).flat_divided() is False
 
     def test_bias_age_ok_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, agebias=3.0)
@@ -507,9 +552,12 @@ class TestQCL1:
         expected = {
             "read_noise_in_range": "RNINRNG",
             "read_noise_nongauss": "RNGAUSS",
-            "bias_subtracted": "BIASOK",
+            "overscan_subtracted": "OSCANSUB",
+            "bias_subtracted": "BIASSUB",
             "bias_age_ok": "BIASAGEQ",
+            "dark_subtracted": "DARKSUB",
             "dark_age_ok": "DARKAGEQ",
+            "flat_divided": "FLATDIV",
             "flat_age_ok": "FLATAGEQ",
             "ffi_finite": "FFIFIN",
         }
@@ -536,9 +584,12 @@ class TestQCL1Run:
         expected_keys = [
             "RNINRNG",
             "RNGAUSS",
-            "BIASOK",
+            "OSCANSUB",
+            "BIASSUB",
             "BIASAGEQ",
+            "DARKSUB",
             "DARKAGEQ",
+            "FLATDIV",
             "FLATAGEQ",
             "FFIFIN",
         ]
@@ -554,8 +605,8 @@ class TestQCL1Run:
         isgood = l1.headers["PRIMARY"]["ISGOOD"]
         assert (isgood[0] if isinstance(isgood, tuple) else isgood) == 0
 
-        biasok = l1.headers["PRIMARY"]["BIASOK"]
-        assert (biasok[0] if isinstance(biasok, tuple) else biasok) == 0
+        biassub = l1.headers["PRIMARY"]["BIASSUB"]
+        assert (biassub[0] if isinstance(biassub, tuple) else biassub) == 0
 
 
 # ---------------------------------------------------------------------------
