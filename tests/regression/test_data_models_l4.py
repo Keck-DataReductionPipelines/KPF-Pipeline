@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.masters import KPFMasterL4
@@ -50,6 +51,21 @@ class TestToKPF4:
         kpf4 = kpf2.to_kpf4()
         assert "RV1" in kpf4.extensions
         assert len(kpf4.data["RV1"]) == 0
+
+    def test_program_ids_survive_transform_and_validate(self, synthetic_l1_file):
+        """PROGID/KOAID set on the L1 PRIMARY survive L1->L2->L4 and pass
+        validate_eprv_primary (called by to_kpf2/to_kpf4); they are registered
+        in L1-headers.csv and the validator allowlist is the union of levels."""
+        l1 = KPF1.from_fits(synthetic_l1_file)
+        l1.headers["PRIMARY"]["PROGID"] = "U999"
+        l1.headers["PRIMARY"]["KOAID"] = "KP.20201122.34567.89"
+        prim = l1.to_kpf2().to_kpf4().headers["PRIMARY"]
+
+        def _scalar(v):
+            return v[0] if isinstance(v, tuple) else v
+
+        assert _scalar(prim["PROGID"]) == "U999"
+        assert _scalar(prim["KOAID"]) == "KP.20201122.34567.89"
 
 
 class TestKPF4:

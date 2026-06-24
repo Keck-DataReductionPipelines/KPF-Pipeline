@@ -193,6 +193,31 @@ class TestToL1:
         assert self._scalar(prim["DRPTAG"]) == version
         assert self._scalar(prim["DRPVERNO"]) == version
 
+    def test_to_l1_stamps_native_program_ids(self, synthetic_l0_file):
+        """PROGID/KOAID carry from the native L0 PRIMARY onto the L1 EPRV PRIMARY."""
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l0.headers["PRIMARY"]["PROGID"] = "U999"
+        l0.headers["PRIMARY"]["KOAID"] = "KP.20201122.34567.89"
+        prim = l0.to_kpf1().headers["PRIMARY"]
+        assert self._scalar(prim["PROGID"]) == "U999"
+        assert self._scalar(prim["KOAID"]) == "KP.20201122.34567.89"
+
+    def test_to_l1_defaults_program_ids_to_unknown(self, synthetic_l0_file):
+        """Absent PROGID/KOAID default to UNKNOWN (the card is always written)."""
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        for key in ("PROGID", "KOAID"):
+            if key in l0.headers["PRIMARY"]:
+                del l0.headers["PRIMARY"][key]
+        prim = l0.to_kpf1().headers["PRIMARY"]
+        assert self._scalar(prim["PROGID"]) == "UNKNOWN"
+        assert self._scalar(prim["KOAID"]) == "UNKNOWN"
+
+    def test_to_l1_sets_drpstatus_default(self, synthetic_l0_file):
+        """to_kpf1 seeds DRPSTATU; its own to_l1 receipt is denylisted, so the
+        default survives until the first real module runs."""
+        prim = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["PRIMARY"]
+        assert self._scalar(prim["DRPSTATU"]) == "File ingested into KPF-DRP"
+
     def test_to_l1_copies_passthrough_extensions(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
@@ -233,6 +258,36 @@ class TestToL1:
         assert "GREEN_AMP1" not in l1.extensions
         assert "GREEN_AMP2" not in l1.extensions
         assert "RED_AMP1" not in l1.extensions
+
+
+class TestDrpStatus:
+    """DRPSTATU advances to '<Module Name> module complete' via the
+    receipt_add_entry override; data-model conversion/IO receipts are denylisted
+    so it names the last real science/masters stage (DRP-RUN-20)."""
+
+    @staticmethod
+    def _scalar(value):
+        return value[0] if isinstance(value, tuple) else value
+
+    def test_module_receipt_updates_status(self, synthetic_l0_file):
+        l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
+        l1.receipt_add_entry("image_assembly", "PASS")
+        status = self._scalar(l1.headers["PRIMARY"]["DRPSTATU"])
+        assert status == "Image Assembly module complete"
+
+    def test_master_receipt_updates_status(self, synthetic_l0_file):
+        l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
+        l1.receipt_add_entry("master_bias", "PASS")
+        status = self._scalar(l1.headers["PRIMARY"]["DRPSTATU"])
+        assert status == "Master Bias module complete"
+
+    def test_internal_receipts_do_not_change_status(self, synthetic_l0_file):
+        l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
+        l1.receipt_add_entry("radial_velocity", "PASS")
+        for internal in ("to_kpf2", "to_kpf4", "to_fits", "from_fits"):
+            l1.receipt_add_entry(internal, "PASS")
+        status = self._scalar(l1.headers["PRIMARY"]["DRPSTATU"])
+        assert status == "Radial Velocity module complete"
 
 
 class TestKPFMasterL1:

@@ -151,6 +151,16 @@ class TestToKPF2:
         kpf2 = l1.to_kpf2()
         assert "to_kpf2" in kpf2.receipt["Module_Name"].values
 
+    def test_to_kpf2_receipt_updates_drpstatus(self, synthetic_l1_file):
+        """The DRPSTATU receipt override is active on KPF2 too (it subclasses
+        RV2, not KPFDataModel, so it carries its own override)."""
+        kpf2 = KPF1.from_fits(synthetic_l1_file).to_kpf2()
+        kpf2.receipt_add_entry("barycentric_correction", "PASS")
+        assert (
+            _scalar(kpf2.headers["PRIMARY"]["DRPSTATU"])
+            == "Barycentric Correction module complete"
+        )
+
     def test_to_kpf2_sets_origid(self, tmp_path):
         """Verify obs_id is stored as ORIGID in KPF2 PRIMARY."""
         fn = str(tmp_path / "KP.20240113.23249.10_L1.fits")
