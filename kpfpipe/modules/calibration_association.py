@@ -259,12 +259,16 @@ class CalibrationAssociation:
             self._calibrations[cal_type] = {"filepath": filepath, "age_days": age_days}
 
         self._set_kpf1_headers(self.l1_obj)
+        self._track_info()
         self.l1_obj.receipt_add_entry("calibration_association", "PASS")
 
+        return self.l1_obj
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
         self._info = {
             cal_type: dict(cal) for cal_type, cal in self._calibrations.items()
         }
-        return self.l1_obj
 
     def info(self):
         """Print a summary of the module configuration and association results."""

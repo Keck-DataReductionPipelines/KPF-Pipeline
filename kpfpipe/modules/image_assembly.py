@@ -597,8 +597,13 @@ class ImageAssembly:
 
         self._convert_expmeter_wavelengths_to_angstroms(l1_obj)
         self._set_kpf1_headers(l1_obj)
+        self._track_info(chips)
         l1_obj.receipt_add_entry("image_assembly", "PASS")
 
+        return l1_obj
+
+    def _track_info(self, chips):
+        """Populate _info (the info() summary) from instance attributes."""
         self._info = {
             chip: {
                 ch: (
@@ -610,8 +615,6 @@ class ImageAssembly:
             }
             for chip in chips
         }
-
-        return l1_obj
 
     def info(self):
         """Print a summary of the module configuration and processing results."""

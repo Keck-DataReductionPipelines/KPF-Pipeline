@@ -347,16 +347,13 @@ class ImageProcessing:
         if self.dark and prior_dark:
             raise RuntimeError("dark already subtracted from this frame (DARKSUB=True)")
 
-        self._info = {}
         if self.bias:
             for chip in self.chips:
                 self.subtract_bias(chip)
-            self._info["bias"] = self._bias_path
 
         if self.dark:
             for chip in self.chips:
                 self.subtract_dark(chip)
-            self._info["dark"] = self._dark_path
 
         # OR with the prior flag so applying one calibration never clears
         # another already recorded on the frame.
@@ -364,9 +361,18 @@ class ImageProcessing:
         self._darksub = bool(self.dark) or prior_dark
 
         self._set_kpf1_headers(self.l1_obj)
+        self._track_info()
         self.l1_obj.receipt_add_entry("image_processing", "PASS")
 
         return self.l1_obj
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {}
+        if self.bias:
+            self._info["bias"] = self._bias_path
+        if self.dark:
+            self._info["dark"] = self._dark_path
 
     def info(self):
         """Print a summary of the module configuration and processing results."""

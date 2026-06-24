@@ -134,26 +134,32 @@ class StageName:
     def perform(self, chips=None):
         ...                                    # populate header-source attributes
         self._set_kpf2_headers(self.l2_obj)    # consolidates ALL PRIMARY writes
+        self._track_info(chips)                # populates _info, just before the receipt
         self.l2_obj.receipt_add_entry("stage_name", "PASS")
-        self._info = {...}                     # info() summary only
         return self.l2_obj
 
     def _set_kpf2_headers(self, l2_obj):
         """Sole place this module writes PRIMARY; reads instance attributes."""
         l2_obj.headers["PRIMARY"][KEY] = (self._attr, "comment")
 
+    def _track_info(self, chips=None, fibers=None):
+        """Populate _info from instance attributes (takes only chips/fibers)."""
+        self._info = {...}
+
     def info(self): ...   # human-readable reporter, always last
 ```
 
 - **Method order is fixed and marked with 66-dash banner comments**:
   `__init__` → *Private helpers* → *Algorithm steps* → *Public entry point* (`perform`,
-  then `_set_kpf{level}_headers`) → `info()`.
+  then `_set_kpf{level}_headers`, `_track_info`) → `info()`.
 - **Header consolidation & `_info`.** A module writes PRIMARY in exactly one place — a private
   `_set_kpf{level}_headers(obj)` that sources its values from instance attributes (never recomputes,
   never reads another product), called immediately before `receipt_add_entry`. `{level}` is the
   module's *output* level; modules that write no PRIMARY keep an empty helper for uniformity.
   `_info` (formerly `_results`) is a pruned, human-readable summary consumed **only** by `info()` —
-  never the science/header chain, and never tests (tests assert on the underlying attributes).
+  never the science/header chain, and never tests (tests assert on the underlying attributes). It is
+  populated by a private `_track_info(self[, chips, fibers])` (no other args — it sources from
+  instance attributes), called immediately after `_set_kpf{level}_headers` and before the receipt.
 - The banner is exactly:
   ```python
       # ------------------------------------------------------------------

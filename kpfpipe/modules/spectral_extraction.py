@@ -506,12 +506,8 @@ class SpectralExtraction:
                 l2_obj.set_data(f"{chip}_{fiber}_VAR", l2_arrays[f"{chip}_{fiber}_VAR"])
 
         self._set_kpf2_headers(l2_obj)
+        self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "PASS")
-
-        self._info = {
-            chip: {"fibers": list(fibers), "norder": self.norder[chip.upper()]}
-            for chip in chips
-        }
 
         return l2_obj
 
@@ -522,6 +518,13 @@ class SpectralExtraction:
         module consolidates header writes in one place, called just before the
         receipt entry.
         """
+
+    def _track_info(self, chips, fibers):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {
+            chip: {"fibers": list(fibers), "norder": self.norder[chip.upper()]}
+            for chip in chips
+        }
 
     def info(self):
         """Print a summary of the module configuration and extraction results."""

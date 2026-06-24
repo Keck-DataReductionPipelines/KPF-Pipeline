@@ -760,17 +760,22 @@ class BarycentricCorrection:
         }
 
         self._set_kpf2_headers(self.l2_obj)
+        self._track_info()
         self.l2_obj.receipt_add_entry("barycentric_correction", "PASS")
 
+        return self.l2_obj
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        green, red = self._ccd_bary[1], self._ccd_bary[2]
         self._info = {
-            "bjd_tdb": np.asarray(bjd_tdb),
-            "bary_kms": np.asarray(bary_kms),
-            "ccd_bjd": np.asarray(ccd_bjd),
-            "ccd_kms": np.asarray(ccd_kms),
-            "ccd_z": np.asarray(ccd_z),
+            "bjd_tdb": np.asarray(self.l2_obj.data["BJD_TDB"]),
+            "bary_kms": np.asarray(self.l2_obj.data["BARYCORR_KMS"]),
+            "ccd_bjd": np.array([green["bjd"], red["bjd"]]),
+            "ccd_kms": np.array([green["kms"], red["kms"]]),
+            "ccd_z": np.array([green["z"], red["z"]]),
             "astrometry_source": self._astrometry_source,
         }
-        return self.l2_obj
 
     def _set_kpf2_headers(self, l2_obj):
         """Write all PRIMARY-header keywords for barycentric correction.

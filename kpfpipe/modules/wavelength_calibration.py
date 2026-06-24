@@ -154,9 +154,8 @@ class WavelengthCalibration:
                 self.l2_obj.set_data(key, np.asarray(src, dtype=np.float64))
 
         self._set_kpf2_headers(self.l2_obj)
+        self._track_info()
         self.l2_obj.receipt_add_entry("wavelength_calibration", "PASS")
-
-        self._info = {"wls_path": self._wls_path}
 
         return self.l2_obj
 
@@ -167,6 +166,10 @@ class WavelengthCalibration:
         module consolidates header writes in one place, called just before the
         receipt entry.
         """
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {"wls_path": self._wls_path}
 
     def info(self):
         """Print a summary of the module configuration and association results."""
