@@ -12,6 +12,7 @@ infrastructure and receipt system.
 import datetime
 import importlib.resources
 import os
+import re
 import warnings
 
 import numpy as np
@@ -25,6 +26,10 @@ from kpfpipe.utils.kpf import get_obs_id
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 L1_EXTENSIONS = pd.read_csv(_config_path / "L1-extensions.csv")
 _KNOWN_L1_EXTENSIONS = set(L1_EXTENSIONS["Name"].tolist())
+
+# EPRV-like L1 filename, but with L1 instead of the standard SL#: the EPRV regex
+# only accepts SL2/SL3/SL4, so KPF L1 uses kpf_L1_YYYYMMDDThhmmss.fits.
+_L1_FILENAME_PATTERN = re.compile(r"kpf_L1_\d{8}T\d{6}\.fits")
 
 
 class KPF1(KPFDataModel):
@@ -123,6 +128,21 @@ class KPF1(KPFDataModel):
                 self.set_data(ext_name, Table.read(hdu))
 
             self.set_header(ext_name, hdu.header)
+
+    def check_filename_convention(self, filename):
+        """KPF L1 uses an EPRV-like name with L1 (not SL#): kpf_L1_YYYYMMDDThhmmss.fits.
+
+        The EPRV regex only accepts SL2/SL3/SL4, so L1 has its own convention.
+        """
+        basename = os.path.basename(filename)
+        if not _L1_FILENAME_PATTERN.fullmatch(basename):
+            warnings.warn(
+                f"Filename '{basename}' does not follow the KPF L1 naming "
+                "convention (kpf_L1_YYYYMMDDThhmmss.fits)",
+                stacklevel=2,
+            )
+            return False
+        return True
 
     def generate_standard_filename(self):
         """

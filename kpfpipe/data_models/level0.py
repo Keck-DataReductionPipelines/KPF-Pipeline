@@ -11,6 +11,7 @@ infrastructure and receipt system.
 
 import importlib.resources
 import os
+import re
 import warnings
 
 import numpy as np
@@ -24,6 +25,9 @@ from kpfpipe.utils.kpf import get_obs_id
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
 _KNOWN_L0_EXTENSIONS = set(L0_EXTENSIONS["Name"].tolist())
+
+# WMKO-native L0 filename: KP.YYYYMMDD.NNNNN.NN.fits (the obs_id plus .fits).
+_L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
 
 
 class KPF0(KPFDataModel):
@@ -117,6 +121,18 @@ class KPF0(KPFDataModel):
                 self.set_data(ext_name, Table.read(hdu))
 
             self.set_header(ext_name, hdu.header)
+
+    def check_filename_convention(self, filename):
+        """KPF L0 uses the WMKO-native KP.YYYYMMDD.NNNNN.NN.fits name."""
+        basename = os.path.basename(filename)
+        if not _L0_FILENAME_PATTERN.fullmatch(basename):
+            warnings.warn(
+                f"Filename '{basename}' does not follow the KPF L0 naming "
+                "convention (KP.YYYYMMDD.NNNNN.NN.fits)",
+                stacklevel=2,
+            )
+            return False
+        return True
 
     def generate_standard_filename(self):
         """KPF L0 filenames follow the KP.YYYYMMDD.NNNNN.NN.fits pattern."""

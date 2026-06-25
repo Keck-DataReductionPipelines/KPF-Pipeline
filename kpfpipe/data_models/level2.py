@@ -209,13 +209,12 @@ class KPF2(KPFDataModel, RV2):
                     self.data.register_alias(alias, canonical)
 
     def check_filename_convention(self, filename):
-        """Restore rvdata's EPRV SL# filename check for the standard L2 product.
+        """KPF L2 is EPRV-standard (SL2 name); delegate to rvdata's check."""
+        return RV2.check_filename_convention(self, filename)
 
-        KPFDataModel (first in the MRO) bypasses the check for non-SL# KPF
-        products; L2 is EPRV-standard, so skip past that bypass to rvdata's
-        implementation.
-        """
-        return super(KPFDataModel, self).check_filename_convention(filename)
+    def generate_standard_filename(self):
+        """KPF L2 is EPRV-standard (SL2 name); delegate to rvdata's builder."""
+        return RV2.generate_standard_filename(self)
 
     def to_kpf4(self):
         """

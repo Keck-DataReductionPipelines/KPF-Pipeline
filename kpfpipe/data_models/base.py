@@ -152,9 +152,22 @@ class KPFDataModel(RVDataModel):
                 break
         return hdu_list
 
-    def check_filename_convention(self, filename):
-        """Override: KPF L0/L1 (and masters) files do not use the EPRV SL# pattern.
+    def generate_standard_filename(self):
+        """Abstract: every concrete KPF model builds its own standard filename.
 
-        Science L2/L4 are EPRV-standard and restore rvdata's check (see KPF2/KPF4).
+        KPFDataModel is never instantiated directly — only inherited — so reaching
+        this means a subclass failed to define the method.
         """
-        return True
+        raise NotImplementedError(
+            f"{type(self).__name__} must define generate_standard_filename"
+        )
+
+    def check_filename_convention(self, filename):
+        """Abstract: every concrete KPF model declares its own filename convention.
+
+        KPFDataModel is never instantiated directly — only inherited — so reaching
+        this means a subclass failed to define the method.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} must define check_filename_convention"
+        )

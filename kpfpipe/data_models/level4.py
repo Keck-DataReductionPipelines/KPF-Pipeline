@@ -200,13 +200,12 @@ class KPF4(KPFDataModel, RV4):
                         d.register_alias(alias, canonical)
 
     def check_filename_convention(self, filename):
-        """Restore rvdata's EPRV SL# filename check for the standard L4 product.
+        """KPF L4 is EPRV-standard (SL4 name); delegate to rvdata's check."""
+        return RV4.check_filename_convention(self, filename)
 
-        KPFDataModel (first in the MRO) bypasses the check for non-SL# KPF
-        products; L4 is EPRV-standard, so skip past that bypass to rvdata's
-        implementation.
-        """
-        return super(KPFDataModel, self).check_filename_convention(filename)
+    def generate_standard_filename(self):
+        """KPF L4 is EPRV-standard (SL4 name); delegate to rvdata's builder."""
+        return RV4.generate_standard_filename(self)
 
     def info(self):
         """Print summary of KPF4 data model contents."""
