@@ -1,34 +1,32 @@
 """
-WMKO ↔ EPRV ↔ KPF PRIMARY header conversion.
+WMKO ↔ EPRV ↔ KPF PRIMARY header reference data.
 
-KPF stores every extension header as an ``astropy.io.fits.Header`` (see
-``data_models/base.py``), so reads use ``header.get(key)`` / ``header[key]`` and
-writes use ``header[key] = (value, comment)`` natively — there is no separate
-header parser.
+This module is the single source of truth for the WMKO→EPRV keyword mapping
+(rvdata's ``header_map.csv``) and the sets that define what may legitimately
+appear on a KPF EPRV PRIMARY header. It holds only module-level reference data —
+loaded once at import — consumed by the methods that actually convert and
+validate:
 
-:class:`HeaderConverter` is the single source of truth for the WMKO→EPRV keyword
-mapping (rvdata's ``header_map.csv``) and for what may legitimately appear on a
-KPF EPRV PRIMARY header:
+- ``KPF0.wmko_to_eprv`` / ``KPF0.build_instrument_header`` (``data_models/level0.py``)
+  convert the raw WMKO L0 PRIMARY to an EPRV-standard L1 PRIMARY and preserve the
+  verbatim raw PRIMARY in ``INSTRUMENT_HEADER``.
+- ``KPFDataModel.validate_eprv_primary`` (``data_models/base.py``), called by
+  ``KPF1.to_kpf2`` / ``KPF2.to_kpf4``, fails loudly if a raw WMKO keyword leaked
+  onto PRIMARY, an unregistered keyword appears, or a required EPRV keyword is
+  missing.
 
-- ``KPF0.to_kpf1`` calls :meth:`HeaderConverter.wmko_to_eprv` to build an
-  EPRV-standard L1 PRIMARY from the raw WMKO L0 PRIMARY, and
-  :meth:`HeaderConverter.build_instrument_header` to preserve the verbatim raw
-  L0 PRIMARY in an immutable ``INSTRUMENT_HEADER`` extension.
-- ``KPF1.to_kpf2`` / ``KPF2.to_kpf4`` call
-  :meth:`HeaderConverter.validate_eprv_primary` to fail loudly if a raw wmko
-  keyword leaked onto PRIMARY, an unregistered keyword appears, or a required
-  EPRV keyword is missing.
-
-KPF-pipeline keywords that are written directly to PRIMARY (read noise, QC
-booleans, diagnostics, RV/barycentric cards, …) are catalogued in the packaged
-registry (``config/L{0,1,2,4}-headers.csv``) and allowed by the validator.
+KPF stores every extension header as an ``astropy.io.fits.Header``, so reads use
+``header.get(key)`` / ``header[key]`` and writes use ``header[key] = (value,
+comment)`` natively. KPF-pipeline keywords written directly to PRIMARY (read
+noise, QC booleans, diagnostics, RV/barycentric cards, …) are catalogued in the
+packaged registry (``config/L{0,1,2,4}-headers.csv``) and allowed by the validator.
 """
 
 import importlib.resources
 
 import pandas as pd
 
-from kpfpipe import DETECTOR, __version__
+from kpfpipe import DETECTOR
 
 # --- Authoritative configs -------------------------------------------------
 # rvdata (installed package): the wmko↔EPRV map and the EPRV PRIMARY keyword
@@ -159,152 +157,3 @@ _NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
 # Initial DRPSTATU value on the L1 EPRV PRIMARY, before any pipeline module runs.
 # Each module overwrites it via the receipt_add_entry override (see base.py).
 _DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
-
-
-class HeaderConverter:
-    """Convert and validate KPF PRIMARY headers across the WMKO-native, EPRV,
-    and KPF-pipeline conventions.
-
-    Single source of truth for the wmko→EPRV mapping (rvdata's
-    ``header_map.csv``) and the EPRV PRIMARY allowlist. Stateless: the reference
-    data (``HEADER_MAP`` and the derived keyword sets) is module-level, loaded
-    once at import.
-    """
-
-    @staticmethod
-    def wmko_to_eprv(wmko_primary):
-        """Map a raw WMKO PRIMARY header to an EPRV-standard PRIMARY dict.
-
-        For each header_map row, take the instrument (wmko) value when present,
-        else the row default. Then apply the value corrections the installed
-        header_map gets wrong (NUMORDER, JD_UTC) and stamp the DRP version
-        (DRPTAG for EPRV, DRPVERNO for WMKO DRP-RUN-11).
-
-        Parameters
-        ----------
-        wmko_primary : Mapping
-            The raw L0 PRIMARY header (astropy ``fits.Header`` or dict).
-
-        Returns
-        -------
-        dict
-            EPRV-standard PRIMARY keyword → value (a few as ``(value, comment)``).
-        """
-        out = {}
-        for _, row in HEADER_MAP.iterrows():
-            standard_key = str(row["STANDARD"]).strip()
-            instrument_key = (
-                str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""
-            )
-            default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
-
-            if instrument_key and instrument_key in wmko_primary:
-                out[standard_key] = wmko_primary.get(instrument_key)
-            elif default_val is not None and str(default_val).strip():
-                out[standard_key] = default_val
-
-        # --- Value corrections (see notes/header_audit.md A1/A2/A3) ---
-        out["NUMORDER"] = (_NUMORDER, "Number of echelle orders (green+red)")
-        # header_map maps JD_UTC <- MJD-OBS but drops the epoch offset, leaving a
-        # raw MJD (A1); KPF's canonical exposure time is MJD-OBS, so add 2400000.5.
-        mjd = wmko_primary.get("MJD-OBS")
-        if mjd not in (None, "", "UNKNOWN"):
-            out["JD_UTC"] = (
-                float(mjd) + 2400000.5,
-                "[day] Julian date of exposure start",
-            )
-        out["DRPTAG"] = (__version__, "DRP version")
-        out["DRPVERNO"] = (__version__, "DRP version (WMKO DRP-RUN-11)")
-
-        # WMKO provenance (DRP-RUN-19): PROGID/KOAID, or 'UNKNOWN' if absent.
-        out["PROGID"] = (
-            wmko_primary.get("PROGID") or "UNKNOWN",
-            "WMKO program ID",
-        )
-        out["KOAID"] = (
-            wmko_primary.get("KOAID") or "UNKNOWN",
-            "KOA archive ID",
-        )
-        # Initial reduction status (DRP-RUN-20); modules overwrite it as they run.
-        out["DRPSTATU"] = (_DRPSTATU_DEFAULT, "DRP reduction status")
-        return out
-
-    @staticmethod
-    def build_instrument_header(wmko_primary):
-        """Verbatim scalar copy of the raw WMKO PRIMARY for INSTRUMENT_HEADER.
-
-        INSTRUMENT_HEADER is an ImageHDU header (scalar values only) and is an
-        immutable, pure pass-through of the raw instrument PRIMARY — nothing
-        writes to it after ``to_kpf1``.
-
-        Parameters
-        ----------
-        wmko_primary : Mapping
-            The raw L0 PRIMARY header.
-
-        Returns
-        -------
-        dict
-            keyword → scalar value.
-        """
-        # Iterate .items() (not keyed get): for a fits.Header this yields each
-        # commentary card's scalar string, where header["COMMENT"] would instead
-        # return an astropy commentary-card object that fits.Header(dict) cannot
-        # re-serialize.
-        return {key: value for key, value in wmko_primary.items()}
-
-    @staticmethod
-    def validate_eprv_primary(header, level):
-        """Validate a converted EPRV PRIMARY header, raising on any inconsistency.
-
-        Fail-loud guard (no silent fallback) for the L2/L4 boundary. Three rules:
-
-        1. **WMKO leak** — a raw WMKO keyword name (header_map INSTRUMENT name
-           differing from its EPRV target) is present on PRIMARY; it should have
-           been converted or left in INSTRUMENT_HEADER.
-        2. **Unregistered keyword** — a card that is neither an EPRV-standard
-           keyword, a header_map STANDARD target, a registered KPF-pipeline
-           keyword (``config/L{0,1,2,4}-headers.csv``), nor a structural card.
-        3. **Missing required** — a Required EPRV PRIMARY keyword is absent.
-
-        Parameters
-        ----------
-        header : Mapping
-            The PRIMARY header to validate.
-        level : str
-            ``"L2"`` or ``"L4"`` (selects the EPRV keyword set).
-
-        Raises
-        ------
-        ValueError
-            On the first inconsistency found.
-        """
-        level = str(level).upper()
-        eprv_keys = EPRV_L4_KEYS if level == "L4" else EPRV_L2_KEYS
-        required_keys = REQUIRED_L4_KEYS if level == "L4" else REQUIRED_L2_KEYS
-
-        for raw_key in list(header):
-            key = str(raw_key).strip()
-            if key in _STRUCTURAL_KEYS or key.startswith("NAXIS"):
-                continue
-            if (
-                key in eprv_keys
-                or key in HEADERMAP_STANDARD_KEYS
-                or key in KPFPIPE_PRIMARY_KEYS
-            ):
-                continue
-            if key in WMKO_PRIMARY_KEYS:
-                raise ValueError(
-                    f"native WMKO keyword {key!r} found on {level} PRIMARY; it must "
-                    "be converted to its EPRV name or kept in INSTRUMENT_HEADER"
-                )
-            raise ValueError(
-                f"unregistered keyword {key!r} on {level} PRIMARY; add it to "
-                "config/L{0,1,2,4}-headers.csv or fix the writer"
-            )
-
-        missing = sorted(k for k in required_keys if k not in header)
-        if missing:
-            raise ValueError(
-                f"missing required EPRV PRIMARY keyword(s) on {level}: {missing}"
-            )

@@ -210,7 +210,6 @@ class KPF1(KPFDataModel):
         arrays are created but empty — the caller (spectral extraction) fills
         those in.
         """
-        from kpfpipe.data_models.headers import HeaderConverter
         from kpfpipe.data_models.level2 import KPF2  # deferred: avoids circular import
 
         kpf2 = KPF2()
@@ -252,7 +251,7 @@ class KPF1(KPFDataModel):
             )
 
         kpf2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
-        HeaderConverter.validate_eprv_primary(kpf2.headers["PRIMARY"], "L2")
+        self.validate_eprv_primary(kpf2.headers["PRIMARY"], "L2")
         kpf2.receipt_add_entry("to_kpf2", "PASS")
         return kpf2
 
