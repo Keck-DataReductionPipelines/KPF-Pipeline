@@ -497,3 +497,31 @@ class TestKPFMasterL2:
 
         with pytest.warns(UserWarning, match="Non-standard extension"):
             KPFMasterL2.from_fits(fn)
+
+
+class TestKPF2HeaderStorage:
+    """KPF2-specific header storage and the KPF2._create_hdul serialization path.
+
+    KPF2 stores headers as fits.Header (like all KPF models) but overrides
+    _create_hdul via RV2, a distinct code path from the inherited base one tested
+    in test_data_models_base.py.
+    """
+
+    def test_fresh_l2_headers_are_fits_headers(self):
+        kpf2 = KPF2()
+        assert isinstance(kpf2.headers["PRIMARY"], fits.Header)
+        # A non-PRIMARY extension header too (created via create_extension).
+        assert isinstance(kpf2.headers["TRACE1_FLUX"], fits.Header)
+
+    def test_l2_primary_comment_round_trips(self, tmp_path):
+        # Guards the KPF2._create_hdul override (not the inherited base path):
+        # a commented PRIMARY card must survive to_fits -> from_fits.
+        kpf2 = KPF2()
+        kpf2.headers["PRIMARY"]["CCFRV"] = (1.2345, "[km/s] Combined radial velocity")
+
+        fn = str(tmp_path / "kpf_SL2_20240113T102656.fits")
+        kpf2.to_fits(fn)
+
+        prim = KPF2.from_fits(fn).headers["PRIMARY"]
+        assert prim.get("CCFRV") == 1.2345
+        assert prim.comments["CCFRV"] == "[km/s] Combined radial velocity"

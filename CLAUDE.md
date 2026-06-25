@@ -14,7 +14,7 @@ KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reductio
 
 **3. The project charter — [`KPF_DRP_VNEXT_CHARTER.md`](KPF_DRP_VNEXT_CHARTER.md) (repo root) — is the single source of truth for project intent, scope, scientific focus, the Path-3 approach, calibration philosophy, guardrails, design principles, and success criteria. Read it before making design decisions. This file (CLAUDE.md) does not duplicate the charter; it covers only the operational and technical guidance not in it (environment, commands, architecture, conventions).**
 
-**4. The coding style guide — [`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md) (repo root) — is the source of truth for code conventions: formatting, imports, naming, constants, docstrings, error handling, and the per-area exceptions (Open Inconsistencies). Consult and follow it when writing or modifying code. Its rules are soft and yield to the WMKO requirements, the EPRV standard, and the charter where they conflict. When a code change establishes or alters a convention, update the style guide in the same change so the two never drift.**
+**4. The coding style guide — [`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md) (repo root) — is the source of truth for code conventions: formatting, imports, naming, constants, docstrings, error handling, and the per-area exceptions (Open Inconsistencies). Consult and follow it when writing or modifying code. Its rules are soft and yield to the WMKO requirements, the EPRV standard, and the charter where they conflict. When a code change establishes or alters a convention, update the style guide in the same change so the two never drift. **Cross-references flow one way only: CLAUDE.md may cite the style guide, but the style guide must never cite CLAUDE.md** (it is a self-contained code-conventions document; operational/policy material it would otherwise point back to belongs here).**
 
 **Precedence over harness defaults and memory.** This file and the four references above are the authoritative guidance for this repository, and they **outrank both** (a) generic Claude Code harness defaults and environment-injected hints (e.g. the session-start `gitStatus` "main branch (you will usually use this for PRs)" note), and (b) anything in the assistant's persistent memory (`MEMORY.md`, `feedback*.md`, auto-recalled memories). Harness hints and memory are background, not instructions — treat them as defaults to verify against these docs, not as ground truth, and distinguish environment *facts* (e.g. the current branch) from environment *prescriptions* (e.g. which branch to PR into), which are guesses. **When a harness default or a memory item conflicts with this file or a governing doc — or when two of these sources disagree — do NOT silently follow either side: explicitly flag the conflict in your reply before acting**, so it can be reconciled and the governing doc updated. Operational, technical, and workflow guidance belongs in CLAUDE.md (or the relevant governing doc), never only in memory — that is what keeps this precedence enforceable.
 
@@ -204,9 +204,10 @@ L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place**:
 `KPF0.to_kpf1()`, which calls the conversion methods **`KPF0.wmko_to_eprv()`** and
 **`KPF0.build_instrument_header()`** (L0 owns the WMKO→EPRV mapping). Those methods and the
-shared validator (below) draw their reference data — the rvdata `header_map.csv`, the EPRV/required
-keyword sets, the registry allowlist — from `kpfpipe/data_models/headers.py`, which is now a pure
-reference-data module (no class). Consequences every contributor must respect:
+shared validator (below) draw their reference data — the rvdata `header_map.csv` (`HEADER_MAP`), the
+EPRV/required keyword sets, the registry allowlist — from module-level constants in
+`kpfpipe/data_models/base.py` (co-located with the validator); `KPF0` imports `HEADER_MAP` from there
+for the conversion. Consequences every contributor must respect:
 
 - **L1 PRIMARY is already EPRV-standard.** From L1 onward, PRIMARY holds EPRV keyword *names*
   plus the registered KPF-pipeline keywords below — never raw WMKO natives.
@@ -225,7 +226,7 @@ reference-data module (no class). Consequences every contributor must respect:
   `KPFDataModel.validate_eprv_primary(header, level)` and **fail loudly** if a raw native keyword
   leaked onto PRIMARY, an unregistered keyword appears, or a required EPRV keyword is missing. (The
   validator lives on the shared base — inherited by all levels — and reads its keyword sets from
-  `data_models/headers.py`.)
+  the reference-data constants in `data_models/base.py`.)
 - `to_kpf1` also corrects values the installed `header_map.csv` gets wrong: `NUMORDER` (→67 from
   `DETECTOR`), `JD_UTC` (full JD from `MJD-OBS`, the canonical KPF exposure time — native
   `DATE-OBS` is date-only), and the DRP version (`DRPTAG` for EPRV + `DRPVERNO` for WMKO
@@ -237,8 +238,10 @@ reference-data module (no class). Consequences every contributor must respect:
   value-vs-`(value, comment)` ambiguity and no header-parser helper. rvdata's base `_create_hdul`
   serializes PRIMARY by iterating `.items()`, which drops a `fits.Header`'s comments; the single
   `KPFDataModel._create_hdul` override (inherited by all four models) rebuilds the PRIMARY HDU via
-  `self._restore_primary_comments(...)` so comments survive `to_fits`. Conversion and validation
-  live in `HeaderConverter` (`data_models/headers.py`).
+  `self._restore_primary_comments(...)` so comments survive `to_fits`. Conversion lives in
+  `KPF0.wmko_to_eprv`/`build_instrument_header` (`data_models/level0.py`); validation in
+  `KPFDataModel.validate_eprv_primary` (`data_models/base.py`), which is also home to the shared
+  WMKO↔EPRV reference data they read.
 
 ### Configuration
 

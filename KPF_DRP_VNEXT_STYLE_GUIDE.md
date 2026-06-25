@@ -17,8 +17,8 @@ requirements), the EPRV standard (data-product format), or the charter (intent, 
 scientific focus, calibration philosophy, guardrails) — **the higher document wins.** Style
 yields to science.
 
-Operational/technical guidance (environment, commands, architecture) lives in
-[`CLAUDE.md`](CLAUDE.md); this file covers *how code should look and be organized*.
+This file covers *how code should look and be organized* — not operational or technical
+guidance (environment, commands, architecture), which is documented separately.
 
 ---
 
@@ -314,9 +314,8 @@ class StageName:
   and return types in NumPy-style docstrings (`name : str or pathlib.Path`), not in
   signatures. Do not add inline type hints to new code; the codebase carries none.
 - **`mypy` is not used.** It still appears as a dev dependency (`pyproject.toml`,
-  `environment.yml`) and in CLAUDE.md's command list, but it is not run or enforced and
-  there are no annotations for it to check. Treat those entries as vestigial, not a
-  signal to start annotating.
+  `environment.yml`), but it is not run or enforced and there are no annotations for it
+  to check. Treat those entries as vestigial, not a signal to start annotating.
 
 ---
 
@@ -574,11 +573,11 @@ documented, intentional ways — follow *its* conventions when adding masters co
 ### FITS PRIMARY header conventions
 
 The WMKO-native → EPRV-standard conversion happens **only** in `KPF0.to_kpf1`
-(`data_models/headers.py`); see CLAUDE.md *Header standardization* for the full rule.
-**Every extension header is an `astropy.io.fits.Header`** — the KPF data models normalize
+(`data_models/level0.py`). **Every extension header is an `astropy.io.fits.Header`** — the KPF data models normalize
 all headers to `fits.Header` (they override `create_extension`; see `data_models/base.py`),
 so there is no value-vs-`(value, comment)` ambiguity and no separate header parser.
-`HeaderConverter` (`data_models/headers.py`) owns the WMKO↔EPRV conversion + validation.
+`KPF0` owns the WMKO→EPRV conversion (`data_models/level0.py`) and `KPFDataModel` the
+EPRV validation (`data_models/base.py`, which also holds the shared reference data).
 What this means when writing code:
 
 - **Reading a header value**: use `header.get(key, default)` (or `header[key]`). A `fits.Header`
@@ -586,9 +585,8 @@ What this means when writing code:
   `value[0] if isinstance(value, tuple)`** — headers are never tuple-valued dicts.
 - **Writing a header value**: assign `header[key] = (value, comment)` for a commented card, or
   `header[key] = value` for a bare value. Both work natively on a `fits.Header`.
-- **Conversion / validation**: call `HeaderConverter.wmko_to_eprv`,
-  `HeaderConverter.build_instrument_header`, and `HeaderConverter.validate_eprv_primary`; don't
-  re-implement the WMKO→EPRV mapping.
+- **Conversion / validation**: call `KPF0.wmko_to_eprv`, `KPF0.build_instrument_header`, and
+  `KPFDataModel.validate_eprv_primary`; don't re-implement the WMKO→EPRV mapping.
 - **Reading a raw instrument keyword** (`ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`,
   `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]` (via `.get`), never from
   PRIMARY. No silent fallback — let a missing key raise.
@@ -619,10 +617,9 @@ What this means when writing code:
 - **Profiling harnesses** (`tests/profiling/profile_<module>.py`, `tests/profiling/profile_*_recipe.py`, and
   the shared `tests/profiling/_profiling.py`) are *not* pytest tests — the `profile_` prefix keeps them out
   of collection so `make test` stays fast. They **mirror the test files 1-to-1**
-  (`test_<x>.py` ↔ `profile_<x>.py`). They are standalone scripts run via `make profile*`
-  (see CLAUDE.md `## Profiling`), must run with **no interactive input**, and must contain
-  **no references to Claude** (that convention lives in CLAUDE.md / this guide, not in the
-  suite). New profiling logic belongs in `tests/profiling/_profiling.py`, not duplicated per file; each
+  (`test_<x>.py` ↔ `profile_<x>.py`). They are standalone scripts run via `make profile*`,
+  must run with **no interactive input**, and must contain **no references to Claude**.
+  New profiling logic belongs in `tests/profiling/_profiling.py`, not duplicated per file; each
   `profile_<module>.py` is a thin `setup`/`call` wrapper over `run_profile`.
 - **Test data**: real KPF FITS lives under `tests/testdata/<LEVEL>/<date>/`,
   referenced via `Path(__file__).parent / "testdata" / ...` assigned to `UPPER_CASE`
@@ -637,8 +634,8 @@ What this means when writing code:
 - **Markers** (registered in `conftest.py`): mark integration / heavy-compute classes
   `@pytest.mark.slow`, and truth-frame-gated classes `@pytest.mark.requires_testdata`
   (auto-skipped when `tests/testdata/` is absent). The fast pre-commit subset is
-  `-m "not slow"`; *when* to run the subset vs the full suite is policy and lives in
-  `CLAUDE.md`, not here.
+  `-m "not slow"`; *when* to run the subset vs the full suite is run-policy, out of scope
+  for this style guide.
 - **Float tolerances** (use the prevailing pattern for the situation):
   - Analytic recovery → `np.testing.assert_allclose(rtol=1e-5, atol=1e-5)`.
   - FITS round-trips → `assert_array_almost_equal(decimal=4)`.

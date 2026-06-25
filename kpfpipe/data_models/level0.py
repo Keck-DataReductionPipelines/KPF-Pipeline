@@ -19,9 +19,8 @@ import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
 
-from kpfpipe import __version__
-from kpfpipe.data_models.base import KPFDataModel
-from kpfpipe.data_models.headers import _DRPSTATU_DEFAULT, _NUMORDER, HEADER_MAP
+from kpfpipe import DETECTOR, __version__
+from kpfpipe.data_models.base import HEADER_MAP, KPFDataModel
 from kpfpipe.utils.kpf import get_obs_id
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
@@ -30,6 +29,15 @@ _KNOWN_L0_EXTENSIONS = set(L0_EXTENSIONS["Name"].tolist())
 
 # WMKO-native L0 filename: KP.YYYYMMDD.NNNNN.NN.fits (the obs_id plus .fits).
 _L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
+
+# --- L0→L1 conversion constants (consumed only by wmko_to_eprv) --------------
+# Detector truth: KPF has 35 green + 32 red echelle orders (rvdata's header_map
+# default of 65 is wrong — see notes/header_audit.md A2).
+_NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
+
+# Initial DRPSTATU value on the L1 EPRV PRIMARY, before any pipeline module runs.
+# Each module overwrites it via the receipt_add_entry override (see base.py).
+_DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
 
 
 class KPF0(KPFDataModel):
@@ -237,9 +245,9 @@ class KPF0(KPFDataModel):
         pass-through extensions.
 
         The raw WMKO PRIMARY header is converted to EPRV-standard keyword names
-        and values here (the single conversion site; see
-        `kpfpipe.data_models.headers`), so the L1 PRIMARY is already
-        EPRV-standard. The verbatim raw L0 PRIMARY is preserved in the
+        and values here (the single conversion site; see `wmko_to_eprv`), so the
+        L1 PRIMARY is already EPRV-standard. The verbatim raw L0 PRIMARY is
+        preserved in the
         immutable INSTRUMENT_HEADER extension. Downstream stages read raw
         instrument keywords from INSTRUMENT_HEADER and write EPRV/registered
         KPF keywords to PRIMARY.
