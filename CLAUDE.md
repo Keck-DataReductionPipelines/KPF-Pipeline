@@ -171,16 +171,14 @@ Data products follow the EPRV RV Data Standard (rvdata) with KPF-specific extens
 
 ```
 RVDataModel (rvdata)
-├── KPFDataModel (base.py)         — KPF base: obs_id, filename conventions
-│   ├── KPF0 (level0.py)          — Raw CCD data (L0)
-│   └── KPF1 (level1.py)          — Assembled FFI (L1)
-├── RV2 (rvdata)
-│   └── KPF2 (level2.py)          — Extracted spectra (L2) with aliases
-└── RV4 (rvdata)
-    └── KPF4 (level4.py)          — RVs and CCFs (L4) with aliases
+└── KPFDataModel (base.py)         — shared KPF behavior (see below)
+    ├── KPF0 (level0.py)                       — Raw CCD data (L0)
+    ├── KPF1 (level1.py)                       — Assembled FFI (L1)
+    ├── KPF2 (KPFDataModel, RV2) (level2.py)   — Extracted spectra (L2) with aliases
+    └── KPF4 (KPFDataModel, RV4) (level4.py)   — RVs and CCFs (L4) with aliases
 ```
 
-L0 and L1 subclass `KPFDataModel` (which wraps `RVDataModel`). L2 and L4 subclass rvdata's `RV2`/`RV4` directly and add KPF-friendly extension aliases via `AliasedOrderedDict`.
+**All four models inherit `KPFDataModel`.** L0/L1 do so directly; L2/L4 via multiple inheritance alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its overrides win, while `RV2`/`RV4`'s `_read`/`from_fits`/level-specific `_create_hdul` stay reachable through `super()`. `KPFDataModel` is the single home for shared behavior: `obs_id`, `as_fits_header`, `create_extension`, alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1), `receipt_add_entry`/`_update_drpstatus`, `_create_hdul`/`_restore_primary_comments`, and the `check_filename_convention` bypass (L2/L4 override it back to enforce the EPRV `SL#` check; masters re-bypass it via `KPFMasterModel`). L2/L4 add KPF-friendly extension aliases via `AliasedOrderedDict`.
 
 ### Extension Alias System
 
@@ -226,15 +224,15 @@ The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one plac
   `DETECTOR`), `JD_UTC` (full JD from `MJD-OBS`, the canonical KPF exposure time — native
   `DATE-OBS` is date-only), and the DRP version (`DRPTAG` for EPRV + `DRPVERNO` for WMKO
   DRP-RUN-11). Calibration masters are out of EPRV scope (their products keep their own layout).
-- **Every extension header is an `astropy.io.fits.Header`.** The KPF data models override
-  `create_extension` (`data_models/base.py`) so a new header is a `fits.Header`, not rvdata's
-  default `OrderedDict`; `from_fits` already returns `fits.Header`. So **read with
-  `header.get(key)` / `header[key]` and write with `header[key] = (value, comment)`** — native
-  astropy, no value-vs-`(value, comment)` ambiguity and no header-parser helper. rvdata's base
-  `_create_hdul` serializes PRIMARY by iterating `.items()`, which drops a `fits.Header`'s
-  comments; the KPF `_create_hdul` overrides (`KPFDataModel`/`KPF2`/`KPF4`, via
-  `restore_primary_comments`) rebuild the PRIMARY HDU so comments survive `to_fits`. Conversion
-  and validation live in `HeaderConverter` (`data_models/headers.py`).
+- **Every extension header is an `astropy.io.fits.Header`.** `KPFDataModel.create_extension`
+  (`data_models/base.py`) stores a new header as a `fits.Header`, not rvdata's default
+  `OrderedDict`; `from_fits` already returns `fits.Header`. So **read with `header.get(key)` /
+  `header[key]` and write with `header[key] = (value, comment)`** — native astropy, no
+  value-vs-`(value, comment)` ambiguity and no header-parser helper. rvdata's base `_create_hdul`
+  serializes PRIMARY by iterating `.items()`, which drops a `fits.Header`'s comments; the single
+  `KPFDataModel._create_hdul` override (inherited by all four models) rebuilds the PRIMARY HDU via
+  `self._restore_primary_comments(...)` so comments survive `to_fits`. Conversion and validation
+  live in `HeaderConverter` (`data_models/headers.py`).
 
 ### Configuration
 

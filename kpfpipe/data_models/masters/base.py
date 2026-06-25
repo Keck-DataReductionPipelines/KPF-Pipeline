@@ -42,6 +42,15 @@ class KPFMasterModel(KPFDataModel):
     def __init__(self):
         KPFDataModel.__init__(self)
 
+    def check_filename_convention(self, filename):
+        """Masters use the WMKO DRP-RUN-05 name, not the EPRV SL# pattern.
+
+        Defined explicitly (not merely inherited from KPFDataModel) so it wins
+        over the KPF2/KPF4 SL# restore: KPFMasterModel precedes KPF2/KPF4 in every
+        masters MRO (e.g. KPFMasterL2 -> KPFMasterModel -> KPF2 -> ...).
+        """
+        return True
+
     def set_input_files(self, file_list, master_type):
         """
         Record the stacked input L0 files and the master calibration type.
