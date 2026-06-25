@@ -1,40 +1,40 @@
-keyword,populated_by,comment
-RNGREEN1,ImageAssembly,Read noise GREEN amp 1 [e-]
-RNGREEN2,ImageAssembly,Read noise GREEN amp 2 [e-]
-RNGREEN3,ImageAssembly,Read noise GREEN amp 3 [e-]
-RNGREEN4,ImageAssembly,Read noise GREEN amp 4 [e-]
-RNRED1,ImageAssembly,Read noise RED amp 1 [e-]
-RNRED2,ImageAssembly,Read noise RED amp 2 [e-]
-RNRED3,ImageAssembly,Read noise RED amp 3 [e-]
-RNRED4,ImageAssembly,Read noise RED amp 4 [e-]
-RNNGGR1,ImageAssembly,Non-Gaussian read noise GREEN amp 1
-RNNGGR2,ImageAssembly,Non-Gaussian read noise GREEN amp 2
-RNNGGR3,ImageAssembly,Non-Gaussian read noise GREEN amp 3
-RNNGGR4,ImageAssembly,Non-Gaussian read noise GREEN amp 4
-RNNGRD1,ImageAssembly,Non-Gaussian read noise RED amp 1
-RNNGRD2,ImageAssembly,Non-Gaussian read noise RED amp 2
-RNNGRD3,ImageAssembly,Non-Gaussian read noise RED amp 3
-RNNGRD4,ImageAssembly,Non-Gaussian read noise RED amp 4
-OSCANSUB,ImageAssembly,Overscan subtraction applied
-BIASSUB,ImageProcessing,Bias subtraction applied
-DARKSUB,ImageProcessing,Dark subtraction applied
-FLATDIV,ImageProcessing,Flat division applied (reserved)
-BIASFILE,CalibrationAssociation,Master bias full path
-BIASAGE,CalibrationAssociation,Master bias age [days]
-DARKFILE,CalibrationAssociation,Master dark full path
-DARKAGE,CalibrationAssociation,Master dark age [days]
-FLATFILE,CalibrationAssociation,Master flat full path
-FLATAGE,CalibrationAssociation,Master flat age [days]
-WLSFILE,CalibrationAssociation,WLS master full path
-WLSAGE,CalibrationAssociation,WLS master age [days]
-DRPVERNO,KPF0.to_kpf1,Pipeline version (WMKO DRP-RUN-11; EPRV equivalent is DRPTAG)
-PROGID,KPF0.to_kpf1,WMKO program ID (DRP-RUN-19)
-KOAID,KPF0.to_kpf1,KOA archive ID (DRP-RUN-19)
-DRPSTATU,KPF0.to_kpf1,DRP reduction status (DRP-RUN-20)
-MASTYPE,KPFMaster,Master calibration type (masters products only)
-RNINRNG,QCL1,QC: per-amp RN within range
-RNGAUSS,QCL1,QC: non-Gaussian RN within range
-BIASAGEQ,QCL1,QC: bias master age ok
-DARKAGEQ,QCL1,QC: dark master age ok
-FLATAGEQ,QCL1,QC: flat master age ok
-FFIFIN,QCL1,QC: assembled CCDs all finite
+Keyword,Description,Extension,DataType,Populated by
+RNGREEN1,Read noise GREEN amp 1 [e-],PRIMARY,float,ImageAssembly
+RNGREEN2,Read noise GREEN amp 2 [e-],PRIMARY,float,ImageAssembly
+RNGREEN3,Read noise GREEN amp 3 [e-],PRIMARY,float,ImageAssembly
+RNGREEN4,Read noise GREEN amp 4 [e-],PRIMARY,float,ImageAssembly
+RNRED1,Read noise RED amp 1 [e-],PRIMARY,float,ImageAssembly
+RNRED2,Read noise RED amp 2 [e-],PRIMARY,float,ImageAssembly
+RNRED3,Read noise RED amp 3 [e-],PRIMARY,float,ImageAssembly
+RNRED4,Read noise RED amp 4 [e-],PRIMARY,float,ImageAssembly
+RNNGGR1,Non-Gaussian read noise GREEN amp 1,PRIMARY,float,ImageAssembly
+RNNGGR2,Non-Gaussian read noise GREEN amp 2,PRIMARY,float,ImageAssembly
+RNNGGR3,Non-Gaussian read noise GREEN amp 3,PRIMARY,float,ImageAssembly
+RNNGGR4,Non-Gaussian read noise GREEN amp 4,PRIMARY,float,ImageAssembly
+RNNGRD1,Non-Gaussian read noise RED amp 1,PRIMARY,float,ImageAssembly
+RNNGRD2,Non-Gaussian read noise RED amp 2,PRIMARY,float,ImageAssembly
+RNNGRD3,Non-Gaussian read noise RED amp 3,PRIMARY,float,ImageAssembly
+RNNGRD4,Non-Gaussian read noise RED amp 4,PRIMARY,float,ImageAssembly
+OSCANSUB,Overscan subtraction applied,PRIMARY,bool,ImageAssembly
+BIASSUB,Bias subtraction applied,PRIMARY,bool,ImageProcessing
+DARKSUB,Dark subtraction applied,PRIMARY,bool,ImageProcessing
+FLATDIV,Flat division applied (reserved),PRIMARY,bool,ImageProcessing
+BIASFILE,Master bias full path,PRIMARY,str,CalibrationAssociation
+BIASAGE,Master bias age [days],PRIMARY,float,CalibrationAssociation
+DARKFILE,Master dark full path,PRIMARY,str,CalibrationAssociation
+DARKAGE,Master dark age [days],PRIMARY,float,CalibrationAssociation
+FLATFILE,Master flat full path,PRIMARY,str,CalibrationAssociation
+FLATAGE,Master flat age [days],PRIMARY,float,CalibrationAssociation
+WLSFILE,WLS master full path,PRIMARY,str,CalibrationAssociation
+WLSAGE,WLS master age [days],PRIMARY,float,CalibrationAssociation
+DRPVERNO,Pipeline version (WMKO DRP-RUN-11; EPRV equivalent is DRPTAG),PRIMARY,str,KPF0.to_kpf1
+PROGID,WMKO program ID (DRP-RUN-19),PRIMARY,str,KPF0.to_kpf1
+KOAID,KOA archive ID (DRP-RUN-19),PRIMARY,str,KPF0.to_kpf1
+DRPSTATU,DRP reduction status (DRP-RUN-20),PRIMARY,str,KPF0.to_kpf1
+MASTYPE,Master calibration type (masters products only),PRIMARY,str,KPFMaster
+RNINRNG,QC: per-amp RN within range,PRIMARY,bool,QCL1
+RNGAUSS,QC: non-Gaussian RN within range,PRIMARY,bool,QCL1
+BIASAGEQ,QC: bias master age ok,PRIMARY,bool,QCL1
+DARKAGEQ,QC: dark master age ok,PRIMARY,bool,QCL1
+FLATAGEQ,QC: flat master age ok,PRIMARY,bool,QCL1
+FFIFIN,QC: assembled CCDs all finite,PRIMARY,bool,QCL1

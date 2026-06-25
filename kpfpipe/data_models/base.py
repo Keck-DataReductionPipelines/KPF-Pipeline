@@ -121,7 +121,7 @@ WMKO_PRIMARY_KEYS = {
 # KPF-pipeline keywords legitimately written to PRIMARY. Each registry entry
 # is an explicit 8-character-max FITS keyword (no wildcards); families are
 # enumerated per member (e.g. RNGREEN1-4, CCD1BJD/CCD2BJD).
-KPFPIPE_PRIMARY_KEYS = {str(k).strip() for k in _KPFPIPE_KW["keyword"]}
+KPFPIPE_PRIMARY_KEYS = {str(k).strip() for k in _KPFPIPE_KW["Keyword"]}
 
 # FITS structural / bookkeeping cards plus KPF-internal PRIMARY keys that are
 # neither EPRV nor in the registry but are always permitted.
