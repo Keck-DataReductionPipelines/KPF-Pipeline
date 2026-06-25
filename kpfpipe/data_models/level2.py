@@ -169,7 +169,7 @@ class KPF2(KPFDataModel, RV2):
         # placeholder for now -- Ca H&K extraction is still WIP and existing master/
         # L2 products (incl. the truth dataset) encode it as BinTableHDU, so flipping
         # the type breaks reading them back. Switch to ImageHDU when Ca H&K is built
-        # and products are regenerated. See EPRV_DATA_STANDARD.md §8 (deviations).
+        # and products are regenerated. See RVDATA_STANDARD.md §8 (deviations).
         for ext, ext_type in [
             ("ANCILLARY_SPECTRUM", "BinTableHDU"),
             ("EXPMETER", "BinTableHDU"),
