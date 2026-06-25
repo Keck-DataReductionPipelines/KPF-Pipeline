@@ -14,6 +14,7 @@ from astropy.table import Table
 from astropy.time import Time
 
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 from kpfpipe.utils.validation import strictly_increasing
@@ -830,13 +831,13 @@ class TestPerform:
         for key in ["CCD1BJD", "CCD1BKMS", "CCD1BZ", "CCD2BJD", "CCD2BKMS", "CCD2BZ"]:
             assert key in prim, f"{key} missing from PRIMARY"
 
-        def _v(k):
-            x = prim[k]
-            return x[0] if isinstance(x, tuple) else x
-
         # All orders had the same delta_rv → green and red means are equal
-        np.testing.assert_allclose(_v("CCD1BKMS"), _v("CCD2BKMS"))
-        np.testing.assert_allclose(_v("CCD1BZ"), _v("CCD2BZ"))
+        np.testing.assert_allclose(
+            HeaderParser.get(prim, "CCD1BKMS"), HeaderParser.get(prim, "CCD2BKMS")
+        )
+        np.testing.assert_allclose(
+            HeaderParser.get(prim, "CCD1BZ"), HeaderParser.get(prim, "CCD2BZ")
+        )
 
     def test_receipt_entry_added(self, bc_monkeypatched):
         bc_monkeypatched.perform()
@@ -900,8 +901,8 @@ class TestPerform:
 
     def test_records_gaia_provenance(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
-        astrsrc = kpf2.headers["PRIMARY"]["ASTRSRC"]
-        assert (astrsrc[0] if isinstance(astrsrc, tuple) else astrsrc) == "Gaia DR3"
+        astrsrc = HeaderParser.get(kpf2.headers["PRIMARY"], "ASTRSRC")
+        assert astrsrc == "Gaia DR3"
 
     def test_perform_falls_back_and_records_wmko_provenance(
         self, synthetic_kpf2, monkeypatch
@@ -931,8 +932,8 @@ class TestPerform:
                 use_wmko_fallback=True
             )  # override the toggle for this call
 
-        astrsrc = kpf2.headers["PRIMARY"]["ASTRSRC"]
-        assert (astrsrc[0] if isinstance(astrsrc, tuple) else astrsrc) == "WMKO header"
+        astrsrc = HeaderParser.get(kpf2.headers["PRIMARY"], "ASTRSRC")
+        assert astrsrc == "WMKO header"
         assert bc._astrometry_source == "WMKO header"
 
     def test_real_outlier_filter_runs_end_to_end(self, synthetic_kpf2, monkeypatch):

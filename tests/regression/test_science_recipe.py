@@ -6,6 +6,7 @@ observation from tests/testdata/L0/20240405/.
 """
 
 import argparse
+import importlib.metadata
 import importlib.util
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ import numpy as np
 import pytest
 
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import build_filepath
@@ -136,18 +138,13 @@ class TestScienceRecipe:
         z = np.asarray(l2.data["BARYCORR_Z"])
         assert np.all(np.abs(z) < 1e-3)
 
-    @staticmethod
-    def _hval(header, key):
-        v = header[key]
-        return v[0] if isinstance(v, tuple) else v
-
     def test_per_ccd_barycorr_keywords(self, recipe_output):
         """Per-CCD scalar summaries should land on PRIMARY."""
         l2 = KPF2.from_fits(recipe_output)
         prim = l2.headers["PRIMARY"]
         for key in ("CCD1BJD", "CCD1BKMS", "CCD1BZ", "CCD2BJD", "CCD2BKMS", "CCD2BZ"):
             assert key in prim, f"{key} missing from PRIMARY"
-            assert np.isfinite(float(self._hval(prim, key))), f"{key} not finite"
+            assert np.isfinite(float(HeaderParser.get(prim, key))), f"{key} not finite"
 
     def test_calibration_headers_set(self, recipe_output):
         """CalibrationAssociation's PRIMARY writes (registered KPF-pipeline
@@ -167,8 +164,22 @@ class TestScienceRecipe:
         # WLSAGE = float days
         assert "WLSFILE" in prim
         assert "WLSDIR" not in prim
-        assert self._hval(prim, "WLSFILE").endswith("_master_thar_L2.fits")
-        assert isinstance(self._hval(prim, "WLSAGE"), float)
+        assert HeaderParser.get(prim, "WLSFILE").endswith("_master_thar_L2.fits")
+        assert isinstance(HeaderParser.get(prim, "WLSAGE"), float)
+
+    def test_provenance_keywords_set(self, recipe_output):
+        """DRP version/provenance/status keywords survive onto the L2 PRIMARY."""
+        prim = KPF2.from_fits(recipe_output).headers["PRIMARY"]
+        version = importlib.metadata.version("kpfpipe")
+        assert HeaderParser.get(prim, "DRPVERNO") == version
+        assert HeaderParser.get(prim, "DRPTAG") == version
+        assert "PROGID" in prim
+        assert "KOAID" in prim
+        # BarycentricCorrection is the last module to run before the L2 write.
+        assert (
+            HeaderParser.get(prim, "DRPSTATU")
+            == "Barycentric Correction module complete"
+        )
 
     def test_wave_arrays_populated(self, recipe_output):
         """WavelengthCalibration should fill the per-fiber WAVE extensions."""

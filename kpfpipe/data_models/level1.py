@@ -131,10 +131,10 @@ class KPF1(KPFDataModel):
         Uses DATE-OBS from the PRIMARY header.
         """
         if "PRIMARY" in self.headers:
-            date_obs = self.headers["PRIMARY"].get("DATE-OBS")
+            from kpfpipe.data_models.headers import HeaderParser
+
+            date_obs = HeaderParser.get(self.headers["PRIMARY"], "DATE-OBS")
             if date_obs is not None:
-                if isinstance(date_obs, tuple):
-                    date_obs = date_obs[0]
                 date_str = str(date_obs).split(".")[0]
                 try:
                     dt = datetime.datetime.fromisoformat(date_str)
@@ -192,7 +192,7 @@ class KPF1(KPFDataModel):
         arrays are created but empty — the caller (spectral extraction) fills
         those in.
         """
-        from kpfpipe.data_models.headers import validate_eprv_primary
+        from kpfpipe.data_models.headers import HeaderConverter
         from kpfpipe.data_models.level2 import KPF2  # deferred: avoids circular import
 
         kpf2 = KPF2()
@@ -232,7 +232,7 @@ class KPF1(KPFDataModel):
             )
 
         kpf2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
-        validate_eprv_primary(kpf2.headers["PRIMARY"], "L2")
+        HeaderConverter.validate_eprv_primary(kpf2.headers["PRIMARY"], "L2")
         kpf2.receipt_add_entry("to_kpf2", "PASS")
         return kpf2
 

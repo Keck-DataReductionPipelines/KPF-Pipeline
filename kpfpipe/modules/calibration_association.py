@@ -11,6 +11,7 @@ import warnings
 from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import glob_masters
 from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
@@ -204,8 +205,15 @@ class CalibrationAssociation:
         primary = l1_obj.headers["PRIMARY"]
         for cal_type, cal in self._calibrations.items():
             prefix = _HEADER_PREFIX[cal_type]
-            primary[f"{prefix}FILE"] = cal["filepath"]
-            primary[f"{prefix}AGE"] = cal["age_days"]
+            HeaderParser.set(
+                primary, f"{prefix}FILE", cal["filepath"], f"{prefix} master path"
+            )
+            HeaderParser.set(
+                primary,
+                f"{prefix}AGE",
+                cal["age_days"],
+                f"[day] {prefix} master age (master-obs)",
+            )
 
     # ------------------------------------------------------------------
     # Public entry point

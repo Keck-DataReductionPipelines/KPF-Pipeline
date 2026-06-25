@@ -364,9 +364,10 @@ def build_master_path_from_fits_header(kpf_obj, cal_type):
         If `{PREFIX}FILE` is absent from the PRIMARY header (i.e.
         CalibrationAssociation has not run for this calibration).
     """
+    from kpfpipe.data_models.headers import HeaderParser
+
     prefix = cal_type.upper()
-    header = kpf_obj.headers["PRIMARY"]
-    master_file = header.get(f"{prefix}FILE")
+    master_file = HeaderParser.get(kpf_obj.headers["PRIMARY"], f"{prefix}FILE")
 
     if not master_file:
         raise FileNotFoundError(

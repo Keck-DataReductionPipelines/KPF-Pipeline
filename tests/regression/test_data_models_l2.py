@@ -13,6 +13,7 @@ from astropy.table import Table
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
@@ -62,10 +63,6 @@ def converted_l1(synthetic_l0_file):
     return KPF0.from_fits(synthetic_l0_file).to_kpf1()
 
 
-def _scalar(value):
-    return value[0] if isinstance(value, tuple) else value
-
-
 class TestToKPF2:
     def test_to_kpf2_creates_kpf2(self, converted_l1):
         kpf2 = converted_l1.to_kpf2()
@@ -76,21 +73,26 @@ class TestToKPF2:
         """Conversion happened in to_kpf1; to_kpf2 forwards the EPRV PRIMARY."""
         kpf2 = converted_l1.to_kpf2()
         prim = kpf2.headers["PRIMARY"]
-        assert _scalar(prim["EXPTIME"]) == 300.0  # from ELAPSED, set in to_kpf1
-        assert _scalar(prim["OBSTYPE"]) == "Object"  # from IMTYPE
-        assert _scalar(prim["OBSERVER"]) == "Smith"  # from GROBSERV
+        assert (
+            HeaderParser.get(prim, "EXPTIME") == 300.0
+        )  # from ELAPSED, set in to_kpf1
+        assert HeaderParser.get(prim, "OBSTYPE") == "Object"  # from IMTYPE
+        assert HeaderParser.get(prim, "OBSERVER") == "Smith"  # from GROBSERV
         # Raw natives never reach the EPRV PRIMARY.
         assert "ELAPSED" not in prim
         assert "IMTYPE" not in prim
 
     def test_to_kpf2_copies_same_name_keywords(self, converted_l1):
         kpf2 = converted_l1.to_kpf2()
-        assert _scalar(kpf2.headers["PRIMARY"]["INSTRUME"]) == "KPF"
-        assert _scalar(kpf2.headers["PRIMARY"]["DATE-OBS"]) == "2024-01-13T10:26:56"
+        assert HeaderParser.get(kpf2.headers["PRIMARY"], "INSTRUME") == "KPF"
+        assert (
+            HeaderParser.get(kpf2.headers["PRIMARY"], "DATE-OBS")
+            == "2024-01-13T10:26:56"
+        )
 
     def test_to_kpf2_sets_defaults(self, converted_l1):
         kpf2 = converted_l1.to_kpf2()
-        assert _scalar(kpf2.headers["PRIMARY"]["DATALVL"]) == "L2"
+        assert HeaderParser.get(kpf2.headers["PRIMARY"], "DATALVL") == "L2"
         origin = kpf2.headers["PRIMARY"].get("ORIGIN")
         assert origin is not None
 
@@ -151,6 +153,16 @@ class TestToKPF2:
         kpf2 = l1.to_kpf2()
         assert "to_kpf2" in kpf2.receipt["Module_Name"].values
 
+    def test_to_kpf2_receipt_updates_drpstatus(self, synthetic_l1_file):
+        """The DRPSTATU receipt override is active on KPF2 too (it subclasses
+        RV2, not KPFDataModel, so it carries its own override)."""
+        kpf2 = KPF1.from_fits(synthetic_l1_file).to_kpf2()
+        kpf2.receipt_add_entry("barycentric_correction", "PASS")
+        assert (
+            HeaderParser.get(kpf2.headers["PRIMARY"], "DRPSTATU")
+            == "Barycentric Correction module complete"
+        )
+
     def test_to_kpf2_sets_origid(self, tmp_path):
         """Verify obs_id is stored as ORIGID in KPF2 PRIMARY."""
         fn = str(tmp_path / "KP.20240113.23249.10_L1.fits")
@@ -172,10 +184,8 @@ class TestToKPF2:
         l1 = KPF1.from_fits(fn)
         assert l1.obs_id == "KP.20240113.23249.10"
         kpf2 = l1.to_kpf2()
-        origid = kpf2.headers["PRIMARY"]["ORIGID"]
-        assert (
-            origid[0] if isinstance(origid, tuple) else origid
-        ) == "KP.20240113.23249.10"
+        origid = HeaderParser.get(kpf2.headers["PRIMARY"], "ORIGID")
+        assert origid == "KP.20240113.23249.10"
 
 
 class TestAliasedOrderedDict:

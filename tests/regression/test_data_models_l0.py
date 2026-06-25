@@ -58,6 +58,19 @@ class TestKPF0:
         l0.to_fits(out_fn)
         assert "to_fits" in l0.receipt["Module_Name"].values
 
+    def test_receipt_survives_roundtrip(self, synthetic_l0_file, tmp_path):
+        """The processing history must reach the FITS RECEIPT extension, not just
+        live in memory; KPFDataModel._create_hdul syncs it (and creates the
+        extension, which L0's default extension set lacks)."""
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l0.receipt_add_entry("image_assembly", "PASS")
+        out_fn = str(tmp_path / "roundtrip_receipt_l0.fits")
+        l0.to_fits(out_fn)
+
+        modules = KPF0.from_fits(out_fn).receipt["Module_Name"].values
+        assert "image_assembly" in modules
+        assert "to_fits" in modules
+
     def test_generate_filename(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         assert l0.generate_standard_filename() == "KP.20240113.23249.10.fits"

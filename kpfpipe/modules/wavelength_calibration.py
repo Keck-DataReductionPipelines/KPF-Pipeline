@@ -13,6 +13,7 @@ import os
 import numpy as np
 
 from kpfpipe import DEFAULTS
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.utils.config import ConfigHandler
 
@@ -94,9 +95,7 @@ class WavelengthCalibration:
                     "WLSFILE missing from L2 PRIMARY; "
                     "run CalibrationAssociation with 'thar' on the L1 first"
                 )
-            wls_path = primary["WLSFILE"]
-            if isinstance(wls_path, tuple):  # PRIMARY stores (value, comment)
-                wls_path = wls_path[0]
+            wls_path = HeaderParser.get(primary, "WLSFILE")
 
         if not os.path.isfile(wls_path):
             raise FileNotFoundError(f"Master WLS file not found: {wls_path}")
@@ -142,14 +141,14 @@ class WavelengthCalibration:
             Defaults to self.fibers.
         wls_path : str, optional
             Direct path to the master WLS L2 file. If omitted, the path is
-            read from WLSFILE on the L2 INSTRUMENT_HEADER extension.
+            read from WLSFILE on the L2 PRIMARY header.
 
         Returns
         -------
         l2_obj : KPF2
             The input L2 with per-fiber _WAVE extensions populated and a
-            'wavelength_calibration' receipt entry. WLSFILE on
-            INSTRUMENT_HEADER is left untouched.
+            'wavelength_calibration' receipt entry. WLSFILE on PRIMARY is
+            left untouched.
         """
         if chips is None:
             chips = self.chips
@@ -178,9 +177,8 @@ class WavelengthCalibration:
     def info(self):
         """Print a summary of the module configuration and association results."""
         print("WavelengthCalibration")
-        obs_id = self.l2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
-        if isinstance(obs_id, tuple):
-            obs_id = obs_id[0]
+        primary = self.l2_obj.headers.get("PRIMARY", {})
+        obs_id = HeaderParser.get(primary, "ORIGID", "unknown")
         print(f"  obs_id:  {obs_id}")
         print(f"  chips:   {self.chips}")
         print(f"  fibers:  {self.fibers}")
@@ -189,8 +187,8 @@ class WavelengthCalibration:
             print("  perform() has not been called")
             return
 
-        inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
-        agewls = inst.get("WLSAGE")
+        # WLSAGE is written to PRIMARY by CalibrationAssociation (alongside WLSFILE).
+        agewls = HeaderParser.get(primary, "WLSAGE")
         print(f"  wls_path: {self._info['wls_path']}")
         if agewls is not None:
             print(f"  WLSAGE:   {agewls:+.4f} d  (master - obs)")

@@ -45,6 +45,7 @@ from scipy.ndimage import gaussian_filter, median_filter
 from scipy.special import erfcinv
 
 from kpfpipe import DEFAULTS
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import strictly_increasing
@@ -757,7 +758,7 @@ class BarycentricCorrection:
         l2_obj : KPF2
             Input KPF2 with BJD_TDB / BARYCORR_KMS / BARYCORR_Z populated,
             per-CCD CCD{1,2}BJD/BKMS/BZ summaries and the astrometry source
-            (ASTRSRC) written to INSTRUMENT_HEADER, and a
+            (ASTRSRC) written to PRIMARY, and a
             'barycentric_correction' receipt entry.
         """
         if use_gaia_astrometry is not None:
@@ -792,9 +793,9 @@ class BarycentricCorrection:
     def info(self):
         """Print a summary of the barycentric correction results."""
         print("BarycentricCorrection")
-        obs_id = self.l2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
-        if isinstance(obs_id, tuple):
-            obs_id = obs_id[0]
+        obs_id = HeaderParser.get(
+            self.l2_obj.headers.get("PRIMARY", {}), "ORIGID", "unknown"
+        )
         print(f"  obs_id:  {obs_id}")
 
         if self._info is None:
@@ -805,7 +806,7 @@ class BarycentricCorrection:
         print(f"  astrometry:  {r['astrometry_source']}")
         ccd_bjd, ccd_kms, ccd_z = r["ccd_bjd"], r["ccd_kms"], r["ccd_z"]
 
-        # Per-CCD summaries (match CCD1*/CCD2* in INSTRUMENT_HEADER).
+        # Per-CCD summaries (match CCD1*/CCD2* on PRIMARY).
         print(f"\n  {'':<8s}{'BJD_TDB':>18s}{'BARYCORR_KMS':>18s}{'BARYCORR_Z':>18s}")
         print("  " + "-" * 62)
         print(

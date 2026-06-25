@@ -174,10 +174,7 @@ class KPF0(KPFDataModel):
         obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
         but empty — the caller (image assembly) fills those in.
         """
-        from kpfpipe.data_models.headers import (
-            build_instrument_header,
-            convert_native_to_eprv,
-        )
+        from kpfpipe.data_models.headers import HeaderConverter
         from kpfpipe.data_models.level1 import KPF1  # deferred: avoids circular import
 
         l1 = KPF1()
@@ -186,14 +183,16 @@ class KPF0(KPFDataModel):
         # preserve the verbatim raw L0 PRIMARY in INSTRUMENT_HEADER (immutable
         # pure pass-through — nothing else ever writes to it).
         if "PRIMARY" in self.headers:
-            native_primary = self.headers["PRIMARY"]
-            for key, value in convert_native_to_eprv(native_primary).items():
+            wmko_primary = self.headers["PRIMARY"]
+            for key, value in HeaderConverter.wmko_to_eprv(wmko_primary).items():
                 l1.headers["PRIMARY"][key] = value
 
             if "INSTRUMENT_HEADER" not in l1.extensions:
                 l1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
             instrument_header = l1.headers["INSTRUMENT_HEADER"]
-            for key, value in build_instrument_header(native_primary).items():
+            for key, value in HeaderConverter.build_instrument_header(
+                wmko_primary
+            ).items():
                 instrument_header[key] = value
 
         # Copy pass-through extensions (data + header)

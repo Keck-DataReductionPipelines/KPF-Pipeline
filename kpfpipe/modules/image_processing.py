@@ -14,6 +14,7 @@ import os
 import numpy as np
 
 from kpfpipe import DEFAULTS
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import build_master_path_from_fits_header
@@ -292,9 +293,9 @@ class ImageProcessing:
         bool
             True if the calibration's header flag is present and truthy.
         """
-        val = l1_obj.headers["PRIMARY"].get(_CALIBRATION_HEADER_KEYS[cal_type])
-        if isinstance(val, tuple):  # Headers store (value, comment) tuples.
-            val = val[0]
+        val = HeaderParser.get(
+            l1_obj.headers["PRIMARY"], _CALIBRATION_HEADER_KEYS[cal_type]
+        )
         return bool(val)
 
     def perform(self, chips=None, *, bias=None, dark=None, flat=None):

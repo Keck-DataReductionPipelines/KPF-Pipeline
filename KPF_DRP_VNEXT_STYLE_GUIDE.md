@@ -573,11 +573,22 @@ documented, intentional ways — follow *its* conventions when adding masters co
 
 The WMKO-native → EPRV-standard conversion happens **only** in `KPF0.to_kpf1`
 (`data_models/headers.py`); see CLAUDE.md *Header standardization* for the full rule.
+Two classes in `data_models/headers.py` own all header handling: **`HeaderParser`**
+(read/write a keyword) and **`HeaderConverter`** (native↔EPRV conversion + validation).
 What this means when writing code:
 
+- **Reading a header value**: use `HeaderParser.get(header, key, default=None)`. A header value
+  is stored either bare or as a `(value, comment)` tuple (and a read-back `fits.Header` yields the
+  scalar); `get` normalizes all three. **Never hand-roll `value[0] if isinstance(value, tuple)`** —
+  that idiom was duplicated ~20× and is now banned; `get` is the one implementation.
+- **Writing a header value**: use `HeaderParser.set(header, key, value, comment=None)` — with a
+  `comment` it writes a `(value, comment)` card, else the bare value.
+- **Conversion / validation**: call `HeaderConverter.native_to_eprv`,
+  `HeaderConverter.build_instrument_header`, and `HeaderConverter.validate_eprv_primary`; don't
+  re-implement the native→EPRV mapping.
 - **Reading a raw instrument keyword** (`ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`,
-  `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]`, never from PRIMARY. No silent
-  fallback — let a missing key raise.
+  `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]` (via `HeaderParser.get`), never from
+  PRIMARY. No silent fallback — let a missing key raise.
 - **Writing a KPF-pipeline keyword**: write it to `headers["PRIMARY"]` *and* add it to
   the matching `config/L{0,1,2,4}-headers.csv`, or `to_kpf2`/`to_kpf4` validation will reject the
   product. Never write to `INSTRUMENT_HEADER` (it is an immutable raw-instrument snapshot).
@@ -721,8 +732,7 @@ the dominant variant of the file/area you're editing**, and don't churn unrelate
 "fix" style.
 
 1. **Quicklook** — no shared base class + tuple-based registration, unlike Diag/QC; DPI
-   (150 vs 600) and axis-fontsize (14 vs 18) drift between L0 and L1; the
-   `(value, comment)`-unwrap helper duplicated ~4×.
+   (150 vs 600) and axis-fontsize (14 vs 18) drift between L0 and L1.
 2. **Masters** — the config-resolution block is duplicated 5× (could be a base helper); the
    `0.2` load-failure threshold is an unnamed magic number.
 3. **Configs** — the `[DATA_DIRS]` + `[KPFPIPE]` blocks are duplicated verbatim across the
