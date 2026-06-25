@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.quality_control.quicklook._save_png import save_png
 
 _DPI = 200
@@ -23,10 +24,6 @@ _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 _SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 _SNR_PERCENTILE = 95
 _FLUX_PERCENTILE = 95
-
-
-def _unwrap(val):
-    return val[0] if isinstance(val, tuple) else val
 
 
 class PlotL2:
@@ -63,10 +60,10 @@ class PlotL2:
         self.obs_id = (
             obs_id
             or getattr(l2_obj, "obs_id", None)
-            or self._obsid_from_filename(_unwrap(primary.get("FILENAME", "")))
+            or self._obsid_from_filename(HeaderParser.get(primary, "FILENAME", ""))
             or ""
         )
-        self.name = _unwrap(primary.get("OBJECT", "")) if primary else ""
+        self.name = HeaderParser.get(primary, "OBJECT", "") if primary else ""
 
     @staticmethod
     def _obsid_from_filename(filename):

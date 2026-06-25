@@ -13,6 +13,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
 
@@ -182,8 +183,7 @@ class TestMasterBiasRoundTrip:
             ml1.to_fits(fn)
             ml1_read = KPFMasterL1.from_fits(fn)
 
-        datalvl = ml1_read.headers["PRIMARY"]["DATALVL"]
-        val = datalvl[0] if isinstance(datalvl, tuple) else datalvl
+        val = HeaderParser.get(ml1_read.headers["PRIMARY"], "DATALVL")
         assert val == "ML1"
 
     def test_roundtrip_mask_dtype(self):

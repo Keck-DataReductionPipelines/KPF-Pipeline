@@ -5,6 +5,7 @@ import pytest
 from astropy.io import fits
 
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.quality_control.diagnostics import DiagL0, DiagL1, DiagL2, Diagnostics
 
@@ -14,11 +15,6 @@ NCOL = DETECTOR["ccd"]["ncol"]
 
 _FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
 _NAN_KEYS = ("NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL")
-
-
-def _hval(raw):
-    """Unpack header value from (value, comment) tuple or plain value."""
-    return raw[0] if isinstance(raw, tuple) else raw
 
 
 # ---------------------------------------------------------------------------
@@ -195,16 +191,16 @@ class TestDiagL2NanCounts:
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
             assert key in kpf2.headers["PRIMARY"], f"missing {key}"
-            assert _hval(kpf2.headers["PRIMARY"][key]) == 0
+            assert HeaderParser.get(kpf2.headers["PRIMARY"], key) == 0
 
     def test_counts_injected_nans_per_fiber(self):
         kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
         # Inject one NaN into GREEN_SCI1_FLUX; expect NANSCI1==1, others==0.
         kpf2.data["GREEN_SCI1_FLUX"][0, 0] = np.nan
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["NANSCI1"]) == 1
+        assert HeaderParser.get(kpf2.headers["PRIMARY"], "NANSCI1") == 1
         for key in ("NANSCI2", "NANSCI3", "NANSKY", "NANCAL"):
-            assert _hval(kpf2.headers["PRIMARY"][key]) == 0
+            assert HeaderParser.get(kpf2.headers["PRIMARY"], key) == 0
 
     def test_writes_keys_even_when_no_data(self):
         """KPF2 with no FLUX extensions populated should still write all 5
@@ -244,7 +240,7 @@ class TestDiagL2NanCounts:
         kpf2 = l1.to_kpf2()
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
-            assert _hval(kpf2.headers["PRIMARY"][key]) == 0
+            assert HeaderParser.get(kpf2.headers["PRIMARY"], key) == 0
 
 
 class TestDiagL2ZeroFlux:
@@ -252,18 +248,22 @@ class TestDiagL2ZeroFlux:
         kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
         DiagL2(kpf2).run()
         assert "ZEROFRAC" in kpf2.headers["PRIMARY"]
-        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(0.0)
+        assert HeaderParser.get(kpf2.headers["PRIMARY"], "ZEROFRAC") == pytest.approx(
+            0.0
+        )
 
     def test_zerofrac_one_when_all_zero(self):
         kpf2 = _make_kpf2_with_flux(zero_frac=1.0)
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(1.0)
+        assert HeaderParser.get(kpf2.headers["PRIMARY"], "ZEROFRAC") == pytest.approx(
+            1.0
+        )
 
     def test_zerofrac_approximate_when_partial(self):
         """50% zeros sprinkled randomly → ZEROFRAC ≈ 0.5 within sampling error."""
         kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(
+        assert HeaderParser.get(kpf2.headers["PRIMARY"], "ZEROFRAC") == pytest.approx(
             0.5, abs=0.01
         )
 
@@ -329,7 +329,7 @@ class TestDiagL2Snr:
         DiagL2(kpf2).run()
         for key in self._SNR_KEYS:
             assert key in kpf2.headers["PRIMARY"], f"missing {key}"
-            assert _hval(kpf2.headers["PRIMARY"][key]) > 0
+            assert HeaderParser.get(kpf2.headers["PRIMARY"], key) > 0
 
     def test_single_fiber_snr_value(self):
         # SKY flux=2, var=0.04 -> SNR = 2/sqrt(0.04) = 10.0 in every pixel.
@@ -337,10 +337,10 @@ class TestDiagL2Snr:
         _set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SKY",))
         _set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SKY",))
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["GSNRSKY"]) == pytest.approx(
+        assert HeaderParser.get(kpf2.headers["PRIMARY"], "GSNRSKY") == pytest.approx(
             10.0, abs=0.01
         )
-        assert _hval(kpf2.headers["PRIMARY"]["RSNRSKY"]) == pytest.approx(
+        assert HeaderParser.get(kpf2.headers["PRIMARY"], "RSNRSKY") == pytest.approx(
             10.0, abs=0.01
         )
 
@@ -351,7 +351,7 @@ class TestDiagL2Snr:
         _set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SCI1", "SCI2", "SCI3"))
         _set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SCI1", "SCI2", "SCI3"))
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["GSNRSCI"]) == pytest.approx(
+        assert HeaderParser.get(kpf2.headers["PRIMARY"], "GSNRSCI") == pytest.approx(
             17.32, abs=0.05
         )
 
@@ -395,11 +395,11 @@ class TestDiagL2OrderletFluxRatios:
         DiagL2(kpf2).run()
         for key in self._RATIO_KEYS:
             assert key in kpf2.headers["PRIMARY"], f"missing {key}"
-            assert _hval(kpf2.headers["PRIMARY"][key]) == pytest.approx(1.0)
+            assert HeaderParser.get(kpf2.headers["PRIMARY"], key) == pytest.approx(1.0)
 
     def test_ratio_value(self):
         # GREEN SCI1 flux=2 over SCI2 flux=1 -> GFR12 == 2.0.
         kpf2 = _make_kpf2_with_flux()
         _set_fiber_arrays(kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SCI1",))
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["GFR12"]) == pytest.approx(2.0)
+        assert HeaderParser.get(kpf2.headers["PRIMARY"], "GFR12") == pytest.approx(2.0)
