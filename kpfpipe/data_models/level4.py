@@ -24,16 +24,11 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
-from astropy.table import Table
 from rvdata.core.models.level4 import RV4
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import (
-    as_fits_header,
-    restore_primary_comments,
-    update_drpstatus,
-)
+from kpfpipe.data_models.base import KPFDataModel
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -145,7 +140,7 @@ class _KPF4DataDict(AliasedOrderedDict):
         return aliased
 
 
-class KPF4(RV4):
+class KPF4(KPFDataModel, RV4):
     """
     KPF Level 4 RV and CCF data model.
 
@@ -204,69 +199,13 @@ class KPF4(RV4):
                     for d in (self.extensions, self.headers, self.data):
                         d.register_alias(alias, canonical)
 
-    def create_extension(self, ext_name, ext_type, header=None, data=None):
-        """Create an extension, storing its header as a ``fits.Header``.
+    def check_filename_convention(self, filename):
+        """KPF L4 is EPRV-standard (SL4 name); delegate to rvdata's check."""
+        return RV4.check_filename_convention(self, filename)
 
-        rvdata initializes a new header as a plain ``OrderedDict``; KPF keeps every
-        header as a ``fits.Header`` so all reads/writes are native astropy.
-        """
-        super().create_extension(ext_name, ext_type, header=header, data=data)
-        self.headers[ext_name] = as_fits_header(self.headers[ext_name])
-
-    def set_data(self, ext_name, data):
-        """
-        Override to resolve aliases before the base class .keys() check.
-
-        Chip-prefix keys (e.g. 'GREEN_SCI2_CCF') are routed directly through
-        `_KPF4DataDict.__setitem__`, which writes into the appropriate slice
-        of the concatenated CCF cube.
-        """
-        if (
-            hasattr(self.data, "_chip_split")
-            and self.data._chip_split(ext_name) is not None
-        ):
-            self.data[ext_name] = data
-            return
-        if hasattr(self.extensions, "_resolve"):
-            ext_name = self.extensions._resolve(ext_name)
-        # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
-        if (
-            ext_name in self.extensions
-            and self.extensions[ext_name] == "BinTableHDU"
-            and isinstance(data, np.ndarray)
-            and data.dtype.names is not None
-        ):
-            data = Table(data)
-        super().set_data(ext_name, data)
-        # Sync self.receipt when the RECEIPT extension is loaded from FITS.
-        if ext_name == "RECEIPT" and isinstance(data, Table):
-            self.receipt = data.to_pandas()
-
-    def set_header(self, ext_name, header):
-        """Override to resolve aliases before the base class .keys() check."""
-        if hasattr(self.extensions, "_resolve"):
-            ext_name = self.extensions._resolve(ext_name)
-        super().set_header(ext_name, header)
-
-    def _create_hdul(self):
-        """
-        Override to sync self.receipt into self.data["RECEIPT"] before writing.
-
-        rvdata's `to_fits` writes `self.data["RECEIPT"]` (the default empty
-        table), not `self.receipt` (the processing history DataFrame). This
-        override syncs them so the full receipt is written to the FITS file.
-        """
-        if self.receipt is not None and not self.receipt.empty:
-            self.data["RECEIPT"] = Table.from_pandas(self.receipt)
-        return restore_primary_comments(
-            super()._create_hdul(), self.headers.get("PRIMARY")
-        )
-
-    def receipt_add_entry(self, module, status):
-        """Record a processing step, and update DRPSTATU for pipeline modules."""
-        super().receipt_add_entry(module, status)
-        if status == "PASS":
-            update_drpstatus(self, module)
+    def generate_standard_filename(self):
+        """KPF L4 is EPRV-standard (SL4 name); delegate to rvdata's builder."""
+        return RV4.generate_standard_filename(self)
 
     def info(self):
         """Print summary of KPF4 data model contents."""

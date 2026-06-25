@@ -22,11 +22,21 @@ Filename convention (WMKO DRP-RUN-05): masters are written as
 ``generate_standard_filename()``.
 """
 
+import os
+import re
+import warnings
+
 import pandas as pd
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.io import build_filepath
 from kpfpipe.utils.kpf import get_obs_id
+
+# WMKO DRP-RUN-05 master name: {KOAID}_master_{type}_L{N}.fits, where KOAID is a
+# KP.YYYYMMDD.NNNNN.NN obs_id, type is bias/dark/flat/thar, and N is 1/2/4.
+_MASTER_FILENAME_PATTERN = re.compile(
+    r"KP\.\d{8}\.\d{5}\.\d{2}_master_(bias|dark|flat|thar)_L[124]\.fits"
+)
 
 
 class KPFMasterModel(KPFDataModel):
@@ -41,6 +51,22 @@ class KPFMasterModel(KPFDataModel):
 
     def __init__(self):
         KPFDataModel.__init__(self)
+
+    def check_filename_convention(self, filename):
+        """Masters use the WMKO DRP-RUN-05 name: {KOAID}_master_{type}_L{N}.fits.
+
+        Defined on KPFMasterModel (which precedes KPF1/KPF2/KPF4 in every masters
+        MRO) so the master convention wins over the per-level science checks.
+        """
+        basename = os.path.basename(filename)
+        if not _MASTER_FILENAME_PATTERN.fullmatch(basename):
+            warnings.warn(
+                f"Filename '{basename}' does not follow the KPF masters naming "
+                "convention ({KOAID}_master_{bias,dark,flat,thar}_L{1,2,4}.fits)",
+                stacklevel=2,
+            )
+            return False
+        return True
 
     def set_input_files(self, file_list, master_type):
         """
