@@ -8,7 +8,7 @@ modules, masters, quality control, utils, recipes/configs, tests, and documentat
 **Status of these rules.** These are *soft* requirements, and this guide sits at the **bottom**
 of the project's authority hierarchy:
 **1. the WMKO technical requirements ([`WMKO_REQUIREMENTS.md`](WMKO_REQUIREMENTS.md)) →
-2. the EPRV data standard ([`RVDATA_STANDARD.md`](RVDATA_STANDARD.md)) →
+2. the EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md)) →
 3. the project charter ([`KPF_DRP_VNEXT_CHARTER.md`](KPF_DRP_VNEXT_CHARTER.md)) → 4. this style
 guide.** They describe the dominant, prevailing pattern; where the codebase contradicts itself,
 the recommended variant is called out explicitly. When following a rule here would conflict

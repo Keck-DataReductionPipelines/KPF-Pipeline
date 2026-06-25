@@ -9,7 +9,7 @@
 the project's reference hierarchy — they outrank every other governing document:
 
 **1. these WMKO requirements → 2. the EPRV data standard
-([`RVDATA_STANDARD.md`](RVDATA_STANDARD.md)) → 3. the project charter
+([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md)) → 3. the project charter
 ([`KPF_DRP_VNEXT_CHARTER.md`](KPF_DRP_VNEXT_CHARTER.md)) → 4. the style guide
 ([`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md)).**
 
