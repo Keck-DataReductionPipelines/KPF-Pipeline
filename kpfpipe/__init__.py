@@ -1,7 +1,16 @@
+import importlib.metadata
 import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Installed package version (WMKO DRP-RUN-11); stamped onto PRIMARY as DRPTAG/
+# DRPVERNO. Falls back to "unknown" if the package metadata is unavailable
+# (e.g. running from a source tree that was never installed).
+try:
+    __version__ = importlib.metadata.version("kpfpipe")
+except importlib.metadata.PackageNotFoundError:
+    __version__ = "unknown"
 
 # By default use both CCDs and all five fibers
 DEFAULTS = {

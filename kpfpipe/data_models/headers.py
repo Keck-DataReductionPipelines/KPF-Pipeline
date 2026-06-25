@@ -6,16 +6,16 @@ Two classes own all KPF header behaviour:
 - :class:`HeaderParser` — read/write a keyword without worrying about whether a
   value is stored bare or as a ``(value, comment)`` tuple. The single place that
   bridges the two in-memory representations (``fits.Header`` vs. ``OrderedDict``).
-- :class:`HeaderConverter` — the single source of truth for the native→EPRV
+- :class:`HeaderConverter` — the single source of truth for the WMKO→EPRV
   keyword mapping (rvdata's ``header_map.csv``) and for what may legitimately
   appear on a KPF EPRV PRIMARY header:
 
-  - ``KPF0.to_kpf1`` calls :meth:`HeaderConverter.native_to_eprv` to build an
+  - ``KPF0.to_kpf1`` calls :meth:`HeaderConverter.wmko_to_eprv` to build an
     EPRV-standard L1 PRIMARY from the raw WMKO L0 PRIMARY, and
     :meth:`HeaderConverter.build_instrument_header` to preserve the verbatim raw
     L0 PRIMARY in an immutable ``INSTRUMENT_HEADER`` extension.
   - ``KPF1.to_kpf2`` / ``KPF2.to_kpf4`` call
-    :meth:`HeaderConverter.validate_eprv_primary` to fail loudly if a raw native
+    :meth:`HeaderConverter.validate_eprv_primary` to fail loudly if a raw wmko
     keyword leaked onto PRIMARY, an unregistered keyword appears, or a required
     EPRV keyword is missing.
 
@@ -24,16 +24,14 @@ booleans, diagnostics, RV/barycentric cards, …) are catalogued in the packaged
 registry (``config/L{0,1,2,4}-headers.csv``) and allowed by the validator.
 """
 
-import importlib.metadata
 import importlib.resources
 
 import pandas as pd
-from astropy.time import Time
 
-from kpfpipe import DETECTOR
+from kpfpipe import DETECTOR, __version__
 
 # --- Authoritative configs -------------------------------------------------
-# rvdata (installed package): the native↔EPRV map and the EPRV PRIMARY keyword
+# rvdata (installed package): the wmko↔EPRV map and the EPRV PRIMARY keyword
 # definitions. KPF consumes these rather than re-encoding the standard.
 _kpf_cfg = importlib.resources.files("rvdata.instruments.kpf.config")
 _rv_cfg = importlib.resources.files("rvdata.core.models.config")
@@ -117,8 +115,8 @@ HEADERMAP_STANDARD_KEYS = {
 }
 # header_map INSTRUMENT names that differ from their STANDARD target are the raw
 # WMKO names that must NOT remain on a converted PRIMARY (they belong in
-# INSTRUMENT_HEADER). Used for a precise "native leak" diagnostic.
-NATIVE_PRIMARY_KEYS = {
+# INSTRUMENT_HEADER). Used for a precise "wmko leak" diagnostic.
+WMKO_PRIMARY_KEYS = {
     str(r["INSTRUMENT"]).strip()
     for _, r in HEADER_MAP.iterrows()
     if pd.notna(r["INSTRUMENT"])
@@ -205,49 +203,24 @@ class HeaderConverter:
     """Convert and validate KPF PRIMARY headers across the WMKO-native, EPRV,
     and KPF-pipeline conventions.
 
-    Single source of truth for the native→EPRV mapping (rvdata's
+    Single source of truth for the wmko→EPRV mapping (rvdata's
     ``header_map.csv``) and the EPRV PRIMARY allowlist. Stateless: the reference
     data (``HEADER_MAP`` and the derived keyword sets) is module-level, loaded
     once at import.
     """
 
     @staticmethod
-    def _drp_version():
-        """Exact DRP version (WMKO DRP-RUN-11), from installed package metadata."""
-        return importlib.metadata.version("kpfpipe")
-
-    @staticmethod
-    def _full_jd_utc(native_primary):
-        """Full Julian Date of the exposure start (EPRV JD_UTC), or None.
-
-        The rvdata header_map maps JD_UTC <- MJD-OBS but omits the epoch offset,
-        leaving a raw MJD (notes/header_audit.md A1). KPF's canonical exposure
-        time is MJD-OBS — legacy code keys off it, and KPF's native DATE-OBS is
-        date-only (e.g. '2024-04-05'), so it cannot supply the time of day. Hence
-        JD_UTC = MJD-OBS + 2400000.5, which equals the JD of the precise ISO
-        DATE-BEG. Fall back to DATE-BEG, then DATE-OBS, only if MJD-OBS is absent.
-        """
-        mjd = HeaderParser.get(native_primary, "MJD-OBS")
-        if mjd not in (None, "", "UNKNOWN"):
-            return float(mjd) + 2400000.5
-        for key in ("DATE-BEG", "DATE-OBS"):
-            val = HeaderParser.get(native_primary, key)
-            if val not in (None, "", "UNKNOWN"):
-                return float(Time(str(val), format="isot", scale="utc").jd)
-        return None
-
-    @classmethod
-    def native_to_eprv(cls, native_primary):
+    def wmko_to_eprv(wmko_primary):
         """Map a raw WMKO PRIMARY header to an EPRV-standard PRIMARY dict.
 
-        For each header_map row, take the instrument (native) value when present,
+        For each header_map row, take the instrument (wmko) value when present,
         else the row default. Then apply the value corrections the installed
         header_map gets wrong (NUMORDER, JD_UTC) and stamp the DRP version
         (DRPTAG for EPRV, DRPVERNO for WMKO DRP-RUN-11).
 
         Parameters
         ----------
-        native_primary : Mapping
+        wmko_primary : Mapping
             The raw L0 PRIMARY header (astropy ``fits.Header`` or dict).
 
         Returns
@@ -263,27 +236,31 @@ class HeaderConverter:
             )
             default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
 
-            if instrument_key and instrument_key in native_primary:
-                out[standard_key] = HeaderParser.get(native_primary, instrument_key)
+            if instrument_key and instrument_key in wmko_primary:
+                out[standard_key] = HeaderParser.get(wmko_primary, instrument_key)
             elif default_val is not None and str(default_val).strip():
                 out[standard_key] = default_val
 
         # --- Value corrections (see notes/header_audit.md A1/A2/A3) ---
         out["NUMORDER"] = (_NUMORDER, "Number of echelle orders (green+red)")
-        jd_utc = cls._full_jd_utc(native_primary)
-        if jd_utc is not None:
-            out["JD_UTC"] = (jd_utc, "[day] Julian date of exposure start")
-        version = cls._drp_version()
-        out["DRPTAG"] = (version, "DRP version")
-        out["DRPVERNO"] = (version, "DRP version (WMKO DRP-RUN-11)")
+        # header_map maps JD_UTC <- MJD-OBS but drops the epoch offset, leaving a
+        # raw MJD (A1); KPF's canonical exposure time is MJD-OBS, so add 2400000.5.
+        mjd = HeaderParser.get(wmko_primary, "MJD-OBS")
+        if mjd not in (None, "", "UNKNOWN"):
+            out["JD_UTC"] = (
+                float(mjd) + 2400000.5,
+                "[day] Julian date of exposure start",
+            )
+        out["DRPTAG"] = (__version__, "DRP version")
+        out["DRPVERNO"] = (__version__, "DRP version (WMKO DRP-RUN-11)")
 
-        # WMKO provenance (DRP-RUN-19): native PROGID/KOAID, or 'UNKNOWN' if absent.
+        # WMKO provenance (DRP-RUN-19): PROGID/KOAID, or 'UNKNOWN' if absent.
         out["PROGID"] = (
-            HeaderParser.get(native_primary, "PROGID") or "UNKNOWN",
+            HeaderParser.get(wmko_primary, "PROGID") or "UNKNOWN",
             "WMKO program ID",
         )
         out["KOAID"] = (
-            HeaderParser.get(native_primary, "KOAID") or "UNKNOWN",
+            HeaderParser.get(wmko_primary, "KOAID") or "UNKNOWN",
             "KOA archive ID",
         )
         # Initial reduction status (DRP-RUN-20); modules overwrite it as they run.
@@ -291,7 +268,7 @@ class HeaderConverter:
         return out
 
     @staticmethod
-    def build_instrument_header(native_primary):
+    def build_instrument_header(wmko_primary):
         """Verbatim scalar copy of the raw WMKO PRIMARY for INSTRUMENT_HEADER.
 
         INSTRUMENT_HEADER is an ImageHDU header (scalar values only) and is an
@@ -300,7 +277,7 @@ class HeaderConverter:
 
         Parameters
         ----------
-        native_primary : Mapping
+        wmko_primary : Mapping
             The raw L0 PRIMARY header.
 
         Returns
@@ -312,9 +289,7 @@ class HeaderConverter:
         # commentary card's scalar string, where header["COMMENT"] would instead
         # return an astropy commentary-card object that fits.Header(dict) cannot
         # re-serialize.
-        return {
-            key: HeaderParser._unwrap(value) for key, value in native_primary.items()
-        }
+        return {key: HeaderParser._unwrap(value) for key, value in wmko_primary.items()}
 
     @staticmethod
     def validate_eprv_primary(header, level):
@@ -322,7 +297,7 @@ class HeaderConverter:
 
         Fail-loud guard (no silent fallback) for the L2/L4 boundary. Three rules:
 
-        1. **Native leak** — a raw WMKO keyword name (header_map INSTRUMENT name
+        1. **WMKO leak** — a raw WMKO keyword name (header_map INSTRUMENT name
            differing from its EPRV target) is present on PRIMARY; it should have
            been converted or left in INSTRUMENT_HEADER.
         2. **Unregistered keyword** — a card that is neither an EPRV-standard
@@ -356,7 +331,7 @@ class HeaderConverter:
                 or key in KPFPIPE_PRIMARY_KEYS
             ):
                 continue
-            if key in NATIVE_PRIMARY_KEYS:
+            if key in WMKO_PRIMARY_KEYS:
                 raise ValueError(
                     f"native WMKO keyword {key!r} found on {level} PRIMARY; it must "
                     "be converted to its EPRV name or kept in INSTRUMENT_HEADER"

@@ -183,15 +183,15 @@ class KPF0(KPFDataModel):
         # preserve the verbatim raw L0 PRIMARY in INSTRUMENT_HEADER (immutable
         # pure pass-through — nothing else ever writes to it).
         if "PRIMARY" in self.headers:
-            native_primary = self.headers["PRIMARY"]
-            for key, value in HeaderConverter.native_to_eprv(native_primary).items():
+            wmko_primary = self.headers["PRIMARY"]
+            for key, value in HeaderConverter.wmko_to_eprv(wmko_primary).items():
                 l1.headers["PRIMARY"][key] = value
 
             if "INSTRUMENT_HEADER" not in l1.extensions:
                 l1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
             instrument_header = l1.headers["INSTRUMENT_HEADER"]
             for key, value in HeaderConverter.build_instrument_header(
-                native_primary
+                wmko_primary
             ).items():
                 instrument_header[key] = value
 
