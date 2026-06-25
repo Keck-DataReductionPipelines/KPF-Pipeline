@@ -9,8 +9,9 @@ commented PRIMARY card survives ``to_fits`` -> ``from_fits`` with its comment
 intact -- the regression guard for the lossless-PRIMARY serialization in
 ``KPFDataModel._create_hdul`` / ``KPF2._create_hdul`` / ``KPF4._create_hdul``.
 
-HeaderConverter (WMKO->EPRV conversion/validation) is exercised end-to-end by the
-to_kpf1/to_kpf2 tests in test_data_models_l{1,2,4}.py.
+The WMKO->EPRV conversion (``KPF0.wmko_to_eprv`` / ``build_instrument_header``) and
+the shared ``KPFDataModel.validate_eprv_primary`` guard are exercised end-to-end by
+the to_kpf1/to_kpf2 tests in test_data_models_l{1,2,4}.py.
 """
 
 from astropy.io import fits

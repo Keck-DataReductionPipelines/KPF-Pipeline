@@ -14,6 +14,16 @@ from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.models.base import RVDataModel
 
+from kpfpipe.data_models.headers import (
+    _STRUCTURAL_KEYS,
+    EPRV_L2_KEYS,
+    EPRV_L4_KEYS,
+    HEADERMAP_STANDARD_KEYS,
+    KPFPIPE_PRIMARY_KEYS,
+    REQUIRED_L2_KEYS,
+    REQUIRED_L4_KEYS,
+    WMKO_PRIMARY_KEYS,
+)
 from kpfpipe.utils.kpf import _DATECODE_PATTERN, _OBS_ID_PATTERN
 
 # Receipt names that are data-model conversions / serialization rather than
@@ -151,6 +161,64 @@ class KPFDataModel(RVDataModel):
                 hdu_list[i] = fits.PrimaryHDU(header=self.as_fits_header(primary))
                 break
         return hdu_list
+
+    @staticmethod
+    def validate_eprv_primary(header, level):
+        """Validate a converted EPRV PRIMARY header, raising on any inconsistency.
+
+        The shared fail-loud guard (no silent fallback) for the L1->L2 and
+        L2->L4 boundaries; called by ``KPF1.to_kpf2`` / ``KPF2.to_kpf4``. Three
+        rules:
+
+        1. **WMKO leak** — a raw WMKO keyword name (header_map INSTRUMENT name
+           differing from its EPRV target) is present on PRIMARY; it should have
+           been converted or left in INSTRUMENT_HEADER.
+        2. **Unregistered keyword** — a card that is neither an EPRV-standard
+           keyword, a header_map STANDARD target, a registered KPF-pipeline
+           keyword (``config/L{0,1,2,4}-headers.csv``), nor a structural card.
+        3. **Missing required** — a Required EPRV PRIMARY keyword is absent.
+
+        Parameters
+        ----------
+        header : Mapping
+            The PRIMARY header to validate.
+        level : str
+            ``"L2"`` or ``"L4"`` (selects the EPRV keyword set).
+
+        Raises
+        ------
+        ValueError
+            On the first inconsistency found.
+        """
+        level = str(level).upper()
+        eprv_keys = EPRV_L4_KEYS if level == "L4" else EPRV_L2_KEYS
+        required_keys = REQUIRED_L4_KEYS if level == "L4" else REQUIRED_L2_KEYS
+
+        for raw_key in list(header):
+            key = str(raw_key).strip()
+            if key in _STRUCTURAL_KEYS or key.startswith("NAXIS"):
+                continue
+            if (
+                key in eprv_keys
+                or key in HEADERMAP_STANDARD_KEYS
+                or key in KPFPIPE_PRIMARY_KEYS
+            ):
+                continue
+            if key in WMKO_PRIMARY_KEYS:
+                raise ValueError(
+                    f"native WMKO keyword {key!r} found on {level} PRIMARY; it must "
+                    "be converted to its EPRV name or kept in INSTRUMENT_HEADER"
+                )
+            raise ValueError(
+                f"unregistered keyword {key!r} on {level} PRIMARY; add it to "
+                "config/L{0,1,2,4}-headers.csv or fix the writer"
+            )
+
+        missing = sorted(k for k in required_keys if k not in header)
+        if missing:
+            raise ValueError(
+                f"missing required EPRV PRIMARY keyword(s) on {level}: {missing}"
+            )
 
     def generate_standard_filename(self):
         """Abstract: every concrete KPF model builds its own standard filename.

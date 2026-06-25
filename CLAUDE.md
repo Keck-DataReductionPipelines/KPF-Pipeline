@@ -202,14 +202,18 @@ L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 ### Header standardization (EPRV PRIMARY)
 
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place**:
-`KPF0.to_kpf1()`, via `kpfpipe/data_models/headers.py` (which drives rvdata's
-`header_map.csv`). Consequences every contributor must respect:
+`KPF0.to_kpf1()`, which calls the conversion methods **`KPF0.wmko_to_eprv()`** and
+**`KPF0.build_instrument_header()`** (L0 owns the WMKO→EPRV mapping). Those methods and the
+shared validator (below) draw their reference data — the rvdata `header_map.csv`, the EPRV/required
+keyword sets, the registry allowlist — from `kpfpipe/data_models/headers.py`, which is now a pure
+reference-data module (no class). Consequences every contributor must respect:
 
 - **L1 PRIMARY is already EPRV-standard.** From L1 onward, PRIMARY holds EPRV keyword *names*
   plus the registered KPF-pipeline keywords below — never raw WMKO natives.
-- **`INSTRUMENT_HEADER` is an immutable, verbatim copy of the raw L0 PRIMARY.** It is written
-  once in `to_kpf1` and **nothing else ever writes to it**. Code that needs a raw instrument
-  keyword (e.g. `ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`) reads it from
+- **`INSTRUMENT_HEADER` is an immutable, verbatim copy of the raw L0 PRIMARY** (values **and**
+  comments — `build_instrument_header()` returns a `fits.Header` copy). It is written once in
+  `to_kpf1` and **nothing else ever writes to it**. Code that needs a raw instrument keyword
+  (e.g. `ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`) reads it from
   `INSTRUMENT_HEADER`, not PRIMARY.
 - **KPF-pipeline keywords are written directly to PRIMARY** (read noise, OSCANMET, BIASSUB/
   DARKSUB, calibration ages/paths, QC booleans, diagnostics, and the RV/barycentric cards). Every
@@ -217,9 +221,11 @@ The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one plac
   (each entry is an explicit ≤8-char FITS keyword — no wildcards; families are enumerated per
   member, e.g. `RNGREEN1`-`RNGREEN4`). **Add new PRIMARY keywords there** or the validator
   will reject the product.
-- **`to_kpf2`/`to_kpf4` are pure pass-throughs** that call `validate_eprv_primary()` and **fail
-  loudly** if a raw native keyword leaked onto PRIMARY, an unregistered keyword appears, or a
-  required EPRV keyword is missing.
+- **`to_kpf2`/`to_kpf4` are pure pass-throughs** that call the shared
+  `KPFDataModel.validate_eprv_primary(header, level)` and **fail loudly** if a raw native keyword
+  leaked onto PRIMARY, an unregistered keyword appears, or a required EPRV keyword is missing. (The
+  validator lives on the shared base — inherited by all levels — and reads its keyword sets from
+  `data_models/headers.py`.)
 - `to_kpf1` also corrects values the installed `header_map.csv` gets wrong: `NUMORDER` (→67 from
   `DETECTOR`), `JD_UTC` (full JD from `MJD-OBS`, the canonical KPF exposure time — native
   `DATE-OBS` is date-only), and the DRP version (`DRPTAG` for EPRV + `DRPVERNO` for WMKO
