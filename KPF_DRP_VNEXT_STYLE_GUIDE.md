@@ -400,10 +400,13 @@ class StageName:
 
 - **Prefer Ruff's normalization for stylistic nits.** When the formatter has an opinion on a
   purely stylistic point (paren placement, line wrapping, quote style, blank lines), follow
-  what `ruff format` produces rather than fighting it. Deviate only with a strong, documented
-  reason — e.g. `target-version` is pinned to `py313` (one below the 3.14.3 runtime) *so that*
-  the formatter keeps the parens on a multi-type `except` rather than emitting PEP 758's bare
-  form, which Pylance/Pyright can't parse (§6).
+  what `ruff format` produces rather than hand-styling against it — fighting the formatter
+  just churns. Deviate only with a strong, documented reason. (Example of such a reason:
+  Ruff's `target-version` is pinned to `py313`, one below the 3.14.3 runtime, *so that* the
+  formatter keeps the parens on a multi-type `except` instead of emitting PEP 758's bare form
+  — which Pylance/Pyright can't parse. The pin makes the formatter agree with the type
+  checker; see §6.)
+
 - **`ruff` is the unified formatter + linter** (it replaced black/isort/flake8). The
   formatter is black-compatible: **88-char target line length**, double-quote normalization.
   Config lives in `pyproject.toml` under `[tool.ruff]`; `ruff==0.15.17` and
