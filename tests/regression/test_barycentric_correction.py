@@ -14,7 +14,6 @@ from astropy.table import Table
 from astropy.time import Time
 
 from kpfpipe import DETECTOR
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 from kpfpipe.utils.validation import strictly_increasing
@@ -832,12 +831,8 @@ class TestPerform:
             assert key in prim, f"{key} missing from PRIMARY"
 
         # All orders had the same delta_rv → green and red means are equal
-        np.testing.assert_allclose(
-            HeaderParser.get(prim, "CCD1BKMS"), HeaderParser.get(prim, "CCD2BKMS")
-        )
-        np.testing.assert_allclose(
-            HeaderParser.get(prim, "CCD1BZ"), HeaderParser.get(prim, "CCD2BZ")
-        )
+        np.testing.assert_allclose(prim.get("CCD1BKMS"), prim.get("CCD2BKMS"))
+        np.testing.assert_allclose(prim.get("CCD1BZ"), prim.get("CCD2BZ"))
 
     def test_receipt_entry_added(self, bc_monkeypatched):
         bc_monkeypatched.perform()
@@ -901,7 +896,7 @@ class TestPerform:
 
     def test_records_gaia_provenance(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
-        astrsrc = HeaderParser.get(kpf2.headers["PRIMARY"], "ASTRSRC")
+        astrsrc = kpf2.headers["PRIMARY"].get("ASTRSRC")
         assert astrsrc == "Gaia DR3"
 
     def test_perform_falls_back_and_records_wmko_provenance(
@@ -932,7 +927,7 @@ class TestPerform:
                 use_wmko_fallback=True
             )  # override the toggle for this call
 
-        astrsrc = HeaderParser.get(kpf2.headers["PRIMARY"], "ASTRSRC")
+        astrsrc = kpf2.headers["PRIMARY"].get("ASTRSRC")
         assert astrsrc == "WMKO header"
         assert bc._astrometry_source == "WMKO header"
 

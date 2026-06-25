@@ -131,9 +131,7 @@ class KPF1(KPFDataModel):
         Uses DATE-OBS from the PRIMARY header.
         """
         if "PRIMARY" in self.headers:
-            from kpfpipe.data_models.headers import HeaderParser
-
-            date_obs = HeaderParser.get(self.headers["PRIMARY"], "DATE-OBS")
+            date_obs = self.headers["PRIMARY"].get("DATE-OBS")
             if date_obs is not None:
                 date_str = str(date_obs).split(".")[0]
                 try:

@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.quality_control.quicklook._save_png import save_image_png, save_png
 
@@ -41,7 +40,7 @@ class PlotL0:
         self.obs_id = getattr(l0_obj, "obs_id", None) or ""
         self.name = ""
         if "PRIMARY" in l0_obj.headers:
-            self.name = HeaderParser.get(l0_obj.headers["PRIMARY"], "OBJECT", "")
+            self.name = l0_obj.headers["PRIMARY"].get("OBJECT", "")
 
     def _has_chip(self, chip):
         """Return True if any AMP extension for the chip holds data."""

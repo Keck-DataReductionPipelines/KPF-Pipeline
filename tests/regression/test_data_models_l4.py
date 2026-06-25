@@ -10,7 +10,6 @@ import pandas as pd
 import pytest
 
 from kpfpipe import DETECTOR
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
@@ -39,7 +38,7 @@ class TestToKPF4:
     def test_to_kpf4_sets_datalvl(self):
         kpf2 = KPF2()
         kpf4 = kpf2.to_kpf4()
-        assert HeaderParser.get(kpf4.headers["PRIMARY"], "DATALVL") == "L4"
+        assert kpf4.headers["PRIMARY"].get("DATALVL") == "L4"
 
     def test_to_kpf4_carries_receipt(self):
         kpf2 = KPF2()
@@ -61,8 +60,8 @@ class TestToKPF4:
         l1.headers["PRIMARY"]["KOAID"] = "KP.20201122.34567.89"
         prim = l1.to_kpf2().to_kpf4().headers["PRIMARY"]
 
-        assert HeaderParser.get(prim, "PROGID") == "U999"
-        assert HeaderParser.get(prim, "KOAID") == "KP.20201122.34567.89"
+        assert prim.get("PROGID") == "U999"
+        assert prim.get("KOAID") == "KP.20201122.34567.89"
 
 
 class TestKPF4:

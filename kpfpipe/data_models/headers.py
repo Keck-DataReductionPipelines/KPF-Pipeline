@@ -1,23 +1,23 @@
 """
-FITS header parsing and WMKO ↔ EPRV ↔ KPF PRIMARY conversion.
+WMKO ↔ EPRV ↔ KPF PRIMARY header conversion.
 
-Two classes own all KPF header behaviour:
+KPF stores every extension header as an ``astropy.io.fits.Header`` (see
+``data_models/base.py``), so reads use ``header.get(key)`` / ``header[key]`` and
+writes use ``header[key] = (value, comment)`` natively — there is no separate
+header parser.
 
-- :class:`HeaderParser` — read/write a keyword without worrying about whether a
-  value is stored bare or as a ``(value, comment)`` tuple. The single place that
-  bridges the two in-memory representations (``fits.Header`` vs. ``OrderedDict``).
-- :class:`HeaderConverter` — the single source of truth for the WMKO→EPRV
-  keyword mapping (rvdata's ``header_map.csv``) and for what may legitimately
-  appear on a KPF EPRV PRIMARY header:
+:class:`HeaderConverter` is the single source of truth for the WMKO→EPRV keyword
+mapping (rvdata's ``header_map.csv``) and for what may legitimately appear on a
+KPF EPRV PRIMARY header:
 
-  - ``KPF0.to_kpf1`` calls :meth:`HeaderConverter.wmko_to_eprv` to build an
-    EPRV-standard L1 PRIMARY from the raw WMKO L0 PRIMARY, and
-    :meth:`HeaderConverter.build_instrument_header` to preserve the verbatim raw
-    L0 PRIMARY in an immutable ``INSTRUMENT_HEADER`` extension.
-  - ``KPF1.to_kpf2`` / ``KPF2.to_kpf4`` call
-    :meth:`HeaderConverter.validate_eprv_primary` to fail loudly if a raw wmko
-    keyword leaked onto PRIMARY, an unregistered keyword appears, or a required
-    EPRV keyword is missing.
+- ``KPF0.to_kpf1`` calls :meth:`HeaderConverter.wmko_to_eprv` to build an
+  EPRV-standard L1 PRIMARY from the raw WMKO L0 PRIMARY, and
+  :meth:`HeaderConverter.build_instrument_header` to preserve the verbatim raw
+  L0 PRIMARY in an immutable ``INSTRUMENT_HEADER`` extension.
+- ``KPF1.to_kpf2`` / ``KPF2.to_kpf4`` call
+  :meth:`HeaderConverter.validate_eprv_primary` to fail loudly if a raw wmko
+  keyword leaked onto PRIMARY, an unregistered keyword appears, or a required
+  EPRV keyword is missing.
 
 KPF-pipeline keywords that are written directly to PRIMARY (read noise, QC
 booleans, diagnostics, RV/barycentric cards, …) are catalogued in the packaged
@@ -161,44 +161,6 @@ _NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
 _DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
 
 
-class HeaderParser:
-    """Read and write FITS header keywords without minding the storage form.
-
-    A KPF extension header is either an astropy ``fits.Header`` (scalar values,
-    comments held separately) or a plain ``OrderedDict`` whose PRIMARY keys may
-    hold ``(value, comment)`` tuples. These static helpers are the single place
-    that bridges the two, so callers never hand-roll a tuple unwrap.
-    """
-
-    @staticmethod
-    def _unwrap(value):
-        """Drop a ``(value, comment)`` tuple wrapper, returning the bare value."""
-        return value[0] if isinstance(value, tuple) else value
-
-    @staticmethod
-    def get(header, key, default=None):
-        """Return the scalar value of ``key``, unwrapping a ``(value, comment)``
-        tuple if present (a ``fits.Header`` already yields the scalar).
-
-        ``default`` is returned only when ``key`` is **absent**; a stored ``None``
-        value is returned as ``None``.
-        """
-        if key not in header:
-            return default
-        return HeaderParser._unwrap(header[key])
-
-    @staticmethod
-    def set(header, key, value, comment=None):
-        """Write ``key``: as a ``(value, comment)`` card when ``comment`` is
-        given, else as the bare value. The single documented write path.
-
-        A commented write round-trips on PRIMARY and on any ``fits.Header``
-        extension; on a plain-dict **non-PRIMARY** extension rvdata's serializer
-        rejects tuples, so comments there must go through a real ``fits.Header``.
-        """
-        header[key] = (value, comment) if comment is not None else value
-
-
 class HeaderConverter:
     """Convert and validate KPF PRIMARY headers across the WMKO-native, EPRV,
     and KPF-pipeline conventions.
@@ -237,7 +199,7 @@ class HeaderConverter:
             default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
 
             if instrument_key and instrument_key in wmko_primary:
-                out[standard_key] = HeaderParser.get(wmko_primary, instrument_key)
+                out[standard_key] = wmko_primary.get(instrument_key)
             elif default_val is not None and str(default_val).strip():
                 out[standard_key] = default_val
 
@@ -245,7 +207,7 @@ class HeaderConverter:
         out["NUMORDER"] = (_NUMORDER, "Number of echelle orders (green+red)")
         # header_map maps JD_UTC <- MJD-OBS but drops the epoch offset, leaving a
         # raw MJD (A1); KPF's canonical exposure time is MJD-OBS, so add 2400000.5.
-        mjd = HeaderParser.get(wmko_primary, "MJD-OBS")
+        mjd = wmko_primary.get("MJD-OBS")
         if mjd not in (None, "", "UNKNOWN"):
             out["JD_UTC"] = (
                 float(mjd) + 2400000.5,
@@ -256,11 +218,11 @@ class HeaderConverter:
 
         # WMKO provenance (DRP-RUN-19): PROGID/KOAID, or 'UNKNOWN' if absent.
         out["PROGID"] = (
-            HeaderParser.get(wmko_primary, "PROGID") or "UNKNOWN",
+            wmko_primary.get("PROGID") or "UNKNOWN",
             "WMKO program ID",
         )
         out["KOAID"] = (
-            HeaderParser.get(wmko_primary, "KOAID") or "UNKNOWN",
+            wmko_primary.get("KOAID") or "UNKNOWN",
             "KOA archive ID",
         )
         # Initial reduction status (DRP-RUN-20); modules overwrite it as they run.
@@ -289,7 +251,7 @@ class HeaderConverter:
         # commentary card's scalar string, where header["COMMENT"] would instead
         # return an astropy commentary-card object that fits.Header(dict) cannot
         # re-serialize.
-        return {key: HeaderParser._unwrap(value) for key, value in wmko_primary.items()}
+        return {key: value for key, value in wmko_primary.items()}
 
     @staticmethod
     def validate_eprv_primary(header, level):

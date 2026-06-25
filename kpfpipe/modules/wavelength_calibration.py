@@ -13,7 +13,6 @@ import os
 import numpy as np
 
 from kpfpipe import DEFAULTS
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.utils.config import ConfigHandler
 
@@ -95,7 +94,7 @@ class WavelengthCalibration:
                     "WLSFILE missing from L2 PRIMARY; "
                     "run CalibrationAssociation with 'thar' on the L1 first"
                 )
-            wls_path = HeaderParser.get(primary, "WLSFILE")
+            wls_path = primary.get("WLSFILE")
 
         if not os.path.isfile(wls_path):
             raise FileNotFoundError(f"Master WLS file not found: {wls_path}")
@@ -178,7 +177,7 @@ class WavelengthCalibration:
         """Print a summary of the module configuration and association results."""
         print("WavelengthCalibration")
         primary = self.l2_obj.headers.get("PRIMARY", {})
-        obs_id = HeaderParser.get(primary, "ORIGID", "unknown")
+        obs_id = primary.get("ORIGID", "unknown")
         print(f"  obs_id:  {obs_id}")
         print(f"  chips:   {self.chips}")
         print(f"  fibers:  {self.fibers}")
@@ -188,7 +187,7 @@ class WavelengthCalibration:
             return
 
         # WLSAGE is written to PRIMARY by CalibrationAssociation (alongside WLSFILE).
-        agewls = HeaderParser.get(primary, "WLSAGE")
+        agewls = primary.get("WLSAGE")
         print(f"  wls_path: {self._info['wls_path']}")
         if agewls is not None:
             print(f"  WLSAGE:   {agewls:+.4f} d  (master - obs)")

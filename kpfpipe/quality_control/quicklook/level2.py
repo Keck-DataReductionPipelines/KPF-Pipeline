@@ -16,7 +16,6 @@ from datetime import UTC, datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.quality_control.quicklook._save_png import save_png
 
 _DPI = 200
@@ -60,10 +59,10 @@ class PlotL2:
         self.obs_id = (
             obs_id
             or getattr(l2_obj, "obs_id", None)
-            or self._obsid_from_filename(HeaderParser.get(primary, "FILENAME", ""))
+            or self._obsid_from_filename(primary.get("FILENAME", ""))
             or ""
         )
-        self.name = HeaderParser.get(primary, "OBJECT", "") if primary else ""
+        self.name = primary.get("OBJECT", "") if primary else ""
 
     @staticmethod
     def _obsid_from_filename(filename):

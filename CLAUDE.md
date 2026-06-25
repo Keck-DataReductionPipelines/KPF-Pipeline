@@ -226,6 +226,15 @@ The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one plac
   `DETECTOR`), `JD_UTC` (full JD from `MJD-OBS`, the canonical KPF exposure time — native
   `DATE-OBS` is date-only), and the DRP version (`DRPTAG` for EPRV + `DRPVERNO` for WMKO
   DRP-RUN-11). Calibration masters are out of EPRV scope (their products keep their own layout).
+- **Every extension header is an `astropy.io.fits.Header`.** The KPF data models override
+  `create_extension` (`data_models/base.py`) so a new header is a `fits.Header`, not rvdata's
+  default `OrderedDict`; `from_fits` already returns `fits.Header`. So **read with
+  `header.get(key)` / `header[key]` and write with `header[key] = (value, comment)`** — native
+  astropy, no value-vs-`(value, comment)` ambiguity and no header-parser helper. rvdata's base
+  `_create_hdul` serializes PRIMARY by iterating `.items()`, which drops a `fits.Header`'s
+  comments; the KPF `_create_hdul` overrides (`KPFDataModel`/`KPF2`/`KPF4`, via
+  `restore_primary_comments`) rebuild the PRIMARY HDU so comments survive `to_fits`. Conversion
+  and validation live in `HeaderConverter` (`data_models/headers.py`).
 
 ### Configuration
 
@@ -243,7 +252,7 @@ Two authorities encode this rule and **must agree per level**: `build_filepath(o
 
 ### RVDataModel Base Class
 
-The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (all OrderedDicts), plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. The base `set_data()`/`set_header()` use `.keys()` checks that bypass `__contains__` overrides, so KPF2/KPF4 override these methods with a `hasattr` guard to resolve aliases during init before the dicts are upgraded.
+The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (top-level OrderedDicts), plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. The base `set_data()`/`set_header()` use `.keys()` checks that bypass `__contains__` overrides, so KPF2/KPF4 override these methods with a `hasattr` guard to resolve aliases during init before the dicts are upgraded. The base `create_extension()` initializes each extension *header* as an `OrderedDict`; the KPF models override it so every header is a `fits.Header` instead (see *Header standardization*).
 
 ### Diagnostics, QC, and Quicklook
 

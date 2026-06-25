@@ -45,7 +45,6 @@ from scipy.ndimage import gaussian_filter, median_filter
 from scipy.special import erfcinv
 
 from kpfpipe import DEFAULTS
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import strictly_increasing
@@ -793,9 +792,7 @@ class BarycentricCorrection:
     def info(self):
         """Print a summary of the barycentric correction results."""
         print("BarycentricCorrection")
-        obs_id = HeaderParser.get(
-            self.l2_obj.headers.get("PRIMARY", {}), "ORIGID", "unknown"
-        )
+        obs_id = self.l2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
         print(f"  obs_id:  {obs_id}")
 
         if self._info is None:

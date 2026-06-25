@@ -23,7 +23,11 @@ from rvdata.core.models.level2 import RV2
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import update_drpstatus
+from kpfpipe.data_models.base import (
+    as_fits_header,
+    restore_primary_comments,
+    update_drpstatus,
+)
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -209,6 +213,15 @@ class KPF2(RV2):
                     self.headers.register_alias(alias, canonical)
                     self.data.register_alias(alias, canonical)
 
+    def create_extension(self, ext_name, ext_type, header=None, data=None):
+        """Create an extension, storing its header as a ``fits.Header``.
+
+        rvdata initializes a new header as a plain ``OrderedDict``; KPF keeps every
+        header as a ``fits.Header`` so all reads/writes are native astropy.
+        """
+        super().create_extension(ext_name, ext_type, header=header, data=data)
+        self.headers[ext_name] = as_fits_header(self.headers[ext_name])
+
     def set_data(self, ext_name, data):
         """
         Override to resolve aliases before the base class .keys() check.
@@ -248,7 +261,9 @@ class KPF2(RV2):
         """
         if self.receipt is not None and not self.receipt.empty:
             self.data["RECEIPT"] = Table.from_pandas(self.receipt)
-        return super()._create_hdul()
+        return restore_primary_comments(
+            super()._create_hdul(), self.headers.get("PRIMARY")
+        )
 
     def receipt_add_entry(self, module, status):
         """Record a processing step, and update DRPSTATU for pipeline modules."""

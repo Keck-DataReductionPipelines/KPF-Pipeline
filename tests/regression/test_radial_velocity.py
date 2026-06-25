@@ -719,9 +719,8 @@ class TestPerform:
     def test_per_fiber_ccf_and_rv_headers(self, rv_module):
         # EPRV L4 keywords on each orderlet's CCF/RV extension; RVMETHOD on PRIMARY.
         l4 = rv_module.perform()
-        # CCF/RV extension headers are fits.Header objects (set via set_header),
-        # so keyword access returns the scalar value. PRIMARY is still written
-        # in place as a (value, comment) tuple.
+        # Every header (PRIMARY and the CCF/RV extensions) is a fits.Header, so
+        # keyword access returns the scalar value.
         ccf_hdr = l4.headers["SCI2_CCF"]
         assert ccf_hdr["VELNSTEP"] == _NVEL
         assert ccf_hdr["VELSTEP"] == pytest.approx(0.25)
@@ -733,7 +732,7 @@ class TestPerform:
         assert rv_hdr["RVMETHOD"] == "CCF"
         assert rv_hdr["SKYRMVD"] is False
         assert rv_hdr["TELLRMVD"] is False
-        assert l4.headers["PRIMARY"]["RVMETHOD"][0] == "CCF"
+        assert l4.headers["PRIMARY"]["RVMETHOD"] == "CCF"
 
     def test_per_ccd_rv_keywords(self, rv_module):
         # Combined per-CCD RV/error are legacy carryovers written to PRIMARY
@@ -762,10 +761,10 @@ class TestPerform:
         assert inst["CCFERV"] > 0
 
         prim = l4.headers["PRIMARY"]
-        assert prim["RV"][0] == pytest.approx(_V_INJECT, abs=0.1)
-        assert prim["RVERR"][0] > 0
-        assert prim["RVMETHOD"][0] == "CCF"
-        assert prim["SYSVEL"][0] is None  # absolute RVs; nothing removed
+        assert prim["RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert prim["RVERR"] > 0
+        assert prim["RVMETHOD"] == "CCF"
+        assert prim["SYSVEL"] is None  # absolute RVs; nothing removed
 
     def test_ccfrv_is_weighted_ccd_combine(self, rv_module):
         # CCFRV = (CCD1RV*Wg + CCD2RV*Wr)/(Wg+Wr), Wg/Wr the summed order weights;
@@ -787,15 +786,15 @@ class TestPerform:
         inst2["CCD1BKMS"] = inst2["CCD2BKMS"] = -12.3
         inst2["CCD1BJD"] = inst2["CCD2BJD"] = 2460123.5
         prim = rv_module.perform().headers["PRIMARY"]
-        assert prim["BERV"][0] == pytest.approx(-12.3)
-        assert prim["BJDTDB"][0] == pytest.approx(2460123.5)
+        assert prim["BERV"] == pytest.approx(-12.3)
+        assert prim["BJDTDB"] == pytest.approx(2460123.5)
 
     def test_primary_berv_undefined_without_per_ccd(self, rv_module):
         # No per-CCD bary summaries on PRIMARY -> BERV/BJDTDB UNDEFINED,
         # but the combined RV is still populated.
         prim = rv_module.perform().headers["PRIMARY"]
-        assert prim["BERV"][0] is None and prim["BJDTDB"][0] is None
-        assert prim["RV"][0] == pytest.approx(_V_INJECT, abs=0.1)
+        assert prim["BERV"] is None and prim["BJDTDB"] is None
+        assert prim["RV"] == pytest.approx(_V_INJECT, abs=0.1)
 
     def test_no_science_illuminated_raises(self, rv_module):
         # SCI requested (default fibers) but all dark -> fail loudly.
@@ -808,7 +807,7 @@ class TestPerform:
         # is left UNDEFINED and a note is printed.
         rv_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "Th_gold"
         prim = rv_module.perform(fibers=["CAL"]).headers["PRIMARY"]
-        assert prim["RV"][0] is None  # combine skipped, stays UNDEFINED
+        assert prim["RV"] is None  # combine skipped, stays UNDEFINED
         assert "no science orderlet requested" in capsys.readouterr().out
 
     def test_single_chip_combine_warns(self, rv_module, capsys):
@@ -819,10 +818,8 @@ class TestPerform:
         assert "only chip GREEN present" in capsys.readouterr().out
 
     def test_l4_serializes_to_fits(self, rv_module, tmp_path):
-        # The CCF/RV extension headers must survive to_fits with comments intact:
-        # rvdata serializes non-PRIMARY extensions via fits.Header(headers[ext]),
-        # which rejects (value, comment) tuples, so they must be fits.Header
-        # objects set via set_header. SCI2 -> CCF3 / RV3.
+        # The CCF/RV extension headers must survive to_fits with comments intact.
+        # SCI2 -> CCF3 / RV3.
         l4 = rv_module.perform(fibers=["SCI1", "SCI2", "SCI3"])
         path = tmp_path / "kpf_SL4_20240405T000000.fits"
         l4.to_fits(str(path))

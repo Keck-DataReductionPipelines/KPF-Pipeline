@@ -35,8 +35,11 @@ class MockL1:
     def __init__(self):
         self.obs_id = "KP.20240405.40113.57"
         # EXPTIME is a raw WMKO native, so it lives in INSTRUMENT_HEADER (where
-        # to_kpf1 preserves it); KPF-pipeline keywords go on PRIMARY.
-        self.headers = {"PRIMARY": {}, "INSTRUMENT_HEADER": {"EXPTIME": _EXPTIME}}
+        # to_kpf1 preserves it); KPF-pipeline keywords go on PRIMARY. Headers are
+        # fits.Header, mirroring the real KPF data models.
+        inst = fits.Header()
+        inst["EXPTIME"] = _EXPTIME
+        self.headers = {"PRIMARY": fits.Header(), "INSTRUMENT_HEADER": inst}
         self.data = {
             "GREEN_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
             "RED_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
@@ -418,7 +421,7 @@ class TestPerform:
 
     def test_biassub_header_set(self, mod_with_bias):
         mod_with_bias.perform()
-        assert mod_with_bias.l1_obj.headers["PRIMARY"]["BIASSUB"][0] is True
+        assert mod_with_bias.l1_obj.headers["PRIMARY"]["BIASSUB"] is True
 
     def test_receipt_entry_added(self, mod_with_bias):
         mod_with_bias.perform()
@@ -444,13 +447,13 @@ class TestPerform:
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE)
         np.testing.assert_allclose(result.data["RED_CCD"], _CCD_VALUE)
         # BIASSUB header reflects the choice
-        assert result.headers["PRIMARY"]["BIASSUB"][0] is False
+        assert result.headers["PRIMARY"]["BIASSUB"] is False
         # No bias path recorded
         assert mod._bias_path is None
 
     def test_darksub_header_false_when_dark_off(self, mod_with_bias):
         mod_with_bias.perform()
-        assert mod_with_bias.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is False
+        assert mod_with_bias.l1_obj.headers["PRIMARY"]["DARKSUB"] is False
 
     def test_flat_true_raises_not_implemented(self, mod_with_bias):
         with pytest.raises(NotImplementedError, match="flat"):
@@ -464,7 +467,7 @@ class TestPerform:
         result = mod.perform(bias=bias_path, dark=False)
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
         np.testing.assert_allclose(result.data["RED_CCD"], _CCD_VALUE - _BIAS_VALUE)
-        assert result.headers["PRIMARY"]["BIASSUB"][0] is True
+        assert result.headers["PRIMARY"]["BIASSUB"] is True
         assert mod._bias_path == bias_path
 
     def test_bias_master_l1_object_used_directly(self, tmp_path):
@@ -475,7 +478,7 @@ class TestPerform:
         mod = _make_module()  # no BIASFILE needed
         result = mod.perform(bias=preloaded, dark=False)
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
-        assert result.headers["PRIMARY"]["BIASSUB"][0] is True
+        assert result.headers["PRIMARY"]["BIASSUB"] is True
         # _bias_path should reflect the in-memory object's filename
         assert mod._bias_path == bias_path
 
@@ -525,8 +528,8 @@ class TestPerformDark:
         np.testing.assert_allclose(
             mod_with_bias_dark.l1_obj.data["GREEN_CCD"], expected
         )
-        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["BIASSUB"][0] is True
-        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is True
+        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["BIASSUB"] is True
+        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["DARKSUB"] is True
 
     def test_bias_then_dark_combined(self, mod_with_bias_dark):
         mod_with_bias_dark.perform(bias=True, dark=True)
@@ -539,7 +542,7 @@ class TestPerformDark:
 
     def test_darksub_header_true(self, mod_with_bias_dark):
         mod_with_bias_dark.perform(bias=True, dark=True)
-        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is True
+        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["DARKSUB"] is True
 
     def test_dark_path_recorded(self, mod_with_bias_dark, tmp_path):
         mod_with_bias_dark.perform(bias=True, dark=True)
@@ -666,8 +669,8 @@ class TestCalibrationGuard:
         )
         mod.perform(bias=True, dark=False)
         mod.perform(bias=False, dark=True)
-        assert mod.l1_obj.headers["PRIMARY"]["BIASSUB"][0] is True
-        assert mod.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is True
+        assert mod.l1_obj.headers["PRIMARY"]["BIASSUB"] is True
+        assert mod.l1_obj.headers["PRIMARY"]["DARKSUB"] is True
         expected = _CCD_VALUE - _BIAS_VALUE - _DARK_VALUE * _EXPTIME
         np.testing.assert_allclose(mod.l1_obj.data["GREEN_CCD"], expected)
 

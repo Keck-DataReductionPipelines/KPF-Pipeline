@@ -16,7 +16,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.dark import Dark
 from kpfpipe.utils.io import build_l0_file_lists
@@ -68,7 +67,7 @@ class TestMasterDarkUnit:
 
     def test_bunit_is_rate(self, master_dark):
         for chip in CHIPS:
-            bunit = HeaderParser.get(master_dark.headers[f"{chip}_IMG"], "BUNIT")
+            bunit = master_dark.headers[f"{chip}_IMG"].get("BUNIT")
             assert bunit == "electrons/sec"
 
     def test_datalvl_class_attribute(self, master_dark):
@@ -140,7 +139,7 @@ class TestMasterDarkRoundTrip:
             ml1.to_fits(fn)
             ml1_read = KPFMasterL1.from_fits(fn)
 
-        assert HeaderParser.get(ml1_read.headers["PRIMARY"], "DATALVL") == "ML1"
+        assert ml1_read.headers["PRIMARY"].get("DATALVL") == "ML1"
 
 
 # ---------------------------------------------------------------------------
@@ -898,7 +897,7 @@ class TestMasterDarkRegression:
 
     def test_bunit_is_rate(self, master_dark):
         for chip in CHIPS:
-            bunit = HeaderParser.get(master_dark.headers[f"{chip}_IMG"], "BUNIT")
+            bunit = master_dark.headers[f"{chip}_IMG"].get("BUNIT")
             assert bunit == "electrons/sec"
 
     def test_snr_never_negative(self, master_dark):

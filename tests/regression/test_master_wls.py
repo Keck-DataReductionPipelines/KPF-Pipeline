@@ -13,7 +13,6 @@ import pytest
 
 import kpfpipe.modules.masters.base as base_module
 from kpfpipe import DETECTOR
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
 
@@ -322,12 +321,9 @@ class TestMakeMasterL2:
         wls = WLS(FILE_LIST)
         override_x = wls.polyorder_x + 4  # ensure different from default
         ml2 = wls.make_master_l2(polyorder_x=override_x)
-        assert HeaderParser.get(ml2.headers["PRIMARY"], "POLYORDX") == override_x
+        assert ml2.headers["PRIMARY"].get("POLYORDX") == override_x
         for chip in wls.chips:
-            assert (
-                HeaderParser.get(ml2.headers[f"{chip}_WLS_COEFFS"], "POLYORDX")
-                == override_x
-            )
+            assert ml2.headers[f"{chip}_WLS_COEFFS"].get("POLYORDX") == override_x
             # verify the override actually propagated into the fit, not just the header
             coeffs = ml2.data[f"{chip}_WLS_COEFFS"]
             assert coeffs.shape[0] == override_x + 1
@@ -531,7 +527,7 @@ class TestMakeMasterL2:
         np.testing.assert_array_equal(
             wls._linelist_df["WAVE"].values, np.array([4500.0, 5500.0, 6500.0])
         )
-        assert HeaderParser.get(ml2.headers["PRIMARY"], "LINELIST") == str(override)
+        assert ml2.headers["PRIMARY"].get("LINELIST") == str(override)
 
     def test_single_frame_stack(self, mock_make_master_l2):
         """A 1-frame stack should still produce a valid master L2."""
