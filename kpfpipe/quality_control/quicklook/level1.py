@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.modules.image_assembly import RN_KEYS
 from kpfpipe.quality_control.quicklook._save_png import save_image_png, save_png
 
@@ -40,7 +39,7 @@ class PlotL1:
         self.obs_id = getattr(l1_obj, "obs_id", None) or ""
         self.name = ""
         if "PRIMARY" in l1_obj.headers:
-            self.name = HeaderParser.get(l1_obj.headers["PRIMARY"], "OBJECT", "")
+            self.name = l1_obj.headers["PRIMARY"].get("OBJECT", "")
 
     def _read_noise_values(self, chip):
         """Return (rn_list, rnng_list) from PRIMARY header, or ([], []) if absent."""
@@ -51,8 +50,8 @@ class PlotL1:
             channel_ext = f"{chip.upper()}_AMP{i}"
             rn_key, rnng_key = RN_KEYS[channel_ext]
             if rn_key in primary and rnng_key in primary:
-                rn_values.append(float(HeaderParser.get(primary, rn_key)))
-                rnng_values.append(float(HeaderParser.get(primary, rnng_key)))
+                rn_values.append(float(primary.get(rn_key)))
+                rnng_values.append(float(primary.get(rnng_key)))
         return rn_values, rnng_values
 
     def image(self, chip, *, full_res=None):

@@ -2,7 +2,6 @@
 
 import numpy as np
 
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.quality_control.qc_booleans.base import QC
 
 _CHIPS = ["GREEN", "RED"]
@@ -16,7 +15,7 @@ _MIN_SCI_SNR = 1.0
 
 def _hdr_float(hdr, key):
     """Return float value for a header key, or None if absent."""
-    val = HeaderParser.get(hdr, key)
+    val = hdr.get(key)
     return None if val is None else float(val)
 
 

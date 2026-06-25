@@ -14,7 +14,6 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
@@ -118,7 +117,7 @@ class TestImageAssemblyBias:
 
     def test_datalvl_set(self, l1_bias):
         l1, _ = l1_bias
-        val = HeaderParser.get(l1.headers["PRIMARY"], "DATALVL")
+        val = l1.headers["PRIMARY"].get("DATALVL")
         assert val == "L1"
 
     def test_read_noise_in_header(self, l1_bias):
@@ -141,7 +140,7 @@ class TestImageAssemblyBias:
 
     def test_overscan_applied_in_header(self, l1_bias):
         l1, _ = l1_bias
-        val = HeaderParser.get(l1.headers["PRIMARY"], "OSCANSUB")
+        val = l1.headers["PRIMARY"].get("OSCANSUB")
         assert val is True
 
     def test_receipt_chain(self, l1_bias):

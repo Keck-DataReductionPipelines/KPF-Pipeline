@@ -406,7 +406,6 @@ class StageName:
   formatter keeps the parens on a multi-type `except` instead of emitting PEP 758's bare form
   — which Pylance/Pyright can't parse. The pin makes the formatter agree with the type
   checker; see §6.)
-
 - **`ruff` is the unified formatter + linter** (it replaced black/isort/flake8). The
   formatter is black-compatible: **88-char target line length**, double-quote normalization.
   Config lives in `pyproject.toml` under `[tool.ruff]`; `ruff==0.15.17` and
@@ -576,21 +575,22 @@ documented, intentional ways — follow *its* conventions when adding masters co
 
 The WMKO-native → EPRV-standard conversion happens **only** in `KPF0.to_kpf1`
 (`data_models/headers.py`); see CLAUDE.md *Header standardization* for the full rule.
-Two classes in `data_models/headers.py` own all header handling: **`HeaderParser`**
-(read/write a keyword) and **`HeaderConverter`** (native↔EPRV conversion + validation).
+**Every extension header is an `astropy.io.fits.Header`** — the KPF data models normalize
+all headers to `fits.Header` (they override `create_extension`; see `data_models/base.py`),
+so there is no value-vs-`(value, comment)` ambiguity and no separate header parser.
+`HeaderConverter` (`data_models/headers.py`) owns the WMKO↔EPRV conversion + validation.
 What this means when writing code:
 
-- **Reading a header value**: use `HeaderParser.get(header, key, default=None)`. A header value
-  is stored either bare or as a `(value, comment)` tuple (and a read-back `fits.Header` yields the
-  scalar); `get` normalizes all three. **Never hand-roll `value[0] if isinstance(value, tuple)`** —
-  that idiom was duplicated ~20× and is now banned; `get` is the one implementation.
-- **Writing a header value**: use `HeaderParser.set(header, key, value, comment=None)` — with a
-  `comment` it writes a `(value, comment)` card, else the bare value.
-- **Conversion / validation**: call `HeaderConverter.native_to_eprv`,
+- **Reading a header value**: use `header.get(key, default)` (or `header[key]`). A `fits.Header`
+  returns the scalar value; the comment lives in `header.comments[key]`. **Never hand-roll
+  `value[0] if isinstance(value, tuple)`** — headers are never tuple-valued dicts.
+- **Writing a header value**: assign `header[key] = (value, comment)` for a commented card, or
+  `header[key] = value` for a bare value. Both work natively on a `fits.Header`.
+- **Conversion / validation**: call `HeaderConverter.wmko_to_eprv`,
   `HeaderConverter.build_instrument_header`, and `HeaderConverter.validate_eprv_primary`; don't
-  re-implement the native→EPRV mapping.
+  re-implement the WMKO→EPRV mapping.
 - **Reading a raw instrument keyword** (`ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`,
-  `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]` (via `HeaderParser.get`), never from
+  `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]` (via `.get`), never from
   PRIMARY. No silent fallback — let a missing key raise.
 - **Writing a KPF-pipeline keyword**: write it to `headers["PRIMARY"]` *and* add it to
   the matching `config/L{0,1,2,4}-headers.csv`, or `to_kpf2`/`to_kpf4` validation will reject the

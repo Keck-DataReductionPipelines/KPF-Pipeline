@@ -5,8 +5,8 @@ Unit tests for CalibrationAssociation.
 import warnings
 
 import pytest
+from astropy.io import fits
 
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.modules.calibration_association import CalibrationAssociation
 
 # ---------------------------------------------------------------------------
@@ -18,7 +18,10 @@ class MockL1:
     def __init__(self, date_obs="2024-04-05T11:08:33"):
         # DATE-OBS is a raw WMKO native read from INSTRUMENT_HEADER; the
         # calibration ages/paths are KPF-pipeline keywords written to PRIMARY.
-        self.headers = {"PRIMARY": {}, "INSTRUMENT_HEADER": {"DATE-OBS": date_obs}}
+        # Headers are fits.Header, mirroring the real KPF data models.
+        inst = fits.Header()
+        inst["DATE-OBS"] = date_obs
+        self.headers = {"PRIMARY": fits.Header(), "INSTRUMENT_HEADER": inst}
         self._receipt = []
 
     def receipt_add_entry(self, name, status):
@@ -254,7 +257,7 @@ class TestPerform:
             / "20240405"
             / "KP.20240405.03637.74_master_bias_L1.fits"
         )
-        assert HeaderParser.get(mod.l1_obj.headers["PRIMARY"], "BIASFILE") == expected
+        assert mod.l1_obj.headers["PRIMARY"].get("BIASFILE") == expected
 
     def test_no_biasdir_header(self, masters_dir):
         mod = _make_module(masters_dir)
@@ -267,7 +270,7 @@ class TestPerform:
         # giving -0.422176 days.
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        age = HeaderParser.get(mod.l1_obj.headers["PRIMARY"], "BIASAGE")
+        age = mod.l1_obj.headers["PRIMARY"].get("BIASAGE")
         assert isinstance(age, float)
         assert age == pytest.approx(-0.422176, abs=1e-5)
 
@@ -280,9 +283,9 @@ class TestPerform:
 
         mod = _make_module(tmp_path)
         mod.perform(["bias"])
-        assert HeaderParser.get(
-            mod.l1_obj.headers["PRIMARY"], "BIASAGE"
-        ) == pytest.approx(-0.547604, abs=1e-5)
+        assert mod.l1_obj.headers["PRIMARY"].get("BIASAGE") == pytest.approx(
+            -0.547604, abs=1e-5
+        )
 
     def test_sets_headers_for_dark_and_flat(self, masters_dir):
         mod = _make_module(masters_dir)
@@ -303,12 +306,10 @@ class TestPerform:
         mod = _make_module(masters_dir)
         mod.perform(["bias", "thar"])
         h = mod.l1_obj.headers["PRIMARY"]
-        assert HeaderParser.get(h, "WLSFILE") == str(
-            d / "KP.20240405.03637.74_master_thar_L2.fits"
-        )
+        assert h.get("WLSFILE") == str(d / "KP.20240405.03637.74_master_thar_L2.fits")
         assert "WLSDIR" not in h
-        assert isinstance(HeaderParser.get(h, "WLSAGE"), float)
-        assert HeaderParser.get(h, "WLSAGE") == pytest.approx(-0.422176, abs=1e-5)
+        assert isinstance(h.get("WLSAGE"), float)
+        assert h.get("WLSAGE") == pytest.approx(-0.422176, abs=1e-5)
 
     def test_raises_on_unknown_cal_type(self, masters_dir):
         mod = _make_module(masters_dir)

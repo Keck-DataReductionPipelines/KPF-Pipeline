@@ -2,7 +2,6 @@
 
 import numpy as np
 
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.modules.image_assembly import RN_KEYS
 from kpfpipe.quality_control.qc_booleans.base import QC
 
@@ -12,13 +11,13 @@ _RNNG_LO, _RNNG_HI = 0.8, 1.5
 
 def _hdr_float(hdr, key):
     """Return float value for a header key, or None if absent."""
-    val = HeaderParser.get(hdr, key)
+    val = hdr.get(key)
     return None if val is None else float(val)
 
 
 def _hdr_flag(hdr, key):
     """Return bool value for a header key, or False if absent."""
-    return bool(HeaderParser.get(hdr, key, default=False))
+    return bool(hdr.get(key, False))
 
 
 class QCL1(QC):

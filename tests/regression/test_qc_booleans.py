@@ -21,7 +21,6 @@ import pytest
 from astropy.io import fits
 
 from kpfpipe import DETECTOR
-from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
@@ -579,7 +578,7 @@ class TestQCL1Run:
         l1 = _make_kpf1(tmp_path)
         results = QCL1(l1).run()
 
-        isgood = HeaderParser.get(l1.headers["PRIMARY"], "ISGOOD")
+        isgood = l1.headers["PRIMARY"].get("ISGOOD")
         assert isgood == 1
 
         expected_keys = [
@@ -595,17 +594,17 @@ class TestQCL1Run:
             "FFIFIN",
         ]
         for k in expected_keys:
-            v = HeaderParser.get(l1.headers["PRIMARY"], k)
+            v = l1.headers["PRIMARY"].get(k)
             assert v == 1, f"{k} should be 1 but is {v}"
             assert k in results
 
     def test_one_bad_check_isgood_0(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=False)
         QCL1(l1).run()
-        isgood = HeaderParser.get(l1.headers["PRIMARY"], "ISGOOD")
+        isgood = l1.headers["PRIMARY"].get("ISGOOD")
         assert isgood == 0
 
-        biassub = HeaderParser.get(l1.headers["PRIMARY"], "BIASSUB")
+        biassub = l1.headers["PRIMARY"].get("BIASSUB")
         assert biassub == 0
 
 

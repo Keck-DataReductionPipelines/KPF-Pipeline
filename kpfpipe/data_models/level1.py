@@ -12,6 +12,7 @@ infrastructure and receipt system.
 import datetime
 import importlib.resources
 import os
+import re
 import warnings
 
 import numpy as np
@@ -25,6 +26,10 @@ from kpfpipe.utils.kpf import get_obs_id
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 L1_EXTENSIONS = pd.read_csv(_config_path / "L1-extensions.csv")
 _KNOWN_L1_EXTENSIONS = set(L1_EXTENSIONS["Name"].tolist())
+
+# EPRV-like L1 filename, but with L1 instead of the standard SL#: the EPRV regex
+# only accepts SL2/SL3/SL4, so KPF L1 uses kpf_L1_YYYYMMDDThhmmss.fits.
+_L1_FILENAME_PATTERN = re.compile(r"kpf_L1_\d{8}T\d{6}\.fits")
 
 
 class KPF1(KPFDataModel):
@@ -124,6 +129,21 @@ class KPF1(KPFDataModel):
 
             self.set_header(ext_name, hdu.header)
 
+    def check_filename_convention(self, filename):
+        """KPF L1 uses an EPRV-like name with L1 (not SL#): kpf_L1_YYYYMMDDThhmmss.fits.
+
+        The EPRV regex only accepts SL2/SL3/SL4, so L1 has its own convention.
+        """
+        basename = os.path.basename(filename)
+        if not _L1_FILENAME_PATTERN.fullmatch(basename):
+            warnings.warn(
+                f"Filename '{basename}' does not follow the KPF L1 naming "
+                "convention (kpf_L1_YYYYMMDDThhmmss.fits)",
+                stacklevel=2,
+            )
+            return False
+        return True
+
     def generate_standard_filename(self):
         """
         KPF L1 filenames follow kpf_L1_YYYYMMDDThhmmss.fits convention.
@@ -131,9 +151,7 @@ class KPF1(KPFDataModel):
         Uses DATE-OBS from the PRIMARY header.
         """
         if "PRIMARY" in self.headers:
-            from kpfpipe.data_models.headers import HeaderParser
-
-            date_obs = HeaderParser.get(self.headers["PRIMARY"], "DATE-OBS")
+            date_obs = self.headers["PRIMARY"].get("DATE-OBS")
             if date_obs is not None:
                 date_str = str(date_obs).split(".")[0]
                 try:
@@ -192,7 +210,6 @@ class KPF1(KPFDataModel):
         arrays are created but empty — the caller (spectral extraction) fills
         those in.
         """
-        from kpfpipe.data_models.headers import HeaderConverter
         from kpfpipe.data_models.level2 import KPF2  # deferred: avoids circular import
 
         kpf2 = KPF2()
@@ -224,7 +241,9 @@ class KPF1(KPFDataModel):
         if self.receipt is not None and not self.receipt.empty:
             kpf2.receipt = self.receipt.copy()
 
-        # Store obs_id for traceability
+        # Carry obs_id through, both as the model attribute and (for traceability
+        # on the product itself) the ORIGID PRIMARY keyword.
+        kpf2.obs_id = self.obs_id
         if self.obs_id is not None:
             kpf2.headers["PRIMARY"]["ORIGID"] = (
                 self.obs_id,
@@ -232,7 +251,7 @@ class KPF1(KPFDataModel):
             )
 
         kpf2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
-        HeaderConverter.validate_eprv_primary(kpf2.headers["PRIMARY"], "L2")
+        self.validate_eprv_primary(kpf2.headers["PRIMARY"], "L2")
         kpf2.receipt_add_entry("to_kpf2", "PASS")
         return kpf2
 

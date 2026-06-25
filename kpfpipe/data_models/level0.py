@@ -11,6 +11,7 @@ infrastructure and receipt system.
 
 import importlib.resources
 import os
+import re
 import warnings
 
 import numpy as np
@@ -18,12 +19,17 @@ import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
 
+from kpfpipe import __version__
 from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.headers import _DRPSTATU_DEFAULT, _NUMORDER, HEADER_MAP
 from kpfpipe.utils.kpf import get_obs_id
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
 _KNOWN_L0_EXTENSIONS = set(L0_EXTENSIONS["Name"].tolist())
+
+# WMKO-native L0 filename: KP.YYYYMMDD.NNNNN.NN.fits (the obs_id plus .fits).
+_L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
 
 
 class KPF0(KPFDataModel):
@@ -118,6 +124,18 @@ class KPF0(KPFDataModel):
 
             self.set_header(ext_name, hdu.header)
 
+    def check_filename_convention(self, filename):
+        """KPF L0 uses the WMKO-native KP.YYYYMMDD.NNNNN.NN.fits name."""
+        basename = os.path.basename(filename)
+        if not _L0_FILENAME_PATTERN.fullmatch(basename):
+            warnings.warn(
+                f"Filename '{basename}' does not follow the KPF L0 naming "
+                "convention (KP.YYYYMMDD.NNNNN.NN.fits)",
+                stacklevel=2,
+            )
+            return False
+        return True
+
     def generate_standard_filename(self):
         """KPF L0 filenames follow the KP.YYYYMMDD.NNNNN.NN.fits pattern."""
         if self.obs_id is not None:
@@ -156,6 +174,63 @@ class KPF0(KPFDataModel):
         "CONFIG",
     ]
 
+    def wmko_to_eprv(self):
+        """Map this L0's raw WMKO PRIMARY to an EPRV-standard PRIMARY dict.
+
+        For each header_map row, take the instrument (WMKO) value when present,
+        else the row default. Then apply the value corrections the installed
+        header_map gets wrong (NUMORDER, JD_UTC) and stamp the DRP version
+        (DRPTAG for EPRV, DRPVERNO for WMKO DRP-RUN-11).
+
+        Returns
+        -------
+        dict
+            EPRV-standard PRIMARY keyword -> value (a few as ``(value, comment)``).
+        """
+        wmko_primary = self.headers["PRIMARY"]
+        out = {}
+        for _, row in HEADER_MAP.iterrows():
+            standard_key = str(row["STANDARD"]).strip()
+            instrument_key = (
+                str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""
+            )
+            default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
+
+            if instrument_key and instrument_key in wmko_primary:
+                out[standard_key] = wmko_primary.get(instrument_key)
+            elif default_val is not None and str(default_val).strip():
+                out[standard_key] = default_val
+
+        # --- Value corrections (see notes/header_audit.md A1/A2/A3) ---
+        out["NUMORDER"] = (_NUMORDER, "Number of echelle orders (green+red)")
+        # header_map maps JD_UTC <- MJD-OBS but drops the epoch offset, leaving a
+        # raw MJD (A1); KPF's canonical exposure time is MJD-OBS, so add 2400000.5.
+        mjd = wmko_primary.get("MJD-OBS")
+        if mjd not in (None, "", "UNKNOWN"):
+            out["JD_UTC"] = (
+                float(mjd) + 2400000.5,
+                "[day] Julian date of exposure start",
+            )
+        out["DRPTAG"] = (__version__, "DRP version")
+        out["DRPVERNO"] = (__version__, "DRP version (WMKO DRP-RUN-11)")
+
+        # WMKO provenance (DRP-RUN-19): PROGID/KOAID, or 'UNKNOWN' if absent.
+        out["PROGID"] = (wmko_primary.get("PROGID") or "UNKNOWN", "WMKO program ID")
+        out["KOAID"] = (wmko_primary.get("KOAID") or "UNKNOWN", "KOA archive ID")
+        # Initial reduction status (DRP-RUN-20); modules overwrite it as they run.
+        out["DRPSTATU"] = (_DRPSTATU_DEFAULT, "DRP reduction status")
+        return out
+
+    def build_instrument_header(self):
+        """Comment-preserving verbatim copy of the raw WMKO PRIMARY.
+
+        INSTRUMENT_HEADER is an immutable, pure pass-through of the raw instrument
+        PRIMARY -- nothing writes to it after ``to_kpf1``. Returning a
+        ``fits.Header`` copy preserves values *and* comments (and commentary
+        cards), unlike a scalar dict.
+        """
+        return self.as_fits_header(self.headers["PRIMARY"])
+
     def to_kpf1(self):
         """
         Create a KPF1 scaffold from this L0, carrying over headers and
@@ -174,26 +249,20 @@ class KPF0(KPFDataModel):
         obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
         but empty — the caller (image assembly) fills those in.
         """
-        from kpfpipe.data_models.headers import HeaderConverter
         from kpfpipe.data_models.level1 import KPF1  # deferred: avoids circular import
 
         l1 = KPF1()
 
         # Convert the raw WMKO PRIMARY to EPRV-standard names/values, and
-        # preserve the verbatim raw L0 PRIMARY in INSTRUMENT_HEADER (immutable
-        # pure pass-through — nothing else ever writes to it).
+        # preserve the verbatim raw L0 PRIMARY (values + comments) in
+        # INSTRUMENT_HEADER (immutable pass-through — nothing else writes to it).
         if "PRIMARY" in self.headers:
-            wmko_primary = self.headers["PRIMARY"]
-            for key, value in HeaderConverter.wmko_to_eprv(wmko_primary).items():
+            for key, value in self.wmko_to_eprv().items():
                 l1.headers["PRIMARY"][key] = value
 
             if "INSTRUMENT_HEADER" not in l1.extensions:
                 l1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
-            instrument_header = l1.headers["INSTRUMENT_HEADER"]
-            for key, value in HeaderConverter.build_instrument_header(
-                wmko_primary
-            ).items():
-                instrument_header[key] = value
+            l1.set_header("INSTRUMENT_HEADER", self.build_instrument_header())
 
         # Copy pass-through extensions (data + header)
         for ext_name in self._L0_TO_L1_PASSTHROUGH:

@@ -171,16 +171,14 @@ Data products follow the EPRV RV Data Standard (rvdata) with KPF-specific extens
 
 ```
 RVDataModel (rvdata)
-├── KPFDataModel (base.py)         — KPF base: obs_id, filename conventions
-│   ├── KPF0 (level0.py)          — Raw CCD data (L0)
-│   └── KPF1 (level1.py)          — Assembled FFI (L1)
-├── RV2 (rvdata)
-│   └── KPF2 (level2.py)          — Extracted spectra (L2) with aliases
-└── RV4 (rvdata)
-    └── KPF4 (level4.py)          — RVs and CCFs (L4) with aliases
+└── KPFDataModel (base.py)         — shared KPF behavior (see below)
+    ├── KPF0 (level0.py)                       — Raw CCD data (L0)
+    ├── KPF1 (level1.py)                       — Assembled FFI (L1)
+    ├── KPF2 (KPFDataModel, RV2) (level2.py)   — Extracted spectra (L2) with aliases
+    └── KPF4 (KPFDataModel, RV4) (level4.py)   — RVs and CCFs (L4) with aliases
 ```
 
-L0 and L1 subclass `KPFDataModel` (which wraps `RVDataModel`). L2 and L4 subclass rvdata's `RV2`/`RV4` directly and add KPF-friendly extension aliases via `AliasedOrderedDict`.
+**All four models inherit `KPFDataModel`.** L0/L1 do so directly; L2/L4 via multiple inheritance alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its overrides win, while `RV2`/`RV4`'s `_read`/`from_fits`/level-specific `_create_hdul` stay reachable through `super()`. `KPFDataModel` is the single home for shared behavior: `obs_id`, `as_fits_header`, `create_extension`, alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1), `receipt_add_entry`/`_update_drpstatus`, and `_create_hdul`/`_restore_primary_comments`. **`check_filename_convention` is the exception** — every concrete model declares it *explicitly* (even bare pass-throughs), and `KPFDataModel`'s version **raises `NotImplementedError`** (the base is abstract — only ever inherited). The conventions: `KP.*` (KPF0), `kpf_L1_*` (KPF1), the EPRV `SL#` check delegated to rvdata via `RV2`/`RV4` (KPF2/KPF4), and the DRP-RUN-05 master name `{KOAID}_master_{type}_L{N}.fits` on `KPFMasterModel` (which precedes KPF1/2/4 in the masters MRO, so it wins). L2/L4 add KPF-friendly extension aliases via `AliasedOrderedDict`.
 
 ### Extension Alias System
 
@@ -204,14 +202,18 @@ L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 ### Header standardization (EPRV PRIMARY)
 
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place**:
-`KPF0.to_kpf1()`, via `kpfpipe/data_models/headers.py` (which drives rvdata's
-`header_map.csv`). Consequences every contributor must respect:
+`KPF0.to_kpf1()`, which calls the conversion methods **`KPF0.wmko_to_eprv()`** and
+**`KPF0.build_instrument_header()`** (L0 owns the WMKO→EPRV mapping). Those methods and the
+shared validator (below) draw their reference data — the rvdata `header_map.csv`, the EPRV/required
+keyword sets, the registry allowlist — from `kpfpipe/data_models/headers.py`, which is now a pure
+reference-data module (no class). Consequences every contributor must respect:
 
 - **L1 PRIMARY is already EPRV-standard.** From L1 onward, PRIMARY holds EPRV keyword *names*
   plus the registered KPF-pipeline keywords below — never raw WMKO natives.
-- **`INSTRUMENT_HEADER` is an immutable, verbatim copy of the raw L0 PRIMARY.** It is written
-  once in `to_kpf1` and **nothing else ever writes to it**. Code that needs a raw instrument
-  keyword (e.g. `ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`) reads it from
+- **`INSTRUMENT_HEADER` is an immutable, verbatim copy of the raw L0 PRIMARY** (values **and**
+  comments — `build_instrument_header()` returns a `fits.Header` copy). It is written once in
+  `to_kpf1` and **nothing else ever writes to it**. Code that needs a raw instrument keyword
+  (e.g. `ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`) reads it from
   `INSTRUMENT_HEADER`, not PRIMARY.
 - **KPF-pipeline keywords are written directly to PRIMARY** (read noise, OSCANMET, BIASSUB/
   DARKSUB, calibration ages/paths, QC booleans, diagnostics, and the RV/barycentric cards). Every
@@ -219,13 +221,24 @@ The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one plac
   (each entry is an explicit ≤8-char FITS keyword — no wildcards; families are enumerated per
   member, e.g. `RNGREEN1`-`RNGREEN4`). **Add new PRIMARY keywords there** or the validator
   will reject the product.
-- **`to_kpf2`/`to_kpf4` are pure pass-throughs** that call `validate_eprv_primary()` and **fail
-  loudly** if a raw native keyword leaked onto PRIMARY, an unregistered keyword appears, or a
-  required EPRV keyword is missing.
+- **`to_kpf2`/`to_kpf4` are pure pass-throughs** that call the shared
+  `KPFDataModel.validate_eprv_primary(header, level)` and **fail loudly** if a raw native keyword
+  leaked onto PRIMARY, an unregistered keyword appears, or a required EPRV keyword is missing. (The
+  validator lives on the shared base — inherited by all levels — and reads its keyword sets from
+  `data_models/headers.py`.)
 - `to_kpf1` also corrects values the installed `header_map.csv` gets wrong: `NUMORDER` (→67 from
   `DETECTOR`), `JD_UTC` (full JD from `MJD-OBS`, the canonical KPF exposure time — native
   `DATE-OBS` is date-only), and the DRP version (`DRPTAG` for EPRV + `DRPVERNO` for WMKO
   DRP-RUN-11). Calibration masters are out of EPRV scope (their products keep their own layout).
+- **Every extension header is an `astropy.io.fits.Header`.** `KPFDataModel.create_extension`
+  (`data_models/base.py`) stores a new header as a `fits.Header`, not rvdata's default
+  `OrderedDict`; `from_fits` already returns `fits.Header`. So **read with `header.get(key)` /
+  `header[key]` and write with `header[key] = (value, comment)`** — native astropy, no
+  value-vs-`(value, comment)` ambiguity and no header-parser helper. rvdata's base `_create_hdul`
+  serializes PRIMARY by iterating `.items()`, which drops a `fits.Header`'s comments; the single
+  `KPFDataModel._create_hdul` override (inherited by all four models) rebuilds the PRIMARY HDU via
+  `self._restore_primary_comments(...)` so comments survive `to_fits`. Conversion and validation
+  live in `HeaderConverter` (`data_models/headers.py`).
 
 ### Configuration
 
@@ -235,7 +248,7 @@ Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/
 
 Science: `L0 = {obs_id}.fits` (KPF-native `KP.*`); `L1 = kpf_L1_{YYYYMMDD}T{HHmmss}.fits` — note **no EPRV "S"**, because the EPRV standard defines no L1 (its filename regex only accepts `SL2`/`SL3`/`SL4`); `L2/L4 = kpf_SL{N}_…` (EPRV-standard). Masters (WMKO DRP-RUN-05): `{KOAID-of-first-input}_master_{type}_L{N}.fits`.
 
-Two authorities encode this rule and **must agree per level**: `build_filepath(obs_id, level, …)` (`utils/io.py`) is the pipeline's path builder (directory + filename, from an obs_id string) and is what recipes use to write; `<model>.generate_standard_filename()` builds only the basename from a populated object's headers and is the `to_fits(fn=None)` fallback — **rvdata-owned for the standard levels L2/L4** (do not override), **KPF-overridden for the non-standard L0/L1**. `TestFilenameConsistency` (in `tests/regression/test_masters_recipe.py`) enforces that the two never drift.
+Two authorities encode this rule and **must agree per level**: `build_filepath(obs_id, level, …)` (`utils/io.py`) is the pipeline's path builder (directory + filename, from an obs_id string) and is what recipes use to write; `<model>.generate_standard_filename()` builds only the basename from a populated object's headers and is the `to_fits(fn=None)` fallback. Like `check_filename_convention`, **every concrete model declares it explicitly** (KPF0/KPF1 build the KPF names; KPF2/KPF4 are bare pass-throughs to rvdata's EPRV builder via `RV2`/`RV4`; `KPFMasterModel` builds the master name), and `KPFDataModel`'s abstract version **raises `NotImplementedError`**. `TestFilenameConsistency` (in `tests/regression/test_masters_recipe.py`) enforces that this and `build_filepath` never drift.
 
 ### Masters Pipeline
 
@@ -243,7 +256,7 @@ Two authorities encode this rule and **must agree per level**: `build_filepath(o
 
 ### RVDataModel Base Class
 
-The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (all OrderedDicts), plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. The base `set_data()`/`set_header()` use `.keys()` checks that bypass `__contains__` overrides, so KPF2/KPF4 override these methods with a `hasattr` guard to resolve aliases during init before the dicts are upgraded.
+The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (top-level OrderedDicts), plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. The base `set_data()`/`set_header()` use `.keys()` checks that bypass `__contains__` overrides, so KPF2/KPF4 override these methods with a `hasattr` guard to resolve aliases during init before the dicts are upgraded. The base `create_extension()` initializes each extension *header* as an `OrderedDict`; the KPF models override it so every header is a `fits.Header` instead (see *Header standardization*).
 
 ### Diagnostics, QC, and Quicklook
 

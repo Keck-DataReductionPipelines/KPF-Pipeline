@@ -18,12 +18,11 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
-from astropy.table import Table
 from rvdata.core.models.level2 import RV2
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import update_drpstatus
+from kpfpipe.data_models.base import KPFDataModel
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -137,7 +136,7 @@ class _KPF2DataDict(AliasedOrderedDict):
         return aliased
 
 
-class KPF2(RV2):
+class KPF2(KPFDataModel, RV2):
     """
     KPF Level 2 extracted spectra data model.
 
@@ -209,58 +208,13 @@ class KPF2(RV2):
                     self.headers.register_alias(alias, canonical)
                     self.data.register_alias(alias, canonical)
 
-    def set_data(self, ext_name, data):
-        """
-        Override to resolve aliases before the base class .keys() check.
+    def check_filename_convention(self, filename):
+        """KPF L2 is EPRV-standard (SL2 name); delegate to rvdata's check."""
+        return RV2.check_filename_convention(self, filename)
 
-        Chip-prefix keys (e.g. 'GREEN_SCI2_FLUX') are routed directly through
-        `_KPF2DataDict.__setitem__`, which writes into the appropriate slice
-        of the concatenated trace array.
-        """
-        if (
-            hasattr(self.data, "_chip_split")
-            and self.data._chip_split(ext_name) is not None
-        ):
-            self.data[ext_name] = data
-            return
-        if hasattr(self.extensions, "_resolve"):
-            ext_name = self.extensions._resolve(ext_name)
-        # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
-        if (
-            ext_name in self.extensions
-            and self.extensions[ext_name] == "BinTableHDU"
-            and isinstance(data, np.ndarray)
-            and data.dtype.names is not None
-        ):
-            data = Table(data)
-        super().set_data(ext_name, data)
-        # Sync self.receipt when the RECEIPT extension is loaded from FITS.
-        if ext_name == "RECEIPT" and isinstance(data, Table):
-            self.receipt = data.to_pandas()
-
-    def _create_hdul(self):
-        """
-        Override to sync self.receipt into self.data["RECEIPT"] before writing.
-
-        rvdata's `to_fits` writes `self.data["RECEIPT"]` (the default empty
-        table), not `self.receipt` (the processing history DataFrame). This
-        override syncs them so the full receipt is written to the FITS file.
-        """
-        if self.receipt is not None and not self.receipt.empty:
-            self.data["RECEIPT"] = Table.from_pandas(self.receipt)
-        return super()._create_hdul()
-
-    def receipt_add_entry(self, module, status):
-        """Record a processing step, and update DRPSTATU for pipeline modules."""
-        super().receipt_add_entry(module, status)
-        if status == "PASS":
-            update_drpstatus(self, module)
-
-    def set_header(self, ext_name, header):
-        """Override to resolve aliases before the base class .keys() check."""
-        if hasattr(self.extensions, "_resolve"):
-            ext_name = self.extensions._resolve(ext_name)
-        super().set_header(ext_name, header)
+    def generate_standard_filename(self):
+        """KPF L2 is EPRV-standard (SL2 name); delegate to rvdata's builder."""
+        return RV2.generate_standard_filename(self)
 
     def to_kpf4(self):
         """
@@ -270,7 +224,6 @@ class KPF2(RV2):
         and the receipt chain preserved. RV and CCF data extensions are
         created but empty — the caller (RV computation) fills those in.
         """
-        from kpfpipe.data_models.headers import HeaderConverter
         from kpfpipe.data_models.level4 import KPF4  # deferred: avoids circular import
 
         kpf4 = KPF4()
@@ -285,12 +238,13 @@ class KPF2(RV2):
             for key, value in self.headers["INSTRUMENT_HEADER"].items():
                 kpf4.headers["INSTRUMENT_HEADER"][key] = value
 
-        # Carry forward receipt
+        # Carry forward receipt and obs_id
         if self.receipt is not None and not self.receipt.empty:
             kpf4.receipt = self.receipt.copy()
+        kpf4.obs_id = self.obs_id
 
         kpf4.headers["PRIMARY"]["DATALVL"] = ("L4", "Data product level")
-        HeaderConverter.validate_eprv_primary(kpf4.headers["PRIMARY"], "L4")
+        self.validate_eprv_primary(kpf4.headers["PRIMARY"], "L4")
         kpf4.receipt_add_entry("to_kpf4", "PASS")
         return kpf4
 
