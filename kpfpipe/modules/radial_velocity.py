@@ -14,12 +14,14 @@ its illumination source (SCI-OBJ/SKY-OBJ/CAL-OBJ in INSTRUMENT_HEADER):
   target   TARGTEFF-lookup      yes       TARGRADV (systemic)
   sky      G2_espresso (solar)  yes       0
   thar     ThAr list (unit wt)  no        0
-  etalon   / lfc                                NotImplementedError
+  etalon   / lfc                                skipped (no CCF/RV; not implemented)
   none     not illuminated -> skipped (no CCF/RV)
 
 All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.
 """
+
+import warnings
 
 import astropy.units as u
 import numpy as np
@@ -29,6 +31,7 @@ from astropy.io import fits
 from astropy.stats import mad_std
 
 from kpfpipe import DEFAULTS, REPO_ROOT
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
@@ -106,8 +109,8 @@ class RadialVelocity:
 
         Returns a dict with keys 'object' (the normalized source), 'mask_name',
         'apply_barycorr', and 'vel_grid_center'. An unilluminated fiber ('none')
-        has None mask/barycorr/center. Raises NotImplementedError for sources
-        whose CCF path is not yet built (etalon, lfc).
+        has None mask/barycorr/center. Sources whose CCF path is not yet built
+        (etalon, lfc) are skipped the same way, with a warning.
         """
         key = f"{chip.upper()}_{fiber.upper()}"
         if key in self._illumination_source:
@@ -128,9 +131,8 @@ class RadialVelocity:
         # Map the raw keyword value straight to the source object and its CCF
         # settings: mask, whether to barycentric-correct, and the velocity-grid
         # center (systemic RV for a star, 0 for sky/calibration).
-        raw = inst[keyword]
-        v = raw[0] if isinstance(raw, tuple) else raw
-        v = str(v).strip().lower()
+        raw = HeaderParser.get(inst, keyword)
+        v = str(raw).strip().lower()
         if v == "target":
             source = {
                 "object": "target",
@@ -160,12 +162,30 @@ class RadialVelocity:
                 "vel_grid_center": None,
             }
         elif v == "lfcfiber":
-            raise NotImplementedError(
-                "CCF for 'lfc'-illuminated fibers is not yet implemented"
+            source = {
+                "object": "lfc",
+                "mask_name": None,
+                "apply_barycorr": None,
+                "vel_grid_center": None,
+            }
+            warnings.warn(
+                f"{fiber.upper()} is lfc-illuminated; CCF is not implemented. "
+                "Skipping this fiber.",
+                UserWarning,
+                stacklevel=2,
             )
         elif "etalon" in v:
-            raise NotImplementedError(
-                "CCF for 'etalon'-illuminated fibers is not yet implemented"
+            source = {
+                "object": "etalon",
+                "mask_name": None,
+                "apply_barycorr": None,
+                "vel_grid_center": None,
+            }
+            warnings.warn(
+                f"{fiber.upper()} is etalon-illuminated; CCF is not implemented. "
+                "Skipping this fiber.",
+                UserWarning,
+                stacklevel=2,
             )
         else:
             raise ValueError(f"unrecognized illumination source {raw!r}")
@@ -977,11 +997,14 @@ class RadialVelocity:
             rv_err = np.full(norder, np.nan)
 
             # Dispatch the mask/barycorr/grid-center from the fiber's illumination
-            # source; 'none' (unilluminated) is skipped with NaN RVs and no
-            # CCF/RV extension, while etalon/lfc fail loud (NotImplementedError).
+            # source; unilluminated or not-yet-implemented sources are skipped
+            # with NaN RVs and no CCF/RV extension.
             source = self._resolve_illumination_source(chips[0], fiber)
-            if source["object"] == "none":
-                print(f"  {fiber}: illumination source 'none'; skipping (no CCF/RV)")
+            if source["mask_name"] is None:
+                print(
+                    f"  {fiber}: illumination source {source['object']!r}; "
+                    "skipping (no CCF/RV)"
+                )
                 self._results[fiber] = {
                     "rv": rv,
                     "rv_err": rv_err,
@@ -1086,8 +1109,12 @@ class RadialVelocity:
             for chip in ccd_rv:
                 n = 1 if chip == "GREEN" else 2
                 v, e = ccd_rv[chip], ccd_rv_err[chip]
-                prim[f"CCD{n}RV{sfx}"] = float(v) if np.isfinite(v) else None
-                prim[f"CCD{n}ERV{sfx}"] = float(e) if np.isfinite(e) else None
+                HeaderParser.set(
+                    prim, f"CCD{n}RV{sfx}", float(v) if np.isfinite(v) else None
+                )
+                HeaderParser.set(
+                    prim, f"CCD{n}ERV{sfx}", float(e) if np.isfinite(e) else None
+                )
 
         # PRIMARY (EPRV L4): always record the RV method.
         prim = l4_obj.headers["PRIMARY"]
@@ -1139,8 +1166,8 @@ class RadialVelocity:
                     f"  combined RV: {chip} science fit non-finite; excluded from CCFRV"
                 )
             n = 1 if chip == "GREEN" else 2
-            prim[f"CCD{n}RV"] = float(v) if np.isfinite(v) else None
-            prim[f"CCD{n}ERV"] = float(e) if np.isfinite(e) else None
+            HeaderParser.set(prim, f"CCD{n}RV", float(v) if np.isfinite(v) else None)
+            HeaderParser.set(prim, f"CCD{n}ERV", float(e) if np.isfinite(e) else None)
 
         # Cross-chip weighted RV (CCFRV) and inverse-variance error (CCFERV): the
         # per-CCD science RVs combined at the RV level by their summed order
@@ -1160,8 +1187,8 @@ class RadialVelocity:
                 "CCFRV/PRIMARY RV UNDEFINED"
             )
 
-        prim["CCFRV"] = float(ccfrv) if np.isfinite(ccfrv) else None
-        prim["CCFERV"] = float(ccferv) if np.isfinite(ccferv) else None
+        HeaderParser.set(prim, "CCFRV", float(ccfrv) if np.isfinite(ccfrv) else None)
+        HeaderParser.set(prim, "CCFERV", float(ccferv) if np.isfinite(ccferv) else None)
 
         # PRIMARY BERV/BJDTDB: chip-weighted mean of the per-CCD photon-weighted
         # bary summaries (CCD<n>BKMS/CCD<n>BJD from BarycentricCorrection), using
@@ -1171,11 +1198,8 @@ class RadialVelocity:
         for chip in chips:
             n = 1 if chip == "GREEN" else 2
             w = float(np.nansum(self._get_order_weights(chip, rep)))
-            bkms, bjd = prim.get(f"CCD{n}BKMS"), prim.get(f"CCD{n}BJD")
-            if isinstance(bkms, tuple):  # PRIMARY stores (value, comment)
-                bkms = bkms[0]
-            if isinstance(bjd, tuple):
-                bjd = bjd[0]
+            bkms = HeaderParser.get(prim, f"CCD{n}BKMS")
+            bjd = HeaderParser.get(prim, f"CCD{n}BJD")
             if (
                 w > 0
                 and bkms is not None
@@ -1219,9 +1243,9 @@ class RadialVelocity:
     def info(self):
         """Print a summary of the module configuration and RV results."""
         print("RadialVelocity")
-        obs_id = self.l2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
-        if isinstance(obs_id, tuple):
-            obs_id = obs_id[0]
+        obs_id = HeaderParser.get(
+            self.l2_obj.headers.get("PRIMARY", {}), "ORIGID", "unknown"
+        )
         print(f"  obs_id:         {obs_id}")
         print(f"  ccf_mask_width: {self.ccf_mask_width} km/s")
         print(f"  ccf_step_size:  {self.ccf_step_size} km/s")

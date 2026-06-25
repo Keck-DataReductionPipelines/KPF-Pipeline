@@ -28,6 +28,9 @@ FLATAGE,CalibrationAssociation,Master flat age [days]
 WLSFILE,CalibrationAssociation,WLS master full path
 WLSAGE,CalibrationAssociation,WLS master age [days]
 DRPVERNO,KPF0.to_kpf1,Pipeline version (WMKO DRP-RUN-11; EPRV equivalent is DRPTAG)
+PROGID,KPF0.to_kpf1,WMKO program ID (DRP-RUN-19)
+KOAID,KPF0.to_kpf1,KOA archive ID (DRP-RUN-19)
+DRPSTATU,KPF0.to_kpf1,DRP reduction status (DRP-RUN-20)
 MASTYPE,KPFMaster,Master calibration type (masters products only)
 RNINRNG,QCL1,QC: per-amp RN within range
 RNGAUSS,QCL1,QC: non-Gaussian RN within range
