@@ -222,7 +222,9 @@ class KPF1(KPFDataModel):
         if self.receipt is not None and not self.receipt.empty:
             kpf2.receipt = self.receipt.copy()
 
-        # Store obs_id for traceability
+        # Carry obs_id through, both as the model attribute and (for traceability
+        # on the product itself) the ORIGID PRIMARY keyword.
+        kpf2.obs_id = self.obs_id
         if self.obs_id is not None:
             kpf2.headers["PRIMARY"]["ORIGID"] = (
                 self.obs_id,

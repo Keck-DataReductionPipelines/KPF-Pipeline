@@ -240,9 +240,10 @@ class KPF2(KPFDataModel, RV2):
             for key, value in self.headers["INSTRUMENT_HEADER"].items():
                 kpf4.headers["INSTRUMENT_HEADER"][key] = value
 
-        # Carry forward receipt
+        # Carry forward receipt and obs_id
         if self.receipt is not None and not self.receipt.empty:
             kpf4.receipt = self.receipt.copy()
+        kpf4.obs_id = self.obs_id
 
         kpf4.headers["PRIMARY"]["DATALVL"] = ("L4", "Data product level")
         HeaderConverter.validate_eprv_primary(kpf4.headers["PRIMARY"], "L4")
