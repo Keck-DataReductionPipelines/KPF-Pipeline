@@ -116,7 +116,7 @@ class StageName:
     def __init__(self, l1_obj, config=None):
         self.l1_obj = l1_obj
         # ... canonical config block (see §4) ...
-        self._results = None  # populated by perform()
+        self._info = None  # info() summary only
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -129,10 +129,23 @@ class StageName:
     def do_step(self, ...): ...
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+    def _track_info(self, chips=None, fibers=None):
+        """Populate _info from instance attributes (takes only chips/fibers)."""
+        self._info = {...}
+
+    def _set_headers(self, l2_obj):
+        """Sole place this module writes PRIMARY; reads instance attributes."""
+        l2_obj.headers["PRIMARY"][KEY] = (self._attr, "comment")
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
     def perform(self, chips=None):
-        ...
+        ...                                    # populate header-source attributes
+        self._set_headers(self.l2_obj)         # consolidates ALL PRIMARY writes
+        self._track_info(chips)                # populates _info, just before the receipt
         self.l2_obj.receipt_add_entry("stage_name", "PASS")
         return self.l2_obj
 
@@ -140,8 +153,16 @@ class StageName:
 ```
 
 - **Method order is fixed and marked with 66-dash banner comments**:
-  `__init__` → *Private helpers* → *Algorithm steps* → *Public entry point* (`perform`)
-  → `info()`.
+  `__init__` → *Private helpers* → *Algorithm steps* → *Private helpers - module execution*
+  (`_track_info`, then `_set_headers`) → *Public entry point* (`perform`) → `info()`.
+- **Header consolidation & `_info`.** A module writes PRIMARY in exactly one place — a private
+  `_set_headers(obj)` that sources its values from instance attributes (never recomputes,
+  never reads another product), called immediately before `receipt_add_entry`. Modules that write
+  no PRIMARY keep an empty helper for uniformity. `_info` (formerly `_results`) is a pruned,
+  human-readable summary consumed **only** by `info()` — never the science/header chain, and never
+  tests (tests assert on the underlying attributes). It is populated by a private
+  `_track_info(self[, chips, fibers])` (no other args — it sources from instance attributes),
+  called immediately after `_set_headers` and before the receipt.
 - The banner is exactly:
   ```python
       # ------------------------------------------------------------------
@@ -208,12 +229,13 @@ class StageName:
   (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword
   argument on a method call (overrides both). Config is the production override path;
   direct kwargs are the developer/interactive path (e.g. notebooks), not used in production.
-- **Declare every lazily-populated attribute in `__init__`, set to `None`/`{}`, with a
-  trailing comment naming the method that fills it** — this is a defining house style:
+- **Declare every lazily-populated attribute in `__init__`, set to `None`/`{}`.** Add a
+  trailing comment naming the filling method (and its shape) **only where that isn't obvious**;
+  keep comments minimal otherwise. Conventional attributes (`_info`) stay bare:
   ```python
-  self._results = None       # populated by perform()
-  self._line_mask = {}       # line mask, set by _build_line_mask()
-  self.ml1_obj = None        # populated by subclass make_master_l1()
+  self._info = None
+  self._ccd_bjd = None   # per-CCD [GREEN, RED] arrays for _set_headers
+  self._line_mask = {}   # set by _build_line_mask()
   ```
 - **Detector geometry comes from `DETECTOR` (sourced from `detector.toml`), consumed on
   the instance** — every module gets `self.norder` (`{GREEN, RED}` dict), `self.ccd`,
@@ -250,17 +272,13 @@ class StageName:
     positional in the same slot (e.g. `CalibrationAssociation.perform(self, cal_types, *, ...)`).
   - **Everything else is keyword-only** — place a bare `*` after the positionals so all
     tunables must be passed by name.
-  - **Order the keyword-only args in two groups**: first the *configurable* parameters —
-    backed by a `_DEFAULTS` key and a config entry, defaulting to `None` and resolving to
-    the configured `self.<attr>` (the "`None` means use config" tunables); then the
-    *semi-hidden* parameters — rarely-tuned knobs left exposed for developer experimentation,
-    carrying a real literal default (e.g. `min_npts=9`, `verbose=True`) and intentionally
-    **absent** from both `_DEFAULTS` and config. The invariant is that a tunable's tier is
-    legible from the signature alone: **`=None` ⇒ configurable** (resolves to `self.<attr>`),
-    **literal default ⇒ semi-hidden**. So a semi-hidden param needing a sequence default uses
-    an *immutable literal* (a tuple, safe as a default argument), e.g.
-    `clip_edge_pixels=(500, 500)`, never the `None`-sentinel + in-body list fallback. Within
-    each group, keep a sensible domain order.
+  - **Order the keyword-only args in two groups**, each in sensible domain order: first the
+    *configurable* params (backed by `_DEFAULTS` + config, defaulting to `None`, resolving to
+    `self.<attr>`), then the *semi-hidden* knobs (a real literal default like `min_npts=9` or
+    `verbose=True`, absent from both `_DEFAULTS` and config). A tunable's tier must be legible
+    from the signature alone: **`=None` ⇒ configurable**, **literal default ⇒ semi-hidden**. A
+    semi-hidden param needing a sequence default uses an *immutable literal*
+    (`clip_edge_pixels=(500, 500)`), never a `None`-sentinel + in-body list fallback.
 - **The `make_master_*` entry points follow the same shape** (§10), with `l0_file_list`
   as the sole positional in place of `chips`/`fibers`.
 - **Parameter ordering applies to *every* method**, not just the public entry points:
@@ -323,10 +341,8 @@ class StageName:
   value with `!r`**: `raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")`.
 - **Narrow your `except`**, never bare `except:`. Broad `except Exception` is acceptable
   only around external I/O that converts to a warning-and-skip. **Always parenthesize a
-  multi-type clause** — `except (ValueError, TypeError):`, binding or not. PEP 758 makes the
-  bare `except A, B:` valid at runtime on 3.14, but Pylance/Pyright doesn't yet parse it and
-  flags every such clause; the parenthesized form is accepted by every tool. The formatter
-  leaves these parens in place because `target-version` is pinned to `py313` (see §8).
+  multi-type clause** — `except (ValueError, TypeError):`, binding or not: the bare PEP 758
+  form (`except A, B:`) is valid on 3.14 but Pylance/Pyright can't parse it (§8).
 - **Always chain re-raises** (Ruff `B904`): `raise ... from e` to preserve the original
   context, or `raise ... from None` when translating a low-level error (a `KeyError`/
   `AttributeError` from a dict lookup or `getattr` dispatch) into a clearer domain error
@@ -384,12 +400,10 @@ class StageName:
 
 - **Prefer Ruff's normalization for stylistic nits.** When the formatter has an opinion on a
   purely stylistic point (paren placement, line wrapping, quote style, blank lines), follow
-  what `ruff format` produces rather than hand-styling against it — fighting the formatter
-  just churns. Deviate only with a strong, documented reason. (Example of such a reason:
-  Ruff's `target-version` is pinned to `py313`, one below the 3.14.3 runtime, *so that* the
-  formatter keeps the parens on a multi-type `except` instead of emitting PEP 758's bare form
-  — which Pylance/Pyright can't parse. The pin makes the formatter agree with the type
-  checker; see §6.)
+  what `ruff format` produces rather than fighting it. Deviate only with a strong, documented
+  reason — e.g. `target-version` is pinned to `py313` (one below the 3.14.3 runtime) *so that*
+  the formatter keeps the parens on a multi-type `except` rather than emitting PEP 758's bare
+  form, which Pylance/Pyright can't parse (§6).
 - **`ruff` is the unified formatter + linter** (it replaced black/isort/flake8). The
   formatter is black-compatible: **88-char target line length**, double-quote normalization.
   Config lives in `pyproject.toml` under `[tool.ruff]`; `ruff==0.15.17` and

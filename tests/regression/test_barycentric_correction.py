@@ -889,24 +889,15 @@ class TestPerform:
         bc_monkeypatched.perform()
         assert captured["rv_mps"] == 0.0
 
-    def test_results_populated(self, bc_monkeypatched):
-        assert bc_monkeypatched._results is None
-        bc_monkeypatched.perform()
-        results = bc_monkeypatched._results
-        assert set(results.keys()) == {
-            "bjd_tdb",
-            "bary_kms",
-            "bary_z",
-            "ccd_bjd",
-            "ccd_kms",
-            "ccd_z",
-            "astrometry_source",
-        }
-        assert results["astrometry_source"] == "Gaia DR3"
-        for key in ("bjd_tdb", "bary_kms", "bary_z"):
-            assert len(results[key]) == NORDER
-        for key in ("ccd_bjd", "ccd_kms", "ccd_z"):
-            assert len(results[key]) == 2
+    def test_state_populated(self, bc_monkeypatched):
+        for attr in ("_ccd_bjd", "_ccd_kms", "_ccd_z"):
+            assert getattr(bc_monkeypatched, attr) is None
+        kpf2 = bc_monkeypatched.perform()
+        assert bc_monkeypatched._astrometry_source == "Gaia DR3"
+        for key in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
+            assert len(kpf2.data[key]) == NORDER
+        for attr in ("_ccd_bjd", "_ccd_kms", "_ccd_z"):
+            assert len(getattr(bc_monkeypatched, attr)) == 2
 
     def test_records_gaia_provenance(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
@@ -943,7 +934,7 @@ class TestPerform:
 
         astrsrc = HeaderParser.get(kpf2.headers["PRIMARY"], "ASTRSRC")
         assert astrsrc == "WMKO header"
-        assert bc._results["astrometry_source"] == "WMKO header"
+        assert bc._astrometry_source == "WMKO header"
 
     def test_real_outlier_filter_runs_end_to_end(self, synthetic_kpf2, monkeypatch):
         """Exercise fix_expmeter_outliers=True through perform() with a

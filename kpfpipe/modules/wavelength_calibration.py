@@ -55,7 +55,7 @@ class WavelengthCalibration:
             setattr(self, k, params.get(k, v))
 
         self._wls_path = None  # set by load_wls()
-        self._results = None  # populated by perform()
+        self._info = None
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -102,6 +102,22 @@ class WavelengthCalibration:
 
         self._wls_path = wls_path
         return KPFMasterL2.from_fits(wls_path)
+
+    # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {"wls_path": self._wls_path}
+
+    def _set_headers(self, l2_obj):
+        """Write all PRIMARY-header keywords for wavelength calibration.
+
+        Reserved: this module writes no PRIMARY metadata yet. Present so every
+        module consolidates header writes in one place, called just before the
+        receipt entry.
+        """
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -152,13 +168,9 @@ class WavelengthCalibration:
                     )
                 self.l2_obj.set_data(key, np.asarray(src, dtype=np.float64))
 
+        self._set_headers(self.l2_obj)
+        self._track_info()
         self.l2_obj.receipt_add_entry("wavelength_calibration", "PASS")
-
-        self._results = {
-            "wls_path": self._wls_path,
-            "chips": list(chips),
-            "fibers": list(fibers),
-        }
 
         return self.l2_obj
 
@@ -171,12 +183,12 @@ class WavelengthCalibration:
         print(f"  chips:   {self.chips}")
         print(f"  fibers:  {self.fibers}")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
         # WLSAGE is written to PRIMARY by CalibrationAssociation (alongside WLSFILE).
         agewls = HeaderParser.get(primary, "WLSAGE")
-        print(f"  wls_path: {self._results['wls_path']}")
+        print(f"  wls_path: {self._info['wls_path']}")
         if agewls is not None:
             print(f"  WLSAGE:   {agewls:+.4f} d  (master - obs)")

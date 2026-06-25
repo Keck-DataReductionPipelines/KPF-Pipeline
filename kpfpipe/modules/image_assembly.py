@@ -70,7 +70,7 @@ class ImageAssembly:
         for k, v in self.ccd.items():
             setattr(self, k, v)
 
-        self._results = None  # populated by perform()
+        self._info = None
         self.orientation = {}  # amp ext -> flip; set by _parse_amplifier_reference()
         self.gain = {}  # amp ext -> gain; set by _parse_amplifier_reference()
         self.namp = {}  # chip -> n amps; set by count_amplifiers()
@@ -194,45 +194,6 @@ class ImageAssembly:
         oscan_srl, _ = self._get_overscan_pixels(chip, amp_no, **kwargs)
         oscan_bias = np.nanmedian(oscan_srl, axis=1)[:, None]
         return oscan_bias
-
-    def _set_kpf1_headers(self, l1_obj):
-        """
-        Populate KPF1 header keywords related to read noise measurement
-        and overscan subtraction.
-
-        Parameters
-        ----------
-        l1_obj : KPF1
-            L1 data object whose PRIMARY header will be updated with
-            read noise and overscan metadata.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        Header updates:
-        1. Read noise per amplifier channel (e.g. RNGRN1)
-        2. Non-Gaussian read noise per amplifier channel (e.g. RNNGGR1)
-        3. Overscan subtraction applied (OSCANSUB)
-        """
-        for channel_ext, rn in self.readnoise.items():
-            key_read, key_rnng = RN_KEYS[channel_ext]
-            l1_obj.headers["PRIMARY"][key_read] = (
-                round(float(rn), 4),
-                f"Read noise {channel_ext} [e-]",
-            )
-            l1_obj.headers["PRIMARY"][key_rnng] = (
-                round(float(self.rn_nongauss[channel_ext]), 4),
-                f"Non-Gaussian read noise {channel_ext}",
-            )
-
-        # "zero" is the explicit no-op method (strips overscan, subtracts none).
-        l1_obj.headers["PRIMARY"]["OSCANSUB"] = (
-            self.overscan_method != "zero",
-            "Overscan subtraction applied",
-        )
 
     @staticmethod
     def _convert_expmeter_wavelengths_to_angstroms(l1_obj):
@@ -535,6 +496,63 @@ class ImageAssembly:
         return image
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self, chips):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {
+            chip: {
+                ch: (
+                    round(float(self.readnoise[ch]), 4),
+                    round(float(self.rn_nongauss[ch]), 4),
+                )
+                for ch in self.readnoise
+                if ch.startswith(chip.upper())
+            }
+            for chip in chips
+        }
+
+    def _set_headers(self, l1_obj):
+        """
+        Populate KPF1 header keywords related to read noise measurement
+        and overscan subtraction.
+
+        Parameters
+        ----------
+        l1_obj : KPF1
+            L1 data object whose PRIMARY header will be updated with
+            read noise and overscan metadata.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Header updates:
+        1. Read noise per amplifier channel (e.g. RNGRN1)
+        2. Non-Gaussian read noise per amplifier channel (e.g. RNNGGR1)
+        3. Overscan subtraction applied (OSCANSUB)
+        """
+        for channel_ext, rn in self.readnoise.items():
+            key_read, key_rnng = RN_KEYS[channel_ext]
+            l1_obj.headers["PRIMARY"][key_read] = (
+                round(float(rn), 4),
+                f"Read noise {channel_ext} [e-]",
+            )
+            l1_obj.headers["PRIMARY"][key_rnng] = (
+                round(float(self.rn_nongauss[channel_ext]), 4),
+                f"Non-Gaussian read noise {channel_ext}",
+            )
+
+        # "zero" is the explicit no-op method (strips overscan, subtracts none).
+        l1_obj.headers["PRIMARY"]["OSCANSUB"] = (
+            self.overscan_method != "zero",
+            "Overscan subtraction applied",
+        )
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
@@ -596,20 +614,9 @@ class ImageAssembly:
             l1_obj.set_data(f"{chip}_VAR", var_ffi)
 
         self._convert_expmeter_wavelengths_to_angstroms(l1_obj)
-        self._set_kpf1_headers(l1_obj)
+        self._set_headers(l1_obj)
+        self._track_info(chips)
         l1_obj.receipt_add_entry("image_assembly", "PASS")
-
-        self._results = {
-            chip: {
-                ch: (
-                    round(float(self.readnoise[ch]), 4),
-                    round(float(self.rn_nongauss[ch]), 4),
-                )
-                for ch in self.readnoise
-                if ch.startswith(chip.upper())
-            }
-            for chip in chips
-        }
 
         return l1_obj
 
@@ -620,13 +627,13 @@ class ImageAssembly:
         print(f"  overscan_method:  {self.overscan_method}")
         print(f"  readnoise_sigma:  {self.readnoise_sigma}")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
         print(f"\n  {'channel':<14s} {'read noise [e-]':<18s} {'non-gaussian'}")
         print("  " + "-" * 48)
-        for chip in self._results:
-            for channel, (rn, rnng) in self._results[chip].items():
+        for chip in self._info:
+            for channel, (rn, rnng) in self._info[chip].items():
                 print(f"  {channel:<14s} {rn:<18} {rnng}")
             print()

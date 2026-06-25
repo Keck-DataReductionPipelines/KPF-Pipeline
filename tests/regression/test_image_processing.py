@@ -145,8 +145,10 @@ class TestInit:
         with pytest.raises(TypeError):
             ImageProcessing(MockL1(), config=42)
 
-    def test_results_none_before_perform(self):
-        assert ImageProcessing(MockL1())._results is None
+    def test_paths_none_before_perform(self):
+        mod = ImageProcessing(MockL1())
+        assert mod._bias_path is None
+        assert mod._dark_path is None
 
     def test_bias_path_none_before_perform(self):
         assert ImageProcessing(MockL1())._bias_path is None
@@ -183,7 +185,6 @@ class TestBiasResolution:
         mod = _make_module(bias_file="master_bias.fits", bias_dir=str(tmp_path))
         mod.perform(dark=False)
         assert mod._bias_path == bias_path
-        assert mod._results["bias"] == bias_path
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
         )
@@ -211,7 +212,7 @@ class TestBiasResolution:
         # No BIAS headers — the object is used directly, no disk lookup.
         mod = _make_module()
         mod.perform(bias=master, dark=False)
-        assert "bias" in mod._results
+        assert mod._bias_path is not None
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
         )
@@ -308,7 +309,6 @@ class TestDarkResolution:
         mod = _make_module(dark_file="master_dark.fits", dark_dir=str(tmp_path))
         mod.perform(bias=False)
         assert mod._dark_path == dark_path
-        assert mod._results["dark"] == dark_path
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
@@ -329,7 +329,7 @@ class TestDarkResolution:
         master = KPFMasterL1.from_fits(dark_path)
         mod = _make_module()
         mod.perform(bias=False, dark=master)
-        assert "dark" in mod._results
+        assert mod._dark_path is not None
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
@@ -412,10 +412,9 @@ class TestPerform:
             mod_with_bias.l1_obj.data["RED_CCD"], _CCD_VALUE - _BIAS_VALUE
         )
 
-    def test_results_keyed_by_bias(self, mod_with_bias, tmp_path):
+    def test_bias_path_recorded(self, mod_with_bias, tmp_path):
         mod_with_bias.perform()
-        assert "bias" in mod_with_bias._results
-        assert mod_with_bias._results["bias"] == str(tmp_path / "master_bias.fits")
+        assert mod_with_bias._bias_path == str(tmp_path / "master_bias.fits")
 
     def test_biassub_header_set(self, mod_with_bias):
         mod_with_bias.perform()
@@ -447,7 +446,7 @@ class TestPerform:
         # BIASSUB header reflects the choice
         assert result.headers["PRIMARY"]["BIASSUB"][0] is False
         # No bias path recorded
-        assert "bias" not in mod._results
+        assert mod._bias_path is None
 
     def test_darksub_header_false_when_dark_off(self, mod_with_bias):
         mod_with_bias.perform()
@@ -466,7 +465,7 @@ class TestPerform:
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
         np.testing.assert_allclose(result.data["RED_CCD"], _CCD_VALUE - _BIAS_VALUE)
         assert result.headers["PRIMARY"]["BIASSUB"][0] is True
-        assert mod._results["bias"] == bias_path
+        assert mod._bias_path == bias_path
 
     def test_bias_master_l1_object_used_directly(self, tmp_path):
         # supplying a KPFMasterL1 instance should bypass disk I/O entirely
@@ -478,7 +477,7 @@ class TestPerform:
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
         assert result.headers["PRIMARY"]["BIASSUB"][0] is True
         # _bias_path should reflect the in-memory object's filename
-        assert mod._results["bias"] == bias_path
+        assert mod._bias_path == bias_path
 
     def test_bias_invalid_type_raises_type_error(self):
         mod = _make_module()
@@ -542,9 +541,9 @@ class TestPerformDark:
         mod_with_bias_dark.perform(bias=True, dark=True)
         assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is True
 
-    def test_results_keyed_by_dark(self, mod_with_bias_dark, tmp_path):
+    def test_dark_path_recorded(self, mod_with_bias_dark, tmp_path):
         mod_with_bias_dark.perform(bias=True, dark=True)
-        assert mod_with_bias_dark._results["dark"] == str(tmp_path / "master_dark.fits")
+        assert mod_with_bias_dark._dark_path == str(tmp_path / "master_dark.fits")
 
     def test_dark_filepath_overrides_headers(self, tmp_path):
         dark_path = str(tmp_path / "explicit_dark.fits")
@@ -554,7 +553,7 @@ class TestPerformDark:
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
-        assert mod._results["dark"] == dark_path
+        assert mod._dark_path == dark_path
 
     def test_dark_master_l1_object_used_directly(self, tmp_path):
         dark_path = str(tmp_path / "preloaded_dark.fits")
@@ -565,7 +564,7 @@ class TestPerformDark:
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
-        assert mod._results["dark"] == dark_path
+        assert mod._dark_path == dark_path
 
     def test_dark_invalid_type_raises_type_error(self):
         mod = _make_module()
