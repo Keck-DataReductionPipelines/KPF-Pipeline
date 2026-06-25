@@ -62,17 +62,49 @@ class KPF0(KPFDataModel):
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
         """
-        Route L0 FITS reads to `KPF0._read`.
+        Route L0 FITS reads to `KPF0._read`, then stamp DRP provenance.
 
         `RVDataModel.read` has no lvl==0 dispatch branch, so the inherited
         `from_fits` would never call into `_read` without this override.
         """
         self._read(hdul)
+        if "PRIMARY" in self.headers:
+            self._stamp_provenance()
         if self.filename is not None:
             try:
                 self.obs_id = get_obs_id(self.filename)
             except ValueError:
                 pass
+
+    def _stamp_provenance(self):
+        """Stamp WMKO DRP-RUN provenance onto the L0 PRIMARY at read time.
+
+        This is the single population site for the four provenance cards
+        (their `Populated by` in config/L0-headers.csv is `KPF0.from_fits`):
+        DRPVERNO (DRP-RUN-11), PROGID/KOAID (DRP-RUN-19), DRPSTATU (DRP-RUN-20).
+        `to_kpf1` passes them through unchanged onto the EPRV L1 PRIMARY.
+
+        DRPVERNO and DRPSTATU are always (re)stamped. PROGID/KOAID must come from
+        the WMKO-native file; an absent (or empty) value is defaulted to UNKNOWN
+        with a warning, so the cards are always present downstream.
+        """
+        primary = self.headers["PRIMARY"]
+        primary["DRPVERNO"] = (
+            __version__,
+            "Pipeline version (WMKO DRP-RUN-11; EPRV equivalent is DRPTAG)",
+        )
+        primary["DRPSTATU"] = (_DRPSTATU_DEFAULT, "DRP reduction status (DRP-RUN-20)")
+        for key, label in (
+            ("PROGID", "WMKO program ID (DRP-RUN-19)"),
+            ("KOAID", "KOA archive ID (DRP-RUN-19)"),
+        ):
+            if not primary.get(key):
+                warnings.warn(
+                    f"{key} absent from L0 PRIMARY; defaulting to 'UNKNOWN'",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                primary[key] = ("UNKNOWN", label)
 
     def _read(self, hdul):
         """
@@ -187,8 +219,10 @@ class KPF0(KPFDataModel):
 
         For each header_map row, take the instrument (WMKO) value when present,
         else the row default. Then apply the value corrections the installed
-        header_map gets wrong (NUMORDER, JD_UTC) and stamp the DRP version
-        (DRPTAG for EPRV, DRPVERNO for WMKO DRP-RUN-11).
+        header_map gets wrong (NUMORDER, JD_UTC), stamp the EPRV DRP version
+        (DRPTAG), and forward the DRP-RUN provenance cards
+        (DRPVERNO/PROGID/KOAID/DRPSTATU) already on the L0 PRIMARY (stamped at
+        read by ``_stamp_provenance``) onto the EPRV L1 PRIMARY.
 
         Returns
         -------
@@ -220,22 +254,24 @@ class KPF0(KPFDataModel):
                 "[day] Julian date of exposure start",
             )
         out["DRPTAG"] = (__version__, "DRP version")
-        out["DRPVERNO"] = (__version__, "DRP version (WMKO DRP-RUN-11)")
 
-        # WMKO provenance (DRP-RUN-19): PROGID/KOAID, or 'UNKNOWN' if absent.
-        out["PROGID"] = (wmko_primary.get("PROGID") or "UNKNOWN", "WMKO program ID")
-        out["KOAID"] = (wmko_primary.get("KOAID") or "UNKNOWN", "KOA archive ID")
-        # Initial reduction status (DRP-RUN-20); modules overwrite it as they run.
-        out["DRPSTATU"] = (_DRPSTATU_DEFAULT, "DRP reduction status")
+        # DRP-RUN provenance (DRPVERNO/PROGID/KOAID/DRPSTATU) is stamped onto the
+        # L0 PRIMARY at read (see _stamp_provenance); forward it verbatim, value
+        # and comment, onto the EPRV L1 PRIMARY.
+        for key in ("DRPVERNO", "PROGID", "KOAID", "DRPSTATU"):
+            if key in wmko_primary:
+                out[key] = (wmko_primary[key], wmko_primary.comments[key])
         return out
 
     def build_instrument_header(self):
-        """Comment-preserving verbatim copy of the raw WMKO PRIMARY.
+        """Comment-preserving verbatim copy of the L0 PRIMARY as ingested.
 
-        INSTRUMENT_HEADER is an immutable, pure pass-through of the raw instrument
-        PRIMARY -- nothing writes to it after ``to_kpf1``. Returning a
-        ``fits.Header`` copy preserves values *and* comments (and commentary
-        cards), unlike a scalar dict.
+        INSTRUMENT_HEADER is an immutable, pure pass-through of the L0 PRIMARY as
+        read from disk -- the raw instrument cards plus the four DRP-RUN
+        provenance cards stamped at read (see ``_stamp_provenance``); nothing
+        writes to it after ``to_kpf1``. Returning a ``fits.Header`` copy
+        preserves values *and* comments (and commentary cards), unlike a scalar
+        dict.
         """
         return self.as_fits_header(self.headers["PRIMARY"])
 
@@ -246,8 +282,9 @@ class KPF0(KPFDataModel):
 
         The raw WMKO PRIMARY header is converted to EPRV-standard keyword names
         and values here (the single conversion site; see `wmko_to_eprv`), so the
-        L1 PRIMARY is already EPRV-standard. The verbatim raw L0 PRIMARY is
-        preserved in the
+        L1 PRIMARY is already EPRV-standard. The DRP-RUN provenance cards
+        (DRPVERNO/PROGID/KOAID/DRPSTATU), stamped onto the L0 PRIMARY at read,
+        are forwarded unchanged. The L0 PRIMARY as ingested is preserved in the
         immutable INSTRUMENT_HEADER extension. Downstream stages read raw
         instrument keywords from INSTRUMENT_HEADER and write EPRV/registered
         KPF keywords to PRIMARY.

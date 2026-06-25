@@ -75,6 +75,8 @@ def synthetic_l0_file(tmp_path):
     primary.header["OBJECT"] = "HD_10700"
     primary.header["IMTYPE"] = "Object"
     primary.header["GROBSERV"] = "Smith"
+    primary.header["PROGID"] = "K123"
+    primary.header["KOAID"] = "KP.20240113.23249.10"
 
     telemetry = Table({"keyword": ["TEMP1", "TEMP2"], "average": [20.0, 21.0]})
     telemetry_hdu = fits.BinTableHDU(data=telemetry, name="TELEMETRY")

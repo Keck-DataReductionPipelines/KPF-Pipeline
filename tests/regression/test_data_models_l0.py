@@ -4,6 +4,7 @@ Tests for the KPF0 (raw CCD / L0) data model.
 Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
+import importlib.metadata
 import os
 
 import numpy as np
@@ -139,3 +140,30 @@ class TestKPF0ErrorPaths:
         out = str(tmp_path / "nested" / "sub" / "out.fits")
         l0.to_fits(out)
         assert os.path.isfile(out)
+
+
+class TestKPF0Provenance:
+    """from_fits stamps the WMKO DRP-RUN provenance cards onto the L0 PRIMARY
+    (their single population site; config/L0-headers.csv Populated by =
+    KPF0.from_fits). to_kpf1 only forwards them."""
+
+    def test_from_fits_stamps_version_and_status(self, synthetic_l0_file):
+        prim = KPF0.from_fits(synthetic_l0_file).headers["PRIMARY"]
+        assert prim.get("DRPVERNO") == importlib.metadata.version("kpfpipe")
+        assert prim.get("DRPSTATU") == "File ingested into KPF-DRP"
+
+    def test_from_fits_carries_native_program_ids(self, synthetic_l0_file):
+        """PROGID/KOAID present in the WMKO-native file are kept verbatim."""
+        prim = KPF0.from_fits(synthetic_l0_file).headers["PRIMARY"]
+        assert prim.get("PROGID") == "K123"
+        assert prim.get("KOAID") == "KP.20240113.23249.10"
+
+    def test_from_fits_defaults_program_ids_to_unknown_and_warns(
+        self, synthetic_l0_minimal
+    ):
+        """A file lacking PROGID/KOAID defaults both to UNKNOWN and warns."""
+        with pytest.warns(UserWarning, match="PROGID absent"):
+            l0 = KPF0.from_fits(synthetic_l0_minimal)
+        prim = l0.headers["PRIMARY"]
+        assert prim.get("PROGID") == "UNKNOWN"
+        assert prim.get("KOAID") == "UNKNOWN"

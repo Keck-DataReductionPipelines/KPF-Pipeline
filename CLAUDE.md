@@ -211,11 +211,18 @@ for the conversion. Consequences every contributor must respect:
 
 - **L1 PRIMARY is already EPRV-standard.** From L1 onward, PRIMARY holds EPRV keyword *names*
   plus the registered KPF-pipeline keywords below — never raw WMKO natives.
-- **`INSTRUMENT_HEADER` is an immutable, verbatim copy of the raw L0 PRIMARY** (values **and**
-  comments — `build_instrument_header()` returns a `fits.Header` copy). It is written once in
-  `to_kpf1` and **nothing else ever writes to it**. Code that needs a raw instrument keyword
-  (e.g. `ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`) reads it from
+- **`INSTRUMENT_HEADER` is an immutable, verbatim copy of the L0 PRIMARY _as ingested_** (values
+  **and** comments — `build_instrument_header()` returns a `fits.Header` copy). "As ingested" = the
+  raw instrument cards plus the four DRP-RUN provenance cards stamped at read (see below). It is
+  written once in `to_kpf1` and **nothing else ever writes to it**. Code that needs a raw instrument
+  keyword (e.g. `ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`) reads it from
   `INSTRUMENT_HEADER`, not PRIMARY.
+- **DRP-RUN provenance is stamped onto the L0 PRIMARY at read (`KPF0.from_fits`), not at `to_kpf1`.**
+  `KPF0._stamp_provenance` (the single population site; their `Populated by` in `L0-headers.csv` is
+  `KPF0.from_fits`) writes `DRPVERNO` (DRP-RUN-11), `DRPSTATU` (DRP-RUN-20), and `PROGID`/`KOAID`
+  (DRP-RUN-19). `PROGID`/`KOAID` come from the WMKO-native file; an absent value is defaulted to
+  `UNKNOWN` **with a warning**. `to_kpf1`/`wmko_to_eprv` then **forward these four verbatim** (value
+  + comment) onto the L1 PRIMARY — they do not repopulate them.
 - **KPF-pipeline keywords are written directly to PRIMARY** (read noise, OSCANMET, BIASSUB/
   DARKSUB, calibration ages/paths, QC booleans, diagnostics, and the RV/barycentric cards). Every
   such keyword must be registered in the per-level registry `data_models/config/L{0,1,2,4}-headers.csv`
@@ -229,8 +236,9 @@ for the conversion. Consequences every contributor must respect:
   the reference-data constants in `data_models/base.py`.)
 - `to_kpf1` also corrects values the installed `header_map.csv` gets wrong: `NUMORDER` (→67 from
   `DETECTOR`), `JD_UTC` (full JD from `MJD-OBS`, the canonical KPF exposure time — native
-  `DATE-OBS` is date-only), and the DRP version (`DRPTAG` for EPRV + `DRPVERNO` for WMKO
-  DRP-RUN-11). Calibration masters are out of EPRV scope (their products keep their own layout).
+  `DATE-OBS` is date-only), and stamps the EPRV DRP version `DRPTAG` (its WMKO equivalent `DRPVERNO`
+  is stamped at read; see above). Calibration masters are out of EPRV scope (their products keep
+  their own layout).
 - **Every extension header is an `astropy.io.fits.Header`.** `KPFDataModel.create_extension`
   (`data_models/base.py`) stores a new header as a `fits.Header`, not rvdata's default
   `OrderedDict`; `from_fits` already returns `fits.Header`. So **read with `header.get(key)` /

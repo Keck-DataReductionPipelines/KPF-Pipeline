@@ -1,4 +1,8 @@
 Keyword,Description,Extension,DataType,Populated by
+PROGID,WMKO program ID (DRP-RUN-19),PRIMARY,str,KPF0.from_fits
+KOAID,KOA archive ID (DRP-RUN-19),PRIMARY,str,KPF0.from_fits
+DRPVERNO,Pipeline version (WMKO DRP-RUN-11; EPRV equivalent is DRPTAG),PRIMARY,str,KPF0.from_fits
+DRPSTATU,DRP reduction status (DRP-RUN-20),PRIMARY,str,KPF0.from_fits
 DATAPRL0,QC: L0 data present,PRIMARY,int,QCL0
 KWRDPRL0,QC: required L0 keywords present,PRIMARY,int,QCL0
 EXPTIMOK,QC: exposure time valid,PRIMARY,int,QCL0

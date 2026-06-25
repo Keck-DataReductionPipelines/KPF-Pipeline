@@ -595,7 +595,8 @@ What this means when writing code:
   PRIMARY. No silent fallback — let a missing key raise.
 - **Writing a KPF-pipeline keyword**: write it to `headers["PRIMARY"]` *and* add it to
   the matching `config/L{0,1,2,4}-headers.csv`, or `to_kpf2`/`to_kpf4` validation will reject the
-  product. Never write to `INSTRUMENT_HEADER` (it is an immutable raw-instrument snapshot).
+  product. Never write to `INSTRUMENT_HEADER` (it is an immutable snapshot of the L0 PRIMARY as
+  ingested).
 - Use EPRV keyword *names* on PRIMARY (e.g. `EXPTIME`, not `ELAPSED`; `OBSTYPE`, not `IMTYPE`).
 
 ---

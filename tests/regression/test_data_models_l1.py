@@ -189,8 +189,9 @@ class TestToL1:
         assert prim.get("DRPTAG") == version
         assert prim.get("DRPVERNO") == version
 
-    def test_to_l1_stamps_native_program_ids(self, synthetic_l0_file):
-        """PROGID/KOAID carry from the native L0 PRIMARY onto the L1 EPRV PRIMARY."""
+    def test_to_l1_forwards_program_ids(self, synthetic_l0_file):
+        """PROGID/KOAID stamped on the L0 PRIMARY carry through onto the L1 EPRV
+        PRIMARY (to_kpf1 forwards them; it no longer populates them)."""
         l0 = KPF0.from_fits(synthetic_l0_file)
         l0.headers["PRIMARY"]["PROGID"] = "U999"
         l0.headers["PRIMARY"]["KOAID"] = "KP.20201122.34567.89"
@@ -198,19 +199,9 @@ class TestToL1:
         assert prim.get("PROGID") == "U999"
         assert prim.get("KOAID") == "KP.20201122.34567.89"
 
-    def test_to_l1_defaults_program_ids_to_unknown(self, synthetic_l0_file):
-        """Absent PROGID/KOAID default to UNKNOWN (the card is always written)."""
-        l0 = KPF0.from_fits(synthetic_l0_file)
-        for key in ("PROGID", "KOAID"):
-            if key in l0.headers["PRIMARY"]:
-                del l0.headers["PRIMARY"][key]
-        prim = l0.to_kpf1().headers["PRIMARY"]
-        assert prim.get("PROGID") == "UNKNOWN"
-        assert prim.get("KOAID") == "UNKNOWN"
-
-    def test_to_l1_sets_drpstatus_default(self, synthetic_l0_file):
-        """to_kpf1 seeds DRPSTATU; its own to_l1 receipt is denylisted, so the
-        default survives until the first real module runs."""
+    def test_to_l1_forwards_drpstatus(self, synthetic_l0_file):
+        """DRPSTATU stamped at read carries onto L1; the to_l1 receipt is
+        denylisted, so the ingest default survives until the first real module."""
         prim = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["PRIMARY"]
         assert prim.get("DRPSTATU") == "File ingested into KPF-DRP"
 
