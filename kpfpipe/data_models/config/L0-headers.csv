@@ -1,6 +1,6 @@
 Keyword,Description,Extension,DataType,Populated by
-DATAPRL0,QC: L0 data present,PRIMARY,bool,QCL0
-KWRDPRL0,QC: required L0 keywords present,PRIMARY,bool,QCL0
-EXPTIMOK,QC: exposure time valid,PRIMARY,bool,QCL0
-NOTJUNK,QC: frame not junk,PRIMARY,bool,QCL0
-ISGOOD,QC: aggregate pass/fail,PRIMARY,bool,QC
+DATAPRL0,QC: L0 data present,PRIMARY,int,QCL0
+KWRDPRL0,QC: required L0 keywords present,PRIMARY,int,QCL0
+EXPTIMOK,QC: exposure time valid,PRIMARY,int,QCL0
+NOTJUNK,QC: frame not junk,PRIMARY,int,QCL0
+ISGOOD,QC: aggregate pass/fail,PRIMARY,int,QC

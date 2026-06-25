@@ -259,12 +259,12 @@ class ImageProcessing:
         place this module writes PRIMARY, called just before the receipt entry.
         """
         l1_obj.headers["PRIMARY"]["BIASSUB"] = (
-            self._biassub,
-            "Bias subtraction applied",
+            int(self._biassub),
+            "Bias subtraction applied (T/F)",
         )
         l1_obj.headers["PRIMARY"]["DARKSUB"] = (
-            self._darksub,
-            "Dark subtraction applied",
+            int(self._darksub),
+            "Dark subtraction applied (T/F)",
         )
 
     # ------------------------------------------------------------------

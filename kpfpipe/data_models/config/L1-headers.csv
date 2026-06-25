@@ -15,10 +15,10 @@ RNNGRD1,Non-Gaussian read noise RED amp 1,PRIMARY,float,ImageAssembly
 RNNGRD2,Non-Gaussian read noise RED amp 2,PRIMARY,float,ImageAssembly
 RNNGRD3,Non-Gaussian read noise RED amp 3,PRIMARY,float,ImageAssembly
 RNNGRD4,Non-Gaussian read noise RED amp 4,PRIMARY,float,ImageAssembly
-OSCANSUB,Overscan subtraction applied,PRIMARY,bool,ImageAssembly
-BIASSUB,Bias subtraction applied,PRIMARY,bool,ImageProcessing
-DARKSUB,Dark subtraction applied,PRIMARY,bool,ImageProcessing
-FLATDIV,Flat division applied (reserved),PRIMARY,bool,ImageProcessing
+OSCANSUB,Overscan subtraction applied (T/F),PRIMARY,int,ImageAssembly
+BIASSUB,Bias subtraction applied (T/F),PRIMARY,int,ImageProcessing
+DARKSUB,Dark subtraction applied (T/F),PRIMARY,int,ImageProcessing
+FLATDIV,Flat division applied (reserved) (T/F),PRIMARY,int,ImageProcessing
 BIASFILE,Master bias full path,PRIMARY,str,CalibrationAssociation
 BIASAGE,Master bias age [days],PRIMARY,float,CalibrationAssociation
 DARKFILE,Master dark full path,PRIMARY,str,CalibrationAssociation
@@ -32,9 +32,9 @@ PROGID,WMKO program ID (DRP-RUN-19),PRIMARY,str,KPF0.to_kpf1
 KOAID,KOA archive ID (DRP-RUN-19),PRIMARY,str,KPF0.to_kpf1
 DRPSTATU,DRP reduction status (DRP-RUN-20),PRIMARY,str,KPF0.to_kpf1
 MASTYPE,Master calibration type (masters products only),PRIMARY,str,KPFMaster
-RNINRNG,QC: per-amp RN within range,PRIMARY,bool,QCL1
-RNGAUSS,QC: non-Gaussian RN within range,PRIMARY,bool,QCL1
-BIASAGEQ,QC: bias master age ok,PRIMARY,bool,QCL1
-DARKAGEQ,QC: dark master age ok,PRIMARY,bool,QCL1
-FLATAGEQ,QC: flat master age ok,PRIMARY,bool,QCL1
-FFIFIN,QC: assembled CCDs all finite,PRIMARY,bool,QCL1
+RNINRNG,QC: per-amp RN within range,PRIMARY,int,QCL1
+RNGAUSS,QC: non-Gaussian RN within range,PRIMARY,int,QCL1
+BIASAGEQ,QC: bias master age ok,PRIMARY,int,QCL1
+DARKAGEQ,QC: dark master age ok,PRIMARY,int,QCL1
+FLATAGEQ,QC: flat master age ok,PRIMARY,int,QCL1
+FFIFIN,QC: assembled CCDs all finite,PRIMARY,int,QCL1

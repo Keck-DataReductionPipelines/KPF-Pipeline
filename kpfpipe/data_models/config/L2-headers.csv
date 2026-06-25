@@ -1,9 +1,9 @@
 Keyword,Description,Extension,DataType,Populated by
-DATAPRL2,QC: L2 data present,PRIMARY,bool,QCL2
-L2NANOK,QC: L2 NaN count ok,PRIMARY,bool,QCL2
-L2FLXOK,QC: L2 zero-flux fraction ok,PRIMARY,bool,QCL2
-L2VARPOS,QC: L2 variance positive,PRIMARY,bool,QCL2
-L2SNROK,QC: L2 SNR ok,PRIMARY,bool,QCL2
+DATAPRL2,QC: L2 data present,PRIMARY,int,QCL2
+L2NANOK,QC: L2 NaN count ok,PRIMARY,int,QCL2
+L2FLXOK,QC: L2 zero-flux fraction ok,PRIMARY,int,QCL2
+L2VARPOS,QC: L2 variance positive,PRIMARY,int,QCL2
+L2SNROK,QC: L2 SNR ok,PRIMARY,int,QCL2
 NANSCI1,NaN pixel count SCI1 (green+red),PRIMARY,int,DiagL2
 NANSCI2,NaN pixel count SCI2 (green+red),PRIMARY,int,DiagL2
 NANSCI3,NaN pixel count SCI3 (green+red),PRIMARY,int,DiagL2

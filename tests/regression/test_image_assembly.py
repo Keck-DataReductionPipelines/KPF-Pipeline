@@ -141,7 +141,7 @@ class TestImageAssemblyBias:
     def test_overscan_applied_in_header(self, l1_bias):
         l1, _ = l1_bias
         val = l1.headers["PRIMARY"].get("OSCANSUB")
-        assert val is True
+        assert val == 1
 
     def test_receipt_chain(self, l1_bias):
         l1, _ = l1_bias

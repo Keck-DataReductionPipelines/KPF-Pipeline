@@ -548,8 +548,8 @@ class ImageAssembly:
 
         # "zero" is the explicit no-op method (strips overscan, subtracts none).
         l1_obj.headers["PRIMARY"]["OSCANSUB"] = (
-            self.overscan_method != "zero",
-            "Overscan subtraction applied",
+            int(self.overscan_method != "zero"),
+            "Overscan subtraction applied (T/F)",
         )
 
     # ------------------------------------------------------------------
