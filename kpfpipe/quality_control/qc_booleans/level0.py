@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe import REPO_ROOT
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.quality_control.qc_booleans.base import QC
 
 _JUNK_CSV = REPO_ROOT / "reference" / "junk_observations.csv"
@@ -61,11 +62,8 @@ class QCL0(QC):
         hdr = self.kpf.headers["PRIMARY"]
         if "EXPTIME" not in hdr:
             return False
-        val = hdr["EXPTIME"]
-        if isinstance(val, tuple):
-            val = val[0]
         try:
-            f = float(val)
+            f = float(HeaderParser.get(hdr, "EXPTIME"))
         except (TypeError, ValueError):
             return False
         return np.isfinite(f) and f >= 0

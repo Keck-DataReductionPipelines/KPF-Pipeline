@@ -11,6 +11,7 @@ import warnings
 from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import glob_masters
 from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
@@ -244,11 +245,16 @@ class CalibrationAssociation:
             # negative when the master predates the obs).
             prefix = _HEADER_PREFIX[cal_type]
             master_dt = kpf_timestamp_to_datetime(get_timestamp(filepath))
-            primary[f"{prefix}FILE"] = filepath
-            primary[f"{prefix}AGE"] = (master_dt - obs_dt).total_seconds() / 86400.0
+            age = (master_dt - obs_dt).total_seconds() / 86400.0
+            HeaderParser.set(
+                primary, f"{prefix}FILE", filepath, f"{prefix} master path"
+            )
+            HeaderParser.set(
+                primary, f"{prefix}AGE", age, f"[day] {prefix} master age (master-obs)"
+            )
 
         self._results = {
-            cal_type: primary[f"{_HEADER_PREFIX[cal_type]}FILE"]
+            cal_type: HeaderParser.get(primary, f"{_HEADER_PREFIX[cal_type]}FILE")
             for cal_type in cal_types
         }
         self.l1_obj.receipt_add_entry("calibration_association", "PASS")
@@ -273,7 +279,7 @@ class CalibrationAssociation:
         h = self.l1_obj.headers["PRIMARY"]
         for cal_type, filename in self._results.items():
             prefix = _HEADER_PREFIX[cal_type]
-            age = h.get(f"{prefix}AGE", "n/a")
+            age = HeaderParser.get(h, f"{prefix}AGE", "n/a")
             print(f"  {cal_type:<12s} {filename}")
             print(f"  {'':12s} age = {age}d")
             print()

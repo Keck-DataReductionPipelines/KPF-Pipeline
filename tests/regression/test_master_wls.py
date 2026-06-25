@@ -13,6 +13,7 @@ import pytest
 
 import kpfpipe.modules.masters.base as base_module
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
 
@@ -244,12 +245,6 @@ def mock_make_master_l2(monkeypatch):
     monkeypatch.setattr(WLS, "_compute_wls_from_stack", mock_compute)
 
 
-def _header_value(header, key):
-    """Extract a header value whether stored as tuple or plain."""
-    val = header[key]
-    return val[0] if isinstance(val, tuple) else val
-
-
 class TestMakeMasterL2:
     def test_returns_kpf_master_l2(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
@@ -327,10 +322,10 @@ class TestMakeMasterL2:
         wls = WLS(FILE_LIST)
         override_x = wls.polyorder_x + 4  # ensure different from default
         ml2 = wls.make_master_l2(polyorder_x=override_x)
-        assert _header_value(ml2.headers["PRIMARY"], "POLYORDX") == override_x
+        assert HeaderParser.get(ml2.headers["PRIMARY"], "POLYORDX") == override_x
         for chip in wls.chips:
             assert (
-                _header_value(ml2.headers[f"{chip}_WLS_COEFFS"], "POLYORDX")
+                HeaderParser.get(ml2.headers[f"{chip}_WLS_COEFFS"], "POLYORDX")
                 == override_x
             )
             # verify the override actually propagated into the fit, not just the header
@@ -536,7 +531,7 @@ class TestMakeMasterL2:
         np.testing.assert_array_equal(
             wls._linelist_df["WAVE"].values, np.array([4500.0, 5500.0, 6500.0])
         )
-        assert _header_value(ml2.headers["PRIMARY"], "LINELIST") == str(override)
+        assert HeaderParser.get(ml2.headers["PRIMARY"], "LINELIST") == str(override)
 
     def test_single_frame_stack(self, mock_make_master_l2):
         """A 1-frame stack should still produce a valid master L2."""

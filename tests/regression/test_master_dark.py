@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.dark import Dark
 from kpfpipe.utils.io import build_l0_file_lists
@@ -30,11 +31,6 @@ TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
 
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
-
-
-def _header_value(value):
-    """Return a header value, unwrapping a (value, comment) tuple if present."""
-    return value[0] if isinstance(value, tuple) else value
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +68,7 @@ class TestMasterDarkUnit:
 
     def test_bunit_is_rate(self, master_dark):
         for chip in CHIPS:
-            bunit = _header_value(master_dark.headers[f"{chip}_IMG"]["BUNIT"])
+            bunit = HeaderParser.get(master_dark.headers[f"{chip}_IMG"], "BUNIT")
             assert bunit == "electrons/sec"
 
     def test_datalvl_class_attribute(self, master_dark):
@@ -144,7 +140,7 @@ class TestMasterDarkRoundTrip:
             ml1.to_fits(fn)
             ml1_read = KPFMasterL1.from_fits(fn)
 
-        assert _header_value(ml1_read.headers["PRIMARY"]["DATALVL"]) == "ML1"
+        assert HeaderParser.get(ml1_read.headers["PRIMARY"], "DATALVL") == "ML1"
 
 
 # ---------------------------------------------------------------------------
@@ -902,7 +898,7 @@ class TestMasterDarkRegression:
 
     def test_bunit_is_rate(self, master_dark):
         for chip in CHIPS:
-            bunit = _header_value(master_dark.headers[f"{chip}_IMG"]["BUNIT"])
+            bunit = HeaderParser.get(master_dark.headers[f"{chip}_IMG"], "BUNIT")
             assert bunit == "electrons/sec"
 
     def test_snr_never_negative(self, master_dark):

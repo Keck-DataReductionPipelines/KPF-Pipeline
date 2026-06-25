@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+from kpfpipe.data_models.headers import HeaderParser
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
@@ -153,18 +154,14 @@ class TestToL1:
         assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
         assert l1.headers["PRIMARY"]["OBJECT"] == "HD_10700"
 
-    @staticmethod
-    def _scalar(value):
-        return value[0] if isinstance(value, tuple) else value
-
     def test_to_l1_converts_native_to_eprv(self, synthetic_l0_file):
         """to_kpf1 renames WMKO natives to their EPRV PRIMARY counterparts."""
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         prim = l1.headers["PRIMARY"]
-        assert self._scalar(prim["OBSTYPE"]) == "Object"  # IMTYPE -> OBSTYPE
-        assert self._scalar(prim["EXPTIME"]) == 300.0  # ELAPSED -> EXPTIME
-        assert self._scalar(prim["OBSERVER"]) == "Smith"  # GROBSERV -> OBSERVER
+        assert HeaderParser.get(prim, "OBSTYPE") == "Object"  # IMTYPE -> OBSTYPE
+        assert HeaderParser.get(prim, "EXPTIME") == 300.0  # ELAPSED -> EXPTIME
+        assert HeaderParser.get(prim, "OBSERVER") == "Smith"  # GROBSERV -> OBSERVER
         # Raw native names must not remain on the EPRV PRIMARY.
         assert "IMTYPE" not in prim
         assert "ELAPSED" not in prim
@@ -186,12 +183,14 @@ class TestToL1:
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         prim = l1.headers["PRIMARY"]
-        assert self._scalar(prim["NUMORDER"]) == 67  # 35 green + 32 red, not 65
+        assert HeaderParser.get(prim, "NUMORDER") == 67  # 35 green + 32 red, not 65
         # JD_UTC is the full Julian Date of DATE-OBS (not a raw MJD).
-        assert self._scalar(prim["JD_UTC"]) == pytest.approx(2460322.93537, abs=1e-3)
+        assert HeaderParser.get(prim, "JD_UTC") == pytest.approx(
+            2460322.93537, abs=1e-3
+        )
         version = importlib.metadata.version("kpfpipe")
-        assert self._scalar(prim["DRPTAG"]) == version
-        assert self._scalar(prim["DRPVERNO"]) == version
+        assert HeaderParser.get(prim, "DRPTAG") == version
+        assert HeaderParser.get(prim, "DRPVERNO") == version
 
     def test_to_l1_stamps_native_program_ids(self, synthetic_l0_file):
         """PROGID/KOAID carry from the native L0 PRIMARY onto the L1 EPRV PRIMARY."""
@@ -199,8 +198,8 @@ class TestToL1:
         l0.headers["PRIMARY"]["PROGID"] = "U999"
         l0.headers["PRIMARY"]["KOAID"] = "KP.20201122.34567.89"
         prim = l0.to_kpf1().headers["PRIMARY"]
-        assert self._scalar(prim["PROGID"]) == "U999"
-        assert self._scalar(prim["KOAID"]) == "KP.20201122.34567.89"
+        assert HeaderParser.get(prim, "PROGID") == "U999"
+        assert HeaderParser.get(prim, "KOAID") == "KP.20201122.34567.89"
 
     def test_to_l1_defaults_program_ids_to_unknown(self, synthetic_l0_file):
         """Absent PROGID/KOAID default to UNKNOWN (the card is always written)."""
@@ -209,14 +208,14 @@ class TestToL1:
             if key in l0.headers["PRIMARY"]:
                 del l0.headers["PRIMARY"][key]
         prim = l0.to_kpf1().headers["PRIMARY"]
-        assert self._scalar(prim["PROGID"]) == "UNKNOWN"
-        assert self._scalar(prim["KOAID"]) == "UNKNOWN"
+        assert HeaderParser.get(prim, "PROGID") == "UNKNOWN"
+        assert HeaderParser.get(prim, "KOAID") == "UNKNOWN"
 
     def test_to_l1_sets_drpstatus_default(self, synthetic_l0_file):
         """to_kpf1 seeds DRPSTATU; its own to_l1 receipt is denylisted, so the
         default survives until the first real module runs."""
         prim = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["PRIMARY"]
-        assert self._scalar(prim["DRPSTATU"]) == "File ingested into KPF-DRP"
+        assert HeaderParser.get(prim, "DRPSTATU") == "File ingested into KPF-DRP"
 
     def test_to_l1_copies_passthrough_extensions(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
@@ -265,20 +264,16 @@ class TestDrpStatus:
     receipt_add_entry override; data-model conversion/IO receipts are denylisted
     so it names the last real science/masters stage (DRP-RUN-20)."""
 
-    @staticmethod
-    def _scalar(value):
-        return value[0] if isinstance(value, tuple) else value
-
     def test_module_receipt_updates_status(self, synthetic_l0_file):
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
         l1.receipt_add_entry("image_assembly", "PASS")
-        status = self._scalar(l1.headers["PRIMARY"]["DRPSTATU"])
+        status = HeaderParser.get(l1.headers["PRIMARY"], "DRPSTATU")
         assert status == "Image Assembly module complete"
 
     def test_master_receipt_updates_status(self, synthetic_l0_file):
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
         l1.receipt_add_entry("master_bias", "PASS")
-        status = self._scalar(l1.headers["PRIMARY"]["DRPSTATU"])
+        status = HeaderParser.get(l1.headers["PRIMARY"], "DRPSTATU")
         assert status == "Master Bias module complete"
 
     def test_internal_receipts_do_not_change_status(self, synthetic_l0_file):
@@ -286,7 +281,7 @@ class TestDrpStatus:
         l1.receipt_add_entry("radial_velocity", "PASS")
         for internal in ("to_kpf2", "to_kpf4", "to_fits", "from_fits"):
             l1.receipt_add_entry(internal, "PASS")
-        status = self._scalar(l1.headers["PRIMARY"]["DRPSTATU"])
+        status = HeaderParser.get(l1.headers["PRIMARY"], "DRPSTATU")
         assert status == "Radial Velocity module complete"
 
 
