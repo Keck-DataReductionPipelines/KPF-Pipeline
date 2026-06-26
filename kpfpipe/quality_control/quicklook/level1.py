@@ -42,16 +42,20 @@ class PlotL1:
             self.name = l1_obj.headers["PRIMARY"].get("OBJECT", "")
 
     def _read_noise_values(self, chip):
-        """Return (rn_list, rnng_list) from PRIMARY header, or ([], []) if absent."""
-        primary = self.l1.headers.get("PRIMARY", {})
+        """Return (rn_list, rnng_list) from QUALITY_CONTROL, or ([], []) if absent.
+
+        ImageAssembly writes the RN*/RNNG* read-noise keywords via set_keyword,
+        which routes them to QUALITY_CONTROL (their registry home), not PRIMARY.
+        """
+        qc = self.l1.headers.get("QUALITY_CONTROL", {})
         rn_values = []
         rnng_values = []
         for i in range(1, 5):
             channel_ext = f"{chip.upper()}_AMP{i}"
             rn_key, rnng_key = RN_KEYS[channel_ext]
-            if rn_key in primary and rnng_key in primary:
-                rn_values.append(float(primary.get(rn_key)))
-                rnng_values.append(float(primary.get(rnng_key)))
+            if rn_key in qc and rnng_key in qc:
+                rn_values.append(float(qc.get(rn_key)))
+                rnng_values.append(float(qc.get(rnng_key)))
         return rn_values, rnng_values
 
     def image(self, chip, *, full_res=None):
@@ -110,7 +114,7 @@ class PlotL1:
         cbar.ax.tick_params(labelsize=14)
         plt.grid(False)
 
-        # Read noise annotation (from L1 headers populated by ImageAssembly)
+        # Read noise annotation (from QUALITY_CONTROL, populated by ImageAssembly)
         rn_values, rnng_values = self._read_noise_values(chip_upper)
         if rn_values:
             rn_text = "RN: " + ", ".join(f"{v:.2f}" for v in rn_values)

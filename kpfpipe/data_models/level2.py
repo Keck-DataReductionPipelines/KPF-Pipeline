@@ -242,15 +242,20 @@ class KPF2(KPFDataModel, RV2):
 
         kpf4 = KPF4()
 
-        # Forward PRIMARY header
+        # Forward PRIMARY + INSTRUMENT_HEADER card-by-card (value + comment) —
+        # iterating .items() would drop the FITS comments, and INSTRUMENT_HEADER
+        # must remain a verbatim copy.
         if "PRIMARY" in self.headers:
-            for key, value in self.headers["PRIMARY"].items():
-                kpf4.headers["PRIMARY"][key] = value
+            for card in self.headers["PRIMARY"].cards:
+                kpf4.headers["PRIMARY"][card.keyword] = (card.value, card.comment)
 
         # Carry forward INSTRUMENT_HEADER (TARGTEFF, TARGRADV, GAIAID, CCD*BJD, ...)
         if "INSTRUMENT_HEADER" in self.headers and "INSTRUMENT_HEADER" in kpf4.headers:
-            for key, value in self.headers["INSTRUMENT_HEADER"].items():
-                kpf4.headers["INSTRUMENT_HEADER"][key] = value
+            for card in self.headers["INSTRUMENT_HEADER"].cards:
+                kpf4.headers["INSTRUMENT_HEADER"][card.keyword] = (
+                    card.value,
+                    card.comment,
+                )
 
         # Carry forward receipt and obs_id
         if self.receipt is not None and not self.receipt.empty:

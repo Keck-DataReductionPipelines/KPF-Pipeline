@@ -202,9 +202,10 @@ class KPF1(KPFDataModel):
 
         The L1 PRIMARY is already EPRV-standard (converted upstream in
         KPF0.to_kpf1), so headers are a pure pass-through: the EPRV PRIMARY and
-        the immutable INSTRUMENT_HEADER are forwarded unchanged, then
-        validate_eprv_primary() fails loudly on any native/unregistered/missing
-        PRIMARY keyword. Pass-through extensions (TELEMETRY,
+        the immutable INSTRUMENT_HEADER are forwarded unchanged (value + comment).
+        Header validation no longer runs here — it moved to the QC runner
+        (quality_control/qc_booleans, QC._validate_headers). Pass-through
+        extensions (TELEMETRY,
         EXPMETER_SCI→EXPMETER, CA_HK→ANCILLARY_SPECTRUM) and KPF-friendly
         aliases (e.g., SCI2_FLUX → TRACE3_FLUX) are handled below. Trace data
         arrays are created but empty — the caller (spectral extraction) fills
@@ -215,13 +216,18 @@ class KPF1(KPFDataModel):
         kpf2 = KPF2()
 
         # Headers are a pure pass-through; the native→EPRV conversion and the
-        # INSTRUMENT_HEADER snapshot were done once in KPF0.to_kpf1.
+        # INSTRUMENT_HEADER snapshot were done once in KPF0.to_kpf1. Copy
+        # card-by-card (value + comment) — iterating .items() would drop the FITS
+        # comments, and INSTRUMENT_HEADER must remain a verbatim copy.
         if "PRIMARY" in self.headers:
-            for key, value in self.headers["PRIMARY"].items():
-                kpf2.headers["PRIMARY"][key] = value
+            for card in self.headers["PRIMARY"].cards:
+                kpf2.headers["PRIMARY"][card.keyword] = (card.value, card.comment)
         if "INSTRUMENT_HEADER" in self.headers:
-            for key, value in self.headers["INSTRUMENT_HEADER"].items():
-                kpf2.headers["INSTRUMENT_HEADER"][key] = value
+            for card in self.headers["INSTRUMENT_HEADER"].cards:
+                kpf2.headers["INSTRUMENT_HEADER"][card.keyword] = (
+                    card.value,
+                    card.comment,
+                )
 
         # Pass-through extensions with renaming
         for l1_ext, kpf2_ext in self._L1_TO_KPF2_PASSTHROUGH.items():
