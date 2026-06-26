@@ -204,18 +204,19 @@ L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place**:
 `KPF0.to_kpf1()`, which calls the conversion methods **`KPF0.wmko_to_eprv()`** and
 **`KPF0.build_instrument_header()`** (L0 owns the WMKO→EPRV mapping). The keyword registry lives in
-**`kpfpipe/data_models/_registry.py`**, organized by its three use-cases: **(1) mapping** — the rvdata
-`header_map.csv` (`HEADER_MAP`); **(2) validation** —
-`EXT_ALLOWED`/`EXT_REQUIRED` per extension + `STRUCTURAL_KEYS`; **(3) routing** — `KEYWORD_ROUTING`
-(`keyword → (extension, comment)`). All of (2)/(3) are precomputed views of the **single source-of-
-truth table `KEYWORD_REGISTRY`** — one DataFrame unioning our `L{0,1,2,4}-headers.csv` registries with
-the EPRV keyword defs (rvdata's `LEVEL2/4_PRIMARY_KEYWORDS` + per-extension CSVs), columns
-`Keyword, Description, Extension, DataType, Populated by, Required, Level`. **`_registry.py` is
-imported only by `data_models/base.py`**: `KPFDataModel` re-exposes `HEADER_MAP`/`REGISTERED_KEYWORDS`/
-`register_rvdata_extension` (so `level0/2/4.py` import them from `base` unchanged) and surfaces
-`KEYWORD_REGISTRY`, `KEYWORD_ROUTING`, `EXT_ALLOWED`, `EXT_REQUIRED`, `STRUCTURAL_KEYS` as
-**class attributes** — so consumers handed a `kpf_obj` (the qc_booleans
-validator, tests) read them off the model rather than importing the registry.
+**`kpfpipe/data_models/keyword_registry.py`** as the single `KeywordRegistry` class (one module
+singleton `keyword_registry`), organized by its three use-cases: **(1) mapping** — the rvdata
+`header_map.csv` (`.header_map`); **(2) validation** — `.allowed`/`.required` per extension +
+`.structural`; **(3) routing** — `.routing` (`keyword → (extension, comment)`). All of (2)/(3) are
+derived in `__init__` from the **single source-of-truth table `.table`** — one DataFrame unioning our
+`L{0,1,2,4}-headers.csv` registries with the EPRV keyword defs (rvdata's `LEVEL2/4_PRIMARY_KEYWORDS` +
+per-extension CSVs), columns `Keyword, Description, Extension, DataType, Populated by, Required, Level`
+(`.registered` is the keyword allowlist). **`keyword_registry.py` is imported only by
+`data_models/base.py`**: `KPFDataModel` surfaces the singleton as the **class attribute
+`keyword_registry`** and re-exports it (so `level2/4.py` call `keyword_registry.register_rvdata_extension`
+from `base`) — consumers handed a `kpf_obj` (the qc_booleans validator, level0's WMKO→EPRV mapping,
+tests) read the lookups off `kpf.keyword_registry.{table,routing,allowed,required,structural,registered,header_map}`
+rather than importing the registry.
 Consequences every contributor must respect:
 
 - **L1 PRIMARY is already EPRV-standard.** From L1 onward, PRIMARY holds EPRV keyword *names*
@@ -254,26 +255,25 @@ Consequences every contributor must respect:
 - **QUALITY_CONTROL + RECEIPT *headers* propagate L0→L1→L2** card-by-card in `to_kpf1`/`to_kpf2`
   (`set_header` with a comment-preserving `fits.Header` copy), alongside the receipt *table* copy.
   QUALITY_CONTROL is a KPF-custom extension unknown to rvdata's definition-driven L2/L4 reader, so
-  `register_rvdata_extension` (`data_models/_registry.py`, re-exposed via `base`, called from
-  `level2.py`/`level4.py`) registers it into rvdata's in-memory `LEVEL{2,4}_EXTENSIONS` so a product
-  written with it reads back.
+  `keyword_registry.register_rvdata_extension` (a method on `KeywordRegistry`, re-exposed via `base`,
+  called from `level2.py`/`level4.py`) registers it into rvdata's in-memory `LEVEL{2,4}_EXTENSIONS` so
+  a product written with it reads back.
 - **Header validation lives in `quality_control/qc_booleans` (`QC._validate_headers`), run at the end
   of `QC.run()` — NOT in `to_kpf2`/`to_kpf4`** (the transforms no longer self-validate). For each
   registry-governed extension present (PRIMARY, QUALITY_CONTROL, RECEIPT, the barycentric extensions,
-  RV#/CCF#), every card must be a registered keyword for that extension (`KEYWORD_REGISTRY`) or a
+  RV#/CCF#), every card must be a registered keyword for that extension (`keyword_registry.table`) or a
   structural card, else it **raises**; an absent `Required` keyword **warns**. PRIMARY *allowed* is
   **not level-gated** (any registered PRIMARY keyword is allowed on any PRIMARY); *required*-warnings
   are level-aware (only keywords required at `Level ≤ product level`, so an L2 product isn't warned
   about missing L4-only `RV`). PRIMARY is validated only where it is EPRV-standard (L1/L2/L4); the raw
   WMKO L0 PRIMARY is skipped. L4 is validated once `QCL4` is written (planned). The validator reads its
-  allowed/required lookups off the validated `kpf_obj` (`self.kpf.EXT_ALLOWED` / `.EXT_REQUIRED`) — the
-  model surfaces the `_registry` lookups as class attributes, so qc_booleans imports nothing from
-  `data_models`.
+  allowed/required lookups off the validated `kpf_obj` (`self.kpf.keyword_registry.allowed` /
+  `.required`), so qc_booleans imports nothing from `data_models`.
 - **`wmko_to_eprv` emits only registered keywords.** It applies `header_map.csv` but **filters each
-  `STANDARD` target against `KEYWORD_REGISTRY`** (via `self.REGISTERED_KEYWORDS`), so rvdata's
+  `STANDARD` target against the registry** (via `self.keyword_registry.registered`), so rvdata's
   header_map entries that aren't EPRV keywords (`PARANG`, `PARANG2`) are dropped, never leaking onto
-  PRIMARY (the raw value survives in `INSTRUMENT_HEADER`). `_registry` warns once at import listing any
-  such header_map/registry inconsistency.
+  PRIMARY (the raw value survives in `INSTRUMENT_HEADER`). `KeywordRegistry` warns once at construction
+  listing any such header_map/registry inconsistency.
 - `to_kpf1` also corrects values the installed `header_map.csv` gets wrong: `NUMORDER` (→67 from
   `DETECTOR`), `JD_UTC` (full JD from `MJD-OBS`, the canonical KPF exposure time — native
   `DATE-OBS` is date-only), and stamps the EPRV DRP version `DRPTAG` (its WMKO equivalent `DRPVERNO`
@@ -288,9 +288,10 @@ Consequences every contributor must respect:
   `KPFDataModel._create_hdul` override (inherited by all four models) rebuilds the PRIMARY HDU via
   `self._restore_primary_comments(...)` so comments survive `to_fits`. Conversion lives in
   `KPF0.wmko_to_eprv`/`build_instrument_header` (`data_models/level0.py`); the unified
-  `KEYWORD_REGISTRY` table and its derived routing/validation lookups live in
-  `data_models/_registry.py`, surfaced through `KPFDataModel` (`set_keyword` + class attributes); the
-  validator itself lives in `quality_control/qc_booleans/base.py` (`QC._validate_headers`).
+  `KeywordRegistry` table and its derived routing/validation lookups live in
+  `data_models/keyword_registry.py` (the `keyword_registry` singleton), surfaced through `KPFDataModel`
+  (`set_keyword` + the `keyword_registry` class attribute); the validator itself lives in
+  `quality_control/qc_booleans/base.py` (`QC._validate_headers`).
 
 ### Configuration
 

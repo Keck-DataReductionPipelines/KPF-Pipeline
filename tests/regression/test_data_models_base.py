@@ -150,7 +150,7 @@ class TestRegistryConformance:
     """
 
     def test_routing_matches_extension_column(self):
-        routing = KPF1.KEYWORD_ROUTING
+        routing = KPF1.keyword_registry.routing
         mismatches = []
         for _, row in read_kpf_header_registry().iterrows():
             kw = str(row["Keyword"]).strip()
@@ -161,23 +161,23 @@ class TestRegistryConformance:
         assert not mismatches, f"routing != registry Extension column: {mismatches}"
 
     def test_every_registry_keyword_is_routable(self):
-        routing = KPF1.KEYWORD_ROUTING
+        routing = KPF1.keyword_registry.routing
         for _, row in read_kpf_header_registry().iterrows():
             kw = str(row["Keyword"]).strip()
             assert kw in routing, f"{kw} missing from routing table"
 
     def test_comment_is_registry_description(self):
-        routing = KPF1.KEYWORD_ROUTING
+        routing = KPF1.keyword_registry.routing
         for _, row in read_kpf_header_registry().iterrows():
             kw = str(row["Keyword"]).strip()
             assert routing[kw][1] == str(row["Description"]).strip()
 
 
 class TestKeywordRegistry:
-    """The unified KEYWORD_REGISTRY table and its derived validation lookups."""
+    """The unified registry table and its derived validation lookups."""
 
     def test_columns(self):
-        assert list(KPF1.KEYWORD_REGISTRY.columns) == [
+        assert list(KPF1.keyword_registry.table.columns) == [
             "Keyword",
             "Description",
             "Extension",
@@ -189,22 +189,22 @@ class TestKeywordRegistry:
 
     def test_unions_kpf_and_eprv(self):
         # KPF-registered (RNGREEN1) and EPRV (RV) keywords both present.
-        keys = KPF1.REGISTERED_KEYWORDS
+        keys = KPF1.keyword_registry.registered
         assert "RNGREEN1" in keys and "RV" in keys
 
     def test_non_registry_headermap_targets_absent(self):
         # PARANG/PARANG2 are header_map STANDARD names that aren't EPRV keywords;
         # they must NOT be in the registry (so wmko_to_eprv drops them).
-        assert "PARANG" not in KPF1.REGISTERED_KEYWORDS
-        assert "PARANG2" not in KPF1.REGISTERED_KEYWORDS
+        assert "PARANG" not in KPF1.keyword_registry.registered
+        assert "PARANG2" not in KPF1.keyword_registry.registered
 
     def test_primary_allowed_not_level_gated(self):
         # An EPRV-L4 keyword (RV) is allowed on PRIMARY regardless of product level.
-        assert "RV" in KPF1.EXT_ALLOWED["PRIMARY"]
+        assert "RV" in KPF1.keyword_registry.allowed["PRIMARY"]
 
     def test_required_keyed_by_minimal_level(self):
-        # EXT_REQUIRED maps keyword -> the minimal Level it is Required at.
-        primary_required = KPF1.EXT_REQUIRED["PRIMARY"]
+        # required maps keyword -> the minimal Level it is Required at.
+        primary_required = KPF1.keyword_registry.required["PRIMARY"]
         assert primary_required.get("RV") == 4  # L4-only required
         assert primary_required.get("INSTRUME") == 2  # L2 required
 

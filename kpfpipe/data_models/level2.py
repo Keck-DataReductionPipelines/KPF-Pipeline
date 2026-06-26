@@ -23,11 +23,11 @@ from rvdata.core.models.level2 import RV2
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import KPFDataModel, register_rvdata_extension
+from kpfpipe.data_models.base import KPFDataModel, keyword_registry
 
 # Make rvdata's RV2._read aware of KPF's QUALITY_CONTROL extension so an L2
 # written with it reads back (KPF2.__init__ creates the empty extension).
-register_rvdata_extension(
+keyword_registry.register_rvdata_extension(
     LEVEL2_EXTENSIONS,
     "QUALITY_CONTROL",
     "BinTableHDU",

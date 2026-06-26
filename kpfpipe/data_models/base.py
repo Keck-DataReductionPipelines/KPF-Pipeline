@@ -14,22 +14,13 @@ from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.models.base import RVDataModel
 
-# The header/extension keyword registry lives in its own module; base.py is its
-# only importer. HEADER_MAP / register_rvdata_extension / REGISTERED_KEYWORDS are
-# re-exposed here so sibling data_models files (level0/2/4) keep importing them
-# from base; the routing/validation lookups are surfaced as KPFDataModel class
-# attributes (below) so consumers handed a kpf_obj (the qc_booleans validator,
-# tests) read them off the model.
-from kpfpipe.data_models._registry import (
-    EXT_ALLOWED,
-    EXT_REQUIRED,
-    HEADER_MAP,
-    KEYWORD_REGISTRY,
-    KEYWORD_ROUTING,
-    REGISTERED_KEYWORDS,
-    STRUCTURAL_KEYS,
-    register_rvdata_extension,
-)
+# The header/extension keyword registry lives in its own module as a single
+# KeywordRegistry instance; base.py is its only importer. The instance is
+# surfaced as a KPFDataModel class attribute (below) so consumers handed a
+# kpf_obj (the qc_booleans validator, level0's WMKO->EPRV mapping, tests) reach
+# it through kpf.keyword_registry, and re-exported so sibling data_models files
+# (level2/4) import the same singleton from base.
+from kpfpipe.data_models.keyword_registry import keyword_registry
 from kpfpipe.utils.kpf import _DATECODE_PATTERN, _OBS_ID_PATTERN
 
 # Receipt names that are data-model conversions / serialization rather than
@@ -38,14 +29,12 @@ from kpfpipe.utils.kpf import _DATECODE_PATTERN, _OBS_ID_PATTERN
 # the writer stamped.
 _INTERNAL_RECEIPTS = frozenset({"to_l1", "to_kpf2", "to_kpf4", "to_fits", "from_fits"})
 
-# Re-exported for sibling data_models modules (KPF0.wmko_to_eprv uses HEADER_MAP +
-# REGISTERED_KEYWORDS; KPF2/KPF4 use register_rvdata_extension). Listed in __all__
-# so the re-export is intentional, not an accident of import.
+# Re-exported for sibling data_models modules: KPF2/KPF4 call
+# keyword_registry.register_rvdata_extension at import. Listed in __all__ so the
+# re-export is intentional, not an accident of import.
 __all__ = [
     "KPFDataModel",
-    "HEADER_MAP",
-    "REGISTERED_KEYWORDS",
-    "register_rvdata_extension",
+    "keyword_registry",
 ]
 
 
@@ -56,17 +45,13 @@ class KPFDataModel(RVDataModel):
     OBS_ID_PATTERN = _OBS_ID_PATTERN
     DATECODE_PATTERN = _DATECODE_PATTERN
 
-    # Keyword registry, surfaced as class attributes so anything handed a KPF data
-    # model (the qc_booleans header validator, tests) reads them off the object —
-    # keeping data_models/_registry imported only by base.py. set_keyword uses
-    # KEYWORD_ROUTING; the validator uses EXT_ALLOWED / EXT_REQUIRED (per-extension)
-    # plus STRUCTURAL_KEYS. KEYWORD_REGISTRY is the source table.
-    KEYWORD_REGISTRY = KEYWORD_REGISTRY
-    KEYWORD_ROUTING = KEYWORD_ROUTING
-    EXT_ALLOWED = EXT_ALLOWED
-    EXT_REQUIRED = EXT_REQUIRED
-    STRUCTURAL_KEYS = STRUCTURAL_KEYS
-    REGISTERED_KEYWORDS = REGISTERED_KEYWORDS
+    # The keyword registry singleton, surfaced as a class attribute so anything
+    # handed a KPF data model (the qc_booleans header validator, level0's
+    # WMKO->EPRV mapping, tests) reaches it via kpf.keyword_registry — keeping
+    # data_models/keyword_registry imported only by base.py. set_keyword uses
+    # .routing; the validator uses .allowed / .required / .structural; .table is
+    # the source table and .registered the allowlist.
+    keyword_registry = keyword_registry
 
     def __init__(self):
         super().__init__()
@@ -122,7 +107,7 @@ class KPFDataModel(RVDataModel):
             config error — the extension must be created before the write).
         """
         name = str(key).strip()
-        route = KEYWORD_ROUTING.get(name)
+        route = self.keyword_registry.routing.get(name)
         if route is None:
             raise KeyError(
                 f"keyword {name!r} is not registered; add it to "

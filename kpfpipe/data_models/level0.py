@@ -20,7 +20,7 @@ from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe import DETECTOR, __version__
-from kpfpipe.data_models.base import HEADER_MAP, KPFDataModel
+from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.kpf import get_obs_id
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
@@ -233,13 +233,13 @@ class KPF0(KPFDataModel):
         """
         wmko_primary = self.headers["PRIMARY"]
         out = {}
-        for _, row in HEADER_MAP.iterrows():
+        for _, row in self.keyword_registry.header_map.iterrows():
             standard_key = str(row["STANDARD"]).strip()
             # Emit only registered keywords. rvdata's header_map.csv maps to a few
             # STANDARD targets that aren't in the keyword registry (e.g. PARANG,
             # PARANG2); skip them so the conversion can't leak non-standard cards
-            # onto the EPRV PRIMARY. (_registry warns once at import about these.)
-            if standard_key not in self.REGISTERED_KEYWORDS:
+            # onto the EPRV PRIMARY. (keyword_registry warns once at import.)
+            if standard_key not in self.keyword_registry.registered:
                 continue
             instrument_key = (
                 str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""

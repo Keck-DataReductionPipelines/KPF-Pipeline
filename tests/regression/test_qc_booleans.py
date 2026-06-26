@@ -15,6 +15,7 @@ All tests use synthetic in-memory data — no real KPF files required.
 import os
 import subprocess
 import sys
+import types
 import warnings
 
 import numpy as np
@@ -180,17 +181,19 @@ class TestQCBase:
 
         The QC runner now writes each result via ``set_keyword`` and validates
         governed extensions at the end of ``run()``, reading the registry lookups
-        off the model (``self.kpf.*``). This fake stores every keyword on
-        QUALITY_CONTROL (value only) and exposes empty ``extensions`` /
-        ``EXT_ALLOWED`` so ``_validate_headers`` is a no-op (LEVEL=None skips
-        PRIMARY; no governed extensions to check).
+        off the model (``self.kpf.keyword_registry``). This fake stores every
+        keyword on QUALITY_CONTROL (value only) and exposes empty ``extensions``
+        plus a registry stub with empty lookups so ``_validate_headers`` is a
+        no-op (LEVEL=None skips PRIMARY; no governed extensions to check).
         """
 
         class _FakeObj:
             extensions = {}
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
             data = {}
-            EXT_ALLOWED = {}
+            keyword_registry = types.SimpleNamespace(
+                allowed={}, required={}, structural=set()
+            )
 
             def set_keyword(self, key, value):
                 self.headers["QUALITY_CONTROL"][key] = value

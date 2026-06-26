@@ -17,14 +17,14 @@ inside the level transforms).
 import warnings
 
 # Header-registry lookups are read off the validated kpf_obj (e.g.
-# self.kpf.EXT_ALLOWED / EXT_REQUIRED), so qc_booleans does not import from
-# data_models — the registry stays reachable purely through the data model. The
-# structural-card policy below is validator-specific and lives here.
+# self.kpf.keyword_registry.allowed / .required), so qc_booleans does not import
+# from data_models — the registry stays reachable purely through the data model.
+# The structural-card policy below is validator-specific and lives here.
 
 # Bookkeeping/structural cards astropy adds to a serialized extension header
 # (BinTable column descriptors, image WCS); always permitted on any governed
 # extension and never counted as a "missing required" keyword. These supplement
-# the model's STRUCTURAL_KEYS (the PRIMARY/bookkeeping set).
+# the registry's structural set (the PRIMARY/bookkeeping cards).
 _EXT_STRUCTURAL_PREFIXES = (
     "NAXIS",
     "TTYPE",
@@ -105,43 +105,44 @@ class QC:
         WMKO L0 PRIMARY is skipped.
         """
         level = str(self.LEVEL).upper()
-        # Registry lookups are read off the validated model (kpf_obj), so
-        # data_models/_registry stays imported only by base.py. PRIMARY allowed is
-        # NOT level-gated (the registry already lists every EPRV + KPF PRIMARY
-        # keyword); required-warnings ARE level-aware. L1 PRIMARY is already
-        # EPRV-L2-standard, so it caps at level 2 like L2.
-        kpf = self.kpf
+        # Registry lookups are read off the validated model's keyword_registry
+        # singleton (kpf_obj), so data_models/keyword_registry stays imported only
+        # by base.py. PRIMARY allowed is NOT level-gated (the registry already
+        # lists every EPRV + KPF PRIMARY keyword); required-warnings ARE
+        # level-aware. L1 PRIMARY is already EPRV-L2-standard, so it caps at
+        # level 2 like L2.
+        reg = self.kpf.keyword_registry
         cap = {"L1": 2, "L2": 2, "L4": 4}.get(level)
 
         def required_at(ext):
             """Keywords required for ``ext`` at or below this product's level."""
             if cap is None:  # L0 (or an untagged QC subclass): no required-warnings.
                 return set()
-            return {k for k, lvl in kpf.EXT_REQUIRED.get(ext, {}).items() if lvl <= cap}
+            return {k for k, lvl in reg.required.get(ext, {}).items() if lvl <= cap}
 
         # PRIMARY is EPRV-standard from L1 onward; the raw WMKO L0 PRIMARY is not.
         if cap is not None:
             self._validate_extension(
                 "PRIMARY",
-                kpf.EXT_ALLOWED.get("PRIMARY", set()),
+                reg.allowed.get("PRIMARY", set()),
                 required_at("PRIMARY"),
             )
 
         # KPF/EPRV governed extensions (QUALITY_CONTROL, RECEIPT, BARYCORR_*,
         # BJD_TDB, RV#/CCF#): validate each that exists on this product.
-        for ext, allowed in kpf.EXT_ALLOWED.items():
-            if ext == "PRIMARY" or ext not in kpf.extensions:
+        for ext, allowed in reg.allowed.items():
+            if ext == "PRIMARY" or ext not in self.kpf.extensions:
                 continue
             self._validate_extension(ext, allowed, required_at(ext))
 
     def _is_structural(self, key):
         """True for a FITS structural/bookkeeping card (not a registered keyword).
 
-        Combines the model's STRUCTURAL_KEYS (PRIMARY/bookkeeping cards) with the
+        Combines the registry's structural cards (PRIMARY/bookkeeping) with the
         extension-table/WCS cards astropy adds at serialization.
         """
         return (
-            key in self.kpf.STRUCTURAL_KEYS
+            key in self.kpf.keyword_registry.structural
             or key in _EXT_STRUCTURAL_EXTRA
             or key.startswith(_EXT_STRUCTURAL_PREFIXES)
         )

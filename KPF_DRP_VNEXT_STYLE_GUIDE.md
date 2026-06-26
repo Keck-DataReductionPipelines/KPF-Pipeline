@@ -586,11 +586,12 @@ The WMKO-native → EPRV-standard conversion happens **only** in `KPF0.to_kpf1`
 (`data_models/level0.py`). **Every extension header is an `astropy.io.fits.Header`** — the KPF data models normalize
 all headers to `fits.Header` (they override `create_extension`; see `data_models/base.py`),
 so there is no value-vs-`(value, comment)` ambiguity and no separate header parser.
-`KPF0` owns the WMKO→EPRV conversion (`data_models/level0.py`). The unified `KEYWORD_REGISTRY` table
-(our `L*-headers.csv` ∪ the EPRV keyword defs) and its derived routing/validation lookups live in
-`data_models/_registry.py` (imported only by `base.py`, which surfaces them through
-`KPFDataModel.set_keyword` and class attributes); the qc_booleans validator reads them off the
-`kpf_obj`. What this means when writing code:
+`KPF0` owns the WMKO→EPRV conversion (`data_models/level0.py`). The unified registry table
+(our `L*-headers.csv` ∪ the EPRV keyword defs) and its derived routing/validation lookups are owned by
+the `KeywordRegistry` class in `data_models/keyword_registry.py` — one module singleton
+`keyword_registry`, imported only by `base.py`, which surfaces it as the `KPFDataModel.keyword_registry`
+class attribute (and uses `.routing` in `set_keyword`); the qc_booleans validator reads `.allowed`/
+`.required` off `kpf_obj.keyword_registry`. What this means when writing code:
 
 - **Reading a header value**: use `header.get(key, default)` (or `header[key]`) on the keyword's
   home extension (per the registry `Extension` column — e.g. read `RNGREEN1` from

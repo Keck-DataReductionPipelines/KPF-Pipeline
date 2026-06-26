@@ -29,11 +29,11 @@ from rvdata.core.models.level4 import RV4
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import KPFDataModel, register_rvdata_extension
+from kpfpipe.data_models.base import KPFDataModel, keyword_registry
 
 # Make rvdata's RV4._read aware of KPF's QUALITY_CONTROL extension so an L4
 # written with it reads back (QCL4 is planned; this keeps the read forward-safe).
-register_rvdata_extension(
+keyword_registry.register_rvdata_extension(
     LEVEL4_EXTENSIONS,
     "QUALITY_CONTROL",
     "BinTableHDU",
