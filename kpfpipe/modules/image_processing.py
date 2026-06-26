@@ -44,7 +44,7 @@ class ImageProcessing:
     Parameters
     ----------
     l1_obj : KPF1
-        Assembled L1 frame. The PRIMARY header must contain the {BIAS,DARK}FILE
+        Assembled L1 frame. The RECEIPT header must contain the {BIAS,DARK}FILE
         keyword (the master's full path, written by CalibrationAssociation) for
         any calibration requested via the header lookup.
     config : None | dict | ConfigHandler
@@ -301,7 +301,7 @@ class ImageProcessing:
             CCD chips to process. Defaults to self.chips.
         bias : bool | str | KPFMasterL1, optional
             How to source the master bias. Falsy → skip. True → load via
-            BIASFILE (the master's full path) in the PRIMARY header. str →
+            BIASFILE (the master's full path) in the RECEIPT header. str →
             treat as an explicit filepath. KPFMasterL1 → use this object
             directly (no disk I/O). Defaults to self.bias.
         dark : bool | str | KPFMasterL1, optional

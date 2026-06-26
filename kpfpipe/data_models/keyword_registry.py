@@ -27,6 +27,7 @@ The three use-cases:
 
 import importlib.resources
 import warnings
+from types import MappingProxyType
 
 import pandas as pd
 from rvdata.core.models.definitions import (
@@ -46,6 +47,11 @@ class KeywordRegistry:
     All attributes are read-only reference data; see the module docstring for the
     three use-cases (mapping / validation / routing).
     """
+
+    # Sentinel written into the "Populated by" column for EPRV-sourced rows; the
+    # derived lookups use it to tell EPRV rows from KPF rows, so it is the single
+    # source of that string (and _kpf_rows asserts no KPF row reuses it).
+    _EPRV_TAG = "EPRV"
 
     # Unified-table column order.
     _COLUMNS = [
@@ -95,12 +101,22 @@ class KeywordRegistry:
         # Source table (EPRV rows first, then KPF rows; KPF wins a collision).
         eprv_rows, kpf_rows = self._build_rows()
         self.table = pd.DataFrame(eprv_rows + kpf_rows, columns=self._COLUMNS)
+        # The lookups below are read-only reference data shared process-wide via
+        # the singleton; freeze them (frozenset / MappingProxyType) so a stray
+        # consumer mutation can't corrupt the registry for everyone (notably
+        # under parallel test execution). self.table is only ever read.
         # Every registered keyword (the allowlist; also the wmko_to_eprv filter).
-        self.registered = set(self.table["Keyword"])
+        self.registered = frozenset(self.table["Keyword"])
         # Derived lookups (all read off self.table — no parallel row lists).
-        self.routing = self._build_routing()
-        self.allowed, self.required = self._build_validation()
-        self.structural = set(self._STRUCTURAL)
+        self.routing = MappingProxyType(self._build_routing())
+        allowed, required = self._build_validation()
+        self.allowed = MappingProxyType(
+            {ext: frozenset(kws) for ext, kws in allowed.items()}
+        )
+        self.required = MappingProxyType(
+            {ext: MappingProxyType(d) for ext, d in required.items()}
+        )
+        self.structural = frozenset(self._STRUCTURAL)
         # (1) Mapping: the rvdata WMKO-native -> EPRV-standard header_map.
         self.header_map = pd.read_csv(_kpf_cfg / "header_map.csv")
         self._warn_unregistered_targets()
@@ -147,21 +163,26 @@ class KeywordRegistry:
                             descr,
                             extension,
                             dtype,
-                            "EPRV",
+                            cls._EPRV_TAG,
                             required and j == 1,
                             level,
                         ]
                     )
             else:
-                rows.append([name, descr, extension, dtype, "EPRV", required, level])
+                rows.append(
+                    [name, descr, extension, dtype, cls._EPRV_TAG, required, level]
+                )
         return rows
 
-    @staticmethod
-    def _kpf_rows():
+    @classmethod
+    def _kpf_rows(cls):
         """KPF-pipeline keyword rows from config/L{0,1,2,4}-headers.csv.
 
-        ``Required`` is always False; ``Populated by`` is whatever the CSV says
-        (never the literal ``"EPRV"``).
+        ``Required`` is always False; ``Populated by`` is whatever the CSV says.
+        It must NEVER be the EPRV sentinel: the derived routing/validation lookups
+        treat a ``Populated by == _EPRV_TAG`` row as EPRV-sourced, so a KPF row
+        reusing that string would be silently misclassified (dropped from routing,
+        given the wrong Required/Level). Guard against it loudly here.
         """
         rows = []
         for level in (0, 1, 2, 4):
@@ -170,13 +191,21 @@ class KeywordRegistry:
                 descr = (
                     "" if pd.isna(r["Description"]) else str(r["Description"]).strip()
                 )
+                populated_by = str(r.get("Populated by", "")).strip()
+                if populated_by == cls._EPRV_TAG:
+                    raise ValueError(
+                        f"L{level}-headers.csv: keyword "
+                        f"{str(r['Keyword']).strip()!r} has 'Populated by' == "
+                        f"{cls._EPRV_TAG!r}, which is reserved as the EPRV-row "
+                        "discriminator; use a real populating site instead"
+                    )
                 rows.append(
                     [
                         str(r["Keyword"]).strip(),
                         descr,
                         str(r["Extension"]).strip(),
                         str(r.get("DataType", "")).strip(),
-                        str(r.get("Populated by", "")).strip(),
+                        populated_by,
                         False,
                         level,
                     ]
@@ -216,10 +245,10 @@ class KeywordRegistry:
         routing = {}
         # EPRV PRIMARY rows first (setdefault), then KPF rows override (KPF wins).
         for row in self.table.itertuples(index=False):
-            if row[4] == "EPRV" and row[2] == "PRIMARY":
+            if row[4] == self._EPRV_TAG and row[2] == "PRIMARY":
                 routing.setdefault(row[0], ("PRIMARY", row[1]))
         for row in self.table.itertuples(index=False):
-            if row[4] != "EPRV":
+            if row[4] != self._EPRV_TAG:
                 routing[row[0]] = (row[2], row[1])
         return routing
 
