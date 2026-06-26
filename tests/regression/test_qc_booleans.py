@@ -884,8 +884,10 @@ class TestValidateHeaders:
     def test_native_wmko_leak_on_primary_raises(self):
         l2 = KPF2()
         # GAIAID is a raw WMKO native (kept in INSTRUMENT_HEADER, never on PRIMARY).
+        # It is not a registered PRIMARY keyword, so it fails the general
+        # unregistered-keyword check (no dedicated WMKO-leak branch needed).
         l2.headers["PRIMARY"]["GAIAID"] = (12345, "leaked native")
-        with pytest.raises(ValueError, match="native WMKO keyword 'GAIAID'"):
+        with pytest.raises(ValueError, match="unregistered keyword 'GAIAID'"):
             QCL2(l2)._validate_headers()
 
     def test_missing_required_primary_keyword_warns(self):

@@ -28,7 +28,6 @@ from kpfpipe.data_models._registry import (
     KEYWORD_ROUTING,
     REGISTERED_KEYWORDS,
     STRUCTURAL_KEYS,
-    WMKO_PRIMARY_KEYS,
     register_rvdata_extension,
 )
 from kpfpipe.utils.kpf import _DATECODE_PATTERN, _OBS_ID_PATTERN
@@ -61,13 +60,12 @@ class KPFDataModel(RVDataModel):
     # model (the qc_booleans header validator, tests) reads them off the object —
     # keeping data_models/_registry imported only by base.py. set_keyword uses
     # KEYWORD_ROUTING; the validator uses EXT_ALLOWED / EXT_REQUIRED (per-extension)
-    # plus STRUCTURAL_KEYS / WMKO_PRIMARY_KEYS. KEYWORD_REGISTRY is the source table.
+    # plus STRUCTURAL_KEYS. KEYWORD_REGISTRY is the source table.
     KEYWORD_REGISTRY = KEYWORD_REGISTRY
     KEYWORD_ROUTING = KEYWORD_ROUTING
     EXT_ALLOWED = EXT_ALLOWED
     EXT_REQUIRED = EXT_REQUIRED
     STRUCTURAL_KEYS = STRUCTURAL_KEYS
-    WMKO_PRIMARY_KEYS = WMKO_PRIMARY_KEYS
     REGISTERED_KEYWORDS = REGISTERED_KEYWORDS
 
     def __init__(self):

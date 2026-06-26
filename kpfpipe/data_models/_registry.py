@@ -17,8 +17,7 @@ fast lookups below are precomputed views of this table.
 
 The three use-cases:
   (1) Mapping  — ``HEADER_MAP`` (WMKO->EPRV), consumed by ``KPF0.wmko_to_eprv``,
-      filtered through ``REGISTERED_KEYWORDS``; plus ``WMKO_PRIMARY_KEYS`` (raw
-      WMKO names, for the leak diagnostic).
+      filtered through ``REGISTERED_KEYWORDS``.
   (2) Validation — ``EXT_ALLOWED`` / ``EXT_REQUIRED`` (per-extension, from the
       table) plus ``STRUCTURAL_KEYS`` (FITS bookkeeping cards).
   (3) Routing — ``KEYWORD_ROUTING`` (keyword -> (extension, comment)), consumed
@@ -215,16 +214,6 @@ STRUCTURAL_KEYS = {
 
 # === (1) Mapping: WMKO-native -> EPRV-standard ================================
 HEADER_MAP = pd.read_csv(_kpf_cfg / "header_map.csv")
-
-# Raw WMKO names that differ from their STANDARD target: must NOT remain on a
-# converted PRIMARY (they belong in INSTRUMENT_HEADER). Used for the leak check.
-WMKO_PRIMARY_KEYS = {
-    str(r["INSTRUMENT"]).strip()
-    for _, r in HEADER_MAP.iterrows()
-    if pd.notna(r["INSTRUMENT"])
-    and str(r["INSTRUMENT"]).strip()
-    and str(r["INSTRUMENT"]).strip() != str(r["STANDARD"]).strip()
-}
 
 # header_map STANDARD targets that are not registered keywords. wmko_to_eprv
 # filters its output to REGISTERED_KEYWORDS, so these would be silently dropped;

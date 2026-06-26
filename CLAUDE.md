@@ -205,7 +205,7 @@ The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one plac
 `KPF0.to_kpf1()`, which calls the conversion methods **`KPF0.wmko_to_eprv()`** and
 **`KPF0.build_instrument_header()`** (L0 owns the WMKO→EPRV mapping). The keyword registry lives in
 **`kpfpipe/data_models/_registry.py`**, organized by its three use-cases: **(1) mapping** — the rvdata
-`header_map.csv` (`HEADER_MAP`) + `WMKO_PRIMARY_KEYS` (leak diagnostic); **(2) validation** —
+`header_map.csv` (`HEADER_MAP`); **(2) validation** —
 `EXT_ALLOWED`/`EXT_REQUIRED` per extension + `STRUCTURAL_KEYS`; **(3) routing** — `KEYWORD_ROUTING`
 (`keyword → (extension, comment)`). All of (2)/(3) are precomputed views of the **single source-of-
 truth table `KEYWORD_REGISTRY`** — one DataFrame unioning our `L{0,1,2,4}-headers.csv` registries with
@@ -213,8 +213,8 @@ the EPRV keyword defs (rvdata's `LEVEL2/4_PRIMARY_KEYWORDS` + per-extension CSVs
 `Keyword, Description, Extension, DataType, Populated by, Required, Level`. **`_registry.py` is
 imported only by `data_models/base.py`**: `KPFDataModel` re-exposes `HEADER_MAP`/`REGISTERED_KEYWORDS`/
 `register_rvdata_extension` (so `level0/2/4.py` import them from `base` unchanged) and surfaces
-`KEYWORD_REGISTRY`, `KEYWORD_ROUTING`, `EXT_ALLOWED`, `EXT_REQUIRED`, `STRUCTURAL_KEYS`,
-`WMKO_PRIMARY_KEYS` as **class attributes** — so consumers handed a `kpf_obj` (the qc_booleans
+`KEYWORD_REGISTRY`, `KEYWORD_ROUTING`, `EXT_ALLOWED`, `EXT_REQUIRED`, `STRUCTURAL_KEYS` as
+**class attributes** — so consumers handed a `kpf_obj` (the qc_booleans
 validator, tests) read them off the model rather than importing the registry.
 Consequences every contributor must respect:
 

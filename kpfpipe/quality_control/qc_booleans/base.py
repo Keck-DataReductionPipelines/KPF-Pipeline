@@ -125,7 +125,6 @@ class QC:
                 "PRIMARY",
                 kpf.EXT_ALLOWED.get("PRIMARY", set()),
                 required_at("PRIMARY"),
-                wmko_check=True,
             )
 
         # KPF/EPRV governed extensions (QUALITY_CONTROL, RECEIPT, BARYCORR_*,
@@ -133,7 +132,7 @@ class QC:
         for ext, allowed in kpf.EXT_ALLOWED.items():
             if ext == "PRIMARY" or ext not in kpf.extensions:
                 continue
-            self._validate_extension(ext, allowed, required_at(ext), wmko_check=False)
+            self._validate_extension(ext, allowed, required_at(ext))
 
     def _is_structural(self, key):
         """True for a FITS structural/bookkeeping card (not a registered keyword).
@@ -147,9 +146,15 @@ class QC:
             or key.startswith(_EXT_STRUCTURAL_PREFIXES)
         )
 
-    def _validate_extension(self, ext, allowed, required, *, wmko_check):
+    def _validate_extension(self, ext, allowed, required):
         """Check one extension header: raise on an unexpected card, warn on an
-        absent required (non-structural) keyword."""
+        absent required (non-structural) keyword.
+
+        Any card that is neither structural nor a registered keyword for ``ext``
+        raises -- this subsumes the old WMKO-native leak check, since a raw
+        instrument keyword (kept in INSTRUMENT_HEADER, never registered for an
+        EPRV PRIMARY) is simply unregistered here.
+        """
         header = self.kpf.headers.get(ext)
         if header is None:
             return
@@ -159,11 +164,6 @@ class QC:
             present.add(key)
             if self._is_structural(key) or key in allowed:
                 continue
-            if wmko_check and key in self.kpf.WMKO_PRIMARY_KEYS:
-                raise ValueError(
-                    f"native WMKO keyword {key!r} found on {ext}; it must be "
-                    "converted to its EPRV name or kept in INSTRUMENT_HEADER"
-                )
             raise ValueError(
                 f"unregistered keyword {key!r} on {ext}; add it to "
                 "config/L{0,1,2,4}-headers.csv or fix the writer"
