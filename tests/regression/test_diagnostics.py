@@ -27,6 +27,12 @@ class TestDiagnosticsBase:
             headers = {"PRIMARY": {}}
             data = {}
 
+            def set_keyword(self, key, value):
+                # Mirror the real routing: set_keyword writes the value only
+                # (the comment comes from the registry). The base test keys are
+                # not in any registry, so the stub just lands them on PRIMARY.
+                self.headers["PRIMARY"][key] = value
+
         return _FakeObj()
 
     def test_writes_returned_keys_to_primary(self):
@@ -39,7 +45,7 @@ class TestDiagnosticsBase:
             metric_a._diag_name = "metric_a"
 
         results = MyDiag(obj).run()
-        assert obj.headers["PRIMARY"]["KEYA"] == (3.14, "metric a")
+        assert obj.headers["PRIMARY"]["KEYA"] == 3.14
         assert results["KEYA"] == (3.14, "metric a")
 
     def test_method_can_emit_multiple_keys(self):
@@ -52,8 +58,8 @@ class TestDiagnosticsBase:
             multi._diag_name = "multi"
 
         MyDiag(obj).run()
-        assert obj.headers["PRIMARY"]["K1"] == (1, "one")
-        assert obj.headers["PRIMARY"]["K2"] == (2, "two")
+        assert obj.headers["PRIMARY"]["K1"] == 1
+        assert obj.headers["PRIMARY"]["K2"] == 2
 
     def test_empty_dict_writes_nothing(self):
         obj = self._make_obj()
@@ -189,17 +195,17 @@ class TestDiagL2NanCounts:
         kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
-            assert key in kpf2.headers["PRIMARY"], f"missing {key}"
-            assert kpf2.headers["PRIMARY"].get(key) == 0
+            assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
     def test_counts_injected_nans_per_fiber(self):
         kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
         # Inject one NaN into GREEN_SCI1_FLUX; expect NANSCI1==1, others==0.
         kpf2.data["GREEN_SCI1_FLUX"][0, 0] = np.nan
         DiagL2(kpf2).run()
-        assert kpf2.headers["PRIMARY"].get("NANSCI1") == 1
+        assert kpf2.headers["QUALITY_CONTROL"].get("NANSCI1") == 1
         for key in ("NANSCI2", "NANSCI3", "NANSKY", "NANCAL"):
-            assert kpf2.headers["PRIMARY"].get(key) == 0
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
     def test_writes_keys_even_when_no_data(self):
         """KPF2 with no FLUX extensions populated should still write all 5
@@ -239,26 +245,28 @@ class TestDiagL2NanCounts:
         kpf2 = l1.to_kpf2()
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
-            assert kpf2.headers["PRIMARY"].get(key) == 0
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
 
 class TestDiagL2ZeroFlux:
     def test_zerofrac_written_when_data_present(self):
         kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
         DiagL2(kpf2).run()
-        assert "ZEROFRAC" in kpf2.headers["PRIMARY"]
-        assert kpf2.headers["PRIMARY"].get("ZEROFRAC") == pytest.approx(0.0)
+        assert "ZEROFRAC" in kpf2.headers["QUALITY_CONTROL"]
+        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.0)
 
     def test_zerofrac_one_when_all_zero(self):
         kpf2 = _make_kpf2_with_flux(zero_frac=1.0)
         DiagL2(kpf2).run()
-        assert kpf2.headers["PRIMARY"].get("ZEROFRAC") == pytest.approx(1.0)
+        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(1.0)
 
     def test_zerofrac_approximate_when_partial(self):
         """50% zeros sprinkled randomly → ZEROFRAC ≈ 0.5 within sampling error."""
         kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
         DiagL2(kpf2).run()
-        assert kpf2.headers["PRIMARY"].get("ZEROFRAC") == pytest.approx(0.5, abs=0.01)
+        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(
+            0.5, abs=0.01
+        )
 
     def test_zerofrac_skipped_when_no_data(self):
         """KPF2 with no populated FLUX extensions → no ZEROFRAC key written."""
@@ -294,7 +302,7 @@ class TestDiagL2ZeroFlux:
             os.unlink(tmp_path)
         kpf2 = l1.to_kpf2()
         DiagL2(kpf2).run()
-        assert "ZEROFRAC" not in kpf2.headers["PRIMARY"]
+        assert "ZEROFRAC" not in kpf2.headers["QUALITY_CONTROL"]
 
 
 def _set_fiber_arrays(kpf2, suffix, value, chips=("GREEN", "RED"), fibers=_FIBERS):
@@ -321,8 +329,8 @@ class TestDiagL2Snr:
         _set_fiber_arrays(kpf2, "VAR", 0.25)
         DiagL2(kpf2).run()
         for key in self._SNR_KEYS:
-            assert key in kpf2.headers["PRIMARY"], f"missing {key}"
-            assert kpf2.headers["PRIMARY"].get(key) > 0
+            assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) > 0
 
     def test_single_fiber_snr_value(self):
         # SKY flux=2, var=0.04 -> SNR = 2/sqrt(0.04) = 10.0 in every pixel.
@@ -330,8 +338,12 @@ class TestDiagL2Snr:
         _set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SKY",))
         _set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SKY",))
         DiagL2(kpf2).run()
-        assert kpf2.headers["PRIMARY"].get("GSNRSKY") == pytest.approx(10.0, abs=0.01)
-        assert kpf2.headers["PRIMARY"].get("RSNRSKY") == pytest.approx(10.0, abs=0.01)
+        assert kpf2.headers["QUALITY_CONTROL"].get("GSNRSKY") == pytest.approx(
+            10.0, abs=0.01
+        )
+        assert kpf2.headers["QUALITY_CONTROL"].get("RSNRSKY") == pytest.approx(
+            10.0, abs=0.01
+        )
 
     def test_summed_sci_snr_value(self):
         # Each SCI fiber flux=2, var=0.04 -> summed flux=6, var=0.12;
@@ -340,7 +352,9 @@ class TestDiagL2Snr:
         _set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SCI1", "SCI2", "SCI3"))
         _set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SCI1", "SCI2", "SCI3"))
         DiagL2(kpf2).run()
-        assert kpf2.headers["PRIMARY"].get("GSNRSCI") == pytest.approx(17.32, abs=0.05)
+        assert kpf2.headers["QUALITY_CONTROL"].get("GSNRSCI") == pytest.approx(
+            17.32, abs=0.05
+        )
 
     def test_summed_sci_skipped_when_a_sci_var_missing(self):
         # VAR for SCI1/SCI2 only (SCI3 var stays empty) -> summed-SCI skipped,
@@ -348,15 +362,15 @@ class TestDiagL2Snr:
         kpf2 = _make_kpf2_with_flux()
         _set_fiber_arrays(kpf2, "VAR", 0.25, fibers=("SCI1", "SCI2", "SKY", "CAL"))
         DiagL2(kpf2).run()
-        assert "GSNRSCI" not in kpf2.headers["PRIMARY"]
-        assert "GSNRSKY" in kpf2.headers["PRIMARY"]
+        assert "GSNRSCI" not in kpf2.headers["QUALITY_CONTROL"]
+        assert "GSNRSKY" in kpf2.headers["QUALITY_CONTROL"]
 
     def test_skipped_without_var(self):
         # Default fixture leaves VAR empty -> no SNR keys at all.
         kpf2 = _make_kpf2_with_flux()
         DiagL2(kpf2).run()
         for key in self._SNR_KEYS:
-            assert key not in kpf2.headers["PRIMARY"]
+            assert key not in kpf2.headers["QUALITY_CONTROL"]
 
 
 # ---------------------------------------------------------------------------
@@ -381,12 +395,12 @@ class TestDiagL2OrderletFluxRatios:
         kpf2 = _make_kpf2_with_flux()
         DiagL2(kpf2).run()
         for key in self._RATIO_KEYS:
-            assert key in kpf2.headers["PRIMARY"], f"missing {key}"
-            assert kpf2.headers["PRIMARY"].get(key) == pytest.approx(1.0)
+            assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) == pytest.approx(1.0)
 
     def test_ratio_value(self):
         # GREEN SCI1 flux=2 over SCI2 flux=1 -> GFR12 == 2.0.
         kpf2 = _make_kpf2_with_flux()
         _set_fiber_arrays(kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SCI1",))
         DiagL2(kpf2).run()
-        assert kpf2.headers["PRIMARY"].get("GFR12") == pytest.approx(2.0)
+        assert kpf2.headers["QUALITY_CONTROL"].get("GFR12") == pytest.approx(2.0)

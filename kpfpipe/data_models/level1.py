@@ -237,6 +237,16 @@ class KPF1(KPFDataModel):
                 if l1_ext in self.headers:
                     kpf2.set_header(kpf2_ext, self.headers[l1_ext])
 
+        # Forward the L1 QUALITY_CONTROL and RECEIPT *headers* onto L2, with
+        # comments. The receipt *table* propagates via the receipt copy below, but
+        # the RECEIPT header cards (OSCANSUB / *FILE applied by ImageAssembly /
+        # CalibrationAssociation) and the QUALITY_CONTROL cards (RN*, *AGE, QC
+        # booleans) are separate and must be carried explicitly; downstream L2
+        # stages (BarycentricCorrection, DiagL2, QCL2) append to them.
+        for ext in ("QUALITY_CONTROL", "RECEIPT"):
+            if ext in self.headers and ext in kpf2.extensions:
+                kpf2.set_header(ext, self.as_fits_header(self.headers[ext]))
+
         # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:
             kpf2.receipt = self.receipt.copy()
@@ -251,7 +261,6 @@ class KPF1(KPFDataModel):
             )
 
         kpf2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
-        self.validate_eprv_primary(kpf2.headers["PRIMARY"], "L2")
         kpf2.receipt_add_entry("to_kpf2", "PASS")
         return kpf2
 

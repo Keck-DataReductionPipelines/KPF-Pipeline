@@ -1,33 +1,33 @@
 Keyword,Description,Extension,DataType,Populated by
-DATAPRL2,QC: L2 data present,PRIMARY,int,QCL2
-L2NANOK,QC: L2 NaN count ok,PRIMARY,int,QCL2
-L2FLXOK,QC: L2 zero-flux fraction ok,PRIMARY,int,QCL2
-L2VARPOS,QC: L2 variance positive,PRIMARY,int,QCL2
-L2SNROK,QC: L2 SNR ok,PRIMARY,int,QCL2
-NANSCI1,NaN pixel count SCI1 (green+red),PRIMARY,int,DiagL2
-NANSCI2,NaN pixel count SCI2 (green+red),PRIMARY,int,DiagL2
-NANSCI3,NaN pixel count SCI3 (green+red),PRIMARY,int,DiagL2
-NANSKY,NaN pixel count SKY (green+red),PRIMARY,int,DiagL2
-NANCAL,NaN pixel count CAL (green+red),PRIMARY,int,DiagL2
-ZEROFRAC,Fraction of L2 flux pixels equal to zero,PRIMARY,float,DiagL2
-GSNRSCI,Median 95th-pctile SNR summed SCI GREEN,PRIMARY,float,DiagL2
-RSNRSCI,Median 95th-pctile SNR summed SCI RED,PRIMARY,float,DiagL2
-GSNRSKY,Median 95th-pctile SNR SKY GREEN,PRIMARY,float,DiagL2
-RSNRSKY,Median 95th-pctile SNR SKY RED,PRIMARY,float,DiagL2
-GSNRCAL,Median 95th-pctile SNR CAL GREEN,PRIMARY,float,DiagL2
-RSNRCAL,Median 95th-pctile SNR CAL RED,PRIMARY,float,DiagL2
-GFR12,Median flux ratio SCI1/SCI2 GREEN,PRIMARY,float,DiagL2
-RFR12,Median flux ratio SCI1/SCI2 RED,PRIMARY,float,DiagL2
-GFR32,Median flux ratio SCI3/SCI2 GREEN,PRIMARY,float,DiagL2
-RFR32,Median flux ratio SCI3/SCI2 RED,PRIMARY,float,DiagL2
-GFRS2,Median flux ratio SKY/SCI2 GREEN,PRIMARY,float,DiagL2
-RFRS2,Median flux ratio SKY/SCI2 RED,PRIMARY,float,DiagL2
-GFRC2,Median flux ratio CAL/SCI2 GREEN,PRIMARY,float,DiagL2
-RFRC2,Median flux ratio CAL/SCI2 RED,PRIMARY,float,DiagL2
-CCD1BJD,GREEN photon-weighted mid-time [BJD_TDB],PRIMARY,float,BarycentricCorrection
-CCD2BJD,RED photon-weighted mid-time [BJD_TDB],PRIMARY,float,BarycentricCorrection
-CCD1BKMS,GREEN barycentric velocity [km/s],PRIMARY,float,BarycentricCorrection
-CCD2BKMS,RED barycentric velocity [km/s],PRIMARY,float,BarycentricCorrection
-CCD1BZ,GREEN barycentric redshift z,PRIMARY,float,BarycentricCorrection
-CCD2BZ,RED barycentric redshift z,PRIMARY,float,BarycentricCorrection
-ASTRSRC,Astrometry source used for barycentric correction,PRIMARY,str,BarycentricCorrection
+DATAPRL2,QC: L2 data present,QUALITY_CONTROL,int,QCL2
+L2NANOK,QC: L2 NaN count ok,QUALITY_CONTROL,int,QCL2
+L2FLXOK,QC: L2 zero-flux fraction ok,QUALITY_CONTROL,int,QCL2
+L2VARPOS,QC: L2 variance positive,QUALITY_CONTROL,int,QCL2
+L2SNROK,QC: L2 SNR ok,QUALITY_CONTROL,int,QCL2
+NANSCI1,NaN pixel count SCI1 (green+red),QUALITY_CONTROL,int,DiagL2
+NANSCI2,NaN pixel count SCI2 (green+red),QUALITY_CONTROL,int,DiagL2
+NANSCI3,NaN pixel count SCI3 (green+red),QUALITY_CONTROL,int,DiagL2
+NANSKY,NaN pixel count SKY (green+red),QUALITY_CONTROL,int,DiagL2
+NANCAL,NaN pixel count CAL (green+red),QUALITY_CONTROL,int,DiagL2
+ZEROFRAC,Fraction of L2 flux pixels equal to zero,QUALITY_CONTROL,float,DiagL2
+GSNRSCI,Median 95th-pctile SNR summed SCI GREEN,QUALITY_CONTROL,float,DiagL2
+RSNRSCI,Median 95th-pctile SNR summed SCI RED,QUALITY_CONTROL,float,DiagL2
+GSNRSKY,Median 95th-pctile SNR SKY GREEN,QUALITY_CONTROL,float,DiagL2
+RSNRSKY,Median 95th-pctile SNR SKY RED,QUALITY_CONTROL,float,DiagL2
+GSNRCAL,Median 95th-pctile SNR CAL GREEN,QUALITY_CONTROL,float,DiagL2
+RSNRCAL,Median 95th-pctile SNR CAL RED,QUALITY_CONTROL,float,DiagL2
+GFR12,Median flux ratio SCI1/SCI2 GREEN,QUALITY_CONTROL,float,DiagL2
+RFR12,Median flux ratio SCI1/SCI2 RED,QUALITY_CONTROL,float,DiagL2
+GFR32,Median flux ratio SCI3/SCI2 GREEN,QUALITY_CONTROL,float,DiagL2
+RFR32,Median flux ratio SCI3/SCI2 RED,QUALITY_CONTROL,float,DiagL2
+GFRS2,Median flux ratio SKY/SCI2 GREEN,QUALITY_CONTROL,float,DiagL2
+RFRS2,Median flux ratio SKY/SCI2 RED,QUALITY_CONTROL,float,DiagL2
+GFRC2,Median flux ratio CAL/SCI2 GREEN,QUALITY_CONTROL,float,DiagL2
+RFRC2,Median flux ratio CAL/SCI2 RED,QUALITY_CONTROL,float,DiagL2
+CCD1BJD,GREEN photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
+CCD2BJD,RED photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
+CCD1BKMS,GREEN barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection
+CCD2BKMS,RED barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection
+CCD1BZ,GREEN barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
+CCD2BZ,RED barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
+ASTRSRC,Astrometry source used for barycentric correction,RECEIPT,str,BarycentricCorrection

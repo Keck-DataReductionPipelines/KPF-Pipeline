@@ -118,14 +118,90 @@ WMKO_PRIMARY_KEYS = {
     and str(r["INSTRUMENT"]).strip() != str(r["STANDARD"]).strip()
 }
 
-# KPF-pipeline keywords legitimately written to PRIMARY. Each registry entry
-# is an explicit 8-character-max FITS keyword (no wildcards); families are
-# enumerated per member (e.g. RNGREEN1-4, CCD1BJD/CCD2BJD).
+# Every registered KPF-pipeline keyword (all levels). Each registry entry is an
+# explicit 8-character-max FITS keyword (no wildcards); families are enumerated
+# per member (e.g. RNGREEN1-4, CCD1BJD/CCD2BJD). The per-extension split lives in
+# EXT_ALLOWED_KEYS below; this flat union is kept for callers that only need
+# "is this a registered keyword".
 KPFPIPE_PRIMARY_KEYS = {str(k).strip() for k in _KPFPIPE_KW["Keyword"]}
 
+# --- Per-extension keyword routing & validation tables -----------------------
+# The Extension column in config/L{0,1,2,4}-headers.csv names the home header for
+# every KPF-pipeline keyword. ``KPFDataModel.set_keyword`` routes a write there
+# with the registry Description as the FITS comment; the qc_booleans validator
+# checks each governed extension's header against the same tables. The EPRV
+# per-extension keyword CSVs (rvdata) supply the standard cards those extensions
+# also carry.
+#
+# Governed extensions whose standard header keywords the EPRV standard defines.
+# RV#/CCF# share one template CSV (L4-RV1 / L4-CCF1); BARYCORR_*/BJD_TDB are
+# per-extension. QUALITY_CONTROL and RECEIPT are KPF-only (no EPRV header CSV).
+_EPRV_EXT_CSV = {
+    "BJD_TDB": _rv_cfg / "L2-BJD_TDB-keywords.csv",
+    "BARYCORR_KMS": _rv_cfg / "L2-BARYCORR_KMS-keywords.csv",
+    "BARYCORR_Z": _rv_cfg / "L2-BARYCORR_Z-keywords.csv",
+    **{f"RV{i}": _rv_cfg / "L4-RV1-keywords.csv" for i in range(1, 6)},
+    **{f"CCF{i}": _rv_cfg / "L4-CCF1-keywords.csv" for i in range(1, 6)},
+}
+
+
+def _read_keyword_registries():
+    """Load the KPF + EPRV keyword registries into the routing/validation tables.
+
+    Builds three structures, once at import:
+
+    - ``routing`` — ``keyword -> (extension, comment)`` for ``set_keyword``.
+      Seeded from the EPRV PRIMARY keyword CSVs (-> PRIMARY) and overlaid with the
+      KPF registry rows (their explicit Extension + Description); KPF wins on the
+      rare name collision (a pipeline keyword shadowing an EPRV default).
+    - ``allowed`` — ``extension -> set(keyword)`` the validator accepts on that
+      governed extension's header: the KPF rows routed there, plus the EPRV
+      per-extension keywords where the standard defines them.
+    - ``required`` — ``extension -> set(keyword)`` flagged Required by the EPRV
+      standard; absence triggers a validator warning. KPF rows are optional.
+
+    Returns ``(routing, allowed, required)`` (also bound at module scope below).
+    """
+    routing = {}
+    allowed = {}
+    required = {}
+
+    # EPRV PRIMARY keywords route to PRIMARY, comment from their Description.
+    for df in (_L2_KW, _L4_KW):
+        descr = dict(
+            zip(
+                df["Keyword"].astype(str).str.strip(),
+                df["Description"].astype(str),
+                strict=False,
+            )
+        )
+        for kw in _keyword_literals(df):
+            routing.setdefault(kw, ("PRIMARY", descr.get(kw, "")))
+
+    # KPF-pipeline keywords: explicit Extension + Description; KPF wins on routing.
+    for _, row in _KPFPIPE_KW.iterrows():
+        kw = str(row["Keyword"]).strip()
+        ext = str(row["Extension"]).strip()
+        comment = "" if pd.isna(row["Description"]) else str(row["Description"]).strip()
+        routing[kw] = (ext, comment)
+        allowed.setdefault(ext, set()).add(kw)
+
+    # EPRV per-extension keywords extend the allowed/required sets for the
+    # governed extensions that carry standard cards.
+    for ext, csv_path in _EPRV_EXT_CSV.items():
+        df = _load_keyword_csv(csv_path)
+        allowed.setdefault(ext, set()).update(_keyword_literals(df))
+        required.setdefault(ext, set()).update(_required_literals(df))
+
+    return routing, allowed, required
+
+
+_KEYWORD_ROUTING, EXT_ALLOWED_KEYS, EXT_REQUIRED_KEYS = _read_keyword_registries()
+
 # FITS structural / bookkeeping cards plus KPF-internal PRIMARY keys that are
-# neither EPRV nor in the registry but are always permitted.
-_STRUCTURAL_KEYS = {
+# neither EPRV nor in the registry but are always permitted. Consumed by the
+# qc_booleans header validator.
+STRUCTURAL_KEYS = {
     "SIMPLE",
     "BITPIX",
     "EXTEND",
@@ -151,6 +227,30 @@ _STRUCTURAL_KEYS = {
 # ``from_fits`` is here too: reading a product back must not clobber the status
 # the writer stamped.
 _INTERNAL_RECEIPTS = frozenset({"to_l1", "to_kpf2", "to_kpf4", "to_fits", "from_fits"})
+
+
+def register_rvdata_extension(level_extensions, name, datatype, description):
+    """Register a KPF-custom extension into an rvdata ``LEVELn_EXTENSIONS`` table.
+
+    rvdata's ``RVn._read`` resolves each HDU's DataType by Name from its
+    ``LEVELn_EXTENSIONS`` DataFrame; a KPF-only extension (e.g. QUALITY_CONTROL)
+    is absent there, so reading an Ln product that contains it raises ``KeyError``.
+    This appends the row in-memory (idempotent). ``Required`` is False so rvdata
+    neither auto-creates it nor lists it in EXT_DESCRIPT — the KPF model
+    ``__init__`` creates the (empty) extension explicitly.
+    """
+    if name in set(level_extensions["Name"]):
+        return
+    row = {col: "" for col in level_extensions.columns}
+    row.update(
+        HDU=int(level_extensions["HDU"].max()) + 1,
+        Name=name,
+        DataType=datatype,
+        Required=False,
+        Multiplicity=False,
+        Description=description,
+    )
+    level_extensions.loc[len(level_extensions)] = row
 
 
 class KPFDataModel(RVDataModel):
@@ -193,6 +293,40 @@ class KPFDataModel(RVDataModel):
         """
         super().create_extension(ext_name, ext_type, header=header, data=data)
         self.headers[ext_name] = self.as_fits_header(self.headers[ext_name])
+
+    def set_keyword(self, key, value):
+        """Write a registered keyword to its home extension header.
+
+        Looks ``key`` up in the merged KPF + EPRV keyword registry
+        (``config/L{0,1,2,4}-headers.csv`` plus the EPRV PRIMARY keywords) and
+        writes ``value`` to the extension named there, with the registry
+        Description as the FITS comment. This is the single write path for
+        registered keywords, so a keyword always lands on the same extension with
+        the same comment — callers never name an extension or comment.
+
+        Raises
+        ------
+        KeyError
+            If ``key`` is registered nowhere; register it in the appropriate
+            ``config/L{level}-headers.csv`` before writing it.
+        ValueError
+            If the keyword's home extension does not exist on this object (a
+            config error — the extension must be created before the write).
+        """
+        name = str(key).strip()
+        route = _KEYWORD_ROUTING.get(name)
+        if route is None:
+            raise KeyError(
+                f"keyword {name!r} is not registered; add it to "
+                "config/L{0,1,2,4}-headers.csv before writing it"
+            )
+        ext, comment = route
+        if ext not in self.extensions:
+            raise ValueError(
+                f"cannot write {name!r}: extension {ext!r} does not exist on "
+                f"{type(self).__name__}"
+            )
+        self.headers[ext][name] = (value, comment)
 
     def set_data(self, ext_name, data):
         """Set extension data, resolving KPF aliases first.
@@ -281,64 +415,6 @@ class KPFDataModel(RVDataModel):
                 hdu_list[i] = fits.PrimaryHDU(header=self.as_fits_header(primary))
                 break
         return hdu_list
-
-    @staticmethod
-    def validate_eprv_primary(header, level):
-        """Validate a converted EPRV PRIMARY header, raising on any inconsistency.
-
-        The shared fail-loud guard (no silent fallback) for the L1->L2 and
-        L2->L4 boundaries; called by ``KPF1.to_kpf2`` / ``KPF2.to_kpf4``. Three
-        rules:
-
-        1. **WMKO leak** — a raw WMKO keyword name (header_map INSTRUMENT name
-           differing from its EPRV target) is present on PRIMARY; it should have
-           been converted or left in INSTRUMENT_HEADER.
-        2. **Unregistered keyword** — a card that is neither an EPRV-standard
-           keyword, a header_map STANDARD target, a registered KPF-pipeline
-           keyword (``config/L{0,1,2,4}-headers.csv``), nor a structural card.
-        3. **Missing required** — a Required EPRV PRIMARY keyword is absent.
-
-        Parameters
-        ----------
-        header : Mapping
-            The PRIMARY header to validate.
-        level : str
-            ``"L2"`` or ``"L4"`` (selects the EPRV keyword set).
-
-        Raises
-        ------
-        ValueError
-            On the first inconsistency found.
-        """
-        level = str(level).upper()
-        eprv_keys = EPRV_L4_KEYS if level == "L4" else EPRV_L2_KEYS
-        required_keys = REQUIRED_L4_KEYS if level == "L4" else REQUIRED_L2_KEYS
-
-        for raw_key in list(header):
-            key = str(raw_key).strip()
-            if key in _STRUCTURAL_KEYS or key.startswith("NAXIS"):
-                continue
-            if (
-                key in eprv_keys
-                or key in HEADERMAP_STANDARD_KEYS
-                or key in KPFPIPE_PRIMARY_KEYS
-            ):
-                continue
-            if key in WMKO_PRIMARY_KEYS:
-                raise ValueError(
-                    f"native WMKO keyword {key!r} found on {level} PRIMARY; it must "
-                    "be converted to its EPRV name or kept in INSTRUMENT_HEADER"
-                )
-            raise ValueError(
-                f"unregistered keyword {key!r} on {level} PRIMARY; add it to "
-                "config/L{0,1,2,4}-headers.csv or fix the writer"
-            )
-
-        missing = sorted(k for k in required_keys if k not in header)
-        if missing:
-            raise ValueError(
-                f"missing required EPRV PRIMARY keyword(s) on {level}: {missing}"
-            )
 
     def generate_standard_filename(self):
         """Abstract: every concrete KPF model builds its own standard filename.

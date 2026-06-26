@@ -52,9 +52,9 @@ class TestToKPF4:
         assert len(kpf4.data["RV1"]) == 0
 
     def test_program_ids_survive_transform_and_validate(self, synthetic_l1_file):
-        """PROGID/KOAID set on the L1 PRIMARY survive L1->L2->L4 and pass
-        validate_eprv_primary (called by to_kpf2/to_kpf4); they are registered
-        in L1-headers.csv and the validator allowlist is the union of levels."""
+        """PROGID/KOAID set on the L1 PRIMARY survive L1->L2->L4; they are
+        registered in L1-headers.csv and stay on PRIMARY through both
+        transforms."""
         l1 = KPF1.from_fits(synthetic_l1_file)
         l1.headers["PRIMARY"]["PROGID"] = "U999"
         l1.headers["PRIMARY"]["KOAID"] = "KP.20201122.34567.89"

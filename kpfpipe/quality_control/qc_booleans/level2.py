@@ -39,7 +39,7 @@ class QCL2(QC):
 
     def flux_finite_fraction(self):
         """NaN count from headers <= 1% of total L2 flux pixels."""
-        hdr = self.kpf.headers["PRIMARY"]
+        hdr = self.kpf.headers["QUALITY_CONTROL"]
         total_pixels = 0
         for chip in _CHIPS:
             for fiber in _FIBERS:
@@ -65,7 +65,7 @@ class QCL2(QC):
 
     def nonzero_flux(self):
         """ZEROFRAC < 0.5."""
-        v = _hdr_float(self.kpf.headers["PRIMARY"], "ZEROFRAC")
+        v = _hdr_float(self.kpf.headers["QUALITY_CONTROL"], "ZEROFRAC")
         return v is not None and v < 0.5
 
     nonzero_flux._qc_key = "L2FLXOK"
@@ -104,7 +104,7 @@ class QCL2(QC):
         before QCL2, mirroring the flux_finite_fraction -> nan_counts
         dependency). Guards against a silently failed extraction.
         """
-        hdr = self.kpf.headers["PRIMARY"]
+        hdr = self.kpf.headers["QUALITY_CONTROL"]
         values = [_hdr_float(hdr, k) for k in ("GSNRSCI", "RSNRSCI")]
         values = [v for v in values if v is not None]
         if not values:

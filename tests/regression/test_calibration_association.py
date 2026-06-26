@@ -21,11 +21,27 @@ class MockL1:
         # Headers are fits.Header, mirroring the real KPF data models.
         inst = fits.Header()
         inst["DATE-OBS"] = date_obs
-        self.headers = {"PRIMARY": fits.Header(), "INSTRUMENT_HEADER": inst}
+        self.headers = {
+            "PRIMARY": fits.Header(),
+            "INSTRUMENT_HEADER": inst,
+            "RECEIPT": fits.Header(),
+            "QUALITY_CONTROL": fits.Header(),
+        }
         self._receipt = []
 
     def receipt_add_entry(self, name, status):
         self._receipt.append((name, status))
+
+    def set_keyword(self, key, value):
+        # Mirror the real routing: master paths ({PREFIX}FILE) land on RECEIPT,
+        # signed ages ({PREFIX}AGE) on QUALITY_CONTROL.
+        if key.endswith("FILE"):
+            ext = "RECEIPT"
+        elif key.endswith("AGE"):
+            ext = "QUALITY_CONTROL"
+        else:
+            ext = "PRIMARY"
+        self.headers[ext][key] = value
 
 
 def _make_module(tmp_path, date_obs="2024-04-05T11:08:33"):
@@ -257,12 +273,12 @@ class TestPerform:
             / "20240405"
             / "KP.20240405.03637.74_master_bias_L1.fits"
         )
-        assert mod.l1_obj.headers["PRIMARY"].get("BIASFILE") == expected
+        assert mod.l1_obj.headers["RECEIPT"].get("BIASFILE") == expected
 
     def test_no_biasdir_header(self, masters_dir):
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        assert "BIASDIR" not in mod.l1_obj.headers["PRIMARY"]
+        assert "BIASDIR" not in mod.l1_obj.headers["RECEIPT"]
 
     def test_sets_biasage_same_day(self, masters_dir):
         # BIASAGE is a signed fractional-day float (master - obs). The master
@@ -270,7 +286,7 @@ class TestPerform:
         # giving -0.422176 days.
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        age = mod.l1_obj.headers["PRIMARY"].get("BIASAGE")
+        age = mod.l1_obj.headers["QUALITY_CONTROL"].get("BIASAGE")
         assert isinstance(age, float)
         assert age == pytest.approx(-0.422176, abs=1e-5)
 
@@ -283,7 +299,7 @@ class TestPerform:
 
         mod = _make_module(tmp_path)
         mod.perform(["bias"])
-        assert mod.l1_obj.headers["PRIMARY"].get("BIASAGE") == pytest.approx(
+        assert mod.l1_obj.headers["QUALITY_CONTROL"].get("BIASAGE") == pytest.approx(
             -0.547604, abs=1e-5
         )
 
@@ -291,9 +307,9 @@ class TestPerform:
         mod = _make_module(masters_dir)
         mod.perform(["bias", "dark", "flat"])
         for prefix in ("BIAS", "DARK", "FLAT"):
-            assert f"{prefix}FILE" in mod.l1_obj.headers["PRIMARY"]
-            assert f"{prefix}DIR" not in mod.l1_obj.headers["PRIMARY"]
-            assert f"{prefix}AGE" in mod.l1_obj.headers["PRIMARY"]
+            assert f"{prefix}FILE" in mod.l1_obj.headers["RECEIPT"]
+            assert f"{prefix}DIR" not in mod.l1_obj.headers["RECEIPT"]
+            assert f"{prefix}AGE" in mod.l1_obj.headers["QUALITY_CONTROL"]
 
     def test_sets_headers_for_thar(self, masters_dir):
         # WLS follows the same unified convention: WLSFILE holds the full path
@@ -305,11 +321,14 @@ class TestPerform:
 
         mod = _make_module(masters_dir)
         mod.perform(["bias", "thar"])
-        h = mod.l1_obj.headers["PRIMARY"]
-        assert h.get("WLSFILE") == str(d / "KP.20240405.03637.74_master_thar_L2.fits")
-        assert "WLSDIR" not in h
-        assert isinstance(h.get("WLSAGE"), float)
-        assert h.get("WLSAGE") == pytest.approx(-0.422176, abs=1e-5)
+        receipt = mod.l1_obj.headers["RECEIPT"]
+        qc = mod.l1_obj.headers["QUALITY_CONTROL"]
+        assert receipt.get("WLSFILE") == str(
+            d / "KP.20240405.03637.74_master_thar_L2.fits"
+        )
+        assert "WLSDIR" not in receipt
+        assert isinstance(qc.get("WLSAGE"), float)
+        assert qc.get("WLSAGE") == pytest.approx(-0.422176, abs=1e-5)
 
     def test_raises_on_unknown_cal_type(self, masters_dir):
         mod = _make_module(masters_dir)
@@ -343,7 +362,7 @@ class TestPerform:
 
         mod2 = _make_module(tmp_path)
         mod2.perform(["bias"], masters_search_window_days=[-2, 0])  # should succeed
-        assert "BIASFILE" in mod2.l1_obj.headers["PRIMARY"]
+        assert "BIASFILE" in mod2.l1_obj.headers["RECEIPT"]
 
 
 # ---------------------------------------------------------------------------

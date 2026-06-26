@@ -735,18 +735,17 @@ class TestPerform:
         assert l4.headers["PRIMARY"]["RVMETHOD"] == "CCF"
 
     def test_per_ccd_rv_keywords(self, rv_module):
-        # Combined per-CCD RV/error are legacy carryovers written to PRIMARY
-        # (registered KPF-pipeline keywords), not the EPRV RV extension. Legacy
-        # scheme: CCD<n>RV<sfx>/CCD<n>ERV<sfx> with CCD1=GREEN, CCD2=RED and the
-        # SCI2 per-fiber suffix '2'.
+        # Per-orderlet legacy RVs are registered KPF keywords routed to their RV#
+        # table header (legacy scheme CCD<n>RV<sfx>/CCD<n>ERV<sfx>; CCD1=GREEN,
+        # CCD2=RED; SCI2 per-fiber suffix '2' -> RV3, aliased SCI2_RV).
         l4 = rv_module.perform()
-        inst = l4.headers["PRIMARY"]
-        assert inst["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert inst["CCD2RV2"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert inst["CCD1ERV2"] > 0 and inst["CCD2ERV2"] > 0
-        # The non-standard keywords must not appear on the EPRV RV extension.
-        rv_hdr = l4.headers["SCI2_RV"]
-        assert "CCD1RV2" not in rv_hdr and "CCD1RV" not in rv_hdr
+        rv_hdr = l4.headers["RV3"]
+        assert rv_hdr["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv_hdr["CCD2RV2"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv_hdr["CCD1ERV2"] > 0 and rv_hdr["CCD2ERV2"] > 0
+        # The per-orderlet keywords do not leak onto PRIMARY (only the
+        # SCI-combined CCD<n>RV/CCFRV do).
+        assert "CCD1RV2" not in l4.headers["PRIMARY"]
 
     def test_primary_combined_rv_populated(self, rv_module):
         # The science combine: SCI-combined CCD1RV/CCD2RV and CCFRV/CCFERV on
@@ -780,11 +779,13 @@ class TestPerform:
 
     def test_primary_berv_bjdtdb_from_per_ccd(self, rv_module):
         # PRIMARY BERV/BJDTDB are the chip-weighted mean of the per-CCD bary
-        # summaries (CCD<n>BKMS/CCD<n>BJD from BarycentricCorrection). Equal
-        # per-CCD values -> the weighted mean is that value, regardless of weights.
-        inst2 = rv_module.l2_obj.headers["PRIMARY"]
-        inst2["CCD1BKMS"] = inst2["CCD2BKMS"] = -12.3
-        inst2["CCD1BJD"] = inst2["CCD2BJD"] = 2460123.5
+        # summaries (CCD<n>BKMS on BARYCORR_KMS, CCD<n>BJD on BJD_TDB, from
+        # BarycentricCorrection). Equal per-CCD values -> the weighted mean is that
+        # value, regardless of weights.
+        bkms = rv_module.l2_obj.headers["BARYCORR_KMS"]
+        bjd = rv_module.l2_obj.headers["BJD_TDB"]
+        bkms["CCD1BKMS"] = bkms["CCD2BKMS"] = -12.3
+        bjd["CCD1BJD"] = bjd["CCD2BJD"] = 2460123.5
         prim = rv_module.perform().headers["PRIMARY"]
         assert prim["BERV"] == pytest.approx(-12.3)
         assert prim["BJDTDB"] == pytest.approx(2460123.5)
@@ -830,11 +831,10 @@ class TestPerform:
             assert ccf.comments["VELSTART"]  # comment preserved
             rv = hdul["RV3"].header
             assert rv["RVMETHOD"] == "CCF"
-            # Legacy combined-CCD RV lives on PRIMARY (SCI2 suffix '2'),
-            # not on the EPRV RV extension.
-            inst = hdul["PRIMARY"].header
-            assert inst["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
-            assert "CCD1RV2" not in rv
+            # Per-orderlet legacy RV lives on its RV# table header (SCI2 -> RV3),
+            # not on PRIMARY.
+            assert rv["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
+            assert "CCD1RV2" not in hdul["PRIMARY"].header
             # The EPRV combined RV survives on PRIMARY.
             assert hdul["PRIMARY"].header["RV"] == pytest.approx(_V_INJECT, abs=0.1)
             assert hdul["PRIMARY"].header["RVERR"] > 0
@@ -848,9 +848,9 @@ class TestPerform:
         )
 
         l4 = rv_module.perform(fibers=["SCI1", "SCI2", "SCI3"])
-        inst = l4.headers["PRIMARY"]
-        assert "CCD1RV2" in inst and inst["CCD1RV2"] is None
-        assert "CCD2RV2" in inst and inst["CCD2RV2"] is None
+        rv_hdr = l4.headers["RV3"]  # SCI2 per-orderlet RVs -> RV3
+        assert "CCD1RV2" in rv_hdr and rv_hdr["CCD1RV2"] is None
+        assert "CCD2RV2" in rv_hdr and rv_hdr["CCD2RV2"] is None
 
     def test_thar_mask_recorded_for_cal(self, rv_module):
         # CAL on a ThAr lamp -> CCFMASK 'thar', instrument frame (no barycorr).

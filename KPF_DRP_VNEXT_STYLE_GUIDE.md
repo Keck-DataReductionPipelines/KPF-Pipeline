@@ -136,15 +136,15 @@ class StageName:
         self._info = {...}
 
     def _set_headers(self, l2_obj):
-        """Sole place this module writes PRIMARY; reads instance attributes."""
-        l2_obj.headers["PRIMARY"][KEY] = (self._attr, "comment")
+        """Sole place this module writes headers; reads instance attributes."""
+        l2_obj.set_keyword(KEY, self._attr)    # routed to its registry extension
 
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
     def perform(self, chips=None):
         ...                                    # populate header-source attributes
-        self._set_headers(self.l2_obj)         # consolidates ALL PRIMARY writes
+        self._set_headers(self.l2_obj)         # consolidates ALL header writes
         self._track_info(chips)                # populates _info, just before the receipt
         self.l2_obj.receipt_add_entry("stage_name", "PASS")
         return self.l2_obj
@@ -155,10 +155,11 @@ class StageName:
 - **Method order is fixed and marked with 66-dash banner comments**:
   `__init__` → *Private helpers* → *Algorithm steps* → *Private helpers - module execution*
   (`_track_info`, then `_set_headers`) → *Public entry point* (`perform`) → `info()`.
-- **Header consolidation & `_info`.** A module writes PRIMARY in exactly one place — a private
+- **Header consolidation & `_info`.** A module writes headers in exactly one place — a private
   `_set_headers(obj)` that sources its values from instance attributes (never recomputes,
-  never reads another product), called immediately before `receipt_add_entry`. Modules that write
-  no PRIMARY keep an empty helper for uniformity. `_info` (formerly `_results`) is a pruned,
+  never reads another product) and writes each registered keyword via `obj.set_keyword(key, value)`
+  (routing + comment come from the registry), called immediately before `receipt_add_entry`. Modules
+  that write no header keywords keep an empty helper for uniformity. `_info` (formerly `_results`) is a pruned,
   human-readable summary consumed **only** by `info()` — never the science/header chain, and never
   tests (tests assert on the underlying attributes). It is populated by a private
   `_track_info(self[, chips, fibers])` (no other args — it sources from instance attributes),
@@ -433,9 +434,10 @@ class StageName:
 These three read-only layers under `kpfpipe/quality_control/` share conventions that new
 QC code must follow:
 
-- **Read-only discipline.** Diagnostics and QC write **only** to `headers["PRIMARY"]`,
-  never to `data`. Quicklook writes only PNGs. When a helper would mutate `l0.data`,
-  operate on a `deepcopy` to protect the caller's object.
+- **Read-only discipline.** Diagnostics and QC write header keywords **only via `set_keyword`**
+  (which routes them to QUALITY_CONTROL — see §11 *FITS PRIMARY header conventions*), never to
+  `data`. Quicklook writes only PNGs. When a helper would mutate `l0.data`, operate on a `deepcopy`
+  to protect the caller's object.
 - **Method-attribute registration + MRO-walk discovery.** Tag a method by assigning an
   attribute immediately after its `def` — there are no decorators:
   ```python
@@ -450,11 +452,13 @@ QC code must follow:
   carrying the tag, and dedupes overrides via a `seen` set (subclass beats base).
 - **Runners reset `self.results = {}` at entry** (determinism) and wrap each method call
   in `try/except` re-raising as `RuntimeError` — loud failure, no silent suppression.
-- **Header writes are always `(value, comment)` 2-tuples.** QC writes integer `0/1` plus
-  an `ISGOOD` aggregate. Round floats before writing
-  (`round(float(x), 6)`), and cast numpy scalars to Python `int`/`float`.
+- **Writes go through `set_keyword`** (comment sourced from the registry, not the call site).
+  QC writes integer `0/1` plus an `ISGOOD` aggregate, then runs `_validate_headers` at the end of
+  `run()`. Round floats before writing (`round(float(x), 6)`), and cast numpy scalars to Python
+  `int`/`float`. The `_qc_comment`/metric-dict comment is retained in `self.results`, but the FITS
+  comment is the registry `Description` — keep the two consistent.
 - **QC comments are namespaced `"QC: ..."`**; Diagnostics comments are bare descriptive
-  phrases.
+  phrases. (Both live in the registry `Description` column, the single source for the FITS comment.)
 - **Quicklook plotting**: pyplot state-machine API (`plt.figure(figsize=..., tight_layout=True)`);
   `cmap="viridis"`, `origin="lower"`, vmin/vmax from percentiles; templated titles
   `f"L{N} - {Chip} CCD: {obs_id} - {name}"`; a UTC `KPF QLP: … UT` timestamp annotation;
@@ -564,12 +568,15 @@ documented, intentional ways — follow *its* conventions when adding masters co
   `trace-map.csv` → `Trace,Fiber,Description` (trace/fiber aliases derived at runtime).
 - These CSVs are the source of truth for HDU layout and alias registration — keep fiber
   names in sync across `trace-map.csv`, `[KPFPIPE].fibers`, and `detector.toml`.
-- **`L{0,1,2,4}-headers.csv`** register every KPF-pipeline keyword written to the EPRV
-  PRIMARY header, split by the level that first writes the keyword (the combined set is the
-  `validate_eprv_primary` allowlist). Columns are `Keyword,Description,Extension,DataType,Populated by`
-  (`Extension` is `PRIMARY` for all entries today; `DataType` is one of `str`/`int`/`float`).
-  Logical flags are stored as `int` 0/1, never Python booleans: QC keys carry a `QC: …` description,
-  and every other (T/F) flag appends `(T/F)` to its description. Each `Keyword`
+- **`L{0,1,2,4}-headers.csv`** register every KPF-pipeline keyword and its home extension,
+  split by the level that first writes the keyword (the combined set drives the `set_keyword`
+  routing map and the qc_booleans validator). Columns are
+  `Keyword,Description,Extension,DataType,Populated by`. The **`Extension`** column is the keyword's
+  home header (`PRIMARY`, `QUALITY_CONTROL`, `RECEIPT`, `BJD_TDB`, `BARYCORR_KMS`, `BARYCORR_Z`,
+  `RV1`–`RV5`) — `set_keyword` writes there, and `Description` becomes the FITS comment, so a
+  keyword's home and comment are defined **once, in the registry**. `DataType` is one of
+  `str`/`int`/`float`. Logical flags are stored as `int` 0/1, never Python booleans: QC keys carry a
+  `QC: …` description, and every other (T/F) flag appends `(T/F)` to its description. Each `Keyword`
   is an explicit FITS keyword of **≤8 characters** with no wildcards — enumerate every member of
   a family on its own row (e.g. `RNGREEN1`-`RNGREEN4`, `CCD1RV`/`CCD2RV`), never a `?`/`*` stand-in.
 
@@ -579,24 +586,29 @@ The WMKO-native → EPRV-standard conversion happens **only** in `KPF0.to_kpf1`
 (`data_models/level0.py`). **Every extension header is an `astropy.io.fits.Header`** — the KPF data models normalize
 all headers to `fits.Header` (they override `create_extension`; see `data_models/base.py`),
 so there is no value-vs-`(value, comment)` ambiguity and no separate header parser.
-`KPF0` owns the WMKO→EPRV conversion (`data_models/level0.py`) and `KPFDataModel` the
-EPRV validation (`data_models/base.py`, which also holds the shared reference data).
-What this means when writing code:
+`KPF0` owns the WMKO→EPRV conversion (`data_models/level0.py`), `KPFDataModel.set_keyword`
+the registered-keyword write path and routing tables (`data_models/base.py`), and the
+qc_booleans validator the header validation. What this means when writing code:
 
-- **Reading a header value**: use `header.get(key, default)` (or `header[key]`). A `fits.Header`
+- **Reading a header value**: use `header.get(key, default)` (or `header[key]`) on the keyword's
+  home extension (per the registry `Extension` column — e.g. read `RNGREEN1` from
+  `headers["QUALITY_CONTROL"]`, `BIASFILE` from `headers["RECEIPT"]`). A `fits.Header`
   returns the scalar value; the comment lives in `header.comments[key]`. **Never hand-roll
   `value[0] if isinstance(value, tuple)`** — headers are never tuple-valued dicts.
-- **Writing a header value**: assign `header[key] = (value, comment)` for a commented card, or
-  `header[key] = value` for a bare value. Both work natively on a `fits.Header`.
-- **Conversion / validation**: call `KPF0.wmko_to_eprv`, `KPF0.build_instrument_header`, and
-  `KPFDataModel.validate_eprv_primary`; don't re-implement the WMKO→EPRV mapping.
+- **Writing a registered KPF-pipeline keyword**: call `obj.set_keyword(key, value)`. It routes the
+  keyword to its registry-home extension with the registry `Description` as the comment — never
+  hardcode an extension or comment, and never write `headers["PRIMARY"][key] = …` directly for a
+  registered keyword. The keyword **must** be in `config/L{0,1,2,4}-headers.csv` first (with its
+  `Extension`), or `set_keyword` raises `KeyError` and the qc_booleans validator would reject the
+  product. Never write to `INSTRUMENT_HEADER` (immutable snapshot of the L0 PRIMARY as ingested).
+- **Writing an unregistered/EPRV-conversion card** (the WMKO→EPRV mapping, provenance stamping):
+  the conversion sites in `KPF0` assign `header[key] = (value, comment)` directly; outside those,
+  prefer `set_keyword`.
+- **Conversion**: call `KPF0.wmko_to_eprv` / `KPF0.build_instrument_header`; don't re-implement the
+  WMKO→EPRV mapping.
 - **Reading a raw instrument keyword** (`ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`,
   `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]` (via `.get`), never from
   PRIMARY. No silent fallback — let a missing key raise.
-- **Writing a KPF-pipeline keyword**: write it to `headers["PRIMARY"]` *and* add it to
-  the matching `config/L{0,1,2,4}-headers.csv`, or `to_kpf2`/`to_kpf4` validation will reject the
-  product. Never write to `INSTRUMENT_HEADER` (it is an immutable snapshot of the L0 PRIMARY as
-  ingested).
 - Use EPRV keyword *names* on PRIMARY (e.g. `EXPTIME`, not `ELAPSED`; `OBSTYPE`, not `IMTYPE`).
 
 ---

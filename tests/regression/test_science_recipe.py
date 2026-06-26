@@ -138,33 +138,42 @@ class TestScienceRecipe:
         assert np.all(np.abs(z) < 1e-3)
 
     def test_per_ccd_barycorr_keywords(self, recipe_output):
-        """Per-CCD scalar summaries should land on PRIMARY."""
+        """Per-CCD scalar summaries land on their barycentric extension headers."""
         l2 = KPF2.from_fits(recipe_output)
-        prim = l2.headers["PRIMARY"]
-        for key in ("CCD1BJD", "CCD1BKMS", "CCD1BZ", "CCD2BJD", "CCD2BKMS", "CCD2BZ"):
-            assert key in prim, f"{key} missing from PRIMARY"
-            assert np.isfinite(float(prim.get(key))), f"{key} not finite"
+        homes = {
+            "CCD1BJD": "BJD_TDB",
+            "CCD2BJD": "BJD_TDB",
+            "CCD1BKMS": "BARYCORR_KMS",
+            "CCD2BKMS": "BARYCORR_KMS",
+            "CCD1BZ": "BARYCORR_Z",
+            "CCD2BZ": "BARYCORR_Z",
+        }
+        for key, ext in homes.items():
+            hdr = l2.headers[ext]
+            assert key in hdr, f"{key} missing from {ext}"
+            assert np.isfinite(float(hdr.get(key))), f"{key} not finite"
 
     def test_calibration_headers_set(self, recipe_output):
-        """CalibrationAssociation's PRIMARY writes (registered KPF-pipeline
-        keywords) survive into the L2 PRIMARY."""
+        """CalibrationAssociation's writes survive onto the L2 product: master
+        paths on RECEIPT, ages on QUALITY_CONTROL (their registry homes)."""
         l2 = KPF2.from_fits(recipe_output)
-        prim = l2.headers["PRIMARY"]
+        receipt = l2.headers["RECEIPT"]
+        qc = l2.headers["QUALITY_CONTROL"]
         # bias/dark use full-path FILE + float AGE (no DIR). Flat association is
         # not part of the basic runnable path until flat processing is
         # implemented.
         for prefix in ("BIAS", "DARK"):
-            assert f"{prefix}FILE" in prim
-            assert f"{prefix}DIR" not in prim
-            assert f"{prefix}AGE" in prim
-        assert "FLATFILE" not in prim
-        assert "FLATAGE" not in prim
+            assert f"{prefix}FILE" in receipt
+            assert f"{prefix}DIR" not in receipt
+            assert f"{prefix}AGE" in qc
+        assert "FLATFILE" not in receipt
+        assert "FLATAGE" not in qc
         # thar uses the same convention: WLSFILE = full path (no WLSDIR),
         # WLSAGE = float days
-        assert "WLSFILE" in prim
-        assert "WLSDIR" not in prim
-        assert prim.get("WLSFILE").endswith("_master_thar_L2.fits")
-        assert isinstance(prim.get("WLSAGE"), float)
+        assert "WLSFILE" in receipt
+        assert "WLSDIR" not in receipt
+        assert receipt.get("WLSFILE").endswith("_master_thar_L2.fits")
+        assert isinstance(qc.get("WLSAGE"), float)
 
     def test_provenance_keywords_set(self, recipe_output):
         """DRP version/provenance/status keywords survive onto the L2 PRIMARY."""

@@ -13,9 +13,10 @@ KPF1 is the representative vehicle for the inherited base path (L0/L1 use
 ``KPFDataModel._create_hdul`` directly). KPF2/KPF4 override ``_create_hdul`` via
 RV2/RV4, so their round-trip guards live in test_data_models_l{2,4}.py.
 
-The WMKO->EPRV conversion (``KPF0.wmko_to_eprv`` / ``build_instrument_header``) and
-the shared ``KPFDataModel.validate_eprv_primary`` guard are exercised end-to-end by
-the to_kpf1/to_kpf2 tests in test_data_models_l{1,2,4}.py.
+The WMKO->EPRV conversion (``KPF0.wmko_to_eprv`` / ``build_instrument_header``) is
+exercised end-to-end by the to_kpf1/to_kpf2 tests in test_data_models_l{1,2,4}.py.
+PRIMARY-header validation no longer lives on the data models (it moved to the QC
+runner, ``quality_control/qc_booleans/base.py``).
 """
 
 from astropy.io import fits

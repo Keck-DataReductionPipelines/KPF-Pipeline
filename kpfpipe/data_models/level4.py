@@ -24,11 +24,21 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
+from rvdata.core.models.definitions import LEVEL4_EXTENSIONS
 from rvdata.core.models.level4 import RV4
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.base import KPFDataModel, register_rvdata_extension
+
+# Make rvdata's RV4._read aware of KPF's QUALITY_CONTROL extension so an L4
+# written with it reads back (QCL4 is planned; this keeps the read forward-safe).
+register_rvdata_extension(
+    LEVEL4_EXTENSIONS,
+    "QUALITY_CONTROL",
+    "BinTableHDU",
+    "Quality-control booleans and diagnostic metrics",
+)
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]

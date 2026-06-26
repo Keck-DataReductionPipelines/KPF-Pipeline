@@ -123,8 +123,8 @@ class TestImageAssemblyBias:
     def test_read_noise_in_header(self, l1_bias):
         l1, _ = l1_bias
         # 2-amp mode: expect RNGREEN1, RNGREEN2, RNRED1, RNRED2
-        assert "RNGREEN1" in l1.headers["PRIMARY"]
-        assert "RNRED1" in l1.headers["PRIMARY"]
+        assert "RNGREEN1" in l1.headers["QUALITY_CONTROL"]
+        assert "RNRED1" in l1.headers["QUALITY_CONTROL"]
 
     def test_read_noise_reasonable(self, l1_bias):
         """Read noise should be between 1 and 20 electrons for KPF."""
@@ -135,12 +135,12 @@ class TestImageAssemblyBias:
     def test_rnng_in_header(self, l1_bias):
         l1, _ = l1_bias
         # 2-amp mode: expect RNNGGR1, RNNGGR2, RNNGRD1, RNNGRD2
-        assert "RNNGGR1" in l1.headers["PRIMARY"]
-        assert "RNNGRD1" in l1.headers["PRIMARY"]
+        assert "RNNGGR1" in l1.headers["QUALITY_CONTROL"]
+        assert "RNNGRD1" in l1.headers["QUALITY_CONTROL"]
 
     def test_overscan_applied_in_header(self, l1_bias):
         l1, _ = l1_bias
-        val = l1.headers["PRIMARY"].get("OSCANSUB")
+        val = l1.headers["RECEIPT"].get("OSCANSUB")
         assert val == 1
 
     def test_receipt_chain(self, l1_bias):
@@ -237,7 +237,7 @@ class TestImageAssembly4Amp:
             "RNRED3",
             "RNRED4",
         ]:
-            assert key in l1.headers["PRIMARY"]
+            assert key in l1.headers["QUALITY_CONTROL"]
 
     def test_4amp_bias_near_zero(self, synthetic_4amp_l0):
         """Synthetic bias with known noise should be near zero after overscan."""

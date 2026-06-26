@@ -48,7 +48,7 @@ class QCL1(QC):
             out of range, or if no RN keyword is present at all (read noise
             should always be recorded).
         """
-        hdr = self.kpf.headers["PRIMARY"]
+        hdr = self.kpf.headers["QUALITY_CONTROL"]
         found = False
         for keys in RN_KEYS.values():
             v = _hdr_float(hdr, keys[idx])
@@ -75,21 +75,21 @@ class QCL1(QC):
 
     def overscan_subtracted(self):
         """OSCANSUB == True."""
-        return _hdr_flag(self.kpf.headers["PRIMARY"], "OSCANSUB")
+        return _hdr_flag(self.kpf.headers["RECEIPT"], "OSCANSUB")
 
     overscan_subtracted._qc_key = "OSCANSUB"
     overscan_subtracted._qc_comment = "QC: overscan subtraction applied"
 
     def bias_subtracted(self):
         """BIASSUB == True."""
-        return _hdr_flag(self.kpf.headers["PRIMARY"], "BIASSUB")
+        return _hdr_flag(self.kpf.headers["RECEIPT"], "BIASSUB")
 
     bias_subtracted._qc_key = "BIASSUB"
     bias_subtracted._qc_comment = "QC: bias subtraction applied"
 
     def bias_age_ok(self):
         """abs(BIASAGE) <= 7 days."""
-        v = _hdr_float(self.kpf.headers["PRIMARY"], "BIASAGE")
+        v = _hdr_float(self.kpf.headers["QUALITY_CONTROL"], "BIASAGE")
         return v is not None and abs(v) <= 7
 
     bias_age_ok._qc_key = "BIASAGEQ"
@@ -97,14 +97,14 @@ class QCL1(QC):
 
     def dark_subtracted(self):
         """DARKSUB == True."""
-        return _hdr_flag(self.kpf.headers["PRIMARY"], "DARKSUB")
+        return _hdr_flag(self.kpf.headers["RECEIPT"], "DARKSUB")
 
     dark_subtracted._qc_key = "DARKSUB"
     dark_subtracted._qc_comment = "QC: dark subtraction applied"
 
     def dark_age_ok(self):
         """abs(DARKAGE) <= 14 days."""
-        v = _hdr_float(self.kpf.headers["PRIMARY"], "DARKAGE")
+        v = _hdr_float(self.kpf.headers["QUALITY_CONTROL"], "DARKAGE")
         return v is not None and abs(v) <= 14
 
     dark_age_ok._qc_key = "DARKAGEQ"
@@ -112,14 +112,14 @@ class QCL1(QC):
 
     def flat_divided(self):
         """FLATDIV == True."""
-        return _hdr_flag(self.kpf.headers["PRIMARY"], "FLATDIV")
+        return _hdr_flag(self.kpf.headers["RECEIPT"], "FLATDIV")
 
     flat_divided._qc_key = "FLATDIV"
     flat_divided._qc_comment = "QC: flat division applied"
 
     def flat_age_ok(self):
         """abs(FLATAGE) <= 30 days."""
-        v = _hdr_float(self.kpf.headers["PRIMARY"], "FLATAGE")
+        v = _hdr_float(self.kpf.headers["QUALITY_CONTROL"], "FLATAGE")
         return v is not None and abs(v) <= 30
 
     flat_age_ok._qc_key = "FLATAGEQ"

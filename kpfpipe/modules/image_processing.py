@@ -256,16 +256,11 @@ class ImageProcessing:
         """Write all PRIMARY-header keywords for image processing.
 
         Reads the applied-flag attributes populated by perform(); the single
-        place this module writes PRIMARY, called just before the receipt entry.
+        place this module writes header keywords, called just before the receipt
+        entry. set_keyword routes BIASSUB/DARKSUB to their registry home (RECEIPT).
         """
-        l1_obj.headers["PRIMARY"]["BIASSUB"] = (
-            int(self._biassub),
-            "Bias subtraction applied (T/F)",
-        )
-        l1_obj.headers["PRIMARY"]["DARKSUB"] = (
-            int(self._darksub),
-            "Dark subtraction applied (T/F)",
-        )
+        l1_obj.set_keyword("BIASSUB", int(self._biassub))
+        l1_obj.set_keyword("DARKSUB", int(self._darksub))
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -276,14 +271,15 @@ class ImageProcessing:
         """
         Return True if `cal_type` is already flagged applied on `l1_obj`.
 
-        Reads the PRIMARY-header flag (`_CALIBRATION_HEADER_KEYS`) written by a
+        Reads the applied flag (`_CALIBRATION_HEADER_KEYS`: BIASSUB/DARKSUB/
+        FLATDIV) from the RECEIPT header — their registry home — written by a
         prior `perform`. Lets callers — and `perform` itself — avoid applying a
         calibration twice (e.g. a cached frame revisited during stacking).
 
         Parameters
         ----------
         l1_obj : KPF1
-            Frame whose PRIMARY header is inspected.
+            Frame whose RECEIPT header is inspected.
         cal_type : str
             Calibration name: 'bias', 'dark', or 'flat'.
 
@@ -292,7 +288,7 @@ class ImageProcessing:
         bool
             True if the calibration's header flag is present and truthy.
         """
-        val = l1_obj.headers["PRIMARY"].get(_CALIBRATION_HEADER_KEYS[cal_type])
+        val = l1_obj.headers["RECEIPT"].get(_CALIBRATION_HEADER_KEYS[cal_type])
         return bool(val)
 
     def perform(self, chips=None, *, bias=None, dark=None, flat=None):

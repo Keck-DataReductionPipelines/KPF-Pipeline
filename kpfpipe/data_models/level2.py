@@ -18,11 +18,21 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
+from rvdata.core.models.definitions import LEVEL2_EXTENSIONS
 from rvdata.core.models.level2 import RV2
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.base import KPFDataModel, register_rvdata_extension
+
+# Make rvdata's RV2._read aware of KPF's QUALITY_CONTROL extension so an L2
+# written with it reads back (KPF2.__init__ creates the empty extension).
+register_rvdata_extension(
+    LEVEL2_EXTENSIONS,
+    "QUALITY_CONTROL",
+    "BinTableHDU",
+    "Quality-control booleans and diagnostic metrics",
+)
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -170,10 +180,14 @@ class KPF2(KPFDataModel, RV2):
         # L2 products (incl. the truth dataset) encode it as BinTableHDU, so flipping
         # the type breaks reading them back. Switch to ImageHDU when Ca H&K is built
         # and products are regenerated. See EPRV_DATA_STANDARD.md §8 (deviations).
+        # QUALITY_CONTROL holds the KPF QC booleans + DiagL2 metrics (the L0/L1
+        # extensions CSVs create it on those models; L2 has no CSV so create it
+        # here). RECEIPT and the barycentric/RV# extensions already exist via RV2.
         for ext, ext_type in [
             ("ANCILLARY_SPECTRUM", "BinTableHDU"),
             ("EXPMETER", "BinTableHDU"),
             ("TELEMETRY", "BinTableHDU"),
+            ("QUALITY_CONTROL", "BinTableHDU"),
         ]:
             if ext not in self.extensions:
                 self.create_extension(ext, ext_type)
@@ -244,7 +258,6 @@ class KPF2(KPFDataModel, RV2):
         kpf4.obs_id = self.obs_id
 
         kpf4.headers["PRIMARY"]["DATALVL"] = ("L4", "Data product level")
-        self.validate_eprv_primary(kpf4.headers["PRIMARY"], "L4")
         kpf4.receipt_add_entry("to_kpf4", "PASS")
         return kpf4
 

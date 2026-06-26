@@ -1,36 +1,35 @@
 Keyword,Description,Extension,DataType,Populated by
-RNGREEN1,Read noise GREEN amp 1 [e-],PRIMARY,float,ImageAssembly
-RNGREEN2,Read noise GREEN amp 2 [e-],PRIMARY,float,ImageAssembly
-RNGREEN3,Read noise GREEN amp 3 [e-],PRIMARY,float,ImageAssembly
-RNGREEN4,Read noise GREEN amp 4 [e-],PRIMARY,float,ImageAssembly
-RNRED1,Read noise RED amp 1 [e-],PRIMARY,float,ImageAssembly
-RNRED2,Read noise RED amp 2 [e-],PRIMARY,float,ImageAssembly
-RNRED3,Read noise RED amp 3 [e-],PRIMARY,float,ImageAssembly
-RNRED4,Read noise RED amp 4 [e-],PRIMARY,float,ImageAssembly
-RNNGGR1,Non-Gaussian read noise GREEN amp 1,PRIMARY,float,ImageAssembly
-RNNGGR2,Non-Gaussian read noise GREEN amp 2,PRIMARY,float,ImageAssembly
-RNNGGR3,Non-Gaussian read noise GREEN amp 3,PRIMARY,float,ImageAssembly
-RNNGGR4,Non-Gaussian read noise GREEN amp 4,PRIMARY,float,ImageAssembly
-RNNGRD1,Non-Gaussian read noise RED amp 1,PRIMARY,float,ImageAssembly
-RNNGRD2,Non-Gaussian read noise RED amp 2,PRIMARY,float,ImageAssembly
-RNNGRD3,Non-Gaussian read noise RED amp 3,PRIMARY,float,ImageAssembly
-RNNGRD4,Non-Gaussian read noise RED amp 4,PRIMARY,float,ImageAssembly
-OSCANSUB,Overscan subtraction applied (T/F),PRIMARY,int,ImageAssembly
-BIASSUB,Bias subtraction applied (T/F),PRIMARY,int,ImageProcessing
-DARKSUB,Dark subtraction applied (T/F),PRIMARY,int,ImageProcessing
-FLATDIV,Flat division applied (reserved) (T/F),PRIMARY,int,ImageProcessing
-BIASFILE,Master bias full path,PRIMARY,str,CalibrationAssociation
-BIASAGE,Master bias age [days],PRIMARY,float,CalibrationAssociation
-DARKFILE,Master dark full path,PRIMARY,str,CalibrationAssociation
-DARKAGE,Master dark age [days],PRIMARY,float,CalibrationAssociation
-FLATFILE,Master flat full path,PRIMARY,str,CalibrationAssociation
-FLATAGE,Master flat age [days],PRIMARY,float,CalibrationAssociation
-WLSFILE,WLS master full path,PRIMARY,str,CalibrationAssociation
-WLSAGE,WLS master age [days],PRIMARY,float,CalibrationAssociation
-MASTYPE,Master calibration type (masters products only),PRIMARY,str,KPFMaster
-RNINRNG,QC: per-amp RN within range,PRIMARY,int,QCL1
-RNGAUSS,QC: non-Gaussian RN within range,PRIMARY,int,QCL1
-BIASAGEQ,QC: bias master age ok,PRIMARY,int,QCL1
-DARKAGEQ,QC: dark master age ok,PRIMARY,int,QCL1
-FLATAGEQ,QC: flat master age ok,PRIMARY,int,QCL1
-FFIFIN,QC: assembled CCDs all finite,PRIMARY,int,QCL1
+RNGREEN1,Read noise GREEN amp 1 [e-],QUALITY_CONTROL,float,ImageAssembly
+RNGREEN2,Read noise GREEN amp 2 [e-],QUALITY_CONTROL,float,ImageAssembly
+RNGREEN3,Read noise GREEN amp 3 [e-],QUALITY_CONTROL,float,ImageAssembly
+RNGREEN4,Read noise GREEN amp 4 [e-],QUALITY_CONTROL,float,ImageAssembly
+RNRED1,Read noise RED amp 1 [e-],QUALITY_CONTROL,float,ImageAssembly
+RNRED2,Read noise RED amp 2 [e-],QUALITY_CONTROL,float,ImageAssembly
+RNRED3,Read noise RED amp 3 [e-],QUALITY_CONTROL,float,ImageAssembly
+RNRED4,Read noise RED amp 4 [e-],QUALITY_CONTROL,float,ImageAssembly
+RNNGGR1,Non-Gaussian read noise GREEN amp 1,QUALITY_CONTROL,float,ImageAssembly
+RNNGGR2,Non-Gaussian read noise GREEN amp 2,QUALITY_CONTROL,float,ImageAssembly
+RNNGGR3,Non-Gaussian read noise GREEN amp 3,QUALITY_CONTROL,float,ImageAssembly
+RNNGGR4,Non-Gaussian read noise GREEN amp 4,QUALITY_CONTROL,float,ImageAssembly
+RNNGRD1,Non-Gaussian read noise RED amp 1,QUALITY_CONTROL,float,ImageAssembly
+RNNGRD2,Non-Gaussian read noise RED amp 2,QUALITY_CONTROL,float,ImageAssembly
+RNNGRD3,Non-Gaussian read noise RED amp 3,QUALITY_CONTROL,float,ImageAssembly
+RNNGRD4,Non-Gaussian read noise RED amp 4,QUALITY_CONTROL,float,ImageAssembly
+OSCANSUB,Overscan subtraction applied (T/F),RECEIPT,int,ImageAssembly
+BIASSUB,Bias subtraction applied (T/F),RECEIPT,int,ImageProcessing
+DARKSUB,Dark subtraction applied (T/F),RECEIPT,int,ImageProcessing
+FLATDIV,Flat division applied (reserved) (T/F),RECEIPT,int,ImageProcessing
+BIASFILE,Master bias full path,RECEIPT,str,CalibrationAssociation
+BIASAGE,Master bias age [days],QUALITY_CONTROL,float,CalibrationAssociation
+DARKFILE,Master dark full path,RECEIPT,str,CalibrationAssociation
+DARKAGE,Master dark age [days],QUALITY_CONTROL,float,CalibrationAssociation
+FLATFILE,Master flat full path,RECEIPT,str,CalibrationAssociation
+FLATAGE,Master flat age [days],QUALITY_CONTROL,float,CalibrationAssociation
+WLSFILE,WLS master full path,RECEIPT,str,CalibrationAssociation
+WLSAGE,WLS master age [days],QUALITY_CONTROL,float,CalibrationAssociation
+RNINRNG,QC: per-amp RN within range,QUALITY_CONTROL,int,QCL1
+RNGAUSS,QC: non-Gaussian RN within range,QUALITY_CONTROL,int,QCL1
+BIASAGEQ,QC: bias master age ok,QUALITY_CONTROL,int,QCL1
+DARKAGEQ,QC: dark master age ok,QUALITY_CONTROL,int,QCL1
+FLATAGEQ,QC: flat master age ok,QUALITY_CONTROL,int,QCL1
+FFIFIN,QC: assembled CCDs all finite,QUALITY_CONTROL,int,QCL1

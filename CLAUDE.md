@@ -203,14 +203,17 @@ L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place**:
 `KPF0.to_kpf1()`, which calls the conversion methods **`KPF0.wmko_to_eprv()`** and
-**`KPF0.build_instrument_header()`** (L0 owns the WMKO→EPRV mapping). Those methods and the
-shared validator (below) draw their reference data — the rvdata `header_map.csv` (`HEADER_MAP`), the
-EPRV/required keyword sets, the registry allowlist — from module-level constants in
-`kpfpipe/data_models/base.py` (co-located with the validator); `KPF0` imports `HEADER_MAP` from there
-for the conversion. Consequences every contributor must respect:
+**`KPF0.build_instrument_header()`** (L0 owns the WMKO→EPRV mapping). Those methods, the keyword
+**routing tables**, and the qc_booleans header validator (below) draw their reference data — the
+rvdata `header_map.csv` (`HEADER_MAP`), the EPRV/required keyword sets, the per-extension allowed/
+required sets, and the `keyword → (extension, comment)` routing map — from module-level constants in
+`kpfpipe/data_models/base.py` (`_read_keyword_registries()` builds the routing/validation tables once
+at import); `KPF0` imports `HEADER_MAP` from there for the conversion. Consequences every contributor
+must respect:
 
 - **L1 PRIMARY is already EPRV-standard.** From L1 onward, PRIMARY holds EPRV keyword *names*
-  plus the registered KPF-pipeline keywords below — never raw WMKO natives.
+  plus the registered KPF-pipeline keywords **routed to PRIMARY** (see the routing rule below) —
+  never raw WMKO natives.
 - **`INSTRUMENT_HEADER` is an immutable, verbatim copy of the L0 PRIMARY _as ingested_** (values
   **and** comments — `build_instrument_header()` returns a `fits.Header` copy). "As ingested" = the
   raw instrument cards plus the four DRP-RUN provenance cards stamped at read (see below). It is
@@ -223,17 +226,37 @@ for the conversion. Consequences every contributor must respect:
   (DRP-RUN-19). `PROGID`/`KOAID` come from the WMKO-native file; an absent value is defaulted to
   `UNKNOWN` **with a warning**. `to_kpf1`/`wmko_to_eprv` then **forward these four verbatim** (value
   + comment) onto the L1 PRIMARY — they do not repopulate them.
-- **KPF-pipeline keywords are written directly to PRIMARY** (read noise, OSCANMET, BIASSUB/
-  DARKSUB, calibration ages/paths, QC booleans, diagnostics, and the RV/barycentric cards). Every
-  such keyword must be registered in the per-level registry `data_models/config/L{0,1,2,4}-headers.csv`
-  (each entry is an explicit ≤8-char FITS keyword — no wildcards; families are enumerated per
-  member, e.g. `RNGREEN1`-`RNGREEN4`). **Add new PRIMARY keywords there** or the validator
-  will reject the product.
-- **`to_kpf2`/`to_kpf4` are pure pass-throughs** that call the shared
-  `KPFDataModel.validate_eprv_primary(header, level)` and **fail loudly** if a raw native keyword
-  leaked onto PRIMARY, an unregistered keyword appears, or a required EPRV keyword is missing. (The
-  validator lives on the shared base — inherited by all levels — and reads its keyword sets from
-  the reference-data constants in `data_models/base.py`.)
+- **KPF-pipeline keywords are written via `KPFDataModel.set_keyword(key, value)`, NOT directly to a
+  header.** `set_keyword` looks the keyword up in the registry and writes it to the **extension named
+  in the registry's `Extension` column**, with the registry `Description` as the FITS comment — so a
+  keyword always lands on the same extension with the same comment, and writers never name an
+  extension or comment. It **fails loudly**: `KeyError` if the keyword is unregistered, `ValueError`
+  if its home extension does not exist on the object. Every such keyword must be registered in the
+  per-level registry `data_models/config/L{0,1,2,4}-headers.csv` (explicit ≤8-char FITS keyword — no
+  wildcards; families enumerated per member, e.g. `RNGREEN1`-`RNGREEN4`). The current homes:
+  - **PRIMARY** — DRP provenance (stamped at read), `DRPTAG`, and the L4 SCI-combined RV summaries
+    (`CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV`, `CCFRV`, `CCFERV`) plus the EPRV RV cards.
+  - **QUALITY_CONTROL** (a KPF-only `BinTableHDU`, created on KPF0/1/2) — QC booleans + `ISGOOD`,
+    read-noise (`RN*`), calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), and DiagL2
+    metrics (`NAN*`/`ZEROFRAC`/`*SNR*`/`*FR*`).
+  - **RECEIPT** — applied flags (`OSCANSUB`/`BIASSUB`/`DARKSUB`/`FLATDIV`), calibration **paths**
+    (`BIASFILE`/`DARKFILE`/`FLATFILE`/`WLSFILE`), `ASTRSRC`.
+  - **BJD_TDB / BARYCORR_KMS / BARYCORR_Z** (EPRV L2 extensions) — the per-CCD barycentric summaries.
+  - **RV1–RV5** (EPRV L4 tables) — the per-orderlet legacy RVs (`CCD<n>RV<sfx>`, sfx S→RV1, 1→RV2,
+    2→RV3, 3→RV4, C→RV5). Masters keep `MASTYPE` on their own PRIMARY (out of EPRV scope).
+- **QUALITY_CONTROL + RECEIPT *headers* propagate L0→L1→L2** card-by-card in `to_kpf1`/`to_kpf2`
+  (`set_header` with a comment-preserving `fits.Header` copy), alongside the receipt *table* copy.
+  QUALITY_CONTROL is a KPF-custom extension unknown to rvdata's definition-driven L2/L4 reader, so
+  `register_rvdata_extension` (`data_models/base.py`, called from `level2.py`/`level4.py`) registers
+  it into rvdata's in-memory `LEVEL{2,4}_EXTENSIONS` so a product written with it reads back.
+- **Header validation lives in `quality_control/qc_booleans` (`QC._validate_headers`), run at the end
+  of `QC.run()` — NOT in `to_kpf2`/`to_kpf4`** (the transforms no longer self-validate). For each
+  registry-governed extension present (PRIMARY, QUALITY_CONTROL, RECEIPT, the barycentric extensions,
+  RV#/CCF#), every card must be a registered keyword for that extension (KPF registry + EPRV
+  per-extension keywords) or a structural card, else it **raises**; an absent EPRV-`Required` keyword
+  **warns**. PRIMARY is validated only where it is EPRV-standard (L1/L2/L4); the raw WMKO L0 PRIMARY
+  is skipped. L4 is validated once `QCL4` is written (planned). The validator reads its allowed/
+  required sets from the routing tables in `data_models/base.py`.
 - `to_kpf1` also corrects values the installed `header_map.csv` gets wrong: `NUMORDER` (→67 from
   `DETECTOR`), `JD_UTC` (full JD from `MJD-OBS`, the canonical KPF exposure time — native
   `DATE-OBS` is date-only), and stamps the EPRV DRP version `DRPTAG` (its WMKO equivalent `DRPVERNO`
@@ -247,9 +270,10 @@ for the conversion. Consequences every contributor must respect:
   serializes PRIMARY by iterating `.items()`, which drops a `fits.Header`'s comments; the single
   `KPFDataModel._create_hdul` override (inherited by all four models) rebuilds the PRIMARY HDU via
   `self._restore_primary_comments(...)` so comments survive `to_fits`. Conversion lives in
-  `KPF0.wmko_to_eprv`/`build_instrument_header` (`data_models/level0.py`); validation in
-  `KPFDataModel.validate_eprv_primary` (`data_models/base.py`), which is also home to the shared
-  WMKO↔EPRV reference data they read.
+  `KPF0.wmko_to_eprv`/`build_instrument_header` (`data_models/level0.py`); the keyword routing/
+  validation tables and the WMKO↔EPRV reference data live in `data_models/base.py`
+  (`_read_keyword_registries`, `set_keyword`); the validator itself lives in
+  `quality_control/qc_booleans/base.py` (`QC._validate_headers`).
 
 ### Configuration
 
@@ -271,10 +295,10 @@ The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (top-level Ord
 
 ### Diagnostics, QC, and Quicklook
 
-Three read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write to PRIMARY headers (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`.
+Three read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`.
 
-- **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them to PRIMARY headers. Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
-- **QC** (`kpfpipe/quality_control/qc_booleans/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes 0/1 keywords plus `ISGOOD` aggregate.
+- **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
+- **QC** (`kpfpipe/quality_control/qc_booleans/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate, then runs `_validate_headers` (the single home for header validation — see *Header standardization*).
 - **Quicklook** (`kpfpipe/quality_control/quicklook/`) — reads products and renders matplotlib plots. Pulls any annotation values from existing headers.
 
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key`) and no shared state.

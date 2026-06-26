@@ -107,7 +107,8 @@ def main():
 
     print()
 
-    isgood_raw = data.headers["PRIMARY"].get("ISGOOD", (0,))
+    # ISGOOD is routed to the QUALITY_CONTROL header (its registry home) by QC.run.
+    isgood_raw = data.headers.get("QUALITY_CONTROL", {}).get("ISGOOD", (0,))
     isgood_val = isgood_raw[0] if isinstance(isgood_raw, tuple) else isgood_raw
     isgood_label = "PASS" if isgood_val else "FAIL"
     print(f"ISGOOD: {isgood_label}  ({pass_count} of {total} checks passed)")

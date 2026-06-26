@@ -709,24 +709,22 @@ class BarycentricCorrection:
         }
 
     def _set_headers(self, l2_obj):
-        """Write all PRIMARY-header keywords for barycentric correction.
+        """Write all summary header keywords for barycentric correction.
 
         Reads self._ccd_bjd/_ccd_kms/_ccd_z and self._astrometry_source
-        (populated by perform()); the single place this module writes PRIMARY,
-        called just before the receipt entry. Per-CCD keywords are registered
-        KPF-pipeline keywords (config/L2-headers.csv); CCD1=GREEN, CCD2=RED.
+        (populated by perform()); the single place this module writes summary
+        keywords, called just before the receipt entry. Per-CCD keywords are
+        registered KPF-pipeline keywords (config/L2-headers.csv); set_keyword
+        routes them to their registry homes (BJD_TDB / BARYCORR_KMS / BARYCORR_Z,
+        and RECEIPT for ASTRSRC). CCD1=GREEN, CCD2=RED.
         """
-        prim = l2_obj.headers["PRIMARY"]
-        prim["CCD1BJD"] = (float(self._ccd_bjd[0]), "[BJD_TDB] GREEN mid-time")
-        prim["CCD1BKMS"] = (
-            float(self._ccd_kms[0]),
-            "[km/s] GREEN barycentric velocity",
-        )
-        prim["CCD1BZ"] = (float(self._ccd_z[0]), "GREEN barycentric redshift z")
-        prim["CCD2BJD"] = (float(self._ccd_bjd[1]), "[BJD_TDB] RED mid-time")
-        prim["CCD2BKMS"] = (float(self._ccd_kms[1]), "[km/s] RED barycentric velocity")
-        prim["CCD2BZ"] = (float(self._ccd_z[1]), "RED barycentric redshift z")
-        prim["ASTRSRC"] = (self._astrometry_source, "Astrometry source")
+        l2_obj.set_keyword("CCD1BJD", float(self._ccd_bjd[0]))
+        l2_obj.set_keyword("CCD1BKMS", float(self._ccd_kms[0]))
+        l2_obj.set_keyword("CCD1BZ", float(self._ccd_z[0]))
+        l2_obj.set_keyword("CCD2BJD", float(self._ccd_bjd[1]))
+        l2_obj.set_keyword("CCD2BKMS", float(self._ccd_kms[1]))
+        l2_obj.set_keyword("CCD2BZ", float(self._ccd_z[1]))
+        l2_obj.set_keyword("ASTRSRC", self._astrometry_source)
 
     # ------------------------------------------------------------------
     # Public entry point

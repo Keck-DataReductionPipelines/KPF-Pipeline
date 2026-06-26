@@ -11,3 +11,4 @@ HDU,Name,DataType,Required,Description
 9,RECEIPT,BinTableHDU,True,Accumulated processing history
 10,CONFIG,BinTableHDU,False,Configuration parameters
 11,INSTRUMENT_HEADER,ImageHDU,False,Verbatim raw instrument (L0) PRIMARY header
+12,QUALITY_CONTROL,BinTableHDU,True,Quality-control booleans and diagnostic metrics

@@ -537,20 +537,11 @@ class ImageAssembly:
         """
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]
-            l1_obj.headers["PRIMARY"][key_read] = (
-                round(float(rn), 4),
-                f"Read noise {channel_ext} [e-]",
-            )
-            l1_obj.headers["PRIMARY"][key_rnng] = (
-                round(float(self.rn_nongauss[channel_ext]), 4),
-                f"Non-Gaussian read noise {channel_ext}",
-            )
+            l1_obj.set_keyword(key_read, round(float(rn), 4))
+            l1_obj.set_keyword(key_rnng, round(float(self.rn_nongauss[channel_ext]), 4))
 
         # "zero" is the explicit no-op method (strips overscan, subtracts none).
-        l1_obj.headers["PRIMARY"]["OSCANSUB"] = (
-            int(self.overscan_method != "zero"),
-            "Overscan subtraction applied (T/F)",
-        )
+        l1_obj.set_keyword("OSCANSUB", int(self.overscan_method != "zero"))
 
     # ------------------------------------------------------------------
     # Public entry point

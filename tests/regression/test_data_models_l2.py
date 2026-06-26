@@ -96,18 +96,6 @@ class TestToKPF2:
         assert kpf2.headers["INSTRUMENT_HEADER"]["INSTRUME"] == "KPF"
         assert kpf2.headers["INSTRUMENT_HEADER"]["ELAPSED"] == 300.0
 
-    def test_to_kpf2_rejects_native_leak(self, converted_l1):
-        """A raw WMKO keyword left on PRIMARY fails loudly."""
-        converted_l1.headers["PRIMARY"]["ELAPSED"] = 300.0
-        with pytest.raises(ValueError, match="native WMKO keyword 'ELAPSED'"):
-            converted_l1.to_kpf2()
-
-    def test_to_kpf2_rejects_unregistered_keyword(self, converted_l1):
-        """An unregistered keyword on PRIMARY fails loudly."""
-        converted_l1.headers["PRIMARY"]["BOGUSKEY"] = 1
-        with pytest.raises(ValueError, match="unregistered keyword 'BOGUSKEY'"):
-            converted_l1.to_kpf2()
-
     def test_to_kpf2_maps_passthrough_extensions(self, tmp_path):
         """Build an L1 with TELEMETRY and CA_HK, verify they map to KPF2 extensions."""
         fn = str(tmp_path / "l1_with_extras.fits")

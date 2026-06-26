@@ -197,18 +197,15 @@ class CalibrationAssociation:
         """Write all PRIMARY-header keywords for calibration association.
 
         Reads self._calibrations (populated by perform()); the single place this
-        module writes PRIMARY, called just before the receipt entry. Each cal
-        type contributes {PREFIX}FILE (full master path) and {PREFIX}AGE (signed
-        fractional-day age).
+        module writes header keywords, called just before the receipt entry. Each
+        cal type contributes {PREFIX}FILE (full master path) and {PREFIX}AGE
+        (signed fractional-day age); set_keyword routes them to their registry
+        homes (RECEIPT for the paths, QUALITY_CONTROL for the ages).
         """
-        primary = l1_obj.headers["PRIMARY"]
         for cal_type, cal in self._calibrations.items():
             prefix = _HEADER_PREFIX[cal_type]
-            primary[f"{prefix}FILE"] = (cal["filepath"], f"{prefix} master path")
-            primary[f"{prefix}AGE"] = (
-                cal["age_days"],
-                f"[day] {prefix} master age (master-obs)",
-            )
+            l1_obj.set_keyword(f"{prefix}FILE", cal["filepath"])
+            l1_obj.set_keyword(f"{prefix}AGE", cal["age_days"])
 
     # ------------------------------------------------------------------
     # Public entry point

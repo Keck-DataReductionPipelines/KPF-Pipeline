@@ -52,7 +52,10 @@ class Diagnostics:
                 continue
             for kw, (value, comment) in output.items():
                 self.results[kw] = (value, comment)
-                self.kpf.headers["PRIMARY"][kw] = (value, comment)
+                # set_keyword routes each metric to its registry home (the method's
+                # _qc_comment is retained in self.results; the FITS comment comes
+                # from the registry Description).
+                self.kpf.set_keyword(kw, value)
 
         return self.results
 

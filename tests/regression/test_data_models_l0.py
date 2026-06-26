@@ -35,7 +35,9 @@ class TestKPF0:
         assert l0.level == 0
         assert l0.obs_id == "KP.20240113.00001.00"
         assert "PRIMARY" in l0.extensions
-        assert len(l0.extensions) == 1
+        # Real KPF0 objects always carry a QUALITY_CONTROL extension.
+        assert "QUALITY_CONTROL" in l0.extensions
+        assert len(l0.extensions) == 2
 
     def test_round_trip(self, synthetic_l0_file, tmp_path):
         l0 = KPF0.from_fits(synthetic_l0_file)
