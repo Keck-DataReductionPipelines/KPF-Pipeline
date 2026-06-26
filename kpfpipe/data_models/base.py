@@ -9,218 +9,29 @@ multiple inheritance alongside rvdata's RV2/RV4 (KPFDataModel listed first so
 its overrides win while RV2/RV4 remain reachable through ``super()``).
 """
 
-import importlib.resources
-
 import numpy as np
-import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.models.base import RVDataModel
 
-from kpfpipe.utils.kpf import _DATECODE_PATTERN, _OBS_ID_PATTERN
-
-# --- WMKO ↔ EPRV ↔ KPF PRIMARY header reference data -------------------------
-# Single source of truth for the WMKO→EPRV keyword mapping (rvdata's
-# header_map.csv) and the sets that define what may legitimately appear on a KPF
-# EPRV PRIMARY header. Loaded once at import. ``validate_eprv_primary`` (below)
-# consumes the derived keyword sets; ``KPF0.wmko_to_eprv`` (level0.py) imports
-# ``HEADER_MAP`` from here for the L0→L1 conversion.
-#
-# rvdata (installed package): the wmko↔EPRV map and the EPRV PRIMARY keyword
-# definitions. KPF consumes these rather than re-encoding the standard.
-_kpf_cfg = importlib.resources.files("rvdata.instruments.kpf.config")
-_rv_cfg = importlib.resources.files("rvdata.core.models.config")
-# This repo: the KPF-pipeline keyword registry (validator allowlist).
-_kpf_data_cfg = importlib.resources.files("kpfpipe.data_models.config")
-
-HEADER_MAP = pd.read_csv(_kpf_cfg / "header_map.csv")
-
-
-def _load_keyword_csv(handle):
-    """Read an rvdata PRIMARY-keyword CSV, stripping any UTF-8 BOM on column 1."""
-    df = pd.read_csv(handle)
-    df.columns = [str(c).lstrip("﻿").strip() for c in df.columns]
-    return df
-
-
-_L2_KW = _load_keyword_csv(_rv_cfg / "L2-PRIMARY-keywords.csv")
-_L4_KW = _load_keyword_csv(_rv_cfg / "L4-PRIMARY-keywords.csv")
-# KPF-pipeline keyword registry, split by the level that first writes the
-# keyword (config/L{0,1,2,4}-headers.csv). All levels are combined into one
-# allowlist, since a keyword written at an earlier level persists on PRIMARY.
-_KPFPIPE_KW = pd.concat(
-    [
-        pd.read_csv(_kpf_data_cfg / f"L{level}-headers.csv")
-        for level in ("0", "1", "2", "4")
-    ],
-    ignore_index=True,
+# The header/extension keyword registry lives in its own module; base.py is its
+# only importer. HEADER_MAP / register_rvdata_extension / REGISTERED_KEYWORDS are
+# re-exposed here so sibling data_models files (level0/2/4) keep importing them
+# from base; the routing/validation lookups are surfaced as KPFDataModel class
+# attributes (below) so consumers handed a kpf_obj (the qc_booleans validator,
+# tests) read them off the model.
+from kpfpipe.data_models._registry import (
+    EXT_ALLOWED,
+    EXT_REQUIRED,
+    HEADER_MAP,
+    KEYWORD_REGISTRY,
+    KEYWORD_ROUTING,
+    REGISTERED_KEYWORDS,
+    STRUCTURAL_KEYS,
+    WMKO_PRIMARY_KEYS,
+    register_rvdata_extension,
 )
-
-
-# The EPRV keyword CSVs encode per-target/per-telescope families as a
-# "BASE1 ... BASE#" template (e.g. "CDEC1 ... CDEC#"). rvdata seeds these
-# expanded at index 1 (CDEC1); a producer may add CDEC2.. up to NUMTRACE/NUMTEL.
-def _family_base(first_token):
-    """'CDEC1' -> 'CDEC' (strip the trailing index)."""
-    return first_token.rstrip("0123456789")
-
-
-def _keyword_literals(df):
-    """All EPRV keyword names, expanding 'BASE1 ... BASE#' families to BASE1-9."""
-    out = set()
-    for kw in df["Keyword"]:
-        name = str(kw).strip()
-        if not name:
-            continue
-        if "..." in name:
-            base = _family_base(name.split("...")[0].strip())
-            out.update(f"{base}{i}" for i in range(1, 10))
-        else:
-            out.add(name)
-    return out
-
-
-def _required_literals(df):
-    """Required EPRV keyword names; families require only index 1 (rvdata's seed)."""
-    flags = df["Required"].astype(str).str.strip().str.lower() == "true"
-    out = set()
-    for kw in df.loc[flags, "Keyword"]:
-        name = str(kw).strip()
-        if not name:
-            continue
-        if "..." in name:
-            out.add(f"{_family_base(name.split('...')[0].strip())}1")
-        else:
-            out.add(name)
-    return out
-
-
-# Every EPRV-standard PRIMARY keyword (L4 = L2 plus the L4-only RV summary keys).
-EPRV_L2_KEYS = _keyword_literals(_L2_KW)
-EPRV_L4_KEYS = EPRV_L2_KEYS | _keyword_literals(_L4_KW)
-REQUIRED_L2_KEYS = _required_literals(_L2_KW)
-REQUIRED_L4_KEYS = REQUIRED_L2_KEYS | _required_literals(_L4_KW)
-
-# header_map STANDARD names are the EPRV-side targets the conversion produces.
-HEADERMAP_STANDARD_KEYS = {
-    str(r["STANDARD"]).strip()
-    for _, r in HEADER_MAP.iterrows()
-    if pd.notna(r["STANDARD"])
-}
-# header_map INSTRUMENT names that differ from their STANDARD target are the raw
-# WMKO names that must NOT remain on a converted PRIMARY (they belong in
-# INSTRUMENT_HEADER). Used for a precise "wmko leak" diagnostic.
-WMKO_PRIMARY_KEYS = {
-    str(r["INSTRUMENT"]).strip()
-    for _, r in HEADER_MAP.iterrows()
-    if pd.notna(r["INSTRUMENT"])
-    and str(r["INSTRUMENT"]).strip()
-    and str(r["INSTRUMENT"]).strip() != str(r["STANDARD"]).strip()
-}
-
-# Every registered KPF-pipeline keyword (all levels). Each registry entry is an
-# explicit 8-character-max FITS keyword (no wildcards); families are enumerated
-# per member (e.g. RNGREEN1-4, CCD1BJD/CCD2BJD). The per-extension split lives in
-# EXT_ALLOWED_KEYS below; this flat union is kept for callers that only need
-# "is this a registered keyword".
-KPFPIPE_PRIMARY_KEYS = {str(k).strip() for k in _KPFPIPE_KW["Keyword"]}
-
-# --- Per-extension keyword routing & validation tables -----------------------
-# The Extension column in config/L{0,1,2,4}-headers.csv names the home header for
-# every KPF-pipeline keyword. ``KPFDataModel.set_keyword`` routes a write there
-# with the registry Description as the FITS comment; the qc_booleans validator
-# checks each governed extension's header against the same tables. The EPRV
-# per-extension keyword CSVs (rvdata) supply the standard cards those extensions
-# also carry.
-#
-# Governed extensions whose standard header keywords the EPRV standard defines.
-# RV#/CCF# share one template CSV (L4-RV1 / L4-CCF1); BARYCORR_*/BJD_TDB are
-# per-extension. QUALITY_CONTROL and RECEIPT are KPF-only (no EPRV header CSV).
-_EPRV_EXT_CSV = {
-    "BJD_TDB": _rv_cfg / "L2-BJD_TDB-keywords.csv",
-    "BARYCORR_KMS": _rv_cfg / "L2-BARYCORR_KMS-keywords.csv",
-    "BARYCORR_Z": _rv_cfg / "L2-BARYCORR_Z-keywords.csv",
-    **{f"RV{i}": _rv_cfg / "L4-RV1-keywords.csv" for i in range(1, 6)},
-    **{f"CCF{i}": _rv_cfg / "L4-CCF1-keywords.csv" for i in range(1, 6)},
-}
-
-
-def _read_keyword_registries():
-    """Load the KPF + EPRV keyword registries into the routing/validation tables.
-
-    Builds three structures, once at import:
-
-    - ``routing`` — ``keyword -> (extension, comment)`` for ``set_keyword``.
-      Seeded from the EPRV PRIMARY keyword CSVs (-> PRIMARY) and overlaid with the
-      KPF registry rows (their explicit Extension + Description); KPF wins on the
-      rare name collision (a pipeline keyword shadowing an EPRV default).
-    - ``allowed`` — ``extension -> set(keyword)`` the validator accepts on that
-      governed extension's header: the KPF rows routed there, plus the EPRV
-      per-extension keywords where the standard defines them.
-    - ``required`` — ``extension -> set(keyword)`` flagged Required by the EPRV
-      standard; absence triggers a validator warning. KPF rows are optional.
-
-    Returns ``(routing, allowed, required)`` (also bound at module scope below).
-    """
-    routing = {}
-    allowed = {}
-    required = {}
-
-    # EPRV PRIMARY keywords route to PRIMARY, comment from their Description.
-    for df in (_L2_KW, _L4_KW):
-        descr = dict(
-            zip(
-                df["Keyword"].astype(str).str.strip(),
-                df["Description"].astype(str),
-                strict=False,
-            )
-        )
-        for kw in _keyword_literals(df):
-            routing.setdefault(kw, ("PRIMARY", descr.get(kw, "")))
-
-    # KPF-pipeline keywords: explicit Extension + Description; KPF wins on routing.
-    for _, row in _KPFPIPE_KW.iterrows():
-        kw = str(row["Keyword"]).strip()
-        ext = str(row["Extension"]).strip()
-        comment = "" if pd.isna(row["Description"]) else str(row["Description"]).strip()
-        routing[kw] = (ext, comment)
-        allowed.setdefault(ext, set()).add(kw)
-
-    # EPRV per-extension keywords extend the allowed/required sets for the
-    # governed extensions that carry standard cards.
-    for ext, csv_path in _EPRV_EXT_CSV.items():
-        df = _load_keyword_csv(csv_path)
-        allowed.setdefault(ext, set()).update(_keyword_literals(df))
-        required.setdefault(ext, set()).update(_required_literals(df))
-
-    return routing, allowed, required
-
-
-_KEYWORD_ROUTING, EXT_ALLOWED_KEYS, EXT_REQUIRED_KEYS = _read_keyword_registries()
-
-# FITS structural / bookkeeping cards plus KPF-internal PRIMARY keys that are
-# neither EPRV nor in the registry but are always permitted. Consumed by the
-# qc_booleans header validator.
-STRUCTURAL_KEYS = {
-    "SIMPLE",
-    "BITPIX",
-    "EXTEND",
-    "XTENSION",
-    "PCOUNT",
-    "GCOUNT",
-    "BSCALE",
-    "BZERO",
-    "COMMENT",
-    "HISTORY",
-    "CONTINUE",
-    "CHECKSUM",
-    "DATASUM",
-    "",
-    "DATALVL",
-    "ORIGID",
-    "FILENAME",
-    "DATE",
-}
+from kpfpipe.utils.kpf import _DATECODE_PATTERN, _OBS_ID_PATTERN
 
 # Receipt names that are data-model conversions / serialization rather than
 # pipeline modules — excluded from DRPSTATU so it names the last real stage.
@@ -228,29 +39,15 @@ STRUCTURAL_KEYS = {
 # the writer stamped.
 _INTERNAL_RECEIPTS = frozenset({"to_l1", "to_kpf2", "to_kpf4", "to_fits", "from_fits"})
 
-
-def register_rvdata_extension(level_extensions, name, datatype, description):
-    """Register a KPF-custom extension into an rvdata ``LEVELn_EXTENSIONS`` table.
-
-    rvdata's ``RVn._read`` resolves each HDU's DataType by Name from its
-    ``LEVELn_EXTENSIONS`` DataFrame; a KPF-only extension (e.g. QUALITY_CONTROL)
-    is absent there, so reading an Ln product that contains it raises ``KeyError``.
-    This appends the row in-memory (idempotent). ``Required`` is False so rvdata
-    neither auto-creates it nor lists it in EXT_DESCRIPT — the KPF model
-    ``__init__`` creates the (empty) extension explicitly.
-    """
-    if name in set(level_extensions["Name"]):
-        return
-    row = {col: "" for col in level_extensions.columns}
-    row.update(
-        HDU=int(level_extensions["HDU"].max()) + 1,
-        Name=name,
-        DataType=datatype,
-        Required=False,
-        Multiplicity=False,
-        Description=description,
-    )
-    level_extensions.loc[len(level_extensions)] = row
+# Re-exported for sibling data_models modules (KPF0.wmko_to_eprv uses HEADER_MAP +
+# REGISTERED_KEYWORDS; KPF2/KPF4 use register_rvdata_extension). Listed in __all__
+# so the re-export is intentional, not an accident of import.
+__all__ = [
+    "KPFDataModel",
+    "HEADER_MAP",
+    "REGISTERED_KEYWORDS",
+    "register_rvdata_extension",
+]
 
 
 class KPFDataModel(RVDataModel):
@@ -259,6 +56,19 @@ class KPFDataModel(RVDataModel):
 
     OBS_ID_PATTERN = _OBS_ID_PATTERN
     DATECODE_PATTERN = _DATECODE_PATTERN
+
+    # Keyword registry, surfaced as class attributes so anything handed a KPF data
+    # model (the qc_booleans header validator, tests) reads them off the object —
+    # keeping data_models/_registry imported only by base.py. set_keyword uses
+    # KEYWORD_ROUTING; the validator uses EXT_ALLOWED / EXT_REQUIRED (per-extension)
+    # plus STRUCTURAL_KEYS / WMKO_PRIMARY_KEYS. KEYWORD_REGISTRY is the source table.
+    KEYWORD_REGISTRY = KEYWORD_REGISTRY
+    KEYWORD_ROUTING = KEYWORD_ROUTING
+    EXT_ALLOWED = EXT_ALLOWED
+    EXT_REQUIRED = EXT_REQUIRED
+    STRUCTURAL_KEYS = STRUCTURAL_KEYS
+    WMKO_PRIMARY_KEYS = WMKO_PRIMARY_KEYS
+    REGISTERED_KEYWORDS = REGISTERED_KEYWORDS
 
     def __init__(self):
         super().__init__()
@@ -314,7 +124,7 @@ class KPFDataModel(RVDataModel):
             config error — the extension must be created before the write).
         """
         name = str(key).strip()
-        route = _KEYWORD_ROUTING.get(name)
+        route = KEYWORD_ROUTING.get(name)
         if route is None:
             raise KeyError(
                 f"keyword {name!r} is not registered; add it to "

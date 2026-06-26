@@ -217,8 +217,10 @@ class KPF0(KPFDataModel):
     def wmko_to_eprv(self):
         """Map this L0's raw WMKO PRIMARY to an EPRV-standard PRIMARY dict.
 
-        For each header_map row, take the instrument (WMKO) value when present,
-        else the row default. Then apply the value corrections the installed
+        For each header_map row whose STANDARD target is a registered keyword,
+        take the instrument (WMKO) value when present, else the row default. The
+        registry filter prevents non-standard header_map targets (e.g. PARANG)
+        from leaking onto PRIMARY. Then apply the value corrections the installed
         header_map gets wrong (NUMORDER, JD_UTC), stamp the EPRV DRP version
         (DRPTAG), and forward the DRP-RUN provenance cards
         (DRPVERNO/PROGID/KOAID/DRPSTATU) already on the L0 PRIMARY (stamped at
@@ -233,6 +235,12 @@ class KPF0(KPFDataModel):
         out = {}
         for _, row in HEADER_MAP.iterrows():
             standard_key = str(row["STANDARD"]).strip()
+            # Emit only registered keywords. rvdata's header_map.csv maps to a few
+            # STANDARD targets that aren't in the keyword registry (e.g. PARANG,
+            # PARANG2); skip them so the conversion can't leak non-standard cards
+            # onto the EPRV PRIMARY. (_registry warns once at import about these.)
+            if standard_key not in self.REGISTERED_KEYWORDS:
+                continue
             instrument_key = (
                 str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""
             )

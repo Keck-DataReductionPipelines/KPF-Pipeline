@@ -16,21 +16,15 @@ inside the level transforms).
 
 import warnings
 
-from kpfpipe.data_models.base import (
-    EPRV_L2_KEYS,
-    EPRV_L4_KEYS,
-    EXT_ALLOWED_KEYS,
-    EXT_REQUIRED_KEYS,
-    HEADERMAP_STANDARD_KEYS,
-    REQUIRED_L2_KEYS,
-    REQUIRED_L4_KEYS,
-    STRUCTURAL_KEYS,
-    WMKO_PRIMARY_KEYS,
-)
+# Header-registry lookups are read off the validated kpf_obj (e.g.
+# self.kpf.EXT_ALLOWED / EXT_REQUIRED), so qc_booleans does not import from
+# data_models — the registry stays reachable purely through the data model. The
+# structural-card policy below is validator-specific and lives here.
 
 # Bookkeeping/structural cards astropy adds to a serialized extension header
 # (BinTable column descriptors, image WCS); always permitted on any governed
-# extension and never counted as a "missing required" keyword.
+# extension and never counted as a "missing required" keyword. These supplement
+# the model's STRUCTURAL_KEYS (the PRIMARY/bookkeeping set).
 _EXT_STRUCTURAL_PREFIXES = (
     "NAXIS",
     "TTYPE",
@@ -48,12 +42,7 @@ _EXT_STRUCTURAL_PREFIXES = (
     "CDELT",
     "CROTA",
 )
-_EXT_STRUCTURAL_KEYS = STRUCTURAL_KEYS | {"EXTNAME", "TFIELDS", "PCOUNT", "GCOUNT"}
-
-
-def _is_structural(key):
-    """True for a FITS structural/bookkeeping card (not a registered keyword)."""
-    return key in _EXT_STRUCTURAL_KEYS or key.startswith(_EXT_STRUCTURAL_PREFIXES)
+_EXT_STRUCTURAL_EXTRA = {"EXTNAME", "TFIELDS", "PCOUNT", "GCOUNT"}
 
 
 class QC:
@@ -116,26 +105,47 @@ class QC:
         WMKO L0 PRIMARY is skipped.
         """
         level = str(self.LEVEL).upper()
+        # Registry lookups are read off the validated model (kpf_obj), so
+        # data_models/_registry stays imported only by base.py. PRIMARY allowed is
+        # NOT level-gated (the registry already lists every EPRV + KPF PRIMARY
+        # keyword); required-warnings ARE level-aware. L1 PRIMARY is already
+        # EPRV-L2-standard, so it caps at level 2 like L2.
+        kpf = self.kpf
+        cap = {"L1": 2, "L2": 2, "L4": 4}.get(level)
+
+        def required_at(ext):
+            """Keywords required for ``ext`` at or below this product's level."""
+            if cap is None:  # L0 (or an untagged QC subclass): no required-warnings.
+                return set()
+            return {k for k, lvl in kpf.EXT_REQUIRED.get(ext, {}).items() if lvl <= cap}
 
         # PRIMARY is EPRV-standard from L1 onward; the raw WMKO L0 PRIMARY is not.
-        if level in ("L1", "L2", "L4"):
-            eprv_keys = EPRV_L4_KEYS if level == "L4" else EPRV_L2_KEYS
-            required = REQUIRED_L4_KEYS if level == "L4" else REQUIRED_L2_KEYS
-            allowed = (
-                eprv_keys
-                | HEADERMAP_STANDARD_KEYS
-                | EXT_ALLOWED_KEYS.get("PRIMARY", set())
+        if cap is not None:
+            self._validate_extension(
+                "PRIMARY",
+                kpf.EXT_ALLOWED.get("PRIMARY", set()),
+                required_at("PRIMARY"),
+                wmko_check=True,
             )
-            self._validate_extension("PRIMARY", allowed, required, wmko_check=True)
 
         # KPF/EPRV governed extensions (QUALITY_CONTROL, RECEIPT, BARYCORR_*,
         # BJD_TDB, RV#/CCF#): validate each that exists on this product.
-        for ext, allowed in EXT_ALLOWED_KEYS.items():
-            if ext == "PRIMARY" or ext not in self.kpf.extensions:
+        for ext, allowed in kpf.EXT_ALLOWED.items():
+            if ext == "PRIMARY" or ext not in kpf.extensions:
                 continue
-            self._validate_extension(
-                ext, allowed, EXT_REQUIRED_KEYS.get(ext, set()), wmko_check=False
-            )
+            self._validate_extension(ext, allowed, required_at(ext), wmko_check=False)
+
+    def _is_structural(self, key):
+        """True for a FITS structural/bookkeeping card (not a registered keyword).
+
+        Combines the model's STRUCTURAL_KEYS (PRIMARY/bookkeeping cards) with the
+        extension-table/WCS cards astropy adds at serialization.
+        """
+        return (
+            key in self.kpf.STRUCTURAL_KEYS
+            or key in _EXT_STRUCTURAL_EXTRA
+            or key.startswith(_EXT_STRUCTURAL_PREFIXES)
+        )
 
     def _validate_extension(self, ext, allowed, required, *, wmko_check):
         """Check one extension header: raise on an unexpected card, warn on an
@@ -147,9 +157,9 @@ class QC:
         for raw_key in list(header):
             key = str(raw_key).strip()
             present.add(key)
-            if _is_structural(key) or key in allowed:
+            if self._is_structural(key) or key in allowed:
                 continue
-            if wmko_check and key in WMKO_PRIMARY_KEYS:
+            if wmko_check and key in self.kpf.WMKO_PRIMARY_KEYS:
                 raise ValueError(
                     f"native WMKO keyword {key!r} found on {ext}; it must be "
                     "converted to its EPRV name or kept in INSTRUMENT_HEADER"
@@ -160,7 +170,7 @@ class QC:
             )
 
         missing = sorted(
-            k for k in required if not _is_structural(k) and k not in present
+            k for k in required if not self._is_structural(k) and k not in present
         )
         if missing:
             warnings.warn(

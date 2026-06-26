@@ -6,6 +6,8 @@ calibration product.
 Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
+import warnings
+
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -60,6 +62,26 @@ def converted_l1(synthetic_l0_file):
     """An L1 produced via KPF0.to_kpf1 — already EPRV-standard PRIMARY plus a
     populated INSTRUMENT_HEADER (the input to_kpf2 expects in production)."""
     return KPF0.from_fits(synthetic_l0_file).to_kpf1()
+
+
+class TestKPF2QualityControlRoundTrip:
+    """The KPF-custom QUALITY_CONTROL extension survives KPF2's RV2 read path.
+
+    register_rvdata_extension teaches rvdata's definition-driven L2 reader about
+    QUALITY_CONTROL; without it from_fits raises KeyError on that HDU.
+    """
+
+    def test_quality_control_and_barycorr_roundtrip(self, tmp_path):
+        l2 = KPF2()
+        l2.set_keyword("NANSCI1", 7)
+        l2.set_keyword("CCD1BKMS", -3.21)
+        fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            l2.to_fits(fn)
+            back = KPF2.from_fits(fn)
+        assert back.headers["QUALITY_CONTROL"]["NANSCI1"] == 7
+        assert back.headers["BARYCORR_KMS"]["CCD1BKMS"] == -3.21
 
 
 class TestToKPF2:

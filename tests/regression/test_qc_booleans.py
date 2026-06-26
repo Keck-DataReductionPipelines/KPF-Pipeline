@@ -15,6 +15,7 @@ All tests use synthetic in-memory data — no real KPF files required.
 import os
 import subprocess
 import sys
+import warnings
 
 import numpy as np
 import pytest
@@ -178,16 +179,18 @@ class TestQCBase:
         """Minimal object with a headers dict and a set_keyword router.
 
         The QC runner now writes each result via ``set_keyword`` and validates
-        governed extensions at the end of ``run()``. This fake stores every
-        keyword on QUALITY_CONTROL (value only) and exposes an empty
-        ``extensions`` dict so ``_validate_headers`` is a no-op (LEVEL=None
-        skips PRIMARY; no governed extensions are present).
+        governed extensions at the end of ``run()``, reading the registry lookups
+        off the model (``self.kpf.*``). This fake stores every keyword on
+        QUALITY_CONTROL (value only) and exposes empty ``extensions`` /
+        ``EXT_ALLOWED`` so ``_validate_headers`` is a no-op (LEVEL=None skips
+        PRIMARY; no governed extensions to check).
         """
 
         class _FakeObj:
             extensions = {}
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
             data = {}
+            EXT_ALLOWED = {}
 
             def set_keyword(self, key, value):
                 self.headers["QUALITY_CONTROL"][key] = value
@@ -855,3 +858,45 @@ class TestQCScript:
             text=True,
         )
         assert result.returncode != 0
+
+
+class TestValidateHeaders:
+    """QC._validate_headers raises on an unexpected card, warns on missing required.
+
+    The validator reads its reference sets off the kpf_obj (self.kpf.*); these
+    exercise it via the QCL2 runner on a fresh KPF2.
+    """
+
+    def test_clean_product_passes(self):
+        # A fresh KPF2 has RV2-seeded EPRV PRIMARY defaults (all required present)
+        # and empty governed extensions -> no unexpected card, no missing required.
+        l2 = KPF2()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # any warning would fail this
+            QCL2(l2)._validate_headers()
+
+    def test_unexpected_keyword_on_governed_extension_raises(self):
+        l2 = KPF2()
+        l2.headers["QUALITY_CONTROL"]["BOGUSKEY"] = (1, "not registered")
+        with pytest.raises(ValueError, match="unregistered keyword 'BOGUSKEY'"):
+            QCL2(l2)._validate_headers()
+
+    def test_native_wmko_leak_on_primary_raises(self):
+        l2 = KPF2()
+        # GAIAID is a raw WMKO native (kept in INSTRUMENT_HEADER, never on PRIMARY).
+        l2.headers["PRIMARY"]["GAIAID"] = (12345, "leaked native")
+        with pytest.raises(ValueError, match="native WMKO keyword 'GAIAID'"):
+            QCL2(l2)._validate_headers()
+
+    def test_missing_required_primary_keyword_warns(self):
+        l2 = KPF2()
+        del l2.headers["PRIMARY"]["INSTRUME"]  # a Required EPRV PRIMARY keyword
+        with pytest.warns(UserWarning, match="missing required keyword"):
+            QCL2(l2)._validate_headers()
+
+    def test_registered_keyword_on_its_extension_passes(self):
+        l2 = KPF2()
+        l2.set_keyword("NANSCI1", 3)  # registered -> QUALITY_CONTROL
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            QCL2(l2)._validate_headers()

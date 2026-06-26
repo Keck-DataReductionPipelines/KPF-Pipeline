@@ -177,6 +177,23 @@ class TestToL1:
         assert inst["GROBSERV"] == "Smith"
         assert inst["INSTRUME"] == "KPF"
 
+    def test_to_l1_filters_non_registry_headermap_targets(self, tmp_path):
+        """wmko_to_eprv emits only registered keywords; header_map's non-standard
+        STANDARD targets (e.g. PARANG <- PARANTEL) are dropped, not leaked onto the
+        EPRV PRIMARY. The raw value survives verbatim in INSTRUMENT_HEADER."""
+        import warnings
+
+        fn = str(tmp_path / "KP.20240113.00009.00.fits")
+        p = fits.PrimaryHDU()
+        p.header["INSTRUME"] = "KPF"
+        p.header["PARANTEL"] = 108.03  # header_map maps PARANTEL -> non-standard PARANG
+        fits.HDUList([p]).writeto(fn)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # PROGID/KOAID absent -> UNKNOWN
+            l1 = KPF0.from_fits(fn).to_kpf1()
+        assert "PARANG" not in l1.headers["PRIMARY"]
+        assert l1.headers["INSTRUMENT_HEADER"]["PARANTEL"] == 108.03
+
     def test_to_l1_fixes_value_bugs(self, synthetic_l0_file):
         """NUMORDER, JD_UTC, and the DRP version keywords are corrected/stamped."""
         l0 = KPF0.from_fits(synthetic_l0_file)

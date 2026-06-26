@@ -19,9 +19,17 @@ PRIMARY-header validation no longer lives on the data models (it moved to the QC
 runner, ``quality_control/qc_booleans/base.py``).
 """
 
+import warnings
+
+import pytest
 from astropy.io import fits
 
+from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.data_models.level2 import KPF2
+from kpfpipe.data_models.level4 import KPF4
+
+from ._registry import read_kpf_header_registry
 
 
 class TestHeaderStorage:
@@ -86,3 +94,157 @@ class TestUndefinedRoundTrip:
         assert "CCFRV" in prim
         val = prim["CCFRV"]
         assert val is None or isinstance(val, fits.card.Undefined)
+
+
+class TestSetKeyword:
+    """KPFDataModel.set_keyword routes to the registry extension with its comment."""
+
+    def test_routes_to_quality_control(self):
+        l1 = KPF1()
+        l1.set_keyword("RNGREEN1", 3.5)
+        assert l1.headers["QUALITY_CONTROL"]["RNGREEN1"] == 3.5
+        # comment comes from the registry Description, not the caller.
+        assert l1.headers["QUALITY_CONTROL"].comments["RNGREEN1"] == (
+            "Read noise GREEN amp 1 [e-]"
+        )
+        # it does NOT leak onto PRIMARY.
+        assert "RNGREEN1" not in l1.headers["PRIMARY"]
+
+    def test_routes_to_receipt(self):
+        l1 = KPF1()
+        l1.set_keyword("BIASFILE", "/path/to/master_bias_L1.fits")
+        assert l1.headers["RECEIPT"]["BIASFILE"] == "/path/to/master_bias_L1.fits"
+        assert "BIASFILE" not in l1.headers["PRIMARY"]
+
+    def test_routes_to_barycorr_and_bjd_extensions(self):
+        l2 = KPF2()
+        l2.set_keyword("CCD1BKMS", -12.3)
+        l2.set_keyword("CCD1BJD", 2460000.5)
+        assert l2.headers["BARYCORR_KMS"]["CCD1BKMS"] == -12.3
+        assert l2.headers["BJD_TDB"]["CCD1BJD"] == 2460000.5
+
+    def test_routes_l4_orderlet_rv_to_rv_table(self):
+        l4 = KPF4()
+        l4.set_keyword("CCD1RV1", 1.2345)  # GREEN SCI1 -> RV2
+        l4.set_keyword("CCD1RV", 6.789)  # combined -> PRIMARY
+        assert l4.headers["RV2"]["CCD1RV1"] == 1.2345
+        assert l4.headers["PRIMARY"]["CCD1RV"] == 6.789
+
+    def test_unregistered_keyword_raises_keyerror(self):
+        l1 = KPF1()
+        with pytest.raises(KeyError, match="not registered"):
+            l1.set_keyword("BOGUSKEY", 1)
+
+    def test_missing_extension_raises_valueerror(self):
+        # KPF1 has no BARYCORR_KMS extension, so routing CCD1BKMS there fails loud.
+        l1 = KPF1()
+        with pytest.raises(ValueError, match="does not exist"):
+            l1.set_keyword("CCD1BKMS", 1.0)
+
+
+class TestRegistryConformance:
+    """The routing table the model exposes agrees with the registry CSV column.
+
+    Oracle: ``read_kpf_header_registry`` reads config/L*-headers.csv directly
+    (tests/regression/_registry.py), independent of the code under test.
+    """
+
+    def test_routing_matches_extension_column(self):
+        routing = KPF1.KEYWORD_ROUTING
+        mismatches = []
+        for _, row in read_kpf_header_registry().iterrows():
+            kw = str(row["Keyword"]).strip()
+            want = str(row["Extension"]).strip()
+            got = routing.get(kw, (None,))[0]
+            if got != want:
+                mismatches.append((kw, want, got))
+        assert not mismatches, f"routing != registry Extension column: {mismatches}"
+
+    def test_every_registry_keyword_is_routable(self):
+        routing = KPF1.KEYWORD_ROUTING
+        for _, row in read_kpf_header_registry().iterrows():
+            kw = str(row["Keyword"]).strip()
+            assert kw in routing, f"{kw} missing from routing table"
+
+    def test_comment_is_registry_description(self):
+        routing = KPF1.KEYWORD_ROUTING
+        for _, row in read_kpf_header_registry().iterrows():
+            kw = str(row["Keyword"]).strip()
+            assert routing[kw][1] == str(row["Description"]).strip()
+
+
+class TestKeywordRegistry:
+    """The unified KEYWORD_REGISTRY table and its derived validation lookups."""
+
+    def test_columns(self):
+        assert list(KPF1.KEYWORD_REGISTRY.columns) == [
+            "Keyword",
+            "Description",
+            "Extension",
+            "DataType",
+            "Populated by",
+            "Required",
+            "Level",
+        ]
+
+    def test_unions_kpf_and_eprv(self):
+        # KPF-registered (RNGREEN1) and EPRV (RV) keywords both present.
+        keys = KPF1.REGISTERED_KEYWORDS
+        assert "RNGREEN1" in keys and "RV" in keys
+
+    def test_non_registry_headermap_targets_absent(self):
+        # PARANG/PARANG2 are header_map STANDARD names that aren't EPRV keywords;
+        # they must NOT be in the registry (so wmko_to_eprv drops them).
+        assert "PARANG" not in KPF1.REGISTERED_KEYWORDS
+        assert "PARANG2" not in KPF1.REGISTERED_KEYWORDS
+
+    def test_primary_allowed_not_level_gated(self):
+        # An EPRV-L4 keyword (RV) is allowed on PRIMARY regardless of product level.
+        assert "RV" in KPF1.EXT_ALLOWED["PRIMARY"]
+
+    def test_required_keyed_by_minimal_level(self):
+        # EXT_REQUIRED maps keyword -> the minimal Level it is Required at.
+        primary_required = KPF1.EXT_REQUIRED["PRIMARY"]
+        assert primary_required.get("RV") == 4  # L4-only required
+        assert primary_required.get("INSTRUME") == 2  # L2 required
+
+
+class TestQualityControlPropagation:
+    """QUALITY_CONTROL + RECEIPT header cards survive to_fits and L0->L1->L2.
+
+    (The KPF2 QUALITY_CONTROL round-trip lives in test_data_models_l2.py, since
+    KPF2 serializes through the RV2 read path.)
+    """
+
+    def test_l1_quality_control_receipt_roundtrip(self, tmp_path):
+        l1 = KPF1()
+        l1.set_keyword("RNGREEN1", 4.2)
+        l1.set_keyword("BIASAGE", 1.5)
+        l1.set_keyword("OSCANSUB", 1)
+        l1.set_keyword("BIASFILE", "/m/bias_L1.fits")
+        fn = str(tmp_path / "kpf_L1_20240101T000000.fits")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            l1.to_fits(fn)
+            back = KPF1.from_fits(fn)
+        assert back.headers["QUALITY_CONTROL"]["RNGREEN1"] == 4.2
+        assert back.headers["QUALITY_CONTROL"].comments["RNGREEN1"] == (
+            "Read noise GREEN amp 1 [e-]"
+        )
+        assert back.headers["QUALITY_CONTROL"]["BIASAGE"] == 1.5
+        assert back.headers["RECEIPT"]["OSCANSUB"] == 1
+        assert back.headers["RECEIPT"]["BIASFILE"] == "/m/bias_L1.fits"
+
+    def test_propagation_l0_to_l1_to_l2(self):
+        l0 = KPF0()
+        # seed an L0 QC flag (QCL0 routes these to QUALITY_CONTROL).
+        l0.set_keyword("NOTJUNK", 1)
+        l1 = l0.to_kpf1()
+        assert l1.headers["QUALITY_CONTROL"]["NOTJUNK"] == 1
+        # add an L1 RECEIPT card; both QUALITY_CONTROL and RECEIPT must reach L2.
+        l1.set_keyword("OSCANSUB", 1)
+        l1.set_keyword("RNGREEN1", 4.0)
+        l2 = l1.to_kpf2()
+        assert l2.headers["QUALITY_CONTROL"]["NOTJUNK"] == 1
+        assert l2.headers["QUALITY_CONTROL"]["RNGREEN1"] == 4.0
+        assert l2.headers["RECEIPT"]["OSCANSUB"] == 1
