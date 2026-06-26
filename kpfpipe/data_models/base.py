@@ -198,14 +198,18 @@ class KPFDataModel(RVDataModel):
         ``(key, value)`` and silently drops the comments. Replace that one HDU with
         a fresh ``PrimaryHDU`` built from the stored header (a ``fits.Header`` that
         holds the comments). The ``PrimaryHDU`` constructor re-adds the structural
-        cards.
+        cards. ``data=hdu.data`` carries through any PRIMARY array: it is ``None``
+        for KPF's header-only PRIMARY today, but omitting it would silently drop a
+        PRIMARY data array if one were ever introduced.
         """
         primary = self.headers.get("PRIMARY")
         if primary is None:
             return hdu_list
         for i, hdu in enumerate(hdu_list):
             if isinstance(hdu, fits.PrimaryHDU):
-                hdu_list[i] = fits.PrimaryHDU(header=self.as_fits_header(primary))
+                hdu_list[i] = fits.PrimaryHDU(
+                    data=hdu.data, header=self.as_fits_header(primary)
+                )
                 break
         return hdu_list
 
