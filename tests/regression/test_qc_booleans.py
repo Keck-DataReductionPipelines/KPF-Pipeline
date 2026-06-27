@@ -15,8 +15,6 @@ All tests use synthetic in-memory data — no real KPF files required.
 import os
 import subprocess
 import sys
-import types
-import warnings
 
 import numpy as np
 import pytest
@@ -62,6 +60,16 @@ def _make_kpf0(
 
     fits.HDUList(hdus).writeto(fn, overwrite=True)
     return KPF0.from_fits(fn)
+
+
+def _seed_required_primary(kpf, qc_cls):
+    """Seed every PRIMARY keyword ``qc_cls`` requires present, skipping any already
+    set. The KWRDPR* check is presence-only, so placeholder sentinel values are
+    fine; reusing the production ``_required_primary_keywords`` avoids drift.
+    """
+    for kw in qc_cls(kpf)._required_primary_keywords():
+        if kw not in kpf.headers["PRIMARY"]:
+            kpf.headers["PRIMARY"][kw] = ("UNKNOWN", "seeded for test")
 
 
 def _make_kpf1(
@@ -120,6 +128,9 @@ def _make_kpf1(
             qc[f"RNNGGR{i}"] = (1.0, "RNNG")
             qc[f"RNNGRD{i}"] = (1.0, "RNNG")
 
+    # Seed the full required-PRIMARY set so KWRDPRL1 (presence of all 44 keywords)
+    # passes; KPF1 is not rvdata-seeded, so a synthetic L1 PRIMARY is otherwise sparse.
+    _seed_required_primary(l1, QCL1)
     return l1
 
 
@@ -179,21 +190,13 @@ class TestQCBase:
     def _make_obj(self):
         """Minimal object with a headers dict and a set_keyword router.
 
-        The QC runner now writes each result via ``set_keyword`` and validates
-        governed extensions at the end of ``run()``, reading the registry lookups
-        off the model (``self.kpf.keyword_registry``). This fake stores every
-        keyword on QUALITY_CONTROL (value only) and exposes empty ``extensions``
-        plus a registry stub with empty lookups so ``_validate_headers`` is a
-        no-op (LEVEL=None skips PRIMARY; no governed extensions to check).
+        QC.run() writes each result via ``set_keyword`` and aggregates ISGOOD; it
+        does NOT validate headers (that moved to the checkpoints layer). This fake
+        stores every keyword on QUALITY_CONTROL (value only).
         """
 
         class _FakeObj:
-            extensions = {}
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
-            data = {}
-            keyword_registry = types.SimpleNamespace(
-                allowed={}, required={}, structural=set()
-            )
 
             def set_keyword(self, key, value):
                 self.headers["QUALITY_CONTROL"][key] = value
@@ -430,6 +433,30 @@ class TestQCL0:
 
 
 class TestQCL1:
+    def test_data_present_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        assert QCL1(l1).data_present() is True
+
+    def test_data_present_fail_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        l1.data["GREEN_CCD"] = None
+        assert QCL1(l1).data_present() is False
+
+    def test_data_present_fail_empty(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        l1.data["RED_CCD"] = np.array([], dtype=np.float32)
+        assert QCL1(l1).data_present() is False
+
+    def test_required_keywords_present_pass(self, tmp_path):
+        # _make_kpf1 seeds the full required-PRIMARY set.
+        l1 = _make_kpf1(tmp_path)
+        assert QCL1(l1).required_keywords_present() is True
+
+    def test_required_keywords_present_fail_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        del l1.headers["PRIMARY"]["INSTRUME"]  # a registry-required PRIMARY keyword
+        assert QCL1(l1).required_keywords_present() is False
+
     def test_read_noise_in_range_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
         assert QCL1(l1).read_noise_in_range() is True
@@ -579,6 +606,8 @@ class TestQCL1:
 
     def test_qc_keys_correct(self):
         expected = {
+            "data_present": "DATAPRL1",
+            "required_keywords_present": "KWRDPRL1",
             "read_noise_in_range": "RNINRNG",
             "read_noise_nongauss": "RNGAUSS",
             "overscan_subtracted": "OSCANSUB",
@@ -613,7 +642,16 @@ class TestQCL1Run:
         # QC flags route to their registry home: the read-noise / age / finite
         # checks land in QUALITY_CONTROL; the applied-step flags reuse the
         # RECEIPT keyword names and so route to RECEIPT.
-        qc_keys = ["RNINRNG", "RNGAUSS", "BIASAGEQ", "DARKAGEQ", "FLATAGEQ", "FFIFIN"]
+        qc_keys = [
+            "DATAPRL1",
+            "KWRDPRL1",
+            "RNINRNG",
+            "RNGAUSS",
+            "BIASAGEQ",
+            "DARKAGEQ",
+            "FLATAGEQ",
+            "FFIFIN",
+        ]
         receipt_keys = ["OSCANSUB", "BIASSUB", "DARKSUB", "FLATDIV"]
         for k in qc_keys:
             v = l1.headers["QUALITY_CONTROL"].get(k)
@@ -644,6 +682,19 @@ class TestQCL2:
     def test_extraction_present_pass(self):
         kpf2 = _make_kpf2_with_flux()
         assert QCL2(kpf2).extraction_present() is True
+
+    def test_required_keywords_present_pass(self):
+        # Fresh KPF2 is rvdata-seeded with the EPRV-required PRIMARY keywords; seed
+        # the KPF provenance cards too so all 44 are present.
+        kpf2 = _make_kpf2_with_flux()
+        _seed_required_primary(kpf2, QCL2)
+        assert QCL2(kpf2).required_keywords_present() is True
+
+    def test_required_keywords_present_fail_missing(self):
+        kpf2 = _make_kpf2_with_flux()
+        _seed_required_primary(kpf2, QCL2)
+        del kpf2.headers["PRIMARY"]["INSTRUME"]
+        assert QCL2(kpf2).required_keywords_present() is False
 
     def test_extraction_present_fail_empty_kpf2(self):
         """A freshly constructed KPF2 with no flux data → all chip-prefix sizes=0."""
@@ -751,6 +802,7 @@ class TestQCL2:
     def test_qc_keys_correct(self):
         expected = {
             "extraction_present": "DATAPRL2",
+            "required_keywords_present": "KWRDPRL2",
             "flux_finite_fraction": "L2NANOK",
             "nonzero_flux": "L2FLXOK",
             "variance_positive": "L2VARPOS",
@@ -861,47 +913,3 @@ class TestQCScript:
             text=True,
         )
         assert result.returncode != 0
-
-
-class TestValidateHeaders:
-    """QC._validate_headers raises on an unexpected card, warns on missing required.
-
-    The validator reads its reference sets off the kpf_obj (self.kpf.*); these
-    exercise it via the QCL2 runner on a fresh KPF2.
-    """
-
-    def test_clean_product_passes(self):
-        # A fresh KPF2 has RV2-seeded EPRV PRIMARY defaults (all required present)
-        # and empty governed extensions -> no unexpected card, no missing required.
-        l2 = KPF2()
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")  # any warning would fail this
-            QCL2(l2)._validate_headers()
-
-    def test_unexpected_keyword_on_governed_extension_raises(self):
-        l2 = KPF2()
-        l2.headers["QUALITY_CONTROL"]["BOGUSKEY"] = (1, "not registered")
-        with pytest.raises(ValueError, match="unregistered keyword 'BOGUSKEY'"):
-            QCL2(l2)._validate_headers()
-
-    def test_native_wmko_leak_on_primary_raises(self):
-        l2 = KPF2()
-        # GAIAID is a raw WMKO native (kept in INSTRUMENT_HEADER, never on PRIMARY).
-        # It is not a registered PRIMARY keyword, so it fails the general
-        # unregistered-keyword check (no dedicated WMKO-leak branch needed).
-        l2.headers["PRIMARY"]["GAIAID"] = (12345, "leaked native")
-        with pytest.raises(ValueError, match="unregistered keyword 'GAIAID'"):
-            QCL2(l2)._validate_headers()
-
-    def test_missing_required_primary_keyword_warns(self):
-        l2 = KPF2()
-        del l2.headers["PRIMARY"]["INSTRUME"]  # a Required EPRV PRIMARY keyword
-        with pytest.warns(UserWarning, match="missing required keyword"):
-            QCL2(l2)._validate_headers()
-
-    def test_registered_keyword_on_its_extension_passes(self):
-        l2 = KPF2()
-        l2.set_keyword("NANSCI1", 3)  # registered -> QUALITY_CONTROL
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            QCL2(l2)._validate_headers()

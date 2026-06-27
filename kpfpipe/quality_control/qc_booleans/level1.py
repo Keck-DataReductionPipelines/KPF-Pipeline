@@ -25,6 +25,29 @@ class QCL1(QC):
 
     LEVEL = "L1"
 
+    def data_present(self):
+        """GREEN_CCD and RED_CCD exist and are non-empty."""
+        for ext in ("GREEN_CCD", "RED_CCD"):
+            arr = self.kpf.data.get(ext)
+            # A None-data extension is stored as array(None, dtype=object); absent.
+            if (
+                arr is None
+                or getattr(arr, "dtype", None) == np.dtype(object)
+                or np.size(arr) == 0
+            ):
+                return False
+        return True
+
+    data_present._qc_key = "DATAPRL1"
+    data_present._qc_comment = "QC: GREEN/RED CCD extensions present and non-empty"
+
+    def required_keywords_present(self):
+        """Every registry-required PRIMARY keyword for L1 is present (presence only)."""
+        return self._required_primary_keywords() <= set(self.kpf.headers["PRIMARY"])
+
+    required_keywords_present._qc_key = "KWRDPRL1"
+    required_keywords_present._qc_comment = "QC: required L1 PRIMARY keywords present"
+
     def _present_rn_in_range(self, idx, lo, hi):
         """Validate a read-noise keyword across every amplifier present.
 

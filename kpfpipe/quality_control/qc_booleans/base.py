@@ -7,42 +7,16 @@ attributes. The runner walks all such methods, calls each one, writes a
 QUALITY_CONTROL), and aggregates ISGOOD = AND of all checks. If any check
 raises, run() raises (loud failure, no silent suppression).
 
-After the checks, the runner validates every registry-governed extension
-header against the keyword registry (``_validate_headers``): an unexpected
-keyword raises, a missing required EPRV keyword warns. This is the single
-home for header validation (it used to live on ``KPFDataModel`` and run
-inside the level transforms).
+QC writes only 0/1 keywords. Header validation (unregistered cards, missing
+required keywords) is NOT done here -- it lives in the separate ``checkpoints``
+layer, which reads these flags plus the product headers and emits warnings or
+raises. The pipeline order is: science modules -> Diagnostics -> QC -> Checkpoints.
 """
 
-import warnings
-
-# Header-registry lookups are read off the validated kpf_obj (e.g.
-# self.kpf.keyword_registry.allowed / .required), so qc_booleans does not import
-# from data_models — the registry stays reachable purely through the data model.
-# The structural-card policy below is validator-specific and lives here.
-
-# Bookkeeping/structural cards astropy adds to a serialized extension header
-# (BinTable column descriptors, image WCS); always permitted on any governed
-# extension and never counted as a "missing required" keyword. These supplement
-# the registry's structural set (the PRIMARY/bookkeeping cards).
-_EXT_STRUCTURAL_PREFIXES = (
-    "NAXIS",
-    "TTYPE",
-    "TFORM",
-    "TUNIT",
-    "TDIM",
-    "TDISP",
-    "TNULL",
-    "TSCAL",
-    "TZERO",
-    "CTYPE",
-    "CUNIT",
-    "CRPIX",
-    "CRVAL",
-    "CDELT",
-    "CROTA",
-)
-_EXT_STRUCTURAL_EXTRA = {"EXTNAME", "TFIELDS", "PCOUNT", "GCOUNT"}
+# Level -> the EPRV PRIMARY Level a product is held to. L1 PRIMARY is already
+# EPRV-L2-standard, so it caps at 2 like L2. L0 (or an untagged subclass) is
+# absent here: its PRIMARY is raw WMKO, not registry-governed.
+_LEVEL_CAP = {"L1": 2, "L2": 2, "L4": 4}
 
 
 class QC:
@@ -51,7 +25,7 @@ class QC:
     Parameters
     ----------
     kpf_obj : KPFDataModel
-        Finished data product whose PRIMARY header receives the QC flags.
+        Finished data product whose QUALITY_CONTROL header receives the 0/1 flags.
     """
 
     LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
@@ -61,7 +35,7 @@ class QC:
         self.results = {}  # Populated by run(): maps keyword to (passed, comment).
 
     def run(self):
-        """Run all checks, write each result to PRIMARY, and aggregate ISGOOD.
+        """Run all checks, write each 0/1 result, and aggregate ISGOOD.
 
         Resets ``self.results`` at the start so calling ``run()`` repeatedly
         on the same instance is deterministic.
@@ -88,97 +62,36 @@ class QC:
 
         is_good = all(p for p, _ in self.results.values())
         self.kpf.set_keyword("ISGOOD", 1 if is_good else 0)
-
-        # Validate every governed extension header now that all keywords (this
-        # level's QC flags included) have been written.
-        self._validate_headers()
         return self.results
 
-    def _validate_headers(self):
-        """Validate every registry-governed extension header (fail loud).
+    def _required_primary_keywords(self):
+        """Keywords a level-N product must carry on PRIMARY (a presence set).
 
-        For each governed extension present on the product, every card must be a
-        registered keyword for that extension (KPF registry + EPRV per-extension
-        keywords) or a structural/bookkeeping card; an unexpected card raises
-        ValueError. A Required EPRV keyword that is absent emits a warning.
-        PRIMARY is validated only where it is EPRV-standard (L1/L2/L4); the raw
-        WMKO L0 PRIMARY is skipped.
+        The registry's EPRV ``Required`` PRIMARY keywords at or below this
+        product's level, unioned with the KPF-pipeline keywords routed to PRIMARY
+        (the provenance cards). Read off the validated model's registry singleton
+        (``self.kpf.keyword_registry``), so qc_booleans imports nothing from
+        data_models. L0 (or an untagged subclass) returns the empty set -- raw
+        WMKO L0 PRIMARY is not registry-governed.
         """
-        level = str(self.LEVEL).upper()
-        # Registry lookups are read off the validated model's keyword_registry
-        # singleton (kpf_obj), so data_models/keyword_registry stays imported only
-        # by base.py. PRIMARY allowed is NOT level-gated (the registry already
-        # lists every EPRV + KPF PRIMARY keyword); required-warnings ARE
-        # level-aware. L1 PRIMARY is already EPRV-L2-standard, so it caps at
-        # level 2 like L2.
+        cap = _LEVEL_CAP.get(str(self.LEVEL).upper())
+        if cap is None:
+            return set()
         reg = self.kpf.keyword_registry
-        cap = {"L1": 2, "L2": 2, "L4": 4}.get(level)
-
-        def required_at(ext):
-            """Keywords required for ``ext`` at or below this product's level."""
-            if cap is None:  # L0 (or an untagged QC subclass): no required-warnings.
-                return set()
-            return {k for k, lvl in reg.required.get(ext, {}).items() if lvl <= cap}
-
-        # PRIMARY is EPRV-standard from L1 onward; the raw WMKO L0 PRIMARY is not.
-        if cap is not None:
-            self._validate_extension(
-                "PRIMARY",
-                reg.allowed.get("PRIMARY", set()),
-                required_at("PRIMARY"),
-            )
-
-        # KPF/EPRV governed extensions (QUALITY_CONTROL, RECEIPT, BARYCORR_*,
-        # BJD_TDB, RV#/CCF#): validate each that exists on this product.
-        for ext, allowed in reg.allowed.items():
-            if ext == "PRIMARY" or ext not in self.kpf.extensions:
-                continue
-            self._validate_extension(ext, allowed, required_at(ext))
-
-    def _is_structural(self, key):
-        """True for a FITS structural/bookkeeping card (not a registered keyword).
-
-        Combines the registry's structural cards (PRIMARY/bookkeeping) with the
-        extension-table/WCS cards astropy adds at serialization.
-        """
-        return (
-            key in self.kpf.keyword_registry.structural
-            or key in _EXT_STRUCTURAL_EXTRA
-            or key.startswith(_EXT_STRUCTURAL_PREFIXES)
-        )
-
-    def _validate_extension(self, ext, allowed, required):
-        """Check one extension header: raise on an unexpected card, warn on an
-        absent required (non-structural) keyword.
-
-        Any card that is neither structural nor a registered keyword for ``ext``
-        raises -- this subsumes the old WMKO-native leak check, since a raw
-        instrument keyword (kept in INSTRUMENT_HEADER, never registered for an
-        EPRV PRIMARY) is simply unregistered here.
-        """
-        header = self.kpf.headers.get(ext)
-        if header is None:
-            return
-        present = set()
-        for raw_key in list(header):
-            key = str(raw_key).strip()
-            present.add(key)
-            if self._is_structural(key) or key in allowed:
-                continue
-            raise ValueError(
-                f"unregistered keyword {key!r} on {ext}; add it to "
-                "config/L{0,1,2,4}-headers.csv or fix the writer"
-            )
-
-        missing = sorted(
-            k for k in required if not self._is_structural(k) and k not in present
-        )
-        if missing:
-            warnings.warn(
-                f"missing required keyword(s) on {ext}: {missing}",
-                UserWarning,
-                stacklevel=2,
-            )
+        required = {
+            k for k, lvl in reg.required.get("PRIMARY", {}).items() if lvl <= cap
+        }
+        # KPF-routed PRIMARY keywords are the registry's PRIMARY rows that are not
+        # EPRV-sourced (PopulatedBy != the "EPRV" discriminator) -- the provenance
+        # cards; they are not flagged EPRV-Required, so add them explicitly.
+        kpf_primary = {
+            row.Keyword
+            for row in reg.table.itertuples(index=False)
+            if row.Extension == "PRIMARY"
+            and row.PopulatedBy != "EPRV"
+            and row.Level <= cap
+        }
+        return required | kpf_primary
 
     def _iter_checks(self):
         """Yield each check method tagged with `_qc_key`.

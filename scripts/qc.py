@@ -19,14 +19,15 @@ import sys
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
+from kpfpipe.quality_control.checkpoints import CheckpointL0, CheckpointL1, CheckpointL2
 from kpfpipe.quality_control.qc_booleans import QCL0, QCL1, QCL2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import build_filepath
 
 _LEVEL_MAP = {
-    "L0": (KPF0, QCL0),
-    "L1": (KPF1, QCL1),
-    "L2": (KPF2, QCL2),
+    "L0": (KPF0, QCL0, CheckpointL0),
+    "L1": (KPF1, QCL1, CheckpointL1),
+    "L2": (KPF2, QCL2, CheckpointL2),
 }
 
 
@@ -72,7 +73,7 @@ def main():
     # Load data
     # ------------------------------------------------------------------ #
     try:
-        DataClass, QCClass = _LEVEL_MAP[args.level]
+        DataClass, QCClass, CheckpointClass = _LEVEL_MAP[args.level]
         data = DataClass.from_fits(input_file)
     except Exception as exc:
         print(f"Error loading {input_file}: {exc}", file=sys.stderr)
@@ -92,6 +93,14 @@ def main():
         results = qc.run()
     except RuntimeError as exc:
         print(f"Error: QC raised unexpectedly: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+    # Checkpoints read the QC flags + headers and warn or raise (e.g. an
+    # unregistered keyword). A raised checkpoint is a structural failure -> exit 2.
+    try:
+        CheckpointClass(data).run()
+    except Exception as exc:
+        print(f"Error: checkpoint failed: {exc}", file=sys.stderr)
         sys.exit(2)
 
     # ------------------------------------------------------------------ #

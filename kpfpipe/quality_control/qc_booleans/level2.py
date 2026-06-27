@@ -37,6 +37,13 @@ class QCL2(QC):
     extraction_present._qc_key = "DATAPRL2"
     extraction_present._qc_comment = "QC: L2 FLUX extensions present and non-empty"
 
+    def required_keywords_present(self):
+        """Every registry-required PRIMARY keyword for L2 is present (presence only)."""
+        return self._required_primary_keywords() <= set(self.kpf.headers["PRIMARY"])
+
+    required_keywords_present._qc_key = "KWRDPRL2"
+    required_keywords_present._qc_comment = "QC: required L2 PRIMARY keywords present"
+
     def flux_finite_fraction(self):
         """NaN count from headers <= 1% of total L2 flux pixels."""
         hdr = self.kpf.headers["QUALITY_CONTROL"]

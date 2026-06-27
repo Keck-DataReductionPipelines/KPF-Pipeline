@@ -429,10 +429,11 @@ class StageName:
 
 ---
 
-## 9. Quality-control layers (Diagnostics / QC / Quicklook)
+## 9. Quality-control layers (Diagnostics / QC / Checkpoints / Quicklook)
 
-These three read-only layers under `kpfpipe/quality_control/` share conventions that new
-QC code must follow:
+These four read-only layers under `kpfpipe/quality_control/` share conventions that new
+QC code must follow. Diagnostics, QC, and Checkpoints run in that strict order — each
+consumes what the prior wrote (metrics → 0/1 flags → warn/raise):
 
 - **Read-only discipline.** Diagnostics and QC write header keywords **only via `set_keyword`**
   (which routes them to QUALITY_CONTROL — see §11 *FITS PRIMARY header conventions*), never to
@@ -446,17 +447,24 @@ QC code must follow:
 
   def data_l0_red_green(self): ...
   data_l0_red_green._qc_key = "DATAPRL0"        # QC
-  data_l0_red_green._qc_comment = "QC: ..."
+
+  def unregistered_keywords(self): ...
+  unregistered_keywords._checkpoint_name = "unregistered_keywords"  # Checkpoints
   ```
   The base class's `_iter_*` generator walks `type(self).__mro__`, collects callables
-  carrying the tag, and dedupes overrides via a `seen` set (subclass beats base).
-- **Runners reset `self.results = {}` at entry** (determinism) and wrap each method call
-  in `try/except` re-raising as `RuntimeError` — loud failure, no silent suppression.
+  carrying the tag (`_diag_name` / `_qc_key` / `_checkpoint_name`), and dedupes overrides
+  via a `seen` set (subclass beats base).
+- **Runners reset `self.results = {}` at entry** (Diagnostics/QC; determinism) and wrap each
+  method call in `try/except` re-raising as `RuntimeError` — loud failure, no silent suppression.
 - **Writes go through `set_keyword`** (comment sourced from the registry, not the call site).
-  QC writes integer `0/1` plus an `ISGOOD` aggregate, then runs `_validate_headers` at the end of
-  `run()`. Round floats before writing (`round(float(x), 6)`), and cast numpy scalars to Python
-  `int`/`float`. The `_qc_comment`/metric-dict comment is retained in `self.results`, but the FITS
-  comment is the registry `Description` — keep the two consistent.
+  QC writes integer `0/1` plus an `ISGOOD` aggregate and **does no validation**. Round floats
+  before writing (`round(float(x), 6)`), and cast numpy scalars to Python `int`/`float`. The
+  `_qc_comment`/metric-dict comment is retained in `self.results`, but the FITS comment is the
+  registry `Description` — keep the two consistent.
+- **Checkpoints validate; they do not write.** A `Checkpoint` subclass reads the 0/1 flags +
+  headers and **warns or raises** (header validation lives in `Checkpoint.unregistered_keywords`).
+  Per-flag severity is a per-level `RAISE_FLAGS` tuple on the subclass (a failed flag named there
+  raises, every other failed flag warns).
 - **QC comments are namespaced `"QC: ..."`**; Diagnostics comments are bare descriptive
   phrases. (Both live in the registry `Description` column, the single source for the FITS comment.)
 - **Quicklook plotting**: pyplot state-machine API (`plt.figure(figsize=..., tight_layout=True)`);
@@ -570,7 +578,7 @@ documented, intentional ways — follow *its* conventions when adding masters co
   names in sync across `trace-map.csv`, `[KPFPIPE].fibers`, and `detector.toml`.
 - **`L{0,1,2,4}-headers.csv`** register every KPF-pipeline keyword and its home extension,
   split by the level that first writes the keyword (the combined set drives the `set_keyword`
-  routing map and the qc_booleans validator). Columns are
+  routing map and the checkpoints validator). Columns are
   `Keyword,Description,Extension,DataType,PopulatedBy`. The **`Extension`** column is the keyword's
   home header (`PRIMARY`, `QUALITY_CONTROL`, `RECEIPT`, `BJD_TDB`, `BARYCORR_KMS`, `BARYCORR_Z`,
   `RV1`–`RV5`) — `set_keyword` writes there, and `Description` becomes the FITS comment, so a
@@ -590,7 +598,7 @@ so there is no value-vs-`(value, comment)` ambiguity and no separate header pars
 (our `L*-headers.csv` ∪ the EPRV keyword defs) and its derived routing/validation lookups are owned by
 the `KeywordRegistry` class in `data_models/keyword_registry.py` — one module singleton
 `keyword_registry`, imported only by `base.py`, which surfaces it as the `KPFDataModel.keyword_registry`
-class attribute (and uses `.routing` in `set_keyword`); the qc_booleans validator reads `.allowed`/
+class attribute (and uses `.routing` in `set_keyword`); the checkpoints validator reads `.allowed`/
 `.required` off `kpf_obj.keyword_registry`. What this means when writing code:
 
 - **Reading a header value**: use `header.get(key, default)` (or `header[key]`) on the keyword's
@@ -602,7 +610,7 @@ class attribute (and uses `.routing` in `set_keyword`); the qc_booleans validato
   keyword to its registry-home extension with the registry `Description` as the comment — never
   hardcode an extension or comment, and never write `headers["PRIMARY"][key] = …` directly for a
   registered keyword. The keyword **must** be in `config/L{0,1,2,4}-headers.csv` first (with its
-  `Extension`), or `set_keyword` raises `KeyError` and the qc_booleans validator would reject the
+  `Extension`), or `set_keyword` raises `KeyError` and the checkpoints validator would reject the
   product. Never write to `INSTRUMENT_HEADER` (immutable snapshot of the L0 PRIMARY as ingested).
 - **Writing an unregistered/EPRV-conversion card** (the WMKO→EPRV mapping, provenance stamping):
   the conversion sites in `KPF0` assign `header[key] = (value, comment)` directly; outside those,
