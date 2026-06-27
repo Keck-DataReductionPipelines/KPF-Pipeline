@@ -500,19 +500,6 @@ class TestQCL1:
             del l1.headers["QUALITY_CONTROL"][f"RNNGRD{i}"]
         assert QCL1(l1).read_noise_nongauss_ok() is True
 
-    def test_overscan_subtracted_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, oscansub=True)
-        assert QCL1(l1).overscan_subtracted() is True
-
-    def test_overscan_subtracted_fail_false(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, oscansub=False)
-        assert QCL1(l1).overscan_subtracted() is False
-
-    def test_overscan_subtracted_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        del l1.headers["RECEIPT"]["OSCANSUB"]
-        assert QCL1(l1).overscan_subtracted() is False
-
     def test_bias_ok_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=True, agebias=3.0)
         assert QCL1(l1).bias_ok() is True
@@ -589,7 +576,6 @@ class TestQCL1:
             "required_keywords_present": "KWRDPRL1",
             "read_noise_ok": "RNOK",
             "read_noise_nongauss_ok": "RNNGOK",
-            "overscan_subtracted": "OSCANSUB",
             "bias_ok": "BIASOK",
             "dark_ok": "DARKOK",
             "flat_ok": "FLATOK",
@@ -615,11 +601,11 @@ class TestQCL1Run:
         isgood = l1.headers["QUALITY_CONTROL"].get("ISGOOD")
         assert isgood == 1
 
-        # QC flags route to their registry home. All L1 QC flags now land on
-        # QUALITY_CONTROL, except overscan_subtracted, which reuses the RECEIPT
-        # OSCANSUB keyword name and so routes to RECEIPT. The per-calibration
-        # OK flags (BIASOK/DARKOK/FLATOK) read RECEIPT *SUB / DiagL1 *AGE but are
-        # themselves QUALITY_CONTROL keywords.
+        # Every L1 QC flag lands on QUALITY_CONTROL. The per-calibration OK flags
+        # (BIASOK/DARKOK/FLATOK) read the RECEIPT *SUB flags and DiagL1 *AGE
+        # values but are themselves QUALITY_CONTROL keywords. The applied-step
+        # flags (OSCANSUB/BIASSUB/DARKSUB/FLATDIV) stay RECEIPT-only provenance
+        # and are not QC checks.
         qc_keys = [
             "DATAPRL1",
             "KWRDPRL1",
@@ -630,13 +616,8 @@ class TestQCL1Run:
             "FLATOK",
             "FFIOK",
         ]
-        receipt_keys = ["OSCANSUB"]
         for k in qc_keys:
             v = l1.headers["QUALITY_CONTROL"].get(k)
-            assert v == 1, f"{k} should be 1 but is {v}"
-            assert k in results
-        for k in receipt_keys:
-            v = l1.headers["RECEIPT"].get(k)
             assert v == 1, f"{k} should be 1 but is {v}"
             assert k in results
 

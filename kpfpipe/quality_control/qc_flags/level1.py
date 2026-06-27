@@ -92,12 +92,6 @@ class QCL1(QC):
 
     read_noise_nongauss_ok._qc_key = "RNNGOK"
 
-    def overscan_subtracted(self):
-        """OSCANSUB == True."""
-        return _hdr_flag(self.kpf_obj.headers["RECEIPT"], "OSCANSUB")
-
-    overscan_subtracted._qc_key = "OSCANSUB"
-
     def bias_ok(self):
         """Bias subtracted (RECEIPT BIASSUB) and master bias age <= 7 days."""
         if not _hdr_flag(self.kpf_obj.headers["RECEIPT"], "BIASSUB"):
