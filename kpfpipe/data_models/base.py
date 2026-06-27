@@ -17,7 +17,7 @@ from rvdata.core.models.base import RVDataModel
 # The header/extension keyword registry lives in its own module as a single
 # KeywordRegistry instance; base.py is its only importer. The instance is
 # surfaced as a KPFDataModel class attribute (below) so consumers handed a
-# kpf_obj (the qc_booleans validator, level0's WMKO->EPRV mapping, tests) reach
+# kpf_obj (the checkpoints validator, level0's WMKO->EPRV mapping, tests) reach
 # it through kpf.keyword_registry, and re-exported so sibling data_models files
 # (level2/4) import the same singleton from base.
 from kpfpipe.data_models.keyword_registry import keyword_registry
@@ -46,7 +46,7 @@ class KPFDataModel(RVDataModel):
     DATECODE_PATTERN = _DATECODE_PATTERN
 
     # The keyword registry singleton, surfaced as a class attribute so anything
-    # handed a KPF data model (the qc_booleans header validator, level0's
+    # handed a KPF data model (the checkpoints header validator, level0's
     # WMKO->EPRV mapping, tests) reaches it via kpf.keyword_registry — keeping
     # data_models/keyword_registry imported only by base.py. set_keyword uses
     # .routing; the validator uses .allowed / .required / .structural; .table is

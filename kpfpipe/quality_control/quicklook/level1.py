@@ -33,7 +33,7 @@ class PlotL1:
     _PLOT_METHODS = ("image",)
 
     def __init__(self, l1_obj, output_dir=None, full_res=False):
-        self.l1 = l1_obj
+        self.l1_obj = l1_obj
         self.output_dir = output_dir
         self.full_res = full_res
         self.obs_id = getattr(l1_obj, "obs_id", None) or ""
@@ -47,7 +47,7 @@ class PlotL1:
         ImageAssembly writes the RN*/RNNG* read-noise keywords via set_keyword,
         which routes them to QUALITY_CONTROL (their registry home), not PRIMARY.
         """
-        qc = self.l1.headers.get("QUALITY_CONTROL", {})
+        qc = self.l1_obj.headers.get("QUALITY_CONTROL", {})
         rn_values = []
         rnng_values = []
         for i in range(1, 5):
@@ -82,7 +82,7 @@ class PlotL1:
 
         chip_upper = chip.upper()
         ext = f"{chip_upper}_CCD"
-        image = np.asarray(self.l1.data[ext])
+        image = np.asarray(self.l1_obj.data[ext])
 
         # Interior percentile (strip 100-pixel border to avoid edge effects)
         interior = image[100:-100, 100:-100] if min(image.shape) > 200 else image
@@ -205,9 +205,9 @@ class PlotL1:
 
     def _has_chip(self, chip):
         ext = f"{chip.upper()}_CCD"
-        if ext not in self.l1.data or self.l1.data[ext] is None:
+        if ext not in self.l1_obj.data or self.l1_obj.data[ext] is None:
             return False
-        return np.size(self.l1.data[ext]) > 0
+        return np.size(self.l1_obj.data[ext]) > 0
 
     def run(self, which, *, full_res=None):
         """

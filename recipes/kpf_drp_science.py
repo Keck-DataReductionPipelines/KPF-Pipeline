@@ -20,8 +20,9 @@ from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.radial_velocity import RadialVelocity
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
+from kpfpipe.quality_control.checkpoints import CheckpointL1, CheckpointL2
 from kpfpipe.quality_control.diagnostics import DiagL1, DiagL2
-from kpfpipe.quality_control.qc_booleans import QCL1, QCL2
+from kpfpipe.quality_control.qc_flags import QCL1, QCL2
 from kpfpipe.quality_control.quicklook.level0 import PlotL0
 from kpfpipe.quality_control.quicklook.level1 import PlotL1
 from kpfpipe.quality_control.quicklook.level2 import PlotL2
@@ -70,10 +71,12 @@ def main(config, args):
     image_processing = ImageProcessing(l1, config)
     l1 = image_processing.perform()
 
-    # Run L1 diagnostics and QC here so the pass/fail thresholds see the
-    # processed image before extraction collapses it to 1D.
+    # Run L1 diagnostics, QC, and checkpoints here so the pass/fail thresholds
+    # see the processed image before extraction collapses it to 1D. Order is
+    # Diagnostics (metrics) -> QC (0/1 flags) -> Checkpoints (warn/raise).
     DiagL1(l1).run()
     QCL1(l1).run()
+    CheckpointL1(l1).run()
 
     # Extract the 2D FFI down to 1D spectra (2D --> 1D), since the RV analysis
     # operates on per-order flux rather than the raw image.
@@ -85,10 +88,12 @@ def main(config, args):
     wavelength_calibration = WavelengthCalibration(l2, config)
     l2 = wavelength_calibration.perform()
 
-    # Run L2 diagnostics and QC on the extracted spectra to flag NaN counts and
-    # zero-flux orders before they propagate into the RV measurement.
+    # Run L2 diagnostics, QC, and checkpoints on the extracted spectra to flag
+    # NaN counts and zero-flux orders before they propagate into the RV
+    # measurement (Diagnostics -> QC -> Checkpoints).
     DiagL2(l2).run()
     QCL2(l2).run()
+    CheckpointL2(l2).run()
 
     # Apply the per-order barycentric correction so the spectra are placed in
     # the Solar System barycentric frame for long-term RV stability. Writes

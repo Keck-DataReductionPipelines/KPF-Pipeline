@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe import REPO_ROOT
-from kpfpipe.quality_control.qc_booleans.base import QC
+from kpfpipe.quality_control.qc_flags.base import QC
 
 _JUNK_CSV = REPO_ROOT / "reference" / "junk_observations.csv"
 
@@ -30,7 +30,7 @@ class QCL0(QC):
     def data_l0_red_green(self):
         """GREEN_AMP1..4 and RED_AMP1..4 exist and are non-empty."""
         for ext in _AMP_EXTENSIONS:
-            arr = self.kpf.data.get(ext)
+            arr = self.kpf_obj.data.get(ext)
             # KPF0 stores None-data as array(None, dtype=object); treat as absent.
             if (
                 arr is None
@@ -41,15 +41,13 @@ class QCL0(QC):
         return True
 
     data_l0_red_green._qc_key = "DATAPRL0"
-    data_l0_red_green._qc_comment = "QC: GREEN/RED amp extensions present and non-empty"
 
     def header_keywords_present(self):
         """Required PRIMARY keywords exist."""
-        hdr = self.kpf.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["PRIMARY"]
         return all(k in hdr for k in _L0_REQUIRED_KEYS)
 
     header_keywords_present._qc_key = "KWRDPRL0"
-    header_keywords_present._qc_comment = "QC: required L0 PRIMARY keywords present"
 
     def exptime_sane(self):
         """EXPTIME is present, finite, and non-negative.
@@ -58,7 +56,7 @@ class QCL0(QC):
         positive. Tightening this requires frame-type-aware filtering, which
         is deferred until QC gains spectrum-type gating.
         """
-        hdr = self.kpf.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["PRIMARY"]
         if "EXPTIME" not in hdr:
             return False
         try:
@@ -68,13 +66,12 @@ class QCL0(QC):
         return np.isfinite(f) and f >= 0
 
     exptime_sane._qc_key = "EXPTIMOK"
-    exptime_sane._qc_comment = "QC: EXPTIME present, finite, non-negative"
 
     def not_junk(self):
         """obs_id not in reference/junk_observations.csv."""
         if not _JUNK_CSV.exists():
             return True
-        obs_id = self.kpf.obs_id
+        obs_id = self.kpf_obj.obs_id
         if not obs_id:
             return True
         df = pd.read_csv(_JUNK_CSV)
@@ -85,4 +82,3 @@ class QCL0(QC):
         return obs_id not in df["obs_id"].values
 
     not_junk._qc_key = "NOTJUNK"
-    not_junk._qc_comment = "QC: obs_id not in junk list"

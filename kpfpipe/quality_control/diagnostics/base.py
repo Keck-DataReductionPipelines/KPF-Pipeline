@@ -28,7 +28,7 @@ class Diagnostics:
     LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
 
     def __init__(self, kpf_obj):
-        self.kpf = kpf_obj
+        self.kpf_obj = kpf_obj
         self.results = {}  # Populated by run(): maps keyword to (value, comment).
 
     def run(self):
@@ -54,10 +54,10 @@ class Diagnostics:
                 continue
             for kw, (value, comment) in output.items():
                 self.results[kw] = (value, comment)
-                # set_keyword routes each metric to its registry home (the method's
-                # _qc_comment is retained in self.results; the FITS comment comes
-                # from the registry Description).
-                self.kpf.set_keyword(kw, value)
+                # set_keyword routes each metric to its registry home; the FITS
+                # comment is the registry Description (the metric-dict comment is
+                # retained in self.results only).
+                self.kpf_obj.set_keyword(kw, value)
 
         return self.results
 

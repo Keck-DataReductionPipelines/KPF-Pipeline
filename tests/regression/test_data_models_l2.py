@@ -527,11 +527,14 @@ class TestKPF2HeaderStorage:
         # Guards the KPF2._create_hdul override (not the inherited base path):
         # a commented PRIMARY card must survive to_fits -> from_fits.
         kpf2 = KPF2()
-        kpf2.headers["PRIMARY"]["CCFRV"] = (1.2345, "[km/s] Combined radial velocity")
+        # A KPF-custom PRIMARY keyword (not an EPRV keyword rvdata rewrites from its
+        # L2 definition): provenance DRPVERNO exercises the KPF comment-preservation
+        # path this guards.
+        kpf2.headers["PRIMARY"]["DRPVERNO"] = ("1.2.3", "Pipeline version (DRP-RUN-11)")
 
         fn = str(tmp_path / "kpf_SL2_20240113T102656.fits")
         kpf2.to_fits(fn)
 
         prim = KPF2.from_fits(fn).headers["PRIMARY"]
-        assert prim.get("CCFRV") == 1.2345
-        assert prim.comments["CCFRV"] == "[km/s] Combined radial velocity"
+        assert prim.get("DRPVERNO") == "1.2.3"
+        assert prim.comments["DRPVERNO"] == "Pipeline version (DRP-RUN-11)"

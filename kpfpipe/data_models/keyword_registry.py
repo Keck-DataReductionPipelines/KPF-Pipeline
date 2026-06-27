@@ -6,7 +6,7 @@ use-cases it serves. ``KeywordRegistry`` builds every lookup once in
 ``__init__`` from one source-of-truth table; the module exposes a single
 instance, ``keyword_registry``. ``KPFDataModel`` (data_models/base.py) is the
 only module that imports this one; it surfaces the instance as a class attribute
-so consumers handed a ``kpf_obj`` (the qc_booleans validator, level0's
+so consumers handed a ``kpf_obj`` (the checkpoints validator, level0's
 WMKO->EPRV mapping, tests) reach the registry through ``kpf.keyword_registry``
 rather than importing from here.
 

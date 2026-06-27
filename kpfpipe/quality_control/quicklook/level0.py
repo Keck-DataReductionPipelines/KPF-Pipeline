@@ -34,7 +34,7 @@ class PlotL0:
     _PLOT_METHODS = ("stitched_image",)
 
     def __init__(self, l0_obj, output_dir=None, full_res=False):
-        self.l0 = l0_obj
+        self.l0_obj = l0_obj
         self.output_dir = output_dir
         self.full_res = full_res
         self.obs_id = getattr(l0_obj, "obs_id", None) or ""
@@ -46,7 +46,7 @@ class PlotL0:
         """Return True if any AMP extension for the chip holds data."""
         for i in range(1, 5):
             ext = f"{chip.upper()}_AMP{i}"
-            arr = self.l0.data.get(ext)
+            arr = self.l0_obj.data.get(ext)
             if arr is not None and np.size(arr) > 0:
                 return True
         return False
@@ -63,18 +63,18 @@ class PlotL0:
         chip = chip.upper()
 
         # Count amplifiers via ImageAssembly (non-destructive).
-        ia = ImageAssembly(self.l0)
+        ia = ImageAssembly(self.l0_obj)
         ia.count_amplifiers(chip)
         namp = ia.namp[chip]
 
         if namp == 2:
             image = np.concatenate(
-                (self.l0.data[f"{chip}_AMP1"], self.l0.data[f"{chip}_AMP2"]),
+                (self.l0_obj.data[f"{chip}_AMP1"], self.l0_obj.data[f"{chip}_AMP2"]),
                 axis=1,
             )
         elif namp == 4:
             # orient_channels mutates l0.data, so operate on a copy.
-            l0_copy = deepcopy(self.l0)
+            l0_copy = deepcopy(self.l0_obj)
             ia = ImageAssembly(l0_copy)
             ia.count_amplifiers(chip)
             ia.orient_channels(chip)

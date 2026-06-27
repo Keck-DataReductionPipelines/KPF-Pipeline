@@ -214,7 +214,7 @@ per-extension CSVs), columns `Keyword, Description, Extension, DataType, Populat
 (`.registered` is the keyword allowlist). **`keyword_registry.py` is imported only by
 `data_models/base.py`**: `KPFDataModel` surfaces the singleton as the **class attribute
 `keyword_registry`** and re-exports it (so `level2/4.py` call `keyword_registry.register_rvdata_extension`
-from `base`) — consumers handed a `kpf_obj` (the qc_booleans validator, level0's WMKO→EPRV mapping,
+from `base`) — consumers handed a `kpf_obj` (the checkpoints validator, level0's WMKO→EPRV mapping,
 tests) read the lookups off `kpf.keyword_registry.{table,routing,allowed,required,structural,registered,header_map}`
 rather than importing the registry.
 Consequences every contributor must respect:
@@ -242,8 +242,7 @@ Consequences every contributor must respect:
   if its home extension does not exist on the object. Every such keyword must be registered in the
   per-level registry `data_models/config/L{0,1,2,4}-headers.csv` (explicit ≤8-char FITS keyword — no
   wildcards; families enumerated per member, e.g. `RNGREEN1`-`RNGREEN4`). The current homes:
-  - **PRIMARY** — DRP provenance (stamped at read), `DRPTAG`, and the L4 SCI-combined RV summaries
-    (`CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV`, `CCFRV`, `CCFERV`) plus the EPRV RV cards.
+  - **PRIMARY** — DRP provenance (stamped at read), `DRPTAG`, and the EPRV RV cards.
   - **QUALITY_CONTROL** (a KPF-only `BinTableHDU`, created on KPF0/1/2) — QC booleans + `ISGOOD`,
     read-noise (`RN*`), calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), and DiagL2
     metrics (`NAN*`/`ZEROFRAC`/`*SNR*`/`*FR*`).
@@ -251,24 +250,29 @@ Consequences every contributor must respect:
     (`BIASFILE`/`DARKFILE`/`FLATFILE`/`WLSFILE`), `ASTRSRC`.
   - **BJD_TDB / BARYCORR_KMS / BARYCORR_Z** (EPRV L2 extensions) — the per-CCD barycentric summaries.
   - **RV1–RV5** (EPRV L4 tables) — the per-orderlet legacy RVs (`CCD<n>RV<sfx>`, sfx S→RV1, 1→RV2,
-    2→RV3, 3→RV4, C→RV5). Masters keep `MASTYPE` on their own PRIMARY (out of EPRV scope).
+    2→RV3, 3→RV4, C→RV5) plus the SCI-combined RV summaries on **RV3**
+    (`CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV`, `CCFRV`, `CCFERV`). Masters keep `MASTYPE` on their own
+    PRIMARY (out of EPRV scope).
 - **QUALITY_CONTROL + RECEIPT *headers* propagate L0→L1→L2** card-by-card in `to_kpf1`/`to_kpf2`
   (`set_header` with a comment-preserving `fits.Header` copy), alongside the receipt *table* copy.
   QUALITY_CONTROL is a KPF-custom extension unknown to rvdata's definition-driven L2/L4 reader, so
   `keyword_registry.register_rvdata_extension` (a method on `KeywordRegistry`, re-exposed via `base`,
   called from `level2.py`/`level4.py`) registers it into rvdata's in-memory `LEVEL{2,4}_EXTENSIONS` so
   a product written with it reads back.
-- **Header validation lives in `quality_control/qc_booleans` (`QC._validate_headers`), run at the end
-  of `QC.run()` — NOT in `to_kpf2`/`to_kpf4`** (the transforms no longer self-validate). For each
-  registry-governed extension present (PRIMARY, QUALITY_CONTROL, RECEIPT, the barycentric extensions,
-  RV#/CCF#), every card must be a registered keyword for that extension (`keyword_registry.table`) or a
-  structural card, else it **raises**; an absent `Required` keyword **warns**. PRIMARY *allowed* is
-  **not level-gated** (any registered PRIMARY keyword is allowed on any PRIMARY); *required*-warnings
-  are level-aware (only keywords required at `Level ≤ product level`, so an L2 product isn't warned
-  about missing L4-only `RV`). PRIMARY is validated only where it is EPRV-standard (L1/L2/L4); the raw
-  WMKO L0 PRIMARY is skipped. L4 is validated once `QCL4` is written (planned). The validator reads its
-  allowed/required lookups off the validated `kpf_obj` (`self.kpf.keyword_registry.allowed` /
-  `.required`), so qc_booleans imports nothing from `data_models`.
+- **Header validation lives in the `quality_control/checkpoints` layer
+  (`Checkpoint.unregistered_keywords`), NOT in QC or `to_kpf2`/`to_kpf4`.** QC writes only 0/1
+  flags; the Checkpoint stage runs after it (science → Diagnostics → QC → Checkpoints) and reads
+  the flags + headers to warn or raise. For each registry-governed extension present (PRIMARY,
+  QUALITY_CONTROL, RECEIPT, the barycentric extensions, RV#/CCF#), every card must be a registered
+  keyword for that extension (`keyword_registry.allowed`) or a structural card, else it **raises**.
+  PRIMARY is validated only where it is EPRV-standard (L1/L2/L4); the raw WMKO L0 PRIMARY is
+  skipped. The "required keywords present" concern is now a **QC flag** instead: `KWRDPRL{1,2,4}`
+  is 1 iff every registry-required PRIMARY keyword for the level is present (EPRV `Required` at
+  `Level ≤ product level`, unioned with the KPF-routed PRIMARY provenance cards); `KWRDPRL0` stays
+  hardcoded (raw L0 PRIMARY is not registry-governed). The `qc_flags` checkpoint then reads each
+  0/1 flag and **raises** it if it is in the level's `RAISE_FLAGS` (data-present only), else
+  **warns**. Checkpoints read all lookups off the validated `kpf_obj`
+  (`self.kpf_obj.keyword_registry`), so `quality_control` imports nothing from `data_models`.
 - **`wmko_to_eprv` emits only registered keywords.** It applies `header_map.csv` but **filters each
   `STANDARD` target against the registry** (via `self.keyword_registry.registered`), so rvdata's
   header_map entries that aren't EPRV keywords (`PARANG`, `PARANG2`) are dropped, never leaking onto
@@ -290,8 +294,8 @@ Consequences every contributor must respect:
   `KPF0.wmko_to_eprv`/`build_instrument_header` (`data_models/level0.py`); the unified
   `KeywordRegistry` table and its derived routing/validation lookups live in
   `data_models/keyword_registry.py` (the `keyword_registry` singleton), surfaced through `KPFDataModel`
-  (`set_keyword` + the `keyword_registry` class attribute); the validator itself lives in
-  `quality_control/qc_booleans/base.py` (`QC._validate_headers`).
+  (`set_keyword` + the `keyword_registry` class attribute); header validation itself lives in
+  `quality_control/checkpoints/base.py` (`Checkpoint.unregistered_keywords`).
 
 ### Configuration
 
@@ -311,17 +315,18 @@ Two authorities encode this rule and **must agree per level**: `build_filepath(o
 
 The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (top-level OrderedDicts), plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. The base `set_data()`/`set_header()` use `.keys()` checks that bypass `__contains__` overrides, so KPF2/KPF4 override these methods with a `hasattr` guard to resolve aliases during init before the dicts are upgraded. The base `create_extension()` initializes each extension *header* as an `OrderedDict`; the KPF models override it so every header is a `fits.Header` instead (see *Header standardization*).
 
-### Diagnostics, QC, and Quicklook
+### Diagnostics, QC, Checkpoints, and Quicklook
 
-Three read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`.
+Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote:
 
 - **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
-- **QC** (`kpfpipe/quality_control/qc_booleans/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate, then runs `_validate_headers` (the single home for header validation — see *Header standardization*).
+- **QC** (`kpfpipe/quality_control/qc_flags/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. No validation or raising — that is the Checkpoints layer's job.
+- **Checkpoints** (`kpfpipe/quality_control/checkpoints/`) — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest). `CheckpointL0`/`L1`/`L2` set `LEVEL` + `RAISE_FLAGS`.
 - **Quicklook** (`kpfpipe/quality_control/quicklook/`) — reads products and renders matplotlib plots. Pulls any annotation values from existing headers.
 
-This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key`) and no shared state.
+This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.
 
-**Where metrics live.** Metrics that depend on intermediate processing state (read noise from raw overscan, master ages from header lookups during association) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics.
+**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics — including the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), which `DiagL1` recomputes from the master paths `CalibrationAssociation` wrote to RECEIPT (`*FILE`) plus the `INSTRUMENT_HEADER` `DATE-OBS`; the association module writes only the paths.
 
 **Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `_RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
 

@@ -107,7 +107,7 @@ class TestPlotL0Constructor:
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
         qlp = PlotL0(synthetic_4amp_l0)
-        assert qlp.l0 is synthetic_4amp_l0
+        assert qlp.l0_obj is synthetic_4amp_l0
         assert qlp.obs_id == "KP.20240405.00001.00"
         assert qlp.name == "synthetic-4amp"
         assert qlp.output_dir is None

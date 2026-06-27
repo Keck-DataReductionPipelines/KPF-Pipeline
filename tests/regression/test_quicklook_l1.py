@@ -90,7 +90,7 @@ class TestPlotL1Constructor:
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
 
         qlp = PlotL1(synthetic_l1)
-        assert qlp.l1 is synthetic_l1
+        assert qlp.l1_obj is synthetic_l1
         assert qlp.obs_id == "KP.20240405.00001.00"
         assert qlp.name == "synthetic-l1"
         assert qlp.output_dir is None

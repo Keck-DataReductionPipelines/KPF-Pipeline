@@ -1,4 +1,6 @@
 Keyword,Description,Extension,DataType,PopulatedBy
+DATAPRL1,QC: GREEN/RED CCD extensions present/non-empty,QUALITY_CONTROL,int,QCL1
+KWRDPRL1,QC: required L1 PRIMARY keywords present,QUALITY_CONTROL,int,QCL1
 RNGREEN1,Read noise GREEN amp 1 [e-],QUALITY_CONTROL,float,ImageAssembly
 RNGREEN2,Read noise GREEN amp 2 [e-],QUALITY_CONTROL,float,ImageAssembly
 RNGREEN3,Read noise GREEN amp 3 [e-],QUALITY_CONTROL,float,ImageAssembly
@@ -16,20 +18,20 @@ RNNGRD2,Non-Gaussian read noise RED amp 2,QUALITY_CONTROL,float,ImageAssembly
 RNNGRD3,Non-Gaussian read noise RED amp 3,QUALITY_CONTROL,float,ImageAssembly
 RNNGRD4,Non-Gaussian read noise RED amp 4,QUALITY_CONTROL,float,ImageAssembly
 OSCANSUB,Overscan subtraction applied (T/F),RECEIPT,int,ImageAssembly
+BIASFILE,Master bias full path,RECEIPT,str,CalibrationAssociation
+DARKFILE,Master dark full path,RECEIPT,str,CalibrationAssociation
+FLATFILE,Master flat full path,RECEIPT,str,CalibrationAssociation
+WLSFILE,WLS master full path,RECEIPT,str,CalibrationAssociation
 BIASSUB,Bias subtraction applied (T/F),RECEIPT,int,ImageProcessing
 DARKSUB,Dark subtraction applied (T/F),RECEIPT,int,ImageProcessing
 FLATDIV,Flat division applied (reserved) (T/F),RECEIPT,int,ImageProcessing
-BIASFILE,Master bias full path,RECEIPT,str,CalibrationAssociation
-BIASAGE,Master bias age [days],QUALITY_CONTROL,float,CalibrationAssociation
-DARKFILE,Master dark full path,RECEIPT,str,CalibrationAssociation
-DARKAGE,Master dark age [days],QUALITY_CONTROL,float,CalibrationAssociation
-FLATFILE,Master flat full path,RECEIPT,str,CalibrationAssociation
-FLATAGE,Master flat age [days],QUALITY_CONTROL,float,CalibrationAssociation
-WLSFILE,WLS master full path,RECEIPT,str,CalibrationAssociation
-WLSAGE,WLS master age [days],QUALITY_CONTROL,float,CalibrationAssociation
-RNINRNG,QC: per-amp RN within range,QUALITY_CONTROL,int,QCL1
-RNGAUSS,QC: non-Gaussian RN within range,QUALITY_CONTROL,int,QCL1
-BIASAGEQ,QC: bias master age ok,QUALITY_CONTROL,int,QCL1
-DARKAGEQ,QC: dark master age ok,QUALITY_CONTROL,int,QCL1
-FLATAGEQ,QC: flat master age ok,QUALITY_CONTROL,int,QCL1
-FFIFIN,QC: assembled CCDs all finite,QUALITY_CONTROL,int,QCL1
+BIASAGE,Master bias age [days],QUALITY_CONTROL,float,DiagL1
+DARKAGE,Master dark age [days],QUALITY_CONTROL,float,DiagL1
+FLATAGE,Master flat age [days],QUALITY_CONTROL,float,DiagL1
+WLSAGE,WLS master age [days],QUALITY_CONTROL,float,DiagL1
+RNOK,QC: per-amp read noise 2-6 e-,QUALITY_CONTROL,int,QCL1
+RNNGOK,QC: non-Gaussian read noise (MAD/STD) 0.8-1.5,QUALITY_CONTROL,int,QCL1
+BIASOK,QC: bias subtracted & master age <= 7 days,QUALITY_CONTROL,int,QCL1
+DARKOK,QC: dark subtracted & master age <= 14 days,QUALITY_CONTROL,int,QCL1
+FLATOK,QC: flat divided & master age <= 30 days,QUALITY_CONTROL,int,QCL1
+FFIOK,QC: GREEN/RED CCDs all finite,QUALITY_CONTROL,int,QCL1

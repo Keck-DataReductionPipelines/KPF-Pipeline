@@ -185,8 +185,8 @@ class WavelengthCalibration:
             print("  perform() has not been called")
             return
 
-        # WLSAGE is written to QUALITY_CONTROL by CalibrationAssociation (WLSFILE
-        # goes to RECEIPT).
+        # WLSAGE is written to QUALITY_CONTROL by DiagL1 (CalibrationAssociation
+        # writes WLSFILE to RECEIPT; DiagL1 derives the age from it).
         agewls = self.l2_obj.headers.get("QUALITY_CONTROL", {}).get("WLSAGE")
         print(f"  wls_path: {self._info['wls_path']}")
         if agewls is not None:

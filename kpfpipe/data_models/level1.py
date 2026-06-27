@@ -203,9 +203,9 @@ class KPF1(KPFDataModel):
         The L1 PRIMARY is already EPRV-standard (converted upstream in
         KPF0.to_kpf1), so headers are a pure pass-through: the EPRV PRIMARY and
         the immutable INSTRUMENT_HEADER are forwarded unchanged (value + comment).
-        Header validation no longer runs here — it moved to the QC runner
-        (quality_control/qc_booleans, QC._validate_headers). Pass-through
-        extensions (TELEMETRY,
+        Header validation no longer runs here — it moved to the checkpoints
+        layer (quality_control/checkpoints, Checkpoint.unregistered_keywords).
+        Pass-through extensions (TELEMETRY,
         EXPMETER_SCI→EXPMETER, CA_HK→ANCILLARY_SPECTRUM) and KPF-friendly
         aliases (e.g., SCI2_FLUX → TRACE3_FLUX) are handled below. Trace data
         arrays are created but empty — the caller (spectral extraction) fills

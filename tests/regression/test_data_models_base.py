@@ -15,8 +15,8 @@ RV2/RV4, so their round-trip guards live in test_data_models_l{2,4}.py.
 
 The WMKO->EPRV conversion (``KPF0.wmko_to_eprv`` / ``build_instrument_header``) is
 exercised end-to-end by the to_kpf1/to_kpf2 tests in test_data_models_l{1,2,4}.py.
-PRIMARY-header validation no longer lives on the data models (it moved to the QC
-runner, ``quality_control/qc_booleans/base.py``).
+PRIMARY-header validation no longer lives on the data models (it moved to the
+checkpoints layer, ``quality_control/checkpoints/base.py``).
 """
 
 import warnings
@@ -84,15 +84,16 @@ class TestUndefinedRoundTrip:
         l1.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
         # radial_velocity writes None for a non-finite fit; astropy stores it as
         # an UNDEFINED card. The value must round-trip as a blank/undefined card
-        # (read back as None), never as a finite number.
-        l1.headers["PRIMARY"]["CCFRV"] = None
+        # (read back as None), never as a finite number. RV is the EPRV combined
+        # RV on PRIMARY, written None on a failed fit.
+        l1.headers["PRIMARY"]["RV"] = None
 
         fn = str(tmp_path / "header_undefined_l1.fits")
         l1.to_fits(fn)
 
         prim = KPF1.from_fits(fn).headers["PRIMARY"]
-        assert "CCFRV" in prim
-        val = prim["CCFRV"]
+        assert "RV" in prim
+        val = prim["RV"]
         assert val is None or isinstance(val, fits.card.Undefined)
 
 
@@ -126,9 +127,9 @@ class TestSetKeyword:
     def test_routes_l4_orderlet_rv_to_rv_table(self):
         l4 = KPF4()
         l4.set_keyword("CCD1RV1", 1.2345)  # GREEN SCI1 -> RV2
-        l4.set_keyword("CCD1RV", 6.789)  # combined -> PRIMARY
+        l4.set_keyword("CCD1RV", 6.789)  # GREEN SCI-combined -> RV3
         assert l4.headers["RV2"]["CCD1RV1"] == 1.2345
-        assert l4.headers["PRIMARY"]["CCD1RV"] == 6.789
+        assert l4.headers["RV3"]["CCD1RV"] == 6.789
 
     def test_unregistered_keyword_raises_keyerror(self):
         l1 = KPF1()

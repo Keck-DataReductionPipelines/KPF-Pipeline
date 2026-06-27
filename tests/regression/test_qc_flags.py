@@ -16,7 +16,6 @@ import os
 import subprocess
 import sys
 import types
-import warnings
 
 import numpy as np
 import pytest
@@ -26,10 +25,10 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
-from kpfpipe.quality_control.qc_booleans.base import QC
-from kpfpipe.quality_control.qc_booleans.level0 import QCL0
-from kpfpipe.quality_control.qc_booleans.level1 import QCL1
-from kpfpipe.quality_control.qc_booleans.level2 import QCL2
+from kpfpipe.quality_control.qc_flags.base import QC
+from kpfpipe.quality_control.qc_flags.level0 import QCL0
+from kpfpipe.quality_control.qc_flags.level1 import QCL1
+from kpfpipe.quality_control.qc_flags.level2 import QCL2
 
 _NORDER = {"GREEN": DETECTOR["norder"]["GREEN"], "RED": DETECTOR["norder"]["RED"]}
 _NCOLS = 10  # small column count for fast tests
@@ -62,6 +61,16 @@ def _make_kpf0(
 
     fits.HDUList(hdus).writeto(fn, overwrite=True)
     return KPF0.from_fits(fn)
+
+
+def _seed_required_primary(kpf, qc_cls):
+    """Seed every PRIMARY keyword ``qc_cls`` requires present, skipping any already
+    set. The KWRDPR* check is presence-only, so placeholder sentinel values are
+    fine; reusing the production ``_required_primary_keywords`` avoids drift.
+    """
+    for kw in qc_cls(kpf)._required_primary_keywords():
+        if kw not in kpf.headers["PRIMARY"]:
+            kpf.headers["PRIMARY"][kw] = ("UNKNOWN", "seeded for test")
 
 
 def _make_kpf1(
@@ -120,6 +129,9 @@ def _make_kpf1(
             qc[f"RNNGGR{i}"] = (1.0, "RNNG")
             qc[f"RNNGRD{i}"] = (1.0, "RNNG")
 
+    # Seed the full required-PRIMARY set so KWRDPRL1 (presence of all 44 keywords)
+    # passes; KPF1 is not rvdata-seeded, so a synthetic L1 PRIMARY is otherwise sparse.
+    _seed_required_primary(l1, QCL1)
     return l1
 
 
@@ -179,21 +191,16 @@ class TestQCBase:
     def _make_obj(self):
         """Minimal object with a headers dict and a set_keyword router.
 
-        The QC runner now writes each result via ``set_keyword`` and validates
-        governed extensions at the end of ``run()``, reading the registry lookups
-        off the model (``self.kpf.keyword_registry``). This fake stores every
-        keyword on QUALITY_CONTROL (value only) and exposes empty ``extensions``
-        plus a registry stub with empty lookups so ``_validate_headers`` is a
-        no-op (LEVEL=None skips PRIMARY; no governed extensions to check).
+        QC.run() writes each result via ``set_keyword`` and aggregates ISGOOD; it
+        does NOT validate headers (that moved to the checkpoints layer). It also
+        reads each check's comment off ``keyword_registry.routing``; these synthetic
+        check keys aren't registered, so the stubbed routing is empty (comment "").
+        This fake stores every keyword on QUALITY_CONTROL (value only).
         """
 
         class _FakeObj:
-            extensions = {}
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
-            data = {}
-            keyword_registry = types.SimpleNamespace(
-                allowed={}, required={}, structural=set()
-            )
+            keyword_registry = types.SimpleNamespace(routing={})
 
             def set_keyword(self, key, value):
                 self.headers["QUALITY_CONTROL"][key] = value
@@ -208,20 +215,18 @@ class TestQCBase:
                 return True
 
             check_a._qc_key = "CHECKA"
-            check_a._qc_comment = "check a"
 
             def check_b(self):
                 return True
 
             check_b._qc_key = "CHECKB"
-            check_b._qc_comment = "check b"
 
         results = MyQC(obj).run()
         assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 1
         assert obj.headers["QUALITY_CONTROL"]["CHECKA"] == 1
         assert obj.headers["QUALITY_CONTROL"]["CHECKB"] == 1
-        assert results["CHECKA"] == (True, "check a")
-        assert results["CHECKB"] == (True, "check b")
+        assert results["CHECKA"][0] is True
+        assert results["CHECKB"][0] is True
 
     def test_one_failing_isgood_0(self):
         obj = self._make_obj()
@@ -231,13 +236,11 @@ class TestQCBase:
                 return True
 
             check_ok._qc_key = "CHKOK"
-            check_ok._qc_comment = "passes"
 
             def check_fail(self):
                 return False
 
             check_fail._qc_key = "CHKFAIL"
-            check_fail._qc_comment = "fails"
 
         MyQC(obj).run()
         assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 0
@@ -252,7 +255,6 @@ class TestQCBase:
                 raise ValueError("boom!")
 
             check_boom._qc_key = "BOOM"
-            check_boom._qc_comment = "raises"
 
         with pytest.raises(RuntimeError, match="QC check 'check_boom' raised"):
             MyQC(obj).run()
@@ -279,20 +281,21 @@ class TestQCBase:
 
         class MyQC(QC):
             def check_flag(self):
-                return self.kpf.flag
+                return self.kpf_obj.flag
 
             check_flag._qc_key = "FLAG"
-            check_flag._qc_comment = "flag check"
 
         qc = MyQC(obj)
         qc.run()
         assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 0
-        assert qc.results == {"FLAG": (False, "flag check")}
+        assert list(qc.results) == ["FLAG"]
+        assert qc.results["FLAG"][0] is False
 
         obj.flag = True
         qc.run()
         assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 1
-        assert qc.results == {"FLAG": (True, "flag check")}
+        assert list(qc.results) == ["FLAG"]
+        assert qc.results["FLAG"][0] is True
 
 
 # ---------------------------------------------------------------------------
@@ -353,7 +356,7 @@ class TestQCL0:
 
     def test_not_junk_pass_no_file(self, tmp_path, monkeypatch):
         """No junk CSV → pass by default."""
-        import kpfpipe.quality_control.qc_booleans.level0 as mod
+        import kpfpipe.quality_control.qc_flags.level0 as mod
 
         monkeypatch.setattr(
             mod, "_JUNK_CSV", tmp_path / "reference" / "junk_observations.csv"
@@ -364,7 +367,7 @@ class TestQCL0:
     def test_not_junk_pass_not_in_list(self, tmp_path, monkeypatch):
         import pandas as pd
 
-        import kpfpipe.quality_control.qc_booleans.level0 as mod
+        import kpfpipe.quality_control.qc_flags.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
         pd.DataFrame({"obs_id": ["KP.20240101.99999.00"]}).to_csv(csv_path, index=False)
@@ -376,7 +379,7 @@ class TestQCL0:
     def test_not_junk_fail_in_list(self, tmp_path, monkeypatch):
         import pandas as pd
 
-        import kpfpipe.quality_control.qc_booleans.level0 as mod
+        import kpfpipe.quality_control.qc_flags.level0 as mod
 
         obs_id = "KP.20240405.00001.00"
         csv_path = tmp_path / "junk_observations.csv"
@@ -390,7 +393,7 @@ class TestQCL0:
         """obs_id=None → passes (can't be in junk list)."""
         import pandas as pd
 
-        import kpfpipe.quality_control.qc_booleans.level0 as mod
+        import kpfpipe.quality_control.qc_flags.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
         pd.DataFrame({"obs_id": ["KP.20240405.00001.00"]}).to_csv(csv_path, index=False)
@@ -404,7 +407,7 @@ class TestQCL0:
         """CSV without 'obs_id' column → raises ValueError."""
         import pandas as pd
 
-        import kpfpipe.quality_control.qc_booleans.level0 as mod
+        import kpfpipe.quality_control.qc_flags.level0 as mod
 
         csv_path = tmp_path / "junk_observations.csv"
         pd.DataFrame({"wrong_col": ["whatever"]}).to_csv(csv_path, index=False)
@@ -421,7 +424,8 @@ class TestQCL0:
     def test_dataprl0_key_and_comment(self):
         fn = QCL0.__dict__["data_l0_red_green"]
         assert fn._qc_key == "DATAPRL0"
-        assert "GREEN" in fn._qc_comment
+        # The comment now lives in the registry Description (not on the method).
+        assert "GREEN" in KPF0.keyword_registry.routing["DATAPRL0"][1]
 
 
 # ---------------------------------------------------------------------------
@@ -430,138 +434,127 @@ class TestQCL0:
 
 
 class TestQCL1:
-    def test_read_noise_in_range_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, with_rn=True)
-        assert QCL1(l1).read_noise_in_range() is True
+    def test_data_present_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        assert QCL1(l1).data_present() is True
 
-    def test_read_noise_in_range_fail_too_high(self, tmp_path):
+    def test_data_present_fail_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        l1.data["GREEN_CCD"] = None
+        assert QCL1(l1).data_present() is False
+
+    def test_data_present_fail_empty(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        l1.data["RED_CCD"] = np.array([], dtype=np.float32)
+        assert QCL1(l1).data_present() is False
+
+    def test_required_keywords_present_pass(self, tmp_path):
+        # _make_kpf1 seeds the full required-PRIMARY set.
+        l1 = _make_kpf1(tmp_path)
+        assert QCL1(l1).required_keywords_present() is True
+
+    def test_required_keywords_present_fail_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        del l1.headers["PRIMARY"]["INSTRUME"]  # a registry-required PRIMARY keyword
+        assert QCL1(l1).required_keywords_present() is False
+
+    def test_read_noise_ok_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, with_rn=True)
+        assert QCL1(l1).read_noise_ok() is True
+
+    def test_read_noise_ok_fail_too_high(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
         l1.headers["QUALITY_CONTROL"]["RNGREEN1"] = (99.0, "bad RN")
-        assert QCL1(l1).read_noise_in_range() is False
+        assert QCL1(l1).read_noise_ok() is False
 
-    def test_read_noise_in_range_fail_missing(self, tmp_path):
+    def test_read_noise_ok_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=False)
-        assert QCL1(l1).read_noise_in_range() is False
+        assert QCL1(l1).read_noise_ok() is False
 
-    def test_read_noise_in_range_pass_2amp(self, tmp_path):
+    def test_read_noise_ok_pass_2amp(self, tmp_path):
         # 2-amp readout: only AMP1/AMP2 keys present (AMP3/4 absent).
         l1 = _make_kpf1(tmp_path, with_rn=True)
         for i in (3, 4):
             del l1.headers["QUALITY_CONTROL"][f"RNGREEN{i}"]
             del l1.headers["QUALITY_CONTROL"][f"RNRED{i}"]
-        assert QCL1(l1).read_noise_in_range() is True
+        assert QCL1(l1).read_noise_ok() is True
 
-    def test_read_noise_nongauss_pass(self, tmp_path):
+    def test_read_noise_nongauss_ok_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
-        assert QCL1(l1).read_noise_nongauss() is True
+        assert QCL1(l1).read_noise_nongauss_ok() is True
 
-    def test_read_noise_nongauss_fail_too_high(self, tmp_path):
+    def test_read_noise_nongauss_ok_fail_too_high(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
         l1.headers["QUALITY_CONTROL"]["RNNGGR1"] = (9.9, "bad RNNG")
-        assert QCL1(l1).read_noise_nongauss() is False
+        assert QCL1(l1).read_noise_nongauss_ok() is False
 
-    def test_read_noise_nongauss_fail_missing(self, tmp_path):
+    def test_read_noise_nongauss_ok_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=False)
-        assert QCL1(l1).read_noise_nongauss() is False
+        assert QCL1(l1).read_noise_nongauss_ok() is False
 
-    def test_read_noise_nongauss_pass_2amp(self, tmp_path):
+    def test_read_noise_nongauss_ok_pass_2amp(self, tmp_path):
         # 2-amp readout: only AMP1/AMP2 keys present (AMP3/4 absent).
         l1 = _make_kpf1(tmp_path, with_rn=True)
         for i in (3, 4):
             del l1.headers["QUALITY_CONTROL"][f"RNNGGR{i}"]
             del l1.headers["QUALITY_CONTROL"][f"RNNGRD{i}"]
-        assert QCL1(l1).read_noise_nongauss() is True
+        assert QCL1(l1).read_noise_nongauss_ok() is True
 
-    def test_overscan_subtracted_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, oscansub=True)
-        assert QCL1(l1).overscan_subtracted() is True
+    def test_bias_ok_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, biassub=True, agebias=3.0)
+        assert QCL1(l1).bias_ok() is True
 
-    def test_overscan_subtracted_fail_false(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, oscansub=False)
-        assert QCL1(l1).overscan_subtracted() is False
+    def test_bias_ok_fail_not_subtracted(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, biassub=False, agebias=3.0)
+        assert QCL1(l1).bias_ok() is False
 
-    def test_overscan_subtracted_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        del l1.headers["RECEIPT"]["OSCANSUB"]
-        assert QCL1(l1).overscan_subtracted() is False
-
-    def test_bias_subtracted_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biassub=True)
-        assert QCL1(l1).bias_subtracted() is True
-
-    def test_bias_subtracted_fail_false(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biassub=False)
-        assert QCL1(l1).bias_subtracted() is False
-
-    def test_bias_subtracted_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        del l1.headers["RECEIPT"]["BIASSUB"]
-        assert QCL1(l1).bias_subtracted() is False
-
-    def test_dark_subtracted_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=True)
-        assert QCL1(l1).dark_subtracted() is True
-
-    def test_dark_subtracted_fail_false(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=False)
-        assert QCL1(l1).dark_subtracted() is False
-
-    def test_dark_subtracted_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        del l1.headers["RECEIPT"]["DARKSUB"]
-        assert QCL1(l1).dark_subtracted() is False
-
-    def test_flat_divided_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=True)
-        assert QCL1(l1).flat_divided() is True
-
-    def test_flat_divided_fail_false(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=False)
-        assert QCL1(l1).flat_divided() is False
-
-    def test_flat_divided_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        del l1.headers["RECEIPT"]["FLATDIV"]
-        assert QCL1(l1).flat_divided() is False
-
-    def test_bias_age_ok_pass(self, tmp_path):
+    def test_bias_ok_fail_subtract_flag_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path, agebias=3.0)
-        assert QCL1(l1).bias_age_ok() is True
+        del l1.headers["RECEIPT"]["BIASSUB"]
+        assert QCL1(l1).bias_ok() is False
 
-    def test_bias_age_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, agebias=10.0)
-        assert QCL1(l1).bias_age_ok() is False
+    def test_bias_ok_fail_too_old(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, biassub=True, agebias=10.0)
+        assert QCL1(l1).bias_ok() is False
 
-    def test_bias_age_ok_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
+    def test_bias_ok_fail_age_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, biassub=True)
         del l1.headers["QUALITY_CONTROL"]["BIASAGE"]
-        assert QCL1(l1).bias_age_ok() is False
+        assert QCL1(l1).bias_ok() is False
 
-    def test_dark_age_ok_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, agedark=7.0)
-        assert QCL1(l1).dark_age_ok() is True
+    def test_dark_ok_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, darksub=True, agedark=7.0)
+        assert QCL1(l1).dark_ok() is True
 
-    def test_dark_age_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, agedark=20.0)
-        assert QCL1(l1).dark_age_ok() is False
+    def test_dark_ok_fail_not_subtracted(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, darksub=False, agedark=7.0)
+        assert QCL1(l1).dark_ok() is False
 
-    def test_dark_age_ok_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
+    def test_dark_ok_fail_too_old(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, darksub=True, agedark=20.0)
+        assert QCL1(l1).dark_ok() is False
+
+    def test_dark_ok_fail_age_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, darksub=True)
         del l1.headers["QUALITY_CONTROL"]["DARKAGE"]
-        assert QCL1(l1).dark_age_ok() is False
+        assert QCL1(l1).dark_ok() is False
 
-    def test_flat_age_ok_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, ageflat=15.0)
-        assert QCL1(l1).flat_age_ok() is True
+    def test_flat_ok_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=15.0)
+        assert QCL1(l1).flat_ok() is True
 
-    def test_flat_age_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, ageflat=45.0)
-        assert QCL1(l1).flat_age_ok() is False
+    def test_flat_ok_fail_not_divided(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, flatdiv=False, ageflat=15.0)
+        assert QCL1(l1).flat_ok() is False
 
-    def test_flat_age_ok_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
+    def test_flat_ok_fail_too_old(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=45.0)
+        assert QCL1(l1).flat_ok() is False
+
+    def test_flat_ok_fail_age_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, flatdiv=True)
         del l1.headers["QUALITY_CONTROL"]["FLATAGE"]
-        assert QCL1(l1).flat_age_ok() is False
+        assert QCL1(l1).flat_ok() is False
 
     def test_ffi_finite_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, finite_ccd=True)
@@ -579,16 +572,14 @@ class TestQCL1:
 
     def test_qc_keys_correct(self):
         expected = {
-            "read_noise_in_range": "RNINRNG",
-            "read_noise_nongauss": "RNGAUSS",
-            "overscan_subtracted": "OSCANSUB",
-            "bias_subtracted": "BIASSUB",
-            "bias_age_ok": "BIASAGEQ",
-            "dark_subtracted": "DARKSUB",
-            "dark_age_ok": "DARKAGEQ",
-            "flat_divided": "FLATDIV",
-            "flat_age_ok": "FLATAGEQ",
-            "ffi_finite": "FFIFIN",
+            "data_present": "DATAPRL1",
+            "required_keywords_present": "KWRDPRL1",
+            "read_noise_ok": "RNOK",
+            "read_noise_nongauss_ok": "RNNGOK",
+            "bias_ok": "BIASOK",
+            "dark_ok": "DARKOK",
+            "flat_ok": "FLATOK",
+            "ffi_finite": "FFIOK",
         }
         for method_name, key in expected.items():
             fn = QCL1.__dict__[method_name]
@@ -610,17 +601,23 @@ class TestQCL1Run:
         isgood = l1.headers["QUALITY_CONTROL"].get("ISGOOD")
         assert isgood == 1
 
-        # QC flags route to their registry home: the read-noise / age / finite
-        # checks land in QUALITY_CONTROL; the applied-step flags reuse the
-        # RECEIPT keyword names and so route to RECEIPT.
-        qc_keys = ["RNINRNG", "RNGAUSS", "BIASAGEQ", "DARKAGEQ", "FLATAGEQ", "FFIFIN"]
-        receipt_keys = ["OSCANSUB", "BIASSUB", "DARKSUB", "FLATDIV"]
+        # Every L1 QC flag lands on QUALITY_CONTROL. The per-calibration OK flags
+        # (BIASOK/DARKOK/FLATOK) read the RECEIPT *SUB flags and DiagL1 *AGE
+        # values but are themselves QUALITY_CONTROL keywords. The applied-step
+        # flags (OSCANSUB/BIASSUB/DARKSUB/FLATDIV) stay RECEIPT-only provenance
+        # and are not QC checks.
+        qc_keys = [
+            "DATAPRL1",
+            "KWRDPRL1",
+            "RNOK",
+            "RNNGOK",
+            "BIASOK",
+            "DARKOK",
+            "FLATOK",
+            "FFIOK",
+        ]
         for k in qc_keys:
             v = l1.headers["QUALITY_CONTROL"].get(k)
-            assert v == 1, f"{k} should be 1 but is {v}"
-            assert k in results
-        for k in receipt_keys:
-            v = l1.headers["RECEIPT"].get(k)
             assert v == 1, f"{k} should be 1 but is {v}"
             assert k in results
 
@@ -630,9 +627,9 @@ class TestQCL1Run:
         isgood = l1.headers["QUALITY_CONTROL"].get("ISGOOD")
         assert isgood == 0
 
-        # BIASSUB reuses the RECEIPT keyword name, so the QC flag routes there.
-        biassub = l1.headers["RECEIPT"].get("BIASSUB")
-        assert biassub == 0
+        # Bias not subtracted -> BIASOK fails (a QUALITY_CONTROL flag); the
+        # RECEIPT BIASSUB provenance keyword is untouched by QC.
+        assert l1.headers["QUALITY_CONTROL"].get("BIASOK") == 0
 
 
 # ---------------------------------------------------------------------------
@@ -644,6 +641,19 @@ class TestQCL2:
     def test_extraction_present_pass(self):
         kpf2 = _make_kpf2_with_flux()
         assert QCL2(kpf2).extraction_present() is True
+
+    def test_required_keywords_present_pass(self):
+        # Fresh KPF2 is rvdata-seeded with the EPRV-required PRIMARY keywords; seed
+        # the KPF provenance cards too so all 44 are present.
+        kpf2 = _make_kpf2_with_flux()
+        _seed_required_primary(kpf2, QCL2)
+        assert QCL2(kpf2).required_keywords_present() is True
+
+    def test_required_keywords_present_fail_missing(self):
+        kpf2 = _make_kpf2_with_flux()
+        _seed_required_primary(kpf2, QCL2)
+        del kpf2.headers["PRIMARY"]["INSTRUME"]
+        assert QCL2(kpf2).required_keywords_present() is False
 
     def test_extraction_present_fail_empty_kpf2(self):
         """A freshly constructed KPF2 with no flux data → all chip-prefix sizes=0."""
@@ -706,7 +716,7 @@ class TestQCL2:
         kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
         assert QCL2(kpf2).nonzero_flux() is False
 
-    # --- variance_positive (L2VARPOS) ---
+    # --- variance_positive (L2VAROK) ---
 
     def test_variance_positive_pass(self):
         kpf2 = _make_kpf2_with_flux()
@@ -751,9 +761,10 @@ class TestQCL2:
     def test_qc_keys_correct(self):
         expected = {
             "extraction_present": "DATAPRL2",
+            "required_keywords_present": "KWRDPRL2",
             "flux_finite_fraction": "L2NANOK",
             "nonzero_flux": "L2FLXOK",
-            "variance_positive": "L2VARPOS",
+            "variance_positive": "L2VAROK",
             "science_snr": "L2SNROK",
         }
         for method_name, key in expected.items():
@@ -861,47 +872,3 @@ class TestQCScript:
             text=True,
         )
         assert result.returncode != 0
-
-
-class TestValidateHeaders:
-    """QC._validate_headers raises on an unexpected card, warns on missing required.
-
-    The validator reads its reference sets off the kpf_obj (self.kpf.*); these
-    exercise it via the QCL2 runner on a fresh KPF2.
-    """
-
-    def test_clean_product_passes(self):
-        # A fresh KPF2 has RV2-seeded EPRV PRIMARY defaults (all required present)
-        # and empty governed extensions -> no unexpected card, no missing required.
-        l2 = KPF2()
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")  # any warning would fail this
-            QCL2(l2)._validate_headers()
-
-    def test_unexpected_keyword_on_governed_extension_raises(self):
-        l2 = KPF2()
-        l2.headers["QUALITY_CONTROL"]["BOGUSKEY"] = (1, "not registered")
-        with pytest.raises(ValueError, match="unregistered keyword 'BOGUSKEY'"):
-            QCL2(l2)._validate_headers()
-
-    def test_native_wmko_leak_on_primary_raises(self):
-        l2 = KPF2()
-        # GAIAID is a raw WMKO native (kept in INSTRUMENT_HEADER, never on PRIMARY).
-        # It is not a registered PRIMARY keyword, so it fails the general
-        # unregistered-keyword check (no dedicated WMKO-leak branch needed).
-        l2.headers["PRIMARY"]["GAIAID"] = (12345, "leaked native")
-        with pytest.raises(ValueError, match="unregistered keyword 'GAIAID'"):
-            QCL2(l2)._validate_headers()
-
-    def test_missing_required_primary_keyword_warns(self):
-        l2 = KPF2()
-        del l2.headers["PRIMARY"]["INSTRUME"]  # a Required EPRV PRIMARY keyword
-        with pytest.warns(UserWarning, match="missing required keyword"):
-            QCL2(l2)._validate_headers()
-
-    def test_registered_keyword_on_its_extension_passes(self):
-        l2 = KPF2()
-        l2.set_keyword("NANSCI1", 3)  # registered -> QUALITY_CONTROL
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            QCL2(l2)._validate_headers()
