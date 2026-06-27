@@ -3,7 +3,7 @@ DATAPRL2,QC: L2 FLUX extensions present and non-empty,QUALITY_CONTROL,int,QCL2
 KWRDPRL2,QC: required L2 PRIMARY keywords present,QUALITY_CONTROL,int,QCL2
 L2NANOK,QC: L2 NaN fraction <= 1%,QUALITY_CONTROL,int,QCL2
 L2FLXOK,QC: L2 zero-flux fraction < 0.5,QUALITY_CONTROL,int,QCL2
-L2VARPOS,QC: no negative L2 variance where flux finite,QUALITY_CONTROL,int,QCL2
+L2VAROK,QC: no negative L2 variance where flux finite,QUALITY_CONTROL,int,QCL2
 L2SNROK,QC: science SNR finite and above floor,QUALITY_CONTROL,int,QCL2
 NANSCI1,NaN pixel count SCI1 (green+red),QUALITY_CONTROL,int,DiagL2
 NANSCI2,NaN pixel count SCI2 (green+red),QUALITY_CONTROL,int,DiagL2

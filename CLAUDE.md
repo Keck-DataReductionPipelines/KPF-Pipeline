@@ -326,7 +326,7 @@ Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume da
 
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.
 
-**Where metrics live.** Metrics that depend on intermediate processing state (read noise from raw overscan, master ages from header lookups during association) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics.
+**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics — including the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), which `DiagL1` recomputes from the master paths `CalibrationAssociation` wrote to RECEIPT (`*FILE`) plus the `INSTRUMENT_HEADER` `DATE-OBS`; the association module writes only the paths.
 
 **Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `_RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
 

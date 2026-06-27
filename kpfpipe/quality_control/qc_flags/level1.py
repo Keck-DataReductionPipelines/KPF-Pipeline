@@ -80,17 +80,13 @@ class QCL1(QC):
                 return False
         return found
 
-    def read_noise_in_range(self):
-        """Every per-amp RN value present in the header is in [2.0, 6.0] e-."""
-        return self._present_rn_in_range(0, _RN_LO, _RN_HI)
+    def read_noise_ok(self):
+        """Per-amp RN in [2.0, 6.0] e- and non-Gaussian RN in [0.8, 1.5]."""
+        return self._present_rn_in_range(
+            0, _RN_LO, _RN_HI
+        ) and self._present_rn_in_range(1, _RNNG_LO, _RNNG_HI)
 
-    read_noise_in_range._qc_key = "RNINRNG"
-
-    def read_noise_nongauss(self):
-        """Every non-Gaussian RN value present in the header is in [0.8, 1.5]."""
-        return self._present_rn_in_range(1, _RNNG_LO, _RNNG_HI)
-
-    read_noise_nongauss._qc_key = "RNGAUSS"
+    read_noise_ok._qc_key = "RNOK"
 
     def overscan_subtracted(self):
         """OSCANSUB == True."""
@@ -98,44 +94,32 @@ class QCL1(QC):
 
     overscan_subtracted._qc_key = "OSCANSUB"
 
-    def bias_subtracted(self):
-        """BIASSUB == True."""
-        return _hdr_flag(self.kpf_obj.headers["RECEIPT"], "BIASSUB")
-
-    bias_subtracted._qc_key = "BIASSUB"
-
-    def bias_age_ok(self):
-        """abs(BIASAGE) <= 7 days."""
+    def bias_ok(self):
+        """Bias subtracted (RECEIPT BIASSUB) and master bias age <= 7 days."""
+        if not _hdr_flag(self.kpf_obj.headers["RECEIPT"], "BIASSUB"):
+            return False
         v = _hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "BIASAGE")
         return v is not None and abs(v) <= 7
 
-    bias_age_ok._qc_key = "BIASAGEQ"
+    bias_ok._qc_key = "BIASOK"
 
-    def dark_subtracted(self):
-        """DARKSUB == True."""
-        return _hdr_flag(self.kpf_obj.headers["RECEIPT"], "DARKSUB")
-
-    dark_subtracted._qc_key = "DARKSUB"
-
-    def dark_age_ok(self):
-        """abs(DARKAGE) <= 14 days."""
+    def dark_ok(self):
+        """Dark subtracted (RECEIPT DARKSUB) and master dark age <= 14 days."""
+        if not _hdr_flag(self.kpf_obj.headers["RECEIPT"], "DARKSUB"):
+            return False
         v = _hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "DARKAGE")
         return v is not None and abs(v) <= 14
 
-    dark_age_ok._qc_key = "DARKAGEQ"
+    dark_ok._qc_key = "DARKOK"
 
-    def flat_divided(self):
-        """FLATDIV == True."""
-        return _hdr_flag(self.kpf_obj.headers["RECEIPT"], "FLATDIV")
-
-    flat_divided._qc_key = "FLATDIV"
-
-    def flat_age_ok(self):
-        """abs(FLATAGE) <= 30 days."""
+    def flat_ok(self):
+        """Flat divided (RECEIPT FLATDIV) and master flat age <= 30 days."""
+        if not _hdr_flag(self.kpf_obj.headers["RECEIPT"], "FLATDIV"):
+            return False
         v = _hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "FLATAGE")
         return v is not None and abs(v) <= 30
 
-    flat_age_ok._qc_key = "FLATAGEQ"
+    flat_ok._qc_key = "FLATOK"
 
     def ffi_finite(self):
         """All values in GREEN_CCD and RED_CCD are finite."""
@@ -147,4 +131,4 @@ class QCL1(QC):
                 return False
         return True
 
-    ffi_finite._qc_key = "FFIFIN"
+    ffi_finite._qc_key = "FFIOK"

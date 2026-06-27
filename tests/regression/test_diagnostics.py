@@ -115,7 +115,7 @@ class TestDiagnosticsBase:
 
 
 # ---------------------------------------------------------------------------
-# DiagL0 / DiagL1 — currently empty placeholders
+# DiagL0 — empty placeholder; DiagL1 with no calibrations is a clean no-op
 # ---------------------------------------------------------------------------
 
 
@@ -132,7 +132,83 @@ class TestEmptyLevels:
         assert results == {}
 
     def test_diag_l1_runs_cleanly(self):
+        # No RECEIPT/INSTRUMENT_HEADER -> calibration_ages returns {} (no crash).
         results = DiagL1(self._make_obj()).run()
+        assert results == {}
+
+
+# ---------------------------------------------------------------------------
+# DiagL1 — master calibration ages
+# ---------------------------------------------------------------------------
+
+
+def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
+    """A KPF1 carrying an INSTRUMENT_HEADER DATE-OBS and RECEIPT master paths.
+
+    Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has
+    written each ``{PREFIX}FILE`` to RECEIPT (via set_keyword) and to_kpf1 has
+    populated INSTRUMENT_HEADER.
+    """
+    l1 = KPF1()
+    l1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
+    l1.headers["INSTRUMENT_HEADER"]["DATE-OBS"] = date_obs
+    for kw, path in (files or {}).items():
+        l1.set_keyword(kw, path)  # *FILE routes to RECEIPT
+    return l1
+
+
+class TestDiagL1CalibrationAges:
+    def test_signed_age_same_day(self):
+        # Master at 2024-04-05 01:00:37 UTC vs obs 11:08:33 UTC -> -0.422176 d.
+        l1 = _make_kpf1_with_calibrations(
+            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
+        )
+        results = DiagL1(l1).run()
+        assert results["BIASAGE"][0] == pytest.approx(-0.422176, abs=1e-5)
+        # Routed to QUALITY_CONTROL with the registry comment.
+        qc = l1.headers["QUALITY_CONTROL"]
+        assert qc["BIASAGE"] == pytest.approx(-0.422176, abs=1e-5)
+        assert qc.comments["BIASAGE"] == "Master bias age [days]"
+
+    def test_signed_age_previous_day(self):
+        # Master 2024-04-04 22:00:00 UTC vs obs 2024-04-05 11:08:33 UTC.
+        l1 = _make_kpf1_with_calibrations(
+            files={"BIASFILE": "/m/KP.20240404.79200.00_master_bias_L1.fits"}
+        )
+        results = DiagL1(l1).run()
+        assert results["BIASAGE"][0] == pytest.approx(-0.547604, abs=1e-5)
+
+    def test_all_cal_types(self):
+        l1 = _make_kpf1_with_calibrations(
+            files={
+                "BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits",
+                "DARKFILE": "/m/KP.20240405.03637.74_master_dark_L1.fits",
+                "FLATFILE": "/m/KP.20240405.03637.74_master_flat_L1.fits",
+                "WLSFILE": "/m/KP.20240405.03637.74_master_thar_L2.fits",
+            }
+        )
+        results = DiagL1(l1).run()
+        assert set(results) == {"BIASAGE", "DARKAGE", "FLATAGE", "WLSAGE"}
+        for kw in results:
+            assert l1.headers["QUALITY_CONTROL"][kw] == pytest.approx(
+                -0.422176, abs=1e-5
+            )
+
+    def test_missing_cal_type_skipped(self):
+        # Only a bias path present -> only BIASAGE written.
+        l1 = _make_kpf1_with_calibrations(
+            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
+        )
+        results = DiagL1(l1).run()
+        assert set(results) == {"BIASAGE"}
+        assert "DARKAGE" not in l1.headers["QUALITY_CONTROL"]
+
+    def test_no_date_obs_skips_all(self):
+        l1 = _make_kpf1_with_calibrations(
+            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
+        )
+        del l1.headers["INSTRUMENT_HEADER"]["DATE-OBS"]
+        results = DiagL1(l1).run()
         assert results == {}
 
 

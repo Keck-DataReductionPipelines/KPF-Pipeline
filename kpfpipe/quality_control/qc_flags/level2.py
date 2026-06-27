@@ -97,7 +97,7 @@ class QCL2(QC):
                     return False
         return saw_data
 
-    variance_positive._qc_key = "L2VARPOS"
+    variance_positive._qc_key = "L2VAROK"
 
     def science_snr(self):
         """Science SNR is finite and above a minimum floor.

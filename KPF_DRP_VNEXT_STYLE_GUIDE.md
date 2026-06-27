@@ -68,7 +68,7 @@ guidance (environment, commands, architecture), which is documented separately.
   exception is documented at its definition. Don't add new public module constants on this
   precedent without the same justification.
 - **FITS keyword names**: ≤ 8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`,
-  `RNINRNG`, `ISGOOD`). Encode the level into the keyword when needed for uniqueness
+  `RNOK`, `ISGOOD`). Encode the level into the keyword when needed for uniqueness
   (`DATAPRL0`, `L2NANOK`). **Before inventing a new PRIMARY/extension keyword, grep
   `reference/legacy_data_format.rst` and reuse the legacy spelling/casing wherever the
   science meaning matches** (e.g. `WLSFILE`, `BIASFILE`) — so downstream tools, notebooks,

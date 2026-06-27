@@ -33,14 +33,10 @@ class MockL1:
         self._receipt.append((name, status))
 
     def set_keyword(self, key, value):
-        # Mirror the real routing: master paths ({PREFIX}FILE) land on RECEIPT,
-        # signed ages ({PREFIX}AGE) on QUALITY_CONTROL.
-        if key.endswith("FILE"):
-            ext = "RECEIPT"
-        elif key.endswith("AGE"):
-            ext = "QUALITY_CONTROL"
-        else:
-            ext = "PRIMARY"
+        # Mirror the real routing: master paths ({PREFIX}FILE) land on RECEIPT.
+        # The signed ages ({PREFIX}AGE) are written downstream by DiagL1, not by
+        # this module.
+        ext = "RECEIPT" if key.endswith("FILE") else "PRIMARY"
         self.headers[ext][key] = value
 
 
@@ -280,28 +276,13 @@ class TestPerform:
         mod.perform(["bias"])
         assert "BIASDIR" not in mod.l1_obj.headers["RECEIPT"]
 
-    def test_sets_biasage_same_day(self, masters_dir):
-        # BIASAGE is a signed fractional-day float (master - obs). The master
-        # shares the obs's date but sits at 01:00:37 UTC vs obs 11:08:33 UTC,
-        # giving -0.422176 days.
+    def test_does_not_write_biasage(self, masters_dir):
+        # The signed master-obs age (BIASAGE) is now recomputed downstream by
+        # DiagL1 from the path this module writes; the module itself emits only
+        # the path. (DiagL1.calibration_ages is covered in test_diagnostics.py.)
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        age = mod.l1_obj.headers["QUALITY_CONTROL"].get("BIASAGE")
-        assert isinstance(age, float)
-        assert age == pytest.approx(-0.422176, abs=1e-5)
-
-    def test_sets_biasage_previous_day(self, tmp_path):
-        # Master at 2024-04-04 22:00:00 UTC vs obs 2024-04-05 11:08:33 UTC gives
-        # delta = -13h 08m 33s = -47313 s = -0.547604 days.
-        d = tmp_path / "masters" / "20240404"
-        d.mkdir(parents=True)
-        _stub_master(d, "KP.20240404.79200.00", "bias")
-
-        mod = _make_module(tmp_path)
-        mod.perform(["bias"])
-        assert mod.l1_obj.headers["QUALITY_CONTROL"].get("BIASAGE") == pytest.approx(
-            -0.547604, abs=1e-5
-        )
+        assert "BIASAGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
 
     def test_sets_headers_for_dark_and_flat(self, masters_dir):
         mod = _make_module(masters_dir)
@@ -309,26 +290,22 @@ class TestPerform:
         for prefix in ("BIAS", "DARK", "FLAT"):
             assert f"{prefix}FILE" in mod.l1_obj.headers["RECEIPT"]
             assert f"{prefix}DIR" not in mod.l1_obj.headers["RECEIPT"]
-            assert f"{prefix}AGE" in mod.l1_obj.headers["QUALITY_CONTROL"]
+            assert f"{prefix}AGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
 
     def test_sets_headers_for_thar(self, masters_dir):
         # WLS follows the same unified convention: WLSFILE holds the full path
-        # (no WLSDIR), and WLSAGE is float days with sign = (master_dt -
-        # obs_dt). Master at 2024-04-05 01:00:37 UTC vs obs at 2024-04-05
-        # 11:08:33 UTC gives delta = -10h 07m 56s = -36476 s = -0.422176 days.
+        # (no WLSDIR). The WLSAGE is written downstream by DiagL1.
         d = masters_dir / "masters" / "20240405"
         _stub_master(d, "KP.20240405.03637.74", "thar")
 
         mod = _make_module(masters_dir)
         mod.perform(["bias", "thar"])
         receipt = mod.l1_obj.headers["RECEIPT"]
-        qc = mod.l1_obj.headers["QUALITY_CONTROL"]
         assert receipt.get("WLSFILE") == str(
             d / "KP.20240405.03637.74_master_thar_L2.fits"
         )
         assert "WLSDIR" not in receipt
-        assert isinstance(qc.get("WLSAGE"), float)
-        assert qc.get("WLSAGE") == pytest.approx(-0.422176, abs=1e-5)
+        assert "WLSAGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
 
     def test_raises_on_unknown_cal_type(self, masters_dir):
         mod = _make_module(masters_dir)

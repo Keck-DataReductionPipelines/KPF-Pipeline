@@ -83,7 +83,7 @@ class CalibrationAssociation:
             setattr(self, k, params.get(k, v))
 
         self._masters_root = params.get("KPF_MASTERS_OUTPUT")
-        self._calibrations = None  # per-cal {filepath, age_days} for _set_headers
+        self._calibrations = None  # per-cal {filepath} for _set_headers
         self._info = None
 
     # ------------------------------------------------------------------
@@ -194,18 +194,18 @@ class CalibrationAssociation:
         }
 
     def _set_headers(self, l1_obj):
-        """Write all PRIMARY-header keywords for calibration association.
+        """Write the master-path keyword for each associated calibration.
 
         Reads self._calibrations (populated by perform()); the single place this
         module writes header keywords, called just before the receipt entry. Each
-        cal type contributes {PREFIX}FILE (full master path) and {PREFIX}AGE
-        (signed fractional-day age); set_keyword routes them to their registry
-        homes (RECEIPT for the paths, QUALITY_CONTROL for the ages).
+        cal type contributes {PREFIX}FILE (full master path), which set_keyword
+        routes to RECEIPT. The signed (master - obs) age ({PREFIX}AGE) is
+        recomputed downstream by DiagL1 from this path plus INSTRUMENT_HEADER
+        DATE-OBS, so this module no longer computes or writes it.
         """
         for cal_type, cal in self._calibrations.items():
             prefix = _HEADER_PREFIX[cal_type]
             l1_obj.set_keyword(f"{prefix}FILE", cal["filepath"])
-            l1_obj.set_keyword(f"{prefix}AGE", cal["age_days"])
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -248,7 +248,6 @@ class CalibrationAssociation:
             )
 
         date_obs = self.l1_obj.headers["INSTRUMENT_HEADER"]["DATE-OBS"]
-        obs_dt = datetime.fromisoformat(date_obs)
 
         self._calibrations = {}
         for cal_type in cal_types:
@@ -262,11 +261,7 @@ class CalibrationAssociation:
                     f"within window {masters_search_window_days} days"
                 )
 
-            # Signed fractional-day age (master - obs): negative when the master
-            # predates the obs.
-            master_dt = kpf_timestamp_to_datetime(get_timestamp(filepath))
-            age_days = (master_dt - obs_dt).total_seconds() / 86400.0
-            self._calibrations[cal_type] = {"filepath": filepath, "age_days": age_days}
+            self._calibrations[cal_type] = {"filepath": filepath}
 
         self._set_headers(self.l1_obj)
         self._track_info()
@@ -291,5 +286,4 @@ class CalibrationAssociation:
         print("  " + "-" * 60)
         for cal_type, cal in self._info.items():
             print(f"  {cal_type:<12s} {cal['filepath']}")
-            print(f"  {'':12s} age = {cal['age_days']}d")
             print()

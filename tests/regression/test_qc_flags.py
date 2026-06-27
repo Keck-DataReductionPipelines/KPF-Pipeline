@@ -458,47 +458,34 @@ class TestQCL1:
         del l1.headers["PRIMARY"]["INSTRUME"]  # a registry-required PRIMARY keyword
         assert QCL1(l1).required_keywords_present() is False
 
-    def test_read_noise_in_range_pass(self, tmp_path):
+    def test_read_noise_ok_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
-        assert QCL1(l1).read_noise_in_range() is True
+        assert QCL1(l1).read_noise_ok() is True
 
-    def test_read_noise_in_range_fail_too_high(self, tmp_path):
+    def test_read_noise_ok_fail_rn_too_high(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
         l1.headers["QUALITY_CONTROL"]["RNGREEN1"] = (99.0, "bad RN")
-        assert QCL1(l1).read_noise_in_range() is False
+        assert QCL1(l1).read_noise_ok() is False
 
-    def test_read_noise_in_range_fail_missing(self, tmp_path):
+    def test_read_noise_ok_fail_nongauss_too_high(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, with_rn=True)
+        l1.headers["QUALITY_CONTROL"]["RNNGGR1"] = (9.9, "bad RNNG")
+        assert QCL1(l1).read_noise_ok() is False
+
+    def test_read_noise_ok_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=False)
-        assert QCL1(l1).read_noise_in_range() is False
+        assert QCL1(l1).read_noise_ok() is False
 
-    def test_read_noise_in_range_pass_2amp(self, tmp_path):
-        # 2-amp readout: only AMP1/AMP2 keys present (AMP3/4 absent).
+    def test_read_noise_ok_pass_2amp(self, tmp_path):
+        # 2-amp readout: only AMP1/AMP2 keys present (AMP3/4 absent), for both
+        # the Gaussian (RN*) and non-Gaussian (RNNG*) families.
         l1 = _make_kpf1(tmp_path, with_rn=True)
         for i in (3, 4):
             del l1.headers["QUALITY_CONTROL"][f"RNGREEN{i}"]
             del l1.headers["QUALITY_CONTROL"][f"RNRED{i}"]
-        assert QCL1(l1).read_noise_in_range() is True
-
-    def test_read_noise_nongauss_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, with_rn=True)
-        assert QCL1(l1).read_noise_nongauss() is True
-
-    def test_read_noise_nongauss_fail_too_high(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, with_rn=True)
-        l1.headers["QUALITY_CONTROL"]["RNNGGR1"] = (9.9, "bad RNNG")
-        assert QCL1(l1).read_noise_nongauss() is False
-
-    def test_read_noise_nongauss_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, with_rn=False)
-        assert QCL1(l1).read_noise_nongauss() is False
-
-    def test_read_noise_nongauss_pass_2amp(self, tmp_path):
-        # 2-amp readout: only AMP1/AMP2 keys present (AMP3/4 absent).
-        l1 = _make_kpf1(tmp_path, with_rn=True)
-        for i in (3, 4):
             del l1.headers["QUALITY_CONTROL"][f"RNNGGR{i}"]
             del l1.headers["QUALITY_CONTROL"][f"RNNGRD{i}"]
-        assert QCL1(l1).read_noise_nongauss() is True
+        assert QCL1(l1).read_noise_ok() is True
 
     def test_overscan_subtracted_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, oscansub=True)
@@ -513,83 +500,61 @@ class TestQCL1:
         del l1.headers["RECEIPT"]["OSCANSUB"]
         assert QCL1(l1).overscan_subtracted() is False
 
-    def test_bias_subtracted_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biassub=True)
-        assert QCL1(l1).bias_subtracted() is True
+    def test_bias_ok_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, biassub=True, agebias=3.0)
+        assert QCL1(l1).bias_ok() is True
 
-    def test_bias_subtracted_fail_false(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biassub=False)
-        assert QCL1(l1).bias_subtracted() is False
+    def test_bias_ok_fail_not_subtracted(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, biassub=False, agebias=3.0)
+        assert QCL1(l1).bias_ok() is False
 
-    def test_bias_subtracted_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        del l1.headers["RECEIPT"]["BIASSUB"]
-        assert QCL1(l1).bias_subtracted() is False
-
-    def test_dark_subtracted_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=True)
-        assert QCL1(l1).dark_subtracted() is True
-
-    def test_dark_subtracted_fail_false(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=False)
-        assert QCL1(l1).dark_subtracted() is False
-
-    def test_dark_subtracted_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        del l1.headers["RECEIPT"]["DARKSUB"]
-        assert QCL1(l1).dark_subtracted() is False
-
-    def test_flat_divided_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=True)
-        assert QCL1(l1).flat_divided() is True
-
-    def test_flat_divided_fail_false(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=False)
-        assert QCL1(l1).flat_divided() is False
-
-    def test_flat_divided_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        del l1.headers["RECEIPT"]["FLATDIV"]
-        assert QCL1(l1).flat_divided() is False
-
-    def test_bias_age_ok_pass(self, tmp_path):
+    def test_bias_ok_fail_subtract_flag_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path, agebias=3.0)
-        assert QCL1(l1).bias_age_ok() is True
+        del l1.headers["RECEIPT"]["BIASSUB"]
+        assert QCL1(l1).bias_ok() is False
 
-    def test_bias_age_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, agebias=10.0)
-        assert QCL1(l1).bias_age_ok() is False
+    def test_bias_ok_fail_too_old(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, biassub=True, agebias=10.0)
+        assert QCL1(l1).bias_ok() is False
 
-    def test_bias_age_ok_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
+    def test_bias_ok_fail_age_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, biassub=True)
         del l1.headers["QUALITY_CONTROL"]["BIASAGE"]
-        assert QCL1(l1).bias_age_ok() is False
+        assert QCL1(l1).bias_ok() is False
 
-    def test_dark_age_ok_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, agedark=7.0)
-        assert QCL1(l1).dark_age_ok() is True
+    def test_dark_ok_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, darksub=True, agedark=7.0)
+        assert QCL1(l1).dark_ok() is True
 
-    def test_dark_age_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, agedark=20.0)
-        assert QCL1(l1).dark_age_ok() is False
+    def test_dark_ok_fail_not_subtracted(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, darksub=False, agedark=7.0)
+        assert QCL1(l1).dark_ok() is False
 
-    def test_dark_age_ok_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
+    def test_dark_ok_fail_too_old(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, darksub=True, agedark=20.0)
+        assert QCL1(l1).dark_ok() is False
+
+    def test_dark_ok_fail_age_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, darksub=True)
         del l1.headers["QUALITY_CONTROL"]["DARKAGE"]
-        assert QCL1(l1).dark_age_ok() is False
+        assert QCL1(l1).dark_ok() is False
 
-    def test_flat_age_ok_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, ageflat=15.0)
-        assert QCL1(l1).flat_age_ok() is True
+    def test_flat_ok_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=15.0)
+        assert QCL1(l1).flat_ok() is True
 
-    def test_flat_age_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, ageflat=45.0)
-        assert QCL1(l1).flat_age_ok() is False
+    def test_flat_ok_fail_not_divided(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, flatdiv=False, ageflat=15.0)
+        assert QCL1(l1).flat_ok() is False
 
-    def test_flat_age_ok_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
+    def test_flat_ok_fail_too_old(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=45.0)
+        assert QCL1(l1).flat_ok() is False
+
+    def test_flat_ok_fail_age_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, flatdiv=True)
         del l1.headers["QUALITY_CONTROL"]["FLATAGE"]
-        assert QCL1(l1).flat_age_ok() is False
+        assert QCL1(l1).flat_ok() is False
 
     def test_ffi_finite_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, finite_ccd=True)
@@ -609,16 +574,12 @@ class TestQCL1:
         expected = {
             "data_present": "DATAPRL1",
             "required_keywords_present": "KWRDPRL1",
-            "read_noise_in_range": "RNINRNG",
-            "read_noise_nongauss": "RNGAUSS",
+            "read_noise_ok": "RNOK",
             "overscan_subtracted": "OSCANSUB",
-            "bias_subtracted": "BIASSUB",
-            "bias_age_ok": "BIASAGEQ",
-            "dark_subtracted": "DARKSUB",
-            "dark_age_ok": "DARKAGEQ",
-            "flat_divided": "FLATDIV",
-            "flat_age_ok": "FLATAGEQ",
-            "ffi_finite": "FFIFIN",
+            "bias_ok": "BIASOK",
+            "dark_ok": "DARKOK",
+            "flat_ok": "FLATOK",
+            "ffi_finite": "FFIOK",
         }
         for method_name, key in expected.items():
             fn = QCL1.__dict__[method_name]
@@ -640,20 +601,21 @@ class TestQCL1Run:
         isgood = l1.headers["QUALITY_CONTROL"].get("ISGOOD")
         assert isgood == 1
 
-        # QC flags route to their registry home: the read-noise / age / finite
-        # checks land in QUALITY_CONTROL; the applied-step flags reuse the
-        # RECEIPT keyword names and so route to RECEIPT.
+        # QC flags route to their registry home. All L1 QC flags now land on
+        # QUALITY_CONTROL, except overscan_subtracted, which reuses the RECEIPT
+        # OSCANSUB keyword name and so routes to RECEIPT. The per-calibration
+        # OK flags (BIASOK/DARKOK/FLATOK) read RECEIPT *SUB / DiagL1 *AGE but are
+        # themselves QUALITY_CONTROL keywords.
         qc_keys = [
             "DATAPRL1",
             "KWRDPRL1",
-            "RNINRNG",
-            "RNGAUSS",
-            "BIASAGEQ",
-            "DARKAGEQ",
-            "FLATAGEQ",
-            "FFIFIN",
+            "RNOK",
+            "BIASOK",
+            "DARKOK",
+            "FLATOK",
+            "FFIOK",
         ]
-        receipt_keys = ["OSCANSUB", "BIASSUB", "DARKSUB", "FLATDIV"]
+        receipt_keys = ["OSCANSUB"]
         for k in qc_keys:
             v = l1.headers["QUALITY_CONTROL"].get(k)
             assert v == 1, f"{k} should be 1 but is {v}"
@@ -669,9 +631,9 @@ class TestQCL1Run:
         isgood = l1.headers["QUALITY_CONTROL"].get("ISGOOD")
         assert isgood == 0
 
-        # BIASSUB reuses the RECEIPT keyword name, so the QC flag routes there.
-        biassub = l1.headers["RECEIPT"].get("BIASSUB")
-        assert biassub == 0
+        # Bias not subtracted -> BIASOK fails (a QUALITY_CONTROL flag); the
+        # RECEIPT BIASSUB provenance keyword is untouched by QC.
+        assert l1.headers["QUALITY_CONTROL"].get("BIASOK") == 0
 
 
 # ---------------------------------------------------------------------------
@@ -758,7 +720,7 @@ class TestQCL2:
         kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
         assert QCL2(kpf2).nonzero_flux() is False
 
-    # --- variance_positive (L2VARPOS) ---
+    # --- variance_positive (L2VAROK) ---
 
     def test_variance_positive_pass(self):
         kpf2 = _make_kpf2_with_flux()
@@ -806,7 +768,7 @@ class TestQCL2:
             "required_keywords_present": "KWRDPRL2",
             "flux_finite_fraction": "L2NANOK",
             "nonzero_flux": "L2FLXOK",
-            "variance_positive": "L2VARPOS",
+            "variance_positive": "L2VAROK",
             "science_snr": "L2SNROK",
         }
         for method_name, key in expected.items():
