@@ -80,7 +80,7 @@ class KPF0(KPFDataModel):
         """Stamp WMKO DRP-RUN provenance onto the L0 PRIMARY at read time.
 
         This is the single population site for the four provenance cards
-        (their `Populated by` in config/L0-headers.csv is `KPF0.from_fits`):
+        (their `PopulatedBy` in config/L0-headers.csv is `KPF0.from_fits`):
         DRPVERNO (DRP-RUN-11), PROGID/KOAID (DRP-RUN-19), DRPSTATU (DRP-RUN-20).
         `to_kpf1` passes them through unchanged onto the EPRV L1 PRIMARY.
 

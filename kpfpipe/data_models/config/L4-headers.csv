@@ -1,4 +1,4 @@
-Keyword,Description,Extension,DataType,Populated by
+Keyword,Description,Extension,DataType,PopulatedBy
 CCD1RV,GREEN SCI-combined RV [km/s] (legacy),PRIMARY,float,RadialVelocity
 CCD2RV,RED SCI-combined RV [km/s] (legacy),PRIMARY,float,RadialVelocity
 CCD1ERV,GREEN SCI-combined RV error [km/s] (legacy),PRIMARY,float,RadialVelocity

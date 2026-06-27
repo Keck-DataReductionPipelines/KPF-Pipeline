@@ -1,4 +1,4 @@
-Keyword,Description,Extension,DataType,Populated by
+Keyword,Description,Extension,DataType,PopulatedBy
 DATAPRL2,QC: L2 data present,QUALITY_CONTROL,int,QCL2
 L2NANOK,QC: L2 NaN count ok,QUALITY_CONTROL,int,QCL2
 L2FLXOK,QC: L2 zero-flux fraction ok,QUALITY_CONTROL,int,QCL2

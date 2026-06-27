@@ -182,7 +182,7 @@ class TestKeywordRegistry:
             "Description",
             "Extension",
             "DataType",
-            "Populated by",
+            "PopulatedBy",
             "Required",
             "Level",
         ]

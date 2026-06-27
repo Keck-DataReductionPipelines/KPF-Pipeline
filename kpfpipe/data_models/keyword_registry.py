@@ -13,7 +13,7 @@ rather than importing from here.
 Source of truth: ``self.table``, one DataFrame unioning the KPF
 ``L{0,1,2,4}-headers.csv`` registries with the EPRV keyword definitions (rvdata's
 ``LEVEL2/4_PRIMARY_KEYWORDS`` plus the per-extension keyword CSVs). Columns:
-``Keyword, Description, Extension, DataType, Populated by, Required, Level``. The
+``Keyword, Description, Extension, DataType, PopulatedBy, Required, Level``. The
 ``routing``/``allowed``/``required`` lookups are derived from this table.
 
 The three use-cases:
@@ -48,18 +48,19 @@ class KeywordRegistry:
     three use-cases (mapping / validation / routing).
     """
 
-    # Sentinel written into the "Populated by" column for EPRV-sourced rows; the
+    # Sentinel written into the "PopulatedBy" column for EPRV-sourced rows; the
     # derived lookups use it to tell EPRV rows from KPF rows, so it is the single
     # source of that string (and _kpf_rows asserts no KPF row reuses it).
     _EPRV_TAG = "EPRV"
 
-    # Unified-table column order.
+    # Unified-table column order. All names are valid Python identifiers so the
+    # derived lookups can read rows by attribute via itertuples (row.PopulatedBy).
     _COLUMNS = [
         "Keyword",
         "Description",
         "Extension",
         "DataType",
-        "Populated by",
+        "PopulatedBy",
         "Required",
         "Level",
     ]
@@ -142,7 +143,7 @@ class KeywordRegistry:
         EPRV CSVs encode per-target/per-telescope families as a "BASE1 ... BASE#"
         template; expand each to literal rows BASE1-9 (only index 1 inherits the
         Required flag, mirroring rvdata's seed). EPRV rows carry ``"EPRV"`` in the
-        ``Populated by`` column — the discriminator the derived lookups use to
+        ``PopulatedBy`` column — the discriminator the derived lookups use to
         tell EPRV rows from KPF rows.
         """
         rows = []
@@ -178,9 +179,9 @@ class KeywordRegistry:
     def _kpf_rows(cls):
         """KPF-pipeline keyword rows from config/L{0,1,2,4}-headers.csv.
 
-        ``Required`` is always False; ``Populated by`` is whatever the CSV says.
+        ``Required`` is always False; ``PopulatedBy`` is whatever the CSV says.
         It must NEVER be the EPRV sentinel: the derived routing/validation lookups
-        treat a ``Populated by == _EPRV_TAG`` row as EPRV-sourced, so a KPF row
+        treat a ``PopulatedBy == _EPRV_TAG`` row as EPRV-sourced, so a KPF row
         reusing that string would be silently misclassified (dropped from routing,
         given the wrong Required/Level). Guard against it loudly here.
         """
@@ -191,11 +192,11 @@ class KeywordRegistry:
                 descr = (
                     "" if pd.isna(r["Description"]) else str(r["Description"]).strip()
                 )
-                populated_by = str(r.get("Populated by", "")).strip()
+                populated_by = str(r.get("PopulatedBy", "")).strip()
                 if populated_by == cls._EPRV_TAG:
                     raise ValueError(
                         f"L{level}-headers.csv: keyword "
-                        f"{str(r['Keyword']).strip()!r} has 'Populated by' == "
+                        f"{str(r['Keyword']).strip()!r} has 'PopulatedBy' == "
                         f"{cls._EPRV_TAG!r}, which is reserved as the EPRV-row "
                         "discriminator; use a real populating site instead"
                     )
@@ -238,18 +239,15 @@ class KeywordRegistry:
         keyword (its explicit Extension); KPF wins a name collision. EPRV
         per-extension cards (RVMETHOD on RV#, CTYPE*, ...) are validation-only,
         never set_keyword targets, so they are excluded.
-
-        Column order (``_COLUMNS``): 0 Keyword, 1 Description, 2 Extension,
-        3 DataType, 4 Populated by, 5 Required, 6 Level.
         """
         routing = {}
         # EPRV PRIMARY rows first (setdefault), then KPF rows override (KPF wins).
         for row in self.table.itertuples(index=False):
-            if row[4] == self._EPRV_TAG and row[2] == "PRIMARY":
-                routing.setdefault(row[0], ("PRIMARY", row[1]))
+            if row.PopulatedBy == self._EPRV_TAG and row.Extension == "PRIMARY":
+                routing.setdefault(row.Keyword, ("PRIMARY", row.Description))
         for row in self.table.itertuples(index=False):
-            if row[4] != self._EPRV_TAG:
-                routing[row[0]] = (row[2], row[1])
+            if row.PopulatedBy != self._EPRV_TAG:
+                routing[row.Keyword] = (row.Extension, row.Description)
         return routing
 
     def _build_validation(self):
@@ -257,16 +255,16 @@ class KeywordRegistry:
 
         allowed: every keyword registered for an extension (no level gate).
         required: keyword -> minimal Level it is Required at (PRIMARY warnings
-        filter Level<=N). Column order as in ``_build_routing``.
+        filter Level<=N).
         """
         allowed = {}
         required = {}
         for row in self.table.itertuples(index=False):
-            kw, extn, req, lvl = row[0], row[2], row[5], row[6]
-            allowed.setdefault(extn, set()).add(kw)
-            if req:
+            extn = row.Extension
+            allowed.setdefault(extn, set()).add(row.Keyword)
+            if row.Required:
                 d = required.setdefault(extn, {})
-                d[kw] = min(d.get(kw, lvl), lvl)
+                d[row.Keyword] = min(d.get(row.Keyword, row.Level), row.Level)
         return allowed, required
 
     def _warn_unregistered_targets(self):

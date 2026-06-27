@@ -1,4 +1,4 @@
-Keyword,Description,Extension,DataType,Populated by
+Keyword,Description,Extension,DataType,PopulatedBy
 PROGID,WMKO program ID (DRP-RUN-19),PRIMARY,str,KPF0.from_fits
 KOAID,KOA archive ID (DRP-RUN-19),PRIMARY,str,KPF0.from_fits
 DRPVERNO,Pipeline version (DRP-RUN-11; EPRV equivalent is DRPTAG),PRIMARY,str,KPF0.from_fits

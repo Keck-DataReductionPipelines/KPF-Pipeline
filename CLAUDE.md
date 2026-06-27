@@ -210,7 +210,7 @@ singleton `keyword_registry`), organized by its three use-cases: **(1) mapping**
 `.structural`; **(3) routing** — `.routing` (`keyword → (extension, comment)`). All of (2)/(3) are
 derived in `__init__` from the **single source-of-truth table `.table`** — one DataFrame unioning our
 `L{0,1,2,4}-headers.csv` registries with the EPRV keyword defs (rvdata's `LEVEL2/4_PRIMARY_KEYWORDS` +
-per-extension CSVs), columns `Keyword, Description, Extension, DataType, Populated by, Required, Level`
+per-extension CSVs), columns `Keyword, Description, Extension, DataType, PopulatedBy, Required, Level`
 (`.registered` is the keyword allowlist). **`keyword_registry.py` is imported only by
 `data_models/base.py`**: `KPFDataModel` surfaces the singleton as the **class attribute
 `keyword_registry`** and re-exports it (so `level2/4.py` call `keyword_registry.register_rvdata_extension`
@@ -229,7 +229,7 @@ Consequences every contributor must respect:
   keyword (e.g. `ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`) reads it from
   `INSTRUMENT_HEADER`, not PRIMARY.
 - **DRP-RUN provenance is stamped onto the L0 PRIMARY at read (`KPF0.from_fits`), not at `to_kpf1`.**
-  `KPF0._stamp_provenance` (the single population site; their `Populated by` in `L0-headers.csv` is
+  `KPF0._stamp_provenance` (the single population site; their `PopulatedBy` in `L0-headers.csv` is
   `KPF0.from_fits`) writes `DRPVERNO` (DRP-RUN-11), `DRPSTATU` (DRP-RUN-20), and `PROGID`/`KOAID`
   (DRP-RUN-19). `PROGID`/`KOAID` come from the WMKO-native file; an absent value is defaulted to
   `UNKNOWN` **with a warning**. `to_kpf1`/`wmko_to_eprv` then **forward these four verbatim** (value

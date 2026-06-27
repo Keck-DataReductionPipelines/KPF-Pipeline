@@ -571,7 +571,7 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **`L{0,1,2,4}-headers.csv`** register every KPF-pipeline keyword and its home extension,
   split by the level that first writes the keyword (the combined set drives the `set_keyword`
   routing map and the qc_booleans validator). Columns are
-  `Keyword,Description,Extension,DataType,Populated by`. The **`Extension`** column is the keyword's
+  `Keyword,Description,Extension,DataType,PopulatedBy`. The **`Extension`** column is the keyword's
   home header (`PRIMARY`, `QUALITY_CONTROL`, `RECEIPT`, `BJD_TDB`, `BARYCORR_KMS`, `BARYCORR_Z`,
   `RV1`–`RV5`) — `set_keyword` writes there, and `Description` becomes the FITS comment, so a
   keyword's home and comment are defined **once, in the registry**. `DataType` is one of

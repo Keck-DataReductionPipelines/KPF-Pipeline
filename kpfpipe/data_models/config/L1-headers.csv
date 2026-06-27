@@ -1,4 +1,4 @@
-Keyword,Description,Extension,DataType,Populated by
+Keyword,Description,Extension,DataType,PopulatedBy
 RNGREEN1,Read noise GREEN amp 1 [e-],QUALITY_CONTROL,float,ImageAssembly
 RNGREEN2,Read noise GREEN amp 2 [e-],QUALITY_CONTROL,float,ImageAssembly
 RNGREEN3,Read noise GREEN amp 3 [e-],QUALITY_CONTROL,float,ImageAssembly

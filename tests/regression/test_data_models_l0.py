@@ -146,7 +146,7 @@ class TestKPF0ErrorPaths:
 
 class TestKPF0Provenance:
     """from_fits stamps the WMKO DRP-RUN provenance cards onto the L0 PRIMARY
-    (their single population site; config/L0-headers.csv Populated by =
+    (their single population site; config/L0-headers.csv PopulatedBy =
     KPF0.from_fits). to_kpf1 only forwards them."""
 
     def test_from_fits_stamps_version_and_status(self, synthetic_l0_file):
