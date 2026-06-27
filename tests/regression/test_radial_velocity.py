@@ -743,21 +743,21 @@ class TestPerform:
         assert rv_hdr["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
         assert rv_hdr["CCD2RV2"] == pytest.approx(_V_INJECT, abs=0.1)
         assert rv_hdr["CCD1ERV2"] > 0 and rv_hdr["CCD2ERV2"] > 0
-        # The per-orderlet keywords do not leak onto PRIMARY (only the
-        # SCI-combined CCD<n>RV/CCFRV do).
+        # The per-orderlet keywords do not leak onto PRIMARY; they live on the RV#
+        # tables (the SCI-combined CCD<n>RV/CCFRV land on RV3).
         assert "CCD1RV2" not in l4.headers["PRIMARY"]
 
-    def test_primary_combined_rv_populated(self, rv_module):
-        # The science combine: SCI-combined CCD1RV/CCD2RV and CCFRV/CCFERV on
-        # PRIMARY (registered KPF keywords) alongside the EPRV RV/RVERR. RV ~
-        # injected value.
+    def test_combined_rv_populated(self, rv_module):
+        # The science combine: SCI-combined CCD1RV/CCD2RV and CCFRV/CCFERV on the
+        # RV3 table (registered KPF keywords), alongside the EPRV RV/RVERR on
+        # PRIMARY. RV ~ injected value.
         l4 = rv_module.perform()
-        inst = l4.headers["PRIMARY"]
-        assert inst["CCD1RV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert inst["CCD2RV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert inst["CCD1ERV"] > 0 and inst["CCD2ERV"] > 0
-        assert inst["CCFRV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert inst["CCFERV"] > 0
+        rv3 = l4.headers["RV3"]
+        assert rv3["CCD1RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv3["CCD2RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv3["CCD1ERV"] > 0 and rv3["CCD2ERV"] > 0
+        assert rv3["CCFRV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv3["CCFERV"] > 0
 
         prim = l4.headers["PRIMARY"]
         assert prim["RV"] == pytest.approx(_V_INJECT, abs=0.1)
@@ -769,7 +769,7 @@ class TestPerform:
         # CCFRV = (CCD1RV*Wg + CCD2RV*Wr)/(Wg+Wr), Wg/Wr the summed order weights;
         # CCFERV = inverse-variance combination of the per-CCD errors.
         l4 = rv_module.perform()
-        inst = l4.headers["PRIMARY"]
+        inst = l4.headers["RV3"]
         wg = np.nansum(rv_module._get_order_weights("GREEN", "SCI1"))
         wr = np.nansum(rv_module._get_order_weights("RED", "SCI1"))
         expect_rv = (inst["CCD1RV"] * wg + inst["CCD2RV"] * wr) / (wg + wr)
@@ -814,7 +814,7 @@ class TestPerform:
     def test_single_chip_combine_warns(self, rv_module, capsys):
         # One chip present: CCFRV uses it alone (== CCD1RV) and a warning prints.
         l4 = rv_module.perform(chips=["GREEN"])
-        inst = l4.headers["PRIMARY"]
+        inst = l4.headers["RV3"]
         assert inst["CCFRV"] == pytest.approx(inst["CCD1RV"], abs=1e-9)
         assert "only chip GREEN present" in capsys.readouterr().out
 

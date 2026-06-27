@@ -242,8 +242,7 @@ Consequences every contributor must respect:
   if its home extension does not exist on the object. Every such keyword must be registered in the
   per-level registry `data_models/config/L{0,1,2,4}-headers.csv` (explicit ≤8-char FITS keyword — no
   wildcards; families enumerated per member, e.g. `RNGREEN1`-`RNGREEN4`). The current homes:
-  - **PRIMARY** — DRP provenance (stamped at read), `DRPTAG`, and the L4 SCI-combined RV summaries
-    (`CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV`, `CCFRV`, `CCFERV`) plus the EPRV RV cards.
+  - **PRIMARY** — DRP provenance (stamped at read), `DRPTAG`, and the EPRV RV cards.
   - **QUALITY_CONTROL** (a KPF-only `BinTableHDU`, created on KPF0/1/2) — QC booleans + `ISGOOD`,
     read-noise (`RN*`), calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), and DiagL2
     metrics (`NAN*`/`ZEROFRAC`/`*SNR*`/`*FR*`).
@@ -251,7 +250,9 @@ Consequences every contributor must respect:
     (`BIASFILE`/`DARKFILE`/`FLATFILE`/`WLSFILE`), `ASTRSRC`.
   - **BJD_TDB / BARYCORR_KMS / BARYCORR_Z** (EPRV L2 extensions) — the per-CCD barycentric summaries.
   - **RV1–RV5** (EPRV L4 tables) — the per-orderlet legacy RVs (`CCD<n>RV<sfx>`, sfx S→RV1, 1→RV2,
-    2→RV3, 3→RV4, C→RV5). Masters keep `MASTYPE` on their own PRIMARY (out of EPRV scope).
+    2→RV3, 3→RV4, C→RV5) plus the SCI-combined RV summaries on **RV3**
+    (`CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV`, `CCFRV`, `CCFERV`). Masters keep `MASTYPE` on their own
+    PRIMARY (out of EPRV scope).
 - **QUALITY_CONTROL + RECEIPT *headers* propagate L0→L1→L2** card-by-card in `to_kpf1`/`to_kpf2`
   (`set_header` with a comment-preserving `fits.Header` copy), alongside the receipt *table* copy.
   QUALITY_CONTROL is a KPF-custom extension unknown to rvdata's definition-driven L2/L4 reader, so

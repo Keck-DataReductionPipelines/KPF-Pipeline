@@ -126,9 +126,9 @@ class TestSetKeyword:
     def test_routes_l4_orderlet_rv_to_rv_table(self):
         l4 = KPF4()
         l4.set_keyword("CCD1RV1", 1.2345)  # GREEN SCI1 -> RV2
-        l4.set_keyword("CCD1RV", 6.789)  # combined -> PRIMARY
+        l4.set_keyword("CCD1RV", 6.789)  # GREEN SCI-combined -> RV3
         assert l4.headers["RV2"]["CCD1RV1"] == 1.2345
-        assert l4.headers["PRIMARY"]["CCD1RV"] == 6.789
+        assert l4.headers["RV3"]["CCD1RV"] == 6.789
 
     def test_unregistered_keyword_raises_keyerror(self):
         l1 = KPF1()
