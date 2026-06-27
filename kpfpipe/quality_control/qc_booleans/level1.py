@@ -28,7 +28,7 @@ class QCL1(QC):
     def data_present(self):
         """GREEN_CCD and RED_CCD exist and are non-empty."""
         for ext in ("GREEN_CCD", "RED_CCD"):
-            arr = self.kpf.data.get(ext)
+            arr = self.kpf_obj.data.get(ext)
             # A None-data extension is stored as array(None, dtype=object); absent.
             if (
                 arr is None
@@ -42,7 +42,7 @@ class QCL1(QC):
 
     def required_keywords_present(self):
         """Every registry-required PRIMARY keyword for L1 is present (presence only)."""
-        return self._required_primary_keywords() <= set(self.kpf.headers["PRIMARY"])
+        return self._required_primary_keywords() <= set(self.kpf_obj.headers["PRIMARY"])
 
     required_keywords_present._qc_key = "KWRDPRL1"
 
@@ -69,7 +69,7 @@ class QCL1(QC):
             out of range, or if no RN keyword is present at all (read noise
             should always be recorded).
         """
-        hdr = self.kpf.headers["QUALITY_CONTROL"]
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
         found = False
         for keys in RN_KEYS.values():
             v = _hdr_float(hdr, keys[idx])
@@ -94,45 +94,45 @@ class QCL1(QC):
 
     def overscan_subtracted(self):
         """OSCANSUB == True."""
-        return _hdr_flag(self.kpf.headers["RECEIPT"], "OSCANSUB")
+        return _hdr_flag(self.kpf_obj.headers["RECEIPT"], "OSCANSUB")
 
     overscan_subtracted._qc_key = "OSCANSUB"
 
     def bias_subtracted(self):
         """BIASSUB == True."""
-        return _hdr_flag(self.kpf.headers["RECEIPT"], "BIASSUB")
+        return _hdr_flag(self.kpf_obj.headers["RECEIPT"], "BIASSUB")
 
     bias_subtracted._qc_key = "BIASSUB"
 
     def bias_age_ok(self):
         """abs(BIASAGE) <= 7 days."""
-        v = _hdr_float(self.kpf.headers["QUALITY_CONTROL"], "BIASAGE")
+        v = _hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "BIASAGE")
         return v is not None and abs(v) <= 7
 
     bias_age_ok._qc_key = "BIASAGEQ"
 
     def dark_subtracted(self):
         """DARKSUB == True."""
-        return _hdr_flag(self.kpf.headers["RECEIPT"], "DARKSUB")
+        return _hdr_flag(self.kpf_obj.headers["RECEIPT"], "DARKSUB")
 
     dark_subtracted._qc_key = "DARKSUB"
 
     def dark_age_ok(self):
         """abs(DARKAGE) <= 14 days."""
-        v = _hdr_float(self.kpf.headers["QUALITY_CONTROL"], "DARKAGE")
+        v = _hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "DARKAGE")
         return v is not None and abs(v) <= 14
 
     dark_age_ok._qc_key = "DARKAGEQ"
 
     def flat_divided(self):
         """FLATDIV == True."""
-        return _hdr_flag(self.kpf.headers["RECEIPT"], "FLATDIV")
+        return _hdr_flag(self.kpf_obj.headers["RECEIPT"], "FLATDIV")
 
     flat_divided._qc_key = "FLATDIV"
 
     def flat_age_ok(self):
         """abs(FLATAGE) <= 30 days."""
-        v = _hdr_float(self.kpf.headers["QUALITY_CONTROL"], "FLATAGE")
+        v = _hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "FLATAGE")
         return v is not None and abs(v) <= 30
 
     flat_age_ok._qc_key = "FLATAGEQ"
@@ -140,7 +140,7 @@ class QCL1(QC):
     def ffi_finite(self):
         """All values in GREEN_CCD and RED_CCD are finite."""
         for ext in ("GREEN_CCD", "RED_CCD"):
-            arr = self.kpf.data.get(ext)
+            arr = self.kpf_obj.data.get(ext)
             if arr is None or np.size(arr) == 0:
                 return False
             if not np.all(np.isfinite(arr)):

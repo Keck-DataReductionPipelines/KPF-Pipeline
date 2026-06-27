@@ -272,7 +272,7 @@ Consequences every contributor must respect:
   hardcoded (raw L0 PRIMARY is not registry-governed). The `qc_flags` checkpoint then reads each
   0/1 flag and **raises** it if it is in the level's `RAISE_FLAGS` (data-present only), else
   **warns**. Checkpoints read all lookups off the validated `kpf_obj`
-  (`self.kpf.keyword_registry`), so `quality_control` imports nothing from `data_models`.
+  (`self.kpf_obj.keyword_registry`), so `quality_control` imports nothing from `data_models`.
 - **`wmko_to_eprv` emits only registered keywords.** It applies `header_map.csv` but **filters each
   `STANDARD` target against the registry** (via `self.keyword_registry.registered`), so rvdata's
   header_map entries that aren't EPRV keywords (`PARANG`, `PARANG2`) are dropped, never leaking onto

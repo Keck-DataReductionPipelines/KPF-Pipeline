@@ -32,7 +32,7 @@ class QC:
     LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
 
     def __init__(self, kpf_obj):
-        self.kpf = kpf_obj
+        self.kpf_obj = kpf_obj
         self.results = {}  # Populated by run(): maps keyword to (passed, comment).
 
     def run(self):
@@ -57,12 +57,12 @@ class QC:
             kw = fn._qc_key
             # The comment is the registry Description (the single source) — the same
             # string set_keyword writes as the FITS comment; mirror it into results.
-            comment = self.kpf.keyword_registry.routing.get(kw, (None, ""))[1]
+            comment = self.kpf_obj.keyword_registry.routing.get(kw, (None, ""))[1]
             self.results[kw] = (passed, comment)
-            self.kpf.set_keyword(kw, 1 if passed else 0)
+            self.kpf_obj.set_keyword(kw, 1 if passed else 0)
 
         is_good = all(p for p, _ in self.results.values())
-        self.kpf.set_keyword("ISGOOD", 1 if is_good else 0)
+        self.kpf_obj.set_keyword("ISGOOD", 1 if is_good else 0)
         return self.results
 
     def _required_primary_keywords(self):
@@ -71,14 +71,14 @@ class QC:
         The registry's EPRV ``Required`` PRIMARY keywords at or below this
         product's level, unioned with the KPF-pipeline keywords routed to PRIMARY
         (the provenance cards). Read off the validated model's registry singleton
-        (``self.kpf.keyword_registry``), so qc_booleans imports nothing from
+        (``self.kpf_obj.keyword_registry``), so qc_booleans imports nothing from
         data_models. L0 (or an untagged subclass) returns the empty set -- raw
         WMKO L0 PRIMARY is not registry-governed.
         """
         cap = _LEVEL_CAP.get(str(self.LEVEL).upper())
         if cap is None:
             return set()
-        reg = self.kpf.keyword_registry
+        reg = self.kpf_obj.keyword_registry
         required = {
             k for k, lvl in reg.required.get("PRIMARY", {}).items() if lvl <= cap
         }

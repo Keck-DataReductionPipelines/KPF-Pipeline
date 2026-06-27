@@ -92,7 +92,7 @@ class TestDiagnosticsBase:
 
         class MyDiag(Diagnostics):
             def metric(self):
-                return {"VAL": (self.kpf.value, "value")}
+                return {"VAL": (self.kpf_obj.value, "value")}
 
             metric._diag_name = "metric"
 

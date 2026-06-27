@@ -61,7 +61,7 @@ class Checkpoint:
     RAISE_FLAGS = ()  # QC keywords whose failure (0) raises; every other 0 warns.
 
     def __init__(self, kpf_obj):
-        self.kpf = kpf_obj
+        self.kpf_obj = kpf_obj
 
     def run(self):
         """Run every checkpoint method; each warns or raises (no return value)."""
@@ -78,14 +78,14 @@ class Checkpoint:
         This subsumes the old WMKO-native leak check: a raw instrument keyword
         kept in INSTRUMENT_HEADER is simply unregistered for an EPRV PRIMARY.
         """
-        reg = self.kpf.keyword_registry
+        reg = self.kpf_obj.keyword_registry
         skip_primary = str(self.LEVEL).upper() in ("L0", "NONE")
         for ext, allowed in reg.allowed.items():
-            if ext not in self.kpf.extensions:
+            if ext not in self.kpf_obj.extensions:
                 continue
             if ext == "PRIMARY" and skip_primary:
                 continue
-            header = self.kpf.headers.get(ext)
+            header = self.kpf_obj.headers.get(ext)
             if header is None:
                 continue
             for raw_key in list(header):
@@ -106,10 +106,10 @@ class Checkpoint:
         QC populator. A flag absent from the header is skipped (the check did not
         run); a flag equal to 0 raises if it is in ``RAISE_FLAGS``, else warns.
         """
-        header = self.kpf.headers.get("QUALITY_CONTROL")
+        header = self.kpf_obj.headers.get("QUALITY_CONTROL")
         if header is None:
             return
-        reg = self.kpf.keyword_registry
+        reg = self.kpf_obj.keyword_registry
         flag_keys = {
             row.Keyword
             for row in reg.table.itertuples(index=False)
@@ -136,7 +136,7 @@ class Checkpoint:
         extension-table/WCS cards astropy adds at serialization.
         """
         return (
-            key in self.kpf.keyword_registry.structural
+            key in self.kpf_obj.keyword_registry.structural
             or key in _EXT_STRUCTURAL_EXTRA
             or key.startswith(_EXT_STRUCTURAL_PREFIXES)
         )

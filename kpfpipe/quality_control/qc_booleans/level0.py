@@ -30,7 +30,7 @@ class QCL0(QC):
     def data_l0_red_green(self):
         """GREEN_AMP1..4 and RED_AMP1..4 exist and are non-empty."""
         for ext in _AMP_EXTENSIONS:
-            arr = self.kpf.data.get(ext)
+            arr = self.kpf_obj.data.get(ext)
             # KPF0 stores None-data as array(None, dtype=object); treat as absent.
             if (
                 arr is None
@@ -44,7 +44,7 @@ class QCL0(QC):
 
     def header_keywords_present(self):
         """Required PRIMARY keywords exist."""
-        hdr = self.kpf.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["PRIMARY"]
         return all(k in hdr for k in _L0_REQUIRED_KEYS)
 
     header_keywords_present._qc_key = "KWRDPRL0"
@@ -56,7 +56,7 @@ class QCL0(QC):
         positive. Tightening this requires frame-type-aware filtering, which
         is deferred until QC gains spectrum-type gating.
         """
-        hdr = self.kpf.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["PRIMARY"]
         if "EXPTIME" not in hdr:
             return False
         try:
@@ -71,7 +71,7 @@ class QCL0(QC):
         """obs_id not in reference/junk_observations.csv."""
         if not _JUNK_CSV.exists():
             return True
-        obs_id = self.kpf.obs_id
+        obs_id = self.kpf_obj.obs_id
         if not obs_id:
             return True
         df = pd.read_csv(_JUNK_CSV)

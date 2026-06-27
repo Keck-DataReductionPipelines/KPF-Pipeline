@@ -281,7 +281,7 @@ class TestQCBase:
 
         class MyQC(QC):
             def check_flag(self):
-                return self.kpf.flag
+                return self.kpf_obj.flag
 
             check_flag._qc_key = "FLAG"
 
