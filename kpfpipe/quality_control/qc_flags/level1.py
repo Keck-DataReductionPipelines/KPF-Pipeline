@@ -81,12 +81,16 @@ class QCL1(QC):
         return found
 
     def read_noise_ok(self):
-        """Per-amp RN in [2.0, 6.0] e- and non-Gaussian RN in [0.8, 1.5]."""
-        return self._present_rn_in_range(
-            0, _RN_LO, _RN_HI
-        ) and self._present_rn_in_range(1, _RNNG_LO, _RNNG_HI)
+        """Every per-amp read noise present is in [2.0, 6.0] e-."""
+        return self._present_rn_in_range(0, _RN_LO, _RN_HI)
 
     read_noise_ok._qc_key = "RNOK"
+
+    def read_noise_nongauss_ok(self):
+        """Every per-amp non-Gaussian read noise present is in [0.8, 1.5]."""
+        return self._present_rn_in_range(1, _RNNG_LO, _RNNG_HI)
+
+    read_noise_nongauss_ok._qc_key = "RNNGOK"
 
     def overscan_subtracted(self):
         """OSCANSUB == True."""

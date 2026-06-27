@@ -29,7 +29,8 @@ BIASAGE,Master bias age [days],QUALITY_CONTROL,float,DiagL1
 DARKAGE,Master dark age [days],QUALITY_CONTROL,float,DiagL1
 FLATAGE,Master flat age [days],QUALITY_CONTROL,float,DiagL1
 WLSAGE,WLS master age [days],QUALITY_CONTROL,float,DiagL1
-RNOK,QC: Read noise 2-6 e- & mad(RN)/std(RN) 0.8-1.5,QUALITY_CONTROL,int,QCL1
+RNOK,QC: per-amp read noise 2-6 e-,QUALITY_CONTROL,int,QCL1
+RNNGOK,QC: non-Gaussian read noise (MAD/STD) 0.8-1.5,QUALITY_CONTROL,int,QCL1
 BIASOK,QC: bias subtracted & master age <= 7 days,QUALITY_CONTROL,int,QCL1
 DARKOK,QC: dark subtracted & master age <= 14 days,QUALITY_CONTROL,int,QCL1
 FLATOK,QC: flat divided & master age <= 30 days,QUALITY_CONTROL,int,QCL1

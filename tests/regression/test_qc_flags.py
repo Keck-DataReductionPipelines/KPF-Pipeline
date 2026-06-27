@@ -462,14 +462,9 @@ class TestQCL1:
         l1 = _make_kpf1(tmp_path, with_rn=True)
         assert QCL1(l1).read_noise_ok() is True
 
-    def test_read_noise_ok_fail_rn_too_high(self, tmp_path):
+    def test_read_noise_ok_fail_too_high(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
         l1.headers["QUALITY_CONTROL"]["RNGREEN1"] = (99.0, "bad RN")
-        assert QCL1(l1).read_noise_ok() is False
-
-    def test_read_noise_ok_fail_nongauss_too_high(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, with_rn=True)
-        l1.headers["QUALITY_CONTROL"]["RNNGGR1"] = (9.9, "bad RNNG")
         assert QCL1(l1).read_noise_ok() is False
 
     def test_read_noise_ok_fail_missing(self, tmp_path):
@@ -477,15 +472,33 @@ class TestQCL1:
         assert QCL1(l1).read_noise_ok() is False
 
     def test_read_noise_ok_pass_2amp(self, tmp_path):
-        # 2-amp readout: only AMP1/AMP2 keys present (AMP3/4 absent), for both
-        # the Gaussian (RN*) and non-Gaussian (RNNG*) families.
+        # 2-amp readout: only AMP1/AMP2 keys present (AMP3/4 absent).
         l1 = _make_kpf1(tmp_path, with_rn=True)
         for i in (3, 4):
             del l1.headers["QUALITY_CONTROL"][f"RNGREEN{i}"]
             del l1.headers["QUALITY_CONTROL"][f"RNRED{i}"]
+        assert QCL1(l1).read_noise_ok() is True
+
+    def test_read_noise_nongauss_ok_pass(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, with_rn=True)
+        assert QCL1(l1).read_noise_nongauss_ok() is True
+
+    def test_read_noise_nongauss_ok_fail_too_high(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, with_rn=True)
+        l1.headers["QUALITY_CONTROL"]["RNNGGR1"] = (9.9, "bad RNNG")
+        assert QCL1(l1).read_noise_nongauss_ok() is False
+
+    def test_read_noise_nongauss_ok_fail_missing(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, with_rn=False)
+        assert QCL1(l1).read_noise_nongauss_ok() is False
+
+    def test_read_noise_nongauss_ok_pass_2amp(self, tmp_path):
+        # 2-amp readout: only AMP1/AMP2 keys present (AMP3/4 absent).
+        l1 = _make_kpf1(tmp_path, with_rn=True)
+        for i in (3, 4):
             del l1.headers["QUALITY_CONTROL"][f"RNNGGR{i}"]
             del l1.headers["QUALITY_CONTROL"][f"RNNGRD{i}"]
-        assert QCL1(l1).read_noise_ok() is True
+        assert QCL1(l1).read_noise_nongauss_ok() is True
 
     def test_overscan_subtracted_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, oscansub=True)
@@ -575,6 +588,7 @@ class TestQCL1:
             "data_present": "DATAPRL1",
             "required_keywords_present": "KWRDPRL1",
             "read_noise_ok": "RNOK",
+            "read_noise_nongauss_ok": "RNNGOK",
             "overscan_subtracted": "OSCANSUB",
             "bias_ok": "BIASOK",
             "dark_ok": "DARKOK",
@@ -610,6 +624,7 @@ class TestQCL1Run:
             "DATAPRL1",
             "KWRDPRL1",
             "RNOK",
+            "RNNGOK",
             "BIASOK",
             "DARKOK",
             "FLATOK",
