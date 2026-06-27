@@ -1,11 +1,16 @@
 """Checkpoint framework base class.
 
-The third quality-control stage (after Diagnostics and QC). A Checkpoint
-subclass READS the 0/1 QC flags written to QUALITY_CONTROL and the product
-headers, then emits warnings or raises errors -- it never writes keywords. A
-method opts in by setting ``_checkpoint_name`` on the function object; ``run()``
-walks all such methods (MRO order) and calls each. The pipeline order is:
-science modules -> Diagnostics -> QC -> Checkpoints.
+The third quality-control stage (after Diagnostics and QC). A Checkpoint's
+checkpoint methods READ the 0/1 QC flags written to QUALITY_CONTROL and the
+product headers, then emit warnings or raise errors -- they never write
+keywords. A method opts in by setting ``_checkpoint_name`` on the function
+object; ``run()`` walks all such methods (MRO order) and calls each.
+
+``run()`` also folds in the two upstream read-only stages: it first runs the
+subclass's paired Diagnostics and QC classes (``DIAGNOSTICS``/``QC``) -- which
+write the metrics and 0/1 flags -- then the checkpoint methods. So the recipe
+drives the whole pipeline order science modules -> Diagnostics -> QC ->
+Checkpoints through one ``CheckpointL{n}(obj).run()`` call.
 
 Two responsibilities, both inherited base checkpoints:
   - ``unregistered_keywords`` -- structural header validation: any non-structural
@@ -59,12 +64,26 @@ class Checkpoint:
 
     LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
     RAISE_FLAGS = ()  # QC keywords whose failure (0) raises; every other 0 warns.
+    DIAGNOSTICS = None  # Paired Diagnostics class, run first by run() (None = skip).
+    QC = None  # Paired QC class, run second; its results land in self.qc_results.
 
     def __init__(self, kpf_obj):
         self.kpf_obj = kpf_obj
+        self.qc_results = {}  # pass/fail dict from the folded QC.run() (empty if none)
 
     def run(self):
-        """Run every checkpoint method; each warns or raises (no return value)."""
+        """Run the paired Diagnostics and QC, then every checkpoint method.
+
+        Folds in the two upstream read-only stages: Diagnostics writes its
+        metrics, QC writes the 0/1 flags + ISGOOD (captured in ``self.qc_results``
+        for callers that report them), then each checkpoint method warns or
+        raises. A level with no paired ``DIAGNOSTICS``/``QC`` skips that stage.
+        The checkpoint methods themselves never write (no return value).
+        """
+        if self.DIAGNOSTICS is not None:
+            self.DIAGNOSTICS(self.kpf_obj).run()
+        if self.QC is not None:
+            self.qc_results = self.QC(self.kpf_obj).run()
         for _name, fn in self._iter_checkpoints():
             fn()
 

@@ -20,9 +20,7 @@ from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.radial_velocity import RadialVelocity
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
-from kpfpipe.quality_control.checkpoints import CheckpointL1, CheckpointL2
-from kpfpipe.quality_control.diagnostics import DiagL1, DiagL2
-from kpfpipe.quality_control.qc_flags import QCL1, QCL2
+from kpfpipe.quality_control.checkpoints import CheckpointL0, CheckpointL1, CheckpointL2
 from kpfpipe.quality_control.quicklook.level0 import PlotL0
 from kpfpipe.quality_control.quicklook.level1 import PlotL1
 from kpfpipe.quality_control.quicklook.level2 import PlotL2
@@ -46,18 +44,19 @@ def main(config, args):
 
     l0 = KPF0.from_fits(build_filepath(obs_id, "L0", data_root=data_root_in))
 
+    # Generate L0 quicklook plots
     l0_qlp_dir = build_qlp_dir(obs_id, "L0", data_root=data_root_science)
     PlotL0(l0, output_dir=l0_qlp_dir).run("all")
 
-    # Assemble the raw L0 readout into a single L1 full-frame image (FFI) so
-    # that downstream stages operate on a contiguous detector frame.
+    # L0 processing complete. CheckpointL0 is constructed but intentionally not
+    # run here: running QCL0 on l0 before assembly would propagate L0 QC flags
+    # onto the L1/L2 QUALITY_CONTROL via to_kpf1/to_kpf2. L0 checkpointing is
+    # left unwired pending that ordering decision.
+    CheckpointL0(l0)
+
+    # Assemble the raw L0 readout into a single L1 full-frame image (FFI)
     image_assembly = ImageAssembly(l0, config)
     l1 = image_assembly.perform()
-
-    # L1 QLP is computed on the assembled (pre-bias-subtraction) image because
-    # ImageProcessing mutates GREEN_CCD/RED_CCD in place during bias subtraction.
-    l1_qlp_dir = build_qlp_dir(obs_id, "L1", data_root=data_root_science)
-    PlotL1(l1, output_dir=l1_qlp_dir).run("all")
 
     # Associate the implemented calibration masters closest to this frame so
     # image processing and wavelength calibration can use them. Flat frames are
@@ -71,11 +70,12 @@ def main(config, args):
     image_processing = ImageProcessing(l1, config)
     l1 = image_processing.perform()
 
-    # Run L1 diagnostics, QC, and checkpoints here so the pass/fail thresholds
-    # see the processed image before extraction collapses it to 1D. Order is
-    # Diagnostics (metrics) -> QC (0/1 flags) -> Checkpoints (warn/raise).
-    DiagL1(l1).run()
-    QCL1(l1).run()
+    # L1 quicklook plots
+    l1_qlp_dir = build_qlp_dir(obs_id, "L1", data_root=data_root_science)
+    PlotL1(l1, output_dir=l1_qlp_dir).run("all")
+
+    # L1 processing complete: CheckpointL1.run() folds in Diagnostics + QC,
+    # then validates (science -> Diagnostics -> QC -> Checkpoints).
     CheckpointL1(l1).run()
 
     # Extract the 2D FFI down to 1D spectra (2D --> 1D), since the RV analysis
@@ -88,26 +88,21 @@ def main(config, args):
     wavelength_calibration = WavelengthCalibration(l2, config)
     l2 = wavelength_calibration.perform()
 
-    # Run L2 diagnostics, QC, and checkpoints on the extracted spectra to flag
-    # NaN counts and zero-flux orders before they propagate into the RV
-    # measurement (Diagnostics -> QC -> Checkpoints).
-    DiagL2(l2).run()
-    QCL2(l2).run()
-    CheckpointL2(l2).run()
-
     # Apply the per-order barycentric correction so the spectra are placed in
     # the Solar System barycentric frame for long-term RV stability. Writes
     # BJD_TDB, BARYCORR_KMS [km/s], and BARYCORR_Z to the headers.
     barycentric_correction = BarycentricCorrection(l2, config)
     l2 = barycentric_correction.perform()
 
-    # L2 QLP (wavelength-aware extracted-spectrum plots; requires attached WAVE)
+    # L2 quicklook plots
     l2_qlp_dir = build_qlp_dir(obs_id, "L2", data_root=data_root_science)
     PlotL2(l2, output_dir=l2_qlp_dir, obs_id=obs_id).run("all")
 
-    # Write the L2 data product to disk before the RV step so the calibrated
-    # spectra are preserved even if RV computation fails. to_fits creates the
-    # parent directory as needed.
+    # L2 processing complete: CheckpointL2.run() folds in Diagnostics + QC,
+    # then validates (science -> Diagnostics -> QC -> Checkpoints).
+    CheckpointL2(l2).run()
+
+    # Write the L2 data products (extracted 1D spectra) to disk
     l2_out_path = build_filepath(obs_id, "L2", data_root=data_root_science)
     l2.to_fits(l2_out_path)
 
@@ -116,8 +111,15 @@ def main(config, args):
     radial_velocity = RadialVelocity(l2, config)
     l4 = radial_velocity.perform()
 
-    # Write the final L4 data product (RVs and CCFs) to disk; to_fits creates
-    # the parent directory as needed.
+    # L4 quicklook plots
+    # l4_qlp_dir = build_qlp_dir(obs_id, "L4", data_root=data_root_science)
+    # PlotL4(l4, output_dir=l4_qlp_dir, obs_id=obs_id).run("all")
+
+    # L4 processing complete: CheckpointL4.run() would fold in Diagnostics + QC
+    # (no QCL4/CheckpointL4 implemented yet).
+    # CheckpointL4(l4).run()
+
+    # Write the final L4 data product (RVs and CCFs) to disk
     l4_out_path = build_filepath(obs_id, "L4", data_root=data_root_science)
     l4.to_fits(l4_out_path)
 
