@@ -214,7 +214,7 @@ per-extension CSVs), columns `Keyword, Description, Extension, DataType, Populat
 (`.registered` is the keyword allowlist). **`keyword_registry.py` is imported only by
 `data_models/base.py`**: `KPFDataModel` surfaces the singleton as the **class attribute
 `keyword_registry`** and re-exports it (so `level2/4.py` call `keyword_registry.register_rvdata_extension`
-from `base`) — consumers handed a `kpf_obj` (the qc_booleans validator, level0's WMKO→EPRV mapping,
+from `base`) — consumers handed a `kpf_obj` (the checkpoints validator, level0's WMKO→EPRV mapping,
 tests) read the lookups off `kpf.keyword_registry.{table,routing,allowed,required,structural,registered,header_map}`
 rather than importing the registry.
 Consequences every contributor must respect:
@@ -320,7 +320,7 @@ The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (top-level Ord
 Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote:
 
 - **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
-- **QC** (`kpfpipe/quality_control/qc_booleans/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. No validation or raising — that is the Checkpoints layer's job.
+- **QC** (`kpfpipe/quality_control/qc_flags/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. No validation or raising — that is the Checkpoints layer's job.
 - **Checkpoints** (`kpfpipe/quality_control/checkpoints/`) — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest). `CheckpointL0`/`L1`/`L2` set `LEVEL` + `RAISE_FLAGS`.
 - **Quicklook** (`kpfpipe/quality_control/quicklook/`) — reads products and renders matplotlib plots. Pulls any annotation values from existing headers.
 

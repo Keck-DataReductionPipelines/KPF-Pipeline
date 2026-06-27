@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from kpfpipe.quality_control.qc_booleans.base import QC
+from kpfpipe.quality_control.qc_flags.base import QC
 
 _CHIPS = ["GREEN", "RED"]
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]

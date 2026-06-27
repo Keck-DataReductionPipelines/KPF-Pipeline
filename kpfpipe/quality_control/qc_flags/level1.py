@@ -3,7 +3,7 @@
 import numpy as np
 
 from kpfpipe.modules.image_assembly import RN_KEYS
-from kpfpipe.quality_control.qc_booleans.base import QC
+from kpfpipe.quality_control.qc_flags.base import QC
 
 _RN_LO, _RN_HI = 2.0, 6.0
 _RNNG_LO, _RNNG_HI = 0.8, 1.5

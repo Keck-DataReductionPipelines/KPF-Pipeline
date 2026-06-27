@@ -71,7 +71,7 @@ class QC:
         The registry's EPRV ``Required`` PRIMARY keywords at or below this
         product's level, unioned with the KPF-pipeline keywords routed to PRIMARY
         (the provenance cards). Read off the validated model's registry singleton
-        (``self.kpf_obj.keyword_registry``), so qc_booleans imports nothing from
+        (``self.kpf_obj.keyword_registry``), so qc_flags imports nothing from
         data_models. L0 (or an untagged subclass) returns the empty set -- raw
         WMKO L0 PRIMARY is not registry-governed.
         """

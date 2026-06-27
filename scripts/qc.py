@@ -20,7 +20,7 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.quality_control.checkpoints import CheckpointL0, CheckpointL1, CheckpointL2
-from kpfpipe.quality_control.qc_booleans import QCL0, QCL1, QCL2
+from kpfpipe.quality_control.qc_flags import QCL0, QCL1, QCL2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import build_filepath
 

@@ -15,8 +15,8 @@ RV2/RV4, so their round-trip guards live in test_data_models_l{2,4}.py.
 
 The WMKO->EPRV conversion (``KPF0.wmko_to_eprv`` / ``build_instrument_header``) is
 exercised end-to-end by the to_kpf1/to_kpf2 tests in test_data_models_l{1,2,4}.py.
-PRIMARY-header validation no longer lives on the data models (it moved to the QC
-runner, ``quality_control/qc_booleans/base.py``).
+PRIMARY-header validation no longer lives on the data models (it moved to the
+checkpoints layer, ``quality_control/checkpoints/base.py``).
 """
 
 import warnings

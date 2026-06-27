@@ -22,7 +22,7 @@ from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 from kpfpipe.quality_control.checkpoints import CheckpointL1, CheckpointL2
 from kpfpipe.quality_control.diagnostics import DiagL1, DiagL2
-from kpfpipe.quality_control.qc_booleans import QCL1, QCL2
+from kpfpipe.quality_control.qc_flags import QCL1, QCL2
 from kpfpipe.quality_control.quicklook.level0 import PlotL0
 from kpfpipe.quality_control.quicklook.level1 import PlotL1
 from kpfpipe.quality_control.quicklook.level2 import PlotL2
