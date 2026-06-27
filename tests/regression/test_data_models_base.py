@@ -84,15 +84,16 @@ class TestUndefinedRoundTrip:
         l1.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
         # radial_velocity writes None for a non-finite fit; astropy stores it as
         # an UNDEFINED card. The value must round-trip as a blank/undefined card
-        # (read back as None), never as a finite number.
-        l1.headers["PRIMARY"]["CCFRV"] = None
+        # (read back as None), never as a finite number. RV is the EPRV combined
+        # RV on PRIMARY, written None on a failed fit.
+        l1.headers["PRIMARY"]["RV"] = None
 
         fn = str(tmp_path / "header_undefined_l1.fits")
         l1.to_fits(fn)
 
         prim = KPF1.from_fits(fn).headers["PRIMARY"]
-        assert "CCFRV" in prim
-        val = prim["CCFRV"]
+        assert "RV" in prim
+        val = prim["RV"]
         assert val is None or isinstance(val, fits.card.Undefined)
 
 

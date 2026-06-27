@@ -959,11 +959,11 @@ class RadialVelocity:
             L4 with a CCF cube and per-order RV table per illuminated orderlet.
             Each CCF extension carries VELSTART/VELSTEP/VELNSTEP/CCFMASK; each RV
             extension carries RVMETHOD/SKYRMVD/TELLRMVD. The legacy combined-RV
-            keywords are registered KPF-pipeline PRIMARY keywords: per-fiber
-            CCD<n>RV<sfx>/CCD<n>ERV<sfx>, the SCI-combined CCD<n>RV/CCD<n>ERV,
-            and CCFRV/CCFERV. PRIMARY also carries the EPRV keywords RVMETHOD and
-            RV/RVERR/BERV/BJDTDB (the combined science RV). Unilluminated
-            ('none') fibers are skipped (empty extensions).
+            keywords are registered KPF-pipeline keywords routed to the RV# tables:
+            per-fiber CCD<n>RV<sfx>/CCD<n>ERV<sfx> by orderlet, and the SCI-combined
+            CCD<n>RV/CCD<n>ERV plus CCFRV/CCFERV on RV3. PRIMARY carries the EPRV
+            keywords RVMETHOD and RV/RVERR/BERV/BJDTDB (the combined science RV).
+            Unilluminated ('none') fibers are skipped (empty extensions).
         """
         if chips is None:
             chips = self.chips
@@ -1099,7 +1099,7 @@ class RadialVelocity:
             # CCD<n>RV<sfx>/CCD<n>ERV<sfx> (n: GREEN=1, RED=2; sfx: 1/2/3=SCI1/2/3,
             # C=CAL, S=SKY), routed by set_keyword to their RV# table header (e.g.
             # CCD1RV1 -> RV2). The bare CCD<n>RV/CCD<n>ERV names stay reserved for
-            # the SCI-combined RV (on PRIMARY). A non-finite value (failed fit) is
+            # the SCI-combined RV (on RV3). A non-finite value (failed fit) is
             # written as None so it becomes a FITS UNDEFINED card, not a NaN.
             sfx = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}[fiber]
             for chip in ccd_rv:
@@ -1180,7 +1180,7 @@ class RadialVelocity:
         if not np.isfinite(ccfrv):
             print(
                 "  combined RV: no finite per-CCD science RV; "
-                "CCFRV/PRIMARY RV UNDEFINED"
+                "CCFRV (RV3) and PRIMARY RV UNDEFINED"
             )
 
         l4_obj.set_keyword("CCFRV", float(ccfrv) if np.isfinite(ccfrv) else None)
