@@ -48,10 +48,6 @@ _EXT_STRUCTURAL_PREFIXES = (
 )
 _EXT_STRUCTURAL_EXTRA = {"EXTNAME", "TFIELDS", "PCOUNT", "GCOUNT"}
 
-# Registry ``PopulatedBy`` values that mark a keyword as a 0/1 QC flag (so the
-# qc_flags checkpoint can find them without a hardcoded list).
-_QC_POPULATORS = {"QC", "QCL0", "QCL1", "QCL2"}
-
 
 class Checkpoint:
     """Base runner for per-level checkpoint methods.
@@ -119,21 +115,21 @@ class Checkpoint:
     unregistered_keywords._checkpoint_name = "unregistered_keywords"
 
     def qc_flags(self):
-        """Read each 0/1 QC flag; raise a RAISE_FLAGS failure, warn the rest.
+        """Read this level's 0/1 QC flags; raise a RAISE_FLAGS failure, warn the rest.
 
-        QC-flag keywords are the QUALITY_CONTROL rows the registry attributes to a
-        QC populator. A flag absent from the header is skipped (the check did not
-        run); a flag equal to 0 raises if it is in ``RAISE_FLAGS``, else warns.
+        Scoped to **this level's own** checks (the registry's
+        ``qc_flag_keywords_by_level[LEVEL]`` -- the ``QCL{n}`` flags), NOT the
+        flags propagated from lower levels: QUALITY_CONTROL accumulates the whole
+        L0->L1->L2->L4 history, but a lower-level flag was already surfaced at its
+        own level's checkpoint, so re-warning it here would just be noise. A flag
+        absent from the header is skipped (the check did not run); a flag equal to
+        0 raises if it is in ``RAISE_FLAGS``, else warns.
         """
         header = self.kpf_obj.headers.get("QUALITY_CONTROL")
         if header is None:
             return
         reg = self.kpf_obj.keyword_registry
-        flag_keys = {
-            row.Keyword
-            for row in reg.table.itertuples(index=False)
-            if row.Extension == "QUALITY_CONTROL" and row.PopulatedBy in _QC_POPULATORS
-        }
+        flag_keys = reg.qc_flag_keywords_by_level.get(self.LEVEL, frozenset())
         for key in sorted(flag_keys):
             value = header.get(key)
             if value is None or value != 0:

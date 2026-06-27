@@ -328,14 +328,14 @@ class KPF0(KPFDataModel):
                 if ext_name in self.headers:
                     l1.set_header(ext_name, self.headers[ext_name])
 
-        # Forward the L0 QUALITY_CONTROL header (QCL0 booleans) onto L1, with
-        # comments. Both models create QUALITY_CONTROL in __init__, so the
-        # destination already exists; downstream L1 QC appends to it. (L0 routes
-        # nothing to RECEIPT, so there is no RECEIPT header to forward here.)
-        if "QUALITY_CONTROL" in self.headers:
-            l1.set_header(
-                "QUALITY_CONTROL", self.as_fits_header(self.headers["QUALITY_CONTROL"])
-            )
+        # Forward the L0 QUALITY_CONTROL and RECEIPT *headers* onto L1 (value +
+        # comment), mirroring to_kpf2/to_kpf4 so all three conversions share one
+        # invariant. QUALITY_CONTROL carries the QCL0 booleans + ISGOOD; downstream
+        # L1 QC appends to it. (RECEIPT is a no-op today -- L0 routes nothing to it
+        # -- but the guarded forward keeps the contract symmetric and future-proof.)
+        for ext in ("QUALITY_CONTROL", "RECEIPT"):
+            if ext in self.headers and ext in l1.extensions:
+                l1.set_header(ext, self.as_fits_header(self.headers[ext]))
 
         # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:

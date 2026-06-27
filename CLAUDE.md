@@ -243,7 +243,7 @@ Consequences every contributor must respect:
   per-level registry `data_models/config/L{0,1,2,4}-headers.csv` (explicit ≤8-char FITS keyword — no
   wildcards; families enumerated per member, e.g. `RNGREEN1`-`RNGREEN4`). The current homes:
   - **PRIMARY** — DRP provenance (stamped at read), `DRPTAG`, and the EPRV RV cards.
-  - **QUALITY_CONTROL** (a KPF-only `BinTableHDU`, created on KPF0/1/2) — QC booleans + `ISGOOD`,
+  - **QUALITY_CONTROL** (a KPF-only `BinTableHDU`, created on KPF0/1/2/4) — QC booleans + `ISGOOD`,
     read-noise (`RN*`), calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), and DiagL2
     metrics (`NAN*`/`ZEROFRAC`/`*SNR*`/`*FR*`).
   - **RECEIPT** — applied flags (`OSCANSUB`/`BIASSUB`/`DARKSUB`/`FLATDIV`), calibration **paths**
@@ -253,8 +253,17 @@ Consequences every contributor must respect:
     2→RV3, 3→RV4, C→RV5) plus the SCI-combined RV summaries on **RV3**
     (`CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV`, `CCFRV`, `CCFERV`). Masters keep `MASTYPE` on their own
     PRIMARY (out of EPRV scope).
-- **QUALITY_CONTROL + RECEIPT *headers* propagate L0→L1→L2** card-by-card in `to_kpf1`/`to_kpf2`
-  (`set_header` with a comment-preserving `fits.Header` copy), alongside the receipt *table* copy.
+- **QUALITY_CONTROL + RECEIPT *headers* propagate L0→L1→L2→L4** card-by-card in
+  `to_kpf1`/`to_kpf2`/`to_kpf4` (`set_header` with a comment-preserving `fits.Header` copy),
+  alongside the receipt *table* copy. All three `to_kpfN` methods share one invariant — forward both
+  governed headers if present — so QUALITY_CONTROL is an **append-only history of every diagnostic /
+  QC flag**, exactly as RECEIPT is the append-only history of processing steps. The **only** QC
+  keyword that changes level-to-level is **`ISGOOD`**, the running aggregate: each level's `QC.run`
+  recomputes it as the AND over *every* QC flag then on QUALITY_CONTROL (propagated + just-written,
+  via `keyword_registry.qc_flag_keywords`, excluding `ISGOOD` itself), so it reflects all QC
+  accumulated so far. The `qc_flags` checkpoint, by contrast, warns/raises only on the **current
+  level's own** flags (`keyword_registry.qc_flag_keywords_by_level[LEVEL]`) — a propagated
+  lower-level `0` was already surfaced at its own level, so it is not re-warned downstream.
   QUALITY_CONTROL is a KPF-custom extension unknown to rvdata's definition-driven L2/L4 reader, so
   `keyword_registry.register_rvdata_extension` (a method on `KeywordRegistry`, re-exposed via `base`,
   called from `level2.py`/`level4.py`) registers it into rvdata's in-memory `LEVEL{2,4}_EXTENSIONS` so
@@ -320,8 +329,8 @@ The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (top-level Ord
 Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote. The recipe drives all three through a **single `CheckpointL{n}(obj).run()` call**: `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly. The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g. `scripts/qc.py`). A level with no paired class skips that stage; `CheckpointL0` is wired but the recipe leaves L0 unrun (running QCL0 pre-assembly would leak L0 flags onto L1/L2 via header propagation).
 
 - **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
-- **QC** (`kpfpipe/quality_control/qc_flags/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. No validation or raising — that is the Checkpoints layer's job.
-- **Checkpoints** (`kpfpipe/quality_control/checkpoints/`) — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest). `CheckpointL0`/`L1`/`L2` set `LEVEL` + `RAISE_FLAGS`.
+- **QC** (`kpfpipe/quality_control/qc_flags/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. `ISGOOD` is the **running** aggregate — the AND over every QC flag accumulated on QUALITY_CONTROL so far (this level's checks *plus* those propagated from lower levels), not just this level's checks. No validation or raising — that is the Checkpoints layer's job.
+- **Checkpoints** (`kpfpipe/quality_control/checkpoints/`) — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest) — scoped to the **current level's own** flags (`keyword_registry.qc_flag_keywords_by_level[LEVEL]`), so a propagated lower-level `0` is not re-warned. `CheckpointL0`/`L1`/`L2` set `LEVEL` + `RAISE_FLAGS`.
 - **Quicklook** (`kpfpipe/quality_control/quicklook/`) — reads products and renders matplotlib plots. Pulls any annotation values from existing headers.
 
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.

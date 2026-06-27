@@ -75,6 +75,13 @@ class KeywordRegistry:
         **{f"CCF{i}": (_rv_cfg / "L4-CCF1-keywords.csv", 4) for i in range(1, 6)},
     }
 
+    # Registry "PopulatedBy" values that mark a QUALITY_CONTROL row as a 0/1 QC
+    # flag. The generic "QC" tags the cross-level aggregate ISGOOD; "QCL{n}" tags
+    # a level-N check. ``qc_flag_keywords`` unions them (drives the ISGOOD
+    # aggregate); ``qc_flag_keywords_by_level`` keys the level-N checks by their
+    # LEVEL tag (drives the per-level checkpoint, which flags only its own checks).
+    _QC_POPULATORS = frozenset({"QC", "QCL0", "QCL1", "QCL2"})
+
     # FITS structural / bookkeeping cards plus KPF-internal PRIMARY keys that are
     # neither EPRV nor in the registry but are always permitted.
     _STRUCTURAL = {
@@ -118,6 +125,13 @@ class KeywordRegistry:
             {ext: MappingProxyType(d) for ext, d in required.items()}
         )
         self.structural = frozenset(self._STRUCTURAL)
+        # QC-flag keyword sets: the full set (ISGOOD aggregate) and the per-level
+        # split (current-level checkpoint scope). See _build_qc_flag_sets.
+        qc_all, qc_by_level = self._build_qc_flag_sets()
+        self.qc_flag_keywords = frozenset(qc_all)
+        self.qc_flag_keywords_by_level = MappingProxyType(
+            {lvl: frozenset(kws) for lvl, kws in qc_by_level.items()}
+        )
         # (1) Mapping: the rvdata WMKO-native -> EPRV-standard header_map.
         self.header_map = pd.read_csv(_kpf_cfg / "header_map.csv")
         self._warn_unregistered_targets()
@@ -266,6 +280,31 @@ class KeywordRegistry:
                 d = required.setdefault(extn, {})
                 d[row.Keyword] = min(d.get(row.Keyword, row.Level), row.Level)
         return allowed, required
+
+    def _build_qc_flag_sets(self):
+        """QC-flag keyword sets, derived from ``self.table``.
+
+        Returns
+        -------
+        tuple
+            ``(all_flags, by_level)``. ``all_flags`` is every QUALITY_CONTROL row
+            tagged by a QC populator (used for the cross-level ISGOOD aggregate).
+            ``by_level`` maps a LEVEL tag ("L0"/"L1"/"L2") to that level's own
+            ``QCL{n}`` flags (used by the per-level checkpoint). The generic "QC"
+            aggregate keyword (ISGOOD) is in ``all_flags`` only — in no per-level
+            set, so the checkpoint never warns/raises on the aggregate itself.
+        """
+        all_flags = set()
+        by_level = {}
+        for row in self.table.itertuples(index=False):
+            if row.Extension != "QUALITY_CONTROL" or row.PopulatedBy not in (
+                self._QC_POPULATORS
+            ):
+                continue
+            all_flags.add(row.Keyword)
+            if row.PopulatedBy != "QC":  # "QCL0"/"QCL1"/"QCL2" -> "L0"/"L1"/"L2"
+                by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
+        return all_flags, by_level
 
     def _warn_unregistered_targets(self):
         """Warn once if header_map maps to STANDARD targets we don't register.

@@ -44,7 +44,8 @@ class QC:
         Returns
         -------
         dict
-            Maps each FITS keyword to its ``(passed, comment)`` pair.
+            Maps each FITS keyword to its ``(passed, comment)`` pair (this level's
+            checks only). ``ISGOOD`` is the cross-level aggregate (see below).
         """
         self.results = {}
 
@@ -61,7 +62,14 @@ class QC:
             self.results[kw] = (passed, comment)
             self.kpf_obj.set_keyword(kw, 1 if passed else 0)
 
-        is_good = all(p for p, _ in self.results.values())
+        # ISGOOD is the running aggregate: AND over every QC flag now on
+        # QUALITY_CONTROL — the flags this level just wrote PLUS those propagated
+        # from lower levels (QUALITY_CONTROL accumulates L0->L1->L2->L4). Reading
+        # the accumulated header makes it level-agnostic; exclude ISGOOD itself.
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        flags = self.kpf_obj.keyword_registry.qc_flag_keywords - {"ISGOOD"}
+        present = [hdr.get(kw) for kw in flags if hdr.get(kw) is not None]
+        is_good = all(bool(v) for v in present)
         self.kpf_obj.set_keyword("ISGOOD", 1 if is_good else 0)
         return self.results
 

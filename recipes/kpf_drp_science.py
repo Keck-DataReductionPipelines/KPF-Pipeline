@@ -48,11 +48,11 @@ def main(config, args):
     l0_qlp_dir = build_qlp_dir(obs_id, "L0", data_root=data_root_science)
     PlotL0(l0, output_dir=l0_qlp_dir).run("all")
 
-    # L0 processing complete. CheckpointL0 is constructed but intentionally not
-    # run here: running QCL0 on l0 before assembly would propagate L0 QC flags
-    # onto the L1/L2 QUALITY_CONTROL via to_kpf1/to_kpf2. L0 checkpointing is
-    # left unwired pending that ordering decision.
-    CheckpointL0(l0)
+    # L0 processing complete: CheckpointL0.run() folds in Diagnostics + QC, then
+    # validates. Run before assembly on purpose -- QCL0 writes the L0 QC flags +
+    # ISGOOD onto l0's QUALITY_CONTROL, which to_kpf1 propagates downstream so the
+    # L1/L2/L4 products carry the full append-only QC history.
+    CheckpointL0(l0).run()
 
     # Assemble the raw L0 readout into a single L1 full-frame image (FFI)
     image_assembly = ImageAssembly(l0, config)

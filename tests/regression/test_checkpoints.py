@@ -96,6 +96,32 @@ class TestQCFlags:
             warnings.simplefilter("error")
             CheckpointL2(l2).qc_flags()
 
+    def test_only_current_level_flags_are_checked(self):
+        # QUALITY_CONTROL accumulates the L0->L1->L2 history, but qc_flags warns
+        # only on THIS level's own checks. A failed L1 flag (RNOK) propagated onto
+        # an L2 product must NOT re-warn at the L2 checkpoint; the L2 flag does.
+        l2 = KPF2()
+        l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")  # avoid raise
+        l2.headers["QUALITY_CONTROL"]["RNOK"] = (0, "L1 read noise (propagated)")
+        l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (0, "L2 required present")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            CheckpointL2(l2).qc_flags()
+        msgs = [str(w.message) for w in caught]
+        assert any("KWRDPRL2 = 0" in m for m in msgs)  # current-level flag warns
+        assert not any("RNOK" in m for m in msgs)  # propagated L1 flag ignored
+
+    def test_registry_qc_flag_sets_scoping(self):
+        from kpfpipe.data_models.keyword_registry import keyword_registry as reg
+
+        # ISGOOD is the cross-level aggregate: in the full set, in no per-level set.
+        assert "ISGOOD" in reg.qc_flag_keywords
+        assert all("ISGOOD" not in s for s in reg.qc_flag_keywords_by_level.values())
+        # Representative checks live under their own level.
+        assert "RNOK" in reg.qc_flag_keywords_by_level["L1"]
+        assert "DATAPRL2" in reg.qc_flag_keywords_by_level["L2"]
+        assert "RNOK" not in reg.qc_flag_keywords_by_level["L2"]
+
 
 class TestRunFoldsDiagnosticsAndQC:
     """``run()`` runs the paired Diagnostics, then QC, then the checkpoint methods."""

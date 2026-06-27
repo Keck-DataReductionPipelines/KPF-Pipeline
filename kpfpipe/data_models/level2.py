@@ -257,6 +257,15 @@ class KPF2(KPFDataModel, RV2):
                     card.comment,
                 )
 
+        # Forward the QUALITY_CONTROL and RECEIPT *headers* onto L4 (value +
+        # comment), mirroring to_kpf2: QUALITY_CONTROL carries the accumulated
+        # L0/L1/L2 diagnostics + QC flags (append-only history, like RECEIPT), and
+        # the RECEIPT cards (applied-step flags, calibration paths) ride along.
+        # The receipt *table* propagates separately via the copy below.
+        for ext in ("QUALITY_CONTROL", "RECEIPT"):
+            if ext in self.headers and ext in kpf4.extensions:
+                kpf4.set_header(ext, self.as_fits_header(self.headers[ext]))
+
         # Carry forward receipt and obs_id
         if self.receipt is not None and not self.receipt.empty:
             kpf4.receipt = self.receipt.copy()

@@ -10,16 +10,8 @@ _JUNK_CSV = REPO_ROOT / "reference" / "junk_observations.csv"
 
 _L0_REQUIRED_KEYS = ["DATE-OBS", "EXPTIME", "OBJECT", "OFNAME", "IMTYPE"]
 
-_AMP_EXTENSIONS = [
-    "GREEN_AMP1",
-    "GREEN_AMP2",
-    "GREEN_AMP3",
-    "GREEN_AMP4",
-    "RED_AMP1",
-    "RED_AMP2",
-    "RED_AMP3",
-    "RED_AMP4",
-]
+_CHIPS = ("GREEN", "RED")
+_AMPS_PER_CHIP = 4  # GREEN_AMP1..4 / RED_AMP1..4 (only a subset is read out)
 
 
 class QCL0(QC):
@@ -28,15 +20,26 @@ class QCL0(QC):
     LEVEL = "L0"
 
     def data_l0_red_green(self):
-        """GREEN_AMP1..4 and RED_AMP1..4 exist and are non-empty."""
-        for ext in _AMP_EXTENSIONS:
-            arr = self.kpf_obj.data.get(ext)
-            # KPF0 stores None-data as array(None, dtype=object); treat as absent.
-            if (
-                arr is None
-                or getattr(arr, "dtype", None) == np.dtype(object)
-                or np.size(arr) == 0
-            ):
+        """Raw CCD data present: GREEN and RED each have >=1 non-empty amplifier.
+
+        KPF reads out either 2 or 4 amplifiers per chip, so only the read-out
+        amps are stored; absent amps are kept as ``array(None, dtype=object)``.
+        Both 2-amp and 4-amp readouts must pass, so we require each chip to have
+        at least one real amp array rather than all four.
+        """
+        for chip in _CHIPS:
+            found = False
+            for i in range(1, _AMPS_PER_CHIP + 1):
+                arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
+                # KPF0 stores None-data as array(None, dtype=object); skip absent.
+                if (
+                    arr is None
+                    or getattr(arr, "dtype", None) == np.dtype(object)
+                    or np.size(arr) == 0
+                ):
+                    continue
+                found = True
+            if not found:
                 return False
         return True
 
