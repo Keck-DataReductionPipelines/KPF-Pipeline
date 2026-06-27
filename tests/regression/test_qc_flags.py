@@ -348,6 +348,21 @@ class TestQCL0:
         l0 = KPF0.from_fits(fn)
         assert QCL0(l0).data_l0_red_green() is True
 
+    def test_data_l0_red_green_fail_partial_amp(self, tmp_path):
+        """A partial/invalid amp set (3 present) is not a supported readout mode
+        (2 or 4), so the inferred count is rejected."""
+        fn = str(tmp_path / "KP.20240405.00004.00.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+        hdus = [primary]
+        for chip in ["GREEN", "RED"]:
+            for amp in (1, 2, 3):  # 3 amps -> not a valid 2/4-amp readout
+                data = np.ones((10, 10), dtype=np.float32)
+                hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
+        fits.HDUList(hdus).writeto(fn, overwrite=True)
+        l0 = KPF0.from_fits(fn)
+        assert QCL0(l0).data_l0_red_green() is False
+
     def test_header_keywords_present_pass(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
         assert QCL0(l0).header_keywords_present() is True

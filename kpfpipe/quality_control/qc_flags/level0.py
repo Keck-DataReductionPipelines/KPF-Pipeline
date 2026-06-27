@@ -12,6 +12,7 @@ _L0_REQUIRED_KEYS = ["DATE-OBS", "EXPTIME", "OBJECT", "OFNAME", "IMTYPE"]
 
 _CHIPS = ("GREEN", "RED")
 _AMPS_PER_CHIP = 4  # GREEN_AMP1..4 / RED_AMP1..4 (only a subset is read out)
+_SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
 
 
 class QCL0(QC):
@@ -20,15 +21,19 @@ class QCL0(QC):
     LEVEL = "L0"
 
     def data_l0_red_green(self):
-        """Raw CCD data present: GREEN and RED each have >=1 non-empty amplifier.
+        """Raw CCD data present: each of GREEN/RED is a supported amp readout.
 
-        KPF reads out either 2 or 4 amplifiers per chip, so only the read-out
-        amps are stored; absent amps are kept as ``array(None, dtype=object)``.
-        Both 2-amp and 4-amp readouts must pass, so we require each chip to have
-        at least one real amp array rather than all four.
+        KPF reads out either 2 or 4 amplifiers per chip, so the expected amp
+        count is inferred from the data rather than fixed: a chip passes when the
+        number of present, non-empty amplifier extensions is a supported readout
+        mode (``_SUPPORTED_NAMP``), mirroring ``ImageAssembly.count_amplifiers``.
+        This accepts both 2-amp and 4-amp frames and rejects a chip with no data
+        or a partial/invalid amp set (1 or 3). Absent amps are stored as
+        ``array(None, dtype=object)`` and skipped -- the same present-amp scan
+        QCL1 uses for read noise.
         """
         for chip in _CHIPS:
-            found = False
+            namp = 0
             for i in range(1, _AMPS_PER_CHIP + 1):
                 arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
                 # KPF0 stores None-data as array(None, dtype=object); skip absent.
@@ -38,8 +43,8 @@ class QCL0(QC):
                     or np.size(arr) == 0
                 ):
                     continue
-                found = True
-            if not found:
+                namp += 1
+            if namp not in _SUPPORTED_NAMP:
                 return False
         return True
 
