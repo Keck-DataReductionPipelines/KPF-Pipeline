@@ -459,8 +459,10 @@ consumes what the prior wrote (metrics → 0/1 flags → warn/raise):
 - **Writes go through `set_keyword`** (comment sourced from the registry, not the call site).
   QC writes integer `0/1` plus an `ISGOOD` aggregate and **does no validation**. Round floats
   before writing (`round(float(x), 6)`), and cast numpy scalars to Python `int`/`float`. The
-  `_qc_comment`/metric-dict comment is retained in `self.results`, but the FITS comment is the
-  registry `Description` — keep the two consistent.
+  per-check/metric comment lives **once, in the registry `Description`** — QC methods carry only
+  `_qc_key` (no `_qc_comment`); `run()` mirrors the registry `Description` into `self.results` for
+  reporting. (Diagnostics methods still return their own `(value, comment)` dicts, but the FITS
+  comment is always the registry `Description`.)
 - **Checkpoints validate; they do not write.** A `Checkpoint` subclass reads the 0/1 flags +
   headers and **warns or raises** (header validation lives in `Checkpoint.unregistered_keywords`).
   Per-flag severity is a per-level `RAISE_FLAGS` tuple on the subclass (a failed flag named there

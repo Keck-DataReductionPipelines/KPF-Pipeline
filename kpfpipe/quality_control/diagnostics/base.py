@@ -54,9 +54,9 @@ class Diagnostics:
                 continue
             for kw, (value, comment) in output.items():
                 self.results[kw] = (value, comment)
-                # set_keyword routes each metric to its registry home (the method's
-                # _qc_comment is retained in self.results; the FITS comment comes
-                # from the registry Description).
+                # set_keyword routes each metric to its registry home; the FITS
+                # comment is the registry Description (the metric-dict comment is
+                # retained in self.results only).
                 self.kpf.set_keyword(kw, value)
 
         return self.results

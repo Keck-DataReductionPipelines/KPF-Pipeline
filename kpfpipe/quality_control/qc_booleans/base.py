@@ -1,11 +1,12 @@
 """QC framework base class.
 
 Each QC subclass defines check methods. A check is a method whose function
-object has `_qc_key` (8-char FITS keyword) and `_qc_comment` (short string)
-attributes. The runner walks all such methods, calls each one, writes a
-0/1 result via ``set_keyword`` (which routes it to its registry home,
-QUALITY_CONTROL), and aggregates ISGOOD = AND of all checks. If any check
-raises, run() raises (loud failure, no silent suppression).
+object has a `_qc_key` (8-char FITS keyword) attribute. The runner walks all
+such methods, calls each one, writes a 0/1 result via ``set_keyword`` (which
+routes it to its registry home, QUALITY_CONTROL, with the registry ``Description``
+as the FITS comment), and aggregates ISGOOD = AND of all checks. The per-check
+comment lives once — in the registry ``Description`` — not on the method. If any
+check raises, run() raises (loud failure, no silent suppression).
 
 QC writes only 0/1 keywords. Header validation (unregistered cards, missing
 required keywords) is NOT done here -- it lives in the separate ``checkpoints``
@@ -54,10 +55,10 @@ class QC:
                 raise RuntimeError(f"QC check {name!r} raised: {e}") from e
 
             kw = fn._qc_key
-            comment = fn._qc_comment
+            # The comment is the registry Description (the single source) — the same
+            # string set_keyword writes as the FITS comment; mirror it into results.
+            comment = self.kpf.keyword_registry.routing.get(kw, (None, ""))[1]
             self.results[kw] = (passed, comment)
-            # set_keyword routes the flag to its registry home (QUALITY_CONTROL)
-            # with the registry comment; fn._qc_comment is kept for self.results.
             self.kpf.set_keyword(kw, 1 if passed else 0)
 
         is_good = all(p for p, _ in self.results.values())

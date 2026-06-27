@@ -41,7 +41,6 @@ class QCL0(QC):
         return True
 
     data_l0_red_green._qc_key = "DATAPRL0"
-    data_l0_red_green._qc_comment = "QC: GREEN/RED amp extensions present and non-empty"
 
     def header_keywords_present(self):
         """Required PRIMARY keywords exist."""
@@ -49,7 +48,6 @@ class QCL0(QC):
         return all(k in hdr for k in _L0_REQUIRED_KEYS)
 
     header_keywords_present._qc_key = "KWRDPRL0"
-    header_keywords_present._qc_comment = "QC: required L0 PRIMARY keywords present"
 
     def exptime_sane(self):
         """EXPTIME is present, finite, and non-negative.
@@ -68,7 +66,6 @@ class QCL0(QC):
         return np.isfinite(f) and f >= 0
 
     exptime_sane._qc_key = "EXPTIMOK"
-    exptime_sane._qc_comment = "QC: EXPTIME present, finite, non-negative"
 
     def not_junk(self):
         """obs_id not in reference/junk_observations.csv."""
@@ -85,4 +82,3 @@ class QCL0(QC):
         return obs_id not in df["obs_id"].values
 
     not_junk._qc_key = "NOTJUNK"
-    not_junk._qc_comment = "QC: obs_id not in junk list"

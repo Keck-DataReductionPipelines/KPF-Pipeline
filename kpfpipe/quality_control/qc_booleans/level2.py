@@ -35,14 +35,12 @@ class QCL2(QC):
         return True
 
     extraction_present._qc_key = "DATAPRL2"
-    extraction_present._qc_comment = "QC: L2 FLUX extensions present and non-empty"
 
     def required_keywords_present(self):
         """Every registry-required PRIMARY keyword for L2 is present (presence only)."""
         return self._required_primary_keywords() <= set(self.kpf.headers["PRIMARY"])
 
     required_keywords_present._qc_key = "KWRDPRL2"
-    required_keywords_present._qc_comment = "QC: required L2 PRIMARY keywords present"
 
     def flux_finite_fraction(self):
         """NaN count from headers <= 1% of total L2 flux pixels."""
@@ -68,7 +66,6 @@ class QCL2(QC):
         return (nan_total / total_pixels) <= 0.01
 
     flux_finite_fraction._qc_key = "L2NANOK"
-    flux_finite_fraction._qc_comment = "QC: L2 NaN fraction <= 1%"
 
     def nonzero_flux(self):
         """ZEROFRAC < 0.5."""
@@ -76,7 +73,6 @@ class QCL2(QC):
         return v is not None and v < 0.5
 
     nonzero_flux._qc_key = "L2FLXOK"
-    nonzero_flux._qc_comment = "QC: L2 zero-flux fraction < 0.5"
 
     def variance_positive(self):
         """No strictly-negative variance where the flux is finite.
@@ -102,7 +98,6 @@ class QCL2(QC):
         return saw_data
 
     variance_positive._qc_key = "L2VARPOS"
-    variance_positive._qc_comment = "QC: no negative L2 variance where flux finite"
 
     def science_snr(self):
         """Science SNR is finite and above a minimum floor.
@@ -119,4 +114,3 @@ class QCL2(QC):
         return all(np.isfinite(v) and v > _MIN_SCI_SNR for v in values)
 
     science_snr._qc_key = "L2SNROK"
-    science_snr._qc_comment = "QC: science SNR finite and above floor"

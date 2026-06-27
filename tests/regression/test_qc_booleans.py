@@ -15,6 +15,7 @@ All tests use synthetic in-memory data — no real KPF files required.
 import os
 import subprocess
 import sys
+import types
 
 import numpy as np
 import pytest
@@ -191,12 +192,15 @@ class TestQCBase:
         """Minimal object with a headers dict and a set_keyword router.
 
         QC.run() writes each result via ``set_keyword`` and aggregates ISGOOD; it
-        does NOT validate headers (that moved to the checkpoints layer). This fake
-        stores every keyword on QUALITY_CONTROL (value only).
+        does NOT validate headers (that moved to the checkpoints layer). It also
+        reads each check's comment off ``keyword_registry.routing``; these synthetic
+        check keys aren't registered, so the stubbed routing is empty (comment "").
+        This fake stores every keyword on QUALITY_CONTROL (value only).
         """
 
         class _FakeObj:
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
+            keyword_registry = types.SimpleNamespace(routing={})
 
             def set_keyword(self, key, value):
                 self.headers["QUALITY_CONTROL"][key] = value
@@ -211,20 +215,18 @@ class TestQCBase:
                 return True
 
             check_a._qc_key = "CHECKA"
-            check_a._qc_comment = "check a"
 
             def check_b(self):
                 return True
 
             check_b._qc_key = "CHECKB"
-            check_b._qc_comment = "check b"
 
         results = MyQC(obj).run()
         assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 1
         assert obj.headers["QUALITY_CONTROL"]["CHECKA"] == 1
         assert obj.headers["QUALITY_CONTROL"]["CHECKB"] == 1
-        assert results["CHECKA"] == (True, "check a")
-        assert results["CHECKB"] == (True, "check b")
+        assert results["CHECKA"][0] is True
+        assert results["CHECKB"][0] is True
 
     def test_one_failing_isgood_0(self):
         obj = self._make_obj()
@@ -234,13 +236,11 @@ class TestQCBase:
                 return True
 
             check_ok._qc_key = "CHKOK"
-            check_ok._qc_comment = "passes"
 
             def check_fail(self):
                 return False
 
             check_fail._qc_key = "CHKFAIL"
-            check_fail._qc_comment = "fails"
 
         MyQC(obj).run()
         assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 0
@@ -255,7 +255,6 @@ class TestQCBase:
                 raise ValueError("boom!")
 
             check_boom._qc_key = "BOOM"
-            check_boom._qc_comment = "raises"
 
         with pytest.raises(RuntimeError, match="QC check 'check_boom' raised"):
             MyQC(obj).run()
@@ -285,17 +284,18 @@ class TestQCBase:
                 return self.kpf.flag
 
             check_flag._qc_key = "FLAG"
-            check_flag._qc_comment = "flag check"
 
         qc = MyQC(obj)
         qc.run()
         assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 0
-        assert qc.results == {"FLAG": (False, "flag check")}
+        assert list(qc.results) == ["FLAG"]
+        assert qc.results["FLAG"][0] is False
 
         obj.flag = True
         qc.run()
         assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 1
-        assert qc.results == {"FLAG": (True, "flag check")}
+        assert list(qc.results) == ["FLAG"]
+        assert qc.results["FLAG"][0] is True
 
 
 # ---------------------------------------------------------------------------
@@ -424,7 +424,8 @@ class TestQCL0:
     def test_dataprl0_key_and_comment(self):
         fn = QCL0.__dict__["data_l0_red_green"]
         assert fn._qc_key == "DATAPRL0"
-        assert "GREEN" in fn._qc_comment
+        # The comment now lives in the registry Description (not on the method).
+        assert "GREEN" in KPF0.keyword_registry.routing["DATAPRL0"][1]
 
 
 # ---------------------------------------------------------------------------

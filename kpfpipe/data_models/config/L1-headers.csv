@@ -27,11 +27,11 @@ FLATFILE,Master flat full path,RECEIPT,str,CalibrationAssociation
 FLATAGE,Master flat age [days],QUALITY_CONTROL,float,CalibrationAssociation
 WLSFILE,WLS master full path,RECEIPT,str,CalibrationAssociation
 WLSAGE,WLS master age [days],QUALITY_CONTROL,float,CalibrationAssociation
-DATAPRL1,QC: L1 data present,QUALITY_CONTROL,int,QCL1
-KWRDPRL1,QC: required L1 keywords present,QUALITY_CONTROL,int,QCL1
-RNINRNG,QC: per-amp RN within range,QUALITY_CONTROL,int,QCL1
-RNGAUSS,QC: non-Gaussian RN within range,QUALITY_CONTROL,int,QCL1
-BIASAGEQ,QC: bias master age ok,QUALITY_CONTROL,int,QCL1
-DARKAGEQ,QC: dark master age ok,QUALITY_CONTROL,int,QCL1
-FLATAGEQ,QC: flat master age ok,QUALITY_CONTROL,int,QCL1
-FFIFIN,QC: assembled CCDs all finite,QUALITY_CONTROL,int,QCL1
+DATAPRL1,QC: GREEN/RED CCD extensions present/non-empty,QUALITY_CONTROL,int,QCL1
+KWRDPRL1,QC: required L1 PRIMARY keywords present,QUALITY_CONTROL,int,QCL1
+RNINRNG,QC: per-amp RN within 2.0-6.0 e-,QUALITY_CONTROL,int,QCL1
+RNGAUSS,QC: non-Gaussian RN within 0.8-1.5,QUALITY_CONTROL,int,QCL1
+BIASAGEQ,QC: bias master age <= 7 days,QUALITY_CONTROL,int,QCL1
+DARKAGEQ,QC: dark master age <= 14 days,QUALITY_CONTROL,int,QCL1
+FLATAGEQ,QC: flat master age <= 30 days,QUALITY_CONTROL,int,QCL1
+FFIFIN,QC: GREEN/RED CCDs all finite,QUALITY_CONTROL,int,QCL1

@@ -39,14 +39,12 @@ class QCL1(QC):
         return True
 
     data_present._qc_key = "DATAPRL1"
-    data_present._qc_comment = "QC: GREEN/RED CCD extensions present and non-empty"
 
     def required_keywords_present(self):
         """Every registry-required PRIMARY keyword for L1 is present (presence only)."""
         return self._required_primary_keywords() <= set(self.kpf.headers["PRIMARY"])
 
     required_keywords_present._qc_key = "KWRDPRL1"
-    required_keywords_present._qc_comment = "QC: required L1 PRIMARY keywords present"
 
     def _present_rn_in_range(self, idx, lo, hi):
         """Validate a read-noise keyword across every amplifier present.
@@ -87,28 +85,24 @@ class QCL1(QC):
         return self._present_rn_in_range(0, _RN_LO, _RN_HI)
 
     read_noise_in_range._qc_key = "RNINRNG"
-    read_noise_in_range._qc_comment = "QC: per-amp RN within 2.0-6.0 e-"
 
     def read_noise_nongauss(self):
         """Every non-Gaussian RN value present in the header is in [0.8, 1.5]."""
         return self._present_rn_in_range(1, _RNNG_LO, _RNNG_HI)
 
     read_noise_nongauss._qc_key = "RNGAUSS"
-    read_noise_nongauss._qc_comment = "QC: non-Gaussian RN within 0.8-1.5"
 
     def overscan_subtracted(self):
         """OSCANSUB == True."""
         return _hdr_flag(self.kpf.headers["RECEIPT"], "OSCANSUB")
 
     overscan_subtracted._qc_key = "OSCANSUB"
-    overscan_subtracted._qc_comment = "QC: overscan subtraction applied"
 
     def bias_subtracted(self):
         """BIASSUB == True."""
         return _hdr_flag(self.kpf.headers["RECEIPT"], "BIASSUB")
 
     bias_subtracted._qc_key = "BIASSUB"
-    bias_subtracted._qc_comment = "QC: bias subtraction applied"
 
     def bias_age_ok(self):
         """abs(BIASAGE) <= 7 days."""
@@ -116,14 +110,12 @@ class QCL1(QC):
         return v is not None and abs(v) <= 7
 
     bias_age_ok._qc_key = "BIASAGEQ"
-    bias_age_ok._qc_comment = "QC: bias master age <= 7 days"
 
     def dark_subtracted(self):
         """DARKSUB == True."""
         return _hdr_flag(self.kpf.headers["RECEIPT"], "DARKSUB")
 
     dark_subtracted._qc_key = "DARKSUB"
-    dark_subtracted._qc_comment = "QC: dark subtraction applied"
 
     def dark_age_ok(self):
         """abs(DARKAGE) <= 14 days."""
@@ -131,14 +123,12 @@ class QCL1(QC):
         return v is not None and abs(v) <= 14
 
     dark_age_ok._qc_key = "DARKAGEQ"
-    dark_age_ok._qc_comment = "QC: dark master age <= 14 days"
 
     def flat_divided(self):
         """FLATDIV == True."""
         return _hdr_flag(self.kpf.headers["RECEIPT"], "FLATDIV")
 
     flat_divided._qc_key = "FLATDIV"
-    flat_divided._qc_comment = "QC: flat division applied"
 
     def flat_age_ok(self):
         """abs(FLATAGE) <= 30 days."""
@@ -146,7 +136,6 @@ class QCL1(QC):
         return v is not None and abs(v) <= 30
 
     flat_age_ok._qc_key = "FLATAGEQ"
-    flat_age_ok._qc_comment = "QC: flat master age <= 30 days"
 
     def ffi_finite(self):
         """All values in GREEN_CCD and RED_CCD are finite."""
@@ -159,4 +148,3 @@ class QCL1(QC):
         return True
 
     ffi_finite._qc_key = "FFIFIN"
-    ffi_finite._qc_comment = "QC: GREEN/RED CCDs all finite"
