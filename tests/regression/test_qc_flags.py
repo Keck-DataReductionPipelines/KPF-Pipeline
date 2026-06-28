@@ -192,15 +192,22 @@ class TestQCBase:
         """Minimal object with a headers dict and a set_keyword router.
 
         QC.run() writes each result via ``set_keyword`` and aggregates ISGOOD; it
-        does NOT validate headers (that moved to the checkpoints layer). It also
-        reads each check's comment off ``keyword_registry.routing``; these synthetic
-        check keys aren't registered, so the stubbed routing is empty (comment "").
-        This fake stores every keyword on QUALITY_CONTROL (value only).
+        does NOT validate headers (that moved to the checkpoints layer). It reads
+        each check's comment off ``keyword_registry.routing`` (empty here -- these
+        synthetic keys aren't registered, so comment "") and derives ISGOOD as the
+        AND over ``keyword_registry.qc_flag_keywords`` present on QUALITY_CONTROL,
+        so the stub declares the synthetic check keys as the QC-flag set. This fake
+        stores every keyword on QUALITY_CONTROL (value only).
         """
 
         class _FakeObj:
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
-            keyword_registry = types.SimpleNamespace(routing={})
+            keyword_registry = types.SimpleNamespace(
+                routing={},
+                qc_flag_keywords=frozenset(
+                    {"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "ISGOOD"}
+                ),
+            )
 
             def set_keyword(self, key, value):
                 self.headers["QUALITY_CONTROL"][key] = value
@@ -322,6 +329,36 @@ class TestQCL0:
             for amp in range(1, 5):
                 # data=None → KPF0 stores array(None, dtype=object) — treated as absent.
                 hdus.append(fits.ImageHDU(data=None, name=f"{chip}_AMP{amp}"))
+        fits.HDUList(hdus).writeto(fn, overwrite=True)
+        l0 = KPF0.from_fits(fn)
+        assert QCL0(l0).data_l0_red_green() is False
+
+    def test_data_l0_red_green_pass_two_amp(self, tmp_path):
+        """2-amp readout (only AMP1/AMP2 per chip; AMP3/4 absent) — the truth-frame
+        layout — has data present and must pass."""
+        fn = str(tmp_path / "KP.20240405.00003.00.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+        hdus = [primary]
+        for chip in ["GREEN", "RED"]:
+            for amp in (1, 2):
+                data = np.ones((10, 10), dtype=np.float32)
+                hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
+        fits.HDUList(hdus).writeto(fn, overwrite=True)
+        l0 = KPF0.from_fits(fn)
+        assert QCL0(l0).data_l0_red_green() is True
+
+    def test_data_l0_red_green_fail_partial_amp(self, tmp_path):
+        """A partial/invalid amp set (3 present) is not a supported readout mode
+        (2 or 4), so the inferred count is rejected."""
+        fn = str(tmp_path / "KP.20240405.00004.00.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+        hdus = [primary]
+        for chip in ["GREEN", "RED"]:
+            for amp in (1, 2, 3):  # 3 amps -> not a valid 2/4-amp readout
+                data = np.ones((10, 10), dtype=np.float32)
+                hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
         fits.HDUList(hdus).writeto(fn, overwrite=True)
         l0 = KPF0.from_fits(fn)
         assert QCL0(l0).data_l0_red_green() is False
@@ -630,6 +667,18 @@ class TestQCL1Run:
         # Bias not subtracted -> BIASOK fails (a QUALITY_CONTROL flag); the
         # RECEIPT BIASSUB provenance keyword is untouched by QC.
         assert l1.headers["QUALITY_CONTROL"].get("BIASOK") == 0
+
+    def test_isgood_aggregates_propagated_flag(self, tmp_path):
+        """ISGOOD is the running aggregate over EVERY QC flag on QUALITY_CONTROL,
+        including ones propagated from a lower level -- not just this level's
+        checks. Seed a failed L0 flag; all L1 checks still pass, yet ISGOOD=0."""
+        l1 = _make_kpf1(tmp_path)
+        l1.headers["QUALITY_CONTROL"]["DATAPRL0"] = (0, "L0 data present (propagated)")
+        QCL1(l1).run()
+        # This level's own checks all pass...
+        assert l1.headers["QUALITY_CONTROL"].get("DATAPRL1") == 1
+        # ...but the propagated L0 failure drags the aggregate down.
+        assert l1.headers["QUALITY_CONTROL"].get("ISGOOD") == 0
 
 
 # ---------------------------------------------------------------------------

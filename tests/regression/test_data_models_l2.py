@@ -163,12 +163,12 @@ class TestToKPF2:
         kpf2 = KPF1.from_fits(synthetic_l1_file).to_kpf2()
         kpf2.receipt_add_entry("barycentric_correction", "PASS")
         assert (
-            kpf2.headers["PRIMARY"].get("DRPSTATU")
+            kpf2.headers["RECEIPT"].get("DRPSTATU")
             == "Barycentric Correction module complete"
         )
 
     def test_to_kpf2_sets_origid(self, tmp_path):
-        """Verify obs_id is stored as ORIGID in KPF2 PRIMARY."""
+        """Verify obs_id is stored as ORIGID on the KPF2 RECEIPT (its registry home)."""
         fn = str(tmp_path / "KP.20240113.23249.10_L1.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
@@ -188,8 +188,9 @@ class TestToKPF2:
         l1 = KPF1.from_fits(fn)
         assert l1.obs_id == "KP.20240113.23249.10"
         kpf2 = l1.to_kpf2()
-        origid = kpf2.headers["PRIMARY"].get("ORIGID")
+        origid = kpf2.headers["RECEIPT"].get("ORIGID")
         assert origid == "KP.20240113.23249.10"
+        assert "ORIGID" not in kpf2.headers["PRIMARY"]
 
 
 class TestAliasedOrderedDict:
@@ -527,14 +528,14 @@ class TestKPF2HeaderStorage:
         # Guards the KPF2._create_hdul override (not the inherited base path):
         # a commented PRIMARY card must survive to_fits -> from_fits.
         kpf2 = KPF2()
-        # A KPF-custom PRIMARY keyword (not an EPRV keyword rvdata rewrites from its
-        # L2 definition): provenance DRPVERNO exercises the KPF comment-preservation
-        # path this guards.
-        kpf2.headers["PRIMARY"]["DRPVERNO"] = ("1.2.3", "Pipeline version (DRP-RUN-11)")
+        # A non-EPRV PRIMARY card: rvdata rewrites its own L2-defined keywords from
+        # the definition (dropping any KPF comment), so an arbitrary card is what
+        # exercises the KPF comment-preservation override rather than that rewrite.
+        kpf2.headers["PRIMARY"]["HDRCMNT"] = ("kept", "comment must survive to_fits")
 
         fn = str(tmp_path / "kpf_SL2_20240113T102656.fits")
         kpf2.to_fits(fn)
 
         prim = KPF2.from_fits(fn).headers["PRIMARY"]
-        assert prim.get("DRPVERNO") == "1.2.3"
-        assert prim.comments["DRPVERNO"] == "Pipeline version (DRP-RUN-11)"
+        assert prim.get("HDRCMNT") == "kept"
+        assert prim.comments["HDRCMNT"] == "comment must survive to_fits"

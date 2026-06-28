@@ -179,6 +179,13 @@ class KPF4(KPFDataModel, RV4):
                 if ext not in self.extensions:
                     self.create_extension(ext, hdu_type)
 
+        # QUALITY_CONTROL holds the accumulated QC booleans + diagnostics metrics
+        # propagated from L0/L1/L2 (RV4 does not create it; registered into
+        # rvdata's LEVEL4_EXTENSIONS above so a written L4 reads back). Mirrors
+        # KPF2.__init__; to_kpf4 forwards the L2 header onto it.
+        if "QUALITY_CONTROL" not in self.extensions:
+            self.create_extension("QUALITY_CONTROL", "BinTableHDU")
+
         # Replace plain OrderedDicts with alias-aware versions
         self.extensions = AliasedOrderedDict.from_ordered_dict(self.extensions)
         self.headers = AliasedOrderedDict.from_ordered_dict(self.headers)

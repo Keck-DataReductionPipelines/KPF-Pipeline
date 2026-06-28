@@ -44,7 +44,8 @@ class QC:
         Returns
         -------
         dict
-            Maps each FITS keyword to its ``(passed, comment)`` pair.
+            Maps each FITS keyword to its ``(passed, comment)`` pair (this level's
+            checks only). ``ISGOOD`` is the cross-level aggregate (see below).
         """
         self.results = {}
 
@@ -61,7 +62,14 @@ class QC:
             self.results[kw] = (passed, comment)
             self.kpf_obj.set_keyword(kw, 1 if passed else 0)
 
-        is_good = all(p for p, _ in self.results.values())
+        # ISGOOD is the running aggregate: AND over every QC flag now on
+        # QUALITY_CONTROL — the flags this level just wrote PLUS those propagated
+        # from lower levels (QUALITY_CONTROL accumulates L0->L1->L2->L4). Reading
+        # the accumulated header makes it level-agnostic; exclude ISGOOD itself.
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        flags = self.kpf_obj.keyword_registry.qc_flag_keywords - {"ISGOOD"}
+        present = [hdr.get(kw) for kw in flags if hdr.get(kw) is not None]
+        is_good = all(bool(v) for v in present)
         self.kpf_obj.set_keyword("ISGOOD", 1 if is_good else 0)
         return self.results
 
@@ -69,8 +77,9 @@ class QC:
         """Keywords a level-N product must carry on PRIMARY (a presence set).
 
         The registry's EPRV ``Required`` PRIMARY keywords at or below this
-        product's level, unioned with the KPF-pipeline keywords routed to PRIMARY
-        (the provenance cards). Read off the validated model's registry singleton
+        product's level. PRIMARY now holds EPRV-registered keywords only (the DRP
+        provenance cards moved to RECEIPT), so there is no KPF-routed-PRIMARY set
+        to union in. Read off the validated model's registry singleton
         (``self.kpf_obj.keyword_registry``), so qc_flags imports nothing from
         data_models. L0 (or an untagged subclass) returns the empty set -- raw
         WMKO L0 PRIMARY is not registry-governed.
@@ -79,20 +88,7 @@ class QC:
         if cap is None:
             return set()
         reg = self.kpf_obj.keyword_registry
-        required = {
-            k for k, lvl in reg.required.get("PRIMARY", {}).items() if lvl <= cap
-        }
-        # KPF-routed PRIMARY keywords are the registry's PRIMARY rows that are not
-        # EPRV-sourced (PopulatedBy != the "EPRV" discriminator) -- the provenance
-        # cards; they are not flagged EPRV-Required, so add them explicitly.
-        kpf_primary = {
-            row.Keyword
-            for row in reg.table.itertuples(index=False)
-            if row.Extension == "PRIMARY"
-            and row.PopulatedBy != "EPRV"
-            and row.Level <= cap
-        }
-        return required | kpf_primary
+        return {k for k, lvl in reg.required.get("PRIMARY", {}).items() if lvl <= cap}
 
     def _iter_checks(self):
         """Yield each check method tagged with `_qc_key`.

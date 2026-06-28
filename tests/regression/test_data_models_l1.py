@@ -167,7 +167,7 @@ class TestToL1:
         assert "GROBSERV" not in prim
 
     def test_to_l1_preserves_raw_header_in_instrument_header(self, synthetic_l0_file):
-        """INSTRUMENT_HEADER is a verbatim copy of the raw L0 PRIMARY."""
+        """INSTRUMENT_HEADER is a pure verbatim copy of the raw L0 PRIMARY."""
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         assert "INSTRUMENT_HEADER" in l1.extensions
@@ -176,6 +176,10 @@ class TestToL1:
         assert inst["ELAPSED"] == 300.0
         assert inst["GROBSERV"] == "Smith"
         assert inst["INSTRUME"] == "KPF"
+        # Pipeline-stamped DRP provenance lives on RECEIPT, never on the raw
+        # PRIMARY snapshot, so INSTRUMENT_HEADER stays pure instrument metadata.
+        assert "DRPVERNO" not in inst
+        assert "DRPSTATU" not in inst
 
     def test_to_l1_filters_non_registry_headermap_targets(self, tmp_path):
         """wmko_to_eprv emits only registered keywords; header_map's non-standard
@@ -203,24 +207,25 @@ class TestToL1:
         # JD_UTC is the full Julian Date of DATE-OBS (not a raw MJD).
         assert prim.get("JD_UTC") == pytest.approx(2460322.93537, abs=1e-3)
         version = importlib.metadata.version("kpfpipe")
-        assert prim.get("DRPTAG") == version
-        assert prim.get("DRPVERNO") == version
+        assert prim.get("DRPTAG") == version  # EPRV version keyword stays on PRIMARY
+        # DRPVERNO (WMKO DRP-RUN-11) now lives on RECEIPT, not PRIMARY.
+        assert prim.get("DRPVERNO") is None
+        assert l1.headers["RECEIPT"].get("DRPVERNO") == version
 
     def test_to_l1_forwards_program_ids(self, synthetic_l0_file):
-        """PROGID/KOAID stamped on the L0 PRIMARY carry through onto the L1 EPRV
-        PRIMARY (to_kpf1 forwards them; it no longer populates them)."""
-        l0 = KPF0.from_fits(synthetic_l0_file)
-        l0.headers["PRIMARY"]["PROGID"] = "U999"
-        l0.headers["PRIMARY"]["KOAID"] = "KP.20201122.34567.89"
-        prim = l0.to_kpf1().headers["PRIMARY"]
-        assert prim.get("PROGID") == "U999"
-        assert prim.get("KOAID") == "KP.20201122.34567.89"
+        """Native PROGID/KOAID stamped to the L0 RECEIPT at read carry onto the L1
+        RECEIPT via the RECEIPT-header forward (no longer onto PRIMARY)."""
+        l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
+        receipt = l1.headers["RECEIPT"]
+        assert receipt.get("PROGID") == "K123"
+        assert receipt.get("KOAID") == "KP.20240113.23249.10"
+        assert "PROGID" not in l1.headers["PRIMARY"]
 
     def test_to_l1_forwards_drpstatus(self, synthetic_l0_file):
-        """DRPSTATU stamped at read carries onto L1; the to_l1 receipt is
-        denylisted, so the ingest default survives until the first real module."""
-        prim = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["PRIMARY"]
-        assert prim.get("DRPSTATU") == "File ingested into KPF-DRP"
+        """DRPSTATU stamped at read carries onto the L1 RECEIPT; the to_l1 receipt
+        is denylisted, so the ingest default survives until the first real module."""
+        receipt = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["RECEIPT"]
+        assert receipt.get("DRPSTATU") == "File ingested into KPF-DRP"
 
     def test_to_l1_copies_passthrough_extensions(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
@@ -272,13 +277,13 @@ class TestDrpStatus:
     def test_module_receipt_updates_status(self, synthetic_l0_file):
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
         l1.receipt_add_entry("image_assembly", "PASS")
-        status = l1.headers["PRIMARY"].get("DRPSTATU")
+        status = l1.headers["RECEIPT"].get("DRPSTATU")
         assert status == "Image Assembly module complete"
 
     def test_master_receipt_updates_status(self, synthetic_l0_file):
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
         l1.receipt_add_entry("master_bias", "PASS")
-        status = l1.headers["PRIMARY"].get("DRPSTATU")
+        status = l1.headers["RECEIPT"].get("DRPSTATU")
         assert status == "Master Bias module complete"
 
     def test_internal_receipts_do_not_change_status(self, synthetic_l0_file):
@@ -286,7 +291,7 @@ class TestDrpStatus:
         l1.receipt_add_entry("radial_velocity", "PASS")
         for internal in ("to_kpf2", "to_kpf4", "to_fits", "from_fits"):
             l1.receipt_add_entry(internal, "PASS")
-        status = l1.headers["PRIMARY"].get("DRPSTATU")
+        status = l1.headers["RECEIPT"].get("DRPSTATU")
         assert status == "Radial Velocity module complete"
 
 

@@ -35,9 +35,12 @@ class TestKPF0:
         assert l0.level == 0
         assert l0.obs_id == "KP.20240113.00001.00"
         assert "PRIMARY" in l0.extensions
-        # Real KPF0 objects always carry a QUALITY_CONTROL extension.
+        # Real KPF0 objects always carry QUALITY_CONTROL and RECEIPT extensions
+        # (RECEIPT is the registry home of the DRP-RUN provenance cards, stamped
+        # at read).
         assert "QUALITY_CONTROL" in l0.extensions
-        assert len(l0.extensions) == 2
+        assert "RECEIPT" in l0.extensions
+        assert len(l0.extensions) == 3
 
     def test_round_trip(self, synthetic_l0_file, tmp_path):
         l0 = KPF0.from_fits(synthetic_l0_file)
@@ -145,20 +148,21 @@ class TestKPF0ErrorPaths:
 
 
 class TestKPF0Provenance:
-    """from_fits stamps the WMKO DRP-RUN provenance cards onto the L0 PRIMARY
-    (their single population site; config/L0-headers.csv PopulatedBy =
-    KPF0.from_fits). to_kpf1 only forwards them."""
+    """from_fits stamps the WMKO DRP-RUN provenance cards onto the L0 RECEIPT
+    (their registry home; config/L0-headers.csv PopulatedBy = KPF0.from_fits).
+    PRIMARY (and its INSTRUMENT_HEADER snapshot) is left raw; to_kpf1 forwards the
+    RECEIPT header downstream."""
 
     def test_from_fits_stamps_version_and_status(self, synthetic_l0_file):
-        prim = KPF0.from_fits(synthetic_l0_file).headers["PRIMARY"]
-        assert prim.get("DRPVERNO") == importlib.metadata.version("kpfpipe")
-        assert prim.get("DRPSTATU") == "File ingested into KPF-DRP"
+        receipt = KPF0.from_fits(synthetic_l0_file).headers["RECEIPT"]
+        assert receipt.get("DRPVERNO") == importlib.metadata.version("kpfpipe")
+        assert receipt.get("DRPSTATU") == "File ingested into KPF-DRP"
 
     def test_from_fits_carries_native_program_ids(self, synthetic_l0_file):
-        """PROGID/KOAID present in the WMKO-native file are kept verbatim."""
-        prim = KPF0.from_fits(synthetic_l0_file).headers["PRIMARY"]
-        assert prim.get("PROGID") == "K123"
-        assert prim.get("KOAID") == "KP.20240113.23249.10"
+        """PROGID/KOAID present in the WMKO-native file drive the RECEIPT cards."""
+        receipt = KPF0.from_fits(synthetic_l0_file).headers["RECEIPT"]
+        assert receipt.get("PROGID") == "K123"
+        assert receipt.get("KOAID") == "KP.20240113.23249.10"
 
     def test_from_fits_defaults_program_ids_to_unknown_and_warns(
         self, synthetic_l0_minimal
@@ -166,6 +170,6 @@ class TestKPF0Provenance:
         """A file lacking PROGID/KOAID defaults both to UNKNOWN and warns."""
         with pytest.warns(UserWarning, match="PROGID absent"):
             l0 = KPF0.from_fits(synthetic_l0_minimal)
-        prim = l0.headers["PRIMARY"]
-        assert prim.get("PROGID") == "UNKNOWN"
-        assert prim.get("KOAID") == "UNKNOWN"
+        receipt = l0.headers["RECEIPT"]
+        assert receipt.get("PROGID") == "UNKNOWN"
+        assert receipt.get("KOAID") == "UNKNOWN"

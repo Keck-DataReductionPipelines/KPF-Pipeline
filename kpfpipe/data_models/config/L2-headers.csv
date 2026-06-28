@@ -32,3 +32,4 @@ CCD2BKMS,RED barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrectio
 CCD1BZ,GREEN barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
 CCD2BZ,RED barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
 ASTRSRC,Astrometry source used for barycentric correction,RECEIPT,str,BarycentricCorrection
+ORIGID,Original L0 observation ID,RECEIPT,str,KPF1.to_kpf2

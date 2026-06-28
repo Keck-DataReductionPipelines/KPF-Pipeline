@@ -168,17 +168,14 @@ class KPFDataModel(RVDataModel):
 
         Called from ``receipt_add_entry``; conversions/serialization receipts
         (``_INTERNAL_RECEIPTS``) are skipped so DRPSTATU names the last real stage.
+        DRPSTATU's registry home is RECEIPT, so ``set_keyword`` routes it there.
         """
         if module in _INTERNAL_RECEIPTS:
             return
-        primary = self.headers.get("PRIMARY")
-        if primary is None:
+        if "RECEIPT" not in self.extensions:
             return
         label = module.replace("_", " ").title()
-        primary["DRPSTATU"] = (
-            f"{label} module complete",
-            "DRP reduction status (DRP-RUN-20)",
-        )
+        self.set_keyword("DRPSTATU", f"{label} module complete")
 
     def _create_hdul(self):
         """Sync self.receipt into the RECEIPT extension before writing; rvdata

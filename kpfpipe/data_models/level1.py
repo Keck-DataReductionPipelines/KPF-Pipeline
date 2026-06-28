@@ -258,13 +258,10 @@ class KPF1(KPFDataModel):
             kpf2.receipt = self.receipt.copy()
 
         # Carry obs_id through, both as the model attribute and (for traceability
-        # on the product itself) the ORIGID PRIMARY keyword.
+        # on the product itself) the ORIGID keyword, registered to RECEIPT.
         kpf2.obs_id = self.obs_id
         if self.obs_id is not None:
-            kpf2.headers["PRIMARY"]["ORIGID"] = (
-                self.obs_id,
-                "Original L0 observation ID",
-            )
+            kpf2.set_keyword("ORIGID", self.obs_id)
 
         kpf2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
         kpf2.receipt_add_entry("to_kpf2", "PASS")

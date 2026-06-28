@@ -1,11 +1,16 @@
 """Checkpoint framework base class.
 
-The third quality-control stage (after Diagnostics and QC). A Checkpoint
-subclass READS the 0/1 QC flags written to QUALITY_CONTROL and the product
-headers, then emits warnings or raises errors -- it never writes keywords. A
-method opts in by setting ``_checkpoint_name`` on the function object; ``run()``
-walks all such methods (MRO order) and calls each. The pipeline order is:
-science modules -> Diagnostics -> QC -> Checkpoints.
+The third quality-control stage (after Diagnostics and QC). A Checkpoint's
+checkpoint methods READ the 0/1 QC flags written to QUALITY_CONTROL and the
+product headers, then emit warnings or raise errors -- they never write
+keywords. A method opts in by setting ``_checkpoint_name`` on the function
+object; ``run()`` walks all such methods (MRO order) and calls each.
+
+``run()`` also folds in the two upstream read-only stages: it first runs the
+subclass's paired Diagnostics and QC classes (``DIAGNOSTICS``/``QC``) -- which
+write the metrics and 0/1 flags -- then the checkpoint methods. So the recipe
+drives the whole pipeline order science modules -> Diagnostics -> QC ->
+Checkpoints through one ``CheckpointL{n}(obj).run()`` call.
 
 Two responsibilities, both inherited base checkpoints:
   - ``unregistered_keywords`` -- structural header validation: any non-structural
@@ -19,34 +24,6 @@ Severity policy lives in the per-level subclasses (their ``RAISE_FLAGS``).
 
 import warnings
 
-# Bookkeeping/structural cards astropy adds to a serialized extension header
-# (BinTable column descriptors, image WCS); always permitted on any governed
-# extension and never treated as unregistered. These supplement the registry's
-# structural set (the PRIMARY/bookkeeping cards). Moved here from QC when header
-# validation became a Checkpoint responsibility.
-_EXT_STRUCTURAL_PREFIXES = (
-    "NAXIS",
-    "TTYPE",
-    "TFORM",
-    "TUNIT",
-    "TDIM",
-    "TDISP",
-    "TNULL",
-    "TSCAL",
-    "TZERO",
-    "CTYPE",
-    "CUNIT",
-    "CRPIX",
-    "CRVAL",
-    "CDELT",
-    "CROTA",
-)
-_EXT_STRUCTURAL_EXTRA = {"EXTNAME", "TFIELDS", "PCOUNT", "GCOUNT"}
-
-# Registry ``PopulatedBy`` values that mark a keyword as a 0/1 QC flag (so the
-# qc_flags checkpoint can find them without a hardcoded list).
-_QC_POPULATORS = {"QC", "QCL0", "QCL1", "QCL2"}
-
 
 class Checkpoint:
     """Base runner for per-level checkpoint methods.
@@ -59,12 +36,26 @@ class Checkpoint:
 
     LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
     RAISE_FLAGS = ()  # QC keywords whose failure (0) raises; every other 0 warns.
+    DIAGNOSTICS = None  # Paired Diagnostics class, run first by run() (None = skip).
+    QC = None  # Paired QC class, run second; its results land in self.qc_results.
 
     def __init__(self, kpf_obj):
         self.kpf_obj = kpf_obj
+        self.qc_results = {}  # pass/fail dict from the folded QC.run() (empty if none)
 
     def run(self):
-        """Run every checkpoint method; each warns or raises (no return value)."""
+        """Run the paired Diagnostics and QC, then every checkpoint method.
+
+        Folds in the two upstream read-only stages: Diagnostics writes its
+        metrics, QC writes the 0/1 flags + ISGOOD (captured in ``self.qc_results``
+        for callers that report them), then each checkpoint method warns or
+        raises. A level with no paired ``DIAGNOSTICS``/``QC`` skips that stage.
+        The checkpoint methods themselves never write (no return value).
+        """
+        if self.DIAGNOSTICS is not None:
+            self.DIAGNOSTICS(self.kpf_obj).run()
+        if self.QC is not None:
+            self.qc_results = self.QC(self.kpf_obj).run()
         for _name, fn in self._iter_checkpoints():
             fn()
 
@@ -90,7 +81,7 @@ class Checkpoint:
                 continue
             for raw_key in list(header):
                 key = str(raw_key).strip()
-                if self._is_structural(key) or key in allowed:
+                if reg.is_structural(key) or key in allowed:
                     continue
                 raise ValueError(
                     f"unregistered keyword {key!r} on {ext}; add it to "
@@ -100,21 +91,21 @@ class Checkpoint:
     unregistered_keywords._checkpoint_name = "unregistered_keywords"
 
     def qc_flags(self):
-        """Read each 0/1 QC flag; raise a RAISE_FLAGS failure, warn the rest.
+        """Read this level's 0/1 QC flags; raise a RAISE_FLAGS failure, warn the rest.
 
-        QC-flag keywords are the QUALITY_CONTROL rows the registry attributes to a
-        QC populator. A flag absent from the header is skipped (the check did not
-        run); a flag equal to 0 raises if it is in ``RAISE_FLAGS``, else warns.
+        Scoped to **this level's own** checks (the registry's
+        ``qc_flag_keywords_by_level[LEVEL]`` -- the ``QCL{n}`` flags), NOT the
+        flags propagated from lower levels: QUALITY_CONTROL accumulates the whole
+        L0->L1->L2->L4 history, but a lower-level flag was already surfaced at its
+        own level's checkpoint, so re-warning it here would just be noise. A flag
+        absent from the header is skipped (the check did not run); a flag equal to
+        0 raises if it is in ``RAISE_FLAGS``, else warns.
         """
         header = self.kpf_obj.headers.get("QUALITY_CONTROL")
         if header is None:
             return
         reg = self.kpf_obj.keyword_registry
-        flag_keys = {
-            row.Keyword
-            for row in reg.table.itertuples(index=False)
-            if row.Extension == "QUALITY_CONTROL" and row.PopulatedBy in _QC_POPULATORS
-        }
+        flag_keys = reg.qc_flag_keywords_by_level.get(self.LEVEL, frozenset())
         for key in sorted(flag_keys):
             value = header.get(key)
             if value is None or value != 0:
@@ -128,18 +119,6 @@ class Checkpoint:
             )
 
     qc_flags._checkpoint_name = "qc_flags"
-
-    def _is_structural(self, key):
-        """True for a FITS structural/bookkeeping card (not a registered keyword).
-
-        Combines the registry's structural cards (PRIMARY/bookkeeping) with the
-        extension-table/WCS cards astropy adds at serialization.
-        """
-        return (
-            key in self.kpf_obj.keyword_registry.structural
-            or key in _EXT_STRUCTURAL_EXTRA
-            or key.startswith(_EXT_STRUCTURAL_PREFIXES)
-        )
 
     def _iter_checkpoints(self):
         """Yield each checkpoint method tagged with `_checkpoint_name`.

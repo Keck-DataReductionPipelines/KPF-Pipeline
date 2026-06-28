@@ -176,15 +176,20 @@ class TestScienceRecipe:
         assert isinstance(qc.get("WLSAGE"), float)
 
     def test_provenance_keywords_set(self, recipe_output):
-        """DRP version/provenance/status keywords survive onto the L2 PRIMARY."""
-        prim = KPF2.from_fits(recipe_output).headers["PRIMARY"]
+        """DRPTAG (EPRV) stays on the L2 PRIMARY; the WMKO DRP-RUN provenance cards
+        live on the L2 RECEIPT."""
+        l2 = KPF2.from_fits(recipe_output)
+        prim = l2.headers["PRIMARY"]
+        receipt = l2.headers["RECEIPT"]
         version = importlib.metadata.version("kpfpipe")
-        assert prim.get("DRPVERNO") == version
         assert prim.get("DRPTAG") == version
-        assert "PROGID" in prim
-        assert "KOAID" in prim
+        # The four provenance cards moved off PRIMARY onto RECEIPT.
+        assert all(k not in prim for k in ("DRPVERNO", "DRPSTATU", "PROGID", "KOAID"))
+        assert receipt.get("DRPVERNO") == version
+        assert "PROGID" in receipt
+        assert "KOAID" in receipt
         # BarycentricCorrection is the last module to run before the L2 write.
-        assert prim.get("DRPSTATU") == "Barycentric Correction module complete"
+        assert receipt.get("DRPSTATU") == "Barycentric Correction module complete"
 
     def test_wave_arrays_populated(self, recipe_output):
         """WavelengthCalibration should fill the per-fiber WAVE extensions."""

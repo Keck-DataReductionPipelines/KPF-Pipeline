@@ -52,16 +52,44 @@ class TestToKPF4:
         assert len(kpf4.data["RV1"]) == 0
 
     def test_program_ids_survive_transform_and_validate(self, synthetic_l1_file):
-        """PROGID/KOAID set on the L1 PRIMARY survive L1->L2->L4; they are
-        registered in L1-headers.csv and stay on PRIMARY through both
-        transforms."""
+        """PROGID/KOAID on the L1 RECEIPT survive L1->L2->L4 via the RECEIPT-header
+        forward (their registry home is RECEIPT, not PRIMARY)."""
         l1 = KPF1.from_fits(synthetic_l1_file)
-        l1.headers["PRIMARY"]["PROGID"] = "U999"
-        l1.headers["PRIMARY"]["KOAID"] = "KP.20201122.34567.89"
-        prim = l1.to_kpf2().to_kpf4().headers["PRIMARY"]
+        l1.headers["RECEIPT"]["PROGID"] = "U999"
+        l1.headers["RECEIPT"]["KOAID"] = "KP.20201122.34567.89"
+        l4 = l1.to_kpf2().to_kpf4()
 
-        assert prim.get("PROGID") == "U999"
-        assert prim.get("KOAID") == "KP.20201122.34567.89"
+        receipt = l4.headers["RECEIPT"]
+        assert receipt.get("PROGID") == "U999"
+        assert receipt.get("KOAID") == "KP.20201122.34567.89"
+        assert "PROGID" not in l4.headers["PRIMARY"]
+
+    def test_kpf4_has_quality_control_extension(self):
+        # KPF4 must create QUALITY_CONTROL (RV4 does not) so to_kpf4 has a
+        # destination and the accumulated QC history reaches L4.
+        assert "QUALITY_CONTROL" in KPF4().extensions
+
+    def test_to_kpf4_forwards_quality_control_and_receipt_headers(self):
+        """QUALITY_CONTROL + RECEIPT header cards (the accumulated L0/L1/L2 QC and
+        provenance history) are forwarded onto L4, like to_kpf2 does for L1->L2."""
+        kpf2 = KPF2()
+        kpf2.set_keyword("NANSCI1", 7)  # DiagL2 metric -> QUALITY_CONTROL
+        kpf2.headers["QUALITY_CONTROL"]["DATAPRL0"] = (1, "L0 flag (propagated)")
+        kpf2.headers["RECEIPT"]["BIASSUB"] = (1, "bias subtracted")
+        kpf4 = kpf2.to_kpf4()
+        assert kpf4.headers["QUALITY_CONTROL"].get("NANSCI1") == 7
+        assert kpf4.headers["QUALITY_CONTROL"].get("DATAPRL0") == 1
+        assert kpf4.headers["RECEIPT"].get("BIASSUB") == 1
+
+    def test_l4_quality_control_survives_round_trip(self, tmp_path):
+        kpf2 = KPF2()
+        kpf2.set_keyword("NANSCI1", 7)
+        kpf4 = kpf2.to_kpf4()
+        path = tmp_path / "rt_l4.fits"
+        kpf4.to_fits(str(path))
+        back = KPF4.from_fits(str(path))
+        assert "QUALITY_CONTROL" in back.extensions
+        assert back.headers["QUALITY_CONTROL"].get("NANSCI1") == 7
 
 
 class TestKPF4:
