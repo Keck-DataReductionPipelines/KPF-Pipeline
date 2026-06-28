@@ -11,19 +11,17 @@ data products are written to the output data root.
 """
 
 from kpfpipe.data_models.level0 import KPF0
-from kpfpipe.modules.barycentric_correction import BarycentricCorrection
-from kpfpipe.modules.calibration_association import CalibrationAssociation
 
 # from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.modules.barycentric_correction import BarycentricCorrection
+from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.radial_velocity import RadialVelocity
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 from kpfpipe.quality_control.checkpoints import CheckpointL0, CheckpointL1, CheckpointL2
-from kpfpipe.quality_control.quicklook.level0 import PlotL0
-from kpfpipe.quality_control.quicklook.level1 import PlotL1
-from kpfpipe.quality_control.quicklook.level2 import PlotL2
+from kpfpipe.quality_control.quicklook import PlotL0, PlotL1, PlotL2
 from kpfpipe.utils.io import build_filepath, build_qlp_dir
 
 
