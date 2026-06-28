@@ -24,30 +24,6 @@ Severity policy lives in the per-level subclasses (their ``RAISE_FLAGS``).
 
 import warnings
 
-# Bookkeeping/structural cards astropy adds to a serialized extension header
-# (BinTable column descriptors, image WCS); always permitted on any governed
-# extension and never treated as unregistered. These supplement the registry's
-# structural set (the PRIMARY/bookkeeping cards). Moved here from QC when header
-# validation became a Checkpoint responsibility.
-_EXT_STRUCTURAL_PREFIXES = (
-    "NAXIS",
-    "TTYPE",
-    "TFORM",
-    "TUNIT",
-    "TDIM",
-    "TDISP",
-    "TNULL",
-    "TSCAL",
-    "TZERO",
-    "CTYPE",
-    "CUNIT",
-    "CRPIX",
-    "CRVAL",
-    "CDELT",
-    "CROTA",
-)
-_EXT_STRUCTURAL_EXTRA = {"EXTNAME", "TFIELDS", "PCOUNT", "GCOUNT"}
-
 
 class Checkpoint:
     """Base runner for per-level checkpoint methods.
@@ -105,7 +81,7 @@ class Checkpoint:
                 continue
             for raw_key in list(header):
                 key = str(raw_key).strip()
-                if self._is_structural(key) or key in allowed:
+                if reg.is_structural(key) or key in allowed:
                     continue
                 raise ValueError(
                     f"unregistered keyword {key!r} on {ext}; add it to "
@@ -143,18 +119,6 @@ class Checkpoint:
             )
 
     qc_flags._checkpoint_name = "qc_flags"
-
-    def _is_structural(self, key):
-        """True for a FITS structural/bookkeeping card (not a registered keyword).
-
-        Combines the registry's structural cards (PRIMARY/bookkeeping) with the
-        extension-table/WCS cards astropy adds at serialization.
-        """
-        return (
-            key in self.kpf_obj.keyword_registry.structural
-            or key in _EXT_STRUCTURAL_EXTRA
-            or key.startswith(_EXT_STRUCTURAL_PREFIXES)
-        )
 
     def _iter_checkpoints(self):
         """Yield each checkpoint method tagged with `_checkpoint_name`.

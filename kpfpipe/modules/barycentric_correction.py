@@ -790,7 +790,7 @@ class BarycentricCorrection:
     def info(self):
         """Print a summary of the barycentric correction results."""
         print("BarycentricCorrection")
-        obs_id = self.l2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
+        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
         print(f"  obs_id:  {obs_id}")
 
         if self._info is None:

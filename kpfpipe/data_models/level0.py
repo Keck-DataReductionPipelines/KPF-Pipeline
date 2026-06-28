@@ -77,34 +77,32 @@ class KPF0(KPFDataModel):
                 pass
 
     def _stamp_provenance(self):
-        """Stamp WMKO DRP-RUN provenance onto the L0 PRIMARY at read time.
+        """Stamp WMKO DRP-RUN provenance onto the L0 RECEIPT at read time.
 
         This is the single population site for the four provenance cards
         (their `PopulatedBy` in config/L0-headers.csv is `KPF0.from_fits`):
         DRPVERNO (DRP-RUN-11), PROGID/KOAID (DRP-RUN-19), DRPSTATU (DRP-RUN-20).
-        `to_kpf1` passes them through unchanged onto the EPRV L1 PRIMARY.
+        They are written to their registry home, RECEIPT, via `set_keyword`, and
+        ride the RECEIPT-header forward onto L1/L2/L4 (see `to_kpf1`). The raw
+        PRIMARY and its INSTRUMENT_HEADER snapshot are left untouched.
 
-        DRPVERNO and DRPSTATU are always (re)stamped. PROGID/KOAID must come from
-        the WMKO-native file; an absent (or empty) value is defaulted to UNKNOWN
+        DRPVERNO and DRPSTATU are always (re)stamped. PROGID/KOAID are read from
+        the WMKO-native PRIMARY; an absent (or empty) value is defaulted to UNKNOWN
         with a warning, so the cards are always present downstream.
         """
+        self.set_keyword("DRPVERNO", __version__)
+        self.set_keyword("DRPSTATU", _DRPSTATU_DEFAULT)
         primary = self.headers["PRIMARY"]
-        primary["DRPVERNO"] = (
-            __version__,
-            "Pipeline version (WMKO DRP-RUN-11; EPRV equivalent is DRPTAG)",
-        )
-        primary["DRPSTATU"] = (_DRPSTATU_DEFAULT, "DRP reduction status (DRP-RUN-20)")
-        for key, label in (
-            ("PROGID", "WMKO program ID (DRP-RUN-19)"),
-            ("KOAID", "KOA archive ID (DRP-RUN-19)"),
-        ):
-            if not primary.get(key):
+        for key in ("PROGID", "KOAID"):
+            value = primary.get(key)
+            if not value:
                 warnings.warn(
                     f"{key} absent from L0 PRIMARY; defaulting to 'UNKNOWN'",
                     UserWarning,
                     stacklevel=2,
                 )
-                primary[key] = ("UNKNOWN", label)
+                value = "UNKNOWN"
+            self.set_keyword(key, value)
 
     def _read(self, hdul):
         """
@@ -221,10 +219,10 @@ class KPF0(KPFDataModel):
         take the instrument (WMKO) value when present, else the row default. The
         registry filter prevents non-standard header_map targets (e.g. PARANG)
         from leaking onto PRIMARY. Then apply the value corrections the installed
-        header_map gets wrong (NUMORDER, JD_UTC), stamp the EPRV DRP version
-        (DRPTAG), and forward the DRP-RUN provenance cards
-        (DRPVERNO/PROGID/KOAID/DRPSTATU) already on the L0 PRIMARY (stamped at
-        read by ``_stamp_provenance``) onto the EPRV L1 PRIMARY.
+        header_map gets wrong (NUMORDER, JD_UTC), and stamp the EPRV DRP version
+        (DRPTAG). The DRP-RUN provenance cards (DRPVERNO/PROGID/KOAID/DRPSTATU) are
+        NOT emitted here -- they live on RECEIPT (see ``_stamp_provenance``) and
+        reach L1 via the RECEIPT-header forward in ``to_kpf1``.
 
         Returns
         -------
@@ -263,23 +261,20 @@ class KPF0(KPFDataModel):
             )
         out["DRPTAG"] = (__version__, "DRP version")
 
-        # DRP-RUN provenance (DRPVERNO/PROGID/KOAID/DRPSTATU) is stamped onto the
-        # L0 PRIMARY at read (see _stamp_provenance); forward it verbatim, value
-        # and comment, onto the EPRV L1 PRIMARY.
-        for key in ("DRPVERNO", "PROGID", "KOAID", "DRPSTATU"):
-            if key in wmko_primary:
-                out[key] = (wmko_primary[key], wmko_primary.comments[key])
+        # DRP-RUN provenance (DRPVERNO/PROGID/KOAID/DRPSTATU) lives on RECEIPT
+        # (stamped at read by _stamp_provenance) and reaches L1 via the
+        # RECEIPT-header forward in to_kpf1 -- it is not copied onto the EPRV
+        # L1 PRIMARY. DRPTAG (above) is the EPRV version keyword on PRIMARY.
         return out
 
     def build_instrument_header(self):
         """Comment-preserving verbatim copy of the L0 PRIMARY as ingested.
 
         INSTRUMENT_HEADER is an immutable, pure pass-through of the L0 PRIMARY as
-        read from disk -- the raw instrument cards plus the four DRP-RUN
-        provenance cards stamped at read (see ``_stamp_provenance``); nothing
-        writes to it after ``to_kpf1``. Returning a ``fits.Header`` copy
-        preserves values *and* comments (and commentary cards), unlike a scalar
-        dict.
+        read from disk -- only the raw instrument cards (DRP-RUN provenance is
+        stamped to RECEIPT, not PRIMARY, so it never appears here); nothing writes
+        to it after ``to_kpf1``. Returning a ``fits.Header`` copy preserves values
+        *and* comments (and commentary cards), unlike a scalar dict.
         """
         return self.as_fits_header(self.headers["PRIMARY"])
 
@@ -290,12 +285,12 @@ class KPF0(KPFDataModel):
 
         The raw WMKO PRIMARY header is converted to EPRV-standard keyword names
         and values here (the single conversion site; see `wmko_to_eprv`), so the
-        L1 PRIMARY is already EPRV-standard. The DRP-RUN provenance cards
-        (DRPVERNO/PROGID/KOAID/DRPSTATU), stamped onto the L0 PRIMARY at read,
-        are forwarded unchanged. The L0 PRIMARY as ingested is preserved in the
-        immutable INSTRUMENT_HEADER extension. Downstream stages read raw
-        instrument keywords from INSTRUMENT_HEADER and write EPRV/registered
-        KPF keywords to PRIMARY.
+        L1 PRIMARY is already EPRV-standard (EPRV-registered keywords only). The
+        DRP-RUN provenance cards (DRPVERNO/PROGID/KOAID/DRPSTATU) live on RECEIPT
+        (stamped at read) and reach L1 via the RECEIPT-header forward below. The
+        L0 PRIMARY as ingested is preserved in the immutable INSTRUMENT_HEADER
+        extension. Downstream stages read raw instrument keywords from
+        INSTRUMENT_HEADER and write EPRV/registered KPF keywords to PRIMARY.
 
         Returns a KPF1 with EPRV PRIMARY header, INSTRUMENT_HEADER, pass-through
         extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, CONFIG), receipt, and
@@ -330,9 +325,9 @@ class KPF0(KPFDataModel):
 
         # Forward the L0 QUALITY_CONTROL and RECEIPT *headers* onto L1 (value +
         # comment), mirroring to_kpf2/to_kpf4 so all three conversions share one
-        # invariant. QUALITY_CONTROL carries the QCL0 booleans + ISGOOD; downstream
-        # L1 QC appends to it. (RECEIPT is a no-op today -- L0 routes nothing to it
-        # -- but the guarded forward keeps the contract symmetric and future-proof.)
+        # invariant. QUALITY_CONTROL carries the QCL0 booleans + ISGOOD; RECEIPT
+        # carries the four DRP-RUN provenance cards stamped at read. Downstream L1
+        # stages append to both.
         for ext in ("QUALITY_CONTROL", "RECEIPT"):
             if ext in self.headers and ext in l1.extensions:
                 l1.set_header(ext, self.as_fits_header(self.headers[ext]))

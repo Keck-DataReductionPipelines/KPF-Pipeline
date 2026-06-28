@@ -219,21 +219,24 @@ tests) read the lookups off `kpf.keyword_registry.{table,routing,allowed,require
 rather than importing the registry.
 Consequences every contributor must respect:
 
-- **L1 PRIMARY is already EPRV-standard.** From L1 onward, PRIMARY holds EPRV keyword *names*
-  plus the registered KPF-pipeline keywords **routed to PRIMARY** (see the routing rule below) —
-  never raw WMKO natives.
-- **`INSTRUMENT_HEADER` is an immutable, verbatim copy of the L0 PRIMARY _as ingested_** (values
-  **and** comments — `build_instrument_header()` returns a `fits.Header` copy). "As ingested" = the
-  raw instrument cards plus the four DRP-RUN provenance cards stamped at read (see below). It is
-  written once in `to_kpf1` and **nothing else ever writes to it**. Code that needs a raw instrument
-  keyword (e.g. `ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`) reads it from
-  `INSTRUMENT_HEADER`, not PRIMARY.
-- **DRP-RUN provenance is stamped onto the L0 PRIMARY at read (`KPF0.from_fits`), not at `to_kpf1`.**
+- **L1 PRIMARY holds EPRV-registered keywords only.** From L1 onward, PRIMARY holds EPRV keyword
+  *names* (incl. `DRPTAG`, `DATALVL`) plus FITS-standard structural/bookkeeping cards — **no
+  KPF-registered keywords** (the DRP provenance cards live on RECEIPT; see below) and never raw
+  WMKO natives.
+- **`INSTRUMENT_HEADER` is an immutable, _pure_ verbatim copy of the raw L0 PRIMARY** (values
+  **and** comments — `build_instrument_header()` returns a `fits.Header` copy). It is the raw
+  instrument cards only — the pipeline stamps **nothing** onto it (DRP provenance goes to RECEIPT,
+  not the L0 PRIMARY, so it never appears here). Written once in `to_kpf1`; **nothing else ever
+  writes to it**. Code that needs a raw instrument keyword (e.g. `ELAPSED`, `MJD-OBS`, `DATE-OBS`,
+  `GAIAID`, `SCI-OBJ`, `TARGTEFF`) reads it from `INSTRUMENT_HEADER`, not PRIMARY.
+- **DRP-RUN provenance is stamped onto the L0 RECEIPT at read (`KPF0.from_fits`), not at `to_kpf1`.**
   `KPF0._stamp_provenance` (the single population site; their `PopulatedBy` in `L0-headers.csv` is
-  `KPF0.from_fits`) writes `DRPVERNO` (DRP-RUN-11), `DRPSTATU` (DRP-RUN-20), and `PROGID`/`KOAID`
-  (DRP-RUN-19). `PROGID`/`KOAID` come from the WMKO-native file; an absent value is defaulted to
-  `UNKNOWN` **with a warning**. `to_kpf1`/`wmko_to_eprv` then **forward these four verbatim** (value
-  + comment) onto the L1 PRIMARY — they do not repopulate them.
+  `KPF0.from_fits`, `Extension` is `RECEIPT`) writes `DRPVERNO` (DRP-RUN-11), `DRPSTATU` (DRP-RUN-20),
+  and `PROGID`/`KOAID` (DRP-RUN-19) via `set_keyword` (so KPF0 carries a RECEIPT extension —
+  `L0-extensions.csv` marks it Required). `PROGID`/`KOAID` are read from the WMKO-native PRIMARY; an
+  absent value is defaulted to `UNKNOWN` **with a warning**. They then ride the RECEIPT-header
+  forward (`to_kpf1`→`to_kpf2`→`to_kpf4`) downstream — the raw PRIMARY and INSTRUMENT_HEADER are left
+  untouched. `DRPSTATU` is advanced per module by `_update_drpstatus`, also to RECEIPT.
 - **KPF-pipeline keywords are written via `KPFDataModel.set_keyword(key, value)`, NOT directly to a
   header.** `set_keyword` looks the keyword up in the registry and writes it to the **extension named
   in the registry's `Extension` column**, with the registry `Description` as the FITS comment — so a
@@ -242,11 +245,13 @@ Consequences every contributor must respect:
   if its home extension does not exist on the object. Every such keyword must be registered in the
   per-level registry `data_models/config/L{0,1,2,4}-headers.csv` (explicit ≤8-char FITS keyword — no
   wildcards; families enumerated per member, e.g. `RNGREEN1`-`RNGREEN4`). The current homes:
-  - **PRIMARY** — DRP provenance (stamped at read), `DRPTAG`, and the EPRV RV cards.
+  - **PRIMARY** — EPRV-registered keywords only: `DRPTAG`, `DATALVL`, and the EPRV RV cards (no
+    KPF-registered keyword routes to PRIMARY).
   - **QUALITY_CONTROL** (a KPF-only `BinTableHDU`, created on KPF0/1/2/4) — QC booleans + `ISGOOD`,
     read-noise (`RN*`), calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), and DiagL2
     metrics (`NAN*`/`ZEROFRAC`/`*SNR*`/`*FR*`).
-  - **RECEIPT** — applied flags (`OSCANSUB`/`BIASSUB`/`DARKSUB`/`FLATDIV`), calibration **paths**
+  - **RECEIPT** — DRP provenance (`PROGID`/`KOAID`/`DRPVERNO`/`DRPSTATU`, stamped at read), `ORIGID`,
+    applied flags (`OSCANSUB`/`BIASSUB`/`DARKSUB`/`FLATDIV`), calibration **paths**
     (`BIASFILE`/`DARKFILE`/`FLATFILE`/`WLSFILE`), `ASTRSRC`.
   - **BJD_TDB / BARYCORR_KMS / BARYCORR_Z** (EPRV L2 extensions) — the per-CCD barycentric summaries.
   - **RV1–RV5** (EPRV L4 tables) — the per-orderlet legacy RVs (`CCD<n>RV<sfx>`, sfx S→RV1, 1→RV2,
@@ -273,12 +278,15 @@ Consequences every contributor must respect:
   flags; the Checkpoint stage runs after it (science → Diagnostics → QC → Checkpoints) and reads
   the flags + headers to warn or raise. For each registry-governed extension present (PRIMARY,
   QUALITY_CONTROL, RECEIPT, the barycentric extensions, RV#/CCF#), every card must be a registered
-  keyword for that extension (`keyword_registry.allowed`) or a structural card, else it **raises**.
+  keyword for that extension (`keyword_registry.allowed`) or a structural card
+  (`keyword_registry.is_structural` — the **single** structural definition: exact FITS bookkeeping
+  cards in `_STRUCTURAL` plus the WCS/bintable prefix families in `_STRUCTURAL_PREFIXES`; the
+  checkpoint delegates to it and keeps no list of its own), else it **raises**.
   PRIMARY is validated only where it is EPRV-standard (L1/L2/L4); the raw WMKO L0 PRIMARY is
   skipped. The "required keywords present" concern is now a **QC flag** instead: `KWRDPRL{1,2,4}`
   is 1 iff every registry-required PRIMARY keyword for the level is present (EPRV `Required` at
-  `Level ≤ product level`, unioned with the KPF-routed PRIMARY provenance cards); `KWRDPRL0` stays
-  hardcoded (raw L0 PRIMARY is not registry-governed). The `qc_flags` checkpoint then reads each
+  `Level ≤ product level`; PRIMARY now holds EPRV-registered keywords only, so there is no KPF-routed
+  set to union in); `KWRDPRL0` stays hardcoded (raw L0 PRIMARY is not registry-governed). The `qc_flags` checkpoint then reads each
   0/1 flag and **raises** it if it is in the level's `RAISE_FLAGS` (data-present only), else
   **warns**. Checkpoints read all lookups off the validated `kpf_obj`
   (`self.kpf_obj.keyword_registry`), so `quality_control` imports nothing from `data_models`.

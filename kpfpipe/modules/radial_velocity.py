@@ -1239,7 +1239,7 @@ class RadialVelocity:
     def info(self):
         """Print a summary of the module configuration and RV results."""
         print("RadialVelocity")
-        obs_id = self.l2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
+        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
         print(f"  obs_id:         {obs_id}")
         print(f"  ccf_mask_width: {self.ccf_mask_width} km/s")
         print(f"  ccf_step_size:  {self.ccf_step_size} km/s")

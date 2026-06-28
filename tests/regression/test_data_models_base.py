@@ -209,6 +209,16 @@ class TestKeywordRegistry:
         assert primary_required.get("RV") == 4  # L4-only required
         assert primary_required.get("INSTRUME") == 2  # L2 required
 
+    def test_is_structural_only_fits_cards(self):
+        # The single structural test: true FITS bookkeeping (exact + WCS/bintable
+        # prefixes) only. Registered keywords are NOT structural -- DATALVL (EPRV)
+        # and ORIGID (KPF, now on RECEIPT) were removed from the structural set.
+        reg = KPF1.keyword_registry
+        for card in ("SIMPLE", "EXTNAME", "NAXIS2", "TTYPE1", "TFORM3", "CRVAL1"):
+            assert reg.is_structural(card), card
+        for kw in ("DATALVL", "ORIGID", "PROGID", "DRPTAG", "RV"):
+            assert not reg.is_structural(kw), kw
+
 
 class TestQualityControlPropagation:
     """QUALITY_CONTROL + RECEIPT header cards survive to_fits and L0->L1->L2.

@@ -82,8 +82,14 @@ class KeywordRegistry:
     # LEVEL tag (drives the per-level checkpoint, which flags only its own checks).
     _QC_POPULATORS = frozenset({"QC", "QCL0", "QCL1", "QCL2"})
 
-    # FITS structural / bookkeeping cards plus KPF-internal PRIMARY keys that are
-    # neither EPRV nor in the registry but are always permitted.
+    # FITS structural / bookkeeping cards that are always permitted on any
+    # extension and are never registered keywords. This is the single source of
+    # truth for "structural" (see is_structural); the checkpoint validator reads
+    # it rather than keeping its own list. Two parts: exact-match cards below, and
+    # the WCS / binary-table column-descriptor families in _STRUCTURAL_PREFIXES
+    # (matched by prefix because they are enumerated, e.g. NAXIS1/TTYPE3). Only
+    # genuine FITS cards belong here -- EPRV keywords (DATALVL) live in the
+    # registry table, KPF keywords (ORIGID) are registered to their home extension.
     _STRUCTURAL = {
         "SIMPLE",
         "BITPIX",
@@ -99,11 +105,31 @@ class KeywordRegistry:
         "CHECKSUM",
         "DATASUM",
         "",
-        "DATALVL",
-        "ORIGID",
         "FILENAME",
         "DATE",
+        "EXTNAME",
+        "TFIELDS",
     }
+
+    # Structural card families astropy adds when serializing an extension header
+    # (binary-table column descriptors, image WCS); matched by prefix.
+    _STRUCTURAL_PREFIXES = (
+        "NAXIS",
+        "TTYPE",
+        "TFORM",
+        "TUNIT",
+        "TDIM",
+        "TDISP",
+        "TNULL",
+        "TSCAL",
+        "TZERO",
+        "CTYPE",
+        "CUNIT",
+        "CRPIX",
+        "CRVAL",
+        "CDELT",
+        "CROTA",
+    )
 
     def __init__(self):
         # Source table (EPRV rows first, then KPF rows; KPF wins a collision).
@@ -135,6 +161,17 @@ class KeywordRegistry:
         # (1) Mapping: the rvdata WMKO-native -> EPRV-standard header_map.
         self.header_map = pd.read_csv(_kpf_cfg / "header_map.csv")
         self._warn_unregistered_targets()
+
+    def is_structural(self, key):
+        """True for a FITS structural / bookkeeping card (never a registered keyword).
+
+        The single structural test, consumed by the checkpoint header validator: a
+        card is structural if it is an exact-match bookkeeping card (``structural``)
+        or belongs to a WCS / binary-table column-descriptor family
+        (``_STRUCTURAL_PREFIXES``, e.g. ``NAXIS2``/``TTYPE3``).
+        """
+        k = str(key).strip()
+        return k in self.structural or k.startswith(self._STRUCTURAL_PREFIXES)
 
     # --- Source table construction -------------------------------------------
 

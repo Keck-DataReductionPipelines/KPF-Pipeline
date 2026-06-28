@@ -52,16 +52,17 @@ class TestToKPF4:
         assert len(kpf4.data["RV1"]) == 0
 
     def test_program_ids_survive_transform_and_validate(self, synthetic_l1_file):
-        """PROGID/KOAID set on the L1 PRIMARY survive L1->L2->L4; they are
-        registered in L1-headers.csv and stay on PRIMARY through both
-        transforms."""
+        """PROGID/KOAID on the L1 RECEIPT survive L1->L2->L4 via the RECEIPT-header
+        forward (their registry home is RECEIPT, not PRIMARY)."""
         l1 = KPF1.from_fits(synthetic_l1_file)
-        l1.headers["PRIMARY"]["PROGID"] = "U999"
-        l1.headers["PRIMARY"]["KOAID"] = "KP.20201122.34567.89"
-        prim = l1.to_kpf2().to_kpf4().headers["PRIMARY"]
+        l1.headers["RECEIPT"]["PROGID"] = "U999"
+        l1.headers["RECEIPT"]["KOAID"] = "KP.20201122.34567.89"
+        l4 = l1.to_kpf2().to_kpf4()
 
-        assert prim.get("PROGID") == "U999"
-        assert prim.get("KOAID") == "KP.20201122.34567.89"
+        receipt = l4.headers["RECEIPT"]
+        assert receipt.get("PROGID") == "U999"
+        assert receipt.get("KOAID") == "KP.20201122.34567.89"
+        assert "PROGID" not in l4.headers["PRIMARY"]
 
     def test_kpf4_has_quality_control_extension(self):
         # KPF4 must create QUALITY_CONTROL (RV4 does not) so to_kpf4 has a
