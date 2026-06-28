@@ -318,10 +318,9 @@ class KPF0(KPFDataModel):
         # comment), mirroring to_kpf2/to_kpf4 so all three conversions share one
         # invariant. QUALITY_CONTROL carries the QCL0 booleans + ISGOOD; RECEIPT
         # carries the four DRP-RUN provenance cards stamped at read. Downstream L1
-        # stages append to both.
-        for ext in ("QUALITY_CONTROL", "RECEIPT"):
-            if ext in self.headers and ext in l1.extensions:
-                l1.set_header(ext, self.as_fits_header(self.headers[ext]))
+        # stages append to both. (PRIMARY/INSTRUMENT_HEADER are not forwarded
+        # here -- L0 PRIMARY is converted via _map_header above, not copied.)
+        self._forward_headers(l1, ("QUALITY_CONTROL", "RECEIPT"))
 
         # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:

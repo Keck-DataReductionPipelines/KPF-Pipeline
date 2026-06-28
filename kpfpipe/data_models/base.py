@@ -157,6 +157,24 @@ class KPFDataModel(RVDataModel):
             ext_name = self.extensions._resolve(ext_name)
         super().set_header(ext_name, header)
 
+    def _forward_headers(self, target, ext_names):
+        """Forward governed extension headers onto ``target``, card by card.
+
+        The single home for the header carry-over shared by the
+        ``to_kpf{1,2,4}`` level-up conversions. For each name present on both
+        sides, every card is copied with its FITS comment (iterating
+        ``.items()`` would drop comments). Copying *overlays* onto the target's
+        existing header rather than replacing it, so a PRIMARY pre-seeded with
+        the EPRV skeleton keeps cards the source lacks (native values win), and
+        INSTRUMENT_HEADER / QUALITY_CONTROL / RECEIPT — created empty on the
+        target — receive a verbatim, comment-preserving copy. An extension
+        absent on either side is skipped.
+        """
+        for ext in ext_names:
+            if ext in self.headers and ext in target.headers:
+                for card in self.as_fits_header(self.headers[ext]).cards:
+                    target.headers[ext][card.keyword] = (card.value, card.comment)
+
     def receipt_add_entry(self, module, status):
         """Record a processing step, and update DRPSTATU for pipeline modules."""
         super().receipt_add_entry(module, status)

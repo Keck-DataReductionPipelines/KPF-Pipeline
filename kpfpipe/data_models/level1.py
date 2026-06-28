@@ -227,18 +227,11 @@ class KPF1(KPFDataModel):
         kpf2 = KPF2()
 
         # Headers are a pure pass-through; the native→EPRV conversion and the
-        # INSTRUMENT_HEADER snapshot were done once in KPF0.to_kpf1. Copy
-        # card-by-card (value + comment) — iterating .items() would drop the FITS
-        # comments, and INSTRUMENT_HEADER must remain a verbatim copy.
-        if "PRIMARY" in self.headers:
-            for card in self.headers["PRIMARY"].cards:
-                kpf2.headers["PRIMARY"][card.keyword] = (card.value, card.comment)
-        if "INSTRUMENT_HEADER" in self.headers:
-            for card in self.headers["INSTRUMENT_HEADER"].cards:
-                kpf2.headers["INSTRUMENT_HEADER"][card.keyword] = (
-                    card.value,
-                    card.comment,
-                )
+        # INSTRUMENT_HEADER snapshot were done once in KPF0.to_kpf1. Forward
+        # PRIMARY + INSTRUMENT_HEADER (and QC/RECEIPT below) card-by-card,
+        # preserving comments; PRIMARY overlays onto kpf2's EPRV seed (native
+        # wins), INSTRUMENT_HEADER stays a verbatim copy.
+        self._forward_headers(kpf2, ("PRIMARY", "INSTRUMENT_HEADER"))
 
         # Pass-through extensions with renaming
         for l1_ext, kpf2_ext in self._L1_TO_KPF2_PASSTHROUGH.items():
@@ -260,9 +253,7 @@ class KPF1(KPFDataModel):
         # CalibrationAssociation) and the QUALITY_CONTROL cards (RN*, *AGE, QC
         # booleans) are separate and must be carried explicitly; downstream L2
         # stages (BarycentricCorrection, DiagL2, QCL2) append to them.
-        for ext in ("QUALITY_CONTROL", "RECEIPT"):
-            if ext in self.headers and ext in kpf2.extensions:
-                kpf2.set_header(ext, self.as_fits_header(self.headers[ext]))
+        self._forward_headers(kpf2, ("QUALITY_CONTROL", "RECEIPT"))
 
         # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:

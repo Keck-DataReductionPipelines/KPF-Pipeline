@@ -242,29 +242,17 @@ class KPF2(KPFDataModel, RV2):
 
         kpf4 = KPF4()
 
-        # Forward PRIMARY + INSTRUMENT_HEADER card-by-card (value + comment) —
-        # iterating .items() would drop the FITS comments, and INSTRUMENT_HEADER
-        # must remain a verbatim copy.
-        if "PRIMARY" in self.headers:
-            for card in self.headers["PRIMARY"].cards:
-                kpf4.headers["PRIMARY"][card.keyword] = (card.value, card.comment)
-
-        # Carry forward INSTRUMENT_HEADER (TARGTEFF, TARGRADV, GAIAID, CCD*BJD, ...)
-        if "INSTRUMENT_HEADER" in self.headers and "INSTRUMENT_HEADER" in kpf4.headers:
-            for card in self.headers["INSTRUMENT_HEADER"].cards:
-                kpf4.headers["INSTRUMENT_HEADER"][card.keyword] = (
-                    card.value,
-                    card.comment,
-                )
-
-        # Forward the QUALITY_CONTROL and RECEIPT *headers* onto L4 (value +
-        # comment), mirroring to_kpf2: QUALITY_CONTROL carries the accumulated
-        # L0/L1/L2 diagnostics + QC flags (append-only history, like RECEIPT), and
-        # the RECEIPT cards (applied-step flags, calibration paths) ride along.
-        # The receipt *table* propagates separately via the copy below.
-        for ext in ("QUALITY_CONTROL", "RECEIPT"):
-            if ext in self.headers and ext in kpf4.extensions:
-                kpf4.set_header(ext, self.as_fits_header(self.headers[ext]))
+        # Forward PRIMARY, INSTRUMENT_HEADER, QUALITY_CONTROL, and RECEIPT
+        # card-by-card (value + comment), mirroring to_kpf2. PRIMARY overlays
+        # onto kpf4's EPRV seed (native wins); INSTRUMENT_HEADER (TARGTEFF,
+        # TARGRADV, GAIAID, CCD*BJD, ...) stays a verbatim copy; QUALITY_CONTROL
+        # carries the accumulated L0/L1/L2 diagnostics + QC flags (append-only
+        # history, like RECEIPT) and the RECEIPT cards (applied-step flags,
+        # calibration paths) ride along. The receipt *table* propagates
+        # separately via the copy below.
+        self._forward_headers(
+            kpf4, ("PRIMARY", "INSTRUMENT_HEADER", "QUALITY_CONTROL", "RECEIPT")
+        )
 
         # Carry forward receipt and obs_id
         if self.receipt is not None and not self.receipt.empty:

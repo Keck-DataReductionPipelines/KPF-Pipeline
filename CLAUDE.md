@@ -264,9 +264,14 @@ Consequences every contributor must respect:
     2→RV3, 3→RV4, C→RV5) plus the SCI-combined RV summaries on **RV3**
     (`CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV`, `CCFRV`, `CCFERV`). Masters keep `MASTYPE` on their own
     PRIMARY (out of EPRV scope).
-- **QUALITY_CONTROL + RECEIPT *headers* propagate L0→L1→L2→L4** card-by-card in
-  `to_kpf1`/`to_kpf2`/`to_kpf4` (`set_header` with a comment-preserving `fits.Header` copy),
-  alongside the receipt *table* copy. All three `to_kpfN` methods share one invariant — forward both
+- **QUALITY_CONTROL + RECEIPT *headers* propagate L0→L1→L2→L4** card-by-card (value + comment),
+  alongside the receipt *table* copy. All three `to_kpfN` methods carry their governed headers through
+  the single shared helper **`KPFDataModel._forward_headers(target, ext_names)`** (`data_models/base.py`)
+  — it overlays each named header onto the target card-by-card so comments survive and a pre-seeded
+  PRIMARY keeps cards the source lacks. `to_kpf2`/`to_kpf4` forward PRIMARY + INSTRUMENT_HEADER through
+  it too (a pure pass-through from L1 onward); `to_kpf1` forwards only QUALITY_CONTROL + RECEIPT, since
+  it *builds* the L1 PRIMARY via `_map_header` and snapshots INSTRUMENT_HEADER from the raw L0 PRIMARY
+  rather than copying them. All three share one invariant — forward both
   governed headers if present — so QUALITY_CONTROL is an **append-only history of every diagnostic /
   QC flag**, exactly as RECEIPT is the append-only history of processing steps. The **only** QC
   keyword that changes level-to-level is **`ISGOOD`**, the running aggregate: each level's `QC.run`
