@@ -67,7 +67,7 @@ class KPF1(KPFDataModel):
             self.headers["PRIMARY"][kw] = value
         # DATALVL is EPRV-Required, so the seed defaults it to "UNKNOWN"; correct it
         # in-memory (to_kpf1 / to_fits set it too, but a fresh KPF1 should read L1).
-        self.headers["PRIMARY"]["DATALVL"] = (self._DATALVL, "Data product level")
+        self.set_keyword("DATALVL", self._DATALVL)
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
         """
@@ -183,11 +183,8 @@ class KPF1(KPFDataModel):
         self.receipt_add_entry("to_fits", "PASS")
 
         if "PRIMARY" in self.headers:
-            self.headers["PRIMARY"]["FILENAME"] = (
-                os.path.basename(fn),
-                "Name of the FITS file",
-            )
-            self.headers["PRIMARY"]["DATALVL"] = (self._DATALVL, "Data product level")
+            self.set_keyword("FILENAME", os.path.basename(fn))
+            self.set_keyword("DATALVL", self._DATALVL)
 
         hdu_list = self._create_hdul()
         hdul = fits.HDUList(hdu_list)
@@ -265,7 +262,7 @@ class KPF1(KPFDataModel):
         if self.obs_id is not None:
             kpf2.set_keyword("ORIGID", self.obs_id)
 
-        kpf2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
+        kpf2.set_keyword("DATALVL", "L2")
         kpf2.receipt_add_entry("to_kpf2", "PASS")
         return kpf2
 

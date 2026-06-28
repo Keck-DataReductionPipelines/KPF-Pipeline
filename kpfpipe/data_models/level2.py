@@ -259,7 +259,7 @@ class KPF2(KPFDataModel, RV2):
             kpf4.receipt = self.receipt.copy()
         kpf4.obs_id = self.obs_id
 
-        kpf4.headers["PRIMARY"]["DATALVL"] = ("L4", "Data product level")
+        kpf4.set_keyword("DATALVL", "L4")
         kpf4.receipt_add_entry("to_kpf4", "PASS")
         return kpf4
 

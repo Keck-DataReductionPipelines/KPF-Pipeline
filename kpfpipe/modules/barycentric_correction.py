@@ -10,8 +10,8 @@ Outputs (rvdata-standard ImageHDUs, shape (NORDER,)):
   - BARYCORR_Z    barycentric redshift per spectral order
 
 Per-CCD scalar summaries (at each chip's flux-weighted photon-midpoint time)
-written to PRIMARY as registered KPF-pipeline keywords
-(config/L2-headers.csv):
+written to the per-CCD barycentric extension headers (BJD_TDB / BARYCORR_KMS /
+BARYCORR_Z) as registered KPF-pipeline keywords (config/L2-headers.csv):
   - CCD1BJD       GREEN photon-weighted mid-time (BJD_TDB)
   - CCD1BKMS      GREEN barycentric velocity [km/s]
   - CCD1BZ        GREEN barycentric redshift
@@ -753,10 +753,10 @@ class BarycentricCorrection:
         Returns
         -------
         l2_obj : KPF2
-            Input KPF2 with BJD_TDB / BARYCORR_KMS / BARYCORR_Z populated,
-            per-CCD CCD{1,2}BJD/BKMS/BZ summaries and the astrometry source
-            (ASTRSRC) written to PRIMARY, and a
-            'barycentric_correction' receipt entry.
+            Input KPF2 with BJD_TDB / BARYCORR_KMS / BARYCORR_Z populated, the
+            per-CCD CCD{1,2}BJD/BKMS/BZ summaries written to those same bary
+            extension headers, the astrometry source (ASTRSRC) written to
+            RECEIPT, and a 'barycentric_correction' receipt entry.
         """
         if use_gaia_astrometry is not None:
             self.use_gaia_astrometry = use_gaia_astrometry
@@ -801,7 +801,8 @@ class BarycentricCorrection:
         print(f"  astrometry:  {r['astrometry_source']}")
         ccd_bjd, ccd_kms, ccd_z = r["ccd_bjd"], r["ccd_kms"], r["ccd_z"]
 
-        # Per-CCD summaries (match CCD1*/CCD2* on PRIMARY).
+        # Per-CCD summaries (CCD1*/CCD2* on the BJD_TDB / BARYCORR_KMS / BARYCORR_Z
+        # extension headers).
         print(f"\n  {'':<8s}{'BJD_TDB':>18s}{'BARYCORR_KMS':>18s}{'BARYCORR_Z':>18s}")
         print("  " + "-" * 62)
         print(
