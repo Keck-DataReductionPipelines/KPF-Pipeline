@@ -303,17 +303,22 @@ Consequences every contributor must respect:
   `"L1"`. This is what makes the `KWRDPRL1` presence check meaningful. `to_kpf1` then overlays native
   values on top (native wins). **Masters are exempt for free**: `KPFMasterL1.__init__` chains straight
   to `KPFDataModel.__init__`, never running `KPF1.__init__`, so the skeleton never lands on a master.
-- **`header_map.csv` is sanitized once, when the registry loads it** (`KeywordRegistry._sanitize_header_map`),
-  so `self.header_map` holds only genuine static native→EPRV mappings. Two row classes are dropped:
-  (1) targets absent from the registry (`PARANG`, `PARANG2`) — warned, so the rvdata header_map/registry
-  inconsistency stays visible; and (2) `_HEADER_MAP_NON_NATIVE` (`NUMORDER`, `DATALVL`, `DRPTAG`,
-  `JD_UTC`) — keywords whose value comes from elsewhere, not a static map row. This is why the four
-  per-keyword corrections are **consolidated to one home each** rather than scattered:
-  - `NUMORDER` (→67) and `DRPTAG` (→DRP `__version__`) — the registry `_SEED_OVERRIDES`, so they ride
-    `eprv_primary_seed` (`KPF1.__init__` stamps them; `DETECTOR`/`__version__` are imported by the registry).
-  - `DATALVL` — `KPF1.__init__` (`= KPF1._DATALVL`); its seed value stays the EPRV placeholder `"UNKNOWN"`.
-  - `JD_UTC` (full JD = native `MJD-OBS` + 2400000.5) — the one **value transform** `header_map` can't
-    express, kept in `_map_header` (a per-frame native-derived value).
+- **`KeywordRegistry.__init__` is a strict read → sanitize → build pipeline.** It reads the raw inputs
+  (the unified keyword table, `header_map.csv`), **sanitizes both once** before any lookup is derived,
+  then builds/distributes the derived lookups from the clean table. The two sanitizations:
+  - **Table Defaults** — `_DEFAULT_OVERRIDES` corrects the Defaults `header_map.csv` gets wrong
+    (`NUMORDER` 65→67, from `DETECTOR`) or that are runtime (`DRPTAG`→DRP `__version__`), written as
+    strings into the `Default` column. So the seed (`eprv_primary_seed`, which `KPF1.__init__` stamps)
+    carries them with **no build-step special-casing**; `DETECTOR`/`__version__` are imported by the
+    registry.
+  - **`header_map`** — `_sanitize_header_map` keeps only genuine static native→EPRV mapping rows,
+    dropping (1) targets absent from the registry (`PARANG`, `PARANG2`) — warned, so the rvdata
+    header_map/registry inconsistency stays visible; and (2) `_HEADER_MAP_NON_NATIVE` (`NUMORDER`,
+    `DATALVL`, `DRPTAG`, `JD_UTC`), whose value comes from elsewhere, not a static map row.
+  The four header_map corrections thus live **one home each**: `NUMORDER`/`DRPTAG` in the table Default
+  (above); `DATALVL` in `KPF1.__init__` (`= KPF1._DATALVL`; its seed value stays the EPRV placeholder
+  `"UNKNOWN"`); and `JD_UTC` (full JD = native `MJD-OBS` + 2400000.5) — the one **value transform**
+  `header_map` can't express — kept in `_map_header` (a per-frame native-derived value).
 - **`_map_header` is a pure tabular mapper** (plus the lone `JD_UTC` transform): it iterates the
   already-sanitized `header_map`, takes the native (WMKO) value when present else the row default, and
   **coerces each value to its EPRV `DataType`** (`keyword_registry.eprv_primary_datatypes` +

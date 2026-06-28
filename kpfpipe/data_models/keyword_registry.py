@@ -32,9 +32,9 @@ The three use-cases:
 
 It also exposes ``eprv_primary_seed`` (the typed EPRV Required PRIMARY skeleton
 ``KPF1.__init__`` stamps, mirroring rvdata's ``RV2.__init__``). The header_map
-corrections live in one place each: ``NUMORDER``/``DRPTAG`` via ``_SEED_OVERRIDES``
-(seeded), ``DATALVL`` via ``KPF1.__init__`` (the model level), and the ``JD_UTC``
-epoch transform in ``_map_header`` (a per-frame value, not a static default).
+corrections live in one place each: ``NUMORDER``/``DRPTAG`` via ``_DEFAULT_OVERRIDES``
+(table sanitization), ``DATALVL`` via ``KPF1.__init__`` (the model level), and the
+``JD_UTC`` epoch transform in ``_map_header`` (a per-frame value, not a static default).
 """
 
 import importlib.resources
@@ -88,15 +88,18 @@ class KeywordRegistry:
     # header_map.csv STANDARD targets that are NOT genuine static native->EPRV
     # mappings, so they are dropped when header_map is sanitized on load (and the
     # raw header_map default/native they carried is wrong or vestigial). Each one's
-    # real value home: NUMORDER/DRPTAG -> _SEED_OVERRIDES (seeded), DATALVL ->
+    # real value home: NUMORDER/DRPTAG -> _DEFAULT_OVERRIDES (table), DATALVL ->
     # KPF1.__init__ (the model's data level), JD_UTC -> the _map_header epoch
     # transform (a per-frame value, not a static default).
     _HEADER_MAP_NON_NATIVE = frozenset({"NUMORDER", "DATALVL", "DRPTAG", "JD_UTC"})
 
-    # Correct seed values for keywords header_map.csv gets wrong: NUMORDER's
-    # header_map default is 65 (KPF has 67), and DRPTAG is the runtime DRP version.
-    # Applied when building eprv_primary_seed, overriding the EPRV table Default.
-    _SEED_OVERRIDES = {"NUMORDER": _NUMORDER, "DRPTAG": __version__}
+    # Table Default corrections applied during the __init__ sanitize phase, for
+    # keywords header_map.csv gets wrong (NUMORDER's default is 65; KPF has 67) or
+    # whose default is runtime (DRPTAG is the DRP version). Stored as strings like
+    # every other Default (the column is string-typed); parse_value_to_datatype
+    # types them. After sanitization the table is clean, so _eprv_primary_lookup
+    # seeds them without special-casing.
+    _DEFAULT_OVERRIDES = {"NUMORDER": str(_NUMORDER), "DRPTAG": __version__}
 
     # Per-extension EPRV keyword CSVs (rvdata does not load these as constants).
     # RV#/CCF# share one template CSV; BARYCORR_*/BJD_TDB are per-extension.
@@ -165,16 +168,31 @@ class KeywordRegistry:
     )
 
     def __init__(self):
-        # Source table (EPRV rows first, then KPF rows; KPF wins a collision).
+        # --- Read the raw reference inputs ---
+        # The unified keyword table (EPRV rows first, then KPF rows; KPF wins a
+        # collision) and the rvdata WMKO-native -> EPRV-standard header_map.
         eprv_rows, kpf_rows = self._build_rows()
-        self.table = pd.DataFrame(eprv_rows + kpf_rows, columns=self._COLUMNS)
-        # The lookups below are read-only reference data shared process-wide via
-        # the singleton; freeze them (frozenset / MappingProxyType) so a stray
-        # consumer mutation can't corrupt the registry for everyone (notably
-        # under parallel test execution). self.table is only ever read.
-        # Every registered keyword (the allowlist; also drives header_map sanitization).
+        table = pd.DataFrame(eprv_rows + kpf_rows, columns=self._COLUMNS)
+        header_map = pd.read_csv(_kpf_cfg / "header_map.csv")
+
+        # --- Sanitize the inputs once, here, before any lookup is derived ---
+        # Correct the Defaults header_map.csv gets wrong (NUMORDER 65 -> 67) or that
+        # are runtime (DRPTAG -> version); these feed eprv_primary_seed, so the build
+        # step reads a clean table with no per-keyword special-casing.
+        for keyword, value in self._DEFAULT_OVERRIDES.items():
+            table.loc[table["Keyword"] == keyword, "Default"] = value
+        self.table = table
+        # The keyword allowlist -- a distributed lookup, and the gate header_map
+        # sanitization filters against (so it is derived before that runs).
         self.registered = frozenset(self.table["Keyword"])
-        # Derived lookups (all read off self.table — no parallel row lists).
+        # Drop header_map rows that aren't genuine static native -> EPRV mappings.
+        self.header_map = self._sanitize_header_map(header_map)
+
+        # --- Build / distribute the derived lookups from the sanitized table ---
+        # All are read-only reference data shared process-wide via the singleton;
+        # freeze them (frozenset / MappingProxyType) so a stray consumer mutation
+        # can't corrupt the registry for everyone (notably under parallel tests).
+        # self.table is only ever read.
         self.routing = MappingProxyType(self._routing_lookup())
         allowed, required = self._validation_lookup()
         self.allowed = MappingProxyType(
@@ -197,11 +215,6 @@ class KeywordRegistry:
         seed, datatypes = self._eprv_primary_lookup()
         self.eprv_primary_seed = MappingProxyType(seed)
         self.eprv_primary_datatypes = MappingProxyType(datatypes)
-        # (1) Mapping: the rvdata WMKO-native -> EPRV-standard header_map, sanitized
-        # on load to genuine static native mappings only (see _sanitize_header_map).
-        self.header_map = self._sanitize_header_map(
-            pd.read_csv(_kpf_cfg / "header_map.csv")
-        )
 
     def is_structural(self, key):
         """True for a FITS structural / bookkeeping card (never a registered keyword).
@@ -403,13 +416,9 @@ class KeywordRegistry:
             units = None if pd.isna(row.Units) else str(row.Units).strip()
             unitstr = "" if not units or units.lower() == "n/a" else f"[{units}] "
             comment = f"{unitstr}{row.Description}"
-            # _SEED_OVERRIDES carries the KPF-correct value for keywords header_map
-            # gets wrong (NUMORDER=67, DRPTAG=version), so the correction lives here
-            # rather than as a fixup in _map_header.
-            if row.Keyword in self._SEED_OVERRIDES:
-                default = self._SEED_OVERRIDES[row.Keyword]
-            else:
-                default = None if pd.isna(row.Default) else row.Default
+            # The table is already sanitized (_DEFAULT_OVERRIDES applied in __init__),
+            # so the Default is read straight, no per-keyword correction here.
+            default = None if pd.isna(row.Default) else row.Default
             seed[row.Keyword] = parse_value_to_datatype(
                 row.Keyword, row.DataType, (default, comment)
             )
@@ -439,6 +448,8 @@ class KeywordRegistry:
             if row.PopulatedBy != "QC":  # "QCL0"/"QCL1"/"QCL2" -> "L0"/"L1"/"L2"
                 by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
         return all_flags, by_level
+
+    # --- Input sanitization (run once in __init__ before the lookups) --------
 
     def _sanitize_header_map(self, raw):
         """Return header_map with only genuine static native->EPRV mapping rows.

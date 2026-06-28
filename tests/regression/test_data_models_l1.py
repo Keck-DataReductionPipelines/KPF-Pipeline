@@ -273,8 +273,8 @@ class TestToL1:
         no longer special-cases NUMORDER/DRPTAG/DATALVL (those ride the seed /
         model level); JD_UTC is the one transform it still performs."""
         out = KPF0.from_fits(synthetic_l0_file)._map_header()
-        assert "NUMORDER" not in out  # seeded (registry _SEED_OVERRIDES)
-        assert "DRPTAG" not in out  # seeded (registry _SEED_OVERRIDES)
+        assert "NUMORDER" not in out  # seeded (registry _DEFAULT_OVERRIDES)
+        assert "DRPTAG" not in out  # seeded (registry _DEFAULT_OVERRIDES)
         assert "DATALVL" not in out  # set by KPF1.__init__ (model level)
         assert "JD_UTC" in out  # the one per-frame transform kept in _map_header
 

@@ -252,17 +252,25 @@ class TestKeywordRegistry:
         assert not ({"PARANG", "PARANG2"} & std)
         assert not ({"NUMORDER", "DATALVL", "DRPTAG", "JD_UTC"} & std)
 
-    def test_seed_overrides_fix_header_map_values(self):
-        # NUMORDER/DRPTAG corrections live in the seed (one place), not as
-        # _map_header fixups: NUMORDER -> 67 (header_map says 65), DRPTAG -> version.
+    def test_default_overrides_sanitize_the_table(self):
+        # NUMORDER/DRPTAG corrections are applied once, to the table Default during
+        # the __init__ sanitize phase (not as a _map_header or build-step fixup):
+        # NUMORDER -> 67 (header_map says 65), DRPTAG -> version. So both the table
+        # and the seed derived from it carry the corrected values.
         import importlib.metadata
 
-        seed = KPF1.keyword_registry.eprv_primary_seed
-        assert seed["NUMORDER"][0] == 67
-        assert seed["DRPTAG"][0] == importlib.metadata.version("kpfpipe")
-        # DATALVL is NOT overridden here -- it stays the EPRV placeholder, set to
-        # the data level by KPF1.__init__.
-        assert seed["DATALVL"][0] == "UNKNOWN"
+        reg = KPF1.keyword_registry
+        version = importlib.metadata.version("kpfpipe")
+        table = reg.table.set_index("Keyword")
+        # Table Defaults are strings (like every other Default); the seed types them.
+        assert table.loc["NUMORDER", "Default"] == "67"
+        assert table.loc["DRPTAG", "Default"] == version
+        assert reg.eprv_primary_seed["NUMORDER"][0] == 67
+        assert reg.eprv_primary_seed["DRPTAG"][0] == version
+        # DATALVL is NOT overridden -- it stays the EPRV placeholder, set to the
+        # data level by KPF1.__init__.
+        assert table.loc["DATALVL", "Default"] == "UNKNOWN"
+        assert reg.eprv_primary_seed["DATALVL"][0] == "UNKNOWN"
 
 
 class TestQualityControlPropagation:
