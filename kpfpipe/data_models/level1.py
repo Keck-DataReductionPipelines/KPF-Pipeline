@@ -58,6 +58,17 @@ class KPF1(KPFDataModel):
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
 
+        # Seed PRIMARY with the EPRV Required keyword skeleton (typed defaults +
+        # comments), mirroring how rvdata's RV2.__init__ seeds KPF2. L1 is not an
+        # EPRV level, so KPF1 has no RV1 to inherit this from; we stamp it from the
+        # registry's eprv_primary_seed (the single source of truth) so KWRDPRL1 is
+        # meaningful and native values (overlaid in KPF0.to_kpf1) win over defaults.
+        for kw, value in self.keyword_registry.eprv_primary_seed.items():
+            self.headers["PRIMARY"][kw] = value
+        # DATALVL is EPRV-Required, so the seed defaults it to "UNKNOWN"; correct it
+        # in-memory (to_kpf1 / to_fits set it too, but a fresh KPF1 should read L1).
+        self.set_keyword("DATALVL", self._DATALVL)
+
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
         """
         Route L1 FITS reads to `KPF1._read`.
@@ -172,11 +183,8 @@ class KPF1(KPFDataModel):
         self.receipt_add_entry("to_fits", "PASS")
 
         if "PRIMARY" in self.headers:
-            self.headers["PRIMARY"]["FILENAME"] = (
-                os.path.basename(fn),
-                "Name of the FITS file",
-            )
-            self.headers["PRIMARY"]["DATALVL"] = (self._DATALVL, "Data product level")
+            self.set_keyword("FILENAME", os.path.basename(fn))
+            self.set_keyword("DATALVL", self._DATALVL)
 
         hdu_list = self._create_hdul()
         hdul = fits.HDUList(hdu_list)
@@ -216,18 +224,11 @@ class KPF1(KPFDataModel):
         kpf2 = KPF2()
 
         # Headers are a pure pass-through; the native→EPRV conversion and the
-        # INSTRUMENT_HEADER snapshot were done once in KPF0.to_kpf1. Copy
-        # card-by-card (value + comment) — iterating .items() would drop the FITS
-        # comments, and INSTRUMENT_HEADER must remain a verbatim copy.
-        if "PRIMARY" in self.headers:
-            for card in self.headers["PRIMARY"].cards:
-                kpf2.headers["PRIMARY"][card.keyword] = (card.value, card.comment)
-        if "INSTRUMENT_HEADER" in self.headers:
-            for card in self.headers["INSTRUMENT_HEADER"].cards:
-                kpf2.headers["INSTRUMENT_HEADER"][card.keyword] = (
-                    card.value,
-                    card.comment,
-                )
+        # INSTRUMENT_HEADER snapshot were done once in KPF0.to_kpf1. Forward
+        # PRIMARY + INSTRUMENT_HEADER (and QC/RECEIPT below) card-by-card,
+        # preserving comments; PRIMARY overlays onto kpf2's EPRV seed (native
+        # wins), INSTRUMENT_HEADER stays a verbatim copy.
+        self._forward_headers(kpf2, ("PRIMARY", "INSTRUMENT_HEADER"))
 
         # Pass-through extensions with renaming
         for l1_ext, kpf2_ext in self._L1_TO_KPF2_PASSTHROUGH.items():
@@ -249,9 +250,7 @@ class KPF1(KPFDataModel):
         # CalibrationAssociation) and the QUALITY_CONTROL cards (RN*, *AGE, QC
         # booleans) are separate and must be carried explicitly; downstream L2
         # stages (BarycentricCorrection, DiagL2, QCL2) append to them.
-        for ext in ("QUALITY_CONTROL", "RECEIPT"):
-            if ext in self.headers and ext in kpf2.extensions:
-                kpf2.set_header(ext, self.as_fits_header(self.headers[ext]))
+        self._forward_headers(kpf2, ("QUALITY_CONTROL", "RECEIPT"))
 
         # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:
@@ -263,7 +262,7 @@ class KPF1(KPFDataModel):
         if self.obs_id is not None:
             kpf2.set_keyword("ORIGID", self.obs_id)
 
-        kpf2.headers["PRIMARY"]["DATALVL"] = ("L2", "Data product level")
+        kpf2.set_keyword("DATALVL", "L2")
         kpf2.receipt_add_entry("to_kpf2", "PASS")
         return kpf2
 

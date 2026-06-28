@@ -13,8 +13,8 @@ KPF1 is the representative vehicle for the inherited base path (L0/L1 use
 ``KPFDataModel._create_hdul`` directly). KPF2/KPF4 override ``_create_hdul`` via
 RV2/RV4, so their round-trip guards live in test_data_models_l{2,4}.py.
 
-The WMKO->EPRV conversion (``KPF0.wmko_to_eprv`` / ``build_instrument_header``) is
-exercised end-to-end by the to_kpf1/to_kpf2 tests in test_data_models_l{1,2,4}.py.
+The WMKO->EPRV conversion (``KPF0._map_header``) is exercised end-to-end by the
+to_kpf1/to_kpf2 tests in test_data_models_l{1,2,4}.py.
 PRIMARY-header validation no longer lives on the data models (it moved to the
 checkpoints layer, ``quality_control/checkpoints/base.py``).
 """
@@ -186,6 +186,8 @@ class TestKeywordRegistry:
             "PopulatedBy",
             "Required",
             "Level",
+            "Default",
+            "Units",
         ]
 
     def test_unions_kpf_and_eprv(self):
@@ -195,7 +197,7 @@ class TestKeywordRegistry:
 
     def test_non_registry_headermap_targets_absent(self):
         # PARANG/PARANG2 are header_map STANDARD names that aren't EPRV keywords;
-        # they must NOT be in the registry (so wmko_to_eprv drops them).
+        # they must NOT be in the registry (so _map_header drops them).
         assert "PARANG" not in KPF1.keyword_registry.registered
         assert "PARANG2" not in KPF1.keyword_registry.registered
 
@@ -204,10 +206,12 @@ class TestKeywordRegistry:
         assert "RV" in KPF1.keyword_registry.allowed["PRIMARY"]
 
     def test_required_keyed_by_minimal_level(self):
-        # required maps keyword -> the minimal Level it is Required at.
+        # required maps keyword -> the minimal Level it is Required at. The EPRV
+        # L2 PRIMARY set is tagged Level 1 (KPF requires it from L1; see
+        # keyword_registry._build_rows), so KWRDPRL1 needs no L1->L2 cap.
         primary_required = KPF1.keyword_registry.required["PRIMARY"]
         assert primary_required.get("RV") == 4  # L4-only required
-        assert primary_required.get("INSTRUME") == 2  # L2 required
+        assert primary_required.get("INSTRUME") == 1  # required from L1
 
     def test_is_structural_only_fits_cards(self):
         # The single structural test: true FITS bookkeeping (exact + WCS/bintable
@@ -218,6 +222,57 @@ class TestKeywordRegistry:
             assert reg.is_structural(card), card
         for kw in ("DATALVL", "ORIGID", "PROGID", "DRPTAG", "RV"):
             assert not reg.is_structural(kw), kw
+
+    def test_default_units_populated_for_eprv_blank_for_kpf(self):
+        # The new table columns carry EPRV CSV values for EPRV rows, "" for KPF.
+        table = KPF1.keyword_registry.table.set_index("Keyword")
+        assert table.loc["INSTRUME", "Default"] == "UNKNOWN"  # EPRV row
+        assert table.loc["RNGREEN1", "Default"] == ""  # KPF row
+        assert table.loc["RNGREEN1", "Units"] == ""
+
+    def test_eprv_primary_seed_is_typed_required_set(self):
+        # The seed is the EPRV Required PRIMARY set (Level <= 1), pre-typed as
+        # (value, comment) tuples ready to drop into a header.
+        reg = KPF1.keyword_registry
+        required = {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= 1}
+        assert set(reg.eprv_primary_seed) == required
+        value, comment = reg.eprv_primary_seed["ISSOLAR"]
+        assert value is False and comment  # Boolean parsed, comment present
+
+    def test_eprv_primary_datatypes_cover_emitted_keywords(self):
+        # Datatypes use rvdata vocab (so parse_value_to_datatype works) and cover
+        # the keywords _map_header emits; KPF int/str spellings never appear here.
+        dt = KPF1.keyword_registry.eprv_primary_datatypes
+        assert dt["INSTRUME"] == "String" and dt["NUMTRACE"] == "UInt"
+        assert "RNGREEN1" not in dt  # KPF keyword, not EPRV PRIMARY
+
+    def test_header_map_sanitized_on_load(self):
+        # header_map holds only genuine static native->EPRV mappings: unregistered
+        # targets (PARANG) and non-native keywords (sourced from seed/model/transform)
+        # are dropped, so _map_header needs no filter or per-keyword correction.
+        std = set(KPF1.keyword_registry.header_map["STANDARD"].astype(str).str.strip())
+        assert not ({"PARANG", "PARANG2"} & std)
+        assert not ({"NUMORDER", "DATALVL", "DRPTAG", "JD_UTC"} & std)
+
+    def test_default_overrides_sanitize_the_table(self):
+        # NUMORDER/DRPTAG corrections are applied once, to the table Default during
+        # the __init__ sanitize phase (not as a _map_header or build-step fixup):
+        # NUMORDER -> 67 (header_map says 65), DRPTAG -> version. So both the table
+        # and the seed derived from it carry the corrected values.
+        import importlib.metadata
+
+        reg = KPF1.keyword_registry
+        version = importlib.metadata.version("kpfpipe")
+        table = reg.table.set_index("Keyword")
+        # Table Defaults are strings (like every other Default); the seed types them.
+        assert table.loc["NUMORDER", "Default"] == "67"
+        assert table.loc["DRPTAG", "Default"] == version
+        assert reg.eprv_primary_seed["NUMORDER"][0] == 67
+        assert reg.eprv_primary_seed["DRPTAG"][0] == version
+        # DATALVL is NOT overridden -- it stays the EPRV placeholder, set to the
+        # data level by KPF1.__init__.
+        assert table.loc["DATALVL", "Default"] == "UNKNOWN"
+        assert reg.eprv_primary_seed["DATALVL"][0] == "UNKNOWN"
 
 
 class TestQualityControlPropagation:

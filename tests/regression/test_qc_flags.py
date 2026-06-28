@@ -129,8 +129,10 @@ def _make_kpf1(
             qc[f"RNNGGR{i}"] = (1.0, "RNNG")
             qc[f"RNNGRD{i}"] = (1.0, "RNNG")
 
-    # Seed the full required-PRIMARY set so KWRDPRL1 (presence of all 44 keywords)
-    # passes; KPF1 is not rvdata-seeded, so a synthetic L1 PRIMARY is otherwise sparse.
+    # Seed the full required-PRIMARY set so KWRDPRL1 (presence of all required
+    # keywords) passes. KPF1.__init__ seeds the EPRV skeleton, but KPF1._read
+    # replaces PRIMARY with the file's (sparse) header, so a synthetic from_fits L1
+    # is otherwise missing them.
     _seed_required_primary(l1, QCL1)
     return l1
 

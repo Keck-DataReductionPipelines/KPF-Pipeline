@@ -1113,8 +1113,7 @@ class RadialVelocity:
                 )
 
         # PRIMARY (EPRV L4): always record the RV method.
-        prim = l4_obj.headers["PRIMARY"]
-        prim["RVMETHOD"] = ("CCF", "RV derivation method")
+        l4_obj.set_keyword("RVMETHOD", "CCF")
 
         # Final science RV (legacy CCD<n>RV / CCFRV). Sum the science orderlets'
         # CCFs per chip and fit (bare CCD<n>RV), then combine the two CCDs at the
@@ -1211,27 +1210,12 @@ class RadialVelocity:
 
         # PRIMARY (EPRV L4): the recommended combined RV. SYSVEL is left UNDEFINED
         # (absolute barycentric RVs, nothing removed); per-fiber velocity grids
-        # live on the CCF extensions.
-        prim["RV"] = (
-            (float(ccfrv), "[km/s] Combined radial velocity")
-            if np.isfinite(ccfrv)
-            else (None, "[km/s] Combined radial velocity")
-        )
-        prim["RVERR"] = (
-            (float(ccferv), "[km/s] Combined RV uncertainty")
-            if np.isfinite(ccferv)
-            else (None, "[km/s] Combined RV uncertainty")
-        )
-        prim["BERV"] = (
-            (float(berv_p), "[km/s] Barycentric correction")
-            if np.isfinite(berv_p)
-            else (None, "[km/s] Barycentric correction")
-        )
-        prim["BJDTDB"] = (
-            (float(bjd_p), "Photon-weighted midpoint [BJD_TDB]")
-            if np.isfinite(bjd_p)
-            else (None, "Photon-weighted midpoint [BJD_TDB]")
-        )
+        # live on the CCF extensions. set_keyword routes each to PRIMARY with the
+        # registry-owned comment; a non-finite value writes an UNDEFINED card.
+        l4_obj.set_keyword("RV", float(ccfrv) if np.isfinite(ccfrv) else None)
+        l4_obj.set_keyword("RVERR", float(ccferv) if np.isfinite(ccferv) else None)
+        l4_obj.set_keyword("BERV", float(berv_p) if np.isfinite(berv_p) else None)
+        l4_obj.set_keyword("BJDTDB", float(bjd_p) if np.isfinite(bjd_p) else None)
 
         l4_obj.receipt_add_entry("radial_velocity", "PASS")
         return l4_obj
