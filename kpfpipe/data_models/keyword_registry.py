@@ -175,8 +175,8 @@ class KeywordRegistry:
         # Every registered keyword (the allowlist; also drives header_map sanitization).
         self.registered = frozenset(self.table["Keyword"])
         # Derived lookups (all read off self.table — no parallel row lists).
-        self.routing = MappingProxyType(self._build_routing())
-        allowed, required = self._build_validation()
+        self.routing = MappingProxyType(self._routing_lookup())
+        allowed, required = self._validation_lookup()
         self.allowed = MappingProxyType(
             {ext: frozenset(kws) for ext, kws in allowed.items()}
         )
@@ -185,16 +185,16 @@ class KeywordRegistry:
         )
         self.structural = frozenset(self._STRUCTURAL)
         # QC-flag keyword sets: the full set (ISGOOD aggregate) and the per-level
-        # split (current-level checkpoint scope). See _build_qc_flag_sets.
-        qc_all, qc_by_level = self._build_qc_flag_sets()
+        # split (current-level checkpoint scope). See _qc_flag_sets_lookup.
+        qc_all, qc_by_level = self._qc_flag_sets_lookup()
         self.qc_flag_keywords = frozenset(qc_all)
         self.qc_flag_keywords_by_level = MappingProxyType(
             {lvl: frozenset(kws) for lvl, kws in qc_by_level.items()}
         )
         # EPRV PRIMARY skeleton: the typed Required seed (KPF1.__init__ stamps it,
         # mirroring RV2.__init__) and the datatypes _map_header types its emitted
-        # values with. See _build_eprv_primary.
-        seed, datatypes = self._build_eprv_primary()
+        # values with. See _eprv_primary_lookup.
+        seed, datatypes = self._eprv_primary_lookup()
         self.eprv_primary_seed = MappingProxyType(seed)
         self.eprv_primary_datatypes = MappingProxyType(datatypes)
         # (1) Mapping: the rvdata WMKO-native -> EPRV-standard header_map, sanitized
@@ -342,7 +342,7 @@ class KeywordRegistry:
 
     # --- Derived lookups (all read self.table) -------------------------------
 
-    def _build_routing(self):
+    def _routing_lookup(self):
         """keyword -> (home extension, comment), derived from ``self.table``.
 
         Write targets only: EPRV PRIMARY keywords (-> PRIMARY) and every KPF
@@ -360,7 +360,7 @@ class KeywordRegistry:
                 routing[row.Keyword] = (row.Extension, row.Description)
         return routing
 
-    def _build_validation(self):
+    def _validation_lookup(self):
         """Per-extension allowed / required lookups, derived from ``self.table``.
 
         allowed: every keyword registered for an extension (no level gate).
@@ -377,7 +377,7 @@ class KeywordRegistry:
                 d[row.Keyword] = min(d.get(row.Keyword, row.Level), row.Level)
         return allowed, required
 
-    def _build_eprv_primary(self):
+    def _eprv_primary_lookup(self):
         """EPRV PRIMARY lookups, derived from ``self.table``.
 
         Returns ``(seed, datatypes)``:
@@ -415,7 +415,7 @@ class KeywordRegistry:
             )
         return seed, datatypes
 
-    def _build_qc_flag_sets(self):
+    def _qc_flag_sets_lookup(self):
         """QC-flag keyword sets, derived from ``self.table``.
 
         Returns
