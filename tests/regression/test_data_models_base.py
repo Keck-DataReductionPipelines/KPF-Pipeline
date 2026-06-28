@@ -186,6 +186,8 @@ class TestKeywordRegistry:
             "PopulatedBy",
             "Required",
             "Level",
+            "Default",
+            "Units",
         ]
 
     def test_unions_kpf_and_eprv(self):
@@ -218,6 +220,29 @@ class TestKeywordRegistry:
             assert reg.is_structural(card), card
         for kw in ("DATALVL", "ORIGID", "PROGID", "DRPTAG", "RV"):
             assert not reg.is_structural(kw), kw
+
+    def test_default_units_populated_for_eprv_blank_for_kpf(self):
+        # The new table columns carry EPRV CSV values for EPRV rows, "" for KPF.
+        table = KPF1.keyword_registry.table.set_index("Keyword")
+        assert table.loc["INSTRUME", "Default"] == "UNKNOWN"  # EPRV row
+        assert table.loc["RNGREEN1", "Default"] == ""  # KPF row
+        assert table.loc["RNGREEN1", "Units"] == ""
+
+    def test_eprv_primary_seed_is_typed_required_set(self):
+        # The seed is the EPRV Required PRIMARY set (Level <= 2), pre-typed as
+        # (value, comment) tuples ready to drop into a header.
+        reg = KPF1.keyword_registry
+        required = {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= 2}
+        assert set(reg.eprv_primary_seed) == required
+        value, comment = reg.eprv_primary_seed["ISSOLAR"]
+        assert value is False and comment  # Boolean parsed, comment present
+
+    def test_eprv_primary_datatypes_cover_emitted_keywords(self):
+        # Datatypes use rvdata vocab (so parse_value_to_datatype works) and cover
+        # the keywords wmko_to_eprv emits; KPF int/str spellings never appear here.
+        dt = KPF1.keyword_registry.eprv_primary_datatypes
+        assert dt["INSTRUME"] == "String" and dt["NUMTRACE"] == "UInt"
+        assert "RNGREEN1" not in dt  # KPF keyword, not EPRV PRIMARY
 
 
 class TestQualityControlPropagation:

@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
+from rvdata.core.tools.headers import parse_value_to_datatype
 
 from kpfpipe import DETECTOR, __version__
 from kpfpipe.data_models.base import KPFDataModel
@@ -245,9 +246,21 @@ class KPF0(KPFDataModel):
             default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
 
             if instrument_key and instrument_key in wmko_primary:
-                out[standard_key] = wmko_primary.get(instrument_key)
+                raw_value = wmko_primary.get(instrument_key)
             elif default_val is not None and str(default_val).strip():
-                out[standard_key] = default_val
+                raw_value = default_val
+            else:
+                continue
+            # Type the value to its EPRV DataType (rvdata-vocab) so the L1 overlay
+            # matches L2's typing (e.g. NUMTRACE '5' -> 5), for both native values
+            # and CSV-string defaults. Emit the bare value so to_kpf1's assignment
+            # preserves the comment KPF1.__init__ seeded onto the PRIMARY card.
+            dt = self.keyword_registry.eprv_primary_datatypes.get(standard_key)
+            out[standard_key] = (
+                parse_value_to_datatype(standard_key, dt, raw_value)[0]
+                if dt
+                else raw_value
+            )
 
         # --- Value corrections (see notes/header_audit.md A1/A2/A3) ---
         out["NUMORDER"] = (_NUMORDER, "Number of echelle orders (green+red)")

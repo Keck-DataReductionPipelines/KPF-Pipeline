@@ -210,13 +210,18 @@ singleton `keyword_registry`), organized by its three use-cases: **(1) mapping**
 `.structural`; **(3) routing** — `.routing` (`keyword → (extension, comment)`). All of (2)/(3) are
 derived in `__init__` from the **single source-of-truth table `.table`** — one DataFrame unioning our
 `L{0,1,2,4}-headers.csv` registries with the EPRV keyword defs (rvdata's `LEVEL2/4_PRIMARY_KEYWORDS` +
-per-extension CSVs), columns `Keyword, Description, Extension, DataType, PopulatedBy, Required, Level`
-(`.registered` is the keyword allowlist). **`keyword_registry.py` is imported only by
-`data_models/base.py`**: `KPFDataModel` surfaces the singleton as the **class attribute
-`keyword_registry`** and re-exports it (so `level2/4.py` call `keyword_registry.register_rvdata_extension`
-from `base`) — consumers handed a `kpf_obj` (the checkpoints validator, level0's WMKO→EPRV mapping,
-tests) read the lookups off `kpf.keyword_registry.{table,routing,allowed,required,structural,registered,header_map}`
-rather than importing the registry.
+per-extension CSVs), columns `Keyword, Description, Extension, DataType, PopulatedBy, Required, Level,
+Default, Units` (`Default`/`Units` carry the EPRV CSV values for EPRV rows, `""` for KPF rows; they
+feed the L1 seed — see below). (`.registered` is the keyword allowlist.) **`keyword_registry.py` is
+imported only by `data_models/base.py`**: `KPFDataModel` surfaces the singleton as the **class
+attribute `keyword_registry`** and re-exports it (so `level2/4.py` call
+`keyword_registry.register_rvdata_extension` from `base`) — consumers handed a `kpf_obj` (the
+checkpoints validator, level0's WMKO→EPRV mapping, tests) read the lookups off
+`kpf.keyword_registry.{table,routing,allowed,required,structural,registered,header_map,eprv_primary_seed,eprv_primary_datatypes}`
+rather than importing the registry. **Known KPF↔rvdata inconsistency (latent):** the KPF
+`L{n}-headers.csv` `DataType` vocab is `int/str/float`, but rvdata's `parse_value_to_datatype` and the
+EPRV CSVs use `UInt/String/Float/Double/Boolean`. Nothing parses the KPF `DataType` today, so this is
+dormant; the typed-overlay/seed paths are scoped to EPRV keywords (rvdata vocab) to avoid it.
 Consequences every contributor must respect:
 
 - **L1 PRIMARY holds EPRV-registered keywords only.** From L1 onward, PRIMARY holds EPRV keyword
@@ -290,11 +295,21 @@ Consequences every contributor must respect:
   0/1 flag and **raises** it if it is in the level's `RAISE_FLAGS` (data-present only), else
   **warns**. Checkpoints read all lookups off the validated `kpf_obj`
   (`self.kpf_obj.keyword_registry`), so `quality_control` imports nothing from `data_models`.
-- **`wmko_to_eprv` emits only registered keywords.** It applies `header_map.csv` but **filters each
-  `STANDARD` target against the registry** (via `self.keyword_registry.registered`), so rvdata's
+- **`KPF1.__init__` seeds the EPRV Required PRIMARY skeleton**, mirroring rvdata's `RV2.__init__`
+  (which `KPF2`/`KPF4` inherit but `KPF1` cannot — L1 is not an EPRV level). It stamps every keyword
+  in `keyword_registry.eprv_primary_seed` (the EPRV Required PRIMARY set at Level ≤ 2, ~40 keywords,
+  pre-typed to `(value, comment)` via rvdata's `parse_value_to_datatype`), then corrects `DATALVL` to
+  `"L1"`. This is what makes the `KWRDPRL1` presence check meaningful. `to_kpf1` then overlays native
+  values on top (native wins). **Masters are exempt for free**: `KPFMasterL1.__init__` chains straight
+  to `KPFDataModel.__init__`, never running `KPF1.__init__`, so the skeleton never lands on a master.
+- **`wmko_to_eprv` emits only registered keywords, typed.** It applies `header_map.csv` but **filters
+  each `STANDARD` target against the registry** (via `self.keyword_registry.registered`), so rvdata's
   header_map entries that aren't EPRV keywords (`PARANG`, `PARANG2`) are dropped, never leaking onto
   PRIMARY (the raw value survives in `INSTRUMENT_HEADER`). `KeywordRegistry` warns once at construction
-  listing any such header_map/registry inconsistency.
+  listing any such header_map/registry inconsistency. Each emitted value is **coerced to its EPRV
+  `DataType`** (`keyword_registry.eprv_primary_datatypes` + `parse_value_to_datatype`) so the L1 values
+  match L2's typing (e.g. `NUMTRACE '5'` → `5`); the value is emitted bare so `to_kpf1`'s assignment
+  **preserves the comment** `KPF1.__init__` seeded.
 - `to_kpf1` also corrects values the installed `header_map.csv` gets wrong: `NUMORDER` (→67 from
   `DETECTOR`), `JD_UTC` (full JD from `MJD-OBS`, the canonical KPF exposure time — native
   `DATE-OBS` is date-only), and stamps the EPRV DRP version `DRPTAG` (its WMKO equivalent `DRPVERNO`

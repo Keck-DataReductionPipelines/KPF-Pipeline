@@ -13,16 +13,22 @@ rather than importing from here.
 Source of truth: ``self.table``, one DataFrame unioning the KPF
 ``L{0,1,2,4}-headers.csv`` registries with the EPRV keyword definitions (rvdata's
 ``LEVEL2/4_PRIMARY_KEYWORDS`` plus the per-extension keyword CSVs). Columns:
-``Keyword, Description, Extension, DataType, PopulatedBy, Required, Level``. The
-``routing``/``allowed``/``required`` lookups are derived from this table.
+``Keyword, Description, Extension, DataType, PopulatedBy, Required, Level, Default,
+Units`` (``Default``/``Units`` carry the EPRV CSV values for EPRV rows, ``""`` for
+KPF rows). The ``routing``/``allowed``/``required``/``eprv_primary_*`` lookups are
+derived from this table.
 
 The three use-cases:
   (1) Mapping  — ``header_map`` (WMKO->EPRV), consumed by ``KPF0.wmko_to_eprv``,
-      filtered through ``registered``.
+      filtered through ``registered``; ``eprv_primary_datatypes`` types the values
+      it emits.
   (2) Validation — ``allowed`` / ``required`` (per-extension, from the table)
       plus ``structural`` (FITS bookkeeping cards).
   (3) Routing — ``routing`` (keyword -> (extension, comment)), consumed by
       ``KPFDataModel.set_keyword``.
+
+It also exposes ``eprv_primary_seed`` (the typed EPRV Required PRIMARY skeleton
+``KPF1.__init__`` stamps, mirroring rvdata's ``RV2.__init__``).
 """
 
 import importlib.resources
@@ -34,6 +40,7 @@ from rvdata.core.models.definitions import (
     LEVEL2_PRIMARY_KEYWORDS,
     LEVEL4_PRIMARY_KEYWORDS,
 )
+from rvdata.core.tools.headers import parse_value_to_datatype
 
 _kpf_cfg = importlib.resources.files("rvdata.instruments.kpf.config")
 _rv_cfg = importlib.resources.files("rvdata.core.models.config")
@@ -63,6 +70,8 @@ class KeywordRegistry:
         "PopulatedBy",
         "Required",
         "Level",
+        "Default",
+        "Units",
     ]
 
     # Per-extension EPRV keyword CSVs (rvdata does not load these as constants).
@@ -158,6 +167,12 @@ class KeywordRegistry:
         self.qc_flag_keywords_by_level = MappingProxyType(
             {lvl: frozenset(kws) for lvl, kws in qc_by_level.items()}
         )
+        # EPRV PRIMARY skeleton: the typed Required seed (KPF1.__init__ stamps it,
+        # mirroring RV2.__init__) and the datatypes wmko_to_eprv types its emitted
+        # values with. See _build_eprv_primary.
+        seed, datatypes = self._build_eprv_primary()
+        self.eprv_primary_seed = MappingProxyType(seed)
+        self.eprv_primary_datatypes = MappingProxyType(datatypes)
         # (1) Mapping: the rvdata WMKO-native -> EPRV-standard header_map.
         self.header_map = pd.read_csv(_kpf_cfg / "header_map.csv")
         self._warn_unregistered_targets()
@@ -205,6 +220,10 @@ class KeywordRegistry:
                 continue
             descr = str(df["Description"].iloc[i]) if "Description" in df else ""
             dtype = str(df["DataType"].iloc[i]) if "DataType" in df else ""
+            # Default/Units feed the typed PRIMARY seed (eprv_primary_seed); kept
+            # raw (NaN-as-is) here, the seed builder normalizes them.
+            default = df["Default"].iloc[i] if "Default" in df else ""
+            units = df["Units"].iloc[i] if "Units" in df else ""
             required = bool(req.iloc[i])
             if "..." in name:
                 base = cls._family_base(name.split("...")[0].strip())
@@ -218,11 +237,23 @@ class KeywordRegistry:
                             cls._EPRV_TAG,
                             required and j == 1,
                             level,
+                            default,
+                            units,
                         ]
                     )
             else:
                 rows.append(
-                    [name, descr, extension, dtype, cls._EPRV_TAG, required, level]
+                    [
+                        name,
+                        descr,
+                        extension,
+                        dtype,
+                        cls._EPRV_TAG,
+                        required,
+                        level,
+                        default,
+                        units,
+                    ]
                 )
         return rows
 
@@ -260,6 +291,8 @@ class KeywordRegistry:
                         populated_by,
                         False,
                         level,
+                        "",  # Default: EPRV-only attribute, blank for KPF rows
+                        "",  # Units: EPRV-only attribute, blank for KPF rows
                     ]
                 )
         return rows
@@ -317,6 +350,38 @@ class KeywordRegistry:
                 d = required.setdefault(extn, {})
                 d[row.Keyword] = min(d.get(row.Keyword, row.Level), row.Level)
         return allowed, required
+
+    def _build_eprv_primary(self):
+        """EPRV PRIMARY lookups, derived from ``self.table``.
+
+        Returns ``(seed, datatypes)``:
+
+        - ``seed`` — ``{keyword: (typed_default, comment)}`` for the EPRV Required
+          PRIMARY keywords at Level <= 2 (the skeleton ``KPF1.__init__`` stamps).
+          Built exactly like ``RV2.__init__``: format the unit/description comment,
+          then type the default via ``parse_value_to_datatype`` so consumers assign
+          it straight into a header. Insertion order follows the standard's.
+        - ``datatypes`` — ``{keyword: DataType}`` for *all* EPRV PRIMARY keywords
+          (required + optional), so ``wmko_to_eprv`` can type the native/default
+          values it overlays. Scoped to EPRV PRIMARY (rvdata-vocab datatypes), so
+          it never feeds KPF's ``int``/``str`` to ``parse_value_to_datatype``.
+        """
+        seed = {}
+        datatypes = {}
+        for row in self.table.itertuples(index=False):
+            if row.PopulatedBy != self._EPRV_TAG or row.Extension != "PRIMARY":
+                continue
+            datatypes[row.Keyword] = row.DataType
+            if not (row.Required and row.Level <= 2):
+                continue
+            units = None if pd.isna(row.Units) else str(row.Units).strip()
+            unitstr = "" if not units or units.lower() == "n/a" else f"[{units}] "
+            comment = f"{unitstr}{row.Description}"
+            default = None if pd.isna(row.Default) else row.Default
+            seed[row.Keyword] = parse_value_to_datatype(
+                row.Keyword, row.DataType, (default, comment)
+            )
+        return seed, datatypes
 
     def _build_qc_flag_sets(self):
         """QC-flag keyword sets, derived from ``self.table``.

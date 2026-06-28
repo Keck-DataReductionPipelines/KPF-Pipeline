@@ -58,6 +58,17 @@ class KPF1(KPFDataModel):
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
 
+        # Seed PRIMARY with the EPRV Required keyword skeleton (typed defaults +
+        # comments), mirroring how rvdata's RV2.__init__ seeds KPF2. L1 is not an
+        # EPRV level, so KPF1 has no RV1 to inherit this from; we stamp it from the
+        # registry's eprv_primary_seed (the single source of truth) so KWRDPRL1 is
+        # meaningful and native values (overlaid in KPF0.to_kpf1) win over defaults.
+        for kw, value in self.keyword_registry.eprv_primary_seed.items():
+            self.headers["PRIMARY"][kw] = value
+        # DATALVL is EPRV-Required, so the seed defaults it to "UNKNOWN"; correct it
+        # in-memory (to_kpf1 / to_fits set it too, but a fresh KPF1 should read L1).
+        self.headers["PRIMARY"]["DATALVL"] = (self._DATALVL, "Data product level")
+
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
         """
         Route L1 FITS reads to `KPF1._read`.

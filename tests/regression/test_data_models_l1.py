@@ -139,6 +139,62 @@ class TestKPF1:
             KPF1.from_fits(fn)
 
 
+class TestL1PrimarySeed:
+    """KPF1.__init__ seeds the EPRV Required PRIMARY skeleton from the registry,
+    mirroring rvdata's RV2.__init__ (which KPF2/KPF4 inherit but KPF1 cannot, as
+    L1 is not an EPRV level). This makes KWRDPRL1 a meaningful presence check.
+    """
+
+    @staticmethod
+    def _required_l2_primary():
+        reg = KPF1.keyword_registry
+        return {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= 2}
+
+    def test_fresh_kpf1_carries_eprv_skeleton(self):
+        l1 = KPF1()
+        present = set(l1.headers["PRIMARY"])
+        assert self._required_l2_primary() <= present
+
+    def test_seed_is_typed_with_comments(self):
+        l1 = KPF1()
+        prim = l1.headers["PRIMARY"]
+        # Boolean/UInt EPRV datatypes parse to real Python types, not strings.
+        assert prim["ISSOLAR"] is False
+        # The comment comes from the EPRV description (registry), not the caller.
+        assert prim.comments["INSTRUME"] == "Instrument name"
+
+    def test_datalvl_corrected_to_l1(self):
+        # The seed defaults DATALVL (EPRV Required) to "UNKNOWN"; __init__ fixes it.
+        assert KPF1().headers["PRIMARY"]["DATALVL"] == "L1"
+
+    def test_seed_matches_registry_lookup(self):
+        # The 40 seeded keys are exactly the registry's eprv_primary_seed.
+        assert (
+            set(KPF1.keyword_registry.eprv_primary_seed) == self._required_l2_primary()
+        )
+
+    def test_converted_l1_has_all_required(self, synthetic_l0_file):
+        # The original goal: a converted L1 carries every EPRV-Required PRIMARY
+        # keyword, so QCL1's KWRDPRL1 presence check is meaningful (and passes).
+        l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
+        assert self._required_l2_primary() <= set(l1.headers["PRIMARY"])
+
+    def test_native_overlay_is_typed(self, synthetic_l0_file):
+        # wmko_to_eprv coerces native/header_map-default values to their EPRV
+        # DataType (was raw strings) and preserves the seeded comment.
+        prim = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["PRIMARY"]
+        assert prim["NUMTRACE"] == 5 and isinstance(prim["NUMTRACE"], int)
+        assert isinstance(prim["OBSALT"], float)
+        assert prim["ISSOLAR"] is False
+        assert prim.comments["NUMTRACE"]  # comment survived the typed overlay
+
+    def test_master_l1_not_seeded(self):
+        # KPFMasterL1 bypasses KPF1.__init__ (its __init__ chains straight to
+        # KPFDataModel), so masters stay out of EPRV scope -- no skeleton.
+        prim = set(KPFMasterL1().headers["PRIMARY"])
+        assert not (self._required_l2_primary() & prim)
+
+
 class TestToL1:
     def test_to_l1_creates_kpf1(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
