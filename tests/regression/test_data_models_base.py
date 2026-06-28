@@ -206,10 +206,12 @@ class TestKeywordRegistry:
         assert "RV" in KPF1.keyword_registry.allowed["PRIMARY"]
 
     def test_required_keyed_by_minimal_level(self):
-        # required maps keyword -> the minimal Level it is Required at.
+        # required maps keyword -> the minimal Level it is Required at. The EPRV
+        # L2 PRIMARY set is tagged Level 1 (KPF requires it from L1; see
+        # keyword_registry._build_rows), so KWRDPRL1 needs no L1->L2 cap.
         primary_required = KPF1.keyword_registry.required["PRIMARY"]
         assert primary_required.get("RV") == 4  # L4-only required
-        assert primary_required.get("INSTRUME") == 2  # L2 required
+        assert primary_required.get("INSTRUME") == 1  # required from L1
 
     def test_is_structural_only_fits_cards(self):
         # The single structural test: true FITS bookkeeping (exact + WCS/bintable
@@ -229,10 +231,10 @@ class TestKeywordRegistry:
         assert table.loc["RNGREEN1", "Units"] == ""
 
     def test_eprv_primary_seed_is_typed_required_set(self):
-        # The seed is the EPRV Required PRIMARY set (Level <= 2), pre-typed as
+        # The seed is the EPRV Required PRIMARY set (Level <= 1), pre-typed as
         # (value, comment) tuples ready to drop into a header.
         reg = KPF1.keyword_registry
-        required = {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= 2}
+        required = {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= 1}
         assert set(reg.eprv_primary_seed) == required
         value, comment = reg.eprv_primary_seed["ISSOLAR"]
         assert value is False and comment  # Boolean parsed, comment present

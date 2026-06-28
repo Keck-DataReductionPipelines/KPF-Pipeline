@@ -14,11 +14,6 @@ layer, which reads these flags plus the product headers and emits warnings or
 raises. The pipeline order is: science modules -> Diagnostics -> QC -> Checkpoints.
 """
 
-# Level -> the EPRV PRIMARY Level a product is held to. L1 PRIMARY is already
-# EPRV-L2-standard, so it caps at 2 like L2. L0 (or an untagged subclass) is
-# absent here: its PRIMARY is raw WMKO, not registry-governed.
-_LEVEL_CAP = {"L1": 2, "L2": 2, "L4": 4}
-
 
 class QC:
     """Base runner for per-level pass/fail QC check methods.
@@ -77,16 +72,21 @@ class QC:
         """Keywords a level-N product must carry on PRIMARY (a presence set).
 
         The registry's EPRV ``Required`` PRIMARY keywords at or below this
-        product's level. PRIMARY now holds EPRV-registered keywords only (the DRP
-        provenance cards moved to RECEIPT), so there is no KPF-routed-PRIMARY set
-        to union in. Read off the validated model's registry singleton
-        (``self.kpf_obj.keyword_registry``), so qc_flags imports nothing from
-        data_models. L0 (or an untagged subclass) returns the empty set -- raw
-        WMKO L0 PRIMARY is not registry-governed.
+        product's own level -- the EPRV L2 PRIMARY set is tagged Level 1 in the
+        registry (KPF holds the L1 PRIMARY to the EPRV L2 spec; see
+        ``keyword_registry._build_rows``), so the check needs no L1->L2 cap: the
+        level cap *is* the level. PRIMARY now holds EPRV-registered keywords only
+        (the DRP provenance cards moved to RECEIPT), so there is no
+        KPF-routed-PRIMARY set to union in. Read off the validated model's
+        registry singleton (``self.kpf_obj.keyword_registry``), so qc_flags
+        imports nothing from data_models. L0 -> Level 0 yields the empty set (no
+        PRIMARY keyword is Required there -- raw WMKO L0 PRIMARY is not
+        registry-governed); an untagged subclass (``LEVEL`` None) also gets it.
         """
-        cap = _LEVEL_CAP.get(str(self.LEVEL).upper())
-        if cap is None:
+        level = str(self.LEVEL or "")
+        if not (level[:1].upper() == "L" and level[1:].isdigit()):
             return set()
+        cap = int(level[1:])
         reg = self.kpf_obj.keyword_registry
         return {k for k, lvl in reg.required.get("PRIMARY", {}).items() if lvl <= cap}
 

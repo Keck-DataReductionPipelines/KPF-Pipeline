@@ -296,14 +296,20 @@ Consequences every contributor must respect:
   PRIMARY is validated only where it is EPRV-standard (L1/L2/L4); the raw WMKO L0 PRIMARY is
   skipped. The "required keywords present" concern is now a **QC flag** instead: `KWRDPRL{1,2,4}`
   is 1 iff every registry-required PRIMARY keyword for the level is present (EPRV `Required` at
-  `Level ≤ product level`; PRIMARY now holds EPRV-registered keywords only, so there is no KPF-routed
-  set to union in); `KWRDPRL0` stays hardcoded (raw L0 PRIMARY is not registry-governed). The `qc_flags` checkpoint then reads each
+  `Level ≤ product level`, used **directly** — `qc_flags` reads `int(LEVEL[1:])`, no L1→L2 cap —
+  because the EPRV L2 PRIMARY set is tagged **Level 1** in the registry: EPRV defines no L1, so KPF
+  holds the L1 PRIMARY to the EPRV L2 spec and requires that set from L1 onward, exactly what
+  `KPF1.__init__` seeds. So the required sets are unchanged (L1→40, L2→40, L4→46), the level cap *is*
+  the level, and `KWRDPRL{1,2,4}` is meaningful at its own level. PRIMARY now holds EPRV-registered
+  keywords only, so there is no KPF-routed set to union in); `KWRDPRL0` (Level 0 → empty set) stays
+  hardcoded (raw L0 PRIMARY is not registry-governed). The `qc_flags` checkpoint then reads each
   0/1 flag and **raises** it if it is in the level's `RAISE_FLAGS` (data-present only), else
   **warns**. Checkpoints read all lookups off the validated `kpf_obj`
   (`self.kpf_obj.keyword_registry`), so `quality_control` imports nothing from `data_models`.
 - **`KPF1.__init__` seeds the EPRV Required PRIMARY skeleton**, mirroring rvdata's `RV2.__init__`
   (which `KPF2`/`KPF4` inherit but `KPF1` cannot — L1 is not an EPRV level). It stamps every keyword
-  in `keyword_registry.eprv_primary_seed` (the EPRV Required PRIMARY set at Level ≤ 2, ~40 keywords,
+  in `keyword_registry.eprv_primary_seed` (the EPRV Required PRIMARY set at Level ≤ 1 — the EPRV L2
+  PRIMARY set, tagged Level 1; ~40 keywords,
   pre-typed to `(value, comment)` via rvdata's `parse_value_to_datatype`), then corrects `DATALVL` to
   `"L1"`. This is what makes the `KWRDPRL1` presence check meaningful. `to_kpf1` then overlays native
   values on top (native wins). **Masters are exempt for free**: `KPFMasterL1.__init__` chains straight

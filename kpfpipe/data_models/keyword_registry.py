@@ -339,8 +339,12 @@ class KeywordRegistry:
     @classmethod
     def _build_rows(cls):
         """Build the EPRV and KPF row lists that union into ``self.table``."""
-        # EPRV PRIMARY: L2 (Level 2) plus the L4-only extras (Level 4); never both.
-        l2 = cls._eprv_rows(LEVEL2_PRIMARY_KEYWORDS, "PRIMARY", 2)
+        # EPRV's L2 PRIMARY keywords are KPF's L1-required set: EPRV defines no L1,
+        # so KPF holds the L1 PRIMARY to the EPRV L2 PRIMARY spec, and KPF1.__init__
+        # seeds exactly this set -- so they are Required from L1 (Level 1), which is
+        # what makes KWRDPRL1 meaningful at its own level (no L1->L2 cap). The
+        # L4-only extras stay Level 4 (first populated at L4). Never both.
+        l2 = cls._eprv_rows(LEVEL2_PRIMARY_KEYWORDS, "PRIMARY", 1)
         l2_keys = {r[0] for r in l2}
         l4 = [
             r
@@ -396,7 +400,8 @@ class KeywordRegistry:
         Returns ``(seed, datatypes)``:
 
         - ``seed`` — ``{keyword: (typed_default, comment)}`` for the EPRV Required
-          PRIMARY keywords at Level <= 2 (the skeleton ``KPF1.__init__`` stamps).
+          PRIMARY keywords at Level <= 1 (the skeleton ``KPF1.__init__`` stamps;
+          these are tagged Level 1 in the table -- see ``_build_rows``).
           Built exactly like ``RV2.__init__``: format the unit/description comment,
           then type the default via ``parse_value_to_datatype`` so consumers assign
           it straight into a header. Insertion order follows the standard's.
@@ -411,7 +416,7 @@ class KeywordRegistry:
             if row.PopulatedBy != self._EPRV_TAG or row.Extension != "PRIMARY":
                 continue
             datatypes[row.Keyword] = row.DataType
-            if not (row.Required and row.Level <= 2):
+            if not (row.Required and row.Level <= 1):
                 continue
             units = None if pd.isna(row.Units) else str(row.Units).strip()
             unitstr = "" if not units or units.lower() == "n/a" else f"[{units}] "

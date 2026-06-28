@@ -146,14 +146,15 @@ class TestL1PrimarySeed:
     """
 
     @staticmethod
-    def _required_l2_primary():
+    def _required_l1_primary():
+        # The EPRV L2 PRIMARY set is tagged Level 1 (KPF requires it from L1).
         reg = KPF1.keyword_registry
-        return {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= 2}
+        return {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= 1}
 
     def test_fresh_kpf1_carries_eprv_skeleton(self):
         l1 = KPF1()
         present = set(l1.headers["PRIMARY"])
-        assert self._required_l2_primary() <= present
+        assert self._required_l1_primary() <= present
 
     def test_seed_is_typed_with_comments(self):
         l1 = KPF1()
@@ -170,14 +171,14 @@ class TestL1PrimarySeed:
     def test_seed_matches_registry_lookup(self):
         # The 40 seeded keys are exactly the registry's eprv_primary_seed.
         assert (
-            set(KPF1.keyword_registry.eprv_primary_seed) == self._required_l2_primary()
+            set(KPF1.keyword_registry.eprv_primary_seed) == self._required_l1_primary()
         )
 
     def test_converted_l1_has_all_required(self, synthetic_l0_file):
         # The original goal: a converted L1 carries every EPRV-Required PRIMARY
         # keyword, so QCL1's KWRDPRL1 presence check is meaningful (and passes).
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
-        assert self._required_l2_primary() <= set(l1.headers["PRIMARY"])
+        assert self._required_l1_primary() <= set(l1.headers["PRIMARY"])
 
     def test_native_overlay_is_typed(self, synthetic_l0_file):
         # _map_header coerces native/header_map-default values to their EPRV
@@ -192,7 +193,7 @@ class TestL1PrimarySeed:
         # KPFMasterL1 bypasses KPF1.__init__ (its __init__ chains straight to
         # KPFDataModel), so masters stay out of EPRV scope -- no skeleton.
         prim = set(KPFMasterL1().headers["PRIMARY"])
-        assert not (self._required_l2_primary() & prim)
+        assert not (self._required_l1_primary() & prim)
 
 
 class TestToL1:
