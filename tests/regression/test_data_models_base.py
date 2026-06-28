@@ -13,7 +13,7 @@ KPF1 is the representative vehicle for the inherited base path (L0/L1 use
 ``KPFDataModel._create_hdul`` directly). KPF2/KPF4 override ``_create_hdul`` via
 RV2/RV4, so their round-trip guards live in test_data_models_l{2,4}.py.
 
-The WMKO->EPRV conversion (``KPF0.wmko_to_eprv`` / ``build_instrument_header``) is
+The WMKO->EPRV conversion (``KPF0.map_header`` / ``build_instrument_header``) is
 exercised end-to-end by the to_kpf1/to_kpf2 tests in test_data_models_l{1,2,4}.py.
 PRIMARY-header validation no longer lives on the data models (it moved to the
 checkpoints layer, ``quality_control/checkpoints/base.py``).
@@ -197,7 +197,7 @@ class TestKeywordRegistry:
 
     def test_non_registry_headermap_targets_absent(self):
         # PARANG/PARANG2 are header_map STANDARD names that aren't EPRV keywords;
-        # they must NOT be in the registry (so wmko_to_eprv drops them).
+        # they must NOT be in the registry (so map_header drops them).
         assert "PARANG" not in KPF1.keyword_registry.registered
         assert "PARANG2" not in KPF1.keyword_registry.registered
 
@@ -239,10 +239,30 @@ class TestKeywordRegistry:
 
     def test_eprv_primary_datatypes_cover_emitted_keywords(self):
         # Datatypes use rvdata vocab (so parse_value_to_datatype works) and cover
-        # the keywords wmko_to_eprv emits; KPF int/str spellings never appear here.
+        # the keywords map_header emits; KPF int/str spellings never appear here.
         dt = KPF1.keyword_registry.eprv_primary_datatypes
         assert dt["INSTRUME"] == "String" and dt["NUMTRACE"] == "UInt"
         assert "RNGREEN1" not in dt  # KPF keyword, not EPRV PRIMARY
+
+    def test_header_map_sanitized_on_load(self):
+        # header_map holds only genuine static native->EPRV mappings: unregistered
+        # targets (PARANG) and non-native keywords (sourced from seed/model/transform)
+        # are dropped, so map_header needs no filter or per-keyword correction.
+        std = set(KPF1.keyword_registry.header_map["STANDARD"].astype(str).str.strip())
+        assert not ({"PARANG", "PARANG2"} & std)
+        assert not ({"NUMORDER", "DATALVL", "DRPTAG", "JD_UTC"} & std)
+
+    def test_seed_overrides_fix_header_map_values(self):
+        # NUMORDER/DRPTAG corrections live in the seed (one place), not as
+        # map_header fixups: NUMORDER -> 67 (header_map says 65), DRPTAG -> version.
+        import importlib.metadata
+
+        seed = KPF1.keyword_registry.eprv_primary_seed
+        assert seed["NUMORDER"][0] == 67
+        assert seed["DRPTAG"][0] == importlib.metadata.version("kpfpipe")
+        # DATALVL is NOT overridden here -- it stays the EPRV placeholder, set to
+        # the data level by KPF1.__init__.
+        assert seed["DATALVL"][0] == "UNKNOWN"
 
 
 class TestQualityControlPropagation:

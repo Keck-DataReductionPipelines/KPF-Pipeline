@@ -20,7 +20,7 @@ from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.tools.headers import parse_value_to_datatype
 
-from kpfpipe import DETECTOR, __version__
+from kpfpipe import __version__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.kpf import get_obs_id
 
@@ -30,11 +30,6 @@ _KNOWN_L0_EXTENSIONS = set(L0_EXTENSIONS["Name"].tolist())
 
 # WMKO-native L0 filename: KP.YYYYMMDD.NNNNN.NN.fits (the obs_id plus .fits).
 _L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
-
-# --- L0→L1 conversion constants (consumed only by wmko_to_eprv) --------------
-# Detector truth: KPF has 35 green + 32 red echelle orders (rvdata's header_map
-# default of 65 is wrong — see notes/header_audit.md A2).
-_NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
 
 # Initial DRPSTATU value on the L1 EPRV PRIMARY, before any pipeline module runs.
 # Each module overwrites it via the receipt_add_entry override (see base.py).
@@ -213,33 +208,31 @@ class KPF0(KPFDataModel):
         "CONFIG",
     ]
 
-    def wmko_to_eprv(self):
+    def map_header(self):
         """Map this L0's raw WMKO PRIMARY to an EPRV-standard PRIMARY dict.
 
-        For each header_map row whose STANDARD target is a registered keyword,
-        take the instrument (WMKO) value when present, else the row default. The
-        registry filter prevents non-standard header_map targets (e.g. PARANG)
-        from leaking onto PRIMARY. Then apply the value corrections the installed
-        header_map gets wrong (NUMORDER, JD_UTC), and stamp the EPRV DRP version
-        (DRPTAG). The DRP-RUN provenance cards (DRPVERNO/PROGID/KOAID/DRPSTATU) are
-        NOT emitted here -- they live on RECEIPT (see ``_stamp_provenance``) and
-        reach L1 via the RECEIPT-header forward in ``to_kpf1``.
+        A pure tabular application of the registry's (sanitized) header_map: for
+        each row, take the instrument (WMKO) value when present, else the row
+        default, and type it to the EPRV DataType. The registry already dropped
+        non-mapping rows (unregistered targets like PARANG, and keywords sourced
+        elsewhere -- NUMORDER/DRPTAG seeded, DATALVL the model level), so there is
+        no filter or per-keyword correction here.
+
+        The sole exception is ``JD_UTC``: it is a per-frame value transform of the
+        native ``MJD-OBS`` (+ epoch offset), not a static default, so header_map
+        cannot carry it; it is computed below. DRP-RUN provenance
+        (DRPVERNO/PROGID/KOAID/DRPSTATU) lives on RECEIPT (see ``_stamp_provenance``),
+        not here.
 
         Returns
         -------
         dict
-            EPRV-standard PRIMARY keyword -> value (a few as ``(value, comment)``).
+            EPRV-standard PRIMARY keyword -> typed value.
         """
         wmko_primary = self.headers["PRIMARY"]
         out = {}
         for _, row in self.keyword_registry.header_map.iterrows():
             standard_key = str(row["STANDARD"]).strip()
-            # Emit only registered keywords. rvdata's header_map.csv maps to a few
-            # STANDARD targets that aren't in the keyword registry (e.g. PARANG,
-            # PARANG2); skip them so the conversion can't leak non-standard cards
-            # onto the EPRV PRIMARY. (keyword_registry warns once at import.)
-            if standard_key not in self.keyword_registry.registered:
-                continue
             instrument_key = (
                 str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""
             )
@@ -262,22 +255,15 @@ class KPF0(KPFDataModel):
                 else raw_value
             )
 
-        # --- Value corrections (see notes/header_audit.md A1/A2/A3) ---
-        out["NUMORDER"] = (_NUMORDER, "Number of echelle orders (green+red)")
-        # header_map maps JD_UTC <- MJD-OBS but drops the epoch offset, leaving a
-        # raw MJD (A1); KPF's canonical exposure time is MJD-OBS, so add 2400000.5.
+        # JD_UTC: KPF's canonical exposure time is the native MJD-OBS; convert it to
+        # a full Julian date (+ 2400000.5). The one value transform header_map can't
+        # express, so it lives here rather than as a static map default.
         mjd = wmko_primary.get("MJD-OBS")
         if mjd not in (None, "", "UNKNOWN"):
             out["JD_UTC"] = (
                 float(mjd) + 2400000.5,
                 "[day] Julian date of exposure start",
             )
-        out["DRPTAG"] = (__version__, "DRP version")
-
-        # DRP-RUN provenance (DRPVERNO/PROGID/KOAID/DRPSTATU) lives on RECEIPT
-        # (stamped at read by _stamp_provenance) and reaches L1 via the
-        # RECEIPT-header forward in to_kpf1 -- it is not copied onto the EPRV
-        # L1 PRIMARY. DRPTAG (above) is the EPRV version keyword on PRIMARY.
         return out
 
     def build_instrument_header(self):
@@ -297,7 +283,7 @@ class KPF0(KPFDataModel):
         pass-through extensions.
 
         The raw WMKO PRIMARY header is converted to EPRV-standard keyword names
-        and values here (the single conversion site; see `wmko_to_eprv`), so the
+        and values here (the single conversion site; see `map_header`), so the
         L1 PRIMARY is already EPRV-standard (EPRV-registered keywords only). The
         DRP-RUN provenance cards (DRPVERNO/PROGID/KOAID/DRPSTATU) live on RECEIPT
         (stamped at read) and reach L1 via the RECEIPT-header forward below. The
@@ -318,7 +304,7 @@ class KPF0(KPFDataModel):
         # preserve the verbatim raw L0 PRIMARY (values + comments) in
         # INSTRUMENT_HEADER (immutable pass-through — nothing else writes to it).
         if "PRIMARY" in self.headers:
-            for key, value in self.wmko_to_eprv().items():
+            for key, value in self.map_header().items():
                 l1.headers["PRIMARY"][key] = value
 
             if "INSTRUMENT_HEADER" not in l1.extensions:
@@ -352,7 +338,8 @@ class KPF0(KPFDataModel):
         # Copy obs_id
         l1.obs_id = self.obs_id
 
-        l1.headers["PRIMARY"]["DATALVL"] = ("L1", "Data product level")
+        # DATALVL is set by KPF1.__init__ (= KPF1._DATALVL) and map_header no
+        # longer emits it (dropped from header_map), so no fixup is needed here.
         l1.receipt_add_entry("to_l1", "PASS")
         return l1
 

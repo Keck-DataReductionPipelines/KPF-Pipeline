@@ -19,16 +19,22 @@ KPF rows). The ``routing``/``allowed``/``required``/``eprv_primary_*`` lookups a
 derived from this table.
 
 The three use-cases:
-  (1) Mapping  — ``header_map`` (WMKO->EPRV), consumed by ``KPF0.wmko_to_eprv``,
-      filtered through ``registered``; ``eprv_primary_datatypes`` types the values
-      it emits.
+  (1) Mapping  — ``header_map`` (WMKO->EPRV), consumed by ``KPF0.map_header``;
+      ``eprv_primary_datatypes`` types the values it emits. ``header_map`` is
+      **sanitized on load** so it holds only genuine static native->EPRV mappings:
+      rows whose target is unregistered (PARANG/PARANG2) or handled elsewhere
+      (``_HEADER_MAP_NON_NATIVE``) are dropped, so ``map_header`` needs no
+      in-loop filter or per-keyword correction.
   (2) Validation — ``allowed`` / ``required`` (per-extension, from the table)
       plus ``structural`` (FITS bookkeeping cards).
   (3) Routing — ``routing`` (keyword -> (extension, comment)), consumed by
       ``KPFDataModel.set_keyword``.
 
 It also exposes ``eprv_primary_seed`` (the typed EPRV Required PRIMARY skeleton
-``KPF1.__init__`` stamps, mirroring rvdata's ``RV2.__init__``).
+``KPF1.__init__`` stamps, mirroring rvdata's ``RV2.__init__``). The header_map
+corrections live in one place each: ``NUMORDER``/``DRPTAG`` via ``_SEED_OVERRIDES``
+(seeded), ``DATALVL`` via ``KPF1.__init__`` (the model level), and the ``JD_UTC``
+epoch transform in ``map_header`` (a per-frame value, not a static default).
 """
 
 import importlib.resources
@@ -42,9 +48,14 @@ from rvdata.core.models.definitions import (
 )
 from rvdata.core.tools.headers import parse_value_to_datatype
 
+from kpfpipe import DETECTOR, __version__
+
 _kpf_cfg = importlib.resources.files("rvdata.instruments.kpf.config")
 _rv_cfg = importlib.resources.files("rvdata.core.models.config")
 _kpf_data_cfg = importlib.resources.files("kpfpipe.data_models.config")
+
+# Number of echelle orders (green + red); the value header_map.csv gets wrong (65).
+_NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
 
 
 class KeywordRegistry:
@@ -73,6 +84,19 @@ class KeywordRegistry:
         "Default",
         "Units",
     ]
+
+    # header_map.csv STANDARD targets that are NOT genuine static native->EPRV
+    # mappings, so they are dropped when header_map is sanitized on load (and the
+    # raw header_map default/native they carried is wrong or vestigial). Each one's
+    # real value home: NUMORDER/DRPTAG -> _SEED_OVERRIDES (seeded), DATALVL ->
+    # KPF1.__init__ (the model's data level), JD_UTC -> the map_header epoch
+    # transform (a per-frame value, not a static default).
+    _HEADER_MAP_NON_NATIVE = frozenset({"NUMORDER", "DATALVL", "DRPTAG", "JD_UTC"})
+
+    # Correct seed values for keywords header_map.csv gets wrong: NUMORDER's
+    # header_map default is 65 (KPF has 67), and DRPTAG is the runtime DRP version.
+    # Applied when building eprv_primary_seed, overriding the EPRV table Default.
+    _SEED_OVERRIDES = {"NUMORDER": _NUMORDER, "DRPTAG": __version__}
 
     # Per-extension EPRV keyword CSVs (rvdata does not load these as constants).
     # RV#/CCF# share one template CSV; BARYCORR_*/BJD_TDB are per-extension.
@@ -148,7 +172,7 @@ class KeywordRegistry:
         # the singleton; freeze them (frozenset / MappingProxyType) so a stray
         # consumer mutation can't corrupt the registry for everyone (notably
         # under parallel test execution). self.table is only ever read.
-        # Every registered keyword (the allowlist; also the wmko_to_eprv filter).
+        # Every registered keyword (the allowlist; also drives header_map sanitization).
         self.registered = frozenset(self.table["Keyword"])
         # Derived lookups (all read off self.table — no parallel row lists).
         self.routing = MappingProxyType(self._build_routing())
@@ -168,14 +192,16 @@ class KeywordRegistry:
             {lvl: frozenset(kws) for lvl, kws in qc_by_level.items()}
         )
         # EPRV PRIMARY skeleton: the typed Required seed (KPF1.__init__ stamps it,
-        # mirroring RV2.__init__) and the datatypes wmko_to_eprv types its emitted
+        # mirroring RV2.__init__) and the datatypes map_header types its emitted
         # values with. See _build_eprv_primary.
         seed, datatypes = self._build_eprv_primary()
         self.eprv_primary_seed = MappingProxyType(seed)
         self.eprv_primary_datatypes = MappingProxyType(datatypes)
-        # (1) Mapping: the rvdata WMKO-native -> EPRV-standard header_map.
-        self.header_map = pd.read_csv(_kpf_cfg / "header_map.csv")
-        self._warn_unregistered_targets()
+        # (1) Mapping: the rvdata WMKO-native -> EPRV-standard header_map, sanitized
+        # on load to genuine static native mappings only (see _sanitize_header_map).
+        self.header_map = self._sanitize_header_map(
+            pd.read_csv(_kpf_cfg / "header_map.csv")
+        )
 
     def is_structural(self, key):
         """True for a FITS structural / bookkeeping card (never a registered keyword).
@@ -362,7 +388,7 @@ class KeywordRegistry:
           then type the default via ``parse_value_to_datatype`` so consumers assign
           it straight into a header. Insertion order follows the standard's.
         - ``datatypes`` — ``{keyword: DataType}`` for *all* EPRV PRIMARY keywords
-          (required + optional), so ``wmko_to_eprv`` can type the native/default
+          (required + optional), so ``map_header`` can type the native/default
           values it overlays. Scoped to EPRV PRIMARY (rvdata-vocab datatypes), so
           it never feeds KPF's ``int``/``str`` to ``parse_value_to_datatype``.
         """
@@ -377,7 +403,13 @@ class KeywordRegistry:
             units = None if pd.isna(row.Units) else str(row.Units).strip()
             unitstr = "" if not units or units.lower() == "n/a" else f"[{units}] "
             comment = f"{unitstr}{row.Description}"
-            default = None if pd.isna(row.Default) else row.Default
+            # _SEED_OVERRIDES carries the KPF-correct value for keywords header_map
+            # gets wrong (NUMORDER=67, DRPTAG=version), so the correction lives here
+            # rather than as a fixup in map_header.
+            if row.Keyword in self._SEED_OVERRIDES:
+                default = self._SEED_OVERRIDES[row.Keyword]
+            else:
+                default = None if pd.isna(row.Default) else row.Default
             seed[row.Keyword] = parse_value_to_datatype(
                 row.Keyword, row.DataType, (default, comment)
             )
@@ -408,29 +440,32 @@ class KeywordRegistry:
                 by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
         return all_flags, by_level
 
-    def _warn_unregistered_targets(self):
-        """Warn once if header_map maps to STANDARD targets we don't register.
+    def _sanitize_header_map(self, raw):
+        """Return header_map with only genuine static native->EPRV mapping rows.
 
-        wmko_to_eprv filters its output to ``registered``, so these would be
-        silently dropped; surfacing the rvdata header_map / registry inconsistency
-        (e.g. PARANG, PARANG2) keeps the drop intentional, not invisible.
+        map_header then applies the map with no in-loop filter or per-keyword
+        correction. Two row classes are dropped:
+          - STANDARD targets absent from the registry (PARANG/PARANG2) -- warned,
+            so the rvdata header_map / registry inconsistency stays visible;
+          - ``_HEADER_MAP_NON_NATIVE`` targets, whose value comes from the seed
+            (NUMORDER/DRPTAG), the model level (DATALVL), or the map_header epoch
+            transform (JD_UTC), not a static map row.
         """
+        standard = raw["STANDARD"].astype(str).str.strip()
         unregistered = sorted(
-            {
-                str(r["STANDARD"]).strip()
-                for _, r in self.header_map.iterrows()
-                if pd.notna(r["STANDARD"])
-            }
-            - self.registered
-            - {""}
+            set(standard[raw["STANDARD"].notna()]) - self.registered - {""}
         )
         if unregistered:
             warnings.warn(
                 "header_map.csv maps to STANDARD targets absent from the keyword "
-                f"registry; wmko_to_eprv will not emit them: {unregistered}",
+                f"registry; they are dropped (not emitted): {unregistered}",
                 UserWarning,
                 stacklevel=2,
             )
+        keep = standard.isin(self.registered) & ~standard.isin(
+            self._HEADER_MAP_NON_NATIVE
+        )
+        return raw[keep].reset_index(drop=True)
 
     # --- rvdata extension registration ---------------------------------------
 

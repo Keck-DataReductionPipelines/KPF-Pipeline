@@ -202,7 +202,7 @@ L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 ### Header standardization (EPRV PRIMARY)
 
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place**:
-`KPF0.to_kpf1()`, which calls the conversion methods **`KPF0.wmko_to_eprv()`** and
+`KPF0.to_kpf1()`, which calls the conversion methods **`KPF0.map_header()`** and
 **`KPF0.build_instrument_header()`** (L0 owns the WMKO→EPRV mapping). The keyword registry lives in
 **`kpfpipe/data_models/keyword_registry.py`** as the single `KeywordRegistry` class (one module
 singleton `keyword_registry`), organized by its three use-cases: **(1) mapping** — the rvdata
@@ -302,19 +302,24 @@ Consequences every contributor must respect:
   `"L1"`. This is what makes the `KWRDPRL1` presence check meaningful. `to_kpf1` then overlays native
   values on top (native wins). **Masters are exempt for free**: `KPFMasterL1.__init__` chains straight
   to `KPFDataModel.__init__`, never running `KPF1.__init__`, so the skeleton never lands on a master.
-- **`wmko_to_eprv` emits only registered keywords, typed.** It applies `header_map.csv` but **filters
-  each `STANDARD` target against the registry** (via `self.keyword_registry.registered`), so rvdata's
-  header_map entries that aren't EPRV keywords (`PARANG`, `PARANG2`) are dropped, never leaking onto
-  PRIMARY (the raw value survives in `INSTRUMENT_HEADER`). `KeywordRegistry` warns once at construction
-  listing any such header_map/registry inconsistency. Each emitted value is **coerced to its EPRV
-  `DataType`** (`keyword_registry.eprv_primary_datatypes` + `parse_value_to_datatype`) so the L1 values
-  match L2's typing (e.g. `NUMTRACE '5'` → `5`); the value is emitted bare so `to_kpf1`'s assignment
-  **preserves the comment** `KPF1.__init__` seeded.
-- `to_kpf1` also corrects values the installed `header_map.csv` gets wrong: `NUMORDER` (→67 from
-  `DETECTOR`), `JD_UTC` (full JD from `MJD-OBS`, the canonical KPF exposure time — native
-  `DATE-OBS` is date-only), and stamps the EPRV DRP version `DRPTAG` (its WMKO equivalent `DRPVERNO`
-  is stamped at read; see above). Calibration masters are out of EPRV scope (their products keep
-  their own layout).
+- **`header_map.csv` is sanitized once, when the registry loads it** (`KeywordRegistry._sanitize_header_map`),
+  so `self.header_map` holds only genuine static native→EPRV mappings. Two row classes are dropped:
+  (1) targets absent from the registry (`PARANG`, `PARANG2`) — warned, so the rvdata header_map/registry
+  inconsistency stays visible; and (2) `_HEADER_MAP_NON_NATIVE` (`NUMORDER`, `DATALVL`, `DRPTAG`,
+  `JD_UTC`) — keywords whose value comes from elsewhere, not a static map row. This is why the four
+  per-keyword corrections are **consolidated to one home each** rather than scattered:
+  - `NUMORDER` (→67) and `DRPTAG` (→DRP `__version__`) — the registry `_SEED_OVERRIDES`, so they ride
+    `eprv_primary_seed` (`KPF1.__init__` stamps them; `DETECTOR`/`__version__` are imported by the registry).
+  - `DATALVL` — `KPF1.__init__` (`= KPF1._DATALVL`); its seed value stays the EPRV placeholder `"UNKNOWN"`.
+  - `JD_UTC` (full JD = native `MJD-OBS` + 2400000.5) — the one **value transform** `header_map` can't
+    express, kept in `map_header` (a per-frame native-derived value).
+- **`map_header` is a pure tabular mapper** (plus the lone `JD_UTC` transform): it iterates the
+  already-sanitized `header_map`, takes the native (WMKO) value when present else the row default, and
+  **coerces each value to its EPRV `DataType`** (`keyword_registry.eprv_primary_datatypes` +
+  `parse_value_to_datatype`) so L1 values match L2's typing (e.g. `NUMTRACE '5'` → `5`). No registry
+  filter and no per-keyword corrections remain in it. The value is emitted bare so `to_kpf1`'s
+  assignment **preserves the comment** `KPF1.__init__` seeded. Calibration masters are out of EPRV
+  scope (their products keep their own layout).
 - **Every extension header is an `astropy.io.fits.Header`.** `KPFDataModel.create_extension`
   (`data_models/base.py`) stores a new header as a `fits.Header`, not rvdata's default
   `OrderedDict`; `from_fits` already returns `fits.Header`. So **read with `header.get(key)` /
@@ -323,7 +328,7 @@ Consequences every contributor must respect:
   serializes PRIMARY by iterating `.items()`, which drops a `fits.Header`'s comments; the single
   `KPFDataModel._create_hdul` override (inherited by all four models) rebuilds the PRIMARY HDU via
   `self._restore_primary_comments(...)` so comments survive `to_fits`. Conversion lives in
-  `KPF0.wmko_to_eprv`/`build_instrument_header` (`data_models/level0.py`); the unified
+  `KPF0.map_header`/`build_instrument_header` (`data_models/level0.py`); the unified
   `KeywordRegistry` table and its derived routing/validation lookups live in
   `data_models/keyword_registry.py` (the `keyword_registry` singleton), surfaced through `KPFDataModel`
   (`set_keyword` + the `keyword_registry` class attribute); header validation itself lives in

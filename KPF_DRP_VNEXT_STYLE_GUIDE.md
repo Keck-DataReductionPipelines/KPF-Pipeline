@@ -617,7 +617,7 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
 - **Writing an unregistered/EPRV-conversion card** (the WMKO→EPRV mapping, provenance stamping):
   the conversion sites in `KPF0` assign `header[key] = (value, comment)` directly; outside those,
   prefer `set_keyword`.
-- **Conversion**: call `KPF0.wmko_to_eprv` / `KPF0.build_instrument_header`; don't re-implement the
+- **Conversion**: call `KPF0.map_header` / `KPF0.build_instrument_header`; don't re-implement the
   WMKO→EPRV mapping.
 - **Reading a raw instrument keyword** (`ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`,
   `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]` (via `.get`), never from

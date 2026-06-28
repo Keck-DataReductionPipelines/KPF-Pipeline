@@ -180,7 +180,7 @@ class TestL1PrimarySeed:
         assert self._required_l2_primary() <= set(l1.headers["PRIMARY"])
 
     def test_native_overlay_is_typed(self, synthetic_l0_file):
-        # wmko_to_eprv coerces native/header_map-default values to their EPRV
+        # map_header coerces native/header_map-default values to their EPRV
         # DataType (was raw strings) and preserves the seeded comment.
         prim = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["PRIMARY"]
         assert prim["NUMTRACE"] == 5 and isinstance(prim["NUMTRACE"], int)
@@ -238,7 +238,7 @@ class TestToL1:
         assert "DRPSTATU" not in inst
 
     def test_to_l1_filters_non_registry_headermap_targets(self, tmp_path):
-        """wmko_to_eprv emits only registered keywords; header_map's non-standard
+        """map_header emits only registered keywords; header_map's non-standard
         STANDARD targets (e.g. PARANG <- PARANTEL) are dropped, not leaked onto the
         EPRV PRIMARY. The raw value survives verbatim in INSTRUMENT_HEADER."""
         import warnings
@@ -267,6 +267,16 @@ class TestToL1:
         # DRPVERNO (WMKO DRP-RUN-11) now lives on RECEIPT, not PRIMARY.
         assert prim.get("DRPVERNO") is None
         assert l1.headers["RECEIPT"].get("DRPVERNO") == version
+
+    def test_map_header_is_pure_tabular_except_jd_utc(self, synthetic_l0_file):
+        """The above values are correct on the L1 PRIMARY, but map_header itself
+        no longer special-cases NUMORDER/DRPTAG/DATALVL (those ride the seed /
+        model level); JD_UTC is the one transform it still performs."""
+        out = KPF0.from_fits(synthetic_l0_file).map_header()
+        assert "NUMORDER" not in out  # seeded (registry _SEED_OVERRIDES)
+        assert "DRPTAG" not in out  # seeded (registry _SEED_OVERRIDES)
+        assert "DATALVL" not in out  # set by KPF1.__init__ (model level)
+        assert "JD_UTC" in out  # the one per-frame transform kept in map_header
 
     def test_to_l1_forwards_program_ids(self, synthetic_l0_file):
         """Native PROGID/KOAID stamped to the L0 RECEIPT at read carry onto the L1
