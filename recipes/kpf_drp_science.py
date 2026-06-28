@@ -10,9 +10,7 @@ Diagnostics, QC, and quicklook layers run at each level, and the L2 and L4
 data products are written to the output data root.
 """
 
-from kpfpipe.data_models.level0 import KPF0
-
-# from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.data_models import KPF0
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_assembly import ImageAssembly
