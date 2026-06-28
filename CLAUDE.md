@@ -202,8 +202,9 @@ L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 ### Header standardization (EPRV PRIMARY)
 
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place**:
-`KPF0.to_kpf1()`, which calls the conversion methods **`KPF0.map_header()`** and
-**`KPF0.build_instrument_header()`** (L0 owns the WMKO→EPRV mapping). The keyword registry lives in
+`KPF0.to_kpf1()`, which calls **`KPF0._map_header()`** for the mapping and copies the raw L0 PRIMARY
+verbatim into `INSTRUMENT_HEADER` inline (`self.as_fits_header(self.headers["PRIMARY"])`) — L0 owns the
+WMKO→EPRV mapping. The keyword registry lives in
 **`kpfpipe/data_models/keyword_registry.py`** as the single `KeywordRegistry` class (one module
 singleton `keyword_registry`), organized by its three use-cases: **(1) mapping** — the rvdata
 `header_map.csv` (`.header_map`); **(2) validation** — `.allowed`/`.required` per extension +
@@ -229,13 +230,13 @@ Consequences every contributor must respect:
   KPF-registered keywords** (the DRP provenance cards live on RECEIPT; see below) and never raw
   WMKO natives.
 - **`INSTRUMENT_HEADER` is an immutable, _pure_ verbatim copy of the raw L0 PRIMARY** (values
-  **and** comments — `build_instrument_header()` returns a `fits.Header` copy). It is the raw
+  **and** comments — `to_kpf1` copies it via `as_fits_header`, a `fits.Header` copy). It is the raw
   instrument cards only — the pipeline stamps **nothing** onto it (DRP provenance goes to RECEIPT,
   not the L0 PRIMARY, so it never appears here). Written once in `to_kpf1`; **nothing else ever
   writes to it**. Code that needs a raw instrument keyword (e.g. `ELAPSED`, `MJD-OBS`, `DATE-OBS`,
   `GAIAID`, `SCI-OBJ`, `TARGTEFF`) reads it from `INSTRUMENT_HEADER`, not PRIMARY.
 - **DRP-RUN provenance is stamped onto the L0 RECEIPT at read (`KPF0.from_fits`), not at `to_kpf1`.**
-  `KPF0._stamp_provenance` (the single population site; their `PopulatedBy` in `L0-headers.csv` is
+  `KPF0._stamp_wmko_tracking` (the single population site; their `PopulatedBy` in `L0-headers.csv` is
   `KPF0.from_fits`, `Extension` is `RECEIPT`) writes `DRPVERNO` (DRP-RUN-11), `DRPSTATU` (DRP-RUN-20),
   and `PROGID`/`KOAID` (DRP-RUN-19) via `set_keyword` (so KPF0 carries a RECEIPT extension —
   `L0-extensions.csv` marks it Required). `PROGID`/`KOAID` are read from the WMKO-native PRIMARY; an
@@ -312,8 +313,8 @@ Consequences every contributor must respect:
     `eprv_primary_seed` (`KPF1.__init__` stamps them; `DETECTOR`/`__version__` are imported by the registry).
   - `DATALVL` — `KPF1.__init__` (`= KPF1._DATALVL`); its seed value stays the EPRV placeholder `"UNKNOWN"`.
   - `JD_UTC` (full JD = native `MJD-OBS` + 2400000.5) — the one **value transform** `header_map` can't
-    express, kept in `map_header` (a per-frame native-derived value).
-- **`map_header` is a pure tabular mapper** (plus the lone `JD_UTC` transform): it iterates the
+    express, kept in `_map_header` (a per-frame native-derived value).
+- **`_map_header` is a pure tabular mapper** (plus the lone `JD_UTC` transform): it iterates the
   already-sanitized `header_map`, takes the native (WMKO) value when present else the row default, and
   **coerces each value to its EPRV `DataType`** (`keyword_registry.eprv_primary_datatypes` +
   `parse_value_to_datatype`) so L1 values match L2's typing (e.g. `NUMTRACE '5'` → `5`). No registry
@@ -328,7 +329,7 @@ Consequences every contributor must respect:
   serializes PRIMARY by iterating `.items()`, which drops a `fits.Header`'s comments; the single
   `KPFDataModel._create_hdul` override (inherited by all four models) rebuilds the PRIMARY HDU via
   `self._restore_primary_comments(...)` so comments survive `to_fits`. Conversion lives in
-  `KPF0.map_header`/`build_instrument_header` (`data_models/level0.py`); the unified
+  `KPF0._map_header` (`data_models/level0.py`); the unified
   `KeywordRegistry` table and its derived routing/validation lookups live in
   `data_models/keyword_registry.py` (the `keyword_registry` singleton), surfaced through `KPFDataModel`
   (`set_keyword` + the `keyword_registry` class attribute); header validation itself lives in

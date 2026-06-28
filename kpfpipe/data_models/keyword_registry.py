@@ -19,11 +19,11 @@ KPF rows). The ``routing``/``allowed``/``required``/``eprv_primary_*`` lookups a
 derived from this table.
 
 The three use-cases:
-  (1) Mapping  — ``header_map`` (WMKO->EPRV), consumed by ``KPF0.map_header``;
+  (1) Mapping  — ``header_map`` (WMKO->EPRV), consumed by ``KPF0._map_header``;
       ``eprv_primary_datatypes`` types the values it emits. ``header_map`` is
       **sanitized on load** so it holds only genuine static native->EPRV mappings:
       rows whose target is unregistered (PARANG/PARANG2) or handled elsewhere
-      (``_HEADER_MAP_NON_NATIVE``) are dropped, so ``map_header`` needs no
+      (``_HEADER_MAP_NON_NATIVE``) are dropped, so ``_map_header`` needs no
       in-loop filter or per-keyword correction.
   (2) Validation — ``allowed`` / ``required`` (per-extension, from the table)
       plus ``structural`` (FITS bookkeeping cards).
@@ -34,7 +34,7 @@ It also exposes ``eprv_primary_seed`` (the typed EPRV Required PRIMARY skeleton
 ``KPF1.__init__`` stamps, mirroring rvdata's ``RV2.__init__``). The header_map
 corrections live in one place each: ``NUMORDER``/``DRPTAG`` via ``_SEED_OVERRIDES``
 (seeded), ``DATALVL`` via ``KPF1.__init__`` (the model level), and the ``JD_UTC``
-epoch transform in ``map_header`` (a per-frame value, not a static default).
+epoch transform in ``_map_header`` (a per-frame value, not a static default).
 """
 
 import importlib.resources
@@ -89,7 +89,7 @@ class KeywordRegistry:
     # mappings, so they are dropped when header_map is sanitized on load (and the
     # raw header_map default/native they carried is wrong or vestigial). Each one's
     # real value home: NUMORDER/DRPTAG -> _SEED_OVERRIDES (seeded), DATALVL ->
-    # KPF1.__init__ (the model's data level), JD_UTC -> the map_header epoch
+    # KPF1.__init__ (the model's data level), JD_UTC -> the _map_header epoch
     # transform (a per-frame value, not a static default).
     _HEADER_MAP_NON_NATIVE = frozenset({"NUMORDER", "DATALVL", "DRPTAG", "JD_UTC"})
 
@@ -192,7 +192,7 @@ class KeywordRegistry:
             {lvl: frozenset(kws) for lvl, kws in qc_by_level.items()}
         )
         # EPRV PRIMARY skeleton: the typed Required seed (KPF1.__init__ stamps it,
-        # mirroring RV2.__init__) and the datatypes map_header types its emitted
+        # mirroring RV2.__init__) and the datatypes _map_header types its emitted
         # values with. See _build_eprv_primary.
         seed, datatypes = self._build_eprv_primary()
         self.eprv_primary_seed = MappingProxyType(seed)
@@ -388,7 +388,7 @@ class KeywordRegistry:
           then type the default via ``parse_value_to_datatype`` so consumers assign
           it straight into a header. Insertion order follows the standard's.
         - ``datatypes`` — ``{keyword: DataType}`` for *all* EPRV PRIMARY keywords
-          (required + optional), so ``map_header`` can type the native/default
+          (required + optional), so ``_map_header`` can type the native/default
           values it overlays. Scoped to EPRV PRIMARY (rvdata-vocab datatypes), so
           it never feeds KPF's ``int``/``str`` to ``parse_value_to_datatype``.
         """
@@ -405,7 +405,7 @@ class KeywordRegistry:
             comment = f"{unitstr}{row.Description}"
             # _SEED_OVERRIDES carries the KPF-correct value for keywords header_map
             # gets wrong (NUMORDER=67, DRPTAG=version), so the correction lives here
-            # rather than as a fixup in map_header.
+            # rather than as a fixup in _map_header.
             if row.Keyword in self._SEED_OVERRIDES:
                 default = self._SEED_OVERRIDES[row.Keyword]
             else:
@@ -443,12 +443,12 @@ class KeywordRegistry:
     def _sanitize_header_map(self, raw):
         """Return header_map with only genuine static native->EPRV mapping rows.
 
-        map_header then applies the map with no in-loop filter or per-keyword
+        _map_header then applies the map with no in-loop filter or per-keyword
         correction. Two row classes are dropped:
           - STANDARD targets absent from the registry (PARANG/PARANG2) -- warned,
             so the rvdata header_map / registry inconsistency stays visible;
           - ``_HEADER_MAP_NON_NATIVE`` targets, whose value comes from the seed
-            (NUMORDER/DRPTAG), the model level (DATALVL), or the map_header epoch
+            (NUMORDER/DRPTAG), the model level (DATALVL), or the _map_header epoch
             transform (JD_UTC), not a static map row.
         """
         standard = raw["STANDARD"].astype(str).str.strip()

@@ -65,14 +65,14 @@ class KPF0(KPFDataModel):
         """
         self._read(hdul)
         if "PRIMARY" in self.headers:
-            self._stamp_provenance()
+            self._stamp_wmko_tracking()
         if self.filename is not None:
             try:
                 self.obs_id = get_obs_id(self.filename)
             except ValueError:
                 pass
 
-    def _stamp_provenance(self):
+    def _stamp_wmko_tracking(self):
         """Stamp WMKO DRP-RUN provenance onto the L0 RECEIPT at read time.
 
         This is the single population site for the four provenance cards
@@ -208,7 +208,7 @@ class KPF0(KPFDataModel):
         "CONFIG",
     ]
 
-    def map_header(self):
+    def _map_header(self):
         """Map this L0's raw WMKO PRIMARY to an EPRV-standard PRIMARY dict.
 
         A pure tabular application of the registry's (sanitized) header_map: for
@@ -221,8 +221,8 @@ class KPF0(KPFDataModel):
         The sole exception is ``JD_UTC``: it is a per-frame value transform of the
         native ``MJD-OBS`` (+ epoch offset), not a static default, so header_map
         cannot carry it; it is computed below. DRP-RUN provenance
-        (DRPVERNO/PROGID/KOAID/DRPSTATU) lives on RECEIPT (see ``_stamp_provenance``),
-        not here.
+        (DRPVERNO/PROGID/KOAID/DRPSTATU) lives on RECEIPT (see
+        ``_stamp_wmko_tracking``), not here.
 
         Returns
         -------
@@ -266,24 +266,13 @@ class KPF0(KPFDataModel):
             )
         return out
 
-    def build_instrument_header(self):
-        """Comment-preserving verbatim copy of the L0 PRIMARY as ingested.
-
-        INSTRUMENT_HEADER is an immutable, pure pass-through of the L0 PRIMARY as
-        read from disk -- only the raw instrument cards (DRP-RUN provenance is
-        stamped to RECEIPT, not PRIMARY, so it never appears here); nothing writes
-        to it after ``to_kpf1``. Returning a ``fits.Header`` copy preserves values
-        *and* comments (and commentary cards), unlike a scalar dict.
-        """
-        return self.as_fits_header(self.headers["PRIMARY"])
-
     def to_kpf1(self):
         """
         Create a KPF1 scaffold from this L0, carrying over headers and
         pass-through extensions.
 
         The raw WMKO PRIMARY header is converted to EPRV-standard keyword names
-        and values here (the single conversion site; see `map_header`), so the
+        and values here (the single conversion site; see `_map_header`), so the
         L1 PRIMARY is already EPRV-standard (EPRV-registered keywords only). The
         DRP-RUN provenance cards (DRPVERNO/PROGID/KOAID/DRPSTATU) live on RECEIPT
         (stamped at read) and reach L1 via the RECEIPT-header forward below. The
@@ -300,16 +289,19 @@ class KPF0(KPFDataModel):
 
         l1 = KPF1()
 
-        # Convert the raw WMKO PRIMARY to EPRV-standard names/values, and
-        # preserve the verbatim raw L0 PRIMARY (values + comments) in
-        # INSTRUMENT_HEADER (immutable pass-through — nothing else writes to it).
+        # Convert the raw WMKO PRIMARY to EPRV-standard names/values, and preserve
+        # the raw L0 PRIMARY verbatim (values + comments, via as_fits_header) in the
+        # immutable INSTRUMENT_HEADER -- only the raw instrument cards (DRP-RUN
+        # provenance lives on RECEIPT), and nothing else ever writes to it.
         if "PRIMARY" in self.headers:
-            for key, value in self.map_header().items():
+            for key, value in self._map_header().items():
                 l1.headers["PRIMARY"][key] = value
 
             if "INSTRUMENT_HEADER" not in l1.extensions:
                 l1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
-            l1.set_header("INSTRUMENT_HEADER", self.build_instrument_header())
+            l1.set_header(
+                "INSTRUMENT_HEADER", self.as_fits_header(self.headers["PRIMARY"])
+            )
 
         # Copy pass-through extensions (data + header)
         for ext_name in self._L0_TO_L1_PASSTHROUGH:
@@ -338,7 +330,7 @@ class KPF0(KPFDataModel):
         # Copy obs_id
         l1.obs_id = self.obs_id
 
-        # DATALVL is set by KPF1.__init__ (= KPF1._DATALVL) and map_header no
+        # DATALVL is set by KPF1.__init__ (= KPF1._DATALVL) and _map_header no
         # longer emits it (dropped from header_map), so no fixup is needed here.
         l1.receipt_add_entry("to_l1", "PASS")
         return l1
