@@ -79,7 +79,7 @@ class WLS(BaseMasterModule):
         self._load_linelist()
 
         self._l2_obj_cache = []  # populated by _process_stack_l0_to_l2()
-        self._results = None  # populated by make_master_l2()
+        self._info = None
         self._coeffs_stack = (
             None  # populated by make_master_l2(); used by save_diagnostics()
         )
@@ -890,7 +890,7 @@ class WLS(BaseMasterModule):
 
         self._coeffs_stack = {}
         self._lines_stack = {}
-        self._results = {}
+        self._info = {}
 
         for chip in self.chips:
             result = self._compute_wls_from_stack(
@@ -904,7 +904,7 @@ class WLS(BaseMasterModule):
             )
             W, coeffs_mean, coeffs_stack, lines_stack = result
 
-            self._results[chip] = {
+            self._info[chip] = {
                 "n_total": sum(len(frame["wav"]) for frame in lines_stack),
                 "n_fit": sum(int(np.sum(~frame["bad"])) for frame in lines_stack),
             }
@@ -1004,13 +1004,13 @@ class WLS(BaseMasterModule):
             f"f={self.polyorder_f}"
         )
 
-        if self._results is None:
+        if self._info is None:
             print("  make_master_l2() has not been called")
             return
 
         print(f"\n  {'chip':<8s} {'n lines fit/total'}")
         print("  " + "-" * 40)
-        for chip, stats in self._results.items():
+        for chip, stats in self._info.items():
             n_fit, n_total = stats["n_fit"], stats["n_total"]
             pct = 100.0 * n_fit / n_total if n_total else 0.0
             print(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")

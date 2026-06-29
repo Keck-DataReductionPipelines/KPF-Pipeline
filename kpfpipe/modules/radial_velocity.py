@@ -86,7 +86,7 @@ class RadialVelocity:
         self._order_weights = (
             None  # shared order-weight table, loaded by _get_order_weights()
         )
-        self._results = None  # per-fiber results, set by perform()
+        self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -990,7 +990,7 @@ class RadialVelocity:
         bjd_tdb = np.asarray(self.l2_obj.data["BJD_TDB"], dtype=np.float64)
         berv = np.asarray(self.l2_obj.data["BARYCORR_KMS"], dtype=np.float64)
 
-        self._results = {}
+        self._info = {}
         for fiber in fibers:
             rv = np.full(norder, np.nan)
             rv_err = np.full(norder, np.nan)
@@ -1004,7 +1004,7 @@ class RadialVelocity:
                     f"  {fiber}: illumination source {source['object']!r}; "
                     "skipping (no CCF/RV)"
                 )
-                self._results[fiber] = {
+                self._info[fiber] = {
                     "rv": rv,
                     "rv_err": rv_err,
                     "source": source["object"],
@@ -1045,7 +1045,7 @@ class RadialVelocity:
             )
             ccd_rv = {chip: per_ccd[chip][0] for chip in chips}
             ccd_rv_err = {chip: per_ccd[chip][1] for chip in chips}
-            self._results[fiber] = {
+            self._info[fiber] = {
                 "rv": rv,
                 "rv_err": rv_err,
                 "source": source["object"],
@@ -1122,7 +1122,7 @@ class RadialVelocity:
         # barycentric frame (compute_ccfs folds barycorr into the mask shift), so
         # the reported BERV/BJDTDB are descriptive, not applied.
         sci_req = [f for f in fibers if f in ("SCI1", "SCI2", "SCI3")]
-        sci = [f for f in sci_req if self._results[f]["source"] not in (None, "none")]
+        sci = [f for f in sci_req if self._info[f]["source"] not in (None, "none")]
         if not sci_req:
             # A calibration-only run (no science orderlet requested): the combined
             # science RV is not applicable, so PRIMARY RV/RVERR/BERV/BJDTDB stay
@@ -1230,7 +1230,7 @@ class RadialVelocity:
         print(f"  ccf_window:     {self.ccf_window} km/s")
         print(f"  rv_window:      {self.rv_window} km/s")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
@@ -1245,9 +1245,9 @@ class RadialVelocity:
         # CCD_RV/CCD_ERV are the combined per-CCD RV and its error; RV_RMS is the
         # order-to-order mad_std (a diagnostic of per-order spread), in m/s.
         fiber_order = [
-            f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in self._results
+            f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in self._info
         ]
-        fiber_order += [f for f in self._results if f not in fiber_order]
+        fiber_order += [f for f in self._info if f not in fiber_order]
 
         print(
             f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NVALID':>8s}"
@@ -1261,7 +1261,7 @@ class RadialVelocity:
             ("RED", slice(norder_green, norder)),
         ):
             for fiber in fiber_order:
-                res = self._results[fiber]
+                res = self._info[fiber]
                 rv = res["rv"][rows]
                 nvalid = int(np.sum(np.isfinite(rv)))
                 if nvalid == 0:

@@ -848,7 +848,7 @@ class BaseMasterModule:
 
         return ml1_obj
 
-    def _populate_results(self, l1_arrays):
+    def _populate_info(self, l1_arrays):
         """
         Summarize per-chip master statistics for `info()` and tests.
 
