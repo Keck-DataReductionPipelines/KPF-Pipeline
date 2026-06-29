@@ -479,9 +479,9 @@ class TestLoadMaster:
 def _stack_frame(exptime, ccd_val, var_val, shape=(2, 2)):
     """A synthetic assembled frame with uniform CCD/VAR and a given EXPTIME."""
     frame = MagicMock()
-    # EXPTIME is a raw WMKO native read from INSTRUMENT_HEADER (where to_kpf1
-    # preserves it).
-    frame.headers = {"PRIMARY": {}, "INSTRUMENT_HEADER": {"EXPTIME": exptime}}
+    # Stacking reads the EPRV-standard PRIMARY EXPTIME (actual elapsed time,
+    # mapped from native WMKO ELAPSED).
+    frame.headers = {"PRIMARY": {"EXPTIME": exptime}, "INSTRUMENT_HEADER": {}}
     frame.data = {
         "GREEN_CCD": np.full(shape, ccd_val, dtype=np.float32),
         "GREEN_VAR": np.full(shape, var_val, dtype=np.float32),

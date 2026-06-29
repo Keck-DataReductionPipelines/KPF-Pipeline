@@ -1,0 +1,15 @@
+HDU,Name,DataType,Required,Description
+0,PRIMARY,PrimaryHDU,True,Calibration metadata header
+1,RECEIPT,BinTableHDU,True,Accumulated processing history
+2,DRP_CONFIG,BinTableHDU,True,Pipeline config as a 2-column table (key = value)
+3,EXT_DESCRIPT,BinTableHDU,True,Table describing contents of each extension
+4,ORDER_TABLE,BinTableHDU,True,Table capturing the wavelength extent of each order in Trace 1
+5,TRACE1_WAVE,ImageHDU,True,Wavelength solution for trace 1
+6,TRACE2_WAVE,ImageHDU,True,Wavelength solution for trace 2
+7,TRACE3_WAVE,ImageHDU,True,Wavelength solution for trace 3
+8,TRACE4_WAVE,ImageHDU,True,Wavelength solution for trace 4
+9,TRACE5_WAVE,ImageHDU,True,Wavelength solution for trace 5
+10,QUALITY_CONTROL,BinTableHDU,True,Quality control flags and diagnostics
+11,INPUT_FILES,BinTableHDU,True,Input L0 files used to generate this master
+12,GREEN_WLS_COEFFS,ImageHDU,False,Green chip WLS Legendre coefficients
+13,RED_WLS_COEFFS,ImageHDU,False,Red chip WLS Legendre coefficients

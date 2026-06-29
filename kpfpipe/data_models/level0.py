@@ -205,7 +205,7 @@ class KPF0(KPFDataModel):
         "EXPMETER_SCI",
         "EXPMETER_SKY",
         "TELEMETRY",
-        "CONFIG",
+        "DRP_CONFIG",
     ]
 
     def _map_header(self):
@@ -281,7 +281,7 @@ class KPF0(KPFDataModel):
         INSTRUMENT_HEADER and write EPRV/registered KPF keywords to PRIMARY.
 
         Returns a KPF1 with EPRV PRIMARY header, INSTRUMENT_HEADER, pass-through
-        extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, CONFIG), receipt, and
+        extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG), receipt, and
         obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
         but empty — the caller (image assembly) fills those in.
         """

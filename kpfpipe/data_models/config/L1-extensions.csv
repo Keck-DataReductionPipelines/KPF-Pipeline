@@ -9,6 +9,6 @@ HDU,Name,DataType,Required,Description
 7,EXPMETER_SKY,BinTableHDU,False,Exposure meter sky fiber
 8,TELEMETRY,BinTableHDU,False,System telemetry table
 9,RECEIPT,BinTableHDU,True,Accumulated processing history
-10,CONFIG,BinTableHDU,False,Configuration parameters
+10,DRP_CONFIG,BinTableHDU,False,Pipeline config as a 2-column table (key = value)
 11,INSTRUMENT_HEADER,ImageHDU,False,Verbatim raw instrument (L0) PRIMARY header
 12,QUALITY_CONTROL,BinTableHDU,True,Quality-control booleans and diagnostic metrics

@@ -44,6 +44,7 @@ def synthetic_masters_l2_file(tmp_path):
     primary.header["INSTRUME"] = "KPF"
     primary.header["DATE-OBS"] = "2024-01-13T10:26:56"
     primary.header["DATALVL"] = "ML2"
+    primary.header["MASTYPE"] = "thar"  # from_fits infers kind="wls" from this
 
     n_pix = 64
     wave = rng.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float32)
@@ -389,34 +390,41 @@ class TestDtypeProvenance:
 
 
 class TestKPFMasterL2:
-    def test_required_extensions_created(self):
-        m = KPFMasterL2()
-        for ext in [
-            "PRIMARY",
-            "RECEIPT",
-            "TRACE1_FLUX",
-            "TRACE1_WAVE",
-            "TRACE1_VAR",
-            "TRACE1_BLAZE",
-            "TRACE3_FLUX",
-            "TRACE3_WAVE",
-            "TRACE3_VAR",
-            "TRACE3_BLAZE",
-            "TRACE5_FLUX",
-            "TRACE5_WAVE",
-            "TRACE5_VAR",
-            "TRACE5_BLAZE",
-        ]:
+    def test_wls_extensions_created(self):
+        # A WLS master carries the shared extensions plus TRACE*_WAVE, and not the
+        # flat-only TRACE*_FLUX/VAR/BLAZE.
+        m = KPFMasterL2(kind="wls")
+        for ext in ["PRIMARY", "RECEIPT", "QUALITY_CONTROL", "INPUT_FILES"]:
             assert ext in m.extensions
+        for n in (1, 3, 5):
+            assert f"TRACE{n}_WAVE" in m.extensions
+            for suffix in ("FLUX", "VAR", "BLAZE"):
+                assert f"TRACE{n}_{suffix}" not in m.extensions
+
+    def test_flat_extensions_created(self):
+        # A flat master carries TRACE*_FLUX/VAR/BLAZE and not TRACE*_WAVE.
+        m = KPFMasterL2(kind="flat")
+        for ext in ["PRIMARY", "RECEIPT", "QUALITY_CONTROL", "INPUT_FILES"]:
+            assert ext in m.extensions
+        for n in (1, 3, 5):
+            for suffix in ("FLUX", "VAR", "BLAZE"):
+                assert f"TRACE{n}_{suffix}" in m.extensions
+            assert f"TRACE{n}_WAVE" not in m.extensions
+
+    def test_kind_required_and_validated(self):
+        with pytest.raises(TypeError):
+            KPFMasterL2()  # kind is required, no default
+        with pytest.raises(ValueError):
+            KPFMasterL2(kind="bogus")
 
     def test_aliases_work(self):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         assert m.extensions._resolve("SCI2_WAVE") == "TRACE3_WAVE"
         assert m.extensions._resolve("CAL_WAVE") == "TRACE1_WAVE"
         assert m.extensions._resolve("SKY_WAVE") == "TRACE5_WAVE"
 
     def test_chip_prefix_access(self):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         n_pix = 32
         trace_data = (
             np.random.default_rng(42)
@@ -433,11 +441,11 @@ class TestKPFMasterL2:
         np.testing.assert_array_equal(red, trace_data[NORDER_GREEN:])
 
     def test_inherits_from_kpf2(self):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         assert isinstance(m, KPF2)
 
     def test_inherits_from_kpf_master_model(self):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         assert isinstance(m, KPFMasterModel)
 
     def test_class_attributes(self):
@@ -477,14 +485,14 @@ class TestKPFMasterL2:
             KPFMasterL2.from_fits(synthetic_masters_l2_file)
 
     def test_set_input_files(self):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]
         m.set_input_files(files, "thar")
         assert m.data["INPUT_FILES"]["FILENAME"].tolist() == files
         assert m.headers["PRIMARY"]["MASTYPE"] == "thar"
 
     def test_input_files_roundtrip(self, tmp_path):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]
         m.set_input_files(files, "thar")
         m.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
@@ -500,6 +508,7 @@ class TestKPFMasterL2:
         fn = str(tmp_path / "unknown_ext_ml2.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-01-13T00:00:00"
+        primary.header["MASTYPE"] = "thar"  # so from_fits can infer kind="wls"
         weird = fits.ImageHDU(data=np.zeros((4, 4)))
         weird.name = "WEIRD_EXTENSION"
         hdul = fits.HDUList([primary, weird])

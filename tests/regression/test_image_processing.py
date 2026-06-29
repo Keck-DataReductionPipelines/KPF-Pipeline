@@ -34,16 +34,17 @@ _EXPTIME = 4.0  # != 1 so dark scaling is observable
 class MockL1:
     def __init__(self):
         self.obs_id = "KP.20240405.40113.57"
-        # EXPTIME is a raw WMKO native, so it lives in INSTRUMENT_HEADER (where
-        # to_kpf1 preserves it). KPF-pipeline keyword routing now sends the
-        # calibration flags/paths to RECEIPT (BIASSUB/DARKSUB, BIAS/DARKFILE),
-        # so a real L1 always has RECEIPT and QUALITY_CONTROL extensions; the
-        # mock mirrors that. Headers are fits.Header, like the real models.
-        inst = fits.Header()
-        inst["EXPTIME"] = _EXPTIME
+        # Dark scaling reads the EPRV-standard PRIMARY EXPTIME (the actual
+        # elapsed time, mapped from native WMKO ELAPSED), so the mock sets it on
+        # PRIMARY. KPF-pipeline keyword routing sends the calibration flags/paths
+        # to RECEIPT (BIASSUB/DARKSUB, BIAS/DARKFILE), so a real L1 always has
+        # RECEIPT and QUALITY_CONTROL extensions; the mock mirrors that. Headers
+        # are fits.Header, like the real models.
+        primary = fits.Header()
+        primary["EXPTIME"] = _EXPTIME
         self.headers = {
-            "PRIMARY": fits.Header(),
-            "INSTRUMENT_HEADER": inst,
+            "PRIMARY": primary,
+            "INSTRUMENT_HEADER": fits.Header(),
             "RECEIPT": fits.Header(),
             "QUALITY_CONTROL": fits.Header(),
         }

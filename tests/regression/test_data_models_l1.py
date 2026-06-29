@@ -191,9 +191,11 @@ class TestL1PrimarySeed:
 
     def test_master_l1_not_seeded(self):
         # KPFMasterL1 bypasses KPF1.__init__ (its __init__ chains straight to
-        # KPFDataModel), so masters stay out of EPRV scope -- no skeleton.
+        # KPFDataModel), so masters stay out of EPRV scope -- no EPRV science
+        # skeleton. Masters carry their own minimal PRIMARY: only DATALVL ("ML1").
         prim = set(KPFMasterL1().headers["PRIMARY"])
-        assert not (self._required_l1_primary() & prim)
+        assert prim == {"DATALVL"}
+        assert not (self._required_l1_primary() & prim) - {"DATALVL"}
 
 
 class TestToL1:

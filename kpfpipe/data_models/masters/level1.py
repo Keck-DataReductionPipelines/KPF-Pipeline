@@ -27,7 +27,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters.base import KPFMasterModel
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
-_MASTERS_L1_EXTENSIONS = pd.read_csv(_config_path / "Masters-L1-extensions.csv")
+_MASTERS_L1_EXTENSIONS = pd.read_csv(_config_path / "ML1-extensions.csv")
 
 
 class KPFMasterL1(KPFMasterModel, KPF1):
@@ -57,6 +57,11 @@ class KPFMasterL1(KPFMasterModel, KPF1):
         for _, row in _MASTERS_L1_EXTENSIONS.iterrows():
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
+
+        # Masters carry their own minimal PRIMARY (no EPRV science skeleton); stamp
+        # DATALVL so it is present in-memory, not only at to_fits (DRP-RUN data
+        # level). Routed via set_keyword like the science models.
+        self.set_keyword("DATALVL", self._DATALVL)
 
     def _create_hdul(self):
         """Cast MASK extensions to uint8 before building HDUs, then restore."""
