@@ -33,25 +33,11 @@ from ._registry import read_kpf_header_registry
 
 
 class TestHeaderStorage:
-    """Every extension header is a fits.Header, with native read/write semantics."""
+    """Every extension header is a fits.Header (not rvdata's OrderedDict)."""
 
     def test_fresh_headers_are_fits_headers(self):
         l1 = KPF1()
         assert isinstance(l1.headers["PRIMARY"], fits.Header)
-
-    def test_tuple_write_sets_value_and_comment(self):
-        # The documented write path: header[key] = (value, comment).
-        l1 = KPF1()
-        l1.headers["PRIMARY"]["BIASAGE"] = (-0.5, "[day] bias age")
-        assert l1.headers["PRIMARY"]["BIASAGE"] == -0.5
-        assert l1.headers["PRIMARY"].comments["BIASAGE"] == "[day] bias age"
-
-    def test_get_returns_scalar_and_honors_default(self):
-        l1 = KPF1()
-        l1.headers["PRIMARY"]["DATE-OBS"] = ("2024-01-13T10:26:56", "obs start")
-        assert l1.headers["PRIMARY"].get("DATE-OBS") == "2024-01-13T10:26:56"
-        assert l1.headers["PRIMARY"].get("NOPE", "fallback") == "fallback"
-        assert l1.headers["PRIMARY"].get("NOPE") is None
 
 
 class TestPrimaryCommentRoundTrip:

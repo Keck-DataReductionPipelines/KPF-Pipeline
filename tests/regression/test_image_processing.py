@@ -167,12 +167,6 @@ class TestInit:
         assert mod._bias_path is None
         assert mod._dark_path is None
 
-    def test_bias_path_none_before_perform(self):
-        assert ImageProcessing(MockL1())._bias_path is None
-
-    def test_dark_path_none_before_perform(self):
-        assert ImageProcessing(MockL1())._dark_path is None
-
     def test_master_caches_none_before_perform(self):
         mod = ImageProcessing(MockL1())
         assert mod._bias_ml1 is None

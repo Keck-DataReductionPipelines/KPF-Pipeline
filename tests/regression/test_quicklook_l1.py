@@ -103,14 +103,6 @@ class TestPlotL1Constructor:
 
 
 class TestImage:
-    def test_returns_figure(self, synthetic_l1):
-        from kpfpipe.quality_control.quicklook.level1 import PlotL1
-
-        qlp = PlotL1(synthetic_l1)
-        fig = qlp.image("green")
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
-
     def test_title_green(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
 

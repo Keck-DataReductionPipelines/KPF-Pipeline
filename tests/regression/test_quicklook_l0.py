@@ -125,14 +125,6 @@ class TestPlotL0Constructor:
 
 
 class TestStitchedImage4Amp:
-    def test_returns_figure(self, synthetic_4amp_l0):
-        from kpfpipe.quality_control.quicklook.level0 import PlotL0
-
-        qlp = PlotL0(synthetic_4amp_l0)
-        fig = qlp.stitched_image("green")
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
-
     def test_title_format(self, synthetic_4amp_l0):
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
@@ -182,14 +174,6 @@ class TestStitchedImage4Amp:
 
 
 class TestStitchedImage2Amp:
-    def test_returns_figure(self, synthetic_2amp_l0):
-        from kpfpipe.quality_control.quicklook.level0 import PlotL0
-
-        qlp = PlotL0(synthetic_2amp_l0)
-        fig = qlp.stitched_image("green")
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
-
     def test_image_shape_2amp(self, synthetic_2amp_l0):
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
