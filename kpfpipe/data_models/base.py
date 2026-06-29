@@ -21,7 +21,6 @@ from rvdata.core.models.base import RVDataModel
 # it through kpf.keyword_registry, and re-exported so sibling data_models files
 # (level2/4) import the same singleton from base.
 from kpfpipe.data_models.keyword_registry import keyword_registry
-from kpfpipe.utils.kpf import _DATECODE_PATTERN, _OBS_ID_PATTERN
 
 # Receipt names that are data-model conversions / serialization rather than
 # pipeline modules — excluded from DRPSTATU so it names the last real stage.
@@ -41,9 +40,6 @@ __all__ = [
 class KPFDataModel(RVDataModel):
     """Shared base for every KPF data model (L0, L1, and — multiply-inherited
     with RV2/RV4 — L2, L4)."""
-
-    OBS_ID_PATTERN = _OBS_ID_PATTERN
-    DATECODE_PATTERN = _DATECODE_PATTERN
 
     # The keyword registry singleton, surfaced as a class attribute so anything
     # handed a KPF data model (the checkpoints header validator, level0's

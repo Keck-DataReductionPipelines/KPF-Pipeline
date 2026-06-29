@@ -394,7 +394,7 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 **Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics — including the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), which `DiagL1` recomputes from the master paths `CalibrationAssociation` wrote to RECEIPT (`*FILE`) plus the `INSTRUMENT_HEADER` `DATE-OBS`; the association module writes only the paths.
 
-**Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `_RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
+**Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
 
 ## Design Principles & Success Criteria
 

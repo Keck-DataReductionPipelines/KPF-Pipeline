@@ -24,8 +24,8 @@ from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.kpf import get_obs_id
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
-L1_EXTENSIONS = pd.read_csv(_config_path / "L1-extensions.csv")
-_KNOWN_L1_EXTENSIONS = set(L1_EXTENSIONS["Name"].tolist())
+_L1_EXTENSIONS = pd.read_csv(_config_path / "L1-extensions.csv")
+_KNOWN_L1_EXTENSIONS = set(_L1_EXTENSIONS["Name"].tolist())
 
 # EPRV-like L1 filename, but with L1 instead of the standard SL#: the EPRV regex
 # only accepts SL2/SL3/SL4, so KPF L1 uses kpf_L1_YYYYMMDDThhmmss.fits.
@@ -54,7 +54,7 @@ class KPF1(KPFDataModel):
         super().__init__()
         self.level = 1
 
-        for _, row in L1_EXTENSIONS.iterrows():
+        for _, row in _L1_EXTENSIONS.iterrows():
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
 

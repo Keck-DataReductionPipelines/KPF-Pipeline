@@ -43,7 +43,7 @@ guidance (environment, commands, architecture), which is documented separately.
 | Predicates | `is_*`, return `bool` | `is_obs_id`, `is_timestamp` |
 | Converters | `<x>_to_<y>` | `air_to_vac`, `utc_to_hst`, `kpf_timestamp_to_eprv_timestamp` |
 | Private helpers | leading underscore | `_get_overscan_pixels`, `_resolve_illumination_source` |
-| Public constants | `UPPER_SNAKE`; allowed in `data_models/` and the package root, **never in `modules/`** | `REPO_ROOT`, `DEFAULTS`, `DETECTOR`, `L0_EXTENSIONS` |
+| Public constants | `UPPER_SNAKE`; allowed in `data_models/` and the package root, **never in `modules/`** | `REPO_ROOT`, `DEFAULTS`, `DETECTOR`, `NORDER_GREEN` |
 | Module constants | `UPPER_SNAKE` with a leading underscore — modules export **no** importable constants (one documented exception: `ImageAssembly.RN_KEYS`) | `_DEFAULTS`, `_LEVEL_BY_CAL_TYPE`, `_OBS_ID_PATTERN` |
 | Variables | `snake_case` | `datecode`, `file_list`, `oscan_srl` |
 

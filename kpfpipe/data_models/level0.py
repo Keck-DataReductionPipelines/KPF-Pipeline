@@ -25,8 +25,8 @@ from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.kpf import get_obs_id
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
-L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
-_KNOWN_L0_EXTENSIONS = set(L0_EXTENSIONS["Name"].tolist())
+_L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
+_KNOWN_L0_EXTENSIONS = set(_L0_EXTENSIONS["Name"].tolist())
 
 # WMKO-native L0 filename: KP.YYYYMMDD.NNNNN.NN.fits (the obs_id plus .fits).
 _L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
@@ -52,7 +52,7 @@ class KPF0(KPFDataModel):
         super().__init__()
         self.level = 0
 
-        for _, row in L0_EXTENSIONS.iterrows():
+        for _, row in _L0_EXTENSIONS.iterrows():
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
 
