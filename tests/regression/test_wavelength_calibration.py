@@ -44,9 +44,10 @@ def _make_master_l2(seed=42):
     Each (chip, fiber) gets its own random-but-reproducible block so we can
     later confirm that exactly the right block lands on the science L2.
     """
-    master = KPFMasterL2()
+    master = KPFMasterL2(kind="wls")
     master.headers["PRIMARY"]["INSTRUME"] = "KPF"
     master.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
+    master.set_keyword("MASTYPE", "thar")  # so from_fits infers kind="wls"
 
     rng = np.random.default_rng(seed)
     for chip in _CHIPS:
@@ -229,9 +230,10 @@ class TestPerform:
 
     def test_raises_when_master_missing_requested_fiber(self, tmp_path):
         # Master only has SCI2; config asks for all 5 fibers → fail loudly.
-        master = KPFMasterL2()
+        master = KPFMasterL2(kind="wls")
         master.headers["PRIMARY"]["INSTRUME"] = "KPF"
         master.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
+        master.set_keyword("MASTYPE", "thar")  # so from_fits infers kind="wls"
         rng = np.random.default_rng(7)
         for chip in _CHIPS:
             norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED

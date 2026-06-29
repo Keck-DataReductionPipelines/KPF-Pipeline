@@ -27,7 +27,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters.base import KPFMasterModel
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
-_MASTERS_L1_EXTENSIONS = pd.read_csv(_config_path / "Masters-L1-extensions.csv")
+_MASTERS_L1_EXTENSIONS = pd.read_csv(_config_path / "ML1-extensions.csv")
 
 
 class KPFMasterL1(KPFMasterModel, KPF1):

@@ -886,7 +886,7 @@ class WLS(BaseMasterModule):
         # _process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
         self._process_stack_l0_to_l2(l0_file_list=l0_file_list, verbose=verbose)
 
-        self.ml2_obj = KPFMasterL2()
+        self.ml2_obj = KPFMasterL2(kind="wls")
 
         self._coeffs_stack = {}
         self._lines_stack = {}
