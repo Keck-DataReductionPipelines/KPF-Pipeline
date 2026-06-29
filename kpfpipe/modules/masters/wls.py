@@ -911,7 +911,13 @@ class WLS(BaseMasterModule):
             self._coeffs_stack[chip] = coeffs_stack
             self._lines_stack[chip] = lines_stack
 
-            for i, fiber in enumerate(self.fibers):
+            # W's fiber planes are ordered by physical slicer position (the fit
+            # ranks fibers via fiber_positions and _evaluate_wls_coeffs emits
+            # planes in that order). Assign by that same canonical order, not
+            # self.fibers' (config-overridable) order, so a reordered self.fibers
+            # cannot mis-route a solution (e.g. SKY's onto CAL).
+            canonical = sorted(self.fibers, key=lambda fb: self.fiber_positions[fb])
+            for i, fiber in enumerate(canonical):
                 if W.ndim == 2:
                     self.ml2_obj.data[f"{chip}_{fiber}_WAVE"] = W
                 else:

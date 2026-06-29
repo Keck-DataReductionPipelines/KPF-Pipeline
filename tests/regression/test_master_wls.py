@@ -259,6 +259,47 @@ class TestMakeMasterL2:
                 assert np.size(wave) > 0
                 assert np.all(wave == 5500.0)
 
+    def test_wave_routing_uses_physical_position_not_fiber_order(self, monkeypatch):
+        """Each W plane routes to its fiber by physical slicer position, even
+        when self.fibers is reordered. W's planes are ordered by fiber_positions
+        (SKY=0..CAL=4), so the write loop must sort by that, not trust
+        self.fibers' (config-overridable) order -- else SKY's solution lands on
+        CAL and vice versa.
+        """
+        monkeypatch.setattr(
+            WLS, "_load_frame", lambda self, fn, cache=False, **kw: (MockL1(), True)
+        )
+        monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kw: l1)
+        monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kw: MockL2())
+
+        def mock_compute(self, chip, fibers, **kwargs):
+            # Plane i carries the constant value i (its physical-position rank).
+            norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
+            W = np.empty((norder, NCOL_TEST, len(fibers)))
+            for i in range(len(fibers)):
+                W[:, :, i] = float(i)
+            coeffs = np.zeros((self.polyorder_x + 1, self.polyorder_m + 1, 1))
+            lines = [
+                {"wav": np.array([5500.0]), "bad": np.array([False])} for _ in range(3)
+            ]
+            return W, coeffs, np.array([coeffs] * 3), lines
+
+        monkeypatch.setattr(WLS, "_compute_wls_from_stack", mock_compute)
+
+        wls = WLS(FILE_LIST)
+        # Reorder away from physical-slicer order (here: TRACE order).
+        wls.fibers = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
+        ml2 = wls.make_master_l2()
+
+        # Ground truth from detector.toml [fiber_positions].
+        physical_rank = {"SKY": 0, "SCI1": 1, "SCI2": 2, "SCI3": 3, "CAL": 4}
+        for chip in wls.chips:
+            for fiber, rank in physical_rank.items():
+                wave = ml2.data[f"{chip}_{fiber}_WAVE"]
+                assert np.all(wave == float(rank)), (
+                    f"{chip}_{fiber}_WAVE routed to the wrong W plane"
+                )
+
     def test_wave_is_float64_and_survives_roundtrip(
         self, mock_make_master_l2, tmp_path
     ):
