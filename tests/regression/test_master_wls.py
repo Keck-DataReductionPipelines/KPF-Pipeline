@@ -843,12 +843,16 @@ class TestFitLinePositions:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0])
 
-        with pytest.warns(UserWarning, match=r"RED SCI1: no good lines retained"):
+        # The fabricated all-NaN fiber makes the code warn once per synthetic order
+        # (verbose=True) plus once at the fiber level; capture them all so the
+        # per-order ones don't leak to the run summary, and assert the fiber-level one.
+        with pytest.warns(UserWarning) as record:
             result = wls._fit_line_positions_ffi(
                 StubL2(),
                 "RED",
                 ["SCI1"],
             )
+        assert any("RED SCI1: no good lines retained" in str(w.message) for w in record)
         assert len(result["wav"]) == 0
 
     def test_nan_orderlet_warning_suppressed_when_verbose_false(self, recwarn):

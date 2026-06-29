@@ -120,17 +120,22 @@ class PlotL0:
         chip_upper = chip.upper()
 
         image = self._stitch(chip_upper)
+        # Stats run on the unmasked pixels (mask -> NaN), mirroring the L1 path;
+        # nan* over the masked array would otherwise ignore the mask and warn.
+        # imshow keeps the masked `image` so masked pixels still render as blank.
+        finite = np.ma.filled(image, np.nan)
 
         # Legacy data format: values stored with extra 2^16 factor
         twotosixteen = False
-        if np.nanmedian(image) > 200 * 2**16:
+        if np.nanmedian(finite) > 200 * 2**16:
             twotosixteen = True
             image = image / 2**16
+            finite = finite / 2**16
 
         fig = plt.figure(figsize=(10, 8), tight_layout=True)
         cmap = "viridis"
-        vmin = np.percentile(image, 1)
-        vmax = np.percentile(image, 99.5)
+        vmin = np.nanpercentile(finite, 1)
+        vmax = np.nanpercentile(finite, 99.5)
         plt.imshow(
             image,
             cmap=cmap,

@@ -222,8 +222,9 @@ class TestStitchedImage2To16:
 
         # Image data should be scaled down to ~300
         ax = fig.axes[0]
+        # imshow keeps the stitched image masked, so use the mask-aware median.
         img_data = ax.get_images()[0].get_array()
-        assert np.nanmedian(img_data) == pytest.approx(300, abs=1)
+        assert np.ma.median(img_data) == pytest.approx(300, abs=1)
         plt.close(fig)
 
 
