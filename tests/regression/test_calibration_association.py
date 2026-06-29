@@ -5,6 +5,7 @@ Unit tests for CalibrationAssociation.
 import warnings
 
 import pytest
+from astropy.io import fits
 
 from kpfpipe.modules.calibration_association import CalibrationAssociation
 
@@ -15,11 +16,29 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 
 class MockL1:
     def __init__(self, date_obs="2024-04-05T11:08:33"):
-        self.headers = {"PRIMARY": {"DATE-OBS": date_obs}}
+        # DATE-OBS is read from the EPRV-standard PRIMARY (identity-mapped from
+        # the native WMKO DATE-OBS); the calibration ages/paths are KPF-pipeline
+        # keywords written to PRIMARY/RECEIPT. Headers are fits.Header, mirroring
+        # the real KPF data models.
+        primary = fits.Header()
+        primary["DATE-OBS"] = date_obs
+        self.headers = {
+            "PRIMARY": primary,
+            "INSTRUMENT_HEADER": fits.Header(),
+            "RECEIPT": fits.Header(),
+            "QUALITY_CONTROL": fits.Header(),
+        }
         self._receipt = []
 
     def receipt_add_entry(self, name, status):
         self._receipt.append((name, status))
+
+    def set_keyword(self, key, value):
+        # Mirror the real routing: master paths ({PREFIX}FILE) land on RECEIPT.
+        # The signed ages ({PREFIX}AGE) are written downstream by DiagL1, not by
+        # this module.
+        ext = "RECEIPT" if key.endswith("FILE") else "PRIMARY"
+        self.headers[ext][key] = value
 
 
 def _make_module(tmp_path, date_obs="2024-04-05T11:08:33"):
@@ -242,56 +261,52 @@ class TestPerform:
         assert ("calibration_association", "PASS") in mod.l1_obj._receipt
 
     def test_sets_biasfile_header(self, masters_dir):
+        # BIASFILE is the master's full path (no separate BIASDIR).
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        assert (
-            mod.l1_obj.headers["PRIMARY"]["BIASFILE"]
-            == "KP.20240405.03637.74_master_bias_L1.fits"
+        expected = str(
+            masters_dir
+            / "masters"
+            / "20240405"
+            / "KP.20240405.03637.74_master_bias_L1.fits"
         )
+        assert mod.l1_obj.headers["RECEIPT"].get("BIASFILE") == expected
 
-    def test_sets_biasdir_header(self, masters_dir):
+    def test_no_biasdir_header(self, masters_dir):
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        expected_dir = str(masters_dir / "masters" / "20240405")
-        assert mod.l1_obj.headers["PRIMARY"]["BIASDIR"] == expected_dir
+        assert "BIASDIR" not in mod.l1_obj.headers["RECEIPT"]
 
-    def test_sets_agebias_same_day(self, masters_dir):
+    def test_does_not_write_biasage(self, masters_dir):
+        # The signed master-obs age (BIASAGE) is now recomputed downstream by
+        # DiagL1 from the path this module writes; the module itself emits only
+        # the path. (DiagL1.calibration_ages is covered in test_diagnostics.py.)
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        assert mod.l1_obj.headers["PRIMARY"]["AGEBIAS"] == 0
-
-    def test_sets_agebias_previous_day(self, tmp_path):
-        d = tmp_path / "masters" / "20240404"
-        d.mkdir(parents=True)
-        _stub_master(d, "KP.20240404.79200.00", "bias")
-
-        mod = _make_module(tmp_path)
-        mod.perform(["bias"])
-        assert mod.l1_obj.headers["PRIMARY"]["AGEBIAS"] == 1
+        assert "BIASAGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
 
     def test_sets_headers_for_dark_and_flat(self, masters_dir):
         mod = _make_module(masters_dir)
         mod.perform(["bias", "dark", "flat"])
         for prefix in ("BIAS", "DARK", "FLAT"):
-            assert f"{prefix}FILE" in mod.l1_obj.headers["PRIMARY"]
-            assert f"{prefix}DIR" in mod.l1_obj.headers["PRIMARY"]
-            assert f"AGE{prefix}" in mod.l1_obj.headers["PRIMARY"]
+            assert f"{prefix}FILE" in mod.l1_obj.headers["RECEIPT"]
+            assert f"{prefix}DIR" not in mod.l1_obj.headers["RECEIPT"]
+            assert f"{prefix}AGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
 
     def test_sets_headers_for_thar(self, masters_dir):
-        # Legacy WLS convention: WLSFILE holds the full path (no WLSDIR), and
-        # AGEWLS is float days with sign = (master_dt - obs_dt). Master at
-        # 2024-04-05 01:00:37 UTC vs obs at 2024-04-05 11:08:33 UTC gives
-        # delta = -10h 07m 56s = -36476 s = -0.422176 days.
+        # WLS follows the same unified convention: WLSFILE holds the full path
+        # (no WLSDIR). The WLSAGE is written downstream by DiagL1.
         d = masters_dir / "masters" / "20240405"
         _stub_master(d, "KP.20240405.03637.74", "thar")
 
         mod = _make_module(masters_dir)
         mod.perform(["bias", "thar"])
-        h = mod.l1_obj.headers["PRIMARY"]
-        assert h["WLSFILE"] == str(d / "KP.20240405.03637.74_master_thar_L2.fits")
-        assert "WLSDIR" not in h
-        assert isinstance(h["AGEWLS"], float)
-        assert h["AGEWLS"] == pytest.approx(-0.422176, abs=1e-5)
+        receipt = mod.l1_obj.headers["RECEIPT"]
+        assert receipt.get("WLSFILE") == str(
+            d / "KP.20240405.03637.74_master_thar_L2.fits"
+        )
+        assert "WLSDIR" not in receipt
+        assert "WLSAGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
 
     def test_raises_on_unknown_cal_type(self, masters_dir):
         mod = _make_module(masters_dir)
@@ -325,7 +340,7 @@ class TestPerform:
 
         mod2 = _make_module(tmp_path)
         mod2.perform(["bias"], masters_search_window_days=[-2, 0])  # should succeed
-        assert "BIASFILE" in mod2.l1_obj.headers["PRIMARY"]
+        assert "BIASFILE" in mod2.l1_obj.headers["RECEIPT"]
 
 
 # ---------------------------------------------------------------------------

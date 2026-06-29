@@ -39,7 +39,7 @@ class Bias(BaseMasterModule):
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
 
-        self._results = None  # populated by make_master_l1()
+        self._info = None
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -91,10 +91,8 @@ class Bias(BaseMasterModule):
             cal_type="bias",
         )
 
-        self.ml1_obj = self._build_ml1_obj(
-            l1_arrays, l0_file_list, master_type="bias", receipt_key="master_bias"
-        )
-        self._results = self._populate_results(l1_arrays)
+        self.ml1_obj = self._build_ml1_obj(l1_arrays, l0_file_list, master_type="bias")
+        self._info = self._populate_info(l1_arrays)
 
         if filepath is not None:
             self.save_master("L1", filepath, overwrite=True)
@@ -109,13 +107,13 @@ class Bias(BaseMasterModule):
             print(f"    {fn}")
         print(f"  chips:  {self.chips}")
 
-        if self._results is None:
+        if self._info is None:
             print("  make_master_l1() has not been called")
             return
 
         print(f"\n  {'chip':<8s} {'median [e-]':<15s} {'rms [e-]':<10s} {'bad pixels'}")
         print("  " + "-" * 56)
-        for chip, stats in self._results.items():
+        for chip, stats in self._info.items():
             print(
                 f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} "
                 f"{stats['num_bad']} ({stats['pct_bad']:.3f}%)"

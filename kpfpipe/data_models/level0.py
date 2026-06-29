@@ -11,19 +11,30 @@ infrastructure and receipt system.
 
 import importlib.resources
 import os
+import re
 import warnings
 
 import numpy as np
 import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
+from rvdata.core.tools.headers import parse_value_to_datatype
 
+from kpfpipe import __version__
 from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.kpf import get_obs_id
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
-L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
-_KNOWN_L0_EXTENSIONS = set(L0_EXTENSIONS["Name"].tolist())
+_L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
+_KNOWN_L0_EXTENSIONS = set(_L0_EXTENSIONS["Name"].tolist())
+
+# WMKO-native L0 filename: KP.YYYYMMDD.NNNNN.NN.fits (the obs_id plus .fits).
+_L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
+
+# Initial DRPSTATU value on the L1 EPRV PRIMARY, before any pipeline module runs.
+# Each module overwrites it via the receipt_add_entry override (see base.py).
+_DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
 
 
 class KPF0(KPFDataModel):
@@ -42,23 +53,53 @@ class KPF0(KPFDataModel):
         super().__init__()
         self.level = 0
 
-        for _, row in L0_EXTENSIONS.iterrows():
+        for _, row in _L0_EXTENSIONS.iterrows():
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
         """
-        Route L0 FITS reads to `KPF0._read`.
+        Route L0 FITS reads to `KPF0._read`, then stamp DRP provenance.
 
         `RVDataModel.read` has no lvl==0 dispatch branch, so the inherited
         `from_fits` would never call into `_read` without this override.
         """
         self._read(hdul)
+        if "PRIMARY" in self.headers:
+            self._stamp_wmko_tracking()
         if self.filename is not None:
             try:
                 self.obs_id = get_obs_id(self.filename)
             except ValueError:
                 pass
+
+    def _stamp_wmko_tracking(self):
+        """Stamp WMKO DRP-RUN provenance onto the L0 RECEIPT at read time.
+
+        This is the single population site for the four provenance cards
+        (their `PopulatedBy` in config/L0-headers.csv is `KPF0.from_fits`):
+        DRPVERNO (DRP-RUN-11), PROGID/KOAID (DRP-RUN-19), DRPSTATU (DRP-RUN-20).
+        They are written to their registry home, RECEIPT, via `set_keyword`, and
+        ride the RECEIPT-header forward onto L1/L2/L4 (see `to_kpf1`). The raw
+        PRIMARY and its INSTRUMENT_HEADER snapshot are left untouched.
+
+        DRPVERNO and DRPSTATU are always (re)stamped. PROGID/KOAID are read from
+        the WMKO-native PRIMARY; an absent (or empty) value is defaulted to UNKNOWN
+        with a warning, so the cards are always present downstream.
+        """
+        self.set_keyword("DRPVERNO", __version__)
+        self.set_keyword("DRPSTATU", _DRPSTATU_DEFAULT)
+        primary = self.headers["PRIMARY"]
+        for key in ("PROGID", "KOAID"):
+            value = primary.get(key)
+            if not value:
+                warnings.warn(
+                    f"{key} absent from L0 PRIMARY; defaulting to 'UNKNOWN'",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                value = "UNKNOWN"
+            self.set_keyword(key, value)
 
     def _read(self, hdul):
         """
@@ -118,6 +159,18 @@ class KPF0(KPFDataModel):
 
             self.set_header(ext_name, hdu.header)
 
+    def check_filename_convention(self, filename):
+        """KPF L0 uses the WMKO-native KP.YYYYMMDD.NNNNN.NN.fits name."""
+        basename = os.path.basename(filename)
+        if not _L0_FILENAME_PATTERN.fullmatch(basename):
+            warnings.warn(
+                f"Filename '{basename}' does not follow the KPF L0 naming "
+                "convention (KP.YYYYMMDD.NNNNN.NN.fits)",
+                stacklevel=2,
+            )
+            return False
+        return True
+
     def generate_standard_filename(self):
         """KPF L0 filenames follow the KP.YYYYMMDD.NNNNN.NN.fits pattern."""
         if self.obs_id is not None:
@@ -153,49 +206,130 @@ class KPF0(KPFDataModel):
         "EXPMETER_SCI",
         "EXPMETER_SKY",
         "TELEMETRY",
-        "CONFIG",
+        "DRP_CONFIG",
     ]
+
+    def _map_header(self):
+        """Map this L0's raw WMKO PRIMARY to an EPRV-standard PRIMARY dict.
+
+        A pure tabular application of the registry's (sanitized) header_map: for
+        each row, take the instrument (WMKO) value when present, else the row
+        default, and type it to the EPRV DataType. The registry already dropped
+        non-mapping rows (unregistered targets like PARANG, and keywords sourced
+        elsewhere -- NUMORDER/DRPTAG seeded, DATALVL the model level), so there is
+        no filter or per-keyword correction here.
+
+        The sole exception is ``JD_UTC``: it is a per-frame value transform of the
+        native ``MJD-OBS`` (+ epoch offset), not a static default, so header_map
+        cannot carry it; it is computed below. DRP-RUN provenance
+        (DRPVERNO/PROGID/KOAID/DRPSTATU) lives on RECEIPT (see
+        ``_stamp_wmko_tracking``), not here.
+
+        Returns
+        -------
+        dict
+            EPRV-standard PRIMARY keyword -> typed value.
+        """
+        wmko_primary = self.headers["PRIMARY"]
+        out = {}
+        for _, row in self.keyword_registry.header_map.iterrows():
+            eprv_key = str(row["STANDARD"]).strip()
+            instrument_key = (
+                str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""
+            )
+            default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
+
+            if instrument_key and instrument_key in wmko_primary:
+                raw_value = wmko_primary.get(instrument_key)
+            elif default_val is not None and str(default_val).strip():
+                raw_value = default_val
+            else:
+                continue
+            # Type the value to its EPRV DataType (rvdata-vocab) so the L1 overlay
+            # matches L2's typing (e.g. NUMTRACE '5' -> 5), for both native values
+            # and CSV-string defaults. Emit the bare value so to_kpf1's assignment
+            # preserves the comment KPF1.__init__ seeded onto the PRIMARY card.
+            dt = self.keyword_registry.eprv_primary_datatypes.get(eprv_key)
+            out[eprv_key] = (
+                parse_value_to_datatype(eprv_key, dt, raw_value)[0] if dt else raw_value
+            )
+
+        # JD_UTC: KPF's canonical exposure time is the native MJD-OBS; convert it to
+        # a full Julian date (+ 2400000.5). The one value transform header_map can't
+        # express, so it lives here rather than as a static map default.
+        mjd = wmko_primary.get("MJD-OBS")
+        if mjd not in (None, "", "UNKNOWN"):
+            out["JD_UTC"] = (
+                float(mjd) + 2400000.5,
+                "[day] Julian date of exposure start",
+            )
+        return out
 
     def to_kpf1(self):
         """
         Create a KPF1 scaffold from this L0, carrying over headers and
         pass-through extensions.
 
-        Returns a KPF1 with PRIMARY header, pass-through extensions (CA_HK,
-        EXPMETER_SCI/SKY, TELEMETRY, CONFIG), receipt, and obs_id copied over.
-        GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created but empty —
-        the caller (image assembly) fills those in.
+        The raw WMKO PRIMARY header is converted to EPRV-standard keyword names
+        and values here (the single conversion site; see `_map_header`), so the
+        L1 PRIMARY is already EPRV-standard (EPRV-registered keywords only). The
+        DRP-RUN provenance cards (DRPVERNO/PROGID/KOAID/DRPSTATU) live on RECEIPT
+        (stamped at read) and reach L1 via the RECEIPT-header forward below. The
+        L0 PRIMARY as ingested is preserved in the immutable INSTRUMENT_HEADER
+        extension. Downstream stages read raw instrument keywords from
+        INSTRUMENT_HEADER and write EPRV/registered KPF keywords to PRIMARY.
+
+        Returns a KPF1 with EPRV PRIMARY header, INSTRUMENT_HEADER, pass-through
+        extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG), receipt, and
+        obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
+        but empty — the caller (image assembly) fills those in.
         """
-        from kpfpipe.data_models.level1 import KPF1  # deferred: avoids circular import
+        kpf1 = KPF1()
 
-        l1 = KPF1()
-
-        # Copy PRIMARY header
+        # Convert the raw WMKO PRIMARY to EPRV-standard names/values, and preserve
+        # the raw L0 PRIMARY verbatim (values + comments, via as_fits_header) in the
+        # immutable INSTRUMENT_HEADER -- only the raw instrument cards (DRP-RUN
+        # provenance lives on RECEIPT), and nothing else ever writes to it.
         if "PRIMARY" in self.headers:
-            for key, value in self.headers["PRIMARY"].items():
-                l1.headers["PRIMARY"][key] = value
+            for key, value in self._map_header().items():
+                kpf1.headers["PRIMARY"][key] = value
+
+            if "INSTRUMENT_HEADER" not in kpf1.extensions:
+                kpf1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
+            kpf1.set_header(
+                "INSTRUMENT_HEADER", self.as_fits_header(self.headers["PRIMARY"])
+            )
 
         # Copy pass-through extensions (data + header)
         for ext_name in self._L0_TO_L1_PASSTHROUGH:
             if ext_name in self.extensions:
                 ext_type = self.extensions[ext_name]
-                if ext_name not in l1.extensions:
-                    l1.create_extension(ext_name, ext_type)
+                if ext_name not in kpf1.extensions:
+                    kpf1.create_extension(ext_name, ext_type)
                 if ext_name in self.data and self.data[ext_name] is not None:
-                    l1.set_data(ext_name, self.data[ext_name])
+                    kpf1.set_data(ext_name, self.data[ext_name])
                 if ext_name in self.headers:
-                    l1.set_header(ext_name, self.headers[ext_name])
+                    kpf1.set_header(ext_name, self.headers[ext_name])
+
+        # Forward the L0 QUALITY_CONTROL and RECEIPT *headers* onto L1 (value +
+        # comment), mirroring to_kpf2/to_kpf4 so all three conversions share one
+        # invariant. QUALITY_CONTROL carries the QCL0 booleans + ISGOOD; RECEIPT
+        # carries the four DRP-RUN provenance cards stamped at read. Downstream L1
+        # stages append to both. (PRIMARY/INSTRUMENT_HEADER are not forwarded
+        # here -- L0 PRIMARY is converted via _map_header above, not copied.)
+        self._forward_headers(kpf1, ("QUALITY_CONTROL", "RECEIPT"))
 
         # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:
-            l1.receipt = self.receipt.copy()
+            kpf1.receipt = self.receipt.copy()
 
         # Copy obs_id
-        l1.obs_id = self.obs_id
+        kpf1.obs_id = self.obs_id
 
-        l1.headers["PRIMARY"]["DATALVL"] = ("L1", "Data product level")
-        l1.receipt_add_entry("to_l1", "PASS")
-        return l1
+        # DATALVL is set by KPF1.__init__ (= KPF1._DATALVL) and _map_header no
+        # longer emits it (dropped from header_map), so no fixup is needed here.
+        kpf1.receipt_add_entry("to_kpf1", "PASS")
+        return kpf1
 
     def info(self):
         """Print summary of L0 data model contents."""

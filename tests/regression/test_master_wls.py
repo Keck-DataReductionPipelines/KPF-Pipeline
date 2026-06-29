@@ -244,12 +244,6 @@ def mock_make_master_l2(monkeypatch):
     monkeypatch.setattr(WLS, "_compute_wls_from_stack", mock_compute)
 
 
-def _header_value(header, key):
-    """Extract a header value whether stored as tuple or plain."""
-    val = header[key]
-    return val[0] if isinstance(val, tuple) else val
-
-
 class TestMakeMasterL2:
     def test_returns_kpf_master_l2(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
@@ -264,6 +258,47 @@ class TestMakeMasterL2:
                 wave = ml2.data[f"{chip}_{fiber}_WAVE"]
                 assert np.size(wave) > 0
                 assert np.all(wave == 5500.0)
+
+    def test_wave_routing_uses_physical_position_not_fiber_order(self, monkeypatch):
+        """Each W plane routes to its fiber by physical slicer position, even
+        when self.fibers is reordered. W's planes are ordered by fiber_positions
+        (SKY=0..CAL=4), so the write loop must sort by that, not trust
+        self.fibers' (config-overridable) order -- else SKY's solution lands on
+        CAL and vice versa.
+        """
+        monkeypatch.setattr(
+            WLS, "_load_frame", lambda self, fn, cache=False, **kw: (MockL1(), True)
+        )
+        monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kw: l1)
+        monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kw: MockL2())
+
+        def mock_compute(self, chip, fibers, **kwargs):
+            # Plane i carries the constant value i (its physical-position rank).
+            norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
+            W = np.empty((norder, NCOL_TEST, len(fibers)))
+            for i in range(len(fibers)):
+                W[:, :, i] = float(i)
+            coeffs = np.zeros((self.polyorder_x + 1, self.polyorder_m + 1, 1))
+            lines = [
+                {"wav": np.array([5500.0]), "bad": np.array([False])} for _ in range(3)
+            ]
+            return W, coeffs, np.array([coeffs] * 3), lines
+
+        monkeypatch.setattr(WLS, "_compute_wls_from_stack", mock_compute)
+
+        wls = WLS(FILE_LIST)
+        # Reorder away from physical-slicer order (here: TRACE order).
+        wls.fibers = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
+        ml2 = wls.make_master_l2()
+
+        # Ground truth from detector.toml [fiber_positions].
+        physical_rank = {"SKY": 0, "SCI1": 1, "SCI2": 2, "SCI3": 3, "CAL": 4}
+        for chip in wls.chips:
+            for fiber, rank in physical_rank.items():
+                wave = ml2.data[f"{chip}_{fiber}_WAVE"]
+                assert np.all(wave == float(rank)), (
+                    f"{chip}_{fiber}_WAVE routed to the wrong W plane"
+                )
 
     def test_wave_is_float64_and_survives_roundtrip(
         self, mock_make_master_l2, tmp_path
@@ -300,18 +335,17 @@ class TestMakeMasterL2:
             "POLYORDX",
             "POLYORDM",
             "POLYORDF",
-            "CHIPS",
-            "FIBERS",
         ]:
             assert key in primary
 
-    def test_coeffs_extension_header_keywords(self, mock_make_master_l2):
+    def test_primary_header_keyword_comments_from_registry(self, mock_make_master_l2):
+        # WLS metadata routes through set_keyword, so the FITS comments come from
+        # Masters-headers.csv (registry), not code-local strings.
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
-        for chip in wls.chips:
-            hdr = ml2.headers[f"{chip}_WLS_COEFFS"]
-            for key in ["POLYORDX", "POLYORDM", "POLYORDF"]:
-                assert key in hdr
+        primary = ml2.headers["PRIMARY"]
+        assert primary.comments["MASTYPE"] == "Master calibration type"
+        assert primary.comments["POLYORDX"] == "WLS polynomial degree, pixel axis"
 
     def test_to_fits_round_trip(self, mock_make_master_l2, tmp_path):
         # Regression: rvdata builds non-PRIMARY headers via fits.Header(dict),
@@ -323,17 +357,31 @@ class TestMakeMasterL2:
         ml2.to_fits(str(out_path))
         assert out_path.exists()
 
+    def test_ml2_datalvl_and_minimal_primary(self, mock_make_master_l2, tmp_path):
+        # Regression: ML2 must not inherit RV2's EPRV science PRIMARY skeleton, and
+        # DATALVL must be "ML2" (not the RV2 placeholder "UNKNOWN") in-memory and on
+        # disk -- rvdata's to_fits never re-stamps DATALVL.
+        from kpfpipe.data_models.masters.level2 import KPFMasterL2
+
+        ml2 = WLS(FILE_LIST).make_master_l2()
+        assert ml2.headers["PRIMARY"].get("DATALVL") == "ML2"
+        # None of the EPRV-required science PRIMARY keywords should be seeded.
+        seeded = set(ml2.keyword_registry.eprv_primary_seed)
+        assert not (seeded & set(ml2.headers["PRIMARY"])) - {"DATALVL"}
+
+        out_path = tmp_path / "ml2_datalvl.fits"
+        ml2.to_fits(str(out_path))
+        read_back = KPFMasterL2.from_fits(str(out_path))
+        assert read_back.headers["PRIMARY"].get("DATALVL") == "ML2"
+
     def test_polyorder_override_stamped(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         override_x = wls.polyorder_x + 4  # ensure different from default
         ml2 = wls.make_master_l2(polyorder_x=override_x)
-        assert _header_value(ml2.headers["PRIMARY"], "POLYORDX") == override_x
+        assert ml2.headers["PRIMARY"].get("POLYORDX") == override_x
         for chip in wls.chips:
-            assert (
-                _header_value(ml2.headers[f"{chip}_WLS_COEFFS"], "POLYORDX")
-                == override_x
-            )
-            # verify the override actually propagated into the fit, not just the header
+            # POLYORD* live on PRIMARY only now; verify the override actually
+            # propagated into the fit (coeffs array shape), not just the header.
             coeffs = ml2.data[f"{chip}_WLS_COEFFS"]
             assert coeffs.shape[0] == override_x + 1
 
@@ -536,7 +584,7 @@ class TestMakeMasterL2:
         np.testing.assert_array_equal(
             wls._linelist_df["WAVE"].values, np.array([4500.0, 5500.0, 6500.0])
         )
-        assert _header_value(ml2.headers["PRIMARY"], "LINELIST") == str(override)
+        assert ml2.headers["PRIMARY"].get("LINELIST") == str(override)
 
     def test_single_frame_stack(self, mock_make_master_l2):
         """A 1-frame stack should still produce a valid master L2."""
@@ -565,18 +613,18 @@ class TestMakeMasterL2:
         assert "GREEN_WLS_COEFFS" in ml2.extensions
         assert "RED_WLS_COEFFS" not in ml2.extensions
 
-    def test_results_populated(self, mock_make_master_l2):
-        """make_master_l2 should populate self._results with per-chip line yields."""
+    def test_info_populated(self, mock_make_master_l2):
+        """make_master_l2 should populate self._info with per-chip line yields."""
         wls = WLS(FILE_LIST)
-        assert wls._results is None
+        assert wls._info is None
         wls.make_master_l2()
-        assert wls._results is not None
+        assert wls._info is not None
         for chip in wls.chips:
-            assert chip in wls._results
-            assert "n_total" in wls._results[chip]
-            assert "n_fit" in wls._results[chip]
-            assert isinstance(wls._results[chip]["n_total"], int)
-            assert isinstance(wls._results[chip]["n_fit"], int)
+            assert chip in wls._info
+            assert "n_total" in wls._info[chip]
+            assert "n_fit" in wls._info[chip]
+            assert isinstance(wls._info[chip]["n_total"], int)
+            assert isinstance(wls._info[chip]["n_fit"], int)
 
     def test_info_before_make_master_l2(self, capsys):
         """info() before perform should print config and the not-called message."""
@@ -795,12 +843,16 @@ class TestFitLinePositions:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0])
 
-        with pytest.warns(UserWarning, match=r"RED SCI1: no good lines retained"):
+        # The fabricated all-NaN fiber makes the code warn once per synthetic order
+        # (verbose=True) plus once at the fiber level; capture them all so the
+        # per-order ones don't leak to the run summary, and assert the fiber-level one.
+        with pytest.warns(UserWarning) as record:
             result = wls._fit_line_positions_ffi(
                 StubL2(),
                 "RED",
                 ["SCI1"],
             )
+        assert any("RED SCI1: no good lines retained" in str(w.message) for w in record)
         assert len(result["wav"]) == 0
 
     def test_nan_orderlet_warning_suppressed_when_verbose_false(self, recwarn):

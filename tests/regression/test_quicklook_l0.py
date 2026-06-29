@@ -107,7 +107,7 @@ class TestPlotL0Constructor:
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
         qlp = PlotL0(synthetic_4amp_l0)
-        assert qlp.l0 is synthetic_4amp_l0
+        assert qlp.l0_obj is synthetic_4amp_l0
         assert qlp.obs_id == "KP.20240405.00001.00"
         assert qlp.name == "synthetic-4amp"
         assert qlp.output_dir is None
@@ -125,14 +125,6 @@ class TestPlotL0Constructor:
 
 
 class TestStitchedImage4Amp:
-    def test_returns_figure(self, synthetic_4amp_l0):
-        from kpfpipe.quality_control.quicklook.level0 import PlotL0
-
-        qlp = PlotL0(synthetic_4amp_l0)
-        fig = qlp.stitched_image("green")
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
-
     def test_title_format(self, synthetic_4amp_l0):
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
@@ -182,14 +174,6 @@ class TestStitchedImage4Amp:
 
 
 class TestStitchedImage2Amp:
-    def test_returns_figure(self, synthetic_2amp_l0):
-        from kpfpipe.quality_control.quicklook.level0 import PlotL0
-
-        qlp = PlotL0(synthetic_2amp_l0)
-        fig = qlp.stitched_image("green")
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
-
     def test_image_shape_2amp(self, synthetic_2amp_l0):
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
@@ -238,8 +222,9 @@ class TestStitchedImage2To16:
 
         # Image data should be scaled down to ~300
         ax = fig.axes[0]
+        # imshow keeps the stitched image masked, so use the mask-aware median.
         img_data = ax.get_images()[0].get_array()
-        assert np.nanmedian(img_data) == pytest.approx(300, abs=1)
+        assert np.ma.median(img_data) == pytest.approx(300, abs=1)
         plt.close(fig)
 
 

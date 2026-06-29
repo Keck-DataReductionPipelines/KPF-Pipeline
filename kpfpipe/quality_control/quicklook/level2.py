@@ -25,10 +25,6 @@ _SNR_PERCENTILE = 95
 _FLUX_PERCENTILE = 95
 
 
-def _unwrap(val):
-    return val[0] if isinstance(val, tuple) else val
-
-
 class PlotL2:
     """
     Quicklook plots for KPF L2 (extracted 1D spectra) data.
@@ -51,7 +47,7 @@ class PlotL2:
     )
 
     def __init__(self, l2_obj, output_dir=None, obs_id=None):
-        self.l2 = l2_obj
+        self.l2_obj = l2_obj
         self.output_dir = output_dir
         self.fibers = _FIBERS
 
@@ -63,10 +59,10 @@ class PlotL2:
         self.obs_id = (
             obs_id
             or getattr(l2_obj, "obs_id", None)
-            or self._obsid_from_filename(_unwrap(primary.get("FILENAME", "")))
+            or self._obsid_from_filename(primary.get("FILENAME", ""))
             or ""
         )
-        self.name = _unwrap(primary.get("OBJECT", "")) if primary else ""
+        self.name = primary.get("OBJECT", "") if primary else ""
 
     @staticmethod
     def _obsid_from_filename(filename):
@@ -87,14 +83,14 @@ class PlotL2:
 
     def _flux(self, chip, fiber):
         """Return the (norder, ncol) flux array for one fiber, or None."""
-        arr = self.l2.data.get(f"{chip.upper()}_{fiber.upper()}_FLUX")
+        arr = self.l2_obj.data.get(f"{chip.upper()}_{fiber.upper()}_FLUX")
         arr = np.asarray(arr) if arr is not None else None
         if arr is None or arr.ndim != 2 or arr.size == 0:
             return None
         return arr
 
     def _var(self, chip, fiber):
-        arr = self.l2.data.get(f"{chip.upper()}_{fiber.upper()}_VAR")
+        arr = self.l2_obj.data.get(f"{chip.upper()}_{fiber.upper()}_VAR")
         arr = np.asarray(arr) if arr is not None else None
         if arr is None or arr.ndim != 2 or arr.size == 0:
             return None
@@ -102,7 +98,7 @@ class PlotL2:
 
     def _wave(self, chip, fiber):
         """Return the (norder, ncol) wavelength array, or None if not populated."""
-        arr = self.l2.data.get(f"{chip.upper()}_{fiber.upper()}_WAVE")
+        arr = self.l2_obj.data.get(f"{chip.upper()}_{fiber.upper()}_WAVE")
         arr = np.asarray(arr) if arr is not None else None
         if arr is None or arr.ndim != 2 or arr.size == 0:
             return None

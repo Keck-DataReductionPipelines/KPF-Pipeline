@@ -1,15 +1,62 @@
 """Diagnostics for KPF Level 1 (assembled FFI) data products.
 
-Currently a placeholder. The L1 metrics consumed by QCL1 (read noise,
-master ages, BIASSUB flag) are all written by the modules that produce
-them — ImageAssembly, CalibrationAssociation, ImageProcessing — because
-they depend on intermediate processing state. Diagnostics that can be
-computed from the finished L1 product alone (e.g. flux percentiles,
-order-trace alignment metrics) will live here.
+The L1 metrics consumed by QCL1 that depend on intermediate processing
+state (read noise from raw overscan, the BIASSUB flag) are still written by
+the modules that produce them — ImageAssembly, ImageProcessing. Metrics that
+can be recomputed from the finished L1 product alone live here: the master
+calibration ages, derived from the master paths CalibrationAssociation wrote
+to RECEIPT plus the observation timestamp in INSTRUMENT_HEADER.
 """
 
+from datetime import datetime
+
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
+from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
+
+# Master-calibration age metrics: the RECEIPT path keyword (written by
+# CalibrationAssociation) -> the age keyword whose signed (master - obs) value
+# this diagnostic computes. The FITS comment comes from the registry via
+# set_keyword; the comment here is retained only on self.results.
+_CAL_AGE_KEYS = {
+    "BIASFILE": ("BIASAGE", "Master bias age [days]"),
+    "DARKFILE": ("DARKAGE", "Master dark age [days]"),
+    "FLATFILE": ("FLATAGE", "Master flat age [days]"),
+    "WLSFILE": ("WLSAGE", "WLS master age [days]"),
+}
 
 
 class DiagL1(Diagnostics):
     LEVEL = "L1"
+
+    def calibration_ages(self):
+        """Signed fractional-day age (master - obs) for each associated master.
+
+        Recomputed from the finished L1 product: the master path is read from
+        RECEIPT (``{PREFIX}FILE``, written by CalibrationAssociation) and the
+        observation timestamp from PRIMARY (DATE-OBS). The master
+        timestamp is parsed from its filename. A cal type is skipped when its
+        path is absent; the whole metric is skipped when DATE-OBS is missing.
+
+        Returns
+        -------
+        dict
+            Maps each present ``{PREFIX}AGE`` keyword to its ``(age, comment)``.
+        """
+        receipt = self.kpf_obj.headers.get("RECEIPT", {})
+        primary = self.kpf_obj.headers.get("PRIMARY", {})
+        date_obs = primary.get("DATE-OBS")
+        if not date_obs:
+            return {}
+        obs_dt = datetime.fromisoformat(date_obs)
+
+        results = {}
+        for file_kw, (age_kw, comment) in _CAL_AGE_KEYS.items():
+            path = receipt.get(file_kw)
+            if not path:
+                continue
+            master_dt = kpf_timestamp_to_datetime(get_timestamp(path))
+            age_days = (master_dt - obs_dt).total_seconds() / 86400.0
+            results[age_kw] = (age_days, comment)
+        return results
+
+    calibration_ages._diag_name = "calibration_ages"

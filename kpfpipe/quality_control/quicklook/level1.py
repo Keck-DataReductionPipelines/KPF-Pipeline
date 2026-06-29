@@ -10,10 +10,6 @@ from kpfpipe.modules.image_assembly import RN_KEYS
 from kpfpipe.quality_control.quicklook._save_png import save_image_png, save_png
 
 
-def _unwrap(val):
-    return val[0] if isinstance(val, tuple) else val
-
-
 class PlotL1:
     """
     Quicklook plots for KPF L1 (assembled FFI) data.
@@ -37,7 +33,7 @@ class PlotL1:
     _PLOT_METHODS = ("image",)
 
     def __init__(self, l1_obj, output_dir=None, full_res=False):
-        self.l1 = l1_obj
+        self.l1_obj = l1_obj
         self.output_dir = output_dir
         self.full_res = full_res
         self.obs_id = getattr(l1_obj, "obs_id", None) or ""
@@ -46,16 +42,20 @@ class PlotL1:
             self.name = l1_obj.headers["PRIMARY"].get("OBJECT", "")
 
     def _read_noise_values(self, chip):
-        """Return (rn_list, rnng_list) from PRIMARY header, or ([], []) if absent."""
-        primary = self.l1.headers.get("PRIMARY", {})
+        """Return (rn_list, rnng_list) from QUALITY_CONTROL, or ([], []) if absent.
+
+        ImageAssembly writes the RN*/RNNG* read-noise keywords via set_keyword,
+        which routes them to QUALITY_CONTROL (their registry home), not PRIMARY.
+        """
+        qc = self.l1_obj.headers.get("QUALITY_CONTROL", {})
         rn_values = []
         rnng_values = []
         for i in range(1, 5):
             channel_ext = f"{chip.upper()}_AMP{i}"
             rn_key, rnng_key = RN_KEYS[channel_ext]
-            if rn_key in primary and rnng_key in primary:
-                rn_values.append(float(_unwrap(primary[rn_key])))
-                rnng_values.append(float(_unwrap(primary[rnng_key])))
+            if rn_key in qc and rnng_key in qc:
+                rn_values.append(float(qc.get(rn_key)))
+                rnng_values.append(float(qc.get(rnng_key)))
         return rn_values, rnng_values
 
     def image(self, chip, *, full_res=None):
@@ -82,7 +82,7 @@ class PlotL1:
 
         chip_upper = chip.upper()
         ext = f"{chip_upper}_CCD"
-        image = np.asarray(self.l1.data[ext])
+        image = np.asarray(self.l1_obj.data[ext])
 
         # Interior percentile (strip 100-pixel border to avoid edge effects)
         interior = image[100:-100, 100:-100] if min(image.shape) > 200 else image
@@ -114,7 +114,7 @@ class PlotL1:
         cbar.ax.tick_params(labelsize=14)
         plt.grid(False)
 
-        # Read noise annotation (from L1 headers populated by ImageAssembly)
+        # Read noise annotation (from QUALITY_CONTROL, populated by ImageAssembly)
         rn_values, rnng_values = self._read_noise_values(chip_upper)
         if rn_values:
             rn_text = "RN: " + ", ".join(f"{v:.2f}" for v in rn_values)
@@ -205,9 +205,9 @@ class PlotL1:
 
     def _has_chip(self, chip):
         ext = f"{chip.upper()}_CCD"
-        if ext not in self.l1.data or self.l1.data[ext] is None:
+        if ext not in self.l1_obj.data or self.l1_obj.data[ext] is None:
             return False
-        return np.size(self.l1.data[ext]) > 0
+        return np.size(self.l1_obj.data[ext]) > 0
 
     def run(self, which, *, full_res=None):
         """

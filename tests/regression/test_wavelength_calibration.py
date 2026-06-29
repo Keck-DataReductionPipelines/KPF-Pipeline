@@ -44,9 +44,10 @@ def _make_master_l2(seed=42):
     Each (chip, fiber) gets its own random-but-reproducible block so we can
     later confirm that exactly the right block lands on the science L2.
     """
-    master = KPFMasterL2()
+    master = KPFMasterL2(kind="wls")
     master.headers["PRIMARY"]["INSTRUME"] = "KPF"
     master.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
+    master.set_keyword("MASTYPE", "thar")  # so from_fits infers kind="wls"
 
     rng = np.random.default_rng(seed)
     for chip in _CHIPS:
@@ -63,9 +64,10 @@ def _make_science_l2(wls_path=None):
     l2.headers["PRIMARY"]["INSTRUME"] = "KPF"
     l2.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T11:08:33"
     if wls_path is not None:
-        # WLSFILE lives in INSTRUMENT_HEADER on L2 (preserves the L1 PRIMARY
-        # written by CalibrationAssociation).
-        l2.headers["INSTRUMENT_HEADER"]["WLSFILE"] = wls_path
+        # WLSFILE is a registered KPF-pipeline keyword routed to the RECEIPT
+        # header (written by CalibrationAssociation on the L1 RECEIPT and carried
+        # through by to_kpf2); set_keyword places it on RECEIPT.
+        l2.set_keyword("WLSFILE", wls_path)
     return l2
 
 
@@ -107,10 +109,6 @@ class TestConstructor:
         with pytest.raises(TypeError):
             WavelengthCalibration(_make_science_l2(), config="not a dict")
 
-    def test_results_is_none_before_perform(self):
-        mod = WavelengthCalibration(_make_science_l2())
-        assert mod._results is None
-
     def test_wls_path_is_none_before_load(self):
         mod = WavelengthCalibration(_make_science_l2())
         assert mod._wls_path is None
@@ -133,7 +131,7 @@ class TestLoadWLS:
         with pytest.raises(FileNotFoundError, match="Master WLS file not found"):
             mod.load_wls()
 
-    def test_reads_wlsfile_from_instrument_header(self, master_wls_path):
+    def test_reads_wlsfile_from_receipt(self, master_wls_path):
         mod = WavelengthCalibration(_make_science_l2(wls_path=master_wls_path))
         loaded = mod.load_wls()
         assert isinstance(loaded, KPFMasterL2)
@@ -163,13 +161,13 @@ class TestPerform:
         WavelengthCalibration(l2).perform()
         assert (l2.receipt["Module_Name"] == "wavelength_calibration").any()
 
-    def test_results_populated_after_perform(self, master_wls_path):
+    def test_attributes_populated_after_perform(self, master_wls_path):
         l2 = _make_science_l2(wls_path=master_wls_path)
         mod = WavelengthCalibration(l2)
         mod.perform()
-        assert mod._results["wls_path"] == master_wls_path
-        assert mod._results["chips"] == _CHIPS
-        assert mod._results["fibers"] == _FIBERS
+        assert mod._wls_path == master_wls_path
+        assert mod.chips == _CHIPS
+        assert mod.fibers == _FIBERS
 
     def test_copies_all_wave_arrays(self, master_wls_path):
         # Every (chip, fiber) WAVE array on the science L2 should match the master.
@@ -232,9 +230,10 @@ class TestPerform:
 
     def test_raises_when_master_missing_requested_fiber(self, tmp_path):
         # Master only has SCI2; config asks for all 5 fibers → fail loudly.
-        master = KPFMasterL2()
+        master = KPFMasterL2(kind="wls")
         master.headers["PRIMARY"]["INSTRUME"] = "KPF"
         master.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
+        master.set_keyword("MASTYPE", "thar")  # so from_fits infers kind="wls"
         rng = np.random.default_rng(7)
         for chip in _CHIPS:
             norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED

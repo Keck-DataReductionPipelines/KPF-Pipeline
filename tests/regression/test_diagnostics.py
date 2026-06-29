@@ -16,11 +16,6 @@ _FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
 _NAN_KEYS = ("NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL")
 
 
-def _hval(raw):
-    """Unpack header value from (value, comment) tuple or plain value."""
-    return raw[0] if isinstance(raw, tuple) else raw
-
-
 # ---------------------------------------------------------------------------
 # Diagnostics base class
 # ---------------------------------------------------------------------------
@@ -31,6 +26,12 @@ class TestDiagnosticsBase:
         class _FakeObj:
             headers = {"PRIMARY": {}}
             data = {}
+
+            def set_keyword(self, key, value):
+                # Mirror the real routing: set_keyword writes the value only
+                # (the comment comes from the registry). The base test keys are
+                # not in any registry, so the stub just lands them on PRIMARY.
+                self.headers["PRIMARY"][key] = value
 
         return _FakeObj()
 
@@ -44,7 +45,7 @@ class TestDiagnosticsBase:
             metric_a._diag_name = "metric_a"
 
         results = MyDiag(obj).run()
-        assert obj.headers["PRIMARY"]["KEYA"] == (3.14, "metric a")
+        assert obj.headers["PRIMARY"]["KEYA"] == 3.14
         assert results["KEYA"] == (3.14, "metric a")
 
     def test_method_can_emit_multiple_keys(self):
@@ -57,8 +58,8 @@ class TestDiagnosticsBase:
             multi._diag_name = "multi"
 
         MyDiag(obj).run()
-        assert obj.headers["PRIMARY"]["K1"] == (1, "one")
-        assert obj.headers["PRIMARY"]["K2"] == (2, "two")
+        assert obj.headers["PRIMARY"]["K1"] == 1
+        assert obj.headers["PRIMARY"]["K2"] == 2
 
     def test_empty_dict_writes_nothing(self):
         obj = self._make_obj()
@@ -91,7 +92,7 @@ class TestDiagnosticsBase:
 
         class MyDiag(Diagnostics):
             def metric(self):
-                return {"VAL": (self.kpf.value, "value")}
+                return {"VAL": (self.kpf_obj.value, "value")}
 
             metric._diag_name = "metric"
 
@@ -114,7 +115,7 @@ class TestDiagnosticsBase:
 
 
 # ---------------------------------------------------------------------------
-# DiagL0 / DiagL1 — currently empty placeholders
+# DiagL0 — empty placeholder; DiagL1 with no calibrations is a clean no-op
 # ---------------------------------------------------------------------------
 
 
@@ -131,7 +132,82 @@ class TestEmptyLevels:
         assert results == {}
 
     def test_diag_l1_runs_cleanly(self):
+        # No RECEIPT/INSTRUMENT_HEADER -> calibration_ages returns {} (no crash).
         results = DiagL1(self._make_obj()).run()
+        assert results == {}
+
+
+# ---------------------------------------------------------------------------
+# DiagL1 — master calibration ages
+# ---------------------------------------------------------------------------
+
+
+def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
+    """A KPF1 carrying a PRIMARY DATE-OBS and RECEIPT master paths.
+
+    Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has
+    written each ``{PREFIX}FILE`` to RECEIPT (via set_keyword) and to_kpf1 has
+    populated the EPRV PRIMARY (DATE-OBS).
+    """
+    l1 = KPF1()
+    l1.headers["PRIMARY"]["DATE-OBS"] = date_obs
+    for kw, path in (files or {}).items():
+        l1.set_keyword(kw, path)  # *FILE routes to RECEIPT
+    return l1
+
+
+class TestDiagL1CalibrationAges:
+    def test_signed_age_same_day(self):
+        # Master at 2024-04-05 01:00:37 UTC vs obs 11:08:33 UTC -> -0.422176 d.
+        l1 = _make_kpf1_with_calibrations(
+            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
+        )
+        results = DiagL1(l1).run()
+        assert results["BIASAGE"][0] == pytest.approx(-0.422176, abs=1e-5)
+        # Routed to QUALITY_CONTROL with the registry comment.
+        qc = l1.headers["QUALITY_CONTROL"]
+        assert qc["BIASAGE"] == pytest.approx(-0.422176, abs=1e-5)
+        assert qc.comments["BIASAGE"] == "Master bias age [days]"
+
+    def test_signed_age_previous_day(self):
+        # Master 2024-04-04 22:00:00 UTC vs obs 2024-04-05 11:08:33 UTC.
+        l1 = _make_kpf1_with_calibrations(
+            files={"BIASFILE": "/m/KP.20240404.79200.00_master_bias_L1.fits"}
+        )
+        results = DiagL1(l1).run()
+        assert results["BIASAGE"][0] == pytest.approx(-0.547604, abs=1e-5)
+
+    def test_all_cal_types(self):
+        l1 = _make_kpf1_with_calibrations(
+            files={
+                "BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits",
+                "DARKFILE": "/m/KP.20240405.03637.74_master_dark_L1.fits",
+                "FLATFILE": "/m/KP.20240405.03637.74_master_flat_L1.fits",
+                "WLSFILE": "/m/KP.20240405.03637.74_master_thar_L2.fits",
+            }
+        )
+        results = DiagL1(l1).run()
+        assert set(results) == {"BIASAGE", "DARKAGE", "FLATAGE", "WLSAGE"}
+        for kw in results:
+            assert l1.headers["QUALITY_CONTROL"][kw] == pytest.approx(
+                -0.422176, abs=1e-5
+            )
+
+    def test_missing_cal_type_skipped(self):
+        # Only a bias path present -> only BIASAGE written.
+        l1 = _make_kpf1_with_calibrations(
+            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
+        )
+        results = DiagL1(l1).run()
+        assert set(results) == {"BIASAGE"}
+        assert "DARKAGE" not in l1.headers["QUALITY_CONTROL"]
+
+    def test_no_date_obs_skips_all(self):
+        l1 = _make_kpf1_with_calibrations(
+            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
+        )
+        del l1.headers["PRIMARY"]["DATE-OBS"]
+        results = DiagL1(l1).run()
         assert results == {}
 
 
@@ -194,17 +270,17 @@ class TestDiagL2NanCounts:
         kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
-            assert key in kpf2.headers["PRIMARY"], f"missing {key}"
-            assert _hval(kpf2.headers["PRIMARY"][key]) == 0
+            assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
     def test_counts_injected_nans_per_fiber(self):
         kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
         # Inject one NaN into GREEN_SCI1_FLUX; expect NANSCI1==1, others==0.
         kpf2.data["GREEN_SCI1_FLUX"][0, 0] = np.nan
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["NANSCI1"]) == 1
+        assert kpf2.headers["QUALITY_CONTROL"].get("NANSCI1") == 1
         for key in ("NANSCI2", "NANSCI3", "NANSKY", "NANCAL"):
-            assert _hval(kpf2.headers["PRIMARY"][key]) == 0
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
     def test_writes_keys_even_when_no_data(self):
         """KPF2 with no FLUX extensions populated should still write all 5
@@ -244,26 +320,26 @@ class TestDiagL2NanCounts:
         kpf2 = l1.to_kpf2()
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
-            assert _hval(kpf2.headers["PRIMARY"][key]) == 0
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
 
 class TestDiagL2ZeroFlux:
     def test_zerofrac_written_when_data_present(self):
         kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
         DiagL2(kpf2).run()
-        assert "ZEROFRAC" in kpf2.headers["PRIMARY"]
-        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(0.0)
+        assert "ZEROFRAC" in kpf2.headers["QUALITY_CONTROL"]
+        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.0)
 
     def test_zerofrac_one_when_all_zero(self):
         kpf2 = _make_kpf2_with_flux(zero_frac=1.0)
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(1.0)
+        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(1.0)
 
     def test_zerofrac_approximate_when_partial(self):
         """50% zeros sprinkled randomly → ZEROFRAC ≈ 0.5 within sampling error."""
         kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["ZEROFRAC"]) == pytest.approx(
+        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(
             0.5, abs=0.01
         )
 
@@ -301,7 +377,7 @@ class TestDiagL2ZeroFlux:
             os.unlink(tmp_path)
         kpf2 = l1.to_kpf2()
         DiagL2(kpf2).run()
-        assert "ZEROFRAC" not in kpf2.headers["PRIMARY"]
+        assert "ZEROFRAC" not in kpf2.headers["QUALITY_CONTROL"]
 
 
 def _set_fiber_arrays(kpf2, suffix, value, chips=("GREEN", "RED"), fibers=_FIBERS):
@@ -328,8 +404,8 @@ class TestDiagL2Snr:
         _set_fiber_arrays(kpf2, "VAR", 0.25)
         DiagL2(kpf2).run()
         for key in self._SNR_KEYS:
-            assert key in kpf2.headers["PRIMARY"], f"missing {key}"
-            assert _hval(kpf2.headers["PRIMARY"][key]) > 0
+            assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) > 0
 
     def test_single_fiber_snr_value(self):
         # SKY flux=2, var=0.04 -> SNR = 2/sqrt(0.04) = 10.0 in every pixel.
@@ -337,10 +413,10 @@ class TestDiagL2Snr:
         _set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SKY",))
         _set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SKY",))
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["GSNRSKY"]) == pytest.approx(
+        assert kpf2.headers["QUALITY_CONTROL"].get("GSNRSKY") == pytest.approx(
             10.0, abs=0.01
         )
-        assert _hval(kpf2.headers["PRIMARY"]["RSNRSKY"]) == pytest.approx(
+        assert kpf2.headers["QUALITY_CONTROL"].get("RSNRSKY") == pytest.approx(
             10.0, abs=0.01
         )
 
@@ -351,7 +427,7 @@ class TestDiagL2Snr:
         _set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SCI1", "SCI2", "SCI3"))
         _set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SCI1", "SCI2", "SCI3"))
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["GSNRSCI"]) == pytest.approx(
+        assert kpf2.headers["QUALITY_CONTROL"].get("GSNRSCI") == pytest.approx(
             17.32, abs=0.05
         )
 
@@ -361,15 +437,15 @@ class TestDiagL2Snr:
         kpf2 = _make_kpf2_with_flux()
         _set_fiber_arrays(kpf2, "VAR", 0.25, fibers=("SCI1", "SCI2", "SKY", "CAL"))
         DiagL2(kpf2).run()
-        assert "GSNRSCI" not in kpf2.headers["PRIMARY"]
-        assert "GSNRSKY" in kpf2.headers["PRIMARY"]
+        assert "GSNRSCI" not in kpf2.headers["QUALITY_CONTROL"]
+        assert "GSNRSKY" in kpf2.headers["QUALITY_CONTROL"]
 
     def test_skipped_without_var(self):
         # Default fixture leaves VAR empty -> no SNR keys at all.
         kpf2 = _make_kpf2_with_flux()
         DiagL2(kpf2).run()
         for key in self._SNR_KEYS:
-            assert key not in kpf2.headers["PRIMARY"]
+            assert key not in kpf2.headers["QUALITY_CONTROL"]
 
 
 # ---------------------------------------------------------------------------
@@ -394,12 +470,12 @@ class TestDiagL2OrderletFluxRatios:
         kpf2 = _make_kpf2_with_flux()
         DiagL2(kpf2).run()
         for key in self._RATIO_KEYS:
-            assert key in kpf2.headers["PRIMARY"], f"missing {key}"
-            assert _hval(kpf2.headers["PRIMARY"][key]) == pytest.approx(1.0)
+            assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) == pytest.approx(1.0)
 
     def test_ratio_value(self):
         # GREEN SCI1 flux=2 over SCI2 flux=1 -> GFR12 == 2.0.
         kpf2 = _make_kpf2_with_flux()
         _set_fiber_arrays(kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SCI1",))
         DiagL2(kpf2).run()
-        assert _hval(kpf2.headers["PRIMARY"]["GFR12"]) == pytest.approx(2.0)
+        assert kpf2.headers["QUALITY_CONTROL"].get("GFR12") == pytest.approx(2.0)

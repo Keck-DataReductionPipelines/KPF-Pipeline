@@ -4,6 +4,7 @@ Tests for the KPF0 (raw CCD / L0) data model.
 Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
+import importlib.metadata
 import os
 
 import numpy as np
@@ -34,7 +35,12 @@ class TestKPF0:
         assert l0.level == 0
         assert l0.obs_id == "KP.20240113.00001.00"
         assert "PRIMARY" in l0.extensions
-        assert len(l0.extensions) == 1
+        # Real KPF0 objects always carry QUALITY_CONTROL and RECEIPT extensions
+        # (RECEIPT is the registry home of the DRP-RUN provenance cards, stamped
+        # at read).
+        assert "QUALITY_CONTROL" in l0.extensions
+        assert "RECEIPT" in l0.extensions
+        assert len(l0.extensions) == 3
 
     def test_round_trip(self, synthetic_l0_file, tmp_path):
         l0 = KPF0.from_fits(synthetic_l0_file)
@@ -57,6 +63,19 @@ class TestKPF0:
         out_fn = str(tmp_path / "receipt_test.fits")
         l0.to_fits(out_fn)
         assert "to_fits" in l0.receipt["Module_Name"].values
+
+    def test_receipt_survives_roundtrip(self, synthetic_l0_file, tmp_path):
+        """The processing history must reach the FITS RECEIPT extension, not just
+        live in memory; KPFDataModel._create_hdul syncs it (and creates the
+        extension, which L0's default extension set lacks)."""
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l0.receipt_add_entry("image_assembly", "PASS")
+        out_fn = str(tmp_path / "roundtrip_receipt_l0.fits")
+        l0.to_fits(out_fn)
+
+        modules = KPF0.from_fits(out_fn).receipt["Module_Name"].values
+        assert "image_assembly" in modules
+        assert "to_fits" in modules
 
     def test_generate_filename(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
@@ -126,3 +145,31 @@ class TestKPF0ErrorPaths:
         out = str(tmp_path / "nested" / "sub" / "out.fits")
         l0.to_fits(out)
         assert os.path.isfile(out)
+
+
+class TestKPF0Provenance:
+    """from_fits stamps the WMKO DRP-RUN provenance cards onto the L0 RECEIPT
+    (their registry home; config/L0-headers.csv PopulatedBy = KPF0.from_fits).
+    PRIMARY (and its INSTRUMENT_HEADER snapshot) is left raw; to_kpf1 forwards the
+    RECEIPT header downstream."""
+
+    def test_from_fits_stamps_version_and_status(self, synthetic_l0_file):
+        receipt = KPF0.from_fits(synthetic_l0_file).headers["RECEIPT"]
+        assert receipt.get("DRPVERNO") == importlib.metadata.version("kpfpipe")
+        assert receipt.get("DRPSTATU") == "File ingested into KPF-DRP"
+
+    def test_from_fits_carries_native_program_ids(self, synthetic_l0_file):
+        """PROGID/KOAID present in the WMKO-native file drive the RECEIPT cards."""
+        receipt = KPF0.from_fits(synthetic_l0_file).headers["RECEIPT"]
+        assert receipt.get("PROGID") == "K123"
+        assert receipt.get("KOAID") == "KP.20240113.23249.10"
+
+    def test_from_fits_defaults_program_ids_to_unknown_and_warns(
+        self, synthetic_l0_minimal
+    ):
+        """A file lacking PROGID/KOAID defaults both to UNKNOWN and warns."""
+        with pytest.warns(UserWarning, match="PROGID absent"):
+            l0 = KPF0.from_fits(synthetic_l0_minimal)
+        receipt = l0.headers["RECEIPT"]
+        assert receipt.get("PROGID") == "UNKNOWN"
+        assert receipt.get("KOAID") == "UNKNOWN"

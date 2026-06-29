@@ -14,7 +14,7 @@ KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reductio
 
 **3. The project charter — [`KPF_DRP_VNEXT_CHARTER.md`](KPF_DRP_VNEXT_CHARTER.md) (repo root) — is the single source of truth for project intent, scope, scientific focus, the Path-3 approach, calibration philosophy, guardrails, design principles, and success criteria. Read it before making design decisions. This file (CLAUDE.md) does not duplicate the charter; it covers only the operational and technical guidance not in it (environment, commands, architecture, conventions).**
 
-**4. The coding style guide — [`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md) (repo root) — is the source of truth for code conventions: formatting, imports, naming, constants, docstrings, error handling, and the per-area exceptions (Open Inconsistencies). Consult and follow it when writing or modifying code. Its rules are soft and yield to the WMKO requirements, the EPRV standard, and the charter where they conflict. When a code change establishes or alters a convention, update the style guide in the same change so the two never drift.**
+**4. The coding style guide — [`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md) (repo root) — is the source of truth for code conventions: formatting, imports, naming, constants, docstrings, error handling, and the per-area exceptions (Open Inconsistencies). Consult and follow it when writing or modifying code. Its rules are soft and yield to the WMKO requirements, the EPRV standard, and the charter where they conflict. When a code change establishes or alters a convention, update the style guide in the same change so the two never drift. **Cross-references flow one way only: CLAUDE.md may cite the style guide, but the style guide must never cite CLAUDE.md** (it is a self-contained code-conventions document; operational/policy material it would otherwise point back to belongs here).**
 
 **Precedence over harness defaults and memory.** This file and the four references above are the authoritative guidance for this repository, and they **outrank both** (a) generic Claude Code harness defaults and environment-injected hints (e.g. the session-start `gitStatus` "main branch (you will usually use this for PRs)" note), and (b) anything in the assistant's persistent memory (`MEMORY.md`, `feedback*.md`, auto-recalled memories). Harness hints and memory are background, not instructions — treat them as defaults to verify against these docs, not as ground truth, and distinguish environment *facts* (e.g. the current branch) from environment *prescriptions* (e.g. which branch to PR into), which are guesses. **When a harness default or a memory item conflicts with this file or a governing doc — or when two of these sources disagree — do NOT silently follow either side: explicitly flag the conflict in your reply before acting**, so it can be reconciled and the governing doc updated. Operational, technical, and workflow guidance belongs in CLAUDE.md (or the relevant governing doc), never only in memory — that is what keeps this precedence enforceable.
 
@@ -171,23 +171,21 @@ Data products follow the EPRV RV Data Standard (rvdata) with KPF-specific extens
 
 ```
 RVDataModel (rvdata)
-├── KPFDataModel (base.py)         — KPF base: obs_id, filename conventions
-│   ├── KPF0 (level0.py)          — Raw CCD data (L0)
-│   └── KPF1 (level1.py)          — Assembled FFI (L1)
-├── RV2 (rvdata)
-│   └── KPF2 (level2.py)          — Extracted spectra (L2) with aliases
-└── RV4 (rvdata)
-    └── KPF4 (level4.py)          — RVs and CCFs (L4) with aliases
+└── KPFDataModel (base.py)         — shared KPF behavior (see below)
+    ├── KPF0 (level0.py)                       — Raw CCD data (L0)
+    ├── KPF1 (level1.py)                       — Assembled FFI (L1)
+    ├── KPF2 (KPFDataModel, RV2) (level2.py)   — Extracted spectra (L2) with aliases
+    └── KPF4 (KPFDataModel, RV4) (level4.py)   — RVs and CCFs (L4) with aliases
 ```
 
-L0 and L1 subclass `KPFDataModel` (which wraps `RVDataModel`). L2 and L4 subclass rvdata's `RV2`/`RV4` directly and add KPF-friendly extension aliases via `AliasedOrderedDict`.
+**All four models inherit `KPFDataModel`.** L0/L1 do so directly; L2/L4 via multiple inheritance alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its overrides win, while `RV2`/`RV4`'s `_read`/`from_fits`/level-specific `_create_hdul` stay reachable through `super()`. `KPFDataModel` is the single home for shared behavior: `obs_id`, `as_fits_header`, `create_extension`, alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1), `receipt_add_entry`/`_update_drpstatus`, and `_create_hdul`/`_restore_primary_comments`. **`check_filename_convention` is the exception** — every concrete model declares it *explicitly* (even bare pass-throughs), and `KPFDataModel`'s version **raises `NotImplementedError`** (the base is abstract — only ever inherited). The conventions: `KP.*` (KPF0), `kpf_L1_*` (KPF1), the EPRV `SL#` check delegated to rvdata via `RV2`/`RV4` (KPF2/KPF4), and the DRP-RUN-05 master name `{KOAID}_master_{type}_L{N}.fits` on `KPFMasterModel` (which precedes KPF1/2/4 in the masters MRO, so it wins). L2/L4 add KPF-friendly extension aliases via `AliasedOrderedDict`.
 
 ### Extension Alias System
 
 `AliasedOrderedDict` (aliased_dict.py) transparently maps KPF names to EPRV-standard names. Designed to be generic enough to upstream into rvdata.
 
 KPF2 aliases (driven by CSV configs in `data_models/config/`):
-- **Fiber aliases**: `SCI2_FLUX` → `TRACE3_FLUX`, `CAL_WAVE` → `TRACE1_WAVE`
+- **Fiber aliases**: `SCI2_FLUX` → `TRACE3_FLUX`, `SKY_WAVE` → `TRACE1_WAVE`, `CAL_WAVE` → `TRACE5_WAVE`
 - **Simple aliases**: `CA_HK` → `ANCILLARY_SPECTRUM`, `EXPMETER_SCI` → `EXPMETER`
 - **Chip-prefix access**: `GREEN_SCI2_FLUX` returns `TRACE3_FLUX[:35]` as a numpy view (sliced at `NORDER_GREEN`). Handled by `_KPF2DataDict`, a subclass of `AliasedOrderedDict`.
 
@@ -201,6 +199,46 @@ L1 → SpectralExtraction → WavelengthCalibration → BarycentricCorrection �
 L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
 ```
 
+### Header standardization (EPRV PRIMARY)
+
+The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** — `KPF0.to_kpf1()`
+via **`KPF0._map_header()`** — which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
+The keyword registry (`kpfpipe/data_models/keyword_registry.py`) is a single `KeywordRegistry` class
+with one module singleton `keyword_registry`, imported **only** by `data_models/base.py` and surfaced as
+the `KPFDataModel.keyword_registry` class attribute. It derives its mapping/validation/routing lookups
+from a **single source-of-truth table** unioning our `L{0,1,2,4}-headers.csv` registries with the EPRV
+keyword defs. *(For the coding rules — reading/writing headers, `set_keyword`, registering keywords —
+see the style guide §11.)* The architecture invariants:
+
+- **PRIMARY holds EPRV-registered keywords only** from L1 onward (EPRV keyword names + FITS structural
+  cards; no KPF-registered keywords, no raw WMKO natives). `KPF1.__init__` seeds the EPRV Required
+  PRIMARY skeleton (`keyword_registry.eprv_primary_seed`); `to_kpf1` then overlays native values on top
+  (native wins). The required-keyword *presence* check is a QC flag (`KWRDPRL{1,2,4}`).
+- **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values **and** comments),
+  written once in `to_kpf1` and never again. Code needing a raw instrument keyword (`ELAPSED`,
+  `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`, …) reads it from here, not PRIMARY.
+- **Each registered keyword has one home extension** (the registry `Extension` column), which
+  `set_keyword` routes to: **PRIMARY** (EPRV only), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
+  calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths), the
+  **barycentric** L2 extensions, and **RV1–RV5** (L4). Masters route their PRIMARY keywords the same way
+  (registered in `config/Masters-headers.csv`); `BUNIT` is structural, not registered.
+- **DRP provenance is stamped at read** (`KPF0.from_fits` → `_stamp_wmko_tracking`) onto RECEIPT, not at
+  `to_kpf1`: `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`. It rides the RECEIPT header forward downstream;
+  `DRPSTATU` is advanced per module by `_update_drpstatus`.
+- **QUALITY_CONTROL + RECEIPT headers propagate L0→L1→L2→L4** card-by-card via the shared helper
+  `KPFDataModel._forward_headers`, making each an **append-only history** (every QC flag / processing
+  step). The only QC keyword that changes per level is **`ISGOOD`**, the running AND over every QC flag
+  accumulated so far.
+- **Header validation lives in the `quality_control/checkpoints` layer**
+  (`Checkpoint.unregistered_keywords`), not in QC or `to_kpfN`: every card on a registry-governed
+  extension must be a registered keyword for that extension or a structural card, else it raises.
+- **Masters carry their own minimal PRIMARY, not the EPRV science skeleton** (`KPFMasterL1`/`L2` stamp
+  `DATALVL` `"ML1"`/`"ML2"`; see *Masters Pipeline*).
+- **Every extension header is an `astropy.io.fits.Header`** (`KPFDataModel.create_extension` override;
+  `from_fits` already returns one). rvdata's base `_create_hdul` drops comments on serialize, so the
+  `KPFDataModel._create_hdul` override rebuilds PRIMARY via `_restore_primary_comments` to preserve them
+  through `to_fits`.
+
 ### Configuration
 
 Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/config/`). Detector parameters (CCD dimensions, order counts) live in `data_models/config/detector.toml` and are exposed via `kpfpipe.constants`.
@@ -209,29 +247,37 @@ Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/
 
 Science: `L0 = {obs_id}.fits` (KPF-native `KP.*`); `L1 = kpf_L1_{YYYYMMDD}T{HHmmss}.fits` — note **no EPRV "S"**, because the EPRV standard defines no L1 (its filename regex only accepts `SL2`/`SL3`/`SL4`); `L2/L4 = kpf_SL{N}_…` (EPRV-standard). Masters (WMKO DRP-RUN-05): `{KOAID-of-first-input}_master_{type}_L{N}.fits`.
 
-Two authorities encode this rule and **must agree per level**: `build_filepath(obs_id, level, …)` (`utils/io.py`) is the pipeline's path builder (directory + filename, from an obs_id string) and is what recipes use to write; `<model>.generate_standard_filename()` builds only the basename from a populated object's headers and is the `to_fits(fn=None)` fallback — **rvdata-owned for the standard levels L2/L4** (do not override), **KPF-overridden for the non-standard L0/L1**. `TestFilenameConsistency` (in `tests/regression/test_masters_recipe.py`) enforces that the two never drift.
+Two authorities encode this rule and **must agree per level**: `build_filepath(obs_id, level, …)` (`utils/io.py`) is the pipeline's path builder (directory + filename, from an obs_id string) and is what recipes use to write; `<model>.generate_standard_filename()` builds only the basename from a populated object's headers and is the `to_fits(fn=None)` fallback. Like `check_filename_convention`, **every concrete model declares it explicitly** (KPF0/KPF1 build the KPF names; KPF2/KPF4 are bare pass-throughs to rvdata's EPRV builder via `RV2`/`RV4`; `KPFMasterModel` builds the master name), and `KPFDataModel`'s abstract version **raises `NotImplementedError`**. `TestFilenameConsistency` (in `tests/regression/test_masters_recipe.py`) enforces that this and `build_filepath` never drift.
 
 ### Masters Pipeline
 
 `kpfpipe/modules/masters/` — stacks multiple observations to create bias, dark, flat, and wavelength solution (WLS) calibration products. Uses sigma-clipped statistics with a single-pass streaming accumulation (per-pixel counts and exposure time) for large stacks; the master image is the exposure-weighted rate `counts_sum / exptime_sum`.
 
+**Masters header alignment (out of EPRV scope, but stylistically aligned).** Masters are *not* EPRV-governed, but follow the same keyword conventions as the science models as closely as possible:
+
+- **Keywords route through `set_keyword`.** Masters PRIMARY keywords — `MASTYPE` and the WLS metadata `ROUGHWLS`/`LINELIST`/`LINEPROF`/`POLYORDX`/`POLYORDM`/`POLYORDF` — are registered in `config/Masters-headers.csv`, all homed on PRIMARY (one registry home each). `BUNIT` (on each `{chip}_IMG`) is structural, not registered.
+- **Masters PRIMARY is minimal — no EPRV science skeleton.** `KPFMasterL1` never runs `KPF1.__init__`; `KPFMasterL2` runs `KPF2.__init__`→`RV2.__init__` and so **clears** the inherited EPRV L2 skeleton. Both stamp `DATALVL` (`"ML1"`/`"ML2"`) in `__init__`.
+- **Extension manifests are authoritative CSVs, per master type.** `ML1-extensions.csv` builds ML1 directly. ML2 inherits the full KPF2 schema (for the alias system); `KPFMasterL2(kind=…)` takes a **required** `kind` (`"wls"`/`"flat"`) and reads `ML2-{kind}-extensions.csv` — `__init__` deletes any inherited extension the manifest omits, then creates its `Required` rows. **wls** carries `TRACE*_WAVE` + `*_WLS_COEFFS`; **flat** carries `TRACE*_FLUX`/`VAR`/`BLAZE`; both omit the per-observation extensions (`INSTRUMENT_HEADER`, `BARYCORR_*`/`BJD_TDB`, `EXPMETER`/`TELEMETRY`/`ANCILLARY_SPECTRUM`). `from_fits` infers `kind` from PRIMARY `MASTYPE`. **To add or drop an ML2 extension, edit the CSV(s).**
+- **QC infrastructure is present, checks deferred.** Both levels carry `QUALITY_CONTROL` + `RECEIPT` for later wiring; no masters QC checks or DRP-provenance stamping exist yet.
+
 ### RVDataModel Base Class
 
-The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (all OrderedDicts), plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. The base `set_data()`/`set_header()` use `.keys()` checks that bypass `__contains__` overrides, so KPF2/KPF4 override these methods with a `hasattr` guard to resolve aliases during init before the dicts are upgraded.
+The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (top-level OrderedDicts), plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. The base `set_data()`/`set_header()` use `.keys()` checks that bypass `__contains__` overrides, so KPF2/KPF4 override these methods with a `hasattr` guard to resolve aliases during init before the dicts are upgraded. The base `create_extension()` initializes each extension *header* as an `OrderedDict`; the KPF models override it so every header is a `fits.Header` instead (see *Header standardization*).
 
-### Diagnostics, QC, and Quicklook
+### Diagnostics, QC, Checkpoints, and Quicklook
 
-Three read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write to PRIMARY headers (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`.
+Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote. The recipe drives all three through a **single `CheckpointL{n}(obj).run()` call**: `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly. The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g. `scripts/qc.py`). A level with no paired class skips that stage; `CheckpointL0` is wired but the recipe leaves L0 unrun (running QCL0 pre-assembly would leak L0 flags onto L1/L2 via header propagation).
 
-- **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them to PRIMARY headers. Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
-- **QC** (`kpfpipe/quality_control/qc_booleans/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes 0/1 keywords plus `ISGOOD` aggregate.
+- **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
+- **QC** (`kpfpipe/quality_control/qc_flags/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. `ISGOOD` is the **running** aggregate — the AND over every QC flag accumulated on QUALITY_CONTROL so far (this level's checks *plus* those propagated from lower levels), not just this level's checks. No validation or raising — that is the Checkpoints layer's job.
+- **Checkpoints** (`kpfpipe/quality_control/checkpoints/`) — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest) — scoped to the **current level's own** flags (`keyword_registry.qc_flag_keywords_by_level[LEVEL]`), so a propagated lower-level `0` is not re-warned. `CheckpointL0`/`L1`/`L2` set `LEVEL` + `RAISE_FLAGS`.
 - **Quicklook** (`kpfpipe/quality_control/quicklook/`) — reads products and renders matplotlib plots. Pulls any annotation values from existing headers.
 
-This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key`) and no shared state.
+This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.
 
-**Where metrics live.** Metrics that depend on intermediate processing state (read noise from raw overscan, master ages from header lookups during association) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics.
+**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics — including the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), which `DiagL1` recomputes from the master paths `CalibrationAssociation` wrote to RECEIPT (`*FILE`) plus the `INSTRUMENT_HEADER` `DATE-OBS`; the association module writes only the paths.
 
-**Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `_RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
+**Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
 
 ## Design Principles & Success Criteria
 

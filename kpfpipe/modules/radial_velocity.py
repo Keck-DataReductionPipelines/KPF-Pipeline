@@ -14,12 +14,14 @@ its illumination source (SCI-OBJ/SKY-OBJ/CAL-OBJ in INSTRUMENT_HEADER):
   target   TARGTEFF-lookup      yes       TARGRADV (systemic)
   sky      G2_espresso (solar)  yes       0
   thar     ThAr list (unit wt)  no        0
-  etalon   / lfc                                NotImplementedError
+  etalon   / lfc                                skipped (no CCF/RV; not implemented)
   none     not illuminated -> skipped (no CCF/RV)
 
 All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.
 """
+
+import warnings
 
 import astropy.units as u
 import numpy as np
@@ -84,7 +86,7 @@ class RadialVelocity:
         self._order_weights = (
             None  # shared order-weight table, loaded by _get_order_weights()
         )
-        self._results = None  # per-fiber results, set by perform()
+        self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -106,8 +108,8 @@ class RadialVelocity:
 
         Returns a dict with keys 'object' (the normalized source), 'mask_name',
         'apply_barycorr', and 'vel_grid_center'. An unilluminated fiber ('none')
-        has None mask/barycorr/center. Raises NotImplementedError for sources
-        whose CCF path is not yet built (etalon, lfc).
+        has None mask/barycorr/center. Sources whose CCF path is not yet built
+        (etalon, lfc) are skipped the same way, with a warning.
         """
         key = f"{chip.upper()}_{fiber.upper()}"
         if key in self._illumination_source:
@@ -128,9 +130,8 @@ class RadialVelocity:
         # Map the raw keyword value straight to the source object and its CCF
         # settings: mask, whether to barycentric-correct, and the velocity-grid
         # center (systemic RV for a star, 0 for sky/calibration).
-        raw = inst[keyword]
-        v = raw[0] if isinstance(raw, tuple) else raw
-        v = str(v).strip().lower()
+        raw = inst.get(keyword)
+        v = str(raw).strip().lower()
         if v == "target":
             source = {
                 "object": "target",
@@ -160,12 +161,30 @@ class RadialVelocity:
                 "vel_grid_center": None,
             }
         elif v == "lfcfiber":
-            raise NotImplementedError(
-                "CCF for 'lfc'-illuminated fibers is not yet implemented"
+            source = {
+                "object": "lfc",
+                "mask_name": None,
+                "apply_barycorr": None,
+                "vel_grid_center": None,
+            }
+            warnings.warn(
+                f"{fiber.upper()} is lfc-illuminated; CCF is not implemented. "
+                "Skipping this fiber.",
+                UserWarning,
+                stacklevel=2,
             )
         elif "etalon" in v:
-            raise NotImplementedError(
-                "CCF for 'etalon'-illuminated fibers is not yet implemented"
+            source = {
+                "object": "etalon",
+                "mask_name": None,
+                "apply_barycorr": None,
+                "vel_grid_center": None,
+            }
+            warnings.warn(
+                f"{fiber.upper()} is etalon-illuminated; CCF is not implemented. "
+                "Skipping this fiber.",
+                UserWarning,
+                stacklevel=2,
             )
         else:
             raise ValueError(f"unrecognized illumination source {raw!r}")
@@ -940,11 +959,11 @@ class RadialVelocity:
             L4 with a CCF cube and per-order RV table per illuminated orderlet.
             Each CCF extension carries VELSTART/VELSTEP/VELNSTEP/CCFMASK; each RV
             extension carries RVMETHOD/SKYRMVD/TELLRMVD. The legacy combined-RV
-            keywords live on INSTRUMENT_HEADER: per-fiber CCD<n>RV<sfx>/CCD<n>ERV<sfx>,
-            the SCI-combined CCD<n>RV/CCD<n>ERV, and CCFRV/CCFERV. PRIMARY carries
-            the EPRV keywords RVMETHOD and RV/RVERR/BERV/BJDTDB (the combined
-            science RV). Unilluminated ('none') fibers are skipped (empty
-            extensions).
+            keywords are registered KPF-pipeline keywords routed to the RV# tables:
+            per-fiber CCD<n>RV<sfx>/CCD<n>ERV<sfx> by orderlet, and the SCI-combined
+            CCD<n>RV/CCD<n>ERV plus CCFRV/CCFERV on RV3. PRIMARY carries the EPRV
+            keywords RVMETHOD and RV/RVERR/BERV/BJDTDB (the combined science RV).
+            Unilluminated ('none') fibers are skipped (empty extensions).
         """
         if chips is None:
             chips = self.chips
@@ -971,18 +990,21 @@ class RadialVelocity:
         bjd_tdb = np.asarray(self.l2_obj.data["BJD_TDB"], dtype=np.float64)
         berv = np.asarray(self.l2_obj.data["BARYCORR_KMS"], dtype=np.float64)
 
-        self._results = {}
+        self._info = {}
         for fiber in fibers:
             rv = np.full(norder, np.nan)
             rv_err = np.full(norder, np.nan)
 
             # Dispatch the mask/barycorr/grid-center from the fiber's illumination
-            # source; 'none' (unilluminated) is skipped with NaN RVs and no
-            # CCF/RV extension, while etalon/lfc fail loud (NotImplementedError).
+            # source; unilluminated or not-yet-implemented sources are skipped
+            # with NaN RVs and no CCF/RV extension.
             source = self._resolve_illumination_source(chips[0], fiber)
-            if source["object"] == "none":
-                print(f"  {fiber}: illumination source 'none'; skipping (no CCF/RV)")
-                self._results[fiber] = {
+            if source["mask_name"] is None:
+                print(
+                    f"  {fiber}: illumination source {source['object']!r}; "
+                    "skipping (no CCF/RV)"
+                )
+                self._info[fiber] = {
                     "rv": rv,
                     "rv_err": rv_err,
                     "source": source["object"],
@@ -1023,7 +1045,7 @@ class RadialVelocity:
             )
             ccd_rv = {chip: per_ccd[chip][0] for chip in chips}
             ccd_rv_err = {chip: per_ccd[chip][1] for chip in chips}
-            self._results[fiber] = {
+            self._info[fiber] = {
                 "rv": rv,
                 "rv_err": rv_err,
                 "source": source["object"],
@@ -1048,11 +1070,8 @@ class RadialVelocity:
                 ),
             )
 
-            # Per-orderlet CCF/RV extension headers (EPRV L4 standard). Built as
-            # fits.Header objects and assigned via set_header: rvdata serializes
-            # non-PRIMARY extensions with fits.Header(headers[ext]), which rejects
-            # bare (value, comment) tuples in a plain dict. The velocity grid is
-            # per-fiber (center varies) but shared across chips.
+            # Per-orderlet CCF/RV extension headers (EPRV L4 standard). The
+            # velocity grid is per-fiber (center varies) but shared across chips.
             grid = self._velocity_grid[f"{chips[-1]}_{fiber}"]
             ccf_hdr = fits.Header()
             # CCF cube is (norder, n_velocity_step): FITS axis 1 = velocity,
@@ -1074,25 +1093,27 @@ class RadialVelocity:
             rv_hdr["TELLRMVD"] = (False, "Telluric model removed?")
             l4_obj.set_header(f"{fiber}_RV", rv_hdr)
 
-            # Combined per-CCD RV/error are KPF legacy carryovers, not EPRV RV1
-            # keywords, so they go on INSTRUMENT_HEADER under the legacy per-fiber
-            # suffix scheme CCD<n>RV<sfx>/CCD<n>ERV<sfx> (n: GREEN=1, RED=2; sfx:
-            # 1/2/3=SCI1/2/3, C=CAL, S=SKY). The bare CCD<n>RV/CCD<n>ERV names
-            # stay reserved for the SCI-combined RV. INSTRUMENT_HEADER is a plain
-            # dict serialized via fits.Header(), which rejects (value, comment)
-            # tuples, so values are written bare; a non-finite value (failed fit)
-            # becomes a FITS UNDEFINED card (None), never a NaN.
-            inst_hdr = l4_obj.headers["INSTRUMENT_HEADER"]
+            # Per-orderlet RV/error are KPF legacy carryovers, not EPRV RV1
+            # keywords. They are registered KPF-pipeline keywords
+            # (config/L4-headers.csv) under the legacy per-fiber suffix scheme
+            # CCD<n>RV<sfx>/CCD<n>ERV<sfx> (n: GREEN=1, RED=2; sfx: 1/2/3=SCI1/2/3,
+            # C=CAL, S=SKY), routed by set_keyword to their RV# table header (e.g.
+            # CCD1RV1 -> RV2). The bare CCD<n>RV/CCD<n>ERV names stay reserved for
+            # the SCI-combined RV (on RV3). A non-finite value (failed fit) is
+            # written as None so it becomes a FITS UNDEFINED card, not a NaN.
             sfx = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}[fiber]
             for chip in ccd_rv:
                 n = 1 if chip == "GREEN" else 2
                 v, e = ccd_rv[chip], ccd_rv_err[chip]
-                inst_hdr[f"CCD{n}RV{sfx}"] = float(v) if np.isfinite(v) else None
-                inst_hdr[f"CCD{n}ERV{sfx}"] = float(e) if np.isfinite(e) else None
+                l4_obj.set_keyword(
+                    f"CCD{n}RV{sfx}", float(v) if np.isfinite(v) else None
+                )
+                l4_obj.set_keyword(
+                    f"CCD{n}ERV{sfx}", float(e) if np.isfinite(e) else None
+                )
 
         # PRIMARY (EPRV L4): always record the RV method.
-        prim = l4_obj.headers["PRIMARY"]
-        prim["RVMETHOD"] = ("CCF", "RV derivation method")
+        l4_obj.set_keyword("RVMETHOD", "CCF")
 
         # Final science RV (legacy CCD<n>RV / CCFRV). Sum the science orderlets'
         # CCFs per chip and fit (bare CCD<n>RV), then combine the two CCDs at the
@@ -1101,7 +1122,7 @@ class RadialVelocity:
         # barycentric frame (compute_ccfs folds barycorr into the mask shift), so
         # the reported BERV/BJDTDB are descriptive, not applied.
         sci_req = [f for f in fibers if f in ("SCI1", "SCI2", "SCI3")]
-        sci = [f for f in sci_req if self._results[f]["source"] not in (None, "none")]
+        sci = [f for f in sci_req if self._info[f]["source"] not in (None, "none")]
         if not sci_req:
             # A calibration-only run (no science orderlet requested): the combined
             # science RV is not applicable, so PRIMARY RV/RVERR/BERV/BJDTDB stay
@@ -1118,7 +1139,6 @@ class RadialVelocity:
                 "cannot form a combined RV"
             )
         rep = sci[0]
-        inst_hdr = l4_obj.headers["INSTRUMENT_HEADER"]
         if len(chips) == 1:
             print(f"  combined RV: only chip {chips[0]} present; CCFRV uses it alone")
 
@@ -1141,8 +1161,8 @@ class RadialVelocity:
                     f"  combined RV: {chip} science fit non-finite; excluded from CCFRV"
                 )
             n = 1 if chip == "GREEN" else 2
-            inst_hdr[f"CCD{n}RV"] = float(v) if np.isfinite(v) else None
-            inst_hdr[f"CCD{n}ERV"] = float(e) if np.isfinite(e) else None
+            l4_obj.set_keyword(f"CCD{n}RV", float(v) if np.isfinite(v) else None)
+            l4_obj.set_keyword(f"CCD{n}ERV", float(e) if np.isfinite(e) else None)
 
         # Cross-chip weighted RV (CCFRV) and inverse-variance error (CCFERV): the
         # per-CCD science RVs combined at the RV level by their summed order
@@ -1159,11 +1179,11 @@ class RadialVelocity:
         if not np.isfinite(ccfrv):
             print(
                 "  combined RV: no finite per-CCD science RV; "
-                "CCFRV/PRIMARY RV UNDEFINED"
+                "CCFRV (RV3) and PRIMARY RV UNDEFINED"
             )
 
-        inst_hdr["CCFRV"] = float(ccfrv) if np.isfinite(ccfrv) else None
-        inst_hdr["CCFERV"] = float(ccferv) if np.isfinite(ccferv) else None
+        l4_obj.set_keyword("CCFRV", float(ccfrv) if np.isfinite(ccfrv) else None)
+        l4_obj.set_keyword("CCFERV", float(ccferv) if np.isfinite(ccferv) else None)
 
         # PRIMARY BERV/BJDTDB: chip-weighted mean of the per-CCD photon-weighted
         # bary summaries (CCD<n>BKMS/CCD<n>BJD from BarycentricCorrection), using
@@ -1173,7 +1193,8 @@ class RadialVelocity:
         for chip in chips:
             n = 1 if chip == "GREEN" else 2
             w = float(np.nansum(self._get_order_weights(chip, rep)))
-            bkms, bjd = inst_hdr.get(f"CCD{n}BKMS"), inst_hdr.get(f"CCD{n}BJD")
+            bkms = self.l2_obj.headers["BARYCORR_KMS"].get(f"CCD{n}BKMS")
+            bjd = self.l2_obj.headers["BJD_TDB"].get(f"CCD{n}BJD")
             if (
                 w > 0
                 and bkms is not None
@@ -1189,27 +1210,12 @@ class RadialVelocity:
 
         # PRIMARY (EPRV L4): the recommended combined RV. SYSVEL is left UNDEFINED
         # (absolute barycentric RVs, nothing removed); per-fiber velocity grids
-        # live on the CCF extensions.
-        prim["RV"] = (
-            (float(ccfrv), "[km/s] Combined radial velocity")
-            if np.isfinite(ccfrv)
-            else (None, "[km/s] Combined radial velocity")
-        )
-        prim["RVERR"] = (
-            (float(ccferv), "[km/s] Combined RV uncertainty")
-            if np.isfinite(ccferv)
-            else (None, "[km/s] Combined RV uncertainty")
-        )
-        prim["BERV"] = (
-            (float(berv_p), "[km/s] Barycentric correction")
-            if np.isfinite(berv_p)
-            else (None, "[km/s] Barycentric correction")
-        )
-        prim["BJDTDB"] = (
-            (float(bjd_p), "Photon-weighted midpoint [BJD_TDB]")
-            if np.isfinite(bjd_p)
-            else (None, "Photon-weighted midpoint [BJD_TDB]")
-        )
+        # live on the CCF extensions. set_keyword routes each to PRIMARY with the
+        # registry-owned comment; a non-finite value writes an UNDEFINED card.
+        l4_obj.set_keyword("RV", float(ccfrv) if np.isfinite(ccfrv) else None)
+        l4_obj.set_keyword("RVERR", float(ccferv) if np.isfinite(ccferv) else None)
+        l4_obj.set_keyword("BERV", float(berv_p) if np.isfinite(berv_p) else None)
+        l4_obj.set_keyword("BJDTDB", float(bjd_p) if np.isfinite(bjd_p) else None)
 
         l4_obj.receipt_add_entry("radial_velocity", "PASS")
         return l4_obj
@@ -1217,16 +1223,14 @@ class RadialVelocity:
     def info(self):
         """Print a summary of the module configuration and RV results."""
         print("RadialVelocity")
-        obs_id = self.l2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
-        if isinstance(obs_id, tuple):
-            obs_id = obs_id[0]
+        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
         print(f"  obs_id:         {obs_id}")
         print(f"  ccf_mask_width: {self.ccf_mask_width} km/s")
         print(f"  ccf_step_size:  {self.ccf_step_size} km/s")
         print(f"  ccf_window:     {self.ccf_window} km/s")
         print(f"  rv_window:      {self.rv_window} km/s")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
@@ -1241,9 +1245,9 @@ class RadialVelocity:
         # CCD_RV/CCD_ERV are the combined per-CCD RV and its error; RV_RMS is the
         # order-to-order mad_std (a diagnostic of per-order spread), in m/s.
         fiber_order = [
-            f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in self._results
+            f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in self._info
         ]
-        fiber_order += [f for f in self._results if f not in fiber_order]
+        fiber_order += [f for f in self._info if f not in fiber_order]
 
         print(
             f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NVALID':>8s}"
@@ -1257,7 +1261,7 @@ class RadialVelocity:
             ("RED", slice(norder_green, norder)),
         ):
             for fiber in fiber_order:
-                res = self._results[fiber]
+                res = self._info[fiber]
                 rv = res["rv"][rows]
                 nvalid = int(np.sum(np.isfinite(rv)))
                 if nvalid == 0:

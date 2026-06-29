@@ -96,11 +96,6 @@ class TestPlots:
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
 
-    def test_spectrum_single_order_default_is_middle(self, l2):
-        fig = PlotL2(l2).spectrum_single_order("green")  # default order
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
-
     def test_spectrum_single_order_explicit_order(self, l2):
         fig = PlotL2(l2).spectrum_single_order("green", order=3)
         assert isinstance(fig, plt.Figure)

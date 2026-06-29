@@ -497,7 +497,7 @@ def _summary_bucket(filename, name):
         if label.startswith("quality_control/quicklook/"):
             return QUICKLOOK_LABEL, "quicklook"
         if label.startswith(
-            ("quality_control/qc_booleans/", "quality_control/diagnostics/")
+            ("quality_control/qc_flags/", "quality_control/diagnostics/")
         ):
             return QC_LABEL, "qc"
         if label.startswith("modules/"):

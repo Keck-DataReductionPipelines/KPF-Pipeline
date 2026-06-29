@@ -5,6 +5,8 @@ Unit tests use synthetic arrays and MockL1 objects; no real data or FITS
 files are required except where a master file must exist on disk.
 """
 
+import os
+
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -32,7 +34,20 @@ _EXPTIME = 4.0  # != 1 so dark scaling is observable
 class MockL1:
     def __init__(self):
         self.obs_id = "KP.20240405.40113.57"
-        self.headers = {"PRIMARY": {"EXPTIME": _EXPTIME}}
+        # Dark scaling reads the EPRV-standard PRIMARY EXPTIME (the actual
+        # elapsed time, mapped from native WMKO ELAPSED), so the mock sets it on
+        # PRIMARY. KPF-pipeline keyword routing sends the calibration flags/paths
+        # to RECEIPT (BIASSUB/DARKSUB, BIAS/DARKFILE), so a real L1 always has
+        # RECEIPT and QUALITY_CONTROL extensions; the mock mirrors that. Headers
+        # are fits.Header, like the real models.
+        primary = fits.Header()
+        primary["EXPTIME"] = _EXPTIME
+        self.headers = {
+            "PRIMARY": primary,
+            "INSTRUMENT_HEADER": fits.Header(),
+            "RECEIPT": fits.Header(),
+            "QUALITY_CONTROL": fits.Header(),
+        }
         self.data = {
             "GREEN_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
             "RED_CCD": np.full(_SHAPE, _CCD_VALUE, dtype=np.float32),
@@ -41,20 +56,28 @@ class MockL1:
         }
         self._receipt = []
 
+    def set_keyword(self, key, value):
+        # Mirror KPFDataModel.set_keyword routing for the keywords this module
+        # writes: BIASSUB/DARKSUB live on RECEIPT (their registry home).
+        ext = "RECEIPT" if key in ("BIASSUB", "DARKSUB") else "PRIMARY"
+        self.headers[ext][key] = value
+
     def receipt_add_entry(self, name, status):
         self._receipt.append((name, status))
 
 
 def _make_module(bias_file=None, bias_dir=None, dark_file=None, dark_dir=None):
+    # {BIAS,DARK}FILE hold the master's full path (no separate DIR keyword), so
+    # join the optional dir onto the filename when composing the header.
     l1 = MockL1()
     if bias_file is not None:
-        l1.headers["PRIMARY"]["BIASFILE"] = bias_file
-    if bias_dir is not None:
-        l1.headers["PRIMARY"]["BIASDIR"] = bias_dir
+        l1.headers["RECEIPT"]["BIASFILE"] = (
+            os.path.join(bias_dir, bias_file) if bias_dir is not None else bias_file
+        )
     if dark_file is not None:
-        l1.headers["PRIMARY"]["DARKFILE"] = dark_file
-    if dark_dir is not None:
-        l1.headers["PRIMARY"]["DARKDIR"] = dark_dir
+        l1.headers["RECEIPT"]["DARKFILE"] = (
+            os.path.join(dark_dir, dark_file) if dark_dir is not None else dark_file
+        )
     return ImageProcessing(l1)
 
 
@@ -139,14 +162,10 @@ class TestInit:
         with pytest.raises(TypeError):
             ImageProcessing(MockL1(), config=42)
 
-    def test_results_none_before_perform(self):
-        assert ImageProcessing(MockL1())._results is None
-
-    def test_bias_path_none_before_perform(self):
-        assert ImageProcessing(MockL1())._bias_path is None
-
-    def test_dark_path_none_before_perform(self):
-        assert ImageProcessing(MockL1())._dark_path is None
+    def test_paths_none_before_perform(self):
+        mod = ImageProcessing(MockL1())
+        assert mod._bias_path is None
+        assert mod._dark_path is None
 
     def test_master_caches_none_before_perform(self):
         mod = ImageProcessing(MockL1())
@@ -162,13 +181,8 @@ class TestInit:
 
 class TestBiasResolution:
     def test_raises_when_biasfile_missing(self):
-        mod = _make_module(bias_dir="/some/dir")
+        mod = _make_module()
         with pytest.raises(FileNotFoundError, match="BIASFILE"):
-            mod.perform(dark=False)
-
-    def test_raises_when_biasdir_missing(self):
-        mod = _make_module(bias_file="master_bias.fits")
-        with pytest.raises(FileNotFoundError, match="BIASDIR"):
             mod.perform(dark=False)
 
     def test_raises_when_file_not_on_disk(self, tmp_path):
@@ -182,7 +196,6 @@ class TestBiasResolution:
         mod = _make_module(bias_file="master_bias.fits", bias_dir=str(tmp_path))
         mod.perform(dark=False)
         assert mod._bias_path == bias_path
-        assert mod._results["bias"] == bias_path
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
         )
@@ -210,7 +223,7 @@ class TestBiasResolution:
         # No BIAS headers — the object is used directly, no disk lookup.
         mod = _make_module()
         mod.perform(bias=master, dark=False)
-        assert "bias" in mod._results
+        assert mod._bias_path is not None
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
         )
@@ -292,13 +305,8 @@ class TestSubtractBias:
 
 class TestDarkResolution:
     def test_raises_when_darkfile_missing(self):
-        mod = _make_module(dark_dir="/some/dir")
+        mod = _make_module()
         with pytest.raises(FileNotFoundError, match="DARKFILE"):
-            mod.perform(bias=False)
-
-    def test_raises_when_darkdir_missing(self):
-        mod = _make_module(dark_file="master_dark.fits")
-        with pytest.raises(FileNotFoundError, match="DARKDIR"):
             mod.perform(bias=False)
 
     def test_raises_when_file_not_on_disk(self, tmp_path):
@@ -312,7 +320,6 @@ class TestDarkResolution:
         mod = _make_module(dark_file="master_dark.fits", dark_dir=str(tmp_path))
         mod.perform(bias=False)
         assert mod._dark_path == dark_path
-        assert mod._results["dark"] == dark_path
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
@@ -333,7 +340,7 @@ class TestDarkResolution:
         master = KPFMasterL1.from_fits(dark_path)
         mod = _make_module()
         mod.perform(bias=False, dark=master)
-        assert "dark" in mod._results
+        assert mod._dark_path is not None
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
@@ -416,14 +423,13 @@ class TestPerform:
             mod_with_bias.l1_obj.data["RED_CCD"], _CCD_VALUE - _BIAS_VALUE
         )
 
-    def test_results_keyed_by_bias(self, mod_with_bias, tmp_path):
+    def test_bias_path_recorded(self, mod_with_bias, tmp_path):
         mod_with_bias.perform()
-        assert "bias" in mod_with_bias._results
-        assert mod_with_bias._results["bias"] == str(tmp_path / "master_bias.fits")
+        assert mod_with_bias._bias_path == str(tmp_path / "master_bias.fits")
 
     def test_biassub_header_set(self, mod_with_bias):
         mod_with_bias.perform()
-        assert mod_with_bias.l1_obj.headers["PRIMARY"]["BIASSUB"][0] is True
+        assert mod_with_bias.l1_obj.headers["RECEIPT"]["BIASSUB"] == 1
 
     def test_receipt_entry_added(self, mod_with_bias):
         mod_with_bias.perform()
@@ -438,24 +444,24 @@ class TestPerform:
         np.testing.assert_allclose(mod_with_bias.l1_obj.data["RED_CCD"], _CCD_VALUE)
 
     def test_raises_when_headers_missing(self):
-        mod = _make_module()  # no BIASFILE / BIASDIR
+        mod = _make_module()  # no BIASFILE
         with pytest.raises(FileNotFoundError):
             mod.perform()
 
     def test_bias_false_skips_subtraction(self):
-        mod = _make_module()  # no BIASFILE / BIASDIR needed when bias is off
+        mod = _make_module()  # no BIASFILE needed when bias is off
         result = mod.perform(bias=False, dark=False)
         # CCDs untouched
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE)
         np.testing.assert_allclose(result.data["RED_CCD"], _CCD_VALUE)
         # BIASSUB header reflects the choice
-        assert result.headers["PRIMARY"]["BIASSUB"][0] is False
+        assert result.headers["RECEIPT"]["BIASSUB"] == 0
         # No bias path recorded
-        assert "bias" not in mod._results
+        assert mod._bias_path is None
 
     def test_darksub_header_false_when_dark_off(self, mod_with_bias):
         mod_with_bias.perform()
-        assert mod_with_bias.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is False
+        assert mod_with_bias.l1_obj.headers["RECEIPT"]["DARKSUB"] == 0
 
     def test_flat_true_raises_not_implemented(self, mod_with_bias):
         with pytest.raises(NotImplementedError, match="flat"):
@@ -469,20 +475,20 @@ class TestPerform:
         result = mod.perform(bias=bias_path, dark=False)
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
         np.testing.assert_allclose(result.data["RED_CCD"], _CCD_VALUE - _BIAS_VALUE)
-        assert result.headers["PRIMARY"]["BIASSUB"][0] is True
-        assert mod._results["bias"] == bias_path
+        assert result.headers["RECEIPT"]["BIASSUB"] == 1
+        assert mod._bias_path == bias_path
 
     def test_bias_master_l1_object_used_directly(self, tmp_path):
         # supplying a KPFMasterL1 instance should bypass disk I/O entirely
         bias_path = str(tmp_path / "preloaded_bias.fits")
         _write_master_bias(bias_path)
         preloaded = KPFMasterL1.from_fits(bias_path)
-        mod = _make_module()  # no BIASFILE / BIASDIR needed
+        mod = _make_module()  # no BIASFILE needed
         result = mod.perform(bias=preloaded, dark=False)
         np.testing.assert_allclose(result.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE)
-        assert result.headers["PRIMARY"]["BIASSUB"][0] is True
+        assert result.headers["RECEIPT"]["BIASSUB"] == 1
         # _bias_path should reflect the in-memory object's filename
-        assert mod._results["bias"] == bias_path
+        assert mod._bias_path == bias_path
 
     def test_bias_invalid_type_raises_type_error(self):
         mod = _make_module()
@@ -530,8 +536,8 @@ class TestPerformDark:
         np.testing.assert_allclose(
             mod_with_bias_dark.l1_obj.data["GREEN_CCD"], expected
         )
-        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["BIASSUB"][0] is True
-        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is True
+        assert mod_with_bias_dark.l1_obj.headers["RECEIPT"]["BIASSUB"] == 1
+        assert mod_with_bias_dark.l1_obj.headers["RECEIPT"]["DARKSUB"] == 1
 
     def test_bias_then_dark_combined(self, mod_with_bias_dark):
         mod_with_bias_dark.perform(bias=True, dark=True)
@@ -544,11 +550,11 @@ class TestPerformDark:
 
     def test_darksub_header_true(self, mod_with_bias_dark):
         mod_with_bias_dark.perform(bias=True, dark=True)
-        assert mod_with_bias_dark.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is True
+        assert mod_with_bias_dark.l1_obj.headers["RECEIPT"]["DARKSUB"] == 1
 
-    def test_results_keyed_by_dark(self, mod_with_bias_dark, tmp_path):
+    def test_dark_path_recorded(self, mod_with_bias_dark, tmp_path):
         mod_with_bias_dark.perform(bias=True, dark=True)
-        assert mod_with_bias_dark._results["dark"] == str(tmp_path / "master_dark.fits")
+        assert mod_with_bias_dark._dark_path == str(tmp_path / "master_dark.fits")
 
     def test_dark_filepath_overrides_headers(self, tmp_path):
         dark_path = str(tmp_path / "explicit_dark.fits")
@@ -558,18 +564,18 @@ class TestPerformDark:
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
-        assert mod._results["dark"] == dark_path
+        assert mod._dark_path == dark_path
 
     def test_dark_master_l1_object_used_directly(self, tmp_path):
         dark_path = str(tmp_path / "preloaded_dark.fits")
         _write_master_dark(dark_path)
         preloaded = KPFMasterL1.from_fits(dark_path)
-        mod = _make_module()  # no DARKFILE / DARKDIR needed
+        mod = _make_module()  # no DARKFILE needed
         mod.perform(bias=False, dark=preloaded)
         np.testing.assert_allclose(
             mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
-        assert mod._results["dark"] == dark_path
+        assert mod._dark_path == dark_path
 
     def test_dark_invalid_type_raises_type_error(self):
         mod = _make_module()
@@ -671,8 +677,8 @@ class TestCalibrationGuard:
         )
         mod.perform(bias=True, dark=False)
         mod.perform(bias=False, dark=True)
-        assert mod.l1_obj.headers["PRIMARY"]["BIASSUB"][0] is True
-        assert mod.l1_obj.headers["PRIMARY"]["DARKSUB"][0] is True
+        assert mod.l1_obj.headers["RECEIPT"]["BIASSUB"] == 1
+        assert mod.l1_obj.headers["RECEIPT"]["DARKSUB"] == 1
         expected = _CCD_VALUE - _BIAS_VALUE - _DARK_VALUE * _EXPTIME
         np.testing.assert_allclose(mod.l1_obj.data["GREEN_CCD"], expected)
 

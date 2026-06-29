@@ -38,7 +38,7 @@ class DiagL2(Diagnostics):
         for fiber, (kw, comment) in _NAN_KEYS.items():
             count = 0
             for chip in _CHIPS:
-                arr = self.kpf.data.get(f"{chip}_{fiber}_FLUX")
+                arr = self.kpf_obj.data.get(f"{chip}_{fiber}_FLUX")
                 if arr is not None and np.size(arr) > 0:
                     count += int(np.sum(np.isnan(arr)))
             results[kw] = (count, comment)
@@ -63,7 +63,7 @@ class DiagL2(Diagnostics):
         total_pix = 0
         for chip in _CHIPS:
             for fiber in _FIBERS:
-                arr = self.kpf.data.get(f"{chip}_{fiber}_FLUX")
+                arr = self.kpf_obj.data.get(f"{chip}_{fiber}_FLUX")
                 if arr is None or np.size(arr) == 0:
                     continue
                 total_zero += int(np.sum(arr == 0))
@@ -79,7 +79,7 @@ class DiagL2(Diagnostics):
 
     def _arr(self, chip, fiber, kind):
         """Return the (norder, ncol) FLUX or VAR array for a fiber, or None."""
-        arr = self.kpf.data.get(f"{chip}_{fiber}_{kind}")
+        arr = self.kpf_obj.data.get(f"{chip}_{fiber}_{kind}")
         if arr is None:
             return None
         arr = np.asarray(arr)

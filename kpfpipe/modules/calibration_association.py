@@ -7,14 +7,13 @@ the masters directory and selecting the nearest-in-time match.
 """
 
 import glob
-import os
 import warnings
 from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import glob_masters
-from kpfpipe.utils.kpf import get_datecode, get_timestamp, kpf_timestamp_to_datetime
+from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -84,7 +83,8 @@ class CalibrationAssociation:
             setattr(self, k, params.get(k, v))
 
         self._masters_root = params.get("KPF_MASTERS_OUTPUT")
-        self._results = None  # populated by perform()
+        self._calibrations = None  # per-cal {filepath} for _set_headers
+        self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -184,6 +184,30 @@ class CalibrationAssociation:
         )[0]
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {
+            cal_type: dict(cal) for cal_type, cal in self._calibrations.items()
+        }
+
+    def _set_headers(self, l1_obj):
+        """Write the master-path keyword for each associated calibration.
+
+        Reads self._calibrations (populated by perform()); the single place this
+        module writes header keywords, called just before the receipt entry. Each
+        cal type contributes {PREFIX}FILE (full master path), which set_keyword
+        routes to RECEIPT. The signed (master - obs) age ({PREFIX}AGE) is
+        recomputed downstream by DiagL1 from this path plus PRIMARY DATE-OBS,
+        so this module no longer computes or writes it.
+        """
+        for cal_type, cal in self._calibrations.items():
+            prefix = _HEADER_PREFIX[cal_type]
+            l1_obj.set_keyword(f"{prefix}FILE", cal["filepath"])
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
@@ -224,9 +248,8 @@ class CalibrationAssociation:
             )
 
         date_obs = self.l1_obj.headers["PRIMARY"]["DATE-OBS"]
-        obs_date = datetime.fromisoformat(date_obs).date()
-        primary = self.l1_obj.headers["PRIMARY"]
 
+        self._calibrations = {}
         for cal_type in cal_types:
             master_files = self._find_master_files(
                 cal_type, date_obs, masters_search_window_days, verbose=verbose
@@ -238,26 +261,10 @@ class CalibrationAssociation:
                     f"within window {masters_search_window_days} days"
                 )
 
-            if cal_type == "thar":
-                # Match legacy WLS header convention exactly: full path in
-                # WLSFILE (no WLSDIR), AGEWLS in fractional days using the
-                # master and obs timestamps (sign convention: master - obs,
-                # so AGEWLS is negative when the master predates the obs).
-                obs_dt = datetime.fromisoformat(date_obs)
-                master_dt = kpf_timestamp_to_datetime(get_timestamp(filepath))
-                primary["WLSFILE"] = filepath
-                primary["AGEWLS"] = (master_dt - obs_dt).total_seconds() / 86400.0
-            else:
-                prefix = _HEADER_PREFIX[cal_type]
-                master_date = datetime.strptime(get_datecode(filepath), "%Y%m%d").date()
-                primary[f"{prefix}FILE"] = os.path.basename(filepath)
-                primary[f"{prefix}DIR"] = os.path.dirname(filepath)
-                primary[f"AGE{prefix}"] = (obs_date - master_date).days
+            self._calibrations[cal_type] = {"filepath": filepath}
 
-        self._results = {
-            cal_type: primary[f"{_HEADER_PREFIX[cal_type]}FILE"]
-            for cal_type in cal_types
-        }
+        self._set_headers(self.l1_obj)
+        self._track_info()
         self.l1_obj.receipt_add_entry("calibration_association", "PASS")
 
         return self.l1_obj
@@ -271,16 +278,12 @@ class CalibrationAssociation:
             f"  search window: {self.masters_search_window_days} days [before, after]"
         )
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
         print(f"\n  {'cal_type':<12s} {'master file'}")
         print("  " + "-" * 60)
-        h = self.l1_obj.headers["PRIMARY"]
-        for cal_type, filename in self._results.items():
-            prefix = _HEADER_PREFIX[cal_type]
-            age = h.get(f"AGE{prefix}", "n/a")
-            print(f"  {cal_type:<12s} {filename}")
-            print(f"  {'':12s} age = {age}d")
+        for cal_type, cal in self._info.items():
+            print(f"  {cal_type:<12s} {cal['filepath']}")
             print()

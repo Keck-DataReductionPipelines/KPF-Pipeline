@@ -17,8 +17,8 @@ requirements), the EPRV standard (data-product format), or the charter (intent, 
 scientific focus, calibration philosophy, guardrails) — **the higher document wins.** Style
 yields to science.
 
-Operational/technical guidance (environment, commands, architecture) lives in
-[`CLAUDE.md`](CLAUDE.md); this file covers *how code should look and be organized*.
+This file covers *how code should look and be organized* — not operational or technical
+guidance (environment, commands, architecture), which is documented separately.
 
 ---
 
@@ -43,7 +43,7 @@ Operational/technical guidance (environment, commands, architecture) lives in
 | Predicates | `is_*`, return `bool` | `is_obs_id`, `is_timestamp` |
 | Converters | `<x>_to_<y>` | `air_to_vac`, `utc_to_hst`, `kpf_timestamp_to_eprv_timestamp` |
 | Private helpers | leading underscore | `_get_overscan_pixels`, `_resolve_illumination_source` |
-| Public constants | `UPPER_SNAKE`; allowed in `data_models/` and the package root, **never in `modules/`** | `REPO_ROOT`, `DEFAULTS`, `DETECTOR`, `L0_EXTENSIONS` |
+| Public constants | `UPPER_SNAKE`; allowed in `data_models/` and the package root, **never in `modules/`** | `REPO_ROOT`, `DEFAULTS`, `DETECTOR`, `NORDER_GREEN` |
 | Module constants | `UPPER_SNAKE` with a leading underscore — modules export **no** importable constants (one documented exception: `ImageAssembly.RN_KEYS`) | `_DEFAULTS`, `_LEVEL_BY_CAL_TYPE`, `_OBS_ID_PATTERN` |
 | Variables | `snake_case` | `datecode`, `file_list`, `oscan_srl` |
 
@@ -67,13 +67,35 @@ Operational/technical guidance (environment, commands, architecture) lives in
   owns detector read-noise metadata that QC/Quicklook import rather than re-derive; the
   exception is documented at its definition. Don't add new public module constants on this
   precedent without the same justification.
+- **Data-product instances vs. level/manifest constants** (`kpfN` vs `L<N>`). A variable that
+  *holds a model instance* names it with the **`kpfN`** form in `data_models/`
+  (`kpf1 = KPF1()`, `kpf2 = self.to_kpf2()`) and the **`lN_obj`/`mlN_obj`** form in `modules/`
+  (`l1_obj`, `ml2_obj`) — each matches its area's established style. A *constant or identifier
+  that names a data **level**, an extension **manifest**, or a **filename pattern*** instead uses
+  the level token **`L<N>`/`ML<N>`** everywhere (`_L0_EXTENSIONS`, `_L0_TO_L1_PASSTHROUGH`,
+  `_L1_TO_L2_PASSTHROUGH`, `_ML1_EXTENSIONS`, `_L1_FILENAME_PATTERN`), so it mirrors the
+  EPRV/`DATALVL` level terminology and the `L0-extensions.csv` / `ML1-extensions.csv` config-file
+  names. A receipt/provenance **step-name string** matches its *method* (`to_kpf1`, `to_kpf2`,
+  `to_kpf4`), not the level.
 - **FITS keyword names**: ≤ 8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`,
-  `RNINRNG`, `ISGOOD`). Encode the level into the keyword when needed for uniqueness
+  `RNOK`, `ISGOOD`). Encode the level into the keyword when needed for uniqueness
   (`DATAPRL0`, `L2NANOK`). **Before inventing a new PRIMARY/extension keyword, grep
   `reference/legacy_data_format.rst` and reuse the legacy spelling/casing wherever the
   science meaning matches** (e.g. `WLSFILE`, `BIASFILE`) — so downstream tools, notebooks,
   and archival workflows keep reading v3 products unchanged. Only coin a new keyword when
   the concept genuinely doesn't exist in the legacy schema.
+- **`rvdata` vs EPRV — the package vs the standard.** These name different things; keep them
+  distinct in identifiers *and* prose. Use **`rvdata`/`RVData`** for the Python *package* we
+  import and inherit from — its imports, classes (`RV2`/`RV4`/`RVDataModel`), and API (e.g.
+  `register_rvdata_extension`). Use **"EPRV" / "EPRV (data) standard"** for the data *format/spec*
+  — FITS structure, keyword names, units, reference frames — and for identifiers that hold or
+  describe format artifacts (`eprv_primary_seed`, `_EPRV_TAG`, the `aliases.csv` `EPRV` column,
+  an `eprv_key` local). The package name `rv-data-standard` *contains* "data standard", so never
+  write "rvdata standard"/"rvdata-standard" for the format: say **"EPRV standard (which rvdata
+  implements)"**. **One external exception:** rvdata's vendored `header_map.csv` names its target
+  column `STANDARD`; read it by that name (`row["STANDARD"]`) but treat the *values* as EPRV
+  targets. Reserve a bare "standard" for genuinely different senses (a "standard CCD sequence",
+  the "standard set" of calibrations, a "standard filename") where no EPRV/rvdata meaning applies.
 
 ---
 
@@ -116,7 +138,7 @@ class StageName:
     def __init__(self, l1_obj, config=None):
         self.l1_obj = l1_obj
         # ... canonical config block (see §4) ...
-        self._results = None  # populated by perform()
+        self._info = None  # info() summary only
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -129,10 +151,23 @@ class StageName:
     def do_step(self, ...): ...
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+    def _track_info(self, chips=None, fibers=None):
+        """Populate _info from instance attributes (takes only chips/fibers)."""
+        self._info = {...}
+
+    def _set_headers(self, l2_obj):
+        """Sole place this module writes headers; reads instance attributes."""
+        l2_obj.set_keyword(KEY, self._attr)    # routed to its registry extension
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
     def perform(self, chips=None):
-        ...
+        ...                                    # populate header-source attributes
+        self._set_headers(self.l2_obj)         # consolidates ALL header writes
+        self._track_info(chips)                # populates _info, just before the receipt
         self.l2_obj.receipt_add_entry("stage_name", "PASS")
         return self.l2_obj
 
@@ -140,8 +175,17 @@ class StageName:
 ```
 
 - **Method order is fixed and marked with 66-dash banner comments**:
-  `__init__` → *Private helpers* → *Algorithm steps* → *Public entry point* (`perform`)
-  → `info()`.
+  `__init__` → *Private helpers* → *Algorithm steps* → *Private helpers - module execution*
+  (`_track_info`, then `_set_headers`) → *Public entry point* (`perform`) → `info()`.
+- **Header consolidation & `_info`.** A module writes headers in exactly one place — a private
+  `_set_headers(obj)` that sources its values from instance attributes (never recomputes,
+  never reads another product) and writes each registered keyword via `obj.set_keyword(key, value)`
+  (routing + comment come from the registry), called immediately before `receipt_add_entry`. Modules
+  that write no header keywords keep an empty helper for uniformity. `_info` (formerly `_results`) is a pruned,
+  human-readable summary consumed **only** by `info()` — never the science/header chain, and never
+  tests (tests assert on the underlying attributes). It is populated by a private
+  `_track_info(self[, chips, fibers])` (no other args — it sources from instance attributes),
+  called immediately after `_set_headers` and before the receipt.
 - The banner is exactly:
   ```python
       # ------------------------------------------------------------------
@@ -208,12 +252,13 @@ class StageName:
   (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword
   argument on a method call (overrides both). Config is the production override path;
   direct kwargs are the developer/interactive path (e.g. notebooks), not used in production.
-- **Declare every lazily-populated attribute in `__init__`, set to `None`/`{}`, with a
-  trailing comment naming the method that fills it** — this is a defining house style:
+- **Declare every lazily-populated attribute in `__init__`, set to `None`/`{}`.** Add a
+  trailing comment naming the filling method (and its shape) **only where that isn't obvious**;
+  keep comments minimal otherwise. Conventional attributes (`_info`) stay bare:
   ```python
-  self._results = None       # populated by perform()
-  self._line_mask = {}       # line mask, set by _build_line_mask()
-  self.ml1_obj = None        # populated by subclass make_master_l1()
+  self._info = None
+  self._ccd_bjd = None   # per-CCD [GREEN, RED] arrays for _set_headers
+  self._line_mask = {}   # set by _build_line_mask()
   ```
 - **Detector geometry comes from `DETECTOR` (sourced from `detector.toml`), consumed on
   the instance** — every module gets `self.norder` (`{GREEN, RED}` dict), `self.ccd`,
@@ -296,9 +341,8 @@ class StageName:
   and return types in NumPy-style docstrings (`name : str or pathlib.Path`), not in
   signatures. Do not add inline type hints to new code; the codebase carries none.
 - **`mypy` is not used.** It still appears as a dev dependency (`pyproject.toml`,
-  `environment.yml`) and in CLAUDE.md's command list, but it is not run or enforced and
-  there are no annotations for it to check. Treat those entries as vestigial, not a
-  signal to start annotating.
+  `environment.yml`), but it is not run or enforced and there are no annotations for it
+  to check. Treat those entries as vestigial, not a signal to start annotating.
 
 ---
 
@@ -413,14 +457,16 @@ class StageName:
 
 ---
 
-## 9. Quality-control layers (Diagnostics / QC / Quicklook)
+## 9. Quality-control layers (Diagnostics / QC / Checkpoints / Quicklook)
 
-These three read-only layers under `kpfpipe/quality_control/` share conventions that new
-QC code must follow:
+These four read-only layers under `kpfpipe/quality_control/` share conventions that new
+QC code must follow. Diagnostics, QC, and Checkpoints run in that strict order — each
+consumes what the prior wrote (metrics → 0/1 flags → warn/raise):
 
-- **Read-only discipline.** Diagnostics and QC write **only** to `headers["PRIMARY"]`,
-  never to `data`. Quicklook writes only PNGs. When a helper would mutate `l0.data`,
-  operate on a `deepcopy` to protect the caller's object.
+- **Read-only discipline.** Diagnostics and QC write header keywords **only via `set_keyword`**
+  (which routes them to QUALITY_CONTROL — see §11 *FITS PRIMARY header conventions*), never to
+  `data`. Quicklook writes only PNGs. When a helper would mutate `l0.data`, operate on a `deepcopy`
+  to protect the caller's object.
 - **Method-attribute registration + MRO-walk discovery.** Tag a method by assigning an
   attribute immediately after its `def` — there are no decorators:
   ```python
@@ -429,17 +475,28 @@ QC code must follow:
 
   def data_l0_red_green(self): ...
   data_l0_red_green._qc_key = "DATAPRL0"        # QC
-  data_l0_red_green._qc_comment = "QC: ..."
+
+  def unregistered_keywords(self): ...
+  unregistered_keywords._checkpoint_name = "unregistered_keywords"  # Checkpoints
   ```
   The base class's `_iter_*` generator walks `type(self).__mro__`, collects callables
-  carrying the tag, and dedupes overrides via a `seen` set (subclass beats base).
-- **Runners reset `self.results = {}` at entry** (determinism) and wrap each method call
-  in `try/except` re-raising as `RuntimeError` — loud failure, no silent suppression.
-- **Header writes are always `(value, comment)` 2-tuples.** QC writes integer `0/1` plus
-  an `ISGOOD` aggregate. Round floats before writing
-  (`round(float(x), 6)`), and cast numpy scalars to Python `int`/`float`.
+  carrying the tag (`_diag_name` / `_qc_key` / `_checkpoint_name`), and dedupes overrides
+  via a `seen` set (subclass beats base).
+- **Runners reset `self.results = {}` at entry** (Diagnostics/QC; determinism) and wrap each
+  method call in `try/except` re-raising as `RuntimeError` — loud failure, no silent suppression.
+- **Writes go through `set_keyword`** (comment sourced from the registry, not the call site).
+  QC writes integer `0/1` plus an `ISGOOD` aggregate and **does no validation**. Round floats
+  before writing (`round(float(x), 6)`), and cast numpy scalars to Python `int`/`float`. The
+  per-check/metric comment lives **once, in the registry `Description`** — QC methods carry only
+  `_qc_key` (no `_qc_comment`); `run()` mirrors the registry `Description` into `self.results` for
+  reporting. (Diagnostics methods still return their own `(value, comment)` dicts, but the FITS
+  comment is always the registry `Description`.)
+- **Checkpoints validate; they do not write.** A `Checkpoint` subclass reads the 0/1 flags +
+  headers and **warns or raises** (header validation lives in `Checkpoint.unregistered_keywords`).
+  Per-flag severity is a per-level `RAISE_FLAGS` tuple on the subclass (a failed flag named there
+  raises, every other failed flag warns).
 - **QC comments are namespaced `"QC: ..."`**; Diagnostics comments are bare descriptive
-  phrases.
+  phrases. (Both live in the registry `Description` column, the single source for the FITS comment.)
 - **Quicklook plotting**: pyplot state-machine API (`plt.figure(figsize=..., tight_layout=True)`);
   `cmap="viridis"`, `origin="lower"`, vmin/vmax from percentiles; templated titles
   `f"L{N} - {Chip} CCD: {obs_id} - {name}"`; a UTC `KPF QLP: … UT` timestamp annotation;
@@ -549,6 +606,53 @@ documented, intentional ways — follow *its* conventions when adding masters co
   `trace-map.csv` → `Trace,Fiber,Description` (trace/fiber aliases derived at runtime).
 - These CSVs are the source of truth for HDU layout and alias registration — keep fiber
   names in sync across `trace-map.csv`, `[KPFPIPE].fibers`, and `detector.toml`.
+- **`L{0,1,2,4}-headers.csv`** register every KPF-pipeline keyword and its home extension,
+  split by the level that first writes the keyword (the combined set drives the `set_keyword`
+  routing map and the checkpoints validator). Columns are
+  `Keyword,Description,Extension,DataType,PopulatedBy`. The **`Extension`** column is the keyword's
+  home header (`PRIMARY`, `QUALITY_CONTROL`, `RECEIPT`, `BJD_TDB`, `BARYCORR_KMS`, `BARYCORR_Z`,
+  `RV1`–`RV5`) — `set_keyword` writes there, and `Description` becomes the FITS comment, so a
+  keyword's home and comment are defined **once, in the registry**. `DataType` is one of
+  `str`/`int`/`float`. Logical flags are stored as `int` 0/1, never Python booleans: QC keys carry a
+  `QC: …` description, and every other (T/F) flag appends `(T/F)` to its description. Each `Keyword`
+  is an explicit FITS keyword of **≤8 characters** with no wildcards — enumerate every member of
+  a family on its own row (e.g. `RNGREEN1`-`RNGREEN4`, `CCD1RV`/`CCD2RV`), never a `?`/`*` stand-in.
+
+### FITS PRIMARY header conventions
+
+*(Terminology: "EPRV" = the data standard/format; `rvdata` = the package implementing it — see the
+`rvdata` vs EPRV rule in §1.)*
+
+The WMKO-native → EPRV-standard conversion happens **only** in `KPF0.to_kpf1`
+(`data_models/level0.py`). **Every extension header is an `astropy.io.fits.Header`** — the KPF data models normalize
+all headers to `fits.Header` (they override `create_extension`; see `data_models/base.py`),
+so there is no value-vs-`(value, comment)` ambiguity and no separate header parser.
+`KPF0` owns the WMKO→EPRV conversion (`data_models/level0.py`). The unified registry table
+(our `L*-headers.csv` ∪ the EPRV keyword defs) and its derived routing/validation lookups are owned by
+the `KeywordRegistry` class in `data_models/keyword_registry.py` — one module singleton
+`keyword_registry`, imported only by `base.py`, which surfaces it as the `KPFDataModel.keyword_registry`
+class attribute (and uses `.routing` in `set_keyword`); the checkpoints validator reads `.allowed`/
+`.required` off `kpf_obj.keyword_registry`. What this means when writing code:
+
+- **Reading a header value**: use `header.get(key, default)` (or `header[key]`) on the keyword's
+  home extension (per the registry `Extension` column — e.g. read `RNGREEN1` from
+  `headers["QUALITY_CONTROL"]`, `BIASFILE` from `headers["RECEIPT"]`). A `fits.Header`
+  returns the scalar value; the comment lives in `header.comments[key]`. **Never hand-roll
+  `value[0] if isinstance(value, tuple)`** — headers are never tuple-valued dicts.
+- **Writing a registered KPF-pipeline keyword**: call `obj.set_keyword(key, value)`. It routes the
+  keyword to its registry-home extension with the registry `Description` as the comment — never
+  hardcode an extension or comment, and never write `headers["PRIMARY"][key] = …` directly for a
+  registered keyword. The keyword **must** be in `config/L{0,1,2,4}-headers.csv` first (with its
+  `Extension`), or `set_keyword` raises `KeyError` and the checkpoints validator would reject the
+  product. Never write to `INSTRUMENT_HEADER` (immutable snapshot of the L0 PRIMARY as ingested).
+- **Writing an unregistered/EPRV-conversion card** (the WMKO→EPRV mapping, provenance stamping):
+  the conversion sites in `KPF0` assign `header[key] = (value, comment)` directly; outside those,
+  prefer `set_keyword`.
+- **Conversion**: call `KPF0._map_header`; don't re-implement the WMKO→EPRV mapping.
+- **Reading a raw instrument keyword** (`ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`,
+  `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]` (via `.get`), never from
+  PRIMARY. No silent fallback — let a missing key raise.
+- Use EPRV keyword *names* on PRIMARY (e.g. `EXPTIME`, not `ELAPSED`; `OBSTYPE`, not `IMTYPE`).
 
 ---
 
@@ -572,10 +676,9 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **Profiling harnesses** (`tests/profiling/profile_<module>.py`, `tests/profiling/profile_*_recipe.py`, and
   the shared `tests/profiling/_profiling.py`) are *not* pytest tests — the `profile_` prefix keeps them out
   of collection so `make test` stays fast. They **mirror the test files 1-to-1**
-  (`test_<x>.py` ↔ `profile_<x>.py`). They are standalone scripts run via `make profile*`
-  (see CLAUDE.md `## Profiling`), must run with **no interactive input**, and must contain
-  **no references to Claude** (that convention lives in CLAUDE.md / this guide, not in the
-  suite). New profiling logic belongs in `tests/profiling/_profiling.py`, not duplicated per file; each
+  (`test_<x>.py` ↔ `profile_<x>.py`). They are standalone scripts run via `make profile*`,
+  must run with **no interactive input**, and must contain **no references to Claude**.
+  New profiling logic belongs in `tests/profiling/_profiling.py`, not duplicated per file; each
   `profile_<module>.py` is a thin `setup`/`call` wrapper over `run_profile`.
 - **Test data**: real KPF FITS lives under `tests/testdata/<LEVEL>/<date>/`,
   referenced via `Path(__file__).parent / "testdata" / ...` assigned to `UPPER_CASE`
@@ -590,8 +693,8 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **Markers** (registered in `conftest.py`): mark integration / heavy-compute classes
   `@pytest.mark.slow`, and truth-frame-gated classes `@pytest.mark.requires_testdata`
   (auto-skipped when `tests/testdata/` is absent). The fast pre-commit subset is
-  `-m "not slow"`; *when* to run the subset vs the full suite is policy and lives in
-  `CLAUDE.md`, not here.
+  `-m "not slow"`; *when* to run the subset vs the full suite is run-policy, out of scope
+  for this style guide.
 - **Float tolerances** (use the prevailing pattern for the situation):
   - Analytic recovery → `np.testing.assert_allclose(rtol=1e-5, atol=1e-5)`.
   - FITS round-trips → `assert_array_almost_equal(decimal=4)`.
@@ -663,7 +766,7 @@ documented, intentional ways — follow *its* conventions when adding masters co
   the summary (and double as test oracles for pure utils).
 - **Types are documented in the docstring, not the signature** (see §5). Array
   shapes/dtypes/units are stated in prose
-  (`"(rvdata-standard ImageHDUs, shape (NORDER,))"`, `"WAVE [Å, vacuum]"`).
+  (`"(EPRV-standard ImageHDUs, shape (NORDER,))"`, `"WAVE [Å, vacuum]"`).
 - **Inline comments explain *why*, not *what*** — full sentences, capitalized. Annotate
   magic numbers with units/meaning inline (`* 1.48424  # e-/ADU: exposure meter gain`). If a
   comment is needed to explain *what* a variable holds, rename the variable instead (§1, code
@@ -688,8 +791,7 @@ the dominant variant of the file/area you're editing**, and don't churn unrelate
 "fix" style.
 
 1. **Quicklook** — no shared base class + tuple-based registration, unlike Diag/QC; DPI
-   (150 vs 600) and axis-fontsize (14 vs 18) drift between L0 and L1; the
-   `(value, comment)`-unwrap helper duplicated ~4×.
+   (150 vs 600) and axis-fontsize (14 vs 18) drift between L0 and L1.
 2. **Masters** — the config-resolution block is duplicated 5× (could be a base helper); the
    `0.2` load-failure threshold is an unnamed magic number.
 3. **Configs** — the `[DATA_DIRS]` + `[KPFPIPE]` blocks are duplicated verbatim across the

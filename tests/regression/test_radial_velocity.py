@@ -369,10 +369,18 @@ class TestDispatch:
     @pytest.mark.parametrize(
         "raw, obj", [("EtalonFiber", "etalon"), ("LFCFiber", "lfc")]
     )
-    def test_unimplemented_source_raises(self, header_kpf2, raw, obj):
+    def test_unimplemented_source_warns_and_skips(self, header_kpf2, raw, obj):
         header_kpf2.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = raw
-        with pytest.raises(NotImplementedError, match=obj):
-            RadialVelocity(header_kpf2)._resolve_illumination_source("GREEN", "CAL")
+        with pytest.warns(UserWarning, match=f"{obj}.*not implemented"):
+            source = RadialVelocity(header_kpf2)._resolve_illumination_source(
+                "GREEN", "CAL"
+            )
+        assert source == {
+            "object": obj,
+            "mask_name": None,
+            "apply_barycorr": None,
+            "vel_grid_center": None,
+        }
 
 
 class TestStellarMaskName:
@@ -711,9 +719,8 @@ class TestPerform:
     def test_per_fiber_ccf_and_rv_headers(self, rv_module):
         # EPRV L4 keywords on each orderlet's CCF/RV extension; RVMETHOD on PRIMARY.
         l4 = rv_module.perform()
-        # CCF/RV extension headers are fits.Header objects (set via set_header),
-        # so keyword access returns the scalar value. PRIMARY is still written
-        # in place as a (value, comment) tuple.
+        # Every header (PRIMARY and the CCF/RV extensions) is a fits.Header, so
+        # keyword access returns the scalar value.
         ccf_hdr = l4.headers["SCI2_CCF"]
         assert ccf_hdr["VELNSTEP"] == _NVEL
         assert ccf_hdr["VELSTEP"] == pytest.approx(0.25)
@@ -725,44 +732,44 @@ class TestPerform:
         assert rv_hdr["RVMETHOD"] == "CCF"
         assert rv_hdr["SKYRMVD"] is False
         assert rv_hdr["TELLRMVD"] is False
-        assert l4.headers["PRIMARY"]["RVMETHOD"][0] == "CCF"
+        assert l4.headers["PRIMARY"]["RVMETHOD"] == "CCF"
 
     def test_per_ccd_rv_keywords(self, rv_module):
-        # Combined per-CCD RV/error are legacy carryovers, so they live on
-        # INSTRUMENT_HEADER, not the EPRV RV extension. Legacy scheme:
-        # CCD<n>RV<sfx>/CCD<n>ERV<sfx> with CCD1=GREEN, CCD2=RED and the SCI2
-        # per-fiber suffix '2'.
+        # Per-orderlet legacy RVs are registered KPF keywords routed to their RV#
+        # table header (legacy scheme CCD<n>RV<sfx>/CCD<n>ERV<sfx>; CCD1=GREEN,
+        # CCD2=RED; SCI2 per-fiber suffix '2' -> RV3, aliased SCI2_RV).
         l4 = rv_module.perform()
-        inst = l4.headers["INSTRUMENT_HEADER"]
-        assert inst["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert inst["CCD2RV2"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert inst["CCD1ERV2"] > 0 and inst["CCD2ERV2"] > 0
-        # The non-standard keywords must not appear on the EPRV RV extension.
-        rv_hdr = l4.headers["SCI2_RV"]
-        assert "CCD1RV2" not in rv_hdr and "CCD1RV" not in rv_hdr
+        rv_hdr = l4.headers["RV3"]
+        assert rv_hdr["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv_hdr["CCD2RV2"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv_hdr["CCD1ERV2"] > 0 and rv_hdr["CCD2ERV2"] > 0
+        # The per-orderlet keywords do not leak onto PRIMARY; they live on the RV#
+        # tables (the SCI-combined CCD<n>RV/CCFRV land on RV3).
+        assert "CCD1RV2" not in l4.headers["PRIMARY"]
 
-    def test_primary_combined_rv_populated(self, rv_module):
-        # The science combine: bare SCI-combined CCD1RV/CCD2RV and CCFRV/CCFERV
-        # on INSTRUMENT_HEADER; the EPRV RV/RVERR on PRIMARY. RV ~ injected value.
+    def test_combined_rv_populated(self, rv_module):
+        # The science combine: SCI-combined CCD1RV/CCD2RV and CCFRV/CCFERV on the
+        # RV3 table (registered KPF keywords), alongside the EPRV RV/RVERR on
+        # PRIMARY. RV ~ injected value.
         l4 = rv_module.perform()
-        inst = l4.headers["INSTRUMENT_HEADER"]
-        assert inst["CCD1RV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert inst["CCD2RV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert inst["CCD1ERV"] > 0 and inst["CCD2ERV"] > 0
-        assert inst["CCFRV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert inst["CCFERV"] > 0
+        rv3 = l4.headers["RV3"]
+        assert rv3["CCD1RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv3["CCD2RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv3["CCD1ERV"] > 0 and rv3["CCD2ERV"] > 0
+        assert rv3["CCFRV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv3["CCFERV"] > 0
 
         prim = l4.headers["PRIMARY"]
-        assert prim["RV"][0] == pytest.approx(_V_INJECT, abs=0.1)
-        assert prim["RVERR"][0] > 0
-        assert prim["RVMETHOD"][0] == "CCF"
-        assert prim["SYSVEL"][0] is None  # absolute RVs; nothing removed
+        assert prim["RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert prim["RVERR"] > 0
+        assert prim["RVMETHOD"] == "CCF"
+        assert prim["SYSVEL"] is None  # absolute RVs; nothing removed
 
     def test_ccfrv_is_weighted_ccd_combine(self, rv_module):
         # CCFRV = (CCD1RV*Wg + CCD2RV*Wr)/(Wg+Wr), Wg/Wr the summed order weights;
         # CCFERV = inverse-variance combination of the per-CCD errors.
         l4 = rv_module.perform()
-        inst = l4.headers["INSTRUMENT_HEADER"]
+        inst = l4.headers["RV3"]
         wg = np.nansum(rv_module._get_order_weights("GREEN", "SCI1"))
         wr = np.nansum(rv_module._get_order_weights("RED", "SCI1"))
         expect_rv = (inst["CCD1RV"] * wg + inst["CCD2RV"] * wr) / (wg + wr)
@@ -772,21 +779,23 @@ class TestPerform:
 
     def test_primary_berv_bjdtdb_from_per_ccd(self, rv_module):
         # PRIMARY BERV/BJDTDB are the chip-weighted mean of the per-CCD bary
-        # summaries (CCD<n>BKMS/CCD<n>BJD from BarycentricCorrection). Equal
-        # per-CCD values -> the weighted mean is that value, regardless of weights.
-        inst2 = rv_module.l2_obj.headers["INSTRUMENT_HEADER"]
-        inst2["CCD1BKMS"] = inst2["CCD2BKMS"] = -12.3
-        inst2["CCD1BJD"] = inst2["CCD2BJD"] = 2460123.5
+        # summaries (CCD<n>BKMS on BARYCORR_KMS, CCD<n>BJD on BJD_TDB, from
+        # BarycentricCorrection). Equal per-CCD values -> the weighted mean is that
+        # value, regardless of weights.
+        bkms = rv_module.l2_obj.headers["BARYCORR_KMS"]
+        bjd = rv_module.l2_obj.headers["BJD_TDB"]
+        bkms["CCD1BKMS"] = bkms["CCD2BKMS"] = -12.3
+        bjd["CCD1BJD"] = bjd["CCD2BJD"] = 2460123.5
         prim = rv_module.perform().headers["PRIMARY"]
-        assert prim["BERV"][0] == pytest.approx(-12.3)
-        assert prim["BJDTDB"][0] == pytest.approx(2460123.5)
+        assert prim["BERV"] == pytest.approx(-12.3)
+        assert prim["BJDTDB"] == pytest.approx(2460123.5)
 
     def test_primary_berv_undefined_without_per_ccd(self, rv_module):
-        # No per-CCD bary summaries on INSTRUMENT_HEADER -> BERV/BJDTDB UNDEFINED,
+        # No per-CCD bary summaries on PRIMARY -> BERV/BJDTDB UNDEFINED,
         # but the combined RV is still populated.
         prim = rv_module.perform().headers["PRIMARY"]
-        assert prim["BERV"][0] is None and prim["BJDTDB"][0] is None
-        assert prim["RV"][0] == pytest.approx(_V_INJECT, abs=0.1)
+        assert prim["BERV"] is None and prim["BJDTDB"] is None
+        assert prim["RV"] == pytest.approx(_V_INJECT, abs=0.1)
 
     def test_no_science_illuminated_raises(self, rv_module):
         # SCI requested (default fibers) but all dark -> fail loudly.
@@ -799,21 +808,19 @@ class TestPerform:
         # is left UNDEFINED and a note is printed.
         rv_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "Th_gold"
         prim = rv_module.perform(fibers=["CAL"]).headers["PRIMARY"]
-        assert prim["RV"][0] is None  # combine skipped, stays UNDEFINED
+        assert prim["RV"] is None  # combine skipped, stays UNDEFINED
         assert "no science orderlet requested" in capsys.readouterr().out
 
     def test_single_chip_combine_warns(self, rv_module, capsys):
         # One chip present: CCFRV uses it alone (== CCD1RV) and a warning prints.
         l4 = rv_module.perform(chips=["GREEN"])
-        inst = l4.headers["INSTRUMENT_HEADER"]
+        inst = l4.headers["RV3"]
         assert inst["CCFRV"] == pytest.approx(inst["CCD1RV"], abs=1e-9)
         assert "only chip GREEN present" in capsys.readouterr().out
 
     def test_l4_serializes_to_fits(self, rv_module, tmp_path):
-        # The CCF/RV extension headers must survive to_fits with comments intact:
-        # rvdata serializes non-PRIMARY extensions via fits.Header(headers[ext]),
-        # which rejects (value, comment) tuples, so they must be fits.Header
-        # objects set via set_header. SCI2 -> CCF3 / RV3.
+        # The CCF/RV extension headers must survive to_fits with comments intact.
+        # SCI2 -> CCF3 / RV3.
         l4 = rv_module.perform(fibers=["SCI1", "SCI2", "SCI3"])
         path = tmp_path / "kpf_SL4_20240405T000000.fits"
         l4.to_fits(str(path))
@@ -824,11 +831,10 @@ class TestPerform:
             assert ccf.comments["VELSTART"]  # comment preserved
             rv = hdul["RV3"].header
             assert rv["RVMETHOD"] == "CCF"
-            # Legacy combined-CCD RV lives on INSTRUMENT_HEADER (SCI2 suffix '2'),
-            # not on the EPRV RV extension.
-            inst = hdul["INSTRUMENT_HEADER"].header
-            assert inst["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
-            assert "CCD1RV2" not in rv
+            # Per-orderlet legacy RV lives on its RV# table header (SCI2 -> RV3),
+            # not on PRIMARY.
+            assert rv["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
+            assert "CCD1RV2" not in hdul["PRIMARY"].header
             # The EPRV combined RV survives on PRIMARY.
             assert hdul["PRIMARY"].header["RV"] == pytest.approx(_V_INJECT, abs=0.1)
             assert hdul["PRIMARY"].header["RVERR"] > 0
@@ -842,9 +848,9 @@ class TestPerform:
         )
 
         l4 = rv_module.perform(fibers=["SCI1", "SCI2", "SCI3"])
-        inst = l4.headers["INSTRUMENT_HEADER"]
-        assert "CCD1RV2" in inst and inst["CCD1RV2"] is None
-        assert "CCD2RV2" in inst and inst["CCD2RV2"] is None
+        rv_hdr = l4.headers["RV3"]  # SCI2 per-orderlet RVs -> RV3
+        assert "CCD1RV2" in rv_hdr and rv_hdr["CCD1RV2"] is None
+        assert "CCD2RV2" in rv_hdr and rv_hdr["CCD2RV2"] is None
 
     def test_thar_mask_recorded_for_cal(self, rv_module):
         # CAL on a ThAr lamp -> CCFMASK 'thar', instrument frame (no barycorr).
@@ -854,10 +860,15 @@ class TestPerform:
         rv = np.asarray(l4.data["CAL_RV"]["RV"])
         np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
 
-    def test_etalon_fiber_raises(self, rv_module):
-        rv_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "EtalonFiber"
-        with pytest.raises(NotImplementedError, match="etalon"):
-            rv_module.perform(fibers=["CAL"])
+    @pytest.mark.parametrize(
+        "raw, obj", [("EtalonFiber", "etalon"), ("LFCFiber", "lfc")]
+    )
+    def test_unimplemented_fiber_skipped(self, rv_module, raw, obj):
+        rv_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = raw
+        with pytest.warns(UserWarning, match=f"{obj}.*not implemented"):
+            l4 = rv_module.perform(fibers=["CAL"])
+        assert l4.data["CAL_CCF"].size == 0
+        assert len(l4.data["CAL_RV"]) == 0
 
     def test_explicit_chips_and_fibers(self, rv_module):
         l4 = rv_module.perform(chips=["GREEN"], fibers=["SCI1", "SCI2", "SCI3"])

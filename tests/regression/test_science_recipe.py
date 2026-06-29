@@ -6,6 +6,7 @@ observation from tests/testdata/L0/20240405/.
 """
 
 import argparse
+import importlib.metadata
 import importlib.util
 import os
 from pathlib import Path
@@ -120,7 +121,7 @@ class TestScienceRecipe:
         assert "barycentric_correction" in modules
 
     def test_barycorr_extensions_populated(self, recipe_output):
-        """BarycentricCorrection should populate the rvdata-standard extensions
+        """BarycentricCorrection should populate the EPRV-standard extensions
         per-order, with finite values."""
         l2 = KPF2.from_fits(recipe_output)
         norder = NORDER_GREEN + NORDER_RED
@@ -137,33 +138,58 @@ class TestScienceRecipe:
         assert np.all(np.abs(z) < 1e-3)
 
     def test_per_ccd_barycorr_keywords(self, recipe_output):
-        """Per-CCD scalar summaries should land on INSTRUMENT_HEADER."""
+        """Per-CCD scalar summaries land on their barycentric extension headers."""
         l2 = KPF2.from_fits(recipe_output)
-        inst = l2.headers["INSTRUMENT_HEADER"]
-        for key in ("CCD1BJD", "CCD1BKMS", "CCD1BZ", "CCD2BJD", "CCD2BKMS", "CCD2BZ"):
-            assert key in inst, f"{key} missing from INSTRUMENT_HEADER"
-            assert np.isfinite(float(inst[key])), f"{key} not finite"
+        homes = {
+            "CCD1BJD": "BJD_TDB",
+            "CCD2BJD": "BJD_TDB",
+            "CCD1BKMS": "BARYCORR_KMS",
+            "CCD2BKMS": "BARYCORR_KMS",
+            "CCD1BZ": "BARYCORR_Z",
+            "CCD2BZ": "BARYCORR_Z",
+        }
+        for key, ext in homes.items():
+            hdr = l2.headers[ext]
+            assert key in hdr, f"{key} missing from {ext}"
+            assert np.isfinite(float(hdr.get(key))), f"{key} not finite"
 
     def test_calibration_headers_set(self, recipe_output):
-        """CalibrationAssociation's L1 PRIMARY writes survive into L2
-        INSTRUMENT_HEADER."""
+        """CalibrationAssociation's writes survive onto the L2 product: master
+        paths on RECEIPT, ages on QUALITY_CONTROL (their registry homes)."""
         l2 = KPF2.from_fits(recipe_output)
-        inst = l2.headers["INSTRUMENT_HEADER"]
-        # bias/dark use basename + DIR + integer AGE. Flat association is not
-        # part of the basic runnable path until flat processing is implemented.
+        receipt = l2.headers["RECEIPT"]
+        qc = l2.headers["QUALITY_CONTROL"]
+        # bias/dark use full-path FILE + float AGE (no DIR). Flat association is
+        # not part of the basic runnable path until flat processing is
+        # implemented.
         for prefix in ("BIAS", "DARK"):
-            assert f"{prefix}FILE" in inst
-            assert f"{prefix}DIR" in inst
-            assert f"AGE{prefix}" in inst
-        assert "FLATFILE" not in inst
-        assert "FLATDIR" not in inst
-        assert "AGEFLAT" not in inst
-        # thar uses legacy convention: WLSFILE = full path (no WLSDIR),
-        # AGEWLS = float days
-        assert "WLSFILE" in inst
-        assert "WLSDIR" not in inst
-        assert inst["WLSFILE"].endswith("_master_thar_L2.fits")
-        assert isinstance(inst["AGEWLS"], float)
+            assert f"{prefix}FILE" in receipt
+            assert f"{prefix}DIR" not in receipt
+            assert f"{prefix}AGE" in qc
+        assert "FLATFILE" not in receipt
+        assert "FLATAGE" not in qc
+        # thar uses the same convention: WLSFILE = full path (no WLSDIR),
+        # WLSAGE = float days
+        assert "WLSFILE" in receipt
+        assert "WLSDIR" not in receipt
+        assert receipt.get("WLSFILE").endswith("_master_thar_L2.fits")
+        assert isinstance(qc.get("WLSAGE"), float)
+
+    def test_provenance_keywords_set(self, recipe_output):
+        """DRPTAG (EPRV) stays on the L2 PRIMARY; the WMKO DRP-RUN provenance cards
+        live on the L2 RECEIPT."""
+        l2 = KPF2.from_fits(recipe_output)
+        prim = l2.headers["PRIMARY"]
+        receipt = l2.headers["RECEIPT"]
+        version = importlib.metadata.version("kpfpipe")
+        assert prim.get("DRPTAG") == version
+        # The four provenance cards moved off PRIMARY onto RECEIPT.
+        assert all(k not in prim for k in ("DRPVERNO", "DRPSTATU", "PROGID", "KOAID"))
+        assert receipt.get("DRPVERNO") == version
+        assert "PROGID" in receipt
+        assert "KOAID" in receipt
+        # BarycentricCorrection is the last module to run before the L2 write.
+        assert receipt.get("DRPSTATU") == "Barycentric Correction module complete"
 
     def test_wave_arrays_populated(self, recipe_output):
         """WavelengthCalibration should fill the per-fiber WAVE extensions."""

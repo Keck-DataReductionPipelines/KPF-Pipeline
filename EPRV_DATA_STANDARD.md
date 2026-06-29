@@ -192,17 +192,21 @@ name, relevant parameters (args), and status**; time/version/branch are filled a
 KPF: Keck, 445–870 nm, R≈100k. Standardized L2/L4 filenames: `kpf_SL2_…fits`,
 `kpf_SL4_…fits`.
 
-**Trace ↔ fiber mapping** — the standard's KPF mapping and our `data_models/config/trace-map.csv`
-**agree for traces 1–5**:
+**Trace ↔ fiber mapping** — KPF assigns trace numbers in **physical fiber order** on the slicer
+(`SKY, SCI1, SCI2, SCI3, CAL`), consistent across `data_models/config/trace-map.csv`,
+`detector.toml [fiber_positions]`, and the `[KPFPIPE].fibers` list. This fiber↔trace-number
+assignment is a **KPF convention**: the EPRV standard governs the per-trace extension *structure*
+(`TRACE{N}_*`), not which fiber is trace N. (An earlier EPRV KPF translator doc listed a CAL-first
+numbering; that was stale and does not bind vNext.)
 
 | Trace | Object type | KPF fiber |
 |:--:|:--:|---|
-| 1 | CAL | Calibration |
+| 1 | SKY | Sky |
 | 2 | SCI | Science slice 1 (`SCI1`) |
 | 3 | SCI | Science slice 2 (`SCI2`) |
 | 4 | SCI | Science slice 3 (`SCI3`) |
-| 5 | SKY | Sky |
-| 6 | SCI | **Virtual fiber** — `SCI1/2/3` resampled onto SCI2's grid, outlier-rejected and weighted |
+| 5 | CAL | Calibration |
+| 6 | SCI | **Virtual fiber** (EPRV translator only, not produced by vNext) — `SCI1/2/3` resampled onto SCI2's grid, outlier-rejected and weighted |
 
 **Known deviations from the EPRV KPF translator doc** (the doc describes the official
 translator; vNext may differ by design per the charter — confirm each is intended):

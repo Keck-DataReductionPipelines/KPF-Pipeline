@@ -3,9 +3,8 @@ KPF Wavelength Calibration module.
 
 Copies the per-fiber wavelength solution from a precomputed master WLS L2
 product onto a science L2. The master is located by CalibrationAssociation,
-which writes the full WLSFILE path to the L1 PRIMARY header. KPF1.to_kpf2()
-preserves the full L1 PRIMARY in the L2 INSTRUMENT_HEADER extension, where
-this module reads it from.
+which writes the full WLSFILE path to the RECEIPT header (its registry home);
+to_kpf2 forwards the L1 RECEIPT header to the L2, where this module reads it.
 """
 
 import os
@@ -23,17 +22,15 @@ class WavelengthCalibration:
     """
     Apply a precomputed wavelength solution to an extracted KPF L2 frame.
 
-    Reads `WLSFILE` (full path, legacy convention) from the L2
-    INSTRUMENT_HEADER extension (populated by CalibrationAssociation on
-    the L1 PRIMARY and carried through by to_kpf2), loads the corresponding
-    KPFMasterL2, and copies each per-fiber {CHIP}_{FIBER}_WAVE array onto
-    the science L2.
+    Reads `WLSFILE` (full path, legacy convention) from the L2 RECEIPT
+    header (written by CalibrationAssociation on the L1 RECEIPT and carried
+    through by to_kpf2), loads the corresponding KPFMasterL2, and copies each
+    per-fiber {CHIP}_{FIBER}_WAVE array onto the science L2.
 
     Parameters
     ----------
     l2_obj : KPF2
-        Extracted L2 frame. The INSTRUMENT_HEADER extension must contain
-        a WLSFILE keyword.
+        Extracted L2 frame. The RECEIPT header must contain a WLSFILE keyword.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: chips, fibers.
     """
@@ -56,7 +53,7 @@ class WavelengthCalibration:
             setattr(self, k, params.get(k, v))
 
         self._wls_path = None  # set by load_wls()
-        self._results = None  # populated by perform()
+        self._info = None
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -67,10 +64,9 @@ class WavelengthCalibration:
         Load the master wavelength solution from disk.
 
         If `wls_path` is provided it is used directly, bypassing the header
-        lookup. Otherwise the path is read from `WLSFILE` in the L2
-        INSTRUMENT_HEADER extension (which preserves the L1 PRIMARY, where
-        CalibrationAssociation wrote WLSFILE as a full path per the legacy
-        WLS convention).
+        lookup. Otherwise the path is read from `WLSFILE` in the L2 RECEIPT
+        header (where CalibrationAssociation wrote it as a full path per the
+        legacy WLS convention).
 
         Parameters
         ----------
@@ -86,24 +82,40 @@ class WavelengthCalibration:
         ------
         KeyError
             If neither `wls_path` is given nor WLSFILE is present in the L2
-            INSTRUMENT_HEADER.
+            RECEIPT header.
         FileNotFoundError
             If the resolved path does not exist.
         """
         if wls_path is None:
-            inst_header = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
-            if "WLSFILE" not in inst_header:
+            receipt = self.l2_obj.headers.get("RECEIPT", {})
+            if "WLSFILE" not in receipt:
                 raise KeyError(
-                    "WLSFILE missing from L2 INSTRUMENT_HEADER; "
+                    "WLSFILE missing from L2 RECEIPT; "
                     "run CalibrationAssociation with 'thar' on the L1 first"
                 )
-            wls_path = inst_header["WLSFILE"]
+            wls_path = receipt.get("WLSFILE")
 
         if not os.path.isfile(wls_path):
             raise FileNotFoundError(f"Master WLS file not found: {wls_path}")
 
         self._wls_path = wls_path
         return KPFMasterL2.from_fits(wls_path)
+
+    # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {"wls_path": self._wls_path}
+
+    def _set_headers(self, l2_obj):
+        """Write all PRIMARY-header keywords for wavelength calibration.
+
+        Reserved: this module writes no PRIMARY metadata yet. Present so every
+        module consolidates header writes in one place, called just before the
+        receipt entry.
+        """
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -127,14 +139,14 @@ class WavelengthCalibration:
             Defaults to self.fibers.
         wls_path : str, optional
             Direct path to the master WLS L2 file. If omitted, the path is
-            read from WLSFILE on the L2 INSTRUMENT_HEADER extension.
+            read from WLSFILE on the L2 RECEIPT header.
 
         Returns
         -------
         l2_obj : KPF2
             The input L2 with per-fiber _WAVE extensions populated and a
-            'wavelength_calibration' receipt entry. WLSFILE on
-            INSTRUMENT_HEADER is left untouched.
+            'wavelength_calibration' receipt entry. WLSFILE on RECEIPT is
+            left untouched.
         """
         if chips is None:
             chips = self.chips
@@ -154,32 +166,28 @@ class WavelengthCalibration:
                     )
                 self.l2_obj.set_data(key, np.asarray(src, dtype=np.float64))
 
+        self._set_headers(self.l2_obj)
+        self._track_info()
         self.l2_obj.receipt_add_entry("wavelength_calibration", "PASS")
-
-        self._results = {
-            "wls_path": self._wls_path,
-            "chips": list(chips),
-            "fibers": list(fibers),
-        }
 
         return self.l2_obj
 
     def info(self):
         """Print a summary of the module configuration and association results."""
         print("WavelengthCalibration")
-        obs_id = self.l2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
-        if isinstance(obs_id, tuple):
-            obs_id = obs_id[0]
+        receipt = self.l2_obj.headers.get("RECEIPT", {})
+        obs_id = receipt.get("ORIGID", "unknown")
         print(f"  obs_id:  {obs_id}")
         print(f"  chips:   {self.chips}")
         print(f"  fibers:  {self.fibers}")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
-        inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
-        agewls = inst.get("AGEWLS")
-        print(f"  wls_path: {self._results['wls_path']}")
+        # WLSAGE is written to QUALITY_CONTROL by DiagL1 (CalibrationAssociation
+        # writes WLSFILE to RECEIPT; DiagL1 derives the age from it).
+        agewls = self.l2_obj.headers.get("QUALITY_CONTROL", {}).get("WLSAGE")
+        print(f"  wls_path: {self._info['wls_path']}")
         if agewls is not None:
-            print(f"  AGEWLS:   {agewls:+.4f} d  (master - obs)")
+            print(f"  WLSAGE:   {agewls:+.4f} d  (master - obs)")

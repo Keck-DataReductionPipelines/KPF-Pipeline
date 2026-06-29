@@ -30,7 +30,7 @@ class WLS(BaseMasterModule):
 
     Standard reduction: like science, a WLS frame is bias- and dark-subtracted
     before extraction (`_STANDARD_CALIBRATIONS = ("bias", "dark")`); flat
-    division is part of the standard but stays off until it is implemented.
+    division is part of the standard reduction but stays off until it is implemented.
 
     Parameters
     ----------
@@ -79,7 +79,7 @@ class WLS(BaseMasterModule):
         self._load_linelist()
 
         self._l2_obj_cache = []  # populated by _process_stack_l0_to_l2()
-        self._results = None  # populated by make_master_l2()
+        self._info = None
         self._coeffs_stack = (
             None  # populated by make_master_l2(); used by save_diagnostics()
         )
@@ -886,11 +886,11 @@ class WLS(BaseMasterModule):
         # _process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
         self._process_stack_l0_to_l2(l0_file_list=l0_file_list, verbose=verbose)
 
-        self.ml2_obj = KPFMasterL2()
+        self.ml2_obj = KPFMasterL2(kind="wls")
 
         self._coeffs_stack = {}
         self._lines_stack = {}
-        self._results = {}
+        self._info = {}
 
         for chip in self.chips:
             result = self._compute_wls_from_stack(
@@ -904,14 +904,20 @@ class WLS(BaseMasterModule):
             )
             W, coeffs_mean, coeffs_stack, lines_stack = result
 
-            self._results[chip] = {
+            self._info[chip] = {
                 "n_total": sum(len(frame["wav"]) for frame in lines_stack),
                 "n_fit": sum(int(np.sum(~frame["bad"])) for frame in lines_stack),
             }
             self._coeffs_stack[chip] = coeffs_stack
             self._lines_stack[chip] = lines_stack
 
-            for i, fiber in enumerate(self.fibers):
+            # W's fiber planes are ordered by physical slicer position (the fit
+            # ranks fibers via fiber_positions and _evaluate_wls_coeffs emits
+            # planes in that order). Assign by that same canonical order, not
+            # self.fibers' (config-overridable) order, so a reordered self.fibers
+            # cannot mis-route a solution (e.g. SKY's onto CAL).
+            canonical = sorted(self.fibers, key=lambda fb: self.fiber_positions[fb])
+            for i, fiber in enumerate(canonical):
                 if W.ndim == 2:
                     self.ml2_obj.data[f"{chip}_{fiber}_WAVE"] = W
                 else:
@@ -922,24 +928,18 @@ class WLS(BaseMasterModule):
                 self.ml2_obj.create_extension(coeffs_ext, "ImageHDU")
             self.ml2_obj.set_data(coeffs_ext, coeffs_mean)
 
-            # (value, comment) tuples are rejected for non-PRIMARY headers
-            # by rvdata's fits.Header(dict) round-trip; keep these plain.
-            coeffs_hdr = self.ml2_obj.headers[coeffs_ext]
-            coeffs_hdr["POLYORDX"] = polyorder_x
-            coeffs_hdr["POLYORDM"] = polyorder_m
-            coeffs_hdr["POLYORDF"] = polyorder_f
-
         self.ml2_obj.set_input_files(l0_file_list, "thar")
 
-        primary = self.ml2_obj.headers["PRIMARY"]
-        primary["ROUGHWLS"] = (self.rough_wls_file, "Rough WLS reference file")
-        primary["LINELIST"] = (self.linelist, "Line list reference file")
-        primary["LINEPROF"] = (lineprofile, "Line profile model used in WLS fit")
-        primary["POLYORDX"] = (polyorder_x, "WLS polynomial degree, pixel axis")
-        primary["POLYORDM"] = (polyorder_m, "WLS polynomial degree, order axis")
-        primary["POLYORDF"] = (polyorder_f, "WLS polynomial degree, fiber axis")
-        primary["CHIPS"] = (",".join(self.chips), "Chips included in master WLS")
-        primary["FIBERS"] = (",".join(self.fibers), "Fibers included in master WLS")
+        # WLS metadata is out of EPRV scope but registered in Masters-headers.csv,
+        # so it routes through set_keyword (-> PRIMARY, registry comments). The
+        # POLYORD* degrees live on PRIMARY only (one registry home each); they were
+        # formerly also stamped on each {chip}_WLS_COEFFS header, now dropped.
+        self.ml2_obj.set_keyword("ROUGHWLS", self.rough_wls_file)
+        self.ml2_obj.set_keyword("LINELIST", self.linelist)
+        self.ml2_obj.set_keyword("LINEPROF", lineprofile)
+        self.ml2_obj.set_keyword("POLYORDX", polyorder_x)
+        self.ml2_obj.set_keyword("POLYORDM", polyorder_m)
+        self.ml2_obj.set_keyword("POLYORDF", polyorder_f)
 
         self.ml2_obj.receipt_add_entry("master_wls", "PASS")
 
@@ -1004,13 +1004,13 @@ class WLS(BaseMasterModule):
             f"f={self.polyorder_f}"
         )
 
-        if self._results is None:
+        if self._info is None:
             print("  make_master_l2() has not been called")
             return
 
         print(f"\n  {'chip':<8s} {'n lines fit/total'}")
         print("  " + "-" * 40)
-        for chip, stats in self._results.items():
+        for chip, stats in self._info.items():
             n_fit, n_total = stats["n_fit"], stats["n_total"]
             pct = 100.0 * n_fit / n_total if n_total else 0.0
             print(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")

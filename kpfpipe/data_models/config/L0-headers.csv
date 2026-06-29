@@ -1,0 +1,10 @@
+Keyword,Description,Extension,DataType,PopulatedBy
+PROGID,WMKO program ID (DRP-RUN-19),RECEIPT,str,KPF0.from_fits
+KOAID,KOA archive ID (DRP-RUN-19),RECEIPT,str,KPF0.from_fits
+DRPVERNO,Pipeline version (DRP-RUN-11; EPRV equivalent is DRPTAG),RECEIPT,str,KPF0.from_fits
+DRPSTATU,DRP reduction status (DRP-RUN-20),RECEIPT,str,KPF0.from_fits
+DATAPRL0,QC: GREEN/RED amp extensions present/non-empty,QUALITY_CONTROL,int,QCL0
+KWRDPRL0,QC: required L0 PRIMARY keywords present,QUALITY_CONTROL,int,QCL0
+EXPTIMOK,"QC: EXPTIME present, finite, non-negative",QUALITY_CONTROL,int,QCL0
+NOTJUNK,QC: obs_id not in junk list,QUALITY_CONTROL,int,QCL0
+ISGOOD,QC: aggregate pass/fail,QUALITY_CONTROL,int,QC

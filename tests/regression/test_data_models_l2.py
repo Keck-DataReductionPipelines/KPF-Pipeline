@@ -6,13 +6,18 @@ calibration product.
 Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
+import warnings
+from collections import OrderedDict
+
 import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
+from rvdata.core.models.level2 import RV2
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.masters import KPFMasterL2
@@ -41,6 +46,7 @@ def synthetic_masters_l2_file(tmp_path):
     primary.header["INSTRUME"] = "KPF"
     primary.header["DATE-OBS"] = "2024-01-13T10:26:56"
     primary.header["DATALVL"] = "ML2"
+    primary.header["MASTYPE"] = "thar"  # from_fits infers kind="wls" from this
 
     n_pix = 64
     wave = rng.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float32)
@@ -54,42 +60,66 @@ def synthetic_masters_l2_file(tmp_path):
     return fn
 
 
+@pytest.fixture
+def converted_l1(synthetic_l0_file):
+    """An L1 produced via KPF0.to_kpf1 — already EPRV-standard PRIMARY plus a
+    populated INSTRUMENT_HEADER (the input to_kpf2 expects in production)."""
+    return KPF0.from_fits(synthetic_l0_file).to_kpf1()
+
+
+class TestKPF2QualityControlRoundTrip:
+    """The KPF-custom QUALITY_CONTROL extension survives KPF2's RV2 read path.
+
+    register_rvdata_extension teaches rvdata's definition-driven L2 reader about
+    QUALITY_CONTROL; without it from_fits raises KeyError on that HDU.
+    """
+
+    def test_quality_control_and_barycorr_roundtrip(self, tmp_path):
+        l2 = KPF2()
+        l2.set_keyword("NANSCI1", 7)
+        l2.set_keyword("CCD1BKMS", -3.21)
+        fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            l2.to_fits(fn)
+            back = KPF2.from_fits(fn)
+        assert back.headers["QUALITY_CONTROL"]["NANSCI1"] == 7
+        assert back.headers["BARYCORR_KMS"]["CCD1BKMS"] == -3.21
+
+
 class TestToKPF2:
-    def test_to_kpf2_creates_kpf2(self, synthetic_l1_file):
-        l1 = KPF1.from_fits(synthetic_l1_file)
-        kpf2 = l1.to_kpf2()
+    def test_to_kpf2_creates_kpf2(self, converted_l1):
+        kpf2 = converted_l1.to_kpf2()
         assert kpf2.level == 2
         assert isinstance(kpf2, KPF2)
 
-    def test_to_kpf2_maps_header_keywords(self, synthetic_l1_file):
-        l1 = KPF1.from_fits(synthetic_l1_file)
-        l1.headers["PRIMARY"]["ELAPSED"] = 300.0
-        l1.headers["PRIMARY"]["IMTYPE"] = "Object"
-        l1.headers["PRIMARY"]["GROBSERV"] = "Smith"
-        kpf2 = l1.to_kpf2()
-        assert kpf2.headers["PRIMARY"]["EXPTIME"] == 300.0
-        assert kpf2.headers["PRIMARY"]["OBSTYPE"] == "Object"
-        assert kpf2.headers["PRIMARY"]["OBSERVER"] == "Smith"
+    def test_to_kpf2_passes_through_eprv_primary(self, converted_l1):
+        """Conversion happened in to_kpf1; to_kpf2 forwards the EPRV PRIMARY."""
+        kpf2 = converted_l1.to_kpf2()
+        prim = kpf2.headers["PRIMARY"]
+        assert prim.get("EXPTIME") == 300.0  # from ELAPSED, set in to_kpf1
+        assert prim.get("OBSTYPE") == "Object"  # from IMTYPE
+        assert prim.get("OBSERVER") == "Smith"  # from GROBSERV
+        # Raw natives never reach the EPRV PRIMARY.
+        assert "ELAPSED" not in prim
+        assert "IMTYPE" not in prim
 
-    def test_to_kpf2_copies_same_name_keywords(self, synthetic_l1_file):
-        l1 = KPF1.from_fits(synthetic_l1_file)
-        kpf2 = l1.to_kpf2()
-        assert kpf2.headers["PRIMARY"]["INSTRUME"] == "KPF"
-        assert kpf2.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
+    def test_to_kpf2_copies_same_name_keywords(self, converted_l1):
+        kpf2 = converted_l1.to_kpf2()
+        assert kpf2.headers["PRIMARY"].get("INSTRUME") == "KPF"
+        assert kpf2.headers["PRIMARY"].get("DATE-OBS") == "2024-01-13T10:26:56"
 
-    def test_to_kpf2_sets_defaults(self, synthetic_l1_file):
-        l1 = KPF1.from_fits(synthetic_l1_file)
-        kpf2 = l1.to_kpf2()
-        datalvl = kpf2.headers["PRIMARY"]["DATALVL"]
-        assert (datalvl[0] if isinstance(datalvl, tuple) else datalvl) == "L2"
+    def test_to_kpf2_sets_defaults(self, converted_l1):
+        kpf2 = converted_l1.to_kpf2()
+        assert kpf2.headers["PRIMARY"].get("DATALVL") == "L2"
         origin = kpf2.headers["PRIMARY"].get("ORIGIN")
         assert origin is not None
 
-    def test_to_kpf2_sets_instrument_header(self, synthetic_l1_file):
-        l1 = KPF1.from_fits(synthetic_l1_file)
-        kpf2 = l1.to_kpf2()
-        assert "INSTRUME" in kpf2.headers["INSTRUMENT_HEADER"]
+    def test_to_kpf2_carries_instrument_header(self, converted_l1):
+        """INSTRUMENT_HEADER (raw natives) is forwarded unchanged from L1."""
+        kpf2 = converted_l1.to_kpf2()
         assert kpf2.headers["INSTRUMENT_HEADER"]["INSTRUME"] == "KPF"
+        assert kpf2.headers["INSTRUMENT_HEADER"]["ELAPSED"] == 300.0
 
     def test_to_kpf2_maps_passthrough_extensions(self, tmp_path):
         """Build an L1 with TELEMETRY and CA_HK, verify they map to KPF2 extensions."""
@@ -130,8 +160,18 @@ class TestToKPF2:
         kpf2 = l1.to_kpf2()
         assert "to_kpf2" in kpf2.receipt["Module_Name"].values
 
+    def test_to_kpf2_receipt_updates_drpstatus(self, synthetic_l1_file):
+        """The DRPSTATU receipt override is active on KPF2 too (it subclasses
+        RV2, not KPFDataModel, so it carries its own override)."""
+        kpf2 = KPF1.from_fits(synthetic_l1_file).to_kpf2()
+        kpf2.receipt_add_entry("barycentric_correction", "PASS")
+        assert (
+            kpf2.headers["RECEIPT"].get("DRPSTATU")
+            == "Barycentric Correction module complete"
+        )
+
     def test_to_kpf2_sets_origid(self, tmp_path):
-        """Verify obs_id is stored as ORIGID in KPF2 PRIMARY."""
+        """Verify obs_id is stored as ORIGID on the KPF2 RECEIPT (its registry home)."""
         fn = str(tmp_path / "KP.20240113.23249.10_L1.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
@@ -151,10 +191,9 @@ class TestToKPF2:
         l1 = KPF1.from_fits(fn)
         assert l1.obs_id == "KP.20240113.23249.10"
         kpf2 = l1.to_kpf2()
-        origid = kpf2.headers["PRIMARY"]["ORIGID"]
-        assert (
-            origid[0] if isinstance(origid, tuple) else origid
-        ) == "KP.20240113.23249.10"
+        origid = kpf2.headers["RECEIPT"].get("ORIGID")
+        assert origid == "KP.20240113.23249.10"
+        assert "ORIGID" not in kpf2.headers["PRIMARY"]
 
 
 class TestAliasedOrderedDict:
@@ -196,8 +235,6 @@ class TestAliasedOrderedDict:
         assert aliases == {"A1", "A2"}
 
     def test_from_ordered_dict(self):
-        from collections import OrderedDict
-
         od = OrderedDict([("A", 1), ("B", 2)])
         aliased = AliasedOrderedDict.from_ordered_dict(od)
         assert aliased["A"] == 1
@@ -216,8 +253,6 @@ class TestAliasedOrderedDict:
 
 class TestKPF2Aliases:
     def test_kpf2_inherits_rv2(self):
-        from rvdata.core.models.level2 import RV2
-
         kpf2 = KPF2()
         assert isinstance(kpf2, RV2)
         assert kpf2.level == 2
@@ -226,8 +261,8 @@ class TestKPF2Aliases:
         kpf2 = KPF2()
         # SCI2_FLUX should resolve to TRACE3_FLUX
         assert kpf2.data["SCI2_FLUX"] is kpf2.data["TRACE3_FLUX"]
-        assert kpf2.data["CAL_FLUX"] is kpf2.data["TRACE1_FLUX"]
-        assert kpf2.data["SKY_WAVE"] is kpf2.data["TRACE5_WAVE"]
+        assert kpf2.data["CAL_FLUX"] is kpf2.data["TRACE5_FLUX"]
+        assert kpf2.data["SKY_WAVE"] is kpf2.data["TRACE1_WAVE"]
 
     def test_extension_alias_resolves(self):
         kpf2 = KPF2()
@@ -250,11 +285,11 @@ class TestKPF2Aliases:
         kpf2 = KPF2()
         # Check all 5 fibers x 4 suffixes = 20 aliases
         for fiber, trace in [
-            ("CAL", 1),
+            ("SKY", 1),
             ("SCI1", 2),
             ("SCI2", 3),
             ("SCI3", 4),
-            ("SKY", 5),
+            ("CAL", 5),
         ]:
             for suffix in ["FLUX", "WAVE", "VAR", "BLAZE"]:
                 alias = f"{fiber}_{suffix}"
@@ -353,34 +388,41 @@ class TestDtypeProvenance:
 
 
 class TestKPFMasterL2:
-    def test_required_extensions_created(self):
-        m = KPFMasterL2()
-        for ext in [
-            "PRIMARY",
-            "RECEIPT",
-            "TRACE1_FLUX",
-            "TRACE1_WAVE",
-            "TRACE1_VAR",
-            "TRACE1_BLAZE",
-            "TRACE3_FLUX",
-            "TRACE3_WAVE",
-            "TRACE3_VAR",
-            "TRACE3_BLAZE",
-            "TRACE5_FLUX",
-            "TRACE5_WAVE",
-            "TRACE5_VAR",
-            "TRACE5_BLAZE",
-        ]:
+    def test_wls_extensions_created(self):
+        # A WLS master carries the shared extensions plus TRACE*_WAVE, and not the
+        # flat-only TRACE*_FLUX/VAR/BLAZE.
+        m = KPFMasterL2(kind="wls")
+        for ext in ["PRIMARY", "RECEIPT", "QUALITY_CONTROL", "INPUT_FILES"]:
             assert ext in m.extensions
+        for n in (1, 3, 5):
+            assert f"TRACE{n}_WAVE" in m.extensions
+            for suffix in ("FLUX", "VAR", "BLAZE"):
+                assert f"TRACE{n}_{suffix}" not in m.extensions
+
+    def test_flat_extensions_created(self):
+        # A flat master carries TRACE*_FLUX/VAR/BLAZE and not TRACE*_WAVE.
+        m = KPFMasterL2(kind="flat")
+        for ext in ["PRIMARY", "RECEIPT", "QUALITY_CONTROL", "INPUT_FILES"]:
+            assert ext in m.extensions
+        for n in (1, 3, 5):
+            for suffix in ("FLUX", "VAR", "BLAZE"):
+                assert f"TRACE{n}_{suffix}" in m.extensions
+            assert f"TRACE{n}_WAVE" not in m.extensions
+
+    def test_kind_required_and_validated(self):
+        with pytest.raises(TypeError):
+            KPFMasterL2()  # kind is required, no default
+        with pytest.raises(ValueError):
+            KPFMasterL2(kind="bogus")
 
     def test_aliases_work(self):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         assert m.extensions._resolve("SCI2_WAVE") == "TRACE3_WAVE"
-        assert m.extensions._resolve("CAL_WAVE") == "TRACE1_WAVE"
-        assert m.extensions._resolve("SKY_WAVE") == "TRACE5_WAVE"
+        assert m.extensions._resolve("CAL_WAVE") == "TRACE5_WAVE"
+        assert m.extensions._resolve("SKY_WAVE") == "TRACE1_WAVE"
 
     def test_chip_prefix_access(self):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         n_pix = 32
         trace_data = (
             np.random.default_rng(42)
@@ -397,11 +439,11 @@ class TestKPFMasterL2:
         np.testing.assert_array_equal(red, trace_data[NORDER_GREEN:])
 
     def test_inherits_from_kpf2(self):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         assert isinstance(m, KPF2)
 
     def test_inherits_from_kpf_master_model(self):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         assert isinstance(m, KPFMasterModel)
 
     def test_class_attributes(self):
@@ -434,21 +476,19 @@ class TestKPFMasterL2:
             assert hdul["PRIMARY"].header["DATALVL"] == "ML2"
 
     def test_no_warning_on_known_extensions(self, synthetic_masters_l2_file):
-        import warnings
-
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
             KPFMasterL2.from_fits(synthetic_masters_l2_file)
 
     def test_set_input_files(self):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]
         m.set_input_files(files, "thar")
         assert m.data["INPUT_FILES"]["FILENAME"].tolist() == files
         assert m.headers["PRIMARY"]["MASTYPE"] == "thar"
 
     def test_input_files_roundtrip(self, tmp_path):
-        m = KPFMasterL2()
+        m = KPFMasterL2(kind="wls")
         files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]
         m.set_input_files(files, "thar")
         m.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
@@ -464,6 +504,7 @@ class TestKPFMasterL2:
         fn = str(tmp_path / "unknown_ext_ml2.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-01-13T00:00:00"
+        primary.header["MASTYPE"] = "thar"  # so from_fits can infer kind="wls"
         weird = fits.ImageHDU(data=np.zeros((4, 4)))
         weird.name = "WEIRD_EXTENSION"
         hdul = fits.HDUList([primary, weird])
@@ -472,3 +513,34 @@ class TestKPFMasterL2:
 
         with pytest.warns(UserWarning, match="Non-standard extension"):
             KPFMasterL2.from_fits(fn)
+
+
+class TestKPF2HeaderStorage:
+    """KPF2-specific header storage and the KPF2._create_hdul serialization path.
+
+    KPF2 stores headers as fits.Header (like all KPF models) but overrides
+    _create_hdul via RV2, a distinct code path from the inherited base one tested
+    in test_data_models_base.py.
+    """
+
+    def test_fresh_l2_headers_are_fits_headers(self):
+        kpf2 = KPF2()
+        assert isinstance(kpf2.headers["PRIMARY"], fits.Header)
+        # A non-PRIMARY extension header too (created via create_extension).
+        assert isinstance(kpf2.headers["TRACE1_FLUX"], fits.Header)
+
+    def test_l2_primary_comment_round_trips(self, tmp_path):
+        # Guards the KPF2._create_hdul override (not the inherited base path):
+        # a commented PRIMARY card must survive to_fits -> from_fits.
+        kpf2 = KPF2()
+        # A non-EPRV PRIMARY card: rvdata rewrites its own L2-defined keywords from
+        # the definition (dropping any KPF comment), so an arbitrary card is what
+        # exercises the KPF comment-preservation override rather than that rewrite.
+        kpf2.headers["PRIMARY"]["HDRCMNT"] = ("kept", "comment must survive to_fits")
+
+        fn = str(tmp_path / "kpf_SL2_20240113T102656.fits")
+        kpf2.to_fits(fn)
+
+        prim = KPF2.from_fits(fn).headers["PRIMARY"]
+        assert prim.get("HDRCMNT") == "kept"
+        assert prim.comments["HDRCMNT"] == "comment must survive to_fits"

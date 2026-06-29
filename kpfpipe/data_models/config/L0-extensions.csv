@@ -15,5 +15,6 @@ HDU,Name,DataType,Required,Description
 13,GUIDER_CUBE_ORIGINS,BinTableHDU,False,Guide camera cube origins table
 14,SOCAL PYRHELIOMETER,BinTableHDU,False,SoCal pyrheliometer data
 15,TELEMETRY,BinTableHDU,False,System telemetry table
-16,RECEIPT,BinTableHDU,False,Processing history
-17,CONFIG,BinTableHDU,False,Configuration parameters
+16,RECEIPT,BinTableHDU,True,Processing history
+17,DRP_CONFIG,BinTableHDU,False,Pipeline config as a 2-column table (key = value)
+18,QUALITY_CONTROL,BinTableHDU,True,Quality-control booleans and diagnostic metrics

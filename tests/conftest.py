@@ -69,9 +69,14 @@ def synthetic_l0_file(tmp_path):
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
     primary.header["DATE-OBS"] = "2024-01-13T10:26:56"
+    primary.header["MJD-OBS"] = 60322.43537  # JD_UTC source (full JD = + 2400000.5)
     primary.header["EXPTIME"] = 300.0
+    primary.header["ELAPSED"] = 300.0
     primary.header["OBJECT"] = "HD_10700"
     primary.header["IMTYPE"] = "Object"
+    primary.header["GROBSERV"] = "Smith"
+    primary.header["PROGID"] = "K123"
+    primary.header["KOAID"] = "KP.20240113.23249.10"
 
     telemetry = Table({"keyword": ["TEMP1", "TEMP2"], "average": [20.0, 21.0]})
     telemetry_hdu = fits.BinTableHDU(data=telemetry, name="TELEMETRY")

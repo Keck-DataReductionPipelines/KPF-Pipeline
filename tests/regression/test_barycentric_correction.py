@@ -824,19 +824,21 @@ class TestPerform:
                 err_msg=f"{key} should be unmodified",
             )
 
-    def test_per_ccd_instrument_header_keywords(self, bc_monkeypatched):
+    def test_per_ccd_primary_keywords(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
-        inst = kpf2.headers["INSTRUMENT_HEADER"]
-        for key in ["CCD1BJD", "CCD1BKMS", "CCD1BZ", "CCD2BJD", "CCD2BKMS", "CCD2BZ"]:
-            assert key in inst, f"{key} missing from INSTRUMENT_HEADER"
-
-        def _v(k):
-            x = inst[k]
-            return x[0] if isinstance(x, tuple) else x
+        bjd = kpf2.headers["BJD_TDB"]
+        kms = kpf2.headers["BARYCORR_KMS"]
+        z = kpf2.headers["BARYCORR_Z"]
+        for key in ("CCD1BJD", "CCD2BJD"):
+            assert key in bjd, f"{key} missing from BJD_TDB"
+        for key in ("CCD1BKMS", "CCD2BKMS"):
+            assert key in kms, f"{key} missing from BARYCORR_KMS"
+        for key in ("CCD1BZ", "CCD2BZ"):
+            assert key in z, f"{key} missing from BARYCORR_Z"
 
         # All orders had the same delta_rv → green and red means are equal
-        np.testing.assert_allclose(_v("CCD1BKMS"), _v("CCD2BKMS"))
-        np.testing.assert_allclose(_v("CCD1BZ"), _v("CCD2BZ"))
+        np.testing.assert_allclose(kms.get("CCD1BKMS"), kms.get("CCD2BKMS"))
+        np.testing.assert_allclose(z.get("CCD1BZ"), z.get("CCD2BZ"))
 
     def test_receipt_entry_added(self, bc_monkeypatched):
         bc_monkeypatched.perform()
@@ -888,28 +890,20 @@ class TestPerform:
         bc_monkeypatched.perform()
         assert captured["rv_mps"] == 0.0
 
-    def test_results_populated(self, bc_monkeypatched):
-        assert bc_monkeypatched._results is None
-        bc_monkeypatched.perform()
-        results = bc_monkeypatched._results
-        assert set(results.keys()) == {
-            "bjd_tdb",
-            "bary_kms",
-            "bary_z",
-            "ccd_bjd",
-            "ccd_kms",
-            "ccd_z",
-            "astrometry_source",
-        }
-        assert results["astrometry_source"] == "Gaia DR3"
-        for key in ("bjd_tdb", "bary_kms", "bary_z"):
-            assert len(results[key]) == NORDER
-        for key in ("ccd_bjd", "ccd_kms", "ccd_z"):
-            assert len(results[key]) == 2
+    def test_state_populated(self, bc_monkeypatched):
+        for attr in ("_ccd_bjd", "_ccd_kms", "_ccd_z"):
+            assert getattr(bc_monkeypatched, attr) is None
+        kpf2 = bc_monkeypatched.perform()
+        assert bc_monkeypatched._astrometry_source == "Gaia DR3"
+        for key in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
+            assert len(kpf2.data[key]) == NORDER
+        for attr in ("_ccd_bjd", "_ccd_kms", "_ccd_z"):
+            assert len(getattr(bc_monkeypatched, attr)) == 2
 
     def test_records_gaia_provenance(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
-        assert kpf2.headers["INSTRUMENT_HEADER"]["ASTRSRC"] == "Gaia DR3"
+        astrsrc = kpf2.headers["RECEIPT"].get("ASTRSRC")
+        assert astrsrc == "Gaia DR3"
 
     def test_perform_falls_back_and_records_wmko_provenance(
         self, synthetic_kpf2, monkeypatch
@@ -939,8 +933,9 @@ class TestPerform:
                 use_wmko_fallback=True
             )  # override the toggle for this call
 
-        assert kpf2.headers["INSTRUMENT_HEADER"]["ASTRSRC"] == "WMKO header"
-        assert bc._results["astrometry_source"] == "WMKO header"
+        astrsrc = kpf2.headers["RECEIPT"].get("ASTRSRC")
+        assert astrsrc == "WMKO header"
+        assert bc._astrometry_source == "WMKO header"
 
     def test_real_outlier_filter_runs_end_to_end(self, synthetic_kpf2, monkeypatch):
         """Exercise fix_expmeter_outliers=True through perform() with a

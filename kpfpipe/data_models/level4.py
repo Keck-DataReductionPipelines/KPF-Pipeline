@@ -6,7 +6,7 @@ for CCF and RV data, following the same AliasedOrderedDict pattern as KPF2.
 
 The EPRV standard defines CCF1...N (ImageHDU) and RV1...N (BinTableHDU), one
 per orderlet. KPF numbers both to match the L2 traces (CCF{n}/RV{n} hold the
-CCF/RV for the orderlet on TRACE{n}): n=1 CAL, 2 SCI1, 3 SCI2, 4 SCI3, 5 SKY.
+CCF/RV for the orderlet on TRACE{n}): n=1 SKY, 2 SCI1, 3 SCI2, 4 SCI3, 5 CAL.
 The KPF name → extension mapping is therefore derived from the shared trace map
 (trace-map.csv), exactly like the L2 TRACE*_FLUX aliases — not from aliases.csv.
 
@@ -24,11 +24,21 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
-from astropy.table import Table
+from rvdata.core.models.definitions import LEVEL4_EXTENSIONS
 from rvdata.core.models.level4 import RV4
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+from kpfpipe.data_models.base import KPFDataModel, keyword_registry
+
+# Make rvdata's RV4._read aware of KPF's QUALITY_CONTROL extension so an L4
+# written with it reads back (QCL4 is planned; this keeps the read forward-safe).
+keyword_registry.register_rvdata_extension(
+    LEVEL4_EXTENSIONS,
+    "QUALITY_CONTROL",
+    "BinTableHDU",
+    "Quality-control booleans and diagnostic metrics",
+)
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -140,7 +150,7 @@ class _KPF4DataDict(AliasedOrderedDict):
         return aliased
 
 
-class KPF4(RV4):
+class KPF4(KPFDataModel, RV4):
     """
     KPF Level 4 RV and CCF data model.
 
@@ -168,6 +178,13 @@ class KPF4(RV4):
                 ext = f"{prefix}{trace_num}"
                 if ext not in self.extensions:
                     self.create_extension(ext, hdu_type)
+
+        # QUALITY_CONTROL holds the accumulated QC booleans + diagnostics metrics
+        # propagated from L0/L1/L2 (RV4 does not create it; registered into
+        # rvdata's LEVEL4_EXTENSIONS above so a written L4 reads back). Mirrors
+        # KPF2.__init__; to_kpf4 forwards the L2 header onto it.
+        if "QUALITY_CONTROL" not in self.extensions:
+            self.create_extension("QUALITY_CONTROL", "BinTableHDU")
 
         # Replace plain OrderedDicts with alias-aware versions
         self.extensions = AliasedOrderedDict.from_ordered_dict(self.extensions)
@@ -199,52 +216,13 @@ class KPF4(RV4):
                     for d in (self.extensions, self.headers, self.data):
                         d.register_alias(alias, canonical)
 
-    def set_data(self, ext_name, data):
-        """
-        Override to resolve aliases before the base class .keys() check.
+    def check_filename_convention(self, filename):
+        """KPF L4 is EPRV-standard (SL4 name); delegate to rvdata's check."""
+        return RV4.check_filename_convention(self, filename)
 
-        Chip-prefix keys (e.g. 'GREEN_SCI2_CCF') are routed directly through
-        `_KPF4DataDict.__setitem__`, which writes into the appropriate slice
-        of the concatenated CCF cube.
-        """
-        if (
-            hasattr(self.data, "_chip_split")
-            and self.data._chip_split(ext_name) is not None
-        ):
-            self.data[ext_name] = data
-            return
-        if hasattr(self.extensions, "_resolve"):
-            ext_name = self.extensions._resolve(ext_name)
-        # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
-        if (
-            ext_name in self.extensions
-            and self.extensions[ext_name] == "BinTableHDU"
-            and isinstance(data, np.ndarray)
-            and data.dtype.names is not None
-        ):
-            data = Table(data)
-        super().set_data(ext_name, data)
-        # Sync self.receipt when the RECEIPT extension is loaded from FITS.
-        if ext_name == "RECEIPT" and isinstance(data, Table):
-            self.receipt = data.to_pandas()
-
-    def set_header(self, ext_name, header):
-        """Override to resolve aliases before the base class .keys() check."""
-        if hasattr(self.extensions, "_resolve"):
-            ext_name = self.extensions._resolve(ext_name)
-        super().set_header(ext_name, header)
-
-    def _create_hdul(self):
-        """
-        Override to sync self.receipt into self.data["RECEIPT"] before writing.
-
-        rvdata's `to_fits` writes `self.data["RECEIPT"]` (the default empty
-        table), not `self.receipt` (the processing history DataFrame). This
-        override syncs them so the full receipt is written to the FITS file.
-        """
-        if self.receipt is not None and not self.receipt.empty:
-            self.data["RECEIPT"] = Table.from_pandas(self.receipt)
-        return super()._create_hdul()
+    def generate_standard_filename(self):
+        """KPF L4 is EPRV-standard (SL4 name); delegate to rvdata's builder."""
+        return RV4.generate_standard_filename(self)
 
     def info(self):
         """Print summary of KPF4 data model contents."""

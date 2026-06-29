@@ -26,11 +26,11 @@ _DEFAULTS = {
 }
 
 # PRIMARY-header flag marking a calibration as applied (single source of truth
-# for these keyword names). FLATSUB is reserved for when flat division lands.
+# for these keyword names). FLATDIV is reserved for when flat division lands.
 _CALIBRATION_HEADER_KEYS = {
     "bias": "BIASSUB",
     "dark": "DARKSUB",
-    "flat": "FLATSUB",
+    "flat": "FLATDIV",
 }
 
 
@@ -44,9 +44,9 @@ class ImageProcessing:
     Parameters
     ----------
     l1_obj : KPF1
-        Assembled L1 frame. The PRIMARY header must contain the {BIAS,DARK}FILE
-        and {BIAS,DARK}DIR keywords (written by CalibrationAssociation) for any
-        calibration requested via the header lookup.
+        Assembled L1 frame. The RECEIPT header must contain the {BIAS,DARK}FILE
+        keyword (the master's full path, written by CalibrationAssociation) for
+        any calibration requested via the header lookup.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: bias, dark, flat
         (boolean flags toggling each calibration).
@@ -75,7 +75,9 @@ class ImageProcessing:
         self._dark_ml1 = None
         self._bias_path = None
         self._dark_path = None
-        self._results = None  # populated by perform()
+        self._biassub = None  # applied flags for _set_headers
+        self._darksub = None
+        self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -239,6 +241,28 @@ class ImageProcessing:
         )
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {}
+        if self.bias:
+            self._info["bias"] = self._bias_path
+        if self.dark:
+            self._info["dark"] = self._dark_path
+
+    def _set_headers(self, l1_obj):
+        """Write all PRIMARY-header keywords for image processing.
+
+        Reads the applied-flag attributes populated by perform(); the single
+        place this module writes header keywords, called just before the receipt
+        entry. set_keyword routes BIASSUB/DARKSUB to their registry home (RECEIPT).
+        """
+        l1_obj.set_keyword("BIASSUB", int(self._biassub))
+        l1_obj.set_keyword("DARKSUB", int(self._darksub))
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
@@ -247,14 +271,15 @@ class ImageProcessing:
         """
         Return True if `cal_type` is already flagged applied on `l1_obj`.
 
-        Reads the PRIMARY-header flag (`_CALIBRATION_HEADER_KEYS`) written by a
+        Reads the applied flag (`_CALIBRATION_HEADER_KEYS`: BIASSUB/DARKSUB/
+        FLATDIV) from the RECEIPT header — their registry home — written by a
         prior `perform`. Lets callers — and `perform` itself — avoid applying a
         calibration twice (e.g. a cached frame revisited during stacking).
 
         Parameters
         ----------
         l1_obj : KPF1
-            Frame whose PRIMARY header is inspected.
+            Frame whose RECEIPT header is inspected.
         cal_type : str
             Calibration name: 'bias', 'dark', or 'flat'.
 
@@ -263,9 +288,7 @@ class ImageProcessing:
         bool
             True if the calibration's header flag is present and truthy.
         """
-        val = l1_obj.headers["PRIMARY"].get(_CALIBRATION_HEADER_KEYS[cal_type])
-        if isinstance(val, tuple):  # Headers store (value, comment) tuples.
-            val = val[0]
+        val = l1_obj.headers["RECEIPT"].get(_CALIBRATION_HEADER_KEYS[cal_type])
         return bool(val)
 
     def perform(self, chips=None, *, bias=None, dark=None, flat=None):
@@ -278,11 +301,11 @@ class ImageProcessing:
             CCD chips to process. Defaults to self.chips.
         bias : bool | str | KPFMasterL1, optional
             How to source the master bias. Falsy → skip. True → load via
-            BIASFILE/BIASDIR in the PRIMARY header. str → treat as an
-            explicit filepath. KPFMasterL1 → use this object directly
-            (no disk I/O). Defaults to self.bias.
+            BIASFILE (the master's full path) in the RECEIPT header. str →
+            treat as an explicit filepath. KPFMasterL1 → use this object
+            directly (no disk I/O). Defaults to self.bias.
         dark : bool | str | KPFMasterL1, optional
-            Same shape as `bias`, sourced from DARKFILE/DARKDIR. Applied
+            Same shape as `bias`, sourced from DARKFILE. Applied
             after bias subtraction and scaled by the frame's exposure time.
             Defaults to self.dark.
         flat : bool | str | KPFMasterL1, optional
@@ -330,27 +353,21 @@ class ImageProcessing:
         if self.dark and prior_dark:
             raise RuntimeError("dark already subtracted from this frame (DARKSUB=True)")
 
-        self._results = {}
         if self.bias:
             for chip in self.chips:
                 self.subtract_bias(chip)
-            self._results["bias"] = self._bias_path
 
         if self.dark:
             for chip in self.chips:
                 self.subtract_dark(chip)
-            self._results["dark"] = self._dark_path
 
         # OR with the prior flag so applying one calibration never clears
         # another already recorded on the frame.
-        self.l1_obj.headers["PRIMARY"]["BIASSUB"] = (
-            bool(self.bias) or prior_bias,
-            "Bias subtraction applied",
-        )
-        self.l1_obj.headers["PRIMARY"]["DARKSUB"] = (
-            bool(self.dark) or prior_dark,
-            "Dark subtraction applied",
-        )
+        self._biassub = bool(self.bias) or prior_bias
+        self._darksub = bool(self.dark) or prior_dark
+
+        self._set_headers(self.l1_obj)
+        self._track_info()
         self.l1_obj.receipt_add_entry("image_processing", "PASS")
 
         return self.l1_obj
@@ -361,11 +378,11 @@ class ImageProcessing:
         print(f"  obs_id: {self.l1_obj.obs_id}")
         print(f"  chips:  {self.chips}")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
         print(f"\n  {'cal_type':<10s} {'master file'}")
         print("  " + "-" * 60)
-        for cal_type, path in self._results.items():
+        for cal_type, path in self._info.items():
             print(f"  {cal_type:<10s} {path}")

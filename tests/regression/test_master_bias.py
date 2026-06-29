@@ -113,6 +113,10 @@ class TestMasterBiasUnit:
     def test_receipt_entry(self, master_bias):
         assert "master_bias" in master_bias.receipt["Module_Name"].values
 
+    def test_bunit_is_electrons(self, master_bias):
+        for chip in CHIPS:
+            assert master_bias.headers[f"{chip}_IMG"].get("BUNIT") == "electrons"
+
     def test_datalvl_class_attribute(self, master_bias):
         assert master_bias._DATALVL == "ML1"
 
@@ -182,8 +186,7 @@ class TestMasterBiasRoundTrip:
             ml1.to_fits(fn)
             ml1_read = KPFMasterL1.from_fits(fn)
 
-        datalvl = ml1_read.headers["PRIMARY"]["DATALVL"]
-        val = datalvl[0] if isinstance(datalvl, tuple) else datalvl
+        val = ml1_read.headers["PRIMARY"].get("DATALVL")
         assert val == "ML1"
 
     def test_roundtrip_mask_dtype(self):

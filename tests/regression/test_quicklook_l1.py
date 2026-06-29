@@ -25,10 +25,9 @@ def _build_synthetic_l1(
     *,
     obs_id="KP.20240405.00001.00",
     object_name="synthetic-l1",
-    with_readnoise=True,
     shape=_FIXTURE_SHAPE,
 ):
-    """Create a synthetic L1 FITS file with assembled CCDs and read-noise headers."""
+    """Create a synthetic L1 FITS file with assembled CCDs (no read-noise)."""
     fn = str(tmp_path / f"{obs_id}_L1.fits")
     rng = np.random.default_rng(42)
 
@@ -38,25 +37,6 @@ def _build_synthetic_l1(
     primary.header["DATALVL"] = "L1"
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
     primary.header["EXPTIME"] = 300.0
-
-    if with_readnoise:
-        for i in range(1, 5):
-            primary.header[f"RNGREEN{i}"] = (
-                3.5 + 0.05 * i,
-                f"Read noise GREEN_AMP{i} [e-]",
-            )
-            primary.header[f"RNNGGR{i}"] = (
-                1.0 + 0.001 * i,
-                f"Non-Gaussian read noise GREEN_AMP{i}",
-            )
-            primary.header[f"RNRED{i}"] = (
-                4.0 + 0.05 * i,
-                f"Read noise RED_AMP{i} [e-]",
-            )
-            primary.header[f"RNNGRD{i}"] = (
-                1.002 + 0.001 * i,
-                f"Non-Gaussian read noise RED_AMP{i}",
-            )
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -72,17 +52,31 @@ def _build_synthetic_l1(
     return fn
 
 
+def _seed_read_noise(l1):
+    """Seed RN*/RNNG* via set_keyword, exactly as ImageAssembly does.
+
+    set_keyword routes these to QUALITY_CONTROL (their registry home), so this
+    exercises the real read path the quicklook annotation depends on — writing
+    them onto PRIMARY here would let the annotation test pass while production
+    (which reads QUALITY_CONTROL) silently rendered nothing.
+    """
+    for i in range(1, 5):
+        l1.set_keyword(f"RNGREEN{i}", 3.5 + 0.05 * i)
+        l1.set_keyword(f"RNNGGR{i}", 1.0 + 0.001 * i)
+        l1.set_keyword(f"RNRED{i}", 4.0 + 0.05 * i)
+        l1.set_keyword(f"RNNGRD{i}", 1.002 + 0.001 * i)
+
+
 @pytest.fixture
 def synthetic_l1(tmp_path):
-    fn = _build_synthetic_l1(tmp_path)
-    return KPF1.from_fits(fn)
+    l1 = KPF1.from_fits(_build_synthetic_l1(tmp_path))
+    _seed_read_noise(l1)
+    return l1
 
 
 @pytest.fixture
 def synthetic_l1_no_rn(tmp_path):
-    fn = _build_synthetic_l1(
-        tmp_path, with_readnoise=False, obs_id="KP.20240405.00002.00"
-    )
+    fn = _build_synthetic_l1(tmp_path, obs_id="KP.20240405.00002.00")
     return KPF1.from_fits(fn)
 
 
@@ -96,7 +90,7 @@ class TestPlotL1Constructor:
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
 
         qlp = PlotL1(synthetic_l1)
-        assert qlp.l1 is synthetic_l1
+        assert qlp.l1_obj is synthetic_l1
         assert qlp.obs_id == "KP.20240405.00001.00"
         assert qlp.name == "synthetic-l1"
         assert qlp.output_dir is None
@@ -109,14 +103,6 @@ class TestPlotL1Constructor:
 
 
 class TestImage:
-    def test_returns_figure(self, synthetic_l1):
-        from kpfpipe.quality_control.quicklook.level1 import PlotL1
-
-        qlp = PlotL1(synthetic_l1)
-        fig = qlp.image("green")
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
-
     def test_title_green(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
 

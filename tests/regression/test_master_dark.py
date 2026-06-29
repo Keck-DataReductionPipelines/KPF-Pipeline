@@ -32,11 +32,6 @@ TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
-def _header_value(value):
-    """Return a header value, unwrapping a (value, comment) tuple if present."""
-    return value[0] if isinstance(value, tuple) else value
-
-
 # ---------------------------------------------------------------------------
 # Unit tests (mocked stack_frames)
 # ---------------------------------------------------------------------------
@@ -72,7 +67,7 @@ class TestMasterDarkUnit:
 
     def test_bunit_is_rate(self, master_dark):
         for chip in CHIPS:
-            bunit = _header_value(master_dark.headers[f"{chip}_IMG"]["BUNIT"])
+            bunit = master_dark.headers[f"{chip}_IMG"].get("BUNIT")
             assert bunit == "electrons/sec"
 
     def test_datalvl_class_attribute(self, master_dark):
@@ -144,7 +139,7 @@ class TestMasterDarkRoundTrip:
             ml1.to_fits(fn)
             ml1_read = KPFMasterL1.from_fits(fn)
 
-        assert _header_value(ml1_read.headers["PRIMARY"]["DATALVL"]) == "ML1"
+        assert ml1_read.headers["PRIMARY"].get("DATALVL") == "ML1"
 
 
 # ---------------------------------------------------------------------------
@@ -398,7 +393,9 @@ class TestLoadMaster:
     @staticmethod
     def _frame(biasfile="master_bias.fits", biasdir="/m"):
         frame = MagicMock(name="l1")
-        frame.headers = {"PRIMARY": {"BIASFILE": biasfile, "BIASDIR": biasdir}}
+        # BIASFILE holds the master's full path (no separate BIASDIR) and now
+        # lives on the RECEIPT extension (its registry home).
+        frame.headers = {"RECEIPT": {"BIASFILE": os.path.join(biasdir, biasfile)}}
         return frame
 
     def test_falsy_value_returns_unchanged_without_loading(self, monkeypatch):
@@ -482,7 +479,9 @@ class TestLoadMaster:
 def _stack_frame(exptime, ccd_val, var_val, shape=(2, 2)):
     """A synthetic assembled frame with uniform CCD/VAR and a given EXPTIME."""
     frame = MagicMock()
-    frame.headers = {"PRIMARY": {"EXPTIME": exptime}}
+    # Stacking reads the EPRV-standard PRIMARY EXPTIME (actual elapsed time,
+    # mapped from native WMKO ELAPSED).
+    frame.headers = {"PRIMARY": {"EXPTIME": exptime}, "INSTRUMENT_HEADER": {}}
     frame.data = {
         "GREEN_CCD": np.full(shape, ccd_val, dtype=np.float32),
         "GREEN_VAR": np.full(shape, var_val, dtype=np.float32),
@@ -899,7 +898,7 @@ class TestMasterDarkRegression:
 
     def test_bunit_is_rate(self, master_dark):
         for chip in CHIPS:
-            bunit = _header_value(master_dark.headers[f"{chip}_IMG"]["BUNIT"])
+            bunit = master_dark.headers[f"{chip}_IMG"].get("BUNIT")
             assert bunit == "electrons/sec"
 
     def test_snr_never_negative(self, master_dark):

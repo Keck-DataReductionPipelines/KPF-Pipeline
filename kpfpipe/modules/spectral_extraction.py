@@ -50,7 +50,7 @@ class SpectralExtraction:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._results = None  # populated by perform()
+        self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -455,6 +455,25 @@ class SpectralExtraction:
         return l2_arrays
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self, chips, fibers):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {
+            chip: {"fibers": list(fibers), "norder": self.norder[chip.upper()]}
+            for chip in chips
+        }
+
+    def _set_headers(self, l2_obj):
+        """Write all PRIMARY-header keywords for spectral extraction.
+
+        Reserved: this module writes no PRIMARY metadata yet. Present so every
+        module consolidates header writes in one place, called just before the
+        receipt entry.
+        """
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
@@ -505,12 +524,9 @@ class SpectralExtraction:
                 )
                 l2_obj.set_data(f"{chip}_{fiber}_VAR", l2_arrays[f"{chip}_{fiber}_VAR"])
 
+        self._set_headers(l2_obj)
+        self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "PASS")
-
-        self._results = {
-            chip: {"fibers": list(fibers), "norder": self.norder[chip.upper()]}
-            for chip in chips
-        }
 
         return l2_obj
 
@@ -520,12 +536,12 @@ class SpectralExtraction:
         print(f"  obs_id:            {self.l1_obj.obs_id}")
         print(f"  extraction_method: {self.extraction_method}")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
         print(f"\n  {'CHIP':<8s} {'FIBERS':<30s} {'NORDER'}")
         print("  " + "-" * 46)
-        for chip, info in self._results.items():
+        for chip, info in self._info.items():
             fibers_str = " ".join(info["fibers"])
             print(f"  {chip:<8s} {fibers_str:<30s} {info['norder']}")

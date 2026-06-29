@@ -4,13 +4,14 @@ KPF Barycentric Correction module.
 Computes per-order barycentric corrections from the EXPMETER_SCI flux-weighted
 midpoint times and stores them on the L2. WAVE arrays are not modified.
 
-Outputs (rvdata-standard ImageHDUs, shape (NORDER,)):
+Outputs (EPRV-standard ImageHDUs, shape (NORDER,)):
   - BJD_TDB       photon-weighted midpoint in BJD_TDB per spectral order
   - BARYCORR_KMS  barycentric velocity per spectral order [km/s]
   - BARYCORR_Z    barycentric redshift per spectral order
 
 Per-CCD scalar summaries (at each chip's flux-weighted photon-midpoint time)
-written to INSTRUMENT_HEADER:
+written to the per-CCD barycentric extension headers (BJD_TDB / BARYCORR_KMS /
+BARYCORR_Z) as registered KPF-pipeline keywords (config/L2-headers.csv):
   - CCD1BJD       GREEN photon-weighted mid-time (BJD_TDB)
   - CCD1BKMS      GREEN barycentric velocity [km/s]
   - CCD1BZ        GREEN barycentric redshift
@@ -19,7 +20,8 @@ written to INSTRUMENT_HEADER:
   - CCD2BZ        RED   barycentric redshift
 
 CCD1BJD/CCD2BJD match the legacy keyword names and semantics; the *BKMS/*BZ
-companions follow the same CCD{n} naming pattern.
+companions follow the same CCD{n} naming pattern. INSTRUMENT_HEADER is an
+immutable pure pass-through of the raw instrument header and is never written.
 
 Notes
 -----
@@ -99,8 +101,11 @@ class BarycentricCorrection:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._results = None
-        self._em_cache = None  # (toggle_key, w_em, t_em) from the last integration
+        self._info = None
+        self._ccd_bjd = None  # Per-CCD [GREEN, RED] arrays for _set_headers
+        self._ccd_kms = None
+        self._ccd_z = None
+        self._exposure_meter = None  # (toggle_key, w_em, t_em)
         self._skycoord = None  # cached Gaia DR3 SkyCoord
         self._astrometry_source = (
             None  # 'Gaia DR3' | 'WMKO header', set by _get_skycoord
@@ -562,14 +567,14 @@ class BarycentricCorrection:
         # Reuse the cached integration when the toggles match (perform() asks
         # for 'orders' then 'ccds').
         key = (interpolate, extrapolate, fix_expmeter_outliers)
-        if self._em_cache is None or self._em_cache[0] != key:
+        if self._exposure_meter is None or self._exposure_meter[0] != key:
             w_em, t_em = self._compute_per_chanel_flux_weighted_midpoint_time(
                 interpolate=interpolate,
                 extrapolate=extrapolate,
                 fix_expmeter_outliers=fix_expmeter_outliers,
             )
-            self._em_cache = (key, w_em, t_em)
-        _, w_em, t_em = self._em_cache
+            self._exposure_meter = (key, w_em, t_em)
+        _, w_em, t_em = self._exposure_meter
 
         if output == "expmeter":
             return w_em, t_em
@@ -689,6 +694,39 @@ class BarycentricCorrection:
         return bjd_tdb, bary_kms, bary_z
 
     # ------------------------------------------------------------------
+    # Private helpers - module execution
+    # ------------------------------------------------------------------
+
+    def _track_info(self):
+        """Populate _info (the info() summary) from instance attributes."""
+        self._info = {
+            "bjd_tdb": np.asarray(self.l2_obj.data["BJD_TDB"]),
+            "bary_kms": np.asarray(self.l2_obj.data["BARYCORR_KMS"]),
+            "ccd_bjd": np.asarray(self._ccd_bjd),
+            "ccd_kms": np.asarray(self._ccd_kms),
+            "ccd_z": np.asarray(self._ccd_z),
+            "astrometry_source": self._astrometry_source,
+        }
+
+    def _set_headers(self, l2_obj):
+        """Write all summary header keywords for barycentric correction.
+
+        Reads self._ccd_bjd/_ccd_kms/_ccd_z and self._astrometry_source
+        (populated by perform()); the single place this module writes summary
+        keywords, called just before the receipt entry. Per-CCD keywords are
+        registered KPF-pipeline keywords (config/L2-headers.csv); set_keyword
+        routes them to their registry homes (BJD_TDB / BARYCORR_KMS / BARYCORR_Z,
+        and RECEIPT for ASTRSRC). CCD1=GREEN, CCD2=RED.
+        """
+        l2_obj.set_keyword("CCD1BJD", float(self._ccd_bjd[0]))
+        l2_obj.set_keyword("CCD1BKMS", float(self._ccd_kms[0]))
+        l2_obj.set_keyword("CCD1BZ", float(self._ccd_z[0]))
+        l2_obj.set_keyword("CCD2BJD", float(self._ccd_bjd[1]))
+        l2_obj.set_keyword("CCD2BKMS", float(self._ccd_kms[1]))
+        l2_obj.set_keyword("CCD2BZ", float(self._ccd_z[1]))
+        l2_obj.set_keyword("ASTRSRC", self._astrometry_source)
+
+    # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
@@ -715,10 +753,10 @@ class BarycentricCorrection:
         Returns
         -------
         l2_obj : KPF2
-            Input KPF2 with BJD_TDB / BARYCORR_KMS / BARYCORR_Z populated,
-            per-CCD CCD{1,2}BJD/BKMS/BZ summaries and the astrometry source
-            (ASTRSRC) written to INSTRUMENT_HEADER, and a
-            'barycentric_correction' receipt entry.
+            Input KPF2 with BJD_TDB / BARYCORR_KMS / BARYCORR_Z populated, the
+            per-CCD CCD{1,2}BJD/BKMS/BZ summaries written to those same bary
+            extension headers, the astrometry source (ASTRSRC) written to
+            RECEIPT, and a 'barycentric_correction' receipt entry.
         """
         if use_gaia_astrometry is not None:
             self.use_gaia_astrometry = use_gaia_astrometry
@@ -733,58 +771,38 @@ class BarycentricCorrection:
         bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(
             output="orders", **kwargs
         )
-        ccd_bjd, ccd_kms, ccd_z = self.compute_barycentric_correction(
+        # Per-CCD summaries [GREEN, RED], consumed by _set_headers.
+        self._ccd_bjd, self._ccd_kms, self._ccd_z = self.compute_barycentric_correction(
             output="ccds", **kwargs
         )
-
-        inst = self.l2_obj.headers["INSTRUMENT_HEADER"]
 
         # Per-order extensions; WAVE arrays are left untouched
         self.l2_obj.set_data("BJD_TDB", np.asarray(bjd_tdb, dtype=np.float64))
         self.l2_obj.set_data("BARYCORR_KMS", np.asarray(bary_kms, dtype=np.float64))
         self.l2_obj.set_data("BARYCORR_Z", np.asarray(bary_z, dtype=np.float64))
 
-        # Per-CCD instrument header keyword (CCD1=GREEN, CCD2=RED)
-        inst["CCD1BJD"] = float(ccd_bjd[0])
-        inst["CCD1BKMS"] = float(ccd_kms[0])
-        inst["CCD1BZ"] = float(ccd_z[0])
-        inst["CCD2BJD"] = float(ccd_bjd[1])
-        inst["CCD2BKMS"] = float(ccd_kms[1])
-        inst["CCD2BZ"] = float(ccd_z[1])
-
-        # Provenance: which astrometry source actually produced the correction
-        inst["ASTRSRC"] = self._astrometry_source
-
+        self._set_headers(self.l2_obj)
+        self._track_info()
         self.l2_obj.receipt_add_entry("barycentric_correction", "PASS")
 
-        self._results = {
-            "bjd_tdb": np.asarray(bjd_tdb),
-            "bary_kms": np.asarray(bary_kms),
-            "bary_z": np.asarray(bary_z),
-            "ccd_bjd": np.asarray(ccd_bjd),
-            "ccd_kms": np.asarray(ccd_kms),
-            "ccd_z": np.asarray(ccd_z),
-            "astrometry_source": self._astrometry_source,
-        }
         return self.l2_obj
 
     def info(self):
         """Print a summary of the barycentric correction results."""
         print("BarycentricCorrection")
-        obs_id = self.l2_obj.headers.get("PRIMARY", {}).get("ORIGID", "unknown")
-        if isinstance(obs_id, tuple):
-            obs_id = obs_id[0]
+        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
         print(f"  obs_id:  {obs_id}")
 
-        if self._results is None:
+        if self._info is None:
             print("  perform() has not been called")
             return
 
-        r = self._results
+        r = self._info
         print(f"  astrometry:  {r['astrometry_source']}")
         ccd_bjd, ccd_kms, ccd_z = r["ccd_bjd"], r["ccd_kms"], r["ccd_z"]
 
-        # Per-CCD summaries (match CCD1*/CCD2* in INSTRUMENT_HEADER).
+        # Per-CCD summaries (CCD1*/CCD2* on the BJD_TDB / BARYCORR_KMS / BARYCORR_Z
+        # extension headers).
         print(f"\n  {'':<8s}{'BJD_TDB':>18s}{'BARYCORR_KMS':>18s}{'BARYCORR_Z':>18s}")
         print("  " + "-" * 62)
         print(
