@@ -60,6 +60,18 @@ class KPFMasterL2(KPFMasterModel, KPF2):
         self.headers["PRIMARY"].clear()
         self.level = 2
 
+        # Masters-L2-extensions.csv is the authoritative manifest of ML2's
+        # extensions. KPF2.__init__ builds the full science L2 schema (needed for
+        # the alias system); anything it created that the manifest omits is dropped
+        # -- the observation-specific extensions (INSTRUMENT_HEADER, BARYCORR_*,
+        # BJD_TDB, EXPMETER, TELEMETRY, ANCILLARY_SPECTRUM) that are void for a
+        # master stacked from N input frames and that masters never populate. The
+        # trace FLUX/VAR/BLAZE siblings are listed (kept), since a future
+        # master-flat L2 may fill them (WLS fills only TRACE*_WAVE).
+        manifest = set(_MASTERS_L2_EXTENSIONS["Name"])
+        for ext in list(self.extensions):
+            if ext not in manifest:
+                self.del_extension(ext)
         for _, row in _MASTERS_L2_EXTENSIONS.iterrows():
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
