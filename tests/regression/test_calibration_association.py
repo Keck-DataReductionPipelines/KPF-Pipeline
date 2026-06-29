@@ -16,14 +16,15 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 
 class MockL1:
     def __init__(self, date_obs="2024-04-05T11:08:33"):
-        # DATE-OBS is a raw WMKO native read from INSTRUMENT_HEADER; the
-        # calibration ages/paths are KPF-pipeline keywords written to PRIMARY.
-        # Headers are fits.Header, mirroring the real KPF data models.
-        inst = fits.Header()
-        inst["DATE-OBS"] = date_obs
+        # DATE-OBS is read from the EPRV-standard PRIMARY (identity-mapped from
+        # the native WMKO DATE-OBS); the calibration ages/paths are KPF-pipeline
+        # keywords written to PRIMARY/RECEIPT. Headers are fits.Header, mirroring
+        # the real KPF data models.
+        primary = fits.Header()
+        primary["DATE-OBS"] = date_obs
         self.headers = {
-            "PRIMARY": fits.Header(),
-            "INSTRUMENT_HEADER": inst,
+            "PRIMARY": primary,
+            "INSTRUMENT_HEADER": fits.Header(),
             "RECEIPT": fits.Header(),
             "QUALITY_CONTROL": fits.Header(),
         }

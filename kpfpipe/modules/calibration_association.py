@@ -200,8 +200,8 @@ class CalibrationAssociation:
         module writes header keywords, called just before the receipt entry. Each
         cal type contributes {PREFIX}FILE (full master path), which set_keyword
         routes to RECEIPT. The signed (master - obs) age ({PREFIX}AGE) is
-        recomputed downstream by DiagL1 from this path plus INSTRUMENT_HEADER
-        DATE-OBS, so this module no longer computes or writes it.
+        recomputed downstream by DiagL1 from this path plus PRIMARY DATE-OBS,
+        so this module no longer computes or writes it.
         """
         for cal_type, cal in self._calibrations.items():
             prefix = _HEADER_PREFIX[cal_type]
@@ -247,7 +247,7 @@ class CalibrationAssociation:
                 f"expected subset of {sorted(_HEADER_PREFIX)}"
             )
 
-        date_obs = self.l1_obj.headers["INSTRUMENT_HEADER"]["DATE-OBS"]
+        date_obs = self.l1_obj.headers["PRIMARY"]["DATE-OBS"]
 
         self._calibrations = {}
         for cal_type in cal_types:

@@ -33,7 +33,7 @@ class DiagL1(Diagnostics):
 
         Recomputed from the finished L1 product: the master path is read from
         RECEIPT (``{PREFIX}FILE``, written by CalibrationAssociation) and the
-        observation timestamp from INSTRUMENT_HEADER (DATE-OBS). The master
+        observation timestamp from PRIMARY (DATE-OBS). The master
         timestamp is parsed from its filename. A cal type is skipped when its
         path is absent; the whole metric is skipped when DATE-OBS is missing.
 
@@ -43,8 +43,8 @@ class DiagL1(Diagnostics):
             Maps each present ``{PREFIX}AGE`` keyword to its ``(age, comment)``.
         """
         receipt = self.kpf_obj.headers.get("RECEIPT", {})
-        instrument = self.kpf_obj.headers.get("INSTRUMENT_HEADER", {})
-        date_obs = instrument.get("DATE-OBS")
+        primary = self.kpf_obj.headers.get("PRIMARY", {})
+        date_obs = primary.get("DATE-OBS")
         if not date_obs:
             return {}
         obs_dt = datetime.fromisoformat(date_obs)

@@ -143,15 +143,14 @@ class TestEmptyLevels:
 
 
 def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
-    """A KPF1 carrying an INSTRUMENT_HEADER DATE-OBS and RECEIPT master paths.
+    """A KPF1 carrying a PRIMARY DATE-OBS and RECEIPT master paths.
 
     Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has
     written each ``{PREFIX}FILE`` to RECEIPT (via set_keyword) and to_kpf1 has
-    populated INSTRUMENT_HEADER.
+    populated the EPRV PRIMARY (DATE-OBS).
     """
     l1 = KPF1()
-    l1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
-    l1.headers["INSTRUMENT_HEADER"]["DATE-OBS"] = date_obs
+    l1.headers["PRIMARY"]["DATE-OBS"] = date_obs
     for kw, path in (files or {}).items():
         l1.set_keyword(kw, path)  # *FILE routes to RECEIPT
     return l1
@@ -207,7 +206,7 @@ class TestDiagL1CalibrationAges:
         l1 = _make_kpf1_with_calibrations(
             files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
         )
-        del l1.headers["INSTRUMENT_HEADER"]["DATE-OBS"]
+        del l1.headers["PRIMARY"]["DATE-OBS"]
         results = DiagL1(l1).run()
         assert results == {}
 
