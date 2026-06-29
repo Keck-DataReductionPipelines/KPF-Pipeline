@@ -113,6 +113,10 @@ class TestMasterBiasUnit:
     def test_receipt_entry(self, master_bias):
         assert "master_bias" in master_bias.receipt["Module_Name"].values
 
+    def test_bunit_is_electrons(self, master_bias):
+        for chip in CHIPS:
+            assert master_bias.headers[f"{chip}_IMG"].get("BUNIT") == "electrons"
+
     def test_datalvl_class_attribute(self, master_bias):
         assert master_bias._DATALVL == "ML1"
 

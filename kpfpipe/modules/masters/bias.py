@@ -91,9 +91,7 @@ class Bias(BaseMasterModule):
             cal_type="bias",
         )
 
-        self.ml1_obj = self._build_ml1_obj(
-            l1_arrays, l0_file_list, master_type="bias", receipt_key="master_bias"
-        )
+        self.ml1_obj = self._build_ml1_obj(l1_arrays, l0_file_list, master_type="bias")
         self._results = self._populate_results(l1_arrays)
 
         if filepath is not None:

@@ -56,6 +56,16 @@ class BaseMasterModule:
     # bias/dark/flat flags. Subclasses override (e.g. Dark -> ("bias",)).
     _STANDARD_CALIBRATIONS = ()
 
+    # Physical pixel units (BUNIT) by master type, written to the IMG
+    # extensions in `_build_ml1_obj`. A bias master is a stacked count image
+    # (electrons); a dark is normalized to a rate (electrons/sec); a flat is a
+    # unitless relative throughput (no BUNIT). Unknown types get no BUNIT.
+    _BUNIT_BY_TYPE = {
+        "bias": "electrons",
+        "dark": "electrons/sec",
+        "flat": None,
+    }
+
     def __init__(self, l0_file_list, config=None):
         if l0_file_list != sorted(l0_file_list):
             raise ValueError("l0_file_list must be sorted in ascending order")
@@ -780,9 +790,7 @@ class BaseMasterModule:
     # Private helpers for building outputs and tracking results.
     # ------------------------------------------------------------------
 
-    def _build_ml1_obj(
-        self, l1_arrays, l0_file_list, *, master_type, receipt_key, bunit=None
-    ):
+    def _build_ml1_obj(self, l1_arrays, l0_file_list, *, master_type):
         """
         Assemble a KPFMasterL1 from finalized per-chip arrays.
 
@@ -793,18 +801,19 @@ class BaseMasterModule:
         l0_file_list : list of str
             L0 files that went into the stack; recorded via set_input_files.
         master_type : str
-            WMKO filename token for the product ('bias', 'dark', 'flat'),
-            recorded via set_input_files for the compliant output filename.
-        receipt_key : str
-            Receipt entry name (e.g. 'master_bias', 'master_dark').
-        bunit : str, optional
-            If given, written as the BUNIT header on each '{chip}_IMG'.
+            WMKO filename token for the product ('bias', 'dark', 'flat').
+            Recorded via set_input_files for the compliant output filename, and
+            the single source for both the receipt key (`master_{master_type}`)
+            and the BUNIT units (`_BUNIT_BY_TYPE`).
 
         Returns
         -------
         KPFMasterL1
             The populated master L1 object.
         """
+        receipt_key = f"master_{master_type}"
+        bunit = self._BUNIT_BY_TYPE.get(master_type)
+
         ml1_obj = KPFMasterL1()
 
         for chip in self.chips:
