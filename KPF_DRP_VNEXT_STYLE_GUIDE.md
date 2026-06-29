@@ -67,6 +67,16 @@ guidance (environment, commands, architecture), which is documented separately.
   owns detector read-noise metadata that QC/Quicklook import rather than re-derive; the
   exception is documented at its definition. Don't add new public module constants on this
   precedent without the same justification.
+- **Data-product instances vs. level/manifest constants** (`kpfN` vs `L<N>`). A variable that
+  *holds a model instance* names it with the **`kpfN`** form in `data_models/`
+  (`kpf1 = KPF1()`, `kpf2 = self.to_kpf2()`) and the **`lN_obj`/`mlN_obj`** form in `modules/`
+  (`l1_obj`, `ml2_obj`) — each matches its area's established style. A *constant or identifier
+  that names a data **level**, an extension **manifest**, or a **filename pattern*** instead uses
+  the level token **`L<N>`/`ML<N>`** everywhere (`_L0_EXTENSIONS`, `_L0_TO_L1_PASSTHROUGH`,
+  `_L1_TO_L2_PASSTHROUGH`, `_ML1_EXTENSIONS`, `_L1_FILENAME_PATTERN`), so it mirrors the
+  EPRV/`DATALVL` level terminology and the `L0-extensions.csv` / `ML1-extensions.csv` config-file
+  names. A receipt/provenance **step-name string** matches its *method* (`to_kpf1`, `to_kpf2`,
+  `to_kpf4`), not the level.
 - **FITS keyword names**: ≤ 8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`,
   `RNOK`, `ISGOOD`). Encode the level into the keyword when needed for uniqueness
   (`DATAPRL0`, `L2NANOK`). **Before inventing a new PRIMARY/extension keyword, grep

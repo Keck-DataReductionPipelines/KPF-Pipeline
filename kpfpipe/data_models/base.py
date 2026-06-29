@@ -26,7 +26,9 @@ from kpfpipe.data_models.keyword_registry import keyword_registry
 # pipeline modules — excluded from DRPSTATU so it names the last real stage.
 # ``from_fits`` is here too: reading a product back must not clobber the status
 # the writer stamped.
-_INTERNAL_RECEIPTS = frozenset({"to_l1", "to_kpf2", "to_kpf4", "to_fits", "from_fits"})
+_INTERNAL_RECEIPTS = frozenset(
+    {"to_kpf1", "to_kpf2", "to_kpf4", "to_fits", "from_fits"}
+)
 
 # Re-exported for sibling data_models modules: KPF2/KPF4 call
 # keyword_registry.register_rvdata_extension at import. Listed in __all__ so the

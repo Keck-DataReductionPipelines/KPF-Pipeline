@@ -199,7 +199,7 @@ class KPF1(KPFDataModel):
     # Mapping of L1 extension names → KPF2/RV2 extension names for pass-through.
     # CA_HK is excluded: it is a raw 2D CCD image, not an extracted spectrum.
     # ANCILLARY_SPECTRUM (BinTableHDU) should be populated after Ca HK extraction.
-    _L1_TO_KPF2_PASSTHROUGH = {
+    _L1_TO_L2_PASSTHROUGH = {
         "TELEMETRY": "TELEMETRY",
         "EXPMETER_SCI": "EXPMETER",
     }
@@ -230,18 +230,18 @@ class KPF1(KPFDataModel):
         self._forward_headers(kpf2, ("PRIMARY", "INSTRUMENT_HEADER"))
 
         # Pass-through extensions with renaming
-        for l1_ext, kpf2_ext in self._L1_TO_KPF2_PASSTHROUGH.items():
-            if l1_ext in self.extensions:
-                l1_type = self.extensions[l1_ext]
+        for kpf1_ext, kpf2_ext in self._L1_TO_L2_PASSTHROUGH.items():
+            if kpf1_ext in self.extensions:
+                kpf1_type = self.extensions[kpf1_ext]
                 if kpf2_ext not in kpf2.extensions:
-                    kpf2.create_extension(kpf2_ext, l1_type)
-                elif kpf2.extensions[kpf2_ext] != l1_type:
+                    kpf2.create_extension(kpf2_ext, kpf1_type)
+                elif kpf2.extensions[kpf2_ext] != kpf1_type:
                     # Update type to match actual L1 data
-                    kpf2.extensions[kpf2_ext] = l1_type
-                if l1_ext in self.data and self.data[l1_ext] is not None:
-                    kpf2.set_data(kpf2_ext, self.data[l1_ext])
-                if l1_ext in self.headers:
-                    kpf2.set_header(kpf2_ext, self.headers[l1_ext])
+                    kpf2.extensions[kpf2_ext] = kpf1_type
+                if kpf1_ext in self.data and self.data[kpf1_ext] is not None:
+                    kpf2.set_data(kpf2_ext, self.data[kpf1_ext])
+                if kpf1_ext in self.headers:
+                    kpf2.set_header(kpf2_ext, self.headers[kpf1_ext])
 
         # Forward the L1 QUALITY_CONTROL and RECEIPT *headers* onto L2, with
         # comments. The receipt *table* propagates via the receipt copy below, but

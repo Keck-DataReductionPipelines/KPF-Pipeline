@@ -286,7 +286,7 @@ class KPF0(KPFDataModel):
         obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
         but empty — the caller (image assembly) fills those in.
         """
-        l1 = KPF1()
+        kpf1 = KPF1()
 
         # Convert the raw WMKO PRIMARY to EPRV-standard names/values, and preserve
         # the raw L0 PRIMARY verbatim (values + comments, via as_fits_header) in the
@@ -294,11 +294,11 @@ class KPF0(KPFDataModel):
         # provenance lives on RECEIPT), and nothing else ever writes to it.
         if "PRIMARY" in self.headers:
             for key, value in self._map_header().items():
-                l1.headers["PRIMARY"][key] = value
+                kpf1.headers["PRIMARY"][key] = value
 
-            if "INSTRUMENT_HEADER" not in l1.extensions:
-                l1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
-            l1.set_header(
+            if "INSTRUMENT_HEADER" not in kpf1.extensions:
+                kpf1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
+            kpf1.set_header(
                 "INSTRUMENT_HEADER", self.as_fits_header(self.headers["PRIMARY"])
             )
 
@@ -306,12 +306,12 @@ class KPF0(KPFDataModel):
         for ext_name in self._L0_TO_L1_PASSTHROUGH:
             if ext_name in self.extensions:
                 ext_type = self.extensions[ext_name]
-                if ext_name not in l1.extensions:
-                    l1.create_extension(ext_name, ext_type)
+                if ext_name not in kpf1.extensions:
+                    kpf1.create_extension(ext_name, ext_type)
                 if ext_name in self.data and self.data[ext_name] is not None:
-                    l1.set_data(ext_name, self.data[ext_name])
+                    kpf1.set_data(ext_name, self.data[ext_name])
                 if ext_name in self.headers:
-                    l1.set_header(ext_name, self.headers[ext_name])
+                    kpf1.set_header(ext_name, self.headers[ext_name])
 
         # Forward the L0 QUALITY_CONTROL and RECEIPT *headers* onto L1 (value +
         # comment), mirroring to_kpf2/to_kpf4 so all three conversions share one
@@ -319,19 +319,19 @@ class KPF0(KPFDataModel):
         # carries the four DRP-RUN provenance cards stamped at read. Downstream L1
         # stages append to both. (PRIMARY/INSTRUMENT_HEADER are not forwarded
         # here -- L0 PRIMARY is converted via _map_header above, not copied.)
-        self._forward_headers(l1, ("QUALITY_CONTROL", "RECEIPT"))
+        self._forward_headers(kpf1, ("QUALITY_CONTROL", "RECEIPT"))
 
         # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:
-            l1.receipt = self.receipt.copy()
+            kpf1.receipt = self.receipt.copy()
 
         # Copy obs_id
-        l1.obs_id = self.obs_id
+        kpf1.obs_id = self.obs_id
 
         # DATALVL is set by KPF1.__init__ (= KPF1._DATALVL) and _map_header no
         # longer emits it (dropped from header_map), so no fixup is needed here.
-        l1.receipt_add_entry("to_l1", "PASS")
-        return l1
+        kpf1.receipt_add_entry("to_kpf1", "PASS")
+        return kpf1
 
     def info(self):
         """Print summary of L0 data model contents."""

@@ -198,21 +198,21 @@ class TestL1PrimarySeed:
         assert not (self._required_l1_primary() & prim) - {"DATALVL"}
 
 
-class TestToL1:
-    def test_to_l1_creates_kpf1(self, synthetic_l0_file):
+class TestToKpf1:
+    def test_to_kpf1_creates_kpf1(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         assert l1.level == 1
         assert isinstance(l1, KPF1)
 
-    def test_to_l1_copies_primary_header(self, synthetic_l0_file):
+    def test_to_kpf1_copies_primary_header(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
         assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
         assert l1.headers["PRIMARY"]["OBJECT"] == "HD_10700"
 
-    def test_to_l1_converts_native_to_eprv(self, synthetic_l0_file):
+    def test_to_kpf1_converts_native_to_eprv(self, synthetic_l0_file):
         """to_kpf1 renames WMKO natives to their EPRV PRIMARY counterparts."""
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
@@ -225,7 +225,7 @@ class TestToL1:
         assert "ELAPSED" not in prim
         assert "GROBSERV" not in prim
 
-    def test_to_l1_preserves_raw_header_in_instrument_header(self, synthetic_l0_file):
+    def test_to_kpf1_preserves_raw_header_in_instrument_header(self, synthetic_l0_file):
         """INSTRUMENT_HEADER is a pure verbatim copy of the raw L0 PRIMARY."""
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
@@ -240,7 +240,7 @@ class TestToL1:
         assert "DRPVERNO" not in inst
         assert "DRPSTATU" not in inst
 
-    def test_to_l1_filters_non_registry_headermap_targets(self, tmp_path):
+    def test_to_kpf1_filters_non_registry_headermap_targets(self, tmp_path):
         """_map_header emits only registered keywords; header_map's non-standard
         STANDARD targets (e.g. PARANG <- PARANTEL) are dropped, not leaked onto the
         EPRV PRIMARY. The raw value survives verbatim in INSTRUMENT_HEADER."""
@@ -257,7 +257,7 @@ class TestToL1:
         assert "PARANG" not in l1.headers["PRIMARY"]
         assert l1.headers["INSTRUMENT_HEADER"]["PARANTEL"] == 108.03
 
-    def test_to_l1_fixes_value_bugs(self, synthetic_l0_file):
+    def test_to_kpf1_fixes_value_bugs(self, synthetic_l0_file):
         """NUMORDER, JD_UTC, and the DRP version keywords are corrected/stamped."""
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
@@ -281,7 +281,7 @@ class TestToL1:
         assert "DATALVL" not in out  # set by KPF1.__init__ (model level)
         assert "JD_UTC" in out  # the one per-frame transform kept in _map_header
 
-    def test_to_l1_forwards_program_ids(self, synthetic_l0_file):
+    def test_to_kpf1_forwards_program_ids(self, synthetic_l0_file):
         """Native PROGID/KOAID stamped to the L0 RECEIPT at read carry onto the L1
         RECEIPT via the RECEIPT-header forward (no longer onto PRIMARY)."""
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
@@ -290,13 +290,13 @@ class TestToL1:
         assert receipt.get("KOAID") == "KP.20240113.23249.10"
         assert "PROGID" not in l1.headers["PRIMARY"]
 
-    def test_to_l1_forwards_drpstatus(self, synthetic_l0_file):
-        """DRPSTATU stamped at read carries onto the L1 RECEIPT; the to_l1 receipt
+    def test_to_kpf1_forwards_drpstatus(self, synthetic_l0_file):
+        """DRPSTATU stamped at read carries onto the L1 RECEIPT; the to_kpf1 receipt
         is denylisted, so the ingest default survives until the first real module."""
         receipt = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["RECEIPT"]
         assert receipt.get("DRPSTATU") == "File ingested into KPF-DRP"
 
-    def test_to_l1_copies_passthrough_extensions(self, synthetic_l0_file):
+    def test_to_kpf1_copies_passthrough_extensions(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         # CA_HK and TELEMETRY were in the synthetic file
@@ -304,13 +304,13 @@ class TestToL1:
         assert "TELEMETRY" in l1.extensions
         np.testing.assert_array_equal(l1.data["CA_HK"], l0.data["CA_HK"])
 
-    def test_to_l1_skips_missing_extensions(self, synthetic_l0_minimal):
+    def test_to_kpf1_skips_missing_extensions(self, synthetic_l0_minimal):
         l0 = KPF0.from_fits(synthetic_l0_minimal)
         l1 = l0.to_kpf1()
         assert "CA_HK" not in l1.extensions
         assert "TELEMETRY" not in l1.extensions
 
-    def test_to_l1_leaves_ccd_empty(self, synthetic_l0_file):
+    def test_to_kpf1_leaves_ccd_empty(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         assert "GREEN_CCD" in l1.extensions
@@ -319,18 +319,18 @@ class TestToL1:
         assert len(l1.data["GREEN_CCD"]) == 0
         assert len(l1.data["RED_CCD"]) == 0
 
-    def test_to_l1_carries_receipt(self, synthetic_l0_file):
+    def test_to_kpf1_carries_receipt(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
-        assert len(l1.receipt) >= 2  # from_fits + to_l1
-        assert "to_l1" in l1.receipt["Module_Name"].values
+        assert len(l1.receipt) >= 2  # from_fits + to_kpf1
+        assert "to_kpf1" in l1.receipt["Module_Name"].values
 
-    def test_to_l1_copies_obs_id(self, synthetic_l0_file):
+    def test_to_kpf1_copies_obs_id(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         assert l1.obs_id == "KP.20240113.23249.10"
 
-    def test_to_l1_drops_amp_extensions(self, synthetic_l0_file):
+    def test_to_kpf1_drops_amp_extensions(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         assert "GREEN_AMP1" not in l1.extensions

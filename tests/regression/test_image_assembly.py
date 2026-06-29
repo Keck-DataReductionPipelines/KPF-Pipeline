@@ -147,7 +147,7 @@ class TestImageAssemblyBias:
         l1, _ = l1_bias
         modules = l1.receipt["Module_Name"].values
         assert "from_fits" in modules
-        assert "to_l1" in modules
+        assert "to_kpf1" in modules
         assert "image_assembly" in modules
 
     def test_passthrough_telemetry(self, l1_bias):
