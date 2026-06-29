@@ -8,4 +8,5 @@ HDU,Name,DataType,Required,Description
 6,RED_MASK,ImageHDU,True,Red CCD bad pixel mask (1=good 0=bad)
 7,INPUT_FILES,BinTableHDU,True,Input L0 files used to generate this master stack
 8,RECEIPT,BinTableHDU,True,Accumulated processing history
-9,CONFIG,BinTableHDU,False,Configuration parameters
+9,QUALITY_CONTROL,BinTableHDU,True,Quality control flags and diagnostics
+10,CONFIG,BinTableHDU,False,Configuration parameters

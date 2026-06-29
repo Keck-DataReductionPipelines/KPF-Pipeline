@@ -58,6 +58,11 @@ class KPFMasterL1(KPFMasterModel, KPF1):
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
 
+        # Masters carry their own minimal PRIMARY (no EPRV science skeleton); stamp
+        # DATALVL so it is present in-memory, not only at to_fits (DRP-RUN data
+        # level). Routed via set_keyword like the science models.
+        self.set_keyword("DATALVL", self._DATALVL)
+
     def _create_hdul(self):
         """Cast MASK extensions to uint8 before building HDUs, then restore."""
         originals = {}

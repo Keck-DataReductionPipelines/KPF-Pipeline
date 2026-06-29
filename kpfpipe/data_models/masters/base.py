@@ -78,12 +78,11 @@ class KPFMasterModel(KPFDataModel):
         name, including after a `from_fits()` round-trip.
         """
         self.set_data("INPUT_FILES", pd.DataFrame({"FILENAME": file_list}))
-        # Written directly (not via set_keyword): masters keep MASTYPE on their own
-        # PRIMARY, out of EPRV/registry scope. The header is a fits.Header, so a
-        # bare string reads back as a scalar via .get() in
-        # generate_standard_filename() (a value/comment tuple would too, but the
-        # bare form keeps this out-of-scope card simple).
-        self.headers["PRIMARY"]["MASTYPE"] = master_type
+        # MASTYPE is out of EPRV scope but registered in Masters-headers.csv so it
+        # routes through set_keyword (-> PRIMARY, registry comment) like every other
+        # KPF keyword. It reads back as a scalar via .get() in
+        # generate_standard_filename().
+        self.set_keyword("MASTYPE", master_type)
 
     def generate_standard_filename(self):
         """

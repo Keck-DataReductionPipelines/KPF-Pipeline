@@ -11,8 +11,10 @@ WMKO->EPRV mapping, tests) reach the registry through ``kpf.keyword_registry``
 rather than importing from here.
 
 Source of truth: ``self.table``, one DataFrame unioning the KPF
-``L{0,1,2,4}-headers.csv`` registries with the EPRV keyword definitions (rvdata's
-``LEVEL2/4_PRIMARY_KEYWORDS`` plus the per-extension keyword CSVs). Columns:
+``L{0,1,2,4}-headers.csv`` registries (plus ``Masters-headers.csv`` for the
+out-of-EPRV-scope masters keywords, which still route through ``set_keyword``)
+with the EPRV keyword definitions (rvdata's ``LEVEL2/4_PRIMARY_KEYWORDS`` plus the
+per-extension keyword CSVs). Columns:
 ``Keyword, Description, Extension, DataType, PopulatedBy, Required, Level, Default,
 Units`` (``Default``/``Units`` carry the EPRV CSV values for EPRV rows, ``""`` for
 KPF rows). The ``routing``/``allowed``/``required``/``eprv_primary_*`` lookups are
@@ -135,6 +137,7 @@ class KeywordRegistry:
         "GCOUNT",
         "BSCALE",
         "BZERO",
+        "BUNIT",
         "COMMENT",
         "HISTORY",
         "CONTINUE",
@@ -337,6 +340,43 @@ class KeywordRegistry:
         return rows
 
     @classmethod
+    def _masters_rows(cls):
+        """KPF masters keyword rows from config/Masters-headers.csv.
+
+        Masters (bias/dark/flat/WLS calibration products) are out of EPRV scope
+        but route their PRIMARY keywords (MASTYPE + the WLS metadata) through
+        ``set_keyword`` like the science models, so they are registered here. Same
+        shape and ``Required is False`` convention as ``_kpf_rows``, but the level
+        comes from the CSV's own ``Level`` column (masters span L1/L2, not one
+        per-file level). The EPRV-tag guard mirrors ``_kpf_rows``.
+        """
+        rows = []
+        df = pd.read_csv(_kpf_data_cfg / "Masters-headers.csv")
+        for _, r in df.iterrows():
+            descr = "" if pd.isna(r["Description"]) else str(r["Description"]).strip()
+            populated_by = str(r.get("PopulatedBy", "")).strip()
+            if populated_by == cls._EPRV_TAG:
+                raise ValueError(
+                    f"Masters-headers.csv: keyword {str(r['Keyword']).strip()!r} "
+                    f"has 'PopulatedBy' == {cls._EPRV_TAG!r}, which is reserved as "
+                    "the EPRV-row discriminator; use a real populating site instead"
+                )
+            rows.append(
+                [
+                    str(r["Keyword"]).strip(),
+                    descr,
+                    str(r["Extension"]).strip(),
+                    str(r.get("DataType", "")).strip(),
+                    populated_by,
+                    False,
+                    int(r["Level"]),
+                    "",  # Default: EPRV-only attribute, blank for KPF rows
+                    "",  # Units: EPRV-only attribute, blank for KPF rows
+                ]
+            )
+        return rows
+
+    @classmethod
     def _build_rows(cls):
         """Build the EPRV and KPF row lists that union into ``self.table``."""
         # EPRV's L2 PRIMARY keywords are KPF's L1-required set: EPRV defines no L1,
@@ -355,7 +395,7 @@ class KeywordRegistry:
         ext = []
         for name, (path, level) in cls._EPRV_EXT_CSV.items():
             ext += cls._eprv_rows(cls._load_keyword_csv(path), name, level)
-        return l2 + l4 + ext, cls._kpf_rows()
+        return l2 + l4 + ext, cls._kpf_rows() + cls._masters_rows()
 
     # --- Derived lookups (all read self.table) -------------------------------
 

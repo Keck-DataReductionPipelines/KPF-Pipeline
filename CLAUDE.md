@@ -262,8 +262,11 @@ Consequences every contributor must respect:
   - **BJD_TDB / BARYCORR_KMS / BARYCORR_Z** (EPRV L2 extensions) — the per-CCD barycentric summaries.
   - **RV1–RV5** (EPRV L4 tables) — the per-orderlet legacy RVs (`CCD<n>RV<sfx>`, sfx S→RV1, 1→RV2,
     2→RV3, 3→RV4, C→RV5) plus the SCI-combined RV summaries on **RV3**
-    (`CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV`, `CCFRV`, `CCFERV`). Masters keep `MASTYPE` on their own
-    PRIMARY (out of EPRV scope).
+    (`CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV`, `CCFRV`, `CCFERV`). Masters are out of EPRV scope but still
+    route their PRIMARY keywords (`MASTYPE` + the WLS metadata `ROUGHWLS`/`LINELIST`/`LINEPROF`/
+    `POLYORDX`/`POLYORDM`/`POLYORDF`/`CHIPS`/`FIBERS`) through `set_keyword`, registered in
+    `config/Masters-headers.csv` (all homed on PRIMARY) — see *Masters Pipeline*. `BUNIT` (a standard
+    FITS card written to each `{chip}_IMG`) is treated as **structural**, not registered.
 - **QUALITY_CONTROL + RECEIPT *headers* propagate L0→L1→L2→L4** card-by-card (value + comment),
   alongside the receipt *table* copy. All three `to_kpfN` methods carry their governed headers through
   the single shared helper **`KPFDataModel._forward_headers(target, ext_names)`** (`data_models/base.py`)
@@ -312,7 +315,9 @@ Consequences every contributor must respect:
   PRIMARY set, tagged Level 1; ~40 keywords,
   pre-typed to `(value, comment)` via rvdata's `parse_value_to_datatype`), then corrects `DATALVL` to
   `"L1"`. This is what makes the `KWRDPRL1` presence check meaningful. `to_kpf1` then overlays native
-  values on top (native wins). **Masters are exempt for free**: `KPFMasterL1.__init__` chains straight
+  values on top (native wins). **Masters carry their own minimal PRIMARY, not the EPRV science skeleton** (see *Masters Pipeline*):
+`KPFMasterL2.__init__` *does* run `KPF2.__init__`→`RV2.__init__`, so it **clears** the inherited EPRV
+seed and re-stamps `DATALVL="ML2"`; `KPFMasterL1.__init__` chains straight
   to `KPFDataModel.__init__`, never running `KPF1.__init__`, so the skeleton never lands on a master.
 - **`KeywordRegistry.__init__` is a strict read → sanitize → build pipeline.** It reads the raw inputs
   (the unified keyword table, `header_map.csv`), **sanitizes both once** before any lookup is derived,
@@ -364,6 +369,12 @@ Two authorities encode this rule and **must agree per level**: `build_filepath(o
 ### Masters Pipeline
 
 `kpfpipe/modules/masters/` — stacks multiple observations to create bias, dark, flat, and wavelength solution (WLS) calibration products. Uses sigma-clipped statistics with a single-pass streaming accumulation (per-pixel counts and exposure time) for large stacks; the master image is the exposure-weighted rate `counts_sum / exptime_sum`.
+
+**Masters header alignment (out of EPRV scope, but stylistically aligned).** Masters are *not* EPRV-governed, but follow the same keyword conventions as the science models as closely as possible:
+
+- **Keywords route through `set_keyword`.** Masters PRIMARY keywords (`MASTYPE` and the WLS metadata `ROUGHWLS`/`LINELIST`/`LINEPROF`/`POLYORDX`/`POLYORDM`/`POLYORDF`/`CHIPS`/`FIBERS`) are registered in `config/Masters-headers.csv` (unioned into the `KeywordRegistry` table by `_masters_rows`, all homed on PRIMARY) so they write via `set_keyword` with registry-owned comments — no direct header writes. `POLYORD*` live on PRIMARY **only** (one registry home each); the former duplicate copies on each `{chip}_WLS_COEFFS` header were dropped. `BUNIT` (a standard FITS card on each `{chip}_IMG`) is treated as **structural** (in `_STRUCTURAL`), not registered, since it lands on multiple extensions.
+- **Masters PRIMARY is minimal — no EPRV science skeleton.** `KPFMasterL1` never runs `KPF1.__init__` (exempt for free); `KPFMasterL2` runs `KPF2.__init__`→`RV2.__init__` (which *would* seed the EPRV L2 PRIMARY), so its `__init__` **clears** that inherited skeleton. Both stamp `DATALVL` themselves (`"ML1"`/`"ML2"`) in `__init__`. This fixes the prior ML2 bug where `DATALVL` shipped as the RV2 placeholder `"UNKNOWN"` (rvdata's `to_fits` never re-stamps it).
+- **QC infrastructure is present, checks deferred.** Both levels carry `QUALITY_CONTROL` (added to `Masters-L1-extensions.csv`; ML2 inherits it from KPF2) and `RECEIPT`, so Diagnostics/QC/Checkpoints can be wired onto masters later. No masters QC checks or DRP-provenance stamping exist yet (future work).
 
 ### RVDataModel Base Class
 

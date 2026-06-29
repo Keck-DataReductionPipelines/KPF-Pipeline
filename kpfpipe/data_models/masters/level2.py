@@ -52,11 +52,19 @@ class KPFMasterL2(KPFMasterModel, KPF2):
 
     def __init__(self):
         KPF2.__init__(self)
+        # KPF2.__init__ runs RV2.__init__ (via super()), which seeds the EPRV L2
+        # science PRIMARY skeleton. Masters are out of EPRV scope and carry their
+        # own minimal PRIMARY, so drop that skeleton and stamp DATALVL ("ML2")
+        # ourselves -- rvdata's to_fits never re-stamps DATALVL, so without this it
+        # would ship the RV2 placeholder "UNKNOWN".
+        self.headers["PRIMARY"].clear()
         self.level = 2
 
         for _, row in _MASTERS_L2_EXTENSIONS.iterrows():
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
+
+        self.set_keyword("DATALVL", self._DATALVL)
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
         """

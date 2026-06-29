@@ -299,13 +299,16 @@ class TestMakeMasterL2:
         ]:
             assert key in primary
 
-    def test_coeffs_extension_header_keywords(self, mock_make_master_l2):
+    def test_primary_header_keyword_comments_from_registry(self, mock_make_master_l2):
+        # WLS metadata routes through set_keyword, so the FITS comments come from
+        # Masters-headers.csv (registry), not code-local strings.
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
-        for chip in wls.chips:
-            hdr = ml2.headers[f"{chip}_WLS_COEFFS"]
-            for key in ["POLYORDX", "POLYORDM", "POLYORDF"]:
-                assert key in hdr
+        primary = ml2.headers["PRIMARY"]
+        assert primary.comments["MASTYPE"] == "Master calibration type"
+        assert primary.comments["POLYORDX"] == "WLS polynomial degree, pixel axis"
+        # Registry fixes the old copy-paste comment (FIBERS once read "Chips ...").
+        assert primary.comments["FIBERS"] == "Fibers included in master WLS"
 
     def test_to_fits_round_trip(self, mock_make_master_l2, tmp_path):
         # Regression: rvdata builds non-PRIMARY headers via fits.Header(dict),
@@ -317,14 +320,31 @@ class TestMakeMasterL2:
         ml2.to_fits(str(out_path))
         assert out_path.exists()
 
+    def test_ml2_datalvl_and_minimal_primary(self, mock_make_master_l2, tmp_path):
+        # Regression: ML2 must not inherit RV2's EPRV science PRIMARY skeleton, and
+        # DATALVL must be "ML2" (not the RV2 placeholder "UNKNOWN") in-memory and on
+        # disk -- rvdata's to_fits never re-stamps DATALVL.
+        from kpfpipe.data_models.masters.level2 import KPFMasterL2
+
+        ml2 = WLS(FILE_LIST).make_master_l2()
+        assert ml2.headers["PRIMARY"].get("DATALVL") == "ML2"
+        # None of the EPRV-required science PRIMARY keywords should be seeded.
+        seeded = set(ml2.keyword_registry.eprv_primary_seed)
+        assert not (seeded & set(ml2.headers["PRIMARY"])) - {"DATALVL"}
+
+        out_path = tmp_path / "ml2_datalvl.fits"
+        ml2.to_fits(str(out_path))
+        read_back = KPFMasterL2.from_fits(str(out_path))
+        assert read_back.headers["PRIMARY"].get("DATALVL") == "ML2"
+
     def test_polyorder_override_stamped(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         override_x = wls.polyorder_x + 4  # ensure different from default
         ml2 = wls.make_master_l2(polyorder_x=override_x)
         assert ml2.headers["PRIMARY"].get("POLYORDX") == override_x
         for chip in wls.chips:
-            assert ml2.headers[f"{chip}_WLS_COEFFS"].get("POLYORDX") == override_x
-            # verify the override actually propagated into the fit, not just the header
+            # POLYORD* live on PRIMARY only now; verify the override actually
+            # propagated into the fit (coeffs array shape), not just the header.
             coeffs = ml2.data[f"{chip}_WLS_COEFFS"]
             assert coeffs.shape[0] == override_x + 1
 
