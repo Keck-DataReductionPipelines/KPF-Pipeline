@@ -1,7 +1,7 @@
 HDU,Name,DataType,Required,Description
 0,PRIMARY,PrimaryHDU,True,Calibration metadata header
 1,RECEIPT,BinTableHDU,True,Accumulated processing history
-2,DRP_CONFIG,BinTableHDU,True,Pipeline details (settings etc) to go from native data to L2
+2,DRP_CONFIG,BinTableHDU,True,Pipeline config as a 2-column table (key = value)
 3,EXT_DESCRIPT,BinTableHDU,True,Table describing contents of each extension
 4,ORDER_TABLE,BinTableHDU,True,Table capturing the wavelength extent of each order in Trace 1
 5,TRACE1_FLUX,ImageHDU,True,Flux in trace 1
