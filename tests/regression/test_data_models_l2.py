@@ -7,11 +7,13 @@ Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
 import warnings
+from collections import OrderedDict
 
 import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
+from rvdata.core.models.level2 import RV2
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
@@ -233,8 +235,6 @@ class TestAliasedOrderedDict:
         assert aliases == {"A1", "A2"}
 
     def test_from_ordered_dict(self):
-        from collections import OrderedDict
-
         od = OrderedDict([("A", 1), ("B", 2)])
         aliased = AliasedOrderedDict.from_ordered_dict(od)
         assert aliased["A"] == 1
@@ -253,8 +253,6 @@ class TestAliasedOrderedDict:
 
 class TestKPF2Aliases:
     def test_kpf2_inherits_rv2(self):
-        from rvdata.core.models.level2 import RV2
-
         kpf2 = KPF2()
         assert isinstance(kpf2, RV2)
         assert kpf2.level == 2
@@ -478,8 +476,6 @@ class TestKPFMasterL2:
             assert hdul["PRIMARY"].header["DATALVL"] == "ML2"
 
     def test_no_warning_on_known_extensions(self, synthetic_masters_l2_file):
-        import warnings
-
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
             KPFMasterL2.from_fits(synthetic_masters_l2_file)

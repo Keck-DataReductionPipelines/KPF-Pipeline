@@ -21,6 +21,7 @@ from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.kpf import get_obs_id
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
@@ -219,8 +220,6 @@ class KPF1(KPFDataModel):
         arrays are created but empty — the caller (spectral extraction) fills
         those in.
         """
-        from kpfpipe.data_models.level2 import KPF2  # deferred: avoids circular import
-
         kpf2 = KPF2()
 
         # Headers are a pure pass-through; the native→EPRV conversion and the

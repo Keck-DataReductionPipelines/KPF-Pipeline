@@ -22,6 +22,7 @@ from rvdata.core.tools.headers import parse_value_to_datatype
 
 from kpfpipe import __version__
 from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.kpf import get_obs_id
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
@@ -285,8 +286,6 @@ class KPF0(KPFDataModel):
         obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
         but empty — the caller (image assembly) fills those in.
         """
-        from kpfpipe.data_models.level1 import KPF1  # deferred: avoids circular import
-
         l1 = KPF1()
 
         # Convert the raw WMKO PRIMARY to EPRV-standard names/values, and preserve

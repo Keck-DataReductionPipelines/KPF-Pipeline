@@ -24,6 +24,7 @@ from rvdata.core.models.level2 import RV2
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.base import KPFDataModel, keyword_registry
+from kpfpipe.data_models.level4 import KPF4
 
 # Make rvdata's RV2._read aware of KPF's QUALITY_CONTROL extension so an L2
 # written with it reads back (KPF2.__init__ creates the empty extension).
@@ -238,8 +239,6 @@ class KPF2(KPFDataModel, RV2):
         and the receipt chain preserved. RV and CCF data extensions are
         created but empty — the caller (RV computation) fills those in.
         """
-        from kpfpipe.data_models.level4 import KPF4  # deferred: avoids circular import
-
         kpf4 = KPF4()
 
         # Forward PRIMARY, INSTRUMENT_HEADER, QUALITY_CONTROL, and RECEIPT
