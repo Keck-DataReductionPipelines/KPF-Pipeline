@@ -6,7 +6,7 @@ for CCF and RV data, following the same AliasedOrderedDict pattern as KPF2.
 
 The EPRV standard defines CCF1...N (ImageHDU) and RV1...N (BinTableHDU), one
 per orderlet. KPF numbers both to match the L2 traces (CCF{n}/RV{n} hold the
-CCF/RV for the orderlet on TRACE{n}): n=1 CAL, 2 SCI1, 3 SCI2, 4 SCI3, 5 SKY.
+CCF/RV for the orderlet on TRACE{n}): n=1 SKY, 2 SCI1, 3 SCI2, 4 SCI3, 5 CAL.
 The KPF name → extension mapping is therefore derived from the shared trace map
 (trace-map.csv), exactly like the L2 TRACE*_FLUX aliases — not from aliases.csv.
 

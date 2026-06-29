@@ -261,8 +261,8 @@ class TestKPF2Aliases:
         kpf2 = KPF2()
         # SCI2_FLUX should resolve to TRACE3_FLUX
         assert kpf2.data["SCI2_FLUX"] is kpf2.data["TRACE3_FLUX"]
-        assert kpf2.data["CAL_FLUX"] is kpf2.data["TRACE1_FLUX"]
-        assert kpf2.data["SKY_WAVE"] is kpf2.data["TRACE5_WAVE"]
+        assert kpf2.data["CAL_FLUX"] is kpf2.data["TRACE5_FLUX"]
+        assert kpf2.data["SKY_WAVE"] is kpf2.data["TRACE1_WAVE"]
 
     def test_extension_alias_resolves(self):
         kpf2 = KPF2()
@@ -285,11 +285,11 @@ class TestKPF2Aliases:
         kpf2 = KPF2()
         # Check all 5 fibers x 4 suffixes = 20 aliases
         for fiber, trace in [
-            ("CAL", 1),
+            ("SKY", 1),
             ("SCI1", 2),
             ("SCI2", 3),
             ("SCI3", 4),
-            ("SKY", 5),
+            ("CAL", 5),
         ]:
             for suffix in ["FLUX", "WAVE", "VAR", "BLAZE"]:
                 alias = f"{fiber}_{suffix}"
@@ -418,8 +418,8 @@ class TestKPFMasterL2:
     def test_aliases_work(self):
         m = KPFMasterL2(kind="wls")
         assert m.extensions._resolve("SCI2_WAVE") == "TRACE3_WAVE"
-        assert m.extensions._resolve("CAL_WAVE") == "TRACE1_WAVE"
-        assert m.extensions._resolve("SKY_WAVE") == "TRACE5_WAVE"
+        assert m.extensions._resolve("CAL_WAVE") == "TRACE5_WAVE"
+        assert m.extensions._resolve("SKY_WAVE") == "TRACE1_WAVE"
 
     def test_chip_prefix_access(self):
         m = KPFMasterL2(kind="wls")

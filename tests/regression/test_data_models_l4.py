@@ -107,12 +107,12 @@ class TestKPF4:
             assert f"RV{n}" in kpf4.extensions
 
     def test_trace_derived_aliases(self):
-        # CCF{n}/RV{n} <-> TRACE{n}: SCI2 is trace 3, CAL is trace 1, SKY is 5.
+        # CCF{n}/RV{n} <-> TRACE{n}: SCI2 is trace 3, SKY is trace 1, CAL is 5.
         kpf4 = KPF4()
         assert kpf4.data._resolve("SCI2_CCF") == "CCF3"
         assert kpf4.data._resolve("SCI2_RV") == "RV3"
-        assert kpf4.data._resolve("CAL_CCF") == "CCF1"
-        assert kpf4.data._resolve("SKY_RV") == "RV5"
+        assert kpf4.data._resolve("CAL_CCF") == "CCF5"
+        assert kpf4.data._resolve("SKY_RV") == "RV1"
         # bare RV is not an alias (RV is trace-mapped, not a 1:1 alias)
         assert kpf4.data._resolve("RV") == "RV"
 
