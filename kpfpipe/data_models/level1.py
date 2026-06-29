@@ -28,7 +28,7 @@ _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _L1_EXTENSIONS = pd.read_csv(_config_path / "L1-extensions.csv")
 _KNOWN_L1_EXTENSIONS = set(_L1_EXTENSIONS["Name"].tolist())
 
-# EPRV-like L1 filename, but with L1 instead of the standard SL#: the EPRV regex
+# EPRV-like L1 filename, but with L1 instead of the EPRV SL#: the EPRV regex
 # only accepts SL2/SL3/SL4, so KPF L1 uses kpf_L1_YYYYMMDDThhmmss.fits.
 _L1_FILENAME_PATTERN = re.compile(r"kpf_L1_\d{8}T\d{6}\.fits")
 

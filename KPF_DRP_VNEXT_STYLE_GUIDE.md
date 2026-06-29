@@ -84,6 +84,18 @@ guidance (environment, commands, architecture), which is documented separately.
   science meaning matches** (e.g. `WLSFILE`, `BIASFILE`) — so downstream tools, notebooks,
   and archival workflows keep reading v3 products unchanged. Only coin a new keyword when
   the concept genuinely doesn't exist in the legacy schema.
+- **`rvdata` vs EPRV — the package vs the standard.** These name different things; keep them
+  distinct in identifiers *and* prose. Use **`rvdata`/`RVData`** for the Python *package* we
+  import and inherit from — its imports, classes (`RV2`/`RV4`/`RVDataModel`), and API (e.g.
+  `register_rvdata_extension`). Use **"EPRV" / "EPRV (data) standard"** for the data *format/spec*
+  — FITS structure, keyword names, units, reference frames — and for identifiers that hold or
+  describe format artifacts (`eprv_primary_seed`, `_EPRV_TAG`, the `aliases.csv` `EPRV` column,
+  an `eprv_key` local). The package name `rv-data-standard` *contains* "data standard", so never
+  write "rvdata standard"/"rvdata-standard" for the format: say **"EPRV standard (which rvdata
+  implements)"**. **One external exception:** rvdata's vendored `header_map.csv` names its target
+  column `STANDARD`; read it by that name (`row["STANDARD"]`) but treat the *values* as EPRV
+  targets. Reserve a bare "standard" for genuinely different senses (a "standard CCD sequence",
+  the "standard set" of calibrations, a "standard filename") where no EPRV/rvdata meaning applies.
 
 ---
 
@@ -608,6 +620,9 @@ documented, intentional ways — follow *its* conventions when adding masters co
 
 ### FITS PRIMARY header conventions
 
+*(Terminology: "EPRV" = the data standard/format; `rvdata` = the package implementing it — see the
+`rvdata` vs EPRV rule in §1.)*
+
 The WMKO-native → EPRV-standard conversion happens **only** in `KPF0.to_kpf1`
 (`data_models/level0.py`). **Every extension header is an `astropy.io.fits.Header`** — the KPF data models normalize
 all headers to `fits.Header` (they override `create_extension`; see `data_models/base.py`),
@@ -751,7 +766,7 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
   the summary (and double as test oracles for pure utils).
 - **Types are documented in the docstring, not the signature** (see §5). Array
   shapes/dtypes/units are stated in prose
-  (`"(rvdata-standard ImageHDUs, shape (NORDER,))"`, `"WAVE [Å, vacuum]"`).
+  (`"(EPRV-standard ImageHDUs, shape (NORDER,))"`, `"WAVE [Å, vacuum]"`).
 - **Inline comments explain *why*, not *what*** — full sentences, capitalized. Annotate
   magic numbers with units/meaning inline (`* 1.48424  # e-/ADU: exposure meter gain`). If a
   comment is needed to explain *what* a variable holds, rename the variable instead (§1, code

@@ -121,7 +121,7 @@ class TestScienceRecipe:
         assert "barycentric_correction" in modules
 
     def test_barycorr_extensions_populated(self, recipe_output):
-        """BarycentricCorrection should populate the rvdata-standard extensions
+        """BarycentricCorrection should populate the EPRV-standard extensions
         per-order, with finite values."""
         l2 = KPF2.from_fits(recipe_output)
         norder = NORDER_GREEN + NORDER_RED

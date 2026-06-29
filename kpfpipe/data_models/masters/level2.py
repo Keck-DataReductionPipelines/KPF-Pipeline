@@ -7,7 +7,7 @@ wavelength solutions, master flats).
 Inherits from KPFMasterModel and KPF2. The full L2 schema and the KPF
 alias system are inherited from KPF2 (see aliases.csv and
 trace-map.csv for the mapping between KPF-internal fiber names like
-SCI2_WAVE and the standard names like TRACE3_WAVE).
+SCI2_WAVE and the EPRV standard names like TRACE3_WAVE).
 
 An L2 master carries a different extension set per *type*: a WLS master
 holds wavelength solutions (TRACE*_WAVE) and fit coefficients

@@ -444,7 +444,7 @@ class KeywordRegistry:
           these are tagged Level 1 in the table -- see ``_build_rows``).
           Built exactly like ``RV2.__init__``: format the unit/description comment,
           then type the default via ``parse_value_to_datatype`` so consumers assign
-          it straight into a header. Insertion order follows the standard's.
+          it straight into a header. Insertion order follows the EPRV standard's.
         - ``datatypes`` — ``{keyword: DataType}`` for *all* EPRV PRIMARY keywords
           (required + optional), so ``_map_header`` can type the native/default
           values it overlays. Scoped to EPRV PRIMARY (rvdata-vocab datatypes), so
@@ -507,9 +507,9 @@ class KeywordRegistry:
             (NUMORDER/DRPTAG), the model level (DATALVL), or the _map_header epoch
             transform (JD_UTC), not a static map row.
         """
-        standard = raw["STANDARD"].astype(str).str.strip()
+        eprv_targets = raw["STANDARD"].astype(str).str.strip()
         unregistered = sorted(
-            set(standard[raw["STANDARD"].notna()]) - self.registered - {""}
+            set(eprv_targets[raw["STANDARD"].notna()]) - self.registered - {""}
         )
         if unregistered:
             warnings.warn(
@@ -518,7 +518,7 @@ class KeywordRegistry:
                 UserWarning,
                 stacklevel=2,
             )
-        keep = standard.isin(self.registered) & ~standard.isin(
+        keep = eprv_targets.isin(self.registered) & ~eprv_targets.isin(
             self._HEADER_MAP_NON_NATIVE
         )
         return raw[keep].reset_index(drop=True)

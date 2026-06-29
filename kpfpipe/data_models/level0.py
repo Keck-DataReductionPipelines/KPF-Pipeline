@@ -233,7 +233,7 @@ class KPF0(KPFDataModel):
         wmko_primary = self.headers["PRIMARY"]
         out = {}
         for _, row in self.keyword_registry.header_map.iterrows():
-            standard_key = str(row["STANDARD"]).strip()
+            eprv_key = str(row["STANDARD"]).strip()
             instrument_key = (
                 str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""
             )
@@ -249,11 +249,9 @@ class KPF0(KPFDataModel):
             # matches L2's typing (e.g. NUMTRACE '5' -> 5), for both native values
             # and CSV-string defaults. Emit the bare value so to_kpf1's assignment
             # preserves the comment KPF1.__init__ seeded onto the PRIMARY card.
-            dt = self.keyword_registry.eprv_primary_datatypes.get(standard_key)
-            out[standard_key] = (
-                parse_value_to_datatype(standard_key, dt, raw_value)[0]
-                if dt
-                else raw_value
+            dt = self.keyword_registry.eprv_primary_datatypes.get(eprv_key)
+            out[eprv_key] = (
+                parse_value_to_datatype(eprv_key, dt, raw_value)[0] if dt else raw_value
             )
 
         # JD_UTC: KPF's canonical exposure time is the native MJD-OBS; convert it to

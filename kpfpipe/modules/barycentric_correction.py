@@ -4,7 +4,7 @@ KPF Barycentric Correction module.
 Computes per-order barycentric corrections from the EXPMETER_SCI flux-weighted
 midpoint times and stores them on the L2. WAVE arrays are not modified.
 
-Outputs (rvdata-standard ImageHDUs, shape (NORDER,)):
+Outputs (EPRV-standard ImageHDUs, shape (NORDER,)):
   - BJD_TDB       photon-weighted midpoint in BJD_TDB per spectral order
   - BARYCORR_KMS  barycentric velocity per spectral order [km/s]
   - BARYCORR_Z    barycentric redshift per spectral order

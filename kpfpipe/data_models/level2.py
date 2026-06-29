@@ -10,7 +10,7 @@ Each trace stores green+red orders concatenated (green first), matching the
 EPRV standard. The chip prefix dynamically slices using NORDER_GREEN.
 
 The alias mechanism (AliasedOrderedDict) is generic and could be
-upstreamed into the rvdata standard.
+upstreamed into the EPRV standard (which rvdata implements).
 """
 
 import importlib.resources
