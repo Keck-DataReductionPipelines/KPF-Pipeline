@@ -273,13 +273,17 @@ class StageName:
     positional in the same slot (e.g. `CalibrationAssociation.perform(self, cal_types, *, ...)`).
   - **Everything else is keyword-only** — place a bare `*` after the positionals so all
     tunables must be passed by name.
-  - **Order the keyword-only args in two groups**, each in sensible domain order: first the
-    *configurable* params (backed by `_DEFAULTS` + config, defaulting to `None`, resolving to
-    `self.<attr>`), then the *semi-hidden* knobs (a real literal default like `min_npts=9` or
-    `verbose=True`, absent from both `_DEFAULTS` and config). A tunable's tier must be legible
-    from the signature alone: **`=None` ⇒ configurable**, **literal default ⇒ semi-hidden**. A
-    semi-hidden param needing a sequence default uses an *immutable literal*
-    (`clip_edge_pixels=(500, 500)`), never a `None`-sentinel + in-body list fallback.
+  - **Order the keyword-only args in two groups**: first the *configurable* parameters —
+    backed by a `_DEFAULTS` key and a config entry, defaulting to `None` and resolving to
+    the configured `self.<attr>` (the "`None` means use config" tunables); then the
+    *semi-hidden* parameters — rarely-tuned knobs left exposed for developer experimentation,
+    carrying a real literal default (e.g. `min_npts=9`, `verbose=True`) and intentionally
+    **absent** from both `_DEFAULTS` and config. The invariant is that a tunable's tier is
+    legible from the signature alone: **`=None` ⇒ configurable** (resolves to `self.<attr>`),
+    **literal default ⇒ semi-hidden**. So a semi-hidden param needing a sequence default uses
+    an *immutable literal* (a tuple, safe as a default argument), e.g.
+    `clip_edge_pixels=(500, 500)`, never the `None`-sentinel + in-body list fallback. Within
+    each group, keep a sensible domain order.
 - **The `make_master_*` entry points follow the same shape** (§10), with `l0_file_list`
   as the sole positional in place of `chips`/`fibers`.
 - **Parameter ordering applies to *every* method**, not just the public entry points:
@@ -341,8 +345,10 @@ class StageName:
   value with `!r`**: `raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")`.
 - **Narrow your `except`**, never bare `except:`. Broad `except Exception` is acceptable
   only around external I/O that converts to a warning-and-skip. **Always parenthesize a
-  multi-type clause** — `except (ValueError, TypeError):`, binding or not: the bare PEP 758
-  form (`except A, B:`) is valid on 3.14 but Pylance/Pyright can't parse it (§8).
+  multi-type clause** — `except (ValueError, TypeError):`, binding or not. PEP 758 makes the
+  bare `except A, B:` valid at runtime on 3.14, but Pylance/Pyright doesn't yet parse it and
+  flags every such clause; the parenthesized form is accepted by every tool. The formatter
+  leaves these parens in place because `target-version` is pinned to `py313` (see §8).
 - **Always chain re-raises** (Ruff `B904`): `raise ... from e` to preserve the original
   context, or `raise ... from None` when translating a low-level error (a `KeyError`/
   `AttributeError` from a dict lookup or `getattr` dispatch) into a clearer domain error
