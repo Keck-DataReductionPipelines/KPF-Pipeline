@@ -406,6 +406,7 @@ class BaseMasterModule:
         cache=False,
         max_fail_fraction=0.2,
         max_fail_number=2,
+        exptime_tolerance=0.1,
     ):
         """
         Compute stacked statistics using an in-memory data cube.
@@ -432,6 +433,10 @@ class BaseMasterModule:
             Maximum absolute number of frames allowed to fail loading before
             raising. Defaults to 2. Stacking raises when either limit is
             exceeded.
+        exptime_tolerance : float, optional
+            Exposure-time tolerance in seconds (default 0.1): the per-frame
+            elapsed-vs-requested bound in `_load_frame`, and the threshold at or
+            below which a frame's exposure counts as zero (a bias).
 
         Returns
         -------
@@ -448,15 +453,19 @@ class BaseMasterModule:
                               stack_frames; equals the valid-frame count for a
                               bias stack, where T = 1)
         zero_exptime : bool
-            True if this is a bias stack (all frames have EXPTIME == 0), used
-            by the streaming path to validate per-frame exposure consistency.
+            True if this is a bias stack (all frames have exposure at or below
+            exptime_tolerance), used by the streaming path to validate per-frame
+            exposure consistency.
 
         Notes
         -----
-        Outlier rejection is performed jointly on CCD and VAR extensions, in
-        rate space, so frames of differing exposure are comparable. Exposure
-        times must be either all zero or all strictly positive. Raises an error
-        if more than `max_fail_fraction` of frames fail to load.
+        Exposure time is read from the EPRV-standard PRIMARY EXPTIME (the actual
+        elapsed time, mapped from the native WMKO ELAPSED), not the nominal
+        requested EXPTIME. Outlier rejection is performed jointly on CCD and VAR
+        extensions, in rate space, so frames of differing exposure are
+        comparable. Exposure times must be either all zero (≤ tolerance) or all
+        above tolerance. Raises an error if more than `max_fail_fraction` of
+        frames fail to load.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -482,7 +491,9 @@ class BaseMasterModule:
         failure = 0
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(fn, cache=cache, verbose=verbose)
+            l1_obj, success = self._load_frame(
+                fn, cache=cache, exptime_tolerance=exptime_tolerance, verbose=verbose
+            )
 
             if not success:
                 failure += 1
@@ -493,7 +504,7 @@ class BaseMasterModule:
 
             l1_obj = self._process_frame(l1_obj)
 
-            exptime[i] = l1_obj.headers["INSTRUMENT_HEADER"]["EXPTIME"]
+            exptime[i] = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
             for chip in self.chips:
                 data_cube[f"{chip}_CCD"][i] = l1_obj.data[f"{chip}_CCD"]
@@ -509,10 +520,10 @@ class BaseMasterModule:
         if np.any(exptime < 0):
             raise ValueError(f"Exposure times cannot be negative; exptime = {exptime}")
 
-        if np.all(exptime > 0):
+        if np.all(exptime > exptime_tolerance):
             zero_exptime = False
             T = exptime[:, None, None]
-        elif np.all(exptime == 0):
+        elif np.all(exptime <= exptime_tolerance):
             zero_exptime = True
             T = np.ones_like(exptime)[:, None, None]
         else:
@@ -577,6 +588,7 @@ class BaseMasterModule:
         verbose=True,
         max_fail_fraction=0.2,
         max_fail_number=2,
+        exptime_tolerance=0.1,
     ):
         """
         Compute stacked statistics with a single streaming pass over the frames.
@@ -600,6 +612,10 @@ class BaseMasterModule:
             Maximum absolute number of frames allowed to fail loading before
             raising. Defaults to 2. Stacking raises when either limit is
             exceeded.
+        exptime_tolerance : float, optional
+            Exposure-time tolerance in seconds (default 0.1): the per-frame
+            elapsed-vs-requested bound in `_load_frame`, and the threshold at or
+            below which a frame's exposure counts as zero (a bias).
 
         Returns
         -------
@@ -613,7 +629,8 @@ class BaseMasterModule:
             produce 'rate_mean'/'rate_rms': clip bounds come from the datacube
             approximation below, and the master IMG is counts_sum / exptime_sum.)
         zero_exptime : bool
-            True if this is a bias stack (all frames have EXPTIME == 0).
+            True if this is a bias stack (all frames have exposure at or below
+            exptime_tolerance).
 
         Notes
         -----
@@ -642,6 +659,7 @@ class BaseMasterModule:
             cache=True,
             max_fail_fraction=max_fail_fraction,
             max_fail_number=max_fail_number,
+            exptime_tolerance=exptime_tolerance,
         )
 
         if len(l0_file_list) <= ndirect:
@@ -682,7 +700,9 @@ class BaseMasterModule:
         for fn in l0_file_list:
             # The first `ndirect` frames are cache hits from the approximation
             # pass above; the rest are read once here and not worth caching.
-            l1_obj, success = self._load_frame(fn, cache=False, verbose=verbose)
+            l1_obj, success = self._load_frame(
+                fn, cache=False, exptime_tolerance=exptime_tolerance, verbose=verbose
+            )
 
             if not success:
                 failure += 1
@@ -693,17 +713,16 @@ class BaseMasterModule:
 
             l1_obj = self._process_frame(l1_obj)
 
-            exptime = l1_obj.headers["INSTRUMENT_HEADER"]["EXPTIME"]
-
-            if zero_exptime != (exptime == 0):
-                raise ValueError("Exposure times must be all zero or all non-zero")
+            exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
             if exptime < 0:
                 raise ValueError("Exposure times cannot be negative")
-            elif exptime == 0:
-                T = 1.0
-            else:
-                T = exptime
+
+            is_zero = exptime <= exptime_tolerance
+            if zero_exptime != is_zero:
+                raise ValueError("Exposure times must be all zero or all non-zero")
+
+            T = 1.0 if is_zero else exptime
 
             for chip in self.chips:
                 # Clip each pixel against the rate bounds (joint over CCD/VAR),
@@ -861,6 +880,7 @@ class BaseMasterModule:
         cal_type=None,
         max_fail_fraction=0.2,
         max_fail_number=2,
+        exptime_tolerance=0.1,
     ):
         """
         Stack full-frame images to produce masters L1.
@@ -889,6 +909,11 @@ class BaseMasterModule:
             Maximum absolute number of frames allowed to fail loading before
             raising. Defaults to 2. Stacking raises when either limit is
             exceeded.
+        exptime_tolerance : float, optional
+            Exposure-time tolerance in seconds (default 0.1), threaded to the
+            stats sub-methods. It bounds the allowed excess of elapsed over
+            requested time in `_check_exptime_vs_elapsed`, and is the threshold
+            at or below which a frame's exposure counts as zero (a bias).
 
         Returns
         -------
@@ -926,6 +951,7 @@ class BaseMasterModule:
                 verbose=verbose,
                 max_fail_fraction=max_fail_fraction,
                 max_fail_number=max_fail_number,
+                exptime_tolerance=exptime_tolerance,
             )
         else:
             stats, _ = self._compute_stats_from_stream(
@@ -935,6 +961,7 @@ class BaseMasterModule:
                 verbose=verbose,
                 max_fail_fraction=max_fail_fraction,
                 max_fail_number=max_fail_number,
+                exptime_tolerance=exptime_tolerance,
             )
 
         for chip in self.chips:
