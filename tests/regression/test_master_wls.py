@@ -294,8 +294,6 @@ class TestMakeMasterL2:
             "POLYORDX",
             "POLYORDM",
             "POLYORDF",
-            "CHIPS",
-            "FIBERS",
         ]:
             assert key in primary
 
@@ -307,8 +305,6 @@ class TestMakeMasterL2:
         primary = ml2.headers["PRIMARY"]
         assert primary.comments["MASTYPE"] == "Master calibration type"
         assert primary.comments["POLYORDX"] == "WLS polynomial degree, pixel axis"
-        # Registry fixes the old copy-paste comment (FIBERS once read "Chips ...").
-        assert primary.comments["FIBERS"] == "Fibers included in master WLS"
 
     def test_to_fits_round_trip(self, mock_make_master_l2, tmp_path):
         # Regression: rvdata builds non-PRIMARY headers via fits.Header(dict),

@@ -934,8 +934,6 @@ class WLS(BaseMasterModule):
         self.ml2_obj.set_keyword("POLYORDX", polyorder_x)
         self.ml2_obj.set_keyword("POLYORDM", polyorder_m)
         self.ml2_obj.set_keyword("POLYORDF", polyorder_f)
-        self.ml2_obj.set_keyword("CHIPS", ",".join(self.chips))
-        self.ml2_obj.set_keyword("FIBERS", ",".join(self.fibers))
 
         self.ml2_obj.receipt_add_entry("master_wls", "PASS")
 
