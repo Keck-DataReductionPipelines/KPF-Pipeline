@@ -240,9 +240,9 @@ class TestToKpf1:
         assert "DRPVERNO" not in inst
         assert "DRPSTATU" not in inst
 
-    def test_to_kpf1_filters_non_registry_headermap_targets(self, tmp_path):
+    def test_to_kpf1_filters_non_registry_headermap_keys(self, tmp_path):
         """_map_header emits only registered keywords; header_map's non-standard
-        STANDARD targets (e.g. PARANG <- PARANTEL) are dropped, not leaked onto the
+        STANDARD keys (e.g. PARANG <- PARANTEL) are dropped, not leaked onto the
         EPRV PRIMARY. The raw value survives verbatim in INSTRUMENT_HEADER."""
         import warnings
 

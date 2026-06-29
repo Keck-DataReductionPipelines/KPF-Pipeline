@@ -181,7 +181,7 @@ class TestKeywordRegistry:
         keys = KPF1.keyword_registry.registered
         assert "RNGREEN1" in keys and "RV" in keys
 
-    def test_non_registry_headermap_targets_absent(self):
+    def test_non_registry_headermap_keys_absent(self):
         # PARANG/PARANG2 are header_map STANDARD names that aren't EPRV keywords;
         # they must NOT be in the registry (so _map_header drops them).
         assert "PARANG" not in KPF1.keyword_registry.registered

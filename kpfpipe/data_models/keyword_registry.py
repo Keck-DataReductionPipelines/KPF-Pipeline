@@ -24,7 +24,7 @@ The three use-cases:
   (1) Mapping  — ``header_map`` (WMKO->EPRV), consumed by ``KPF0._map_header``;
       ``eprv_primary_datatypes`` types the values it emits. ``header_map`` is
       **sanitized on load** so it holds only genuine static native->EPRV mappings:
-      rows whose target is unregistered (PARANG/PARANG2) or handled elsewhere
+      rows whose key is unregistered (PARANG/PARANG2) or handled elsewhere
       (``_HEADER_MAP_NON_NATIVE``) are dropped, so ``_map_header`` needs no
       in-loop filter or per-keyword correction.
   (2) Validation — ``allowed`` / ``required`` (per-extension, from the table)
@@ -87,7 +87,7 @@ class KeywordRegistry:
         "Units",
     ]
 
-    # header_map.csv STANDARD targets that are NOT genuine static native->EPRV
+    # header_map.csv STANDARD keys that are NOT genuine static native->EPRV
     # mappings, so they are dropped when header_map is sanitized on load (and the
     # raw header_map default/native they carried is wrong or vestigial). Each one's
     # real value home: NUMORDER/DRPTAG -> _DEFAULT_OVERRIDES (table), DATALVL ->
@@ -248,7 +248,7 @@ class KeywordRegistry:
     def _eprv_rows(cls, df, extension, level):
         """Expand an EPRV keyword CSV into unified-registry rows.
 
-        EPRV CSVs encode per-target/per-telescope families as a "BASE1 ... BASE#"
+        EPRV CSVs encode per-key/per-telescope families as a "BASE1 ... BASE#"
         template; expand each to literal rows BASE1-9 (only index 1 inherits the
         Required flag, mirroring rvdata's seed). EPRV rows carry ``"EPRV"`` in the
         ``PopulatedBy`` column — the discriminator the derived lookups use to
@@ -402,7 +402,7 @@ class KeywordRegistry:
     def _routing_lookup(self):
         """keyword -> (home extension, comment), derived from ``self.table``.
 
-        Write targets only: EPRV PRIMARY keywords (-> PRIMARY) and every KPF
+        Write keys only: EPRV PRIMARY keywords (-> PRIMARY) and every KPF
         keyword (its explicit Extension); KPF wins a name collision. EPRV
         per-extension cards (RVMETHOD on RV#, CTYPE*, ...) are validation-only,
         never set_keyword targets, so they are excluded.
@@ -501,24 +501,24 @@ class KeywordRegistry:
 
         _map_header then applies the map with no in-loop filter or per-keyword
         correction. Two row classes are dropped:
-          - STANDARD targets absent from the registry (PARANG/PARANG2) -- warned,
+          - STANDARD keys absent from the registry (PARANG/PARANG2) -- warned,
             so the rvdata header_map / registry inconsistency stays visible;
-          - ``_HEADER_MAP_NON_NATIVE`` targets, whose value comes from the seed
+          - ``_HEADER_MAP_NON_NATIVE`` keys, whose value comes from the seed
             (NUMORDER/DRPTAG), the model level (DATALVL), or the _map_header epoch
             transform (JD_UTC), not a static map row.
         """
-        eprv_targets = raw["STANDARD"].astype(str).str.strip()
+        eprv_keys = raw["STANDARD"].astype(str).str.strip()
         unregistered = sorted(
-            set(eprv_targets[raw["STANDARD"].notna()]) - self.registered - {""}
+            set(eprv_keys[raw["STANDARD"].notna()]) - self.registered - {""}
         )
         if unregistered:
             warnings.warn(
-                "header_map.csv maps to STANDARD targets absent from the keyword "
+                "header_map.csv maps to STANDARD keys absent from the keyword "
                 f"registry; they are dropped (not emitted): {unregistered}",
                 UserWarning,
                 stacklevel=2,
             )
-        keep = eprv_targets.isin(self.registered) & ~eprv_targets.isin(
+        keep = eprv_keys.isin(self.registered) & ~eprv_keys.isin(
             self._HEADER_MAP_NON_NATIVE
         )
         return raw[keep].reset_index(drop=True)
