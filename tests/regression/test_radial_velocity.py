@@ -690,6 +690,7 @@ class TestPerform:
                 "WAVE_END",
                 "RV",
                 "RV_ERR",
+                "WEIGHT",
             }
             # EPRV L4: time/wavelength columns are 64-bit; order index is integer.
             assert table["BJD_TDB"].dtype == np.float64
@@ -715,6 +716,22 @@ class TestPerform:
         for fiber in self._ILLUMINATED:
             rv = np.asarray(l4.data[f"{fiber}_RV"]["RV"])
             np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
+
+    def test_rv_table_weight_column_matches_order_weights(self, rv_module):
+        # The per-order CCF-combination weights (ccf_order_weights.csv, column
+        # by the orderlet's mask) are persisted as the WEIGHT column, green
+        # orders then red, matching _get_order_weights.
+        l4 = rv_module.perform()
+        for fiber in self._ILLUMINATED:
+            weight = np.asarray(l4.data[f"{fiber}_RV"]["WEIGHT"], dtype=float)
+            expected = np.concatenate(
+                [
+                    rv_module._get_order_weights("GREEN", fiber),
+                    rv_module._get_order_weights("RED", fiber),
+                ]
+            )
+            assert weight.shape == (NORDER,)
+            np.testing.assert_array_equal(weight, expected)
 
     def test_per_fiber_ccf_and_rv_headers(self, rv_module):
         # EPRV L4 keywords on each orderlet's CCF/RV extension; RVMETHOD on PRIMARY.
