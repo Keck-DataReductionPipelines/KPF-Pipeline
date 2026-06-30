@@ -240,6 +240,8 @@ class KPF0(KPFDataModel):
             default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
 
             if instrument_key and instrument_key in wmko_primary:
+                # Verbatim: some cards legitimately read "None" (e.g. CAL-OBJ when
+                # the cal fiber is dark -> TRACE1/CLSRC1); real data, not a sentinel.
                 raw_value = wmko_primary.get(instrument_key)
             elif default_val is not None and str(default_val).strip():
                 raw_value = default_val
