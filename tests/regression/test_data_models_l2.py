@@ -172,8 +172,9 @@ class TestToKPF2:
             == "Barycentric Correction module complete"
         )
 
-    def test_to_kpf2_sets_origid(self, tmp_path):
-        """Verify obs_id is stored as ORIGID on the KPF2 RECEIPT (its registry home)."""
+    def test_to_kpf2_propagates_origid(self, tmp_path):
+        """ORIGID is stamped at L0 and rides the RECEIPT header through to_kpf2;
+        it is not (re)written at L2, and stays off PRIMARY."""
         fn = str(tmp_path / "KP.20240113.23249.10_L1.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
@@ -191,10 +192,10 @@ class TestToKPF2:
         hdul.close()
 
         l1 = KPF1.from_fits(fn)
-        assert l1.obs_id == "KP.20240113.23249.10"
+        # Mimic what KPF0.from_fits + to_kpf1 would have placed on the L1 RECEIPT.
+        l1.set_keyword("ORIGID", "KP.20240113.23249.10")
         kpf2 = l1.to_kpf2()
-        origid = kpf2.headers["RECEIPT"].get("ORIGID")
-        assert origid == "KP.20240113.23249.10"
+        assert kpf2.headers["RECEIPT"].get("ORIGID") == "KP.20240113.23249.10"
         assert "ORIGID" not in kpf2.headers["PRIMARY"]
 
 

@@ -249,11 +249,10 @@ class KPF1(KPFDataModel):
         if self.receipt is not None and not self.receipt.empty:
             kpf2.receipt = self.receipt.copy()
 
-        # Carry obs_id through, both as the model attribute and (for traceability
-        # on the product itself) the ORIGID keyword, registered to RECEIPT.
+        # Carry the obs_id model attribute through. The ORIGID provenance card is
+        # stamped once at L0 (KPF0.from_fits) and rides forward on the RECEIPT
+        # header forwarded above, so it is not (re)written here.
         kpf2.obs_id = self.obs_id
-        if self.obs_id is not None:
-            kpf2.set_keyword("ORIGID", self.obs_id)
 
         kpf2.set_keyword("DATALVL", "L2")
         kpf2.receipt_add_entry("to_kpf2", "", "PASS")
