@@ -18,7 +18,7 @@ _SCI_FIBERS = ("SCI1", "SCI2", "SCI3")
 # DATE-END - DATE-BEG vs ELAPSED tolerance, and max |per-order BERV % deviation|
 # (both from v2.12 quality_control.py).
 _TIME_TOL_S = 0.1
-_BCV_PCT_TOL = 1.0
+_BERV_PCT_TOL = 1.0
 
 
 def _hdr_float(hdr, key):
@@ -83,9 +83,9 @@ class QCL4(QC):
             return False
         return True
 
-    times_consistent._qc_key = "TIMCHKL4"
+    times_consistent._qc_key = "TIMEOK"
 
-    def barycentric_rv_percent_change(self):
+    def berv_within_tolerance(self):
         """Per-order BERV deviation within +/-1% of the weighted mean.
 
         Ports v2.12 ``L2_barycentric_rv_percent_change``, reading BERVMAXP /
@@ -98,6 +98,6 @@ class QCL4(QC):
         mn = _hdr_float(hdr, "BERVMINP")
         if mx is None or mn is None:
             return True
-        return mx <= _BCV_PCT_TOL and mn >= -_BCV_PCT_TOL
+        return mx <= _BERV_PCT_TOL and mn >= -_BERV_PCT_TOL
 
-    barycentric_rv_percent_change._qc_key = "BERVOK"
+    berv_within_tolerance._qc_key = "BERVOK"

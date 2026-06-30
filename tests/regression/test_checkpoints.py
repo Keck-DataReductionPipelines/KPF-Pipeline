@@ -233,7 +233,7 @@ class TestCheckpointL4:
         qc = l4.headers["QUALITY_CONTROL"]
         # Folded DiagL4 metrics + QCL4 flags both landed on QUALITY_CONTROL.
         assert qc["BERVMEAN"] is not None and qc["BJDMEAN"] is not None
-        assert qc["DATAPRL4"] == 1 and qc["TIMCHKL4"] == 1
+        assert qc["DATAPRL4"] == 1 and qc["TIMEOK"] == 1
         assert qc["ISGOOD"] == 1
 
     def test_run_raises_when_science_ccf_rv_missing(self):
@@ -243,8 +243,8 @@ class TestCheckpointL4:
             CheckpointL4(l4).run()
 
     def test_nonraise_flag_warns(self):
-        # Bad timing -> TIMCHKL4 = 0; not a RAISE_FLAG, so it warns (not raises).
+        # Bad timing -> TIMEOK = 0; not a RAISE_FLAG, so it warns (not raises).
         l4 = _make_l4()
         l4.headers["INSTRUMENT_HEADER"]["ELAPSED"] = 999.0  # END-BEG != ELAPSED
-        with pytest.warns(UserWarning, match="TIMCHKL4 = 0"):
+        with pytest.warns(UserWarning, match="TIMEOK = 0"):
             CheckpointL4(l4).run()

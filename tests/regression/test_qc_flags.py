@@ -989,20 +989,14 @@ class TestQCL4:
         assert QCL4(_make_l4(dates={})).times_consistent() is False
 
     def test_bcv_percent_change_pass(self):
-        assert (
-            QCL4(_make_l4(maxpc=0.3, minpc=-0.4)).barycentric_rv_percent_change()
-            is True
-        )
+        assert QCL4(_make_l4(maxpc=0.3, minpc=-0.4)).berv_within_tolerance() is True
 
     def test_bcv_percent_change_fail(self):
-        assert (
-            QCL4(_make_l4(maxpc=1.5, minpc=-0.2)).barycentric_rv_percent_change()
-            is False
-        )
+        assert QCL4(_make_l4(maxpc=1.5, minpc=-0.2)).berv_within_tolerance() is False
 
     def test_bcv_percent_change_absent_passes(self):
         # No BERVMAXP/BERVMINP (e.g. calibration frame) -> nothing to flag.
-        assert QCL4(_make_l4()).barycentric_rv_percent_change() is True
+        assert QCL4(_make_l4()).berv_within_tolerance() is True
 
     def test_required_keywords_present(self):
         l4 = _make_l4()
@@ -1019,9 +1013,9 @@ class TestQCL4:
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         results = QCL4(l4).run()
-        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "TIMCHKL4", "BERVOK"}
+        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "TIMEOK", "BERVOK"}
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["DATAPRL4"] == 1 and qc["TIMCHKL4"] == 1 and qc["BERVOK"] == 1
+        assert qc["DATAPRL4"] == 1 and qc["TIMEOK"] == 1 and qc["BERVOK"] == 1
         assert qc["ISGOOD"] == 1
 
     def test_run_flags_failure_in_isgood(self):

@@ -78,7 +78,7 @@ class DiagL4(Diagnostics):
 
     bjd_dispersion._diag_name = "bjd_dispersion"
 
-    def bcv_dispersion(self):
+    def berv_dispersion(self):
         """Weighted-mean barycentric RV correction and per-order spread (SCI2)."""
         tab = self._sci_rv_table()
         if tab is None:
@@ -103,4 +103,4 @@ class DiagL4(Diagnostics):
             values["BERVMINP"] = round(float(perc.min()), 4)
         return self._tag(**values)
 
-    bcv_dispersion._diag_name = "bcv_dispersion"
+    berv_dispersion._diag_name = "berv_dispersion"

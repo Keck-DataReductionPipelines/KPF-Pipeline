@@ -516,7 +516,7 @@ class TestDiagL4:
     #   BJD  [10, 20] -> mean 15, std 5 d (=432000 s), range 10 d (=864000 s)
     #   BERV [0.1, 0.3] -> mean 0.2, std 0.1 km/s (=100 m/s), range 0.2 (=200 m/s)
     #   per-order BERV %dev = [-50, +50] of the 0.2 mean
-    def test_bjd_bcv_dispersion_values(self):
+    def test_bjd_berv_dispersion_values(self):
         l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [1.0, 1.0])
         DiagL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
