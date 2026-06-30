@@ -1,10 +1,8 @@
 Keyword,Description,Extension,DataType,PopulatedBy
-CCD1RV,GREEN SCI-combined RV [km/s] (legacy),RV3,float,RadialVelocity
-CCD2RV,RED SCI-combined RV [km/s] (legacy),RV3,float,RadialVelocity
-CCD1ERV,GREEN SCI-combined RV error [km/s] (legacy),RV3,float,RadialVelocity
-CCD2ERV,RED SCI-combined RV error [km/s] (legacy),RV3,float,RadialVelocity
-CCFRV,Cross-chip science-combined RV [km/s] (legacy),RV3,float,RadialVelocity
-CCFERV,Cross-chip science-combined RV error [km/s] (legacy),RV3,float,RadialVelocity
+CCD1RV,GREEN SCI-combined RV [km/s] (legacy),PRIMARY,float,RadialVelocity
+CCD2RV,RED SCI-combined RV [km/s] (legacy),PRIMARY,float,RadialVelocity
+CCD1ERV,GREEN SCI-combined RV error [km/s] (legacy),PRIMARY,float,RadialVelocity
+CCD2ERV,RED SCI-combined RV error [km/s] (legacy),PRIMARY,float,RadialVelocity
 CCD1RVS,GREEN SKY RV [km/s] (legacy),RV1,float,RadialVelocity
 CCD1RV1,GREEN SCI1 RV [km/s] (legacy),RV2,float,RadialVelocity
 CCD1RV2,GREEN SCI2 RV [km/s] (legacy),RV3,float,RadialVelocity

@@ -796,38 +796,37 @@ class TestPerform:
         assert rv_hdr["CCD2RV2"] == pytest.approx(_V_INJECT, abs=0.1)
         assert rv_hdr["CCD1ERV2"] > 0 and rv_hdr["CCD2ERV2"] > 0
         # The per-orderlet keywords do not leak onto PRIMARY; they live on the RV#
-        # tables (the SCI-combined CCD<n>RV/CCFRV land on RV3).
+        # tables (only the SCI-combined CCD<n>RV/CCD<n>ERV land on PRIMARY).
         assert "CCD1RV2" not in l4.headers["PRIMARY"]
 
     def test_combined_rv_populated(self, rv_module):
-        # The science combine: SCI-combined CCD1RV/CCD2RV and CCFRV/CCFERV on the
-        # RV3 table (registered KPF keywords), alongside the EPRV RV/RVERR on
-        # PRIMARY. RV ~ injected value.
+        # The final science RV is on PRIMARY: the EPRV RV/RVERR plus the KPF
+        # SCI-combined per-CCD CCD1RV/CCD2RV/CCD1ERV/CCD2ERV (KPF-registered, homed
+        # on PRIMARY). RV ~ injected value.
         l4 = rv_module.perform()
-        rv3 = l4.headers["RV3"]
-        assert rv3["CCD1RV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert rv3["CCD2RV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert rv3["CCD1ERV"] > 0 and rv3["CCD2ERV"] > 0
-        assert rv3["CCFRV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert rv3["CCFERV"] > 0
-
         prim = l4.headers["PRIMARY"]
+        assert prim["CCD1RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert prim["CCD2RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert prim["CCD1ERV"] > 0 and prim["CCD2ERV"] > 0
         assert prim["RV"] == pytest.approx(_V_INJECT, abs=0.1)
         assert prim["RVERR"] > 0
         assert prim["RVMETHOD"] == "CCF"
         assert prim["SYSVEL"] is None  # absolute RVs; nothing removed
+        # The combined-RV keywords are not duplicated onto the RV3 table.
+        assert "CCD1RV" not in l4.headers["RV3"]
+        assert "RV" not in l4.headers["RV3"]
 
-    def test_ccfrv_is_weighted_ccd_combine(self, rv_module):
-        # CCFRV = (CCD1RV*Wg + CCD2RV*Wr)/(Wg+Wr), Wg/Wr the summed order weights;
-        # CCFERV = inverse-variance combination of the per-CCD errors.
+    def test_combined_rv_is_weighted_ccd_combine(self, rv_module):
+        # PRIMARY RV = (CCD1RV*Wg + CCD2RV*Wr)/(Wg+Wr), Wg/Wr the summed order
+        # weights; RVERR = inverse-variance combination of the per-CCD errors.
         l4 = rv_module.perform()
-        inst = l4.headers["RV3"]
+        prim = l4.headers["PRIMARY"]
         wg = np.nansum(rv_module._get_order_weights("GREEN", "SCI1"))
         wr = np.nansum(rv_module._get_order_weights("RED", "SCI1"))
-        expect_rv = (inst["CCD1RV"] * wg + inst["CCD2RV"] * wr) / (wg + wr)
-        expect_err = (1.0 / inst["CCD1ERV"] ** 2 + 1.0 / inst["CCD2ERV"] ** 2) ** -0.5
-        assert inst["CCFRV"] == pytest.approx(expect_rv, abs=1e-9)
-        assert inst["CCFERV"] == pytest.approx(expect_err, rel=1e-9)
+        expect_rv = (prim["CCD1RV"] * wg + prim["CCD2RV"] * wr) / (wg + wr)
+        expect_err = (1.0 / prim["CCD1ERV"] ** 2 + 1.0 / prim["CCD2ERV"] ** 2) ** -0.5
+        assert prim["RV"] == pytest.approx(expect_rv, abs=1e-9)
+        assert prim["RVERR"] == pytest.approx(expect_err, rel=1e-9)
 
     def test_primary_berv_bjdtdb_from_per_ccd(self, rv_module):
         # PRIMARY BERV/BJDTDB are the chip-weighted mean of the per-CCD bary
@@ -864,10 +863,11 @@ class TestPerform:
         assert "no science orderlet requested" in capsys.readouterr().out
 
     def test_single_chip_combine_warns(self, rv_module, capsys):
-        # One chip present: CCFRV uses it alone (== CCD1RV) and a warning prints.
+        # One chip present: the combined RV uses it alone (== CCD1RV) and a
+        # warning prints.
         l4 = rv_module.perform(chips=["GREEN"])
-        inst = l4.headers["RV3"]
-        assert inst["CCFRV"] == pytest.approx(inst["CCD1RV"], abs=1e-9)
+        prim = l4.headers["PRIMARY"]
+        assert prim["RV"] == pytest.approx(prim["CCD1RV"], abs=1e-9)
         assert "only chip GREEN present" in capsys.readouterr().out
 
     def test_l4_serializes_to_fits(self, rv_module, tmp_path):

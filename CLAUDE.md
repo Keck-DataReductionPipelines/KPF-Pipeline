@@ -212,14 +212,21 @@ see the style guide §11.)* The architecture invariants:
   cards; no KPF-registered keywords, no raw WMKO natives). `KPF1.__init__` seeds the EPRV Required
   PRIMARY skeleton (`keyword_registry.eprv_primary_seed`); `to_kpf1` then overlays native values on top
   (native wins). The required-keyword *presence* check is a QC flag (`KWRDPRL{1,2,4}`).
+  **One deliberate exception:** the L4 SCI-combined per-CCD RV keywords
+  `CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV` are KPF-registered (`config/L4-headers.csv`) yet homed on
+  PRIMARY, because they are the pipeline's final RV measurements and belong with the EPRV
+  `RV`/`RVERR`. (`RV`/`RVERR` themselves are EPRV PRIMARY keywords, not KPF-registered, so they are not
+  the exception.)
 - **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values **and** comments),
   written once in `to_kpf1` and never again. Code needing a raw instrument keyword (`ELAPSED`,
   `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`, …) reads it from here, not PRIMARY.
 - **Each registered keyword has one home extension** (the registry `Extension` column), which
-  `set_keyword` routes to: **PRIMARY** (EPRV only), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
+  `set_keyword` routes to: **PRIMARY** (EPRV keywords, plus the L4 final-RV exception
+  `CCD{1,2}RV`/`CCD{1,2}ERV` above), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
   calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths), the
-  **barycentric** L2 extensions, and **RV1–RV5** (L4). Masters route their PRIMARY keywords the same way
-  (registered in `config/Masters-headers.csv`); `BUNIT` is structural, not registered.
+  **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). Masters route their
+  PRIMARY keywords the same way (registered in `config/Masters-headers.csv`); `BUNIT` is structural, not
+  registered.
 - **DRP provenance is stamped at read** (`KPF0.from_fits` → `_stamp_wmko_tracking`) onto RECEIPT, not at
   `to_kpf1`: `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`. It rides the RECEIPT header forward downstream;
   `DRPSTATU` is advanced per module by `_update_drpstatus`.
