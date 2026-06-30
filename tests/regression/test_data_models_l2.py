@@ -388,6 +388,29 @@ class TestDtypeProvenance:
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_FLUX", FLUX, tmp_path)
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_WAVE", WAVE, tmp_path)
 
+    def test_chip_prefix_wave_write_enforces_min_bit_depth(self):
+        """A float32 WAVE written via a chip-prefix key (which bypasses rvdata's
+        base set_data) is still upcast to float64 with the MinBitDepth warning —
+        the chip-split path enforces the born-64 WAVE policy like the canonical
+        path does."""
+        kpf2 = KPF2()
+        with pytest.warns(UserWarning, match="MinBitDepth=64"):
+            kpf2.set_data(
+                "GREEN_SCI2_WAVE", np.ones((NORDER_GREEN, 8), dtype=np.float32)
+            )
+        assert_dtype(kpf2.data["TRACE3_WAVE"], WAVE, "underlying TRACE3_WAVE")
+
+    def test_chip_prefix_flux_write_keeps_float32(self):
+        """FLUX has no MinBitDepth requirement, so a float32 chip-prefix write is
+        kept as-is (no upcast, no warning) — the enforcement is WAVE/QUALITY-only."""
+        kpf2 = KPF2()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            kpf2.set_data(
+                "GREEN_SCI2_FLUX", np.ones((NORDER_GREEN, 8), dtype=np.float32)
+            )
+        assert_dtype(kpf2.data["TRACE3_FLUX"], FLUX, "underlying TRACE3_FLUX")
+
 
 class TestKPFMasterL2:
     def test_wls_extensions_created(self):

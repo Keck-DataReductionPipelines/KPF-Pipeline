@@ -9,6 +9,8 @@ multiple inheritance alongside rvdata's RV2/RV4 (KPFDataModel listed first so
 its overrides win while RV2/RV4 remain reachable through ``super()``).
 """
 
+import warnings
+
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table
@@ -128,12 +130,17 @@ class KPFDataModel(RVDataModel):
         extension aliases before the base class ``.keys()`` check. The
         ``hasattr`` guards make it a no-op passthrough for non-aliased L0/L1.
         """
-        if (
-            hasattr(self.data, "_chip_split")
-            and self.data._chip_split(ext_name) is not None
-        ):
-            self.data[ext_name] = data
-            return
+        if hasattr(self.data, "_chip_split"):
+            split = self.data._chip_split(ext_name)
+            if split is not None:
+                # The chip-prefix write goes straight into the underlying
+                # canonical array (sized from the first write's dtype), bypassing
+                # rvdata's MinBitDepth check in super().set_data. Enforce it here
+                # so both write paths honor the born-64 WAVE / 8-bit policy.
+                canonical = self.data._resolve(split[0])
+                data = self._coerce_to_min_bit_depth(canonical, data, ext_name)
+                self.data[ext_name] = data
+                return
         if hasattr(self.extensions, "_resolve"):
             ext_name = self.extensions._resolve(ext_name)
         # astropy reads BinTableHDUs back as numpy record arrays; convert to Table.
@@ -148,6 +155,38 @@ class KPFDataModel(RVDataModel):
         # Sync self.receipt when the RECEIPT extension is loaded from FITS.
         if ext_name == "RECEIPT" and isinstance(data, Table):
             self.receipt = data.to_pandas()
+
+    def _coerce_to_min_bit_depth(self, canonical_ext, data, label):
+        """Upcast ``data`` to satisfy ``canonical_ext``'s MinBitDepth, mirroring
+        rvdata's base ``set_data`` enforcement (incl. its warning) for the
+        chip-prefix write path that bypasses it. ``canonical_ext`` is the resolved
+        extension whose requirement applies (e.g. ``TRACE3_WAVE``); ``label`` is
+        the name shown in the warning (the chip-prefix key the caller passed).
+        A no-op when there is no requirement, the array is empty, or it already
+        meets the depth (and for KPF4, whose ``_get_min_bit_depth`` returns None).
+        """
+        min_depth = self._get_min_bit_depth(canonical_ext)
+        if (
+            min_depth is None
+            or not isinstance(data, np.ndarray)
+            or data.size == 0
+            or data.dtype.itemsize * 8 >= min_depth
+        ):
+            return data
+        if np.issubdtype(data.dtype, np.floating):
+            target = np.dtype(f"float{min_depth}")
+        elif np.issubdtype(data.dtype, np.unsignedinteger):
+            target = np.dtype(f"uint{min_depth}")
+        else:
+            target = np.dtype(f"int{min_depth}")
+        warnings.warn(
+            f"Extension '{label}' has dtype {data.dtype} "
+            f"({data.dtype.itemsize * 8}-bit) but MinBitDepth={min_depth}. "
+            f"Upcasting to {target.name}.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return data.astype(target)
 
     def set_header(self, ext_name, header):
         """Set an extension header, resolving KPF aliases before the base class
