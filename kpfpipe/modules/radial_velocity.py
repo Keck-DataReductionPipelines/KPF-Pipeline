@@ -1055,15 +1055,41 @@ class RadialVelocity:
                 "ccd_rv_err": ccd_rv_err,
             }
 
-            # Per-orderlet RV table, one row per spectral order. WEIGHT is the
-            # per-order CCF-combination weight (ccf_order_weights.csv, by mask),
-            # persisted for downstream weighting (e.g. DiagL4 BJD/BCV statistics).
+            # Per-orderlet RV table, one row per spectral order (green orders
+            # then red). ORDER_ID is the KPF chip/fiber/order name, 1-based per
+            # chip (a KPF-custom extra column). ECHELLE_ORDER is the physical
+            # grating order from detector.toml echelle_orders, listed blue->red,
+            # so order index 0 -- the bluest -- carries the highest echelle
+            # number. WEIGHT is the per-order CCF-combination weight
+            # (ccf_order_weights.csv, by mask), persisted for downstream
+            # weighting (e.g. DiagL4 BJD/BCV statistics).
+            order_id = np.array(
+                [
+                    f"{chip}_{fiber}_{order}"
+                    for chip in ("GREEN", "RED")
+                    for order in range(1, self.norder[chip] + 1)
+                ]
+            )
+            echelle_order = np.concatenate(
+                [
+                    np.linspace(
+                        self.echelle_orders[chip][0],
+                        self.echelle_orders[chip][1],
+                        self.norder[chip],
+                    )
+                    .round()
+                    .astype(np.int64)
+                    for chip in ("GREEN", "RED")
+                ]
+            )
             wave = np.asarray(self.l2_obj.data[f"{fiber}_WAVE"], dtype=np.float64)
             l4_obj.set_data(
                 f"{fiber}_RV",
                 pd.DataFrame(
                     {
                         "ORDER_INDEX": np.arange(norder, dtype=np.int64),
+                        "ORDER_ID": order_id,
+                        "ECHELLE_ORDER": echelle_order,
                         "BJD_TDB": bjd_tdb,
                         "BERV": berv,
                         "WAVE_START": np.nanmin(wave, axis=1),

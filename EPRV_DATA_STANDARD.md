@@ -63,8 +63,8 @@ while `KPF2`/`KPF4` subclass the EPRV `RV2`/`RV4` and must satisfy everything be
 - **Required vs optional**: `Required=True` extensions must be present *and meaningfully
   populated*; `Required=False` are optional enhancements.
 - **MinBitDepth**: the standard enforces minimum precision — **`*_WAVE` and `BJD_TDB` are
-  64-bit**; quality arrays are 8-bit. (Newer RVData upcasts 32-bit `*_WAVE` to float64 and
-  warns — see §8.)
+  64-bit**; quality arrays are 8-bit. (rvdata 0.4.0 enforces this on serialize, upcasting any
+  sub-64-bit `*_WAVE`/`BJD_TDB` and warning; KPF `*_WAVE`/`BJD_TDB` are already born-64.)
 - Undefined values (e.g. unextracted orders) are **NaN**.
 
 ### Shared extensions (present at L2, L3, L4)
@@ -124,10 +124,18 @@ optional** (supports non-CCF methods).
 L4 PRIMARY gains: `BJDTDB`, `RV`, `RVERR`, `BERV`, `RVMETHOD`, `SYSVEL`.
 `RV2`/`CCF2`/… replicate per trace.
 
-> **vNext note:** the `RV1` required column is listed above as `BC_VELOCITY` (the
-> standard's develop docs), but the pinned RVData (§8) and our code use `BERV`. The
-> code correctly emits `BERV`; this is the same doc-vs-pin drift as the
-> `receipt_add_entry` signature note in §7. Reconcile when bumping the pin.
+> **vNext note (reconciled against rvdata 0.4.0):** the table cell above mirrors
+> the standard's *develop* readthedocs, which drift from the released package KPF pins:
+> - **Barycentric column** — develop docs say `BC_VELOCITY`, but 0.4.0's machine-readable
+>   `L4-RV_TABLE-columns.csv` (what its compliance checker uses) names it **`BERV`**. Our
+>   code emits `BERV`; we are compliant. The develop-doc name is upstream drift, not ours.
+> - **Headers** — develop docs list `RVMETHOD/RVSTART/RVSTEP/MASK` on `RVn`, but 0.4.0
+>   registers `RVMETHOD/SKYRMVD/TELLRMVD` on `RVn` and puts the velocity-grid keywords
+>   (`VELSTART/VELSTEP/VELNSTEP/CCFMASK`) on `CCFn`. Our code emits exactly the 0.4.0 set.
+> - **Optional columns** — KPF populates the EPRV-optional `ORDER_INDEX`, `ECHELLE_ORDER`
+>   (physical grating order, blue→red), and `WEIGHT` (per-order CCF-combination weight),
+>   plus a KPF-custom `ORDER_ID` (chip/fiber/order name, 1-based per chip — the standard
+>   permits team-added columns).
 
 ---
 
@@ -181,9 +189,10 @@ levels. The standard's logged columns: **time, code release, branch name, commit
 function, args, status**. Adding an entry takes **three caller-supplied strings: function
 name, relevant parameters (args), and status**; time/version/branch are filled automatically.
 
-> **vNext note:** our code currently calls `receipt_add_entry(module, status)` (2 args)
-> because we pin an older RVData (§8); the standard/newer RVData expects
-> `receipt_add_entry(module, args, status)` (3 args). Reconcile when bumping the pin.
+> **vNext note (reconciled on rvdata 0.4.0):** our code now calls the 3-arg
+> `receipt_add_entry(function, args, status)` matching the standard — `KPFDataModel`
+> overrides it (`data_models/base.py`) and every module passes the three strings (most an
+> empty `args`). The earlier 2-arg form is gone; this drift is resolved.
 
 ---
 

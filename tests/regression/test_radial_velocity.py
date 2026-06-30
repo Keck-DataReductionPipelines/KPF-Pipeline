@@ -684,6 +684,8 @@ class TestPerform:
             assert len(table) == NORDER
             assert set(table.columns) >= {
                 "ORDER_INDEX",
+                "ORDER_ID",
+                "ECHELLE_ORDER",
                 "BJD_TDB",
                 "BERV",
                 "WAVE_START",
@@ -692,11 +694,13 @@ class TestPerform:
                 "RV_ERR",
                 "WEIGHT",
             }
-            # EPRV L4: time/wavelength columns are 64-bit; order index is integer.
+            # EPRV L4: time/wavelength columns are 64-bit; order/echelle indices
+            # are integer.
             assert table["BJD_TDB"].dtype == np.float64
             assert table["WAVE_START"].dtype == np.float64
             assert table["WAVE_END"].dtype == np.float64
             assert np.issubdtype(table["ORDER_INDEX"].dtype, np.integer)
+            assert np.issubdtype(table["ECHELLE_ORDER"].dtype, np.integer)
 
     def test_unilluminated_fiber_skipped(self, rv_module):
         # CAL-OBJ='None' -> no CCF cube or RV table written.
@@ -732,6 +736,37 @@ class TestPerform:
             )
             assert weight.shape == (NORDER,)
             np.testing.assert_array_equal(weight, expected)
+
+    def test_rv_table_order_id_and_echelle_columns(self, rv_module):
+        # ORDER_ID is the KPF chip/fiber/order name, 1-based per chip
+        # (green orders then red). ECHELLE_ORDER is the physical grating order
+        # from detector.toml echelle_orders, blue->red, so order index 0 (the
+        # bluest) carries the highest echelle number: GREEN 137..103, RED
+        # 102..71.
+        l4 = rv_module.perform()
+        for fiber in self._ILLUMINATED:
+            table = l4.data[f"{fiber}_RV"]
+            order_id = np.asarray(table["ORDER_ID"])
+            echelle = np.asarray(table["ECHELLE_ORDER"])
+            assert order_id.shape == (NORDER,)
+            assert echelle.shape == (NORDER,)
+            # 1-based per-chip naming, green-then-red.
+            assert order_id[0] == f"GREEN_{fiber}_1"
+            assert order_id[NORDER_GREEN - 1] == f"GREEN_{fiber}_{NORDER_GREEN}"
+            assert order_id[NORDER_GREEN] == f"RED_{fiber}_1"
+            assert order_id[-1] == f"RED_{fiber}_{NORDER_RED}"
+            # Physical echelle orders at the chip edges (detector.toml).
+            assert echelle[0] == 137
+            assert echelle[NORDER_GREEN - 1] == 103
+            assert echelle[NORDER_GREEN] == 102
+            assert echelle[-1] == 71
+            # Consecutive, strictly decreasing within each chip.
+            np.testing.assert_array_equal(
+                echelle[:NORDER_GREEN], np.arange(137, 102, -1)
+            )
+            np.testing.assert_array_equal(
+                echelle[NORDER_GREEN:], np.arange(102, 70, -1)
+            )
 
     def test_per_fiber_ccf_and_rv_headers(self, rv_module):
         # EPRV L4 keywords on each orderlet's CCF/RV extension; RVMETHOD on PRIMARY.
@@ -855,6 +890,10 @@ class TestPerform:
             # The EPRV combined RV survives on PRIMARY.
             assert hdul["PRIMARY"].header["RV"] == pytest.approx(_V_INJECT, abs=0.1)
             assert hdul["PRIMARY"].header["RVERR"] > 0
+            # The string ORDER_ID and integer ECHELLE_ORDER columns round-trip.
+            rv_table = hdul["RV3"].data
+            assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_1"
+            assert rv_table["ECHELLE_ORDER"][0] == 137
 
     def test_failed_combined_fit_written_as_undefined(self, rv_module, monkeypatch):
         # A non-finite fit (failed fit) is written as a FITS UNDEFINED card
