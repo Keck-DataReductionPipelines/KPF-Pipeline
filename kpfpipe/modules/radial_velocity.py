@@ -958,11 +958,13 @@ class RadialVelocity:
         l4_obj : KPF4
             L4 with a CCF cube and per-order RV table per illuminated orderlet.
             Each CCF extension carries VELSTART/VELSTEP/VELNSTEP/CCFMASK; each RV
-            extension carries RVMETHOD/SKYRMVD/TELLRMVD. The legacy combined-RV
-            keywords are registered KPF-pipeline keywords routed to the RV# tables:
-            per-fiber CCD<n>RV<sfx>/CCD<n>ERV<sfx> by orderlet, and the SCI-combined
-            CCD<n>RV/CCD<n>ERV plus CCFRV/CCFERV on RV3. PRIMARY carries the EPRV
-            keywords RVMETHOD and RV/RVERR/BERV/BJDTDB (the combined science RV).
+            extension carries RVMETHOD/SKYRMVD/TELLRMVD. The per-fiber legacy RV
+            keywords CCD<n>RV<sfx>/CCD<n>ERV<sfx> are registered KPF-pipeline
+            keywords routed to their RV# table by orderlet. PRIMARY carries the
+            final science RV: the EPRV keywords RVMETHOD/RV/RVERR/BERV/BJDTDB, plus
+            the KPF SCI-combined per-CCD CCD<n>RV/CCD<n>ERV -- KPF-registered yet
+            homed on PRIMARY as a deliberate exception to the EPRV-only-PRIMARY
+            rule, since these are the pipeline's final RV measurements.
             Unilluminated ('none') fibers are skipped (empty extensions).
         """
         if chips is None:
@@ -1055,15 +1057,41 @@ class RadialVelocity:
                 "ccd_rv_err": ccd_rv_err,
             }
 
-            # Per-orderlet RV table, one row per spectral order. WEIGHT is the
-            # per-order CCF-combination weight (ccf_order_weights.csv, by mask),
-            # persisted for downstream weighting (e.g. DiagL4 BJD/BCV statistics).
+            # Per-orderlet RV table, one row per spectral order (green orders
+            # then red). ORDER_ID is the KPF chip/fiber/order name, 1-based per
+            # chip (a KPF-custom extra column). ECHELLE_ORDER is the physical
+            # grating order from detector.toml echelle_orders, listed blue->red,
+            # so order index 0 -- the bluest -- carries the highest echelle
+            # number. WEIGHT is the per-order CCF-combination weight
+            # (ccf_order_weights.csv, by mask), persisted for downstream
+            # weighting (e.g. DiagL4 BJD/BCV statistics).
+            order_id = np.array(
+                [
+                    f"{chip}_{fiber}_{order}"
+                    for chip in ("GREEN", "RED")
+                    for order in range(1, self.norder[chip] + 1)
+                ]
+            )
+            echelle_order = np.concatenate(
+                [
+                    np.linspace(
+                        self.echelle_orders[chip][0],
+                        self.echelle_orders[chip][1],
+                        self.norder[chip],
+                    )
+                    .round()
+                    .astype(np.int64)
+                    for chip in ("GREEN", "RED")
+                ]
+            )
             wave = np.asarray(self.l2_obj.data[f"{fiber}_WAVE"], dtype=np.float64)
             l4_obj.set_data(
                 f"{fiber}_RV",
                 pd.DataFrame(
                     {
                         "ORDER_INDEX": np.arange(norder, dtype=np.int64),
+                        "ORDER_ID": order_id,
+                        "ECHELLE_ORDER": echelle_order,
                         "BJD_TDB": bjd_tdb,
                         "BERV": berv,
                         "WAVE_START": np.nanmin(wave, axis=1),
@@ -1104,7 +1132,7 @@ class RadialVelocity:
             # CCD<n>RV<sfx>/CCD<n>ERV<sfx> (n: GREEN=1, RED=2; sfx: 1/2/3=SCI1/2/3,
             # C=CAL, S=SKY), routed by set_keyword to their RV# table header (e.g.
             # CCD1RV1 -> RV2). The bare CCD<n>RV/CCD<n>ERV names stay reserved for
-            # the SCI-combined RV (on RV3). A non-finite value (failed fit) is
+            # the SCI-combined RV (on PRIMARY). A non-finite value (failed fit) is
             # written as None so it becomes a FITS UNDEFINED card, not a NaN.
             sfx = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}[fiber]
             for chip in ccd_rv:
@@ -1120,12 +1148,13 @@ class RadialVelocity:
         # PRIMARY (EPRV L4): always record the RV method.
         l4_obj.set_keyword("RVMETHOD", "CCF")
 
-        # Final science RV (legacy CCD<n>RV / CCFRV). Sum the science orderlets'
-        # CCFs per chip and fit (bare CCD<n>RV), then combine the two CCDs at the
-        # RV level, weighted by their summed order-weights (CCFRV); the error is
-        # the inverse-variance combination (CCFERV). RVs are already in the
-        # barycentric frame (compute_ccfs folds barycorr into the mask shift), so
-        # the reported BERV/BJDTDB are descriptive, not applied.
+        # Final science RV (PRIMARY RV/RVERR + the KPF per-CCD CCD<n>RV/CCD<n>ERV).
+        # Sum the science orderlets' CCFs per chip and fit (bare CCD<n>RV), then
+        # combine the two CCDs at the RV level, weighted by their summed
+        # order-weights (PRIMARY RV); the error is the inverse-variance
+        # combination (PRIMARY RVERR). RVs are already in the barycentric frame
+        # (compute_ccfs folds barycorr into the mask shift), so the reported
+        # BERV/BJDTDB are descriptive, not applied.
         sci_req = [f for f in fibers if f in ("SCI1", "SCI2", "SCI3")]
         sci = [f for f in sci_req if self._info[f]["source"] not in (None, "none")]
         if not sci_req:
@@ -1145,7 +1174,10 @@ class RadialVelocity:
             )
         rep = sci[0]
         if len(chips) == 1:
-            print(f"  combined RV: only chip {chips[0]} present; CCFRV uses it alone")
+            print(
+                f"  combined RV: only chip {chips[0]} present; "
+                "the combined RV uses it alone"
+            )
 
         # Per CCD: bare SCI-combined RV/error (the science orderlets' CCFs summed
         # within each chip, then orders collapsed). The three science fibers are
@@ -1163,15 +1195,16 @@ class RadialVelocity:
             v, e = per_ccd[chip]
             if not np.isfinite(v):
                 print(
-                    f"  combined RV: {chip} science fit non-finite; excluded from CCFRV"
+                    f"  combined RV: {chip} science fit non-finite; "
+                    "excluded from the combined RV"
                 )
             n = 1 if chip == "GREEN" else 2
             l4_obj.set_keyword(f"CCD{n}RV", float(v) if np.isfinite(v) else None)
             l4_obj.set_keyword(f"CCD{n}ERV", float(e) if np.isfinite(e) else None)
 
-        # Cross-chip weighted RV (CCFRV) and inverse-variance error (CCFERV): the
-        # per-CCD science RVs combined at the RV level by their summed order
-        # weights.
+        # Cross-chip weighted RV and inverse-variance error (the PRIMARY RV/RVERR,
+        # written below): the per-CCD science RVs combined at the RV level by their
+        # summed order weights.
         ccfrv, ccferv = self.compute_weighted_rvs(
             chips,
             sci,
@@ -1182,18 +1215,12 @@ class RadialVelocity:
             min_npts=min_npts,
         )
         if not np.isfinite(ccfrv):
-            print(
-                "  combined RV: no finite per-CCD science RV; "
-                "CCFRV (RV3) and PRIMARY RV UNDEFINED"
-            )
-
-        l4_obj.set_keyword("CCFRV", float(ccfrv) if np.isfinite(ccfrv) else None)
-        l4_obj.set_keyword("CCFERV", float(ccferv) if np.isfinite(ccferv) else None)
+            print("  combined RV: no finite per-CCD science RV; PRIMARY RV UNDEFINED")
 
         # PRIMARY BERV/BJDTDB: chip-weighted mean of the per-CCD photon-weighted
         # bary summaries (CCD<n>BKMS/CCD<n>BJD from BarycentricCorrection), using
-        # the same summed-order-weight chip weights as the CCFRV combine so the
-        # two stay consistent. Not a CCF operation, so computed here.
+        # the same summed-order-weight chip weights as the combined-RV combine so
+        # the two stay consistent. Not a CCF operation, so computed here.
         bnum = jnum = bden = 0.0
         for chip in chips:
             n = 1 if chip == "GREEN" else 2

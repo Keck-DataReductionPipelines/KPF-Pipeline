@@ -654,6 +654,8 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
   `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]` (via `.get`), never from
   PRIMARY. No silent fallback — let a missing key raise.
 - Use EPRV keyword *names* on PRIMARY (e.g. `EXPTIME`, not `ELAPSED`; `OBSTYPE`, not `IMTYPE`).
+  Exception: the L4 final-RV measurements `CCD{1,2}RV`/`CCD{1,2}ERV` are KPF-registered keywords
+  deliberately homed on PRIMARY (alongside the EPRV `RV`/`RVERR`).
 
 ---
 

@@ -684,6 +684,8 @@ class TestPerform:
             assert len(table) == NORDER
             assert set(table.columns) >= {
                 "ORDER_INDEX",
+                "ORDER_ID",
+                "ECHELLE_ORDER",
                 "BJD_TDB",
                 "BERV",
                 "WAVE_START",
@@ -692,11 +694,13 @@ class TestPerform:
                 "RV_ERR",
                 "WEIGHT",
             }
-            # EPRV L4: time/wavelength columns are 64-bit; order index is integer.
+            # EPRV L4: time/wavelength columns are 64-bit; order/echelle indices
+            # are integer.
             assert table["BJD_TDB"].dtype == np.float64
             assert table["WAVE_START"].dtype == np.float64
             assert table["WAVE_END"].dtype == np.float64
             assert np.issubdtype(table["ORDER_INDEX"].dtype, np.integer)
+            assert np.issubdtype(table["ECHELLE_ORDER"].dtype, np.integer)
 
     def test_unilluminated_fiber_skipped(self, rv_module):
         # CAL-OBJ='None' -> no CCF cube or RV table written.
@@ -733,6 +737,37 @@ class TestPerform:
             assert weight.shape == (NORDER,)
             np.testing.assert_array_equal(weight, expected)
 
+    def test_rv_table_order_id_and_echelle_columns(self, rv_module):
+        # ORDER_ID is the KPF chip/fiber/order name, 1-based per chip
+        # (green orders then red). ECHELLE_ORDER is the physical grating order
+        # from detector.toml echelle_orders, blue->red, so order index 0 (the
+        # bluest) carries the highest echelle number: GREEN 137..103, RED
+        # 102..71.
+        l4 = rv_module.perform()
+        for fiber in self._ILLUMINATED:
+            table = l4.data[f"{fiber}_RV"]
+            order_id = np.asarray(table["ORDER_ID"])
+            echelle = np.asarray(table["ECHELLE_ORDER"])
+            assert order_id.shape == (NORDER,)
+            assert echelle.shape == (NORDER,)
+            # 1-based per-chip naming, green-then-red.
+            assert order_id[0] == f"GREEN_{fiber}_1"
+            assert order_id[NORDER_GREEN - 1] == f"GREEN_{fiber}_{NORDER_GREEN}"
+            assert order_id[NORDER_GREEN] == f"RED_{fiber}_1"
+            assert order_id[-1] == f"RED_{fiber}_{NORDER_RED}"
+            # Physical echelle orders at the chip edges (detector.toml).
+            assert echelle[0] == 137
+            assert echelle[NORDER_GREEN - 1] == 103
+            assert echelle[NORDER_GREEN] == 102
+            assert echelle[-1] == 71
+            # Consecutive, strictly decreasing within each chip.
+            np.testing.assert_array_equal(
+                echelle[:NORDER_GREEN], np.arange(137, 102, -1)
+            )
+            np.testing.assert_array_equal(
+                echelle[NORDER_GREEN:], np.arange(102, 70, -1)
+            )
+
     def test_per_fiber_ccf_and_rv_headers(self, rv_module):
         # EPRV L4 keywords on each orderlet's CCF/RV extension; RVMETHOD on PRIMARY.
         l4 = rv_module.perform()
@@ -761,38 +796,37 @@ class TestPerform:
         assert rv_hdr["CCD2RV2"] == pytest.approx(_V_INJECT, abs=0.1)
         assert rv_hdr["CCD1ERV2"] > 0 and rv_hdr["CCD2ERV2"] > 0
         # The per-orderlet keywords do not leak onto PRIMARY; they live on the RV#
-        # tables (the SCI-combined CCD<n>RV/CCFRV land on RV3).
+        # tables (only the SCI-combined CCD<n>RV/CCD<n>ERV land on PRIMARY).
         assert "CCD1RV2" not in l4.headers["PRIMARY"]
 
     def test_combined_rv_populated(self, rv_module):
-        # The science combine: SCI-combined CCD1RV/CCD2RV and CCFRV/CCFERV on the
-        # RV3 table (registered KPF keywords), alongside the EPRV RV/RVERR on
-        # PRIMARY. RV ~ injected value.
+        # The final science RV is on PRIMARY: the EPRV RV/RVERR plus the KPF
+        # SCI-combined per-CCD CCD1RV/CCD2RV/CCD1ERV/CCD2ERV (KPF-registered, homed
+        # on PRIMARY). RV ~ injected value.
         l4 = rv_module.perform()
-        rv3 = l4.headers["RV3"]
-        assert rv3["CCD1RV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert rv3["CCD2RV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert rv3["CCD1ERV"] > 0 and rv3["CCD2ERV"] > 0
-        assert rv3["CCFRV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert rv3["CCFERV"] > 0
-
         prim = l4.headers["PRIMARY"]
+        assert prim["CCD1RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert prim["CCD2RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert prim["CCD1ERV"] > 0 and prim["CCD2ERV"] > 0
         assert prim["RV"] == pytest.approx(_V_INJECT, abs=0.1)
         assert prim["RVERR"] > 0
         assert prim["RVMETHOD"] == "CCF"
         assert prim["SYSVEL"] is None  # absolute RVs; nothing removed
+        # The combined-RV keywords are not duplicated onto the RV3 table.
+        assert "CCD1RV" not in l4.headers["RV3"]
+        assert "RV" not in l4.headers["RV3"]
 
-    def test_ccfrv_is_weighted_ccd_combine(self, rv_module):
-        # CCFRV = (CCD1RV*Wg + CCD2RV*Wr)/(Wg+Wr), Wg/Wr the summed order weights;
-        # CCFERV = inverse-variance combination of the per-CCD errors.
+    def test_combined_rv_is_weighted_ccd_combine(self, rv_module):
+        # PRIMARY RV = (CCD1RV*Wg + CCD2RV*Wr)/(Wg+Wr), Wg/Wr the summed order
+        # weights; RVERR = inverse-variance combination of the per-CCD errors.
         l4 = rv_module.perform()
-        inst = l4.headers["RV3"]
+        prim = l4.headers["PRIMARY"]
         wg = np.nansum(rv_module._get_order_weights("GREEN", "SCI1"))
         wr = np.nansum(rv_module._get_order_weights("RED", "SCI1"))
-        expect_rv = (inst["CCD1RV"] * wg + inst["CCD2RV"] * wr) / (wg + wr)
-        expect_err = (1.0 / inst["CCD1ERV"] ** 2 + 1.0 / inst["CCD2ERV"] ** 2) ** -0.5
-        assert inst["CCFRV"] == pytest.approx(expect_rv, abs=1e-9)
-        assert inst["CCFERV"] == pytest.approx(expect_err, rel=1e-9)
+        expect_rv = (prim["CCD1RV"] * wg + prim["CCD2RV"] * wr) / (wg + wr)
+        expect_err = (1.0 / prim["CCD1ERV"] ** 2 + 1.0 / prim["CCD2ERV"] ** 2) ** -0.5
+        assert prim["RV"] == pytest.approx(expect_rv, abs=1e-9)
+        assert prim["RVERR"] == pytest.approx(expect_err, rel=1e-9)
 
     def test_primary_berv_bjdtdb_from_per_ccd(self, rv_module):
         # PRIMARY BERV/BJDTDB are the chip-weighted mean of the per-CCD bary
@@ -829,10 +863,11 @@ class TestPerform:
         assert "no science orderlet requested" in capsys.readouterr().out
 
     def test_single_chip_combine_warns(self, rv_module, capsys):
-        # One chip present: CCFRV uses it alone (== CCD1RV) and a warning prints.
+        # One chip present: the combined RV uses it alone (== CCD1RV) and a
+        # warning prints.
         l4 = rv_module.perform(chips=["GREEN"])
-        inst = l4.headers["RV3"]
-        assert inst["CCFRV"] == pytest.approx(inst["CCD1RV"], abs=1e-9)
+        prim = l4.headers["PRIMARY"]
+        assert prim["RV"] == pytest.approx(prim["CCD1RV"], abs=1e-9)
         assert "only chip GREEN present" in capsys.readouterr().out
 
     def test_l4_serializes_to_fits(self, rv_module, tmp_path):
@@ -855,6 +890,10 @@ class TestPerform:
             # The EPRV combined RV survives on PRIMARY.
             assert hdul["PRIMARY"].header["RV"] == pytest.approx(_V_INJECT, abs=0.1)
             assert hdul["PRIMARY"].header["RVERR"] > 0
+            # The string ORDER_ID and integer ECHELLE_ORDER columns round-trip.
+            rv_table = hdul["RV3"].data
+            assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_1"
+            assert rv_table["ECHELLE_ORDER"][0] == 137
 
     def test_failed_combined_fit_written_as_undefined(self, rv_module, monkeypatch):
         # A non-finite fit (failed fit) is written as a FITS UNDEFINED card
