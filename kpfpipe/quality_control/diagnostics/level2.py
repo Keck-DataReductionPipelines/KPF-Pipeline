@@ -10,12 +10,14 @@ _SCI_FIBERS = ("SCI1", "SCI2", "SCI3")
 _SNR_PERCENTILE = 95
 _CHIP_PREFIX = {"GREEN": "G", "RED": "R"}
 
+# Fiber -> NaN-count keyword. The FITS comment comes from the registry (via
+# the _tag helper / set_keyword), so it is not duplicated here.
 _NAN_KEYS = {
-    "SCI1": ("NANSCI1", "NaN pixel count, SCI1 (green+red)"),
-    "SCI2": ("NANSCI2", "NaN pixel count, SCI2 (green+red)"),
-    "SCI3": ("NANSCI3", "NaN pixel count, SCI3 (green+red)"),
-    "SKY": ("NANSKY", "NaN pixel count, SKY (green+red)"),
-    "CAL": ("NANCAL", "NaN pixel count, CAL (green+red)"),
+    "SCI1": "NANSCI1",
+    "SCI2": "NANSCI2",
+    "SCI3": "NANSCI3",
+    "SKY": "NANSKY",
+    "CAL": "NANCAL",
 }
 
 
@@ -35,14 +37,14 @@ class DiagL2(Diagnostics):
             Maps each per-fiber NaN-count keyword to its ``(value, comment)``.
         """
         results = {}
-        for fiber, (kw, comment) in _NAN_KEYS.items():
+        for fiber, kw in _NAN_KEYS.items():
             count = 0
             for chip in _CHIPS:
                 arr = self.kpf_obj.data.get(f"{chip}_{fiber}_FLUX")
                 if arr is not None and np.size(arr) > 0:
                     count += int(np.sum(np.isnan(arr)))
-            results[kw] = (count, comment)
-        return results
+            results[kw] = count
+        return self._tag(**results)
 
     nan_counts._diag_name = "nan_counts"
 
@@ -73,7 +75,7 @@ class DiagL2(Diagnostics):
             return {}
 
         frac = round(float(total_zero / total_pix), 6)
-        return {"ZEROFRAC": (frac, "Fraction of L2 flux pixels equal to zero")}
+        return self._tag(ZEROFRAC=frac)
 
     zero_flux_fraction._diag_name = "zero_flux_fraction"
 
@@ -111,19 +113,13 @@ class DiagL2(Diagnostics):
             sci_f = [self._arr(chip, f, "FLUX") for f in _SCI_FIBERS]
             sci_v = [self._arr(chip, f, "VAR") for f in _SCI_FIBERS]
             if all(a is not None for a in sci_f + sci_v):
-                out[f"{p}SNRSCI"] = (
-                    self._median_snr(sum(sci_f), sum(sci_v)),
-                    f"Median 95th-pctile SNR, summed SCI ({chip})",
-                )
+                out[f"{p}SNRSCI"] = self._median_snr(sum(sci_f), sum(sci_v))
             for fiber in ("SKY", "CAL"):
                 f = self._arr(chip, fiber, "FLUX")
                 v = self._arr(chip, fiber, "VAR")
                 if f is not None and v is not None:
-                    out[f"{p}SNR{fiber}"] = (
-                        self._median_snr(f, v),
-                        f"Median 95th-pctile SNR, {fiber} ({chip})",
-                    )
-        return out
+                    out[f"{p}SNR{fiber}"] = self._median_snr(f, v)
+        return self._tag(**out)
 
     snr._diag_name = "snr"
 
@@ -152,10 +148,7 @@ class DiagL2(Diagnostics):
                 ratio = ratio[np.isfinite(ratio)]
                 if ratio.size == 0:
                     continue
-                out[f"{p}{tag}"] = (
-                    round(float(np.nanmedian(ratio)), 4),
-                    f"Median flux ratio {a}/{b} ({chip})",
-                )
-        return out
+                out[f"{p}{tag}"] = round(float(np.nanmedian(ratio)), 4)
+        return self._tag(**out)
 
     orderlet_flux_ratios._diag_name = "orderlet_flux_ratios"

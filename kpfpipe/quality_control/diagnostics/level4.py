@@ -70,17 +70,11 @@ class DiagL4(Diagnostics):
         if stats is None:
             return {}
         mean, std, rng = stats
-        return {
-            "BJDMEAN": (round(mean, 6), "Weighted-mean photon BJD_TDB (SCI2)"),
-            "BJDSTD": (
-                round(std * _SEC_PER_DAY, 4),
-                "Weighted std of per-order BJD [s] (SCI2)",
-            ),
-            "BJDRNG": (
-                round(rng * _SEC_PER_DAY, 4),
-                "Per-order BJD range [s] (SCI2)",
-            ),
-        }
+        return self._tag(
+            BJDMEAN=round(mean, 6),
+            BJDSTD=round(std * _SEC_PER_DAY, 4),
+            BJDRNG=round(rng * _SEC_PER_DAY, 4),
+        )
 
     bjd_dispersion._diag_name = "bjd_dispersion"
 
@@ -93,19 +87,10 @@ class DiagL4(Diagnostics):
         if stats is None:
             return {}
         mean, std, rng = stats
-        out = {
-            "BERVMEAN": (
-                round(mean, 6),
-                "Weighted mean barycentric RV correction [km/s] (SCI2)",
-            ),
-            "BERVSTD": (
-                round(std * _KMS_TO_MS, 4),
-                "Weighted std of per-order BERV [m/s] (SCI2)",
-            ),
-            "BERVRNG": (
-                round(rng * _KMS_TO_MS, 4),
-                "Per-order BERV range [m/s] (SCI2)",
-            ),
+        values = {
+            "BERVMEAN": round(mean, 6),
+            "BERVSTD": round(std * _KMS_TO_MS, 4),
+            "BERVRNG": round(rng * _KMS_TO_MS, 4),
         }
         # Per-order BERV percent deviation from the weighted mean, over
         # nonzero-weight orders (BERVOK feeds on these).
@@ -114,14 +99,8 @@ class DiagL4(Diagnostics):
         nz = np.isfinite(berv) & np.isfinite(w) & (w != 0)
         if mean != 0 and np.any(nz):
             perc = (berv[nz] - mean) / mean * 100.0
-            out["BERVMAXP"] = (
-                round(float(perc.max()), 4),
-                "Max per-order BERV deviation from mean [%] (SCI2)",
-            )
-            out["BERVMINP"] = (
-                round(float(perc.min()), 4),
-                "Min per-order BERV deviation from mean [%] (SCI2)",
-            )
-        return out
+            values["BERVMAXP"] = round(float(perc.max()), 4)
+            values["BERVMINP"] = round(float(perc.min()), 4)
+        return self._tag(**values)
 
     bcv_dispersion._diag_name = "bcv_dispersion"

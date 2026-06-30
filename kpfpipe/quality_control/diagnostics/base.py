@@ -31,6 +31,22 @@ class Diagnostics:
         self.kpf_obj = kpf_obj
         self.results = {}  # Populated by run(): maps keyword to (value, comment).
 
+    def _tag(self, **values):
+        """Pair each ``keyword=value`` with its registry-sourced FITS comment.
+
+        Diagnostic methods build their result dict with this rather than
+        hardcoding comment strings, so the FITS comment has a single source of
+        truth (the keyword registry / ``config/L{n}-headers.csv`` Description)
+        and never drifts from it. ``set_keyword`` already uses the registry
+        Description for the header write; this keeps ``self.results`` in sync.
+        """
+        routing = self.kpf_obj.keyword_registry.routing
+        out = {}
+        for kw, value in values.items():
+            route = routing.get(kw)
+            out[kw] = (value, route[1] if route is not None else "")
+        return out
+
     def run(self):
         """Run all diagnostic methods, writing each result via set_keyword.
 
