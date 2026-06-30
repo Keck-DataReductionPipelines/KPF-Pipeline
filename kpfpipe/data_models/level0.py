@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
+from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 from rvdata.core.tools.headers import parse_value_to_datatype
 
 from kpfpipe import __version__
@@ -136,14 +137,7 @@ class KPF0(KPFDataModel):
             elif ext_name == "RECEIPT":
                 t = Table.read(hdu)
                 df = t.to_pandas()
-                receipt_columns = [
-                    "Time",
-                    "Code_Release",
-                    "Commit_Hash",
-                    "Branch_Name",
-                    "Module_Name",
-                    "Status",
-                ]
+                receipt_columns = BASE_RECEIPT_COLUMNS["Name"].tolist()
                 if df.empty:
                     df = pd.DataFrame(columns=receipt_columns)
                 else:
@@ -184,7 +178,7 @@ class KPF0(KPFDataModel):
         if not fn.endswith(".fits"):
             raise NameError("Filename must end with .fits")
 
-        self.receipt_add_entry("to_fits", "PASS")
+        self.receipt_add_entry("to_fits", f"out_filepath={fn}", "PASS")
 
         if "PRIMARY" in self.headers:
             self.headers["PRIMARY"]["FILENAME"] = (
@@ -328,7 +322,7 @@ class KPF0(KPFDataModel):
 
         # DATALVL is set by KPF1.__init__ (= KPF1._DATALVL) and _map_header no
         # longer emits it (dropped from header_map), so no fixup is needed here.
-        kpf1.receipt_add_entry("to_kpf1", "PASS")
+        kpf1.receipt_add_entry("to_kpf1", "", "PASS")
         return kpf1
 
     def info(self):

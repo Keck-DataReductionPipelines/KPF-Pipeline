@@ -53,7 +53,9 @@ def _make_master_l2(seed=42):
     for chip in _CHIPS:
         norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
         for fiber in _FIBERS:
-            arr = rng.uniform(4000.0, 8000.0, size=(norder, NCOL)).astype(np.float32)
+            # WAVE is born-64 (EPRV / dtype policy); rvdata's MinBitDepth would
+            # otherwise upcast-and-warn a float32 WAVE on read.
+            arr = rng.uniform(4000.0, 8000.0, size=(norder, NCOL)).astype(np.float64)
             master.data[f"{chip}_{fiber}_WAVE"] = arr
     return master
 
@@ -159,7 +161,7 @@ class TestPerform:
     def test_adds_receipt_entry(self, master_wls_path):
         l2 = _make_science_l2(wls_path=master_wls_path)
         WavelengthCalibration(l2).perform()
-        assert (l2.receipt["Module_Name"] == "wavelength_calibration").any()
+        assert (l2.receipt["FUNCTION"] == "wavelength_calibration").any()
 
     def test_attributes_populated_after_perform(self, master_wls_path):
         l2 = _make_science_l2(wls_path=master_wls_path)
@@ -181,9 +183,12 @@ class TestPerform:
                 np.testing.assert_array_equal(l2.data[key], master.data[key])
 
     def test_wave_arrays_are_float64(self, master_wls_path):
-        # The fixture master is float32 (4-byte); the science WAVE must be float64.
+        # WAVE is born-64 everywhere (EPRV / dtype policy; rvdata MinBitDepth also
+        # enforces 64-bit WAVE on read). Both the master and the science WAVE it is
+        # copied onto must be float64.
         master = KPFMasterL2.from_fits(master_wls_path)
-        assert master.data["GREEN_SCI2_WAVE"].dtype.itemsize == 4
+        # from_fits yields big-endian (>f8); compare precision, not byte order.
+        assert_dtype(master.data["GREEN_SCI2_WAVE"], WAVE, "master GREEN_SCI2_WAVE")
         l2 = _make_science_l2(wls_path=master_wls_path)
         WavelengthCalibration(l2).perform()
         for chip in _CHIPS:
@@ -239,7 +244,7 @@ class TestPerform:
             norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
             master.data[f"{chip}_SCI2_WAVE"] = rng.uniform(
                 4000.0, 8000.0, size=(norder, NCOL)
-            ).astype(np.float32)
+            ).astype(np.float64)  # WAVE is born-64 (EPRV / dtype policy)
         master_path = str(tmp_path / "partial_master.fits")
         master.to_fits(master_path)
 

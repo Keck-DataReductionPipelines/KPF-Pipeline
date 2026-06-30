@@ -607,7 +607,7 @@ class ImageAssembly:
         self._convert_expmeter_wavelengths_to_angstroms(l1_obj)
         self._set_headers(l1_obj)
         self._track_info(chips)
-        l1_obj.receipt_add_entry("image_assembly", "PASS")
+        l1_obj.receipt_add_entry("image_assembly", "", "PASS")
 
         return l1_obj
 

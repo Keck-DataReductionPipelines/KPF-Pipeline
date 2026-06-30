@@ -783,7 +783,7 @@ class BarycentricCorrection:
 
         self._set_headers(self.l2_obj)
         self._track_info()
-        self.l2_obj.receipt_add_entry("barycentric_correction", "PASS")
+        self.l2_obj.receipt_add_entry("barycentric_correction", "", "PASS")
 
         return self.l2_obj
 

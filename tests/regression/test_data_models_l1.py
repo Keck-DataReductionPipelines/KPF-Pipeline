@@ -95,7 +95,7 @@ class TestKPF1:
 
         out_fn = str(tmp_path / "receipt_l1.fits")
         l1.to_fits(out_fn)
-        assert "to_fits" in l1.receipt["Module_Name"].values
+        assert "to_fits" in l1.receipt["FUNCTION"].values
 
     def test_receipt_survives_roundtrip(self, synthetic_l1_file, tmp_path):
         """The processing history must be written to the FITS RECEIPT extension,
@@ -103,11 +103,11 @@ class TestKPF1:
         self.data["RECEIPT"], so KPFDataModel._create_hdul syncs self.receipt
         into it before writing; without that the receipt is silently lost."""
         l1 = KPF1.from_fits(synthetic_l1_file)
-        l1.receipt_add_entry("image_assembly", "PASS")
+        l1.receipt_add_entry("image_assembly", "", "PASS")
         out_fn = str(tmp_path / "roundtrip_l1.fits")
         l1.to_fits(out_fn)
 
-        modules = KPF1.from_fits(out_fn).receipt["Module_Name"].values
+        modules = KPF1.from_fits(out_fn).receipt["FUNCTION"].values
         assert "image_assembly" in modules
         assert "to_fits" in modules
 
@@ -323,7 +323,7 @@ class TestToKpf1:
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         assert len(l1.receipt) >= 2  # from_fits + to_kpf1
-        assert "to_kpf1" in l1.receipt["Module_Name"].values
+        assert "to_kpf1" in l1.receipt["FUNCTION"].values
 
     def test_to_kpf1_copies_obs_id(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
@@ -345,21 +345,21 @@ class TestDrpStatus:
 
     def test_module_receipt_updates_status(self, synthetic_l0_file):
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
-        l1.receipt_add_entry("image_assembly", "PASS")
+        l1.receipt_add_entry("image_assembly", "", "PASS")
         status = l1.headers["RECEIPT"].get("DRPSTATU")
         assert status == "Image Assembly module complete"
 
     def test_master_receipt_updates_status(self, synthetic_l0_file):
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
-        l1.receipt_add_entry("master_bias", "PASS")
+        l1.receipt_add_entry("master_bias", "", "PASS")
         status = l1.headers["RECEIPT"].get("DRPSTATU")
         assert status == "Master Bias module complete"
 
     def test_internal_receipts_do_not_change_status(self, synthetic_l0_file):
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
-        l1.receipt_add_entry("radial_velocity", "PASS")
+        l1.receipt_add_entry("radial_velocity", "", "PASS")
         for internal in ("to_kpf2", "to_kpf4", "to_fits", "from_fits"):
-            l1.receipt_add_entry(internal, "PASS")
+            l1.receipt_add_entry(internal, "", "PASS")
         status = l1.headers["RECEIPT"].get("DRPSTATU")
         assert status == "Radial Velocity module complete"
 

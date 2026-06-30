@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
+from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.masters.base import KPFMasterModel
@@ -131,7 +132,7 @@ class KPFMasterL2(KPFMasterModel, KPF2):
             obj.filename = os.path.basename(fn)
             obj.dirname = os.path.dirname(fn)
             obj.read(hdul, instrument, **kwargs)
-        obj.receipt_add_entry("from_fits", "PASS")
+        obj.receipt_add_entry("from_fits", f"fn={fn}, instrument={instrument}", "PASS")
         return obj
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
@@ -178,14 +179,7 @@ class KPFMasterL2(KPFMasterModel, KPF2):
             elif ext_name == "RECEIPT":
                 t = Table.read(hdu)
                 df = t.to_pandas()
-                receipt_columns = [
-                    "Time",
-                    "Code_Release",
-                    "Commit_Hash",
-                    "Branch_Name",
-                    "Module_Name",
-                    "Status",
-                ]
+                receipt_columns = BASE_RECEIPT_COLUMNS["Name"].tolist()
                 if df.empty:
                     df = pd.DataFrame(columns=receipt_columns)
                 else:

@@ -393,7 +393,7 @@ class TestMakeMasterL2:
     def test_receipt_entry(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
-        assert "master_wls" in ml2.receipt["Module_Name"].tolist()
+        assert "master_wls" in ml2.receipt["FUNCTION"].tolist()
 
     def test_resets_l2_cache(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)

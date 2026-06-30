@@ -168,7 +168,7 @@ class StageName:
         ...                                    # populate header-source attributes
         self._set_headers(self.l2_obj)         # consolidates ALL header writes
         self._track_info(chips)                # populates _info, just before the receipt
-        self.l2_obj.receipt_add_entry("stage_name", "PASS")
+        self.l2_obj.receipt_add_entry("stage_name", "", "PASS")
         return self.l2_obj
 
     def info(self): ...   # human-readable reporter, always last
@@ -325,7 +325,8 @@ class StageName:
   against an explicit allowed set, raising `ValueError` that names the valid options.
 - **Return patterns**:
   - A transform's `perform()` returns the next-level data object after mutating
-    headers and calling `receipt_add_entry("<module>", "PASS")`.
+    headers and calling `receipt_add_entry("<module>", "", "PASS")` (the middle
+    arg is the rvdata `ARGS` provenance string — `""` when not applicable).
   - Step methods that mutate `*_obj.data` in place return `None` and document
     *"Modifies … in-place"*.
   - Helpers return a single value or a fixed tuple; validators return `None`.

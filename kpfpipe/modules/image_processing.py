@@ -368,7 +368,7 @@ class ImageProcessing:
 
         self._set_headers(self.l1_obj)
         self._track_info()
-        self.l1_obj.receipt_add_entry("image_processing", "PASS")
+        self.l1_obj.receipt_add_entry("image_processing", "", "PASS")
 
         return self.l1_obj
 

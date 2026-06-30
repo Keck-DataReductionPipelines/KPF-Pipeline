@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
+from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level2 import KPF2
@@ -118,14 +119,7 @@ class KPF1(KPFDataModel):
             elif ext_name == "RECEIPT":
                 t = Table.read(hdu)
                 df = t.to_pandas()
-                receipt_columns = [
-                    "Time",
-                    "Code_Release",
-                    "Commit_Hash",
-                    "Branch_Name",
-                    "Module_Name",
-                    "Status",
-                ]
+                receipt_columns = BASE_RECEIPT_COLUMNS["Name"].tolist()
                 if df.empty:
                     df = pd.DataFrame(columns=receipt_columns)
                 else:
@@ -181,7 +175,7 @@ class KPF1(KPFDataModel):
         if not fn.endswith(".fits"):
             raise NameError("Filename must end with .fits")
 
-        self.receipt_add_entry("to_fits", "PASS")
+        self.receipt_add_entry("to_fits", f"out_filepath={fn}", "PASS")
 
         if "PRIMARY" in self.headers:
             self.set_keyword("FILENAME", os.path.basename(fn))
@@ -262,7 +256,7 @@ class KPF1(KPFDataModel):
             kpf2.set_keyword("ORIGID", self.obs_id)
 
         kpf2.set_keyword("DATALVL", "L2")
-        kpf2.receipt_add_entry("to_kpf2", "PASS")
+        kpf2.receipt_add_entry("to_kpf2", "", "PASS")
         return kpf2
 
     def info(self):

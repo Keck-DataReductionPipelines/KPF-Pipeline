@@ -63,7 +63,7 @@ class TestMasterDarkUnit:
         assert np.all(master_dark.data["RED_SNR"] >= 0)
 
     def test_receipt_entry(self, master_dark):
-        assert "master_dark" in master_dark.receipt["Module_Name"].values
+        assert "master_dark" in master_dark.receipt["FUNCTION"].values
 
     def test_bunit_is_rate(self, master_dark):
         for chip in CHIPS:
@@ -913,4 +913,4 @@ class TestMasterDarkRegression:
             assert np.mean(mask) > 0.9
 
     def test_bias_subtracted_via_receipt(self, master_dark):
-        assert "master_dark" in master_dark.receipt["Module_Name"].values
+        assert "master_dark" in master_dark.receipt["FUNCTION"].values

@@ -842,7 +842,7 @@ class TestPerform:
 
     def test_receipt_entry_added(self, bc_monkeypatched):
         bc_monkeypatched.perform()
-        modules = bc_monkeypatched.l2_obj.receipt["Module_Name"].values
+        modules = bc_monkeypatched.l2_obj.receipt["FUNCTION"].values
         assert "barycentric_correction" in modules
 
     def test_targradv_converted_km_to_m_and_passed_through(

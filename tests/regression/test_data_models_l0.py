@@ -58,22 +58,22 @@ class TestKPF0:
     def test_receipt_tracking(self, synthetic_l0_file, tmp_path):
         l0 = KPF0.from_fits(synthetic_l0_file)
         assert len(l0.receipt) >= 1
-        assert "from_fits" in l0.receipt["Module_Name"].values
+        assert "from_fits" in l0.receipt["FUNCTION"].values
 
         out_fn = str(tmp_path / "receipt_test.fits")
         l0.to_fits(out_fn)
-        assert "to_fits" in l0.receipt["Module_Name"].values
+        assert "to_fits" in l0.receipt["FUNCTION"].values
 
     def test_receipt_survives_roundtrip(self, synthetic_l0_file, tmp_path):
         """The processing history must reach the FITS RECEIPT extension, not just
         live in memory; KPFDataModel._create_hdul syncs it (and creates the
         extension, which L0's default extension set lacks)."""
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l0.receipt_add_entry("image_assembly", "PASS")
+        l0.receipt_add_entry("image_assembly", "", "PASS")
         out_fn = str(tmp_path / "roundtrip_receipt_l0.fits")
         l0.to_fits(out_fn)
 
-        modules = KPF0.from_fits(out_fn).receipt["Module_Name"].values
+        modules = KPF0.from_fits(out_fn).receipt["FUNCTION"].values
         assert "image_assembly" in modules
         assert "to_fits" in modules
 
@@ -113,23 +113,23 @@ class TestKPF0ErrorPaths:
             KPF0.from_fits(fn)
 
     def test_parses_receipt_with_entries(self, tmp_path):
-        receipt = Table({"Module_Name": ["init"], "Status": ["PASS"]})
+        receipt = Table({"FUNCTION": ["init"], "STATUS": ["PASS"]})
         rec_hdu = fits.BinTableHDU(data=receipt, name="RECEIPT")
         fn = self._minimal_l0(tmp_path, extra_hdus=[rec_hdu])
         l0 = KPF0.from_fits(fn)
-        assert "init" in l0.receipt["Module_Name"].values
+        assert "init" in l0.receipt["FUNCTION"].values
         # The receipt is reindexed to include the standard provenance columns.
-        assert "Commit_Hash" in l0.receipt.columns
+        assert "COMMIT_HASH" in l0.receipt.columns
 
     def test_parses_empty_receipt(self, tmp_path):
-        receipt = Table(names=["Module_Name"], dtype=["U10"])  # zero rows
+        receipt = Table(names=["FUNCTION"], dtype=["U10"])  # zero rows
         rec_hdu = fits.BinTableHDU(data=receipt, name="RECEIPT")
         fn = self._minimal_l0(tmp_path, extra_hdus=[rec_hdu])
         l0 = KPF0.from_fits(fn)
         # An empty receipt is seeded with the standard columns; from_fits then
         # appends its own entry.
-        assert "Code_Release" in l0.receipt.columns
-        assert "from_fits" in l0.receipt["Module_Name"].values
+        assert "CODE_RELEASE" in l0.receipt.columns
+        assert "from_fits" in l0.receipt["FUNCTION"].values
 
     def test_generate_filename_without_obs_id_raises(self):
         with pytest.raises(ValueError, match="obs_id not set"):

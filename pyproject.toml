@@ -22,7 +22,7 @@ dependencies = [
     "pillow==12.1.1",
     "scipy==1.17.0",
     "tqdm==4.67.3",
-    "rv-data-standard @ git+https://github.com/EPRV-RCN/RVData.git@7413775939ca0366dbba0df8c2e5b48c76595634"
+    "rv-data-standard==0.4.0"
 ]
 
 # Optional dependencies for development (linting, testing, formatting)

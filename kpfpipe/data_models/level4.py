@@ -224,6 +224,12 @@ class KPF4(KPFDataModel, RV4):
         """KPF L4 is EPRV-standard (SL4 name); delegate to rvdata's builder."""
         return RV4.generate_standard_filename(self)
 
+    def to_fits(self, fn=None):
+        """KPF keeps a single-filepath ``to_fits``; rvdata >=0.4.0 renamed the
+        parameter to ``out_filename``. Delegate so all our call sites can keep
+        passing one path (``to_fits(fn)``)."""
+        return super().to_fits(out_filename=fn)
+
     def info(self):
         """Print summary of KPF4 data model contents."""
         if self.filename:

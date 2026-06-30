@@ -49,7 +49,9 @@ def synthetic_masters_l2_file(tmp_path):
     primary.header["MASTYPE"] = "thar"  # from_fits infers kind="wls" from this
 
     n_pix = 64
-    wave = rng.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float32)
+    # WAVE is born-64 (EPRV / dtype policy); float32 would trip rvdata's
+    # MinBitDepth upcast-and-warn on read.
+    wave = rng.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float64)
     trace3_wave = fits.ImageHDU(data=wave)
     trace3_wave.name = "TRACE3_WAVE"
 
@@ -158,13 +160,13 @@ class TestToKPF2:
     def test_to_kpf2_carries_receipt(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
         kpf2 = l1.to_kpf2()
-        assert "to_kpf2" in kpf2.receipt["Module_Name"].values
+        assert "to_kpf2" in kpf2.receipt["FUNCTION"].values
 
     def test_to_kpf2_receipt_updates_drpstatus(self, synthetic_l1_file):
         """The DRPSTATU receipt override is active on KPF2 too (it subclasses
         RV2, not KPFDataModel, so it carries its own override)."""
         kpf2 = KPF1.from_fits(synthetic_l1_file).to_kpf2()
-        kpf2.receipt_add_entry("barycentric_correction", "PASS")
+        kpf2.receipt_add_entry("barycentric_correction", "", "PASS")
         assert (
             kpf2.headers["RECEIPT"].get("DRPSTATU")
             == "Barycentric Correction module complete"
@@ -456,7 +458,7 @@ class TestKPFMasterL2:
 
     def test_from_fits_adds_receipt_entry(self, synthetic_masters_l2_file):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
-        assert "from_fits" in m.receipt["Module_Name"].values
+        assert "from_fits" in m.receipt["FUNCTION"].values
 
     def test_round_trip(self, synthetic_masters_l2_file, tmp_path):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)

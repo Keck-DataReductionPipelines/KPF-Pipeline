@@ -231,6 +231,12 @@ class KPF2(KPFDataModel, RV2):
         """KPF L2 is EPRV-standard (SL2 name); delegate to rvdata's builder."""
         return RV2.generate_standard_filename(self)
 
+    def to_fits(self, fn=None):
+        """KPF keeps a single-filepath ``to_fits``; rvdata >=0.4.0 renamed the
+        parameter to ``out_filename``. Delegate so all our call sites can keep
+        passing one path (``to_fits(fn)``)."""
+        return super().to_fits(out_filename=fn)
+
     def to_kpf4(self):
         """
         Create a KPF4 scaffold from this KPF2, carrying over headers and receipt.
@@ -259,7 +265,7 @@ class KPF2(KPFDataModel, RV2):
         kpf4.obs_id = self.obs_id
 
         kpf4.set_keyword("DATALVL", "L4")
-        kpf4.receipt_add_entry("to_kpf4", "PASS")
+        kpf4.receipt_add_entry("to_kpf4", "", "PASS")
         return kpf4
 
     def info(self):

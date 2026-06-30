@@ -24,10 +24,11 @@ from kpfpipe.data_models.keyword_registry import keyword_registry
 
 # Receipt names that are data-model conversions / serialization rather than
 # pipeline modules — excluded from DRPSTATU so it names the last real stage.
-# ``from_fits`` is here too: reading a product back must not clobber the status
-# the writer stamped.
+# ``read``/``from_fits`` are here too: reading a product back must not clobber
+# the status the writer stamped (rvdata >=0.4.0 logs a ``read`` receipt via its
+# ``@receipt_logged`` decorator on ``RVDataModel.read``).
 _INTERNAL_RECEIPTS = frozenset(
-    {"to_kpf1", "to_kpf2", "to_kpf4", "to_fits", "from_fits"}
+    {"to_kpf1", "to_kpf2", "to_kpf4", "to_fits", "from_fits", "read"}
 )
 
 # Re-exported for sibling data_models modules: KPF2/KPF4 call
@@ -173,58 +174,43 @@ class KPFDataModel(RVDataModel):
                 for card in self.as_fits_header(self.headers[ext]).cards:
                     target.headers[ext][card.keyword] = (card.value, card.comment)
 
-    def receipt_add_entry(self, module, status):
-        """Record a processing step, and update DRPSTATU for pipeline modules."""
-        super().receipt_add_entry(module, status)
-        if status == "PASS":
-            self._update_drpstatus(module)
+    def receipt_add_entry(self, function, args, status):
+        """Record a processing step, and update DRPSTATU for pipeline modules.
 
-    def _update_drpstatus(self, module):
+        Signature matches rvdata >=0.4.0: ``function`` names the step, ``args``
+        is a key=value provenance string (``""`` when not applicable), ``status``
+        is ``"PASS"``/``"FAIL"``.
+        """
+        super().receipt_add_entry(function, args, status)
+        if status == "PASS":
+            self._update_drpstatus(function)
+
+    def _update_drpstatus(self, function):
         """Stamp DRPSTATU = '<Module Name> module complete' for a completed module.
 
         Called from ``receipt_add_entry``; conversions/serialization receipts
         (``_INTERNAL_RECEIPTS``) are skipped so DRPSTATU names the last real stage.
         DRPSTATU's registry home is RECEIPT, so ``set_keyword`` routes it there.
         """
-        if module in _INTERNAL_RECEIPTS:
+        if function in _INTERNAL_RECEIPTS:
             return
         if "RECEIPT" not in self.extensions:
             return
-        label = module.replace("_", " ").title()
+        label = function.replace("_", " ").title()
         self.set_keyword("DRPSTATU", f"{label} module complete")
 
     def _create_hdul(self):
-        """Sync self.receipt into the RECEIPT extension before writing; rvdata
-        serializes self.data["RECEIPT"], not self.receipt. L0/L1 omit RECEIPT
-        from their default extensions, so create it if absent."""
+        """Sync ``self.receipt`` into the RECEIPT extension before writing; rvdata
+        serializes ``self.data["RECEIPT"]``, not ``self.receipt``. L0/L1 omit
+        RECEIPT from their default extensions, so create it if absent. PRIMARY
+        keyword comments are preserved by rvdata's own ``_create_hdul`` (it copies
+        a ``fits.Header`` directly) as of rvdata >=0.4.0, so no PRIMARY rebuild is
+        needed here."""
         if self.receipt is not None and not self.receipt.empty:
             if "RECEIPT" not in self.extensions:
                 self.create_extension("RECEIPT", "BinTableHDU")
-            self.data["RECEIPT"] = Table.from_pandas(self.receipt)
-        return self._restore_primary_comments(super()._create_hdul())
-
-    def _restore_primary_comments(self, hdu_list):
-        """Rebuild the PRIMARY HDU so its keyword comments survive serialization.
-
-        RVData's ``_create_hdul`` builds PRIMARY by iterating
-        ``headers["PRIMARY"].items()``, which on a ``fits.Header`` yields only
-        ``(key, value)`` and silently drops the comments. Replace that one HDU with
-        a fresh ``PrimaryHDU`` built from the stored header (a ``fits.Header`` that
-        holds the comments). The ``PrimaryHDU`` constructor re-adds the structural
-        cards. ``data=hdu.data`` carries through any PRIMARY array: it is ``None``
-        for KPF's header-only PRIMARY today, but omitting it would silently drop a
-        PRIMARY data array if one were ever introduced.
-        """
-        primary = self.headers.get("PRIMARY")
-        if primary is None:
-            return hdu_list
-        for i, hdu in enumerate(hdu_list):
-            if isinstance(hdu, fits.PrimaryHDU):
-                hdu_list[i] = fits.PrimaryHDU(
-                    data=hdu.data, header=self.as_fits_header(primary)
-                )
-                break
-        return hdu_list
+            self._sync_receipt_to_extension()
+        return super()._create_hdul()
 
     def generate_standard_filename(self):
         """Abstract: every concrete KPF model builds its own standard filename.

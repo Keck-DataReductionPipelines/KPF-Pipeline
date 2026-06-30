@@ -526,7 +526,7 @@ class SpectralExtraction:
 
         self._set_headers(l2_obj)
         self._track_info(chips, fibers)
-        l2_obj.receipt_add_entry("spectral_extraction", "PASS")
+        l2_obj.receipt_add_entry("spectral_extraction", "", "PASS")
 
         return l2_obj
 
