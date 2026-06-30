@@ -20,17 +20,21 @@ import types
 import numpy as np
 import pytest
 from astropy.io import fits
+from astropy.table import Table
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
+from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.quality_control.qc_flags.level0 import QCL0
 from kpfpipe.quality_control.qc_flags.level1 import QCL1
 from kpfpipe.quality_control.qc_flags.level2 import QCL2
+from kpfpipe.quality_control.qc_flags.level4 import QCL4
 
 _NORDER = {"GREEN": DETECTOR["norder"]["GREEN"], "RED": DETECTOR["norder"]["RED"]}
+_NORDER_TOTAL = _NORDER["GREEN"] + _NORDER["RED"]
 _NCOLS = 10  # small column count for fast tests
 
 
@@ -923,3 +927,109 @@ class TestQCScript:
             text=True,
         )
         assert result.returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# QCL4 — CCF/RV presence, times, and BERV percent-change (ported from v2.12)
+# ---------------------------------------------------------------------------
+
+_GOOD_DATES = {
+    "DATE-BEG": "2024-09-23T09:12:09.484",
+    "DATE-MID": "2024-09-23T09:12:15.519",
+    "DATE-END": "2024-09-23T09:12:21.554",
+    "ELAPSED": 12.07,
+}
+
+
+def _make_l4(*, sci=True, dates=_GOOD_DATES, maxpc=None, minpc=None):
+    """KPF4 with science CCF/RV, INSTRUMENT_HEADER times, and optional BCV %."""
+    l4 = KPF4()
+    if sci:
+        for fiber in ("SCI1", "SCI2", "SCI3"):
+            l4.set_data(f"{fiber}_CCF", np.ones((_NORDER_TOTAL, 5)))
+            l4.set_data(
+                f"{fiber}_RV",
+                Table(
+                    {
+                        "ORDER_INDEX": np.arange(_NORDER_TOTAL),
+                        "RV": np.zeros(_NORDER_TOTAL),
+                    }
+                ),
+            )
+    if "INSTRUMENT_HEADER" not in l4.headers:
+        l4.set_header("INSTRUMENT_HEADER", fits.Header())
+    for k, v in (dates or {}).items():
+        l4.headers["INSTRUMENT_HEADER"][k] = v
+    if maxpc is not None:
+        l4.headers["QUALITY_CONTROL"]["MAXPCBCV"] = maxpc
+    if minpc is not None:
+        l4.headers["QUALITY_CONTROL"]["MINPCBCV"] = minpc
+    return l4
+
+
+class TestQCL4:
+    def test_ccf_rv_present_pass(self):
+        assert QCL4(_make_l4()).ccf_rv_present() is True
+
+    def test_ccf_rv_present_fail_when_missing(self):
+        assert QCL4(_make_l4(sci=False)).ccf_rv_present() is False
+
+    def test_times_consistent_pass(self):
+        assert QCL4(_make_l4()).times_consistent() is True
+
+    def test_times_out_of_order_fails(self):
+        bad = dict(_GOOD_DATES, **{"DATE-MID": "2024-09-23T09:12:25.000"})  # mid > end
+        assert QCL4(_make_l4(dates=bad)).times_consistent() is False
+
+    def test_times_duration_mismatch_fails(self):
+        bad = dict(_GOOD_DATES, ELAPSED=99.0)  # END-BEG != ELAPSED
+        assert QCL4(_make_l4(dates=bad)).times_consistent() is False
+
+    def test_times_missing_keys_fail(self):
+        assert QCL4(_make_l4(dates={})).times_consistent() is False
+
+    def test_bcv_percent_change_pass(self):
+        assert (
+            QCL4(_make_l4(maxpc=0.3, minpc=-0.4)).barycentric_rv_percent_change()
+            is True
+        )
+
+    def test_bcv_percent_change_fail(self):
+        assert (
+            QCL4(_make_l4(maxpc=1.5, minpc=-0.2)).barycentric_rv_percent_change()
+            is False
+        )
+
+    def test_bcv_percent_change_absent_passes(self):
+        # No MAXPCBCV/MINPCBCV (e.g. calibration frame) -> nothing to flag.
+        assert QCL4(_make_l4()).barycentric_rv_percent_change() is True
+
+    def test_required_keywords_present(self):
+        l4 = _make_l4()
+        req = QCL4(l4)._required_primary_keywords()
+        for kw in req:
+            l4.headers["PRIMARY"][kw] = 1.0
+        assert QCL4(l4).required_keywords_present() is True
+        if req:
+            del l4.headers["PRIMARY"][sorted(req)[0]]
+            assert QCL4(l4).required_keywords_present() is False
+
+    def test_run_all_good_isgood(self):
+        l4 = _make_l4(maxpc=0.1, minpc=-0.1)
+        for kw in QCL4(l4)._required_primary_keywords():
+            l4.headers["PRIMARY"][kw] = 1.0
+        results = QCL4(l4).run()
+        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "TIMCHKL4", "QCPCBCV"}
+        qc = l4.headers["QUALITY_CONTROL"]
+        assert qc["DATAPRL4"] == 1 and qc["TIMCHKL4"] == 1 and qc["QCPCBCV"] == 1
+        assert qc["ISGOOD"] == 1
+
+    def test_run_flags_failure_in_isgood(self):
+        l4 = _make_l4(sci=False, maxpc=2.0, minpc=-2.0)  # no CCF/RV, bad BCV
+        for kw in QCL4(l4)._required_primary_keywords():
+            l4.headers["PRIMARY"][kw] = 1.0
+        l4.headers["QUALITY_CONTROL"]  # ensure present
+        QCL4(l4).run()
+        qc = l4.headers["QUALITY_CONTROL"]
+        assert qc["DATAPRL4"] == 0 and qc["QCPCBCV"] == 0
+        assert qc["ISGOOD"] == 0

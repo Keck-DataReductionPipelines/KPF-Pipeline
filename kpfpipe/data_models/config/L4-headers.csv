@@ -25,3 +25,15 @@ CCD2ERV1,RED SCI1 RV error [km/s] (legacy),RV2,float,RadialVelocity
 CCD2ERV2,RED SCI2 RV error [km/s] (legacy),RV3,float,RadialVelocity
 CCD2ERV3,RED SCI3 RV error [km/s] (legacy),RV4,float,RadialVelocity
 CCD2ERVC,RED CAL RV error [km/s] (legacy),RV5,float,RadialVelocity
+CCFBJD,Weighted-mean photon BJD_TDB (SCI2),QUALITY_CONTROL,float,DiagL4
+BJDSTD,Weighted std of per-order BJD [s] (SCI2),QUALITY_CONTROL,float,DiagL4
+BJDRNG,Per-order BJD range [s] (SCI2),QUALITY_CONTROL,float,DiagL4
+CCFBCV,Weighted-mean barycentric RV correction [km/s] (SCI2),QUALITY_CONTROL,float,DiagL4
+BCVSTD,Weighted std of per-order BERV [m/s] (SCI2),QUALITY_CONTROL,float,DiagL4
+BCVRNG,Per-order BERV range [m/s] (SCI2),QUALITY_CONTROL,float,DiagL4
+MAXPCBCV,Max per-order BERV deviation from mean [%] (SCI2),QUALITY_CONTROL,float,DiagL4
+MINPCBCV,Min per-order BERV deviation from mean [%] (SCI2),QUALITY_CONTROL,float,DiagL4
+DATAPRL4,QC: L4 CCF/RV present,QUALITY_CONTROL,int,QCL4
+KWRDPRL4,QC: required L4 PRIMARY keywords present,QUALITY_CONTROL,int,QCL4
+TIMCHKL4,QC: L4 times consistent (DATE-BEG/MID/END/ELAPSED),QUALITY_CONTROL,int,QCL4
+QCPCBCV,QC: per-order BERV within +/-1% of mean,QUALITY_CONTROL,int,QCL4
