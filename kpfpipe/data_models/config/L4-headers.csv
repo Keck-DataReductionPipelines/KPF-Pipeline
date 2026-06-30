@@ -33,3 +33,7 @@ BCVSTD,Weighted std of per-order BERV [m/s] (SCI2),QUALITY_CONTROL,float,DiagL4
 BCVRNG,Per-order BERV range [m/s] (SCI2),QUALITY_CONTROL,float,DiagL4
 MAXPCBCV,Max per-order BERV deviation from mean [%] (SCI2),QUALITY_CONTROL,float,DiagL4
 MINPCBCV,Min per-order BERV deviation from mean [%] (SCI2),QUALITY_CONTROL,float,DiagL4
+DATAPRL4,QC: L4 CCF/RV present,QUALITY_CONTROL,int,QCL4
+KWRDPRL4,QC: required L4 PRIMARY keywords present,QUALITY_CONTROL,int,QCL4
+TIMCHKL4,QC: L4 times consistent (DATE-BEG/MID/END/ELAPSED),QUALITY_CONTROL,int,QCL4
+QCPCBCV,QC: per-order BERV within +/-1% of mean,QUALITY_CONTROL,int,QCL4

@@ -118,7 +118,7 @@ class KeywordRegistry:
     # a level-N check. ``qc_flag_keywords`` unions them (drives the ISGOOD
     # aggregate); ``qc_flag_keywords_by_level`` keys the level-N checks by their
     # LEVEL tag (drives the per-level checkpoint, which flags only its own checks).
-    _QC_POPULATORS = frozenset({"QC", "QCL0", "QCL1", "QCL2"})
+    _QC_POPULATORS = frozenset({"QC", "QCL0", "QCL1", "QCL2", "QCL4"})
 
     # FITS structural / bookkeeping cards that are always permitted on any
     # extension and are never registered keywords. This is the single source of
