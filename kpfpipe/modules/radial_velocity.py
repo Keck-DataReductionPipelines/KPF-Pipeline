@@ -994,6 +994,7 @@ class RadialVelocity:
         for fiber in fibers:
             rv = np.full(norder, np.nan)
             rv_err = np.full(norder, np.nan)
+            weight = np.full(norder, np.nan)
 
             # Dispatch the mask/barycorr/grid-center from the fiber's illumination
             # source; unilluminated or not-yet-implemented sources are skipped
@@ -1032,6 +1033,7 @@ class RadialVelocity:
                 )
                 rv[rows] = result["rv"]
                 rv_err[rows] = result["rv_err"]
+                weight[rows] = self._get_order_weights(chip, fiber)
 
             # Per-fiber per-CCD weighted RV (orders collapsed, single fiber).
             per_ccd = self.compute_weighted_rvs(
@@ -1053,7 +1055,9 @@ class RadialVelocity:
                 "ccd_rv_err": ccd_rv_err,
             }
 
-            # Per-orderlet RV table, one row per spectral order.
+            # Per-orderlet RV table, one row per spectral order. WEIGHT is the
+            # per-order CCF-combination weight (ccf_order_weights.csv, by mask),
+            # persisted for downstream weighting (e.g. DiagL4 BJD/BCV statistics).
             wave = np.asarray(self.l2_obj.data[f"{fiber}_WAVE"], dtype=np.float64)
             l4_obj.set_data(
                 f"{fiber}_RV",
@@ -1066,6 +1070,7 @@ class RadialVelocity:
                         "WAVE_END": np.nanmax(wave, axis=1),
                         "RV": rv,
                         "RV_ERR": rv_err,
+                        "WEIGHT": weight,
                     }
                 ),
             )
