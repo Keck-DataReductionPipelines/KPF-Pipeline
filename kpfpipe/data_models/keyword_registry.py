@@ -34,11 +34,13 @@ The three use-cases:
 
 It also exposes ``eprv_primary_seed`` (the typed EPRV Required PRIMARY skeleton
 ``KPF1.__init__`` stamps, mirroring rvdata's ``RV2.__init__``). The header_map
-corrections live in one place each: ``NUMORDER``/``DRPTAG`` via ``_DEFAULT_OVERRIDES``
-(table sanitization), ``DATALVL`` via ``KPF1.__init__`` (the model level), and the
-``JD_UTC`` epoch transform in ``_map_header`` (a per-frame value, not a static default).
+corrections live in one place each: ``NUMORDER``/``DRPTAG``/``EPRVTAG``/``VOCLASS``
+via ``_DEFAULT_OVERRIDES`` (table sanitization), ``DATALVL`` via ``KPF1.__init__``
+(the model level), and the ``JD_UTC`` epoch transform in ``_map_header`` (a
+per-frame value, not a static default).
 """
 
+import importlib.metadata
 import importlib.resources
 import warnings
 from types import MappingProxyType
@@ -58,6 +60,13 @@ _kpf_data_cfg = importlib.resources.files("kpfpipe.data_models.config")
 
 # Number of echelle orders (green + red); the value header_map.csv gets wrong (65).
 _NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
+
+# EPRV-standard compliance is pinned to the installed rv-data-standard release
+# (environment.yml pins it exactly): EPRVTAG is its version ("v0.4.0"), VOCLASS
+# the release month ("EPRVSTANDARD2026.06"). The release date is not in package
+# metadata (PyPI-only), so map it from the exact pin here; bump both together.
+_RVDATA_VERSION = importlib.metadata.version("rv-data-standard")
+_RVDATA_RELEASE_MONTHS = {"0.4.0": "2026.06"}
 
 
 class KeywordRegistry:
@@ -97,11 +106,17 @@ class KeywordRegistry:
 
     # Table Default corrections applied during the __init__ sanitize phase, for
     # keywords header_map.csv gets wrong (NUMORDER's default is 65; KPF has 67) or
-    # whose default is runtime (DRPTAG is the DRP version). Stored as strings like
-    # every other Default (the column is string-typed); parse_value_to_datatype
-    # types them. After sanitization the table is clean, so _eprv_primary_lookup
-    # seeds them without special-casing.
-    _DEFAULT_OVERRIDES = {"NUMORDER": str(_NUMORDER), "DRPTAG": __version__}
+    # whose default is runtime: DRPTAG is the DRP version, and EPRVTAG/VOCLASS are
+    # the EPRV compliance tags derived from the pinned rv-data-standard release.
+    # Stored as strings like every other Default (the column is string-typed);
+    # parse_value_to_datatype types them. After sanitization the table is clean, so
+    # _eprv_primary_lookup seeds them without special-casing.
+    _DEFAULT_OVERRIDES = {
+        "NUMORDER": str(_NUMORDER),
+        "DRPTAG": __version__,
+        "EPRVTAG": f"v{_RVDATA_VERSION}",
+        "VOCLASS": f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
+    }
 
     # Per-extension EPRV keyword CSVs (rvdata does not load these as constants).
     # RV#/CCF# share one template CSV; BARYCORR_*/BJD_TDB are per-extension.

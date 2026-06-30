@@ -6,6 +6,7 @@ Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
 import importlib.metadata
+import re
 
 import numpy as np
 import pytest
@@ -167,6 +168,16 @@ class TestL1PrimarySeed:
     def test_datalvl_corrected_to_l1(self):
         # The seed defaults DATALVL (EPRV Required) to "UNKNOWN"; __init__ fixes it.
         assert KPF1().headers["PRIMARY"]["DATALVL"] == "L1"
+
+    def test_compliance_tags_from_rvdata_pin(self):
+        # EPRVTAG/VOCLASS default to "UNKNOWN" in the EPRV CSV; _DEFAULT_OVERRIDES
+        # derives them from the pinned rv-data-standard release. EPRVTAG is the
+        # version ("v0.4.0"); VOCLASS encodes the release month
+        # ("EPRVSTANDARD<YYYY.MM>").
+        prim = KPF1().headers["PRIMARY"]
+        version = importlib.metadata.version("rv-data-standard")
+        assert prim["EPRVTAG"] == f"v{version}"
+        assert re.fullmatch(r"EPRVSTANDARD\d{4}\.\d{2}", prim["VOCLASS"])
 
     def test_seed_matches_registry_lookup(self):
         # The 40 seeded keys are exactly the registry's eprv_primary_seed.
