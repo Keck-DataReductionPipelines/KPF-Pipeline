@@ -23,11 +23,9 @@ KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reductio
 - **Python 3.14.3** (pinned exactly)
 - **Conda env**: `kpfpipe` — set up via `conda env create -f KPF-Pipeline/environment.yml`
 - **Install package**: `pip install -e KPF-Pipeline/` (editable install)
-- **Key dependency**: `rv-data-standard` (RVData), pinned to a specific commit
-  (`git+https://github.com/EPRV-RCN/RVData.git@7413775…`) rather than the moving `@develop`
-  branch — RVData's `develop` has since introduced breaking changes (a `MinBitDepth` upcast
-  of WAVE arrays, and a `receipt_add_entry` signature change). Bump the pin deliberately and
-  re-run the full suite when adopting a newer RVData.
+- **Key dependency**: `rv-data-standard` (RVData), pinned to the released version
+  `rv-data-standard==0.4.0` (a tagged PyPI release, not a moving branch). Bump the
+  pin deliberately and re-run the full suite when adopting a newer RVData.
 
 ## Git workflow
 
@@ -235,9 +233,9 @@ see the style guide §11.)* The architecture invariants:
 - **Masters carry their own minimal PRIMARY, not the EPRV science skeleton** (`KPFMasterL1`/`L2` stamp
   `DATALVL` `"ML1"`/`"ML2"`; see *Masters Pipeline*).
 - **Every extension header is an `astropy.io.fits.Header`** (`KPFDataModel.create_extension` override;
-  `from_fits` already returns one). rvdata's base `_create_hdul` drops comments on serialize, so the
-  `KPFDataModel._create_hdul` override rebuilds PRIMARY via `_restore_primary_comments` to preserve them
-  through `to_fits`.
+  `from_fits` already returns one). rvdata's base `_create_hdul` (>=0.4.0) copies a `fits.Header`
+  directly when serializing PRIMARY, preserving its keyword comments through `to_fits`; the
+  `KPFDataModel._create_hdul` override only syncs the receipt table into the RECEIPT extension.
 
 ### Configuration
 

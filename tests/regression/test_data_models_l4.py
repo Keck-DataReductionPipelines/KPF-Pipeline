@@ -43,7 +43,7 @@ class TestToKPF4:
     def test_to_kpf4_carries_receipt(self):
         kpf2 = KPF2()
         kpf4 = kpf2.to_kpf4()
-        assert "to_kpf4" in kpf4.receipt["Module_Name"].values
+        assert "to_kpf4" in kpf4.receipt["FUNCTION"].values
 
     def test_to_kpf4_leaves_rv_empty(self):
         kpf2 = KPF2()

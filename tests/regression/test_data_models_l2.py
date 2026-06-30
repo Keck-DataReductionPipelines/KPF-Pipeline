@@ -49,7 +49,9 @@ def synthetic_masters_l2_file(tmp_path):
     primary.header["MASTYPE"] = "thar"  # from_fits infers kind="wls" from this
 
     n_pix = 64
-    wave = rng.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float32)
+    # WAVE is born-64 (EPRV / dtype policy); float32 would trip rvdata's
+    # MinBitDepth upcast-and-warn on read.
+    wave = rng.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float64)
     trace3_wave = fits.ImageHDU(data=wave)
     trace3_wave.name = "TRACE3_WAVE"
 
@@ -158,13 +160,13 @@ class TestToKPF2:
     def test_to_kpf2_carries_receipt(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
         kpf2 = l1.to_kpf2()
-        assert "to_kpf2" in kpf2.receipt["Module_Name"].values
+        assert "to_kpf2" in kpf2.receipt["FUNCTION"].values
 
     def test_to_kpf2_receipt_updates_drpstatus(self, synthetic_l1_file):
         """The DRPSTATU receipt override is active on KPF2 too (it subclasses
         RV2, not KPFDataModel, so it carries its own override)."""
         kpf2 = KPF1.from_fits(synthetic_l1_file).to_kpf2()
-        kpf2.receipt_add_entry("barycentric_correction", "PASS")
+        kpf2.receipt_add_entry("barycentric_correction", "", "PASS")
         assert (
             kpf2.headers["RECEIPT"].get("DRPSTATU")
             == "Barycentric Correction module complete"
@@ -386,6 +388,29 @@ class TestDtypeProvenance:
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_FLUX", FLUX, tmp_path)
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_WAVE", WAVE, tmp_path)
 
+    def test_chip_prefix_wave_write_enforces_min_bit_depth(self):
+        """A float32 WAVE written via a chip-prefix key (which bypasses rvdata's
+        base set_data) is still upcast to float64 with the MinBitDepth warning —
+        the chip-split path enforces the born-64 WAVE policy like the canonical
+        path does."""
+        kpf2 = KPF2()
+        with pytest.warns(UserWarning, match="MinBitDepth=64"):
+            kpf2.set_data(
+                "GREEN_SCI2_WAVE", np.ones((NORDER_GREEN, 8), dtype=np.float32)
+            )
+        assert_dtype(kpf2.data["TRACE3_WAVE"], WAVE, "underlying TRACE3_WAVE")
+
+    def test_chip_prefix_flux_write_keeps_float32(self):
+        """FLUX has no MinBitDepth requirement, so a float32 chip-prefix write is
+        kept as-is (no upcast, no warning) — the enforcement is WAVE/QUALITY-only."""
+        kpf2 = KPF2()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            kpf2.set_data(
+                "GREEN_SCI2_FLUX", np.ones((NORDER_GREEN, 8), dtype=np.float32)
+            )
+        assert_dtype(kpf2.data["TRACE3_FLUX"], FLUX, "underlying TRACE3_FLUX")
+
 
 class TestKPFMasterL2:
     def test_wls_extensions_created(self):
@@ -456,7 +481,7 @@ class TestKPFMasterL2:
 
     def test_from_fits_adds_receipt_entry(self, synthetic_masters_l2_file):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
-        assert "from_fits" in m.receipt["Module_Name"].values
+        assert "from_fits" in m.receipt["FUNCTION"].values
 
     def test_round_trip(self, synthetic_masters_l2_file, tmp_path):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)

@@ -113,7 +113,7 @@ class TestScienceRecipe:
 
     def test_receipt_chain(self, recipe_output):
         l2 = KPF2.from_fits(recipe_output)
-        modules = l2.receipt["Module_Name"].values
+        modules = l2.receipt["FUNCTION"].values
         assert "image_assembly" in modules
         assert "calibration_association" in modules
         assert "spectral_extraction" in modules

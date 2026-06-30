@@ -265,7 +265,7 @@ class CalibrationAssociation:
 
         self._set_headers(self.l1_obj)
         self._track_info()
-        self.l1_obj.receipt_add_entry("calibration_association", "PASS")
+        self.l1_obj.receipt_add_entry("calibration_association", "", "PASS")
 
         return self.l1_obj
 

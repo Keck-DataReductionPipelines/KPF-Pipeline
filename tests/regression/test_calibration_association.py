@@ -30,8 +30,8 @@ class MockL1:
         }
         self._receipt = []
 
-    def receipt_add_entry(self, name, status):
-        self._receipt.append((name, status))
+    def receipt_add_entry(self, name, args, status):
+        self._receipt.append((name, args, status))
 
     def set_keyword(self, key, value):
         # Mirror the real routing: master paths ({PREFIX}FILE) land on RECEIPT.
@@ -258,7 +258,7 @@ class TestPerform:
     def test_adds_receipt_entry(self, masters_dir):
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
-        assert ("calibration_association", "PASS") in mod.l1_obj._receipt
+        assert ("calibration_association", "", "PASS") in mod.l1_obj._receipt
 
     def test_sets_biasfile_header(self, masters_dir):
         # BIASFILE is the master's full path (no separate BIASDIR).

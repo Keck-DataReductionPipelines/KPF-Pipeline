@@ -258,7 +258,7 @@ class TestPerformShapes:
         )
         se = SpectralExtraction(minimal_l1)
         l2 = se.perform()
-        modules = l2.receipt["Module_Name"].values
+        modules = l2.receipt["FUNCTION"].values
         assert "to_kpf2" in modules
         assert "spectral_extraction" in modules
 
@@ -307,7 +307,7 @@ class TestSpectralExtractionRealData:
 
     def test_receipt_chain(self, l2_from_flat):
         l2, _ = l2_from_flat
-        modules = l2.receipt["Module_Name"].values
+        modules = l2.receipt["FUNCTION"].values
         assert "image_assembly" in modules
         assert "spectral_extraction" in modules
 

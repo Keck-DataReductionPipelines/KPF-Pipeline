@@ -145,7 +145,7 @@ class TestImageAssemblyBias:
 
     def test_receipt_chain(self, l1_bias):
         l1, _ = l1_bias
-        modules = l1.receipt["Module_Name"].values
+        modules = l1.receipt["FUNCTION"].values
         assert "from_fits" in modules
         assert "to_kpf1" in modules
         assert "image_assembly" in modules

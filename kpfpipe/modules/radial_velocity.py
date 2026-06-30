@@ -1131,7 +1131,7 @@ class RadialVelocity:
                 "  combined RV: no science orderlet requested; "
                 "PRIMARY RV left UNDEFINED"
             )
-            l4_obj.receipt_add_entry("radial_velocity", "PASS")
+            l4_obj.receipt_add_entry("radial_velocity", "", "PASS")
             return l4_obj
         if not sci:
             raise ValueError(
@@ -1217,7 +1217,7 @@ class RadialVelocity:
         l4_obj.set_keyword("BERV", float(berv_p) if np.isfinite(berv_p) else None)
         l4_obj.set_keyword("BJDTDB", float(bjd_p) if np.isfinite(bjd_p) else None)
 
-        l4_obj.receipt_add_entry("radial_velocity", "PASS")
+        l4_obj.receipt_add_entry("radial_velocity", "", "PASS")
         return l4_obj
 
     def info(self):

@@ -844,7 +844,7 @@ class BaseMasterModule:
                 ml1_obj.headers[f"{chip}_IMG"]["BUNIT"] = bunit
 
         ml1_obj.set_input_files(l0_file_list, master_type)
-        ml1_obj.receipt_add_entry(receipt_key, "PASS")
+        ml1_obj.receipt_add_entry(receipt_key, "", "PASS")
 
         return ml1_obj
 

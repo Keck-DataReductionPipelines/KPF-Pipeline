@@ -73,7 +73,7 @@ def synthetic_kpf2():
         n = NORDER_GREEN if chip == "GREEN" else NORDER_RED
         for fiber in ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]:
             kpf2.set_data(
-                f"{chip}_{fiber}_WAVE", np.full((n, NCOL), 5000.0, dtype=np.float32)
+                f"{chip}_{fiber}_WAVE", np.full((n, NCOL), 5000.0, dtype=np.float64)
             )
 
     return kpf2
@@ -450,10 +450,10 @@ class TestFluxWeightedMidpointOrders:
         """Front-weighted flux + GREEN orders at 5000Å vs RED at 5100Å:
         GREEN orders should get an earlier midpoint than RED."""
         synthetic_kpf2.set_data(
-            "GREEN_SCI2_WAVE", np.full((NORDER_GREEN, NCOL), 5000.0, dtype=np.float32)
+            "GREEN_SCI2_WAVE", np.full((NORDER_GREEN, NCOL), 5000.0, dtype=np.float64)
         )
         synthetic_kpf2.set_data(
-            "RED_SCI2_WAVE", np.full((NORDER_RED, NCOL), 5100.0, dtype=np.float32)
+            "RED_SCI2_WAVE", np.full((NORDER_RED, NCOL), 5100.0, dtype=np.float64)
         )
         # Front-weighted at 5000Å, back-weighted at 5100Å
         data = {
@@ -510,12 +510,12 @@ class TestFluxWeightedMidpointCcds:
     def test_flux_weighting_biases_ccd_time_toward_bright_orders(self, synthetic_kpf2):
         """A bright bluest GREEN order pulls the chip summary toward its
         (earlier) midpoint relative to the unweighted chip mean."""
-        green_waves = np.linspace(5000.0, 5300.0, NORDER_GREEN, dtype=np.float32)
+        green_waves = np.linspace(5000.0, 5300.0, NORDER_GREEN, dtype=np.float64)
         synthetic_kpf2.set_data(
             "GREEN_SCI2_WAVE", np.repeat(green_waves[:, None], NCOL, axis=1)
         )
         synthetic_kpf2.set_data(
-            "RED_SCI2_WAVE", np.full((NORDER_RED, NCOL), 5300.0, dtype=np.float32)
+            "RED_SCI2_WAVE", np.full((NORDER_RED, NCOL), 5300.0, dtype=np.float64)
         )
         # Chromatic flux gradient: bluest channel early, reddest channel late.
         data = {
@@ -576,10 +576,10 @@ class TestFluxWeightedMidpointCcds:
         """With GREEN orders at 5000Å and RED orders at 5100Å plus a chromatic
         flux gradient, 'ccds' should report distinguishable times per chip."""
         synthetic_kpf2.set_data(
-            "GREEN_SCI2_WAVE", np.full((NORDER_GREEN, NCOL), 5000.0, dtype=np.float32)
+            "GREEN_SCI2_WAVE", np.full((NORDER_GREEN, NCOL), 5000.0, dtype=np.float64)
         )
         synthetic_kpf2.set_data(
-            "RED_SCI2_WAVE", np.full((NORDER_RED, NCOL), 5100.0, dtype=np.float32)
+            "RED_SCI2_WAVE", np.full((NORDER_RED, NCOL), 5100.0, dtype=np.float64)
         )
         # Front-weighted at 5000Å, back-weighted at 5100Å → distinct midpoints
         data = {
@@ -842,7 +842,7 @@ class TestPerform:
 
     def test_receipt_entry_added(self, bc_monkeypatched):
         bc_monkeypatched.perform()
-        modules = bc_monkeypatched.l2_obj.receipt["Module_Name"].values
+        modules = bc_monkeypatched.l2_obj.receipt["FUNCTION"].values
         assert "barycentric_correction" in modules
 
     def test_targradv_converted_km_to_m_and_passed_through(

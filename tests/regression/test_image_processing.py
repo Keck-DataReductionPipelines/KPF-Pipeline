@@ -62,8 +62,8 @@ class MockL1:
         ext = "RECEIPT" if key in ("BIASSUB", "DARKSUB") else "PRIMARY"
         self.headers[ext][key] = value
 
-    def receipt_add_entry(self, name, status):
-        self._receipt.append((name, status))
+    def receipt_add_entry(self, name, args, status):
+        self._receipt.append((name, args, status))
 
 
 def _make_module(bias_file=None, bias_dir=None, dark_file=None, dark_dir=None):
@@ -433,7 +433,7 @@ class TestPerform:
 
     def test_receipt_entry_added(self, mod_with_bias):
         mod_with_bias.perform()
-        assert ("image_processing", "PASS") in mod_with_bias.l1_obj._receipt
+        assert ("image_processing", "", "PASS") in mod_with_bias.l1_obj._receipt
 
     def test_chips_override_processes_only_requested(self, mod_with_bias):
         mod_with_bias.perform(chips=["GREEN"])

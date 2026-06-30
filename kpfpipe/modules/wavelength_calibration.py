@@ -168,7 +168,7 @@ class WavelengthCalibration:
 
         self._set_headers(self.l2_obj)
         self._track_info()
-        self.l2_obj.receipt_add_entry("wavelength_calibration", "PASS")
+        self.l2_obj.receipt_add_entry("wavelength_calibration", "", "PASS")
 
         return self.l2_obj
 

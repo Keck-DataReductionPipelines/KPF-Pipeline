@@ -6,12 +6,13 @@ KPF stores every extension header as an ``astropy.io.fits.Header``, so reads use
 comment)`` natively. These tests pin the contract every model inherits from the
 shared base: (1) headers are ``fits.Header`` from construction onward, and (2) a
 commented PRIMARY card survives ``to_fits`` -> ``from_fits`` with its comment
-intact -- the regression guard for the lossless-PRIMARY serialization in
-``KPFDataModel._create_hdul`` / ``_restore_primary_comments``.
+intact -- the regression guard for lossless-PRIMARY serialization (rvdata's base
+``_create_hdul`` copies a ``fits.Header`` directly, preserving its comments, as
+of rvdata >=0.4.0).
 
-KPF1 is the representative vehicle for the inherited base path (L0/L1 use
-``KPFDataModel._create_hdul`` directly). KPF2/KPF4 override ``_create_hdul`` via
-RV2/RV4, so their round-trip guards live in test_data_models_l{2,4}.py.
+KPF1 is the representative vehicle for the inherited base path. All KPF models
+serialize PRIMARY through rvdata's comment-preserving base ``_create_hdul``;
+KPF2/KPF4 round-trip guards live in test_data_models_l{2,4}.py.
 
 The WMKO->EPRV conversion (``KPF0._map_header``) is exercised end-to-end by the
 to_kpf1/to_kpf2 tests in test_data_models_l{1,2,4}.py.
@@ -43,10 +44,8 @@ class TestHeaderStorage:
 class TestPrimaryCommentRoundTrip:
     """A commented PRIMARY write survives to_fits -> from_fits with its comment.
 
-    rvdata's base _create_hdul serializes PRIMARY by iterating ``.items()``, which
-    drops a fits.Header's comments; KPFDataModel._create_hdul rebuilds the PRIMARY
-    HDU (via _restore_primary_comments) so the comments survive. This test would
-    fail without that override.
+    rvdata's base _create_hdul (>=0.4.0) copies a fits.Header directly when
+    serializing PRIMARY, preserving its keyword comments through the round-trip.
     """
 
     def test_primary_comment_round_trips(self, tmp_path):

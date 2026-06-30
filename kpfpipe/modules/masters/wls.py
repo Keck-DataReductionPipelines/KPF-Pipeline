@@ -941,7 +941,7 @@ class WLS(BaseMasterModule):
         self.ml2_obj.set_keyword("POLYORDM", polyorder_m)
         self.ml2_obj.set_keyword("POLYORDF", polyorder_f)
 
-        self.ml2_obj.receipt_add_entry("master_wls", "PASS")
+        self.ml2_obj.receipt_add_entry("master_wls", "", "PASS")
 
         if master_path is not None:
             self.save_master("L2", master_path, overwrite=True)
