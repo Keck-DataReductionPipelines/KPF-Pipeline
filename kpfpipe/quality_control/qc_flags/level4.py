@@ -88,16 +88,16 @@ class QCL4(QC):
     def barycentric_rv_percent_change(self):
         """Per-order BERV deviation within +/-1% of the weighted mean.
 
-        Ports v2.12 ``L2_barycentric_rv_percent_change``, reading MAXPCBCV /
-        MINPCBCV written by DiagL4 (run DiagL4 before QCL4). Passes when the
+        Ports v2.12 ``L2_barycentric_rv_percent_change``, reading BERVMAXP /
+        BERVMINP written by DiagL4 (run DiagL4 before QCL4). Passes when the
         metrics are absent (e.g. a calibration frame with no science RV) -- there
         is nothing to flag.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        mx = _hdr_float(hdr, "MAXPCBCV")
-        mn = _hdr_float(hdr, "MINPCBCV")
+        mx = _hdr_float(hdr, "BERVMAXP")
+        mn = _hdr_float(hdr, "BERVMINP")
         if mx is None or mn is None:
             return True
         return mx <= _BCV_PCT_TOL and mn >= -_BCV_PCT_TOL
 
-    barycentric_rv_percent_change._qc_key = "QCPCBCV"
+    barycentric_rv_percent_change._qc_key = "BERVOK"

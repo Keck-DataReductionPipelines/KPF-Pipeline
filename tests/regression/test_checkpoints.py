@@ -232,7 +232,7 @@ class TestCheckpointL4:
             CheckpointL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
         # Folded DiagL4 metrics + QCL4 flags both landed on QUALITY_CONTROL.
-        assert qc["CCFBCV"] is not None and qc["CCFBJD"] is not None
+        assert qc["BERVMEAN"] is not None and qc["BJDMEAN"] is not None
         assert qc["DATAPRL4"] == 1 and qc["TIMCHKL4"] == 1
         assert qc["ISGOOD"] == 1
 

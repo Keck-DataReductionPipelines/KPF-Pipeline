@@ -961,9 +961,9 @@ def _make_l4(*, sci=True, dates=_GOOD_DATES, maxpc=None, minpc=None):
     for k, v in (dates or {}).items():
         l4.headers["INSTRUMENT_HEADER"][k] = v
     if maxpc is not None:
-        l4.headers["QUALITY_CONTROL"]["MAXPCBCV"] = maxpc
+        l4.headers["QUALITY_CONTROL"]["BERVMAXP"] = maxpc
     if minpc is not None:
-        l4.headers["QUALITY_CONTROL"]["MINPCBCV"] = minpc
+        l4.headers["QUALITY_CONTROL"]["BERVMINP"] = minpc
     return l4
 
 
@@ -1001,7 +1001,7 @@ class TestQCL4:
         )
 
     def test_bcv_percent_change_absent_passes(self):
-        # No MAXPCBCV/MINPCBCV (e.g. calibration frame) -> nothing to flag.
+        # No BERVMAXP/BERVMINP (e.g. calibration frame) -> nothing to flag.
         assert QCL4(_make_l4()).barycentric_rv_percent_change() is True
 
     def test_required_keywords_present(self):
@@ -1019,9 +1019,9 @@ class TestQCL4:
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         results = QCL4(l4).run()
-        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "TIMCHKL4", "QCPCBCV"}
+        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "TIMCHKL4", "BERVOK"}
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["DATAPRL4"] == 1 and qc["TIMCHKL4"] == 1 and qc["QCPCBCV"] == 1
+        assert qc["DATAPRL4"] == 1 and qc["TIMCHKL4"] == 1 and qc["BERVOK"] == 1
         assert qc["ISGOOD"] == 1
 
     def test_run_flags_failure_in_isgood(self):
@@ -1031,5 +1031,5 @@ class TestQCL4:
         l4.headers["QUALITY_CONTROL"]  # ensure present
         QCL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["DATAPRL4"] == 0 and qc["QCPCBCV"] == 0
+        assert qc["DATAPRL4"] == 0 and qc["BERVOK"] == 0
         assert qc["ISGOOD"] == 0

@@ -520,14 +520,14 @@ class TestDiagL4:
         l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [1.0, 1.0])
         DiagL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["CCFBJD"] == pytest.approx(15.0)
+        assert qc["BJDMEAN"] == pytest.approx(15.0)
         assert qc["BJDSTD"] == pytest.approx(432000.0)
         assert qc["BJDRNG"] == pytest.approx(864000.0)
-        assert qc["CCFBCV"] == pytest.approx(0.2)
-        assert qc["BCVSTD"] == pytest.approx(100.0)
-        assert qc["BCVRNG"] == pytest.approx(200.0)
-        assert qc["MAXPCBCV"] == pytest.approx(50.0)
-        assert qc["MINPCBCV"] == pytest.approx(-50.0)
+        assert qc["BERVMEAN"] == pytest.approx(0.2)
+        assert qc["BERVSTD"] == pytest.approx(100.0)
+        assert qc["BERVRNG"] == pytest.approx(200.0)
+        assert qc["BERVMAXP"] == pytest.approx(50.0)
+        assert qc["BERVMINP"] == pytest.approx(-50.0)
 
     def test_zero_weight_orders_excluded(self):
         # Third order has zero weight: excluded from the weighted mean and the
@@ -535,9 +535,9 @@ class TestDiagL4:
         l4 = _l4_with_sci2_rv([10.0, 20.0, 999.0], [0.1, 0.3, 9.0], [1.0, 1.0, 0.0])
         DiagL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["CCFBJD"] == pytest.approx(15.0)
+        assert qc["BJDMEAN"] == pytest.approx(15.0)
         assert qc["BJDRNG"] == pytest.approx(864000.0)
-        assert qc["CCFBCV"] == pytest.approx(0.2)
+        assert qc["BERVMEAN"] == pytest.approx(0.2)
 
     def test_skips_without_sci2_rv_table(self):
         # No SCI2 RV table (e.g. unilluminated science) -> no metrics written.
