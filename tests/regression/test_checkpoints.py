@@ -16,11 +16,23 @@ checkpoint methods; that orchestration is pinned in ``TestRunFoldsDiagnosticsAnd
 
 import warnings
 
+import numpy as np
 import pytest
+from astropy.io import fits
+from astropy.table import Table
 
+from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level2 import KPF2
-from kpfpipe.quality_control.checkpoints import Checkpoint, CheckpointL0, CheckpointL2
+from kpfpipe.data_models.level4 import KPF4
+from kpfpipe.quality_control.checkpoints import (
+    Checkpoint,
+    CheckpointL0,
+    CheckpointL2,
+    CheckpointL4,
+)
+
+_NORDER_TOTAL = DETECTOR["norder"]["GREEN"] + DETECTOR["norder"]["RED"]
 
 
 class TestUnregisteredKeywords:
@@ -173,3 +185,66 @@ class TestRunFoldsDiagnosticsAndQC:
             warnings.simplefilter("error")
             chk.run()
         assert chk.qc_results == {}
+
+
+# ---------------------------------------------------------------------------
+# CheckpointL4 — folds DiagL4 + QCL4, then validates the RV/CCF product
+# ---------------------------------------------------------------------------
+
+
+def _make_l4(*, sci=True):
+    """KPF4 good enough for CheckpointL4.run(): science CCF + RV tables (with
+    BJD_TDB/BERV/WEIGHT for DiagL4), consistent INSTRUMENT_HEADER times, and the
+    required PRIMARY keywords seeded so KWRDPRL4 passes."""
+    l4 = KPF4()
+    if sci:
+        rng = np.random.default_rng(3)
+        for fiber in ("SCI1", "SCI2", "SCI3"):
+            l4.set_data(f"{fiber}_CCF", np.ones((_NORDER_TOTAL, 5)))
+            l4.set_data(
+                f"{fiber}_RV",
+                Table(
+                    {
+                        "ORDER_INDEX": np.arange(_NORDER_TOTAL),
+                        "BJD_TDB": 2460000.0 + rng.normal(0, 1e-4, _NORDER_TOTAL),
+                        "BERV": 7.9 + rng.normal(0, 1e-4, _NORDER_TOTAL),
+                        "WEIGHT": np.ones(_NORDER_TOTAL),
+                    }
+                ),
+            )
+    if "INSTRUMENT_HEADER" not in l4.headers:
+        l4.set_header("INSTRUMENT_HEADER", fits.Header())
+    ih = l4.headers["INSTRUMENT_HEADER"]
+    ih["DATE-BEG"] = "2024-09-23T09:12:09.484"
+    ih["DATE-MID"] = "2024-09-23T09:12:15.519"
+    ih["DATE-END"] = "2024-09-23T09:12:21.554"
+    ih["ELAPSED"] = 12.07
+    for kw in CheckpointL4.QC(l4)._required_primary_keywords():
+        l4.headers["PRIMARY"][kw] = ("UNKNOWN", "seeded for test")
+    return l4
+
+
+class TestCheckpointL4:
+    def test_run_good_product_passes_and_writes_flags(self):
+        l4 = _make_l4()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # a good product must not warn
+            CheckpointL4(l4).run()
+        qc = l4.headers["QUALITY_CONTROL"]
+        # Folded DiagL4 metrics + QCL4 flags both landed on QUALITY_CONTROL.
+        assert qc["CCFBCV"] is not None and qc["CCFBJD"] is not None
+        assert qc["DATAPRL4"] == 1 and qc["TIMCHKL4"] == 1
+        assert qc["ISGOOD"] == 1
+
+    def test_run_raises_when_science_ccf_rv_missing(self):
+        # DATAPRL4 is fatal (in RAISE_FLAGS): no science CCF/RV -> run() raises.
+        l4 = _make_l4(sci=False)
+        with pytest.raises(ValueError, match="DATAPRL4 = 0"):
+            CheckpointL4(l4).run()
+
+    def test_nonraise_flag_warns(self):
+        # Bad timing -> TIMCHKL4 = 0; not a RAISE_FLAG, so it warns (not raises).
+        l4 = _make_l4()
+        l4.headers["INSTRUMENT_HEADER"]["ELAPSED"] = 999.0  # END-BEG != ELAPSED
+        with pytest.warns(UserWarning, match="TIMCHKL4 = 0"):
+            CheckpointL4(l4).run()
