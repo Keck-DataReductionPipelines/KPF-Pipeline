@@ -1,6 +1,4 @@
 Keyword,Description,Extension,DataType,PopulatedBy
-DATAPRL1,QC: GREEN/RED CCD extensions present/non-empty,QUALITY_CONTROL,int,QCL1
-KWRDPRL1,QC: required L1 PRIMARY keywords present,QUALITY_CONTROL,int,QCL1
 RNGREEN1,Read noise GREEN amp 1 [e-],QUALITY_CONTROL,float,ImageAssembly
 RNGREEN2,Read noise GREEN amp 2 [e-],QUALITY_CONTROL,float,ImageAssembly
 RNGREEN3,Read noise GREEN amp 3 [e-],QUALITY_CONTROL,float,ImageAssembly
@@ -29,6 +27,8 @@ BIASAGE,Master bias age [days],QUALITY_CONTROL,float,DiagL1
 DARKAGE,Master dark age [days],QUALITY_CONTROL,float,DiagL1
 FLATAGE,Master flat age [days],QUALITY_CONTROL,float,DiagL1
 WLSAGE,WLS master age [days],QUALITY_CONTROL,float,DiagL1
+DATAPRL1,QC: GREEN/RED CCD extensions present/non-empty,QUALITY_CONTROL,int,QCL1
+KWRDPRL1,QC: required L1 PRIMARY keywords present,QUALITY_CONTROL,int,QCL1
 RNOK,QC: per-amp read noise 2-6 e-,QUALITY_CONTROL,int,QCL1
 RNNGOK,QC: non-Gaussian read noise (MAD/STD) 0.8-1.5,QUALITY_CONTROL,int,QCL1
 BIASOK,QC: bias subtracted & master age <= 7 days,QUALITY_CONTROL,int,QCL1
