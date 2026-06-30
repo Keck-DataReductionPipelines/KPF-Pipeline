@@ -44,9 +44,13 @@ _NCOLS = 10  # small column count for fast tests
 
 
 def _make_kpf0(
-    tmp_path, *, with_amps=True, exptime=60.0, obs_id="KP.20240405.00001.00"
+    tmp_path, *, with_amps=True, exptime=60.0, obs_id="KP.20240405.00001.00", dates=None
 ):
-    """Minimal 4-amp KPF0 object with required headers."""
+    """Minimal 4-amp KPF0 object with required headers.
+
+    ``dates`` optionally seeds raw DATE-BEG/MID/END/ELAPSED cards on PRIMARY for
+    the DATTIMOK timing check.
+    """
     fn = str(tmp_path / f"{obs_id}.fits")
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
@@ -55,6 +59,8 @@ def _make_kpf0(
     primary.header["OBJECT"] = "synthetic"
     primary.header["OFNAME"] = f"{obs_id}.fits"
     primary.header["IMTYPE"] = "Object"
+    for k, v in (dates or {}).items():
+        primary.header[k] = v
 
     hdus = [primary]
     if with_amps:
@@ -65,6 +71,15 @@ def _make_kpf0(
 
     fits.HDUList(hdus).writeto(fn, overwrite=True)
     return KPF0.from_fits(fn)
+
+
+# Self-consistent raw timing cards (END - BEG == ELAPSED), for the DATTIMOK check.
+_GOOD_DATES = {
+    "DATE-BEG": "2024-09-23T09:12:09.484",
+    "DATE-MID": "2024-09-23T09:12:15.519",
+    "DATE-END": "2024-09-23T09:12:21.554",
+    "ELAPSED": 12.07,
+}
 
 
 def _seed_required_primary(kpf, qc_cls):
@@ -378,6 +393,25 @@ class TestQCL0:
         l0 = _make_kpf0(tmp_path)
         del l0.headers["PRIMARY"]["OFNAME"]
         assert QCL0(l0).header_keywords_present() is False
+
+    def test_times_consistent_pass(self, tmp_path):
+        l0 = _make_kpf0(tmp_path, dates=_GOOD_DATES)
+        assert QCL0(l0).times_consistent() is True
+
+    def test_times_out_of_order_fails(self, tmp_path):
+        bad = dict(_GOOD_DATES, **{"DATE-MID": "2024-09-23T09:12:25.000"})  # mid > end
+        assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
+
+    def test_times_duration_mismatch_fails(self, tmp_path):
+        bad = dict(_GOOD_DATES, ELAPSED=99.0)  # END-BEG != ELAPSED
+        assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
+
+    def test_times_missing_keys_fail(self, tmp_path):
+        # Raw L0 PRIMARY without DATE-BEG/MID/END -> cannot verify -> fail.
+        assert QCL0(_make_kpf0(tmp_path)).times_consistent() is False
+
+    def test_timechk_key_present(self):
+        assert QCL0.__dict__["times_consistent"]._qc_key == "DATTIMOK"
 
     def test_exptime_sane_pass_positive(self, tmp_path):
         l0 = _make_kpf0(tmp_path, exptime=300.0)
@@ -851,6 +885,8 @@ def _write_l0_fixture(path, *, passing=True):
     primary.header["OBJECT"] = "synthetic"
     primary.header["OFNAME"] = os.path.basename(path)
     primary.header["IMTYPE"] = "Object"
+    for k, v in _GOOD_DATES.items():  # self-consistent raw times so DATTIMOK passes
+        primary.header[k] = v
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -930,19 +966,13 @@ class TestQCScript:
 
 
 # ---------------------------------------------------------------------------
-# QCL4 — CCF/RV presence, times, and BERV percent-change (ported from v2.12)
+# QCL4 — CCF/RV presence and BERV percent-change (ported from v2.12)
+# (timing consistency moved to QCL0 / DATTIMOK)
 # ---------------------------------------------------------------------------
 
-_GOOD_DATES = {
-    "DATE-BEG": "2024-09-23T09:12:09.484",
-    "DATE-MID": "2024-09-23T09:12:15.519",
-    "DATE-END": "2024-09-23T09:12:21.554",
-    "ELAPSED": 12.07,
-}
 
-
-def _make_l4(*, sci=True, dates=_GOOD_DATES, maxpc=None, minpc=None):
-    """KPF4 with science CCF/RV, INSTRUMENT_HEADER times, and optional BCV %."""
+def _make_l4(*, sci=True, maxpc=None, minpc=None):
+    """KPF4 with science CCF/RV and optional per-order BERV %-deviation metrics."""
     l4 = KPF4()
     if sci:
         for fiber in ("SCI1", "SCI2", "SCI3"):
@@ -956,10 +986,6 @@ def _make_l4(*, sci=True, dates=_GOOD_DATES, maxpc=None, minpc=None):
                     }
                 ),
             )
-    if "INSTRUMENT_HEADER" not in l4.headers:
-        l4.set_header("INSTRUMENT_HEADER", fits.Header())
-    for k, v in (dates or {}).items():
-        l4.headers["INSTRUMENT_HEADER"][k] = v
     if maxpc is not None:
         l4.headers["QUALITY_CONTROL"]["BERVMAXP"] = maxpc
     if minpc is not None:
@@ -973,20 +999,6 @@ class TestQCL4:
 
     def test_ccf_rv_present_fail_when_missing(self):
         assert QCL4(_make_l4(sci=False)).ccf_rv_present() is False
-
-    def test_times_consistent_pass(self):
-        assert QCL4(_make_l4()).times_consistent() is True
-
-    def test_times_out_of_order_fails(self):
-        bad = dict(_GOOD_DATES, **{"DATE-MID": "2024-09-23T09:12:25.000"})  # mid > end
-        assert QCL4(_make_l4(dates=bad)).times_consistent() is False
-
-    def test_times_duration_mismatch_fails(self):
-        bad = dict(_GOOD_DATES, ELAPSED=99.0)  # END-BEG != ELAPSED
-        assert QCL4(_make_l4(dates=bad)).times_consistent() is False
-
-    def test_times_missing_keys_fail(self):
-        assert QCL4(_make_l4(dates={})).times_consistent() is False
 
     def test_bcv_percent_change_pass(self):
         assert QCL4(_make_l4(maxpc=0.3, minpc=-0.4)).berv_within_tolerance() is True
@@ -1013,9 +1025,9 @@ class TestQCL4:
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         results = QCL4(l4).run()
-        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "TIMEOK", "BERVOK"}
+        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "BERVOK"}
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["DATAPRL4"] == 1 and qc["TIMEOK"] == 1 and qc["BERVOK"] == 1
+        assert qc["DATAPRL4"] == 1 and qc["BERVOK"] == 1
         assert qc["ISGOOD"] == 1
 
     def test_run_flags_failure_in_isgood(self):

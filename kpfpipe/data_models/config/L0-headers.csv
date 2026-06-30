@@ -7,4 +7,5 @@ DATAPRL0,QC: GREEN/RED amp extensions present/non-empty,QUALITY_CONTROL,int,QCL0
 KWRDPRL0,QC: required L0 PRIMARY keywords present,QUALITY_CONTROL,int,QCL0
 EXPTIMOK,"QC: EXPTIME present, finite, non-negative",QUALITY_CONTROL,int,QCL0
 NOTJUNK,QC: obs_id not in junk list,QUALITY_CONTROL,int,QCL0
+DATTIMOK,QC: L0 times consistent (DATE-BEG/MID/END/ELAPSED),QUALITY_CONTROL,int,QCL0
 ISGOOD,QC: aggregate pass/fail,QUALITY_CONTROL,int,QC
