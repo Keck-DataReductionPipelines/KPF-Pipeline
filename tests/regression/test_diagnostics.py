@@ -3,10 +3,18 @@
 import numpy as np
 import pytest
 from astropy.io import fits
+from astropy.table import Table
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level1 import KPF1
-from kpfpipe.quality_control.diagnostics import DiagL0, DiagL1, DiagL2, Diagnostics
+from kpfpipe.data_models.level4 import KPF4
+from kpfpipe.quality_control.diagnostics import (
+    DiagL0,
+    DiagL1,
+    DiagL2,
+    DiagL4,
+    Diagnostics,
+)
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -479,3 +487,68 @@ class TestDiagL2OrderletFluxRatios:
         _set_fiber_arrays(kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SCI1",))
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("GFR12") == pytest.approx(2.0)
+
+
+# ---------------------------------------------------------------------------
+# DiagL4 — per-order BJD / barycentric-RV dispersion (ported from v2.12)
+# ---------------------------------------------------------------------------
+
+
+def _l4_with_sci2_rv(bjd, berv, weight):
+    """KPF4 carrying a SCI2 per-order RV table with BJD_TDB/BERV/WEIGHT."""
+    l4 = KPF4()
+    l4.set_data(
+        "SCI2_RV",
+        Table(
+            {
+                "ORDER_INDEX": np.arange(len(bjd), dtype=np.int64),
+                "BJD_TDB": np.asarray(bjd, dtype=float),
+                "BERV": np.asarray(berv, dtype=float),
+                "WEIGHT": np.asarray(weight, dtype=float),
+            }
+        ),
+    )
+    return l4
+
+
+class TestDiagL4:
+    # Two equal-weight orders with toy values give exact, hand-checkable stats:
+    #   BJD  [10, 20] -> mean 15, std 5 d (=432000 s), range 10 d (=864000 s)
+    #   BERV [0.1, 0.3] -> mean 0.2, std 0.1 km/s (=100 m/s), range 0.2 (=200 m/s)
+    #   per-order BERV %dev = [-50, +50] of the 0.2 mean
+    def test_bjd_bcv_dispersion_values(self):
+        l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [1.0, 1.0])
+        DiagL4(l4).run()
+        qc = l4.headers["QUALITY_CONTROL"]
+        assert qc["CCFBJD"] == pytest.approx(15.0)
+        assert qc["BJDSTD"] == pytest.approx(432000.0)
+        assert qc["BJDRNG"] == pytest.approx(864000.0)
+        assert qc["CCFBCV"] == pytest.approx(0.2)
+        assert qc["BCVSTD"] == pytest.approx(100.0)
+        assert qc["BCVRNG"] == pytest.approx(200.0)
+        assert qc["MAXPCBCV"] == pytest.approx(50.0)
+        assert qc["MINPCBCV"] == pytest.approx(-50.0)
+
+    def test_zero_weight_orders_excluded(self):
+        # Third order has zero weight: excluded from the weighted mean and the
+        # nonzero-weight range, matching v2.12.
+        l4 = _l4_with_sci2_rv([10.0, 20.0, 999.0], [0.1, 0.3, 9.0], [1.0, 1.0, 0.0])
+        DiagL4(l4).run()
+        qc = l4.headers["QUALITY_CONTROL"]
+        assert qc["CCFBJD"] == pytest.approx(15.0)
+        assert qc["BJDRNG"] == pytest.approx(864000.0)
+        assert qc["CCFBCV"] == pytest.approx(0.2)
+
+    def test_skips_without_sci2_rv_table(self):
+        # No SCI2 RV table (e.g. unilluminated science) -> no metrics written.
+        results = DiagL4(KPF4()).run()
+        assert results == {}
+
+    def test_skips_without_weight_column(self):
+        # WEIGHT column absent (pre-weights L4) -> skip rather than guess.
+        l4 = KPF4()
+        l4.set_data(
+            "SCI2_RV",
+            Table({"ORDER_INDEX": [0, 1], "BJD_TDB": [10.0, 20.0], "BERV": [0.1, 0.3]}),
+        )
+        assert DiagL4(l4).run() == {}
