@@ -24,7 +24,7 @@ from kpfpipe.quality_control.checkpoints import (
     CheckpointL2,
     CheckpointL4,
 )
-from kpfpipe.quality_control.quicklook import PlotL0, PlotL1, PlotL2
+from kpfpipe.quality_control.quicklook import PlotL0, PlotL1, PlotL2, PlotL4
 from kpfpipe.utils.io import build_filepath, build_qlp_dir
 
 
@@ -112,9 +112,9 @@ def main(config, args):
     radial_velocity = RadialVelocity(l2, config)
     l4 = radial_velocity.perform()
 
-    # L4 quicklook plots (PlotL4 lands with the L4 QLP PR; wire it in there).
-    # l4_qlp_dir = build_qlp_dir(obs_id, "L4", data_root=data_root_science)
-    # PlotL4(l4, output_dir=l4_qlp_dir, obs_id=obs_id).run("all")
+    # L4 quicklook plots
+    l4_qlp_dir = build_qlp_dir(obs_id, "L4", data_root=data_root_science)
+    PlotL4(l4, output_dir=l4_qlp_dir, obs_id=obs_id).run("all")
 
     # L4 processing complete: CheckpointL4.run() folds in Diagnostics (DiagL4)
     # and QC (QCL4), then validates (science -> Diagnostics -> QC -> Checkpoints).
