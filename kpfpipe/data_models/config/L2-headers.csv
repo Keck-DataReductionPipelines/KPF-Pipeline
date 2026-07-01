@@ -1,10 +1,11 @@
 Keyword,Description,Extension,DataType,PopulatedBy
-DATAPRL2,QC: L2 FLUX extensions present and non-empty,QUALITY_CONTROL,int,QCL2
-KWRDPRL2,QC: required L2 PRIMARY keywords present,QUALITY_CONTROL,int,QCL2
-L2NANOK,QC: L2 NaN fraction <= 1%,QUALITY_CONTROL,int,QCL2
-L2FLXOK,QC: L2 zero-flux fraction < 0.5,QUALITY_CONTROL,int,QCL2
-L2VAROK,QC: no negative L2 variance where flux finite,QUALITY_CONTROL,int,QCL2
-L2SNROK,QC: science SNR finite and above floor,QUALITY_CONTROL,int,QCL2
+ASTRSRC,Astrometry source used for barycentric correction,RECEIPT,str,BarycentricCorrection
+CCD1BJD,GREEN photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
+CCD2BJD,RED photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
+CCD1BKMS,GREEN barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection
+CCD2BKMS,RED barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection
+CCD1BZ,GREEN barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
+CCD2BZ,RED barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
 NANSCI1,NaN pixel count SCI1 (green+red),QUALITY_CONTROL,int,DiagL2
 NANSCI2,NaN pixel count SCI2 (green+red),QUALITY_CONTROL,int,DiagL2
 NANSCI3,NaN pixel count SCI3 (green+red),QUALITY_CONTROL,int,DiagL2
@@ -25,11 +26,9 @@ GFRS2,Median flux ratio SKY/SCI2 GREEN,QUALITY_CONTROL,float,DiagL2
 RFRS2,Median flux ratio SKY/SCI2 RED,QUALITY_CONTROL,float,DiagL2
 GFRC2,Median flux ratio CAL/SCI2 GREEN,QUALITY_CONTROL,float,DiagL2
 RFRC2,Median flux ratio CAL/SCI2 RED,QUALITY_CONTROL,float,DiagL2
-CCD1BJD,GREEN photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
-CCD2BJD,RED photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
-CCD1BKMS,GREEN barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection
-CCD2BKMS,RED barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection
-CCD1BZ,GREEN barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
-CCD2BZ,RED barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
-ASTRSRC,Astrometry source used for barycentric correction,RECEIPT,str,BarycentricCorrection
-ORIGID,Original L0 observation ID,RECEIPT,str,KPF1.to_kpf2
+DATAPRL2,QC: L2 FLUX extensions present and non-empty,QUALITY_CONTROL,int,QCL2
+KWRDPRL2,QC: required L2 PRIMARY keywords present,QUALITY_CONTROL,int,QCL2
+L2NANOK,QC: L2 NaN fraction <= 1%,QUALITY_CONTROL,int,QCL2
+L2FLXOK,QC: L2 zero-flux fraction < 0.5,QUALITY_CONTROL,int,QCL2
+L2VAROK,QC: no negative L2 variance where flux finite,QUALITY_CONTROL,int,QCL2
+L2SNROK,QC: science SNR finite and above floor,QUALITY_CONTROL,int,QCL2

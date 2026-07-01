@@ -1,10 +1,10 @@
 """Diagnostics for KPF Level 4 (RVs and CCFs) data products.
 
 Ports the per-order BJD and barycentric-RV dispersion statistics from the
-v2.12 ``AnalyzeL2.compute_statistics``: photon-weighted means (``CCFBJD`` /
-``CCFBCV``) and the spread of the per-order values about them (``BJDSTD`` /
-``BJDRNG`` in seconds, ``BCVSTD`` / ``BCVRNG`` in m/s) plus the per-order BERV
-percent deviation (``MAXPCBCV`` / ``MINPCBCV``). They are weighted by the
+v2.12 ``AnalyzeL2.compute_statistics``: photon-weighted means (``BJDMEAN`` /
+``BERVMEAN``) and the spread of the per-order values about them (``BJDSTD`` /
+``BJDRNG`` in seconds, ``BERVSTD`` / ``BERVRNG`` in m/s) plus the per-order BERV
+percent deviation (``BERVMAXP`` / ``BERVMINP``). They are weighted by the
 per-order CCF-combination ``WEIGHT`` column and computed on the primary science
 orderlet (SCI2), matching the old single-table behavior.
 
@@ -70,21 +70,15 @@ class DiagL4(Diagnostics):
         if stats is None:
             return {}
         mean, std, rng = stats
-        return {
-            "CCFBJD": (round(mean, 6), "Weighted-mean photon BJD_TDB (SCI2)"),
-            "BJDSTD": (
-                round(std * _SEC_PER_DAY, 4),
-                "Weighted std of per-order BJD [s] (SCI2)",
-            ),
-            "BJDRNG": (
-                round(rng * _SEC_PER_DAY, 4),
-                "Per-order BJD range [s] (SCI2)",
-            ),
-        }
+        return self._tag(
+            BJDMEAN=round(mean, 6),
+            BJDSTD=round(std * _SEC_PER_DAY, 4),
+            BJDRNG=round(rng * _SEC_PER_DAY, 4),
+        )
 
     bjd_dispersion._diag_name = "bjd_dispersion"
 
-    def bcv_dispersion(self):
+    def berv_dispersion(self):
         """Weighted-mean barycentric RV correction and per-order spread (SCI2)."""
         tab = self._sci_rv_table()
         if tab is None:
@@ -93,35 +87,20 @@ class DiagL4(Diagnostics):
         if stats is None:
             return {}
         mean, std, rng = stats
-        out = {
-            "CCFBCV": (
-                round(mean, 6),
-                "Weighted-mean barycentric RV correction [km/s] (SCI2)",
-            ),
-            "BCVSTD": (
-                round(std * _KMS_TO_MS, 4),
-                "Weighted std of per-order BERV [m/s] (SCI2)",
-            ),
-            "BCVRNG": (
-                round(rng * _KMS_TO_MS, 4),
-                "Per-order BERV range [m/s] (SCI2)",
-            ),
+        values = {
+            "BERVMEAN": round(mean, 6),
+            "BERVSTD": round(std * _KMS_TO_MS, 4),
+            "BERVRNG": round(rng * _KMS_TO_MS, 4),
         }
         # Per-order BERV percent deviation from the weighted mean, over
-        # nonzero-weight orders (v2.12 QCPCBCV feeds on these).
+        # nonzero-weight orders (BERVOK feeds on these).
         berv = np.asarray(tab["BERV"], dtype=float)
         w = np.asarray(tab["WEIGHT"], dtype=float)
         nz = np.isfinite(berv) & np.isfinite(w) & (w != 0)
         if mean != 0 and np.any(nz):
             perc = (berv[nz] - mean) / mean * 100.0
-            out["MAXPCBCV"] = (
-                round(float(perc.max()), 4),
-                "Max per-order BERV deviation from mean [%] (SCI2)",
-            )
-            out["MINPCBCV"] = (
-                round(float(perc.min()), 4),
-                "Min per-order BERV deviation from mean [%] (SCI2)",
-            )
-        return out
+            values["BERVMAXP"] = round(float(perc.max()), 4)
+            values["BERVMINP"] = round(float(perc.min()), 4)
+        return self._tag(**values)
 
-    bcv_dispersion._diag_name = "bcv_dispersion"
+    berv_dispersion._diag_name = "berv_dispersion"

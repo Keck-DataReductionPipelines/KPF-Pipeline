@@ -18,7 +18,6 @@ import warnings
 
 import numpy as np
 import pytest
-from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe import DETECTOR
@@ -194,8 +193,8 @@ class TestRunFoldsDiagnosticsAndQC:
 
 def _make_l4(*, sci=True):
     """KPF4 good enough for CheckpointL4.run(): science CCF + RV tables (with
-    BJD_TDB/BERV/WEIGHT for DiagL4), consistent INSTRUMENT_HEADER times, and the
-    required PRIMARY keywords seeded so KWRDPRL4 passes."""
+    BJD_TDB/BERV/WEIGHT for DiagL4) and the required PRIMARY keywords seeded so
+    KWRDPRL4 passes. (Timing consistency is an L0 check, DATTIMOK, not L4.)"""
     l4 = KPF4()
     if sci:
         rng = np.random.default_rng(3)
@@ -212,13 +211,6 @@ def _make_l4(*, sci=True):
                     }
                 ),
             )
-    if "INSTRUMENT_HEADER" not in l4.headers:
-        l4.set_header("INSTRUMENT_HEADER", fits.Header())
-    ih = l4.headers["INSTRUMENT_HEADER"]
-    ih["DATE-BEG"] = "2024-09-23T09:12:09.484"
-    ih["DATE-MID"] = "2024-09-23T09:12:15.519"
-    ih["DATE-END"] = "2024-09-23T09:12:21.554"
-    ih["ELAPSED"] = 12.07
     for kw in CheckpointL4.QC(l4)._required_primary_keywords():
         l4.headers["PRIMARY"][kw] = ("UNKNOWN", "seeded for test")
     return l4
@@ -232,8 +224,8 @@ class TestCheckpointL4:
             CheckpointL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
         # Folded DiagL4 metrics + QCL4 flags both landed on QUALITY_CONTROL.
-        assert qc["CCFBCV"] is not None and qc["CCFBJD"] is not None
-        assert qc["DATAPRL4"] == 1 and qc["TIMCHKL4"] == 1
+        assert qc["BERVMEAN"] is not None and qc["BJDMEAN"] is not None
+        assert qc["DATAPRL4"] == 1
         assert qc["ISGOOD"] == 1
 
     def test_run_raises_when_science_ccf_rv_missing(self):
@@ -243,8 +235,10 @@ class TestCheckpointL4:
             CheckpointL4(l4).run()
 
     def test_nonraise_flag_warns(self):
-        # Bad timing -> TIMCHKL4 = 0; not a RAISE_FLAG, so it warns (not raises).
+        # KWRDPRL4 = 0 (a required PRIMARY keyword missing); not a RAISE_FLAG, so
+        # it warns rather than raises.
         l4 = _make_l4()
-        l4.headers["INSTRUMENT_HEADER"]["ELAPSED"] = 999.0  # END-BEG != ELAPSED
-        with pytest.warns(UserWarning, match="TIMCHKL4 = 0"):
+        req = sorted(CheckpointL4.QC(l4)._required_primary_keywords())
+        del l4.headers["PRIMARY"][req[0]]
+        with pytest.warns(UserWarning, match="KWRDPRL4 = 0"):
             CheckpointL4(l4).run()

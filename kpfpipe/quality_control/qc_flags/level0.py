@@ -1,5 +1,7 @@
 """QC checks for KPF Level 0 (raw CCD) data products."""
 
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 
@@ -13,6 +15,23 @@ _L0_REQUIRED_KEYS = ["DATE-OBS", "EXPTIME", "OBJECT", "OFNAME", "IMTYPE"]
 _CHIPS = ("GREEN", "RED")
 _AMPS_PER_CHIP = 4  # GREEN_AMP1..4 / RED_AMP1..4 (only a subset is read out)
 _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
+_TIME_TOL_S = 0.1  # DATE-END - DATE-BEG vs ELAPSED tolerance (v2.12 quality_control.py)
+
+
+def _hdr_float(hdr, key):
+    """Return float value for a header key, or None if absent."""
+    val = hdr.get(key)
+    return None if val is None else float(val)
+
+
+def _parse_iso(value):
+    """Parse an ISO-8601 datetime string, or None if missing/unparseable."""
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
 
 
 class QCL0(QC):
@@ -56,6 +75,33 @@ class QCL0(QC):
         return all(k in hdr for k in _L0_REQUIRED_KEYS)
 
     header_keywords_present._qc_key = "KWRDPRL0"
+
+    def times_consistent(self):
+        """DATE-BEG < DATE-MID < DATE-END and |(END-BEG) - ELAPSED| < 0.1 s.
+
+        Ports v2.12 ``L2_datetime``. At L0 the raw instrument times live on the
+        WMKO-native PRIMARY (the header later snapshotted verbatim into
+        INSTRUMENT_HEADER at to_kpf1); the 0/1 flag then propagates downstream
+        on QUALITY_CONTROL. Passes the duration check when ELAPSED is absent --
+        only the present cards are checked.
+        """
+        hdr = self.kpf_obj.headers["PRIMARY"]
+        beg, mid, end = (
+            _parse_iso(hdr.get(k)) for k in ("DATE-BEG", "DATE-MID", "DATE-END")
+        )
+        if beg is None or mid is None or end is None:
+            return False
+        if not (beg <= mid <= end):
+            return False
+        elapsed = _hdr_float(hdr, "ELAPSED")
+        if (
+            elapsed is not None
+            and abs((end - beg).total_seconds() - elapsed) > _TIME_TOL_S
+        ):
+            return False
+        return True
+
+    times_consistent._qc_key = "DATTIMOK"
 
     def exptime_sane(self):
         """EXPTIME is present, finite, and non-negative.

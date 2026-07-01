@@ -66,30 +66,36 @@ class KPF0(KPFDataModel):
         `from_fits` would never call into `_read` without this override.
         """
         self._read(hdul)
-        if "PRIMARY" in self.headers:
-            self._stamp_wmko_tracking()
+        # Derive obs_id before stamping: _stamp_wmko_tracking writes it as the
+        # ORIGID provenance card, so it must be known by then.
         if self.filename is not None:
             try:
                 self.obs_id = get_obs_id(self.filename)
             except ValueError:
                 pass
+        if "PRIMARY" in self.headers:
+            self._stamp_wmko_tracking()
 
     def _stamp_wmko_tracking(self):
         """Stamp WMKO DRP-RUN provenance onto the L0 RECEIPT at read time.
 
-        This is the single population site for the four provenance cards
-        (their `PopulatedBy` in config/L0-headers.csv is `KPF0.from_fits`):
-        DRPVERNO (DRP-RUN-11), PROGID/KOAID (DRP-RUN-19), DRPSTATU (DRP-RUN-20).
-        They are written to their registry home, RECEIPT, via `set_keyword`, and
-        ride the RECEIPT-header forward onto L1/L2/L4 (see `to_kpf1`). The raw
-        PRIMARY and its INSTRUMENT_HEADER snapshot are left untouched.
+        This is the single population site for the provenance cards (their
+        `PopulatedBy` in config/L0-headers.csv is `KPF0.from_fits`):
+        DRPVERNO (DRP-RUN-11), PROGID/KOAID (DRP-RUN-19), DRPSTATU (DRP-RUN-20),
+        and ORIGID (the original L0 obs_id). They are written to their registry
+        home, RECEIPT, via `set_keyword`, and ride the RECEIPT-header forward onto
+        L1/L2/L4 (see `to_kpf1`). The raw PRIMARY and its INSTRUMENT_HEADER
+        snapshot are left untouched.
 
         DRPVERNO and DRPSTATU are always (re)stamped. PROGID/KOAID are read from
         the WMKO-native PRIMARY; an absent (or empty) value is defaulted to UNKNOWN
-        with a warning, so the cards are always present downstream.
+        with a warning, so the cards are always present downstream. ORIGID is
+        stamped only when the obs_id was resolved (e.g. from the filename).
         """
         self.set_keyword("DRPVERNO", __version__)
         self.set_keyword("DRPSTATU", _DRPSTATU_DEFAULT)
+        if self.obs_id is not None:
+            self.set_keyword("ORIGID", self.obs_id)
         primary = self.headers["PRIMARY"]
         for key in ("PROGID", "KOAID"):
             value = primary.get(key)

@@ -164,6 +164,13 @@ class TestKPF0Provenance:
         assert receipt.get("PROGID") == "K123"
         assert receipt.get("KOAID") == "KP.20240113.23249.10"
 
+    def test_from_fits_stamps_origid_from_obs_id(self, synthetic_l0_file):
+        """ORIGID is inferred from the resolved obs_id and stamped onto RECEIPT."""
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        assert l0.obs_id == "KP.20240113.23249.10"
+        assert l0.headers["RECEIPT"].get("ORIGID") == "KP.20240113.23249.10"
+        assert "ORIGID" not in l0.headers["PRIMARY"]
+
     def test_from_fits_defaults_program_ids_to_unknown_and_warns(
         self, synthetic_l0_minimal
     ):
