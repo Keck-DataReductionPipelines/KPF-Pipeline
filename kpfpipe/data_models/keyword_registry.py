@@ -149,9 +149,13 @@ class KeywordRegistry:
     # the cross-level ISGOOD aggregate, "QCL{n}" a level-N check.
     _QC_POPULATORS = frozenset({"QC", "QCL0", "QCL1", "QCL2", "QCL4"})
 
-    # FITS structural cards permitted on any extension (never registered keywords) --
-    # the validator's allowlist. Exact matches here; enumerated families in
-    # _STRUCTURAL_PREFIXES.
+    # FITS structural cards: written by the I/O layer (astropy) from the HDU's
+    # structure, never authored by the pipeline -- so always permitted on any
+    # extension and never registered keywords (the build-time sanitizer in
+    # _build_registry enforces registered & structural == empty). Exact matches
+    # here; enumerated families in _STRUCTURAL_PREFIXES. The lone exception is
+    # BUNIT: it carries content (physical units) but is stamped directly on the
+    # masters images rather than registered (see masters/base.py).
     _STRUCTURAL = {
         "SIMPLE",
         "BITPIX",
@@ -168,13 +172,13 @@ class KeywordRegistry:
         "CHECKSUM",
         "DATASUM",
         "",
-        "FILENAME",
-        "DATE",
         "EXTNAME",
         "TFIELDS",
     }
 
-    # Structural card families (NAXIS*, bintable column descriptors, WCS); by prefix.
+    # Structural card families (NAXIS*, bintable column descriptors); by prefix. No
+    # WCS family here: KPF authors no WCS, and CTYPE is registered content (rvdata
+    # uses it to name each extension's axes), so a stray WCS card should be flagged.
     _STRUCTURAL_PREFIXES = (
         "NAXIS",
         "TTYPE",
@@ -185,12 +189,6 @@ class KeywordRegistry:
         "TNULL",
         "TSCAL",
         "TZERO",
-        "CTYPE",
-        "CUNIT",
-        "CRPIX",
-        "CRVAL",
-        "CDELT",
-        "CROTA",
     )
 
     def __init__(self):
@@ -204,9 +202,9 @@ class KeywordRegistry:
 
         Assembles the unified table (EPRV rows first, then KPF rows; KPF wins a
         collision), corrects the Defaults header_map.csv gets wrong (NUMORDER
-        65 -> 67) or that are runtime (DRPTAG -> version) so downstream lookups
-        read a clean table, then derives the read-only lookups. All are shared
-        process-wide via the singleton, so they are frozen (frozenset /
+        65 -> 67) or that are runtime (DRPTAG -> version), drops structural cards
+        rvdata redundantly registers, then derives the read-only lookups. All are
+        shared process-wide via the singleton, so they are frozen (frozenset /
         MappingProxyType) against a stray consumer mutation; ``self.table`` is
         only ever read.
         """
@@ -215,6 +213,12 @@ class KeywordRegistry:
         for keyword, value in self._DEFAULT_OVERRIDES.items():
             if value is not None:
                 table.loc[table["Keyword"] == keyword, "Default"] = value
+        # Structural cards are written by astropy, never registered: drop any that
+        # rvdata redundantly declares as keywords (e.g. XTENSION/EXTNAME), so
+        # registered & structural stay disjoint. (structural is derived first so
+        # is_structural is available here.)
+        self.structural = frozenset(self._STRUCTURAL)
+        table = table[~table["Keyword"].map(self.is_structural)].reset_index(drop=True)
         self.table = table
         self.registered = frozenset(self.table["Keyword"])
 
@@ -226,7 +230,6 @@ class KeywordRegistry:
         self.required = MappingProxyType(
             {ext: MappingProxyType(d) for ext, d in required.items()}
         )
-        self.structural = frozenset(self._STRUCTURAL)
         qc_all, qc_by_level = self._qc_flag_sets_lookup()
         self.qc_flag_keywords = frozenset(qc_all)
         self.qc_flag_keywords_by_level = MappingProxyType(

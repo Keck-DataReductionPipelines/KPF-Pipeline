@@ -840,6 +840,15 @@ class TestPerform:
         np.testing.assert_allclose(kms.get("CCD1BKMS"), kms.get("CCD2BKMS"))
         np.testing.assert_allclose(z.get("CCD1BZ"), z.get("CCD2BZ"))
 
+    def test_ctype1_axis_label(self, bc_monkeypatched):
+        # These are 1-D per-order arrays: CTYPE1 names the order axis (registered
+        # content). CTYPE2 is N/A (no second axis).
+        kpf2 = bc_monkeypatched.perform()
+        for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
+            hdr = kpf2.headers[ext]
+            assert hdr["CTYPE1"] == "Order-N", ext
+            assert "CTYPE2" not in hdr, ext
+
     def test_receipt_entry_added(self, bc_monkeypatched):
         bc_monkeypatched.perform()
         modules = bc_monkeypatched.l2_obj.receipt["FUNCTION"].values

@@ -136,6 +136,16 @@ L4 PRIMARY gains: `BJDTDB`, `RV`, `RVERR`, `BERV`, `RVMETHOD`, `SYSVEL`.
 >   (physical grating order, blue→red), and `WEIGHT` (per-order CCF-combination weight),
 >   plus a KPF-custom `ORDER_ID` (chip/fiber/order name, 1-based per chip — the standard
 >   permits team-added columns).
+> - **Structural cards as keywords** — 0.4.0's per-extension keyword CSVs redundantly
+>   register FITS *structural* cards astropy writes on its own (`XTENSION`, `EXTNAME`) as
+>   if they were content keywords. The registry sanitizes these out at build so structural
+>   and registered stay disjoint (see `keyword_registry._build_registry`).
+> - **CTYPE on 1-D extensions** — 0.4.0 marks both `CTYPE1` *and* `CTYPE2` Required on every
+>   RV/CCF/barycorr extension with identical boilerplate. The barycentric extensions
+>   (`BJD_TDB`/`BARYCORR_KMS`/`BARYCORR_Z`) are 1-D per-order arrays, so only `CTYPE1`
+>   (`Order-N`) applies; KPF stamps that and treats `CTYPE2` as N/A for 1-D. RV/CCF (2-D)
+>   carry both. KPF treats `CTYPE` as registered content (axis meaning), not a structural
+>   WCS card.
 
 ---
 
