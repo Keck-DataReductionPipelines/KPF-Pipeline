@@ -25,7 +25,7 @@ The three use-cases:
       ``eprv_primary_datatypes`` types the values it emits. ``header_map`` is
       **sanitized on load** so it holds only genuine static native->EPRV mappings:
       rows whose key is unregistered (PARANG/PARANG2) or handled elsewhere
-      (``_HEADER_MAP_NON_NATIVE``) are dropped, so ``_map_header`` needs no
+      (``_DEFAULT_OVERRIDES``) are dropped, so ``_map_header`` needs no
       in-loop filter or per-keyword correction.
   (2) Validation — ``allowed`` / ``required`` (per-extension, from the table)
       plus ``structural`` (FITS bookkeeping cards).
@@ -54,9 +54,9 @@ from rvdata.core.tools.headers import parse_value_to_datatype
 
 from kpfpipe import DETECTOR, __version__
 
-_kpf_cfg = importlib.resources.files("rvdata.instruments.kpf.config")
-_rv_cfg = importlib.resources.files("rvdata.core.models.config")
-_kpf_data_cfg = importlib.resources.files("kpfpipe.data_models.config")
+_rvdata_inst_cfg = importlib.resources.files("rvdata.instruments.kpf.config")
+_rvdata_core_cfg = importlib.resources.files("rvdata.core.models.config")
+_kpf_pipe_cfg = importlib.resources.files("kpfpipe.data_models.config")
 
 # Number of echelle orders (green + red); the value header_map.csv gets wrong (65).
 _NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
@@ -96,36 +96,38 @@ class KeywordRegistry:
         "Units",
     ]
 
-    # header_map.csv STANDARD keys that are NOT genuine static native->EPRV
-    # mappings, so they are dropped when header_map is sanitized on load (and the
-    # raw header_map default/native they carried is wrong or vestigial). Each one's
-    # real value home: NUMORDER/DRPTAG -> _DEFAULT_OVERRIDES (table), DATALVL ->
-    # KPF1.__init__ (the model's data level), JD_UTC -> the _map_header epoch
-    # transform (a per-frame value, not a static default).
-    _HEADER_MAP_NON_NATIVE = frozenset({"NUMORDER", "DATALVL", "DRPTAG", "JD_UTC"})
-
-    # Table Default corrections applied during the __init__ sanitize phase, for
-    # keywords header_map.csv gets wrong (NUMORDER's default is 65; KPF has 67) or
-    # whose default is runtime: DRPTAG is the DRP version, and EPRVTAG/VOCLASS are
-    # the EPRV compliance tags derived from the pinned rv-data-standard release.
-    # Stored as strings like every other Default (the column is string-typed);
-    # parse_value_to_datatype types them. After sanitization the table is clean, so
-    # _eprv_primary_lookup seeds them without special-casing.
+    # header_map.csv STANDARD keys whose entry is not a genuine static
+    # native->EPRV mapping, each paired with its real value. Two consumers read
+    # this map (see __init__): the non-None values correct the table Default (so
+    # _eprv_primary_lookup seeds them cleanly), and every key is dropped from
+    # header_map (so _map_header applies it with no per-keyword correction).
+    # Values are strings like every Default; parse_value_to_datatype types them.
+    # None means no static default -- the value is supplied elsewhere at build
+    # time: DATALVL by the model level (KPF1.__init__), JD_UTC by the _map_header
+    # epoch transform. (NUMORDER's header_map default is 65; KPF has 67. DRPTAG is
+    # the DRP version; EPRVTAG/VOCLASS the pinned rv-data-standard tags.)
     _DEFAULT_OVERRIDES = {
         "NUMORDER": str(_NUMORDER),
         "DRPTAG": __version__,
         "EPRVTAG": f"v{_RVDATA_VERSION}",
         "VOCLASS": f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
+        "DATALVL": None,
+        "JD_UTC": None,
     }
 
     # Per-extension EPRV keyword CSVs (rvdata does not load these as constants).
     # RV#/CCF# share one template CSV; BARYCORR_*/BJD_TDB are per-extension.
     _EPRV_EXT_CSV = {
-        "BJD_TDB": (_rv_cfg / "L2-BJD_TDB-keywords.csv", 2),
-        "BARYCORR_KMS": (_rv_cfg / "L2-BARYCORR_KMS-keywords.csv", 2),
-        "BARYCORR_Z": (_rv_cfg / "L2-BARYCORR_Z-keywords.csv", 2),
-        **{f"RV{i}": (_rv_cfg / "L4-RV1-keywords.csv", 4) for i in range(1, 6)},
-        **{f"CCF{i}": (_rv_cfg / "L4-CCF1-keywords.csv", 4) for i in range(1, 6)},
+        "BJD_TDB": (_rvdata_core_cfg / "L2-BJD_TDB-keywords.csv", 2),
+        "BARYCORR_KMS": (_rvdata_core_cfg / "L2-BARYCORR_KMS-keywords.csv", 2),
+        "BARYCORR_Z": (_rvdata_core_cfg / "L2-BARYCORR_Z-keywords.csv", 2),
+        **{
+            f"RV{i}": (_rvdata_core_cfg / "L4-RV1-keywords.csv", 4) for i in range(1, 6)
+        },
+        **{
+            f"CCF{i}": (_rvdata_core_cfg / "L4-CCF1-keywords.csv", 4)
+            for i in range(1, 6)
+        },
     }
 
     # Registry "PopulatedBy" values that mark a QUALITY_CONTROL row as a 0/1 QC
@@ -191,14 +193,16 @@ class KeywordRegistry:
         # collision) and the rvdata WMKO-native -> EPRV-standard header_map.
         eprv_rows, kpf_rows = self._build_rows()
         table = pd.DataFrame(eprv_rows + kpf_rows, columns=self._COLUMNS)
-        header_map = pd.read_csv(_kpf_cfg / "header_map.csv")
+        header_map = pd.read_csv(_rvdata_inst_cfg / "header_map.csv")
 
         # --- Sanitize the inputs once, here, before any lookup is derived ---
         # Correct the Defaults header_map.csv gets wrong (NUMORDER 65 -> 67) or that
         # are runtime (DRPTAG -> version); these feed eprv_primary_seed, so the build
-        # step reads a clean table with no per-keyword special-casing.
+        # step reads a clean table with no per-keyword special-casing. None-valued
+        # overrides carry no static default (value supplied elsewhere), so skip them.
         for keyword, value in self._DEFAULT_OVERRIDES.items():
-            table.loc[table["Keyword"] == keyword, "Default"] = value
+            if value is not None:
+                table.loc[table["Keyword"] == keyword, "Default"] = value
         self.table = table
         # The keyword allowlist -- a distributed lookup, and the gate header_map
         # sanitization filters against (so it is derived before that runs).
@@ -247,18 +251,6 @@ class KeywordRegistry:
 
     # --- Source table construction -------------------------------------------
 
-    @staticmethod
-    def _load_keyword_csv(handle):
-        """Read an rvdata keyword CSV, stripping any UTF-8 BOM on column 1."""
-        df = pd.read_csv(handle)
-        df.columns = [str(c).lstrip("﻿").strip() for c in df.columns]
-        return df
-
-    @staticmethod
-    def _family_base(first_token):
-        """'CDEC1' -> 'CDEC' (strip the trailing index)."""
-        return first_token.rstrip("0123456789")
-
     @classmethod
     def _eprv_rows(cls, df, extension, level):
         """Expand an EPRV keyword CSV into unified-registry rows.
@@ -283,7 +275,8 @@ class KeywordRegistry:
             units = df["Units"].iloc[i] if "Units" in df else ""
             required = bool(req.iloc[i])
             if "..." in name:
-                base = cls._family_base(name.split("...")[0].strip())
+                # "CDEC1 ... CDEC#" -> "CDEC" (strip the trailing index).
+                base = name.split("...")[0].strip().rstrip("0123456789")
                 for j in range(1, 10):
                     rows.append(
                         [
@@ -326,7 +319,7 @@ class KeywordRegistry:
         """
         rows = []
         for level in (0, 1, 2, 4):
-            df = pd.read_csv(_kpf_data_cfg / f"L{level}-headers.csv")
+            df = pd.read_csv(_kpf_pipe_cfg / f"L{level}-headers.csv")
             for _, r in df.iterrows():
                 descr = (
                     "" if pd.isna(r["Description"]) else str(r["Description"]).strip()
@@ -366,7 +359,7 @@ class KeywordRegistry:
         per-file level). The EPRV-tag guard mirrors ``_kpf_rows``.
         """
         rows = []
-        df = pd.read_csv(_kpf_data_cfg / "Masters-headers.csv")
+        df = pd.read_csv(_kpf_pipe_cfg / "Masters-headers.csv")
         for _, r in df.iterrows():
             descr = "" if pd.isna(r["Description"]) else str(r["Description"]).strip()
             populated_by = str(r.get("PopulatedBy", "")).strip()
@@ -409,7 +402,7 @@ class KeywordRegistry:
         # EPRV per-extension keywords (governed extensions with standard cards).
         ext = []
         for name, (path, level) in cls._EPRV_EXT_CSV.items():
-            ext += cls._eprv_rows(cls._load_keyword_csv(path), name, level)
+            ext += cls._eprv_rows(pd.read_csv(path), name, level)
         return l2 + l4 + ext, cls._kpf_rows() + cls._masters_rows()
 
     # --- Derived lookups (all read self.table) -------------------------------
@@ -518,9 +511,9 @@ class KeywordRegistry:
         correction. Two row classes are dropped:
           - STANDARD keys absent from the registry (PARANG/PARANG2) -- warned,
             so the rvdata header_map / registry inconsistency stays visible;
-          - ``_HEADER_MAP_NON_NATIVE`` keys, whose value comes from the seed
-            (NUMORDER/DRPTAG), the model level (DATALVL), or the _map_header epoch
-            transform (JD_UTC), not a static map row.
+          - ``_DEFAULT_OVERRIDES`` keys, whose value comes from the corrected table
+            default, the model level, or the _map_header epoch transform, not a
+            static map row.
         """
         eprv_keys = raw["STANDARD"].astype(str).str.strip()
         unregistered = sorted(
@@ -534,7 +527,7 @@ class KeywordRegistry:
                 stacklevel=2,
             )
         keep = eprv_keys.isin(self.registered) & ~eprv_keys.isin(
-            self._HEADER_MAP_NON_NATIVE
+            self._DEFAULT_OVERRIDES.keys()
         )
         return raw[keep].reset_index(drop=True)
 
