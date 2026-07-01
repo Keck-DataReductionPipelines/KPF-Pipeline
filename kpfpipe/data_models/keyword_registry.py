@@ -141,10 +141,10 @@ class KeywordRegistry:
     # extension and are never registered keywords. This is the single source of
     # truth for "structural" (see is_structural); the checkpoint validator reads
     # it rather than keeping its own list. Two parts: exact-match cards below, and
-    # the WCS / binary-table column-descriptor families in _STRUCTURAL_PREFIXES
-    # (matched by prefix because they are enumerated, e.g. NAXIS1/TTYPE3). Only
-    # genuine FITS cards belong here -- EPRV keywords (DATALVL) live in the
-    # registry table, KPF keywords (ORIGID) are registered to their home extension.
+    # the enumerated card families in _STRUCTURAL_PREFIXES (matched by prefix, e.g.
+    # NAXIS1/TTYPE3). Only genuine FITS cards belong here -- EPRV keywords (DATALVL)
+    # live in the registry table, KPF keywords (ORIGID) are registered to their
+    # home extension.
     _STRUCTURAL = {
         "SIMPLE",
         "BITPIX",
@@ -168,7 +168,8 @@ class KeywordRegistry:
     }
 
     # Structural card families astropy adds when serializing an extension header
-    # (binary-table column descriptors, image WCS); matched by prefix.
+    # (array dimensions NAXIS*, binary-table column descriptors, image WCS);
+    # matched by prefix.
     _STRUCTURAL_PREFIXES = (
         "NAXIS",
         "TTYPE",
@@ -273,8 +274,8 @@ class KeywordRegistry:
 
         The single structural test, consumed by the checkpoint header validator: a
         card is structural if it is an exact-match bookkeeping card (``structural``)
-        or belongs to a WCS / binary-table column-descriptor family
-        (``_STRUCTURAL_PREFIXES``, e.g. ``NAXIS2``/``TTYPE3``).
+        or belongs to an enumerated card family (``_STRUCTURAL_PREFIXES``, e.g.
+        ``NAXIS2``/``TTYPE3``).
         """
         k = str(key).strip()
         return k in self.structural or k.startswith(self._STRUCTURAL_PREFIXES)
@@ -297,12 +298,12 @@ class KeywordRegistry:
             name = str(kw).strip()
             if not name:
                 continue
-            descr = str(df["Description"].iloc[i]) if "Description" in df else ""
-            dtype = str(df["DataType"].iloc[i]) if "DataType" in df else ""
+            descr = str(df["Description"].iloc[i])
+            dtype = str(df["DataType"].iloc[i])
             # Default/Units feed the typed PRIMARY seed (eprv_primary_seed); kept
             # raw (NaN-as-is) here, the seed builder normalizes them.
-            default = df["Default"].iloc[i] if "Default" in df else ""
-            units = df["Units"].iloc[i] if "Units" in df else ""
+            default = df["Default"].iloc[i]
+            units = df["Units"].iloc[i]
             required = bool(req.iloc[i])
             if "..." in name:
                 # "CDEC1 ... CDEC#" -> "CDEC" (strip the trailing index).
@@ -338,66 +339,26 @@ class KeywordRegistry:
         return rows
 
     @classmethod
-    def _kpf_rows(cls):
-        """KPF-pipeline keyword rows from config/L{0,1,2,4}-headers.csv.
+    def _parse_kpf_keyword_config(cls, df, source, level_of):
+        """Expand a KPF header CSV into unified-registry rows.
 
-        ``Required`` is always False; ``PopulatedBy`` is whatever the CSV says.
-        It must NEVER be the EPRV sentinel: the derived routing/validation lookups
-        treat a ``PopulatedBy == _EPRV_TAG`` row as EPRV-sourced, so a KPF row
-        reusing that string would be silently misclassified (dropped from routing,
-        given the wrong Required/Level). Guard against it loudly here.
+        Shared by ``_kpf_rows`` and ``_masters_rows``. ``Required`` is always
+        False; ``PopulatedBy`` is whatever the CSV says, but it must NEVER be the
+        EPRV sentinel: the derived routing/validation lookups treat a
+        ``PopulatedBy == _EPRV_TAG`` row as EPRV-sourced, so a KPF row reusing that
+        string would be silently misclassified (dropped from routing, given the
+        wrong Required/Level). Guard against it loudly here. ``source`` names the
+        CSV for that error; ``level_of(row)`` yields each row's Level.
         """
         rows = []
-        for level in (0, 1, 2, 4):
-            df = pd.read_csv(_kpf_pipe_cfg / f"L{level}-headers.csv")
-            for _, r in df.iterrows():
-                descr = (
-                    "" if pd.isna(r["Description"]) else str(r["Description"]).strip()
-                )
-                populated_by = str(r.get("PopulatedBy", "")).strip()
-                if populated_by == cls._EPRV_TAG:
-                    raise ValueError(
-                        f"L{level}-headers.csv: keyword "
-                        f"{str(r['Keyword']).strip()!r} has 'PopulatedBy' == "
-                        f"{cls._EPRV_TAG!r}, which is reserved as the EPRV-row "
-                        "discriminator; use a real populating site instead"
-                    )
-                rows.append(
-                    [
-                        str(r["Keyword"]).strip(),
-                        descr,
-                        str(r["Extension"]).strip(),
-                        str(r.get("DataType", "")).strip(),
-                        populated_by,
-                        False,
-                        level,
-                        "",  # Default: EPRV-only attribute, blank for KPF rows
-                        "",  # Units: EPRV-only attribute, blank for KPF rows
-                    ]
-                )
-        return rows
-
-    @classmethod
-    def _masters_rows(cls):
-        """KPF masters keyword rows from config/Masters-headers.csv.
-
-        Masters (bias/dark/flat/WLS calibration products) are out of EPRV scope
-        but route their PRIMARY keywords (MASTYPE + the WLS metadata) through
-        ``set_keyword`` like the science models, so they are registered here. Same
-        shape and ``Required is False`` convention as ``_kpf_rows``, but the level
-        comes from the CSV's own ``Level`` column (masters span L1/L2, not one
-        per-file level). The EPRV-tag guard mirrors ``_kpf_rows``.
-        """
-        rows = []
-        df = pd.read_csv(_kpf_pipe_cfg / "Masters-headers.csv")
         for _, r in df.iterrows():
             descr = "" if pd.isna(r["Description"]) else str(r["Description"]).strip()
             populated_by = str(r.get("PopulatedBy", "")).strip()
             if populated_by == cls._EPRV_TAG:
                 raise ValueError(
-                    f"Masters-headers.csv: keyword {str(r['Keyword']).strip()!r} "
-                    f"has 'PopulatedBy' == {cls._EPRV_TAG!r}, which is reserved as "
-                    "the EPRV-row discriminator; use a real populating site instead"
+                    f"{source}: keyword {str(r['Keyword']).strip()!r} has "
+                    f"'PopulatedBy' == {cls._EPRV_TAG!r}, which is reserved as the "
+                    "EPRV-row discriminator; use a real populating site instead"
                 )
             rows.append(
                 [
@@ -407,12 +368,41 @@ class KeywordRegistry:
                     str(r.get("DataType", "")).strip(),
                     populated_by,
                     False,
-                    int(r["Level"]),
+                    level_of(r),
                     "",  # Default: EPRV-only attribute, blank for KPF rows
                     "",  # Units: EPRV-only attribute, blank for KPF rows
                 ]
             )
         return rows
+
+    @classmethod
+    def _kpf_rows(cls):
+        """KPF-pipeline keyword rows from config/L{0,1,2,4}-headers.csv.
+
+        Level is the per-file level (one CSV per data level).
+        """
+        rows = []
+        for level in (0, 1, 2, 4):
+            df = pd.read_csv(_kpf_pipe_cfg / f"L{level}-headers.csv")
+            rows += cls._parse_kpf_keyword_config(
+                df, f"L{level}-headers.csv", lambda r, lvl=level: lvl
+            )
+        return rows
+
+    @classmethod
+    def _masters_rows(cls):
+        """KPF masters keyword rows from config/Masters-headers.csv.
+
+        Masters (bias/dark/flat/WLS calibration products) are out of EPRV scope
+        but route their PRIMARY keywords (MASTYPE + the WLS metadata) through
+        ``set_keyword`` like the science models, so they are registered here. Level
+        comes from the CSV's own ``Level`` column (masters span L1/L2, not one
+        per-file level).
+        """
+        df = pd.read_csv(_kpf_pipe_cfg / "Masters-headers.csv")
+        return cls._parse_kpf_keyword_config(
+            df, "Masters-headers.csv", lambda r: int(r["Level"])
+        )
 
     @classmethod
     def _build_rows(cls):
@@ -523,8 +513,9 @@ class KeywordRegistry:
         all_flags = set()
         by_level = {}
         for row in self.table.itertuples(index=False):
-            if row.Extension != "QUALITY_CONTROL" or row.PopulatedBy not in (
-                self._QC_POPULATORS
+            if (
+                row.Extension != "QUALITY_CONTROL"
+                or row.PopulatedBy not in self._QC_POPULATORS
             ):
                 continue
             all_flags.add(row.Keyword)
