@@ -199,14 +199,36 @@ class TestKeywordRegistry:
         assert primary_required.get("INSTRUME") == 1  # required from L1
 
     def test_is_structural_only_fits_cards(self):
-        # The single structural test: true FITS bookkeeping (exact + WCS/bintable
-        # prefixes) only. Registered keywords are NOT structural -- DATALVL (EPRV)
-        # and ORIGID (KPF, now on RECEIPT) were removed from the structural set.
+        # Structural = FITS cards astropy writes from the HDU structure, never
+        # authored by the pipeline (exact + bintable/array prefixes).
         reg = KPF1.keyword_registry
-        for card in ("SIMPLE", "EXTNAME", "NAXIS2", "TTYPE1", "TFORM3", "CRVAL1"):
+        for card in ("SIMPLE", "EXTNAME", "XTENSION", "NAXIS2", "TTYPE1", "TFORM3"):
             assert reg.is_structural(card), card
-        for kw in ("DATALVL", "ORIGID", "PROGID", "DRPTAG", "RV"):
+        # Content keywords (pipeline-authored) are NOT structural -- including CTYPE
+        # (axis meaning), DATE/FILENAME, and the pruned WCS family (KPF writes no WCS).
+        for kw in (
+            "DATALVL",
+            "ORIGID",
+            "PROGID",
+            "DRPTAG",
+            "RV",
+            "CTYPE1",
+            "DATE",
+            "FILENAME",
+            "CUNIT1",
+            "CRVAL1",
+            "CDELT1",
+        ):
             assert not reg.is_structural(kw), kw
+
+    def test_registered_and_structural_are_disjoint(self):
+        # Build-time invariant: structural cards (astropy-authored) are never
+        # registered. rvdata redundantly declares XTENSION/EXTNAME as per-extension
+        # keywords; the _build_registry sanitizer drops them.
+        reg = KPF1.keyword_registry
+        assert not [k for k in reg.registered if reg.is_structural(k)]
+        assert "XTENSION" not in reg.registered
+        assert "EXTNAME" not in reg.registered
 
     def test_default_units_populated_for_eprv_blank_for_kpf(self):
         # The new table columns carry EPRV CSV values for EPRV rows, "" for KPF.

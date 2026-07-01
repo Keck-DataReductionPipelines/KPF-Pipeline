@@ -650,9 +650,15 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
   the conversion sites in `KPF0` assign `header[key] = (value, comment)` directly; outside those,
   prefer `set_keyword`.
 - **Conversion**: call `KPF0._map_header`; don't re-implement the WMKO→EPRV mapping.
-- **Reading a raw instrument keyword** (`ELAPSED`, `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`,
-  `TARGTEFF`, …): read it from `headers["INSTRUMENT_HEADER"]` (via `.get`), never from
-  PRIMARY. No silent fallback — let a missing key raise.
+- **Reading a header keyword: prefer PRIMARY when the keyword lands there** after `to_kpf1` with the
+  same value (e.g. `DATE-OBS`, `OBJECT` — carried to PRIMARY under their own names). Read from
+  `headers["INSTRUMENT_HEADER"]` only when PRIMARY can't serve the read cleanly: the native never
+  reaches PRIMARY (`DATE-BEG`/`MID`/`END`, `MJD-OBS`, `TARGFRAM`, `TARGTEFF`, `GAIAMAG`, native
+  `EXPTIME`, `OFNAME`), or it belongs to a **coherent native block** where mixing PRIMARY + INSTRUMENT
+  reads or the cryptic renamed keys (`GAIAID`→`CID4`, `TARGRA`→`CRA4`, `SCI-OBJ`→`TRACE4`, …) would
+  obscure intent — the astrometry/catalog block, the per-fiber illumination source
+  (`SCI-OBJ`/`SKY-OBJ`/`CAL-OBJ`), and the `EXPTIME`-vs-`ELAPSED` pair (distinct quantities that only
+  coexist on INSTRUMENT_HEADER). Read via `.get`; no silent fallback — let a missing key raise.
 - Use EPRV keyword *names* on PRIMARY (e.g. `EXPTIME`, not `ELAPSED`; `OBSTYPE`, not `IMTYPE`).
   Exception: the L4 final-RV measurements `CCD{1,2}RV`/`CCD{1,2}ERV` are KPF-registered keywords
   deliberately homed on PRIMARY (alongside the EPRV `RV`/`RVERR`).

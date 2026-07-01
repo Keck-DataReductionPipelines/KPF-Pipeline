@@ -5,7 +5,7 @@ state (read noise from raw overscan, the BIASSUB flag) are still written by
 the modules that produce them — ImageAssembly, ImageProcessing. Metrics that
 can be recomputed from the finished L1 product alone live here: the master
 calibration ages, derived from the master paths CalibrationAssociation wrote
-to RECEIPT plus the observation timestamp in INSTRUMENT_HEADER.
+to RECEIPT plus the observation timestamp (DATE-OBS) on PRIMARY.
 """
 
 from datetime import datetime

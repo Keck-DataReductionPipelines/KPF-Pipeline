@@ -218,8 +218,20 @@ see the style guide §11.)* The architecture invariants:
   `RV`/`RVERR`. (`RV`/`RVERR` themselves are EPRV PRIMARY keywords, not KPF-registered, so they are not
   the exception.)
 - **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values **and** comments),
-  written once in `to_kpf1` and never again. Code needing a raw instrument keyword (`ELAPSED`,
-  `MJD-OBS`, `DATE-OBS`, `GAIAID`, `SCI-OBJ`, `TARGTEFF`, …) reads it from here, not PRIMARY.
+  written once in `to_kpf1` and never again.
+- **Read from PRIMARY whenever the keyword lands there after `to_kpf1`** (same value); read from
+  `INSTRUMENT_HEADER` only when PRIMARY can't serve the read cleanly. `_map_header` carries just some
+  natives to PRIMARY, and mostly under **renamed** EPRV keys (`ELAPSED`→`EXPTIME`, `IMTYPE`→`OBSTYPE`,
+  `GAIAID`→`CID4`, `TARGRA`→`CRA4`, `SCI-OBJ`/`SKY-OBJ`/`CAL-OBJ`→`TRACE4`/`TRACE1`/`CLSRC5`, …); a few
+  (`DATE-BEG`/`MID`/`END`, `MJD-OBS`, `TARGFRAM`, `TARGTEFF`, `GAIAMAG`, native `EXPTIME`, `OFNAME`) are
+  **not on PRIMARY at all**. So: a native that survives to PRIMARY under its **own name** and is read in
+  isolation is read from **PRIMARY** (e.g. `DATE-OBS`, `OBJECT`). Read from **INSTRUMENT_HEADER** when
+  the native (a) never reaches PRIMARY, or (b) is one of a **coherent block of natives** where mixing
+  PRIMARY + INSTRUMENT reads (or the cryptic renamed keys) would obscure intent — the WMKO astrometry/
+  catalog block (`TARGRA`/`DEC`/`PM*`/`PLAX`/`TARGFRAM`/`TARGEPOC`/`TARGRADV`/`GAIAID`) in
+  `barycentric_correction`, the per-fiber illumination source (`SCI-OBJ`/`SKY-OBJ`/`CAL-OBJ`) in
+  `radial_velocity`, and the `EXPTIME`-vs-`ELAPSED` pair in masters (which name **different** quantities —
+  requested vs. elapsed — that only coexist as distinct cards on INSTRUMENT_HEADER).
 - **Each registered keyword has one home extension** (the registry `Extension` column), which
   `set_keyword` routes to: **PRIMARY** (EPRV keywords, plus the L4 final-RV exception
   `CCD{1,2}RV`/`CCD{1,2}ERV` above), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
@@ -280,7 +292,7 @@ Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume da
 
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.
 
-**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics — including the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), which `DiagL1` recomputes from the master paths `CalibrationAssociation` wrote to RECEIPT (`*FILE`) plus the `INSTRUMENT_HEADER` `DATE-OBS`; the association module writes only the paths.
+**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics — including the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), which `DiagL1` recomputes from the master paths `CalibrationAssociation` wrote to RECEIPT (`*FILE`) plus the PRIMARY `DATE-OBS` (an EPRV keyword carried to PRIMARY under its own name); the association module writes only the paths.
 
 **Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
 

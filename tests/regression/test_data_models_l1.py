@@ -6,6 +6,7 @@ Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
 import importlib.metadata
+import re
 
 import numpy as np
 import pytest
@@ -168,6 +169,16 @@ class TestL1PrimarySeed:
         # The seed defaults DATALVL (EPRV Required) to "UNKNOWN"; __init__ fixes it.
         assert KPF1().headers["PRIMARY"]["DATALVL"] == "L1"
 
+    def test_compliance_tags_from_rvdata_pin(self):
+        # EPRVTAG/VOCLASS default to "UNKNOWN" in the EPRV CSV; _DEFAULT_OVERRIDES
+        # derives them from the pinned rv-data-standard release. EPRVTAG is the
+        # version ("v0.4.0"); VOCLASS encodes the release month
+        # ("EPRVSTANDARD<YYYY.MM>").
+        prim = KPF1().headers["PRIMARY"]
+        version = importlib.metadata.version("rv-data-standard")
+        assert prim["EPRVTAG"] == f"v{version}"
+        assert re.fullmatch(r"EPRVSTANDARD\d{4}\.\d{2}", prim["VOCLASS"])
+
     def test_seed_matches_registry_lookup(self):
         # The 40 seeded keys are exactly the registry's eprv_primary_seed.
         assert (
@@ -196,6 +207,45 @@ class TestL1PrimarySeed:
         prim = set(KPFMasterL1().headers["PRIMARY"])
         assert prim == {"DATALVL"}
         assert not (self._required_l1_primary() & prim) - {"DATALVL"}
+
+
+class TestHeaderMapFiberRealignment:
+    """rvdata's header_map numbers per-trace keywords CAL-first (1=CAL..5=SKY);
+    _load_header_map realigns them to KPF's SKY-first numbering (1=SKY..5=CAL) by
+    swapping index 1<->5 for the fiber-indexed families. Keywords that also end in
+    1/5 but are not fiber-indexed (EXSNR wavelength bands) must be left alone.
+    """
+
+    @staticmethod
+    def _source(standard):
+        # (INSTRUMENT, DEFAULT) for a STANDARD key in the sanitized header_map, or
+        # (None, None) if the row was dropped.
+        hm = KPF1.keyword_registry.header_map
+        row = hm[hm["STANDARD"].astype(str).str.strip() == standard]
+        if row.empty:
+            return None, None
+        return str(row.iloc[0]["INSTRUMENT"]).strip(), str(
+            row.iloc[0]["DEFAULT"]
+        ).strip()
+
+    def test_trace_native_cards_swapped_to_sky_first(self):
+        # SKY is trace 1, CAL is trace 5 (KPF), so their native OBJ cards land there.
+        assert self._source("TRACE1")[0] == "SKY-OBJ"
+        assert self._source("TRACE5")[0] == "CAL-OBJ"
+
+    def test_catalog_block_swapped(self):
+        # The CAL last-source card moves to index 5; the "sky" catalog defaults move
+        # from index 5 to index 1 (SKY).
+        assert self._source("CLSRC5")[0] == "CAL-OBJ"
+        assert self._source("CLSRC1")[0] != "CAL-OBJ"
+        assert self._source("CSRC1")[1] == "sky"
+        assert self._source("CID1")[1] == "sky"
+
+    def test_exposure_meter_snr_not_swapped(self):
+        # Guard: EXSNR ends in 1/5 (wavelength band 452/852nm), not a fiber index,
+        # so it must be untouched -- catches an over-broad swap.
+        assert self._source("EXSNR1")[0] == "SNRSC452"
+        assert self._source("EXSNR5")[0] == "SNRSC852"
 
 
 class TestToKpf1:
