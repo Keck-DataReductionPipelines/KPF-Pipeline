@@ -77,13 +77,11 @@ class KeywordRegistry:
     three use-cases (mapping / validation / routing).
     """
 
-    # Sentinel written into the "PopulatedBy" column for EPRV-sourced rows; the
-    # derived lookups use it to tell EPRV rows from KPF rows, so it is the single
-    # source of that string (and _kpf_rows asserts no KPF row reuses it).
+    # "PopulatedBy" value marking an EPRV-sourced row -- the discriminator the
+    # derived lookups use to tell EPRV rows from KPF rows.
     _EPRV_TAG = "EPRV"
 
-    # Unified-table column order. All names are valid Python identifiers so the
-    # derived lookups can read rows by attribute via itertuples (row.PopulatedBy).
+    # Unified-table columns; valid identifiers for itertuples attribute access.
     _COLUMNS = [
         "Keyword",
         "Description",
@@ -96,16 +94,11 @@ class KeywordRegistry:
         "Units",
     ]
 
-    # header_map.csv STANDARD keys whose entry is not a genuine static
-    # native->EPRV mapping, each paired with its real value. Two consumers read
-    # this map (see __init__): the non-None values correct the table Default (so
-    # _eprv_primary_lookup seeds them cleanly), and every key is dropped from
-    # header_map (so _map_header applies it with no per-keyword correction).
-    # Values are strings like every Default; parse_value_to_datatype types them.
-    # None means no static default -- the value is supplied elsewhere at build
-    # time: DATALVL by the model level (KPF1.__init__), JD_UTC by the _map_header
-    # epoch transform. (NUMORDER's header_map default is 65; KPF has 67. DRPTAG is
-    # the DRP version; EPRVTAG/VOCLASS the pinned rv-data-standard tags.)
+    # header_map keys whose entry is not a genuine native->EPRV mapping. Two
+    # consumers: non-None values correct the table Default (NUMORDER 65->67; DRPTAG,
+    # EPRVTAG, VOCLASS are runtime tags), and every key is dropped from header_map.
+    # None = no static default; value set elsewhere (DATALVL by KPF1.__init__,
+    # JD_UTC by the _map_header epoch transform).
     _DEFAULT_OVERRIDES = {
         "NUMORDER": str(_NUMORDER),
         "DRPTAG": __version__,
@@ -115,8 +108,8 @@ class KeywordRegistry:
         "JD_UTC": None,
     }
 
-    # Per-extension EPRV keyword CSVs (rvdata does not load these as constants).
-    # RV#/CCF# share one template CSV; BARYCORR_*/BJD_TDB are per-extension.
+    # Per-extension EPRV keyword CSVs (rvdata exposes no constant). RV#/CCF# share a
+    # template; BARYCORR_*/BJD_TDB are per-extension.
     _EPRV_EXT_CSV = {
         "BJD_TDB": (_rvdata_core_cfg / "L2-BJD_TDB-keywords.csv", 2),
         "BARYCORR_KMS": (_rvdata_core_cfg / "L2-BARYCORR_KMS-keywords.csv", 2),
@@ -130,21 +123,13 @@ class KeywordRegistry:
         },
     }
 
-    # Registry "PopulatedBy" values that mark a QUALITY_CONTROL row as a 0/1 QC
-    # flag. The generic "QC" tags the cross-level aggregate ISGOOD; "QCL{n}" tags
-    # a level-N check. ``qc_flag_keywords`` unions them (drives the ISGOOD
-    # aggregate); ``qc_flag_keywords_by_level`` keys the level-N checks by their
-    # LEVEL tag (drives the per-level checkpoint, which flags only its own checks).
+    # "PopulatedBy" values marking a QUALITY_CONTROL row as a 0/1 QC flag: "QC" tags
+    # the cross-level ISGOOD aggregate, "QCL{n}" a level-N check.
     _QC_POPULATORS = frozenset({"QC", "QCL0", "QCL1", "QCL2", "QCL4"})
 
-    # FITS structural / bookkeeping cards that are always permitted on any
-    # extension and are never registered keywords. This is the single source of
-    # truth for "structural" (see is_structural); the checkpoint validator reads
-    # it rather than keeping its own list. Two parts: exact-match cards below, and
-    # the enumerated card families in _STRUCTURAL_PREFIXES (matched by prefix, e.g.
-    # NAXIS1/TTYPE3). Only genuine FITS cards belong here -- EPRV keywords (DATALVL)
-    # live in the registry table, KPF keywords (ORIGID) are registered to their
-    # home extension.
+    # FITS structural cards permitted on any extension (never registered keywords) --
+    # the validator's allowlist. Exact matches here; enumerated families in
+    # _STRUCTURAL_PREFIXES.
     _STRUCTURAL = {
         "SIMPLE",
         "BITPIX",
@@ -167,9 +152,7 @@ class KeywordRegistry:
         "TFIELDS",
     }
 
-    # Structural card families astropy adds when serializing an extension header
-    # (array dimensions NAXIS*, binary-table column descriptors, image WCS);
-    # matched by prefix.
+    # Structural card families (NAXIS*, bintable column descriptors, WCS); by prefix.
     _STRUCTURAL_PREFIXES = (
         "NAXIS",
         "TTYPE",
@@ -189,9 +172,8 @@ class KeywordRegistry:
     )
 
     def __init__(self):
-        # Build the source table and its derived lookups, then load the header_map
-        # -- order matters: the header_map is filtered against self.registered, the
-        # allowlist the table build produces.
+        # Order matters: _load_header_map filters against the registry
+        # _build_registry produces.
         self._build_registry()
         self._load_header_map()
 
@@ -208,8 +190,6 @@ class KeywordRegistry:
         """
         eprv_rows, kpf_rows = self._build_rows()
         table = pd.DataFrame(eprv_rows + kpf_rows, columns=self._COLUMNS)
-        # None-valued overrides carry no static default (value supplied
-        # elsewhere), so skip them.
         for keyword, value in self._DEFAULT_OVERRIDES.items():
             if value is not None:
                 table.loc[table["Keyword"] == keyword, "Default"] = value
@@ -225,16 +205,11 @@ class KeywordRegistry:
             {ext: MappingProxyType(d) for ext, d in required.items()}
         )
         self.structural = frozenset(self._STRUCTURAL)
-        # QC-flag keyword sets: the full set (ISGOOD aggregate) and the per-level
-        # split (current-level checkpoint scope). See _qc_flag_sets_lookup.
         qc_all, qc_by_level = self._qc_flag_sets_lookup()
         self.qc_flag_keywords = frozenset(qc_all)
         self.qc_flag_keywords_by_level = MappingProxyType(
             {lvl: frozenset(kws) for lvl, kws in qc_by_level.items()}
         )
-        # EPRV PRIMARY skeleton: the typed Required seed (KPF1.__init__ stamps it,
-        # mirroring RV2.__init__) and the datatypes _map_header types its emitted
-        # values with. See _eprv_primary_lookup.
         seed, datatypes = self._eprv_primary_lookup()
         self.eprv_primary_seed = MappingProxyType(seed)
         self.eprv_primary_datatypes = MappingProxyType(datatypes)
@@ -300,8 +275,7 @@ class KeywordRegistry:
                 continue
             descr = str(df["Description"].iloc[i])
             dtype = str(df["DataType"].iloc[i])
-            # Default/Units feed the typed PRIMARY seed (eprv_primary_seed); kept
-            # raw (NaN-as-is) here, the seed builder normalizes them.
+            # Kept raw (NaN preserved); _eprv_primary_lookup normalizes them.
             default = df["Default"].iloc[i]
             units = df["Units"].iloc[i]
             required = bool(req.iloc[i])
@@ -369,8 +343,8 @@ class KeywordRegistry:
                     populated_by,
                     False,
                     level_of(r),
-                    "",  # Default: EPRV-only attribute, blank for KPF rows
-                    "",  # Units: EPRV-only attribute, blank for KPF rows
+                    "",  # Default (EPRV-only)
+                    "",  # Units (EPRV-only)
                 ]
             )
         return rows
@@ -407,11 +381,9 @@ class KeywordRegistry:
     @classmethod
     def _build_rows(cls):
         """Build the EPRV and KPF row lists that union into ``self.table``."""
-        # EPRV's L2 PRIMARY keywords are KPF's L1-required set: EPRV defines no L1,
-        # so KPF holds the L1 PRIMARY to the EPRV L2 PRIMARY spec, and KPF1.__init__
-        # seeds exactly this set -- so they are Required from L1 (Level 1), which is
-        # what makes KWRDPRL1 meaningful at its own level (no L1->L2 cap). The
-        # L4-only extras stay Level 4 (first populated at L4). Never both.
+        # EPRV defines no L1, so KPF holds L1 PRIMARY to the EPRV L2 PRIMARY spec:
+        # these are Required from Level 1 (what makes KWRDPRL1 meaningful). L4-only
+        # extras stay Level 4.
         l2 = cls._eprv_rows(LEVEL2_PRIMARY_KEYWORDS, "PRIMARY", 1)
         l2_keys = {r[0] for r in l2}
         l4 = [
@@ -489,8 +461,7 @@ class KeywordRegistry:
             units = None if pd.isna(row.Units) else str(row.Units).strip()
             unitstr = "" if not units or units.lower() == "n/a" else f"[{units}] "
             comment = f"{unitstr}{row.Description}"
-            # The table is already sanitized (_DEFAULT_OVERRIDES applied in __init__),
-            # so the Default is read straight, no per-keyword correction here.
+            # Default already corrected in _build_registry (_DEFAULT_OVERRIDES).
             default = None if pd.isna(row.Default) else row.Default
             seed[row.Keyword] = parse_value_to_datatype(
                 row.Keyword, row.DataType, (default, comment)
