@@ -108,6 +108,28 @@ class KeywordRegistry:
         "JD_UTC": None,
     }
 
+    # rvdata's header_map numbers per-trace keywords CAL-first (trace 1=CAL .. 5=SKY),
+    # the stale translator convention; KPF is SKY-first (1=SKY .. 5=CAL, see
+    # EPRV_DATA_STANDARD.md and trace-map.csv). These are the fiber-indexed families
+    # whose STANDARD index _load_header_map realigns 1<->5. NOT here (also end in 1/5
+    # but not fiber-indexed): EXSNR/EXSNRW (wavelength band 452/852nm), DQLVL, T*.
+    _FIBER_INDEXED_BASES = (
+        "TRACE",
+        "CSRC",
+        "CID",
+        "CRA",
+        "CDEC",
+        "CEQNX",
+        "CEPCH",
+        "CPLX",
+        "CPMR",
+        "CPMD",
+        "CRV",
+        "CZ",
+        "CCLR",
+        "CLSRC",
+    )
+
     # Per-extension EPRV keyword CSVs (rvdata exposes no constant). RV#/CCF# share a
     # template; BARYCORR_*/BJD_TDB are per-extension.
     _EPRV_EXT_CSV = {
@@ -217,9 +239,10 @@ class KeywordRegistry:
     def _load_header_map(self):
         """Read and sanitize rvdata's WMKO-native -> EPRV-standard ``header_map``.
 
-        Keeps only genuine static native->EPRV mapping rows, so KPF0._map_header
-        applies the map with no in-loop filter or per-keyword correction. Two row
-        classes are dropped:
+        First realigns the fiber-indexed STANDARD keys from rvdata's CAL-first to
+        KPF's SKY-first numbering (see ``_FIBER_INDEXED_BASES``), then keeps only
+        genuine static native->EPRV mapping rows so KPF0._map_header applies the map
+        with no in-loop filter or per-keyword correction. Two row classes are dropped:
           - STANDARD keys absent from the registry (PARANG/PARANG2) -- warned, so
             the rvdata header_map / registry inconsistency stays visible;
           - ``_DEFAULT_OVERRIDES`` keys, whose value comes from the corrected table
@@ -228,6 +251,12 @@ class KeywordRegistry:
         Runs after ``_build_registry`` -- it filters against ``self.registered``.
         """
         raw = pd.read_csv(_rvdata_inst_cfg / "header_map.csv")
+        # Swap trace index 1<->5 for the fiber-indexed families (SKY<->CAL). A dict
+        # replace maps each value once, so the two-way exchange is atomic.
+        swap = {}
+        for base in self._FIBER_INDEXED_BASES:
+            swap[f"{base}1"], swap[f"{base}5"] = f"{base}5", f"{base}1"
+        raw["STANDARD"] = raw["STANDARD"].replace(swap)
         eprv_keys = raw["STANDARD"].astype(str).str.strip()
         unregistered = sorted(
             set(eprv_keys[raw["STANDARD"].notna()]) - self.registered - {""}
