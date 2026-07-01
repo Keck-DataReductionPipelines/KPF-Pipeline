@@ -188,33 +188,33 @@ class KeywordRegistry:
     )
 
     def __init__(self):
-        # --- Read the raw reference inputs ---
-        # The unified keyword table (EPRV rows first, then KPF rows; KPF wins a
-        # collision) and the rvdata WMKO-native -> EPRV-standard header_map.
+        # Build the source table and its derived lookups, then load the header_map
+        # -- order matters: the header_map is filtered against self.registered, the
+        # allowlist the table build produces.
+        self._build_registry()
+        self._load_header_map()
+
+    def _build_registry(self):
+        """Build ``self.table`` and every lookup derived from it.
+
+        Assembles the unified table (EPRV rows first, then KPF rows; KPF wins a
+        collision), corrects the Defaults header_map.csv gets wrong (NUMORDER
+        65 -> 67) or that are runtime (DRPTAG -> version) so downstream lookups
+        read a clean table, then derives the read-only lookups. All are shared
+        process-wide via the singleton, so they are frozen (frozenset /
+        MappingProxyType) against a stray consumer mutation; ``self.table`` is
+        only ever read.
+        """
         eprv_rows, kpf_rows = self._build_rows()
         table = pd.DataFrame(eprv_rows + kpf_rows, columns=self._COLUMNS)
-        header_map = pd.read_csv(_rvdata_inst_cfg / "header_map.csv")
-
-        # --- Sanitize the inputs once, here, before any lookup is derived ---
-        # Correct the Defaults header_map.csv gets wrong (NUMORDER 65 -> 67) or that
-        # are runtime (DRPTAG -> version); these feed eprv_primary_seed, so the build
-        # step reads a clean table with no per-keyword special-casing. None-valued
-        # overrides carry no static default (value supplied elsewhere), so skip them.
+        # None-valued overrides carry no static default (value supplied
+        # elsewhere), so skip them.
         for keyword, value in self._DEFAULT_OVERRIDES.items():
             if value is not None:
                 table.loc[table["Keyword"] == keyword, "Default"] = value
         self.table = table
-        # The keyword allowlist -- a distributed lookup, and the gate header_map
-        # sanitization filters against (so it is derived before that runs).
         self.registered = frozenset(self.table["Keyword"])
-        # Drop header_map rows that aren't genuine static native -> EPRV mappings.
-        self.header_map = self._sanitize_header_map(header_map)
 
-        # --- Build / distribute the derived lookups from the sanitized table ---
-        # All are read-only reference data shared process-wide via the singleton;
-        # freeze them (frozenset / MappingProxyType) so a stray consumer mutation
-        # can't corrupt the registry for everyone (notably under parallel tests).
-        # self.table is only ever read.
         self.routing = MappingProxyType(self._routing_lookup())
         allowed, required = self._validation_lookup()
         self.allowed = MappingProxyType(
@@ -237,6 +237,36 @@ class KeywordRegistry:
         seed, datatypes = self._eprv_primary_lookup()
         self.eprv_primary_seed = MappingProxyType(seed)
         self.eprv_primary_datatypes = MappingProxyType(datatypes)
+
+    def _load_header_map(self):
+        """Read and sanitize rvdata's WMKO-native -> EPRV-standard ``header_map``.
+
+        Keeps only genuine static native->EPRV mapping rows, so KPF0._map_header
+        applies the map with no in-loop filter or per-keyword correction. Two row
+        classes are dropped:
+          - STANDARD keys absent from the registry (PARANG/PARANG2) -- warned, so
+            the rvdata header_map / registry inconsistency stays visible;
+          - ``_DEFAULT_OVERRIDES`` keys, whose value comes from the corrected table
+            default, the model level, or the _map_header epoch transform, not a
+            static map row.
+        Runs after ``_build_registry`` -- it filters against ``self.registered``.
+        """
+        raw = pd.read_csv(_rvdata_inst_cfg / "header_map.csv")
+        eprv_keys = raw["STANDARD"].astype(str).str.strip()
+        unregistered = sorted(
+            set(eprv_keys[raw["STANDARD"].notna()]) - self.registered - {""}
+        )
+        if unregistered:
+            warnings.warn(
+                "header_map.csv maps to STANDARD keys absent from the keyword "
+                f"registry; they are dropped (not emitted): {unregistered}",
+                UserWarning,
+                stacklevel=2,
+            )
+        keep = eprv_keys.isin(self.registered) & ~eprv_keys.isin(
+            self._DEFAULT_OVERRIDES.keys()
+        )
+        self.header_map = raw[keep].reset_index(drop=True)
 
     def is_structural(self, key):
         """True for a FITS structural / bookkeeping card (never a registered keyword).
@@ -501,35 +531,6 @@ class KeywordRegistry:
             if row.PopulatedBy != "QC":  # "QCL0"/"QCL1"/"QCL2" -> "L0"/"L1"/"L2"
                 by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
         return all_flags, by_level
-
-    # --- Input sanitization (run once in __init__ before the lookups) --------
-
-    def _sanitize_header_map(self, raw):
-        """Return header_map with only genuine static native->EPRV mapping rows.
-
-        _map_header then applies the map with no in-loop filter or per-keyword
-        correction. Two row classes are dropped:
-          - STANDARD keys absent from the registry (PARANG/PARANG2) -- warned,
-            so the rvdata header_map / registry inconsistency stays visible;
-          - ``_DEFAULT_OVERRIDES`` keys, whose value comes from the corrected table
-            default, the model level, or the _map_header epoch transform, not a
-            static map row.
-        """
-        eprv_keys = raw["STANDARD"].astype(str).str.strip()
-        unregistered = sorted(
-            set(eprv_keys[raw["STANDARD"].notna()]) - self.registered - {""}
-        )
-        if unregistered:
-            warnings.warn(
-                "header_map.csv maps to STANDARD keys absent from the keyword "
-                f"registry; they are dropped (not emitted): {unregistered}",
-                UserWarning,
-                stacklevel=2,
-            )
-        keep = eprv_keys.isin(self.registered) & ~eprv_keys.isin(
-            self._DEFAULT_OVERRIDES.keys()
-        )
-        return raw[keep].reset_index(drop=True)
 
     # --- rvdata extension registration ---------------------------------------
 
