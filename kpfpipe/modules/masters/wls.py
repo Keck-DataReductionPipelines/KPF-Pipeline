@@ -395,7 +395,7 @@ class WLS(BaseMasterModule):
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
               'bad' - boolean QC flag (True = line failed QC)
-              'order' - 1-indexed order number
+              'order' - 0-indexed order number
               'fiber' - fiber name
         """
         linelist_df = self._load_linelist(linelist)
@@ -437,7 +437,7 @@ class WLS(BaseMasterModule):
                         f"(no fittable lines; flux likely NaN-filled)",
                         stacklevel=2,
                     )
-                line_dict["order"] = (o + 1) * np.ones(nlines, dtype=int)
+                line_dict["order"] = o * np.ones(nlines, dtype=int)
                 line_dict["fiber"] = np.full(nlines, fiber)
 
                 for k in keys:
@@ -516,7 +516,7 @@ class WLS(BaseMasterModule):
         good = ~lines["bad"]
         wav = lines["wav"][good]
         pix = lines["pix"][good]
-        order_num = lines["order"][good]
+        order_index = lines["order"][good]
         fiber_names = lines["fiber"][good]
 
         fibers = list(set(fiber_names))
@@ -551,7 +551,7 @@ class WLS(BaseMasterModule):
 
         # rescale position variables to [-1,1] for Legendre fitting
         x = 2 * pix / (ncol - 1) - 1
-        m = 2 * (order_num - 1) / (norder - 1) - 1
+        m = 2 * order_index / (norder - 1) - 1
 
         if len(fibers) != 1:
             # map fibers to their positional rank then rescale to [-1, 1]

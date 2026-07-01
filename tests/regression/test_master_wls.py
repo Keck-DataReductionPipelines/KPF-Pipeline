@@ -231,7 +231,7 @@ def mock_make_master_l2(monkeypatch):
             {
                 "wav": np.array([5500.0, 5501.0]),
                 "pix": np.array([100.5, 200.5]),
-                "order": np.array([1, 2]),
+                "order": np.array([0, 1]),
                 "fiber": np.array([fibers[0]] * 2),
                 "bad": np.array([False, False]),
                 "std": np.array([0.5, 0.5]),
@@ -561,8 +561,8 @@ class TestMakeMasterL2:
                 ["SCI1"],
             )
 
-        # The NaN order contributed no lines; remaining orders did.
-        assert result["order"].min() >= 2
+        # The NaN order (0-based order 0) contributed no lines; remaining did.
+        assert result["order"].min() >= 1
         assert len(result["wav"]) > 0
 
     def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
@@ -659,7 +659,7 @@ class TestCalculateWlsCoeffs:
         for f in fibers:
             wav.extend(5000.0 + np.arange(n))
             pix.extend(np.linspace(10.0, 4000.0, n))
-            ord_.extend(np.linspace(1, 30, n).astype(int))
+            ord_.extend(np.linspace(0, 29, n).astype(int))
             fib.extend([f] * n)
         return {
             "wav": np.asarray(wav, dtype=float),
