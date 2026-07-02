@@ -349,12 +349,37 @@ class StageName:
 
 ## 6. Error handling, validation & logging
 
-- **No `logging` module anywhere.** Don't introduce one without a project decision.
-  - Human-facing status → `print()`, confined to `info()` reporters and recipe banners.
-  - In-pipeline recoverable/degraded conditions → `warnings.warn(..., stacklevel=2)`, gated
-    behind a `verbose` flag: `if verbose: warnings.warn(..., stacklevel=2)`. The explicit
-    `stacklevel` is required (Ruff `B028`) so the warning points at the caller.
-- **Raise exceptions; do not catch-and-log.** Choose the semantically correct type:
+- **Logging is standard** (the project decision of issue #1408, implementing WMKO
+  DRP-RUN-07/08/09). The rules:
+  - **Named loggers only**: `logger = logging.getLogger(__name__)` at module top, below
+    the imports. Recipes are exec'd (their `__name__` is `"recipe"`), so they name their
+    loggers explicitly — `logging.getLogger("kpfpipe.recipe.science")` / `".masters"`;
+    the CLI uses `"kpfpipe.cli"`. Never call the root-logger conveniences
+    (`logging.info(...)` — Ruff `LOG015`).
+  - **Handler/level configuration lives in exactly one place**:
+    `kpfpipe.utils.logger.setup_logging`, called only by the CLI entry point
+    (`tools/cli.py`) — never at import time, never in recipes/modules/tests. Library
+    code must work with no handlers installed (records drop silently).
+  - **Level policy**: `INFO` is the production level — reduction steps, decision
+    points, file reads/writes, and end-of-`perform()` module summaries. `DEBUG` —
+    inner-loop progress and counters. `WARNING` arrives via the warnings bridge (below).
+    Log calls are **never** gated behind `verbose` flags — the level is the gate.
+  - **Lazy `%`-formatting in log calls** (Ruff `G`): `logger.info("wrote %s", fn)`,
+    not f-strings.
+  - Human-facing status → `print()`, confined to interactive `info()` reporters (data
+    models and modules); never in `perform()`/pipeline paths. Module `info()` builds its
+    text in `_info_text()` so `perform()` can log the same summary.
+  - In-pipeline recoverable/degraded conditions → `warnings.warn(..., stacklevel=2)`,
+    gated behind a `verbose` flag: `if verbose: warnings.warn(..., stacklevel=2)`. The
+    explicit `stacklevel` is required (Ruff `B028`) so the warning points at the caller.
+    `setup_logging` bridges these into the log at `WARNING` via
+    `logging.captureWarnings(True)` — with the default warning filter, each unique
+    warning is recorded once per location per process.
+- **Raise exceptions; do not catch-and-log.** The one sanctioned catch-log-reraise
+  point is the CLI entry (`tools/cli.py`), which wraps the recipe call in
+  `logger.critical(..., exc_info=True); raise` so uncaught tracebacks land in the log
+  (DRP-RUN-08) before the process exits nonzero. Everywhere else, choose the
+  semantically correct type:
   - `TypeError` — wrong `config` type (every `__init__`).
   - `ValueError` — bad domain value / failed validation (the workhorse).
   - `LookupError`/`KeyError` — missing trace/header.
@@ -441,7 +466,9 @@ class StageName:
   `pre-commit==4.6.0` are pinned dev deps. Enforced locally via a pre-commit hook — run
   `pre-commit install` once after setting up the env.
 - **Lint ruleset** (`[tool.ruff.lint] select`): `E`/`W` (pycodestyle), `F` (pyflakes),
-  `I` (import sorting), `B` (flake8-bugbear), `UP` (pyupgrade). Line length (`E501`) is
+  `I` (import sorting), `B` (flake8-bugbear), `UP` (pyupgrade), `G`
+  (flake8-logging-format — lazy `%`-formatting in log calls), `LOG` (flake8-logging —
+  named loggers only). Line length (`E501`) is
   enforced at 88. `__init__.py` is exempt from `F401` (re-exports). Ruff's scope is
   `kpfpipe/`, `tests/`, `recipes/`; `legacy/`, `gjgilbert_notebooks/`, and `scripts/`
   (unimplemented pseudocode stubs) are excluded.
