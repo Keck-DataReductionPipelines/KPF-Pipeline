@@ -260,6 +260,10 @@ see the style guide §11.)* The architecture invariants:
 
 Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/config/`). Detector parameters (CCD dimensions, order counts) live in `data_models/config/detector.toml` and are exposed via `kpfpipe.constants`.
 
+### Logging (issue #1408; WMKO DRP-RUN-07/08/09)
+
+Handler/level configuration lives in exactly one place: `kpfpipe.utils.logger.setup_logging`, called only by the CLI (`tools/cli.py`) before the recipe runs — never at import time, never in recipes/modules/tests. It writes one UT-timestamped log file per invocation under the `[LOGGER] log_directory` config key (`log_level`, `console` also supported; CLI overrides `--log_dir`/`--log_level`; `--test` defaults the log dir to `tests/testdata/logs`). Library code just declares `logger = logging.getLogger(__name__)` and must work with no handlers installed — tests call `recipe.main(config, args)` directly with no logging configured, so setup must never move into recipes. `warnings.warn` remains the recoverable-condition API, bridged into the log via `logging.captureWarnings`. Tests that call `setup_logging` must tear down via `kpfpipe.utils.logger.teardown_logging` inside the same test (see the autouse fixture in `tests/regression/test_logger.py` — pytest's per-test `catch_warnings` context otherwise strands `logging._warnings_showwarning`). *(Coding rules — levels, lazy `%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
+
 ### Filename conventions
 
 Science: `L0 = {obs_id}.fits` (KPF-native `KP.*`); `L1 = kpf_L1_{YYYYMMDD}T{HHmmss}.fits` — note **no EPRV "S"**, because the EPRV standard defines no L1 (its filename regex only accepts `SL2`/`SL3`/`SL4`); `L2/L4 = kpf_SL{N}_…` (EPRV-standard). Masters (WMKO DRP-RUN-05): `{KOAID-of-first-input}_master_{type}_L{N}.fits`.
