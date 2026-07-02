@@ -104,9 +104,10 @@ class WLS(BaseMasterModule):
         """
         Return the cached line list DataFrame, loading or reloading if needed.
 
-        Columns: CHIP, ORDER (0-indexed per chip), WAVE [Å, vacuum]. Loads from
-        disk when nothing is cached, or when `linelist` (a file path) differs
-        from the cached `self.linelist`; otherwise returns the cache unchanged.
+        Columns: CHIP, INDEX (0-based row), ECHELLE (physical order), WAVE
+        [Å, vacuum]. Loads from disk when nothing is cached, or when `linelist`
+        (a file path) differs from the cached `self.linelist`; otherwise returns
+        the cache unchanged.
         """
         needs_load = not hasattr(self, "_linelist_df")
         if linelist is not None and linelist != self.linelist:
@@ -367,7 +368,7 @@ class WLS(BaseMasterModule):
 
         Loops over the requested fibers, calling `_fit_line_positions_1d`
         on each (order, fiber) extracted spectrum, and concatenates the
-        surviving lines into flat arrays tagged with their order number
+        surviving lines into flat arrays tagged with their echelle order
         and fiber name.
 
         Parameters
@@ -564,8 +565,7 @@ class WLS(BaseMasterModule):
         x = 2 * pix / (ncol - 1) - 1
         m = 2 * (order - red) / (blue - red) - 1
 
-        # fit the grating invariant m*lambda (echelle order x wavelength): it is
-        # smooth across orders and an unweighted fit approximates velocity-space
+        # unweighted fit on the grating invariant approximates velocity-space
         mlambda = order * wav
 
         if len(fibers) != 1:
@@ -951,9 +951,7 @@ class WLS(BaseMasterModule):
         self.ml2_obj.set_input_files(l0_file_list, "thar")
 
         # WLS metadata is out of EPRV scope but registered in Masters-headers.csv,
-        # so it routes through set_keyword (-> PRIMARY, registry comments). The
-        # POLYORD* degrees live on PRIMARY only (one registry home each); they were
-        # formerly also stamped on each {chip}_WLS_COEFFS header, now dropped.
+        # so it routes through set_keyword (-> PRIMARY, registry comments).
         self.ml2_obj.set_keyword("ROUGHWLS", self.rough_wls_file)
         self.ml2_obj.set_keyword("LINELIST", self.linelist)
         self.ml2_obj.set_keyword("LINEPROF", lineprofile)
