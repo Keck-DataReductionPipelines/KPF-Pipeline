@@ -334,49 +334,6 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
     return os.path.join(data_root, level, datecode, filename)
 
 
-def build_master_path_from_fits_header(kpf_obj, cal_type):
-    """
-    Read a master calibration path from a KPF object's RECEIPT header.
-
-    Returns the `{PREFIX}FILE` keyword (written by CalibrationAssociation as the
-    master's full path), where `PREFIX` is the uppercase calibration name. Used
-    by the image-processing and masters layers to locate the master associated
-    with a frame. Accepts any KPF data object (L1/L2/L4): the association
-    keywords live on the RECEIPT extension header (their registry home in
-    config/L{1,2}-headers.csv).
-
-    Parameters
-    ----------
-    kpf_obj : KPFDataModel
-        Any KPF data object whose RECEIPT header holds the associated master
-        keywords (e.g. KPF1, KPF2, KPF4).
-    cal_type : str
-        Lowercase calibration name (e.g. 'bias' or 'dark'); its uppercase form
-        is the header keyword prefix (BIAS, DARK).
-
-    Returns
-    -------
-    str
-        Full path to the associated master, from `{PREFIX}FILE`.
-
-    Raises
-    ------
-    FileNotFoundError
-        If `{PREFIX}FILE` is absent from the RECEIPT header (i.e.
-        CalibrationAssociation has not run for this calibration).
-    """
-    prefix = cal_type.upper()
-    master_file = kpf_obj.headers["RECEIPT"].get(f"{prefix}FILE")
-
-    if not master_file:
-        raise FileNotFoundError(
-            f"{prefix}FILE must be present in the RECEIPT header. "
-            "Run CalibrationAssociation before ImageProcessing."
-        )
-
-    return master_file
-
-
 def glob_masters(data_root, cal_type, level, datecode):
     """
     Glob pattern matching every ``cal_type``/``level`` master written under
