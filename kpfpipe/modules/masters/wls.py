@@ -414,8 +414,7 @@ class WLS(BaseMasterModule):
         lines = {k: [[None] * norder for _ in fibers] for k in keys}
 
         for i, fiber in enumerate(fibers):
-            if verbose:
-                print(f"fitting {chip} {fiber} line positions")
+            logger.debug("fitting %s %s line positions", chip, fiber)
 
             flux_arr = l2_obj.data[f"{chip}_{fiber}_FLUX"]
             wave_arr = self.rough_wls[f"{chip}_{fiber}_WAVE"]
@@ -453,8 +452,7 @@ class WLS(BaseMasterModule):
 
             n_total = len(lines["wav"][i])
             n_good = int(np.sum(~lines["bad"][i]))
-            if verbose:
-                print(f"  {chip} {fiber}: {n_good}/{n_total} good lines")
+            logger.info("%s %s: %d/%d good lines", chip, fiber, n_good, n_total)
             if n_good == 0 and verbose:
                 warnings.warn(
                     f"{chip} {fiber}: no good lines retained "
@@ -717,8 +715,7 @@ class WLS(BaseMasterModule):
         rejected = 0
 
         for i, l2_obj in enumerate(l2_obj_list):
-            if verbose:
-                print(f"\n{i + 1} of {nobs}")
+            logger.debug("processing observation %d of %d", i + 1, nobs)
 
             lines_stack[i] = self._fit_line_positions_ffi(
                 l2_obj,
@@ -954,6 +951,8 @@ class WLS(BaseMasterModule):
         if diagnostics_path is not None:
             self.save_diagnostics(diagnostics_path)
 
+        logger.info("summary:\n%s", self._info_text())
+
         return self.ml2_obj
 
     def save_diagnostics(self, path):
@@ -994,29 +993,35 @@ class WLS(BaseMasterModule):
                             frame_group.create_dataset(key, data=arr)
         logger.info("wrote WLS diagnostics to %s", path)
 
-    def info(self):
-        """Print a summary of the module configuration and WLS results."""
-        print("WLS")
-        print("  l0_file_list:")
+    def _info_text(self):
+        """Build the info() report text."""
+        lines = []
+        lines.append("WLS")
+        lines.append("  l0_file_list:")
         for fn in self.l0_file_list:
-            print(f"    {fn}")
-        print(f"  chips:           {self.chips}")
-        print(f"  fibers:          {self.fibers}")
-        print(f"  linelist:        {self.linelist}")
-        print(f"  rough_wls_file:  {self.rough_wls_file}")
-        print(f"  lineprofile:     {self.lineprofile}")
-        print(
+            lines.append(f"    {fn}")
+        lines.append(f"  chips:           {self.chips}")
+        lines.append(f"  fibers:          {self.fibers}")
+        lines.append(f"  linelist:        {self.linelist}")
+        lines.append(f"  rough_wls_file:  {self.rough_wls_file}")
+        lines.append(f"  lineprofile:     {self.lineprofile}")
+        lines.append(
             f"  polyorder:       x={self.polyorder_x}, m={self.polyorder_m}, "
             f"f={self.polyorder_f}"
         )
 
         if self._info is None:
-            print("  make_master_l2() has not been called")
-            return
+            lines.append("  make_master_l2() has not been called")
+            return "\n".join(lines)
 
-        print(f"\n  {'chip':<8s} {'n lines fit/total'}")
-        print("  " + "-" * 40)
+        lines.append(f"\n  {'chip':<8s} {'n lines fit/total'}")
+        lines.append("  " + "-" * 40)
         for chip, stats in self._info.items():
             n_fit, n_total = stats["n_fit"], stats["n_total"]
             pct = 100.0 * n_fit / n_total if n_total else 0.0
-            print(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")
+            lines.append(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")
+        return "\n".join(lines)
+
+    def info(self):
+        """Print a summary of the module configuration and WLS results."""
+        print(self._info_text())

@@ -532,20 +532,28 @@ class SpectralExtraction:
         self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "", "PASS")
 
+        logger.info("summary:\n%s", self._info_text())
         return l2_obj
+
+    def _info_text(self):
+        """Build the info() report text."""
+        lines = [
+            "SpectralExtraction",
+            f"  obs_id:            {self.l1_obj.obs_id}",
+            f"  extraction_method: {self.extraction_method}",
+        ]
+
+        if self._info is None:
+            lines.append("  perform() has not been called")
+            return "\n".join(lines)
+
+        lines.append(f"\n  {'CHIP':<8s} {'FIBERS':<30s} {'NORDER'}")
+        lines.append("  " + "-" * 46)
+        for chip, info in self._info.items():
+            fibers_str = " ".join(info["fibers"])
+            lines.append(f"  {chip:<8s} {fibers_str:<30s} {info['norder']}")
+        return "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and extraction results."""
-        print("SpectralExtraction")
-        print(f"  obs_id:            {self.l1_obj.obs_id}")
-        print(f"  extraction_method: {self.extraction_method}")
-
-        if self._info is None:
-            print("  perform() has not been called")
-            return
-
-        print(f"\n  {'CHIP':<8s} {'FIBERS':<30s} {'NORDER'}")
-        print("  " + "-" * 46)
-        for chip, info in self._info.items():
-            fibers_str = " ".join(info["fibers"])
-            print(f"  {chip:<8s} {fibers_str:<30s} {info['norder']}")
+        print(self._info_text())

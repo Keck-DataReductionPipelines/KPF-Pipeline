@@ -41,11 +41,17 @@ class Flat(BaseMasterModule):
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
 
+    def _info_text(self):
+        """Build the info() report text."""
+        lines = []
+        lines.append("Flat")
+        lines.append("  l0_file_list:")
+        for fn in self.l0_file_list:
+            lines.append(f"    {fn}")
+        lines.append(f"  chips:  {self.chips}")
+        lines.append("  make_master_l1() is not yet implemented for Flat")
+        return "\n".join(lines)
+
     def info(self):
         """Print a summary of the module configuration (not yet implemented)."""
-        print("Flat")
-        print("  l0_file_list:")
-        for fn in self.l0_file_list:
-            print(f"    {fn}")
-        print(f"  chips:  {self.chips}")
-        print("  make_master_l1() is not yet implemented for Flat")
+        print(self._info_text())

@@ -9,6 +9,7 @@ modules drive these same flags per file type (see kpfpipe/modules/masters);
 science applies the full sequence. Flat division is not yet implemented.
 """
 
+import logging
 import os
 
 import numpy as np
@@ -17,6 +18,8 @@ from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import build_master_path_from_fits_header
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -370,19 +373,27 @@ class ImageProcessing:
         self._track_info()
         self.l1_obj.receipt_add_entry("image_processing", "", "PASS")
 
+        logger.info("summary:\n%s", self._info_text())
         return self.l1_obj
+
+    def _info_text(self):
+        """Build the info() report text."""
+        lines = [
+            "ImageProcessing",
+            f"  obs_id: {self.l1_obj.obs_id}",
+            f"  chips:  {self.chips}",
+        ]
+
+        if self._info is None:
+            lines.append("  perform() has not been called")
+            return "\n".join(lines)
+
+        lines.append(f"\n  {'cal_type':<10s} {'master file'}")
+        lines.append("  " + "-" * 60)
+        for cal_type, path in self._info.items():
+            lines.append(f"  {cal_type:<10s} {path}")
+        return "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and processing results."""
-        print("ImageProcessing")
-        print(f"  obs_id: {self.l1_obj.obs_id}")
-        print(f"  chips:  {self.chips}")
-
-        if self._info is None:
-            print("  perform() has not been called")
-            return
-
-        print(f"\n  {'cal_type':<10s} {'master file'}")
-        print("  " + "-" * 60)
-        for cal_type, path in self._info.items():
-            print(f"  {cal_type:<10s} {path}")
+        print(self._info_text())

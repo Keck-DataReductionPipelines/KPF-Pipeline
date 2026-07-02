@@ -227,9 +227,6 @@ class BaseMasterModule:
         reduce redundant I/O and recomputation. The streaming stats path caches
         its approximation-pass frames so the exact pass reuses them.
         """
-        if verbose:
-            print(f"loading {fn}")
-
         success = True
         failure = False
 

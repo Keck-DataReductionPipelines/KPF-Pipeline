@@ -2,8 +2,12 @@
 KPF Master Dark construction module.
 """
 
+import logging
+
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
+
+logger = logging.getLogger(__name__)
 
 
 class Dark(BaseMasterModule):
@@ -114,27 +118,35 @@ class Dark(BaseMasterModule):
         if filepath is not None:
             self.save_master("L1", filepath, overwrite=True)
 
+        logger.info("summary:\n%s", self._info_text())
+
         return self.ml1_obj
 
-    def info(self):
-        """Print a summary of the module configuration and stacking results."""
-        print("Dark")
-        print("  l0_file_list:")
+    def _info_text(self):
+        """Build the info() report text."""
+        lines = []
+        lines.append("Dark")
+        lines.append("  l0_file_list:")
         for fn in self.l0_file_list:
-            print(f"    {fn}")
-        print(f"  chips:  {self.chips}")
+            lines.append(f"    {fn}")
+        lines.append(f"  chips:  {self.chips}")
 
         if self._info is None:
-            print("  make_master_l1() has not been called")
-            return
+            lines.append("  make_master_l1() has not been called")
+            return "\n".join(lines)
 
-        print(
+        lines.append(
             f"\n  {'chip':<8s} {'median [e-/s]':<15s} "
             f"{'rms [e-/s]':<10s} {'bad pixels'}"
         )
-        print("  " + "-" * 56)
+        lines.append("  " + "-" * 56)
         for chip, stats in self._info.items():
-            print(
+            lines.append(
                 f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} "
                 f"{stats['num_bad']} ({stats['pct_bad']:.3f}%)"
             )
+        return "\n".join(lines)
+
+    def info(self):
+        """Print a summary of the module configuration and stacking results."""
+        print(self._info_text())

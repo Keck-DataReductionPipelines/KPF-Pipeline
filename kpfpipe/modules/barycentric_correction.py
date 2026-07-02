@@ -30,6 +30,7 @@ Follows the barycentric correction approach described in:
 - Butler et al. (1996)    — flux-weighted midpoint time
 """
 
+import logging
 import re
 import warnings
 
@@ -48,6 +49,8 @@ from kpfpipe import DEFAULTS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import strictly_increasing
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -791,33 +794,45 @@ class BarycentricCorrection:
         self._track_info()
         self.l2_obj.receipt_add_entry("barycentric_correction", "", "PASS")
 
+        logger.info("summary:\n%s", self._info_text())
         return self.l2_obj
 
-    def info(self):
-        """Print a summary of the barycentric correction results."""
-        print("BarycentricCorrection")
+    def _info_text(self):
+        """Build the info() report text."""
         obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
-        print(f"  obs_id:  {obs_id}")
+        lines = [
+            "BarycentricCorrection",
+            f"  obs_id:  {obs_id}",
+        ]
 
         if self._info is None:
-            print("  perform() has not been called")
-            return
+            lines.append("  perform() has not been called")
+            return "\n".join(lines)
 
         r = self._info
-        print(f"  astrometry:  {r['astrometry_source']}")
+        lines.append(f"  astrometry:  {r['astrometry_source']}")
         ccd_bjd, ccd_kms, ccd_z = r["ccd_bjd"], r["ccd_kms"], r["ccd_z"]
 
         # Per-CCD summaries (CCD1*/CCD2* on the BJD_TDB / BARYCORR_KMS / BARYCORR_Z
         # extension headers).
-        print(f"\n  {'':<8s}{'BJD_TDB':>18s}{'BARYCORR_KMS':>18s}{'BARYCORR_Z':>18s}")
-        print("  " + "-" * 62)
-        print(
+        lines.append(
+            f"\n  {'':<8s}{'BJD_TDB':>18s}{'BARYCORR_KMS':>18s}{'BARYCORR_Z':>18s}"
+        )
+        lines.append("  " + "-" * 62)
+        lines.append(
             f"  {'GREEN':<8s}{ccd_bjd[0]:>18.6f}{ccd_kms[0]:>+18.4f}{ccd_z[0]:>18.10f}"
         )
-        print(f"  {'RED':<8s}{ccd_bjd[1]:>18.6f}{ccd_kms[1]:>+18.4f}{ccd_z[1]:>18.10f}")
+        lines.append(
+            f"  {'RED':<8s}{ccd_bjd[1]:>18.6f}{ccd_kms[1]:>+18.4f}{ccd_z[1]:>18.10f}"
+        )
 
         bjd, kms = r["bjd_tdb"], r["bary_kms"]
-        print(
+        lines.append(
             f"\n  per-order spread:   BJD {np.ptp(bjd) * 86400:.3f} sec,"
             f" BARY {np.ptp(kms) * 1000:.3f} m/s"
         )
+        return "\n".join(lines)
+
+    def info(self):
+        """Print a summary of the barycentric correction results."""
+        print(self._info_text())

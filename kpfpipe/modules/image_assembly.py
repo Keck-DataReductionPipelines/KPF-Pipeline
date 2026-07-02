@@ -8,12 +8,16 @@ standard CCD reduction sequence (bias subtraction, then exposure-scaled dark
 subtraction, then flat division), gated per file type by the masters modules.
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
 
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -609,22 +613,30 @@ class ImageAssembly:
         self._track_info(chips)
         l1_obj.receipt_add_entry("image_assembly", "", "PASS")
 
+        logger.info("summary:\n%s", self._info_text())
         return l1_obj
+
+    def _info_text(self):
+        """Build the info() report text."""
+        lines = [
+            "ImageAssembly",
+            f"  obs_id:           {self.l0_obj.obs_id}",
+            f"  overscan_method:  {self.overscan_method}",
+            f"  readnoise_sigma:  {self.readnoise_sigma}",
+        ]
+
+        if self._info is None:
+            lines.append("  perform() has not been called")
+            return "\n".join(lines)
+
+        lines.append(f"\n  {'channel':<14s} {'read noise [e-]':<18s} {'non-gaussian'}")
+        lines.append("  " + "-" * 48)
+        for chip in self._info:
+            for channel, (rn, rnng) in self._info[chip].items():
+                lines.append(f"  {channel:<14s} {rn:<18} {rnng}")
+            lines.append("")
+        return "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and processing results."""
-        print("ImageAssembly")
-        print(f"  obs_id:           {self.l0_obj.obs_id}")
-        print(f"  overscan_method:  {self.overscan_method}")
-        print(f"  readnoise_sigma:  {self.readnoise_sigma}")
-
-        if self._info is None:
-            print("  perform() has not been called")
-            return
-
-        print(f"\n  {'channel':<14s} {'read noise [e-]':<18s} {'non-gaussian'}")
-        print("  " + "-" * 48)
-        for chip in self._info:
-            for channel, (rn, rnng) in self._info[chip].items():
-                print(f"  {channel:<14s} {rn:<18} {rnng}")
-            print()
+        print(self._info_text())
