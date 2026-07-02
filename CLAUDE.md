@@ -87,7 +87,8 @@ fast subset. The three tiers, smallest first:
 - **The FULL suite (`make test`)** — reserved for when the blast radius is wide:
   - opening or updating a PR;
   - changing a **core/shared module** other tests depend on — the data models
-    (`kpfpipe/data_models/`), `kpfpipe/constants`, base classes, or anything the
+    (`kpfpipe/data_models/`), the package-level constants in `kpfpipe/__init__.py`
+    (`DETECTOR`/`DEFAULTS`/`REPO_ROOT`), base classes, or anything the
     integration tests exercise;
   - a **major or cross-cutting refactor**.
 
@@ -258,7 +259,7 @@ see the style guide §11.)* The architecture invariants:
 
 ### Configuration
 
-Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/config/`). Detector parameters (CCD dimensions, order counts) live in `data_models/config/detector.toml` and are exposed via `kpfpipe.constants`.
+Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/config/`). Detector parameters (CCD dimensions, order counts) live in `reference/detector.toml` and are exposed at the package top level as `kpfpipe.DETECTOR` (alongside `kpfpipe.DEFAULTS`/`REPO_ROOT`), loaded by `kpfpipe/__init__.py`.
 
 ### Filename conventions
 
