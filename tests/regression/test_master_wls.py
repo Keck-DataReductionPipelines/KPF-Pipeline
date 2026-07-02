@@ -691,6 +691,33 @@ class TestCalculateWlsCoeffs:
         coeffs = wls._calculate_wls_coeffs(lines, wls._echelle_orders["GREEN"])
         assert coeffs.shape == (wls.polyorder_x + 1, wls.polyorder_m + 1)
 
+    def test_mlambda_roundtrip_recovers_wavelength(self):
+        """A surface exactly representable as m*lambda is recovered by the fit."""
+        wls = WLS(FILE_LIST)
+        orders = wls._echelle_orders["GREEN"]
+        ncol = wls.ccd["ncol"]
+
+        # true m*lambda is a known low-degree Legendre surface -> divide out the
+        # order to get a wavelength surface the fit must recover exactly.
+        coeffs_true = np.zeros((wls.polyorder_x + 1, wls.polyorder_m + 1))
+        coeffs_true[0, 0], coeffs_true[1, 0] = 8.0e5, 300.0  # mean, pixel slope
+        coeffs_true[0, 1], coeffs_true[1, 1] = 5.0e4, 5.0  # order slope, cross term
+        wave_true = wls._evaluate_wls_coeffs(coeffs_true, orders, nfiber=1)
+
+        cols = np.linspace(0, ncol - 1, 60).astype(int)
+        lines = {
+            "wav": np.array(
+                [wave_true[j, c] for j in range(len(orders)) for c in cols]
+            ),
+            "pix": np.array([float(c) for _ in orders for c in cols]),
+            "order": np.array([o for o in orders for _ in cols]),
+            "fiber": np.array(["SCI1"] * (len(orders) * len(cols))),
+            "bad": np.zeros(len(orders) * len(cols), dtype=bool),
+        }
+        coeffs_fit = wls._calculate_wls_coeffs(lines, orders)
+        wave_fit = wls._evaluate_wls_coeffs(coeffs_fit, orders, nfiber=1)
+        np.testing.assert_allclose(wave_fit, wave_true, rtol=1e-9)
+
 
 # ---------------------------------------------------------------------------
 # TestComputeWlsFrameRejection

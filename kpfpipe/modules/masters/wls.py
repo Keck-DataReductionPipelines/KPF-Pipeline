@@ -484,9 +484,9 @@ class WLS(BaseMasterModule):
         Fit a multivariate Legendre polynomial wavelength solution to
         fitted line positions.
 
-        Treats wavelength as a smooth function of pixel position (x), order
-        number (m), and (optionally) fiber index (f). All variables are
-        rescaled to [-1, 1] before fitting.
+        Treats the grating invariant m*lambda (echelle order x wavelength) as a
+        smooth function of pixel position (x), order (m), and (optionally) fiber
+        index (f). All variables are rescaled to [-1, 1] before fitting.
 
         Parameters
         ----------
@@ -564,6 +564,10 @@ class WLS(BaseMasterModule):
         x = 2 * pix / (ncol - 1) - 1
         m = 2 * (order - red) / (blue - red) - 1
 
+        # fit the grating invariant m*lambda (echelle order x wavelength): it is
+        # smooth across orders and an unweighted fit approximates velocity-space
+        mlambda = order * wav
+
         if len(fibers) != 1:
             # map fibers to their positional rank then rescale to [-1, 1]
             canonical = sorted(expected_fibers, key=lambda fb: self.fiber_positions[fb])
@@ -574,7 +578,7 @@ class WLS(BaseMasterModule):
         if len(fibers) == 1:
             V = legendre.legvander2d(x, m, deg=[polyorder_x, polyorder_m])
 
-            coeffs, *_ = np.linalg.lstsq(V, wav, rcond=None)
+            coeffs, *_ = np.linalg.lstsq(V, mlambda, rcond=None)
             coeffs = coeffs.reshape(polyorder_x + 1, polyorder_m + 1)
 
         else:
@@ -582,7 +586,7 @@ class WLS(BaseMasterModule):
                 x, m, f, deg=[polyorder_x, polyorder_m, polyorder_f]
             )
 
-            coeffs, *_ = np.linalg.lstsq(V, wav, rcond=None)
+            coeffs, *_ = np.linalg.lstsq(V, mlambda, rcond=None)
             coeffs = coeffs.reshape(polyorder_x + 1, polyorder_m + 1, polyorder_f + 1)
 
         return coeffs
@@ -590,6 +594,9 @@ class WLS(BaseMasterModule):
     def _evaluate_wls_coeffs(self, coeffs, orders, nfiber):
         """
         Evaluate a Legendre wavelength solution over all detector columns.
+
+        The coefficients describe the grating-invariant m*lambda surface, so the
+        evaluated surface is divided by the physical order to recover wavelength.
 
         Parameters
         ----------
@@ -613,17 +620,20 @@ class WLS(BaseMasterModule):
         y = 2 * (orders - red) / (blue - red) - 1
         z = np.linspace(-1, 1, nfiber)
 
+        # L is the fitted grating-invariant surface m*lambda
         if coeffs.ndim == 2:
             X, Y = np.meshgrid(x, y)
-            W = legendre.legval2d(X, Y, coeffs)
+            L = legendre.legval2d(X, Y, coeffs)
 
         elif coeffs.ndim == 3:
             X, Y, Z = np.meshgrid(x, y, z)
-            W = legendre.legval3d(X, Y, Z, coeffs)
+            L = legendre.legval3d(X, Y, Z, coeffs)
 
         else:
             raise ValueError(f"coeffs.ndim expected to be 2 or 3, got {coeffs.ndim}")
 
+        # recover wavelength by dividing out the physical order (axis 0)
+        W = L / orders.reshape((-1,) + (1,) * (L.ndim - 1))
         return W
 
     def _compute_wls_from_stack(
