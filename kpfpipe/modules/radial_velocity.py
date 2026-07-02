@@ -83,6 +83,7 @@ class RadialVelocity:
         self._line_mask = {}  # line mask, set by _build_line_mask()
         self._velocity_grid = {}  # velocity grid, set by _build_velocity_grid()
         self._ccf = {}  # CCF cube, set by compute_ccfs()
+        self._ccf_var = {}  # per-bin CCF variance cube, set by compute_ccfs()
         self._order_weights = (
             None  # shared order-weight table, loaded by _get_order_weights()
         )
@@ -333,9 +334,12 @@ class RadialVelocity:
 
         Returns
         -------
-        ndarray
+        ccf : ndarray
             CCF value at each velocity step (all zeros if the order is unusable
             or no mask lines fall fully within it).
+        ccf_var : ndarray
+            Per-velocity-bin photon variance sum(w**2 * flux), where w is the
+            per-pixel mask weight (all zeros in the same unusable cases).
 
         Raises
         ------
@@ -354,9 +358,10 @@ class RadialVelocity:
             )
 
         ccf = np.zeros(velocity_grid.size)
+        ccf_var = np.zeros(velocity_grid.size)
         n_pix = wave.size
         if n_pix < 3 or not strictly_increasing(wave):
-            return ccf
+            return ccf, ccf_var
 
         # Wavelength bin edges (length n+1) and widths at the pixel midpoints.
         edges = np.empty(n_pix + 1)
@@ -376,7 +381,7 @@ class RadialVelocity:
             line_mask["end"] * smax <= wave[-1]
         )
         if not np.any(keep):
-            return ccf
+            return ccf, ccf_var
         l_start, l_end = line_mask["start"][keep], line_mask["end"][keep]
         l_weight = line_mask["weight"][keep]
 
@@ -420,11 +425,12 @@ class RadialVelocity:
                 )
 
             ccf[vi] = np.sum(flux_clean * overlap_frac)
+            ccf_var[vi] = np.sum(flux_clean * overlap_frac**2)
 
-        return ccf
+        return ccf, ccf_var
 
     @staticmethod
-    def _compute_rv_1d(vel, ccf, wave, window, fit_nsigma=3.0, min_npts=9):
+    def _compute_rv_1d(vel, ccf, ccf_var, wave, window, fit_nsigma=3.0, min_npts=9):
         """
         Two-pass Gaussian fit to a CCF dip, with a photon-limited error.
 
@@ -440,6 +446,9 @@ class RadialVelocity:
             CCF velocity steps [km/s].
         ccf : ndarray
             CCF value at each velocity step.
+        ccf_var : ndarray
+            Per-velocity-bin CCF variance sum(w**2 * var) aligned with `ccf`; sets
+            the photon noise in the error estimate (Bouchy 2001).
         wave : ndarray
             1D wavelength solution for the order [Å]; sets the per-pixel velocity
             scale used in the error estimate.
@@ -457,6 +466,12 @@ class RadialVelocity:
             Fitted radial velocity [km/s], or NaN if the fit fails.
         rv_err : float
             Photon-limited RV uncertainty [km/s], or NaN if unavailable.
+
+        Raises
+        ------
+        ValueError
+            If the CCF or its variance is non-physical (zero/negative flux
+            counts) across the fit window, so a photon error cannot be computed.
         """
         # Fail loudly on non-finite CCF values rather than masking them out.
         if ccf.size < min_npts or not np.all(np.isfinite(ccf)) or np.ptp(ccf) == 0:
@@ -499,9 +514,14 @@ class RadialVelocity:
             pass
 
         # Photon-limited RV uncertainty from the weighted CCF slope over the
-        # second-pass window.
-        if not np.any(ccf_fit) or np.any(ccf_fit < 0):
-            return rv, np.nan
+        # second-pass window; per-bin noise is the propagated CCF variance
+        # sum(w**2 * var) (Bouchy 2001).
+        ccf_var_fit = ccf_var[idx_lo:idx_hi]
+        if not np.any(ccf_fit) or np.any(ccf_fit < 0) or np.any(ccf_var_fit <= 0):
+            raise ValueError(
+                "non-physical CCF or CCF variance in the RV fit window "
+                "(zero/negative flux counts); cannot compute a photon-limited error"
+            )
 
         # nan-aware: in the combined-CCF path `wave` is the full, unclipped order
         # row, which may carry NaN edge pixels; plain np.median would NaN the error.
@@ -513,7 +533,7 @@ class RadialVelocity:
         )
         n_pix_per_vel_step = dv / vel_span_per_pixel  # dv: mean velocity-grid step
 
-        weighted_slope = np.gradient(ccf_fit, vel_fit) ** 2 / ccf_fit
+        weighted_slope = np.gradient(ccf_fit, vel_fit) ** 2 / ccf_var_fit
         qccf = (
             np.sum(weighted_slope) ** 0.5 / np.sum(ccf_fit) ** 0.5
         ) * n_pix_per_vel_step**0.5
@@ -547,11 +567,17 @@ class RadialVelocity:
 
         Returns
         -------
-        tuple
-            (velocity_grid, weighted_ccf, summed_ccf, rep_wave): the shared
-            velocity grid [km/s], the two 1D collapsed CCFs, and the WAVE row of
-            the strongest order (the photon-error velocity scale). weighted_ccf
-            is identically zero if no order carries weight.
+        velocity_grid : ndarray
+            Shared CCF velocity grid [km/s].
+        weighted_ccf : ndarray
+            Order-weighted collapsed CCF (the RV value); identically zero if no
+            order carries weight.
+        summed_ccf : ndarray
+            Unweighted order-summed collapsed CCF (the photon-error signal).
+        summed_ccf_var : ndarray
+            Per-bin photon variance of summed_ccf.
+        rep_wave : ndarray
+            WAVE row of the strongest order (the photon-error velocity scale).
 
         Raises
         ------
@@ -583,6 +609,7 @@ class RadialVelocity:
         )
         weights = self._get_order_weights(chip, fibers[0])
         ccf = np.sum([self._ccf[f"{chip}_{f}"] for f in fibers], axis=0)
+        ccf_var = np.sum([self._ccf_var[f"{chip}_{f}"] for f in fibers], axis=0)
 
         ccf_weighted = np.zeros(velocity_grid.size)
         for o in range(ccf.shape[0]):
@@ -590,11 +617,12 @@ class RadialVelocity:
             if ccf_sum > 0 and weights[o] != 0:
                 ccf_weighted += (ccf[o] / ccf_sum) * weights[o]
         ccf_summed = np.nansum(ccf, axis=0)
+        ccf_summed_var = np.nansum(ccf_var, axis=0)
 
         # The dispersion is ~uniform across the chip; use the strongest order's
         # WAVE for the photon-noise velocity scale.
         rep = int(np.argmax(np.nansum(ccf, axis=1)))
-        return velocity_grid, ccf_weighted, ccf_summed, wave[rep]
+        return velocity_grid, ccf_weighted, ccf_summed, ccf_summed_var, wave[rep]
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -701,6 +729,7 @@ class RadialVelocity:
             barycorr_z = np.zeros(norder)
 
         ccf = np.zeros((norder, velocity_grid.size))
+        ccf_var = np.zeros((norder, velocity_grid.size))
 
         # Some orders legitimately yield a zero CCF (no mask lines fall within
         # their wavelength coverage, or the order has no usable flux); those are
@@ -709,7 +738,7 @@ class RadialVelocity:
         for o in range(norder):
             if not np.all(np.isfinite(wave[o])) or not np.any(np.isfinite(flux[o])):
                 continue
-            ccf[o] = self._compute_ccf_1d(
+            ccf[o], ccf_var[o] = self._compute_ccf_1d(
                 wave[o], flux[o], line_mask, velocity_grid, barycorr_z[o]
             )
 
@@ -727,6 +756,7 @@ class RadialVelocity:
             )
 
         self._ccf[f"{chip}_{fiber}"] = ccf
+        self._ccf_var[f"{chip}_{fiber}"] = ccf_var
 
         return {"velocity": velocity_grid, "ccf": ccf}
 
@@ -776,6 +806,7 @@ class RadialVelocity:
                 "before compute_order_by_order_rvs"
             )
         ccf = self._ccf[ext]
+        ccf_var = self._ccf_var[ext]
 
         velocity_grid = self._velocity_grid[ext]  # the grid compute_ccfs used
         wave = np.asarray(self.l2_obj.data[f"{chip}_{fiber}_WAVE"], dtype=np.float64)
@@ -785,7 +816,7 @@ class RadialVelocity:
             if not np.any(ccf[o]):
                 continue
             rv[o], rv_err[o] = self._compute_rv_1d(
-                velocity_grid, ccf[o], wave[o], window, fit_nsigma, min_npts
+                velocity_grid, ccf[o], ccf_var[o], wave[o], window, fit_nsigma, min_npts
             )
 
         return {"rv": rv, "rv_err": rv_err}
@@ -872,13 +903,15 @@ class RadialVelocity:
         # unweighted-sum CCF.
         per_chip = {}
         for chip in chips:
-            grid, ccf_w, ccf_s, wave = self._combine_ccfs(chip, fibers)
+            grid, ccf_w, ccf_s, ccf_s_var, wave = self._combine_ccfs(chip, fibers)
             if not np.any(ccf_w):
                 per_chip[chip] = (np.nan, np.nan)
                 continue
-            rv = self._compute_rv_1d(grid, ccf_w, wave, window, fit_nsigma, min_npts)[0]
+            rv = self._compute_rv_1d(
+                grid, ccf_w, ccf_s_var, wave, window, fit_nsigma, min_npts
+            )[0]
             rv_err = self._compute_rv_1d(
-                grid, ccf_s, wave, window, fit_nsigma, min_npts
+                grid, ccf_s, ccf_s_var, wave, window, fit_nsigma, min_npts
             )[1]
             per_chip[chip] = (rv, rv_err)
 
