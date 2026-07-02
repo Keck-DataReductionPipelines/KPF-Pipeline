@@ -90,7 +90,13 @@ def build_mini_database(data_dir, write=True):
 
 
 def build_l0_file_lists(
-    cal_type, *, data_dir=None, mini_db=None, min_file_count=5, cluster_gap_seconds=7200
+    cal_type,
+    *,
+    data_dir=None,
+    mini_db=None,
+    min_file_count=5,
+    cluster_gap_seconds=7200,
+    merge_small_clusters=False,
 ):
     """
     Return sorted file lists for all calibration clusters of the requested
@@ -102,7 +108,9 @@ def build_l0_file_lists(
     given, uses it directly to avoid redundant I/O. Filters by OBJECT, then
     groups frames into clusters by detecting gaps larger than
     `cluster_gap_seconds` between consecutive timestamps. Every returned
-    cluster must have at least `min_file_count` files; otherwise raises.
+    cluster has at least `min_file_count` files: undersized clusters are
+    dropped, or (with `merge_small_clusters`) folded into a neighbor. Raises
+    only when no cluster meets the threshold.
 
     Parameters
     ----------
@@ -119,6 +127,10 @@ def build_l0_file_lists(
         into separate clusters. The default of 7200 (2 hours) reliably
         distinguishes morning vs. evening KPF calibration clusters, which are
         separated by science obs.
+    merge_small_clusters : bool, default False
+        How to handle clusters smaller than `min_file_count`. If False, drop
+        them. If True, iteratively merge each into its nearest-in-time neighbor
+        until every cluster meets the threshold.
 
     Returns
     -------
@@ -130,8 +142,7 @@ def build_l0_file_lists(
     ValueError
         If `cal_type` is not a recognized calibration type, if exactly one of
         `data_dir` or `mini_db` is not provided, if no calibration frames of
-        the requested type are found, or if any cluster contains fewer than
-        `min_file_count` files.
+        the requested type are found, or if no cluster meets `min_file_count`.
     """
     if cal_type not in _OBJECT_MAP:
         raise ValueError(
@@ -199,11 +210,40 @@ def build_l0_file_lists(
         clusters.append(cluster)
     clusters.sort(key=lambda c: get_seconds_since_j2000(c[0]))
 
-    short = [c for c in clusters if len(c) < min_file_count]
-    if short:
+    if merge_small_clusters:
+        # Fold each undersized cluster (smallest first) into its nearer
+        # chronological neighbor until none remain below threshold.
+        while len(clusters) > 1 and any(len(c) < min_file_count for c in clusters):
+            i = min(
+                (k for k, c in enumerate(clusters) if len(c) < min_file_count),
+                key=lambda k: len(clusters[k]),
+            )
+            prev_gap = (
+                get_seconds_since_j2000(clusters[i][0])
+                - get_seconds_since_j2000(clusters[i - 1][-1])
+                if i > 0
+                else float("inf")
+            )
+            next_gap = (
+                get_seconds_since_j2000(clusters[i + 1][0])
+                - get_seconds_since_j2000(clusters[i][-1])
+                if i < len(clusters) - 1
+                else float("inf")
+            )
+            j = i - 1 if prev_gap <= next_gap else i + 1
+            merged = sorted(clusters[i] + clusters[j], key=get_seconds_since_j2000)
+            for idx in sorted((i, j), reverse=True):
+                clusters.pop(idx)
+            clusters.append(merged)
+        clusters.sort(key=lambda c: get_seconds_since_j2000(c[0]))
+    else:
+        # Drop undersized clusters; one usable cluster is enough.
+        clusters = [c for c in clusters if len(c) >= min_file_count]
+
+    if not any(len(c) >= min_file_count for c in clusters):
         raise ValueError(
-            f"'{cal_type}' has {len(short)} cluster(s) below "
-            f"min_file_count={min_file_count}; sizes: {[len(c) for c in short]}"
+            f"'{cal_type}' has no cluster with at least "
+            f"min_file_count={min_file_count} files"
         )
     return clusters
 

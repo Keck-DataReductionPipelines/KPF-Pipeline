@@ -138,6 +138,23 @@ def _make_mini_db():
     return df
 
 
+_BIAS_SMALL = [
+    f"/data/L0/20240405/KP.20240405.{30000 + i * 100:05d}.00.fits" for i in range(2)
+]  # 30000–30100, a >2hr gap after _BIAS_A → a separate 2-file cluster
+
+
+def _mixed_bias_db():
+    """Mini_db with one 5-file bias cluster (_BIAS_A) and a later 2-file one."""
+    rows = [
+        {"FILENAME": f, "IMTYPE": "Bias", "OBJECT": "autocal-bias", "TARGNAME": None}
+        for f in _BIAS_A + _BIAS_SMALL
+    ]
+    df = pd.DataFrame(rows)
+    df["EXPTIME"] = 60.0
+    df["ELAPSED"] = 60.0
+    return df, _BIAS_SMALL
+
+
 def _write_test_csv(tmp_path, db):
     """
     Materialize a synthetic mini_db on disk: touch a stub .fits for every
@@ -191,19 +208,49 @@ class TestBuildL0FileLists:
         for lst in build_l0_file_lists("bias", data_dir=data_dir):
             assert lst == sorted(lst)
 
-    def test_raises_when_any_cluster_below_min(self, data_dir):
-        # min_file_count=6: both bias clusters (5 files each) fall below → raises.
-        with pytest.raises(ValueError, match="below min_file_count=6"):
+    def test_raises_when_no_cluster_meets_min(self, data_dir):
+        # min_file_count=6: both bias clusters (5 files each) fall below and are
+        # dropped, leaving nothing → raises.
+        with pytest.raises(ValueError, match="no cluster with at least"):
             build_l0_file_lists("bias", min_file_count=6, data_dir=data_dir)
 
     def test_raises_when_no_frames_found(self, data_dir):
         with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
             build_l0_file_lists("flat", data_dir=data_dir)
 
-    def test_raises_when_dark_cluster_below_default_min(self, data_dir):
-        # dark cluster has only 3 files; default min_file_count=5 → raises.
-        with pytest.raises(ValueError, match="below min_file_count=5"):
+    def test_raises_when_only_cluster_below_default_min(self, data_dir):
+        # dark cluster has only 3 files; default min_file_count=5 → dropped →
+        # raises.
+        with pytest.raises(ValueError, match="no cluster with at least"):
             build_l0_file_lists("dark", data_dir=data_dir)
+
+    def test_drops_small_cluster_keeps_large(self):
+        db, _ = _mixed_bias_db()
+        lists = build_l0_file_lists("bias", mini_db=db)
+        assert len(lists) == 1
+        assert lists[0] == sorted(_BIAS_A)
+
+    def test_merge_folds_small_into_neighbor(self):
+        db, small = _mixed_bias_db()
+        lists = build_l0_file_lists("bias", mini_db=db, merge_small_clusters=True)
+        assert len(lists) == 1
+        assert lists[0] == sorted(_BIAS_A + small)
+
+    def test_merge_combines_two_small_clusters(self, data_dir):
+        # Two 5-file bias clusters, each below min=6; merged into one of 10.
+        lists = build_l0_file_lists(
+            "bias", min_file_count=6, data_dir=data_dir, merge_small_clusters=True
+        )
+        assert len(lists) == 1
+        assert len(lists[0]) == 10
+
+    def test_merge_raises_when_total_below_min(self):
+        # 7 bias files total (5 + 2); merging cannot reach min=8 → raises.
+        db, _ = _mixed_bias_db()
+        with pytest.raises(ValueError, match="no cluster with at least"):
+            build_l0_file_lists(
+                "bias", min_file_count=8, mini_db=db, merge_small_clusters=True
+            )
 
     def test_invalid_imtype_raises(self, data_dir):
         with pytest.raises(ValueError, match="cal_type must be one of"):
@@ -295,9 +342,16 @@ class TestBuildL0FileListsRealData:
 
     def test_dark_raises_on_undersized_clusters(self, l0_dir):
         # The testdata has two dark clusters of 2 and 3 frames — both below
-        # the default min_file_count=5 → raises.
-        with pytest.raises(ValueError, match="below min_file_count=5"):
+        # the default min_file_count=5 and dropped, leaving nothing → raises.
+        with pytest.raises(ValueError, match="no cluster with at least"):
             build_l0_file_lists("dark", data_dir=l0_dir)
+
+    def test_dark_merges_undersized_clusters(self, l0_dir):
+        # Merging the 2- and 3-frame dark clusters yields one of 5, meeting min.
+        lists = build_l0_file_lists("dark", data_dir=l0_dir, merge_small_clusters=True)
+        assert len(lists) == 1
+        assert len(lists[0]) == 5
+        assert lists[0] == sorted(lists[0])
 
 
 # ---------------------------------------------------------------------------
