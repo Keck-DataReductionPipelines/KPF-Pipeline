@@ -314,7 +314,7 @@ class RadialVelocity:
         return rows[mask_name].to_numpy(dtype=float)
 
     @staticmethod
-    def _compute_ccf_1d(wave, flux, line_mask, velocity_grid, barycorr_z):
+    def _compute_ccf_1d(wave, flux, var, line_mask, velocity_grid, barycorr_z):
         """
         Cross-correlate one order's spectrum against the mask over the velocity
         grid, folding in the order's barycentric redshift z.
@@ -325,6 +325,9 @@ class RadialVelocity:
             1D wavelength solution for the order [Å].
         flux : ndarray
             1D extracted flux for the order.
+        var : ndarray
+            1D per-pixel variance for the order (TRACE_VAR); sets the CCF photon
+            variance.
         line_mask : dict
             Line mask (keys 'start', 'end', 'weight') from _build_line_mask.
         velocity_grid : ndarray
@@ -338,7 +341,7 @@ class RadialVelocity:
             CCF value at each velocity step (all zeros if the order is unusable
             or no mask lines fall fully within it).
         ccf_var : ndarray
-            Per-velocity-bin photon variance sum(w**2 * flux), where w is the
+            Per-velocity-bin photon variance sum(w**2 * var), where w is the
             per-pixel mask weight (all zeros in the same unusable cases).
 
         Raises
@@ -350,6 +353,7 @@ class RadialVelocity:
         """
         wave = np.asarray(wave, dtype=np.float64)
         flux = np.asarray(flux, dtype=np.float64)
+        var = np.asarray(var, dtype=np.float64)
         if wave[0] > wave[-1]:
             raise ValueError(
                 f"WAVE array is descending (wave[0]={wave[0]:.4f} > "
@@ -389,6 +393,7 @@ class RadialVelocity:
         # summing flux_clean * overlap_frac (overlap weights are always finite)
         # is identical but skips the per-step NaN mask.
         flux_clean = np.nan_to_num(flux)
+        var_clean = np.nan_to_num(var)
 
         # Shifted line edges and their covering-pixel indices for every velocity
         # step at once: searchsorted takes an array of any shape, so one batched
@@ -425,7 +430,7 @@ class RadialVelocity:
                 )
 
             ccf[vi] = np.sum(flux_clean * overlap_frac)
-            ccf_var[vi] = np.sum(flux_clean * overlap_frac**2)
+            ccf_var[vi] = np.sum(var_clean * overlap_frac**2)
 
         return ccf, ccf_var
 
@@ -692,6 +697,7 @@ class RadialVelocity:
 
         flux = np.asarray(self.l2_obj.data[f"{chip}_{fiber}_FLUX"], dtype=np.float64)
         wave = np.asarray(self.l2_obj.data[f"{chip}_{fiber}_WAVE"], dtype=np.float64)
+        var = np.asarray(self.l2_obj.data[f"{chip}_{fiber}_VAR"], dtype=np.float64)
 
         # Drop the blaze-faint, low-S/N pixels at each order's edges, which
         # otherwise inject noise into the CCF. clip_edge_pixels counts pixels to
@@ -711,6 +717,7 @@ class RadialVelocity:
                 cols = slice(n_long, ncol - n_short)
             flux = flux[:, cols]
             wave = wave[:, cols]
+            var = var[:, cols]
 
         norder = flux.shape[0]
 
@@ -739,7 +746,7 @@ class RadialVelocity:
             if not np.all(np.isfinite(wave[o])) or not np.any(np.isfinite(flux[o])):
                 continue
             ccf[o], ccf_var[o] = self._compute_ccf_1d(
-                wave[o], flux[o], line_mask, velocity_grid, barycorr_z[o]
+                wave[o], flux[o], var[o], line_mask, velocity_grid, barycorr_z[o]
             )
 
         # Fail loudly: an identically-zero CCF across every order means the

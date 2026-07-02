@@ -83,51 +83,66 @@ class TestComputeCCF:
         # Observed absorption that the CCF should align at velocity step v_dip.
         lam_obs = centers * (1.0 + v_dip / SPEED_OF_LIGHT_KMS) / (1.0 + z)
         flux = _absorption_spectrum(wave, lam_obs)
+        var = flux.copy()  # photon-noise proxy
         vel = np.arange(-402, 403) * 0.25
-        return wave, flux, mask, vel
+        return wave, flux, var, mask, vel
 
     def test_dip_at_injected_velocity(self):
-        wave, flux, mask, vel = self._order(v_dip=3.0, z=0.0)
-        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        wave, flux, var, mask, vel = self._order(v_dip=3.0, z=0.0)
+        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         assert vel[np.argmin(ccf)] == pytest.approx(3.0, abs=0.3)
 
     def test_zero_velocity_dip(self):
-        wave, flux, mask, vel = self._order(v_dip=0.0, z=0.0)
-        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        wave, flux, var, mask, vel = self._order(v_dip=0.0, z=0.0)
+        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         assert vel[np.argmin(ccf)] == pytest.approx(0.0, abs=0.3)
 
     def test_barycorr_z_folds_in(self):
         z = 5.0 / SPEED_OF_LIGHT_KMS
-        wave, flux, mask, vel = self._order(v_dip=2.0, z=z)
-        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, z)
+        wave, flux, var, mask, vel = self._order(v_dip=2.0, z=z)
+        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, z)
         assert vel[np.argmin(ccf)] == pytest.approx(2.0, abs=0.3)
 
     def test_descending_wave_raises(self):
-        wave, flux, mask, vel = self._order(v_dip=0.0)
+        wave, flux, var, mask, vel = self._order(v_dip=0.0)
         with pytest.raises(ValueError, match="descending"):
-            RadialVelocity._compute_ccf_1d(wave[::-1], flux[::-1], mask, vel, 0.0)
+            RadialVelocity._compute_ccf_1d(
+                wave[::-1], flux[::-1], var[::-1], mask, vel, 0.0
+            )
 
     def test_constant_wave_returns_zeros(self):
-        wave, flux, mask, vel = self._order()
+        wave, flux, var, mask, vel = self._order()
         ccf, _ = RadialVelocity._compute_ccf_1d(
-            np.full_like(wave, 5000.0), flux, mask, vel, 0.0
+            np.full_like(wave, 5000.0), flux, var, mask, vel, 0.0
         )
         assert not np.any(ccf)
 
     def test_nan_wave_returns_zeros(self):
-        wave, flux, mask, vel = self._order()
+        wave, flux, var, mask, vel = self._order()
         wave = wave.copy()
         wave[1000] = np.nan
-        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         assert not np.any(ccf)
 
     def test_no_lines_in_order_returns_zeros(self):
         wave = np.linspace(6000.0, 6050.0, 2000)
         flux = np.ones_like(wave)
+        var = flux.copy()  # photon-noise proxy
         mask = _make_mask(np.linspace(5008.0, 5042.0, 20))  # all outside the order
         vel = np.arange(-402, 403) * 0.25
-        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         assert not np.any(ccf)
+
+    def test_ccf_var_propagates_var_not_flux(self):
+        # ccf_var carries the per-pixel VARIANCE, not the flux: scaling var
+        # scales ccf_var but leaves the CCF value unchanged.
+        wave, flux, var, mask, vel = self._order(v_dip=0.0)
+        ccf1, var1 = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
+        ccf2, var2 = RadialVelocity._compute_ccf_1d(
+            wave, flux, 4.0 * var, mask, vel, 0.0
+        )
+        np.testing.assert_allclose(ccf1, ccf2)
+        np.testing.assert_allclose(var2, 4.0 * var1)
 
 
 # ---------------------------------------------------------------------------
@@ -144,19 +159,20 @@ class TestDtypeProvenance:
         centers = np.linspace(5008.0, 5042.0, 20)
         mask = _make_mask(centers)
         flux = _absorption_spectrum(wave, centers)
+        var = flux.copy()  # photon-noise proxy
         vel = np.arange(-402, 403) * 0.25
-        return wave, flux, mask, vel
+        return wave, flux, var, mask, vel
 
     def test_ccf_1d_is_float64_from_float32_flux(self):
-        wave, flux, mask, vel = self._order()
+        wave, flux, var, mask, vel = self._order()
         ccf, _ = RadialVelocity._compute_ccf_1d(
-            wave, flux.astype(np.float32), mask, vel, 0.0
+            wave, flux.astype(np.float32), var, mask, vel, 0.0
         )
         assert_dtype(ccf, CCF, "CCF (_compute_ccf_1d, float32 flux in)")
 
     def test_compute_rv_1d_returns_float64(self):
-        wave, flux, mask, vel = self._order()
-        ccf, ccf_var = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        wave, flux, var, mask, vel = self._order()
+        ccf, ccf_var = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         rv, rv_err = RadialVelocity._compute_rv_1d(
             vel, ccf, ccf_var, wave, [-50.0, 50.0], 11
         )
@@ -527,6 +543,9 @@ def rv_kpf2():
             )
             kpf2.set_data(
                 f"{chip}_{fiber}_FLUX", np.tile(flux_1d, (n, 1)).astype(np.float64)
+            )
+            kpf2.set_data(
+                f"{chip}_{fiber}_VAR", np.tile(flux_1d, (n, 1)).astype(np.float64)
             )
     # Per-order barycentric extensions (populated together by BarycentricCorrection).
     kpf2.set_data("BARYCORR_Z", np.zeros(NORDER))
