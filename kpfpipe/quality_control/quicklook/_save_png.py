@@ -1,9 +1,13 @@
 """Shared figure-saving helper for quicklook plots."""
 
+import logging
+
 import numpy as np
 from matplotlib import colormaps
 from matplotlib.colors import Normalize
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 def save_png(fig, path, dpi, compress_level):
@@ -32,6 +36,7 @@ def save_png(fig, path, dpi, compress_level):
     Image.fromarray(rgb, "RGB").save(
         path, format="png", dpi=(dpi, dpi), compress_level=compress_level
     )
+    logger.info("wrote quicklook %s", path)
 
 
 def save_image_png(image, path, cmap, vmin, vmax, origin="lower", compress_level=1):
@@ -53,3 +58,4 @@ def save_image_png(image, path, cmap, vmin, vmax, origin="lower", compress_level
     cmap_obj.set_bad("black")
     rgb = cmap_obj(norm(masked), bytes=True)[..., :3]
     Image.fromarray(rgb, "RGB").save(path, format="png", compress_level=compress_level)
+    logger.info("wrote quicklook %s", path)

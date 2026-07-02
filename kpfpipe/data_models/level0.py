@@ -10,6 +10,7 @@ infrastructure and receipt system.
 """
 
 import importlib.resources
+import logging
 import os
 import re
 import warnings
@@ -25,6 +26,8 @@ from kpfpipe import __version__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.kpf import get_obs_id
+
+logger = logging.getLogger(__name__)
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
@@ -199,6 +202,7 @@ class KPF0(KPFDataModel):
             os.makedirs(dirname, exist_ok=True)
         hdul.writeto(fn, overwrite=True, output_verify="silentfix")
         hdul.close()
+        logger.info("wrote %s to %s", type(self).__name__, fn)
         return fn
 
     _L0_TO_L1_PASSTHROUGH = [

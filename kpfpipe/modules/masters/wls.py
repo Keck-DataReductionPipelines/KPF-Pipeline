@@ -2,6 +2,7 @@
 KPF Master Wavelength Solution construction module.
 """
 
+import logging
 import os
 import warnings
 
@@ -16,6 +17,8 @@ from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
+
+logger = logging.getLogger(__name__)
 
 _ROUGH_WLS_FILE = f"{REPO_ROOT}/reference/rough_wls_fallback.csv"
 
@@ -104,6 +107,7 @@ class WLS(BaseMasterModule):
             self.linelist = linelist
             needs_load = True
         if needs_load:
+            logger.info("reading ThAr line list from %s", self.linelist)
             self._linelist_df = pd.read_csv(self.linelist)
         return self._linelist_df
 
@@ -122,6 +126,7 @@ class WLS(BaseMasterModule):
             self.rough_wls_file = rough_wls_file
             needs_load = True
         if needs_load:
+            logger.info("reading rough WLS from %s", self.rough_wls_file)
             df = pd.read_csv(self.rough_wls_file)
 
             ncol = self.ccd["ncol"]
@@ -987,6 +992,7 @@ class WLS(BaseMasterModule):
                             )
                         else:
                             frame_group.create_dataset(key, data=arr)
+        logger.info("wrote WLS diagnostics to %s", path)
 
     def info(self):
         """Print a summary of the module configuration and WLS results."""

@@ -11,6 +11,7 @@ infrastructure and receipt system.
 
 import datetime
 import importlib.resources
+import logging
 import os
 import re
 import warnings
@@ -24,6 +25,8 @@ from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.kpf import get_obs_id
+
+logger = logging.getLogger(__name__)
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _L1_EXTENSIONS = pd.read_csv(_config_path / "L1-extensions.csv")
@@ -188,6 +191,7 @@ class KPF1(KPFDataModel):
             os.makedirs(dirname, exist_ok=True)
         hdul.writeto(fn, overwrite=True, output_verify="silentfix")
         hdul.close()
+        logger.info("wrote %s to %s", type(self).__name__, fn)
         return fn
 
     # Mapping of L1 extension names → KPF2/RV2 extension names for pass-through.

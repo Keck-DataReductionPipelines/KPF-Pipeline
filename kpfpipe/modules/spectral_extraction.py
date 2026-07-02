@@ -2,6 +2,7 @@
 KPF Spectral Extraction module.
 """
 
+import logging
 import warnings
 
 import numpy as np
@@ -11,6 +12,8 @@ from numpy.polynomial import polynomial
 from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import validate_array
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {**DEFAULTS, "extraction_method": "box"}
 
@@ -76,6 +79,7 @@ class SpectralExtraction:
             self.order_trace_path = {}
 
         filepath = f"{REPO_ROOT}/reference/order_trace_{chip.lower()}.csv"
+        logger.info("reading %s order trace from %s", chip, filepath)
         with open(filepath) as f:
             self.order_trace[chip.upper()] = (
                 pd.read_csv(f, index_col=0).set_index(["Fiber", "Order"]).sort_index()

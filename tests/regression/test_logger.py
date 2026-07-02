@@ -145,6 +145,20 @@ class TestTeardown:
         kpflog.teardown_logging()  # must not raise
 
 
+class TestIOChokepoints:
+    """Every FITS write/read emits one INFO record (DRP-RUN-08)."""
+
+    def test_to_fits_and_from_fits_log_records(self, tmp_path, caplog):
+        from kpfpipe.data_models.level4 import KPF4
+
+        path = str(tmp_path / "rt_l4.fits")
+        with caplog.at_level(logging.INFO, logger="kpfpipe"):
+            KPF4().to_fits(path)
+            KPF4.from_fits(path)
+        assert f"wrote KPF4 to {path}" in caplog.text
+        assert f"reading KPF4 from {path}" in caplog.text
+
+
 def _config(tmp_path, body):
     path = tmp_path / "config.toml"
     path.write_text(body)

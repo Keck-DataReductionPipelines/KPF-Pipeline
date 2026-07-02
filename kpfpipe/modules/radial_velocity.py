@@ -21,6 +21,7 @@ All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.
 """
 
+import logging
 import warnings
 
 import astropy.units as u
@@ -35,6 +36,8 @@ from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 from kpfpipe.utils.validation import strictly_increasing
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -246,7 +249,9 @@ class RadialVelocity:
 
         mask_name = self._resolve_illumination_source(chip, fiber)["mask_name"]
         if mask_name == "thar":
-            df = pd.read_csv(f"{REPO_ROOT}/reference/thar_line_list.csv")
+            mask_path = f"{REPO_ROOT}/reference/thar_line_list.csv"
+            logger.info("reading %s %s CCF mask from %s", chip, fiber, mask_path)
+            df = pd.read_csv(mask_path)
             # Deduplicate: lines recur across overlapping orders and would
             # otherwise be double-counted.
             centers = np.unique(df["WAVE"].to_numpy(dtype=float))
@@ -255,6 +260,7 @@ class RadialVelocity:
             mask_path = (
                 f"{REPO_ROOT}/reference/line_masks/stellar_masks/{mask_name}.txt"
             )
+            logger.info("reading %s %s CCF mask from %s", chip, fiber, mask_path)
             centers, weights = np.loadtxt(mask_path, unpack=True)  # vacuum wavelengths
 
         mask = {
@@ -298,9 +304,9 @@ class RadialVelocity:
         Returns a 1D ndarray of length norder_chip, ordered by ORDER.
         """
         if self._order_weights is None:
-            self._order_weights = pd.read_csv(
-                f"{REPO_ROOT}/reference/ccf_order_weights.csv"
-            )
+            weights_path = f"{REPO_ROOT}/reference/ccf_order_weights.csv"
+            logger.info("reading CCF order weights from %s", weights_path)
+            self._order_weights = pd.read_csv(weights_path)
         df = self._order_weights
         mask_name = self._resolve_illumination_source(chip, fiber)["mask_name"]
         if mask_name not in df.columns:

@@ -20,6 +20,7 @@ orders, a view).
 """
 
 import importlib.resources
+import logging
 from collections import OrderedDict
 
 import numpy as np
@@ -43,6 +44,8 @@ keyword_registry.register_rvdata_extension(
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NORDER = NORDER_GREEN + NORDER_RED
+
+logger = logging.getLogger(__name__)
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 # CCF and RV extensions reuse the shared trace map (CCF{n}/RV{n} <-> TRACE{n});
@@ -228,7 +231,9 @@ class KPF4(KPFDataModel, RV4):
         """KPF keeps a single-filepath ``to_fits``; rvdata >=0.4.0 renamed the
         parameter to ``out_filename``. Delegate so all our call sites can keep
         passing one path (``to_fits(fn)``)."""
-        return super().to_fits(out_filename=fn)
+        out_path = super().to_fits(out_filename=fn)
+        logger.info("wrote %s to %s", type(self).__name__, out_path)
+        return out_path
 
     def info(self):
         """Print summary of KPF4 data model contents."""
