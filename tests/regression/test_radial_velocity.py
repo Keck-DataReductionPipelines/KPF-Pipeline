@@ -174,7 +174,7 @@ class TestDtypeProvenance:
         wave, flux, var, mask, vel = self._order()
         ccf, ccf_var = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         rv, rv_err = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 11
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
         )
         assert_dtype(np.asarray(rv), RV_FLOAT, "RV scalar")
         assert_dtype(np.asarray(rv_err), RV_FLOAT, "RV_ERR scalar")
@@ -196,21 +196,23 @@ class TestComputeRV:
     def test_recovers_injected_rv(self):
         vel, ccf, ccf_var, wave = self._ccf(v0=2.5)
         rv, rv_err = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 11
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
         )
         assert rv == pytest.approx(2.5, abs=0.05)
 
     def test_error_finite_and_positive(self):
         vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
         _, rv_err = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 11
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
         )
         assert np.isfinite(rv_err) and rv_err > 0
 
     def test_even_window_pts_allowed(self):
         # min_npts is a minimum point count, not a centered odd window.
         vel, ccf, ccf_var, wave = self._ccf(v0=1.0)
-        rv, _ = RadialVelocity._compute_rv_1d(vel, ccf, ccf_var, wave, [-50.0, 50.0], 8)
+        rv, _ = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 8
+        )
         assert rv == pytest.approx(1.0, abs=0.05)
 
     def test_nonphysical_variance_raises(self):
@@ -219,7 +221,9 @@ class TestComputeRV:
         vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
         ccf_var[402] = -1.0  # index of v = 0, inside the +/-3 sigma fit window
         with pytest.raises(ValueError, match="non-physical"):
-            RadialVelocity._compute_rv_1d(vel, ccf, ccf_var, wave, [-50.0, 50.0], 11)
+            RadialVelocity._compute_rv_1d(
+                vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+            )
 
     def test_flat_ccf_returns_nan(self):
         vel = np.arange(-402, 403) * 0.25
@@ -227,7 +231,7 @@ class TestComputeRV:
         ccf_var = ccf
         wave = np.linspace(5000.0, 5050.0, 4000)
         rv, rv_err = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 11
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
         )
         assert np.isnan(rv) and np.isnan(rv_err)
 
@@ -236,7 +240,7 @@ class TestComputeRV:
         vel, ccf, ccf_var, wave = self._ccf(v0=1.0)
         ccf[10] = np.nan
         rv, rv_err = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 11
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
         )
         assert np.isnan(rv) and np.isnan(rv_err)
 
@@ -249,7 +253,7 @@ class TestComputeRV:
         ccf_var = ccf
         wave = np.linspace(5000.0, 5050.0, 4000)
         rv, rv_err = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 11
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
         )
         assert rv == pytest.approx(v0, abs=0.1) and np.isnan(rv_err)
 
@@ -257,10 +261,10 @@ class TestComputeRV:
         # A larger min-points floor below the +/-3 sigma window doesn't shift the fit.
         vel, ccf, ccf_var, wave = self._ccf(v0=1.0)
         rv9, _ = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 9
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 9
         )
         rv21, _ = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 21
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 21
         )
         assert rv9 == pytest.approx(1.0, abs=0.05)
         assert rv21 == pytest.approx(1.0, abs=0.05)
@@ -269,7 +273,7 @@ class TestComputeRV:
         # A first-pass window narrower than min_npts grid points -> NaN, NaN.
         vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
         rv, rv_err = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-0.1, 0.1], 11
+            vel, ccf, ccf_var, wave, 0.5, [-0.1, 0.1], 11
         )
         assert np.isnan(rv) and np.isnan(rv_err)
 
@@ -282,7 +286,7 @@ class TestComputeRV:
 
         monkeypatch.setattr("kpfpipe.modules.radial_velocity.optimize_lsq", boom)
         rv, rv_err = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 11
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
         )
         assert np.isnan(rv) and np.isnan(rv_err)
 
@@ -295,7 +299,7 @@ class TestComputeRV:
 
         monkeypatch.setattr("kpfpipe.modules.radial_velocity.optimize_lsq", bad_fit)
         rv, rv_err = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 11
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
         )
         assert np.isnan(rv) and np.isnan(rv_err)
 
@@ -312,9 +316,45 @@ class TestComputeRV:
 
         monkeypatch.setattr("kpfpipe.modules.radial_velocity.optimize_lsq", flaky)
         rv, _ = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, wave, [-50.0, 50.0], 11
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
         )
         assert np.isfinite(rv) and rv == pytest.approx(0.0, abs=1e-9)
+
+    def test_error_scales_with_correlation_length(self):
+        # The photon error is 1/sqrt(N_scale) with N_scale = dv / corr_length,
+        # so rv_err must scale as sqrt(corr_length): widening the mask hole (via
+        # mask_width) lengthens the noise correlation and inflates the error by
+        # exactly sqrt(L2/L1). Guards the corr-length term feeding the error.
+        vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
+        velpix = c.to("km/s").value * np.median(np.abs(np.diff(wave))) / np.median(wave)
+        _, err_a = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
+        _, err_b = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 1.0, [-50.0, 50.0], 11
+        )
+        la = RadialVelocity._ccf_noise_corr_length(velpix, 0.5)
+        lb = RadialVelocity._ccf_noise_corr_length(velpix, 1.0)
+        assert err_b / err_a == pytest.approx((lb / la) ** 0.5, rel=1e-6)
+
+
+class TestCCFNoiseCorrLength:
+    def test_matches_measured_value(self):
+        # Native pixel 0.885 km/s, mask hole 2*0.5 = 1.0 km/s -> trapezoid-ACF
+        # integral length, verified against the frame's measured autocorrelation.
+        assert RadialVelocity._ccf_noise_corr_length(0.885, 0.5) == pytest.approx(
+            1.418, abs=1e-3
+        )
+
+    def test_equal_widths_give_1p5w(self):
+        # pixel width == mask-hole width == w -> 1.5 w.
+        assert RadialVelocity._ccf_noise_corr_length(0.6, 0.3) == pytest.approx(0.9)
+
+    def test_symmetric_in_the_two_widths(self):
+        # L depends only on the {pixel, mask-hole} pair, not which is larger.
+        a = RadialVelocity._ccf_noise_corr_length(1.0, 0.4)  # widths {1.0, 0.8}
+        b = RadialVelocity._ccf_noise_corr_length(0.8, 0.5)  # widths {0.8, 1.0}
+        assert a == pytest.approx(b)
 
 
 # ---------------------------------------------------------------------------
@@ -592,7 +632,7 @@ class TestComputeCCFPublic:
         monkeypatch.setattr(
             RadialVelocity,
             "_build_line_mask",
-            lambda self, chip, fiber, width=None: _make_mask(_MASK_CENTERS),
+            lambda self, chip, fiber, mask_width=None: _make_mask(_MASK_CENTERS),
         )
         rv_kpf2.set_data("BARYCORR_Z", np.array([]))
         rv = RadialVelocity(rv_kpf2, config={"ccf_window": _RANGE_KMS})
