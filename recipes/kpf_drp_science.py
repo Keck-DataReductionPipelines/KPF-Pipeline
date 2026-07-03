@@ -13,6 +13,7 @@ data products are written to the output data root.
 from kpfpipe.data_models import KPF0
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 from kpfpipe.modules.calibration_association import CalibrationAssociation
+from kpfpipe.modules.cross_correlation import CrossCorrelation
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.radial_velocity import RadialVelocity
@@ -107,9 +108,12 @@ def main(config, args):
     l2_out_path = build_filepath(obs_id, "L2", data_root=data_root_science)
     l2.to_fits(l2_out_path)
 
-    # Compute the radial velocity (RV) from the cross-correlation function
-    # (CCF), which is the primary scientific product of the pipeline.
-    radial_velocity = RadialVelocity(l2, config)
+    # Cross-correlate the extracted spectra to build the per-order CCFs (L4).
+    cross_correlation = CrossCorrelation(l2, config)
+    l4 = cross_correlation.perform()
+
+    # Fit the CCFs to radial velocities -- the primary scientific product.
+    radial_velocity = RadialVelocity(l4, config)
     l4 = radial_velocity.perform()
 
     # L4 quicklook plots
