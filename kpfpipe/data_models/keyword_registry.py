@@ -29,8 +29,10 @@ The three use-cases:
       in-loop filter or per-keyword correction.
   (2) Validation — ``allowed`` / ``required`` (per-extension, from the table)
       plus ``structural`` (FITS bookkeeping cards).
-  (3) Routing — ``routing`` (keyword -> (extension, comment)), consumed by
-      ``KPFDataModel.set_keyword``.
+  (3) Routing — ``routing`` (keyword -> (extension, comment)) for the default
+      home-extension write, plus ``comment_for`` ((extension, keyword) ->
+      comment) for ``set_keyword``'s targeted (``ext=``) write of EPRV
+      per-extension cards. Both consumed by ``KPFDataModel.set_keyword``.
 
 It also exposes ``eprv_primary_seed`` (the typed EPRV Required PRIMARY skeleton
 ``KPF1.__init__`` stamps, mirroring rvdata's ``RV2.__init__``). The header_map
@@ -223,6 +225,15 @@ class KeywordRegistry:
         self.registered = frozenset(self.table["Keyword"])
 
         self.routing = MappingProxyType(self._routing_lookup())
+        # (extension, keyword) -> Description, for set_keyword's targeted (ext=)
+        # write path (EPRV per-extension cards like VELSTART on CCF#, which have no
+        # single routed home). KPF rows come after EPRV rows, so KPF wins a clash.
+        self.comments = MappingProxyType(
+            {
+                (row.Extension, row.Keyword): row.Description
+                for row in self.table.itertuples(index=False)
+            }
+        )
         allowed, required = self._validation_lookup()
         self.allowed = MappingProxyType(
             {ext: frozenset(kws) for ext, kws in allowed.items()}
@@ -286,6 +297,15 @@ class KeywordRegistry:
         """
         k = str(key).strip()
         return k in self.structural or k.startswith(self._STRUCTURAL_PREFIXES)
+
+    def comment_for(self, keyword, extension):
+        """FITS comment (registry Description) for ``keyword`` on ``extension``.
+
+        Returns None when the keyword is not registered for that extension — the
+        membership test set_keyword's targeted (``ext=``) path uses; a registered
+        keyword with an empty Description returns ``""``, distinct from None.
+        """
+        return self.comments.get((extension, str(keyword).strip()))
 
     # --- Source table construction -------------------------------------------
 

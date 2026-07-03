@@ -27,7 +27,6 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 from astropy.constants import c
-from astropy.io import fits
 from astropy.stats import mad_std
 
 from kpfpipe import DEFAULTS, REPO_ROOT
@@ -1208,28 +1207,25 @@ class RadialVelocity:
                 ),
             )
 
-            # Per-orderlet CCF/RV extension headers (EPRV L4 standard). The
-            # velocity grid is per-fiber (center varies) but shared across chips.
+            # Per-orderlet CCF/RV extension headers: EPRV per-extension keywords,
+            # each written through the registry to this orderlet's CCF{n}/RV{n}.
+            # The velocity grid is per-fiber (center varies) but shared across
+            # chips. CCF axes are (velocity, order); RV axes are (columns, order).
             grid = self._velocity_grid[f"{chips[-1]}_{fiber}"]
-            ccf_hdr = fits.Header()
-            # CCF cube is (norder, n_velocity_step): FITS axis 1 = velocity,
-            # axis 2 = order (EXTNAME is stamped by rvdata on serialization).
-            ccf_hdr["CTYPE1"] = ("Velocity", "Name of axis 1")
-            ccf_hdr["CTYPE2"] = ("Order-N", "Name of axis 2")
-            ccf_hdr["VELSTART"] = (float(grid[0]), "[km/s] Velocity grid start")
-            ccf_hdr["VELSTEP"] = (float(ccf_step_size), "[km/s] Velocity grid step")
-            ccf_hdr["VELNSTEP"] = (int(grid.size), "Number of velocity grid steps")
-            ccf_hdr["CCFMASK"] = (mask_name, "Mask used to generate CCF")
-            l4_obj.set_header(f"{fiber}_CCF", ccf_hdr)
+            ccf_ext = f"{fiber}_CCF"
+            l4_obj.set_keyword("CTYPE1", "Velocity", ext=ccf_ext)
+            l4_obj.set_keyword("CTYPE2", "Order-N", ext=ccf_ext)
+            l4_obj.set_keyword("VELSTART", float(grid[0]), ext=ccf_ext)
+            l4_obj.set_keyword("VELSTEP", float(ccf_step_size), ext=ccf_ext)
+            l4_obj.set_keyword("VELNSTEP", int(grid.size), ext=ccf_ext)
+            l4_obj.set_keyword("CCFMASK", mask_name, ext=ccf_ext)
 
-            rv_hdr = fits.Header()
-            # RV table has one row per spectral order: FITS axis 2 = order.
-            rv_hdr["CTYPE1"] = ("Columns", "Name of axis 1")
-            rv_hdr["CTYPE2"] = ("Order-N", "Name of axis 2")
-            rv_hdr["RVMETHOD"] = ("CCF", "RV derivation method")
-            rv_hdr["SKYRMVD"] = (False, "Sky model removed?")
-            rv_hdr["TELLRMVD"] = (False, "Telluric model removed?")
-            l4_obj.set_header(f"{fiber}_RV", rv_hdr)
+            rv_ext = f"{fiber}_RV"
+            l4_obj.set_keyword("CTYPE1", "Columns", ext=rv_ext)
+            l4_obj.set_keyword("CTYPE2", "Order-N", ext=rv_ext)
+            l4_obj.set_keyword("RVMETHOD", "CCF", ext=rv_ext)
+            l4_obj.set_keyword("SKYRMVD", False, ext=rv_ext)
+            l4_obj.set_keyword("TELLRMVD", False, ext=rv_ext)
 
             # Per-orderlet RV/error are KPF legacy carryovers, not EPRV RV1
             # keywords. They are registered KPF-pipeline keywords

@@ -116,6 +116,23 @@ class TestSetKeyword:
         assert l4.headers["RV2"]["CCD1RV1"] == 1.2345
         assert l4.headers["PRIMARY"]["CCD1RV"] == 6.789
 
+    def test_targeted_ext_writes_eprv_per_extension_card(self):
+        # EPRV per-extension cards (VELSTART on every CCF#, RVMETHOD on every RV#)
+        # have no single routed home; ext= targets one, alias-resolved, with the
+        # registry Description as the comment.
+        l4 = KPF4()
+        l4.set_keyword("VELSTART", -100.0, ext="SCI2_CCF")  # SCI2_CCF -> CCF3
+        l4.set_keyword("RVMETHOD", "CCF", ext="SCI2_RV")  # SCI2_RV -> RV3
+        assert l4.headers["CCF3"]["VELSTART"] == -100.0
+        assert l4.headers["CCF3"].comments["VELSTART"] == "Velocity Grid Start"
+        assert l4.headers["RV3"]["RVMETHOD"] == "CCF"
+
+    def test_targeted_ext_unregistered_for_extension_raises(self):
+        # A keyword not registered for the targeted extension fails loud.
+        l4 = KPF4()
+        with pytest.raises(KeyError, match="not registered for extension"):
+            l4.set_keyword("VELSTART", 1.0, ext="SCI2_RV")  # VELSTART is CCF-only
+
     def test_unregistered_keyword_raises_keyerror(self):
         l1 = KPF1()
         with pytest.raises(KeyError, match="not registered"):
