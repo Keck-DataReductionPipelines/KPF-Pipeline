@@ -43,9 +43,7 @@ class Flat(BaseMasterModule):
 
     def info(self):
         """Print a summary of the module configuration (not yet implemented)."""
-        print("Flat")
-        print("  l0_file_list:")
-        for fn in self.l0_file_list:
-            print(f"    {fn}")
-        print(f"  chips:  {self.chips}")
-        print("  make_master_l1() is not yet implemented for Flat")
+        # Flat has no make_master_l1() yet, so nothing is tracked onto _info; the
+        # reporter is a terse not-implemented notice (mirrors the other masters'
+        # not-run state). When stacking lands, add _track_info()/_stack_info here.
+        print(f"{type(self).__name__}: make_master_l1() is not yet implemented")

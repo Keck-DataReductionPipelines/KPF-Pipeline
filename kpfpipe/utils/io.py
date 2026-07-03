@@ -1,6 +1,7 @@
 """L0 file-list discovery, calibration clustering, and the mini-database."""
 
 import glob
+import logging
 import os
 import warnings
 
@@ -14,6 +15,8 @@ from kpfpipe.utils.kpf import (
     is_obs_id,
     kpf_timestamp_to_eprv_timestamp,
 )
+
+logger = logging.getLogger(__name__)
 
 _MINI_DB_KEYS = ["FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"]
 
@@ -67,9 +70,11 @@ def build_mini_database(data_dir, write=True):
     if not file_list:
         raise ValueError(f"No FITS files found in {data_dir}")
 
+    logger.info("scanning %d FITS headers in %s", len(file_list), data_dir)
     mini_db = {k: [] for k in _MINI_DB_KEYS}
 
     for fn in file_list:
+        logger.debug("reading header of %s", fn)
         try:
             header = fits.getheader(fn, ext=0)
         except Exception as e:
@@ -86,6 +91,7 @@ def build_mini_database(data_dir, write=True):
     if write:
         csv_path = os.path.join(data_dir, f"KP.{datecode}_{level}.csv")
         df.to_csv(csv_path, index=False)
+        logger.info("wrote mini database to %s", csv_path)
     return df
 
 
@@ -245,6 +251,13 @@ def build_l0_file_lists(
             f"'{cal_type}' has no cluster with at least "
             f"min_file_count={min_file_count} files"
         )
+    # Which frames feed each master is a decision point (DRP-RUN-08).
+    logger.info(
+        "'%s' frames form %d cluster(s); sizes: %s",
+        cal_type,
+        len(clusters),
+        [len(c) for c in clusters],
+    )
     return clusters
 
 

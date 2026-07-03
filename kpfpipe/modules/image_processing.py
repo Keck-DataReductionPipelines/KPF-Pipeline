@@ -9,6 +9,7 @@ modules drive these same flags per file type (see kpfpipe/modules/masters);
 science applies the full sequence. Flat division is not yet implemented.
 """
 
+import logging
 import os
 
 import numpy as np
@@ -16,6 +17,8 @@ import numpy as np
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -262,12 +265,19 @@ class ImageProcessing:
     # ------------------------------------------------------------------
 
     def _track_info(self):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {}
+        """Build and cache the info() summary text from instance attributes."""
+        lines = [
+            "ImageProcessing",
+            f"  obs_id: {self.l1_obj.obs_id}",
+            f"  chips:  {self.chips}",
+            f"\n  {'cal_type':<10s} {'master file'}",
+            "  " + "-" * 60,
+        ]
         if self.bias:
-            self._info["bias"] = self._bias_path
+            lines.append(f"  {'bias':<10s} {self._bias_path}")
         if self.dark:
-            self._info["dark"] = self._dark_path
+            lines.append(f"  {'dark':<10s} {self._dark_path}")
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l1_obj):
         """Write all PRIMARY-header keywords for image processing.
@@ -387,19 +397,12 @@ class ImageProcessing:
         self._track_info()
         self.l1_obj.receipt_add_entry("image_processing", "", "PASS")
 
+        logger.info("summary:\n%s", self._info)
         return self.l1_obj
 
     def info(self):
         """Print a summary of the module configuration and processing results."""
-        print("ImageProcessing")
-        print(f"  obs_id: {self.l1_obj.obs_id}")
-        print(f"  chips:  {self.chips}")
-
         if self._info is None:
-            print("  perform() has not been called")
-            return
-
-        print(f"\n  {'cal_type':<10s} {'master file'}")
-        print("  " + "-" * 60)
-        for cal_type, path in self._info.items():
-            print(f"  {cal_type:<10s} {path}")
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)

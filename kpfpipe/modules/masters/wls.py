@@ -2,6 +2,7 @@
 KPF Master Wavelength Solution construction module.
 """
 
+import logging
 import os
 import warnings
 
@@ -16,6 +17,8 @@ from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
+
+logger = logging.getLogger(__name__)
 
 _ROUGH_WLS_FILE = f"{REPO_ROOT}/reference/rough_wls_fallback.csv"
 
@@ -114,6 +117,7 @@ class WLS(BaseMasterModule):
             self.linelist = linelist
             needs_load = True
         if needs_load:
+            logger.info("reading ThAr line list from %s", self.linelist)
             self._linelist_df = pd.read_csv(self.linelist)
         return self._linelist_df
 
@@ -132,6 +136,7 @@ class WLS(BaseMasterModule):
             self.rough_wls_file = rough_wls_file
             needs_load = True
         if needs_load:
+            logger.info("reading rough WLS from %s", self.rough_wls_file)
             df = pd.read_csv(self.rough_wls_file)
 
             ncol = self.ccd["ncol"]
@@ -419,8 +424,7 @@ class WLS(BaseMasterModule):
         lines = {k: [[None] * len(orders) for _ in fibers] for k in keys}
 
         for i, fiber in enumerate(fibers):
-            if verbose:
-                print(f"fitting {chip} {fiber} line positions")
+            logger.debug("fitting %s %s line positions", chip, fiber)
 
             flux_arr = l2_obj.data[f"{chip}_{fiber}_FLUX"]
             wave_arr = self.rough_wls[f"{chip}_{fiber}_WAVE"]
@@ -459,8 +463,7 @@ class WLS(BaseMasterModule):
 
             n_total = len(lines["wav"][i])
             n_good = int(np.sum(~lines["bad"][i]))
-            if verbose:
-                print(f"  {chip} {fiber}: {n_good}/{n_total} good lines")
+            logger.info("%s %s: %d/%d good lines", chip, fiber, n_good, n_total)
             if n_good == 0 and verbose:
                 warnings.warn(
                     f"{chip} {fiber}: no good lines retained "
@@ -732,8 +735,7 @@ class WLS(BaseMasterModule):
         rejected = 0
 
         for i, l2_obj in enumerate(l2_obj_list):
-            if verbose:
-                print(f"\n{i + 1} of {nobs}")
+            logger.debug("processing observation %d of %d", i + 1, nobs)
 
             lines_stack[i] = self._fit_line_positions_ffi(
                 l2_obj,
@@ -910,7 +912,7 @@ class WLS(BaseMasterModule):
 
         self._coeffs_stack = {}
         self._lines_stack = {}
-        self._info = {}
+        self._stack_info = {}
 
         for chip in self.chips:
             result = self._compute_wls_from_stack(
@@ -924,7 +926,7 @@ class WLS(BaseMasterModule):
             )
             W, coeffs_mean, coeffs_stack, lines_stack = result
 
-            self._info[chip] = {
+            self._stack_info[chip] = {
                 "n_total": sum(len(frame["wav"]) for frame in lines_stack),
                 "n_fit": sum(int(np.sum(~frame["bad"])) for frame in lines_stack),
             }
@@ -967,6 +969,9 @@ class WLS(BaseMasterModule):
         if diagnostics_path is not None:
             self.save_diagnostics(diagnostics_path)
 
+        self._track_info()
+        logger.info("summary:\n%s", self._info)
+
         return self.ml2_obj
 
     def save_diagnostics(self, path):
@@ -1005,30 +1010,33 @@ class WLS(BaseMasterModule):
                             )
                         else:
                             frame_group.create_dataset(key, data=arr)
+        logger.info("wrote WLS diagnostics to %s", path)
 
-    def info(self):
-        """Print a summary of the module configuration and WLS results."""
-        print("WLS")
-        print("  l0_file_list:")
+    def _track_info(self):
+        """Build and cache the info() summary text from _stack_info."""
+        lines = ["WLS", "  l0_file_list:"]
         for fn in self.l0_file_list:
-            print(f"    {fn}")
-        print(f"  chips:           {self.chips}")
-        print(f"  fibers:          {self.fibers}")
-        print(f"  linelist:        {self.linelist}")
-        print(f"  rough_wls_file:  {self.rough_wls_file}")
-        print(f"  lineprofile:     {self.lineprofile}")
-        print(
+            lines.append(f"    {fn}")
+        lines.append(f"  chips:           {self.chips}")
+        lines.append(f"  fibers:          {self.fibers}")
+        lines.append(f"  linelist:        {self.linelist}")
+        lines.append(f"  rough_wls_file:  {self.rough_wls_file}")
+        lines.append(f"  lineprofile:     {self.lineprofile}")
+        lines.append(
             f"  polyorder:       x={self.polyorder_x}, m={self.polyorder_m}, "
             f"f={self.polyorder_f}"
         )
-
-        if self._info is None:
-            print("  make_master_l2() has not been called")
-            return
-
-        print(f"\n  {'chip':<8s} {'n lines fit/total'}")
-        print("  " + "-" * 40)
-        for chip, stats in self._info.items():
+        lines.append(f"\n  {'chip':<8s} {'n lines fit/total'}")
+        lines.append("  " + "-" * 40)
+        for chip, stats in self._stack_info.items():
             n_fit, n_total = stats["n_fit"], stats["n_total"]
             pct = 100.0 * n_fit / n_total if n_total else 0.0
-            print(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")
+            lines.append(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")
+        self._info = "\n".join(lines)
+
+    def info(self):
+        """Print a summary of the module configuration and WLS results."""
+        if self._info is None:
+            print(f"{type(self).__name__}: make_master_l2() has not been called")
+        else:
+            print(self._info)

@@ -9,6 +9,7 @@ multiple inheritance alongside rvdata's RV2/RV4 (KPFDataModel listed first so
 its overrides win while RV2/RV4 remain reachable through ``super()``).
 """
 
+import logging
 import warnings
 
 import numpy as np
@@ -41,6 +42,8 @@ __all__ = [
     "keyword_registry",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 class KPFDataModel(RVDataModel):
     """Shared base for every KPF data model (L0, L1, and — multiply-inherited
@@ -57,6 +60,17 @@ class KPFDataModel(RVDataModel):
     def __init__(self):
         super().__init__()
         self.obs_id = None
+
+    @classmethod
+    def from_fits(cls, fn, instrument=None, **kwargs):
+        """Read a data product from FITS, logging the file read (DRP-RUN-08).
+
+        The single read chokepoint for every KPF data model: one INFO record
+        per FITS read, naming the concrete class and the path, then delegate
+        to the inherited reader (rvdata's for L2/L4 via RV2/RV4 in the MRO).
+        """
+        logger.info("reading %s from %s", cls.__name__, fn)
+        return super().from_fits(fn, instrument=instrument, **kwargs)
 
     @staticmethod
     def as_fits_header(src):

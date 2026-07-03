@@ -21,6 +21,7 @@ All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.
 """
 
+import logging
 import warnings
 
 import astropy.units as u
@@ -31,6 +32,8 @@ from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import strictly_increasing
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -242,7 +245,9 @@ class CrossCorrelation:
 
         mask_name = self._resolve_illumination_source(chip, fiber)["mask_name"]
         if mask_name == "thar":
-            df = pd.read_csv(f"{REPO_ROOT}/reference/thar_line_list.csv")
+            mask_path = f"{REPO_ROOT}/reference/thar_line_list.csv"
+            logger.info("reading %s %s CCF mask from %s", chip, fiber, mask_path)
+            df = pd.read_csv(mask_path)
             # Deduplicate: lines recur across overlapping orders and would
             # otherwise be double-counted.
             centers = np.unique(df["WAVE"].to_numpy(dtype=float))
@@ -251,6 +256,7 @@ class CrossCorrelation:
             mask_path = (
                 f"{REPO_ROOT}/reference/line_masks/stellar_masks/{mask_name}.txt"
             )
+            logger.info("reading %s %s CCF mask from %s", chip, fiber, mask_path)
             centers, weights = np.loadtxt(mask_path, unpack=True)  # vacuum wavelengths
 
         half_width = mask_width / 2.0  # hole spans +/- half_width about each center
@@ -295,9 +301,9 @@ class CrossCorrelation:
         Returns a 1D ndarray of length norder_chip, ordered by ORDER.
         """
         if self._order_weights is None:
-            self._order_weights = pd.read_csv(
-                f"{REPO_ROOT}/reference/ccf_order_weights.csv"
-            )
+            weights_path = f"{REPO_ROOT}/reference/ccf_order_weights.csv"
+            logger.info("reading CCF order weights from %s", weights_path)
+            self._order_weights = pd.read_csv(weights_path)
         df = self._order_weights
         mask_name = self._resolve_illumination_source(chip, fiber)["mask_name"]
         if mask_name not in df.columns:
@@ -705,9 +711,10 @@ class CrossCorrelation:
             # Unilluminated or not-yet-implemented sources have no mask -> skip.
             source = self._resolve_illumination_source(chips[0], fiber)
             if source["mask_name"] is None:
-                print(
-                    f"  {fiber}: illumination source {source['object']!r}; "
-                    "skipping (no CCF)"
+                logger.info(
+                    "%s: illumination source %r; skipping (no CCF)",
+                    fiber,
+                    source["object"],
                 )
                 continue
 
@@ -778,23 +785,26 @@ class CrossCorrelation:
         self._set_headers(l4_obj)
         self._track_info(chips, fibers)
         l4_obj.receipt_add_entry("cross_correlation", "", "PASS")
+        logger.info("summary:\n%s", self._info_text())
         return l4_obj
 
-    def info(self):
-        """Print a summary of the module configuration and CCF results."""
-        print("CrossCorrelation")
+    def _info_text(self):
+        """Build the info() report text."""
         obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
-        print(f"  obs_id:         {obs_id}")
-        print(f"  ccf_mask_width: {self.ccf_mask_width} km/s")
-        print(f"  ccf_step_size:  {self.ccf_step_size} km/s")
-        print(f"  ccf_window:     {self.ccf_window} km/s")
+        lines = [
+            "CrossCorrelation",
+            f"  obs_id:         {obs_id}",
+            f"  ccf_mask_width: {self.ccf_mask_width} km/s",
+            f"  ccf_step_size:  {self.ccf_step_size} km/s",
+            f"  ccf_window:     {self.ccf_window} km/s",
+        ]
 
         if self._info is None:
-            print("  perform() has not been called")
-            return
+            lines.append("  perform() has not been called")
+            return "\n".join(lines)
 
         # CCF velocity grid: per-fiber center, shared step/span.
-        print(
+        lines.append(
             f"\n  CCF velocity grid: {self.ccf_window[0]:+.1f} to "
             f"{self.ccf_window[1]:+.1f} km/s "
             f"about each fiber's center, step {self.ccf_step_size} km/s"
@@ -807,12 +817,19 @@ class CrossCorrelation:
         ]
         fiber_order += [f for f in self._info if f not in fiber_order]
 
-        print(f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NCCF':>8s}")
-        print("  " + "-" * 34)
+        lines.append(f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NCCF':>8s}")
+        lines.append("  " + "-" * 34)
         for chip in ("GREEN", "RED"):
             for fiber in fiber_order:
                 res = self._info[fiber]
                 nccf = res.get("nccf", {}).get(chip)
                 if not nccf:
                     continue
-                print(f"  {chip:<8s}{fiber:<8s}{res.get('source', ''):<10s}{nccf:>8d}")
+                lines.append(
+                    f"  {chip:<8s}{fiber:<8s}{res.get('source', ''):<10s}{nccf:>8d}"
+                )
+        return "\n".join(lines)
+
+    def info(self):
+        """Print a summary of the module configuration and CCF results."""
+        print(self._info_text())

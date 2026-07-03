@@ -2,6 +2,7 @@
 KPF Spectral Extraction module.
 """
 
+import logging
 import warnings
 
 import numpy as np
@@ -11,6 +12,8 @@ from numpy.polynomial import polynomial
 from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import validate_array
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {**DEFAULTS, "extraction_method": "box"}
 
@@ -76,6 +79,7 @@ class SpectralExtraction:
             self.order_trace_path = {}
 
         filepath = f"{REPO_ROOT}/reference/order_trace_{chip.lower()}.csv"
+        logger.info("reading %s order trace from %s", chip, filepath)
         with open(filepath) as f:
             self.order_trace[chip.upper()] = (
                 pd.read_csv(f, index_col=0).set_index(["Fiber", "Order"]).sort_index()
@@ -459,11 +463,18 @@ class SpectralExtraction:
     # ------------------------------------------------------------------
 
     def _track_info(self, chips, fibers):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {
-            chip: {"fibers": list(fibers), "norder": self.norder[chip.upper()]}
-            for chip in chips
-        }
+        """Build and cache the info() summary text from instance attributes."""
+        lines = [
+            "SpectralExtraction",
+            f"  obs_id:            {self.l1_obj.obs_id}",
+            f"  extraction_method: {self.extraction_method}",
+            f"\n  {'CHIP':<8s} {'FIBERS':<30s} {'NORDER'}",
+            "  " + "-" * 46,
+        ]
+        fibers_str = " ".join(fibers)
+        for chip in chips:
+            lines.append(f"  {chip:<8s} {fibers_str:<30s} {self.norder[chip.upper()]}")
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
         """Write all PRIMARY-header keywords for spectral extraction.
@@ -528,20 +539,12 @@ class SpectralExtraction:
         self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "", "PASS")
 
+        logger.info("summary:\n%s", self._info)
         return l2_obj
 
     def info(self):
         """Print a summary of the module configuration and extraction results."""
-        print("SpectralExtraction")
-        print(f"  obs_id:            {self.l1_obj.obs_id}")
-        print(f"  extraction_method: {self.extraction_method}")
-
         if self._info is None:
-            print("  perform() has not been called")
-            return
-
-        print(f"\n  {'CHIP':<8s} {'FIBERS':<30s} {'NORDER'}")
-        print("  " + "-" * 46)
-        for chip, info in self._info.items():
-            fibers_str = " ".join(info["fibers"])
-            print(f"  {chip:<8s} {fibers_str:<30s} {info['norder']}")
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)

@@ -9,6 +9,8 @@ CrossCorrelation (mask monkeypatched, narrow grid) to get an L4, then exercise
 RadialVelocity on it.
 """
 
+import logging
+
 import numpy as np
 import pytest
 from astropy.constants import c
@@ -527,24 +529,27 @@ class TestPerform:
         with pytest.raises(ValueError, match="none illuminated"):
             rv.perform()
 
-    def test_cal_only_run_skips_combine(self, monkeypatch, capsys):
+    def test_cal_only_run_skips_combine(self, monkeypatch, caplog):
         # A calibration-only run (no SCI requested) does not raise; PRIMARY RV is
-        # left UNDEFINED and a note is printed.
+        # left UNDEFINED and a note is logged.
         l4 = _make_l4(monkeypatch, sci_obj="None", sky_obj="None", cal_obj="Th_gold")
-        prim = (
-            RadialVelocity(l4, config={"rv_window": _RANGE_KMS})
-            .perform(fibers=["CAL"])
-            .headers["PRIMARY"]
-        )
+        with caplog.at_level(logging.INFO, logger="kpfpipe"):
+            prim = (
+                RadialVelocity(l4, config={"rv_window": _RANGE_KMS})
+                .perform(fibers=["CAL"])
+                .headers["PRIMARY"]
+            )
         assert prim.get("RV") is None
-        assert "no science orderlet requested" in capsys.readouterr().out
+        assert "no science orderlet requested" in caplog.text
 
-    def test_single_chip_combine_warns(self, rv_module, capsys):
-        # One chip present: the combined RV uses it alone (== CCD1RV) and warns.
-        l4 = rv_module.perform(chips=["GREEN"])
+    def test_single_chip_combine_warns(self, rv_module, caplog):
+        # One chip present: the combined RV uses it alone (== CCD1RV) and a
+        # note is logged.
+        with caplog.at_level(logging.INFO, logger="kpfpipe"):
+            l4 = rv_module.perform(chips=["GREEN"])
         prim = l4.headers["PRIMARY"]
         assert prim["RV"] == pytest.approx(prim["CCD1RV"], abs=1e-9)
-        assert "only chip GREEN present" in capsys.readouterr().out
+        assert "only chip GREEN present" in caplog.text
 
     def test_l4_serializes_to_fits(self, rv_module, tmp_path):
         # The filled RV columns and RV headers survive to_fits. SCI2 -> RV3.
