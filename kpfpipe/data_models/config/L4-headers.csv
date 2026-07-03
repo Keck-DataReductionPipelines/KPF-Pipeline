@@ -23,6 +23,7 @@ CCD2ERV1,RED SCI1 RV error [km/s],RV2,float,RadialVelocity
 CCD2ERV2,RED SCI2 RV error [km/s],RV3,float,RadialVelocity
 CCD2ERV3,RED SCI3 RV error [km/s],RV4,float,RadialVelocity
 CCD2ERVC,RED CAL RV error [km/s],RV5,float,RadialVelocity
+VELMASK,CCF mask hole full width [km/s],CCF*,float,RadialVelocity
 BJDMEAN,Photon-weighted mean of per-order BJD_TDB (SCI2),QUALITY_CONTROL,float,DiagL4
 BJDSTD,Photon-weighted std of per-order BJD [s] (SCI2),QUALITY_CONTROL,float,DiagL4
 BJDRNG,Per-order BJD range [s] (SCI2),QUALITY_CONTROL,float,DiagL4

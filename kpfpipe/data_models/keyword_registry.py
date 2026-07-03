@@ -63,6 +63,10 @@ _kpf_pipe_cfg = importlib.resources.files("kpfpipe.data_models.config")
 # Number of echelle orders (green + red); the value header_map.csv gets wrong (65).
 _NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
 
+# Number of traces/orderlets (SKY, SCI1-3, CAL); the numbered per-orderlet
+# extensions CCF#/RV#/CCF_VAR# run 1.._NUMTRACES.
+_NUMTRACES = len(pd.read_csv(_kpf_pipe_cfg / "trace-map.csv"))
+
 # EPRV-standard compliance is pinned to the installed rv-data-standard release
 # (environment.yml pins it exactly): EPRVTAG is its version ("v0.4.0"), VOCLASS
 # the release month ("EPRVSTANDARD2026.06"). The release date is not in package
@@ -139,11 +143,12 @@ class KeywordRegistry:
         "BARYCORR_KMS": (_rvdata_core_cfg / "L2-BARYCORR_KMS-keywords.csv", 2),
         "BARYCORR_Z": (_rvdata_core_cfg / "L2-BARYCORR_Z-keywords.csv", 2),
         **{
-            f"RV{i}": (_rvdata_core_cfg / "L4-RV1-keywords.csv", 4) for i in range(1, 6)
+            f"RV{i}": (_rvdata_core_cfg / "L4-RV1-keywords.csv", 4)
+            for i in range(1, _NUMTRACES + 1)
         },
         **{
             f"CCF{i}": (_rvdata_core_cfg / "L4-CCF1-keywords.csv", 4)
-            for i in range(1, 6)
+            for i in range(1, _NUMTRACES + 1)
         },
     }
 
@@ -386,19 +391,19 @@ class KeywordRegistry:
                     f"'PopulatedBy' == {cls._EPRV_TAG!r}, which is reserved as the "
                     "EPRV-row discriminator; use a real populating site instead"
                 )
-            rows.append(
-                [
-                    str(r["Keyword"]).strip(),
-                    descr,
-                    str(r["Extension"]).strip(),
-                    str(r.get("DataType", "")).strip(),
-                    populated_by,
-                    False,
-                    level_of(r),
-                    "",  # Default (EPRV-only)
-                    "",  # Units (EPRV-only)
-                ]
-            )
+            keyword = str(r["Keyword"]).strip()
+            dtype = str(r.get("DataType", "")).strip()
+            level = level_of(r)
+            ext_field = str(r["Extension"]).strip()
+            if ext_field.endswith("*"):
+                base = ext_field[:-1]
+                extensions = [f"{base}{i}" for i in range(1, _NUMTRACES + 1)]
+            else:
+                extensions = [ext_field]
+            for ext in extensions:
+                rows.append(
+                    [keyword, descr, ext, dtype, populated_by, False, level, "", ""]
+                )
         return rows
 
     @classmethod
@@ -454,18 +459,22 @@ class KeywordRegistry:
     def _routing_lookup(self):
         """keyword -> (home extension, comment), derived from ``self.table``.
 
-        Write keys only: EPRV PRIMARY keywords (-> PRIMARY) and every KPF
-        keyword (its explicit Extension); KPF wins a name collision. EPRV
-        per-extension cards (RVMETHOD on RV#, CTYPE*, ...) are validation-only,
-        never set_keyword targets, so they are excluded.
+        Write keys only: EPRV PRIMARY keywords (-> PRIMARY) and each KPF keyword
+        with a single home extension; KPF wins a name collision. EPRV
+        per-extension cards (RVMETHOD on RV#, CTYPE*, ...) and multi-home KPF
+        keywords (VELMASK on CCF#) have no single home, so they are excluded and
+        written via set_keyword's targeted ``ext=`` path.
         """
         routing = {}
-        # EPRV PRIMARY rows first (setdefault), then KPF rows override (KPF wins).
         for row in self.table.itertuples(index=False):
             if row.PopulatedBy == self._EPRV_TAG and row.Extension == "PRIMARY":
                 routing.setdefault(row.Keyword, ("PRIMARY", row.Description))
+        kpf_homes = {}
         for row in self.table.itertuples(index=False):
             if row.PopulatedBy != self._EPRV_TAG:
+                kpf_homes.setdefault(row.Keyword, set()).add(row.Extension)
+        for row in self.table.itertuples(index=False):
+            if row.PopulatedBy != self._EPRV_TAG and len(kpf_homes[row.Keyword]) == 1:
                 routing[row.Keyword] = (row.Extension, row.Description)
         return routing
 

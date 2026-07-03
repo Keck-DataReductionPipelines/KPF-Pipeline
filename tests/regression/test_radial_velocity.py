@@ -887,6 +887,7 @@ class TestPerform:
             _RANGE_KMS[0]
         )  # center 0 (TARGRADV=0)
         assert ccf_hdr["CCFMASK"] == "G2_espresso"  # 5772 K -> G2
+        assert ccf_hdr["VELMASK"] == pytest.approx(rv_module.ccf_mask_width)
         rv_hdr = l4.headers["SCI2_RV"]
         assert rv_hdr["RVMETHOD"] == "CCF"
         assert rv_hdr["SKYRMVD"] is False

@@ -1219,6 +1219,7 @@ class RadialVelocity:
             l4_obj.set_keyword("VELSTEP", float(ccf_step_size), ext=ccf_ext)
             l4_obj.set_keyword("VELNSTEP", int(grid.size), ext=ccf_ext)
             l4_obj.set_keyword("CCFMASK", mask_name, ext=ccf_ext)
+            l4_obj.set_keyword("VELMASK", float(ccf_mask_width), ext=ccf_ext)
 
             rv_ext = f"{fiber}_RV"
             l4_obj.set_keyword("CTYPE1", "Columns", ext=rv_ext)
