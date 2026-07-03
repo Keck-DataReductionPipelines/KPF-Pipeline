@@ -29,7 +29,7 @@ use_gaia_astrometry = true
 use_wmko_fallback = false
 
 [MODULE_RADIAL_VELOCITY]
-ccf_mask_width = 0.5
+ccf_mask_width = 1.0
 ccf_step_size = 0.25
 ccf_window = [-100.0, 100.0]
 rv_window = [-25.0, 25.0]

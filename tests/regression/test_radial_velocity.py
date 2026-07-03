@@ -41,12 +41,12 @@ NCOL = 2000
 # ---------------------------------------------------------------------------
 
 
-def _make_mask(centers, weights=None, width=0.5):
+def _make_mask(centers, weights=None, width=1.0):
     """Build a line-mask dict matching _build_line_mask's structure."""
     centers = np.asarray(centers, dtype=np.float64)
     if weights is None:
         weights = np.ones_like(centers)
-    half_width = centers * (width / SPEED_OF_LIGHT_KMS)
+    half_width = centers * (width / 2.0 / SPEED_OF_LIGHT_KMS)
     return {
         "center": centers,
         "weight": np.asarray(weights, dtype=np.float64),
@@ -83,51 +83,66 @@ class TestComputeCCF:
         # Observed absorption that the CCF should align at velocity step v_dip.
         lam_obs = centers * (1.0 + v_dip / SPEED_OF_LIGHT_KMS) / (1.0 + z)
         flux = _absorption_spectrum(wave, lam_obs)
+        var = flux.copy()  # photon-noise proxy
         vel = np.arange(-402, 403) * 0.25
-        return wave, flux, mask, vel
+        return wave, flux, var, mask, vel
 
     def test_dip_at_injected_velocity(self):
-        wave, flux, mask, vel = self._order(v_dip=3.0, z=0.0)
-        ccf = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        wave, flux, var, mask, vel = self._order(v_dip=3.0, z=0.0)
+        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         assert vel[np.argmin(ccf)] == pytest.approx(3.0, abs=0.3)
 
     def test_zero_velocity_dip(self):
-        wave, flux, mask, vel = self._order(v_dip=0.0, z=0.0)
-        ccf = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        wave, flux, var, mask, vel = self._order(v_dip=0.0, z=0.0)
+        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         assert vel[np.argmin(ccf)] == pytest.approx(0.0, abs=0.3)
 
     def test_barycorr_z_folds_in(self):
         z = 5.0 / SPEED_OF_LIGHT_KMS
-        wave, flux, mask, vel = self._order(v_dip=2.0, z=z)
-        ccf = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, z)
+        wave, flux, var, mask, vel = self._order(v_dip=2.0, z=z)
+        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, z)
         assert vel[np.argmin(ccf)] == pytest.approx(2.0, abs=0.3)
 
     def test_descending_wave_raises(self):
-        wave, flux, mask, vel = self._order(v_dip=0.0)
+        wave, flux, var, mask, vel = self._order(v_dip=0.0)
         with pytest.raises(ValueError, match="descending"):
-            RadialVelocity._compute_ccf_1d(wave[::-1], flux[::-1], mask, vel, 0.0)
+            RadialVelocity._compute_ccf_1d(
+                wave[::-1], flux[::-1], var[::-1], mask, vel, 0.0
+            )
 
     def test_constant_wave_returns_zeros(self):
-        wave, flux, mask, vel = self._order()
-        ccf = RadialVelocity._compute_ccf_1d(
-            np.full_like(wave, 5000.0), flux, mask, vel, 0.0
+        wave, flux, var, mask, vel = self._order()
+        ccf, _ = RadialVelocity._compute_ccf_1d(
+            np.full_like(wave, 5000.0), flux, var, mask, vel, 0.0
         )
         assert not np.any(ccf)
 
     def test_nan_wave_returns_zeros(self):
-        wave, flux, mask, vel = self._order()
+        wave, flux, var, mask, vel = self._order()
         wave = wave.copy()
         wave[1000] = np.nan
-        ccf = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         assert not np.any(ccf)
 
     def test_no_lines_in_order_returns_zeros(self):
         wave = np.linspace(6000.0, 6050.0, 2000)
         flux = np.ones_like(wave)
+        var = flux.copy()  # photon-noise proxy
         mask = _make_mask(np.linspace(5008.0, 5042.0, 20))  # all outside the order
         vel = np.arange(-402, 403) * 0.25
-        ccf = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
+        ccf, _ = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         assert not np.any(ccf)
+
+    def test_ccf_var_propagates_var_not_flux(self):
+        # ccf_var carries the per-pixel VARIANCE, not the flux: scaling var
+        # scales ccf_var but leaves the CCF value unchanged.
+        wave, flux, var, mask, vel = self._order(v_dip=0.0)
+        ccf1, var1 = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
+        ccf2, var2 = RadialVelocity._compute_ccf_1d(
+            wave, flux, 4.0 * var, mask, vel, 0.0
+        )
+        np.testing.assert_allclose(ccf1, ccf2)
+        np.testing.assert_allclose(var2, 4.0 * var1)
 
 
 # ---------------------------------------------------------------------------
@@ -144,20 +159,23 @@ class TestDtypeProvenance:
         centers = np.linspace(5008.0, 5042.0, 20)
         mask = _make_mask(centers)
         flux = _absorption_spectrum(wave, centers)
+        var = flux.copy()  # photon-noise proxy
         vel = np.arange(-402, 403) * 0.25
-        return wave, flux, mask, vel
+        return wave, flux, var, mask, vel
 
     def test_ccf_1d_is_float64_from_float32_flux(self):
-        wave, flux, mask, vel = self._order()
-        ccf = RadialVelocity._compute_ccf_1d(
-            wave, flux.astype(np.float32), mask, vel, 0.0
+        wave, flux, var, mask, vel = self._order()
+        ccf, _ = RadialVelocity._compute_ccf_1d(
+            wave, flux.astype(np.float32), var, mask, vel, 0.0
         )
         assert_dtype(ccf, CCF, "CCF (_compute_ccf_1d, float32 flux in)")
 
     def test_compute_rv_1d_returns_float64(self):
-        wave, flux, mask, vel = self._order()
-        ccf = RadialVelocity._compute_ccf_1d(wave, flux, mask, vel, 0.0)
-        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        wave, flux, var, mask, vel = self._order()
+        ccf, ccf_var = RadialVelocity._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
+        rv, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
         assert_dtype(np.asarray(rv), RV_FLOAT, "RV scalar")
         assert_dtype(np.asarray(rv_err), RV_FLOAT, "RV_ERR scalar")
 
@@ -171,37 +189,59 @@ class TestComputeRV:
     def _ccf(self, v0=0.0, sigma=4.0, baseline=100.0, depth=30.0):
         vel = np.arange(-402, 403) * 0.25
         ccf = baseline - depth * np.exp(-0.5 * ((vel - v0) / sigma) ** 2)
+        ccf_var = ccf.copy()  # photon-noise proxy at the CCF count scale
         wave = np.linspace(5000.0, 5050.0, 4000)
-        return vel, ccf, wave
+        return vel, ccf, ccf_var, wave
 
     def test_recovers_injected_rv(self):
-        vel, ccf, wave = self._ccf(v0=2.5)
-        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        vel, ccf, ccf_var, wave = self._ccf(v0=2.5)
+        rv, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
         assert rv == pytest.approx(2.5, abs=0.05)
 
     def test_error_finite_and_positive(self):
-        vel, ccf, wave = self._ccf(v0=0.0)
-        _, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
+        _, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
         assert np.isfinite(rv_err) and rv_err > 0
 
     def test_even_window_pts_allowed(self):
         # min_npts is a minimum point count, not a centered odd window.
-        vel, ccf, wave = self._ccf(v0=1.0)
-        rv, _ = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 8)
+        vel, ccf, ccf_var, wave = self._ccf(v0=1.0)
+        rv, _ = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 8
+        )
         assert rv == pytest.approx(1.0, abs=0.05)
+
+    def test_nonphysical_variance_raises(self):
+        # A non-positive CCF variance in the fit window is corrupt flux, not a
+        # recoverable "no error" case -> fail loudly rather than return NaN.
+        vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
+        ccf_var[402] = -1.0  # index of v = 0, inside the +/-3 sigma fit window
+        with pytest.raises(ValueError, match="non-physical"):
+            RadialVelocity._compute_rv_1d(
+                vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+            )
 
     def test_flat_ccf_returns_nan(self):
         vel = np.arange(-402, 403) * 0.25
         ccf = np.full_like(vel, 100.0)
+        ccf_var = ccf
         wave = np.linspace(5000.0, 5050.0, 4000)
-        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        rv, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_nonfinite_ccf_returns_nan(self):
         # Non-finite CCF values fail loudly (NaN) rather than being masked out.
-        vel, ccf, wave = self._ccf(v0=1.0)
+        vel, ccf, ccf_var, wave = self._ccf(v0=1.0)
         ccf[10] = np.nan
-        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        rv, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_second_pass_off_grid_returns_first_pass_rv(self):
@@ -210,49 +250,62 @@ class TestComputeRV:
         vel = np.arange(-402, 403) * 0.25
         v0 = vel[20]
         ccf = 100.0 - 30.0 * np.exp(-0.5 * ((vel - v0) / 4.0) ** 2)
+        ccf_var = ccf
         wave = np.linspace(5000.0, 5050.0, 4000)
-        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        rv, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
         assert rv == pytest.approx(v0, abs=0.1) and np.isnan(rv_err)
 
     def test_min_points_floor_does_not_change_result(self):
         # A larger min-points floor below the +/-3 sigma window doesn't shift the fit.
-        vel, ccf, wave = self._ccf(v0=1.0)
-        rv9, _ = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 9)
-        rv21, _ = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 21)
+        vel, ccf, ccf_var, wave = self._ccf(v0=1.0)
+        rv9, _ = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 9
+        )
+        rv21, _ = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 21
+        )
         assert rv9 == pytest.approx(1.0, abs=0.05)
         assert rv21 == pytest.approx(1.0, abs=0.05)
 
     def test_narrow_window_returns_nan(self):
         # A first-pass window narrower than min_npts grid points -> NaN, NaN.
-        vel, ccf, wave = self._ccf(v0=0.0)
-        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-0.1, 0.1], 11)
+        vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
+        rv, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-0.1, 0.1], 11
+        )
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_first_pass_fit_failure_returns_nan(self, monkeypatch):
         # optimize_lsq raising on the first pass fails loudly as NaN, not a crash.
-        vel, ccf, wave = self._ccf(v0=0.0)
+        vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
 
         def boom(*args, **kwargs):
             raise RuntimeError("singular matrix")
 
         monkeypatch.setattr("kpfpipe.modules.radial_velocity.optimize_lsq", boom)
-        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        rv, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_nonfinite_fit_params_return_nan(self, monkeypatch):
         # A fit returning a non-finite mean/sigma is rejected as NaN.
-        vel, ccf, wave = self._ccf(v0=0.0)
+        vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
 
         def bad_fit(*args, **kwargs):
             return np.array([100.0, 30.0, np.nan, 4.0]), None
 
         monkeypatch.setattr("kpfpipe.modules.radial_velocity.optimize_lsq", bad_fit)
-        rv, rv_err = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        rv, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_second_pass_fit_failure_keeps_first_pass_rv(self, monkeypatch):
         # If the refinement (second) fit raises, the first-pass mean is retained.
-        vel, ccf, wave = self._ccf(v0=0.0)
+        vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
         calls = []
 
         def flaky(*args, **kwargs):
@@ -262,8 +315,46 @@ class TestComputeRV:
             raise RuntimeError("refinement failed")
 
         monkeypatch.setattr("kpfpipe.modules.radial_velocity.optimize_lsq", flaky)
-        rv, _ = RadialVelocity._compute_rv_1d(vel, ccf, wave, [-50.0, 50.0], 11)
+        rv, _ = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
         assert np.isfinite(rv) and rv == pytest.approx(0.0, abs=1e-9)
+
+    def test_error_scales_with_correlation_length(self):
+        # The photon error is 1/sqrt(N_scale) with N_scale = dv / corr_length,
+        # so rv_err must scale as sqrt(corr_length): widening the mask hole (via
+        # mask_width) lengthens the noise correlation and inflates the error by
+        # exactly sqrt(L2/L1). Guards the corr-length term feeding the error.
+        vel, ccf, ccf_var, wave = self._ccf(v0=0.0)
+        velpix = c.to("km/s").value * np.median(np.abs(np.diff(wave))) / np.median(wave)
+        _, err_a = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 0.5, [-50.0, 50.0], 11
+        )
+        _, err_b = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, wave, 1.0, [-50.0, 50.0], 11
+        )
+        la = RadialVelocity._ccf_noise_corr_length(velpix, 0.5)
+        lb = RadialVelocity._ccf_noise_corr_length(velpix, 1.0)
+        assert err_b / err_a == pytest.approx((lb / la) ** 0.5, rel=1e-6)
+
+
+class TestCCFNoiseCorrLength:
+    def test_matches_measured_value(self):
+        # Native pixel 0.885 km/s, mask hole full width 1.0 km/s -> trapezoid-ACF
+        # integral length, verified against the frame's measured autocorrelation.
+        assert RadialVelocity._ccf_noise_corr_length(0.885, 1.0) == pytest.approx(
+            1.418, abs=1e-3
+        )
+
+    def test_equal_widths_give_1p5w(self):
+        # pixel width == mask-hole width == w -> 1.5 w.
+        assert RadialVelocity._ccf_noise_corr_length(0.6, 0.6) == pytest.approx(0.9)
+
+    def test_symmetric_in_the_two_widths(self):
+        # L depends only on the {pixel, mask-hole} pair, not which is larger.
+        a = RadialVelocity._ccf_noise_corr_length(1.0, 0.8)  # widths {1.0, 0.8}
+        b = RadialVelocity._ccf_noise_corr_length(0.8, 1.0)  # widths {0.8, 1.0}
+        assert a == pytest.approx(b)
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +584,9 @@ def rv_kpf2():
             kpf2.set_data(
                 f"{chip}_{fiber}_FLUX", np.tile(flux_1d, (n, 1)).astype(np.float64)
             )
+            kpf2.set_data(
+                f"{chip}_{fiber}_VAR", np.tile(flux_1d, (n, 1)).astype(np.float64)
+            )
     # Per-order barycentric extensions (populated together by BarycentricCorrection).
     kpf2.set_data("BARYCORR_Z", np.zeros(NORDER))
     kpf2.set_data("BARYCORR_KMS", np.zeros(NORDER))
@@ -538,7 +632,7 @@ class TestComputeCCFPublic:
         monkeypatch.setattr(
             RadialVelocity,
             "_build_line_mask",
-            lambda self, chip, fiber, width=None: _make_mask(_MASK_CENTERS),
+            lambda self, chip, fiber, mask_width=None: _make_mask(_MASK_CENTERS),
         )
         rv_kpf2.set_data("BARYCORR_Z", np.array([]))
         rv = RadialVelocity(rv_kpf2, config={"ccf_window": _RANGE_KMS})
@@ -950,10 +1044,10 @@ class TestConstructor:
             RadialVelocity(header_kpf2, config="not-a-config")
 
     def test_dict_config_overrides_default(self, header_kpf2):
-        rv = RadialVelocity(header_kpf2, config={"ccf_mask_width": 1.0})
-        assert rv.ccf_mask_width == 1.0
+        rv = RadialVelocity(header_kpf2, config={"ccf_mask_width": 2.0})
+        assert rv.ccf_mask_width == 2.0
 
     def test_defaults_applied(self, header_kpf2):
         rv = RadialVelocity(header_kpf2)
-        assert rv.ccf_mask_width == 0.5
+        assert rv.ccf_mask_width == 1.0
         assert rv.ccf_step_size == 0.25
