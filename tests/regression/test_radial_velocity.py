@@ -9,6 +9,8 @@ absorption injected at a monkeypatched line mask, and a narrow velocity grid
 for speed.
 """
 
+import logging
+
 import numpy as np
 import pytest
 from astropy.constants import c
@@ -948,21 +950,23 @@ class TestPerform:
         with pytest.raises(ValueError, match="none illuminated"):
             rv_module.perform()
 
-    def test_cal_only_run_skips_combine(self, rv_module, capsys):
+    def test_cal_only_run_skips_combine(self, rv_module, caplog):
         # A calibration-only run (no SCI requested) does not raise; PRIMARY RV
-        # is left UNDEFINED and a note is printed.
+        # is left UNDEFINED and a note is logged.
         rv_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "Th_gold"
-        prim = rv_module.perform(fibers=["CAL"]).headers["PRIMARY"]
+        with caplog.at_level(logging.INFO, logger="kpfpipe"):
+            prim = rv_module.perform(fibers=["CAL"]).headers["PRIMARY"]
         assert prim["RV"] is None  # combine skipped, stays UNDEFINED
-        assert "no science orderlet requested" in capsys.readouterr().out
+        assert "no science orderlet requested" in caplog.text
 
-    def test_single_chip_combine_warns(self, rv_module, capsys):
+    def test_single_chip_combine_warns(self, rv_module, caplog):
         # One chip present: the combined RV uses it alone (== CCD1RV) and a
-        # warning prints.
-        l4 = rv_module.perform(chips=["GREEN"])
+        # note is logged.
+        with caplog.at_level(logging.INFO, logger="kpfpipe"):
+            l4 = rv_module.perform(chips=["GREEN"])
         prim = l4.headers["PRIMARY"]
         assert prim["RV"] == pytest.approx(prim["CCD1RV"], abs=1e-9)
-        assert "only chip GREEN present" in capsys.readouterr().out
+        assert "only chip GREEN present" in caplog.text
 
     def test_l4_serializes_to_fits(self, rv_module, tmp_path):
         # The CCF/RV extension headers must survive to_fits with comments intact.

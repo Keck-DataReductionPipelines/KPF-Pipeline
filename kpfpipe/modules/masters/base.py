@@ -104,6 +104,10 @@ class BaseMasterModule:
         # populated by subclass make_master_l2(); used by save_master('L2', ...)
         self.ml2_obj = None
 
+        # Per-chip stack statistics cached by _populate_stack_info() (dict);
+        # consumed by the subclass _track_info() when it builds the info() text.
+        self._stack_info = None
+
         # Effective per-frame calibrations (standard set masked by the resolved
         # flags); make_master_l1/l2 re-resolve this with any kwarg overrides.
         self._active_calibrations = self._resolve_calibrations()
@@ -226,9 +230,6 @@ class BaseMasterModule:
         reduce redundant I/O and recomputation. The streaming stats path caches
         its approximation-pass frames so the exact pass reuses them.
         """
-        if verbose:
-            print(f"loading {fn}")
-
         success = True
         failure = False
 
@@ -847,16 +848,14 @@ class BaseMasterModule:
 
         return ml1_obj
 
-    def _populate_info(self, l1_arrays):
+    def _populate_stack_info(self, l1_arrays):
         """
-        Summarize per-chip master statistics for `info()` and tests.
+        Cache per-chip master statistics on `self._stack_info` for `_track_info()`.
 
-        Returns
-        -------
-        dict
-            Per-chip {'num_bad', 'pct_bad', 'median', 'rms'}.
+        Sets `self._stack_info` to a per-chip dict of
+        {'num_bad', 'pct_bad', 'median', 'rms'}.
         """
-        return {
+        self._stack_info = {
             chip: {
                 "num_bad": int(np.sum(~l1_arrays[f"{chip}_MASK"])),
                 "pct_bad": float(100.0 * np.mean(~l1_arrays[f"{chip}_MASK"])),

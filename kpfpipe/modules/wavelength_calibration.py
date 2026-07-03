@@ -7,6 +7,7 @@ which writes the full WLSFILE path to the RECEIPT header (its registry home);
 to_kpf2 forwards the L1 RECEIPT header to the L2, where this module reads it.
 """
 
+import logging
 import os
 
 import numpy as np
@@ -14,6 +15,8 @@ import numpy as np
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.utils.config import ConfigHandler
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {**DEFAULTS}
 
@@ -106,8 +109,22 @@ class WavelengthCalibration:
     # ------------------------------------------------------------------
 
     def _track_info(self):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {"wls_path": self._wls_path}
+        """Build and cache the info() summary text from instance attributes."""
+        receipt = self.l2_obj.headers.get("RECEIPT", {})
+        obs_id = receipt.get("ORIGID", "unknown")
+        lines = [
+            "WavelengthCalibration",
+            f"  obs_id:  {obs_id}",
+            f"  chips:   {self.chips}",
+            f"  fibers:  {self.fibers}",
+        ]
+        # WLSAGE is written to QUALITY_CONTROL by DiagL1 (CalibrationAssociation
+        # writes WLSFILE to RECEIPT; DiagL1 derives the age from it).
+        agewls = self.l2_obj.headers.get("QUALITY_CONTROL", {}).get("WLSAGE")
+        lines.append(f"  wls_path: {self._wls_path}")
+        if agewls is not None:
+            lines.append(f"  WLSAGE:   {agewls:+.4f} d  (master - obs)")
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
         """Write all PRIMARY-header keywords for wavelength calibration.
@@ -170,24 +187,12 @@ class WavelengthCalibration:
         self._track_info()
         self.l2_obj.receipt_add_entry("wavelength_calibration", "", "PASS")
 
+        logger.info("summary:\n%s", self._info)
         return self.l2_obj
 
     def info(self):
         """Print a summary of the module configuration and association results."""
-        print("WavelengthCalibration")
-        receipt = self.l2_obj.headers.get("RECEIPT", {})
-        obs_id = receipt.get("ORIGID", "unknown")
-        print(f"  obs_id:  {obs_id}")
-        print(f"  chips:   {self.chips}")
-        print(f"  fibers:  {self.fibers}")
-
         if self._info is None:
-            print("  perform() has not been called")
-            return
-
-        # WLSAGE is written to QUALITY_CONTROL by DiagL1 (CalibrationAssociation
-        # writes WLSFILE to RECEIPT; DiagL1 derives the age from it).
-        agewls = self.l2_obj.headers.get("QUALITY_CONTROL", {}).get("WLSAGE")
-        print(f"  wls_path: {self._info['wls_path']}")
-        if agewls is not None:
-            print(f"  WLSAGE:   {agewls:+.4f} d  (master - obs)")
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)

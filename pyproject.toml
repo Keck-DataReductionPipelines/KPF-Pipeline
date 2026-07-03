@@ -87,8 +87,10 @@ target-version = "py313"
 extend-exclude = ["legacy", "gjgilbert_notebooks", "scripts"]
 
 [tool.ruff.lint]
-# E/W pycodestyle, F pyflakes, I import-sorting, B bugbear, UP pyupgrade.
-select = ["E", "F", "W", "I", "B", "UP"]
+# E/W pycodestyle, F pyflakes, I import-sorting, B bugbear, UP pyupgrade,
+# G logging-format (lazy %-formatting in log calls), LOG logging (named
+# loggers only, no root-logger convenience calls).
+select = ["E", "F", "W", "I", "B", "UP", "G", "LOG"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["kpfpipe"]

@@ -2,8 +2,12 @@
 KPF Master Bias construction module.
 """
 
+import logging
+
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
+
+logger = logging.getLogger(__name__)
 
 
 class Bias(BaseMasterModule):
@@ -92,29 +96,36 @@ class Bias(BaseMasterModule):
         )
 
         self.ml1_obj = self._build_ml1_obj(l1_arrays, l0_file_list, master_type="bias")
-        self._info = self._populate_info(l1_arrays)
+        self._populate_stack_info(l1_arrays)
+        self._track_info()
 
         if filepath is not None:
             self.save_master("L1", filepath, overwrite=True)
 
+        logger.info("summary:\n%s", self._info)
+
         return self.ml1_obj
 
-    def info(self):
-        """Print a summary of the module configuration and stacking results."""
-        print("Bias")
-        print("  l0_file_list:")
+    def _track_info(self):
+        """Build and cache the info() summary text from _stack_info."""
+        lines = ["Bias", "  l0_file_list:"]
         for fn in self.l0_file_list:
-            print(f"    {fn}")
-        print(f"  chips:  {self.chips}")
-
-        if self._info is None:
-            print("  make_master_l1() has not been called")
-            return
-
-        print(f"\n  {'chip':<8s} {'median [e-]':<15s} {'rms [e-]':<10s} {'bad pixels'}")
-        print("  " + "-" * 56)
-        for chip, stats in self._info.items():
-            print(
+            lines.append(f"    {fn}")
+        lines.append(f"  chips:  {self.chips}")
+        lines.append(
+            f"\n  {'chip':<8s} {'median [e-]':<15s} {'rms [e-]':<10s} {'bad pixels'}"
+        )
+        lines.append("  " + "-" * 56)
+        for chip, stats in self._stack_info.items():
+            lines.append(
                 f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} "
                 f"{stats['num_bad']} ({stats['pct_bad']:.3f}%)"
             )
+        self._info = "\n".join(lines)
+
+    def info(self):
+        """Print a summary of the module configuration and stacking results."""
+        if self._info is None:
+            print(f"{type(self).__name__}: make_master_l1() has not been called")
+        else:
+            print(self._info)

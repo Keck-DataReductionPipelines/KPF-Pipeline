@@ -14,6 +14,7 @@ upstreamed into the EPRV standard (which rvdata implements).
 """
 
 import importlib.resources
+import logging
 from collections import OrderedDict
 
 import numpy as np
@@ -37,6 +38,8 @@ keyword_registry.register_rvdata_extension(
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
+
+logger = logging.getLogger(__name__)
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
@@ -235,7 +238,9 @@ class KPF2(KPFDataModel, RV2):
         """KPF keeps a single-filepath ``to_fits``; rvdata >=0.4.0 renamed the
         parameter to ``out_filename``. Delegate so all our call sites can keep
         passing one path (``to_fits(fn)``)."""
-        return super().to_fits(out_filename=fn)
+        out_path = super().to_fits(out_filename=fn)
+        logger.info("wrote %s to %s", type(self).__name__, out_path)
+        return out_path
 
     def to_kpf4(self):
         """

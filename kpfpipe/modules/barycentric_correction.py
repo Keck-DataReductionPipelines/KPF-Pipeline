@@ -30,6 +30,7 @@ Follows the barycentric correction approach described in:
 - Butler et al. (1996)    — flux-weighted midpoint time
 """
 
+import logging
 import re
 import warnings
 
@@ -48,6 +49,8 @@ from kpfpipe import DEFAULTS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.validation import strictly_increasing
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -698,15 +701,29 @@ class BarycentricCorrection:
     # ------------------------------------------------------------------
 
     def _track_info(self):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {
-            "bjd_tdb": np.asarray(self.l2_obj.data["BJD_TDB"]),
-            "bary_kms": np.asarray(self.l2_obj.data["BARYCORR_KMS"]),
-            "ccd_bjd": np.asarray(self._ccd_bjd),
-            "ccd_kms": np.asarray(self._ccd_kms),
-            "ccd_z": np.asarray(self._ccd_z),
-            "astrometry_source": self._astrometry_source,
-        }
+        """Build and cache the info() summary text from instance attributes."""
+        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
+        ccd_bjd = np.asarray(self._ccd_bjd)
+        ccd_kms = np.asarray(self._ccd_kms)
+        ccd_z = np.asarray(self._ccd_z)
+        lines = [
+            "BarycentricCorrection",
+            f"  obs_id:  {obs_id}",
+            f"  astrometry:  {self._astrometry_source}",
+            # Per-CCD summaries (CCD1*/CCD2* on the BJD_TDB / BARYCORR_KMS /
+            # BARYCORR_Z extension headers).
+            f"\n  {'':<8s}{'BJD_TDB':>18s}{'BARYCORR_KMS':>18s}{'BARYCORR_Z':>18s}",
+            "  " + "-" * 62,
+            f"  {'GREEN':<8s}{ccd_bjd[0]:>18.6f}{ccd_kms[0]:>+18.4f}{ccd_z[0]:>18.10f}",
+            f"  {'RED':<8s}{ccd_bjd[1]:>18.6f}{ccd_kms[1]:>+18.4f}{ccd_z[1]:>18.10f}",
+        ]
+        bjd = np.asarray(self.l2_obj.data["BJD_TDB"])
+        kms = np.asarray(self.l2_obj.data["BARYCORR_KMS"])
+        lines.append(
+            f"\n  per-order spread:   BJD {np.ptp(bjd) * 86400:.3f} sec,"
+            f" BARY {np.ptp(kms) * 1000:.3f} m/s"
+        )
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
         """Write all summary header keywords for barycentric correction.
@@ -791,33 +808,12 @@ class BarycentricCorrection:
         self._track_info()
         self.l2_obj.receipt_add_entry("barycentric_correction", "", "PASS")
 
+        logger.info("summary:\n%s", self._info)
         return self.l2_obj
 
     def info(self):
         """Print a summary of the barycentric correction results."""
-        print("BarycentricCorrection")
-        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
-        print(f"  obs_id:  {obs_id}")
-
         if self._info is None:
-            print("  perform() has not been called")
-            return
-
-        r = self._info
-        print(f"  astrometry:  {r['astrometry_source']}")
-        ccd_bjd, ccd_kms, ccd_z = r["ccd_bjd"], r["ccd_kms"], r["ccd_z"]
-
-        # Per-CCD summaries (CCD1*/CCD2* on the BJD_TDB / BARYCORR_KMS / BARYCORR_Z
-        # extension headers).
-        print(f"\n  {'':<8s}{'BJD_TDB':>18s}{'BARYCORR_KMS':>18s}{'BARYCORR_Z':>18s}")
-        print("  " + "-" * 62)
-        print(
-            f"  {'GREEN':<8s}{ccd_bjd[0]:>18.6f}{ccd_kms[0]:>+18.4f}{ccd_z[0]:>18.10f}"
-        )
-        print(f"  {'RED':<8s}{ccd_bjd[1]:>18.6f}{ccd_kms[1]:>+18.4f}{ccd_z[1]:>18.10f}")
-
-        bjd, kms = r["bjd_tdb"], r["bary_kms"]
-        print(
-            f"\n  per-order spread:   BJD {np.ptp(bjd) * 86400:.3f} sec,"
-            f" BARY {np.ptp(kms) * 1000:.3f} m/s"
-        )
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)

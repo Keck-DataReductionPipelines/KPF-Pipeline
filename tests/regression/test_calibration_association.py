@@ -22,6 +22,7 @@ class MockL1:
         # the real KPF data models.
         primary = fits.Header()
         primary["DATE-OBS"] = date_obs
+        self.obs_id = "KP.20240405.40113.57"
         self.headers = {
             "PRIMARY": primary,
             "INSTRUMENT_HEADER": fits.Header(),

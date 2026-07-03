@@ -21,6 +21,7 @@ All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.
 """
 
+import logging
 import warnings
 
 import astropy.units as u
@@ -35,6 +36,8 @@ from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 from kpfpipe.utils.validation import strictly_increasing
+
+logger = logging.getLogger(__name__)
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -248,7 +251,9 @@ class RadialVelocity:
 
         mask_name = self._resolve_illumination_source(chip, fiber)["mask_name"]
         if mask_name == "thar":
-            df = pd.read_csv(f"{REPO_ROOT}/reference/thar_line_list.csv")
+            mask_path = f"{REPO_ROOT}/reference/thar_line_list.csv"
+            logger.info("reading %s %s CCF mask from %s", chip, fiber, mask_path)
+            df = pd.read_csv(mask_path)
             # Deduplicate: lines recur across overlapping orders and would
             # otherwise be double-counted.
             centers = np.unique(df["WAVE"].to_numpy(dtype=float))
@@ -257,6 +262,7 @@ class RadialVelocity:
             mask_path = (
                 f"{REPO_ROOT}/reference/line_masks/stellar_masks/{mask_name}.txt"
             )
+            logger.info("reading %s %s CCF mask from %s", chip, fiber, mask_path)
             centers, weights = np.loadtxt(mask_path, unpack=True)  # vacuum wavelengths
 
         half_width = mask_width / 2.0  # hole spans +/- half_width about each center
@@ -301,9 +307,9 @@ class RadialVelocity:
         Returns a 1D ndarray of length norder_chip, ordered by ORDER.
         """
         if self._order_weights is None:
-            self._order_weights = pd.read_csv(
-                f"{REPO_ROOT}/reference/ccf_order_weights.csv"
-            )
+            weights_path = f"{REPO_ROOT}/reference/ccf_order_weights.csv"
+            logger.info("reading CCF order weights from %s", weights_path)
+            self._order_weights = pd.read_csv(weights_path)
         df = self._order_weights
         mask_name = self._resolve_illumination_source(chip, fiber)["mask_name"]
         if mask_name not in df.columns:
@@ -1101,9 +1107,10 @@ class RadialVelocity:
             # with NaN RVs and no CCF/RV extension.
             source = self._resolve_illumination_source(chips[0], fiber)
             if source["mask_name"] is None:
-                print(
-                    f"  {fiber}: illumination source {source['object']!r}; "
-                    "skipping (no CCF/RV)"
+                logger.info(
+                    "%s: illumination source %r; skipping (no CCF/RV)",
+                    fiber,
+                    source["object"],
                 )
                 self._info[fiber] = {
                     "rv": rv,
@@ -1259,9 +1266,8 @@ class RadialVelocity:
             # A calibration-only run (no science orderlet requested): the combined
             # science RV is not applicable, so PRIMARY RV/RVERR/BERV/BJDTDB stay
             # UNDEFINED.
-            print(
-                "  combined RV: no science orderlet requested; "
-                "PRIMARY RV left UNDEFINED"
+            logger.info(
+                "combined RV: no science orderlet requested; PRIMARY RV left UNDEFINED"
             )
             l4_obj.receipt_add_entry("radial_velocity", "", "PASS")
             return l4_obj
@@ -1272,9 +1278,9 @@ class RadialVelocity:
             )
         rep = sci[0]
         if len(chips) == 1:
-            print(
-                f"  combined RV: only chip {chips[0]} present; "
-                "the combined RV uses it alone"
+            logger.info(
+                "combined RV: only chip %s present; the combined RV uses it alone",
+                chips[0],
             )
 
         # Per CCD: bare SCI-combined RV/error (the science orderlets' CCFs summed
@@ -1292,9 +1298,10 @@ class RadialVelocity:
         for chip in chips:
             v, e = per_ccd[chip]
             if not np.isfinite(v):
-                print(
-                    f"  combined RV: {chip} science fit non-finite; "
-                    "excluded from the combined RV"
+                logger.info(
+                    "combined RV: %s science fit non-finite; "
+                    "excluded from the combined RV",
+                    chip,
                 )
             n = 1 if chip == "GREEN" else 2
             l4_obj.set_keyword(f"CCD{n}RV", float(v) if np.isfinite(v) else None)
@@ -1313,7 +1320,9 @@ class RadialVelocity:
             min_npts=min_npts,
         )
         if not np.isfinite(ccfrv):
-            print("  combined RV: no finite per-CCD science RV; PRIMARY RV UNDEFINED")
+            logger.info(
+                "combined RV: no finite per-CCD science RV; PRIMARY RV UNDEFINED"
+            )
 
         # PRIMARY BERV/BJDTDB: chip-weighted mean of the per-CCD photon-weighted
         # bary summaries (CCD<n>BKMS/CCD<n>BJD from BarycentricCorrection), using
@@ -1348,24 +1357,27 @@ class RadialVelocity:
         l4_obj.set_keyword("BJDTDB", float(bjd_p) if np.isfinite(bjd_p) else None)
 
         l4_obj.receipt_add_entry("radial_velocity", "", "PASS")
+        logger.info("summary:\n%s", self._info_text())
         return l4_obj
 
-    def info(self):
-        """Print a summary of the module configuration and RV results."""
-        print("RadialVelocity")
+    def _info_text(self):
+        """Build the info() report text."""
         obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
-        print(f"  obs_id:         {obs_id}")
-        print(f"  ccf_mask_width: {self.ccf_mask_width} km/s")
-        print(f"  ccf_step_size:  {self.ccf_step_size} km/s")
-        print(f"  ccf_window:     {self.ccf_window} km/s")
-        print(f"  rv_window:      {self.rv_window} km/s")
+        lines = [
+            "RadialVelocity",
+            f"  obs_id:         {obs_id}",
+            f"  ccf_mask_width: {self.ccf_mask_width} km/s",
+            f"  ccf_step_size:  {self.ccf_step_size} km/s",
+            f"  ccf_window:     {self.ccf_window} km/s",
+            f"  rv_window:      {self.rv_window} km/s",
+        ]
 
         if self._info is None:
-            print("  perform() has not been called")
-            return
+            lines.append("  perform() has not been called")
+            return "\n".join(lines)
 
         # CCF velocity grid: per-fiber center, shared step/span.
-        print(
+        lines.append(
             f"\n  CCF velocity grid: {self.ccf_window[0]:+.1f} to "
             f"{self.ccf_window[1]:+.1f} km/s "
             f"about each fiber's center, step {self.ccf_step_size} km/s"
@@ -1379,11 +1391,11 @@ class RadialVelocity:
         ]
         fiber_order += [f for f in self._info if f not in fiber_order]
 
-        print(
+        lines.append(
             f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NVALID':>8s}"
             f"{'CCD_RV [km/s]':>16s}{'CCD_ERV [m/s]':>16s}{'RV_RMS [m/s]':>16s}"
         )
-        print("  " + "-" * 82)
+        lines.append("  " + "-" * 82)
         norder_green = self.norder["GREEN"]
         norder = norder_green + self.norder["RED"]
         for chip, rows in (
@@ -1399,7 +1411,12 @@ class RadialVelocity:
                 ccd_rv = res.get("ccd_rv", {}).get(chip, np.nan)
                 ccd_erv = res.get("ccd_rv_err", {}).get(chip, np.nan)
                 rv_rms = mad_std(rv, ignore_nan=True) * 1e3 if nvalid >= 2 else np.nan
-                print(
+                lines.append(
                     f"  {chip:<8s}{fiber:<8s}{res.get('source', ''):<10s}{nvalid:>8d}"
                     f"{ccd_rv:>+16.5f}{ccd_erv * 1e3:>16.3f}{rv_rms:>16.3f}"
                 )
+        return "\n".join(lines)
+
+    def info(self):
+        """Print a summary of the module configuration and RV results."""
+        print(self._info_text())

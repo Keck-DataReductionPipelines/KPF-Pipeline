@@ -2,8 +2,12 @@
 KPF Master Dark construction module.
 """
 
+import logging
+
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
+
+logger = logging.getLogger(__name__)
 
 
 class Dark(BaseMasterModule):
@@ -109,32 +113,37 @@ class Dark(BaseMasterModule):
         # exposure time, so the master dark IMG is in electrons/sec (BUNIT is
         # derived from master_type in _build_ml1_obj).
         self.ml1_obj = self._build_ml1_obj(l1_arrays, l0_file_list, master_type="dark")
-        self._info = self._populate_info(l1_arrays)
+        self._populate_stack_info(l1_arrays)
+        self._track_info()
 
         if filepath is not None:
             self.save_master("L1", filepath, overwrite=True)
 
+        logger.info("summary:\n%s", self._info)
+
         return self.ml1_obj
 
-    def info(self):
-        """Print a summary of the module configuration and stacking results."""
-        print("Dark")
-        print("  l0_file_list:")
+    def _track_info(self):
+        """Build and cache the info() summary text from _stack_info."""
+        lines = ["Dark", "  l0_file_list:"]
         for fn in self.l0_file_list:
-            print(f"    {fn}")
-        print(f"  chips:  {self.chips}")
-
-        if self._info is None:
-            print("  make_master_l1() has not been called")
-            return
-
-        print(
+            lines.append(f"    {fn}")
+        lines.append(f"  chips:  {self.chips}")
+        lines.append(
             f"\n  {'chip':<8s} {'median [e-/s]':<15s} "
             f"{'rms [e-/s]':<10s} {'bad pixels'}"
         )
-        print("  " + "-" * 56)
-        for chip, stats in self._info.items():
-            print(
+        lines.append("  " + "-" * 56)
+        for chip, stats in self._stack_info.items():
+            lines.append(
                 f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} "
                 f"{stats['num_bad']} ({stats['pct_bad']:.3f}%)"
             )
+        self._info = "\n".join(lines)
+
+    def info(self):
+        """Print a summary of the module configuration and stacking results."""
+        if self._info is None:
+            print(f"{type(self).__name__}: make_master_l1() has not been called")
+        else:
+            print(self._info)

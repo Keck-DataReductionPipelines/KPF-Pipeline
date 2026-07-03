@@ -24,6 +24,7 @@ KPFMasterModel.generate_standard_filename().
 """
 
 import importlib.resources
+import logging
 import os
 import warnings
 
@@ -35,6 +36,8 @@ from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.masters.base import KPFMasterModel
+
+logger = logging.getLogger(__name__)
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _ML2_WLS_EXTENSIONS = pd.read_csv(_config_path / "ML2-wls-extensions.csv")
@@ -120,6 +123,9 @@ class KPFMasterL2(KPFMasterModel, KPF2):
             raise OSError(f"{fn} does not exist.")
         if not fn.endswith(".fits") and not fn.endswith(".fit"):
             raise OSError("input files must be FITS files")
+        # This override does not go through KPFDataModel.from_fits (it builds
+        # the instance itself), so it logs its own read record (DRP-RUN-08).
+        logger.info("reading %s from %s", cls.__name__, fn)
         with fits.open(fn) as hdul:
             mastype = hdul["PRIMARY"].header.get("MASTYPE")
             kind = cls._MASTYPE_TO_KIND.get(str(mastype).lower()) if mastype else None

@@ -8,6 +8,7 @@ Each master is stacked by the corresponding module under `kpfpipe.modules.master
 and written to the output data root via the pipeline path helpers.
 """
 
+import logging
 import os
 
 from kpfpipe.modules.masters.bias import Bias
@@ -22,9 +23,13 @@ from kpfpipe.utils.io import (
 )
 from kpfpipe.utils.kpf import get_obs_id
 
+# Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
+# would not identify this module in the log (style guide section 6).
+logger = logging.getLogger("kpfpipe.recipe.masters")
+
 
 def main(config, args):
-    print("\n\n=== entering kpf_drp_masters pipeline ===\n\n")
+    logger.info("entering kpf_drp_masters pipeline")
 
     if not args.datecode:
         raise SystemExit(
@@ -32,6 +37,7 @@ def main(config, args):
         )
 
     datecode = args.datecode
+    logger.info("building masters for %s", datecode)
 
     data_dirs = config.get_params(["DATA_DIRS"])
     data_root_in = data_dirs["KPF_DATA_INPUT"]
@@ -48,6 +54,7 @@ def main(config, args):
         bias_path = build_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="bias"
         )
+        logger.info("stacking %d bias frames -> %s", len(files), bias_path)
         bias = Bias(files, config)
         bias.make_master_l1(filepath=bias_path)
 
@@ -58,6 +65,7 @@ def main(config, args):
         dark_path = build_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="dark"
         )
+        logger.info("stacking %d dark frames -> %s", len(files), dark_path)
         dark = Dark(files, config)
         dark.make_master_l1(filepath=dark_path)
 
@@ -81,9 +89,12 @@ def main(config, args):
             os.path.dirname(wls_master_path), f"{obs_id}_master_thar_diagnostics.h5"
         )
 
+        logger.info(
+            "building WLS from %d ThAr frames -> %s", len(files), wls_master_path
+        )
         wls = WLS(files, config)
         wls.make_master_l2(
             master_path=wls_master_path, diagnostics_path=wls_diagnostics_path
         )
 
-    print("\n\n=== exiting kpf_drp_masters pipeline ===\n\n")
+    logger.info("exiting kpf_drp_masters pipeline")
