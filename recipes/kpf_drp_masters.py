@@ -61,7 +61,9 @@ def main(config, args):
     # Stack the dark frames into a master dark used to remove dark current.
     # Runs after the master bias so CalibrationAssociation can subtract that
     # bias from each dark frame (via _process_frame) before stacking.
-    for files in build_l0_file_lists("dark", mini_db=mini_db):
+    for files in build_l0_file_lists(
+        "dark", mini_db=mini_db, merge_small_clusters=True
+    ):
         dark_path = build_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="dark"
         )
