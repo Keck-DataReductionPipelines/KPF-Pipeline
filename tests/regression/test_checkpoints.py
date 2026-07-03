@@ -205,6 +205,7 @@ def _make_l4(*, sci=True):
                 Table(
                     {
                         "ORDER_INDEX": np.arange(_NORDER_TOTAL),
+                        "RV": rng.normal(0, 1e-3, _NORDER_TOTAL),
                         "BJD_TDB": 2460000.0 + rng.normal(0, 1e-4, _NORDER_TOTAL),
                         "BERV": 7.9 + rng.normal(0, 1e-4, _NORDER_TOTAL),
                         "WEIGHT": np.ones(_NORDER_TOTAL),

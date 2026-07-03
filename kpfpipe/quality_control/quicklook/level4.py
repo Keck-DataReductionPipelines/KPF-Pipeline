@@ -36,7 +36,7 @@ class PlotL4:
     Quicklook plots for KPF L4 (RVs and CCFs) data.
 
     Args:
-        l4_obj: KPF4 data object (post-RadialVelocity).
+        l4_obj: KPF4 data object (post-CrossCorrelation + RadialVelocity).
         output_dir: directory to save PNG files. None = return Figure only.
         obs_id: observation ID for titles/filenames. Like KPF2, KPF4 has no
             obs_id attribute, so the recipe passes it explicitly; absent that,
@@ -196,7 +196,7 @@ class PlotL4:
 
     def _order_weights(self, rvtab):
         """Per-order CCF-combination weights for the SCI annotations, read from
-        the RV table's WEIGHT column (written by RadialVelocity).
+        the RV table's WEIGHT column (written by CrossCorrelation).
 
         These are the weights the pipeline actually uses to combine the per-order
         CCFs (see RadialVelocity._combine_ccfs); orders with weight 0 are excluded
@@ -210,8 +210,8 @@ class PlotL4:
         if "WEIGHT" not in rvtab.colnames:
             raise ValueError(
                 "L4 RV table has no WEIGHT column; cannot annotate per-order CCF "
-                "weights. The L4 must come from a RadialVelocity step that writes "
-                "the WEIGHT column."
+                "weights. The L4 must come from a CrossCorrelation step that "
+                "writes the WEIGHT column."
             )
         return np.asarray(rvtab["WEIGHT"], dtype=float)
 
