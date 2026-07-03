@@ -75,6 +75,15 @@ class WLS(BaseMasterModule):
         super().__init__(l0_file_list, params)
         self.rough_wls_file = _ROUGH_WLS_FILE
 
+        # physical echelle order per row (bluest first), cached per chip;
+        # e.g. GREEN 137..103. "order" means this echelle order throughout.
+        self._echelle_orders = {
+            chip: np.linspace(*self.echelle_orders[chip], self.norder[chip])
+            .round()
+            .astype(int)
+            for chip in self.echelle_orders
+        }
+
         self._load_rough_wls()
         self._load_linelist()
 
@@ -95,9 +104,10 @@ class WLS(BaseMasterModule):
         """
         Return the cached line list DataFrame, loading or reloading if needed.
 
-        Columns: CHIP, ORDER (0-indexed per chip), WAVE [Å, vacuum]. Loads from
-        disk when nothing is cached, or when `linelist` (a file path) differs
-        from the cached `self.linelist`; otherwise returns the cache unchanged.
+        Columns: CHIP, INDEX (0-based row), ECHELLE (physical order), WAVE
+        [Å, vacuum]. Loads from disk when nothing is cached, or when `linelist`
+        (a file path) differs from the cached `self.linelist`; otherwise returns
+        the cache unchanged.
         """
         needs_load = not hasattr(self, "_linelist_df")
         if linelist is not None and linelist != self.linelist:
@@ -135,15 +145,15 @@ class WLS(BaseMasterModule):
             self.rough_wls = {}
 
             for chip in self.chips:
-                norder = self.norder[chip]
+                orders = self._echelle_orders[chip]
                 for fiber in self.fibers:
                     channel_ext = f"{chip}_{fiber}_WAVE"
-                    self.rough_wls[channel_ext] = np.zeros((norder, ncol))
+                    self.rough_wls[channel_ext] = np.zeros((len(orders), ncol))
 
-                    for o in range(norder):
-                        use = (df.CHIP == chip) & (df.ORDER == o)
+                    for j, o in enumerate(orders):
+                        use = (df.CHIP == chip) & (df.ECHELLE == o)
                         coeffs = df.loc[use, coeff_cols].values[0]
-                        self.rough_wls[channel_ext][o] = legendre.legval(x, coeffs)
+                        self.rough_wls[channel_ext][j] = legendre.legval(x, coeffs)
 
         return self.rough_wls
 
@@ -358,7 +368,7 @@ class WLS(BaseMasterModule):
 
         Loops over the requested fibers, calling `_fit_line_positions_1d`
         on each (order, fiber) extracted spectrum, and concatenates the
-        surviving lines into flat arrays tagged with their order number
+        surviving lines into flat arrays tagged with their echelle order
         and fiber name.
 
         Parameters
@@ -395,7 +405,7 @@ class WLS(BaseMasterModule):
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
               'bad' - boolean QC flag (True = line failed QC)
-              'order' - 1-indexed order number
+              'order' - physical echelle order
               'fiber' - fiber name
         """
         linelist_df = self._load_linelist(linelist)
@@ -403,10 +413,10 @@ class WLS(BaseMasterModule):
         if lineprofile is None:
             lineprofile = self.lineprofile
 
-        norder = self.norder[chip]
+        orders = self._echelle_orders[chip]
         # keys mirror _fit_line_positions_1d's output plus per-line provenance tags
         keys = ("wav", "pix", "std", "amp", "bad", "order", "fiber")
-        lines = {k: [[None] * norder for _ in fibers] for k in keys}
+        lines = {k: [[None] * len(orders) for _ in fibers] for k in keys}
 
         for i, fiber in enumerate(fibers):
             if verbose:
@@ -418,13 +428,14 @@ class WLS(BaseMasterModule):
             if np.shape(flux_arr) != np.shape(wave_arr):
                 raise ValueError("shape mismatch between flux array and rough WLS")
 
-            for o in range(norder):
+            for j, o in enumerate(orders):
                 line_waves = linelist_df.loc[
-                    (linelist_df["CHIP"] == chip) & (linelist_df["ORDER"] == o), "WAVE"
+                    (linelist_df["CHIP"] == chip) & (linelist_df["ECHELLE"] == o),
+                    "WAVE",
                 ].to_numpy(dtype=float)
                 line_dict = self._fit_line_positions_1d(
-                    flux_arr[o],
-                    wave_arr[o],
+                    flux_arr[j],
+                    wave_arr[j],
                     line_waves,
                     lineprofile=lineprofile,
                     window=window,
@@ -433,15 +444,15 @@ class WLS(BaseMasterModule):
                 nlines = len(line_dict["wav"])
                 if nlines == 0 and verbose:
                     warnings.warn(
-                        f"{chip} {fiber} order {o + 1}: orderlet skipped "
+                        f"{chip} {fiber} order {o}: orderlet skipped "
                         f"(no fittable lines; flux likely NaN-filled)",
                         stacklevel=2,
                     )
-                line_dict["order"] = (o + 1) * np.ones(nlines, dtype=int)
+                line_dict["order"] = o * np.ones(nlines, dtype=int)
                 line_dict["fiber"] = np.full(nlines, fiber)
 
                 for k in keys:
-                    lines[k][i][o] = line_dict[k]
+                    lines[k][i][j] = line_dict[k]
 
             for k in lines:
                 lines[k][i] = np.hstack(lines[k][i])
@@ -465,7 +476,7 @@ class WLS(BaseMasterModule):
     def _calculate_wls_coeffs(
         self,
         lines,
-        norder,
+        orders,
         polyorder_x=None,
         polyorder_m=None,
         polyorder_f=None,
@@ -474,9 +485,9 @@ class WLS(BaseMasterModule):
         Fit a multivariate Legendre polynomial wavelength solution to
         fitted line positions.
 
-        Treats wavelength as a smooth function of pixel position (x), order
-        number (m), and (optionally) fiber index (f). All variables are
-        rescaled to [-1, 1] before fitting.
+        Treats the grating invariant m*lambda (echelle order x wavelength) as a
+        smooth function of pixel position (x), order (m), and (optionally) fiber
+        index (f). All variables are rescaled to [-1, 1] before fitting.
 
         Parameters
         ----------
@@ -484,8 +495,8 @@ class WLS(BaseMasterModule):
             Flat 1D arrays as produced by `_fit_line_positions_ffi`. Lines
             with `lines['bad']` set are excluded from the fit. Required
             keys: 'wav', 'pix', 'order', 'fiber', 'bad'.
-        norder : int
-            Total number of spectral orders on the chip. Used to rescale
+        orders : ndarray of int
+            Physical echelle order per row (bluest first), used to rescale
             the order axis to [-1, 1].
         polyorder_x : int, optional
             Polynomial degree along the pixel axis.
@@ -516,7 +527,7 @@ class WLS(BaseMasterModule):
         good = ~lines["bad"]
         wav = lines["wav"][good]
         pix = lines["pix"][good]
-        order_num = lines["order"][good]
+        order = lines["order"][good]
         fiber_names = lines["fiber"][good]
 
         fibers = list(set(fiber_names))
@@ -550,8 +561,12 @@ class WLS(BaseMasterModule):
         ncol = self.ccd["ncol"]
 
         # rescale position variables to [-1,1] for Legendre fitting
+        blue, red = orders[0], orders[-1]
         x = 2 * pix / (ncol - 1) - 1
-        m = 2 * (order_num - 1) / (norder - 1) - 1
+        m = 2 * (order - red) / (blue - red) - 1
+
+        # unweighted fit on the grating invariant approximates velocity-space
+        mlambda = order * wav
 
         if len(fibers) != 1:
             # map fibers to their positional rank then rescale to [-1, 1]
@@ -563,7 +578,7 @@ class WLS(BaseMasterModule):
         if len(fibers) == 1:
             V = legendre.legvander2d(x, m, deg=[polyorder_x, polyorder_m])
 
-            coeffs, *_ = np.linalg.lstsq(V, wav, rcond=None)
+            coeffs, *_ = np.linalg.lstsq(V, mlambda, rcond=None)
             coeffs = coeffs.reshape(polyorder_x + 1, polyorder_m + 1)
 
         else:
@@ -571,25 +586,26 @@ class WLS(BaseMasterModule):
                 x, m, f, deg=[polyorder_x, polyorder_m, polyorder_f]
             )
 
-            coeffs, *_ = np.linalg.lstsq(V, wav, rcond=None)
+            coeffs, *_ = np.linalg.lstsq(V, mlambda, rcond=None)
             coeffs = coeffs.reshape(polyorder_x + 1, polyorder_m + 1, polyorder_f + 1)
 
         return coeffs
 
-    @staticmethod
-    def _evaluate_wls_coeffs(coeffs, ncol, norder, nfiber):
+    def _evaluate_wls_coeffs(self, coeffs, orders, nfiber):
         """
-        Evaluate a Legendre wavelength solution onto a regular grid.
+        Evaluate a Legendre wavelength solution over all detector columns.
+
+        The coefficients describe the grating-invariant m*lambda surface, so the
+        evaluated surface is divided by the physical order to recover wavelength.
 
         Parameters
         ----------
         coeffs : ndarray
             Legendre coefficient array from `_calculate_wls_coeffs`. Either
             2D (single-fiber) or 3D (three-fiber).
-        ncol : int
-            Number of detector columns at which to evaluate.
-        norder : int
-            Number of spectral orders at which to evaluate.
+        orders : ndarray of int
+            Physical echelle order per row (bluest first); sets the number of
+            orders and the [-1, 1] rescaling (must match `_calculate_wls_coeffs`).
         nfiber : int
             Number of fibers at which to evaluate. Ignored for 2D `coeffs`.
 
@@ -599,21 +615,25 @@ class WLS(BaseMasterModule):
             Wavelength array of shape (norder, ncol) for 2D `coeffs`, or
             (norder, ncol, nfiber) for 3D `coeffs`.
         """
-        x = np.linspace(-1, 1, ncol)
-        y = np.linspace(-1, 1, norder)
+        blue, red = orders[0], orders[-1]
+        x = np.linspace(-1, 1, self.ccd["ncol"])
+        y = 2 * (orders - red) / (blue - red) - 1
         z = np.linspace(-1, 1, nfiber)
 
+        # L is the fitted grating-invariant surface m*lambda
         if coeffs.ndim == 2:
             X, Y = np.meshgrid(x, y)
-            W = legendre.legval2d(X, Y, coeffs)
+            L = legendre.legval2d(X, Y, coeffs)
 
         elif coeffs.ndim == 3:
             X, Y, Z = np.meshgrid(x, y, z)
-            W = legendre.legval3d(X, Y, Z, coeffs)
+            L = legendre.legval3d(X, Y, Z, coeffs)
 
         else:
             raise ValueError(f"coeffs.ndim expected to be 2 or 3, got {coeffs.ndim}")
 
+        # recover wavelength by dividing out the physical order (axis 0)
+        W = L / orders.reshape((-1,) + (1,) * (L.ndim - 1))
         return W
 
     def _compute_wls_from_stack(
@@ -746,7 +766,7 @@ class WLS(BaseMasterModule):
 
             coeffs_stack[i] = self._calculate_wls_coeffs(
                 lines_stack[i],
-                self.norder[chip],
+                self._echelle_orders[chip],
                 polyorder_x=polyorder_x,
                 polyorder_m=polyorder_m,
                 polyorder_f=polyorder_f,
@@ -782,7 +802,7 @@ class WLS(BaseMasterModule):
         coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0) / denom
 
         W = self._evaluate_wls_coeffs(
-            coeffs_mean, self.ccd["ncol"], self.norder[chip], len(fibers)
+            coeffs_mean, self._echelle_orders[chip], len(fibers)
         )
 
         return W, coeffs_mean, coeffs_stack, lines_stack
@@ -931,9 +951,7 @@ class WLS(BaseMasterModule):
         self.ml2_obj.set_input_files(l0_file_list, "thar")
 
         # WLS metadata is out of EPRV scope but registered in Masters-headers.csv,
-        # so it routes through set_keyword (-> PRIMARY, registry comments). The
-        # POLYORD* degrees live on PRIMARY only (one registry home each); they were
-        # formerly also stamped on each {chip}_WLS_COEFFS header, now dropped.
+        # so it routes through set_keyword (-> PRIMARY, registry comments).
         self.ml2_obj.set_keyword("ROUGHWLS", self.rough_wls_file)
         self.ml2_obj.set_keyword("LINELIST", self.linelist)
         self.ml2_obj.set_keyword("LINEPROF", lineprofile)

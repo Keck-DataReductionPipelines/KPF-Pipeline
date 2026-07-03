@@ -225,7 +225,7 @@ class ImageAssembly:
                     table.rename_column(col, new_name)
 
     # ------------------------------------------------------------------
-    # Algorithm steps
+    # Public helpers
     # ------------------------------------------------------------------
 
     def count_amplifiers(self, chip):
@@ -310,6 +310,10 @@ class ImageAssembly:
                 )
 
             self.l0_obj.data[channel_ext] = image_reoriented
+
+    # ------------------------------------------------------------------
+    # Algorithm steps
+    # ------------------------------------------------------------------
 
     def apply_gain_conversion(self, chip):
         """

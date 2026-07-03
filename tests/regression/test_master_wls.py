@@ -39,10 +39,11 @@ class MockL2:
 
 
 def _linelist_df(chip, norder, waves):
-    """Stub line list (CHIP, ORDER, WAVE): `waves` repeated for every order."""
+    """Stub line list: `waves` repeated for every 0-based order index."""
+    echelle = np.linspace(*DETECTOR["echelle_orders"][chip], norder).round().astype(int)
     return pd.DataFrame(
-        [(chip, o, w) for o in range(norder) for w in waves],
-        columns=["CHIP", "ORDER", "WAVE"],
+        [(chip, o, int(echelle[o]), w) for o in range(norder) for w in waves],
+        columns=["CHIP", "INDEX", "ECHELLE", "WAVE"],
     )
 
 
@@ -231,7 +232,7 @@ def mock_make_master_l2(monkeypatch):
             {
                 "wav": np.array([5500.0, 5501.0]),
                 "pix": np.array([100.5, 200.5]),
-                "order": np.array([1, 2]),
+                "order": self._echelle_orders[chip][:2],
                 "fiber": np.array([fibers[0]] * 2),
                 "bad": np.array([False, False]),
                 "std": np.array([0.5, 0.5]),
@@ -554,22 +555,23 @@ class TestMakeMasterL2:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
 
-        with pytest.warns(UserWarning, match=r"RED SCI1 order 1: orderlet skipped"):
+        with pytest.warns(UserWarning, match=r"RED SCI1 order 102: orderlet skipped"):
             result = wls._fit_line_positions_ffi(
                 StubL2(),
                 "RED",
                 ["SCI1"],
             )
 
-        # The NaN order contributed no lines; remaining orders did.
-        assert result["order"].min() >= 2
+        # The NaN order (bluest RED, echelle 102) contributed no lines; rest did.
+        assert 102 not in result["order"]
         assert len(result["wav"]) > 0
 
     def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
         """Override file is loaded into the cache and stamped to the header."""
         override = tmp_path / "alt_linelist.csv"
         override.write_text(
-            "CHIP,ORDER,WAVE\nGREEN,0,4500.0\nGREEN,1,5500.0\nRED,0,6500.0\n"
+            "CHIP,INDEX,ECHELLE,WAVE\n"
+            "GREEN,0,137,4500.0\nGREEN,1,136,5500.0\nRED,0,102,6500.0\n"
         )
 
         wls = WLS(FILE_LIST)
@@ -659,7 +661,7 @@ class TestCalculateWlsCoeffs:
         for f in fibers:
             wav.extend(5000.0 + np.arange(n))
             pix.extend(np.linspace(10.0, 4000.0, n))
-            ord_.extend(np.linspace(1, 30, n).astype(int))
+            ord_.extend(np.linspace(137, 103, n).astype(int))  # GREEN echelle orders
             fib.extend([f] * n)
         return {
             "wav": np.asarray(wav, dtype=float),
@@ -674,20 +676,47 @@ class TestCalculateWlsCoeffs:
         wls = WLS(FILE_LIST)
         lines = self._make_lines(5, fibers=("SCI1",))
         with pytest.raises(ValueError, match=r"underconstrained"):
-            wls._calculate_wls_coeffs(lines, norder=30)
+            wls._calculate_wls_coeffs(lines, wls._echelle_orders["GREEN"])
 
     def test_underconstrained_multi_fiber_raises(self):
         # 5-fiber → 7*4*3 = 84 free params; 10 lines per fiber * 5 = 50 < 84
         wls = WLS(FILE_LIST)
         lines = self._make_lines(10, fibers=("SKY", "SCI1", "SCI2", "SCI3", "CAL"))
         with pytest.raises(ValueError, match=r"underconstrained"):
-            wls._calculate_wls_coeffs(lines, norder=30)
+            wls._calculate_wls_coeffs(lines, wls._echelle_orders["GREEN"])
 
     def test_sufficient_lines_does_not_raise(self):
         wls = WLS(FILE_LIST)
         lines = self._make_lines(50, fibers=("SCI1",))
-        coeffs = wls._calculate_wls_coeffs(lines, norder=30)
+        coeffs = wls._calculate_wls_coeffs(lines, wls._echelle_orders["GREEN"])
         assert coeffs.shape == (wls.polyorder_x + 1, wls.polyorder_m + 1)
+
+    def test_mlambda_roundtrip_recovers_wavelength(self):
+        """A surface exactly representable as m*lambda is recovered by the fit."""
+        wls = WLS(FILE_LIST)
+        orders = wls._echelle_orders["GREEN"]
+        ncol = wls.ccd["ncol"]
+
+        # true m*lambda is a known low-degree Legendre surface -> divide out the
+        # order to get a wavelength surface the fit must recover exactly.
+        coeffs_true = np.zeros((wls.polyorder_x + 1, wls.polyorder_m + 1))
+        coeffs_true[0, 0], coeffs_true[1, 0] = 8.0e5, 300.0  # mean, pixel slope
+        coeffs_true[0, 1], coeffs_true[1, 1] = 5.0e4, 5.0  # order slope, cross term
+        wave_true = wls._evaluate_wls_coeffs(coeffs_true, orders, nfiber=1)
+
+        cols = np.linspace(0, ncol - 1, 60).astype(int)
+        lines = {
+            "wav": np.array(
+                [wave_true[j, c] for j in range(len(orders)) for c in cols]
+            ),
+            "pix": np.array([float(c) for _ in orders for c in cols]),
+            "order": np.array([o for o in orders for _ in cols]),
+            "fiber": np.array(["SCI1"] * (len(orders) * len(cols))),
+            "bad": np.zeros(len(orders) * len(cols), dtype=bool),
+        }
+        coeffs_fit = wls._calculate_wls_coeffs(lines, orders)
+        wave_fit = wls._evaluate_wls_coeffs(coeffs_fit, orders, nfiber=1)
+        np.testing.assert_allclose(wave_fit, wave_true, rtol=1e-9)
 
 
 # ---------------------------------------------------------------------------
@@ -719,7 +748,7 @@ class TestComputeWlsFrameRejection:
             WLS, "_calculate_wls_coeffs", lambda self, *a, **k: np.ones((2, 2))
         )
         monkeypatch.setattr(
-            WLS, "_evaluate_wls_coeffs", staticmethod(lambda *a, **k: np.zeros((3, 3)))
+            WLS, "_evaluate_wls_coeffs", lambda self, *a, **k: np.zeros((3, 3))
         )
         return wls
 
@@ -767,7 +796,7 @@ class TestComputeWlsFrameRejection:
             WLS, "_calculate_wls_coeffs", lambda self, *a, **k: next(coeffs)
         )
         monkeypatch.setattr(
-            WLS, "_evaluate_wls_coeffs", staticmethod(lambda *a, **k: np.zeros((3, 3)))
+            WLS, "_evaluate_wls_coeffs", lambda self, *a, **k: np.zeros((3, 3))
         )
         with pytest.raises(ValueError, match=r"non-finite Legendre coefficients"):
             wls._compute_wls_from_stack("GREEN", ["SCI1"], verbose=False)

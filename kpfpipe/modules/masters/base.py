@@ -15,7 +15,6 @@ from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import build_master_path_from_fits_header
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 
@@ -181,7 +180,7 @@ class BaseMasterModule:
         if isinstance(value, str):
             path = value
         elif value is True:
-            path = build_master_path_from_fits_header(l1_obj, cal_type)
+            path = l1_obj.headers["RECEIPT"][f"{cal_type.upper()}FILE"]
         else:
             return value  # let ImageProcessing raise the TypeError
 

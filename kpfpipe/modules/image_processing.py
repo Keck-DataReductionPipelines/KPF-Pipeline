@@ -16,7 +16,6 @@ import numpy as np
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import build_master_path_from_fits_header
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -132,7 +131,7 @@ class ImageProcessing:
             path = value
             master = self._load_master(path)
         elif value is True:
-            path = build_master_path_from_fits_header(self.l1_obj, cal_type)
+            path = self._get_master_path(cal_type)
             master = self._load_master(path)
         else:
             raise TypeError(
@@ -143,6 +142,24 @@ class ImageProcessing:
         setattr(self, f"_{cal_type}_path", path)
         setattr(self, f"_{cal_type}_ml1", master)
         return master
+
+    def _get_master_path(self, cal_type):
+        """
+        Read the master path for `cal_type` from the L1 RECEIPT header.
+
+        Returns the `{PREFIX}FILE` keyword (uppercase calibration name), the
+        master's full path written by CalibrationAssociation. Raises
+        FileNotFoundError if it is absent — a `True` calibration was requested
+        on a frame that has not been through CalibrationAssociation.
+        """
+        prefix = cal_type.upper()
+        master_file = self.l1_obj.headers["RECEIPT"].get(f"{prefix}FILE")
+        if not master_file:
+            raise FileNotFoundError(
+                f"{prefix}FILE must be present in the RECEIPT header. "
+                "Run CalibrationAssociation before ImageProcessing."
+            )
+        return master_file
 
     @staticmethod
     def _master_image_variance(img, snr):
