@@ -38,7 +38,7 @@ from kpfpipe.utils.validation import strictly_increasing
 
 _DEFAULTS = {
     **DEFAULTS,
-    "ccf_mask_width": 0.5,
+    "ccf_mask_width": 1.0,
     "ccf_step_size": 0.25,
     "ccf_window": [-100.0, 100.0],
     "rv_window": [-25.0, 25.0],
@@ -227,8 +227,8 @@ class RadialVelocity:
     def _build_line_mask(self, chip, fiber, mask_width=None):
         """
         Build (and cache) the orderlet's CCF line mask: vacuum line centers,
-        weights, and per-line top-hat edges at velocity -/+ mask_width about each
-        center (relativistic Doppler). The mask is selected from the orderlet's
+        weights, and per-line top-hat holes of full width `mask_width` about
+        each center (relativistic Doppler). The mask is selected from the orderlet's
         illumination source.
 
         Stellar masks load from reference/line_masks/stellar_masks/; the 'thar'
@@ -259,11 +259,12 @@ class RadialVelocity:
             )
             centers, weights = np.loadtxt(mask_path, unpack=True)  # vacuum wavelengths
 
+        half_width = mask_width / 2.0  # hole spans +/- half_width about each center
         mask = {
             "center": centers,
             "weight": weights,
-            "start": centers * (1.0 + compute_redshift(-mask_width * u.km / u.s)),
-            "end": centers * (1.0 + compute_redshift(+mask_width * u.km / u.s)),
+            "start": centers * (1.0 + compute_redshift(-half_width * u.km / u.s)),
+            "end": centers * (1.0 + compute_redshift(+half_width * u.km / u.s)),
         }
         self._line_mask[key] = mask
         return mask
@@ -325,14 +326,15 @@ class RadialVelocity:
         oversampled. That length is *not* the native pixel: the CCF is the
         spectrum seen through a mask hole, so its noise kernel is the
         cross-correlation of two top-hats -- the mask hole (full width
-        `2 * mask_width`, since the mask spans +/- mask_width about each line
-        center) and the native pixel (`vel_span_per_pixel`) -- i.e. a trapezoid.
-        The integral length of a trapezoid's autocorrelation, (integral)^2 /
-        integral-of-square, is `M**2 / (M - m/3)` with M, m the larger/smaller
-        of the two widths (reduces to 1.5*w for equal widths).
+        `mask_width`) and the native pixel (`vel_span_per_pixel`) -- i.e. a
+        trapezoid. The integral length of a trapezoid's autocorrelation,
+        (integral)^2 / integral-of-square, is `M**2 / (M - m/3)` with M, m the
+        larger/smaller of the two widths (reduces to 1.5*w for equal widths).
         """
-        w_m = 2.0 * mask_width
-        big, small = max(vel_span_per_pixel, w_m), min(vel_span_per_pixel, w_m)
+        big, small = (
+            max(vel_span_per_pixel, mask_width),
+            min(vel_span_per_pixel, mask_width),
+        )
         return big**2 / (big - small / 3.0)
 
     @staticmethod
@@ -482,9 +484,9 @@ class RadialVelocity:
             1D wavelength solution for the order [Å]; sets the native per-pixel
             velocity scale used in the error estimate.
         mask_width : float
-            CCF mask width [km/s] used to build the CCF (the mask spans
-            +/- mask_width about each line center); with `wave` it sets the
-            CCF-noise correlation length (see `_ccf_noise_corr_length`).
+            CCF mask hole full width [km/s] used to build the CCF (each top-hat
+            hole is `mask_width` wide, centered on its line); with `wave` it sets
+            the CCF-noise correlation length (see `_ccf_noise_corr_length`).
         window : list of float
             [min, max] km/s velocity window about the dip for the first pass.
         fit_nsigma : float

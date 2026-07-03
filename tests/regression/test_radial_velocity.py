@@ -41,12 +41,12 @@ NCOL = 2000
 # ---------------------------------------------------------------------------
 
 
-def _make_mask(centers, weights=None, width=0.5):
+def _make_mask(centers, weights=None, width=1.0):
     """Build a line-mask dict matching _build_line_mask's structure."""
     centers = np.asarray(centers, dtype=np.float64)
     if weights is None:
         weights = np.ones_like(centers)
-    half_width = centers * (width / SPEED_OF_LIGHT_KMS)
+    half_width = centers * (width / 2.0 / SPEED_OF_LIGHT_KMS)
     return {
         "center": centers,
         "weight": np.asarray(weights, dtype=np.float64),
@@ -340,20 +340,20 @@ class TestComputeRV:
 
 class TestCCFNoiseCorrLength:
     def test_matches_measured_value(self):
-        # Native pixel 0.885 km/s, mask hole 2*0.5 = 1.0 km/s -> trapezoid-ACF
+        # Native pixel 0.885 km/s, mask hole full width 1.0 km/s -> trapezoid-ACF
         # integral length, verified against the frame's measured autocorrelation.
-        assert RadialVelocity._ccf_noise_corr_length(0.885, 0.5) == pytest.approx(
+        assert RadialVelocity._ccf_noise_corr_length(0.885, 1.0) == pytest.approx(
             1.418, abs=1e-3
         )
 
     def test_equal_widths_give_1p5w(self):
         # pixel width == mask-hole width == w -> 1.5 w.
-        assert RadialVelocity._ccf_noise_corr_length(0.6, 0.3) == pytest.approx(0.9)
+        assert RadialVelocity._ccf_noise_corr_length(0.6, 0.6) == pytest.approx(0.9)
 
     def test_symmetric_in_the_two_widths(self):
         # L depends only on the {pixel, mask-hole} pair, not which is larger.
-        a = RadialVelocity._ccf_noise_corr_length(1.0, 0.4)  # widths {1.0, 0.8}
-        b = RadialVelocity._ccf_noise_corr_length(0.8, 0.5)  # widths {0.8, 1.0}
+        a = RadialVelocity._ccf_noise_corr_length(1.0, 0.8)  # widths {1.0, 0.8}
+        b = RadialVelocity._ccf_noise_corr_length(0.8, 1.0)  # widths {0.8, 1.0}
         assert a == pytest.approx(b)
 
 
@@ -1044,10 +1044,10 @@ class TestConstructor:
             RadialVelocity(header_kpf2, config="not-a-config")
 
     def test_dict_config_overrides_default(self, header_kpf2):
-        rv = RadialVelocity(header_kpf2, config={"ccf_mask_width": 1.0})
-        assert rv.ccf_mask_width == 1.0
+        rv = RadialVelocity(header_kpf2, config={"ccf_mask_width": 2.0})
+        assert rv.ccf_mask_width == 2.0
 
     def test_defaults_applied(self, header_kpf2):
         rv = RadialVelocity(header_kpf2)
-        assert rv.ccf_mask_width == 0.5
+        assert rv.ccf_mask_width == 1.0
         assert rv.ccf_step_size == 0.25
