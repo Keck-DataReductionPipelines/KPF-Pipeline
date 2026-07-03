@@ -102,7 +102,7 @@ class KPFDataModel(RVDataModel):
         super().create_extension(ext_name, ext_type, header=header, data=data)
         self.headers[ext_name] = self.as_fits_header(self.headers[ext_name])
 
-    def set_keyword(self, key, value):
+    def set_keyword(self, key, value, ext=None):
         """Write a registered keyword to its home extension header.
 
         Looks ``key`` up in the merged KPF + EPRV keyword registry
@@ -110,25 +110,44 @@ class KPFDataModel(RVDataModel):
         writes ``value`` to the extension named there, with the registry
         Description as the FITS comment. This is the single write path for
         registered keywords, so a keyword always lands on the same extension with
-        the same comment — callers never name an extension or comment.
+        the same comment — callers never name a comment.
+
+        ``ext`` targets a specific extension for EPRV per-extension cards that
+        have no single routed home because they recur on every orderlet's
+        extension (e.g. ``VELSTART`` on ``CCF1..5``, ``RVMETHOD`` on ``RV1..5``).
+        The keyword must be registered *for that extension*; the comment still
+        comes from the registry. Aliases (e.g. ``SCI2_CCF``) resolve first. When
+        ``ext`` is None the keyword routes to its registered home as usual.
 
         Raises
         ------
         KeyError
-            If ``key`` is registered nowhere; register it in the appropriate
+            If ``key`` is registered nowhere (default), or not registered for
+            ``ext`` (targeted); register it in the appropriate
             ``config/L{level}-headers.csv`` before writing it.
         ValueError
-            If the keyword's home extension does not exist on this object (a
-            config error — the extension must be created before the write).
+            If the target extension does not exist on this object (a config
+            error — the extension must be created before the write).
         """
         name = str(key).strip()
-        route = self.keyword_registry.routing.get(name)
-        if route is None:
-            raise KeyError(
-                f"keyword {name!r} is not registered; add it to "
-                "config/L{0,1,2,4}-headers.csv before writing it"
-            )
-        ext, comment = route
+        if ext is None:
+            route = self.keyword_registry.routing.get(name)
+            if route is None:
+                raise KeyError(
+                    f"keyword {name!r} is not registered; add it to "
+                    "config/L{0,1,2,4}-headers.csv before writing it"
+                )
+            ext, comment = route
+        else:
+            if hasattr(self.extensions, "_resolve"):
+                ext = self.extensions._resolve(ext)
+            comment = self.keyword_registry.comment_for(name, ext)
+            if comment is None:
+                raise KeyError(
+                    f"keyword {name!r} is not registered for extension {ext!r}; "
+                    "register it in the appropriate config/L{0,1,2,4}-headers.csv "
+                    "before writing it"
+                )
         if ext not in self.extensions:
             raise ValueError(
                 f"cannot write {name!r}: extension {ext!r} does not exist on "

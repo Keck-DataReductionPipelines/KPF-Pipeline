@@ -36,7 +36,7 @@ class PlotL4:
     Quicklook plots for KPF L4 (RVs and CCFs) data.
 
     Args:
-        l4_obj: KPF4 data object (post-RadialVelocity).
+        l4_obj: KPF4 data object (post-CrossCorrelation + RadialVelocity).
         output_dir: directory to save PNG files. None = return Figure only.
         obs_id: observation ID for titles/filenames. Like KPF2, KPF4 has no
             obs_id attribute, so the recipe passes it explicitly; absent that,
@@ -196,7 +196,7 @@ class PlotL4:
 
     def _order_weights(self, rvtab):
         """Per-order CCF-combination weights for the SCI annotations, read from
-        the RV table's WEIGHT column (written by RadialVelocity).
+        the RV table's WEIGHT column (written by CrossCorrelation).
 
         These are the weights the pipeline actually uses to combine the per-order
         CCFs (see RadialVelocity._combine_ccfs); orders with weight 0 are excluded
@@ -210,8 +210,8 @@ class PlotL4:
         if "WEIGHT" not in rvtab.colnames:
             raise ValueError(
                 "L4 RV table has no WEIGHT column; cannot annotate per-order CCF "
-                "weights. The L4 must come from a RadialVelocity step that writes "
-                "the WEIGHT column."
+                "weights. The L4 must come from a CrossCorrelation step that "
+                "writes the WEIGHT column."
             )
         return np.asarray(rvtab["WEIGHT"], dtype=float)
 
@@ -368,15 +368,18 @@ class PlotL4:
 
     def run(self, which):
         """Generate the requested plot(s) for every chip that has CCF data,
-        saving each to ``output_dir`` and closing the matplotlib figure.
+        saving each to ``output_dir``. In that save-to-disk mode the figure is
+        closed so callers don't accumulate them; when ``output_dir`` is None the
+        figures are returned open, so they display when the caller renders them
+        (e.g. interactively in a notebook).
 
         Args:
             which: 'all' to run every implemented plot, or the name of a
                 single plot method (one of ``self._PLOT_METHODS``).
 
         Returns:
-            dict mapping ``{method_name}_{chip}`` to matplotlib.Figure
-            (closed; useful for tests/introspection).
+            dict mapping ``{method_name}_{chip}`` to matplotlib.Figure (closed
+            only when saved to ``output_dir``; useful for tests/introspection).
         """
         if which == "all":
             names = self._PLOT_METHODS
@@ -399,5 +402,8 @@ class PlotL4:
                 if fig is None:
                     continue
                 figures[f"{name}_{chip}"] = fig
-                plt.close(fig)
+                # Closing frees memory in save-to-disk mode; when returning
+                # figures for interactive display, leave them open.
+                if self.output_dir is not None:
+                    plt.close(fig)
         return figures

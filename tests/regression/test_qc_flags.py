@@ -971,10 +971,17 @@ class TestQCScript:
 # ---------------------------------------------------------------------------
 
 
-def _make_l4(*, sci=True, maxpc=None, minpc=None):
-    """KPF4 with science CCF/RV and optional per-order BERV %-deviation metrics."""
+def _make_l4(*, sci=True, rv_filled=True, maxpc=None, minpc=None):
+    """KPF4 with science CCF/RV and optional per-order BERV %-deviation metrics.
+
+    ``rv_filled=False`` seeds the RV table with NaN RVs (a CrossCorrelation-only
+    L4, before RadialVelocity), so DATAPRL4 must fail.
+    """
     l4 = KPF4()
     if sci:
+        rv_col = (
+            np.zeros(_NORDER_TOTAL) if rv_filled else np.full(_NORDER_TOTAL, np.nan)
+        )
         for fiber in ("SCI1", "SCI2", "SCI3"):
             l4.set_data(f"{fiber}_CCF", np.ones((_NORDER_TOTAL, 5)))
             l4.set_data(
@@ -982,7 +989,7 @@ def _make_l4(*, sci=True, maxpc=None, minpc=None):
                 Table(
                     {
                         "ORDER_INDEX": np.arange(_NORDER_TOTAL),
-                        "RV": np.zeros(_NORDER_TOTAL),
+                        "RV": rv_col,
                     }
                 ),
             )
@@ -999,6 +1006,11 @@ class TestQCL4:
 
     def test_ccf_rv_present_fail_when_missing(self):
         assert QCL4(_make_l4(sci=False)).ccf_rv_present() is False
+
+    def test_ccf_rv_present_fail_when_rvs_unfilled(self):
+        # CCF present but RV column all-NaN (CrossCorrelation ran, RadialVelocity
+        # did not) -> the RVs are the L4 product, so DATAPRL4 must fail.
+        assert QCL4(_make_l4(rv_filled=False)).ccf_rv_present() is False
 
     def test_bcv_percent_change_pass(self):
         assert QCL4(_make_l4(maxpc=0.3, minpc=-0.4)).berv_within_tolerance() is True

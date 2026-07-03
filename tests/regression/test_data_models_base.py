@@ -116,6 +116,35 @@ class TestSetKeyword:
         assert l4.headers["RV2"]["CCD1RV1"] == 1.2345
         assert l4.headers["PRIMARY"]["CCD1RV"] == 6.789
 
+    def test_targeted_ext_writes_eprv_per_extension_card(self):
+        # EPRV per-extension cards (VELSTART on every CCF#, RVMETHOD on every RV#)
+        # have no single routed home; ext= targets one, alias-resolved, with the
+        # registry Description as the comment.
+        l4 = KPF4()
+        l4.set_keyword("VELSTART", -100.0, ext="SCI2_CCF")  # SCI2_CCF -> CCF3
+        l4.set_keyword("RVMETHOD", "CCF", ext="SCI2_RV")  # SCI2_RV -> RV3
+        assert l4.headers["CCF3"]["VELSTART"] == -100.0
+        assert l4.headers["CCF3"].comments["VELSTART"] == "Velocity Grid Start"
+        assert l4.headers["RV3"]["RVMETHOD"] == "CCF"
+
+    def test_targeted_ext_writes_kpf_multi_home_card(self):
+        # A KPF per-extension keyword (VELMASK, registered as CCF* -> CCF1..5) has
+        # no single routed home, so it is ext=-only like the EPRV per-ext cards.
+        l4 = KPF4()
+        l4.set_keyword("VELMASK", 1.0, ext="SCI2_CCF")  # SCI2_CCF -> CCF3
+        assert l4.headers["CCF3"]["VELMASK"] == 1.0
+        assert (
+            l4.headers["CCF3"].comments["VELMASK"] == "CCF mask hole full width [km/s]"
+        )
+        with pytest.raises(KeyError, match="not registered"):
+            l4.set_keyword("VELMASK", 1.0)  # no home extension without ext=
+
+    def test_targeted_ext_unregistered_for_extension_raises(self):
+        # A keyword not registered for the targeted extension fails loud.
+        l4 = KPF4()
+        with pytest.raises(KeyError, match="not registered for extension"):
+            l4.set_keyword("VELSTART", 1.0, ext="SCI2_RV")  # VELSTART is CCF-only
+
     def test_unregistered_keyword_raises_keyerror(self):
         l1 = KPF1()
         with pytest.raises(KeyError, match="not registered"):
@@ -139,24 +168,45 @@ class TestRegistryConformance:
         routing = KPF1.keyword_registry.routing
         mismatches = []
         for _, row in read_kpf_header_registry().iterrows():
-            kw = str(row["Keyword"]).strip()
             want = str(row["Extension"]).strip()
+            if want.endswith("*"):
+                continue
+            kw = str(row["Keyword"]).strip()
             got = routing.get(kw, (None,))[0]
             if got != want:
                 mismatches.append((kw, want, got))
         assert not mismatches, f"routing != registry Extension column: {mismatches}"
 
-    def test_every_registry_keyword_is_routable(self):
+    def test_single_home_routable_per_extension_not(self):
+        # Single-home KPF keywords route to their home; per-extension keywords
+        # (Extension "CCF*") are ext=-only and excluded from routing.
         routing = KPF1.keyword_registry.routing
         for _, row in read_kpf_header_registry().iterrows():
             kw = str(row["Keyword"]).strip()
-            assert kw in routing, f"{kw} missing from routing table"
+            if str(row["Extension"]).strip().endswith("*"):
+                assert kw not in routing, f"per-extension {kw} must not be routed"
+            else:
+                assert kw in routing, f"{kw} missing from routing table"
 
     def test_comment_is_registry_description(self):
         routing = KPF1.keyword_registry.routing
         for _, row in read_kpf_header_registry().iterrows():
+            if str(row["Extension"]).strip().endswith("*"):
+                continue
             kw = str(row["Keyword"]).strip()
             assert routing[kw][1] == str(row["Description"]).strip()
+
+    def test_per_extension_keyword_expands_across_orderlets(self):
+        # A "CCF*" Extension registers the keyword on CCF1..CCF5 (allowed +
+        # comment) while staying out of routing.
+        reg = KPF1.keyword_registry
+        for n in range(1, 6):
+            assert "VELMASK" in reg.allowed[f"CCF{n}"]
+            assert (
+                reg.comment_for("VELMASK", f"CCF{n}")
+                == "CCF mask hole full width [km/s]"
+            )
+        assert "VELMASK" not in reg.routing
 
 
 class TestKeywordRegistry:

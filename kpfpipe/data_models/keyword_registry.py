@@ -29,8 +29,10 @@ The three use-cases:
       in-loop filter or per-keyword correction.
   (2) Validation — ``allowed`` / ``required`` (per-extension, from the table)
       plus ``structural`` (FITS bookkeeping cards).
-  (3) Routing — ``routing`` (keyword -> (extension, comment)), consumed by
-      ``KPFDataModel.set_keyword``.
+  (3) Routing — ``routing`` (keyword -> (extension, comment)) for the default
+      home-extension write, plus ``comment_for`` ((extension, keyword) ->
+      comment) for ``set_keyword``'s targeted (``ext=``) write of EPRV
+      per-extension cards. Both consumed by ``KPFDataModel.set_keyword``.
 
 It also exposes ``eprv_primary_seed`` (the typed EPRV Required PRIMARY skeleton
 ``KPF1.__init__`` stamps, mirroring rvdata's ``RV2.__init__``). The header_map
@@ -60,6 +62,10 @@ _kpf_pipe_cfg = importlib.resources.files("kpfpipe.data_models.config")
 
 # Number of echelle orders (green + red); the value header_map.csv gets wrong (65).
 _NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
+
+# Number of traces/orderlets (SKY, SCI1-3, CAL); the numbered per-orderlet
+# extensions CCF#/RV#/CCF_VAR# run 1.._NUMTRACES.
+_NUMTRACES = len(pd.read_csv(_kpf_pipe_cfg / "trace-map.csv"))
 
 # EPRV-standard compliance is pinned to the installed rv-data-standard release
 # (environment.yml pins it exactly): EPRVTAG is its version ("v0.4.0"), VOCLASS
@@ -137,11 +143,12 @@ class KeywordRegistry:
         "BARYCORR_KMS": (_rvdata_core_cfg / "L2-BARYCORR_KMS-keywords.csv", 2),
         "BARYCORR_Z": (_rvdata_core_cfg / "L2-BARYCORR_Z-keywords.csv", 2),
         **{
-            f"RV{i}": (_rvdata_core_cfg / "L4-RV1-keywords.csv", 4) for i in range(1, 6)
+            f"RV{i}": (_rvdata_core_cfg / "L4-RV1-keywords.csv", 4)
+            for i in range(1, _NUMTRACES + 1)
         },
         **{
             f"CCF{i}": (_rvdata_core_cfg / "L4-CCF1-keywords.csv", 4)
-            for i in range(1, 6)
+            for i in range(1, _NUMTRACES + 1)
         },
     }
 
@@ -223,6 +230,15 @@ class KeywordRegistry:
         self.registered = frozenset(self.table["Keyword"])
 
         self.routing = MappingProxyType(self._routing_lookup())
+        # (extension, keyword) -> Description, for set_keyword's targeted (ext=)
+        # write path (EPRV per-extension cards like VELSTART on CCF#, which have no
+        # single routed home). KPF rows come after EPRV rows, so KPF wins a clash.
+        self.comments = MappingProxyType(
+            {
+                (row.Extension, row.Keyword): row.Description
+                for row in self.table.itertuples(index=False)
+            }
+        )
         allowed, required = self._validation_lookup()
         self.allowed = MappingProxyType(
             {ext: frozenset(kws) for ext, kws in allowed.items()}
@@ -286,6 +302,15 @@ class KeywordRegistry:
         """
         k = str(key).strip()
         return k in self.structural or k.startswith(self._STRUCTURAL_PREFIXES)
+
+    def comment_for(self, keyword, extension):
+        """FITS comment (registry Description) for ``keyword`` on ``extension``.
+
+        Returns None when the keyword is not registered for that extension — the
+        membership test set_keyword's targeted (``ext=``) path uses; a registered
+        keyword with an empty Description returns ``""``, distinct from None.
+        """
+        return self.comments.get((extension, str(keyword).strip()))
 
     # --- Source table construction -------------------------------------------
 
@@ -366,19 +391,19 @@ class KeywordRegistry:
                     f"'PopulatedBy' == {cls._EPRV_TAG!r}, which is reserved as the "
                     "EPRV-row discriminator; use a real populating site instead"
                 )
-            rows.append(
-                [
-                    str(r["Keyword"]).strip(),
-                    descr,
-                    str(r["Extension"]).strip(),
-                    str(r.get("DataType", "")).strip(),
-                    populated_by,
-                    False,
-                    level_of(r),
-                    "",  # Default (EPRV-only)
-                    "",  # Units (EPRV-only)
-                ]
-            )
+            keyword = str(r["Keyword"]).strip()
+            dtype = str(r.get("DataType", "")).strip()
+            level = level_of(r)
+            ext_field = str(r["Extension"]).strip()
+            if ext_field.endswith("*"):
+                base = ext_field[:-1]
+                extensions = [f"{base}{i}" for i in range(1, _NUMTRACES + 1)]
+            else:
+                extensions = [ext_field]
+            for ext in extensions:
+                rows.append(
+                    [keyword, descr, ext, dtype, populated_by, False, level, "", ""]
+                )
         return rows
 
     @classmethod
@@ -434,18 +459,22 @@ class KeywordRegistry:
     def _routing_lookup(self):
         """keyword -> (home extension, comment), derived from ``self.table``.
 
-        Write keys only: EPRV PRIMARY keywords (-> PRIMARY) and every KPF
-        keyword (its explicit Extension); KPF wins a name collision. EPRV
-        per-extension cards (RVMETHOD on RV#, CTYPE*, ...) are validation-only,
-        never set_keyword targets, so they are excluded.
+        Write keys only: EPRV PRIMARY keywords (-> PRIMARY) and each KPF keyword
+        with a single home extension; KPF wins a name collision. EPRV
+        per-extension cards (RVMETHOD on RV#, CTYPE*, ...) and multi-home KPF
+        keywords (VELMASK on CCF#) have no single home, so they are excluded and
+        written via set_keyword's targeted ``ext=`` path.
         """
         routing = {}
-        # EPRV PRIMARY rows first (setdefault), then KPF rows override (KPF wins).
         for row in self.table.itertuples(index=False):
             if row.PopulatedBy == self._EPRV_TAG and row.Extension == "PRIMARY":
                 routing.setdefault(row.Keyword, ("PRIMARY", row.Description))
+        kpf_homes = {}
         for row in self.table.itertuples(index=False):
             if row.PopulatedBy != self._EPRV_TAG:
+                kpf_homes.setdefault(row.Keyword, set()).add(row.Extension)
+        for row in self.table.itertuples(index=False):
+            if row.PopulatedBy != self._EPRV_TAG and len(kpf_homes[row.Keyword]) == 1:
                 routing[row.Keyword] = (row.Extension, row.Description)
         return routing
 

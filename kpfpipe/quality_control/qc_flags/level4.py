@@ -29,13 +29,23 @@ class QCL4(QC):
     LEVEL = "L4"
 
     def ccf_rv_present(self):
-        """Each science orderlet has a non-empty CCF cube and RV table."""
+        """Each science orderlet has a non-empty CCF cube and computed RVs.
+
+        Both stages of the split must have run: CrossCorrelation writes the CCF
+        cube and seeds the RV table (with NaN RV/RV_ERR), and RadialVelocity fills
+        the RV column. A seeded-but-unfilled table (CrossCorrelation without a
+        following RadialVelocity) fails here, since the RVs are the L4 product.
+        """
         for fiber in _SCI_FIBERS:
             ccf = self.kpf_obj.data.get(f"{fiber}_CCF")
             rv = self.kpf_obj.data.get(f"{fiber}_RV")
             if ccf is None or np.size(ccf) == 0:
                 return False
             if rv is None or len(rv) == 0:
+                return False
+            if "RV" not in getattr(rv, "colnames", []):
+                return False
+            if not np.any(np.isfinite(np.asarray(rv["RV"], dtype=float))):
                 return False
         return True
 
