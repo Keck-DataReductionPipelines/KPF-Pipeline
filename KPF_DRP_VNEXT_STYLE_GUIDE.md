@@ -138,7 +138,7 @@ class StageName:
     def __init__(self, l1_obj, config=None):
         self.l1_obj = l1_obj
         # ... canonical config block (see §4) ...
-        self._info = None  # info() summary only
+        self._info = None  # cached info() summary text (str)
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -154,8 +154,8 @@ class StageName:
     # Private helpers - module execution
     # ------------------------------------------------------------------
     def _track_info(self, chips=None, fibers=None):
-        """Populate _info from instance attributes (takes only chips/fibers)."""
-        self._info = {...}
+        """Build & cache the info() summary text (takes only chips/fibers)."""
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
         """Sole place this module writes headers; reads instance attributes."""
@@ -167,11 +167,13 @@ class StageName:
     def perform(self, chips=None):
         ...                                    # populate header-source attributes
         self._set_headers(self.l2_obj)         # consolidates ALL header writes
-        self._track_info(chips)                # populates _info, just before the receipt
+        self._track_info(chips)                # builds & caches _info text, before the receipt
         self.l2_obj.receipt_add_entry("stage_name", "", "PASS")
+        logger.info("summary:\n%s", self._info)  # perform() logs the cached summary
         return self.l2_obj
 
-    def info(self): ...   # human-readable reporter, always last
+    def info(self):       # prints self._info (the cached text), always last
+        print(self._info)
 ```
 
 - **Method order is fixed and marked with 66-dash banner comments**:
@@ -181,11 +183,18 @@ class StageName:
   `_set_headers(obj)` that sources its values from instance attributes (never recomputes,
   never reads another product) and writes each registered keyword via `obj.set_keyword(key, value)`
   (routing + comment come from the registry), called immediately before `receipt_add_entry`. Modules
-  that write no header keywords keep an empty helper for uniformity. `_info` (formerly `_results`) is a pruned,
-  human-readable summary consumed **only** by `info()` — never the science/header chain, and never
-  tests (tests assert on the underlying attributes). It is populated by a private
-  `_track_info(self[, chips, fibers])` (no other args — it sources from instance attributes),
-  called immediately after `_set_headers` and before the receipt.
+  that write no header keywords keep an empty helper for uniformity. `_info` (formerly `_results`) is the
+  pruned, human-readable summary **text** (a `str`) consumed **only** by reporting — never the
+  science/header chain, and never tests (tests assert on the underlying attributes). A private
+  `_track_info(self[, chips, fibers])` (no other args — it sources from instance attributes) **builds
+  and caches** that text on `self._info`, called immediately after `_set_headers` and before the receipt;
+  `perform()` then logs it (`logger.info("summary:\n%s", self._info)`) and `info()` prints it, so both
+  share one rendering (no separate `_info_text()` builder). `info()` prints a short "not been called"
+  notice while `self._info` is `None`. *(The `masters/` subpackage follows this same pattern: Bias/Dark/WLS
+  each have a `_track_info()` that caches the text on `self._info`, with the per-chip stack statistics cached
+  separately on `self._stack_info` (Bias/Dark via the base `_populate_stack_info()`; WLS inline in
+  `make_master_l2`). Flat is an unimplemented stub — no `_track_info`; its `info()` prints a terse
+  not-implemented notice directly. See §10.)*
 - The banner is exactly:
   ```python
       # ------------------------------------------------------------------
@@ -367,8 +376,9 @@ class StageName:
   - **Lazy `%`-formatting in log calls** (Ruff `G`): `logger.info("wrote %s", fn)`,
     not f-strings.
   - Human-facing status → `print()`, confined to interactive `info()` reporters (data
-    models and modules); never in `perform()`/pipeline paths. Module `info()` builds its
-    text in `_info_text()` so `perform()` can log the same summary.
+    models and modules); never in `perform()`/pipeline paths. A module's `_track_info()`
+    builds and caches the summary text on `self._info`; `info()` prints it and `perform()`
+    logs it (`logger.info("summary:\n%s", self._info)`), so both share one rendering (see §2).
   - In-pipeline recoverable/degraded conditions → `warnings.warn(..., stacklevel=2)`,
     gated behind a `verbose` flag: `if verbose: warnings.warn(..., stacklevel=2)`. The
     explicit `stacklevel` is required (Ruff `B028`) so the warning points at the caller.

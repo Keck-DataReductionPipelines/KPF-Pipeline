@@ -613,19 +613,6 @@ class TestMakeMasterL2:
         assert "GREEN_WLS_COEFFS" in ml2.extensions
         assert "RED_WLS_COEFFS" not in ml2.extensions
 
-    def test_info_populated(self, mock_make_master_l2):
-        """make_master_l2 should populate self._info with per-chip line yields."""
-        wls = WLS(FILE_LIST)
-        assert wls._info is None
-        wls.make_master_l2()
-        assert wls._info is not None
-        for chip in wls.chips:
-            assert chip in wls._info
-            assert "n_total" in wls._info[chip]
-            assert "n_fit" in wls._info[chip]
-            assert isinstance(wls._info[chip]["n_total"], int)
-            assert isinstance(wls._info[chip]["n_fit"], int)
-
     def test_info_before_make_master_l2(self, capsys):
         """info() before perform should print config and the not-called message."""
         wls = WLS(FILE_LIST)

@@ -96,39 +96,36 @@ class Bias(BaseMasterModule):
         )
 
         self.ml1_obj = self._build_ml1_obj(l1_arrays, l0_file_list, master_type="bias")
-        self._info = self._populate_info(l1_arrays)
+        self._populate_stack_info(l1_arrays)
+        self._track_info()
 
         if filepath is not None:
             self.save_master("L1", filepath, overwrite=True)
 
-        logger.info("summary:\n%s", self._info_text())
+        logger.info("summary:\n%s", self._info)
 
         return self.ml1_obj
 
-    def _info_text(self):
-        """Build the info() report text."""
-        lines = []
-        lines.append("Bias")
-        lines.append("  l0_file_list:")
+    def _track_info(self):
+        """Build and cache the info() summary text from _stack_info."""
+        lines = ["Bias", "  l0_file_list:"]
         for fn in self.l0_file_list:
             lines.append(f"    {fn}")
         lines.append(f"  chips:  {self.chips}")
-
-        if self._info is None:
-            lines.append("  make_master_l1() has not been called")
-            return "\n".join(lines)
-
         lines.append(
             f"\n  {'chip':<8s} {'median [e-]':<15s} {'rms [e-]':<10s} {'bad pixels'}"
         )
         lines.append("  " + "-" * 56)
-        for chip, stats in self._info.items():
+        for chip, stats in self._stack_info.items():
             lines.append(
                 f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} "
                 f"{stats['num_bad']} ({stats['pct_bad']:.3f}%)"
             )
-        return "\n".join(lines)
+        self._info = "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and stacking results."""
-        print(self._info_text())
+        if self._info is None:
+            print(f"{type(self).__name__}: make_master_l1() has not been called")
+        else:
+            print(self._info)

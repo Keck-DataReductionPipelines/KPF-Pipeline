@@ -109,8 +109,22 @@ class WavelengthCalibration:
     # ------------------------------------------------------------------
 
     def _track_info(self):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {"wls_path": self._wls_path}
+        """Build and cache the info() summary text from instance attributes."""
+        receipt = self.l2_obj.headers.get("RECEIPT", {})
+        obs_id = receipt.get("ORIGID", "unknown")
+        lines = [
+            "WavelengthCalibration",
+            f"  obs_id:  {obs_id}",
+            f"  chips:   {self.chips}",
+            f"  fibers:  {self.fibers}",
+        ]
+        # WLSAGE is written to QUALITY_CONTROL by DiagL1 (CalibrationAssociation
+        # writes WLSFILE to RECEIPT; DiagL1 derives the age from it).
+        agewls = self.l2_obj.headers.get("QUALITY_CONTROL", {}).get("WLSAGE")
+        lines.append(f"  wls_path: {self._wls_path}")
+        if agewls is not None:
+            lines.append(f"  WLSAGE:   {agewls:+.4f} d  (master - obs)")
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
         """Write all PRIMARY-header keywords for wavelength calibration.
@@ -173,32 +187,12 @@ class WavelengthCalibration:
         self._track_info()
         self.l2_obj.receipt_add_entry("wavelength_calibration", "", "PASS")
 
-        logger.info("summary:\n%s", self._info_text())
+        logger.info("summary:\n%s", self._info)
         return self.l2_obj
-
-    def _info_text(self):
-        """Build the info() report text."""
-        receipt = self.l2_obj.headers.get("RECEIPT", {})
-        obs_id = receipt.get("ORIGID", "unknown")
-        lines = [
-            "WavelengthCalibration",
-            f"  obs_id:  {obs_id}",
-            f"  chips:   {self.chips}",
-            f"  fibers:  {self.fibers}",
-        ]
-
-        if self._info is None:
-            lines.append("  perform() has not been called")
-            return "\n".join(lines)
-
-        # WLSAGE is written to QUALITY_CONTROL by DiagL1 (CalibrationAssociation
-        # writes WLSFILE to RECEIPT; DiagL1 derives the age from it).
-        agewls = self.l2_obj.headers.get("QUALITY_CONTROL", {}).get("WLSAGE")
-        lines.append(f"  wls_path: {self._info['wls_path']}")
-        if agewls is not None:
-            lines.append(f"  WLSAGE:   {agewls:+.4f} d  (master - obs)")
-        return "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and association results."""
-        print(self._info_text())
+        if self._info is None:
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)

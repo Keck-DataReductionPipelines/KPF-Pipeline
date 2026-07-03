@@ -248,12 +248,19 @@ class ImageProcessing:
     # ------------------------------------------------------------------
 
     def _track_info(self):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {}
+        """Build and cache the info() summary text from instance attributes."""
+        lines = [
+            "ImageProcessing",
+            f"  obs_id: {self.l1_obj.obs_id}",
+            f"  chips:  {self.chips}",
+            f"\n  {'cal_type':<10s} {'master file'}",
+            "  " + "-" * 60,
+        ]
         if self.bias:
-            self._info["bias"] = self._bias_path
+            lines.append(f"  {'bias':<10s} {self._bias_path}")
         if self.dark:
-            self._info["dark"] = self._dark_path
+            lines.append(f"  {'dark':<10s} {self._dark_path}")
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l1_obj):
         """Write all PRIMARY-header keywords for image processing.
@@ -373,27 +380,12 @@ class ImageProcessing:
         self._track_info()
         self.l1_obj.receipt_add_entry("image_processing", "", "PASS")
 
-        logger.info("summary:\n%s", self._info_text())
+        logger.info("summary:\n%s", self._info)
         return self.l1_obj
-
-    def _info_text(self):
-        """Build the info() report text."""
-        lines = [
-            "ImageProcessing",
-            f"  obs_id: {self.l1_obj.obs_id}",
-            f"  chips:  {self.chips}",
-        ]
-
-        if self._info is None:
-            lines.append("  perform() has not been called")
-            return "\n".join(lines)
-
-        lines.append(f"\n  {'cal_type':<10s} {'master file'}")
-        lines.append("  " + "-" * 60)
-        for cal_type, path in self._info.items():
-            lines.append(f"  {cal_type:<10s} {path}")
-        return "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and processing results."""
-        print(self._info_text())
+        if self._info is None:
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)

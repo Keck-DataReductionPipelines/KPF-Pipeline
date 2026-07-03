@@ -892,7 +892,7 @@ class WLS(BaseMasterModule):
 
         self._coeffs_stack = {}
         self._lines_stack = {}
-        self._info = {}
+        self._stack_info = {}
 
         for chip in self.chips:
             result = self._compute_wls_from_stack(
@@ -906,7 +906,7 @@ class WLS(BaseMasterModule):
             )
             W, coeffs_mean, coeffs_stack, lines_stack = result
 
-            self._info[chip] = {
+            self._stack_info[chip] = {
                 "n_total": sum(len(frame["wav"]) for frame in lines_stack),
                 "n_fit": sum(int(np.sum(~frame["bad"])) for frame in lines_stack),
             }
@@ -951,7 +951,8 @@ class WLS(BaseMasterModule):
         if diagnostics_path is not None:
             self.save_diagnostics(diagnostics_path)
 
-        logger.info("summary:\n%s", self._info_text())
+        self._track_info()
+        logger.info("summary:\n%s", self._info)
 
         return self.ml2_obj
 
@@ -993,11 +994,9 @@ class WLS(BaseMasterModule):
                             frame_group.create_dataset(key, data=arr)
         logger.info("wrote WLS diagnostics to %s", path)
 
-    def _info_text(self):
-        """Build the info() report text."""
-        lines = []
-        lines.append("WLS")
-        lines.append("  l0_file_list:")
+    def _track_info(self):
+        """Build and cache the info() summary text from _stack_info."""
+        lines = ["WLS", "  l0_file_list:"]
         for fn in self.l0_file_list:
             lines.append(f"    {fn}")
         lines.append(f"  chips:           {self.chips}")
@@ -1009,19 +1008,17 @@ class WLS(BaseMasterModule):
             f"  polyorder:       x={self.polyorder_x}, m={self.polyorder_m}, "
             f"f={self.polyorder_f}"
         )
-
-        if self._info is None:
-            lines.append("  make_master_l2() has not been called")
-            return "\n".join(lines)
-
         lines.append(f"\n  {'chip':<8s} {'n lines fit/total'}")
         lines.append("  " + "-" * 40)
-        for chip, stats in self._info.items():
+        for chip, stats in self._stack_info.items():
             n_fit, n_total = stats["n_fit"], stats["n_total"]
             pct = 100.0 * n_fit / n_total if n_total else 0.0
             lines.append(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")
-        return "\n".join(lines)
+        self._info = "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and WLS results."""
-        print(self._info_text())
+        if self._info is None:
+            print(f"{type(self).__name__}: make_master_l2() has not been called")
+        else:
+            print(self._info)

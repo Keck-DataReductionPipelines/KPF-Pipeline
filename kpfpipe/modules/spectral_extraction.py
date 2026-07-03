@@ -463,11 +463,18 @@ class SpectralExtraction:
     # ------------------------------------------------------------------
 
     def _track_info(self, chips, fibers):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {
-            chip: {"fibers": list(fibers), "norder": self.norder[chip.upper()]}
-            for chip in chips
-        }
+        """Build and cache the info() summary text from instance attributes."""
+        lines = [
+            "SpectralExtraction",
+            f"  obs_id:            {self.l1_obj.obs_id}",
+            f"  extraction_method: {self.extraction_method}",
+            f"\n  {'CHIP':<8s} {'FIBERS':<30s} {'NORDER'}",
+            "  " + "-" * 46,
+        ]
+        fibers_str = " ".join(fibers)
+        for chip in chips:
+            lines.append(f"  {chip:<8s} {fibers_str:<30s} {self.norder[chip.upper()]}")
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
         """Write all PRIMARY-header keywords for spectral extraction.
@@ -532,28 +539,12 @@ class SpectralExtraction:
         self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "", "PASS")
 
-        logger.info("summary:\n%s", self._info_text())
+        logger.info("summary:\n%s", self._info)
         return l2_obj
-
-    def _info_text(self):
-        """Build the info() report text."""
-        lines = [
-            "SpectralExtraction",
-            f"  obs_id:            {self.l1_obj.obs_id}",
-            f"  extraction_method: {self.extraction_method}",
-        ]
-
-        if self._info is None:
-            lines.append("  perform() has not been called")
-            return "\n".join(lines)
-
-        lines.append(f"\n  {'CHIP':<8s} {'FIBERS':<30s} {'NORDER'}")
-        lines.append("  " + "-" * 46)
-        for chip, info in self._info.items():
-            fibers_str = " ".join(info["fibers"])
-            lines.append(f"  {chip:<8s} {fibers_str:<30s} {info['norder']}")
-        return "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and extraction results."""
-        print(self._info_text())
+        if self._info is None:
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)

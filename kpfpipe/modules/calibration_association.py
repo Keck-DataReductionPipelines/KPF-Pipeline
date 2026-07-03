@@ -191,10 +191,19 @@ class CalibrationAssociation:
     # ------------------------------------------------------------------
 
     def _track_info(self):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {
-            cal_type: dict(cal) for cal_type, cal in self._calibrations.items()
-        }
+        """Build and cache the info() summary text from instance attributes."""
+        lines = [
+            "CalibrationAssociation",
+            f"  obs_id:        {self.l1_obj.obs_id}",
+            f"  masters root:  {self._masters_root}",
+            f"  search window: {self.masters_search_window_days} days [before, after]",
+            f"\n  {'cal_type':<12s} {'master file'}",
+            "  " + "-" * 60,
+        ]
+        for cal_type, cal in self._calibrations.items():
+            lines.append(f"  {cal_type:<12s} {cal['filepath']}")
+            lines.append("")
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l1_obj):
         """Write the master-path keyword for each associated calibration.
@@ -270,29 +279,12 @@ class CalibrationAssociation:
         self._track_info()
         self.l1_obj.receipt_add_entry("calibration_association", "", "PASS")
 
-        logger.info("summary:\n%s", self._info_text())
+        logger.info("summary:\n%s", self._info)
         return self.l1_obj
-
-    def _info_text(self):
-        """Build the info() report text."""
-        lines = [
-            "CalibrationAssociation",
-            f"  obs_id:        {self.l1_obj.obs_id}",
-            f"  masters root:  {self._masters_root}",
-            f"  search window: {self.masters_search_window_days} days [before, after]",
-        ]
-
-        if self._info is None:
-            lines.append("  perform() has not been called")
-            return "\n".join(lines)
-
-        lines.append(f"\n  {'cal_type':<12s} {'master file'}")
-        lines.append("  " + "-" * 60)
-        for cal_type, cal in self._info.items():
-            lines.append(f"  {cal_type:<12s} {cal['filepath']}")
-            lines.append("")
-        return "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and association results."""
-        print(self._info_text())
+        if self._info is None:
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)

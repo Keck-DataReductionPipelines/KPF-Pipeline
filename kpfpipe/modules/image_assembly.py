@@ -504,18 +504,24 @@ class ImageAssembly:
     # ------------------------------------------------------------------
 
     def _track_info(self, chips):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {
-            chip: {
-                ch: (
-                    round(float(self.readnoise[ch]), 4),
-                    round(float(self.rn_nongauss[ch]), 4),
-                )
-                for ch in self.readnoise
-                if ch.startswith(chip.upper())
-            }
-            for chip in chips
-        }
+        """Build and cache the info() summary text from instance attributes."""
+        lines = [
+            "ImageAssembly",
+            f"  obs_id:           {self.l0_obj.obs_id}",
+            f"  overscan_method:  {self.overscan_method}",
+            f"  readnoise_sigma:  {self.readnoise_sigma}",
+            f"\n  {'channel':<14s} {'read noise [e-]':<18s} {'non-gaussian'}",
+            "  " + "-" * 48,
+        ]
+        for chip in chips:
+            for ch in self.readnoise:
+                if not ch.startswith(chip.upper()):
+                    continue
+                rn = round(float(self.readnoise[ch]), 4)
+                rnng = round(float(self.rn_nongauss[ch]), 4)
+                lines.append(f"  {ch:<14s} {rn:<18} {rnng}")
+            lines.append("")
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l1_obj):
         """
@@ -613,30 +619,12 @@ class ImageAssembly:
         self._track_info(chips)
         l1_obj.receipt_add_entry("image_assembly", "", "PASS")
 
-        logger.info("summary:\n%s", self._info_text())
+        logger.info("summary:\n%s", self._info)
         return l1_obj
-
-    def _info_text(self):
-        """Build the info() report text."""
-        lines = [
-            "ImageAssembly",
-            f"  obs_id:           {self.l0_obj.obs_id}",
-            f"  overscan_method:  {self.overscan_method}",
-            f"  readnoise_sigma:  {self.readnoise_sigma}",
-        ]
-
-        if self._info is None:
-            lines.append("  perform() has not been called")
-            return "\n".join(lines)
-
-        lines.append(f"\n  {'channel':<14s} {'read noise [e-]':<18s} {'non-gaussian'}")
-        lines.append("  " + "-" * 48)
-        for chip in self._info:
-            for channel, (rn, rnng) in self._info[chip].items():
-                lines.append(f"  {channel:<14s} {rn:<18} {rnng}")
-            lines.append("")
-        return "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and processing results."""
-        print(self._info_text())
+        if self._info is None:
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)
