@@ -213,8 +213,10 @@ class PlotL1:
         """
         Generate the requested plot(s) for every chip that has data.
 
-        Saves each to `output_dir` and closes the matplotlib figure so
-        callers don't accumulate them.
+        Saves each to `output_dir` and, in that save-to-disk mode, closes the
+        matplotlib figure so callers don't accumulate them. When `output_dir`
+        is None the figures are returned open, so they display when the caller
+        renders them (e.g. interactively in a notebook).
 
         Parameters
         ----------
@@ -228,8 +230,8 @@ class PlotL1:
         Returns
         -------
         dict
-            Maps `{method_name}_{chip}` to its (closed) matplotlib.Figure;
-            useful for tests and introspection.
+            Maps `{method_name}_{chip}` to its matplotlib.Figure (closed only
+            when saved to `output_dir`); useful for tests and introspection.
 
         Raises
         ------
@@ -257,5 +259,8 @@ class PlotL1:
             for name in names:
                 fig = getattr(self, name)(chip, full_res=full_res)
                 figures[f"{name}_{chip}"] = fig
-                plt.close(fig)
+                # Closing frees memory in save-to-disk mode; when returning
+                # figures for interactive display, leave them open.
+                if self.output_dir is not None:
+                    plt.close(fig)
         return figures

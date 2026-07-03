@@ -399,15 +399,18 @@ class PlotL2:
 
     def run(self, which):
         """Generate the requested plot(s) for every chip that has data,
-        saving each to ``output_dir`` and closing the matplotlib figure.
+        saving each to ``output_dir``. In that save-to-disk mode the figure is
+        closed so callers don't accumulate them; when ``output_dir`` is None the
+        figures are returned open, so they display when the caller renders them
+        (e.g. interactively in a notebook).
 
         Args:
             which: 'all' to run every implemented plot, or the name of a
                 single plot method (one of ``self._PLOT_METHODS``).
 
         Returns:
-            dict mapping ``{method_name}_{chip}`` to matplotlib.Figure
-            (closed; useful for tests/introspection).
+            dict mapping ``{method_name}_{chip}`` to matplotlib.Figure (closed
+            only when saved to ``output_dir``; useful for tests/introspection).
         """
         if which == "all":
             names = self._PLOT_METHODS
@@ -430,5 +433,8 @@ class PlotL2:
                 if fig is None:
                     continue
                 figures[f"{name}_{chip}"] = fig
-                plt.close(fig)
+                # Closing frees memory in save-to-disk mode; when returning
+                # figures for interactive display, leave them open.
+                if self.output_dir is not None:
+                    plt.close(fig)
         return figures
