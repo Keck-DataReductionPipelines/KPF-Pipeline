@@ -152,3 +152,7 @@ def main(config, args):
     l4.to_fits(l4_out_path)
 
     logger.info("exiting kpf_drp_science pipeline")
+
+
+if __name__ == "__main__":
+    main()

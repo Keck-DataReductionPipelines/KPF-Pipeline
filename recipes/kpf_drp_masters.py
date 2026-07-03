@@ -98,3 +98,7 @@ def main(config, args):
         )
 
     logger.info("exiting kpf_drp_masters pipeline")
+
+
+if __name__ == "__main__":
+    main()
