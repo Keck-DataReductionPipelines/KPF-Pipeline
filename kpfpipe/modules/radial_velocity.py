@@ -575,8 +575,8 @@ class RadialVelocity:
     # ------------------------------------------------------------------
 
     def _track_info(self, fibers):
-        """Populate _info (the info() summary) from instance attributes."""
-        self._info = {}
+        """Build and cache the info() summary text from instance attributes."""
+        info = {}
         for fiber in fibers:
             fiber = fiber.upper()
             pf = self._per_fiber.get(fiber, {})
@@ -585,7 +585,50 @@ class RadialVelocity:
                 entry["ccd_rv"] = pf.get("ccd_rv", {})
                 entry["ccd_rv_err"] = pf.get("ccd_rv_err", {})
                 entry["mask"] = self.l4_obj.headers[f"{fiber}_CCF"].get("CCFMASK")
-            self._info[fiber] = entry
+            info[fiber] = entry
+
+        obs_id = self.l4_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
+        lines = [
+            "RadialVelocity",
+            f"  obs_id:     {obs_id}",
+            f"  rv_window:  {self.rv_window} km/s",
+        ]
+
+        # Per-CCD, per-orderlet summary. MASK is the CCF mask; CCD_RV/CCD_ERV are
+        # the combined per-CCD RV and its error; RV_RMS is the order-to-order
+        # mad_std (a diagnostic of per-order spread), in m/s.
+        fiber_order = [f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in info]
+        fiber_order += [f for f in info if f not in fiber_order]
+
+        lines.append(
+            f"\n  {'CHIP':<8s}{'FIBER':<8s}{'MASK':<14s}{'NVALID':>8s}"
+            f"{'CCD_RV [km/s]':>16s}{'CCD_ERV [m/s]':>16s}{'RV_RMS [m/s]':>16s}"
+        )
+        lines.append("  " + "-" * 86)
+        norder_green = self.norder["GREEN"]
+        norder = norder_green + self.norder["RED"]
+        for chip, rows in (
+            ("GREEN", slice(0, norder_green)),
+            ("RED", slice(norder_green, norder)),
+        ):
+            for fiber in fiber_order:
+                res = info[fiber]
+                rv = res["rv"]
+                if rv is None:
+                    continue
+                rv = rv[rows]
+                nvalid = int(np.sum(np.isfinite(rv)))
+                if nvalid == 0:
+                    continue
+                ccd_rv = res.get("ccd_rv", {}).get(chip, np.nan)
+                ccd_erv = res.get("ccd_rv_err", {}).get(chip, np.nan)
+                rv_rms = mad_std(rv, ignore_nan=True) * 1e3 if nvalid >= 2 else np.nan
+                lines.append(
+                    f"  {chip:<8s}{fiber:<8s}{str(res.get('mask', '')):<14s}"
+                    f"{nvalid:>8d}{ccd_rv:>+16.5f}{ccd_erv * 1e3:>16.3f}"
+                    f"{rv_rms:>16.3f}"
+                )
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l4_obj):
         """
@@ -842,60 +885,12 @@ class RadialVelocity:
         self._set_headers(l4_obj)
         self._track_info(fibers)
         l4_obj.receipt_add_entry("radial_velocity", "", "PASS")
-        logger.info("summary:\n%s", self._info_text())
+        logger.info("summary:\n%s", self._info)
         return l4_obj
-
-    def _info_text(self):
-        """Build the info() report text."""
-        obs_id = self.l4_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
-        lines = [
-            "RadialVelocity",
-            f"  obs_id:     {obs_id}",
-            f"  rv_window:  {self.rv_window} km/s",
-        ]
-
-        if self._info is None:
-            lines.append("  perform() has not been called")
-            return "\n".join(lines)
-
-        # Per-CCD, per-orderlet summary. MASK is the CCF mask; CCD_RV/CCD_ERV are
-        # the combined per-CCD RV and its error; RV_RMS is the order-to-order
-        # mad_std (a diagnostic of per-order spread), in m/s.
-        fiber_order = [
-            f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in self._info
-        ]
-        fiber_order += [f for f in self._info if f not in fiber_order]
-
-        lines.append(
-            f"\n  {'CHIP':<8s}{'FIBER':<8s}{'MASK':<14s}{'NVALID':>8s}"
-            f"{'CCD_RV [km/s]':>16s}{'CCD_ERV [m/s]':>16s}{'RV_RMS [m/s]':>16s}"
-        )
-        lines.append("  " + "-" * 86)
-        norder_green = self.norder["GREEN"]
-        norder = norder_green + self.norder["RED"]
-        for chip, rows in (
-            ("GREEN", slice(0, norder_green)),
-            ("RED", slice(norder_green, norder)),
-        ):
-            for fiber in fiber_order:
-                res = self._info[fiber]
-                rv = res["rv"]
-                if rv is None:
-                    continue
-                rv = rv[rows]
-                nvalid = int(np.sum(np.isfinite(rv)))
-                if nvalid == 0:
-                    continue
-                ccd_rv = res.get("ccd_rv", {}).get(chip, np.nan)
-                ccd_erv = res.get("ccd_rv_err", {}).get(chip, np.nan)
-                rv_rms = mad_std(rv, ignore_nan=True) * 1e3 if nvalid >= 2 else np.nan
-                lines.append(
-                    f"  {chip:<8s}{fiber:<8s}{str(res.get('mask', '')):<14s}"
-                    f"{nvalid:>8d}{ccd_rv:>+16.5f}{ccd_erv * 1e3:>16.3f}"
-                    f"{rv_rms:>16.3f}"
-                )
-        return "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and RV results."""
-        print(self._info_text())
+        if self._info is None:
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)

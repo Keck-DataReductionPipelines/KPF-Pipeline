@@ -574,15 +574,15 @@ class CrossCorrelation:
     # ------------------------------------------------------------------
 
     def _track_info(self, chips, fibers):
-        """Populate _info (the info() summary) from instance attributes."""
+        """Build and cache the info() summary text from instance attributes."""
         chips = [c.upper() for c in chips]
-        self._info = {}
+        info = {}
         for fiber in fibers:
             fiber = fiber.upper()
             src = self._illumination_source.get(f"{chips[0]}_{fiber}")
             source = src["object"] if src else None
             if fiber not in self._fibers_done:
-                self._info[fiber] = {"source": source, "nccf": {}}
+                info[fiber] = {"source": source, "nccf": {}}
                 continue
             # Count of orders with a non-zero CCF, per chip.
             nccf = {}
@@ -591,12 +591,41 @@ class CrossCorrelation:
                 nccf[chip] = (
                     int(np.sum(np.any(ccf != 0, axis=1))) if ccf is not None else 0
                 )
-            grid = self._velocity_grid[f"{chips[-1]}_{fiber}"]
-            self._info[fiber] = {
-                "source": source,
-                "grid_span": (float(grid[0]), float(grid[-1])),
-                "nccf": nccf,
-            }
+            info[fiber] = {"source": source, "nccf": nccf}
+
+        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
+        lines = [
+            "CrossCorrelation",
+            f"  obs_id:         {obs_id}",
+            f"  ccf_mask_width: {self.ccf_mask_width} km/s",
+            f"  ccf_step_size:  {self.ccf_step_size} km/s",
+            f"  ccf_window:     {self.ccf_window} km/s",
+        ]
+
+        # CCF velocity grid: per-fiber center, shared step/span.
+        lines.append(
+            f"\n  CCF velocity grid: {self.ccf_window[0]:+.1f} to "
+            f"{self.ccf_window[1]:+.1f} km/s "
+            f"about each fiber's center, step {self.ccf_step_size} km/s"
+        )
+
+        # Per-CCD, per-orderlet summary. SOURCE is the illumination source; NCCF
+        # is the number of orders with a non-zero CCF on that chip.
+        fiber_order = [f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in info]
+        fiber_order += [f for f in info if f not in fiber_order]
+
+        lines.append(f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NCCF':>8s}")
+        lines.append("  " + "-" * 34)
+        for chip in ("GREEN", "RED"):
+            for fiber in fiber_order:
+                res = info[fiber]
+                nccf = res.get("nccf", {}).get(chip)
+                if not nccf:
+                    continue
+                lines.append(
+                    f"  {chip:<8s}{fiber:<8s}{res.get('source', ''):<10s}{nccf:>8d}"
+                )
+        self._info = "\n".join(lines)
 
     def _set_headers(self, l4_obj):
         """
@@ -785,51 +814,12 @@ class CrossCorrelation:
         self._set_headers(l4_obj)
         self._track_info(chips, fibers)
         l4_obj.receipt_add_entry("cross_correlation", "", "PASS")
-        logger.info("summary:\n%s", self._info_text())
+        logger.info("summary:\n%s", self._info)
         return l4_obj
-
-    def _info_text(self):
-        """Build the info() report text."""
-        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
-        lines = [
-            "CrossCorrelation",
-            f"  obs_id:         {obs_id}",
-            f"  ccf_mask_width: {self.ccf_mask_width} km/s",
-            f"  ccf_step_size:  {self.ccf_step_size} km/s",
-            f"  ccf_window:     {self.ccf_window} km/s",
-        ]
-
-        if self._info is None:
-            lines.append("  perform() has not been called")
-            return "\n".join(lines)
-
-        # CCF velocity grid: per-fiber center, shared step/span.
-        lines.append(
-            f"\n  CCF velocity grid: {self.ccf_window[0]:+.1f} to "
-            f"{self.ccf_window[1]:+.1f} km/s "
-            f"about each fiber's center, step {self.ccf_step_size} km/s"
-        )
-
-        # Per-CCD, per-orderlet summary. SOURCE is the illumination source; NCCF
-        # is the number of orders with a non-zero CCF on that chip.
-        fiber_order = [
-            f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in self._info
-        ]
-        fiber_order += [f for f in self._info if f not in fiber_order]
-
-        lines.append(f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NCCF':>8s}")
-        lines.append("  " + "-" * 34)
-        for chip in ("GREEN", "RED"):
-            for fiber in fiber_order:
-                res = self._info[fiber]
-                nccf = res.get("nccf", {}).get(chip)
-                if not nccf:
-                    continue
-                lines.append(
-                    f"  {chip:<8s}{fiber:<8s}{res.get('source', ''):<10s}{nccf:>8d}"
-                )
-        return "\n".join(lines)
 
     def info(self):
         """Print a summary of the module configuration and CCF results."""
-        print(self._info_text())
+        if self._info is None:
+            print(f"{type(self).__name__}: perform() has not been called")
+        else:
+            print(self._info)
