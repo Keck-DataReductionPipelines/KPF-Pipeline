@@ -774,6 +774,8 @@ class TestPerform:
         for fiber in self._ILLUMINATED:
             assert l4.data[f"{fiber}_CCF"].shape == (NORDER, _NVEL)
             assert_dtype(l4.data[f"{fiber}_CCF"], CCF, f"{fiber}_CCF")
+            # The per-bin CCF variance cube is persisted alongside the CCF.
+            assert l4.data[f"{fiber}_CCF_VAR"].shape == (NORDER, _NVEL)
             table = l4.data[f"{fiber}_RV"]
             assert len(table) == NORDER
             assert set(table.columns) >= {
@@ -797,9 +799,10 @@ class TestPerform:
             assert np.issubdtype(table["ECHELLE_ORDER"].dtype, np.integer)
 
     def test_unilluminated_fiber_skipped(self, rv_module):
-        # CAL-OBJ='None' -> no CCF cube or RV table written.
+        # CAL-OBJ='None' -> no CCF cube, CCF variance, or RV table written.
         l4 = rv_module.perform()
         assert l4.data["CAL_CCF"].size == 0
+        assert l4.data["CAL_CCF_VAR"].size == 0
         assert len(l4.data["CAL_RV"]) == 0
 
     def test_ccf_chip_halves_populated(self, rv_module):
@@ -808,6 +811,16 @@ class TestPerform:
         assert l4.data["RED_SCI2_CCF"].shape == (NORDER_RED, _NVEL)
         assert np.any(l4.data["GREEN_SCI2_CCF"])
         assert np.any(l4.data["RED_SCI2_CCF"])
+
+    def test_ccf_var_persisted(self, rv_module):
+        # The per-bin CCF variance cube is written alongside the CCF and matches
+        # the variance compute_ccfs cached (what the RV photon-error step reads).
+        l4 = rv_module.perform()
+        for chip, norder in (("GREEN", NORDER_GREEN), ("RED", NORDER_RED)):
+            var = l4.data[f"{chip}_SCI2_CCF_VAR"]
+            assert var.shape == (norder, _NVEL)
+            np.testing.assert_array_equal(var, rv_module._ccf_var[f"{chip}_SCI2"])
+        assert np.any(l4.data["GREEN_SCI2_CCF_VAR"])
 
     def test_recovers_injected_rv_illuminated_orderlets(self, rv_module):
         l4 = rv_module.perform()

@@ -10,13 +10,18 @@ CCF/RV for the orderlet on TRACE{n}): n=1 SKY, 2 SCI1, 3 SCI2, 4 SCI3, 5 CAL.
 The KPF name → extension mapping is therefore derived from the shared trace map
 (trace-map.csv), exactly like the L2 TRACE*_FLUX aliases — not from aliases.csv.
 
-Each CCF stores green+red orders concatenated (green first), like TRACE*_FLUX,
-so per-chip access mirrors KPF2. RV tables hold one row per order (no chip
-prefix — slice by ORDER_INDEX instead). As examples, `data["SCI2_CCF"]` is
-`data["CCF3"]` (alias) and `data["SCI2_RV"]` is `data["RV3"]` (alias), while
-`data["GREEN_SCI2_CCF"]` returns `CCF3[:NORDER_GREEN]` (the green orders, a
-view) and `data["RED_SCI2_CCF"]` returns `CCF3[NORDER_GREEN:]` (the red
-orders, a view).
+KPF adds a parallel CCF_VAR1...N ImageHDU (a KPF extension, not EPRV) holding
+the per-velocity-bin CCF photon variance for each CCF{n}, numbered and aliased
+the same way (CCF_VAR{n} ↔ TRACE{n}). It persists what the RV photon-error step
+needs, which the value-only EPRV CCF{n} does not carry.
+
+Each CCF (and CCF_VAR) stores green+red orders concatenated (green first), like
+TRACE*_FLUX, so per-chip access mirrors KPF2. RV tables hold one row per order
+(no chip prefix — slice by ORDER_INDEX instead). As examples, `data["SCI2_CCF"]`
+is `data["CCF3"]` (alias), `data["SCI2_CCF_VAR"]` is `data["CCF_VAR3"]`, and
+`data["SCI2_RV"]` is `data["RV3"]` (alias), while `data["GREEN_SCI2_CCF"]`
+returns `CCF3[:NORDER_GREEN]` (the green orders, a view) and
+`data["RED_SCI2_CCF"]` returns `CCF3[NORDER_GREEN:]` (the red orders, a view).
 """
 
 import importlib.resources
@@ -54,14 +59,15 @@ _ALIASES = pd.read_csv(_config_path / "aliases.csv")
 # Build a set of valid chip-prefix keys for fast membership testing.
 # e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"),
 #        "GREEN_SCI2_RV": ("SCI2_RV", "GREEN")}.
-# Each maps a chip-prefixed key -> (fiber_alias, chip). CCF cubes are sliced on
-# their order axis (axis 0) and support chip-prefix read and write; RV tables are
-# row-sliced (green = rows 0:NORDER_GREEN, red the rest) and support read only —
-# each is written whole (one BinTable per orderlet), so a chip-prefix write raises.
+# Each maps a chip-prefixed key -> (fiber_alias, chip). CCF and CCF_VAR cubes are
+# sliced on their order axis (axis 0) and support chip-prefix read and write; RV
+# tables are row-sliced (green = rows 0:NORDER_GREEN, red the rest) and support
+# read only — each is written whole (one BinTable per orderlet), so a chip-prefix
+# write raises.
 _CHIP_PREFIX_KEYS = {}  # chip-prefixed key → (fiber_alias, chip)
 for _, _row in _TRACE_MAP.iterrows():
     _fiber = str(_row["Fiber"]).strip()
-    for _suffix in ("CCF", "RV"):
+    for _suffix in ("CCF", "CCF_VAR", "RV"):
         _fiber_alias = f"{_fiber}_{_suffix}"
         for _chip in ("GREEN", "RED"):
             _CHIP_PREFIX_KEYS[f"{_chip}_{_fiber_alias}"] = (_fiber_alias, _chip)
@@ -156,12 +162,15 @@ class KPF4(KPFDataModel, RV4):
 
     Extends RV4 with KPF-friendly extension aliases and per-chip access for the
     CCF cubes. EPRV-standard extension names (CCF1...N, RV1...N) remain
-    canonical; aliases are transparent synonyms.
+    canonical; aliases are transparent synonyms. KPF also adds a parallel
+    CCF_VAR1...N ImageHDU (per-bin CCF variance) that behaves exactly like
+    CCF1...N (same shape, concatenation, and per-chip access).
 
-    Each CCF holds green+red orders concatenated (35 green + 32 red = 67 orders
-    total). Per-chip access via the GREEN_/RED_ prefix returns numpy views into
-    the concatenated array. RV tables hold one row per order. As examples of the
-    aliasing, `data["SCI2_CCF"]` is `data["CCF3"]` and `data["SCI2_RV"]` is
+    Each CCF (and CCF_VAR) holds green+red orders concatenated (35 green + 32 red
+    = 67 orders total). Per-chip access via the GREEN_/RED_ prefix returns numpy
+    views into the concatenated array. RV tables hold one row per order. As
+    examples of the aliasing, `data["SCI2_CCF"]` is `data["CCF3"]`,
+    `data["SCI2_CCF_VAR"]` is `data["CCF_VAR3"]`, and `data["SCI2_RV"]` is
     `data["RV3"]`; per-chip, `data["GREEN_SCI2_CCF"]` returns `CCF3[:35]` (green
     orders, a numpy view), `data["RED_SCI2_CCF"]` returns `CCF3[35:]` (red
     orders, a numpy view), and `data["GREEN_SCI2_RV"]` / `data["RED_SCI2_RV"]`
@@ -171,10 +180,16 @@ class KPF4(KPFDataModel, RV4):
     def __init__(self):
         super().__init__()
 
-        # RV4 creates only the required CCF1 / RV1; KPF stores one CCF and one
-        # RV table per orderlet (CCF{n}/RV{n} <-> TRACE{n}).
+        # RV4 creates only the required CCF1 / RV1; KPF stores one CCF, one CCF
+        # variance cube, and one RV table per orderlet (CCF{n}/CCF_VAR{n}/RV{n}
+        # <-> TRACE{n}). CCF_VAR{n} is a KPF extension (not EPRV) holding the
+        # per-velocity-bin CCF photon variance, paired with CCF{n}.
         for trace_num in range(1, 6):
-            for prefix, hdu_type in (("CCF", "ImageHDU"), ("RV", "BinTableHDU")):
+            for prefix, hdu_type in (
+                ("CCF", "ImageHDU"),
+                ("CCF_VAR", "ImageHDU"),
+                ("RV", "BinTableHDU"),
+            ):
                 ext = f"{prefix}{trace_num}"
                 if ext not in self.extensions:
                     self.create_extension(ext, hdu_type)
@@ -204,12 +219,13 @@ class KPF4(KPFDataModel, RV4):
                 for d in (self.extensions, self.headers, self.data):
                     d.register_alias(alias, canonical)
 
-        # Per-orderlet CCF/RV aliases derived from the trace map
-        # (CCF{n}/RV{n} ↔ TRACE{n}): e.g. SCI2_CCF → CCF3, SCI2_RV → RV3.
+        # Per-orderlet CCF/CCF_VAR/RV aliases derived from the trace map
+        # (CCF{n}/CCF_VAR{n}/RV{n} ↔ TRACE{n}): e.g. SCI2_CCF → CCF3,
+        # SCI2_CCF_VAR → CCF_VAR3, SCI2_RV → RV3.
         for _, row in _TRACE_MAP.iterrows():
             trace_num = int(row["Trace"])
             fiber = str(row["Fiber"]).strip()
-            for prefix in ("CCF", "RV"):
+            for prefix in ("CCF", "CCF_VAR", "RV"):
                 canonical = f"{prefix}{trace_num}"
                 alias = f"{fiber}_{prefix}"
                 if canonical in self.extensions:

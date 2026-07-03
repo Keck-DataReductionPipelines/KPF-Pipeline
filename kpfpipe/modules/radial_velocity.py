@@ -1020,8 +1020,9 @@ class RadialVelocity:
         Compute per-order CCFs and radial velocities and package them in a KPF4.
 
         For each requested orderlet (fiber), the per-order CCFs of both chips are
-        written to the orderlet's CCF cube ({fiber}_CCF, green+red concatenated)
-        and the per-order RVs to the orderlet's RV table ({fiber}_RV).
+        written to the orderlet's CCF cube ({fiber}_CCF, green+red concatenated),
+        their per-bin photon variances to {fiber}_CCF_VAR (same shape), and the
+        per-order RVs to the orderlet's RV table ({fiber}_RV).
 
         Parameters
         ----------
@@ -1123,6 +1124,12 @@ class RadialVelocity:
                     clip_edge_pixels=clip_edge_pixels,
                 )["ccf"]
                 l4_obj.set_data(f"{chip}_{fiber}_CCF", ccf)
+                # Persist the per-bin CCF photon variance (sum w**2 * var),
+                # cached by compute_ccfs, so the RV photon-error step can read it
+                # from the L4 rather than from this module's in-memory state.
+                l4_obj.set_data(
+                    f"{chip}_{fiber}_CCF_VAR", self._ccf_var[f"{chip}_{fiber}"]
+                )
                 result = self.compute_order_by_order_rvs(
                     chip, fiber, rv_window, fit_nsigma, min_npts
                 )

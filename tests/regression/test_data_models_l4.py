@@ -104,14 +104,17 @@ class TestKPF4:
         kpf4 = KPF4()
         for n in range(1, 6):
             assert f"CCF{n}" in kpf4.extensions
+            assert f"CCF_VAR{n}" in kpf4.extensions
             assert f"RV{n}" in kpf4.extensions
 
     def test_trace_derived_aliases(self):
-        # CCF{n}/RV{n} <-> TRACE{n}: SCI2 is trace 3, SKY is trace 1, CAL is 5.
+        # CCF{n}/CCF_VAR{n}/RV{n} <-> TRACE{n}: SCI2 is trace 3, SKY is 1, CAL is 5.
         kpf4 = KPF4()
         assert kpf4.data._resolve("SCI2_CCF") == "CCF3"
+        assert kpf4.data._resolve("SCI2_CCF_VAR") == "CCF_VAR3"
         assert kpf4.data._resolve("SCI2_RV") == "RV3"
         assert kpf4.data._resolve("CAL_CCF") == "CCF5"
+        assert kpf4.data._resolve("CAL_CCF_VAR") == "CCF_VAR5"
         assert kpf4.data._resolve("SKY_RV") == "RV1"
         # bare RV is not an alias (RV is trace-mapped, not a 1:1 alias)
         assert kpf4.data._resolve("RV") == "RV"
@@ -125,6 +128,31 @@ class TestKPF4:
         assert kpf4.data["SCI2_CCF"].shape == (NORDER, 5)
         np.testing.assert_array_equal(kpf4.data["GREEN_SCI2_CCF"], green)
         np.testing.assert_array_equal(kpf4.data["RED_SCI2_CCF"], red)
+
+    def test_ccf_var_chip_prefix_views(self):
+        # CCF_VAR behaves exactly like CCF: a writable, chip-sliced image cube.
+        kpf4 = KPF4()
+        green = np.ones((NORDER_GREEN, 5))
+        red = 2 * np.ones((NORDER - NORDER_GREEN, 5))
+        kpf4.set_data("GREEN_SCI2_CCF_VAR", green)
+        kpf4.set_data("RED_SCI2_CCF_VAR", red)
+        assert kpf4.data["SCI2_CCF_VAR"].shape == (NORDER, 5)
+        np.testing.assert_array_equal(kpf4.data["GREEN_SCI2_CCF_VAR"], green)
+        np.testing.assert_array_equal(kpf4.data["RED_SCI2_CCF_VAR"], red)
+
+    def test_ccf_var_survives_round_trip(self, tmp_path):
+        # The CCF_VAR image cube serializes and reloads like CCF.
+        kpf4 = KPF2().to_kpf4()
+        ccf = np.arange(NORDER * 5, dtype=float).reshape(NORDER, 5)
+        var = ccf + 0.5
+        kpf4.set_data("SCI2_CCF", ccf)
+        kpf4.set_data("SCI2_CCF_VAR", var)
+        path = tmp_path / "rt_ccf_var.fits"
+        kpf4.to_fits(str(path))
+        back = KPF4.from_fits(str(path))
+        assert "CCF_VAR3" in back.extensions
+        np.testing.assert_allclose(np.asarray(back.data["SCI2_CCF_VAR"]), var)
+        np.testing.assert_allclose(np.asarray(back.data["SCI2_CCF"]), ccf)
 
     def test_rv_chip_prefix_views(self):
         # RV tables are row-sliced (green = rows 0:NORDER_GREEN, red the rest).

@@ -146,6 +146,11 @@ L4 PRIMARY gains: `BJDTDB`, `RV`, `RVERR`, `BERV`, `RVMETHOD`, `SYSVEL`.
 >   (`Order-N`) applies; KPF stamps that and treats `CTYPE2` as N/A for 1-D. RV/CCF (2-D)
 >   carry both. KPF treats `CTYPE` as registered content (axis meaning), not a structural
 >   WCS card.
+> - **KPF `CCF_VARn` extension** — the standard defines no CCF-variance product (`CCFn` is
+>   value-only). KPF adds `CCF_VARn`, an `ImageHDU` per-velocity-bin CCF photon-variance cube
+>   paired 1:1 with `CCFn` (same shape/numbering/per-chip access), persisting what the RV
+>   photon-error step needs. Additive and team-scoped, following the `QUALITY_CONTROL`
+>   precedent — it does not alter any standard-defined extension.
 
 ---
 
