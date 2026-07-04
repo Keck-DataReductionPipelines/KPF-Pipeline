@@ -6,8 +6,10 @@ recipes. Given a target star and an inclusive datecode range, it
 
   1. combs the L0 input tree for that target's raw science frames (obs_ids),
   2. infers the unique nights (datecodes) those frames span,
-  3. (optionally) rebuilds the nightly calibration masters for each night, then
-  4. reduces every science frame end-to-end (L0 -> L4).
+  3. (optionally) rebuilds the nightly calibration masters for each night,
+  4. reduces every science frame end-to-end (L0 -> L4), then
+  5. plots the RV timeseries (RV vs BJD_TDB, with RVERR error bars) when a
+     --plot_directory is given.
 
 It reimplements no pipeline logic: each night and each frame is dispatched as a
 separate ``python -m tools.cli`` subprocess (the pipeline's own command-line
@@ -15,8 +17,8 @@ entry point), so every invocation gets its own log file, clean process state,
 and an independent exit code. Steps 3 and 4 run in a bounded process pool; the
 whole run aborts loudly if any masters night or any science frame fails, naming
 the offending obs_id/datecode and its log so it can be investigated. The reduced
-L1/L2/L4 products land in the usual output dirs for follow-up plotting -- this
-script does not itself make the RV plot.
+L1/L2/L4 products land in the usual output dirs; when --plot_directory is given,
+the RV timeseries plot is written there once every frame has reduced.
 """
 
 import argparse
@@ -26,9 +28,12 @@ import os
 import subprocess
 import sys
 
+import numpy as np
+from astropy.io import fits
+
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import build_mini_database, glob_masters
+from kpfpipe.utils.io import build_filepath, build_mini_database, glob_masters
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
 
 # Masters every science frame depends on, as (cal_type, level). Flat masters are
@@ -82,6 +87,17 @@ def parse_args(argv=None):
         "--kpf_science_output", help="override [DATA_DIRS] KPF_SCIENCE_OUTPUT"
     )
     ap.add_argument("--log_directory", help="override [LOGGER] log_directory")
+    ap.add_argument(
+        "--plot_directory",
+        help="directory to write the RV timeseries plot into; if omitted, the "
+        "reduction still runs but no plot is produced",
+    )
+    ap.add_argument(
+        "--group_intranight_obs",
+        action="store_true",
+        help="combine all of a night's RVs into one point before plotting, via "
+        "an RVERR-weighted average",
+    )
     ap.add_argument(
         "--file_limit",
         type=int,
@@ -233,6 +249,79 @@ def _report_failures(failures, log_dir):
                 print(f"  {line}", file=sys.stderr)
 
 
+def _read_l4_rv(obs_ids, science_output):
+    """Read (BJD_TDB, RV, RVERR, datecode) from each frame's L4 product.
+
+    RV and RVERR are km/s, BJDTDB is a Julian day -- all on the L4 PRIMARY header
+    (per the EPRV standard). Frames with a non-finite RV/RVERR are skipped with a
+    warning (a real reduction should not produce them, but we do not want one bad
+    point to blow up the plot).
+    """
+    times, rvs, errs, nights = [], [], [], []
+    for oid in obs_ids:
+        hdr = fits.getheader(build_filepath(oid, "L4", data_root=science_output), 0)
+        vals = (hdr.get("BJDTDB"), hdr.get("RV"), hdr.get("RVERR"))
+        if any(v is None for v in vals) or not np.all(np.isfinite(vals)):
+            print(f"  warning: {oid} has no finite RV/RVERR/BJDTDB; skipping")
+            continue
+        bjd, rv, err = vals
+        times.append(bjd)
+        rvs.append(rv)
+        errs.append(err)
+        nights.append(get_datecode(oid))
+    return np.array(times), np.array(rvs), np.array(errs), np.array(nights)
+
+
+def _group_by_night(times, rvs, errs, nights):
+    """Collapse each night's frames to one RVERR-weighted mean point.
+
+    Weights are 1/RVERR**2: the combined RV is the weighted mean, its error is
+    1/sqrt(sum w), and the epoch is the same weighted mean of BJD_TDB.
+    """
+    g_times, g_rvs, g_errs = [], [], []
+    for night in sorted(set(nights)):
+        sel = nights == night
+        w = 1.0 / errs[sel] ** 2
+        g_times.append(np.sum(w * times[sel]) / np.sum(w))
+        g_rvs.append(np.sum(w * rvs[sel]) / np.sum(w))
+        g_errs.append(1.0 / np.sqrt(np.sum(w)))
+    return np.array(g_times), np.array(g_rvs), np.array(g_errs)
+
+
+def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group):
+    """Write the RV-vs-BJD_TDB timeseries plot (with RVERR error bars)."""
+    import matplotlib
+
+    matplotlib.use("Agg")  # headless: never needs a display (e.g. on the server)
+    import matplotlib.pyplot as plt
+
+    times, rvs, errs, nights = _read_l4_rv(obs_ids, science_output)
+    if times.size == 0:
+        sys.exit("error: no finite RV points to plot")
+
+    title = f"{target} RV timeseries"
+    suffix = ""
+    if group:
+        times, rvs, errs = _group_by_night(times, rvs, errs, nights)
+        title += " (nightly weighted mean)"
+        suffix = "_nightly"
+
+    order = np.argsort(times)
+    os.makedirs(plot_directory, exist_ok=True)
+    out_path = os.path.join(plot_directory, f"{target}_rv_timeseries{suffix}.png")
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.errorbar(times[order], rvs[order], yerr=errs[order], fmt="o", capsize=3)
+    ax.set_xlabel("BJD_TDB [day]")
+    ax.set_ylabel("RV [km/s]")
+    ax.set_title(f"{title} -- {times.size} point(s)")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    print(f"RV timeseries plot -> {out_path}")
+
+
 def main(argv=None):
     args = parse_args(argv)
     start, end = args.date_range
@@ -329,6 +418,19 @@ def main(argv=None):
         f"\ndone: reduced {len(obs_ids)} frame(s); "
         f"L2/L4 products under {science_output}"
     )
+
+    # Step 5: RV timeseries plot from the freshly written L4 products -- only
+    # when a plot directory was given (no --plot_directory => reduction only).
+    if args.plot_directory:
+        plot_rv_timeseries(
+            args.target,
+            obs_ids,
+            science_output,
+            args.plot_directory,
+            args.group_intranight_obs,
+        )
+    else:
+        print("no --plot_directory given; skipping RV timeseries plot")
 
 
 if __name__ == "__main__":
