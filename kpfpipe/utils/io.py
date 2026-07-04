@@ -114,6 +114,7 @@ def build_l0_file_lists(
     min_file_count=5,
     cluster_gap_seconds=7200,
     merge_small_clusters=False,
+    enforce_hst_midnight_boundary=True,
 ):
     """
     Return sorted file lists for all calibration clusters of the requested
@@ -124,13 +125,15 @@ def build_l0_file_lists(
     `build_mini_database` to scan headers and write it. When `mini_db` is
     given, uses it directly to avoid redundant I/O. Filters by OBJECT, then
     groups frames into clusters by detecting gaps larger than
-    `cluster_gap_seconds` between consecutive timestamps. A cluster never spans
-    two HST (Hawaii) calendar days: frames on either side of HST midnight are
-    always split, even though the UTC-keyed data directory places them
-    together. Every returned cluster has at least `min_file_count` files:
-    undersized clusters are dropped, or (with `merge_small_clusters`) folded
-    into a same-HST-day neighbor. Raises only when no cluster meets the
-    threshold.
+    `cluster_gap_seconds` between consecutive timestamps. By default a cluster
+    never spans two HST (Hawaii) calendar days: frames on either side of HST
+    midnight are always split, even though the UTC-keyed data directory places
+    them together. Set `enforce_hst_midnight_boundary=False` to lift that split
+    (used for darks, whose sparse 1200 s sequences routinely straddle the HST
+    midnight of a single observing night). Every returned cluster has at least
+    `min_file_count` files: undersized clusters are dropped, or (with
+    `merge_small_clusters`) folded into a neighbor. Raises only when no cluster
+    meets the threshold.
 
     Parameters
     ----------
@@ -150,8 +153,17 @@ def build_l0_file_lists(
     merge_small_clusters : bool, default False
         How to handle clusters smaller than `min_file_count`. If False, drop
         them. If True, iteratively merge each into its nearest-in-time neighbor
-        on the same HST day until every cluster meets the threshold; a cluster
-        with no same-HST-day neighbor is dropped.
+        until every cluster meets the threshold; when the HST-midnight boundary
+        is enforced the neighbor must be on the same HST day (a cluster with no
+        such neighbor is dropped), otherwise any chronological neighbor is
+        eligible.
+    enforce_hst_midnight_boundary : bool, default True
+        If True, clusters never span HST midnight: frames on opposite sides of
+        it are always split, and merging is restricted to same-HST-day
+        neighbors. If False, HST midnight is ignored entirely (only
+        `cluster_gap_seconds` splits clusters, and any neighbor may be merged) --
+        set this for darks, whose sparse sequences legitimately span the HST
+        midnight of one observing night.
 
     Returns
     -------
@@ -230,7 +242,10 @@ def build_l0_file_lists(
             continue
         cluster = [timed[0][1]]
         for (prev_t, prev_fn), (t, fn) in zip(timed, timed[1:], strict=False):
-            if t - prev_t > cluster_gap_seconds or hst_day[fn] != hst_day[prev_fn]:
+            crosses_midnight = (
+                enforce_hst_midnight_boundary and hst_day[fn] != hst_day[prev_fn]
+            )
+            if t - prev_t > cluster_gap_seconds or crosses_midnight:
                 clusters.append(cluster)
                 cluster = [fn]
             else:
@@ -240,25 +255,36 @@ def build_l0_file_lists(
 
     if merge_small_clusters:
         # Fold each undersized cluster (smallest first) into its nearer
-        # chronological neighbor, but only a neighbor on the same HST day so a
-        # master never spans HST midnight. A cluster with no same-day neighbor
-        # is dropped instead of merged.
+        # chronological neighbor. When the HST-midnight boundary is enforced the
+        # neighbor must share the HST day (so a master never spans HST midnight),
+        # and a cluster with no same-day neighbor is dropped; otherwise any
+        # adjacent cluster is eligible.
         while len(clusters) > 1 and any(len(c) < min_file_count for c in clusters):
             i = min(
                 (k for k, c in enumerate(clusters) if len(c) < min_file_count),
                 key=lambda k: len(clusters[k]),
             )
             day_i = hst_day[clusters[i][0]]
+            # A neighbor is eligible when the midnight boundary is off, or when
+            # it shares cluster i's HST day.
+            prev_ok = i > 0 and (
+                not enforce_hst_midnight_boundary
+                or hst_day[clusters[i - 1][0]] == day_i
+            )
+            next_ok = i < len(clusters) - 1 and (
+                not enforce_hst_midnight_boundary
+                or hst_day[clusters[i + 1][0]] == day_i
+            )
             prev_gap = (
                 get_seconds_since_j2000(clusters[i][0])
                 - get_seconds_since_j2000(clusters[i - 1][-1])
-                if i > 0 and hst_day[clusters[i - 1][0]] == day_i
+                if prev_ok
                 else float("inf")
             )
             next_gap = (
                 get_seconds_since_j2000(clusters[i + 1][0])
                 - get_seconds_since_j2000(clusters[i][-1])
-                if i < len(clusters) - 1 and hst_day[clusters[i + 1][0]] == day_i
+                if next_ok
                 else float("inf")
             )
             if prev_gap == float("inf") and next_gap == float("inf"):

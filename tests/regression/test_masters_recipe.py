@@ -186,6 +186,33 @@ def _midnight_bias_db(n_before=5, n_after=5):
     return df, before, after
 
 
+def _cross_midnight_gap_db(n_before=2, n_after=2):
+    """Sparse dark clusters on opposite HST days, split by a >2 h gap.
+
+    Mirrors a real sparse-dark night (e.g. 20240806): a pre-midnight group and a
+    post-midnight group, each below the dark min_file_count and separated by both
+    the gap and HST midnight. Returns (df, before_files, after_files).
+    """
+    before = [
+        f"/data/L0/20240405/KP.20240405.{34000 + i * 100:05d}.00.fits"  # HST 20240404
+        for i in range(n_before)
+    ]
+    after = [
+        f"/data/L0/20240405/KP.20240405.{50000 + i * 100:05d}.00.fits"  # HST 20240405
+        for i in range(n_after)
+    ]
+    rows = [
+        {"FILENAME": f, "IMTYPE": "Dark", "OBJECT": "autocal-dark", "TARGNAME": None}
+        for f in before + after
+    ]
+    df = pd.DataFrame(rows)
+    df["EXPTIME"] = 1200.0
+    df["ELAPSED"] = 1200.0
+    df["UTC"] = [get_timestamp(f) for f in df["FILENAME"]]
+    df["HST"] = [utc_to_hst(t) for t in df["UTC"]]
+    return df, before, after
+
+
 def _write_test_csv(tmp_path, db):
     """
     Materialize a synthetic mini_db on disk: touch a stub .fits for every
@@ -301,6 +328,38 @@ class TestBuildL0FileLists:
         )
         assert len(lists) == 1
         assert lists[0] == sorted(before)
+
+    def test_no_boundary_keeps_cross_midnight_cluster(self):
+        # With enforce_hst_midnight_boundary=False, frames <gap apart across HST
+        # midnight stay in one cluster (only cluster_gap_seconds can split them).
+        db, before, after = _midnight_bias_db()
+        lists = build_l0_file_lists(
+            "bias",
+            mini_db=db,
+            min_file_count=5,
+            enforce_hst_midnight_boundary=False,
+        )
+        assert len(lists) == 1
+        assert lists[0] == sorted(before + after)
+
+    def test_no_boundary_merges_across_midnight(self):
+        # Two sparse dark clusters on opposite HST days (the 20240806 case): with
+        # the boundary enforced they cannot merge and both drop; with it lifted
+        # they merge into one cluster that meets the threshold.
+        db, before, after = _cross_midnight_gap_db()
+        with pytest.raises(ValueError, match="no cluster with at least"):
+            build_l0_file_lists(
+                "dark", mini_db=db, min_file_count=3, merge_small_clusters=True
+            )
+        lists = build_l0_file_lists(
+            "dark",
+            mini_db=db,
+            min_file_count=3,
+            merge_small_clusters=True,
+            enforce_hst_midnight_boundary=False,
+        )
+        assert len(lists) == 1
+        assert lists[0] == sorted(before + after)
 
     def test_invalid_imtype_raises(self, data_dir):
         with pytest.raises(ValueError, match="cal_type must be one of"):

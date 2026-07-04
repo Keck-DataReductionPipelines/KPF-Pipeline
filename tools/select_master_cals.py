@@ -15,8 +15,9 @@ apart OR fall on different HST calendar days (KPF's morning vs. evening cal
 sequences). Only clusters meeting the per-type minimum are eligible; of those,
 the largest (earliest on a tie) is chosen so all frames come from a single
 sequence. Per-type thresholds match recipes/kpf_drp_masters.py (see
-_TYPE_CONFIG): bias/flat/thar require 5 frames, darks require 3 and merge
-undersized clusters into a same-HST-day neighbor.
+_TYPE_CONFIG): bias/flat/thar require 5 frames; darks require 3, merge undersized
+clusters, and ignore the HST-midnight split (their sparse sequences legitimately
+span a night's HST midnight).
 
 Output is an obs_id list in the exact format of the input (index<TAB>obs_id,
 one per line), ready to feed straight back into fetch_l0.sh. A human-readable
@@ -27,6 +28,7 @@ Usage:
     python3 select_master_cals.py obs_ids.txt --root /data/kpf/L0 -o cals.txt
     # then feed the output to fetch_l0.sh to retrieve the calibration frames.
 """
+
 import argparse
 import glob
 import os
@@ -57,15 +59,16 @@ _OBJECT_MAP = {
 }
 
 # Per-type clustering settings, matching recipes/kpf_drp_masters.py exactly:
-# bias/flat/thar use build_l0_file_lists defaults (min 5, no merge); darks are
-# sparse (long 1200 s exposures scattered across a night), so the recipe drops
-# the threshold to 3 and merges undersized clusters into a same-HST-day
-# neighbor. Each type still yields a single sequence, as requested.
+# bias/flat/thar use build_l0_file_lists defaults (min 5, no merge, HST-midnight
+# boundary enforced); darks are sparse (long 1200 s exposures scattered across a
+# night), so the recipe drops the threshold to 3, merges undersized clusters, and
+# lifts the HST-midnight boundary (enforce_boundary=False) since a night's darks
+# routinely straddle HST midnight. Each type still yields a single sequence.
 _TYPE_CONFIG = {
-    "bias": {"min_count": 5, "merge": False},
-    "dark": {"min_count": 3, "merge": True},
-    "flat": {"min_count": 5, "merge": False},
-    "thar": {"min_count": 5, "merge": False},
+    "bias": {"min_count": 5, "merge": False, "enforce_boundary": True},
+    "dark": {"min_count": 3, "merge": True, "enforce_boundary": False},
+    "flat": {"min_count": 5, "merge": False, "enforce_boundary": True},
+    "thar": {"min_count": 5, "merge": False, "enforce_boundary": True},
 }
 
 
@@ -122,26 +125,36 @@ def scan_night(data_dir):
     return frames, len(files)
 
 
-def _merge_small(clusters, min_count):
-    """Fold undersized clusters into a same-HST-day neighbor (io.py logic).
+def _merge_small(clusters, min_count, enforce_boundary=True):
+    """Fold undersized clusters into a neighbor (io.py logic).
 
     Mirrors build_l0_file_lists(merge_small_clusters=True): repeatedly take the
     smallest undersized cluster and merge it into its nearer chronological
-    neighbor on the same HST day; an isolated undersized cluster (no same-day
-    neighbor) is dropped. Cluster entries are (datetime, ts, fn) tuples.
+    neighbor; an isolated undersized cluster is dropped. When enforce_boundary is
+    True the neighbor must share the HST day; when False any adjacent cluster is
+    eligible. Cluster entries are (datetime, ts, fn) tuples.
     """
-    def day(c):
-        return hst_day(c[0][1])
+
+    def day_ok(k, di):
+        return not enforce_boundary or hst_day(clusters[k][0][1]) == di
 
     inf = float("inf")
     while len(clusters) > 1 and any(len(c) < min_count for c in clusters):
-        i = min((k for k, c in enumerate(clusters) if len(c) < min_count),
-                key=lambda k: len(clusters[k]))
-        di = day(clusters[i])
-        prev_gap = ((clusters[i][0][0] - clusters[i - 1][-1][0]).total_seconds()
-                    if i > 0 and day(clusters[i - 1]) == di else inf)
-        next_gap = ((clusters[i + 1][0][0] - clusters[i][-1][0]).total_seconds()
-                    if i < len(clusters) - 1 and day(clusters[i + 1]) == di else inf)
+        i = min(
+            (k for k, c in enumerate(clusters) if len(c) < min_count),
+            key=lambda k: len(clusters[k]),
+        )
+        di = hst_day(clusters[i][0][1])
+        prev_gap = (
+            (clusters[i][0][0] - clusters[i - 1][-1][0]).total_seconds()
+            if i > 0 and day_ok(i - 1, di)
+            else inf
+        )
+        next_gap = (
+            (clusters[i + 1][0][0] - clusters[i][-1][0]).total_seconds()
+            if i < len(clusters) - 1 and day_ok(i + 1, di)
+            else inf
+        )
         if prev_gap == inf and next_gap == inf:
             clusters.pop(i)
             continue
@@ -154,13 +167,13 @@ def _merge_small(clusters, min_count):
     return clusters
 
 
-def cluster(frames, cal_type, gap, min_count, merge):
+def cluster(frames, cal_type, gap, min_count, merge, enforce_boundary=True):
     """Clusters of a given cal type, mirroring io.py::build_l0_file_lists.
 
     frames: {fn: (object, exptime, ts)}. Groups by OBJECT, splits on >gap gaps
-    and HST-midnight, optionally merges undersized clusters, then returns those
-    with >= min_count frames, sorted chronologically. Each cluster is a list of
-    (datetime, ts, fn) tuples.
+    (and, when enforce_boundary is True, on HST-midnight), optionally merges
+    undersized clusters, then returns those with >= min_count frames, sorted
+    chronologically. Each cluster is a list of (datetime, ts, fn) tuples.
     """
     wanted = set(_OBJECT_MAP[cal_type])
     by_obj = defaultdict(list)
@@ -172,8 +185,9 @@ def cluster(frames, cal_type, gap, min_count, merge):
     for group in by_obj.values():
         timed = sorted(group)  # by datetime
         cur = [timed[0]]
-        for (pdt, pts, _pfn), (dt, ts, fn) in zip(timed, timed[1:]):
-            if (dt - pdt).total_seconds() > gap or hst_day(ts) != hst_day(pts):
+        for (pdt, pts, _pfn), (dt, ts, fn) in zip(timed, timed[1:], strict=False):
+            crosses_midnight = enforce_boundary and hst_day(ts) != hst_day(pts)
+            if (dt - pdt).total_seconds() > gap or crosses_midnight:
                 clusters.append(cur)
                 cur = [(dt, ts, fn)]
             else:
@@ -182,7 +196,7 @@ def cluster(frames, cal_type, gap, min_count, merge):
     clusters.sort(key=lambda c: c[0][0])
 
     if merge:
-        clusters = _merge_small(clusters, min_count)
+        clusters = _merge_small(clusters, min_count, enforce_boundary)
     return [c for c in clusters if len(c) >= min_count]
 
 
@@ -192,24 +206,43 @@ def obs_id_of(fn):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("obs_id_list", help="input list of science obs_ids (as 10700.txt)")
-    ap.add_argument("-o", "--out", default="master_calibs.txt",
-                    help="output obs_id list (default: master_calibs.txt; '-' = stdout)")
-    ap.add_argument("--root", default="/data/kpf/L0",
-                    help="L0 root holding {datecode}/ subdirs (default: "
-                         "/data/kpf/L0, the standard KPF data-server layout)")
-    ap.add_argument("--count", type=int, default=5,
-                    help="max frames to take per type per night (fewer if the "
-                         "chosen cluster is smaller, e.g. sparse darks)")
-    ap.add_argument("--gap", type=int, default=7200,
-                    help="cluster-splitting gap in seconds (default 2h)")
+    ap.add_argument(
+        "-o",
+        "--out",
+        default="master_calibs.txt",
+        help="output obs_id list (default: master_calibs.txt; '-' = stdout)",
+    )
+    ap.add_argument(
+        "--root",
+        default="/data/kpf/L0",
+        help="L0 root holding {datecode}/ subdirs (default: "
+        "/data/kpf/L0, the standard KPF data-server layout)",
+    )
+    ap.add_argument(
+        "--count",
+        type=int,
+        default=5,
+        help="max frames to take per type per night (fewer if the "
+        "chosen cluster is smaller, e.g. sparse darks)",
+    )
+    ap.add_argument(
+        "--gap",
+        type=int,
+        default=7200,
+        help="cluster-splitting gap in seconds (default 2h)",
+    )
     args = ap.parse_args()
 
     datecodes = datecodes_from_list(args.obs_id_list)
-    print(f"# {len(datecodes)} unique datecode(s) from {args.obs_id_list}: "
-          f"{', '.join(datecodes)}\n", file=sys.stderr)
+    print(
+        f"# {len(datecodes)} unique datecode(s) from {args.obs_id_list}: "
+        f"{', '.join(datecodes)}\n",
+        file=sys.stderr,
+    )
 
     selected = []  # list of (datecode, cal_type, [obs_ids])
     for dc in datecodes:
@@ -218,26 +251,40 @@ def main():
             print(f"{dc}: MISSING remote dir {data_dir} -- skipped", file=sys.stderr)
             continue
         frames, n_all = scan_night(data_dir)
-        print(f"{dc}: scanned {n_all} L0 frames, {len(frames)} calibration frames",
-              file=sys.stderr)
+        print(
+            f"{dc}: scanned {n_all} L0 frames, {len(frames)} calibration frames",
+            file=sys.stderr,
+        )
         for cal_type in ("bias", "dark", "flat", "thar"):
             cfg = _TYPE_CONFIG[cal_type]
             min_count = cfg["min_count"]
-            clusters = cluster(frames, cal_type, args.gap, min_count, cfg["merge"])
+            clusters = cluster(
+                frames,
+                cal_type,
+                args.gap,
+                min_count,
+                cfg["merge"],
+                cfg["enforce_boundary"],
+            )
             if not clusters:
-                print(f"    {cal_type:5s}: no cluster with >= {min_count} "
-                      f"frames -- skipped", file=sys.stderr)
+                print(
+                    f"    {cal_type:5s}: no cluster with >= {min_count} "
+                    f"frames -- skipped",
+                    file=sys.stderr,
+                )
                 continue
             # largest cluster (earliest on a tie) -> take the first `count`
             best = max(clusters, key=lambda c: (len(c), -c[0][0].timestamp()))
-            chosen = best[:args.count]
+            chosen = best[: args.count]
             obs_ids = [obs_id_of(fn) for _dt, _ts, fn in chosen]
             exps = {frames[fn][1] for _dt, _ts, fn in chosen}
             t0, t1 = chosen[0][1], chosen[-1][1]
-            print(f"    {cal_type:5s}: {len(clusters)} eligible cluster(s), "
-                  f"chose size {len(best)} -> {len(obs_ids)} frames "
-                  f"[{t0} .. {t1}] EXPTIME={sorted(e for e in exps if e is not None)}",
-                  file=sys.stderr)
+            print(
+                f"    {cal_type:5s}: {len(clusters)} eligible cluster(s), "
+                f"chose size {len(best)} -> {len(obs_ids)} frames "
+                f"[{t0} .. {t1}] EXPTIME={sorted(e for e in exps if e is not None)}",
+                file=sys.stderr,
+            )
             selected.append((dc, cal_type, obs_ids))
 
     all_ids = [oid for _dc, _t, ids in selected for oid in ids]
@@ -249,8 +296,10 @@ def main():
     else:
         with open(args.out, "w") as fh:
             fh.write(out_text)
-        print(f"\n# wrote {len(all_ids)} calibration obs_ids to {args.out}",
-              file=sys.stderr)
+        print(
+            f"\n# wrote {len(all_ids)} calibration obs_ids to {args.out}",
+            file=sys.stderr,
+        )
 
     if not all_ids:
         sys.exit("error: no calibration frames selected")
