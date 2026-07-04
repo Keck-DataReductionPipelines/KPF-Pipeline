@@ -217,3 +217,7 @@ def resolve_logging(config, recipe_path, obs_id, datecode):
         "level": params.get("log_level", "INFO"),
         "console": params.get("console", True),
     }
+
+
+if __name__ == "__main__":
+    main()
