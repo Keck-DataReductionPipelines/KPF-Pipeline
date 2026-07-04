@@ -26,6 +26,7 @@ from kpfpipe.utils.io import (
     build_qlp_dir,
     glob_masters,
 )
+from kpfpipe.utils.kpf import get_timestamp, utc_to_hst
 
 # ---------------------------------------------------------------------------
 # Test data paths
@@ -135,6 +136,8 @@ def _make_mini_db():
     df = pd.DataFrame(rows)
     df["EXPTIME"] = 60.0
     df["ELAPSED"] = 60.0
+    df["UTC"] = [get_timestamp(f) for f in df["FILENAME"]]
+    df["HST"] = [utc_to_hst(t) for t in df["UTC"]]
     return df
 
 
@@ -152,7 +155,35 @@ def _mixed_bias_db():
     df = pd.DataFrame(rows)
     df["EXPTIME"] = 60.0
     df["ELAPSED"] = 60.0
+    df["UTC"] = [get_timestamp(f) for f in df["FILENAME"]]
+    df["HST"] = [utc_to_hst(t) for t in df["UTC"]]
     return df, _BIAS_SMALL
+
+
+def _midnight_bias_db(n_before=5, n_after=5):
+    """Bias frames straddling HST midnight (UTC 36000) within one UTC directory.
+
+    The before/after groups are <cluster_gap_seconds apart, so only the HST-day
+    boundary can separate them. Returns (df, before_files, after_files).
+    """
+    before = [
+        f"/data/L0/20240405/KP.20240405.{35400 + i * 100:05d}.00.fits"  # HST 20240404
+        for i in range(n_before)
+    ]
+    after = [
+        f"/data/L0/20240405/KP.20240405.{36100 + i * 100:05d}.00.fits"  # HST 20240405
+        for i in range(n_after)
+    ]
+    rows = [
+        {"FILENAME": f, "IMTYPE": "Bias", "OBJECT": "autocal-bias", "TARGNAME": None}
+        for f in before + after
+    ]
+    df = pd.DataFrame(rows)
+    df["EXPTIME"] = 60.0
+    df["ELAPSED"] = 60.0
+    df["UTC"] = [get_timestamp(f) for f in df["FILENAME"]]
+    df["HST"] = [utc_to_hst(t) for t in df["UTC"]]
+    return df, before, after
 
 
 def _write_test_csv(tmp_path, db):
@@ -252,6 +283,25 @@ class TestBuildL0FileLists:
                 "bias", min_file_count=8, mini_db=db, merge_small_clusters=True
             )
 
+    def test_hst_midnight_splits_cluster(self):
+        # Same-OBJECT frames <gap apart but on opposite sides of HST midnight
+        # (UTC 36000) must not share a cluster.
+        db, before, after = _midnight_bias_db()
+        lists = build_l0_file_lists("bias", mini_db=db, min_file_count=5)
+        assert len(lists) == 2
+        assert lists[0] == sorted(before)
+        assert lists[1] == sorted(after)
+
+    def test_hst_midnight_blocks_merge(self):
+        # A small post-midnight cluster has no same-HST-day neighbor, so it is
+        # dropped rather than merged across midnight into the pre-midnight one.
+        db, before, _ = _midnight_bias_db(n_before=5, n_after=2)
+        lists = build_l0_file_lists(
+            "bias", mini_db=db, min_file_count=5, merge_small_clusters=True
+        )
+        assert len(lists) == 1
+        assert lists[0] == sorted(before)
+
     def test_invalid_imtype_raises(self, data_dir):
         with pytest.raises(ValueError, match="cal_type must be one of"):
             build_l0_file_lists("bogus", data_dir=data_dir)
@@ -346,11 +396,22 @@ class TestBuildL0FileListsRealData:
         with pytest.raises(ValueError, match="no cluster with at least"):
             build_l0_file_lists("dark", data_dir=l0_dir)
 
-    def test_dark_merges_undersized_clusters(self, l0_dir):
-        # Merging the 2- and 3-frame dark clusters yields one of 5, meeting min.
-        lists = build_l0_file_lists("dark", data_dir=l0_dir, merge_small_clusters=True)
+    def test_dark_merge_respects_hst_boundary(self, l0_dir):
+        # The 5 dark frames span two HST days (2 on one, 3 on the next), so they
+        # can never merge into a single >=5 master without crossing HST midnight.
+        # With the default min=5, no same-HST-day cluster reaches the threshold →
+        # raises even with merge_small_clusters.
+        with pytest.raises(ValueError, match="no cluster with at least"):
+            build_l0_file_lists("dark", data_dir=l0_dir, merge_small_clusters=True)
+
+    def test_dark_merges_within_hst_day(self, l0_dir):
+        # Lowering min to 3 lets the 3 same-HST-day darks merge into one cluster;
+        # the 2 frames on the other HST day are dropped (no same-day neighbor).
+        lists = build_l0_file_lists(
+            "dark", data_dir=l0_dir, min_file_count=3, merge_small_clusters=True
+        )
         assert len(lists) == 1
-        assert len(lists[0]) == 5
+        assert len(lists[0]) == 3
         assert lists[0] == sorted(lists[0])
 
 
