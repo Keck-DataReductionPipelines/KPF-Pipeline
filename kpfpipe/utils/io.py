@@ -14,11 +14,14 @@ from kpfpipe.utils.kpf import (
     get_timestamp,
     is_obs_id,
     kpf_timestamp_to_eprv_timestamp,
+    utc_to_hst,
 )
 
 logger = logging.getLogger(__name__)
 
 _MINI_DB_KEYS = ["FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"]
+# Derived from the filename's KPF timestamp (which is UTC), not header keys.
+_MINI_DB_DERIVED_KEYS = ["UTC", "HST"]
 
 _OBJECT_MAP = {
     "bias": ["autocal-bias"],
@@ -34,7 +37,7 @@ _OBJECT_MAP = {
 }
 
 
-def build_mini_database(data_dir, write=True):
+def build_mini_database(data_dir, write=False):
     """
     Build the mini database for all FITS files in a directory and write
     it to disk as KP.{datecode}_{level}.csv in that directory.
@@ -48,7 +51,7 @@ def build_mini_database(data_dir, write=True):
     ----------
     data_dir : str
         Path to directory containing L0 FITS files.
-    write : bool, default True
+    write : bool, default False
         Whether to write the mini database CSV to `data_dir`.
 
     Returns
@@ -57,9 +60,12 @@ def build_mini_database(data_dir, write=True):
         DataFrame with columns FILENAME (absolute path to the FITS file),
         TARGNAME (target name), IMTYPE (image type), OBJECT (object
         identifier, e.g. 'autocal-bias'), EXPTIME (requested exposure time
-        [s]), and ELAPSED (actual elapsed time [s]). Rows where a header key
-        is missing are included with NaN for that column and a warning is
-        issued.
+        [s]), ELAPSED (actual elapsed time [s]), UTC (observation time in
+        universal time, taken from the KPF timestamp in the filename), and
+        HST (that same time converted to Hawaii Standard Time, UTC-10). Both
+        UTC and HST are KPF-format timestamp strings ('YYYYMMDD.SSSSS.FF').
+        Rows where a header key is missing are included with NaN for that
+        column and a warning is issued.
     """
     data_dir = os.path.normpath(data_dir)
     datecode = os.path.basename(data_dir)
@@ -71,7 +77,7 @@ def build_mini_database(data_dir, write=True):
         raise ValueError(f"No FITS files found in {data_dir}")
 
     logger.info("scanning %d FITS headers in %s", len(file_list), data_dir)
-    mini_db = {k: [] for k in _MINI_DB_KEYS}
+    mini_db = {k: [] for k in _MINI_DB_KEYS + _MINI_DB_DERIVED_KEYS}
 
     for fn in file_list:
         logger.debug("reading header of %s", fn)
@@ -85,6 +91,11 @@ def build_mini_database(data_dir, write=True):
 
         for k in _MINI_DB_KEYS[1:]:
             mini_db[k].append(header.get(k, None))
+
+        # UTC is the KPF timestamp; HST is that converted to Hawaii time.
+        utc = get_timestamp(fn)
+        mini_db["UTC"].append(utc)
+        mini_db["HST"].append(utc_to_hst(utc))
 
     df = pd.DataFrame(mini_db)
 
@@ -113,10 +124,13 @@ def build_l0_file_lists(
     `build_mini_database` to scan headers and write it. When `mini_db` is
     given, uses it directly to avoid redundant I/O. Filters by OBJECT, then
     groups frames into clusters by detecting gaps larger than
-    `cluster_gap_seconds` between consecutive timestamps. Every returned
-    cluster has at least `min_file_count` files: undersized clusters are
-    dropped, or (with `merge_small_clusters`) folded into a neighbor. Raises
-    only when no cluster meets the threshold.
+    `cluster_gap_seconds` between consecutive timestamps. A cluster never spans
+    two HST (Hawaii) calendar days: frames on either side of HST midnight are
+    always split, even though the UTC-keyed data directory places them
+    together. Every returned cluster has at least `min_file_count` files:
+    undersized clusters are dropped, or (with `merge_small_clusters`) folded
+    into a same-HST-day neighbor. Raises only when no cluster meets the
+    threshold.
 
     Parameters
     ----------
@@ -136,7 +150,8 @@ def build_l0_file_lists(
     merge_small_clusters : bool, default False
         How to handle clusters smaller than `min_file_count`. If False, drop
         them. If True, iteratively merge each into its nearest-in-time neighbor
-        until every cluster meets the threshold.
+        on the same HST day until every cluster meets the threshold; a cluster
+        with no same-HST-day neighbor is dropped.
 
     Returns
     -------
@@ -198,17 +213,24 @@ def build_l0_file_lists(
             f"{data_dir or 'the provided mini_db'}"
         )
 
+    # HST calendar day per file, from the mini_db HST timestamp ('YYYYMMDD...').
+    hst_day = {
+        fn: str(hst).split(".")[0]
+        for fn, hst in zip(cal_df["FILENAME"], cal_df["HST"], strict=True)
+    }
+
     # Cluster per-OBJECT (morning vs. evening thar etc. have different OBJECT
     # suffixes), splitting wherever consecutive frames are more than
-    # cluster_gap_seconds apart. Final list sorted chronologically.
+    # cluster_gap_seconds apart or fall on different HST days (the UTC-keyed
+    # directory can straddle HST midnight). Final list sorted chronologically.
     clusters = []
     for _, group in cal_df.groupby("OBJECT", dropna=False):
         timed = sorted((get_seconds_since_j2000(fn), fn) for fn in group["FILENAME"])
         if not timed:
             continue
         cluster = [timed[0][1]]
-        for (prev_t, _), (t, fn) in zip(timed, timed[1:], strict=False):
-            if t - prev_t > cluster_gap_seconds:
+        for (prev_t, prev_fn), (t, fn) in zip(timed, timed[1:], strict=False):
+            if t - prev_t > cluster_gap_seconds or hst_day[fn] != hst_day[prev_fn]:
                 clusters.append(cluster)
                 cluster = [fn]
             else:
@@ -218,24 +240,30 @@ def build_l0_file_lists(
 
     if merge_small_clusters:
         # Fold each undersized cluster (smallest first) into its nearer
-        # chronological neighbor until none remain below threshold.
+        # chronological neighbor, but only a neighbor on the same HST day so a
+        # master never spans HST midnight. A cluster with no same-day neighbor
+        # is dropped instead of merged.
         while len(clusters) > 1 and any(len(c) < min_file_count for c in clusters):
             i = min(
                 (k for k, c in enumerate(clusters) if len(c) < min_file_count),
                 key=lambda k: len(clusters[k]),
             )
+            day_i = hst_day[clusters[i][0]]
             prev_gap = (
                 get_seconds_since_j2000(clusters[i][0])
                 - get_seconds_since_j2000(clusters[i - 1][-1])
-                if i > 0
+                if i > 0 and hst_day[clusters[i - 1][0]] == day_i
                 else float("inf")
             )
             next_gap = (
                 get_seconds_since_j2000(clusters[i + 1][0])
                 - get_seconds_since_j2000(clusters[i][-1])
-                if i < len(clusters) - 1
+                if i < len(clusters) - 1 and hst_day[clusters[i + 1][0]] == day_i
                 else float("inf")
             )
+            if prev_gap == float("inf") and next_gap == float("inf"):
+                clusters.pop(i)
+                continue
             j = i - 1 if prev_gap <= next_gap else i + 1
             merged = sorted(clusters[i] + clusters[j], key=get_seconds_since_j2000)
             for idx in sorted((i, j), reverse=True):
