@@ -75,9 +75,10 @@ def parse_args(argv=None):
     )
     ap.add_argument(
         "--reprocess_masters",
-        action="store_true",
-        help="rebuild masters for every night in range; otherwise reuse masters "
-        "already on disk",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="rebuild masters for every night in range (default: on; pass "
+        "--no-reprocess_masters to reuse masters already on disk)",
     )
     ap.add_argument("--kpf_data_input", help="override [DATA_DIRS] KPF_DATA_INPUT")
     ap.add_argument(
