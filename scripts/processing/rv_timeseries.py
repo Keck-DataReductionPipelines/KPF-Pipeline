@@ -19,6 +19,11 @@ whole run aborts loudly if any masters night or any science frame fails, naming
 the offending obs_id/datecode and its log so it can be investigated. The reduced
 L1/L2/L4 products land in the usual output dirs; when --plot_directory is given,
 the RV timeseries plot is written there once every frame has reduced.
+
+With --plots_only, steps 1-4 are skipped entirely: the target's frames are
+discovered by scanning the L4 output tree (not the L0 input tree) and the plot is
+regenerated from those products, so a frame whose L4 was deleted is simply
+omitted rather than causing a failure.
 """
 
 import argparse
@@ -280,6 +285,71 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
     return obs_ids
 
 
+def discover_l4_files(science_output, target, start, end, jobs):
+    """L4 product paths for `target` over [start, end], scanned from the L4 tree.
+
+    The --plots_only counterpart to discover_science_obs_ids: instead of combing
+    the L0 input tree and reducing, it enumerates the L4 products already on disk
+    under {science_output}/L4/{datecode}, reads each PRIMARY OBJECT, and keeps
+    this target's frames. Returns a sorted list of L4 file paths. A frame whose
+    L4 was deleted simply doesn't appear -- plots-only never depends on the L0
+    tree and never fails on a missing product.
+    """
+    l4_root = os.path.join(science_output, "L4")
+    if not os.path.isdir(l4_root):
+        sys.exit(f"error: L4 output directory not found: {l4_root}")
+
+    nights = [
+        d
+        for d in sorted(os.listdir(l4_root))
+        if is_datecode(d)
+        and start <= d <= end
+        and os.path.isdir(os.path.join(l4_root, d))
+    ]
+    if not nights:
+        sys.exit(f"error: no L4 datecode dirs under {l4_root} in range {start}..{end}")
+
+    # Reading each L4 PRIMARY is I/O bound over NFS, so fan the nights out across
+    # a thread pool (getheader releases the GIL during I/O), mirroring the L0 scan.
+    def _scan_night(dc):
+        hits = []
+        for path in sorted(glob.glob(os.path.join(l4_root, dc, "kpf_SL4_*.fits"))):
+            try:
+                obj = fits.getheader(path, 0).get("OBJECT")
+            except OSError as e:
+                print(f"  warning: skipping unreadable L4 {path}: {e}", flush=True)
+                continue
+            if str(obj).strip() == str(target):
+                hits.append(path)
+        return hits
+
+    print(
+        f"scanning {len(nights)} L4 night(s) for target {target} "
+        f"({min(jobs, len(nights))} workers)...",
+        flush=True,
+    )
+    l4_paths = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = {pool.submit(_scan_night, dc): dc for dc in nights}
+        for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
+            dc = futures[future]
+            hits = future.result()
+            l4_paths.extend(hits)
+            print(
+                f"  [{i}/{len(nights)}] {dc}: {len(hits)} L4 frame(s) "
+                f"(total {len(l4_paths)})",
+                flush=True,
+            )
+
+    l4_paths = sorted(set(l4_paths))
+    if not l4_paths:
+        sys.exit(
+            f"error: no L4 products for target {target!r} in range "
+            f"{start}..{end} under {l4_root}"
+        )
+    return l4_paths
+
+
 def _missing_masters(masters_output, datecode):
     """Required (cal_type, level) masters absent for `datecode` (empty == complete)."""
     return [
@@ -496,27 +566,29 @@ def _report_failures(failures, log_dir):
                 print(f"  {line}", file=sys.stderr)
 
 
-def _read_l4_rv(obs_ids, science_output):
-    """Read (BJD_TDB, RV, RVERR, datecode) from each frame's L4 product.
+def _read_l4_rv(l4_paths):
+    """Read (BJD_TDB, RV, RVERR, datecode) from each L4 product.
 
     RV and RVERR are km/s, BJDTDB is a Julian day -- all on the L4 PRIMARY header
-    (per the EPRV standard). The datecode (from the obs_id) labels each frame's
-    observing night for the per-night panels. Frames with a non-finite RV/RVERR
-    are skipped with a warning (a real reduction should not produce them, but we
-    do not want one bad point to blow up the plot).
+    (per the EPRV standard). The datecode labels each frame's observing night for
+    the per-night panels; it is the L4 file's parent directory
+    ({science_output}/L4/{datecode}). Frames with a non-finite RV/RVERR are
+    skipped with a warning (a real reduction should not produce them, but we do
+    not want one bad point to blow up the plot).
     """
     times, rvs, errs, nights = [], [], [], []
-    for oid in obs_ids:
-        hdr = fits.getheader(build_filepath(oid, "L4", data_root=science_output), 0)
+    for path in l4_paths:
+        hdr = fits.getheader(path, 0)
         vals = (hdr.get("BJDTDB"), hdr.get("RV"), hdr.get("RVERR"))
         if any(v is None for v in vals) or not np.all(np.isfinite(vals)):
-            print(f"  warning: {oid} has no finite RV/RVERR/BJDTDB; skipping")
+            name = os.path.basename(path)
+            print(f"  warning: {name} has no finite RV/RVERR/BJDTDB; skipping")
             continue
         bjd, rv, err = vals
         times.append(bjd)
         rvs.append(rv)
         errs.append(err)
-        nights.append(get_datecode(oid))
+        nights.append(os.path.basename(os.path.dirname(path)))
     return np.array(times), np.array(rvs), np.array(errs), np.array(nights)
 
 
@@ -632,7 +704,7 @@ def plot_nightly_panels(target, times, rvs, errs, nights, plot_directory):
     print(f"nightly panels plot -> {out_path}  ({len(unique)} night(s))")
 
 
-def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group_bursts):
+def plot_rv_timeseries(target, l4_paths, plot_directory, group_bursts):
     """Write the RV timeseries plot.
 
     Plots delta-RV (m/s, relative to the median RV) vs. observation date, with
@@ -651,7 +723,7 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group_bu
     from astropy.time import Time
     from matplotlib.ticker import FuncFormatter
 
-    times, rvs, errs, nights = _read_l4_rv(obs_ids, science_output)
+    times, rvs, errs, nights = _read_l4_rv(l4_paths)
     if times.size == 0:
         sys.exit("error: no finite RV points to plot")
 
@@ -775,21 +847,23 @@ def main(argv=None):
         if value:
             forward += [flag, value]
 
-    # Steps 1-2: science frames -> unique nights.
-    obs_ids = discover_science_obs_ids(
-        data_input, args.target, start, end, args.file_limit, args.jobs
-    )
-    datecodes = sorted({get_datecode(o) for o in obs_ids})
-    print(
-        f"target {args.target}: {len(obs_ids)} science frame(s) across "
-        f"{len(datecodes)} night(s) [{start}..{end}]"
-    )
-
-    # Steps 3-4: reduction (masters + science). Skipped entirely with
-    # --plots_only, which replots from L4 products already on disk.
+    # --plots_only replots from the L4 products already on disk: discover the
+    # target's frames by scanning the L4 output tree (not the L0 input tree) and
+    # skip all reduction. Otherwise, discover the raw L0 frames and reduce them.
     if args.plots_only:
         print("plots-only: skipping masters and science reduction")
+        l4_paths = discover_l4_files(science_output, args.target, start, end, args.jobs)
     else:
+        # Steps 1-2: science frames -> unique nights.
+        obs_ids = discover_science_obs_ids(
+            data_input, args.target, start, end, args.file_limit, args.jobs
+        )
+        datecodes = sorted({get_datecode(o) for o in obs_ids})
+        print(
+            f"target {args.target}: {len(obs_ids)} science frame(s) across "
+            f"{len(datecodes)} night(s) [{start}..{end}]"
+        )
+
         # Step 3: nightly masters (parallel across nights). Build every night by
         # default; with --skip_existing_masters, skip a night only when all of
         # its required masters are already on disk.
@@ -832,14 +906,17 @@ def main(argv=None):
             f"\ndone: reduced {len(obs_ids)} frame(s); "
             f"L2/L4 products under {science_output}"
         )
+        l4_paths = [
+            build_filepath(oid, "L4", data_root=science_output) for oid in obs_ids
+        ]
 
     # Step 5: RV timeseries plot from the L4 products -- only when a plot
-    # directory was given (no --plot_directory => reduction only).
+    # directory was given (no --plot_directory => reduction only; --plots_only
+    # always supplies one).
     if args.plot_directory:
         plot_rv_timeseries(
             args.target,
-            obs_ids,
-            science_output,
+            l4_paths,
             args.plot_directory,
             args.group_bursts,
         )
