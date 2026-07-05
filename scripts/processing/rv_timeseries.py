@@ -219,15 +219,20 @@ def _handle_termination_signal(signum, frame):
     raise KeyboardInterrupt
 
 
+def _kill_group(proc, sig=signal.SIGKILL):
+    """Signal a child's whole process group, ignoring an already-dead child."""
+    try:
+        os.killpg(proc.pid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
 def _terminate_all_children(grace=5.0):
     """SIGTERM every live child's process group, then SIGKILL any survivor."""
     with _live_lock:
         procs = list(_live_procs)
     for p in procs:
-        try:
-            os.killpg(p.pid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
-            pass
+        _kill_group(p, signal.SIGTERM)
     deadline = time.monotonic() + grace
     for p in procs:
         try:
@@ -236,18 +241,18 @@ def _terminate_all_children(grace=5.0):
             pass
     for p in procs:
         if p.poll() is None:
-            try:
-                os.killpg(p.pid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                pass
+            _kill_group(p, signal.SIGKILL)
 
 
-def _run_one(argv):
+def _run_one(argv, timeout=None):
     """Run one recipe subprocess; return (returncode, captured stderr).
 
     The child starts in its own session (process group) and is tracked in
-    `_live_procs` so `run_stage` can kill the whole tree on interrupt. Returns
-    (130, "") without launching once teardown has begun (`_interrupted`).
+    `_live_procs` so `run_stage` can kill the whole tree on interrupt. `timeout`
+    (seconds), used for the serial canary, bounds the run: on expiry the child's
+    process group is killed and (124, note) returned -- 124 being the
+    conventional timeout exit status. Returns (130, "") without launching once
+    teardown has begun (`_interrupted`).
     """
     if _interrupted.is_set():
         return 130, ""
@@ -262,19 +267,41 @@ def _run_one(argv):
     with _live_lock:
         _live_procs.add(proc)
     try:
-        _out, stderr = proc.communicate()
+        try:
+            _out, stderr = proc.communicate(timeout=timeout)
+            return proc.returncode, stderr
+        except subprocess.TimeoutExpired:
+            _kill_group(proc)
+            _out, stderr = proc.communicate()  # reap the killed group
+            return 124, f"timed out after {timeout}s; child process group killed"
+        except BaseException:
+            # A KeyboardInterrupt (SIGINT/SIGTERM in the main thread, i.e. the
+            # serial canary) unwinds here before the finally removes proc from
+            # _live_procs -- kill the child now so it can't outlive us, since it
+            # is in its own session and would otherwise be untracked.
+            _kill_group(proc)
+            proc.communicate()  # best-effort reap
+            raise
     finally:
         with _live_lock:
             _live_procs.discard(proc)
-    return proc.returncode, stderr
 
 
-def run_stage(label, tasks, jobs, log_dir):
-    """Run `tasks` in a bounded pool; abort loudly if any fails.
+def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800):
+    """Run `tasks`: the first serially as a canary, then the rest in a pool.
 
-    tasks: list of (tag, argv). On the first nonzero exit, stop launching new
-    jobs (cancel not-yet-started ones) but let in-flight jobs finish, then print
-    a sentinel per failure -- naming the tag and its log file -- and exit(1).
+    tasks: list of (tag, argv). The first unit runs alone (bounded by
+    `canary_timeout` seconds) before any fan-out. This warms the shared on-disk
+    caches every job lazily builds -- barycorrpy leap-second / astropy IERS
+    tables, the matplotlib font cache, compiled bytecode -- so the parallel jobs
+    hit a warm cache instead of stampeding a cold one (the thundering-herd
+    failure mode). It doubles as a fail-fast check: if the canary fails, abort
+    before committing to the fan-out.
+
+    In the parallel phase, on the first nonzero exit stop launching new jobs
+    (cancel not-yet-started ones) but let in-flight jobs finish. Any failure
+    prints a sentinel per failing unit -- naming its tag and log file -- and
+    exits(1).
 
     On Ctrl+C (SIGINT) or SIGTERM, cancel the queue and terminate every
     still-running child before exiting (130), so an interrupt stops the whole
@@ -282,24 +309,42 @@ def run_stage(label, tasks, jobs, log_dir):
     """
     if not tasks:
         return
-    print(f"[{label}] dispatching {len(tasks)} job(s), up to {jobs} at once")
+    print(
+        f"[{label}] dispatching {len(tasks)} job(s): 1 serial canary, "
+        f"then up to {jobs} at once"
+    )
     failures = []
-    pool = concurrent.futures.ThreadPoolExecutor(max_workers=jobs)
-    futures = {pool.submit(_run_one, argv): tag for tag, argv in tasks}
+    pool = None
     try:
-        for future in concurrent.futures.as_completed(futures):
-            tag = futures[future]
-            try:
-                rc, stderr = future.result()
-            except concurrent.futures.CancelledError:
-                continue
-            if rc == 0:
-                print(f"  [{label}] ok: {tag}")
-                continue
-            failures.append((label, tag, rc, stderr))
-            print(f"  [{label}] FAILED: {tag} (exit {rc}); halting new {label} jobs")
-            for pending in futures:
-                pending.cancel()
+        # Canary: run the first unit alone to warm shared caches and surface
+        # config/env failures before fanning out. Fan out only if it passes.
+        canary_tag, canary_argv = tasks[0]
+        print(f"  [{label}] canary {canary_tag} (serial; warms shared caches)...")
+        rc, stderr = _run_one(canary_argv, timeout=canary_timeout)
+        if rc != 0:
+            failures.append((label, canary_tag, rc, stderr))
+            print(
+                f"  [{label}] FAILED: canary {canary_tag} (exit {rc}); not fanning out"
+            )
+        else:
+            print(f"  [{label}] ok: {canary_tag}")
+            pool = concurrent.futures.ThreadPoolExecutor(max_workers=jobs)
+            futures = {pool.submit(_run_one, argv): tag for tag, argv in tasks[1:]}
+            for future in concurrent.futures.as_completed(futures):
+                tag = futures[future]
+                try:
+                    rc, stderr = future.result()
+                except concurrent.futures.CancelledError:
+                    continue
+                if rc == 0:
+                    print(f"  [{label}] ok: {tag}")
+                    continue
+                failures.append((label, tag, rc, stderr))
+                print(
+                    f"  [{label}] FAILED: {tag} (exit {rc}); halting new {label} jobs"
+                )
+                for pending in futures:
+                    pending.cancel()
     except KeyboardInterrupt:
         _interrupted.set()
         print(
@@ -307,65 +352,18 @@ def run_stage(label, tasks, jobs, log_dir):
             f"running ones...",
             file=sys.stderr,
         )
-        pool.shutdown(wait=False, cancel_futures=True)
+        if pool is not None:
+            pool.shutdown(wait=False, cancel_futures=True)
         _terminate_all_children()
         print(f"[{label}] all child processes stopped; exiting", file=sys.stderr)
         sys.exit(130)
     finally:
-        pool.shutdown(wait=True)
+        if pool is not None:
+            pool.shutdown(wait=True)
 
     if failures:
         _report_failures(failures, log_dir)
         sys.exit(1)
-
-
-def _warm_caches(timeout=900):
-    """Serially populate every shared cache the recipe touches, before fan-out.
-
-    Each of these is built/downloaded lazily on first use, so a cold parallel
-    fan-out has `--jobs` subprocesses racing to create the same thing at once --
-    the thundering-herd failure mode. Warm them exactly once here so the parallel
-    jobs all hit a warm cache:
-
-      * barycorrpy leap-second tables (downloaded at import) + astropy IERS
-        Earth-orientation tables -- the timeout-less network fetch that wedged an
-        earlier run;
-      * the matplotlib font cache (`fontlist-v###.json`), rebuilt on first
-        pyplot import and prone to a concurrent-rebuild race, e.g. right after a
-        matplotlib upgrade bumps the cache version.
-
-    Runs in a child so it uses the recipe subprocesses' interpreter/env; plain
-    `subprocess.run` (serial, in our process group) so a Ctrl+C stops it like any
-    foreground command, with a `timeout` backstop so it can't hang indefinitely.
-    """
-    print("warming barycorrpy / IERS / matplotlib caches (one-time)...")
-    code = (
-        "import barycorrpy\n"  # leap-second download happens at import
-        "from astropy.utils.iers import IERS_Auto\n"
-        "IERS_Auto.open()\n"  # force the IERS-A table fetch/refresh too
-        "import matplotlib\n"
-        "matplotlib.use('Agg')\n"
-        "import matplotlib.pyplot as plt\n"  # builds/loads the font cache once
-    )
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", code],
-            cwd=_REPO,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        sys.exit(
-            f"ERROR: cache warm-up did not finish within {timeout}s (network "
-            "fetch likely hung); aborting before the science fan-out."
-        )
-    if proc.returncode != 0:
-        sys.exit(
-            "ERROR: cache warm-up failed; aborting before the science fan-out.\n"
-            + (proc.stderr or "").strip()
-        )
-    print("caches warm")
 
 
 def _report_failures(failures, log_dir):
@@ -564,9 +562,9 @@ def main(argv=None):
         )
         for oid in obs_ids
     ]
-    # Warm the shared caches once, serially, so the parallel science jobs below
-    # don't stampede a cold cache and wedge on barycorrpy's import-time download.
-    _warm_caches()
+    # run_stage runs the first frame serially as a canary before fanning out --
+    # warming barycorrpy/IERS/matplotlib caches so the parallel jobs don't
+    # stampede a cold cache (and failing fast if the first frame is broken).
     run_stage("science", tasks, args.jobs, log_dir)
 
     science_output = (
