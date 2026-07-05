@@ -446,11 +446,18 @@ def _group_by_night(times, rvs, errs, nights):
 
 
 def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group):
-    """Write the RV-vs-BJD_TDB timeseries plot (with RVERR error bars)."""
+    """Write the RV timeseries plot.
+
+    Plots delta-RV (m/s, relative to the median RV) vs. observation date, with
+    RVERR error bars, a zero reference line (the median), an RMS annotation, and
+    calendar-date (YYYYMMDD) x tick labels derived from BJD_TDB.
+    """
     import matplotlib
 
     matplotlib.use("Agg")  # headless: never needs a display (e.g. on the server)
     import matplotlib.pyplot as plt
+    from astropy.time import Time
+    from matplotlib.ticker import FuncFormatter
 
     times, rvs, errs, nights = _read_l4_rv(obs_ids, science_output)
     if times.size == 0:
@@ -463,20 +470,44 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group):
         title += " (nightly weighted mean)"
         suffix = "_nightly"
 
+    # Delta-RV about the median, in m/s (RV/RVERR are stored in km/s per EPRV).
+    drv = (rvs - np.median(rvs)) * 1e3
+    derr = errs * 1e3
+    rms = np.sqrt(np.mean(drv**2))
+
     order = np.argsort(times)
     os.makedirs(plot_directory, exist_ok=True)
     out_path = os.path.join(plot_directory, f"{target}_rv_timeseries{suffix}.png")
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.errorbar(times[order], rvs[order], yerr=errs[order], fmt="o", capsize=3)
-    ax.set_xlabel("BJD_TDB [day]")
-    ax.set_ylabel("RV [km/s]")
+    ax.axhline(0.0, color="0.6", lw=1, zorder=0)  # zero = median RV, guides the eye
+    ax.errorbar(times[order], drv[order], yerr=derr[order], fmt="o", capsize=3)
+
+    # Relabel the BJD_TDB axis with human-readable calendar dates (YYYYMMDD); the
+    # TDB-vs-UTC offset (~seconds) is irrelevant at day granularity.
+    ax.xaxis.set_major_formatter(
+        FuncFormatter(
+            lambda jd, _p: Time(jd, format="jd", scale="tdb").strftime("%Y%m%d")
+        )
+    )
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+
+    ax.set_xlabel("Date [UT]")
+    ax.set_ylabel(r"$\Delta$RV [m/s]")
     ax.set_title(f"{title} -- {times.size} point(s)")
+    ax.annotate(
+        f"RMS = {rms:.2f} m/s",
+        xy=(0.02, 0.96),
+        xycoords="axes fraction",
+        va="top",
+        ha="left",
+        bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.8),
+    )
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
-    print(f"RV timeseries plot -> {out_path}")
+    print(f"RV timeseries plot -> {out_path}  (RMS {rms:.2f} m/s)")
 
 
 def main(argv=None):
