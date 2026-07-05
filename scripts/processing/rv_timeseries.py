@@ -187,7 +187,7 @@ def _dir_params(config_path, section):
     return ConfigHandler(config_path).get_params([section])
 
 
-def discover_science_obs_ids(data_input, target, start, end, file_limit):
+def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
     """Raw science obs_ids for `target` over [start, end], from the L0 tree.
 
     Enumerates the nights (datecode dirs) under {data_input}/L0, scans each one's
@@ -216,13 +216,33 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit):
     if not nights:
         sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
 
-    obs_ids = []
-    for dc in nights:
+    # Scanning a night reads every L0 PRIMARY header -- slow over NFS but I/O
+    # bound, so fan the nights out across a thread pool (getheader releases the
+    # GIL during I/O). Emit a per-night heartbeat, in completion order, since the
+    # scan is otherwise silent.
+    def _scan_night(dc):
         df = build_mini_database(os.path.join(l0_root, dc))
         is_object = df["IMTYPE"].astype(str).str.strip() == "Object"
         is_target = df["OBJECT"].astype(str).str.strip() == str(target)
-        for fn in df.loc[is_object & is_target, "FILENAME"]:
-            obs_ids.append(get_obs_id(fn))
+        return [get_obs_id(fn) for fn in df.loc[is_object & is_target, "FILENAME"]]
+
+    print(
+        f"scanning {len(nights)} night(s) for target {target} "
+        f"({min(jobs, len(nights))} workers)...",
+        flush=True,
+    )
+    obs_ids = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = {pool.submit(_scan_night, dc): dc for dc in nights}
+        for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
+            dc = futures[future]
+            hits = future.result()
+            obs_ids.extend(hits)
+            print(
+                f"  [{i}/{len(nights)}] {dc}: {len(hits)} matching frame(s) "
+                f"(total {len(obs_ids)})",
+                flush=True,
+            )
 
     obs_ids = sorted(set(obs_ids))
     if not obs_ids:
@@ -729,7 +749,7 @@ def main(argv=None):
 
     # Steps 1-2: science frames -> unique nights.
     obs_ids = discover_science_obs_ids(
-        data_input, args.target, start, end, args.file_limit
+        data_input, args.target, start, end, args.file_limit, args.jobs
     )
     datecodes = sorted({get_datecode(o) for o in obs_ids})
     print(
