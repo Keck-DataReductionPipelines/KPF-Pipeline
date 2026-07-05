@@ -25,8 +25,11 @@ import argparse
 import concurrent.futures
 import glob
 import os
+import signal
 import subprocess
 import sys
+import threading
+import time
 
 import numpy as np
 from astropy.io import fits
@@ -196,10 +199,74 @@ def check_masters_exist(masters_output, datecodes):
         )
 
 
+# Live child recipe processes, so an interrupt can tear down the whole tree and
+# not just the foreground shell. Each child is its own session/process-group
+# leader (start_new_session=True), and this orchestrator is its sole owner: a
+# Ctrl+C (SIGINT) or `kill` (SIGTERM handled below) of the orchestrator kills
+# every in-flight child via os.killpg. `_interrupted` also stops the pool from
+# launching any not-yet-started job once teardown has begun.
+_live_procs = set()
+_live_lock = threading.Lock()
+_interrupted = threading.Event()
+
+
+def _handle_termination_signal(signum, frame):
+    """Turn SIGTERM into a KeyboardInterrupt so `kill` cleans up like Ctrl+C.
+
+    SIGINT already raises KeyboardInterrupt in the main thread; routing SIGTERM
+    through the same path lets `run_stage` catch both and terminate children.
+    """
+    raise KeyboardInterrupt
+
+
+def _terminate_all_children(grace=5.0):
+    """SIGTERM every live child's process group, then SIGKILL any survivor."""
+    with _live_lock:
+        procs = list(_live_procs)
+    for p in procs:
+        try:
+            os.killpg(p.pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+    deadline = time.monotonic() + grace
+    for p in procs:
+        try:
+            p.wait(timeout=max(0.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            pass
+    for p in procs:
+        if p.poll() is None:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+
 def _run_one(argv):
-    """Run one recipe subprocess; return (returncode, captured stderr)."""
-    proc = subprocess.run(argv, cwd=_REPO, capture_output=True, text=True)
-    return proc.returncode, proc.stderr
+    """Run one recipe subprocess; return (returncode, captured stderr).
+
+    The child starts in its own session (process group) and is tracked in
+    `_live_procs` so `run_stage` can kill the whole tree on interrupt. Returns
+    (130, "") without launching once teardown has begun (`_interrupted`).
+    """
+    if _interrupted.is_set():
+        return 130, ""
+    proc = subprocess.Popen(
+        argv,
+        cwd=_REPO,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    with _live_lock:
+        _live_procs.add(proc)
+    try:
+        _out, stderr = proc.communicate()
+    finally:
+        with _live_lock:
+            _live_procs.discard(proc)
+    return proc.returncode, stderr
 
 
 def run_stage(label, tasks, jobs, log_dir):
@@ -208,13 +275,18 @@ def run_stage(label, tasks, jobs, log_dir):
     tasks: list of (tag, argv). On the first nonzero exit, stop launching new
     jobs (cancel not-yet-started ones) but let in-flight jobs finish, then print
     a sentinel per failure -- naming the tag and its log file -- and exit(1).
+
+    On Ctrl+C (SIGINT) or SIGTERM, cancel the queue and terminate every
+    still-running child before exiting (130), so an interrupt stops the whole
+    run rather than leaving the pool draining orphaned subprocesses.
     """
     if not tasks:
         return
     print(f"[{label}] dispatching {len(tasks)} job(s), up to {jobs} at once")
     failures = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = {pool.submit(_run_one, argv): tag for tag, argv in tasks}
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=jobs)
+    futures = {pool.submit(_run_one, argv): tag for tag, argv in tasks}
+    try:
         for future in concurrent.futures.as_completed(futures):
             tag = futures[future]
             try:
@@ -228,10 +300,72 @@ def run_stage(label, tasks, jobs, log_dir):
             print(f"  [{label}] FAILED: {tag} (exit {rc}); halting new {label} jobs")
             for pending in futures:
                 pending.cancel()
+    except KeyboardInterrupt:
+        _interrupted.set()
+        print(
+            f"\n[{label}] interrupted -- cancelling queued jobs and terminating "
+            f"running ones...",
+            file=sys.stderr,
+        )
+        pool.shutdown(wait=False, cancel_futures=True)
+        _terminate_all_children()
+        print(f"[{label}] all child processes stopped; exiting", file=sys.stderr)
+        sys.exit(130)
+    finally:
+        pool.shutdown(wait=True)
 
     if failures:
         _report_failures(failures, log_dir)
         sys.exit(1)
+
+
+def _warm_caches(timeout=900):
+    """Serially populate every shared cache the recipe touches, before fan-out.
+
+    Each of these is built/downloaded lazily on first use, so a cold parallel
+    fan-out has `--jobs` subprocesses racing to create the same thing at once --
+    the thundering-herd failure mode. Warm them exactly once here so the parallel
+    jobs all hit a warm cache:
+
+      * barycorrpy leap-second tables (downloaded at import) + astropy IERS
+        Earth-orientation tables -- the timeout-less network fetch that wedged an
+        earlier run;
+      * the matplotlib font cache (`fontlist-v###.json`), rebuilt on first
+        pyplot import and prone to a concurrent-rebuild race, e.g. right after a
+        matplotlib upgrade bumps the cache version.
+
+    Runs in a child so it uses the recipe subprocesses' interpreter/env; plain
+    `subprocess.run` (serial, in our process group) so a Ctrl+C stops it like any
+    foreground command, with a `timeout` backstop so it can't hang indefinitely.
+    """
+    print("warming barycorrpy / IERS / matplotlib caches (one-time)...")
+    code = (
+        "import barycorrpy\n"  # leap-second download happens at import
+        "from astropy.utils.iers import IERS_Auto\n"
+        "IERS_Auto.open()\n"  # force the IERS-A table fetch/refresh too
+        "import matplotlib\n"
+        "matplotlib.use('Agg')\n"
+        "import matplotlib.pyplot as plt\n"  # builds/loads the font cache once
+    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=_REPO,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        sys.exit(
+            f"ERROR: cache warm-up did not finish within {timeout}s (network "
+            "fetch likely hung); aborting before the science fan-out."
+        )
+    if proc.returncode != 0:
+        sys.exit(
+            "ERROR: cache warm-up failed; aborting before the science fan-out.\n"
+            + (proc.stderr or "").strip()
+        )
+    print("caches warm")
 
 
 def _report_failures(failures, log_dir):
@@ -324,6 +458,27 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group):
 
 
 def main(argv=None):
+    # Route SIGTERM through the same KeyboardInterrupt path as Ctrl+C so both a
+    # terminal interrupt and an explicit `kill` tear down the child processes
+    # (see run_stage). Installed here, not at import, so importing this module
+    # (e.g. from tests) does not mutate signal handlers.
+    signal.signal(signal.SIGTERM, _handle_termination_signal)
+
+    # Pin each recipe subprocess to single-threaded BLAS/OpenMP. We already run
+    # one process per CPU (`--jobs`), and numpy/scipy's OpenBLAS backend would
+    # otherwise spawn a full thread pool *inside each* -- jobs x cores threads,
+    # which thrashes and presents as a hang. setdefault so an explicit caller
+    # value wins; set here (after this module's numpy import) so it changes only
+    # the inherited env of the children, not our already-initialised numpy.
+    for _var in (
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+    ):
+        os.environ.setdefault(_var, "1")
+
     args = parse_args(argv)
     start, end = args.date_range
 
@@ -409,6 +564,9 @@ def main(argv=None):
         )
         for oid in obs_ids
     ]
+    # Warm the shared caches once, serially, so the parallel science jobs below
+    # don't stampede a cold cache and wedge on barycorrpy's import-time download.
+    _warm_caches()
     run_stage("science", tasks, args.jobs, log_dir)
 
     science_output = (
