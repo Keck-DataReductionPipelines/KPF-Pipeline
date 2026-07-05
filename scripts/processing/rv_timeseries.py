@@ -437,14 +437,14 @@ def _report_failures(failures, log_dir):
 
 
 def _read_l4_rv(obs_ids, science_output):
-    """Read (BJD_TDB, RV, RVERR, datecode) from each frame's L4 product.
+    """Read (BJD_TDB, RV, RVERR) from each frame's L4 product.
 
     RV and RVERR are km/s, BJDTDB is a Julian day -- all on the L4 PRIMARY header
     (per the EPRV standard). Frames with a non-finite RV/RVERR are skipped with a
     warning (a real reduction should not produce them, but we do not want one bad
     point to blow up the plot).
     """
-    times, rvs, errs, nights = [], [], [], []
+    times, rvs, errs = [], [], []
     for oid in obs_ids:
         hdr = fits.getheader(build_filepath(oid, "L4", data_root=science_output), 0)
         vals = (hdr.get("BJDTDB"), hdr.get("RV"), hdr.get("RVERR"))
@@ -455,19 +455,29 @@ def _read_l4_rv(obs_ids, science_output):
         times.append(bjd)
         rvs.append(rv)
         errs.append(err)
-        nights.append(get_datecode(oid))
-    return np.array(times), np.array(rvs), np.array(errs), np.array(nights)
+    return np.array(times), np.array(rvs), np.array(errs)
 
 
-def _group_by_night(times, rvs, errs, nights):
-    """Collapse each night's frames to one RVERR-weighted mean point.
+# Minimum gap separating one burst from the next. A bright-star burst is ~3-5
+# exposures at ~1-min readout cadence; revisits are tens of minutes apart, so
+# 15 min cleanly sits between the two (well above intra-burst, below inter-burst).
+_BURST_GAP_MINUTES = 15.0
 
-    Weights are 1/RVERR**2: the combined RV is the weighted mean, its error is
-    1/sqrt(sum w), and the epoch is the same weighted mean of BJD_TDB.
+
+def _group_bursts(times, rvs, errs, gap_minutes=_BURST_GAP_MINUTES):
+    """Collapse each burst of rapid-succession frames to one RVERR-weighted point.
+
+    Splits the time-ordered frames wherever consecutive BJD_TDB values differ by
+    more than `gap_minutes` (as `build_l0_file_lists` clusters calibrations), then
+    combines each burst with 1/RVERR**2 weights: weighted-mean RV, error
+    1/sqrt(sum w), epoch the weighted-mean BJD_TDB.
     """
+    order = np.argsort(times)
+    times, rvs, errs = times[order], rvs[order], errs[order]
+    gaps_minutes = np.diff(times) * 1440.0  # BJD_TDB days -> minutes
+    breaks = np.nonzero(gaps_minutes > gap_minutes)[0] + 1
     g_times, g_rvs, g_errs = [], [], []
-    for night in sorted(set(nights)):
-        sel = nights == night
+    for sel in np.split(np.arange(times.size), breaks):
         w = 1.0 / errs[sel] ** 2
         g_times.append(np.sum(w * times[sel]) / np.sum(w))
         g_rvs.append(np.sum(w * rvs[sel]) / np.sum(w))
@@ -489,21 +499,20 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group_bu
     from astropy.time import Time
     from matplotlib.ticker import FuncFormatter
 
-    times, rvs, errs, nights = _read_l4_rv(obs_ids, science_output)
+    times, rvs, errs = _read_l4_rv(obs_ids, science_output)
     if times.size == 0:
         sys.exit("error: no finite RV points to plot")
 
-    title = f"{target} RV timeseries"
     suffix = ""
     if group_bursts:
-        times, rvs, errs = _group_by_night(times, rvs, errs, nights)
-        title += " (nightly weighted mean)"
-        suffix = "_nightly"
+        times, rvs, errs = _group_bursts(times, rvs, errs)
+        suffix = "_bursts"
 
     # Delta-RV about the median, in m/s (RV/RVERR are stored in km/s per EPRV).
     drv = (rvs - np.median(rvs)) * 1e3
     derr = errs * 1e3
     rms = np.sqrt(np.mean(drv**2))
+    med_err = np.median(derr)  # median per-point photon uncertainty
 
     order = np.argsort(times)
     os.makedirs(plot_directory, exist_ok=True)
@@ -524,9 +533,9 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group_bu
 
     ax.set_xlabel("Date [UT]")
     ax.set_ylabel(r"$\Delta$RV [m/s]")
-    ax.set_title(f"{title} -- {times.size} point(s)")
+    ax.set_title(target)
     ax.annotate(
-        f"RMS = {rms:.2f} m/s",
+        f"RV_RMS = {rms:.2f} m/s\nRV_ERR = {med_err:.2f} m/s",
         xy=(0.02, 0.96),
         xycoords="axes fraction",
         va="top",
@@ -537,7 +546,10 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group_bu
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
-    print(f"RV timeseries plot -> {out_path}  (RMS {rms:.2f} m/s)")
+    print(
+        f"RV timeseries plot -> {out_path}  "
+        f"(RV_RMS {rms:.2f} m/s, RV_ERR {med_err:.2f} m/s)"
+    )
 
 
 def main(argv=None):
