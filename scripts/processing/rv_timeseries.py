@@ -104,6 +104,14 @@ def parse_args(argv=None):
         "(default: reduce every frame)",
     )
     ap.add_argument(
+        "--plots_only",
+        action="store_true",
+        help="skip all reduction (masters + science); only (re)generate plots "
+        "from L4 products already on disk. Reads L4 from --kpf_science_output "
+        "(or the config default) and writes plots to --plot_directory; "
+        "--output_dir sets both at once",
+    )
+    ap.add_argument(
         "--input_dir",
         help="shorthand for --kpf_data_input (the L0 input root)",
     )
@@ -179,6 +187,10 @@ def parse_args(argv=None):
             ap.error(f"--output_dir conflicts with {', '.join(clashes)}")
         for k, v in routed.items():
             setattr(args, k, v)
+
+    # --plots_only with nowhere to write is a no-op; require a plot destination.
+    if args.plots_only and not args.plot_directory:
+        ap.error("--plots_only requires --plot_directory (or --output_dir)")
     return args
 
 
@@ -594,7 +606,13 @@ def plot_nightly_panels(target, times, rvs, errs, nights, plot_directory):
         o = np.argsort(minutes)
         ax.axhline(0.0, color="0.6", lw=1, zorder=0)
         ax.errorbar(
-            minutes[o], drv[sel][o], yerr=derr[sel][o], fmt="o", ms=4, capsize=2
+            minutes[o],
+            drv[sel][o],
+            yerr=derr[sel][o],
+            fmt="o",
+            ms=4,
+            capsize=2,
+            color="C3",
         )
         ax.set_title(night, fontsize=9)
         ax.grid(True, alpha=0.3)
@@ -672,7 +690,7 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group_bu
 
     # Foreground series (burst means when grouping, else the frames): larger,
     # black-outlined markers so they stand out over the grey underlay.
-    fg_kw = dict(fmt="o", capsize=3, zorder=2)
+    fg_kw = dict(fmt="o", capsize=3, zorder=2, color="C3")
     if group_bursts:
         fg_kw.update(ms=8, mec="black", mew=0.8, label="burst mean")
     ax.errorbar(times[order], drv[order], yerr=derr[order], **fg_kw)
@@ -767,47 +785,56 @@ def main(argv=None):
         f"{len(datecodes)} night(s) [{start}..{end}]"
     )
 
-    # Step 3: nightly masters (parallel across nights). Build every night by
-    # default; with --skip_existing_masters, skip a night only when all of its
-    # required masters are already on disk.
-    masters_todo = datecodes
-    if args.skip_existing_masters:
-        masters_todo = [dc for dc in datecodes if _missing_masters(masters_output, dc)]
-        skipped = len(datecodes) - len(masters_todo)
-        if skipped:
-            print(f"skipping masters for {skipped} night(s) already complete on disk")
-    tasks = [
-        _cli_task(dc, _MASTERS_RECIPE, args.masters_config, "-d", forward)
-        for dc in masters_todo
-    ]
-    run_stage("masters", tasks, args.jobs, log_dir)
+    # Steps 3-4: reduction (masters + science). Skipped entirely with
+    # --plots_only, which replots from L4 products already on disk.
+    if args.plots_only:
+        print("plots-only: skipping masters and science reduction")
+    else:
+        # Step 3: nightly masters (parallel across nights). Build every night by
+        # default; with --skip_existing_masters, skip a night only when all of
+        # its required masters are already on disk.
+        masters_todo = datecodes
+        if args.skip_existing_masters:
+            masters_todo = [
+                dc for dc in datecodes if _missing_masters(masters_output, dc)
+            ]
+            skipped = len(datecodes) - len(masters_todo)
+            if skipped:
+                print(f"skipping masters for {skipped} night(s) already complete")
+        tasks = [
+            _cli_task(dc, _MASTERS_RECIPE, args.masters_config, "-d", forward)
+            for dc in masters_todo
+        ]
+        run_stage("masters", tasks, args.jobs, log_dir)
 
-    # Gate: never start science if any required master is missing.
-    check_masters_exist(masters_output, datecodes)
-    print("all required masters present")
+        # Gate: never start science if any required master is missing.
+        check_masters_exist(masters_output, datecodes)
+        print("all required masters present")
 
-    # Step 4: science reduction (parallel across frames; canary-then-fan-out).
-    # Reduce every frame by default; with --skip_existing_science, skip frames
-    # that already have an L4 product (reduced to completion).
-    science_todo = obs_ids
-    if args.skip_existing_science:
-        science_todo = [o for o in obs_ids if not _science_complete(o, science_output)]
-        skipped = len(obs_ids) - len(science_todo)
-        if skipped:
-            print(f"skipping {skipped} science frame(s) already reduced to L4")
-    tasks = [
-        _cli_task(oid, _SCIENCE_RECIPE, args.science_config, "-o", forward)
-        for oid in science_todo
-    ]
-    run_stage("science", tasks, args.jobs, log_dir)
+        # Step 4: science reduction (parallel across frames; canary-then-fan-out).
+        # Reduce every frame by default; with --skip_existing_science, skip frames
+        # that already have an L4 product (reduced to completion).
+        science_todo = obs_ids
+        if args.skip_existing_science:
+            science_todo = [
+                o for o in obs_ids if not _science_complete(o, science_output)
+            ]
+            skipped = len(obs_ids) - len(science_todo)
+            if skipped:
+                print(f"skipping {skipped} science frame(s) already reduced to L4")
+        tasks = [
+            _cli_task(oid, _SCIENCE_RECIPE, args.science_config, "-o", forward)
+            for oid in science_todo
+        ]
+        run_stage("science", tasks, args.jobs, log_dir)
 
-    print(
-        f"\ndone: reduced {len(obs_ids)} frame(s); "
-        f"L2/L4 products under {science_output}"
-    )
+        print(
+            f"\ndone: reduced {len(obs_ids)} frame(s); "
+            f"L2/L4 products under {science_output}"
+        )
 
-    # Step 5: RV timeseries plot from the freshly written L4 products -- only
-    # when a plot directory was given (no --plot_directory => reduction only).
+    # Step 5: RV timeseries plot from the L4 products -- only when a plot
+    # directory was given (no --plot_directory => reduction only).
     if args.plot_directory:
         plot_rv_timeseries(
             args.target,
