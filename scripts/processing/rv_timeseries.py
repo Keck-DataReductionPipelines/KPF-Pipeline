@@ -52,6 +52,18 @@ _DEFAULT_MASTERS_CONFIG = os.path.join(_REPO, "configs", "kpf_drp_masters.toml")
 _DEFAULT_SCIENCE_CONFIG = os.path.join(_REPO, "configs", "kpf_drp_science.toml")
 
 
+def _default_jobs():
+    """Default --jobs: at most 25% of the CPUs, but always allow up to 16.
+
+    Keeps a many-core shared machine from being monopolised (the 25% cap), while
+    still letting a laptop use up to 16 cores even when that is a large fraction
+    of them. Never exceeds the actual CPU count. os.cpu_count() returns None when
+    it cannot be determined, so fall back to 1 (a valid positive default).
+    """
+    n = os.cpu_count() or 1
+    return min(n, max(16, n // 4))
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -130,8 +142,9 @@ def parse_args(argv=None):
     ap.add_argument(
         "--jobs",
         type=int,
-        default=os.cpu_count() or 1,
-        help="max concurrent recipe subprocesses (default: CPU count)",
+        default=_default_jobs(),
+        help="max concurrent recipe subprocesses (default: %(default)s -- at "
+        "most 25%% of CPUs, but up to 16 even on a small machine)",
     )
     args = ap.parse_args(argv)
 
