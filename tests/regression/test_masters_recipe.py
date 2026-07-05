@@ -25,6 +25,7 @@ from kpfpipe.utils.io import (
     build_mini_database,
     build_qlp_dir,
     glob_masters,
+    load_junk_obs_ids,
 )
 from kpfpipe.utils.kpf import get_timestamp, utc_to_hst
 
@@ -76,69 +77,40 @@ _SCI_A = [
 ]  # 50000–50100
 
 
-def _make_mini_db():
-    rows = (
-        [
-            {
-                "FILENAME": f,
-                "IMTYPE": "Bias",
-                "OBJECT": "autocal-bias",
-                "TARGNAME": None,
-            }
-            for f in _BIAS_A
-        ]
-        + [
-            {
-                "FILENAME": f,
-                "IMTYPE": "Bias",
-                "OBJECT": "autocal-bias",
-                "TARGNAME": None,
-            }
-            for f in _BIAS_B
-        ]
-        + [
-            {
-                "FILENAME": f,
-                "IMTYPE": "Dark",
-                "OBJECT": "autocal-dark",
-                "TARGNAME": None,
-            }
-            for f in _DARK_A
-        ]
-        + [
-            {
-                "FILENAME": f,
-                "IMTYPE": "Arclamp",
-                "OBJECT": "autocal-thar-all-morn",
-                "TARGNAME": None,
-            }
-            for f in _THAR_MORN
-        ]
-        + [
-            {
-                "FILENAME": f,
-                "IMTYPE": "Arclamp",
-                "OBJECT": "autocal-thar-all-eve",
-                "TARGNAME": None,
-            }
-            for f in _THAR_EVE
-        ]
-        + [
-            {
-                "FILENAME": f,
-                "IMTYPE": "Object",
-                "OBJECT": "185144",
-                "TARGNAME": "185144",
-            }
-            for f in _SCI_A
-        ]
-    )
+def _rows(files, obj, imtype, targname=None):
+    """Row dicts for a group of frames sharing OBJECT/IMTYPE/TARGNAME."""
+    return [
+        {"FILENAME": f, "IMTYPE": imtype, "OBJECT": obj, "TARGNAME": targname}
+        for f in files
+    ]
+
+
+def _mini_db(rows, *, exptime=60.0, junk=()):
+    """Assemble a synthetic mini database from row dicts.
+
+    Adds the derived columns build_l0_file_lists needs: EXPTIME/ELAPSED, the
+    UTC/HST timestamps (parsed from each FILENAME), and ISJUNK (the FILENAMEs in
+    `junk` are flagged True). This is the single assembly path for every layout
+    fixture below.
+    """
     df = pd.DataFrame(rows)
-    df["EXPTIME"] = 60.0
-    df["ELAPSED"] = 60.0
+    df["EXPTIME"] = exptime
+    df["ELAPSED"] = exptime
     df["UTC"] = [get_timestamp(f) for f in df["FILENAME"]]
     df["HST"] = [utc_to_hst(t) for t in df["UTC"]]
+    df["ISJUNK"] = df["FILENAME"].isin(set(junk))
     return df
+
+
+def _make_mini_db():
+    return _mini_db(
+        _rows(_BIAS_A, "autocal-bias", "Bias")
+        + _rows(_BIAS_B, "autocal-bias", "Bias")
+        + _rows(_DARK_A, "autocal-dark", "Dark")
+        + _rows(_THAR_MORN, "autocal-thar-all-morn", "Arclamp")
+        + _rows(_THAR_EVE, "autocal-thar-all-eve", "Arclamp")
+        + _rows(_SCI_A, "185144", "Object", "185144")
+    )
 
 
 _BIAS_SMALL = [
@@ -148,16 +120,7 @@ _BIAS_SMALL = [
 
 def _mixed_bias_db():
     """Mini_db with one 5-file bias cluster (_BIAS_A) and a later 2-file one."""
-    rows = [
-        {"FILENAME": f, "IMTYPE": "Bias", "OBJECT": "autocal-bias", "TARGNAME": None}
-        for f in _BIAS_A + _BIAS_SMALL
-    ]
-    df = pd.DataFrame(rows)
-    df["EXPTIME"] = 60.0
-    df["ELAPSED"] = 60.0
-    df["UTC"] = [get_timestamp(f) for f in df["FILENAME"]]
-    df["HST"] = [utc_to_hst(t) for t in df["UTC"]]
-    return df, _BIAS_SMALL
+    return _mini_db(_rows(_BIAS_A + _BIAS_SMALL, "autocal-bias", "Bias")), _BIAS_SMALL
 
 
 def _midnight_bias_db(n_before=5, n_after=5):
@@ -174,15 +137,7 @@ def _midnight_bias_db(n_before=5, n_after=5):
         f"/data/L0/20240405/KP.20240405.{36100 + i * 100:05d}.00.fits"  # HST 20240405
         for i in range(n_after)
     ]
-    rows = [
-        {"FILENAME": f, "IMTYPE": "Bias", "OBJECT": "autocal-bias", "TARGNAME": None}
-        for f in before + after
-    ]
-    df = pd.DataFrame(rows)
-    df["EXPTIME"] = 60.0
-    df["ELAPSED"] = 60.0
-    df["UTC"] = [get_timestamp(f) for f in df["FILENAME"]]
-    df["HST"] = [utc_to_hst(t) for t in df["UTC"]]
+    df = _mini_db(_rows(before + after, "autocal-bias", "Bias"))
     return df, before, after
 
 
@@ -201,15 +156,7 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
         f"/data/L0/20240405/KP.20240405.{50000 + i * 100:05d}.00.fits"  # HST 20240405
         for i in range(n_after)
     ]
-    rows = [
-        {"FILENAME": f, "IMTYPE": "Dark", "OBJECT": "autocal-dark", "TARGNAME": None}
-        for f in before + after
-    ]
-    df = pd.DataFrame(rows)
-    df["EXPTIME"] = 1200.0
-    df["ELAPSED"] = 1200.0
-    df["UTC"] = [get_timestamp(f) for f in df["FILENAME"]]
-    df["HST"] = [utc_to_hst(t) for t in df["UTC"]]
+    df = _mini_db(_rows(before + after, "autocal-dark", "Dark"), exptime=1200.0)
     return df, before, after
 
 
@@ -687,6 +634,11 @@ class TestBuildMiniDatabase:
     def test_all_files_are_fits(self, mini_db):
         assert mini_db["FILENAME"].str.endswith(".fits").all()
 
+    def test_isjunk_column_present_and_false(self, mini_db):
+        # No junk list ships in tests/testdata, so every frame is ISJUNK=False.
+        assert "ISJUNK" in mini_db.columns
+        assert not mini_db["ISJUNK"].any()
+
     def test_write_false_does_not_write_csv(self):
         csv_path = TESTDATA_L0_DIR / "KP.20240405_L0.csv"
         was_present = csv_path.exists()
@@ -696,6 +648,55 @@ class TestBuildMiniDatabase:
     def test_empty_directory_raises(self, tmp_path):
         with pytest.raises(ValueError, match="No FITS files found"):
             build_mini_database(str(tmp_path))
+
+
+# ---------------------------------------------------------------------------
+# Junk exclusion: load_junk_obs_ids + build_l0_file_lists(exclude_junk=...)
+# (synthetic; the only junk files written go to isolated tmp_path/reference/)
+# ---------------------------------------------------------------------------
+
+
+_JUNK_BIAS = [
+    f"/data/L0/20240405/KP.20240405.{s:05d}.00.fits" for s in (1000, 1010, 1020, 1030)
+]  # four bias frames 10 s apart on one HST day
+
+
+class TestJunkExclusion:
+    def test_load_junk_absent_file(self, tmp_path):
+        assert load_junk_obs_ids(str(tmp_path)) == set()
+
+    def test_load_junk_parses_wmko_format(self, tmp_path):
+        # WMKO layout: a title line, an 'observation_id' header, one obs_id/row.
+        ref = tmp_path / "reference"
+        ref.mkdir()
+        (ref / "Junk_Observations_for_KPF.csv").write_text(
+            "Junk Observations for KPF\nobservation_id\n"
+            "KP.20240405.00001.00\nKP.20240405.00002.00\n"
+        )
+        assert load_junk_obs_ids(str(tmp_path)) == {
+            "KP.20240405.00001.00",
+            "KP.20240405.00002.00",
+        }
+
+    def test_exclude_junk_default_drops_flagged_frame(self):
+        junk_fn = _JUNK_BIAS[1]
+        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
+        lists = build_l0_file_lists("bias", mini_db=db, min_file_count=1)
+        assert junk_fn not in [fn for cluster in lists for fn in cluster]
+
+    def test_exclude_junk_false_keeps_flagged_frame(self):
+        junk_fn = _JUNK_BIAS[1]
+        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
+        lists = build_l0_file_lists(
+            "bias", mini_db=db, min_file_count=1, exclude_junk=False
+        )
+        assert junk_fn in [fn for cluster in lists for fn in cluster]
+
+    def test_exclude_junk_without_column_raises(self):
+        # A mini database built before ISJUNK existed must fail loudly.
+        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias")).drop(columns="ISJUNK")
+        with pytest.raises(KeyError):
+            build_l0_file_lists("bias", mini_db=db, min_file_count=1)
 
 
 # ---------------------------------------------------------------------------

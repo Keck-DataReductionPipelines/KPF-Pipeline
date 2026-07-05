@@ -431,68 +431,79 @@ class TestQCL0:
         del l0.headers["PRIMARY"]["EXPTIME"]
         assert QCL0(l0).exptime_sane() is False
 
-    def test_not_junk_pass_no_file(self, tmp_path, monkeypatch):
-        """No junk CSV → pass by default."""
+    # not_junk delegates all file I/O to io.load_junk_obs_ids, so these tests
+    # monkeypatch that helper (no junk file is ever written to a data tree) and
+    # verify only not_junk's own logic: the dirname -> data_input recovery, the
+    # obs_id membership test, and the two short-circuits. load_junk_obs_ids's
+    # CSV parsing is covered separately in test_masters_recipe.py.
+    def test_not_junk_pass_empty_list(self, tmp_path, monkeypatch):
+        """No junk (empty set, e.g. no list on disk) → not junk."""
         import kpfpipe.quality_control.qc_flags.level0 as mod
 
-        monkeypatch.setattr(
-            mod, "_JUNK_CSV", tmp_path / "reference" / "junk_observations.csv"
-        )
+        monkeypatch.setattr(mod, "load_junk_obs_ids", lambda data_input: set())
         l0 = _make_kpf0(tmp_path)
+        l0.dirname = str(tmp_path / "L0" / "20240405")
         assert QCL0(l0).not_junk() is True
 
     def test_not_junk_pass_not_in_list(self, tmp_path, monkeypatch):
-        import pandas as pd
-
         import kpfpipe.quality_control.qc_flags.level0 as mod
 
-        csv_path = tmp_path / "junk_observations.csv"
-        pd.DataFrame({"obs_id": ["KP.20240101.99999.00"]}).to_csv(csv_path, index=False)
-        monkeypatch.setattr(mod, "_JUNK_CSV", csv_path)
-
+        monkeypatch.setattr(
+            mod, "load_junk_obs_ids", lambda data_input: {"KP.20240101.99999.00"}
+        )
         l0 = _make_kpf0(tmp_path)
+        l0.dirname = str(tmp_path / "L0" / "20240405")
         assert QCL0(l0).not_junk() is True
 
     def test_not_junk_fail_in_list(self, tmp_path, monkeypatch):
-        import pandas as pd
-
         import kpfpipe.quality_control.qc_flags.level0 as mod
 
         obs_id = "KP.20240405.00001.00"
-        csv_path = tmp_path / "junk_observations.csv"
-        pd.DataFrame({"obs_id": [obs_id]}).to_csv(csv_path, index=False)
-        monkeypatch.setattr(mod, "_JUNK_CSV", csv_path)
-
+        monkeypatch.setattr(mod, "load_junk_obs_ids", lambda data_input: {obs_id})
         l0 = _make_kpf0(tmp_path, obs_id=obs_id)
+        l0.dirname = str(tmp_path / "L0" / "20240405")
         assert QCL0(l0).not_junk() is False
 
-    def test_not_junk_pass_none_obs_id(self, tmp_path, monkeypatch):
-        """obs_id=None → passes (can't be in junk list)."""
-        import pandas as pd
-
+    def test_not_junk_recovers_data_input_from_dirname(self, tmp_path, monkeypatch):
+        """data_input is the L0 dir's grandparent ({root}/L0/{datecode} → {root})."""
         import kpfpipe.quality_control.qc_flags.level0 as mod
 
-        csv_path = tmp_path / "junk_observations.csv"
-        pd.DataFrame({"obs_id": ["KP.20240405.00001.00"]}).to_csv(csv_path, index=False)
-        monkeypatch.setattr(mod, "_JUNK_CSV", csv_path)
+        seen = {}
 
+        def _fake(data_input):
+            seen["data_input"] = data_input
+            return set()
+
+        monkeypatch.setattr(mod, "load_junk_obs_ids", _fake)
         l0 = _make_kpf0(tmp_path)
+        l0.dirname = str(tmp_path / "L0" / "20240405")
+        QCL0(l0).not_junk()
+        assert seen["data_input"] == str(tmp_path)
+
+    def test_not_junk_pass_none_obs_id(self, tmp_path, monkeypatch):
+        """obs_id=None → passes without consulting the list."""
+        import kpfpipe.quality_control.qc_flags.level0 as mod
+
+        def _boom(data_input):
+            raise AssertionError("load_junk_obs_ids must not be consulted")
+
+        monkeypatch.setattr(mod, "load_junk_obs_ids", _boom)
+        l0 = _make_kpf0(tmp_path)
+        l0.dirname = str(tmp_path / "L0" / "20240405")
         l0.obs_id = None
         assert QCL0(l0).not_junk() is True
 
-    def test_not_junk_malformed_csv_raises(self, tmp_path, monkeypatch):
-        """CSV without 'obs_id' column → raises ValueError."""
-        import pandas as pd
-
+    def test_not_junk_pass_unknown_dirname(self, tmp_path, monkeypatch):
+        """No source dir on the object → passes without consulting the list."""
         import kpfpipe.quality_control.qc_flags.level0 as mod
 
-        csv_path = tmp_path / "junk_observations.csv"
-        pd.DataFrame({"wrong_col": ["whatever"]}).to_csv(csv_path, index=False)
-        monkeypatch.setattr(mod, "_JUNK_CSV", csv_path)
+        def _boom(data_input):
+            raise AssertionError("load_junk_obs_ids must not be consulted")
 
+        monkeypatch.setattr(mod, "load_junk_obs_ids", _boom)
         l0 = _make_kpf0(tmp_path)
-        with pytest.raises(ValueError, match="obs_id"):
-            QCL0(l0).not_junk()
+        l0.dirname = None
+        assert QCL0(l0).not_junk() is True
 
     def test_not_junk_key_present(self):
         qc = QCL0.__dict__["not_junk"]

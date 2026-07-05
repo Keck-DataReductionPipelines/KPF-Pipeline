@@ -226,10 +226,14 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
         except ValueError as e:
             # e.g. a datecode dir with no FITS files -- skip it, don't abort.
             print(f"  warning: skipping night {dc}: {e}", flush=True)
-            return []
+            return [], 0
         is_object = df["IMTYPE"].astype(str).str.strip() == "Object"
         is_target = df["OBJECT"].astype(str).str.strip() == str(target)
-        return [get_obs_id(fn) for fn in df.loc[is_object & is_target, "FILENAME"]]
+        matched = df.loc[is_object & is_target]
+        # Drop observer-flagged junk frames (build_mini_database's ISJUNK).
+        good = matched.loc[~matched["ISJUNK"].astype(bool)]
+        n_junk = len(matched) - len(good)
+        return [get_obs_id(fn) for fn in good["FILENAME"]], n_junk
 
     print(
         f"scanning {len(nights)} night(s) for target {target} "
@@ -241,11 +245,12 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
         futures = {pool.submit(_scan_night, dc): dc for dc in nights}
         for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
             dc = futures[future]
-            hits = future.result()
+            hits, n_junk = future.result()
             obs_ids.extend(hits)
+            junk_note = f", {n_junk} junk skipped" if n_junk else ""
             print(
-                f"  [{i}/{len(nights)}] {dc}: {len(hits)} matching frame(s) "
-                f"(total {len(obs_ids)})",
+                f"  [{i}/{len(nights)}] {dc}: {len(hits)} matching frame(s)"
+                f"{junk_note} (total {len(obs_ids)})",
                 flush=True,
             )
 

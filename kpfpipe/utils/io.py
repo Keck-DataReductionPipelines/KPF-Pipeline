@@ -10,6 +10,7 @@ from astropy.io import fits
 
 from kpfpipe.utils.kpf import (
     get_datecode,
+    get_obs_id,
     get_seconds_since_j2000,
     get_timestamp,
     is_obs_id,
@@ -20,8 +21,9 @@ from kpfpipe.utils.kpf import (
 logger = logging.getLogger(__name__)
 
 _MINI_DB_KEYS = ["FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"]
-# Derived from the filename's KPF timestamp (which is UTC), not header keys.
-_MINI_DB_DERIVED_KEYS = ["UTC", "HST"]
+# Derived, not read from a header key: UTC/HST from the filename's KPF timestamp,
+# ISJUNK from the observer junk list (see load_junk_obs_ids).
+_MINI_DB_DERIVED_KEYS = ["UTC", "HST", "ISJUNK"]
 
 _OBJECT_MAP = {
     "bias": ["autocal-bias"],
@@ -35,6 +37,25 @@ _OBJECT_MAP = {
         "autocal-thar-all-midnight",
     ],
 }
+
+
+def load_junk_obs_ids(data_input):
+    """Set of observer-flagged junk obs_ids for a data tree.
+
+    "Junk" is a manual flag observers set at exposure time (e.g. the wrong
+    telescope settings): such a frame can pass every automated QC yet be
+    scientifically useless, so it must be excluded from masters and science. The
+    list is WMKO's ``{data_input}/reference/Junk_Observations_for_KPF.csv`` -- a
+    title line, then an ``observation_id`` header, then one obs_id per row (read
+    the same way as v2.12's ``kpf_processing_progress.py``). An absent file
+    yields the empty set, so exclusion becomes a no-op -- matching WMKO's rule
+    that a missing list means nothing is junk.
+    """
+    junk_csv = os.path.join(data_input, "reference", "Junk_Observations_for_KPF.csv")
+    if not os.path.isfile(junk_csv):
+        return set()
+    df = pd.read_csv(junk_csv, header=1)
+    return set(df.iloc[:, 0].astype(str).str.strip())
 
 
 def build_mini_database(data_dir, write=False):
@@ -62,10 +83,15 @@ def build_mini_database(data_dir, write=False):
         identifier, e.g. 'autocal-bias'), EXPTIME (requested exposure time
         [s]), ELAPSED (actual elapsed time [s]), UTC (observation time in
         universal time, taken from the KPF timestamp in the filename), and
-        HST (that same time converted to Hawaii Standard Time, UTC-10). Both
-        UTC and HST are KPF-format timestamp strings ('YYYYMMDD.SSSSS.FF').
-        Rows where a header key is missing are included with NaN for that
-        column and a warning is issued.
+        HST (that same time converted to Hawaii Standard Time, UTC-10), and
+        ISJUNK (bool: the frame is on the observer junk list, see
+        load_junk_obs_ids). Both UTC and HST are KPF-format timestamp strings
+        ('YYYYMMDD.SSSSS.FF'). Rows where a header key is missing are included
+        with NaN for that column and a warning is issued.
+
+        Junk rows are flagged (ISJUNK), not dropped, so callers keep them
+        visible; build_l0_file_lists(exclude_junk=True) does the actual
+        exclusion for master construction.
     """
     data_dir = os.path.normpath(data_dir)
     datecode = os.path.basename(data_dir)
@@ -75,6 +101,9 @@ def build_mini_database(data_dir, write=False):
 
     if not file_list:
         raise ValueError(f"No FITS files found in {data_dir}")
+
+    # data_dir is {root}/{level}/{datecode}; the junk list lives under {root}.
+    junk = load_junk_obs_ids(os.path.dirname(os.path.dirname(data_dir)))
 
     logger.info("scanning %d FITS headers in %s", len(file_list), data_dir)
     mini_db = {k: [] for k in _MINI_DB_KEYS + _MINI_DB_DERIVED_KEYS}
@@ -96,6 +125,7 @@ def build_mini_database(data_dir, write=False):
         utc = get_timestamp(fn)
         mini_db["UTC"].append(utc)
         mini_db["HST"].append(utc_to_hst(utc))
+        mini_db["ISJUNK"].append(get_obs_id(fn) in junk)
 
     df = pd.DataFrame(mini_db)
 
@@ -115,6 +145,7 @@ def build_l0_file_lists(
     cluster_gap_seconds=7200,
     merge_small_clusters=False,
     enforce_hst_midnight_boundary=True,
+    exclude_junk=True,
 ):
     """
     Return sorted file lists for all calibration clusters of the requested
@@ -123,7 +154,8 @@ def build_l0_file_lists(
     Exactly one of `data_dir` or `mini_db` must be provided. When `data_dir`
     is given, loads the mini database CSV if it exists, otherwise calls
     `build_mini_database` to scan headers and write it. When `mini_db` is
-    given, uses it directly to avoid redundant I/O. Filters by OBJECT, then
+    given, uses it directly to avoid redundant I/O. Drops observer-flagged junk
+    frames (unless `exclude_junk=False`), filters by OBJECT, then
     groups frames into clusters by detecting gaps larger than
     `cluster_gap_seconds` between consecutive timestamps. By default a cluster
     never spans two HST (Hawaii) calendar days: frames on either side of HST
@@ -164,6 +196,11 @@ def build_l0_file_lists(
         `cluster_gap_seconds` splits clusters, and any neighbor may be merged) --
         set this for darks, whose sparse sequences legitimately span the HST
         midnight of one observing night.
+    exclude_junk : bool, default True
+        Drop observer-flagged junk frames (the mini database's ISJUNK column)
+        before clustering, so they never enter a master stack. Rarely disabled.
+        Requires the ISJUNK column: a mini database built before ISJUNK existed
+        (a stale cached CSV) raises KeyError -- rebuild it.
 
     Returns
     -------
@@ -216,6 +253,9 @@ def build_l0_file_lists(
                 mini_db = build_mini_database(data_dir)
         else:
             mini_db = build_mini_database(data_dir)
+
+    if exclude_junk:
+        mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
 
     cal_df = mini_db[mini_db["OBJECT"].isin(_OBJECT_MAP[cal_type])]
 
