@@ -192,8 +192,9 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit):
 
     Enumerates the nights (datecode dirs) under {data_input}/L0, scans each one's
     PRIMARY headers via build_mini_database, and keeps the frames whose IMTYPE is
-    'Object' and whose OBJECT matches `target`. Every directory under L0 must be a
-    valid datecode -- an unexpected entry aborts the run (fail loudly, don't skip).
+    'Object' and whose OBJECT matches `target`. Non-datecode entries (backup dirs,
+    stray files, etc.) are skipped with a note; only valid datecode dirs in
+    [start, end] are processed.
     """
     l0_root = os.path.join(data_input, "L0")
     if not os.path.isdir(l0_root):
@@ -204,14 +205,14 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit):
         for e in sorted(os.listdir(l0_root))
         if os.path.isdir(os.path.join(l0_root, e))
     ]
-    invalid = [d for d in subdirs if not is_datecode(d)]
-    if invalid:
-        sys.exit(
-            f"error: non-datecode director(y/ies) under {l0_root}: "
-            f"{', '.join(invalid)} -- expected one datecode dir per night"
+    non_datecode = [d for d in subdirs if not is_datecode(d)]
+    if non_datecode:
+        print(
+            f"  note: ignoring {len(non_datecode)} non-datecode entr(y/ies) under "
+            f"{l0_root}: {', '.join(non_datecode)}"
         )
 
-    nights = [d for d in subdirs if start <= d <= end]
+    nights = [d for d in subdirs if is_datecode(d) and start <= d <= end]
     if not nights:
         sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
 
