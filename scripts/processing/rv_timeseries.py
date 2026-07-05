@@ -70,7 +70,9 @@ def parse_args(argv=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument(
-        "target", help="star id as it appears in the L0 OBJECT header, e.g. 10700"
+        "--target",
+        required=True,
+        help="star id as it appears in the L0 OBJECT header, e.g. 10700",
     )
     ap.add_argument(
         "--date_range",
