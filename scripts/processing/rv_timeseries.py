@@ -88,6 +88,17 @@ def parse_args(argv=None):
         help="skip reducing a frame that already has an L4 product on disk "
         "(default: reduce every frame)",
     )
+    ap.add_argument(
+        "--input_dir",
+        help="shorthand for --kpf_data_input (the L0 input root)",
+    )
+    ap.add_argument(
+        "--output_dir",
+        help="shorthand routing all outputs under one root: sets "
+        "--kpf_masters_output and --kpf_science_output to it, "
+        "--log_directory to {output_dir}/logs, and --plot_directory to "
+        "{output_dir}/QLP/timeseries",
+    )
     ap.add_argument("--kpf_data_input", help="override [DATA_DIRS] KPF_DATA_INPUT")
     ap.add_argument(
         "--kpf_masters_output", help="override [DATA_DIRS] KPF_MASTERS_OUTPUT"
@@ -102,7 +113,7 @@ def parse_args(argv=None):
         "reduction still runs but no plot is produced",
     )
     ap.add_argument(
-        "--group_intranight_obs",
+        "--group_bursts",
         action="store_true",
         help="combine all of a night's RVs into one point before plotting, via "
         "an RVERR-weighted average",
@@ -132,6 +143,25 @@ def parse_args(argv=None):
         ap.error("--file_limit must be >= 1")
     if args.jobs < 1:
         ap.error("--jobs must be >= 1")
+
+    # --input_dir / --output_dir are shorthands that populate the explicit
+    # dir overrides below; reject giving both a shorthand and its long form.
+    if args.input_dir:
+        if args.kpf_data_input:
+            ap.error("give either --input_dir or --kpf_data_input, not both")
+        args.kpf_data_input = args.input_dir
+    if args.output_dir:
+        routed = {
+            "kpf_masters_output": args.output_dir,
+            "kpf_science_output": args.output_dir,
+            "log_directory": os.path.join(args.output_dir, "logs"),
+            "plot_directory": os.path.join(args.output_dir, "QLP", "timeseries"),
+        }
+        clashes = [f"--{k}" for k in routed if getattr(args, k)]
+        if clashes:
+            ap.error(f"--output_dir conflicts with {', '.join(clashes)}")
+        for k, v in routed.items():
+            setattr(args, k, v)
     return args
 
 
@@ -445,7 +475,7 @@ def _group_by_night(times, rvs, errs, nights):
     return np.array(g_times), np.array(g_rvs), np.array(g_errs)
 
 
-def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group):
+def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group_bursts):
     """Write the RV timeseries plot.
 
     Plots delta-RV (m/s, relative to the median RV) vs. observation date, with
@@ -465,7 +495,7 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group):
 
     title = f"{target} RV timeseries"
     suffix = ""
-    if group:
+    if group_bursts:
         times, rvs, errs = _group_by_night(times, rvs, errs, nights)
         title += " (nightly weighted mean)"
         suffix = "_nightly"
@@ -613,7 +643,7 @@ def main(argv=None):
             obs_ids,
             science_output,
             args.plot_directory,
-            args.group_intranight_obs,
+            args.group_bursts,
         )
     else:
         print("no --plot_directory given; skipping RV timeseries plot")
