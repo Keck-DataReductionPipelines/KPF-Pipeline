@@ -199,12 +199,9 @@ def check_masters_exist(masters_output, datecodes):
         )
 
 
-# Live child recipe processes, so an interrupt can tear down the whole tree and
-# not just the foreground shell. Each child is its own session/process-group
-# leader (start_new_session=True), and this orchestrator is its sole owner: a
-# Ctrl+C (SIGINT) or `kill` (SIGTERM handled below) of the orchestrator kills
-# every in-flight child via os.killpg. `_interrupted` also stops the pool from
-# launching any not-yet-started job once teardown has begun.
+# Live child recipe processes. Each is its own session leader
+# (start_new_session=True); on interrupt the orchestrator kills every in-flight
+# child's group via os.killpg, and `_interrupted` stops the pool launching more.
 _live_procs = set()
 _live_lock = threading.Lock()
 _interrupted = threading.Event()
@@ -275,10 +272,8 @@ def _run_one(argv, timeout=None):
             _out, stderr = proc.communicate()  # reap the killed group
             return 124, f"timed out after {timeout}s; child process group killed"
         except BaseException:
-            # A KeyboardInterrupt (SIGINT/SIGTERM in the main thread, i.e. the
-            # serial canary) unwinds here before the finally removes proc from
-            # _live_procs -- kill the child now so it can't outlive us, since it
-            # is in its own session and would otherwise be untracked.
+            # KeyboardInterrupt during the serial canary unwinds here before the
+            # finally untracks proc -- kill the child now so it can't outlive us.
             _kill_group(proc)
             proc.communicate()  # best-effort reap
             raise
@@ -316,8 +311,6 @@ def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800):
     failures = []
     pool = None
     try:
-        # Canary: run the first unit alone to warm shared caches and surface
-        # config/env failures before fanning out. Fan out only if it passes.
         canary_tag, canary_argv = tasks[0]
         print(f"  [{label}] canary {canary_tag} (serial; warms shared caches)...")
         rc, stderr = _run_one(canary_argv, timeout=canary_timeout)
@@ -364,6 +357,18 @@ def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800):
     if failures:
         _report_failures(failures, log_dir)
         sys.exit(1)
+
+
+def _cli_task(unit, recipe, config, unit_flag, forward):
+    """Build a (tag, argv) task running one recipe `unit` via `python -m tools.cli`.
+
+    `unit` is the datecode (masters) or obs_id (science); `unit_flag` its CLI flag
+    (`-d`/`-o`); `forward` the resolved dir/log overrides appended to every
+    invocation. The tag is the unit itself, which the sentinel/log paths key on.
+    """
+    argv = [sys.executable, "-m", "tools.cli", "-r", recipe, "-c", config]
+    argv += [unit_flag, unit, *forward]
+    return unit, argv
 
 
 def _report_failures(failures, log_dir):
@@ -456,18 +461,14 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group):
 
 
 def main(argv=None):
-    # Route SIGTERM through the same KeyboardInterrupt path as Ctrl+C so both a
-    # terminal interrupt and an explicit `kill` tear down the child processes
-    # (see run_stage). Installed here, not at import, so importing this module
-    # (e.g. from tests) does not mutate signal handlers.
+    # Route SIGTERM through the KeyboardInterrupt path so `kill` tears down
+    # children like Ctrl+C (see run_stage). Here, not at import, so importing
+    # this module doesn't mutate signal handlers.
     signal.signal(signal.SIGTERM, _handle_termination_signal)
 
-    # Pin each recipe subprocess to single-threaded BLAS/OpenMP. We already run
-    # one process per CPU (`--jobs`), and numpy/scipy's OpenBLAS backend would
-    # otherwise spawn a full thread pool *inside each* -- jobs x cores threads,
-    # which thrashes and presents as a hang. setdefault so an explicit caller
-    # value wins; set here (after this module's numpy import) so it changes only
-    # the inherited env of the children, not our already-initialised numpy.
+    # Pin each recipe subprocess to single-threaded BLAS/OpenMP: we already run
+    # one process per CPU (`--jobs`), so an OpenBLAS pool inside each would be
+    # jobs x cores threads and thrash. setdefault lets an explicit caller win.
     for _var in (
         "OMP_NUM_THREADS",
         "OPENBLAS_NUM_THREADS",
@@ -480,13 +481,13 @@ def main(argv=None):
     args = parse_args(argv)
     start, end = args.date_range
 
-    # Resolve effective dirs: input/logs from the science config, masters-output
-    # from the masters config (where masters are written), each with any CLI
-    # override applied. Overrides are also forwarded verbatim to every subprocess.
-    data_input = (
-        args.kpf_data_input
-        or _dir_params(args.science_config, "DATA_DIRS")["KPF_DATA_INPUT"]
-    )
+    # Resolve effective dirs: input/science-output/logs from the science config,
+    # masters-output from the masters config (where masters are written), each
+    # with any CLI override applied. Overrides are also forwarded verbatim to
+    # every subprocess.
+    science_dirs = _dir_params(args.science_config, "DATA_DIRS")
+    data_input = args.kpf_data_input or science_dirs["KPF_DATA_INPUT"]
+    science_output = args.kpf_science_output or science_dirs["KPF_SCIENCE_OUTPUT"]
     masters_output = (
         args.kpf_masters_output
         or _dir_params(args.masters_config, "DATA_DIRS")["KPF_MASTERS_OUTPUT"]
@@ -496,14 +497,14 @@ def main(argv=None):
     )
 
     forward = []
-    if args.kpf_data_input:
-        forward += ["--data_input", args.kpf_data_input]
-    if args.kpf_masters_output:
-        forward += ["--data_masters", args.kpf_masters_output]
-    if args.kpf_science_output:
-        forward += ["--data_science", args.kpf_science_output]
-    if args.log_directory:
-        forward += ["--log_dir", args.log_directory]
+    for value, flag in (
+        (args.kpf_data_input, "--data_input"),
+        (args.kpf_masters_output, "--data_masters"),
+        (args.kpf_science_output, "--data_science"),
+        (args.log_directory, "--log_dir"),
+    ):
+        if value:
+            forward += [flag, value]
 
     # Steps 1-2: science frames -> unique nights.
     obs_ids = discover_science_obs_ids(
@@ -518,21 +519,7 @@ def main(argv=None):
     # Step 3: nightly masters (parallel across nights), or reuse existing.
     if args.reprocess_masters:
         tasks = [
-            (
-                dc,
-                [
-                    sys.executable,
-                    "-m",
-                    "tools.cli",
-                    "-r",
-                    _MASTERS_RECIPE,
-                    "-c",
-                    args.masters_config,
-                    "-d",
-                    dc,
-                    *forward,
-                ],
-            )
+            _cli_task(dc, _MASTERS_RECIPE, args.masters_config, "-d", forward)
             for dc in datecodes
         ]
         run_stage("masters", tasks, args.jobs, log_dir)
@@ -543,34 +530,13 @@ def main(argv=None):
     check_masters_exist(masters_output, datecodes)
     print("all required masters present")
 
-    # Step 4: science reduction (parallel across frames).
+    # Step 4: science reduction (parallel across frames; canary-then-fan-out).
     tasks = [
-        (
-            oid,
-            [
-                sys.executable,
-                "-m",
-                "tools.cli",
-                "-r",
-                _SCIENCE_RECIPE,
-                "-c",
-                args.science_config,
-                "-o",
-                oid,
-                *forward,
-            ],
-        )
+        _cli_task(oid, _SCIENCE_RECIPE, args.science_config, "-o", forward)
         for oid in obs_ids
     ]
-    # run_stage runs the first frame serially as a canary before fanning out --
-    # warming barycorrpy/IERS/matplotlib caches so the parallel jobs don't
-    # stampede a cold cache (and failing fast if the first frame is broken).
     run_stage("science", tasks, args.jobs, log_dir)
 
-    science_output = (
-        args.kpf_science_output
-        or _dir_params(args.science_config, "DATA_DIRS")["KPF_SCIENCE_OUTPUT"]
-    )
     print(
         f"\ndone: reduced {len(obs_ids)} frame(s); "
         f"L2/L4 products under {science_output}"
