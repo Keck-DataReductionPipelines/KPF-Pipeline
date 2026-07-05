@@ -30,6 +30,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import UTC, datetime
 
 import numpy as np
 from astropy.io import fits
@@ -115,8 +116,9 @@ def parse_args(argv=None):
     ap.add_argument(
         "--group_bursts",
         action="store_true",
-        help="combine all of a night's RVs into one point before plotting, via "
-        "an RVERR-weighted average",
+        help="combine each burst of rapid-succession frames into one "
+        "RVERR-weighted point before plotting; also writes a per-night panel "
+        "plot of the individual frames",
     )
     ap.add_argument(
         "--file_limit",
@@ -437,14 +439,15 @@ def _report_failures(failures, log_dir):
 
 
 def _read_l4_rv(obs_ids, science_output):
-    """Read (BJD_TDB, RV, RVERR) from each frame's L4 product.
+    """Read (BJD_TDB, RV, RVERR, datecode) from each frame's L4 product.
 
     RV and RVERR are km/s, BJDTDB is a Julian day -- all on the L4 PRIMARY header
-    (per the EPRV standard). Frames with a non-finite RV/RVERR are skipped with a
-    warning (a real reduction should not produce them, but we do not want one bad
-    point to blow up the plot).
+    (per the EPRV standard). The datecode (from the obs_id) labels each frame's
+    observing night for the per-night panels. Frames with a non-finite RV/RVERR
+    are skipped with a warning (a real reduction should not produce them, but we
+    do not want one bad point to blow up the plot).
     """
-    times, rvs, errs = [], [], []
+    times, rvs, errs, nights = [], [], [], []
     for oid in obs_ids:
         hdr = fits.getheader(build_filepath(oid, "L4", data_root=science_output), 0)
         vals = (hdr.get("BJDTDB"), hdr.get("RV"), hdr.get("RVERR"))
@@ -455,7 +458,8 @@ def _read_l4_rv(obs_ids, science_output):
         times.append(bjd)
         rvs.append(rv)
         errs.append(err)
-    return np.array(times), np.array(rvs), np.array(errs)
+        nights.append(get_datecode(oid))
+    return np.array(times), np.array(rvs), np.array(errs), np.array(nights)
 
 
 # Minimum gap separating one burst from the next. A bright-star burst is ~3-5
@@ -485,12 +489,96 @@ def _group_bursts(times, rvs, errs, gap_minutes=_BURST_GAP_MINUTES):
     return np.array(g_times), np.array(g_rvs), np.array(g_errs)
 
 
+def _stamp_provenance(fig):
+    """Footer with UT generation time + short git commit (quicklook-style)."""
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        commit = (
+            subprocess.run(
+                ["git", "-C", str(_REPO), "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout.strip()
+            or "unknown"
+        )
+    except (OSError, subprocess.SubprocessError):
+        commit = "unknown"
+    fig.text(
+        0.99,
+        0.005,
+        f"generated {now} UT · {commit}",
+        fontsize=8,
+        color="darkgray",
+        ha="right",
+        va="bottom",
+    )
+
+
+def _symmetric_ylim(ax):
+    """Set the y-limits symmetric about 0 (equal span above and below)."""
+    ymax = max(abs(v) for v in ax.get_ylim())
+    ax.set_ylim(-ymax, ymax)
+
+
+def plot_nightly_panels(target, times, rvs, errs, nights, plot_directory):
+    """Write a per-night multi-panel plot of the individual (ungrouped) frames.
+
+    One panel per observing night, delta-RV (m/s, about the overall median) vs.
+    minutes from that night's first frame, so within-night trends are visible.
+    Panels share a y-axis to keep nights comparable.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    drv = (rvs - np.median(rvs)) * 1e3
+    derr = errs * 1e3
+
+    unique = sorted(set(nights))
+    ncols = min(4, len(unique))
+    nrows = int(np.ceil(len(unique) / ncols))
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(3.3 * ncols, 2.7 * nrows), sharey=True, squeeze=False
+    )
+    for ax, night in zip(axes.flat, unique, strict=False):
+        sel = nights == night
+        minutes = (times[sel] - times[sel].min()) * 1440.0
+        o = np.argsort(minutes)
+        ax.axhline(0.0, color="0.6", lw=1, zorder=0)
+        ax.errorbar(
+            minutes[o], drv[sel][o], yerr=derr[sel][o], fmt="o", ms=4, capsize=2
+        )
+        ax.set_title(night, fontsize=9)
+        ax.grid(True, alpha=0.3)
+    for ax in axes.flat[len(unique) :]:
+        ax.set_visible(False)
+    _symmetric_ylim(axes.flat[0])  # sharey: one range applies to every panel
+
+    fig.supxlabel("Minutes from first frame of night")
+    fig.supylabel(r"$\Delta$RV [m/s]")
+    fig.suptitle(target)
+    fig.tight_layout()
+    _stamp_provenance(fig)
+    os.makedirs(plot_directory, exist_ok=True)
+    out_path = os.path.join(plot_directory, f"{target}_rv_nightly.png")
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    print(f"nightly panels plot -> {out_path}  ({len(unique)} night(s))")
+
+
 def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group_bursts):
     """Write the RV timeseries plot.
 
     Plots delta-RV (m/s, relative to the median RV) vs. observation date, with
     RVERR error bars, a zero reference line (the median), an RMS annotation, and
     calendar-date (YYYYMMDD) x tick labels derived from BJD_TDB.
+
+    When group_bursts is set, the individual frames are drawn as a faint grey
+    underlay and the burst-grouped means overplotted in colour on top; the
+    RV_RMS/RV_ERR annotation then reflects the burst means. It also writes the
+    per-night panel plot from the ungrouped frames (see plot_nightly_panels).
     """
     import matplotlib
 
@@ -499,28 +587,51 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group_bu
     from astropy.time import Time
     from matplotlib.ticker import FuncFormatter
 
-    times, rvs, errs = _read_l4_rv(obs_ids, science_output)
+    times, rvs, errs, nights = _read_l4_rv(obs_ids, science_output)
     if times.size == 0:
         sys.exit("error: no finite RV points to plot")
 
-    suffix = ""
-    if group_bursts:
-        times, rvs, errs = _group_bursts(times, rvs, errs)
-        suffix = "_bursts"
+    # Delta-RV about the median of the individual frames, in m/s (RV/RVERR are
+    # stored in km/s per EPRV). One reference for both layers keeps them aligned.
+    ref = np.median(rvs)
 
-    # Delta-RV about the median, in m/s (RV/RVERR are stored in km/s per EPRV).
-    drv = (rvs - np.median(rvs)) * 1e3
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.axhline(0.0, color="0.6", lw=1, zorder=0)  # zero = median RV, guides the eye
+
+    if group_bursts:
+        plot_nightly_panels(target, times, rvs, errs, nights, plot_directory)
+        # Faint grey underlay: the individual (ungrouped) frames for context.
+        g_order = np.argsort(times)
+        ax.errorbar(
+            times[g_order],
+            ((rvs - ref) * 1e3)[g_order],
+            yerr=(errs * 1e3)[g_order],
+            fmt="o",
+            ms=4,
+            color="0.6",
+            alpha=0.5,
+            zorder=1,
+            label="individual frames",
+        )
+        times, rvs, errs = _group_bursts(times, rvs, errs)
+
+    drv = (rvs - ref) * 1e3
     derr = errs * 1e3
     rms = np.sqrt(np.mean(drv**2))
     med_err = np.median(derr)  # median per-point photon uncertainty
 
     order = np.argsort(times)
     os.makedirs(plot_directory, exist_ok=True)
-    out_path = os.path.join(plot_directory, f"{target}_rv_timeseries{suffix}.png")
+    out_path = os.path.join(plot_directory, f"{target}_rv_timeseries.png")
 
-    fig, ax = plt.subplots(figsize=(9, 5))
-    ax.axhline(0.0, color="0.6", lw=1, zorder=0)  # zero = median RV, guides the eye
-    ax.errorbar(times[order], drv[order], yerr=derr[order], fmt="o", capsize=3)
+    # Foreground series (burst means when grouping, else the frames): larger,
+    # black-outlined markers so they stand out over the grey underlay.
+    fg_kw = dict(fmt="o", capsize=3, zorder=2)
+    if group_bursts:
+        fg_kw.update(ms=8, mec="black", mew=0.8, label="burst mean")
+    ax.errorbar(times[order], drv[order], yerr=derr[order], **fg_kw)
+    if group_bursts:
+        ax.legend(loc="upper right", fontsize=8)
 
     # Relabel the BJD_TDB axis with human-readable calendar dates (YYYYMMDD); the
     # TDB-vs-UTC offset (~seconds) is irrelevant at day granularity.
@@ -543,7 +654,9 @@ def plot_rv_timeseries(target, obs_ids, science_output, plot_directory, group_bu
         bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.8),
     )
     ax.grid(True, alpha=0.3)
+    _symmetric_ylim(ax)
     fig.tight_layout()
+    _stamp_provenance(fig)
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(
