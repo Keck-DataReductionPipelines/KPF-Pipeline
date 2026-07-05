@@ -221,7 +221,12 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
     # GIL during I/O). Emit a per-night heartbeat, in completion order, since the
     # scan is otherwise silent.
     def _scan_night(dc):
-        df = build_mini_database(os.path.join(l0_root, dc))
+        try:
+            df = build_mini_database(os.path.join(l0_root, dc))
+        except ValueError as e:
+            # e.g. a datecode dir with no FITS files -- skip it, don't abort.
+            print(f"  warning: skipping night {dc}: {e}", flush=True)
+            return []
         is_object = df["IMTYPE"].astype(str).str.strip() == "Object"
         is_target = df["OBJECT"].astype(str).str.strip() == str(target)
         return [get_obs_id(fn) for fn in df.loc[is_object & is_target, "FILENAME"]]
