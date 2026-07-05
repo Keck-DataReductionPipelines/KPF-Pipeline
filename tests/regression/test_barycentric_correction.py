@@ -308,16 +308,49 @@ class TestFluxWeightedMidpointExpmeter:
         assert w.shape == (len(_WAVE_COLS),)
         assert len(t_fwm) == len(_WAVE_COLS)
 
-    def test_negative_flux_raises(self, synthetic_kpf2, monkeypatch):
+    def test_small_negative_flux_preserved(self, synthetic_kpf2, monkeypatch):
+        """Small negative fluctuations (background-subtraction noise near zero
+        flux) are preserved with their real weight, not floored: flooring would
+        bias the flux-weighted midpoint. Only a non-positive *channel total*
+        raises (the meaningful guard); a single negative sample does not."""
+
         def mock_flux(self):
             w = np.array([float(c) for c in _WAVE_COLS])
-            return w, np.full((3, len(_WAVE_COLS)), -1.0)
+            f = np.full((3, len(_WAVE_COLS)), 100.0)
+            f[0, 0] = -20.0  # one small negative; channel total stays positive (+180)
+            return w, f
 
         monkeypatch.setattr(BarycentricCorrection, "_get_normalized_flux", mock_flux)
 
         bc = BarycentricCorrection(synthetic_kpf2)
-        with pytest.raises(ValueError, match="negative"):
-            bc.compute_flux_weighted_midpoint_times(output="expmeter")
+        _, t_mid, _ = bc._get_timestamps()
+        _, t_fwm = bc.compute_flux_weighted_midpoint_times(
+            output="expmeter",
+            interpolate=False,
+            extrapolate=False,
+            fix_expmeter_outliers=False,
+        )
+
+        # Compare midpoints as seconds from the first reading: JD magnitudes
+        # (~2.46e6) make any relative tolerance meaningless, so reduce to O(100 s)
+        # offsets where absolute tolerances actually mean what they say.
+        f0 = np.array([-20.0, 100.0, 100.0])  # channel 0 carries the negative sample
+        floored = np.clip(f0, 0.0, None)
+        ref = t_mid.jd[0]
+
+        def offset_seconds(weights):
+            return (np.sum(t_mid.jd * weights) / np.sum(weights) - ref) * 86400.0
+
+        actual_s = (t_fwm.jd[0] - ref) * 86400.0
+        expected_s = offset_seconds(f0)  # negative-preserving weighting
+        floored_s = offset_seconds(floored)  # what flooring to zero would give
+
+        assert np.isfinite(actual_s)
+        # Matches the exact negative-preserving midpoint to <1 ms...
+        np.testing.assert_allclose(actual_s, expected_s, atol=1e-3)
+        # ...and is unambiguously not the floored result (the two differ by the
+        # negative sample's ~20 s pull on the earliest reading).
+        assert abs(actual_s - floored_s) > 1.0
 
     def test_zero_flux_channel_raises(self, synthetic_kpf2):
         """A channel with zero flux across all readings → 0/0 midpoint; fail loudly."""

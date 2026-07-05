@@ -312,9 +312,6 @@ class BarycentricCorrection:
         t_beg, t_mid, t_end = self._get_timestamps()
         w_em, f = self._get_normalized_flux()
 
-        if np.any(f < 0):
-            raise ValueError("negative exposure meter flux values detected")
-
         if fix_expmeter_outliers:
             f = self._fix_expmeter_outliers(f)
 
