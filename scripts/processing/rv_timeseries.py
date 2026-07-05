@@ -77,11 +77,16 @@ def parse_args(argv=None):
         help="science recipe TOML (default: configs/kpf_drp_science.toml)",
     )
     ap.add_argument(
-        "--reprocess_masters",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="rebuild masters for every night in range (default: on; pass "
-        "--no-reprocess_masters to reuse masters already on disk)",
+        "--skip_existing_masters",
+        action="store_true",
+        help="skip building a night's masters when all of its required masters "
+        "already exist on disk (default: rebuild every night)",
+    )
+    ap.add_argument(
+        "--skip_existing_science",
+        action="store_true",
+        help="skip reducing a frame that already has an L4 product on disk "
+        "(default: reduce every frame)",
     )
     ap.add_argument("--kpf_data_input", help="override [DATA_DIRS] KPF_DATA_INPUT")
     ap.add_argument(
@@ -185,18 +190,32 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit):
     return obs_ids
 
 
+def _missing_masters(masters_output, datecode):
+    """Required (cal_type, level) masters absent for `datecode` (empty == complete)."""
+    return [
+        (cal_type, level)
+        for cal_type, level in _REQUIRED_MASTERS
+        if not glob.glob(glob_masters(masters_output, cal_type, level, datecode))
+    ]
+
+
 def check_masters_exist(masters_output, datecodes):
     """Abort unless every required master exists for every night in `datecodes`."""
-    missing = []
-    for dc in datecodes:
-        for cal_type, level in _REQUIRED_MASTERS:
-            if not glob.glob(glob_masters(masters_output, cal_type, level, dc)):
-                missing.append(f"  {dc}: missing {cal_type} {level} master")
+    missing = [
+        f"  {dc}: missing {cal_type} {level} master"
+        for dc in datecodes
+        for cal_type, level in _missing_masters(masters_output, dc)
+    ]
     if missing:
         sys.exit(
             "error: required masters missing (aborting before science)\n"
             + "\n".join(missing)
         )
+
+
+def _science_complete(obs_id, science_output):
+    """True if the frame's L4 product already exists (reduced to completion)."""
+    return os.path.exists(build_filepath(obs_id, "L4", data_root=science_output))
 
 
 # Live child recipe processes. Each is its own session leader
@@ -516,24 +535,37 @@ def main(argv=None):
         f"{len(datecodes)} night(s) [{start}..{end}]"
     )
 
-    # Step 3: nightly masters (parallel across nights), or reuse existing.
-    if args.reprocess_masters:
-        tasks = [
-            _cli_task(dc, _MASTERS_RECIPE, args.masters_config, "-d", forward)
-            for dc in datecodes
-        ]
-        run_stage("masters", tasks, args.jobs, log_dir)
-    else:
-        print("reusing existing masters on disk (--reprocess_masters not set)")
+    # Step 3: nightly masters (parallel across nights). Build every night by
+    # default; with --skip_existing_masters, skip a night only when all of its
+    # required masters are already on disk.
+    masters_todo = datecodes
+    if args.skip_existing_masters:
+        masters_todo = [dc for dc in datecodes if _missing_masters(masters_output, dc)]
+        skipped = len(datecodes) - len(masters_todo)
+        if skipped:
+            print(f"skipping masters for {skipped} night(s) already complete on disk")
+    tasks = [
+        _cli_task(dc, _MASTERS_RECIPE, args.masters_config, "-d", forward)
+        for dc in masters_todo
+    ]
+    run_stage("masters", tasks, args.jobs, log_dir)
 
     # Gate: never start science if any required master is missing.
     check_masters_exist(masters_output, datecodes)
     print("all required masters present")
 
     # Step 4: science reduction (parallel across frames; canary-then-fan-out).
+    # Reduce every frame by default; with --skip_existing_science, skip frames
+    # that already have an L4 product (reduced to completion).
+    science_todo = obs_ids
+    if args.skip_existing_science:
+        science_todo = [o for o in obs_ids if not _science_complete(o, science_output)]
+        skipped = len(obs_ids) - len(science_todo)
+        if skipped:
+            print(f"skipping {skipped} science frame(s) already reduced to L4")
     tasks = [
         _cli_task(oid, _SCIENCE_RECIPE, args.science_config, "-o", forward)
-        for oid in obs_ids
+        for oid in science_todo
     ]
     run_stage("science", tasks, args.jobs, log_dir)
 
