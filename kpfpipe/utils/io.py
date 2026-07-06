@@ -302,48 +302,9 @@ class FileHandler:
         clusters.sort(key=lambda c: get_seconds_since_j2000(c[0]))
 
         if merge_small_clusters:
-            # Fold each undersized cluster (smallest first) into its nearer
-            # chronological neighbor. When the HST-midnight boundary is enforced
-            # the neighbor must share the HST day (so a master never spans HST
-            # midnight), and a cluster with no same-day neighbor is dropped;
-            # otherwise any adjacent cluster is eligible.
-            while len(clusters) > 1 and any(len(c) < min_file_count for c in clusters):
-                i = min(
-                    (k for k, c in enumerate(clusters) if len(c) < min_file_count),
-                    key=lambda k: len(clusters[k]),
-                )
-                day_i = hst_day[clusters[i][0]]
-                # A neighbor is eligible when the midnight boundary is off, or when
-                # it shares cluster i's HST day.
-                prev_ok = i > 0 and (
-                    not enforce_hst_midnight_boundary
-                    or hst_day[clusters[i - 1][0]] == day_i
-                )
-                next_ok = i < len(clusters) - 1 and (
-                    not enforce_hst_midnight_boundary
-                    or hst_day[clusters[i + 1][0]] == day_i
-                )
-                prev_gap = (
-                    get_seconds_since_j2000(clusters[i][0])
-                    - get_seconds_since_j2000(clusters[i - 1][-1])
-                    if prev_ok
-                    else float("inf")
-                )
-                next_gap = (
-                    get_seconds_since_j2000(clusters[i + 1][0])
-                    - get_seconds_since_j2000(clusters[i][-1])
-                    if next_ok
-                    else float("inf")
-                )
-                if prev_gap == float("inf") and next_gap == float("inf"):
-                    clusters.pop(i)
-                    continue
-                j = i - 1 if prev_gap <= next_gap else i + 1
-                merged = sorted(clusters[i] + clusters[j], key=get_seconds_since_j2000)
-                for idx in sorted((i, j), reverse=True):
-                    clusters.pop(idx)
-                clusters.append(merged)
-            clusters.sort(key=lambda c: get_seconds_since_j2000(c[0]))
+            clusters = self._merge_undersized_clusters(
+                clusters, hst_day, min_file_count, enforce_hst_midnight_boundary
+            )
         else:
             # Drop undersized clusters; one usable cluster is enough.
             clusters = [c for c in clusters if len(c) >= min_file_count]
@@ -360,6 +321,76 @@ class FileHandler:
             len(clusters),
             [len(c) for c in clusters],
         )
+        return clusters
+
+    def _merge_undersized_clusters(
+        self, clusters, hst_day, min_file_count, enforce_hst_midnight_boundary
+    ):
+        """
+        Fold each undersized cluster into its nearer chronological neighbor.
+
+        Repeatedly takes the smallest cluster below `min_file_count` and merges
+        it into whichever adjacent cluster is nearer in time, until every
+        remaining cluster meets the threshold (or none can grow). When the
+        HST-midnight boundary is enforced the neighbor must share the cluster's
+        HST day (so a master never spans HST midnight), and a cluster with no
+        same-day neighbor is dropped; otherwise any adjacent cluster is
+        eligible. The input list is not modified.
+
+        Parameters
+        ----------
+        clusters : list of list of str
+            Chronologically-sorted clusters, each a list of filenames.
+        hst_day : dict
+            Maps each filename to its HST calendar day ('YYYYMMDD').
+        min_file_count : int
+            Frames a cluster must have to be kept as-is.
+        enforce_hst_midnight_boundary : bool
+            If True, merge only into same-HST-day neighbors.
+
+        Returns
+        -------
+        list of list of str
+            The merged clusters, sorted chronologically by first frame.
+        """
+        clusters = list(clusters)
+        while len(clusters) > 1 and any(len(c) < min_file_count for c in clusters):
+            i = min(
+                (k for k, c in enumerate(clusters) if len(c) < min_file_count),
+                key=lambda k: len(clusters[k]),
+            )
+            day_i = hst_day[clusters[i][0]]
+            # A neighbor is eligible when the midnight boundary is off, or when
+            # it shares cluster i's HST day.
+            prev_ok = i > 0 and (
+                not enforce_hst_midnight_boundary
+                or hst_day[clusters[i - 1][0]] == day_i
+            )
+            next_ok = i < len(clusters) - 1 and (
+                not enforce_hst_midnight_boundary
+                or hst_day[clusters[i + 1][0]] == day_i
+            )
+            prev_gap = (
+                get_seconds_since_j2000(clusters[i][0])
+                - get_seconds_since_j2000(clusters[i - 1][-1])
+                if prev_ok
+                else float("inf")
+            )
+            next_gap = (
+                get_seconds_since_j2000(clusters[i + 1][0])
+                - get_seconds_since_j2000(clusters[i][-1])
+                if next_ok
+                else float("inf")
+            )
+            if prev_gap == float("inf") and next_gap == float("inf"):
+                clusters.pop(i)
+                continue
+            j = i - 1 if prev_gap <= next_gap else i + 1
+            merged = sorted(clusters[i] + clusters[j], key=get_seconds_since_j2000)
+            for idx in sorted((i, j), reverse=True):
+                clusters.pop(idx)
+            clusters.append(merged)
+        clusters.sort(key=lambda c: get_seconds_since_j2000(c[0]))
         return clusters
 
     def find_masters(self, cal_type, level, datecode):
