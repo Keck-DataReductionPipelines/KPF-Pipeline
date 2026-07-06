@@ -80,6 +80,10 @@ def is_timestamp(s):
     """
     Return True if `s` is a valid KPF timestamp, e.g. '20240113.23249.10'.
     Both the format and the embedded date/seconds are checked.
+
+    Completes the `is_obs_id` / `is_datecode` / `is_timestamp` validator triple.
+    Deliberately retained for a symmetric validation surface even though only
+    the other two have call sites today.
     """
     try:
         _validate_kpf_timestamp(s)
@@ -237,6 +241,12 @@ def utc_to_hst(timestamp):
 def hst_to_utc(timestamp):
     """
     Convert a KPF HST timestamp to UTC.
+
+    The inverse of `utc_to_hst`, deliberately retained as its symmetric
+    counterpart so the UTC<->HST conversion is a complete pair. The pipeline
+    currently only calls `utc_to_hst` (the data tree is UTC-keyed, so
+    conversion runs UTC->HST); this direction backs round-trip tests and any
+    future HST-keyed input.
 
     Parameters
     ----------

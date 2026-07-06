@@ -227,6 +227,21 @@ class StageName:
   (`count_amplifiers`, `orient_channels`) and the public `RN_KEYS` read-noise table are
   owned by `ImageAssembly`; other layers import them. Reusable stats/validation live in
   `kpfpipe/utils/` and are imported, never re-implemented (the project's **utils-first** rule).
+- **A util should earn its place with a consumer — with two documented exceptions.** Default
+  to YAGNI: don't add a `utils/` helper before something calls it. Two categories may be kept
+  without a production call site, and **each such function must say so in its docstring** (a
+  short sentence naming why it's retained) so it reads as deliberate, not dead code:
+  - **Symmetric-completeness helpers** — the unused half of an inverse pair or the missing
+    member of a validator set, kept so the API surface is whole. Examples: `hst_to_utc`
+    (inverse of the used `utc_to_hst`), `is_timestamp` (completes the
+    `is_obs_id`/`is_datecode`/`is_timestamp` triple).
+  - **Staged-ahead helpers** — a self-contained routine written for imminent work and already
+    covered by tests, ahead of its first pipeline call site. Example: `air_to_vac` (retained
+    for the forthcoming vacuum-wavelength wiring, already a wavelength-cal test oracle).
+
+  Both are exempt from "delete if unused"; anything else unused is dead code and should go.
+  The docstring note is the machine-invisible signal a linter can't infer — without it, a
+  future reader (or a dead-code sweep) can't tell an intentional keep from an oversight.
 - **Deferred (in-function) imports are acceptable and used deliberately** in tests and
   occasionally to break import-cost/cycles — when you do it, add a one-line comment
   saying why.
