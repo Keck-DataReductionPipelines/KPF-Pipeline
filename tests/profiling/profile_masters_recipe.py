@@ -41,11 +41,11 @@ def _load_recipe():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     # Widen the cluster gap so the bundled darks group into one stackable cluster.
-    # build_l0_file_lists is a FileHandler staticmethod; wrap the class attribute
-    # the recipe resolves through.
+    # build_l0_file_lists is a FileHandler instance method; wrap the class
+    # attribute the recipe resolves through (partialmethod re-binds self).
     original = module.FileHandler.build_l0_file_lists
-    module.FileHandler.build_l0_file_lists = staticmethod(
-        functools.partial(original, cluster_gap_seconds=P.MASTERS_CLUSTER_GAP_SECONDS)
+    module.FileHandler.build_l0_file_lists = functools.partialmethod(
+        original, cluster_gap_seconds=P.MASTERS_CLUSTER_GAP_SECONDS
     )
     return module
 

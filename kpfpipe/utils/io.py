@@ -89,15 +89,19 @@ class FileHandler:
 
         self._data_input = params.get("KPF_DATA_INPUT")
         self._masters_output = params.get("KPF_MASTERS_OUTPUT")
+        self._mini_db = None  # the loaded night, set by build_mini_database
 
     def build_mini_database(self, datecode):
         """
-        Scan the PRIMARY header of every L0 FITS file for one observing night
-        and return a DataFrame of the frame-selection keys.
+        Scan the PRIMARY header of every L0 FITS file for one observing night,
+        cache the resulting DataFrame on the instance, and return it.
 
         Reads ``{KPF_DATA_INPUT}/L0/{datecode}/*.fits`` fresh on every call (no
         on-disk cache). The extracted keys drive frame selection -- e.g.
-        filtering by OBJECT to identify bias, dark, flat, or thar frames.
+        filtering by OBJECT to identify bias, dark, flat, or thar frames. The
+        result is stored as ``self._mini_db`` so a subsequent
+        ``build_l0_file_lists`` needs no arguments beyond the calibration type;
+        callers rarely need the return value directly.
 
         Parameters
         ----------
@@ -121,7 +125,8 @@ class FileHandler:
 
             Junk rows are flagged (ISJUNK), not dropped, so callers keep them
             visible; build_l0_file_lists(exclude_junk=True) does the actual
-            exclusion for master construction.
+            exclusion for master construction. The same DataFrame is cached on
+            ``self._mini_db``.
 
         Raises
         ------
@@ -160,13 +165,14 @@ class FileHandler:
             mini_db["HST"].append(utc_to_hst(utc))
             mini_db["ISJUNK"].append(get_obs_id(fn) in junk)
 
-        return pd.DataFrame(mini_db)
+        self._mini_db = pd.DataFrame(mini_db)
+        return self._mini_db
 
-    @staticmethod
     def build_l0_file_lists(
+        self,
         cal_type,
-        mini_db,
         *,
+        mini_db=None,
         min_file_count=5,
         cluster_gap_seconds=7200,
         merge_small_clusters=False,
@@ -175,7 +181,7 @@ class FileHandler:
     ):
         """
         Return sorted file lists for all calibration clusters of the requested
-        type, grouped from a mini database.
+        type, grouped from the loaded mini database.
 
         Drops observer-flagged junk frames (unless `exclude_junk=False`), filters
         by OBJECT, then groups frames into clusters by detecting gaps larger than
@@ -189,15 +195,17 @@ class FileHandler:
         `merge_small_clusters`) folded into a neighbor. Raises only when no cluster
         meets the threshold.
 
-        Pure over its inputs -- no file I/O -- hence a staticmethod; obtain the
-        mini database from `FileHandler.build_mini_database`.
+        Clusters the mini database carried on the instance (from a prior
+        `build_mini_database`), so the recipe never handles the DataFrame itself.
 
         Parameters
         ----------
         cal_type : str
             Calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
-        mini_db : pandas.DataFrame
-            DataFrame returned by `build_mini_database`.
+        mini_db : pandas.DataFrame, optional
+            Mini database to cluster. Defaults to ``self._mini_db`` (set by
+            `build_mini_database`); pass one explicitly only to cluster a
+            DataFrame the handler did not build.
         min_file_count : int, default 5
             Minimum number of files required per cluster.
         cluster_gap_seconds : int, default 7200
@@ -231,13 +239,22 @@ class FileHandler:
         Raises
         ------
         ValueError
-            If `cal_type` is not a recognized calibration type, if no calibration
+            If `cal_type` is not a recognized calibration type, if no mini
+            database is available (none loaded and none passed), if no calibration
             frames of the requested type are found, or if no cluster meets
             `min_file_count`.
         """
         if cal_type not in _OBJECT_MAP:
             raise ValueError(
                 f"cal_type must be one of {list(_OBJECT_MAP.keys())}; got '{cal_type}'"
+            )
+
+        if mini_db is None:
+            mini_db = self._mini_db
+        if mini_db is None:
+            raise ValueError(
+                "no mini database available; call build_mini_database(datecode) "
+                "first (or pass mini_db=)"
             )
 
         if exclude_junk:

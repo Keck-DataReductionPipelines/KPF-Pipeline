@@ -221,9 +221,9 @@ def masters_l0_files(imtype):
     from kpfpipe.utils.io import FileHandler
 
     file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
-    mini_db = file_handler.build_mini_database(MASTERS_DATECODE)
-    return FileHandler.build_l0_file_lists(
-        imtype, mini_db, cluster_gap_seconds=MASTERS_CLUSTER_GAP_SECONDS
+    file_handler.build_mini_database(MASTERS_DATECODE)
+    return file_handler.build_l0_file_lists(
+        imtype, cluster_gap_seconds=MASTERS_CLUSTER_GAP_SECONDS
     )[0]
 
 

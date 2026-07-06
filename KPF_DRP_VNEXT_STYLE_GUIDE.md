@@ -261,8 +261,12 @@ class StageName:
   per-call tunables: it takes `config=None` alone, resolves only the roots it needs
   (`config.get_params(["DATA_DIRS"])`), stores them as private attributes, and
   **omits the `_DEFAULTS` setattr loop** when there is nothing tunable to surface
-  (every knob stays a per-call method argument). Pure per-call logic on such a
-  handler (e.g. clustering a mini database) is a `@staticmethod`.
+  (every clustering knob stays a per-call method argument). Such a handler may also
+  carry loaded working state so callers never thread an intermediate product:
+  `FileHandler.build_mini_database` caches the night's DataFrame on `self._mini_db`,
+  which `build_l0_file_lists` reads by default (an explicit `mini_db=` arg overrides
+  it, per the "`None` means use `self`" rule), so the recipe passes a datecode once
+  and the mini database is never surfaced.
 - **Defaults live in the module, not the config file.** Resolution is a three-tier
   override chain, lowest precedence first: `_DEFAULTS` (the in-module default) → config
   (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword

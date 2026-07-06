@@ -161,57 +161,66 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
 # ---------------------------------------------------------------------------
 
 
+def _cluster(cal_type, mini_db, **kwargs):
+    """Cluster a synthetic mini_db through the (instance-method) API.
+
+    build_l0_file_lists reads the handler's carried mini database by default;
+    these logic tests pass a synthetic one via ``mini_db=`` on a bare handler.
+    """
+    return FileHandler().build_l0_file_lists(cal_type, mini_db=mini_db, **kwargs)
+
+
 class TestBuildL0FileLists:
-    """Clustering is pure over a mini database, so these exercise the
-    ``@staticmethod`` directly with synthetic DataFrames (no files on disk)."""
+    """Clustering depends only on the mini database, so these exercise it with
+    synthetic DataFrames (no files on disk) via the ``mini_db=`` override."""
 
     def test_two_bias_clusters_returned_separately(self):
-        lists = FileHandler.build_l0_file_lists("bias", _make_mini_db())
+        lists = _cluster("bias", _make_mini_db())
         assert len(lists) == 2
 
     def test_bias_cluster_a_files(self):
-        lists = FileHandler.build_l0_file_lists("bias", _make_mini_db())
+        lists = _cluster("bias", _make_mini_db())
         assert lists[0] == sorted(_BIAS_A)
 
     def test_bias_cluster_b_files(self):
-        lists = FileHandler.build_l0_file_lists("bias", _make_mini_db())
+        lists = _cluster("bias", _make_mini_db())
         assert lists[1] == sorted(_BIAS_B)
 
     def test_files_are_sorted(self):
-        for lst in FileHandler.build_l0_file_lists("bias", _make_mini_db()):
+        for lst in _cluster("bias", _make_mini_db()):
             assert lst == sorted(lst)
 
     def test_raises_when_no_cluster_meets_min(self):
         # min_file_count=6: both bias clusters (5 files each) fall below and are
         # dropped, leaving nothing → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            FileHandler.build_l0_file_lists("bias", _make_mini_db(), min_file_count=6)
+            _cluster("bias", _make_mini_db(), min_file_count=6)
 
     def test_raises_when_no_frames_found(self):
         with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
-            FileHandler.build_l0_file_lists("flat", _make_mini_db())
+            _cluster("flat", _make_mini_db())
 
     def test_raises_when_only_cluster_below_default_min(self):
         # dark cluster has only 3 files; default min_file_count=5 → dropped →
         # raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            FileHandler.build_l0_file_lists("dark", _make_mini_db())
+            _cluster("dark", _make_mini_db())
 
     def test_drops_small_cluster_keeps_large(self):
         db, _ = _mixed_bias_db()
-        lists = FileHandler.build_l0_file_lists("bias", db)
+        lists = _cluster("bias", db)
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_A)
 
     def test_merge_folds_small_into_neighbor(self):
         db, small = _mixed_bias_db()
-        lists = FileHandler.build_l0_file_lists("bias", db, merge_small_clusters=True)
+        lists = _cluster("bias", db, merge_small_clusters=True)
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_A + small)
 
     def test_merge_combines_two_small_clusters(self):
         # Two 5-file bias clusters, each below min=6; merged into one of 10.
-        lists = FileHandler.build_l0_file_lists(
+        lists = _cluster(
             "bias", _make_mini_db(), min_file_count=6, merge_small_clusters=True
         )
         assert len(lists) == 1
@@ -221,15 +230,13 @@ class TestBuildL0FileLists:
         # 7 bias files total (5 + 2); merging cannot reach min=8 → raises.
         db, _ = _mixed_bias_db()
         with pytest.raises(ValueError, match="no cluster with at least"):
-            FileHandler.build_l0_file_lists(
-                "bias", db, min_file_count=8, merge_small_clusters=True
-            )
+            _cluster("bias", db, min_file_count=8, merge_small_clusters=True)
 
     def test_hst_midnight_splits_cluster(self):
         # Same-OBJECT frames <gap apart but on opposite sides of HST midnight
         # (UTC 36000) must not share a cluster.
         db, before, after = _midnight_bias_db()
-        lists = FileHandler.build_l0_file_lists("bias", db, min_file_count=5)
+        lists = _cluster("bias", db, min_file_count=5)
         assert len(lists) == 2
         assert lists[0] == sorted(before)
         assert lists[1] == sorted(after)
@@ -238,9 +245,7 @@ class TestBuildL0FileLists:
         # A small post-midnight cluster has no same-HST-day neighbor, so it is
         # dropped rather than merged across midnight into the pre-midnight one.
         db, before, _ = _midnight_bias_db(n_before=5, n_after=2)
-        lists = FileHandler.build_l0_file_lists(
-            "bias", db, min_file_count=5, merge_small_clusters=True
-        )
+        lists = _cluster("bias", db, min_file_count=5, merge_small_clusters=True)
         assert len(lists) == 1
         assert lists[0] == sorted(before)
 
@@ -248,7 +253,7 @@ class TestBuildL0FileLists:
         # With enforce_hst_midnight_boundary=False, frames <gap apart across HST
         # midnight stay in one cluster (only cluster_gap_seconds can split them).
         db, before, after = _midnight_bias_db()
-        lists = FileHandler.build_l0_file_lists(
+        lists = _cluster(
             "bias",
             db,
             min_file_count=5,
@@ -263,10 +268,8 @@ class TestBuildL0FileLists:
         # they merge into one cluster that meets the threshold.
         db, before, after = _cross_midnight_gap_db()
         with pytest.raises(ValueError, match="no cluster with at least"):
-            FileHandler.build_l0_file_lists(
-                "dark", db, min_file_count=3, merge_small_clusters=True
-            )
-        lists = FileHandler.build_l0_file_lists(
+            _cluster("dark", db, min_file_count=3, merge_small_clusters=True)
+        lists = _cluster(
             "dark",
             db,
             min_file_count=3,
@@ -278,20 +281,20 @@ class TestBuildL0FileLists:
 
     def test_invalid_imtype_raises(self):
         with pytest.raises(ValueError, match="cal_type must be one of"):
-            FileHandler.build_l0_file_lists("bogus", _make_mini_db())
+            _cluster("bogus", _make_mini_db())
 
     def test_thar_returns_two_clusters(self):
         # Morning and evening ThArs have different OBJECT suffixes and are >2hr
         # apart; each forms its own cluster.
-        lists = FileHandler.build_l0_file_lists("thar", _make_mini_db())
+        lists = _cluster("thar", _make_mini_db())
         assert len(lists) == 2
 
     def test_thar_morn_cluster(self):
-        lists = FileHandler.build_l0_file_lists("thar", _make_mini_db())
+        lists = _cluster("thar", _make_mini_db())
         assert lists[0] == sorted(_THAR_MORN)
 
     def test_thar_eve_cluster(self):
-        lists = FileHandler.build_l0_file_lists("thar", _make_mini_db())
+        lists = _cluster("thar", _make_mini_db())
         assert lists[1] == sorted(_THAR_EVE)
 
 
@@ -303,42 +306,43 @@ class TestBuildL0FileLists:
 @pytest.mark.slow
 class TestBuildL0FileListsRealData:
     @pytest.fixture(scope="class")
-    def mini_db(self):
-        return FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)}).build_mini_database(
-            "20240405"
-        )
+    def fh(self):
+        # A handler with the night loaded — the recipe's usage pattern.
+        handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
+        handler.build_mini_database("20240405")
+        return handler
 
-    def test_bias_returns_single_cluster(self, mini_db):
-        lists = FileHandler.build_l0_file_lists("bias", mini_db)
+    def test_bias_returns_single_cluster(self, fh):
+        lists = fh.build_l0_file_lists("bias")
         assert len(lists) == 1
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
-    def test_flat_returns_single_cluster(self, mini_db):
-        lists = FileHandler.build_l0_file_lists("flat", mini_db)
+    def test_flat_returns_single_cluster(self, fh):
+        lists = fh.build_l0_file_lists("flat")
         assert len(lists) == 1
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
-    def test_dark_raises_on_undersized_clusters(self, mini_db):
+    def test_dark_raises_on_undersized_clusters(self, fh):
         # The testdata has two dark clusters of 2 and 3 frames — both below
         # the default min_file_count=5 and dropped, leaving nothing → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            FileHandler.build_l0_file_lists("dark", mini_db)
+            fh.build_l0_file_lists("dark")
 
-    def test_dark_merge_respects_hst_boundary(self, mini_db):
+    def test_dark_merge_respects_hst_boundary(self, fh):
         # The 5 dark frames span two HST days (2 on one, 3 on the next), so they
         # can never merge into a single >=5 master without crossing HST midnight.
         # With the default min=5, no same-HST-day cluster reaches the threshold →
         # raises even with merge_small_clusters.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            FileHandler.build_l0_file_lists("dark", mini_db, merge_small_clusters=True)
+            fh.build_l0_file_lists("dark", merge_small_clusters=True)
 
-    def test_dark_merges_within_hst_day(self, mini_db):
+    def test_dark_merges_within_hst_day(self, fh):
         # Lowering min to 3 lets the 3 same-HST-day darks merge into one cluster;
         # the 2 frames on the other HST day are dropped (no same-day neighbor).
-        lists = FileHandler.build_l0_file_lists(
-            "dark", mini_db, min_file_count=3, merge_small_clusters=True
+        lists = fh.build_l0_file_lists(
+            "dark", min_file_count=3, merge_small_clusters=True
         )
         assert len(lists) == 1
         assert len(lists[0]) == 3
@@ -611,22 +615,20 @@ class TestJunkExclusion:
     def test_exclude_junk_default_drops_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
-        lists = FileHandler.build_l0_file_lists("bias", db, min_file_count=1)
+        lists = _cluster("bias", db, min_file_count=1)
         assert junk_fn not in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_false_keeps_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
-        lists = FileHandler.build_l0_file_lists(
-            "bias", db, min_file_count=1, exclude_junk=False
-        )
+        lists = _cluster("bias", db, min_file_count=1, exclude_junk=False)
         assert junk_fn in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias")).drop(columns="ISJUNK")
         with pytest.raises(KeyError):
-            FileHandler.build_l0_file_lists("bias", db, min_file_count=1)
+            _cluster("bias", db, min_file_count=1)
 
 
 # ---------------------------------------------------------------------------
@@ -647,9 +649,9 @@ class TestMastersRecipe:
         data_root_out = str(tmp_path)
 
         file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
-        mini_db = file_handler.build_mini_database("20240405")
+        file_handler.build_mini_database("20240405")
         output_paths = []
-        for files in file_handler.build_l0_file_lists("bias", mini_db):
+        for files in file_handler.build_l0_file_lists("bias"):
             bias_handler = Bias(files)
             bias_l1 = bias_handler.make_master_l1()
             out_path = build_filepath(

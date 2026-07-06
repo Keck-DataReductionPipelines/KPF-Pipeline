@@ -878,10 +878,9 @@ class TestMasterDarkRegression:
     @pytest.fixture(scope="class")
     def master_dark(self):
         file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
-        mini_db = file_handler.build_mini_database("20240405")
-        files = FileHandler.build_l0_file_lists(
+        file_handler.build_mini_database("20240405")
+        files = file_handler.build_l0_file_lists(
             "dark",
-            mini_db,
             min_file_count=5,
             cluster_gap_seconds=24 * 3600,
             enforce_hst_midnight_boundary=False,

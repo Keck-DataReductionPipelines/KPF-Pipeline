@@ -43,13 +43,14 @@ def main(config, args):
     if not os.path.isdir(l0_dir):
         raise SystemExit(f"L0 data directory not found: {l0_dir}")
 
-    # Scan the night's L0 headers once; reuse the mini database across cal types.
+    # Scan the night's L0 headers once; the handler carries the mini database
+    # across the per-cal-type build_l0_file_lists calls below.
     file_handler = FileHandler(config)
-    mini_db = file_handler.build_mini_database(datecode)
+    file_handler.build_mini_database(datecode)
 
     # Stack the bias frames into a master bias used to remove the detector
     # offset from every science and calibration frame.
-    for files in file_handler.build_l0_file_lists("bias", mini_db):
+    for files in file_handler.build_l0_file_lists("bias"):
         bias_path = build_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="bias"
         )
@@ -62,7 +63,6 @@ def main(config, args):
     # bias from each dark frame (via _process_frame) before stacking.
     for files in file_handler.build_l0_file_lists(
         "dark",
-        mini_db,
         min_file_count=3,
         merge_small_clusters=True,
         enforce_hst_midnight_boundary=False,
@@ -75,7 +75,7 @@ def main(config, args):
         dark.make_master_l1(filepath=dark_path)
 
     # master flat (not yet implemented)
-    # for files in file_handler.build_l0_file_lists('flat', mini_db):
+    # for files in file_handler.build_l0_file_lists('flat'):
     #    flat_path = build_filepath(get_obs_id(files[0]), 'L1',
     #                               data_root=data_root_masters, master='flat')
     #    flat = Flat(files, config)
@@ -83,7 +83,7 @@ def main(config, args):
 
     # Stack the ThAr exposures into a master wavelength solution, since the
     # emission-line spectrum anchors the per-order wavelength calibration.
-    for files in file_handler.build_l0_file_lists("thar", mini_db):
+    for files in file_handler.build_l0_file_lists("thar"):
         obs_id = get_obs_id(files[0])
         wls_master_path = build_filepath(
             obs_id, "L2", data_root=data_root_masters, master="thar"
