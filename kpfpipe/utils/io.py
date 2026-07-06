@@ -2,6 +2,7 @@
 
 import glob
 import logging
+import math
 import os
 import warnings
 from datetime import datetime
@@ -291,8 +292,6 @@ class FileHandler:
             timed = sorted(
                 (self._seconds_since_j2000(fn), fn) for fn in group["FILENAME"]
             )
-            if not timed:
-                continue
             cluster = [timed[0][1]]
             for (prev_t, prev_fn), (t, fn) in zip(timed, timed[1:], strict=False):
                 crosses_midnight = (
@@ -390,35 +389,29 @@ class FileHandler:
             The merged clusters, sorted chronologically by first frame.
         """
         clusters = list(clusters)
+
+        def gap_to(i, j):
+            # Chronological gap [s] from cluster i to neighbor j (i - 1 or i + 1);
+            # inf when j is out of range or -- boundary enforced -- on a different
+            # HST day, marking it ineligible to merge into.
+            if not 0 <= j < len(clusters) or (
+                enforce_hst_midnight_boundary
+                and hst_day[clusters[j][0]] != hst_day[clusters[i][0]]
+            ):
+                return math.inf
+            earlier, later = sorted((i, j))
+            return self._seconds_since_j2000(
+                clusters[later][0]
+            ) - self._seconds_since_j2000(clusters[earlier][-1])
+
         while len(clusters) > 1 and any(len(c) < min_file_count for c in clusters):
             i = min(
                 (k for k, c in enumerate(clusters) if len(c) < min_file_count),
                 key=lambda k: len(clusters[k]),
             )
-            day_i = hst_day[clusters[i][0]]
-            # A neighbor is eligible when the midnight boundary is off, or when
-            # it shares cluster i's HST day.
-            prev_ok = i > 0 and (
-                not enforce_hst_midnight_boundary
-                or hst_day[clusters[i - 1][0]] == day_i
-            )
-            next_ok = i < len(clusters) - 1 and (
-                not enforce_hst_midnight_boundary
-                or hst_day[clusters[i + 1][0]] == day_i
-            )
-            prev_gap = (
-                self._seconds_since_j2000(clusters[i][0])
-                - self._seconds_since_j2000(clusters[i - 1][-1])
-                if prev_ok
-                else float("inf")
-            )
-            next_gap = (
-                self._seconds_since_j2000(clusters[i + 1][0])
-                - self._seconds_since_j2000(clusters[i][-1])
-                if next_ok
-                else float("inf")
-            )
-            if prev_gap == float("inf") and next_gap == float("inf"):
+            prev_gap = gap_to(i, i - 1)
+            next_gap = gap_to(i, i + 1)
+            if prev_gap == next_gap == math.inf:
                 clusters.pop(i)
                 continue
             j = i - 1 if prev_gap <= next_gap else i + 1
