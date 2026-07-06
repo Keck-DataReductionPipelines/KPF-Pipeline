@@ -218,11 +218,12 @@ MASTERS_CONFIG = {"KPF_MASTERS_OUTPUT": str(TESTDATA_DIR)}
 
 def masters_l0_files(imtype):
     """First real L0 cluster of ``imtype`` ('bias'|'dark'|'thar') from testdata."""
-    from kpfpipe.utils.io import build_l0_file_lists
+    from kpfpipe.utils.io import FileHandler
 
-    l0_dir = str(TESTDATA_DIR / "L0" / MASTERS_DATECODE)
-    return build_l0_file_lists(
-        imtype, data_dir=l0_dir, cluster_gap_seconds=MASTERS_CLUSTER_GAP_SECONDS
+    file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
+    mini_db = file_handler.build_mini_database(MASTERS_DATECODE)
+    return FileHandler.build_l0_file_lists(
+        imtype, mini_db, cluster_gap_seconds=MASTERS_CLUSTER_GAP_SECONDS
     )[0]
 
 

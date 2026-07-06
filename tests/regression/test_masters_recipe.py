@@ -8,7 +8,6 @@ Integration tests use real L0 data from tests/testdata/L0/20240405/.
 import importlib.util
 import os
 from pathlib import Path
-from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -20,11 +19,9 @@ from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import (
+    FileHandler,
     build_filepath,
-    build_l0_file_lists,
-    build_mini_database,
     build_qlp_dir,
-    glob_masters,
     load_junk_obs_ids,
 )
 from kpfpipe.utils.kpf import get_timestamp, utc_to_hst
@@ -34,7 +31,6 @@ from kpfpipe.utils.kpf import get_timestamp, utc_to_hst
 # ---------------------------------------------------------------------------
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
-TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
 MASTERS_CONFIG_PATH = (
     Path(__file__).parent.parent.parent / "configs" / "kpf_drp_masters.toml"
 )
@@ -160,91 +156,63 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
     return df, before, after
 
 
-def _write_test_csv(tmp_path, db):
-    """
-    Materialize a synthetic mini_db on disk: touch a stub .fits for every
-    FILENAME row, rewrite the CSV's FILENAME column to point to the stubs,
-    and write the CSV alongside them.
-    """
-    data_dir = tmp_path / "L0" / "20240405"
-    data_dir.mkdir(parents=True)
-    db = db.copy()
-    new_filenames = []
-    for original in db["FILENAME"]:
-        new_path = str(data_dir / os.path.basename(original))
-        open(new_path, "w").close()
-        new_filenames.append(new_path)
-    db["FILENAME"] = new_filenames
-    csv_path = data_dir / "KP.20240405_L0.csv"
-    db.to_csv(csv_path, index=False)
-    return str(data_dir)
-
-
-def _at(data_dir, synthetic_paths):
-    """Translate /data/L0/... synthetic paths to absolute paths in data_dir."""
-    return [os.path.join(data_dir, os.path.basename(p)) for p in synthetic_paths]
-
-
 # ---------------------------------------------------------------------------
-# build_l0_file_lists
+# FileHandler.build_l0_file_lists (synthetic mini databases)
 # ---------------------------------------------------------------------------
 
 
 class TestBuildL0FileLists:
-    @pytest.fixture(scope="class")
-    def data_dir(self, tmp_path_factory):
-        tmp_path = tmp_path_factory.mktemp("l0data")
-        db = _make_mini_db()
-        return _write_test_csv(tmp_path, db)
+    """Clustering is pure over a mini database, so these exercise the
+    ``@staticmethod`` directly with synthetic DataFrames (no files on disk)."""
 
-    def test_two_bias_clusters_returned_separately(self, data_dir):
-        lists = build_l0_file_lists("bias", data_dir=data_dir)
+    def test_two_bias_clusters_returned_separately(self):
+        lists = FileHandler.build_l0_file_lists("bias", _make_mini_db())
         assert len(lists) == 2
 
-    def test_bias_cluster_a_files(self, data_dir):
-        lists = build_l0_file_lists("bias", data_dir=data_dir)
-        assert lists[0] == sorted(_at(data_dir, _BIAS_A))
+    def test_bias_cluster_a_files(self):
+        lists = FileHandler.build_l0_file_lists("bias", _make_mini_db())
+        assert lists[0] == sorted(_BIAS_A)
 
-    def test_bias_cluster_b_files(self, data_dir):
-        lists = build_l0_file_lists("bias", data_dir=data_dir)
-        assert lists[1] == sorted(_at(data_dir, _BIAS_B))
+    def test_bias_cluster_b_files(self):
+        lists = FileHandler.build_l0_file_lists("bias", _make_mini_db())
+        assert lists[1] == sorted(_BIAS_B)
 
-    def test_files_are_sorted(self, data_dir):
-        for lst in build_l0_file_lists("bias", data_dir=data_dir):
+    def test_files_are_sorted(self):
+        for lst in FileHandler.build_l0_file_lists("bias", _make_mini_db()):
             assert lst == sorted(lst)
 
-    def test_raises_when_no_cluster_meets_min(self, data_dir):
+    def test_raises_when_no_cluster_meets_min(self):
         # min_file_count=6: both bias clusters (5 files each) fall below and are
         # dropped, leaving nothing → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            build_l0_file_lists("bias", min_file_count=6, data_dir=data_dir)
+            FileHandler.build_l0_file_lists("bias", _make_mini_db(), min_file_count=6)
 
-    def test_raises_when_no_frames_found(self, data_dir):
+    def test_raises_when_no_frames_found(self):
         with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
-            build_l0_file_lists("flat", data_dir=data_dir)
+            FileHandler.build_l0_file_lists("flat", _make_mini_db())
 
-    def test_raises_when_only_cluster_below_default_min(self, data_dir):
+    def test_raises_when_only_cluster_below_default_min(self):
         # dark cluster has only 3 files; default min_file_count=5 → dropped →
         # raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            build_l0_file_lists("dark", data_dir=data_dir)
+            FileHandler.build_l0_file_lists("dark", _make_mini_db())
 
     def test_drops_small_cluster_keeps_large(self):
         db, _ = _mixed_bias_db()
-        lists = build_l0_file_lists("bias", mini_db=db)
+        lists = FileHandler.build_l0_file_lists("bias", db)
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_A)
 
     def test_merge_folds_small_into_neighbor(self):
         db, small = _mixed_bias_db()
-        lists = build_l0_file_lists("bias", mini_db=db, merge_small_clusters=True)
+        lists = FileHandler.build_l0_file_lists("bias", db, merge_small_clusters=True)
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_A + small)
 
-    def test_merge_combines_two_small_clusters(self, data_dir):
+    def test_merge_combines_two_small_clusters(self):
         # Two 5-file bias clusters, each below min=6; merged into one of 10.
-        lists = build_l0_file_lists(
-            "bias", min_file_count=6, data_dir=data_dir, merge_small_clusters=True
+        lists = FileHandler.build_l0_file_lists(
+            "bias", _make_mini_db(), min_file_count=6, merge_small_clusters=True
         )
         assert len(lists) == 1
         assert len(lists[0]) == 10
@@ -253,15 +221,15 @@ class TestBuildL0FileLists:
         # 7 bias files total (5 + 2); merging cannot reach min=8 → raises.
         db, _ = _mixed_bias_db()
         with pytest.raises(ValueError, match="no cluster with at least"):
-            build_l0_file_lists(
-                "bias", min_file_count=8, mini_db=db, merge_small_clusters=True
+            FileHandler.build_l0_file_lists(
+                "bias", db, min_file_count=8, merge_small_clusters=True
             )
 
     def test_hst_midnight_splits_cluster(self):
         # Same-OBJECT frames <gap apart but on opposite sides of HST midnight
         # (UTC 36000) must not share a cluster.
         db, before, after = _midnight_bias_db()
-        lists = build_l0_file_lists("bias", mini_db=db, min_file_count=5)
+        lists = FileHandler.build_l0_file_lists("bias", db, min_file_count=5)
         assert len(lists) == 2
         assert lists[0] == sorted(before)
         assert lists[1] == sorted(after)
@@ -270,8 +238,8 @@ class TestBuildL0FileLists:
         # A small post-midnight cluster has no same-HST-day neighbor, so it is
         # dropped rather than merged across midnight into the pre-midnight one.
         db, before, _ = _midnight_bias_db(n_before=5, n_after=2)
-        lists = build_l0_file_lists(
-            "bias", mini_db=db, min_file_count=5, merge_small_clusters=True
+        lists = FileHandler.build_l0_file_lists(
+            "bias", db, min_file_count=5, merge_small_clusters=True
         )
         assert len(lists) == 1
         assert lists[0] == sorted(before)
@@ -280,9 +248,9 @@ class TestBuildL0FileLists:
         # With enforce_hst_midnight_boundary=False, frames <gap apart across HST
         # midnight stay in one cluster (only cluster_gap_seconds can split them).
         db, before, after = _midnight_bias_db()
-        lists = build_l0_file_lists(
+        lists = FileHandler.build_l0_file_lists(
             "bias",
-            mini_db=db,
+            db,
             min_file_count=5,
             enforce_hst_midnight_boundary=False,
         )
@@ -295,12 +263,12 @@ class TestBuildL0FileLists:
         # they merge into one cluster that meets the threshold.
         db, before, after = _cross_midnight_gap_db()
         with pytest.raises(ValueError, match="no cluster with at least"):
-            build_l0_file_lists(
-                "dark", mini_db=db, min_file_count=3, merge_small_clusters=True
+            FileHandler.build_l0_file_lists(
+                "dark", db, min_file_count=3, merge_small_clusters=True
             )
-        lists = build_l0_file_lists(
+        lists = FileHandler.build_l0_file_lists(
             "dark",
-            mini_db=db,
+            db,
             min_file_count=3,
             merge_small_clusters=True,
             enforce_hst_midnight_boundary=False,
@@ -308,69 +276,23 @@ class TestBuildL0FileLists:
         assert len(lists) == 1
         assert lists[0] == sorted(before + after)
 
-    def test_invalid_imtype_raises(self, data_dir):
+    def test_invalid_imtype_raises(self):
         with pytest.raises(ValueError, match="cal_type must be one of"):
-            build_l0_file_lists("bogus", data_dir=data_dir)
+            FileHandler.build_l0_file_lists("bogus", _make_mini_db())
 
-    def test_thar_returns_two_clusters(self, data_dir):
+    def test_thar_returns_two_clusters(self):
         # Morning and evening ThArs have different OBJECT suffixes and are >2hr
         # apart; each forms its own cluster.
-        lists = build_l0_file_lists("thar", data_dir=data_dir)
+        lists = FileHandler.build_l0_file_lists("thar", _make_mini_db())
         assert len(lists) == 2
 
-    def test_thar_morn_cluster(self, data_dir):
-        lists = build_l0_file_lists("thar", data_dir=data_dir)
-        assert lists[0] == sorted(_at(data_dir, _THAR_MORN))
+    def test_thar_morn_cluster(self):
+        lists = FileHandler.build_l0_file_lists("thar", _make_mini_db())
+        assert lists[0] == sorted(_THAR_MORN)
 
-    def test_thar_eve_cluster(self, data_dir):
-        lists = build_l0_file_lists("thar", data_dir=data_dir)
-        assert lists[1] == sorted(_at(data_dir, _THAR_EVE))
-
-    def test_raises_when_neither_source_provided(self):
-        with pytest.raises(ValueError, match="Exactly one of"):
-            build_l0_file_lists("bias")
-
-    def test_raises_when_both_sources_provided(self, data_dir):
-        with pytest.raises(ValueError, match="Exactly one of"):
-            build_l0_file_lists("bias", data_dir=data_dir, mini_db=_make_mini_db())
-
-    def test_accepts_mini_db_directly(self):
-        lists = build_l0_file_lists("bias", mini_db=_make_mini_db())
-        assert len(lists) == 2
-        assert lists[0] == sorted(_BIAS_A)
-
-    def test_rebuilds_db_if_csv_missing(self, tmp_path):
-        data_dir = str(tmp_path / "L0" / "20240405")
-        os.makedirs(data_dir)
-        with patch("kpfpipe.utils.io.build_mini_database") as mock_bmd:
-            mock_bmd.return_value = _make_mini_db()
-            lists = build_l0_file_lists("bias", data_dir=data_dir)
-        mock_bmd.assert_called_once_with(data_dir)
-        assert len(lists) == 2
-
-    def test_rebuilds_db_if_files_added_on_disk(self, tmp_path):
-        # Materialize a consistent CSV + stubs, then plant an extra .fits
-        # file the CSV does not know about.
-        data_dir = _write_test_csv(tmp_path, _make_mini_db())
-        open(os.path.join(data_dir, "KP.20240405.99999.99.fits"), "w").close()
-
-        with patch("kpfpipe.utils.io.build_mini_database") as mock_bmd:
-            mock_bmd.return_value = _make_mini_db()
-            with pytest.warns(UserWarning, match=r"stale.*\+1 added"):
-                build_l0_file_lists("bias", data_dir=data_dir)
-        mock_bmd.assert_called_once_with(data_dir)
-
-    def test_rebuilds_db_if_files_removed_from_disk(self, tmp_path):
-        # Materialize a consistent CSV + stubs, then unlink one .fits
-        # the CSV still references.
-        data_dir = _write_test_csv(tmp_path, _make_mini_db())
-        os.unlink(os.path.join(data_dir, os.path.basename(_BIAS_A[0])))
-
-        with patch("kpfpipe.utils.io.build_mini_database") as mock_bmd:
-            mock_bmd.return_value = _make_mini_db()
-            with pytest.warns(UserWarning, match=r"stale.*-1 removed"):
-                build_l0_file_lists("bias", data_dir=data_dir)
-        mock_bmd.assert_called_once_with(data_dir)
+    def test_thar_eve_cluster(self):
+        lists = FileHandler.build_l0_file_lists("thar", _make_mini_db())
+        assert lists[1] == sorted(_THAR_EVE)
 
 
 # ---------------------------------------------------------------------------
@@ -381,40 +303,42 @@ class TestBuildL0FileLists:
 @pytest.mark.slow
 class TestBuildL0FileListsRealData:
     @pytest.fixture(scope="class")
-    def l0_dir(self):
-        return str(TESTDATA_L0_DIR)
+    def mini_db(self):
+        return FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)}).build_mini_database(
+            "20240405"
+        )
 
-    def test_bias_returns_single_cluster(self, l0_dir):
-        lists = build_l0_file_lists("bias", data_dir=l0_dir)
+    def test_bias_returns_single_cluster(self, mini_db):
+        lists = FileHandler.build_l0_file_lists("bias", mini_db)
         assert len(lists) == 1
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
-    def test_flat_returns_single_cluster(self, l0_dir):
-        lists = build_l0_file_lists("flat", data_dir=l0_dir)
+    def test_flat_returns_single_cluster(self, mini_db):
+        lists = FileHandler.build_l0_file_lists("flat", mini_db)
         assert len(lists) == 1
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
-    def test_dark_raises_on_undersized_clusters(self, l0_dir):
+    def test_dark_raises_on_undersized_clusters(self, mini_db):
         # The testdata has two dark clusters of 2 and 3 frames — both below
         # the default min_file_count=5 and dropped, leaving nothing → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            build_l0_file_lists("dark", data_dir=l0_dir)
+            FileHandler.build_l0_file_lists("dark", mini_db)
 
-    def test_dark_merge_respects_hst_boundary(self, l0_dir):
+    def test_dark_merge_respects_hst_boundary(self, mini_db):
         # The 5 dark frames span two HST days (2 on one, 3 on the next), so they
         # can never merge into a single >=5 master without crossing HST midnight.
         # With the default min=5, no same-HST-day cluster reaches the threshold →
         # raises even with merge_small_clusters.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            build_l0_file_lists("dark", data_dir=l0_dir, merge_small_clusters=True)
+            FileHandler.build_l0_file_lists("dark", mini_db, merge_small_clusters=True)
 
-    def test_dark_merges_within_hst_day(self, l0_dir):
+    def test_dark_merges_within_hst_day(self, mini_db):
         # Lowering min to 3 lets the 3 same-HST-day darks merge into one cluster;
         # the 2 frames on the other HST day are dropped (no same-day neighbor).
-        lists = build_l0_file_lists(
-            "dark", data_dir=l0_dir, min_file_count=3, merge_small_clusters=True
+        lists = FileHandler.build_l0_file_lists(
+            "dark", mini_db, min_file_count=3, merge_small_clusters=True
         )
         assert len(lists) == 1
         assert len(lists[0]) == 3
@@ -517,34 +441,38 @@ class TestBuildFilepath:
 
 
 # ---------------------------------------------------------------------------
-# glob_masters
+# FileHandler.glob_masters
 # ---------------------------------------------------------------------------
 
 
 class TestGlobMasters:
-    """`glob_masters` (the masters finder pattern) and `build_filepath` (the
+    """`FileHandler.glob_masters` (the masters finder) and `build_filepath` (the
     masters writer) build the same path independently. These guard that the two
     inline f-strings can't drift — same directory and `_master_{type}_{level}`
     filename, with the KOAID wildcarded in the finder."""
 
-    def test_glob_masters(self):
-        assert (
-            glob_masters("/data", "bias", "L1", "20240405")
-            == "/data/masters/20240405/*_master_bias_L1.fits"
-        )
+    def test_returns_empty_when_no_masters(self, tmp_path):
+        fh = FileHandler({"KPF_MASTERS_OUTPUT": str(tmp_path)})
+        assert fh.glob_masters("bias", "L1", "20240405") == []
+
+    def test_raises_without_masters_root(self):
+        with pytest.raises(ValueError, match="KPF_MASTERS_OUTPUT"):
+            FileHandler().glob_masters("bias", "L1", "20240405")
 
     @pytest.mark.parametrize(
         "cal_type,level",
         [("bias", "L1"), ("dark", "L1"), ("flat", "L1"), ("thar", "L2")],
     )
-    def test_glob_masters_matches_build_filepath(self, cal_type, level):
-        # The finder pattern must equal a written master path with only the
-        # KOAID wildcarded — same directory, same filename convention.
+    def test_finds_build_filepath_output(self, tmp_path, cal_type, level):
+        # The finder must locate a master written at the build_filepath path with
+        # only the KOAID wildcarded — same directory, same filename convention.
         obs_id = "KP.20240405.03600.00"
-        written = build_filepath(obs_id, level, data_root="/data", master=cal_type)
-        assert glob_masters("/data", cal_type, level, "20240405") == written.replace(
-            obs_id, "*"
-        )
+        root = str(tmp_path)
+        written = build_filepath(obs_id, level, data_root=root, master=cal_type)
+        os.makedirs(os.path.dirname(written), exist_ok=True)
+        open(written, "w").close()
+        fh = FileHandler({"KPF_MASTERS_OUTPUT": root})
+        assert fh.glob_masters(cal_type, level, "20240405") == [written]
 
 
 # ---------------------------------------------------------------------------
@@ -611,7 +539,7 @@ class TestBuildQlpDir:
 
 
 # ---------------------------------------------------------------------------
-# build_mini_database (real L0 data from tests/testdata/)
+# FileHandler.build_mini_database (real L0 data from tests/testdata/)
 # ---------------------------------------------------------------------------
 
 
@@ -619,7 +547,9 @@ class TestBuildQlpDir:
 class TestBuildMiniDatabase:
     @pytest.fixture(scope="class")
     def mini_db(self):
-        return build_mini_database(str(TESTDATA_L0_DIR), write=False)
+        return FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)}).build_mini_database(
+            "20240405"
+        )
 
     def test_has_required_columns(self, mini_db):
         for col in ("FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"):
@@ -639,15 +569,15 @@ class TestBuildMiniDatabase:
         assert "ISJUNK" in mini_db.columns
         assert not mini_db["ISJUNK"].any()
 
-    def test_write_false_does_not_write_csv(self):
-        csv_path = TESTDATA_L0_DIR / "KP.20240405_L0.csv"
-        was_present = csv_path.exists()
-        build_mini_database(str(TESTDATA_L0_DIR), write=False)
-        assert csv_path.exists() == was_present
-
     def test_empty_directory_raises(self, tmp_path):
+        (tmp_path / "L0" / "20240405").mkdir(parents=True)
+        fh = FileHandler({"KPF_DATA_INPUT": str(tmp_path)})
         with pytest.raises(ValueError, match="No FITS files found"):
-            build_mini_database(str(tmp_path))
+            fh.build_mini_database("20240405")
+
+    def test_missing_data_input_raises(self):
+        with pytest.raises(ValueError, match="KPF_DATA_INPUT"):
+            FileHandler().build_mini_database("20240405")
 
 
 # ---------------------------------------------------------------------------
@@ -681,14 +611,14 @@ class TestJunkExclusion:
     def test_exclude_junk_default_drops_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
-        lists = build_l0_file_lists("bias", mini_db=db, min_file_count=1)
+        lists = FileHandler.build_l0_file_lists("bias", db, min_file_count=1)
         assert junk_fn not in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_false_keeps_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
-        lists = build_l0_file_lists(
-            "bias", mini_db=db, min_file_count=1, exclude_junk=False
+        lists = FileHandler.build_l0_file_lists(
+            "bias", db, min_file_count=1, exclude_junk=False
         )
         assert junk_fn in [fn for cluster in lists for fn in cluster]
 
@@ -696,7 +626,7 @@ class TestJunkExclusion:
         # A mini database built before ISJUNK existed must fail loudly.
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias")).drop(columns="ISJUNK")
         with pytest.raises(KeyError):
-            build_l0_file_lists("bias", mini_db=db, min_file_count=1)
+            FileHandler.build_l0_file_lists("bias", db, min_file_count=1)
 
 
 # ---------------------------------------------------------------------------
@@ -706,7 +636,7 @@ class TestJunkExclusion:
 
 @pytest.mark.slow
 class TestMastersRecipe:
-    """End-to-end recipe test: build_l0_file_lists → Bias.make_master_l1 → to_fits."""
+    """End-to-end recipe test: FileHandler → Bias.make_master_l1 → to_fits."""
 
     @pytest.fixture(scope="class")
     def recipe_output(self, tmp_path_factory):
@@ -716,8 +646,10 @@ class TestMastersRecipe:
         tmp_path = tmp_path_factory.mktemp("recipe_out")
         data_root_out = str(tmp_path)
 
+        file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
+        mini_db = file_handler.build_mini_database("20240405")
         output_paths = []
-        for files in build_l0_file_lists("bias", data_dir=str(TESTDATA_L0_DIR)):
+        for files in file_handler.build_l0_file_lists("bias", mini_db):
             bias_handler = Bias(files)
             bias_l1 = bias_handler.make_master_l1()
             out_path = build_filepath(

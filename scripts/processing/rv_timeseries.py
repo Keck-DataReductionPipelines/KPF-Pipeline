@@ -42,7 +42,7 @@ from astropy.io import fits
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import build_filepath, build_mini_database, glob_masters
+from kpfpipe.utils.io import FileHandler, build_filepath
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
 
 # Masters every science frame depends on, as (cal_type, level). Flat masters are
@@ -208,14 +208,16 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
     """Raw science obs_ids for `target` over [start, end], from the L0 tree.
 
     Enumerates the nights (datecode dirs) under {data_input}/L0, scans each one's
-    PRIMARY headers via build_mini_database, and keeps the frames whose IMTYPE is
-    'Object' and whose OBJECT matches `target`. Non-datecode entries (backup dirs,
-    stray files, etc.) are skipped with a note; only valid datecode dirs in
-    [start, end] are processed.
+    PRIMARY headers via FileHandler.build_mini_database, and keeps the frames whose
+    IMTYPE is 'Object' and whose OBJECT matches `target`. Non-datecode entries
+    (backup dirs, stray files, etc.) are skipped with a note; only valid datecode
+    dirs in [start, end] are processed.
     """
     l0_root = os.path.join(data_input, "L0")
     if not os.path.isdir(l0_root):
         sys.exit(f"error: L0 input directory not found: {l0_root}")
+
+    file_handler = FileHandler({"KPF_DATA_INPUT": data_input})
 
     subdirs = [
         e
@@ -239,7 +241,7 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
     # scan is otherwise silent.
     def _scan_night(dc):
         try:
-            df = build_mini_database(os.path.join(l0_root, dc))
+            df = file_handler.build_mini_database(dc)
         except ValueError as e:
             # e.g. a datecode dir with no FITS files -- skip it, don't abort.
             print(f"  warning: skipping night {dc}: {e}", flush=True)
@@ -247,7 +249,7 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
         is_object = df["IMTYPE"].astype(str).str.strip() == "Object"
         is_target = df["OBJECT"].astype(str).str.strip() == str(target)
         matched = df.loc[is_object & is_target]
-        # Drop observer-flagged junk frames (build_mini_database's ISJUNK).
+        # Drop observer-flagged junk frames (the mini database's ISJUNK column).
         good = matched.loc[~matched["ISJUNK"].astype(bool)]
         n_junk = len(matched) - len(good)
         return [get_obs_id(fn) for fn in good["FILENAME"]], n_junk
@@ -352,10 +354,11 @@ def discover_l4_files(science_output, target, start, end, jobs):
 
 def _missing_masters(masters_output, datecode):
     """Required (cal_type, level) masters absent for `datecode` (empty == complete)."""
+    file_handler = FileHandler({"KPF_MASTERS_OUTPUT": masters_output})
     return [
         (cal_type, level)
         for cal_type, level in _REQUIRED_MASTERS
-        if not glob.glob(glob_masters(masters_output, cal_type, level, datecode))
+        if not file_handler.glob_masters(cal_type, level, datecode)
     ]
 
 

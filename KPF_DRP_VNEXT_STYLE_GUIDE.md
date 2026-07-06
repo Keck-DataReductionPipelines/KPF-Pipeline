@@ -256,6 +256,13 @@ class StageName:
   Tunable params become instance attributes via the `_DEFAULTS` setattr loop.
 - **`_DEFAULTS` merges the global defaults**: `_DEFAULTS = {**DEFAULTS, "key": ...}`
   (use the `{**DEFAULTS, ...}` spread form, not `dict(DEFAULTS)`).
+- **Utility handlers in `utils/` are a lighter variant.** A config-carrying
+  discovery/IO handler (e.g. `io.FileHandler`) has no data-model object and often no
+  per-call tunables: it takes `config=None` alone, resolves only the roots it needs
+  (`config.get_params(["DATA_DIRS"])`), stores them as private attributes, and
+  **omits the `_DEFAULTS` setattr loop** when there is nothing tunable to surface
+  (every knob stays a per-call method argument). Pure per-call logic on such a
+  handler (e.g. clustering a mini database) is a `@staticmethod`.
 - **Defaults live in the module, not the config file.** Resolution is a three-tier
   override chain, lowest precedence first: `_DEFAULTS` (the in-module default) → config
   (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword

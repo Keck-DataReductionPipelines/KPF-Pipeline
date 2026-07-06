@@ -18,7 +18,7 @@ import pytest
 
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.dark import Dark
-from kpfpipe.utils.io import build_l0_file_lists
+from kpfpipe.utils.io import FileHandler
 
 from ._masters import make_l1_arrays
 
@@ -27,7 +27,6 @@ NROW, NCOL = 10, 10  # small arrays for unit tests
 # make_l1_arrays() — shared synthetic stack_frames builder — lives in _masters.py
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
-TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
 
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
@@ -878,9 +877,11 @@ class TestMasterDarkRegression:
 
     @pytest.fixture(scope="class")
     def master_dark(self):
-        files = build_l0_file_lists(
+        file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
+        mini_db = file_handler.build_mini_database("20240405")
+        files = FileHandler.build_l0_file_lists(
             "dark",
-            data_dir=str(TESTDATA_L0_DIR),
+            mini_db,
             min_file_count=5,
             cluster_gap_seconds=24 * 3600,
             enforce_hst_midnight_boundary=False,
