@@ -593,7 +593,7 @@ class CrossCorrelation:
                 )
             info[fiber] = {"source": source, "nccf": nccf}
 
-        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
+        obs_id = self.l2_obj.obs_id or "unknown"
         lines = [
             "CrossCorrelation",
             f"  obs_id:         {obs_id}",

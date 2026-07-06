@@ -14,7 +14,6 @@ from astropy.constants import c
 from kpfpipe.utils.astro import air_to_vac, compute_doppler_factor, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import (
-    eprv_timestamp_to_kpf_timestamp,
     get_datecode,
     get_obs_id,
     get_seconds_since_j2000,
@@ -166,32 +165,6 @@ class TestKpfTimestampToEprv:
         result = kpf_timestamp_to_eprv_timestamp("20240405.40113.57")
         assert "57" not in result
         assert "." not in result
-
-
-class TestEprvTimestampToKpf:
-    def test_basic_conversion(self):
-        # 11:08:33 = 11*3600 + 8*60 + 33 = 40113
-        assert eprv_timestamp_to_kpf_timestamp("20240405T110833") == "20240405.40113.00"
-
-    def test_midnight(self):
-        assert eprv_timestamp_to_kpf_timestamp("20240405T000000") == "20240405.00000.00"
-
-    def test_end_of_day(self):
-        assert eprv_timestamp_to_kpf_timestamp("20240405T235959") == "20240405.86399.00"
-
-    def test_one_hour(self):
-        assert eprv_timestamp_to_kpf_timestamp("20240405T010000") == "20240405.03600.00"
-
-    def test_frame_field_is_zero(self):
-        assert eprv_timestamp_to_kpf_timestamp("20240405T110833").endswith(".00")
-
-    def test_roundtrip(self):
-        # Round-trip loses frame field (becomes .00)
-        ts = "20240405.40113.57"
-        assert (
-            eprv_timestamp_to_kpf_timestamp(kpf_timestamp_to_eprv_timestamp(ts))
-            == "20240405.40113.00"
-        )
 
 
 class TestGetObsId:
@@ -389,34 +362,6 @@ class TestKpfTimestampToEprvValidation:
     def test_raises_on_invalid_date(self):
         with pytest.raises(ValueError, match="Invalid date"):
             kpf_timestamp_to_eprv_timestamp("20249999.40113.57")
-
-
-class TestEprvTimestampToKpfValidation:
-    def test_raises_on_non_T_separator(self):
-        # Previously: silently accepted any char at position 8.
-        with pytest.raises(ValueError, match="Invalid EPRV timestamp format"):
-            eprv_timestamp_to_kpf_timestamp("20240405A110833")
-
-    def test_raises_on_hours_out_of_range(self):
-        # Previously: emitted an invalid KPF timestamp going out.
-        with pytest.raises(ValueError, match="time-of-day"):
-            eprv_timestamp_to_kpf_timestamp("20240405T256059")
-
-    def test_raises_on_minutes_out_of_range(self):
-        with pytest.raises(ValueError, match="time-of-day"):
-            eprv_timestamp_to_kpf_timestamp("20240405T126059")
-
-    def test_raises_on_seconds_out_of_range(self):
-        with pytest.raises(ValueError, match="time-of-day"):
-            eprv_timestamp_to_kpf_timestamp("20240405T120060")
-
-    def test_raises_on_invalid_date(self):
-        with pytest.raises(ValueError, match="Invalid date"):
-            eprv_timestamp_to_kpf_timestamp("20249999T110833")
-
-    def test_raises_on_short_input(self):
-        with pytest.raises(ValueError, match="Invalid EPRV timestamp format"):
-            eprv_timestamp_to_kpf_timestamp("short")
 
 
 class TestGetSecondsSinceJ2000:

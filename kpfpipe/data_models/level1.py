@@ -24,7 +24,6 @@ from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.io import kpf_filename
-from kpfpipe.utils.kpf import get_obs_id
 
 logger = logging.getLogger(__name__)
 
@@ -81,11 +80,6 @@ class KPF1(KPFDataModel):
         `from_fits` would never call into `_read` without this override.
         """
         self._read(hdul)
-        if self.filename is not None:
-            try:
-                self.obs_id = get_obs_id(self.filename)
-            except ValueError:
-                pass
 
     def _read(self, hdul):
         """

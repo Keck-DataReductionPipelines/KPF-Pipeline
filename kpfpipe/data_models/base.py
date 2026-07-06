@@ -61,6 +61,7 @@ class KPFDataModel(RVDataModel):
     def __init__(self):
         super().__init__()
         self.obs_id = None
+        self.dirname = None
 
     @classmethod
     def from_fits(cls, fn, instrument=None, **kwargs):

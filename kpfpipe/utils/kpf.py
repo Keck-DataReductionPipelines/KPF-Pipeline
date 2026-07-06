@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 _OBS_ID_PATTERN = re.compile(r"(KP\.\d{8}\.\d{5}\.\d{2})")
 _DATECODE_PATTERN = re.compile(r"\d{8}")
 _KPF_TIMESTAMP_PATTERN = re.compile(r"(\d{8}\.\d{5}\.\d{2})")
-_EPRV_TIMESTAMP_PATTERN = re.compile(r"\d{8}T\d{6}")
 
 # Seconds per day
 _SECONDS_PER_DAY = 86400
@@ -45,37 +44,6 @@ def _validate_kpf_timestamp(timestamp):
         raise ValueError(
             f"Invalid seconds-past-midnight in KPF timestamp {timestamp!r}: "
             f"{seconds} not in [0, {_SECONDS_PER_DAY - 1}]"
-        )
-
-
-def _validate_eprv_timestamp(timestamp):
-    """
-    Validate that `timestamp` is a well-formed EPRV timestamp string of the
-    form 'YYYYMMDDTHHMMSS' with a real calendar date and HH/MM/SS in their
-    standard ranges. Raises ValueError otherwise.
-    """
-    if not isinstance(timestamp, str):
-        raise ValueError(
-            f"EPRV timestamp must be a string; got {type(timestamp).__name__}"
-        )
-    if not _EPRV_TIMESTAMP_PATTERN.fullmatch(timestamp):
-        raise ValueError(
-            f"Invalid EPRV timestamp format {timestamp!r}; expected 'YYYYMMDDTHHMMSS'"
-        )
-    date_str = timestamp[:8]
-    try:
-        datetime.strptime(date_str, "%Y%m%d")
-    except ValueError as e:
-        raise ValueError(
-            f"Invalid date in EPRV timestamp {timestamp!r}: {date_str!r}"
-        ) from e
-    hh = int(timestamp[9:11])
-    mm = int(timestamp[11:13])
-    ss = int(timestamp[13:15])
-    if hh >= 24 or mm >= 60 or ss >= 60:
-        raise ValueError(
-            f"Invalid time-of-day in EPRV timestamp {timestamp!r}: "
-            f"got HH={hh}, MM={mm}, SS={ss}"
         )
 
 
@@ -336,30 +304,3 @@ def kpf_timestamp_to_eprv_timestamp(timestamp):
     mm = (total_seconds % 3600) // 60
     ss = total_seconds % 60
     return f"{date_str}T{hh:02d}{mm:02d}{ss:02d}"
-
-
-def eprv_timestamp_to_kpf_timestamp(timestamp):
-    """
-    Convert an EPRV standard timestamp to KPF format, e.g. '20240405T110833'
-    -> '20240405.40113.00'.
-
-    The frame field is set to '00' since EPRV timestamps have 1-second
-    resolution and carry no sub-second information.
-
-    Parameters
-    ----------
-    timestamp : str
-        EPRV timestamp string of the form 'YYYYMMDDTHHMMSS'.
-
-    Returns
-    -------
-    str
-        KPF timestamp of the form 'YYYYMMDD.SSSSS.00'.
-    """
-    _validate_eprv_timestamp(timestamp)
-    date_str = timestamp[:8]
-    hh = int(timestamp[9:11])
-    mm = int(timestamp[11:13])
-    ss = int(timestamp[13:15])
-    total_seconds = hh * 3600 + mm * 60 + ss
-    return f"{date_str}.{total_seconds:05d}.00"

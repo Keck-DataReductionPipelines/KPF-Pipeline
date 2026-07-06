@@ -80,9 +80,7 @@ def main():
         print(f"Error loading {input_file}: {exc}", file=sys.stderr)
         sys.exit(2)
 
-    obs_id = (
-        args.obs_id or getattr(data, "obs_id", None) or os.path.basename(input_file)
-    )
+    obs_id = args.obs_id or getattr(data, "obs_id", None) or "unknown"
 
     # ------------------------------------------------------------------ #
     # Run QC (via the Checkpoint stage, which folds in Diagnostics + QC and

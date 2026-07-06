@@ -54,28 +54,8 @@ class PlotL2:
         primary = (
             l2_obj.headers.get("PRIMARY", {}) if hasattr(l2_obj, "headers") else {}
         )
-        # obs_id: explicit arg (recipe knows it) > model attr (KPF0/1 only) >
-        # FILENAME header, stripped of level/extension suffixes.
-        self.obs_id = (
-            obs_id
-            or getattr(l2_obj, "obs_id", None)
-            or self._obsid_from_filename(primary.get("FILENAME", ""))
-            or ""
-        )
+        self.obs_id = obs_id or getattr(l2_obj, "obs_id", None) or ""
         self.name = primary.get("OBJECT", "") if primary else ""
-
-    @staticmethod
-    def _obsid_from_filename(filename):
-        """Derive an obs_id from a FILENAME header (strip path/level/ext)."""
-        if not filename:
-            return ""
-        base = os.path.basename(str(filename))
-        for suffix in ("_L0", "_L1", "_L2", "_L4"):
-            base = base.replace(suffix, "")
-        for ext in (".fits", ".fits.gz"):
-            if base.endswith(ext):
-                base = base[: -len(ext)]
-        return base
 
     # ------------------------------------------------------------------
     # Data access helpers

@@ -597,7 +597,7 @@ class RadialVelocity:
                 entry["mask"] = self.l4_obj.headers[f"{fiber}_CCF"].get("CCFMASK")
             info[fiber] = entry
 
-        obs_id = self.l4_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
+        obs_id = self.l4_obj.obs_id or "unknown"
         lines = [
             "RadialVelocity",
             f"  obs_id:     {obs_id}",

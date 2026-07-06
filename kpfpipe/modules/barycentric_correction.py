@@ -699,7 +699,7 @@ class BarycentricCorrection:
 
     def _track_info(self):
         """Build and cache the info() summary text from instance attributes."""
-        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
+        obs_id = self.l2_obj.obs_id or "unknown"
         ccd_bjd = np.asarray(self._ccd_bjd)
         ccd_kms = np.asarray(self._ccd_kms)
         ccd_z = np.asarray(self._ccd_z)
