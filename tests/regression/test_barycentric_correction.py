@@ -16,7 +16,7 @@ from astropy.time import Time
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
-from kpfpipe.utils.validation import strictly_increasing
+from kpfpipe.utils.stats import strictly_increasing
 
 from ._dtype_policy import BARYCORR, BJD, assert_dtype
 

@@ -1,10 +1,7 @@
 """
 Tests for kpfpipe.utils helpers: astro (astro.py), KPF timestamp/obs_id
-conversions (kpf.py), statistics (stats.py), validation (validation.py), and
-config loading (config.py).
+conversions (kpf.py), statistics (stats.py), and config loading (config.py).
 """
-
-import warnings
 
 import astropy.units as u
 import numpy as np
@@ -31,8 +28,8 @@ from kpfpipe.utils.stats import (
     flag_outliers,
     interpolate_bad_pixels,
     optimize_lsq,
+    strictly_increasing,
 )
-from kpfpipe.utils.validation import strictly_increasing, validate_array
 
 C_KMS = c.to("km/s").value
 
@@ -476,11 +473,6 @@ class TestFlagOutliers:
             flag_outliers(np.arange(10.0), sigma=5.0, method="bogus")
 
 
-# ===========================================================================
-# validation.py — array/value validators
-# ===========================================================================
-
-
 class TestStrictlyIncreasing:
     def test_true_for_increasing(self):
         assert strictly_increasing([1.0, 2.0, 3.0]) is True
@@ -488,39 +480,6 @@ class TestStrictlyIncreasing:
     def test_false_for_non_increasing(self):
         assert strictly_increasing([1.0, 1.0, 2.0]) is False
         assert strictly_increasing([3.0, 2.0, 1.0]) is False
-
-
-class TestValidateArray:
-    def test_invalid_response_raises(self):
-        with pytest.raises(ValueError, match="response must be"):
-            validate_array([1.0, 2.0], response="bogus")
-
-    def test_clean_array_is_silent(self):
-        # A finite, positive array produces no warning and returns None.
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            assert validate_array(np.array([1.0, 2.0, 3.0])) is None
-
-    def test_nan_warns(self):
-        with pytest.warns(UserWarning, match="NaN values detected"):
-            validate_array(np.array([1.0, np.nan, 3.0]))
-
-    def test_inf_warns(self):
-        with pytest.warns(UserWarning, match="Non-finite values detected"):
-            validate_array(np.array([1.0, np.inf, 3.0]), check_positive=False)
-
-    def test_negative_warns(self):
-        with pytest.warns(UserWarning, match="Negative values detected"):
-            validate_array(np.array([1.0, -2.0, 3.0]), check_finite=False)
-
-    def test_error_response_raises_with_all_issues(self):
-        with pytest.raises(ValueError, match="NaN values detected"):
-            validate_array(np.array([np.nan, -1.0]), response="error")
-
-    def test_silent_response_suppresses(self):
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            assert validate_array(np.array([np.nan, -1.0]), response="silent") is None
 
 
 # ===========================================================================

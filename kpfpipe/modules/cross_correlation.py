@@ -31,7 +31,7 @@ import pandas as pd
 from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.validation import strictly_increasing
+from kpfpipe.utils.stats import strictly_increasing
 
 logger = logging.getLogger(__name__)
 

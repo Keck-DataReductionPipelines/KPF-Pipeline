@@ -1,4 +1,4 @@
-"""Statistical helpers: outlier flagging, robust line fits, bad-pixel interpolation."""
+"""Statistical helpers: monotonicity, outliers, line fits, bad-pixel interpolation."""
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
@@ -9,6 +9,12 @@ from scipy.ndimage import (
     median_filter,
 )
 from scipy.optimize import leastsq
+
+
+def strictly_increasing(x):
+    """Return True if the 1D array is strictly increasing."""
+    x = np.asarray(x)
+    return bool(np.all(x[:-1] < x[1:]))
 
 
 def _gaussian_dist(theta, x):
