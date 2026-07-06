@@ -38,9 +38,8 @@ class PlotL4:
     Args:
         l4_obj: KPF4 data object (post-CrossCorrelation + RadialVelocity).
         output_dir: directory to save PNG files. None = return Figure only.
-        obs_id: observation ID for titles/filenames. Like KPF2, KPF4 has no
-            obs_id attribute, so the recipe passes it explicitly; absent that,
-            it is derived from the PRIMARY FILENAME header.
+        obs_id: observation ID for titles/filenames. If None, falls back to
+            the l4_obj.obs_id attribute (populated on every construction path).
     """
 
     _PLOT_METHODS = ("ccf_grid",)

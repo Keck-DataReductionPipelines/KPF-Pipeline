@@ -33,9 +33,8 @@ class PlotL2:
         l2_obj: KPF2 data object (post-SpectralExtraction; requires
             WavelengthCalibration to have populated the per-fiber WAVE arrays).
         output_dir: directory to save PNG files. None = return Figure only.
-        obs_id: observation ID for titles/filenames. Unlike KPF0/KPF1, KPF2
-            has no obs_id attribute, so the recipe passes it explicitly; absent
-            that, it is derived from the PRIMARY FILENAME header.
+        obs_id: observation ID for titles/filenames. If None, falls back to
+            the l2_obj.obs_id attribute (populated on every construction path).
     """
 
     _PLOT_METHODS = (
