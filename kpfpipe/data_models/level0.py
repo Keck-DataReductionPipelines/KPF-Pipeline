@@ -25,6 +25,7 @@ from rvdata.core.tools.headers import parse_value_to_datatype
 from kpfpipe import __version__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.utils.io import kpf_filename
 from kpfpipe.utils.kpf import get_obs_id
 
 logger = logging.getLogger(__name__)
@@ -175,10 +176,12 @@ class KPF0(KPFDataModel):
         return True
 
     def generate_standard_filename(self):
-        """KPF L0 filenames follow the KP.YYYYMMDD.NNNNN.NN.fits pattern."""
-        if self.obs_id is not None:
-            return f"{self.obs_id}.fits"
-        raise ValueError("Cannot generate filename: obs_id not set")
+        """KPF L0 filenames follow the KP.YYYYMMDD.NNNNN.NN.fits pattern.
+
+        Delegates to `kpf_filename` (the single source for the KPF-native naming
+        rule), which raises a `ValueError` if `obs_id` is unset or invalid.
+        """
+        return kpf_filename(self.obs_id, "L0")
 
     def to_fits(self, fn=None):
         """Write L0 data to a FITS file (plain ImageHDU, no compression)."""

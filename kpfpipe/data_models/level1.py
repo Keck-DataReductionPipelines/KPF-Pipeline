@@ -9,7 +9,6 @@ Subclasses RVDataModel (via KPFDataModel) to reuse its extension/header/data
 infrastructure and receipt system.
 """
 
-import datetime
 import importlib.resources
 import logging
 import os
@@ -24,6 +23,7 @@ from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level2 import KPF2
+from kpfpipe.utils.io import kpf_filename
 from kpfpipe.utils.kpf import get_obs_id
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,6 @@ class KPF1(KPFDataModel):
     """
 
     _DATALVL = "L1"
-    _FILENAME_PREFIX = "kpf_L1"
     _known_extensions = _KNOWN_L1_EXTENSIONS
 
     def __init__(self):
@@ -155,21 +154,14 @@ class KPF1(KPFDataModel):
 
     def generate_standard_filename(self):
         """
-        KPF L1 filenames follow kpf_L1_YYYYMMDDThhmmss.fits convention.
+        KPF L1 filenames follow the kpf_L1_YYYYMMDDThhmmss.fits convention.
 
-        Uses DATE-OBS from the PRIMARY header.
+        Delegates to `kpf_filename` (the single source for the KPF-native naming
+        rule), deriving the timestamp from `obs_id` so the fallback name matches
+        where the recipe writes (`kpf_filepath(obs_id, "L1")`). Raises a
+        `ValueError` if `obs_id` is unset or invalid.
         """
-        if "PRIMARY" in self.headers:
-            date_obs = self.headers["PRIMARY"].get("DATE-OBS")
-            if date_obs is not None:
-                date_str = str(date_obs).split(".")[0]
-                try:
-                    dt = datetime.datetime.fromisoformat(date_str)
-                    datetime_str = dt.strftime("%Y%m%dT%H%M%S")
-                    return f"{self._FILENAME_PREFIX}_{datetime_str}.fits"
-                except ValueError:
-                    pass
-        raise ValueError("Cannot generate filename: DATE-OBS not available")
+        return kpf_filename(self.obs_id, "L1")
 
     def to_fits(self, fn=None):
         """Write L1 data to a FITS file."""

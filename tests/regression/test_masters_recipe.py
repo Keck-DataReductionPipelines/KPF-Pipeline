@@ -535,27 +535,20 @@ class TestFindMasters:
 
 
 class TestFilenameConsistency:
-    """`kpf_filepath` (the pipeline's path builder, from an obs_id) and a data
-    model's `generate_standard_filename` (the to_fits fallback, from headers) are
-    two independent encodings of the same naming rule. This contract asserts they
-    agree on the basename for every level, so the two can never silently drift
-    (the kind of divergence behind the old `kpf_SL1` bug).
-
-    L0/L1 use KPF overrides (no EPRV name for raw/assembled frames); L2/L4 use the
-    EPRV-standard name inherited from rvdata. Both paths are exercised here.
+    """`kpf_filepath` (the pipeline's path builder, from an obs_id string) and a
+    data model's `generate_standard_filename` (the to_fits fallback) build the same
+    product basename. Every level now routes both through `kpf_filename` -- the
+    single source for the naming rule -- so this contract guards that each model
+    carries its `obs_id` and delegates at the right level, and that the string and
+    object builders can never silently diverge (the kind of bug behind the old
+    `kpf_SL1` mix-up). All four levels are exercised.
     """
 
     OBS_ID = "KP.20240405.49597.71"  # 49597 s of day = 13:46:37 UT
-    DATE_OBS = "2024-04-05T13:46:37"
 
     def _make(self, level):
-        if level == "L0":
-            obj = KPF0()
-            obj.obs_id = self.OBS_ID
-            return obj
-        obj = {"L1": KPF1, "L2": KPF2, "L4": KPF4}[level]()
-        obj.headers["PRIMARY"]["INSTRUME"] = "KPF"
-        obj.headers["PRIMARY"]["DATE-OBS"] = self.DATE_OBS
+        obj = {"L0": KPF0, "L1": KPF1, "L2": KPF2, "L4": KPF4}[level]()
+        obj.obs_id = self.OBS_ID
         return obj
 
     @pytest.mark.parametrize("level", ["L0", "L1", "L2", "L4"])

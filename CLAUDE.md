@@ -241,8 +241,13 @@ see the style guide §11.)* The architecture invariants:
   PRIMARY keywords the same way (registered in `config/Masters-headers.csv`); `BUNIT` is structural, not
   registered.
 - **DRP provenance is stamped at read** (`KPF0.from_fits` → `_stamp_wmko_tracking`) onto RECEIPT, not at
-  `to_kpf1`: `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`. It rides the RECEIPT header forward downstream;
-  `DRPSTATU` is advanced per module by `_update_drpstatus`.
+  `to_kpf1`: `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID` (the original L0 obs_id). It rides the
+  RECEIPT header forward downstream; `DRPSTATU` is advanced per module by `_update_drpstatus`. `ORIGID`
+  is also the **read-path recovery source for `obs_id`**: `KPFDataModel.from_fits` reads it back into
+  `self.obs_id` for L1/L2/L4 (whose own filenames are timestamp-based and embed no obs_id, unlike L0's),
+  so **every model carries `obs_id` on every construction path** — the `to_kpfN` converters set it
+  directly, from_fits recovers it from `ORIGID`. (Masters carry no `ORIGID` and set no `obs_id`; their
+  filename comes from KOAID/MASTYPE instead — see *Filename conventions*.)
 - **QUALITY_CONTROL + RECEIPT headers propagate L0→L1→L2→L4** card-by-card via the shared helper
   `KPFDataModel._forward_headers`, making each an **append-only history** (every QC flag / processing
   step). The only QC keyword that changes per level is **`ISGOOD`**, the running AND over every QC flag
@@ -269,7 +274,7 @@ Handler/level configuration lives in exactly one place: `kpfpipe.utils.logger.se
 
 Science: `L0 = {obs_id}.fits` (KPF-native `KP.*`); `L1 = kpf_L1_{YYYYMMDD}T{HHmmss}.fits` — note **no EPRV "S"**, because the EPRV standard defines no L1 (its filename regex only accepts `SL2`/`SL3`/`SL4`); `L2/L4 = kpf_SL{N}_…` (EPRV-standard). Masters (WMKO DRP-RUN-05): `{KOAID-of-first-input}_master_{type}_L{N}.fits`.
 
-Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs_id, level, …)` (`utils/io.py`) is the pipeline's path builder (directory + filename, from an obs_id string) and is what recipes use to write; `<model>.generate_standard_filename()` builds only the basename from a populated object's headers and is the `to_fits(fn=None)` fallback. `kpf_filepath` itself decomposes into two lower-level helpers it composes: `kpf_directory(obs_id, *, level, data_root, kind)` — the single authority for an **output** directory (`kind` ∈ `science`/`masters`/`QLP`; QLP is `{data_root}/QLP/{datecode}/{obs_id}/{level}`) — and `kpf_filename(obs_id, level, *, master)` — the basename; `kpf_filepath = os.path.join(kpf_directory(…), kpf_filename(…))`. Like `check_filename_convention`, **every concrete model declares it explicitly** (KPF0/KPF1 build the KPF names; KPF2/KPF4 are bare pass-throughs to rvdata's EPRV builder via `RV2`/`RV4`; `KPFMasterModel` builds the master name), and `KPFDataModel`'s abstract version **raises `NotImplementedError`**. `TestFilenameConsistency` (in `tests/regression/test_masters_recipe.py`) enforces that this and `kpf_filepath` never drift.
+Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs_id, level, …)` (`utils/io.py`) is the pipeline's path builder (directory + filename, from an obs_id string) and is what recipes use to write; `<model>.generate_standard_filename()` builds only the basename and is the `to_fits(fn=None)` fallback. `kpf_filepath` itself decomposes into two lower-level helpers it composes: `kpf_directory(obs_id, *, level, data_root, kind)` — the single authority for an **output** directory (`kind` ∈ `science`/`masters`/`QLP`; QLP is `{data_root}/QLP/{datecode}/{obs_id}/{level}`) — and `kpf_filename(obs_id, level, *, master)` — the basename; `kpf_filepath = os.path.join(kpf_directory(…), kpf_filename(…))`. **`kpf_filename` is the single source for the naming rule**: the four science models' `generate_standard_filename` all delegate to `kpf_filename(self.obs_id, level)` (so the object- and string-keyed builders can't drift), which is why every model must carry `obs_id` on every construction path (see the `ORIGID` recovery note under *Header standardization*). Like `check_filename_convention`, **every concrete model declares it explicitly** (L0/L1/L2/L4 delegate to `kpf_filename`; `KPFMasterModel` overrides with the KOAID/MASTYPE master name, since masters carry no `obs_id`), and `KPFDataModel`'s abstract version **raises `NotImplementedError`**. `TestFilenameConsistency` (in `tests/regression/test_masters_recipe.py`) enforces that `generate_standard_filename` and `kpf_filepath` never drift. (Filename *validation* — `check_filename_convention` — is separate and still delegates to rvdata's EPRV check for L2/L4.)
 
 ### Masters Pipeline
 

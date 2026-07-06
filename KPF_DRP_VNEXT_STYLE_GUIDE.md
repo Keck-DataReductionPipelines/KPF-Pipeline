@@ -609,7 +609,11 @@ documented, intentional ways — follow *its* conventions when adding masters co
   single authority for an **output** directory (`kind` ∈ `science`/`masters`/`QLP`),
   `kpf_filename(obs_id, level, *, master)` builds the basename, and
   `kpf_filepath = os.path.join(kpf_directory(...), kpf_filename(...))` is their composition
-  (returning the bare `kpf_filename` when `data_root is None`). Recipes call these rather than
+  (returning the bare `kpf_filename` when `data_root is None`). `kpf_filename` is also the single
+  naming authority for the **data models**: every science model's `generate_standard_filename()`
+  (the `to_fits(fn=None)` fallback) delegates to `kpf_filename(self.obs_id, level)`, so the object-
+  and string-keyed names can't drift (`KPFMasterModel` overrides with the KOAID/MASTYPE master name).
+  Recipes call these rather than
   assembling paths inline (e.g. a QLP dir is `kpf_directory(..., kind="QLP")`, not a hand-built
   `os.path.join(data_root, "QLP", …)`). `kpf_directory` is obs-keyed (datecode from `obs_id`);
   plain `os.path.join` remains fine for **input**/night-keyed directories that have a bare

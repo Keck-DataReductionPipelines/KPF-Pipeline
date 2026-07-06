@@ -36,6 +36,7 @@ from rvdata.core.models.level4 import RV4
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.base import KPFDataModel, keyword_registry
+from kpfpipe.utils.io import kpf_filename
 
 # Make rvdata's RV4._read aware of KPF's QUALITY_CONTROL extension so an L4
 # written with it reads back (QCL4 is planned; this keeps the read forward-safe).
@@ -240,8 +241,14 @@ class KPF4(KPFDataModel, RV4):
         return RV4.check_filename_convention(self, filename)
 
     def generate_standard_filename(self):
-        """KPF L4 is EPRV-standard (SL4 name); delegate to rvdata's builder."""
-        return RV4.generate_standard_filename(self)
+        """KPF L4 standard filename (EPRV-standard SL4 name).
+
+        Delegates to `kpf_filename` (the single source for KPF product naming, so
+        generation lives in one place across all levels), deriving the name from
+        `obs_id`. `check_filename_convention` still defers to rvdata's EPRV
+        validator. Raises a `ValueError` if `obs_id` is unset or invalid.
+        """
+        return kpf_filename(self.obs_id, "L4")
 
     def to_fits(self, fn=None):
         """KPF keeps a single-filepath ``to_fits``; rvdata >=0.4.0 renamed the
