@@ -162,10 +162,10 @@ def masters_config(output_dir=None):
 
 def load_l0(config):
     from kpfpipe.data_models.level0 import KPF0
-    from kpfpipe.utils.io import build_filepath
+    from kpfpipe.utils.io import kpf_filepath
 
     return KPF0.from_fits(
-        build_filepath(SCIENCE_OBS_ID, "L0", data_root=str(TESTDATA_DIR))
+        kpf_filepath(SCIENCE_OBS_ID, "L0", data_root=str(TESTDATA_DIR))
     )
 
 

@@ -20,8 +20,9 @@ from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import (
     FileHandler,
-    build_filepath,
-    build_qlp_dir,
+    kpf_directory,
+    kpf_filename,
+    kpf_filepath,
     load_junk_obs_ids,
 )
 from kpfpipe.utils.kpf import get_timestamp, utc_to_hst
@@ -350,133 +351,182 @@ class TestBuildL0FileListsRealData:
 
 
 # ---------------------------------------------------------------------------
-# build_filepath
+# kpf_filepath
 # ---------------------------------------------------------------------------
 
 
-class TestBuildFilepath:
+class TestKpfFilepath:
     def test_master_bias_with_obs_id(self):
-        path = build_filepath(
+        path = kpf_filepath(
             "KP.20240405.03600.00", "L1", data_root="/data", master="bias"
         )
         assert path == "/data/masters/20240405/KP.20240405.03600.00_master_bias_L1.fits"
 
     def test_master_flat_with_obs_id(self):
-        path = build_filepath(
+        path = kpf_filepath(
             "KP.20240405.14000.00", "L1", data_root="/data", master="flat"
         )
         assert path == "/data/masters/20240405/KP.20240405.14000.00_master_flat_L1.fits"
 
     def test_master_bare_filename(self):
-        name = build_filepath("KP.20240405.03600.00", "L1", master="bias")
+        name = kpf_filepath("KP.20240405.03600.00", "L1", master="bias")
         assert name == "KP.20240405.03600.00_master_bias_L1.fits"
 
     def test_science_l0(self):
-        path = build_filepath("KP.20240405.49597.71", "L0", data_root="/data")
+        path = kpf_filepath("KP.20240405.49597.71", "L0", data_root="/data")
         assert path == "/data/L0/20240405/KP.20240405.49597.71.fits"
 
     def test_science_l1(self):
         # Science L1 keeps the KPF "kpf_L1" prefix (no EPRV "S": no L1 standard).
         # KP.20240405.49597.71 → 49597s = 13:46:37
-        path = build_filepath("KP.20240405.49597.71", "L1", data_root="/data")
+        path = kpf_filepath("KP.20240405.49597.71", "L1", data_root="/data")
         assert path == "/data/L1/20240405/kpf_L1_20240405T134637.fits"
 
     def test_science_bare_filename_l0(self):
-        name = build_filepath("KP.20240405.49597.71", "L0")
+        name = kpf_filepath("KP.20240405.49597.71", "L0")
         assert name == "KP.20240405.49597.71.fits"
 
     def test_science_bare_filename_l1(self):
         # 49597s = 13:46:37; L1 keeps the "kpf_L1" prefix (no EPRV "S")
-        name = build_filepath("KP.20240405.49597.71", "L1")
+        name = kpf_filepath("KP.20240405.49597.71", "L1")
         assert name == "kpf_L1_20240405T134637.fits"
-
-    def test_invalid_master_type_raises(self):
-        with pytest.raises(ValueError, match="'master' must be"):
-            build_filepath("KP.20240405.03600.00", "L1", master="wls")
-
-    def test_invalid_master_level_raises(self):
-        with pytest.raises(ValueError, match="'level' for master products"):
-            build_filepath("KP.20240405.03600.00", "L0", master="bias")
 
     def test_science_l2(self):
         # KP.20240405.40113.57 → 40113s = 11:08:33
-        path = build_filepath("KP.20240405.40113.57", "L2", data_root="/data")
+        path = kpf_filepath("KP.20240405.40113.57", "L2", data_root="/data")
         assert path == "/data/L2/20240405/kpf_SL2_20240405T110833.fits"
 
     def test_science_l4(self):
-        path = build_filepath("KP.20240405.40113.57", "L4", data_root="/data")
+        path = kpf_filepath("KP.20240405.40113.57", "L4", data_root="/data")
         assert path == "/data/L4/20240405/kpf_SL4_20240405T110833.fits"
 
     def test_science_l2_midnight_boundary(self):
         # 3600s = 01:00:00
-        path = build_filepath("KP.20240405.03600.00", "L2", data_root="/data")
+        path = kpf_filepath("KP.20240405.03600.00", "L2", data_root="/data")
         assert path == "/data/L2/20240405/kpf_SL2_20240405T010000.fits"
 
     def test_science_l2_zero_seconds(self):
         # 0s = 00:00:00
-        path = build_filepath("KP.20240405.00000.00", "L2", data_root="/data")
+        path = kpf_filepath("KP.20240405.00000.00", "L2", data_root="/data")
         assert path == "/data/L2/20240405/kpf_SL2_20240405T000000.fits"
 
     def test_science_bare_filename_l2(self):
-        name = build_filepath("KP.20240405.40113.57", "L2")
+        name = kpf_filepath("KP.20240405.40113.57", "L2")
         assert name == "kpf_SL2_20240405T110833.fits"
 
     def test_master_thar_with_obs_id(self):
-        path = build_filepath(
+        path = kpf_filepath(
             "KP.20240405.03600.00", "L2", data_root="/data", master="thar"
         )
         assert path == "/data/masters/20240405/KP.20240405.03600.00_master_thar_L2.fits"
 
     def test_invalid_obs_id_raises(self):
         with pytest.raises(ValueError, match="valid observation ID"):
-            build_filepath("20240405", "L1")
+            kpf_filepath("20240405", "L1")
 
     def test_invalid_data_root_empty_string_raises(self):
         with pytest.raises(
             ValueError, match="data_root must be None or a non-empty string"
         ):
-            build_filepath("KP.20240405.40113.57", "L2", data_root="")
+            kpf_filepath("KP.20240405.40113.57", "L2", data_root="")
 
     def test_invalid_data_root_non_string_raises(self):
         with pytest.raises(
             ValueError, match="data_root must be None or a non-empty string"
         ):
-            build_filepath("KP.20240405.40113.57", "L2", data_root=12345)
+            kpf_filepath("KP.20240405.40113.57", "L2", data_root=12345)
+
+    def test_composes_directory_and_filename(self):
+        # kpf_filepath is exactly kpf_directory joined with kpf_filename.
+        obs_id = "KP.20240405.40113.57"
+        assert kpf_filepath(obs_id, "L2", data_root="/data") == os.path.join(
+            kpf_directory(obs_id, level="L2", data_root="/data", kind="science"),
+            kpf_filename(obs_id, "L2"),
+        )
 
 
 # ---------------------------------------------------------------------------
-# FileHandler.glob_masters
+# kpf_filename
 # ---------------------------------------------------------------------------
 
 
-class TestGlobMasters:
-    """`FileHandler.glob_masters` (the masters finder) and `build_filepath` (the
+class TestKpfFilename:
+    def test_science_l0(self):
+        assert kpf_filename("KP.20240405.49597.71", "L0") == "KP.20240405.49597.71.fits"
+
+    def test_science_l1(self):
+        # 49597 s = 13:46:37; L1 keeps the "kpf_L1" prefix (no EPRV "S").
+        assert (
+            kpf_filename("KP.20240405.49597.71", "L1") == "kpf_L1_20240405T134637.fits"
+        )
+
+    def test_science_l2(self):
+        # 40113 s = 11:08:33; L2 uses the EPRV "kpf_SL2" prefix.
+        assert (
+            kpf_filename("KP.20240405.40113.57", "L2") == "kpf_SL2_20240405T110833.fits"
+        )
+
+    def test_science_l4(self):
+        assert (
+            kpf_filename("KP.20240405.40113.57", "L4") == "kpf_SL4_20240405T110833.fits"
+        )
+
+    def test_master(self):
+        assert (
+            kpf_filename("KP.20240405.03600.00", "L1", master="bias")
+            == "KP.20240405.03600.00_master_bias_L1.fits"
+        )
+
+    def test_invalid_obs_id_raises(self):
+        with pytest.raises(ValueError, match="valid observation ID"):
+            kpf_filename("20240405", "L1")
+
+    def test_invalid_level_raises(self):
+        with pytest.raises(ValueError, match="'level' must be"):
+            kpf_filename("KP.20240405.49597.71", "L9")
+
+    def test_invalid_master_type_raises(self):
+        with pytest.raises(ValueError, match="'master' must be"):
+            kpf_filename("KP.20240405.03600.00", "L1", master="wls")
+
+    def test_invalid_master_level_raises(self):
+        with pytest.raises(ValueError, match="'level' for master products"):
+            kpf_filename("KP.20240405.03600.00", "L0", master="bias")
+
+
+# ---------------------------------------------------------------------------
+# FileHandler.find_masters
+# ---------------------------------------------------------------------------
+
+
+class TestFindMasters:
+    """`FileHandler.find_masters` (the masters finder) and `kpf_filepath` (the
     masters writer) build the same path independently. These guard that the two
     inline f-strings can't drift — same directory and `_master_{type}_{level}`
     filename, with the KOAID wildcarded in the finder."""
 
     def test_returns_empty_when_no_masters(self, tmp_path):
         fh = FileHandler({"KPF_MASTERS_OUTPUT": str(tmp_path)})
-        assert fh.glob_masters("bias", "L1", "20240405") == []
+        assert fh.find_masters("bias", "L1", "20240405") == []
 
     def test_raises_without_masters_root(self):
         with pytest.raises(ValueError, match="KPF_MASTERS_OUTPUT"):
-            FileHandler().glob_masters("bias", "L1", "20240405")
+            FileHandler().find_masters("bias", "L1", "20240405")
 
     @pytest.mark.parametrize(
         "cal_type,level",
         [("bias", "L1"), ("dark", "L1"), ("flat", "L1"), ("thar", "L2")],
     )
-    def test_finds_build_filepath_output(self, tmp_path, cal_type, level):
-        # The finder must locate a master written at the build_filepath path with
+    def test_finds_kpf_filepath_output(self, tmp_path, cal_type, level):
+        # The finder must locate a master written at the kpf_filepath path with
         # only the KOAID wildcarded — same directory, same filename convention.
         obs_id = "KP.20240405.03600.00"
         root = str(tmp_path)
-        written = build_filepath(obs_id, level, data_root=root, master=cal_type)
+        written = kpf_filepath(obs_id, level, data_root=root, master=cal_type)
         os.makedirs(os.path.dirname(written), exist_ok=True)
         open(written, "w").close()
         fh = FileHandler({"KPF_MASTERS_OUTPUT": root})
-        assert fh.glob_masters(cal_type, level, "20240405") == [written]
+        assert fh.find_masters(cal_type, level, "20240405") == [written]
 
 
 # ---------------------------------------------------------------------------
@@ -485,7 +535,7 @@ class TestGlobMasters:
 
 
 class TestFilenameConsistency:
-    """`build_filepath` (the pipeline's path builder, from an obs_id) and a data
+    """`kpf_filepath` (the pipeline's path builder, from an obs_id) and a data
     model's `generate_standard_filename` (the to_fits fallback, from headers) are
     two independent encodings of the same naming rule. This contract asserts they
     agree on the basename for every level, so the two can never silently drift
@@ -509,37 +559,51 @@ class TestFilenameConsistency:
         return obj
 
     @pytest.mark.parametrize("level", ["L0", "L1", "L2", "L4"])
-    def test_generate_standard_filename_matches_build_filepath(self, level):
+    def test_generate_standard_filename_matches_kpf_filepath(self, level):
         obj = self._make(level)
-        expected = os.path.basename(build_filepath(self.OBS_ID, level))
+        expected = os.path.basename(kpf_filepath(self.OBS_ID, level))
         assert obj.generate_standard_filename() == expected
 
 
 # ---------------------------------------------------------------------------
-# build_qlp_dir
+# kpf_directory
 # ---------------------------------------------------------------------------
 
 
-class TestBuildQlpDir:
-    def test_l0(self):
-        path = build_qlp_dir("KP.20240405.49597.71", "L0", data_root="/data")
+class TestKpfDirectory:
+    OBS_ID = "KP.20240405.49597.71"
+
+    def test_science(self):
+        path = kpf_directory(self.OBS_ID, level="L2", data_root="/data", kind="science")
+        assert path == "/data/L2/20240405"
+
+    def test_masters_ignores_level(self):
+        path = kpf_directory(self.OBS_ID, data_root="/data", kind="masters")
+        assert path == "/data/masters/20240405"
+
+    def test_qlp(self):
+        path = kpf_directory(self.OBS_ID, level="L0", data_root="/data", kind="QLP")
         assert path == "/data/QLP/20240405/KP.20240405.49597.71/L0"
 
-    def test_l1(self):
-        path = build_qlp_dir("KP.20240405.49597.71", "L1", data_root="/data")
-        assert path == "/data/QLP/20240405/KP.20240405.49597.71/L1"
+    def test_invalid_kind_raises(self):
+        with pytest.raises(ValueError, match="kind must be one of"):
+            kpf_directory(self.OBS_ID, level="L0", data_root="/data", kind="logs")
 
     def test_invalid_obs_id_raises(self):
         with pytest.raises(ValueError, match="valid observation ID"):
-            build_qlp_dir("20240405", "L0", data_root="/data")
+            kpf_directory("20240405", level="L0", data_root="/data", kind="QLP")
+
+    def test_missing_level_raises_for_science(self):
+        with pytest.raises(ValueError, match="'level' must be"):
+            kpf_directory(self.OBS_ID, data_root="/data", kind="science")
 
     def test_invalid_data_root_none_raises(self):
         with pytest.raises(ValueError, match="data_root must be a non-empty string"):
-            build_qlp_dir("KP.20240405.40113.57", "L0", data_root=None)
+            kpf_directory(self.OBS_ID, level="L0", data_root=None, kind="QLP")
 
     def test_invalid_data_root_empty_string_raises(self):
         with pytest.raises(ValueError, match="data_root must be a non-empty string"):
-            build_qlp_dir("KP.20240405.40113.57", "L0", data_root="")
+            kpf_directory(self.OBS_ID, level="L0", data_root="", kind="QLP")
 
 
 # ---------------------------------------------------------------------------
@@ -654,7 +718,7 @@ class TestMastersRecipe:
         for files in file_handler.build_l0_file_lists("bias"):
             bias_handler = Bias(files)
             bias_l1 = bias_handler.make_master_l1()
-            out_path = build_filepath(
+            out_path = kpf_filepath(
                 get_obs_id(files[0]), "L1", data_root=data_root_out, master="bias"
             )
             os.makedirs(os.path.dirname(out_path), exist_ok=True)

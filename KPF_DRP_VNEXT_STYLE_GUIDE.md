@@ -337,7 +337,7 @@ class StageName:
   **not** need a `*` added; their domain identifiers stay positional. A helper may still use
   `*` where it already aids clarity (existing practice), but don't add one mechanically:
   ```python
-  def build_filepath(obs_id, level, *, data_root=None, master=None): ...
+  def kpf_filepath(obs_id, level, *, data_root=None, master=None): ...
   def _box_extraction(D, V, *, S=None, M=None, W=None): ...
   ```
   Required positionals first; everything tunable after the `*`.
@@ -604,17 +604,23 @@ documented, intentional ways — follow *its* conventions when adding masters co
   - Transform modules → `.perform()`; QC/Diag/Quicklook → `.run()` (or `.run("all")`);
     masters → `.make_master_l1/l2()`. The constructor takes the **whole `ConfigHandler`**,
     not pre-extracted params — each module pulls its own section internally.
-- **Product paths go through the `utils/io.py` helpers** (`build_filepath`, `glob_masters`,
-  `build_qlp_dir`, `build_l0_file_lists`, `get_obs_id`) — never re-derived by string
-  concatenation in modules/recipes. These helpers are the single definition of the on-disk
-  layout and filename conventions, built inline within each (no shared layout/filename
-  constant or directory helper — that abstraction was deliberately removed as more confusing
-  than the duplication). Where a convention is necessarily encoded twice — the masters
-  *writer* (`build_filepath`) and *reader* (`glob_masters`) build their paths independently —
-  keep them in lock-step with a **drift test** (`test_glob_masters_matches_build_filepath`),
-  not a shared helper. Plain `os.path.join` is fine for incidental input-directory assembly
-  (e.g. an L0 scan dir). Level passed as a literal `"L0"/"L1"/"L2"/"L4"`;
-  `os.makedirs(os.path.dirname(path), exist_ok=True)` before every `.to_fits()`.
+- **Output paths go through the `utils/io.py` trio** — never re-derived by string
+  concatenation in modules/recipes. `kpf_directory(obs_id, *, level, data_root, kind)` is the
+  single authority for an **output** directory (`kind` ∈ `science`/`masters`/`QLP`),
+  `kpf_filename(obs_id, level, *, master)` builds the basename, and
+  `kpf_filepath = os.path.join(kpf_directory(...), kpf_filename(...))` is their composition
+  (returning the bare `kpf_filename` when `data_root is None`). Recipes call these rather than
+  assembling paths inline (e.g. a QLP dir is `kpf_directory(..., kind="QLP")`, not a hand-built
+  `os.path.join(data_root, "QLP", …)`). `kpf_directory` is obs-keyed (datecode from `obs_id`);
+  plain `os.path.join` remains fine for **input**/night-keyed directories that have a bare
+  datecode and no obs_id — the L0 scan dir (`FileHandler.build_mini_database`), the
+  masters-search dir (`find_masters`, which scans a `obs_date ± N` window), and the masters
+  recipe's `l0_dir` — which are out of `kpf_directory`'s scope by design. Where the masters
+  layout is thus encoded twice — the *writer* (`kpf_filepath`/`kpf_directory`) and the inline
+  *reader* (`find_masters`) — keep them in lock-step with a **drift test**
+  (`TestFindMasters.test_finds_kpf_filepath_output`). Level passed as a literal
+  `"L0"/"L1"/"L2"/"L4"`; `os.makedirs(os.path.dirname(path), exist_ok=True)` before every
+  `.to_fits()`.
 - **Arg validation**: guard at the top, `raise SystemExit("Error: --obs_id is required …")`
   with an example.
 - **Recipe comments** are terse, lowercase, imperative, and explain the *why* (science

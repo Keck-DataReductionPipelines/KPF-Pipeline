@@ -356,17 +356,17 @@ class FileHandler:
         )
         return clusters
 
-    def glob_masters(self, cal_type, level, datecode):
+    def find_masters(self, cal_type, level, datecode):
         """
         Sorted list of the master files matching ``cal_type``/``level`` written
         under ``KPF_MASTERS_OUTPUT`` for ``datecode`` -- everything matching
         ``{root}/masters/{datecode}/*_master_{cal_type}_{level}.fits`` (the KOAID
         prefix wildcarded).
 
-        The reader counterpart to a `build_filepath` master path: it builds the
+        The reader counterpart to a `kpf_filepath` master path: it builds the
         same masters directory and filename independently, with the KOAID
         wildcarded, and returns what is actually on disk.
-        `TestGlobMasters.test_finds_build_filepath_output` guards that the two stay
+        `TestFindMasters.test_finds_kpf_filepath_output` guards that the two stay
         in step.
 
         Raises
@@ -385,51 +385,157 @@ class FileHandler:
         return sorted(glob.glob(pattern))
 
 
-def build_qlp_dir(obs_id, level, *, data_root):
+def kpf_filename(obs_id, level, *, master=None):
     """
-    Build the QLP output directory for a given observation and level.
+    Base filename for a KPF data product (no directory).
+
+    The obs_id-string twin of ``<model>.generate_standard_filename()`` (which
+    builds the same basename from a populated object's headers -- the
+    ``to_fits(fn=None)`` fallback); the two encode the same naming rule and must
+    agree per level, which ``TestFilenameConsistency`` enforces.
+
+    Science basenames by level:
+      L0:    {obs_id}.fits                       (KPF-native)
+      L1:    kpf_L1_{YYYYMMDD}T{HHmmss}.fits      (no EPRV "S": no L1 standard)
+      L2/L4: kpf_SL{N}_{YYYYMMDD}T{HHmmss}.fits   (EPRV standard)
+    Master basename: {obs_id}_master_{master}_{level}.fits.
 
     Parameters
     ----------
     obs_id : str
-        Observation ID (e.g. 'KP.20240405.49597.71').
+        Observation ID (e.g. 'KP.20240405.49597.71'). For master products this
+        is the obs_id of the first frame in the stack.
     level : str
-        Data level string, one of 'L0', 'L1', 'L2', 'L4'.
-    data_root : str
-        Root data directory (e.g. '/data/kpf-next/').
+        Data level 'L0'/'L1'/'L2'/'L4' (masters: 'L1'/'L2'/'L4').
+    master : str or None, optional
+        Master calibration type ('bias'/'dark'/'flat'/'thar') for a master
+        product, or None (the default) for a science product.
 
     Returns
     -------
     str
-        Absolute path {data_root}/QLP/{datecode}/{obs_id}/{level}/.
+        The base filename.
 
     Raises
     ------
     ValueError
-        If `obs_id` is not a valid observation ID, or if `data_root` is not a
-        non-empty string.
+        If `obs_id` is not a valid observation ID, `level` is unrecognized, or
+        `master` is an unrecognized type or paired with an invalid level.
     """
-    if not isinstance(data_root, str) or not data_root:
-        raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")
     if not is_obs_id(obs_id):
         raise ValueError(
             "obs_id must be a valid observation ID "
             f"(e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
         )
-    return os.path.join(data_root, "QLP", get_datecode(obs_id), obs_id, level)
+
+    if master is not None:
+        if master not in ("bias", "dark", "flat", "thar"):
+            raise ValueError(
+                f"'master' must be 'bias', 'dark', 'flat', or 'thar'; got '{master}'"
+            )
+        if level not in ("L1", "L2", "L4"):
+            raise ValueError(
+                "'level' for master products must be 'L1', 'L2', or 'L4'; "
+                f"got '{level}'"
+            )
+        return f"{obs_id}_master_{master}_{level}.fits"
+
+    if level not in ("L0", "L1", "L2", "L4"):
+        raise ValueError(f"'level' must be 'L0', 'L1', 'L2', or 'L4'; got '{level}'")
+
+    if level == "L0":
+        return f"{obs_id}.fits"
+    eprv_ts = kpf_timestamp_to_eprv_timestamp(get_timestamp(obs_id))
+    # L1 has no EPRV standard, so it keeps the KPF "kpf_L1" prefix (no "S");
+    # L2/L4 use the EPRV "kpf_SL{N}" prefix.
+    prefix = "kpf_L1" if level == "L1" else f"kpf_SL{level[1]}"
+    return f"{prefix}_{eprv_ts}.fits"
 
 
-def build_filepath(obs_id, level, *, data_root=None, master=None):
+_DIRECTORY_KINDS = ("science", "masters", "QLP")
+
+
+def kpf_directory(obs_id, *, level=None, data_root, kind):
     """
-    Build a filepath for a KPF data product.
+    Output directory for a KPF product tree.
+
+    The single authority for the on-disk output layout; `kpf_filepath` and the
+    recipes go through it rather than re-deriving ``os.path.join(data_root, ...)``
+    by hand. The datecode is parsed from ``obs_id``. Pure path construction -- it
+    does not touch the filesystem.
+
+    ===========  =========================================================
+    ``kind``     directory
+    ===========  =========================================================
+    ``science``  ``{data_root}/{level}/{datecode}`` -- L0/L1/L2/L4 products
+    ``masters``  ``{data_root}/masters/{datecode}`` (``level`` unused)
+    ``QLP``      ``{data_root}/QLP/{datecode}/{obs_id}/{level}`` -- quicklook
+    ===========  =========================================================
+
+    Parameters
+    ----------
+    obs_id : str
+        Observation ID (e.g. 'KP.20240405.49597.71'); the datecode source and,
+        for ``QLP``, a path component.
+    level : str or None, optional
+        Data level 'L0'/'L1'/'L2'/'L4'. Required for ``science`` and ``QLP``;
+        unused for ``masters``.
+    data_root : str
+        Root data directory (e.g. '/data/kpf/'); a non-empty string.
+    kind : str
+        Which output tree: 'science', 'masters', or 'QLP'.
+
+    Returns
+    -------
+    str
+        The directory path (no trailing separator).
+
+    Raises
+    ------
+    ValueError
+        If `data_root` is not a non-empty string, `kind` is unrecognized,
+        `obs_id` is invalid, or `level` is missing/invalid for a kind that needs
+        it.
+    """
+    if not isinstance(data_root, str) or not data_root:
+        raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")
+    if kind not in _DIRECTORY_KINDS:
+        raise ValueError(f"kind must be one of {list(_DIRECTORY_KINDS)}; got {kind!r}")
+    if not is_obs_id(obs_id):
+        raise ValueError(
+            "obs_id must be a valid observation ID "
+            f"(e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
+        )
+
+    datecode = get_datecode(obs_id)
+
+    if kind == "masters":
+        return os.path.join(data_root, "masters", datecode)
+
+    # science and QLP both carry a data level.
+    if level not in ("L0", "L1", "L2", "L4"):
+        raise ValueError(
+            f"'level' must be 'L0', 'L1', 'L2', or 'L4' for kind={kind!r}; "
+            f"got {level!r}"
+        )
+    if kind == "science":
+        return os.path.join(data_root, level, datecode)
+    # kind == "QLP": the obs_id names a path component.
+    return os.path.join(data_root, "QLP", datecode, obs_id, level)
+
+
+def kpf_filepath(obs_id, level, *, data_root=None, master=None):
+    """
+    Build a filepath for a KPF data product: the product's directory
+    (`kpf_directory`) joined with its basename (`kpf_filename`).
 
     This is the pipeline's authoritative path builder: it constructs the output
-    path (directory layout + filename) from an obs_id string, before/without a
-    populated data object, and is what every recipe uses to decide where to
-    write. The parallel `<model>.generate_standard_filename()` builds only the
-    basename from a populated object's headers and is the `to_fits(fn=None)`
-    fallback (rvdata-owned for the EPRV-standard levels L2/L4, KPF-overridden for
-    the non-standard levels L0/L1). The two encode the same naming rule and must
+    path from an obs_id string, before/without a populated data object, and is
+    what every recipe uses to decide where to write. The parallel
+    `<model>.generate_standard_filename()` builds only the basename from a
+    populated object's headers and is the `to_fits(fn=None)` fallback
+    (rvdata-owned for the EPRV-standard levels L2/L4, KPF-overridden for the
+    non-standard levels L0/L1). The two encode the same naming rule and must
     agree per level; `TestFilenameConsistency` enforces that contract.
 
     Parameters
@@ -441,8 +547,8 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
         Data level string, one of 'L0', 'L1', 'L2', 'L4'.
     data_root : str or None, optional
         Root data directory (e.g. '/data/kpf/'). When None (the default),
-        returns the bare filename. Otherwise must be a non-empty string and a
-        full path is returned.
+        returns the bare filename (`kpf_filename`). Otherwise must be a
+        non-empty string and a full path is returned.
     master : str or None, optional
         Master calibration type, one of 'bias', 'dark', 'flat', 'thar'. If
         provided, builds a master calibration path. If omitted, builds a
@@ -465,47 +571,13 @@ def build_filepath(obs_id, level, *, data_root=None, master=None):
         raise ValueError(
             f"data_root must be None or a non-empty string; got {data_root!r}"
         )
-    if not is_obs_id(obs_id):
-        raise ValueError(
-            "obs_id must be a valid observation ID "
-            f"(e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
-        )
 
-    datecode = get_datecode(obs_id)
-
-    if master is not None:
-        # Masters: {data_root}/masters/{datecode}/{obs_id}_master_{master}_{level}.fits
-        # Level is in the filename only — no level subdirectory.
-        if master not in ("bias", "dark", "flat", "thar"):
-            raise ValueError(
-                f"'master' must be 'bias', 'dark', 'flat', or 'thar'; got '{master}'"
-            )
-        if level not in ("L1", "L2", "L4"):
-            raise ValueError(
-                "'level' for master products must be 'L1', 'L2', or 'L4'; "
-                f"got '{level}'"
-            )
-        filename = f"{obs_id}_master_{master}_{level}.fits"
-        if data_root is None:
-            return filename
-        return os.path.join(data_root, "masters", datecode, filename)
-
-    # Science paths by level:
-    #   L0:    {obs_id}.fits                            (KPF-native)
-    #   L1:    kpf_L1_{YYYYMMDD}T{HHmmss}.fits          (no EPRV "S": no L1 standard)
-    #   L2/L4: kpf_SL{N}_{YYYYMMDD}T{HHmmss}.fits       (EPRV standard)
-    if level not in ("L0", "L1", "L2", "L4"):
-        raise ValueError(f"'level' must be 'L0', 'L1', 'L2', or 'L4'; got '{level}'")
-
-    if level == "L0":
-        filename = f"{obs_id}.fits"
-    else:
-        eprv_ts = kpf_timestamp_to_eprv_timestamp(get_timestamp(obs_id))
-        # L1 has no EPRV standard, so it keeps the KPF "kpf_L1" prefix (no "S");
-        # L2/L4 use the EPRV "kpf_SL{N}" prefix.
-        prefix = "kpf_L1" if level == "L1" else f"kpf_SL{level[1]}"
-        filename = f"{prefix}_{eprv_ts}.fits"
-
+    filename = kpf_filename(obs_id, level, master=master)
     if data_root is None:
         return filename
-    return os.path.join(data_root, level, datecode, filename)
+
+    kind = "masters" if master is not None else "science"
+    return os.path.join(
+        kpf_directory(obs_id, level=level, data_root=data_root, kind=kind),
+        filename,
+    )

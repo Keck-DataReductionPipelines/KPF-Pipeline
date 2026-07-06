@@ -141,7 +141,7 @@ class CalibrationAssociation:
         for delta in range(days_before, days_after + 1):
             search_date = obs_date + timedelta(days=delta)
             datecode = search_date.strftime("%Y%m%d")
-            for filepath in self._file_handler.glob_masters(cal_type, level, datecode):
+            for filepath in self._file_handler.find_masters(cal_type, level, datecode):
                 try:
                     ts = get_timestamp(filepath)
                 except ValueError as e:

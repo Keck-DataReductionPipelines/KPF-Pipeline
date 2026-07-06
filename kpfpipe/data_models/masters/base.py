@@ -29,7 +29,7 @@ import warnings
 import pandas as pd
 
 from kpfpipe.data_models.base import KPFDataModel
-from kpfpipe.utils.io import build_filepath
+from kpfpipe.utils.io import kpf_filepath
 from kpfpipe.utils.kpf import get_obs_id
 
 # WMKO DRP-RUN-05 master name: {KOAID}_master_{type}_L{N}.fits, where KOAID is a
@@ -92,7 +92,7 @@ class KPFMasterModel(KPFDataModel):
         The KOAID is read from the first recorded input file and the type from
         the PRIMARY ``MASTYPE`` header (both set by `set_input_files()`). Raises
         if either is missing, so a non-compliant master name can never be
-        produced; `build_filepath` validates the type token and level.
+        produced; `kpf_filepath` validates the type token and level.
         """
         master_type = self.headers["PRIMARY"].get("MASTYPE")
         if not master_type:
@@ -106,4 +106,4 @@ class KPFMasterModel(KPFDataModel):
                 "INPUT_FILES is empty; cannot determine the first-input KOAID"
             )
         koaid = get_obs_id(str(input_files["FILENAME"][0]))
-        return build_filepath(koaid, f"L{self.level}", master=master_type)
+        return kpf_filepath(koaid, f"L{self.level}", master=master_type)

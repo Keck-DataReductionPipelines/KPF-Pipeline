@@ -42,7 +42,7 @@ from astropy.io import fits
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import FileHandler, build_filepath
+from kpfpipe.utils.io import FileHandler, kpf_filepath
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
 
 # Masters every science frame depends on, as (cal_type, level). Flat masters are
@@ -358,7 +358,7 @@ def _missing_masters(masters_output, datecode):
     return [
         (cal_type, level)
         for cal_type, level in _REQUIRED_MASTERS
-        if not file_handler.glob_masters(cal_type, level, datecode)
+        if not file_handler.find_masters(cal_type, level, datecode)
     ]
 
 
@@ -378,7 +378,7 @@ def check_masters_exist(masters_output, datecodes):
 
 def _science_complete(obs_id, science_output):
     """True if the frame's L4 product already exists (reduced to completion)."""
-    return os.path.exists(build_filepath(obs_id, "L4", data_root=science_output))
+    return os.path.exists(kpf_filepath(obs_id, "L4", data_root=science_output))
 
 
 # Live child recipe processes. Each is its own session leader
@@ -910,7 +910,7 @@ def main(argv=None):
             f"L2/L4 products under {science_output}"
         )
         l4_paths = [
-            build_filepath(oid, "L4", data_root=science_output) for oid in obs_ids
+            kpf_filepath(oid, "L4", data_root=science_output) for oid in obs_ids
         ]
 
     # Step 5: RV timeseries plot from the L4 products -- only when a plot

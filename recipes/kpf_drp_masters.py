@@ -16,7 +16,7 @@ from kpfpipe.modules.masters.dark import Dark
 
 # from kpfpipe.modules.masters.flat import Flat
 from kpfpipe.modules.masters.wls import WLS
-from kpfpipe.utils.io import FileHandler, build_filepath
+from kpfpipe.utils.io import FileHandler, kpf_filepath
 from kpfpipe.utils.kpf import get_obs_id
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
@@ -51,7 +51,7 @@ def main(config, args):
     # Stack the bias frames into a master bias used to remove the detector
     # offset from every science and calibration frame.
     for files in file_handler.build_l0_file_lists("bias"):
-        bias_path = build_filepath(
+        bias_path = kpf_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="bias"
         )
         logger.info("stacking %d bias frames -> %s", len(files), bias_path)
@@ -67,7 +67,7 @@ def main(config, args):
         merge_small_clusters=True,
         enforce_hst_midnight_boundary=False,
     ):
-        dark_path = build_filepath(
+        dark_path = kpf_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="dark"
         )
         logger.info("stacking %d dark frames -> %s", len(files), dark_path)
@@ -76,7 +76,7 @@ def main(config, args):
 
     # master flat (not yet implemented)
     # for files in file_handler.build_l0_file_lists('flat'):
-    #    flat_path = build_filepath(get_obs_id(files[0]), 'L1',
+    #    flat_path = kpf_filepath(get_obs_id(files[0]), 'L1',
     #                               data_root=data_root_masters, master='flat')
     #    flat = Flat(files, config)
     #    flat.make_master_l1(filepath=flat_path)
@@ -85,7 +85,7 @@ def main(config, args):
     # emission-line spectrum anchors the per-order wavelength calibration.
     for files in file_handler.build_l0_file_lists("thar"):
         obs_id = get_obs_id(files[0])
-        wls_master_path = build_filepath(
+        wls_master_path = kpf_filepath(
             obs_id, "L2", data_root=data_root_masters, master="thar"
         )
         # The diagnostics HDF5 is a sidecar of the master, in the same directory
