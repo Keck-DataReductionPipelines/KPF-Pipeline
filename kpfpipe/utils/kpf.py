@@ -18,33 +18,28 @@ _HST_UTC_OFFSET_SECONDS = 36000
 _J2000_EPOCH = datetime(2000, 1, 1, 12, 0, 0)
 
 
-def _validate_kpf_timestamp(timestamp):
+def is_timestamp(s):
     """
-    Validate that `timestamp` is a well-formed KPF timestamp string of the
-    form 'YYYYMMDD.SSSSS.FF' with a real calendar date and SSSSS in
-    [0, 86399]. Raises ValueError otherwise.
+    Return True if `s` is a valid KPF timestamp, e.g. '20240113.23249.10'.
+
+    Checks all three: the 'YYYYMMDD.SSSSS.FF' format, that YYYYMMDD is a real
+    calendar date, and that SSSSS (seconds past midnight) is in [0, 86399].
+    The sub-second frame field FF is format-checked only.
+
+    This is the module's single source of timestamp-validity logic. The other
+    predicate (`is_obs_id`) and the raising extractors/converters
+    (`get_timestamp`, `utc_to_hst`, `kpf_timestamp_to_datetime`, ...) all
+    validate through it -- the predicates return its bool, the raising callers
+    turn a False into a ValueError at their own boundary.
     """
-    if not isinstance(timestamp, str):
-        raise ValueError(
-            f"KPF timestamp must be a string; got {type(timestamp).__name__}"
-        )
-    if not _KPF_TIMESTAMP_PATTERN.fullmatch(timestamp):
-        raise ValueError(
-            f"Invalid KPF timestamp format {timestamp!r}; expected 'YYYYMMDD.SSSSS.FF'"
-        )
-    date_str, seconds_str, _ = timestamp.split(".")
+    if not isinstance(s, str) or not _KPF_TIMESTAMP_PATTERN.fullmatch(s):
+        return False
+    date_str, seconds_str, _ = s.split(".")
     try:
         datetime.strptime(date_str, "%Y%m%d")
-    except ValueError as e:
-        raise ValueError(
-            f"Invalid date in KPF timestamp {timestamp!r}: {date_str!r}"
-        ) from e
-    seconds = int(seconds_str)
-    if seconds >= _SECONDS_PER_DAY:
-        raise ValueError(
-            f"Invalid seconds-past-midnight in KPF timestamp {timestamp!r}: "
-            f"{seconds} not in [0, {_SECONDS_PER_DAY - 1}]"
-        )
+    except ValueError:
+        return False
+    return int(seconds_str) < _SECONDS_PER_DAY
 
 
 def is_obs_id(s):
@@ -55,11 +50,7 @@ def is_obs_id(s):
     """
     if not isinstance(s, str) or not _OBS_ID_PATTERN.fullmatch(s):
         return False
-    try:
-        _validate_kpf_timestamp(s[3:])
-    except ValueError:
-        return False
-    return True
+    return is_timestamp(s[3:])
 
 
 def is_datecode(s):
@@ -71,22 +62,6 @@ def is_datecode(s):
         return False
     try:
         datetime.strptime(s, "%Y%m%d")
-    except ValueError:
-        return False
-    return True
-
-
-def is_timestamp(s):
-    """
-    Return True if `s` is a valid KPF timestamp, e.g. '20240113.23249.10'.
-    Both the format and the embedded date/seconds are checked.
-
-    Completes the `is_obs_id` / `is_datecode` / `is_timestamp` validator triple.
-    Deliberately retained for a symmetric validation surface even though only
-    the other two have call sites today.
-    """
-    try:
-        _validate_kpf_timestamp(s)
     except ValueError:
         return False
     return True
@@ -118,7 +93,8 @@ def get_obs_id(fn):
     if not match:
         raise ValueError(f"No obs_id found in: {fn}")
     obs_id = match.group(1)
-    _validate_kpf_timestamp(obs_id[3:])
+    if not is_timestamp(obs_id[3:]):
+        raise ValueError(f"Invalid KPF timestamp in obs_id: {obs_id!r}")
     return obs_id
 
 
@@ -148,7 +124,8 @@ def get_datecode(s):
     if not match:
         raise ValueError(f"Cannot extract datecode from: {s}")
     obs_id = match.group(1)
-    _validate_kpf_timestamp(obs_id[3:])
+    if not is_timestamp(obs_id[3:]):
+        raise ValueError(f"Invalid KPF timestamp in {s!r}")
     return obs_id.split(".")[1]
 
 
@@ -178,7 +155,8 @@ def get_timestamp(s):
     if not match:
         raise ValueError(f"No KPF timestamp found in: {s}")
     timestamp = match.group(1)
-    _validate_kpf_timestamp(timestamp)
+    if not is_timestamp(timestamp):
+        raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
     return timestamp
 
 
@@ -228,7 +206,8 @@ def utc_to_hst(timestamp):
     str
         HST timestamp in the same KPF format.
     """
-    _validate_kpf_timestamp(timestamp)
+    if not is_timestamp(timestamp):
+        raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
     date_str, seconds_str, frame_str = timestamp.split(".")
     hst_seconds = int(seconds_str) - _HST_UTC_OFFSET_SECONDS
     date = datetime.strptime(date_str, "%Y%m%d")
@@ -258,7 +237,8 @@ def hst_to_utc(timestamp):
     str
         UTC timestamp in the same KPF format.
     """
-    _validate_kpf_timestamp(timestamp)
+    if not is_timestamp(timestamp):
+        raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
     date_str, seconds_str, frame_str = timestamp.split(".")
     utc_seconds = int(seconds_str) + _HST_UTC_OFFSET_SECONDS
     date = datetime.strptime(date_str, "%Y%m%d")
@@ -284,7 +264,8 @@ def kpf_timestamp_to_datetime(timestamp):
     datetime
         Naive UTC datetime at the timestamp's seconds-past-midnight.
     """
-    _validate_kpf_timestamp(timestamp)
+    if not is_timestamp(timestamp):
+        raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
     date_str, seconds_str, _ = timestamp.split(".")
     return datetime.strptime(date_str, "%Y%m%d") + timedelta(seconds=int(seconds_str))
 
@@ -307,7 +288,8 @@ def kpf_timestamp_to_eprv_timestamp(timestamp):
     str
         EPRV timestamp of the form 'YYYYMMDDTHHMMSS'.
     """
-    _validate_kpf_timestamp(timestamp)
+    if not is_timestamp(timestamp):
+        raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
     date_str, seconds_str, _ = timestamp.split(".")
     total_seconds = int(seconds_str)
     hh = total_seconds // 3600

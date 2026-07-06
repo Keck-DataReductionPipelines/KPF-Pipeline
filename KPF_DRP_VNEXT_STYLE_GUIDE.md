@@ -232,9 +232,8 @@ class StageName:
   without a production call site, and **each such function must say so in its docstring** (a
   short sentence naming why it's retained) so it reads as deliberate, not dead code:
   - **Symmetric-completeness helpers** — the unused half of an inverse pair or the missing
-    member of a validator set, kept so the API surface is whole. Examples: `hst_to_utc`
-    (inverse of the used `utc_to_hst`), `is_timestamp` (completes the
-    `is_obs_id`/`is_datecode`/`is_timestamp` triple).
+    member of a validator set, kept so the API surface is whole. Example: `hst_to_utc`
+    (inverse of the used `utc_to_hst`).
   - **Staged-ahead helpers** — a self-contained routine written for imminent work and already
     covered by tests, ahead of its first pipeline call site. Example: `air_to_vac` (retained
     for the forthcoming vacuum-wavelength wiring, already a wavelength-cal test oracle).
