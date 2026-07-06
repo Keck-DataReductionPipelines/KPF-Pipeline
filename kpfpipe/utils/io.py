@@ -39,6 +39,12 @@ _OBJECT_MAP = {
     ],
 }
 
+# The calibration/master frame types, in canonical order. Derived from
+# _OBJECT_MAP so it stays the single source: both L0 frame selection
+# (build_l0_file_lists) and master-product filenames (kpf_filename) validate
+# against the same set and cannot drift.
+_CAL_TYPES = tuple(_OBJECT_MAP)
+
 
 def load_junk_obs_ids(data_input):
     """Set of observer-flagged junk obs_ids for a data tree.
@@ -429,9 +435,9 @@ def kpf_filename(obs_id, level, *, master=None):
         )
 
     if master is not None:
-        if master not in ("bias", "dark", "flat", "thar"):
+        if master not in _CAL_TYPES:
             raise ValueError(
-                f"'master' must be 'bias', 'dark', 'flat', or 'thar'; got '{master}'"
+                f"'master' must be one of {list(_CAL_TYPES)}; got '{master}'"
             )
         if level not in ("L1", "L2", "L4"):
             raise ValueError(
