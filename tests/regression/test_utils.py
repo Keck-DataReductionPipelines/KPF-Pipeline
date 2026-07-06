@@ -16,7 +16,6 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import (
     get_datecode,
     get_obs_id,
-    get_seconds_since_j2000,
     get_timestamp,
     hst_to_utc,
     is_datecode,
@@ -362,26 +361,6 @@ class TestKpfTimestampToEprvValidation:
     def test_raises_on_invalid_date(self):
         with pytest.raises(ValueError, match="Invalid KPF timestamp"):
             kpf_timestamp_to_eprv_timestamp("20249999.40113.57")
-
-
-class TestGetSecondsSinceJ2000:
-    def test_basic(self):
-        # J2000.0 itself: 2000-01-01 12:00 UTC = '20000101.43200.00'
-        assert get_seconds_since_j2000("20000101.43200.00") == 0
-
-    def test_monotonic_across_year_boundary(self):
-        # Dec 31 23:59:00 -> Jan 1 00:00:00 should differ by 60s exactly.
-        end = get_seconds_since_j2000("20231231.86340.00")
-        start_next_year = get_seconds_since_j2000("20240101.00000.00")
-        assert start_next_year - end == 60
-
-    def test_raises_on_invalid_timestamp(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            get_seconds_since_j2000("KP.20240405.99999.57.fits")
-
-    def test_raises_when_no_timestamp_found(self):
-        with pytest.raises(ValueError, match="No KPF timestamp found"):
-            get_seconds_since_j2000("notimestamp.fits")
 
 
 # ===========================================================================

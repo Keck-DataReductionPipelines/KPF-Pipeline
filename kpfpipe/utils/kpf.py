@@ -14,9 +14,6 @@ _SECONDS_PER_DAY = 86400
 # Hawaii Standard Time is UTC-10 (KPF timestamps are UTC)
 _HST_UTC_OFFSET_SECONDS = 36000
 
-# J2000.0 epoch (2000-01-01 12:00 UTC)
-_J2000_EPOCH = datetime(2000, 1, 1, 12, 0, 0)
-
 
 def is_timestamp(s):
     """
@@ -158,38 +155,6 @@ def get_timestamp(s):
     if not is_timestamp(timestamp):
         raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
     return timestamp
-
-
-def get_seconds_since_j2000(s):
-    """
-    Compute seconds since the J2000.0 epoch (2000-01-01 12:00 UTC) for the
-    KPF timestamp embedded in `s`. Suitable as a monotonic scalar for sorting
-    and gap detection.
-
-    Parameters
-    ----------
-    s : str
-        A KPF timestamp ('YYYYMMDD.SSSSS.FF'), an obs_id
-        ('KP.YYYYMMDD.SSSSS.FF'), or any filename or path containing one.
-
-    Returns
-    -------
-    int
-        Seconds since J2000.0 (naive UTC).
-
-    Raises
-    ------
-    ValueError
-        If no valid KPF timestamp is found in `s`.
-
-    Notes
-    -----
-    Arithmetic is naive UTC; leap seconds are ignored. Fine for frame
-    ordering and cluster-gap detection but does not give TT/TAI precision
-    and should not be used for astronomical timing.
-    """
-    dt = kpf_timestamp_to_datetime(get_timestamp(s))
-    return int((dt - _J2000_EPOCH).total_seconds())
 
 
 def utc_to_hst(timestamp):

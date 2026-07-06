@@ -4,6 +4,7 @@ import glob
 import logging
 import os
 import warnings
+from datetime import datetime
 
 import pandas as pd
 from astropy.io import fits
@@ -12,14 +13,18 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import (
     get_datecode,
     get_obs_id,
-    get_seconds_since_j2000,
     get_timestamp,
     is_obs_id,
+    kpf_timestamp_to_datetime,
     kpf_timestamp_to_eprv_timestamp,
     utc_to_hst,
 )
 
 logger = logging.getLogger(__name__)
+
+# J2000.0 epoch (2000-01-01 12:00 UTC); reference for the monotonic sort/gap
+# scalar FileHandler._seconds_since_j2000 computes when clustering frames.
+_J2000_EPOCH = datetime(2000, 1, 1, 12, 0, 0)
 
 _MINI_DB_KEYS = ["FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"]
 # Derived, not read from a header key: UTC/HST from the filename's KPF timestamp,
@@ -284,7 +289,7 @@ class FileHandler:
         clusters = []
         for _, group in cal_df.groupby("OBJECT", dropna=False):
             timed = sorted(
-                (get_seconds_since_j2000(fn), fn) for fn in group["FILENAME"]
+                (self._seconds_since_j2000(fn), fn) for fn in group["FILENAME"]
             )
             if not timed:
                 continue
@@ -299,7 +304,7 @@ class FileHandler:
                 else:
                     cluster.append(fn)
             clusters.append(cluster)
-        clusters.sort(key=lambda c: get_seconds_since_j2000(c[0]))
+        clusters.sort(key=lambda c: self._seconds_since_j2000(c[0]))
 
         if merge_small_clusters:
             clusters = self._merge_undersized_clusters(
@@ -322,6 +327,37 @@ class FileHandler:
             [len(c) for c in clusters],
         )
         return clusters
+
+    def _seconds_since_j2000(self, s):
+        """
+        Seconds since the J2000.0 epoch (2000-01-01 12:00 UTC) for the KPF
+        timestamp embedded in `s` -- the monotonic scalar this handler sorts and
+        gap-detects on when clustering frames.
+
+        Parameters
+        ----------
+        s : str
+            A KPF timestamp ('YYYYMMDD.SSSSS.FF'), an obs_id
+            ('KP.YYYYMMDD.SSSSS.FF'), or any filename or path containing one.
+
+        Returns
+        -------
+        int
+            Seconds since J2000.0 (naive UTC).
+
+        Raises
+        ------
+        ValueError
+            If no valid KPF timestamp is found in `s`.
+
+        Notes
+        -----
+        Arithmetic is naive UTC; leap seconds are ignored. Fine for frame
+        ordering and cluster-gap detection but does not give TT/TAI precision
+        and should not be used for astronomical timing.
+        """
+        dt = kpf_timestamp_to_datetime(get_timestamp(s))
+        return int((dt - _J2000_EPOCH).total_seconds())
 
     def _merge_undersized_clusters(
         self, clusters, hst_day, min_file_count, enforce_hst_midnight_boundary
@@ -371,14 +407,14 @@ class FileHandler:
                 or hst_day[clusters[i + 1][0]] == day_i
             )
             prev_gap = (
-                get_seconds_since_j2000(clusters[i][0])
-                - get_seconds_since_j2000(clusters[i - 1][-1])
+                self._seconds_since_j2000(clusters[i][0])
+                - self._seconds_since_j2000(clusters[i - 1][-1])
                 if prev_ok
                 else float("inf")
             )
             next_gap = (
-                get_seconds_since_j2000(clusters[i + 1][0])
-                - get_seconds_since_j2000(clusters[i][-1])
+                self._seconds_since_j2000(clusters[i + 1][0])
+                - self._seconds_since_j2000(clusters[i][-1])
                 if next_ok
                 else float("inf")
             )
@@ -386,11 +422,11 @@ class FileHandler:
                 clusters.pop(i)
                 continue
             j = i - 1 if prev_gap <= next_gap else i + 1
-            merged = sorted(clusters[i] + clusters[j], key=get_seconds_since_j2000)
+            merged = sorted(clusters[i] + clusters[j], key=self._seconds_since_j2000)
             for idx in sorted((i, j), reverse=True):
                 clusters.pop(idx)
             clusters.append(merged)
-        clusters.sort(key=lambda c: get_seconds_since_j2000(c[0]))
+        clusters.sort(key=lambda c: self._seconds_since_j2000(c[0]))
         return clusters
 
     def find_masters(self, cal_type, level, datecode):
