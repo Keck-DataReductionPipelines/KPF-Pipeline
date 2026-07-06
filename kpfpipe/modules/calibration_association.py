@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import FileHandler
-from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
+from kpfpipe.utils.kpf_utils import get_timestamp, kpf_timestamp_to_datetime
 
 logger = logging.getLogger(__name__)
 

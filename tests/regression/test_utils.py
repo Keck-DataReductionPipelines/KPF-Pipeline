@@ -1,6 +1,6 @@
 """
 Tests for kpfpipe.utils helpers: astro (astro.py), KPF timestamp/obs_id
-conversions (kpf.py), statistics (stats.py), and config loading (config.py).
+conversions (kpf_utils.py), statistics (stats.py), and config loading (config.py).
 """
 
 import astropy.units as u
@@ -10,7 +10,7 @@ from astropy.constants import c
 
 from kpfpipe.utils.astro import air_to_vac, compute_doppler_factor, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.kpf import (
+from kpfpipe.utils.kpf_utils import (
     get_datecode,
     get_obs_id,
     get_timestamp,
@@ -98,7 +98,7 @@ class TestAirToVac:
 
 
 # ===========================================================================
-# kpf.py — timestamp conversion utilities
+# kpf_utils.py — timestamp conversion utilities
 # ===========================================================================
 
 

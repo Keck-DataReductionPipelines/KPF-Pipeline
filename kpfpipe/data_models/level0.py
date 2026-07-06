@@ -26,7 +26,7 @@ from kpfpipe import __version__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.io import kpf_filename
-from kpfpipe.utils.kpf import get_obs_id
+from kpfpipe.utils.kpf_utils import get_obs_id
 
 logger = logging.getLogger(__name__)
 

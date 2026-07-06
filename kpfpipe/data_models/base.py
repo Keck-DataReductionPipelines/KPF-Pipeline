@@ -24,7 +24,7 @@ from rvdata.core.models.base import RVDataModel
 # it through kpf.keyword_registry, and re-exported so sibling data_models files
 # (level2/4) import the same singleton from base.
 from kpfpipe.data_models.keyword_registry import keyword_registry
-from kpfpipe.utils.kpf import is_obs_id
+from kpfpipe.utils.kpf_utils import is_obs_id
 
 # Receipt names that are data-model conversions / serialization rather than
 # pipeline modules — excluded from DRPSTATU so it names the last real stage.

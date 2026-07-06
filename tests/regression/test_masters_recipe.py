@@ -25,7 +25,7 @@ from kpfpipe.utils.io import (
     kpf_filepath,
     load_junk_obs_ids,
 )
-from kpfpipe.utils.kpf import get_timestamp, utc_to_hst
+from kpfpipe.utils.kpf_utils import get_timestamp, utc_to_hst
 
 # ---------------------------------------------------------------------------
 # Test data paths
@@ -724,7 +724,7 @@ class TestMastersRecipe:
     @pytest.fixture(scope="class")
     def recipe_output(self, tmp_path_factory):
         from kpfpipe.modules.masters.bias import Bias
-        from kpfpipe.utils.kpf import get_obs_id
+        from kpfpipe.utils.kpf_utils import get_obs_id
 
         tmp_path = tmp_path_factory.mktemp("recipe_out")
         data_root_out = str(tmp_path)

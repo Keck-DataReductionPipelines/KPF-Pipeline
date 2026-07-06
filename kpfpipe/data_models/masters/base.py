@@ -30,7 +30,7 @@ import pandas as pd
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.io import kpf_filename
-from kpfpipe.utils.kpf import get_obs_id
+from kpfpipe.utils.kpf_utils import get_obs_id
 
 # WMKO DRP-RUN-05 master name: {KOAID}_master_{type}_L{N}.fits, where KOAID is a
 # KP.YYYYMMDD.NNNNN.NN obs_id, type is bias/dark/flat/thar, and N is 1/2/4.

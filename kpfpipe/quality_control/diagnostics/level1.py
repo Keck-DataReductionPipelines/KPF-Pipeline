@@ -11,7 +11,7 @@ to RECEIPT plus the observation timestamp (DATE-OBS) on PRIMARY.
 from datetime import datetime
 
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
-from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
+from kpfpipe.utils.kpf_utils import get_timestamp, kpf_timestamp_to_datetime
 
 # Master-calibration age metrics: the RECEIPT path keyword (written by
 # CalibrationAssociation) -> the age keyword whose signed (master - obs) value

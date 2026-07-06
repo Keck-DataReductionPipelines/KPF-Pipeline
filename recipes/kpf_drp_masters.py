@@ -17,7 +17,7 @@ from kpfpipe.modules.masters.dark import Dark
 # from kpfpipe.modules.masters.flat import Flat
 from kpfpipe.modules.masters.wls import WLS
 from kpfpipe.utils.io import FileHandler, kpf_filepath
-from kpfpipe.utils.kpf import get_obs_id
+from kpfpipe.utils.kpf_utils import get_obs_id
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
 # would not identify this module in the log (style guide section 6).
