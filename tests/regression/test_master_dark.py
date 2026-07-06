@@ -879,7 +879,7 @@ class TestMasterDarkRegression:
     def master_dark(self):
         file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
         file_handler.build_mini_database("20240405")
-        files = file_handler.build_l0_file_lists(
+        files = file_handler.build_calibration_stacks(
             "dark",
             min_file_count=5,
             cluster_gap_seconds=24 * 3600,

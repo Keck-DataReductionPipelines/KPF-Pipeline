@@ -605,7 +605,7 @@ def _group_bursts(times, rvs, errs, gap_minutes=_BURST_GAP_MINUTES):
     """Collapse each burst of rapid-succession frames to one RVERR-weighted point.
 
     Splits the time-ordered frames wherever consecutive BJD_TDB values differ by
-    more than `gap_minutes` (as `build_l0_file_lists` clusters calibrations), then
+    more than `gap_minutes` (as `build_calibration_stacks` clusters calibrations), then
     combines each burst with 1/RVERR**2 weights: weighted-mean RV, error
     1/sqrt(sum w), epoch the weighted-mean BJD_TDB.
     """

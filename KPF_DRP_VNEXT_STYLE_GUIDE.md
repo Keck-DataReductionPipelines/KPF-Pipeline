@@ -278,7 +278,7 @@ class StageName:
   (every clustering knob stays a per-call method argument). Such a handler may also
   carry loaded working state so callers never thread an intermediate product:
   `FileHandler.build_mini_database` caches the night's DataFrame on `self._mini_db`,
-  which `build_l0_file_lists` reads by default (an explicit `mini_db=` arg overrides
+  which `build_calibration_stacks` reads by default (an explicit `mini_db=` arg overrides
   it, per the "`None` means use `self`" rule), so the recipe passes a datecode once
   and the mini database is never surfaced.
 - **Defaults live in the module, not the config file.** Resolution is a three-tier

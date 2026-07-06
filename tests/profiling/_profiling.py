@@ -222,7 +222,7 @@ def masters_l0_files(imtype):
 
     file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
     file_handler.build_mini_database(MASTERS_DATECODE)
-    return file_handler.build_l0_file_lists(
+    return file_handler.build_calibration_stacks(
         imtype, cluster_gap_seconds=MASTERS_CLUSTER_GAP_SECONDS
     )[0]
 

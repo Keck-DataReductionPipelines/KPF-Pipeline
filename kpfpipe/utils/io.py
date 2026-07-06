@@ -46,7 +46,7 @@ _OBJECT_MAP = {
 
 # The calibration/master frame types, in canonical order. Derived from
 # _OBJECT_MAP so it stays the single source: both L0 frame selection
-# (build_l0_file_lists) and master-product filenames (kpf_filename) validate
+# (build_calibration_stacks) and master-product filenames (kpf_filename) validate
 # against the same set and cannot drift.
 _CAL_TYPES = tuple(_OBJECT_MAP)
 
@@ -111,7 +111,7 @@ class FileHandler:
         on-disk cache). The extracted keys drive frame selection -- e.g.
         filtering by OBJECT to identify bias, dark, flat, or thar frames. The
         result is stored as ``self._mini_db`` so a subsequent
-        ``build_l0_file_lists`` needs no arguments beyond the calibration type;
+        ``build_calibration_stacks`` needs no arguments beyond the calibration type;
         callers rarely need the return value directly.
 
         Parameters
@@ -135,7 +135,7 @@ class FileHandler:
             warning is issued; an unreadable frame is skipped with a warning.
 
             Junk rows are flagged (ISJUNK), not dropped, so callers keep them
-            visible; build_l0_file_lists(exclude_junk=True) does the actual
+            visible; build_calibration_stacks(exclude_junk=True) does the actual
             exclusion for master construction. The same DataFrame is cached on
             ``self._mini_db``.
 
@@ -179,7 +179,7 @@ class FileHandler:
         self._mini_db = pd.DataFrame(mini_db)
         return self._mini_db
 
-    def build_l0_file_lists(
+    def build_calibration_stacks(
         self,
         cal_type,
         *,

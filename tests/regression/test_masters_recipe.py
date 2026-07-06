@@ -85,7 +85,7 @@ def _rows(files, obj, imtype, targname=None):
 def _mini_db(rows, *, exptime=60.0, junk=()):
     """Assemble a synthetic mini database from row dicts.
 
-    Adds the derived columns build_l0_file_lists needs: EXPTIME/ELAPSED, the
+    Adds the derived columns build_calibration_stacks needs: EXPTIME/ELAPSED, the
     UTC/HST timestamps (parsed from each FILENAME), and ISJUNK (the FILENAMEs in
     `junk` are flagged True). This is the single assembly path for every layout
     fixture below.
@@ -158,17 +158,17 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
 
 
 # ---------------------------------------------------------------------------
-# FileHandler.build_l0_file_lists (synthetic mini databases)
+# FileHandler.build_calibration_stacks (synthetic mini databases)
 # ---------------------------------------------------------------------------
 
 
 def _cluster(cal_type, mini_db, **kwargs):
     """Cluster a synthetic mini_db through the (instance-method) API.
 
-    build_l0_file_lists reads the handler's carried mini database by default;
+    build_calibration_stacks reads the handler's carried mini database by default;
     these logic tests pass a synthetic one via ``mini_db=`` on a bare handler.
     """
-    return FileHandler().build_l0_file_lists(cal_type, mini_db=mini_db, **kwargs)
+    return FileHandler().build_calibration_stacks(cal_type, mini_db=mini_db, **kwargs)
 
 
 class TestSecondsSinceJ2000:
@@ -195,7 +195,7 @@ class TestSecondsSinceJ2000:
             FileHandler()._seconds_since_j2000("notimestamp.fits")
 
 
-class TestBuildL0FileLists:
+class TestBuildCalibrationStacks:
     """Clustering depends only on the mini database, so these exercise it with
     synthetic DataFrames (no files on disk) via the ``mini_db=`` override."""
 
@@ -324,12 +324,12 @@ class TestBuildL0FileLists:
 
 
 # ---------------------------------------------------------------------------
-# build_l0_file_lists (real data)
+# build_calibration_stacks (real data)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.slow
-class TestBuildL0FileListsRealData:
+class TestBuildCalibrationStacksRealData:
     @pytest.fixture(scope="class")
     def fh(self):
         # A handler with the night loaded — the recipe's usage pattern.
@@ -338,13 +338,13 @@ class TestBuildL0FileListsRealData:
         return handler
 
     def test_bias_returns_single_cluster(self, fh):
-        lists = fh.build_l0_file_lists("bias")
+        lists = fh.build_calibration_stacks("bias")
         assert len(lists) == 1
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
     def test_flat_returns_single_cluster(self, fh):
-        lists = fh.build_l0_file_lists("flat")
+        lists = fh.build_calibration_stacks("flat")
         assert len(lists) == 1
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
@@ -353,7 +353,7 @@ class TestBuildL0FileListsRealData:
         # The testdata has two dark clusters of 2 and 3 frames — both below
         # the default min_file_count=5 and dropped, leaving nothing → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            fh.build_l0_file_lists("dark")
+            fh.build_calibration_stacks("dark")
 
     def test_dark_merge_respects_hst_boundary(self, fh):
         # The 5 dark frames span two HST days (2 on one, 3 on the next), so they
@@ -361,12 +361,12 @@ class TestBuildL0FileListsRealData:
         # With the default min=5, no same-HST-day cluster reaches the threshold →
         # raises even with merge_small_clusters.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            fh.build_l0_file_lists("dark", merge_small_clusters=True)
+            fh.build_calibration_stacks("dark", merge_small_clusters=True)
 
     def test_dark_merges_within_hst_day(self, fh):
         # Lowering min to 3 lets the 3 same-HST-day darks merge into one cluster;
         # the 2 frames on the other HST day are dropped (no same-day neighbor).
-        lists = fh.build_l0_file_lists(
+        lists = fh.build_calibration_stacks(
             "dark", min_file_count=3, merge_small_clusters=True
         )
         assert len(lists) == 1
@@ -642,7 +642,7 @@ class TestBuildMiniDatabase:
 
     def test_no_cluster_columns(self, mini_db):
         # CAL_START/CAL_END were moved out of the mini_db; cluster detection
-        # now happens at build_l0_file_lists time.
+        # now happens at build_calibration_stacks time.
         assert "CAL_START" not in mini_db.columns
         assert "CAL_END" not in mini_db.columns
 
@@ -666,7 +666,7 @@ class TestBuildMiniDatabase:
 
 
 # ---------------------------------------------------------------------------
-# Junk exclusion: load_junk_obs_ids + build_l0_file_lists(exclude_junk=...)
+# Junk exclusion: load_junk_obs_ids + build_calibration_stacks(exclude_junk=...)
 # (synthetic; the only junk files written go to isolated tmp_path/reference/)
 # ---------------------------------------------------------------------------
 
@@ -732,7 +732,7 @@ class TestMastersRecipe:
         file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
         file_handler.build_mini_database("20240405")
         output_paths = []
-        for files in file_handler.build_l0_file_lists("bias"):
+        for files in file_handler.build_calibration_stacks("bias"):
             bias_handler = Bias(files)
             bias_l1 = bias_handler.make_master_l1()
             out_path = kpf_filepath(

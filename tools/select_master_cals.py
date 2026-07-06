@@ -5,7 +5,7 @@ Run this where the L0 tree and astropy are available (typically on the remote
 data server). It takes the same obs_id-list input as fetch_l0.sh, infers every
 unique datecode in that list, scans the L0 headers for each night under --root,
 and -- reproducing the KPF pipeline's own clustering logic from
-kpfpipe/utils/io.py::build_l0_file_lists -- selects one calibration sequence
+kpfpipe/utils/io.py::build_calibration_stacks -- selects one calibration sequence
 (cluster) of each type (bias, dark, flat, thar) per night and emits its frames.
 
 Frames are typed by the PRIMARY-header OBJECT keyword (autocal-bias, etc., the
@@ -59,7 +59,7 @@ _OBJECT_MAP = {
 }
 
 # Per-type clustering settings, matching recipes/kpf_drp_masters.py exactly:
-# bias/flat/thar use build_l0_file_lists defaults (min 5, no merge, HST-midnight
+# bias/flat/thar use build_calibration_stacks defaults (min 5, no merge, HST-midnight
 # boundary enforced); darks are sparse (long 1200 s exposures scattered across a
 # night), so the recipe drops the threshold to 3, merges undersized clusters, and
 # lifts the HST-midnight boundary (enforce_boundary=False) since a night's darks
@@ -128,7 +128,7 @@ def scan_night(data_dir):
 def _merge_small(clusters, min_count, enforce_boundary=True):
     """Fold undersized clusters into a neighbor (io.py logic).
 
-    Mirrors build_l0_file_lists(merge_small_clusters=True): repeatedly take the
+    Mirrors build_calibration_stacks(merge_small_clusters=True): repeatedly take the
     smallest undersized cluster and merge it into its nearer chronological
     neighbor; an isolated undersized cluster is dropped. When enforce_boundary is
     True the neighbor must share the HST day; when False any adjacent cluster is
@@ -168,7 +168,7 @@ def _merge_small(clusters, min_count, enforce_boundary=True):
 
 
 def cluster(frames, cal_type, gap, min_count, merge, enforce_boundary=True):
-    """Clusters of a given cal type, mirroring io.py::build_l0_file_lists.
+    """Clusters of a given cal type, mirroring io.py::build_calibration_stacks.
 
     frames: {fn: (object, exptime, ts)}. Groups by OBJECT, splits on >gap gaps
     (and, when enforce_boundary is True, on HST-midnight), optionally merges

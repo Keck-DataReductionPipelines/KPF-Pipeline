@@ -44,13 +44,13 @@ def main(config, args):
         raise SystemExit(f"L0 data directory not found: {l0_dir}")
 
     # Scan the night's L0 headers once; the handler carries the mini database
-    # across the per-cal-type build_l0_file_lists calls below.
+    # across the per-cal-type build_calibration_stacks calls below.
     file_handler = FileHandler(config)
     file_handler.build_mini_database(datecode)
 
     # Stack the bias frames into a master bias used to remove the detector
     # offset from every science and calibration frame.
-    for files in file_handler.build_l0_file_lists("bias"):
+    for files in file_handler.build_calibration_stacks("bias"):
         bias_path = kpf_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="bias"
         )
@@ -61,7 +61,7 @@ def main(config, args):
     # Stack the dark frames into a master dark used to remove dark current.
     # Runs after the master bias so CalibrationAssociation can subtract that
     # bias from each dark frame (via _process_frame) before stacking.
-    for files in file_handler.build_l0_file_lists(
+    for files in file_handler.build_calibration_stacks(
         "dark",
         min_file_count=3,
         merge_small_clusters=True,
@@ -75,7 +75,7 @@ def main(config, args):
         dark.make_master_l1(filepath=dark_path)
 
     # master flat (not yet implemented)
-    # for files in file_handler.build_l0_file_lists('flat'):
+    # for files in file_handler.build_calibration_stacks('flat'):
     #    flat_path = kpf_filepath(get_obs_id(files[0]), 'L1',
     #                               data_root=data_root_masters, master='flat')
     #    flat = Flat(files, config)
@@ -83,7 +83,7 @@ def main(config, args):
 
     # Stack the ThAr exposures into a master wavelength solution, since the
     # emission-line spectrum anchors the per-order wavelength calibration.
-    for files in file_handler.build_l0_file_lists("thar"):
+    for files in file_handler.build_calibration_stacks("thar"):
         obs_id = get_obs_id(files[0])
         wls_master_path = kpf_filepath(
             obs_id, "L2", data_root=data_root_masters, master="thar"
