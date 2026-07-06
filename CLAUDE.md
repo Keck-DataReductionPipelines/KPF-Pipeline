@@ -150,9 +150,12 @@ collects it):
   Per-module `tests/profiling/profile_<module>.py` files drill into a single module (useful
   when re-running one module repeatedly during algorithm development). `flat` is
   skipped while stubbed. The shared stacking engine (`masters/base.py`) has no
-  dedicated harness: attribution charges its work to the right `base.py` methods
-  inside `profile_master_bias.py` / `profile_master_dark.py`, so a separate
-  engine profile would be redundant.
+  dedicated *profiling* harness: attribution charges its work to the right
+  `base.py` methods inside `profile_master_bias.py` / `profile_master_dark.py`, so
+  a separate engine profile would be redundant. (The *test* suite does isolate it —
+  see `regression/test_masters_base.py` under *Masters test layout* below —
+  because profiling partitions by wall-clock while tests partition by
+  responsibility.)
 - **Data.** Real (gitignored) `tests/testdata` frames at realistic sizes; each
   harness skips cleanly (exit 0) when the frames are absent, mirroring the
   `requires_testdata` test pattern.
@@ -288,6 +291,24 @@ Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs
 - **Masters PRIMARY is minimal — no EPRV science skeleton.** `KPFMasterL1` never runs `KPF1.__init__`; `KPFMasterL2` runs `KPF2.__init__`→`RV2.__init__` and so **clears** the inherited EPRV L2 skeleton. Both stamp `DATALVL` (`"ML1"`/`"ML2"`) in `__init__`.
 - **Extension manifests are authoritative CSVs, per master type.** `ML1-extensions.csv` builds ML1 directly. ML2 inherits the full KPF2 schema (for the alias system); `KPFMasterL2(kind=…)` takes a **required** `kind` (`"wls"`/`"flat"`) and reads `ML2-{kind}-extensions.csv` — `__init__` deletes any inherited extension the manifest omits, then creates its `Required` rows. **wls** carries `TRACE*_WAVE` + `*_WLS_COEFFS`; **flat** carries `TRACE*_FLUX`/`VAR`/`BLAZE`; both omit the per-observation extensions (`INSTRUMENT_HEADER`, `BARYCORR_*`/`BJD_TDB`, `EXPMETER`/`TELEMETRY`/`ANCILLARY_SPECTRUM`). `from_fits` infers `kind` from PRIMARY `MASTYPE`. **To add or drop an ML2 extension, edit the CSV(s).**
 - **QC infrastructure is present, checks deferred.** Both levels carry `QUALITY_CONTROL` + `RECEIPT` for later wiring; no masters QC checks or DRP-provenance stamping exist yet.
+
+**Masters test layout.** The masters tests are split by *what they exercise*, not just
+by module. `BaseMasterModule` is abstract, so `tests/regression/test_masters_base.py`
+unit-tests the **shared engine** — stacking (rate estimator, per-pixel rejection,
+datacube clipping), calibration resolve/apply/load, frame-load guards, array cleaning,
+and the shared L1 output contract (dtype provenance, `save_master`) — driving it through
+the simplest concrete vehicle for each path: `Bias` (no calibrations) for the pure L1
+output/dtype/save path, `Dark` (bias-subtracted) for the calibration-orchestration path.
+`test_master_bias.py` and `test_master_dark.py` are then **symmetric mirrors** that cover
+only each concrete module's own behavior (Unit / Info / RoundTrip / Signature /
+Regression: BUNIT `electrons` vs `electrons/sec`, receipt name, `info()` text, the
+calibration signature, and a real-data regression). `test_master_wls.py` stands apart —
+WLS builds an ML2 and does not use the L1 stacking engine, so it is tested per-WLS-method
+on its own. `test_masters_recipe.py` covers only the `kpf_drp_masters` recipe (its
+FileHandler/path-builder unit tests live in `test_io.py`). Shared synthetic fixtures live
+in `tests/regression/_masters.py`. `flat` has no test file (stubbed, no `make_master_l1`
+yet). **A test belongs in `test_masters_base.py` iff it exercises a `base.py` method
+vehicle-incidentally; module-specific behavior stays in `test_master_<type>.py`.**
 
 ### RVDataModel Base Class
 
