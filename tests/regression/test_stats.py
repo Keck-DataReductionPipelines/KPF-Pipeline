@@ -128,3 +128,7 @@ class TestStrictlyIncreasing:
     def test_false_for_non_increasing(self):
         assert strictly_increasing([1.0, 1.0, 2.0]) is False
         assert strictly_increasing([3.0, 2.0, 1.0]) is False
+
+    def test_single_element_is_increasing(self):
+        # A length-1 array is vacuously strictly increasing.
+        assert strictly_increasing([1.0]) is True
