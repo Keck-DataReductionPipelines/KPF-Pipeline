@@ -180,6 +180,101 @@ class FileHandler:
         self._mini_db = pd.DataFrame(mini_db)
         return self._mini_db
 
+    def _seconds_since_j2000(self, s):
+        """
+        Seconds since the J2000.0 epoch (2000-01-01 12:00 UTC) for the KPF
+        timestamp embedded in `s` -- the monotonic scalar this handler sorts and
+        gap-detects on when clustering frames.
+
+        Parameters
+        ----------
+        s : str
+            A KPF timestamp ('YYYYMMDD.SSSSS.FF'), an obs_id
+            ('KP.YYYYMMDD.SSSSS.FF'), or any filename or path containing one.
+
+        Returns
+        -------
+        int
+            Seconds since J2000.0 (naive UTC).
+
+        Raises
+        ------
+        ValueError
+            If no valid KPF timestamp is found in `s`.
+
+        Notes
+        -----
+        Arithmetic is naive UTC; leap seconds are ignored. Fine for frame
+        ordering and cluster-gap detection but does not give TT/TAI precision
+        and should not be used for astronomical timing.
+        """
+        dt = kpf_timestamp_to_datetime(get_timestamp(s))
+        return int((dt - _J2000_EPOCH).total_seconds())
+
+    def _merge_undersized_clusters(
+        self, clusters, hst_day, min_file_count, enforce_hst_midnight_boundary
+    ):
+        """
+        Fold each undersized cluster into its nearer chronological neighbor.
+
+        Repeatedly takes the smallest cluster below `min_file_count` and merges
+        it into whichever adjacent cluster is nearer in time, until every
+        remaining cluster meets the threshold (or none can grow). When the
+        HST-midnight boundary is enforced the neighbor must share the cluster's
+        HST day (so a master never spans HST midnight), and a cluster with no
+        same-day neighbor is dropped; otherwise any adjacent cluster is
+        eligible. The input list is not modified.
+
+        Parameters
+        ----------
+        clusters : list of list of str
+            Chronologically-sorted clusters, each a list of filenames.
+        hst_day : dict
+            Maps each filename to its HST calendar day ('YYYYMMDD').
+        min_file_count : int
+            Frames a cluster must have to be kept as-is.
+        enforce_hst_midnight_boundary : bool
+            If True, merge only into same-HST-day neighbors.
+
+        Returns
+        -------
+        list of list of str
+            The merged clusters, sorted chronologically by first frame.
+        """
+        clusters = list(clusters)
+
+        def gap_to(i, j):
+            # Chronological gap [s] from cluster i to neighbor j (i - 1 or i + 1);
+            # inf when j is out of range or -- boundary enforced -- on a different
+            # HST day, marking it ineligible to merge into.
+            if not 0 <= j < len(clusters) or (
+                enforce_hst_midnight_boundary
+                and hst_day[clusters[j][0]] != hst_day[clusters[i][0]]
+            ):
+                return math.inf
+            earlier, later = sorted((i, j))
+            return self._seconds_since_j2000(
+                clusters[later][0]
+            ) - self._seconds_since_j2000(clusters[earlier][-1])
+
+        while len(clusters) > 1 and any(len(c) < min_file_count for c in clusters):
+            i = min(
+                (k for k, c in enumerate(clusters) if len(c) < min_file_count),
+                key=lambda k: len(clusters[k]),
+            )
+            prev_gap = gap_to(i, i - 1)
+            next_gap = gap_to(i, i + 1)
+            if prev_gap == next_gap == math.inf:
+                clusters.pop(i)
+                continue
+            j = i - 1 if prev_gap <= next_gap else i + 1
+            merged = sorted(clusters[i] + clusters[j], key=self._seconds_since_j2000)
+            for idx in sorted((i, j), reverse=True):
+                clusters.pop(idx)
+            clusters.append(merged)
+        clusters.sort(key=lambda c: self._seconds_since_j2000(c[0]))
+        return clusters
+
     def build_calibration_stacks(
         self,
         cal_type,
@@ -325,101 +420,6 @@ class FileHandler:
             len(clusters),
             [len(c) for c in clusters],
         )
-        return clusters
-
-    def _seconds_since_j2000(self, s):
-        """
-        Seconds since the J2000.0 epoch (2000-01-01 12:00 UTC) for the KPF
-        timestamp embedded in `s` -- the monotonic scalar this handler sorts and
-        gap-detects on when clustering frames.
-
-        Parameters
-        ----------
-        s : str
-            A KPF timestamp ('YYYYMMDD.SSSSS.FF'), an obs_id
-            ('KP.YYYYMMDD.SSSSS.FF'), or any filename or path containing one.
-
-        Returns
-        -------
-        int
-            Seconds since J2000.0 (naive UTC).
-
-        Raises
-        ------
-        ValueError
-            If no valid KPF timestamp is found in `s`.
-
-        Notes
-        -----
-        Arithmetic is naive UTC; leap seconds are ignored. Fine for frame
-        ordering and cluster-gap detection but does not give TT/TAI precision
-        and should not be used for astronomical timing.
-        """
-        dt = kpf_timestamp_to_datetime(get_timestamp(s))
-        return int((dt - _J2000_EPOCH).total_seconds())
-
-    def _merge_undersized_clusters(
-        self, clusters, hst_day, min_file_count, enforce_hst_midnight_boundary
-    ):
-        """
-        Fold each undersized cluster into its nearer chronological neighbor.
-
-        Repeatedly takes the smallest cluster below `min_file_count` and merges
-        it into whichever adjacent cluster is nearer in time, until every
-        remaining cluster meets the threshold (or none can grow). When the
-        HST-midnight boundary is enforced the neighbor must share the cluster's
-        HST day (so a master never spans HST midnight), and a cluster with no
-        same-day neighbor is dropped; otherwise any adjacent cluster is
-        eligible. The input list is not modified.
-
-        Parameters
-        ----------
-        clusters : list of list of str
-            Chronologically-sorted clusters, each a list of filenames.
-        hst_day : dict
-            Maps each filename to its HST calendar day ('YYYYMMDD').
-        min_file_count : int
-            Frames a cluster must have to be kept as-is.
-        enforce_hst_midnight_boundary : bool
-            If True, merge only into same-HST-day neighbors.
-
-        Returns
-        -------
-        list of list of str
-            The merged clusters, sorted chronologically by first frame.
-        """
-        clusters = list(clusters)
-
-        def gap_to(i, j):
-            # Chronological gap [s] from cluster i to neighbor j (i - 1 or i + 1);
-            # inf when j is out of range or -- boundary enforced -- on a different
-            # HST day, marking it ineligible to merge into.
-            if not 0 <= j < len(clusters) or (
-                enforce_hst_midnight_boundary
-                and hst_day[clusters[j][0]] != hst_day[clusters[i][0]]
-            ):
-                return math.inf
-            earlier, later = sorted((i, j))
-            return self._seconds_since_j2000(
-                clusters[later][0]
-            ) - self._seconds_since_j2000(clusters[earlier][-1])
-
-        while len(clusters) > 1 and any(len(c) < min_file_count for c in clusters):
-            i = min(
-                (k for k, c in enumerate(clusters) if len(c) < min_file_count),
-                key=lambda k: len(clusters[k]),
-            )
-            prev_gap = gap_to(i, i - 1)
-            next_gap = gap_to(i, i + 1)
-            if prev_gap == next_gap == math.inf:
-                clusters.pop(i)
-                continue
-            j = i - 1 if prev_gap <= next_gap else i + 1
-            merged = sorted(clusters[i] + clusters[j], key=self._seconds_since_j2000)
-            for idx in sorted((i, j), reverse=True):
-                clusters.pop(idx)
-            clusters.append(merged)
-        clusters.sort(key=lambda c: self._seconds_since_j2000(c[0]))
         return clusters
 
     def find_masters(self, cal_type, level, datecode):
