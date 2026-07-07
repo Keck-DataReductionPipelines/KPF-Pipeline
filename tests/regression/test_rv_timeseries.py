@@ -164,6 +164,18 @@ class TestParseArgs:
         assert rv.parse_args(_BASE_ARGS).job_timeout == 600
         assert rv.parse_args(_BASE_ARGS + ["--job_timeout", "120"]).job_timeout == 120
 
+    def test_jobs_unset_resolves_per_stage(self, rv):
+        # Unset --jobs: science gets the cores default, masters the RAM-capped
+        # one; masters never exceeds science.
+        ns = rv.parse_args(_BASE_ARGS)
+        assert ns.jobs == rv._default_jobs()
+        assert ns.masters_jobs == rv._default_masters_jobs()
+        assert ns.masters_jobs <= ns.jobs
+
+    def test_jobs_override_drives_both_stages(self, rv):
+        ns = rv.parse_args(_BASE_ARGS + ["--jobs", "3"])
+        assert ns.jobs == 3 and ns.masters_jobs == 3
+
 
 # ---------------------------------------------------------------------------
 # small helpers
@@ -178,6 +190,43 @@ class TestDefaultJobs:
     def test_cap(self, rv, monkeypatch, cpus, expected):
         monkeypatch.setattr(rv.os, "cpu_count", lambda: cpus)
         assert rv._default_jobs() == expected
+
+
+class TestDefaultMastersJobs:
+    @staticmethod
+    def _fake_sysconf(ram_gib):
+        # SC_PHYS_PAGES * SC_PAGE_SIZE = total bytes; use a 4 KiB page.
+        page = 4096
+        pages = int(ram_gib * 2**30) // page
+        return lambda name: {"SC_PHYS_PAGES": pages, "SC_PAGE_SIZE": page}[name]
+
+    def test_ram_caps_below_cores(self, rv, monkeypatch):
+        # 64 cores -> cpu_cap 16, but a modest-RAM box caps masters far lower.
+        monkeypatch.setattr(rv.os, "cpu_count", lambda: 64)
+        monkeypatch.setattr(rv.os, "sysconf", self._fake_sysconf(16))
+        assert rv._default_masters_jobs() == 16 // rv._MASTERS_JOB_GIB
+        assert rv._default_masters_jobs() < rv._default_jobs()
+
+    def test_ample_ram_leaves_cores_default(self, rv, monkeypatch):
+        # Plenty of RAM -> the cores-based default wins (RAM cap doesn't bite).
+        monkeypatch.setattr(rv.os, "cpu_count", lambda: 8)
+        monkeypatch.setattr(rv.os, "sysconf", self._fake_sysconf(256))
+        assert rv._default_masters_jobs() == rv._default_jobs() == 8
+
+    def test_unknown_ram_falls_back_to_cores(self, rv, monkeypatch):
+        monkeypatch.setattr(rv.os, "cpu_count", lambda: 8)
+
+        def _raise(_name):
+            raise ValueError("SC_PHYS_PAGES unavailable")
+
+        monkeypatch.setattr(rv.os, "sysconf", _raise)
+        assert rv._default_masters_jobs() == rv._default_jobs() == 8
+
+    def test_never_below_one(self, rv, monkeypatch):
+        # Tiny RAM would floor the cap to 0; the helper clamps to 1.
+        monkeypatch.setattr(rv.os, "cpu_count", lambda: 8)
+        monkeypatch.setattr(rv.os, "sysconf", self._fake_sysconf(1))
+        assert rv._default_masters_jobs() == 1
 
 
 class TestDatecodeDirs:

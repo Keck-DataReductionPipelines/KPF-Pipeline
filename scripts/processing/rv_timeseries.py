@@ -61,17 +61,47 @@ _SCIENCE_RECIPE = os.path.join(_REPO, "recipes", "kpf_drp_science.py")
 _DEFAULT_MASTERS_CONFIG = os.path.join(_REPO, "configs", "kpf_drp_masters.toml")
 _DEFAULT_SCIENCE_CONFIG = os.path.join(_REPO, "configs", "kpf_drp_science.toml")
 
+# Approximate resident RAM (GiB) of one masters (stacking) job at its peak, used
+# by _default_jobs to cap concurrency by RAM so parallel stacks don't swap the
+# machine. The estimate assumes the stack builder holds at most 5 frames in
+# memory at once (the streaming accumulator's approximation-pass window): at
+# 4080x4080 float32 that peaks near ~2-2.5 GiB, rounded up here to leave headroom
+# for the OS, filesystem cache, and per-op transients. A larger in-memory stack
+# would raise the per-job peak and this constant with it.
+_MASTERS_JOB_GIB = 4
+
 
 def _default_jobs():
-    """Default --jobs: at most 25% of the CPUs, but always allow up to 16.
+    """Cores-based default job count: at most 25% of the CPUs, but always allow
+    up to 16.
 
-    Keeps a many-core shared machine from being monopolised (the 25% cap), while
-    still letting a laptop use up to 16 cores even when that is a large fraction
-    of them. Never exceeds the actual CPU count. os.cpu_count() returns None when
-    it cannot be determined, so fall back to 1 (a valid positive default).
+    The science default and the base for the masters default. Keeps a many-core
+    shared machine from being monopolised (the 25% cap), while still letting a
+    laptop use up to 16 cores even when that is a large fraction of them. Never
+    exceeds the actual CPU count. os.cpu_count() returns None when it cannot be
+    determined, so fall back to 1 (a valid positive default).
     """
     n = os.cpu_count() or 1
     return min(n, max(16, n // 4))
+
+
+def _default_masters_jobs():
+    """Masters default job count: the cores-based default, further capped by RAM.
+
+    A masters (stacking) job holds several full-frame cubes for its whole
+    lifetime, so on a high-core / modest-RAM machine the cores-based default can
+    launch enough concurrent jobs to oversubscribe RAM and swap the machine to a
+    crawl (every job then stalls past --job_timeout). Cap it at one job per
+    _MASTERS_JOB_GIB of physical RAM. Falls back to the cores-based default when
+    physical RAM can't be determined (e.g. os.sysconf unavailable). Science jobs
+    are far lighter, so only masters takes this cap.
+    """
+    cpu_cap = _default_jobs()
+    try:
+        ram_gib = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30
+    except (ValueError, OSError, AttributeError):
+        return cpu_cap
+    return max(1, min(cpu_cap, int(ram_gib // _MASTERS_JOB_GIB)))
 
 
 def parse_args(argv=None):
@@ -162,9 +192,14 @@ def parse_args(argv=None):
     ap.add_argument(
         "--jobs",
         type=int,
-        default=_default_jobs(),
-        help="max concurrent recipe subprocesses (default: %(default)s -- at "
-        "most 25%% of CPUs, but up to 16 even on a small machine)",
+        default=None,
+        help=(
+            "max concurrent recipe subprocesses; overrides the automatic "
+            "per-stage default. Left unset, science uses a cores-based default "
+            "(~25%% of CPUs, but up to 16) and masters uses that further capped "
+            f"at one job per ~{_MASTERS_JOB_GIB} GiB of RAM, so parallel stacks "
+            "don't swap the machine"
+        ),
     )
     ap.add_argument(
         "--job_timeout",
@@ -187,10 +222,19 @@ def parse_args(argv=None):
         ap.error(f"--date_range START must be <= END (got {start} > {end})")
     if args.file_limit < 1:
         ap.error("--file_limit must be >= 1")
-    if args.jobs < 1:
-        ap.error("--jobs must be >= 1")
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
+
+    # --jobs is an optional manual override; unset, each stage picks its own
+    # default (science cores-based, masters further RAM-capped). An explicit
+    # value drives both stages.
+    if args.jobs is None:
+        args.jobs = _default_jobs()
+        args.masters_jobs = _default_masters_jobs()
+    elif args.jobs < 1:
+        ap.error("--jobs must be >= 1")
+    else:
+        args.masters_jobs = args.jobs
 
     # --input_dir / --output_dir are shorthands that populate the explicit
     # dir overrides below; reject giving both a shorthand and its long form.
@@ -1034,7 +1078,7 @@ def main(argv=None):
         run_stage(
             "masters",
             tasks,
-            args.jobs,
+            args.masters_jobs,
             log_dir,
             job_timeout=args.job_timeout,
             abort_on_failure=False,
