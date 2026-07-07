@@ -72,6 +72,11 @@ class FileHandler:
     methods keyed by ``datecode``/``cal_type``, so recipes and scripts never
     assemble data paths by hand.
 
+    Not thread-safe: ``build_mini_database`` stores the scanned night on
+    ``self._mini_db`` and returns it, so concurrent calls on one instance race.
+    Use one instance per thread (the on-disk cache is shared safely, keyed by
+    datecode).
+
     Parameters
     ----------
     config : None | dict | ConfigHandler

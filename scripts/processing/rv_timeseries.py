@@ -261,8 +261,6 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
     if not os.path.isdir(l0_root):
         sys.exit(f"error: L0 input directory not found: {l0_root}")
 
-    file_handler = FileHandler({"KPF_DATA_INPUT": data_input})
-
     non_datecode = [
         e
         for e in sorted(os.listdir(l0_root))
@@ -279,6 +277,9 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
         sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
 
     def _scan_night(dc):
+        # A FileHandler per night (not shared): it carries the scanned night on
+        # self._mini_db, so one instance across these pooled threads would race.
+        file_handler = FileHandler({"KPF_DATA_INPUT": data_input})
         try:
             df = file_handler.build_mini_database(dc, cache=True)
         except ValueError as e:
