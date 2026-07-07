@@ -246,8 +246,10 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
     """Raw science obs_ids for `target` over [start, end], from the L0 tree.
 
     Enumerates the nights (datecode dirs) under {data_input}/L0, scans each one's
-    PRIMARY headers via FileHandler.build_mini_database, and keeps the frames whose
-    IMTYPE is 'Object' and whose OBJECT matches `target`. Non-datecode entries
+    PRIMARY headers via FileHandler.build_mini_database (cache=True: reuse the
+    night's on-disk mini-database CSV when present, else write it after scanning),
+    and keeps the frames whose IMTYPE is 'Object' and whose OBJECT matches
+    `target`. Non-datecode entries
     (backup dirs, stray files, etc.) are skipped with a note; observer-flagged
     junk frames (the mini database's ISJUNK column) are dropped.
     """
@@ -274,7 +276,7 @@ def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
 
     def _scan_night(dc):
         try:
-            df = file_handler.build_mini_database(dc)
+            df = file_handler.build_mini_database(dc, cache=True)
         except ValueError as e:
             # e.g. a datecode dir with no FITS files -- skip it, don't abort.
             print(f"  warning: skipping night {dc}: {e}", flush=True)

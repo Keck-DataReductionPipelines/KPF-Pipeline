@@ -95,20 +95,87 @@ class FileHandler:
         self._masters_output = params.get("KPF_MASTERS_OUTPUT")
         self._mini_db = None  # the loaded night, set by build_mini_database
 
-    def build_mini_database(self, datecode):
+    def _mini_db_cache_path(self, datecode):
+        """On-disk mini-database cache path for one night:
+        ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv``."""
+        return os.path.join(self._data_input, "vNext", "mini_db", f"{datecode}_L0.csv")
+
+    def _validate_mini_db_cache(self, cache_path, file_list, data_dir):
+        """True if the on-disk mini-db cache is trustworthy for the current L0
+        directory, else False (the caller then rescans). Validation only -- the
+        cache is read (loaded) separately by the caller.
+
+        Two guardrails protect against a stale cache:
+
+        * **Count** -- the cache's row count must equal the number of FITS files
+          on disk, so a frame added or removed since the cache was written
+          invalidates it. (An unreadable frame is dropped from the scan but still
+          counts on disk, so a persistently-corrupt frame defeats the cache -- an
+          acceptable, rare edge that errs toward rescanning.)
+        * **Freshness** -- the cache must be at least as new as every input's
+          timestamp: for each file the later of its modification time
+          (``st_mtime``, when its contents were written) and its change time
+          (``st_ctime``, when it was last moved/linked into the directory -- so a
+          frame copied in with an old mtime is still caught); plus the directory's
+          own ``st_mtime`` (its entry list changes when a file is added or
+          removed). A same-count swap thus still invalidates the cache.
+        """
+        if not file_list or not os.path.isfile(cache_path):
+            return False
+
+        n_cached = len(pd.read_csv(cache_path))
+        if n_cached != len(file_list):
+            logger.info(
+                "mini database cache %s is stale (%d cached rows vs %d files on "
+                "disk); rescanning",
+                cache_path,
+                n_cached,
+                len(file_list),
+            )
+            return False
+
+        cache_mtime = os.stat(cache_path).st_mtime
+        newest_input = os.stat(data_dir).st_mtime
+        for fn in file_list:
+            st = os.stat(fn)
+            newest_input = max(newest_input, st.st_mtime, st.st_ctime)
+        if cache_mtime < newest_input:
+            logger.info(
+                "mini database cache %s is out of date (older than an L0 input); "
+                "rescanning",
+                cache_path,
+            )
+            return False
+
+        return True
+
+    def build_mini_database(self, datecode, cache=False):
         """
         Scan the PRIMARY header of every L0 FITS file for one observing night,
         cache the resulting DataFrame on the instance, and return it.
 
-        Reads ``{KPF_DATA_INPUT}/L0/{datecode}/*.fits`` fresh on every call (no
-        on-disk cache) and stores the result as ``self._mini_db``, so a
-        subsequent ``build_calibration_stacks`` needs only the calibration type;
-        callers rarely need the return value directly.
+        Reads ``{KPF_DATA_INPUT}/L0/{datecode}/*.fits`` and stores the result as
+        ``self._mini_db``, so a subsequent ``build_calibration_stacks`` needs
+        only the calibration type; callers rarely need the return value directly.
+
+        With ``cache=True`` the on-disk CSV cache at
+        ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv`` is used for both
+        read and write: a *current* cache is loaded instead of re-scanning the L0
+        directory, otherwise the directory is scanned and the result written to
+        the cache (directory created as needed) for next time. A cache is current
+        only when it passes the count and freshness guardrails in
+        ``_validate_mini_db_cache``; a frame added, removed, replaced, or
+        rewritten since the cache was built forces a rescan. With ``cache=False``
+        (default) the directory is always scanned and nothing is read from or
+        written to disk.
 
         Parameters
         ----------
         datecode : str
             Observing-night datecode 'YYYYMMDD'.
+        cache : bool, default False
+            When True, load the on-disk cache CSV if it is current, else scan and
+            (re)write it. When False, always scan fresh and never touch the cache.
 
         Returns
         -------
@@ -130,6 +197,13 @@ class FileHandler:
 
         data_dir = os.path.join(self._data_input, "L0", datecode)
         file_list = sorted(glob.glob(os.path.join(data_dir, "*.fits")))
+
+        cache_path = self._mini_db_cache_path(datecode)
+        if cache and self._validate_mini_db_cache(cache_path, file_list, data_dir):
+            logger.info("loading mini database cache from %s", cache_path)
+            self._mini_db = pd.read_csv(cache_path)
+            return self._mini_db
+
         if not file_list:
             raise ValueError(f"No FITS files found in {data_dir}")
 
@@ -158,6 +232,12 @@ class FileHandler:
             mini_db["ISJUNK"].append(get_obs_id(fn) in junk)
 
         self._mini_db = pd.DataFrame(mini_db)
+
+        if cache:
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            self._mini_db.to_csv(cache_path, index=False)
+            logger.info("wrote mini database cache to %s", cache_path)
+
         return self._mini_db
 
     def _seconds_since_j2000(self, s):

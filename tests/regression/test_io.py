@@ -647,6 +647,108 @@ class TestBuildMiniDatabase:
 
 
 # ---------------------------------------------------------------------------
+# build_mini_database on-disk cache (read/write + staleness guardrails):
+# synthetic L0 frames written to a temp tree
+# ---------------------------------------------------------------------------
+
+
+def _write_l0_frame(tmp_path, datecode, obs_id):
+    """Write a minimal L0 FITS (PRIMARY header only) into the L0/{datecode} tree
+    so build_mini_database has a real header to scan; returns the FileHandler.
+    Safe to call more than once per night to stage multiple frames."""
+    from astropy.io import fits
+
+    l0_dir = tmp_path / "L0" / datecode
+    l0_dir.mkdir(parents=True, exist_ok=True)
+    header = fits.Header(
+        {
+            "TARGNAME": "bias",
+            "IMTYPE": "Bias",
+            "OBJECT": "autocal-bias",
+            "EXPTIME": 0.0,
+            "ELAPSED": 0.0,
+        }
+    )
+    fits.PrimaryHDU(header=header).writeto(l0_dir / f"{obs_id}.fits")
+    return FileHandler({"KPF_DATA_INPUT": str(tmp_path)})
+
+
+def _seed_cache(tmp_path, datecode, filenames):
+    """Seed the on-disk mini-db cache CSV with the given FILENAME rows and return
+    its path. Only FILENAME/OBJECT are written -- enough for the guardrail
+    (row count) and cache-hit (FILENAME) assertions."""
+    cache = tmp_path / "vNext" / "mini_db" / f"{datecode}_L0.csv"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    rows = "".join(f"{fn},autocal-bias\n" for fn in filenames)
+    cache.write_text("FILENAME,OBJECT\n" + rows)
+    return cache
+
+
+def _touch_newer(cache, l0_dir):
+    """Bump `cache`'s mtime past every input under `l0_dir` (each file's
+    mtime/ctime and the directory's mtime), so the freshness guardrail passes."""
+    newest = os.stat(l0_dir).st_mtime
+    for entry in os.scandir(l0_dir):
+        st = entry.stat()
+        newest = max(newest, st.st_mtime, st.st_ctime)
+    os.utime(cache, (newest + 10, newest + 10))
+
+
+class TestMiniDatabaseCache:
+    def test_cache_true_writes_csv_on_scan(self, tmp_path):
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        db = fh.build_mini_database("20240405", cache=True)
+
+        cache = tmp_path / "vNext" / "mini_db" / "20240405_L0.csv"
+        assert cache.is_file()
+        # The cache round-trips the built DataFrame's columns and rows.
+        cached = pd.read_csv(cache)
+        assert list(cached.columns) == list(db.columns)
+        assert len(cached) == len(db)
+        assert cached["FILENAME"].tolist() == db["FILENAME"].tolist()
+
+    def test_cache_true_reads_current_cache_without_scanning(self, tmp_path):
+        # A current cache (row count matches disk, newer than every input) is
+        # loaded verbatim, not rescanned. Prove it by seeding a SENTINEL FILENAME
+        # a real scan would never produce, then asserting it survives.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        _touch_newer(cache, tmp_path / "L0" / "20240405")
+
+        db = fh.build_mini_database("20240405", cache=True)
+        assert db["FILENAME"].tolist() == ["/sentinel.fits"]
+
+    def test_cache_stale_row_count_rescans(self, tmp_path):
+        # Cache lists one frame but two are on disk -> count guardrail rejects it.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        _write_l0_frame(tmp_path, "20240405", "KP.20240405.02000.00")
+        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        _touch_newer(cache, tmp_path / "L0" / "20240405")
+
+        db = fh.build_mini_database("20240405", cache=True)
+        assert len(db) == 2
+        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+
+    def test_cache_out_of_date_rescans(self, tmp_path):
+        # Cache older than an L0 input -> freshness guardrail rejects it.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        os.utime(cache, (1_000_000, 1_000_000))  # far in the past
+
+        db = fh.build_mini_database("20240405", cache=True)
+        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+        expected = os.path.join(
+            str(tmp_path), "L0", "20240405", "KP.20240405.01000.00.fits"
+        )
+        assert db["FILENAME"].tolist() == [expected]
+
+    def test_cache_false_leaves_no_cache(self, tmp_path):
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        fh.build_mini_database("20240405")  # cache defaults to False
+        assert not (tmp_path / "vNext" / "mini_db").exists()
+
+
+# ---------------------------------------------------------------------------
 # Junk exclusion: load_junk_obs_ids + build_calibration_stacks(exclude_junk=...)
 # (synthetic; the only junk files written go to isolated tmp_path/vNext/reference/)
 # ---------------------------------------------------------------------------
