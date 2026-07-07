@@ -75,7 +75,7 @@ class BaseMasterModule:
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE"])
+            params = config.get_params(["DATA_DIRS", "TRACES"])
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 

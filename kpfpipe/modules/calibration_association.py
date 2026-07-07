@@ -76,7 +76,7 @@ class CalibrationAssociation:
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_CALIBRATION_ASSOCIATION"]
+                ["DATA_DIRS", "TRACES", "MODULE_CALIBRATION_ASSOCIATION"]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")

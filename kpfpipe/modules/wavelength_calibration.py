@@ -47,7 +47,7 @@ class WavelengthCalibration:
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_WAVELENGTH_CALIBRATION"]
+                ["DATA_DIRS", "TRACES", "MODULE_WAVELENGTH_CALIBRATION"]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")

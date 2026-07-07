@@ -8,7 +8,7 @@ log_directory = "/data/kpf-next/logs/"  # one parent dir for all logs (DRP-RUN-0
 log_level = "INFO"                      # production level
 console = true                          # mirror records to stderr
 
-[KPFPIPE]
+[TRACES]
 chips = ["GREEN", "RED"]
 fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 

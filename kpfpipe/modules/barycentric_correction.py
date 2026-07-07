@@ -96,7 +96,7 @@ class BarycentricCorrection:
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_BARYCENTRIC_CORRECTION"]
+                ["DATA_DIRS", "TRACES", "MODULE_BARYCENTRIC_CORRECTION"]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")

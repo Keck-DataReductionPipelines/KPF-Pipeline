@@ -218,7 +218,7 @@ KPF: Keck, 445–870 nm, R≈100k. Standardized L2/L4 filenames: `kpf_SL2_…fit
 
 **Trace ↔ fiber mapping** — KPF assigns trace numbers in **physical fiber order** on the slicer
 (`SKY, SCI1, SCI2, SCI3, CAL`), consistent across `data_models/config/trace-map.csv`,
-`detector.toml [fiber_positions]`, and the `[KPFPIPE].fibers` list. This fiber↔trace-number
+`detector.toml [fiber_positions]`, and the `[TRACES].fibers` list. This fiber↔trace-number
 assignment is a **KPF convention**: the EPRV standard governs the per-trace extension *structure*
 (`TRACE{N}_*`), not which fiber is trace N. (An earlier EPRV KPF translator doc listed a CAL-first
 numbering; that was stale and does not bind vNext.)

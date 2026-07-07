@@ -261,7 +261,7 @@ class StageName:
   elif isinstance(config, dict):
       params = config
   elif isinstance(config, ConfigHandler):
-      params = config.get_params(["DATA_DIRS", "KPFPIPE", "MODULE_<NAME>"])
+      params = config.get_params(["DATA_DIRS", "TRACES", "MODULE_<NAME>"])
   else:
       raise TypeError("config must be None, dict, or ConfigHandler")
   for k, v in _DEFAULTS.items():
@@ -652,9 +652,9 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **TOML, loaded with stdlib `tomllib`.** One config per recipe, sharing the basename
   (`recipes/kpf_drp_science.py` ↔ `configs/kpf_drp_science.toml`).
 - **Sections are `UPPER_SNAKE` in brackets.** Two fixed globals `[DATA_DIRS]`,
-  `[KPFPIPE]`; per-module sections in the **science** config are **`[MODULE_<NAME>]`**
+  `[TRACES]`; per-module sections in the **science** config are **`[MODULE_<NAME>]`**
   matching the class (`[MODULE_RADIAL_VELOCITY]` ↔ `RadialVelocity`), and those modules
-  call `config.get_params(["DATA_DIRS", "KPFPIPE", "MODULE_<NAME>"])`.
+  call `config.get_params(["DATA_DIRS", "TRACES", "MODULE_<NAME>"])`.
 - **Masters config sections use the bare product name** — `[BIAS]`, `[DARK]`, `[FLAT]`,
   `[WLS]` (no `MODULE_` prefix), matched by `get_params([..., "BIAS"])`. This is a
   deliberate, accepted exception: masters are batch builders keyed by product, not the
@@ -679,7 +679,7 @@ documented, intentional ways — follow *its* conventions when adding masters co
 - **Mapping tables**: `aliases.csv` → `KPF,EPRV,Description` (1:1 non-trace aliases only);
   `trace-map.csv` → `Trace,Fiber,Description` (trace/fiber aliases derived at runtime).
 - These CSVs are the source of truth for HDU layout and alias registration — keep fiber
-  names in sync across `trace-map.csv`, `[KPFPIPE].fibers`, and `detector.toml`.
+  names in sync across `trace-map.csv`, `[TRACES].fibers`, and `detector.toml`.
 - **`L{0,1,2,4}-headers.csv`** register every KPF-pipeline keyword and its home extension,
   split by the level that first writes the keyword (the combined set drives the `set_keyword`
   routing map and the checkpoints validator). Columns are
@@ -876,5 +876,5 @@ the dominant variant of the file/area you're editing**, and don't churn unrelate
    (150 vs 600) and axis-fontsize (14 vs 18) drift between L0 and L1.
 2. **Masters** — the config-resolution block is duplicated 5× (could be a base helper); the
    `0.2` load-failure threshold is an unnamed magic number.
-3. **Configs** — the `[DATA_DIRS]` + `[KPFPIPE]` blocks are duplicated verbatim across the
+3. **Configs** — the `[DATA_DIRS]` + `[TRACES]` blocks are duplicated verbatim across the
    science and masters configs (no shared-include mechanism).

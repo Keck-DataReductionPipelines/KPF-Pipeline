@@ -67,7 +67,7 @@ class CrossCorrelation:
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_CROSS_CORRELATION"]
+                ["DATA_DIRS", "TRACES", "MODULE_CROSS_CORRELATION"]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")

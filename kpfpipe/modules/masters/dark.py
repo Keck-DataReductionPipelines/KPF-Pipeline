@@ -41,7 +41,7 @@ class Dark(BaseMasterModule):
             params = config.get_params(
                 [
                     "DATA_DIRS",
-                    "KPFPIPE",
+                    "TRACES",
                     "DARK",
                     "MODULE_CALIBRATION_ASSOCIATION",
                     "MODULE_IMAGE_PROCESSING",

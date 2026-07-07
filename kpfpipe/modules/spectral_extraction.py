@@ -44,7 +44,7 @@ class SpectralExtraction:
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_SPECTRAL_EXTRACTION"]
+                ["DATA_DIRS", "TRACES", "MODULE_SPECTRAL_EXTRACTION"]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")

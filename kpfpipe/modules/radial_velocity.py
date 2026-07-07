@@ -56,7 +56,7 @@ class RadialVelocity:
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_RADIAL_VELOCITY"]
+                ["DATA_DIRS", "TRACES", "MODULE_RADIAL_VELOCITY"]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
