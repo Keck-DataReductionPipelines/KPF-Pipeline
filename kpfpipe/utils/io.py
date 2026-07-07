@@ -53,12 +53,12 @@ _CAL_TYPES = tuple(_OBJECT_MAP)
 
 
 def load_junk_obs_ids(data_input):
-    """Set of observer-flagged junk obs_ids from WMKO's
-    ``{data_input}/reference/Junk_Observations_for_KPF.csv`` (a title line, an
+    """Set of observer-flagged junk obs_ids, to be stored with L0 data at
+    ``{data_input}/vNext/reference/junk_obs.csv`` (a title line, an
     ``observation_id`` header, then one obs_id per row). An absent file yields
     the empty set, so exclusion becomes a no-op.
     """
-    junk_csv = os.path.join(data_input, "reference", "Junk_Observations_for_KPF.csv")
+    junk_csv = os.path.join(data_input, "vNext", "reference", "junk_obs.csv")
     if not os.path.isfile(junk_csv):
         return set()
     df = pd.read_csv(junk_csv, header=1)

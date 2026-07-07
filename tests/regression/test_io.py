@@ -648,7 +648,7 @@ class TestBuildMiniDatabase:
 
 # ---------------------------------------------------------------------------
 # Junk exclusion: load_junk_obs_ids + build_calibration_stacks(exclude_junk=...)
-# (synthetic; the only junk files written go to isolated tmp_path/reference/)
+# (synthetic; the only junk files written go to isolated tmp_path/vNext/reference/)
 # ---------------------------------------------------------------------------
 
 
@@ -663,9 +663,9 @@ class TestJunkExclusion:
 
     def test_load_junk_parses_wmko_format(self, tmp_path):
         # WMKO layout: a title line, an 'observation_id' header, one obs_id/row.
-        ref = tmp_path / "reference"
-        ref.mkdir()
-        (ref / "Junk_Observations_for_KPF.csv").write_text(
+        ref = tmp_path / "vNext" / "reference"
+        ref.mkdir(parents=True)
+        (ref / "junk_obs.csv").write_text(
             "Junk Observations for KPF\nobservation_id\n"
             "KP.20240405.00001.00\nKP.20240405.00002.00\n"
         )
