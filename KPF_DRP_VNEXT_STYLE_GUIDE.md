@@ -436,10 +436,11 @@ class StageName:
   context, or `raise ... from None` when translating a low-level error (a `KeyError`/
   `AttributeError` from a dict lookup or `getattr` dispatch) into a clearer domain error
   whose message already says what the original would — suppressing the redundant chain.
-- **Predicate/validator split**: internal `_validate_*` raise; public `is_*` wrap them in
-  `try/except` and return `bool` (never raise from the boolean API).
-- **Configurable severity**: validators that serve both soft and hard contexts take a
-  `response="warn"|"error"|"silent"` channel (see `utils/validation.py`).
+- **Predicate/extractor split**: `is_*` predicates validate inline and return `bool`
+  (never raise); the raising extractors/converters (`get_*`, `utc_to_hst`, …) validate
+  through the matching predicate and raise `ValueError` at their own boundary. See
+  `utils/kpf_utils.py`, where `is_timestamp` is the single validity source and
+  `get_timestamp` et al. turn its `False` into a raise.
 
 ---
 
