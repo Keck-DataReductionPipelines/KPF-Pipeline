@@ -386,6 +386,13 @@ _live_procs = set()
 _live_lock = threading.Lock()
 _interrupted = threading.Event()
 
+# Launch throttle: serializes subprocess launches to >= _launch_interval apart
+# (science only), so a burst of pool workers doesn't hammer SIMBAD/Gaia with the
+# rapid catalog queries the per-frame L0 pointing QC fires. `_last_launch` holds
+# the monotonic time of the most recent launch.
+_launch_lock = threading.Lock()
+_last_launch = [0.0]
+
 
 def _handle_termination_signal(signum, frame):
     """Turn SIGTERM into a KeyboardInterrupt so `kill` cleans up like Ctrl+C.
@@ -421,7 +428,7 @@ def _terminate_all_children(grace=5.0):
             _kill_group(p, signal.SIGKILL)
 
 
-def _run_one(argv, timeout=None):
+def _run_one(argv, timeout=None, launch_interval=0.0):
     """Run one recipe subprocess; return (returncode, captured stderr).
 
     The child starts in its own session (process group) and is tracked in
@@ -431,9 +438,21 @@ def _run_one(argv, timeout=None):
     conventional timeout exit status. Returns (130, "") without launching once
     teardown has begun (`_interrupted`), and also kills-then-returns 130 if
     teardown begins in the window between launching and tracking the child.
+
+    `launch_interval` (seconds, >0 for science) throttles the actual launch:
+    the lock is held across the sleep so concurrent pool workers launch one
+    interval apart, pacing the SIMBAD/Gaia queries the L0 pointing QC makes.
     """
     if _interrupted.is_set():
         return 130, ""
+    if launch_interval > 0:
+        with _launch_lock:
+            wait = launch_interval - (time.monotonic() - _last_launch[0])
+            if wait > 0:
+                time.sleep(wait)
+            _last_launch[0] = time.monotonic()
+        if _interrupted.is_set():
+            return 130, ""
     proc = subprocess.Popen(
         argv,
         cwd=_REPO,
@@ -482,6 +501,7 @@ def run_stage(
     job_timeout=600,
     canary_timeout=1800,
     abort_on_failure=True,
+    launch_interval=0.0,
 ):
     """Run `tasks`: the first serially as a canary, then the rest in a pool.
 
@@ -507,6 +527,10 @@ def run_stage(
       canary still fans out, since one bad night must not stop the others), and
       failures are reported as a warning without exiting -- the caller inspects
       which products landed to decide what to do downstream.
+
+    `launch_interval` (seconds) spaces the fan-out launches apart (science passes
+    1.0 to rate-limit the SIMBAD/Gaia queries the L0 pointing QC makes); the
+    canary is unaffected (it runs alone, first).
 
     Returns the set of failed tags. On Ctrl+C (SIGINT) or SIGTERM, cancel the
     queue and terminate every still-running child before exiting (130), so an
@@ -537,7 +561,8 @@ def run_stage(
         if rc == 0 or not abort_on_failure:
             pool = concurrent.futures.ThreadPoolExecutor(max_workers=jobs)
             futures = {
-                pool.submit(_run_one, argv, job_timeout): tag for tag, argv in tasks[1:]
+                pool.submit(_run_one, argv, job_timeout, launch_interval): tag
+                for tag, argv in tasks[1:]
             }
             for future in concurrent.futures.as_completed(futures):
                 tag = futures[future]
@@ -989,7 +1014,14 @@ def main(argv=None):
             _cli_task(oid, _SCIENCE_RECIPE, args.science_config, "-o", forward)
             for oid in science_todo
         ]
-        run_stage("science", tasks, args.jobs, log_dir, job_timeout=args.job_timeout)
+        run_stage(
+            "science",
+            tasks,
+            args.jobs,
+            log_dir,
+            job_timeout=args.job_timeout,
+            launch_interval=1.0,
+        )
 
         print(
             f"\ndone: reduced {len(science_frames)} frame(s); "
