@@ -513,6 +513,33 @@ class TestDatacubeClipping:
         # Dropping one of six frames still leaves every pixel well-sampled.
         assert np.all(arrays["GREEN_MASK"])
 
+    def test_var_outlier_frame_is_not_rejected(self):
+        # Rejection is CCD-only: a frame with a gross VAR outlier but normal CCD
+        # counts is NOT dropped (VAR = |CCD| + RN carries no independent info).
+        nrow, ncol = 3, 3
+        good = [_stack_frame(10.0, 100.0, 100.0, shape=(nrow, ncol)) for _ in range(5)]
+        var_outlier = _stack_frame(10.0, 100.0, 1e5, shape=(nrow, ncol))
+        frames = good[:2] + [var_outlier] + good[2:]
+
+        dark = Dark(sorted(f"f{i}.fits" for i in range(len(frames))))
+        dark.chips = ["GREEN"]
+        dark.ccd = {"nrow": nrow, "ncol": ncol}
+        dark.stack_sigma = 5.0
+        by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
+        with (
+            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+        ):
+            arrays = dark.stack_frames(nstream=10)  # > nframe, so datacube path
+
+        # CCD normal -> IMG unaffected at 10 e-/sec, and the VAR outlier stays in
+        # the variance sum: SNR = |6*100| / sqrt(5*100 + 1e5) ~= 1.89. Had it been
+        # rejected (old CCD|VAR criterion) SNR would be ~22.4.
+        np.testing.assert_allclose(arrays["GREEN_IMG"], 10.0, rtol=1e-5)
+        np.testing.assert_allclose(
+            arrays["GREEN_SNR"], 600.0 / np.sqrt(100500.0), rtol=1e-5
+        )
+
 
 # ---------------------------------------------------------------------------
 # _clean_l1_arrays: bad-pixel interpolation and mask recompute

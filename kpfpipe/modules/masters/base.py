@@ -195,7 +195,7 @@ class BaseMasterModule:
             self._master_paths[cal_type] = path
         return self._master_ml1[cal_type]
 
-    def _load_frame(self, fn, cache, exptime_tolerance=0.1, verbose=True):
+    def _load_frame(self, fn, cache=False, exptime_tolerance=0.1, verbose=True):
         """
         Load an L0 file and perform image assembly to produce an L1 object.
 
@@ -461,11 +461,12 @@ class BaseMasterModule:
         -----
         Exposure time is read from the EPRV-standard PRIMARY EXPTIME (the actual
         elapsed time, mapped from the native WMKO ELAPSED), not the nominal
-        requested EXPTIME. Outlier rejection is performed jointly on CCD and VAR
-        extensions, in rate space, so frames of differing exposure are
-        comparable. Exposure times must be either all zero (≤ tolerance) or all
-        above tolerance. Raises an error if more than `max_fail_fraction` of
-        frames fail to load.
+        requested EXPTIME. Outlier rejection is performed on the CCD rate (VAR =
+        |CCD| + RN adds no independent information); rates are used so frames of
+        differing exposure are comparable, and VAR is still summed for the SNR.
+        Exposure times must be either all zero (≤ tolerance) or all above
+        tolerance. Raises an error if more than `max_fail_fraction` of frames
+        fail to load.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -537,13 +538,10 @@ class BaseMasterModule:
             stats[f"{chip}_CCD"] = {}
             stats[f"{chip}_VAR"] = {}
 
-            # Per-pixel frame-to-frame rejection: at each pixel, flag the frames
-            # whose rate deviates from the across-frame median (axis=0 is the
-            # frame axis). A frame is rejected if it is an outlier in either the
-            # counts rate or the variance rate.
-            out = flag_outliers(
-                data_cube[f"{chip}_CCD"] / T, sigma, axis=0
-            ) | flag_outliers(data_cube[f"{chip}_VAR"] / T, sigma, axis=0)
+            # Per-pixel frame-to-frame rejection on the CCD rate (axis=0 is the
+            # frame axis). VAR = |CCD| + RN is monotonic in |CCD|, so clipping it
+            # adds no independent info; VAR is only summed below for the SNR.
+            out = flag_outliers(data_cube[f"{chip}_CCD"] / T, sigma, axis=0)
 
             valid = ~out
             N = np.sum(~out, axis=0)
@@ -652,11 +650,12 @@ class BaseMasterModule:
         # The approximation pass stacks only the first `ndirect` frames; cache
         # them so the streaming exact pass below reuses them instead of
         # re-reading those files from disk.
+        # cache=False: don't retain assembled frames -- holding them alongside the
+        # datacube spiked peak RAM into swap; re-reading in the exact pass is cheaper.
         approx_stats, zero_exptime = self._compute_stats_from_datacube(
             l0_file_list=l0_file_list[:ndirect],
             sigma=sigma,
             verbose=verbose,
-            cache=True,
             max_fail_fraction=max_fail_fraction,
             max_fail_number=max_fail_number,
             exptime_tolerance=exptime_tolerance,
@@ -698,10 +697,9 @@ class BaseMasterModule:
         clipping_mask = np.ones((nrow, ncol), dtype=bool)
 
         for fn in l0_file_list:
-            # The first `ndirect` frames are cache hits from the approximation
-            # pass above; the rest are read once here and not worth caching.
+            # Assembled fresh (no cache) -- retaining frames spiked peak RAM into swap.
             l1_obj, success = self._load_frame(
-                fn, cache=False, exptime_tolerance=exptime_tolerance, verbose=verbose
+                fn, exptime_tolerance=exptime_tolerance, verbose=verbose
             )
 
             if not success:
@@ -725,16 +723,13 @@ class BaseMasterModule:
             T = 1.0 if is_zero else exptime
 
             for chip in self.chips:
-                # Clip each pixel against the rate bounds (joint over CCD/VAR),
-                # then accumulate counts and exposure time over the survivors.
-                clipping_mask[:] = True
-
-                for suffix in ["CCD", "VAR"]:
-                    ext = f"{chip}_{suffix}"
-                    rate = l1_obj.data[ext] / T
-                    lower = approx_stats[ext]["rate_lower"]
-                    upper = approx_stats[ext]["rate_upper"]
-                    clipping_mask &= (rate >= lower) & (rate <= upper)
+                # Clip each pixel against the CCD rate bounds (VAR = |CCD| + RN
+                # adds no independent info); the CCD mask is applied to both below.
+                ext = f"{chip}_CCD"
+                rate = l1_obj.data[ext] / T
+                lower = approx_stats[ext]["rate_lower"]
+                upper = approx_stats[ext]["rate_upper"]
+                clipping_mask[:] = (rate >= lower) & (rate <= upper)
 
                 exact_stats[f"{chip}_CCD"]["exptime_sum"] += T * clipping_mask
 

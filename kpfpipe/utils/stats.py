@@ -196,8 +196,12 @@ def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
 
     if method == "median":
         med = np.nanmedian(x, axis=axis, keepdims=True)
-        mad = _mad_std(x, med=med, axis=axis, keepdims=True)
-        out = np.abs(x - med) / (mad + eps) > sigma
+        # Reuse one abs-dev buffer (MAD, then normalize in place) to avoid extra
+        # full-size temporaries on the datacube.
+        dev = np.abs(x - med)
+        mad = 1.482602218505602 * np.nanmedian(dev, axis=axis, keepdims=True)
+        dev /= mad + eps
+        out = dev > sigma
 
     elif method == "trend":
         trend = _smooth_filter(x, size=kernel_size, axes=axis)
