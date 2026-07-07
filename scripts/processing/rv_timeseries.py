@@ -14,11 +14,15 @@ recipes. Given a target star and an inclusive datecode range, it
 It reimplements no pipeline logic: each night and each frame is dispatched as a
 separate ``python -m tools.cli`` subprocess (the pipeline's own command-line
 entry point), so every invocation gets its own log file, clean process state,
-and an independent exit code. Steps 3 and 4 run in a bounded process pool; the
-whole run aborts loudly if any masters night or any science frame fails, naming
-the offending obs_id/datecode and its log so it can be investigated. The reduced
-L1/L2/L4 products land in the usual output dirs; when --plot_directory is given,
-the RV timeseries plot is written there once every frame has reduced.
+and an independent exit code. Steps 3 and 4 run in a bounded process pool. A
+masters night that fails to build (e.g. the known WLS failure mode) is
+non-fatal: it is reported as a warning and the run continues, but its science
+frames are then skipped (with a warning) rather than reduced into guaranteed
+failures, since they would be missing a required master. A science frame that
+fails still aborts the run loudly, naming the offending obs_id and its log. The
+reduced L1/L2/L4 products land in the usual output dirs; when --plot_directory
+is given, the RV timeseries plot is written there once the reducible frames are
+done.
 
 With --plots_only, steps 1-4 are skipped entirely: the target's frames are
 discovered by scanning the L4 output tree (not the L0 input tree) and the plot is
@@ -356,20 +360,6 @@ def _missing_masters(masters_output, datecode):
     ]
 
 
-def check_masters_exist(masters_output, datecodes):
-    """Abort unless every required master exists for every night in `datecodes`."""
-    missing = [
-        f"  {dc}: missing {cal_type} {level} master"
-        for dc in datecodes
-        for cal_type, level in _missing_masters(masters_output, dc)
-    ]
-    if missing:
-        sys.exit(
-            "error: required masters missing (aborting before science)\n"
-            + "\n".join(missing)
-        )
-
-
 def _science_complete(obs_id, science_output):
     """True if the frame's L4 product already exists (reduced to completion)."""
     return os.path.exists(kpf_filepath(obs_id, "L4", data_root=science_output))
@@ -458,7 +448,7 @@ def _run_one(argv, timeout=None):
             _live_procs.discard(proc)
 
 
-def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800):
+def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800, abort_on_failure=True):
     """Run `tasks`: the first serially as a canary, then the rest in a pool.
 
     tasks: list of (tag, argv). The first unit runs alone (bounded by
@@ -466,20 +456,25 @@ def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800):
     caches every job lazily builds -- barycorrpy leap-second / astropy IERS
     tables, the matplotlib font cache, compiled bytecode -- so the parallel jobs
     hit a warm cache instead of stampeding a cold one (the thundering-herd
-    failure mode). It doubles as a fail-fast check: if the canary fails, abort
-    before committing to the fan-out.
+    failure mode).
 
-    In the parallel phase, on the first nonzero exit stop launching new jobs
-    (cancel not-yet-started ones) but let in-flight jobs finish. Any failure
-    prints a sentinel per failing unit -- naming its tag and log file -- and
-    exits(1).
+    `abort_on_failure` controls what a nonzero exit means:
 
-    On Ctrl+C (SIGINT) or SIGTERM, cancel the queue and terminate every
-    still-running child before exiting (130), so an interrupt stops the whole
-    run rather than leaving the pool draining orphaned subprocesses.
+    * True (default, science): fail-fast. A failed canary skips the fan-out; a
+      failed pool job stops new launches (in-flight jobs finish). Any failure
+      prints a per-unit sentinel and exits(1).
+    * False (masters): fail-soft. Every unit is attempted regardless (a failed
+      canary still fans out, since one bad night must not stop the others), and
+      failures are reported as a warning without exiting -- the caller inspects
+      which products landed to decide what to do downstream.
+
+    Returns the set of failed tags. On Ctrl+C (SIGINT) or SIGTERM, cancel the
+    queue and terminate every still-running child before exiting (130), so an
+    interrupt stops the whole run rather than leaving the pool draining orphaned
+    subprocesses.
     """
     if not tasks:
-        return
+        return set()
     print(
         f"[{label}] dispatching {len(tasks)} job(s): 1 serial canary, "
         f"then up to {jobs} at once"
@@ -492,11 +487,14 @@ def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800):
         rc, stderr = _run_one(canary_argv, timeout=canary_timeout)
         if rc != 0:
             failures.append((label, canary_tag, rc, stderr))
-            print(
-                f"  [{label}] FAILED: canary {canary_tag} (exit {rc}); not fanning out"
-            )
+            fanning = "continuing anyway" if not abort_on_failure else "not fanning out"
+            print(f"  [{label}] FAILED: canary {canary_tag} (exit {rc}); {fanning}")
         else:
             print(f"  [{label}] ok: {canary_tag}")
+
+        # Fan out when the canary passed, or always in fail-soft mode (a bad
+        # night must not block the rest). Skip only when a fail-fast canary died.
+        if rc == 0 or not abort_on_failure:
             pool = concurrent.futures.ThreadPoolExecutor(max_workers=jobs)
             futures = {pool.submit(_run_one, argv): tag for tag, argv in tasks[1:]}
             for future in concurrent.futures.as_completed(futures):
@@ -509,11 +507,15 @@ def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800):
                     print(f"  [{label}] ok: {tag}")
                     continue
                 failures.append((label, tag, rc, stderr))
-                print(
-                    f"  [{label}] FAILED: {tag} (exit {rc}); halting new {label} jobs"
-                )
-                for pending in futures:
-                    pending.cancel()
+                if abort_on_failure:
+                    print(
+                        f"  [{label}] FAILED: {tag} (exit {rc}); halting new "
+                        f"{label} jobs"
+                    )
+                    for pending in futures:
+                        pending.cancel()
+                else:
+                    print(f"  [{label}] FAILED: {tag} (exit {rc}); continuing")
     except KeyboardInterrupt:
         _interrupted.set()
         print(
@@ -531,8 +533,20 @@ def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800):
             pool.shutdown(wait=True)
 
     if failures:
-        _report_failures(failures, log_dir)
-        sys.exit(1)
+        if abort_on_failure:
+            _report_failures(
+                failures, log_dir, header=f"ABORTED: {len(failures)} job(s) failed"
+            )
+            sys.exit(1)
+        _report_failures(
+            failures,
+            log_dir,
+            header=(
+                f"WARNING: {len(failures)} {label} job(s) failed; continuing "
+                f"without them"
+            ),
+        )
+    return {tag for _, tag, _, _ in failures}
 
 
 def _cli_task(unit, recipe, config, unit_flag, forward):
@@ -547,10 +561,14 @@ def _cli_task(unit, recipe, config, unit_flag, forward):
     return unit, argv
 
 
-def _report_failures(failures, log_dir):
-    """Print an actionable sentinel for each failed subprocess, to stderr."""
+def _report_failures(failures, log_dir, *, header):
+    """Print an actionable sentinel for each failed subprocess, to stderr.
+
+    `header` is the banner line -- an ABORTED line when the stage is fatal, or a
+    WARNING line when a fail-soft stage is continuing past the failures.
+    """
     print(f"\n{'=' * 72}", file=sys.stderr)
-    print(f"ABORTED: {len(failures)} job(s) failed", file=sys.stderr)
+    print(header, file=sys.stderr)
     print("=" * 72, file=sys.stderr)
     for label, tag, rc, stderr in failures:
         hint = os.path.join(log_dir, "*", f"kpf_{label}_{tag}_*.log")
@@ -876,21 +894,48 @@ def main(argv=None):
             _cli_task(dc, _MASTERS_RECIPE, args.masters_config, "-d", forward)
             for dc in masters_todo
         ]
-        run_stage("masters", tasks, args.jobs, log_dir)
+        # Fail-soft: a night whose masters fail (e.g. the known WLS failure mode)
+        # is warned about, not fatal; its science frames are gated out below.
+        run_stage("masters", tasks, args.jobs, log_dir, abort_on_failure=False)
 
-        # Gate: never start science if any required master is missing.
-        check_masters_exist(masters_output, datecodes)
-        print("all required masters present")
+        # Per-night gate: a night still missing a required master (whether it
+        # failed just now or was never built) can only produce failed science
+        # reductions, so drop its frames with a warning instead of running them.
+        incomplete = {dc: _missing_masters(masters_output, dc) for dc in datecodes}
+        incomplete = {dc: miss for dc, miss in incomplete.items() if miss}
+        science_frames = obs_ids
+        if incomplete:
+            for dc in sorted(incomplete):
+                miss = ", ".join(f"{ct} {lv}" for ct, lv in incomplete[dc])
+                n = sum(1 for o in obs_ids if get_datecode(o) == dc)
+                print(
+                    f"  warning: night {dc} missing master(s) [{miss}]; skipping "
+                    f"its {n} science frame(s)",
+                    flush=True,
+                )
+            science_frames = [o for o in obs_ids if get_datecode(o) not in incomplete]
+            if not science_frames:
+                sys.exit(
+                    "error: no reducible science frames -- every matching night "
+                    "is missing a required master"
+                )
+            complete = len(datecodes) - len(incomplete)
+            print(
+                f"proceeding with {len(science_frames)} science frame(s) from "
+                f"{complete} complete night(s)"
+            )
+        else:
+            print("all required masters present")
 
         # Step 4: science reduction (parallel across frames; canary-then-fan-out).
-        # Reduce every frame by default; with --skip_existing_science, skip frames
-        # that already have an L4 product (reduced to completion).
-        science_todo = obs_ids
+        # Reduce every reducible frame by default; with --skip_existing_science,
+        # skip frames that already have an L4 product (reduced to completion).
+        science_todo = science_frames
         if args.skip_existing_science:
             science_todo = [
-                o for o in obs_ids if not _science_complete(o, science_output)
+                o for o in science_frames if not _science_complete(o, science_output)
             ]
-            skipped = len(obs_ids) - len(science_todo)
+            skipped = len(science_frames) - len(science_todo)
             if skipped:
                 print(f"skipping {skipped} science frame(s) already reduced to L4")
         tasks = [
@@ -900,11 +945,11 @@ def main(argv=None):
         run_stage("science", tasks, args.jobs, log_dir)
 
         print(
-            f"\ndone: reduced {len(obs_ids)} frame(s); "
+            f"\ndone: reduced {len(science_frames)} frame(s); "
             f"L2/L4 products under {science_output}"
         )
         l4_paths = [
-            kpf_filepath(oid, "L4", data_root=science_output) for oid in obs_ids
+            kpf_filepath(oid, "L4", data_root=science_output) for oid in science_frames
         ]
 
     # Step 5: RV timeseries plot from the L4 products -- only when a plot
