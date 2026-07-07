@@ -509,6 +509,37 @@ class TestQCL0:
         qc = QCL0.__dict__["not_junk"]
         assert qc._qc_key == "NOTJUNK"
 
+    def test_radec_consistent_pass(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        for k, v in (("TARGOFF", 0.02), ("OBJOFF", 2.3), ("GAIAOFF", 2.3)):
+            l0.set_keyword(k, v)  # routes to QUALITY_CONTROL
+        assert QCL0(l0).radec_consistent() is True
+
+    def test_radec_gaiaoff_fail(self, tmp_path):
+        # The 20240816 signature: pointing/target/OBJECT fine, GAIAID ~25 deg off.
+        l0 = _make_kpf0(tmp_path)
+        for k, v in (("TARGOFF", 0.02), ("OBJOFF", 2.3), ("GAIAOFF", 91004.96)):
+            l0.set_keyword(k, v)
+        assert QCL0(l0).radec_consistent() is False
+
+    def test_radec_targoff_fail(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        l0.set_keyword("TARGOFF", 1.5)  # > 1" pointing-vs-target
+        assert QCL0(l0).radec_consistent() is False
+
+    def test_radec_objoff_fail(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        l0.set_keyword("OBJOFF", 6.0)  # > 5" pointing-vs-OBJECT
+        assert QCL0(l0).radec_consistent() is False
+
+    def test_radec_absent_offsets_pass(self, tmp_path):
+        # A calibration-like frame writes no offsets -> nothing to check -> pass.
+        l0 = _make_kpf0(tmp_path)
+        assert QCL0(l0).radec_consistent() is True
+
+    def test_radecok_key_present(self):
+        assert QCL0.__dict__["radec_consistent"]._qc_key == "RADECOK"
+
     def test_dataprl0_key_and_comment(self):
         fn = QCL0.__dict__["data_l0_red_green"]
         assert fn._qc_key == "DATAPRL0"

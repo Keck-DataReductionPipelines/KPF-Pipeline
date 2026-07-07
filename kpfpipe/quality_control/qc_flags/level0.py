@@ -138,3 +138,21 @@ class QCL0(QC):
         return obs_id not in load_junk_obs_ids(data_input)
 
     not_junk._qc_key = "NOTJUNK"
+
+    def radec_consistent(self):
+        """Pointing agrees with the target and catalog positions.
+
+        Thresholds the DiagL0 offsets on QUALITY_CONTROL: TARGOFF < 1", and the
+        catalog cross-matches OBJOFF/GAIAOFF < 5" (a loose bound, since the loaded
+        pointing coordinates are not Gaia/SIMBAD-derived). Each offset is checked
+        only when present, so a frame with no pointing (e.g. a calibration frame)
+        or a skipped catalog lookup passes.
+        """
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        for key, limit in (("TARGOFF", 1.0), ("OBJOFF", 5.0), ("GAIAOFF", 5.0)):
+            val = _hdr_float(hdr, key)
+            if val is not None and val >= limit:
+                return False
+        return True
+
+    radec_consistent._qc_key = "RADECOK"
