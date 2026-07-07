@@ -43,6 +43,7 @@ from datetime import UTC, datetime
 
 import numpy as np
 from astropy.io import fits
+from astropy.stats import mad_std
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
@@ -793,10 +794,17 @@ def plot_rv_timeseries(target, l4_paths, plot_directory, group_bursts):
     RVERR error bars, a zero reference line (the median), an RMS annotation, and
     calendar-date (YYYYMMDD) x tick labels derived from BJD_TDB.
 
+    The scatter is measured robustly: RV_RMS is the mad_std of the points (not
+    the literal root-mean-square, which one outlier can dominate), and the y-range
+    is clipped to +/-5 sigma about it. Points beyond 5 sigma are drawn as a black
+    triangle at the clipped edge (up for positive, down for negative) annotated
+    with their delta-RV, so a large outlier is flagged without rescaling the plot.
+
     When group_bursts is set, the individual frames are drawn as a faint grey
     underlay and the burst-grouped means overplotted in colour on top; the
-    RV_RMS/RV_ERR annotation then reflects the burst means. It also writes the
-    per-night panel plot from the ungrouped frames (see plot_nightly_panels).
+    RV_RMS/RV_ERR annotation and the outlier flagging then reflect the burst
+    means. It also writes the per-night panel plot from the ungrouped frames
+    (see plot_nightly_panels).
     """
     import matplotlib
 
@@ -835,20 +843,63 @@ def plot_rv_timeseries(target, l4_paths, plot_directory, group_bursts):
 
     drv = (rvs - ref) * 1e3
     derr = errs * 1e3
-    rms = np.sqrt(np.mean(drv**2))
     med_err = np.median(derr)  # median per-point photon uncertainty
+
+    # Robust scatter: RV_RMS is the mad_std (one outlier can't inflate it), and
+    # the y-range is clipped to +/-5 sigma. A degenerate sigma (single point, all
+    # identical) falls back to the literal RMS and a data-driven symmetric range.
+    sigma = float(mad_std(drv))
+    if np.isfinite(sigma) and sigma > 0:
+        rms = sigma
+        ylim = 5.0 * sigma
+        outlier = np.abs(drv) > ylim
+    else:
+        rms = np.sqrt(np.mean(drv**2))
+        ylim = None
+        outlier = np.zeros(drv.shape, dtype=bool)
 
     order = np.argsort(times)
     os.makedirs(plot_directory, exist_ok=True)
     out_path = os.path.join(plot_directory, f"{target}_rv_timeseries.png")
 
     # Foreground series (burst means when grouping, else the frames): larger,
-    # black-outlined markers so they stand out over the grey underlay.
+    # black-outlined markers so they stand out over the grey underlay. Draw only
+    # the in-range points; 5-sigma outliers are marked separately at the edge.
     fg_kw = dict(fmt="o", capsize=3, zorder=2, color="C3")
     if group_bursts:
         fg_kw.update(ms=8, mec="black", mew=0.8, label="burst mean")
-    ax.errorbar(times[order], drv[order], yerr=derr[order], **fg_kw)
-    if group_bursts:
+    keep = order[~outlier[order]]
+    ax.errorbar(times[keep], drv[keep], yerr=derr[keep], **fg_kw)
+
+    # Off-plot outliers: a black up/down triangle pinned to the clipped edge
+    # (clip_on=False so the whole marker shows), annotated with the delta-RV.
+    if outlier.any():
+        up = outlier & (drv > 0)
+        dn = outlier & (drv < 0)
+        tri_kw = dict(ls="none", color="black", ms=9, clip_on=False, zorder=4)
+        label = r"5$\sigma$ outlier"
+        if up.any():
+            ax.plot(
+                times[up], np.full(up.sum(), ylim), marker="^", label=label, **tri_kw
+            )
+            label = None
+        if dn.any():
+            ax.plot(
+                times[dn], np.full(dn.sum(), -ylim), marker="v", label=label, **tri_kw
+            )
+        for i in np.flatnonzero(outlier):
+            edge, off = (ylim, -12) if drv[i] > 0 else (-ylim, 12)
+            ax.annotate(
+                f"{drv[i]:+.0f} m/s",
+                (times[i], edge),
+                textcoords="offset points",
+                xytext=(0, off),
+                ha="center",
+                va="top" if drv[i] > 0 else "bottom",
+                fontsize=7,
+            )
+
+    if group_bursts or outlier.any():
         ax.legend(loc="upper right", fontsize=8)
 
     # Relabel the BJD_TDB axis with human-readable calendar dates (YYYYMMDD); the
@@ -872,7 +923,10 @@ def plot_rv_timeseries(target, l4_paths, plot_directory, group_bursts):
         bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.8),
     )
     ax.grid(True, alpha=0.3)
-    _symmetric_ylim(ax)
+    if ylim is not None:
+        ax.set_ylim(-ylim, ylim)
+    else:
+        _symmetric_ylim(ax)
     fig.tight_layout()
     _stamp_provenance(fig)
     fig.savefig(out_path, dpi=150)
