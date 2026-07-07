@@ -4,7 +4,7 @@ KPF_MASTERS_OUTPUT = "/data/kpf-next/masters-root/"
 KPF_SCIENCE_OUTPUT = "/data/kpf-next/science-root/"
 
 [LOGGER]
-log_directory = "/data/kpf-next/logs/"  # one parent dir for all logs (DRP-RUN-09)
+log_dir = "/data/kpf-next/logs/"        # one parent dir for all logs (DRP-RUN-09)
 log_level = "INFO"                      # production level
 console = true                          # mirror records to stderr
 

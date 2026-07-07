@@ -514,7 +514,7 @@ class TestFindMasters:
         fh = FileHandler({"KPF_MASTERS_OUTPUT": str(tmp_path)})
         assert fh.find_masters("bias", "L1", "20240405") == []
 
-    def test_raises_without_masters_root(self):
+    def test_raises_without_masters_output(self):
         with pytest.raises(ValueError, match="KPF_MASTERS_OUTPUT"):
             FileHandler().find_masters("bias", "L1", "20240405")
 

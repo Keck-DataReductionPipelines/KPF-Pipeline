@@ -77,17 +77,19 @@ def main():
         help="obs_id, e.g. KP.20240405.40113.57 (science only; exclusive with -d)",
     )
     parser.add_argument(
-        "--data_input", default=None, help="override KPF_DATA_INPUT directory"
+        "--kpf_data_input", default=None, help="override KPF_DATA_INPUT directory"
     )
     parser.add_argument(
-        "--data_masters", default=None, help="override KPF_MASTERS_OUTPUT directory"
+        "--kpf_masters_output",
+        default=None,
+        help="override KPF_MASTERS_OUTPUT directory",
     )
     parser.add_argument(
-        "--data_science", default=None, help="override KPF_SCIENCE_OUTPUT directory"
+        "--kpf_science_output",
+        default=None,
+        help="override KPF_SCIENCE_OUTPUT directory",
     )
-    parser.add_argument(
-        "--log_dir", default=None, help="override [LOGGER] log_directory"
-    )
+    parser.add_argument("--log_dir", default=None, help="override [LOGGER] log_dir")
     parser.add_argument(
         "--log_level", default=None, help="override [LOGGER] log_level (e.g. DEBUG)"
     )
@@ -121,24 +123,24 @@ def main():
         parser.error("science recipe takes -o/--obs_id, not -d/--datecode")
 
     if args.test:
-        args.data_input = args.data_input or _TESTDATA_DIR
-        args.data_masters = args.data_masters or _TESTDATA_DIR
-        args.data_science = args.data_science or _TESTDATA_DIR
+        args.kpf_data_input = args.kpf_data_input or _TESTDATA_DIR
+        args.kpf_masters_output = args.kpf_masters_output or _TESTDATA_DIR
+        args.kpf_science_output = args.kpf_science_output or _TESTDATA_DIR
         args.log_dir = args.log_dir or os.path.join(_TESTDATA_DIR, "logs")
 
     overrides = {}
-    if args.data_input or args.data_masters or args.data_science:
+    if args.kpf_data_input or args.kpf_masters_output or args.kpf_science_output:
         overrides["DATA_DIRS"] = {}
-        if args.data_input:
-            overrides["DATA_DIRS"]["KPF_DATA_INPUT"] = args.data_input
-        if args.data_masters:
-            overrides["DATA_DIRS"]["KPF_MASTERS_OUTPUT"] = args.data_masters
-        if args.data_science:
-            overrides["DATA_DIRS"]["KPF_SCIENCE_OUTPUT"] = args.data_science
+        if args.kpf_data_input:
+            overrides["DATA_DIRS"]["KPF_DATA_INPUT"] = args.kpf_data_input
+        if args.kpf_masters_output:
+            overrides["DATA_DIRS"]["KPF_MASTERS_OUTPUT"] = args.kpf_masters_output
+        if args.kpf_science_output:
+            overrides["DATA_DIRS"]["KPF_SCIENCE_OUTPUT"] = args.kpf_science_output
     if args.log_dir or args.log_level:
         overrides["LOGGER"] = {}
         if args.log_dir:
-            overrides["LOGGER"]["log_directory"] = args.log_dir
+            overrides["LOGGER"]["log_dir"] = args.log_dir
         if args.log_level:
             overrides["LOGGER"]["log_level"] = args.log_level
 
@@ -202,10 +204,10 @@ def resolve_logging(config, recipe_path, obs_id, datecode):
         Keyword arguments for ``setup_logging``.
     """
     params = config.get_params(["LOGGER"])
-    log_dir = params.get("log_directory")
+    log_dir = params.get("log_dir")
     if not log_dir:
         raise ValueError(
-            "no log directory configured: set [LOGGER] log_directory in the "
+            "no log directory configured: set [LOGGER] log_dir in the "
             "config file or pass --log_dir"
         )
     recipe_name = os.path.splitext(os.path.basename(recipe_path))[0]

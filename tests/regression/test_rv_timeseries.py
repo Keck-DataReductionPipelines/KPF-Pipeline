@@ -143,7 +143,7 @@ class TestParseArgs:
         ns = rv.parse_args(_BASE_ARGS + ["--output_dir", "/out"])
         assert ns.kpf_masters_output == "/out"
         assert ns.kpf_science_output == "/out"
-        assert ns.log_directory == "/out/logs"
+        assert ns.log_dir == "/out/logs"
         assert ns.plot_directory == "/out/QLP/timeseries"
 
     def test_output_dir_conflicts_with_explicit_override(self, rv):

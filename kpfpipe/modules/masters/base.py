@@ -86,7 +86,7 @@ class BaseMasterModule:
 
         # Masters output root; CalibrationAssociation reads masters from here
         # when `_process_frame` associates a calibration for a stacked frame.
-        self._masters_root = params.get("KPF_MASTERS_OUTPUT")
+        self._masters_output = params.get("KPF_MASTERS_OUTPUT")
 
         # Forwarded to CalibrationAssociation in `_process_frame` so an operator's
         # configured search window is honored, not silently reset to the default.
@@ -294,7 +294,7 @@ class BaseMasterModule:
         # filepath / KPFMasterL1 overrides are loaded directly by ImageProcessing.
         cal_types = [name for name, value in calibrations.items() if value is True]
         if cal_types:
-            ca_config = {"KPF_MASTERS_OUTPUT": self._masters_root}
+            ca_config = {"KPF_MASTERS_OUTPUT": self._masters_output}
             if self._masters_search_window_days is not None:
                 ca_config["masters_search_window_days"] = (
                     self._masters_search_window_days

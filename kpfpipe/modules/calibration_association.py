@@ -84,7 +84,7 @@ class CalibrationAssociation:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._masters_root = params.get("KPF_MASTERS_OUTPUT")
+        self._masters_output = params.get("KPF_MASTERS_OUTPUT")
         self._file_handler = FileHandler(params)  # masters discovery
         self._calibrations = None  # per-cal {filepath} for _set_headers
         self._info = None
@@ -193,9 +193,9 @@ class CalibrationAssociation:
         """Build and cache the info() summary text from instance attributes."""
         lines = [
             "CalibrationAssociation",
-            f"  obs_id:        {self.l1_obj.obs_id}",
-            f"  masters root:  {self._masters_root}",
-            f"  search window: {self.masters_search_window_days} days [before, after]",
+            f"  obs_id:         {self.l1_obj.obs_id}",
+            f"  masters output: {self._masters_output}",
+            f"  search window:  {self.masters_search_window_days} days [before, after]",
             f"\n  {'cal_type':<12s} {'master file'}",
             "  " + "-" * 60,
         ]

@@ -84,21 +84,21 @@ def mock_pipeline(monkeypatch):
 
 
 class TestInit:
-    def test_none_config_sets_masters_root_none(self):
+    def test_none_config_sets_masters_output_none(self):
         wls = WLS(FILE_LIST)
-        assert wls._masters_root is None
+        assert wls._masters_output is None
 
-    def test_reads_masters_root_from_config(self):
+    def test_reads_masters_output_from_config(self):
         # WLS associates the master bias from KPF_MASTERS_OUTPUT -- where the
         # masters recipe writes it and where CalibrationAssociation reads it.
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
-        assert wls._masters_root == "/masters"
+        assert wls._masters_output == "/masters"
 
-    def test_ignores_data_input_for_masters_root(self):
+    def test_ignores_data_input_for_masters_output(self):
         # The raw input root is not where masters live; only KPF_MASTERS_OUTPUT
         # drives the masters search.
         wls = WLS(FILE_LIST, config={"KPF_DATA_INPUT": "/in"})
-        assert wls._masters_root is None
+        assert wls._masters_output is None
 
     def test_invalid_config_raises(self):
         with pytest.raises(TypeError):
@@ -116,7 +116,7 @@ class TestExtractFrame:
         result = wls._extract_frame(MockL1())
         assert result is mock_pipeline
 
-    def test_passes_masters_root_to_calibration_association(self, monkeypatch):
+    def test_passes_masters_output_to_calibration_association(self, monkeypatch):
         # _process_frame (run before _extract_frame) associates the bias from
         # KPF_MASTERS_OUTPUT; _extract_frame itself no longer does calibration.
         mock_ca = MagicMock()

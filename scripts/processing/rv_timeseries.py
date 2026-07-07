@@ -128,7 +128,7 @@ def parse_args(argv=None):
         "--output_dir",
         help="shorthand routing all outputs under one root: sets "
         "--kpf_masters_output and --kpf_science_output to it, "
-        "--log_directory to {output_dir}/logs, and --plot_directory to "
+        "--log_dir to {output_dir}/logs, and --plot_directory to "
         "{output_dir}/QLP/timeseries",
     )
     ap.add_argument("--kpf_data_input", help="override [DATA_DIRS] KPF_DATA_INPUT")
@@ -138,7 +138,7 @@ def parse_args(argv=None):
     ap.add_argument(
         "--kpf_science_output", help="override [DATA_DIRS] KPF_SCIENCE_OUTPUT"
     )
-    ap.add_argument("--log_directory", help="override [LOGGER] log_directory")
+    ap.add_argument("--log_dir", help="override [LOGGER] log_dir")
     ap.add_argument(
         "--plot_directory",
         help="directory to write the RV timeseries plot into; if omitted, the "
@@ -201,7 +201,7 @@ def parse_args(argv=None):
         routed = {
             "kpf_masters_output": args.output_dir,
             "kpf_science_output": args.output_dir,
-            "log_directory": os.path.join(args.output_dir, "logs"),
+            "log_dir": os.path.join(args.output_dir, "logs"),
             "plot_directory": os.path.join(args.output_dir, "QLP", "timeseries"),
         }
         clashes = [f"--{k}" for k in routed if getattr(args, k)]
@@ -890,16 +890,14 @@ def main(argv=None):
         args.kpf_masters_output
         or _dir_params(args.masters_config, "DATA_DIRS")["KPF_MASTERS_OUTPUT"]
     )
-    log_dir = args.log_directory or _dir_params(args.science_config, "LOGGER").get(
-        "log_directory"
-    )
+    log_dir = args.log_dir or _dir_params(args.science_config, "LOGGER").get("log_dir")
 
     forward = []
     for value, flag in (
-        (args.kpf_data_input, "--data_input"),
-        (args.kpf_masters_output, "--data_masters"),
-        (args.kpf_science_output, "--data_science"),
-        (args.log_directory, "--log_dir"),
+        (args.kpf_data_input, "--kpf_data_input"),
+        (args.kpf_masters_output, "--kpf_masters_output"),
+        (args.kpf_science_output, "--kpf_science_output"),
+        (args.log_dir, "--log_dir"),
     ):
         if value:
             forward += [flag, value]
