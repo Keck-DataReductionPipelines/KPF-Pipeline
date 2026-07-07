@@ -20,14 +20,10 @@ def is_timestamp(s):
     Return True if `s` is a valid KPF timestamp, e.g. '20240113.23249.10'.
 
     Checks all three: the 'YYYYMMDD.SSSSS.FF' format, that YYYYMMDD is a real
-    calendar date, and that SSSSS (seconds past midnight) is in [0, 86399].
-    The sub-second frame field FF is format-checked only.
-
-    This is the module's single source of timestamp-validity logic. The other
-    predicate (`is_obs_id`) and the raising extractors/converters
-    (`get_timestamp`, `utc_to_hst`, `kpf_timestamp_to_datetime`, ...) all
-    validate through it -- the predicates return its bool, the raising callers
-    turn a False into a ValueError at their own boundary.
+    calendar date, and that SSSSS (seconds past midnight) is in [0, 86399]; the
+    sub-second frame field FF is format-checked only. The module's single source
+    of timestamp validity -- every other predicate and raising converter
+    validates through it.
     """
     if not isinstance(s, str) or not _KPF_TIMESTAMP_PATTERN.fullmatch(s):
         return False
@@ -65,25 +61,8 @@ def is_datecode(s):
 
 
 def get_obs_id(fn):
-    """
-    Extract the obs_id from a filename or path.
-
-    Parameters
-    ----------
-    fn : str
-        Filename or path, e.g.
-        '/data/L1/20240113/KP.20240113.23249.10_L1.fits'.
-
-    Returns
-    -------
-    str
-        The obs_id, e.g. 'KP.20240113.23249.10'.
-
-    Raises
-    ------
-    ValueError
-        If no valid obs_id is found in `fn`.
-    """
+    """Extract the obs_id (e.g. 'KP.20240113.23249.10') from a filename or path;
+    raises ``ValueError`` if none is found."""
     if not isinstance(fn, str):
         raise ValueError(f"input must be a string; got {type(fn).__name__}")
     match = _OBS_ID_PATTERN.search(os.path.basename(fn))
@@ -96,25 +75,8 @@ def get_obs_id(fn):
 
 
 def get_datecode(s):
-    """
-    Extract the datecode from an obs_id or filename.
-
-    Parameters
-    ----------
-    s : str
-        An obs_id or filename, e.g. 'KP.20230708.04519.63' or
-        'KP.20230708.04519.63_L1.fits'.
-
-    Returns
-    -------
-    str
-        The datecode, e.g. '20230708'.
-
-    Raises
-    ------
-    ValueError
-        If no valid obs_id is found in `s`.
-    """
+    """Extract the datecode (e.g. '20230708') from an obs_id or filename; raises
+    ``ValueError`` if no valid obs_id is found."""
     if not isinstance(s, str):
         raise ValueError(f"input must be a string; got {type(s).__name__}")
     match = _OBS_ID_PATTERN.search(s)
@@ -127,25 +89,8 @@ def get_datecode(s):
 
 
 def get_timestamp(s):
-    """
-    Extract the KPF timestamp from an obs_id, filename, or path.
-
-    Parameters
-    ----------
-    s : str
-        An obs_id, filename, or path, e.g. 'KP.20240113.23249.10' or
-        '/data/L0/20240113/KP.20240113.23249.10.fits'.
-
-    Returns
-    -------
-    str
-        The KPF timestamp, e.g. '20240113.23249.10'.
-
-    Raises
-    ------
-    ValueError
-        If no valid KPF timestamp is found in `s`.
-    """
+    """Extract the KPF timestamp (e.g. '20240113.23249.10') from an obs_id,
+    filename, or path; raises ``ValueError`` if none is found."""
     if not isinstance(s, str):
         raise ValueError(f"input must be a string; got {type(s).__name__}")
     match = _KPF_TIMESTAMP_PATTERN.search(os.path.basename(s))
@@ -158,19 +103,8 @@ def get_timestamp(s):
 
 
 def utc_to_hst(timestamp):
-    """
-    Convert a KPF UTC timestamp to HST (Hawaii Standard Time, UTC-10).
-
-    Parameters
-    ----------
-    timestamp : str
-        KPF timestamp string of the form 'YYYYMMDD.SSSSS.FF'.
-
-    Returns
-    -------
-    str
-        HST timestamp in the same KPF format.
-    """
+    """Convert a KPF UTC timestamp ('YYYYMMDD.SSSSS.FF') to HST (Hawaii Standard
+    Time, UTC-10), returned in the same KPF format."""
     if not is_timestamp(timestamp):
         raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
     date_str, seconds_str, frame_str = timestamp.split(".")
@@ -183,25 +117,10 @@ def utc_to_hst(timestamp):
 
 
 def hst_to_utc(timestamp):
-    """
-    Convert a KPF HST timestamp to UTC.
-
-    The inverse of `utc_to_hst`, deliberately retained as its symmetric
-    counterpart so the UTC<->HST conversion is a complete pair. The pipeline
-    currently only calls `utc_to_hst` (the data tree is UTC-keyed, so
-    conversion runs UTC->HST); this direction backs round-trip tests and any
-    future HST-keyed input.
-
-    Parameters
-    ----------
-    timestamp : str
-        KPF timestamp string of the form 'YYYYMMDD.SSSSS.FF'.
-
-    Returns
-    -------
-    str
-        UTC timestamp in the same KPF format.
-    """
+    """Convert a KPF HST timestamp ('YYYYMMDD.SSSSS.FF') to UTC, in the same KPF
+    format. The inverse of `utc_to_hst`, kept as its symmetric counterpart: the
+    pipeline only calls `utc_to_hst` (the data tree is UTC-keyed), so this backs
+    round-trip tests and any future HST-keyed input."""
     if not is_timestamp(timestamp):
         raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
     date_str, seconds_str, frame_str = timestamp.split(".")
@@ -214,21 +133,9 @@ def hst_to_utc(timestamp):
 
 
 def kpf_timestamp_to_datetime(timestamp):
-    """
-    Parse a KPF UTC timestamp string into a `datetime`, e.g.
-    '20240405.40113.57' -> ``datetime(2024, 4, 5, 11, 8, 33)``.
-
-    Parameters
-    ----------
-    timestamp : str
-        KPF timestamp string of the form 'YYYYMMDD.SSSSS.FF' (the sub-second
-        frame field is ignored).
-
-    Returns
-    -------
-    datetime
-        Naive UTC datetime at the timestamp's seconds-past-midnight.
-    """
+    """Parse a KPF UTC timestamp ('YYYYMMDD.SSSSS.FF', sub-second field ignored)
+    into a naive UTC `datetime`, e.g. '20240405.40113.57' ->
+    ``datetime(2024, 4, 5, 11, 8, 33)``."""
     if not is_timestamp(timestamp):
         raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
     date_str, seconds_str, _ = timestamp.split(".")
@@ -236,23 +143,9 @@ def kpf_timestamp_to_datetime(timestamp):
 
 
 def kpf_timestamp_to_eprv_timestamp(timestamp):
-    """
-    Convert a KPF timestamp to EPRV standard format, e.g. '20240405.40113.57'
-    -> '20240405T110833'.
-
-    EPRV timestamps have 1-second resolution; the sub-second frame field
-    is dropped.
-
-    Parameters
-    ----------
-    timestamp : str
-        KPF timestamp string of the form 'YYYYMMDD.SSSSS.FF'.
-
-    Returns
-    -------
-    str
-        EPRV timestamp of the form 'YYYYMMDDTHHMMSS'.
-    """
+    """Convert a KPF timestamp to EPRV format ('YYYYMMDDTHHMMSS', 1-second
+    resolution, sub-second field dropped), e.g. '20240405.40113.57' ->
+    '20240405T110833'."""
     if not is_timestamp(timestamp):
         raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
     date_str, seconds_str, _ = timestamp.split(".")

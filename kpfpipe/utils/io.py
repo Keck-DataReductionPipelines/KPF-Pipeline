@@ -53,16 +53,10 @@ _CAL_TYPES = tuple(_OBJECT_MAP)
 
 
 def load_junk_obs_ids(data_input):
-    """Set of observer-flagged junk obs_ids for a data tree.
-
-    "Junk" is a manual flag observers set at exposure time (e.g. the wrong
-    telescope settings): such a frame can pass every automated QC yet be
-    scientifically useless, so it must be excluded from masters and science. The
-    list is WMKO's ``{data_input}/reference/Junk_Observations_for_KPF.csv`` -- a
-    title line, then an ``observation_id`` header, then one obs_id per row (read
-    the same way as v2.12's ``kpf_processing_progress.py``). An absent file
-    yields the empty set, so exclusion becomes a no-op -- matching WMKO's rule
-    that a missing list means nothing is junk.
+    """Set of observer-flagged junk obs_ids from WMKO's
+    ``{data_input}/reference/Junk_Observations_for_KPF.csv`` (a title line, an
+    ``observation_id`` header, then one obs_id per row). An absent file yields
+    the empty set, so exclusion becomes a no-op.
     """
     junk_csv = os.path.join(data_input, "reference", "Junk_Observations_for_KPF.csv")
     if not os.path.isfile(junk_csv):
@@ -74,11 +68,9 @@ def load_junk_obs_ids(data_input):
 class FileHandler:
     """Discover KPF data files across the L0-input and masters-output trees.
 
-    A config-carrying handler that resolves the pipeline's data-tree roots once
-    and exposes file discovery as methods keyed by ``datecode``/``cal_type``, so
-    recipes and scripts never assemble data paths by hand. It holds no per-call
-    tunables (every clustering knob is a method argument), so it has no
-    ``_DEFAULTS`` loop.
+    Resolves the pipeline's data-tree roots once and exposes file discovery as
+    methods keyed by ``datecode``/``cal_type``, so recipes and scripts never
+    assemble data paths by hand.
 
     Parameters
     ----------
@@ -109,36 +101,24 @@ class FileHandler:
         cache the resulting DataFrame on the instance, and return it.
 
         Reads ``{KPF_DATA_INPUT}/L0/{datecode}/*.fits`` fresh on every call (no
-        on-disk cache). The extracted keys drive frame selection -- e.g.
-        filtering by OBJECT to identify bias, dark, flat, or thar frames. The
-        result is stored as ``self._mini_db`` so a subsequent
-        ``build_calibration_stacks`` needs no arguments beyond the calibration type;
+        on-disk cache) and stores the result as ``self._mini_db``, so a
+        subsequent ``build_calibration_stacks`` needs only the calibration type;
         callers rarely need the return value directly.
 
         Parameters
         ----------
         datecode : str
-            Observing-night datecode 'YYYYMMDD'; the L0 directory scanned is
-            ``{KPF_DATA_INPUT}/L0/{datecode}/``.
+            Observing-night datecode 'YYYYMMDD'.
 
         Returns
         -------
         pandas.DataFrame
-            One row per readable frame, with columns FILENAME (absolute path to
-            the FITS file), TARGNAME (target name), IMTYPE (image type), OBJECT
-            (object identifier, e.g. 'autocal-bias'), EXPTIME (requested exposure
-            time [s]), ELAPSED (actual elapsed time [s]), UTC (observation time in
-            universal time, taken from the KPF timestamp in the filename), HST
-            (that same time converted to Hawaii Standard Time, UTC-10), and ISJUNK
-            (bool: the frame is on the observer junk list, see load_junk_obs_ids).
-            Both UTC and HST are KPF-format timestamp strings ('YYYYMMDD.SSSSS.FF').
-            Rows where a header key is missing carry None for that column and a
-            warning is issued; an unreadable frame is skipped with a warning.
-
-            Junk rows are flagged (ISJUNK), not dropped, so callers keep them
-            visible; build_calibration_stacks(exclude_junk=True) does the actual
-            exclusion for master construction. The same DataFrame is cached on
-            ``self._mini_db``.
+            One row per readable frame. Columns: the header keys FILENAME
+            (absolute path), TARGNAME, IMTYPE, OBJECT, EXPTIME, ELAPSED; plus
+            derived UTC and HST (KPF-format timestamps from the filename, HST =
+            UTC-10) and ISJUNK (frame is on the observer junk list -- flagged,
+            not dropped). A missing header key gives None for that column; an
+            unreadable frame is skipped; both warn.
 
         Raises
         ------
@@ -181,32 +161,13 @@ class FileHandler:
         return self._mini_db
 
     def _seconds_since_j2000(self, s):
-        """
-        Seconds since the J2000.0 epoch (2000-01-01 12:00 UTC) for the KPF
-        timestamp embedded in `s` -- the monotonic scalar this handler sorts and
-        gap-detects on when clustering frames.
+        """Seconds since J2000.0 (2000-01-01 12:00 UTC) for the KPF timestamp in
+        `s` (a timestamp, obs_id, filename, or path) -- the monotonic scalar this
+        handler sorts and gap-detects on when clustering frames; raises
+        ``ValueError`` if `s` holds no valid KPF timestamp.
 
-        Parameters
-        ----------
-        s : str
-            A KPF timestamp ('YYYYMMDD.SSSSS.FF'), an obs_id
-            ('KP.YYYYMMDD.SSSSS.FF'), or any filename or path containing one.
-
-        Returns
-        -------
-        int
-            Seconds since J2000.0 (naive UTC).
-
-        Raises
-        ------
-        ValueError
-            If no valid KPF timestamp is found in `s`.
-
-        Notes
-        -----
-        Arithmetic is naive UTC; leap seconds are ignored. Fine for frame
-        ordering and cluster-gap detection but does not give TT/TAI precision
-        and should not be used for astronomical timing.
+        Naive UTC arithmetic (leap seconds ignored): fine for frame ordering and
+        cluster-gap detection, not for astronomical (TT/TAI) timing.
         """
         dt = kpf_timestamp_to_datetime(get_timestamp(s))
         return int((dt - _J2000_EPOCH).total_seconds())
@@ -222,24 +183,12 @@ class FileHandler:
         remaining cluster meets the threshold (or none can grow). When the
         HST-midnight boundary is enforced the neighbor must share the cluster's
         HST day (so a master never spans HST midnight), and a cluster with no
-        same-day neighbor is dropped; otherwise any adjacent cluster is
-        eligible. The input list is not modified.
+        same-day neighbor is dropped; otherwise any adjacent cluster is eligible.
 
-        Parameters
-        ----------
-        clusters : list of list of str
-            Chronologically-sorted clusters, each a list of filenames.
-        hst_day : dict
-            Maps each filename to its HST calendar day ('YYYYMMDD').
-        min_file_count : int
-            Frames a cluster must have to be kept as-is.
-        enforce_hst_midnight_boundary : bool
-            If True, merge only into same-HST-day neighbors.
-
-        Returns
-        -------
-        list of list of str
-            The merged clusters, sorted chronologically by first frame.
+        `clusters` is a chronologically-sorted list of filename lists and
+        `hst_day` maps each filename to its HST calendar day ('YYYYMMDD'); the
+        input is not modified and the merged clusters are returned
+        chronologically sorted.
         """
         clusters = list(clusters)
 
@@ -296,47 +245,35 @@ class FileHandler:
         never spans two HST (Hawaii) calendar days: frames on either side of HST
         midnight are always split, even though the UTC-keyed data directory places
         them together. Set `enforce_hst_midnight_boundary=False` to lift that split
-        (used for darks, whose sparse 1200 s sequences routinely straddle the HST
-        midnight of a single observing night). Every returned cluster has at least
-        `min_file_count` files: undersized clusters are dropped, or (with
-        `merge_small_clusters`) folded into a neighbor. Raises only when no cluster
-        meets the threshold.
-
-        Clusters the mini database carried on the instance (from a prior
-        `build_mini_database`), so the recipe never handles the DataFrame itself.
+        (used for darks, whose sparse sequences routinely straddle HST midnight).
+        Every returned cluster has at least `min_file_count` files: undersized
+        clusters are dropped, or (with `merge_small_clusters`) folded into a
+        neighbor. Raises only when no cluster meets the threshold. Clusters the
+        mini database carried on the instance, so the recipe never handles the
+        DataFrame itself.
 
         Parameters
         ----------
         cal_type : str
             Calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
         mini_db : pandas.DataFrame, optional
-            Mini database to cluster. Defaults to ``self._mini_db`` (set by
-            `build_mini_database`); pass one explicitly only to cluster a
-            DataFrame the handler did not build.
+            DataFrame to cluster; defaults to ``self._mini_db``. Pass one only to
+            cluster a database the handler did not build.
         min_file_count : int, default 5
             Minimum number of files required per cluster.
         cluster_gap_seconds : int, default 7200
-            Gap [s] between consecutive frames that splits a calibration sequence
-            into separate clusters. The default of 7200 (2 hours) reliably
-            distinguishes morning vs. evening KPF calibration clusters, which are
-            separated by science obs.
+            Gap [s] between consecutive frames that splits one cluster from the
+            next. The 2-hour default separates KPF morning vs. evening clusters.
         merge_small_clusters : bool, default False
-            How to handle clusters smaller than `min_file_count`. If False, drop
-            them. If True, iteratively merge each into its nearest-in-time neighbor
-            until every cluster meets the threshold; when the HST-midnight boundary
-            is enforced the neighbor must be on the same HST day (a cluster with no
-            such neighbor is dropped), otherwise any chronological neighbor is
-            eligible.
+            When False, drop clusters below `min_file_count`; when True, merge
+            each into its nearest-in-time (and, if the boundary is enforced,
+            same-HST-day) neighbor.
         enforce_hst_midnight_boundary : bool, default True
-            If True, clusters never span HST midnight: frames on opposite sides of
-            it are always split, and merging is restricted to same-HST-day
-            neighbors. If False, HST midnight is ignored entirely (only
-            `cluster_gap_seconds` splits clusters, and any neighbor may be merged) --
-            set this for darks, whose sparse sequences legitimately span the HST
-            midnight of one observing night.
+            Whether clusters may span HST midnight (see summary). Set False for
+            darks.
         exclude_junk : bool, default True
-            Drop observer-flagged junk frames (the mini database's ISJUNK column)
-            before clustering, so they never enter a master stack. Rarely disabled.
+            Drop junk frames (the ISJUNK column) before clustering. Rarely
+            disabled.
 
         Returns
         -------
@@ -429,9 +366,7 @@ class FileHandler:
         ``{root}/masters/{datecode}/*_master_{cal_type}_{level}.fits`` (the KOAID
         prefix wildcarded).
 
-        The reader counterpart to a `kpf_filepath` master path: it builds the
-        same masters directory and filename independently, with the KOAID
-        wildcarded, and returns what is actually on disk.
+        The reader counterpart to a `kpf_filepath` master path;
         `TestFindMasters.test_finds_kpf_filepath_output` guards that the two stay
         in step.
 
@@ -453,12 +388,9 @@ class FileHandler:
 
 def kpf_filename(obs_id, level, *, master=None):
     """
-    Base filename for a KPF data product (no directory).
-
-    The obs_id-string twin of ``<model>.generate_standard_filename()`` (which
-    builds the same basename from a populated object's headers -- the
-    ``to_fits(fn=None)`` fallback); the two encode the same naming rule and must
-    agree per level, which ``TestFilenameConsistency`` enforces.
+    Base filename for a KPF data product (no directory). The single source of
+    the naming rule; ``<model>.generate_standard_filename()`` and `kpf_filepath`
+    both delegate here.
 
     Science basenames by level:
       L0:    {obs_id}.fits                       (KPF-native)
@@ -595,14 +527,11 @@ def kpf_filepath(obs_id, level, *, data_root=None, master=None):
     Build a filepath for a KPF data product: the product's directory
     (`kpf_directory`) joined with its basename (`kpf_filename`).
 
-    This is the pipeline's authoritative path builder: it constructs the output
-    path from an obs_id string, before/without a populated data object, and is
-    what every recipe uses to decide where to write. The parallel
-    `<model>.generate_standard_filename()` builds only the basename from a
-    populated object's headers and is the `to_fits(fn=None)` fallback
-    (rvdata-owned for the EPRV-standard levels L2/L4, KPF-overridden for the
-    non-standard levels L0/L1). The two encode the same naming rule and must
-    agree per level; `TestFilenameConsistency` enforces that contract.
+    The pipeline's authoritative path builder: constructs the output path from
+    an obs_id string (before/without a populated data object), as every recipe
+    does when deciding where to write. Its basename twin,
+    ``<model>.generate_standard_filename()``, builds the same name from a
+    populated object; `TestFilenameConsistency` enforces they agree per level.
 
     Parameters
     ----------
