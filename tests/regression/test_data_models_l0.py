@@ -132,7 +132,7 @@ class TestKPF0ErrorPaths:
         assert "from_fits" in l0.receipt["FUNCTION"].values
 
     def test_generate_filename_without_obs_id_raises(self):
-        with pytest.raises(ValueError, match="obs_id not set"):
+        with pytest.raises(ValueError, match="valid observation ID"):
             KPF0().generate_standard_filename()
 
     def test_to_fits_rejects_non_fits_name(self, synthetic_l0_file, tmp_path):

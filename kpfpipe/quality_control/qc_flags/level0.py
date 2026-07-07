@@ -124,7 +124,7 @@ class QCL0(QC):
 
         "Junk" is a manual observer flag (e.g. the wrong telescope settings) that
         no automated QC can catch. The list lives at
-        ``{KPF_DATA_INPUT}/reference/Junk_Observations_for_KPF.csv``;
+        ``{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv``;
         KPF_DATA_INPUT is recovered from the frame's own source directory, which
         rvdata records as ``self.dirname`` (``{KPF_DATA_INPUT}/L0/{datecode}``)
         when the L0 is read. An absent list or unknown source dir yields

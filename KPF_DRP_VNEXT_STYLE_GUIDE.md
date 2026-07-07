@@ -227,6 +227,20 @@ class StageName:
   (`count_amplifiers`, `orient_channels`) and the public `RN_KEYS` read-noise table are
   owned by `ImageAssembly`; other layers import them. Reusable stats/validation live in
   `kpfpipe/utils/` and are imported, never re-implemented (the project's **utils-first** rule).
+- **A util should earn its place with a consumer — with two documented exceptions.** Default
+  to YAGNI: don't add a `utils/` helper before something calls it. Two categories may be kept
+  without a production call site, and **each such function must say so in its docstring** (a
+  short sentence naming why it's retained) so it reads as deliberate, not dead code:
+  - **Symmetric-completeness helpers** — the unused half of an inverse pair or the missing
+    member of a validator set, kept so the API surface is whole. Example: `hst_to_utc`
+    (inverse of the used `utc_to_hst`).
+  - **Staged-ahead helpers** — a self-contained routine written for imminent work and already
+    covered by tests, ahead of its first pipeline call site. Example: `air_to_vac` (retained
+    for the forthcoming vacuum-wavelength wiring, already a wavelength-cal test oracle).
+
+  Both are exempt from "delete if unused"; anything else unused is dead code and should go.
+  The docstring note is the machine-invisible signal a linter can't infer — without it, a
+  future reader (or a dead-code sweep) can't tell an intentional keep from an oversight.
 - **Deferred (in-function) imports are acceptable and used deliberately** in tests and
   occasionally to break import-cost/cycles — when you do it, add a one-line comment
   saying why.
@@ -256,6 +270,17 @@ class StageName:
   Tunable params become instance attributes via the `_DEFAULTS` setattr loop.
 - **`_DEFAULTS` merges the global defaults**: `_DEFAULTS = {**DEFAULTS, "key": ...}`
   (use the `{**DEFAULTS, ...}` spread form, not `dict(DEFAULTS)`).
+- **Utility handlers in `utils/` are a lighter variant.** A config-carrying
+  discovery/IO handler (e.g. `io.FileHandler`) has no data-model object and often no
+  per-call tunables: it takes `config=None` alone, resolves only the roots it needs
+  (`config.get_params(["DATA_DIRS"])`), stores them as private attributes, and
+  **omits the `_DEFAULTS` setattr loop** when there is nothing tunable to surface
+  (every clustering knob stays a per-call method argument). Such a handler may also
+  carry loaded working state so callers never thread an intermediate product:
+  `FileHandler.build_mini_database` caches the night's DataFrame on `self._mini_db`,
+  which `build_calibration_stacks` reads by default (an explicit `mini_db=` arg overrides
+  it, per the "`None` means use `self`" rule), so the recipe passes a datecode once
+  and the mini database is never surfaced.
 - **Defaults live in the module, not the config file.** Resolution is a three-tier
   override chain, lowest precedence first: `_DEFAULTS` (the in-module default) → config
   (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword
@@ -326,7 +351,7 @@ class StageName:
   **not** need a `*` added; their domain identifiers stay positional. A helper may still use
   `*` where it already aids clarity (existing practice), but don't add one mechanically:
   ```python
-  def build_filepath(obs_id, level, *, data_root=None, master=None): ...
+  def kpf_filepath(obs_id, level, *, data_root=None, master=None): ...
   def _box_extraction(D, V, *, S=None, M=None, W=None): ...
   ```
   Required positionals first; everything tunable after the `*`.
@@ -411,10 +436,11 @@ class StageName:
   context, or `raise ... from None` when translating a low-level error (a `KeyError`/
   `AttributeError` from a dict lookup or `getattr` dispatch) into a clearer domain error
   whose message already says what the original would — suppressing the redundant chain.
-- **Predicate/validator split**: internal `_validate_*` raise; public `is_*` wrap them in
-  `try/except` and return `bool` (never raise from the boolean API).
-- **Configurable severity**: validators that serve both soft and hard contexts take a
-  `response="warn"|"error"|"silent"` channel (see `utils/validation.py`).
+- **Predicate/extractor split**: `is_*` predicates validate inline and return `bool`
+  (never raise); the raising extractors/converters (`get_*`, `utc_to_hst`, …) validate
+  through the matching predicate and raise `ValueError` at their own boundary. See
+  `utils/kpf_utils.py`, where `is_timestamp` is the single validity source and
+  `get_timestamp` et al. turn its `False` into a raise.
 
 ---
 
@@ -593,17 +619,27 @@ documented, intentional ways — follow *its* conventions when adding masters co
   - Transform modules → `.perform()`; QC/Diag/Quicklook → `.run()` (or `.run("all")`);
     masters → `.make_master_l1/l2()`. The constructor takes the **whole `ConfigHandler`**,
     not pre-extracted params — each module pulls its own section internally.
-- **Product paths go through the `utils/io.py` helpers** (`build_filepath`, `glob_masters`,
-  `build_qlp_dir`, `build_l0_file_lists`, `get_obs_id`) — never re-derived by string
-  concatenation in modules/recipes. These helpers are the single definition of the on-disk
-  layout and filename conventions, built inline within each (no shared layout/filename
-  constant or directory helper — that abstraction was deliberately removed as more confusing
-  than the duplication). Where a convention is necessarily encoded twice — the masters
-  *writer* (`build_filepath`) and *reader* (`glob_masters`) build their paths independently —
-  keep them in lock-step with a **drift test** (`test_glob_masters_matches_build_filepath`),
-  not a shared helper. Plain `os.path.join` is fine for incidental input-directory assembly
-  (e.g. an L0 scan dir). Level passed as a literal `"L0"/"L1"/"L2"/"L4"`;
-  `os.makedirs(os.path.dirname(path), exist_ok=True)` before every `.to_fits()`.
+- **Output paths go through the `utils/io.py` trio** — never re-derived by string
+  concatenation in modules/recipes. `kpf_directory(obs_id, *, level, data_root, kind)` is the
+  single authority for an **output** directory (`kind` ∈ `science`/`masters`/`QLP`),
+  `kpf_filename(obs_id, level, *, master)` builds the basename, and
+  `kpf_filepath = os.path.join(kpf_directory(...), kpf_filename(...))` is their composition
+  (returning the bare `kpf_filename` when `data_root is None`). `kpf_filename` is also the single
+  naming authority for the **data models**: every science model's `generate_standard_filename()`
+  (the `to_fits(fn=None)` fallback) delegates to `kpf_filename(self.obs_id, level)`, so the object-
+  and string-keyed names can't drift (`KPFMasterModel` overrides with the KOAID/MASTYPE master name).
+  Recipes call these rather than
+  assembling paths inline (e.g. a QLP dir is `kpf_directory(..., kind="QLP")`, not a hand-built
+  `os.path.join(data_root, "QLP", …)`). `kpf_directory` is obs-keyed (datecode from `obs_id`);
+  plain `os.path.join` remains fine for **input**/night-keyed directories that have a bare
+  datecode and no obs_id — the L0 scan dir (`FileHandler.build_mini_database`), the
+  masters-search dir (`find_masters`, which scans a `obs_date ± N` window), and the masters
+  recipe's `l0_dir` — which are out of `kpf_directory`'s scope by design. Where the masters
+  layout is thus encoded twice — the *writer* (`kpf_filepath`/`kpf_directory`) and the inline
+  *reader* (`find_masters`) — keep them in lock-step with a **drift test**
+  (`TestFindMasters.test_finds_kpf_filepath_output`). Level passed as a literal
+  `"L0"/"L1"/"L2"/"L4"`; `os.makedirs(os.path.dirname(path), exist_ok=True)` before every
+  `.to_fits()`.
 - **Arg validation**: guard at the top, `raise SystemExit("Error: --obs_id is required …")`
   with an example.
 - **Recipe comments** are terse, lowercase, imperative, and explain the *why* (science

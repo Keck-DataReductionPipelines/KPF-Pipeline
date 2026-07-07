@@ -42,8 +42,8 @@ from astropy.io import fits
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import build_filepath, build_mini_database, glob_masters
-from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
+from kpfpipe.utils.io import FileHandler, kpf_filepath
+from kpfpipe.utils.kpf_utils import get_datecode, get_obs_id, is_datecode
 
 # Masters every science frame depends on, as (cal_type, level). Flat masters are
 # scaffolded but not implemented, so they are not (yet) required -- this matches
@@ -204,72 +204,90 @@ def _dir_params(config_path, section):
     return ConfigHandler(config_path).get_params([section])
 
 
+def _datecode_dirs(root, start, end):
+    """Sorted datecode subdirs of `root` within the inclusive [start, end] range."""
+    return [
+        d
+        for d in sorted(os.listdir(root))
+        if is_datecode(d) and start <= d <= end and os.path.isdir(os.path.join(root, d))
+    ]
+
+
+def _scan_nights(nights, target, worker, jobs, item_label):
+    """Fan `worker(dc)` out over `nights` in a thread pool; return the pooled hits.
+
+    Scanning a night reads every PRIMARY header -- slow over NFS but I/O bound, so
+    a thread pool overlaps the latency (``getheader`` releases the GIL during
+    I/O). `worker(dc)` returns ``(hits, note)``: that night's list of results and
+    an optional trailing note. A per-night heartbeat prints in completion order
+    (the scan is otherwise silent), tagging each count with `item_label`.
+    """
+    print(
+        f"scanning {len(nights)} night(s) for target {target} "
+        f"({min(jobs, len(nights))} workers)...",
+        flush=True,
+    )
+    hits_all = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = {pool.submit(worker, dc): dc for dc in nights}
+        for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
+            dc = futures[future]
+            hits, note = future.result()
+            hits_all.extend(hits)
+            print(
+                f"  [{i}/{len(nights)}] {dc}: {len(hits)} {item_label}{note} "
+                f"(total {len(hits_all)})",
+                flush=True,
+            )
+    return hits_all
+
+
 def discover_science_obs_ids(data_input, target, start, end, file_limit, jobs):
     """Raw science obs_ids for `target` over [start, end], from the L0 tree.
 
     Enumerates the nights (datecode dirs) under {data_input}/L0, scans each one's
-    PRIMARY headers via build_mini_database, and keeps the frames whose IMTYPE is
-    'Object' and whose OBJECT matches `target`. Non-datecode entries (backup dirs,
-    stray files, etc.) are skipped with a note; only valid datecode dirs in
-    [start, end] are processed.
+    PRIMARY headers via FileHandler.build_mini_database, and keeps the frames whose
+    IMTYPE is 'Object' and whose OBJECT matches `target`. Non-datecode entries
+    (backup dirs, stray files, etc.) are skipped with a note; observer-flagged
+    junk frames (the mini database's ISJUNK column) are dropped.
     """
     l0_root = os.path.join(data_input, "L0")
     if not os.path.isdir(l0_root):
         sys.exit(f"error: L0 input directory not found: {l0_root}")
 
-    subdirs = [
+    file_handler = FileHandler({"KPF_DATA_INPUT": data_input})
+
+    non_datecode = [
         e
         for e in sorted(os.listdir(l0_root))
-        if os.path.isdir(os.path.join(l0_root, e))
+        if os.path.isdir(os.path.join(l0_root, e)) and not is_datecode(e)
     ]
-    non_datecode = [d for d in subdirs if not is_datecode(d)]
     if non_datecode:
         print(
             f"  note: ignoring {len(non_datecode)} non-datecode entr(y/ies) under "
             f"{l0_root}: {', '.join(non_datecode)}"
         )
 
-    nights = [d for d in subdirs if is_datecode(d) and start <= d <= end]
+    nights = _datecode_dirs(l0_root, start, end)
     if not nights:
         sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
 
-    # Scanning a night reads every L0 PRIMARY header -- slow over NFS but I/O
-    # bound, so fan the nights out across a thread pool (getheader releases the
-    # GIL during I/O). Emit a per-night heartbeat, in completion order, since the
-    # scan is otherwise silent.
     def _scan_night(dc):
         try:
-            df = build_mini_database(os.path.join(l0_root, dc))
+            df = file_handler.build_mini_database(dc)
         except ValueError as e:
             # e.g. a datecode dir with no FITS files -- skip it, don't abort.
             print(f"  warning: skipping night {dc}: {e}", flush=True)
-            return [], 0
+            return [], ""
         is_object = df["IMTYPE"].astype(str).str.strip() == "Object"
         is_target = df["OBJECT"].astype(str).str.strip() == str(target)
         matched = df.loc[is_object & is_target]
-        # Drop observer-flagged junk frames (build_mini_database's ISJUNK).
         good = matched.loc[~matched["ISJUNK"].astype(bool)]
         n_junk = len(matched) - len(good)
-        return [get_obs_id(fn) for fn in good["FILENAME"]], n_junk
+        note = f", {n_junk} junk skipped" if n_junk else ""
+        return [get_obs_id(fn) for fn in good["FILENAME"]], note
 
-    print(
-        f"scanning {len(nights)} night(s) for target {target} "
-        f"({min(jobs, len(nights))} workers)...",
-        flush=True,
-    )
-    obs_ids = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = {pool.submit(_scan_night, dc): dc for dc in nights}
-        for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
-            dc = futures[future]
-            hits, n_junk = future.result()
-            obs_ids.extend(hits)
-            junk_note = f", {n_junk} junk skipped" if n_junk else ""
-            print(
-                f"  [{i}/{len(nights)}] {dc}: {len(hits)} matching frame(s)"
-                f"{junk_note} (total {len(obs_ids)})",
-                flush=True,
-            )
+    obs_ids = _scan_nights(nights, target, _scan_night, jobs, "matching frame(s)")
 
     obs_ids = sorted(set(obs_ids))
     if not obs_ids:
@@ -299,18 +317,10 @@ def discover_l4_files(science_output, target, start, end, jobs):
     if not os.path.isdir(l4_root):
         sys.exit(f"error: L4 output directory not found: {l4_root}")
 
-    nights = [
-        d
-        for d in sorted(os.listdir(l4_root))
-        if is_datecode(d)
-        and start <= d <= end
-        and os.path.isdir(os.path.join(l4_root, d))
-    ]
+    nights = _datecode_dirs(l4_root, start, end)
     if not nights:
         sys.exit(f"error: no L4 datecode dirs under {l4_root} in range {start}..{end}")
 
-    # Reading each L4 PRIMARY is I/O bound over NFS, so fan the nights out across
-    # a thread pool (getheader releases the GIL during I/O), mirroring the L0 scan.
     def _scan_night(dc):
         hits = []
         for path in sorted(glob.glob(os.path.join(l4_root, dc, "kpf_SL4_*.fits"))):
@@ -321,25 +331,9 @@ def discover_l4_files(science_output, target, start, end, jobs):
                 continue
             if str(obj).strip() == str(target):
                 hits.append(path)
-        return hits
+        return hits, ""
 
-    print(
-        f"scanning {len(nights)} L4 night(s) for target {target} "
-        f"({min(jobs, len(nights))} workers)...",
-        flush=True,
-    )
-    l4_paths = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = {pool.submit(_scan_night, dc): dc for dc in nights}
-        for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
-            dc = futures[future]
-            hits = future.result()
-            l4_paths.extend(hits)
-            print(
-                f"  [{i}/{len(nights)}] {dc}: {len(hits)} L4 frame(s) "
-                f"(total {len(l4_paths)})",
-                flush=True,
-            )
+    l4_paths = _scan_nights(nights, target, _scan_night, jobs, "L4 frame(s)")
 
     l4_paths = sorted(set(l4_paths))
     if not l4_paths:
@@ -352,10 +346,11 @@ def discover_l4_files(science_output, target, start, end, jobs):
 
 def _missing_masters(masters_output, datecode):
     """Required (cal_type, level) masters absent for `datecode` (empty == complete)."""
+    file_handler = FileHandler({"KPF_MASTERS_OUTPUT": masters_output})
     return [
         (cal_type, level)
         for cal_type, level in _REQUIRED_MASTERS
-        if not glob.glob(glob_masters(masters_output, cal_type, level, datecode))
+        if not file_handler.find_masters(cal_type, level, datecode)
     ]
 
 
@@ -375,7 +370,7 @@ def check_masters_exist(masters_output, datecodes):
 
 def _science_complete(obs_id, science_output):
     """True if the frame's L4 product already exists (reduced to completion)."""
-    return os.path.exists(build_filepath(obs_id, "L4", data_root=science_output))
+    return os.path.exists(kpf_filepath(obs_id, "L4", data_root=science_output))
 
 
 # Live child recipe processes. Each is its own session leader
@@ -602,7 +597,7 @@ def _group_bursts(times, rvs, errs, gap_minutes=_BURST_GAP_MINUTES):
     """Collapse each burst of rapid-succession frames to one RVERR-weighted point.
 
     Splits the time-ordered frames wherever consecutive BJD_TDB values differ by
-    more than `gap_minutes` (as `build_l0_file_lists` clusters calibrations), then
+    more than `gap_minutes` (as `build_calibration_stacks` clusters calibrations), then
     combines each burst with 1/RVERR**2 weights: weighted-mean RV, error
     1/sqrt(sum w), epoch the weighted-mean BJD_TDB.
     """
@@ -907,7 +902,7 @@ def main(argv=None):
             f"L2/L4 products under {science_output}"
         )
         l4_paths = [
-            build_filepath(oid, "L4", data_root=science_output) for oid in obs_ids
+            kpf_filepath(oid, "L4", data_root=science_output) for oid in obs_ids
         ]
 
     # Step 5: RV timeseries plot from the L4 products -- only when a plot

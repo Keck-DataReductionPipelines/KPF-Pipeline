@@ -48,7 +48,7 @@ from scipy.special import erfcinv
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.validation import strictly_increasing
+from kpfpipe.utils.stats import strictly_increasing
 
 logger = logging.getLogger(__name__)
 
@@ -699,7 +699,7 @@ class BarycentricCorrection:
 
     def _track_info(self):
         """Build and cache the info() summary text from instance attributes."""
-        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
+        obs_id = self.l2_obj.obs_id or "unknown"
         ccd_bjd = np.asarray(self._ccd_bjd)
         ccd_kms = np.asarray(self._ccd_kms)
         ccd_z = np.asarray(self._ccd_z)

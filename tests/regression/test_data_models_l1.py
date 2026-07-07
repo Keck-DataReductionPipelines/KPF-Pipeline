@@ -114,9 +114,8 @@ class TestKPF1:
 
     def test_generate_filename(self, synthetic_l1_file):
         l1 = KPF1.from_fits(synthetic_l1_file)
-        fn = l1.generate_standard_filename()
-        assert fn.startswith("kpf_L1_")
-        assert fn.endswith(".fits")
+        l1.obs_id = "KP.20240113.37616.10"  # 37616 s of day = 10:26:56 UT
+        assert l1.generate_standard_filename() == "kpf_L1_20240113T102656.fits"
 
     def test_datalvl_header(self, synthetic_l1_file, tmp_path):
         l1 = KPF1.from_fits(synthetic_l1_file)

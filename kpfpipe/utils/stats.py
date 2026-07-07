@@ -1,4 +1,4 @@
-"""Statistical helpers: outlier flagging, robust line fits, bad-pixel interpolation."""
+"""Statistical helpers: monotonicity, outliers, line fits, bad-pixel interpolation."""
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
@@ -9,6 +9,12 @@ from scipy.ndimage import (
     median_filter,
 )
 from scipy.optimize import leastsq
+
+
+def strictly_increasing(x):
+    """Return True if the 1D array is strictly increasing."""
+    x = np.asarray(x)
+    return bool(np.all(x[:-1] < x[1:]))
 
 
 def _gaussian_dist(theta, x):
@@ -76,8 +82,33 @@ def optimize_lsq(x, y, linemodel):
     """
     Fit a 1D line model to (x, y) by non-linear least squares.
 
-    Looks up the model function, Jacobian, and theta0 initializer for the
-    given lineprofile name and dispatches scipy.optimize.least_squares.
+    Looks up the model function, analytic Jacobian, and initial-guess
+    generator registered under `linemodel`, then fits via MINPACK's lmder
+    (`scipy.optimize.leastsq`, not `least_squares` -- see the implementation
+    note below), and maps the solution back with the model's untransform.
+
+    Parameters
+    ----------
+    x : ndarray
+        1D independent variable (e.g. velocity or pixel grid).
+    y : ndarray
+        1D dependent variable to fit, same shape as `x`.
+    linemodel : str
+        Registered line-profile name. Currently only 'gaussian' is supported;
+        an unknown name raises.
+
+    Returns
+    -------
+    theta : ndarray
+        Fitted parameters in the model's reported convention. For 'gaussian':
+        ``[b, a, mu, sigma]`` (baseline, amplitude, center, positive width).
+    rms : float
+        RMS of the fit residuals (``std`` of ``model - y`` at the solution).
+
+    Raises
+    ------
+    ValueError
+        If `linemodel` is not a registered line-profile name.
     """
     try:
         func, jac, theta0_generator, untransform = _FUNCTIONS[linemodel]
@@ -181,7 +212,39 @@ def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
 
 def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
     """
-    Interpolate over bad pixels.
+    Interpolate over bad pixels of a 2D image, replacing each with a value
+    inferred from its good neighbors.
+
+    Parameters
+    ----------
+    data : ndarray
+        2D image; bad pixels are filled, good pixels pass through unchanged.
+        Not modified in place (a copy is returned).
+    mask : ndarray
+        Good-pixel mask broadcastable to `data`, truthy where a pixel is good.
+        Its logical complement marks the pixels to interpolate.
+    method : {'local', 'global'}, default 'local'
+        - ``'local'``: fill each bad pixel from a 3x3 weighted mean of its good
+          neighbors (assumes isolated bad pixels).
+        - ``'global'``: bilinearly interpolate every bad pixel from the full
+          good grid (robust to clumps of adjacent bad pixels).
+    fill_outside : bool, default True
+        Fill any bad pixels the chosen method leaves unset -- ``'local'``
+        pixels with no good neighbor in their 3x3 window, ``'global'`` pixels
+        outside the good-data convex hull -- with the value of the nearest
+        filled pixel (a Euclidean distance-transform lookup). If False, such
+        pixels are left untouched: they keep their original value under
+        ``'local'`` and become NaN under ``'global'``.
+
+    Returns
+    -------
+    ndarray
+        Copy of `data` with bad pixels interpolated.
+
+    Raises
+    ------
+    ValueError
+        If `method` is not 'local' or 'global'.
     """
 
     good = mask.astype(bool)

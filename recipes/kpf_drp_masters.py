@@ -16,12 +16,8 @@ from kpfpipe.modules.masters.dark import Dark
 
 # from kpfpipe.modules.masters.flat import Flat
 from kpfpipe.modules.masters.wls import WLS
-from kpfpipe.utils.io import (
-    build_filepath,
-    build_l0_file_lists,
-    build_mini_database,
-)
-from kpfpipe.utils.kpf import get_obs_id
+from kpfpipe.utils.io import FileHandler, kpf_filepath
+from kpfpipe.utils.kpf_utils import get_obs_id
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
 # would not identify this module in the log (style guide section 6).
@@ -46,12 +42,16 @@ def main(config, args):
     l0_dir = os.path.join(data_root_in, "L0", datecode)
     if not os.path.isdir(l0_dir):
         raise SystemExit(f"L0 data directory not found: {l0_dir}")
-    mini_db = build_mini_database(l0_dir)
+
+    # Scan the night's L0 headers once; the handler carries the mini database
+    # across the per-cal-type build_calibration_stacks calls below.
+    file_handler = FileHandler(config)
+    file_handler.build_mini_database(datecode)
 
     # Stack the bias frames into a master bias used to remove the detector
     # offset from every science and calibration frame.
-    for files in build_l0_file_lists("bias", mini_db=mini_db):
-        bias_path = build_filepath(
+    for files in file_handler.build_calibration_stacks("bias"):
+        bias_path = kpf_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="bias"
         )
         logger.info("stacking %d bias frames -> %s", len(files), bias_path)
@@ -61,14 +61,13 @@ def main(config, args):
     # Stack the dark frames into a master dark used to remove dark current.
     # Runs after the master bias so CalibrationAssociation can subtract that
     # bias from each dark frame (via _process_frame) before stacking.
-    for files in build_l0_file_lists(
+    for files in file_handler.build_calibration_stacks(
         "dark",
-        mini_db=mini_db,
         min_file_count=3,
         merge_small_clusters=True,
         enforce_hst_midnight_boundary=False,
     ):
-        dark_path = build_filepath(
+        dark_path = kpf_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="dark"
         )
         logger.info("stacking %d dark frames -> %s", len(files), dark_path)
@@ -76,17 +75,17 @@ def main(config, args):
         dark.make_master_l1(filepath=dark_path)
 
     # master flat (not yet implemented)
-    # for files in build_l0_file_lists('flat', mini_db=mini_db):
-    #    flat_path = build_filepath(get_obs_id(files[0]), 'L1',
+    # for files in file_handler.build_calibration_stacks('flat'):
+    #    flat_path = kpf_filepath(get_obs_id(files[0]), 'L1',
     #                               data_root=data_root_masters, master='flat')
     #    flat = Flat(files, config)
     #    flat.make_master_l1(filepath=flat_path)
 
     # Stack the ThAr exposures into a master wavelength solution, since the
     # emission-line spectrum anchors the per-order wavelength calibration.
-    for files in build_l0_file_lists("thar", mini_db=mini_db):
+    for files in file_handler.build_calibration_stacks("thar"):
         obs_id = get_obs_id(files[0])
-        wls_master_path = build_filepath(
+        wls_master_path = kpf_filepath(
             obs_id, "L2", data_root=data_root_masters, master="thar"
         )
         # The diagnostics HDF5 is a sidecar of the master, in the same directory

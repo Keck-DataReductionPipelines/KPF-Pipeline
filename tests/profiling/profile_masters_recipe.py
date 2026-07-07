@@ -8,7 +8,7 @@ run. Optimized independently of the science recipe. Per-module line detail is in
 so the second line-profiler pass is disabled here.
 
 The bundled darks span two default-gap clusters, so the recipe's
-``build_l0_file_lists`` is wrapped to widen ``cluster_gap_seconds`` (the same
+``build_calibration_stacks`` is wrapped to widen ``cluster_gap_seconds`` (the same
 accommodation the master-dark regression test makes) — otherwise the recipe
 raises on a too-small dark cluster.
 
@@ -41,9 +41,11 @@ def _load_recipe():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     # Widen the cluster gap so the bundled darks group into one stackable cluster.
-    module.build_l0_file_lists = functools.partial(
-        module.build_l0_file_lists,
-        cluster_gap_seconds=P.MASTERS_CLUSTER_GAP_SECONDS,
+    # build_calibration_stacks is a FileHandler instance method; wrap the class
+    # attribute the recipe resolves through (partialmethod re-binds self).
+    original = module.FileHandler.build_calibration_stacks
+    module.FileHandler.build_calibration_stacks = functools.partialmethod(
+        original, cluster_gap_seconds=P.MASTERS_CLUSTER_GAP_SECONDS
     )
     return module
 

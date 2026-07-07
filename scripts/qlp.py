@@ -3,10 +3,10 @@
 Standalone QLP (quicklook plot) generator.
 
 Usage:
-    python scripts/qlp.py --obs_id KP.20240405.03637.74 --level L0 --config configs/kpf_drp_science.toml
+    python scripts/qlp.py --obs_id KP.20240405.03637.74 --level L0 --config <toml>
 
     # Or specify paths directly:
-    python scripts/qlp.py --input /data/kpf/L0/20240405/KP.20240405.03637.74.fits --level L0 --output_dir ./qlp_output
+    python scripts/qlp.py --input <file> --level L0 --output_dir <dir>
 """
 
 import argparse
@@ -18,8 +18,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.quality_control.quicklook.level0 import PlotL0
 from kpfpipe.quality_control.quicklook.level1 import PlotL1
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import build_filepath
-from kpfpipe.utils.kpf import get_datecode
+from kpfpipe.utils.io import kpf_directory, kpf_filepath
 
 
 def main():
@@ -46,7 +45,7 @@ def main():
         config = ConfigHandler(args.config)
         params = config.get_params(["DATA_DIRS"])
         data_root = params.get("KPF_DATA_INPUT", "/data/kpf/")
-        input_file = build_filepath(args.obs_id, args.level, data_root=data_root)
+        input_file = kpf_filepath(args.obs_id, args.level, data_root=data_root)
     else:
         parser.error("Provide either --input or both --obs_id and --config")
 
@@ -68,13 +67,15 @@ def main():
         if not obs_id:
             parser.error(
                 f"Could not determine obs_id from {input_file}. "
-                "Pass --obs_id explicitly or --output_dir to bypass obs_id-based path building."
+                "Pass --obs_id explicitly or --output_dir to bypass "
+                "obs_id-based path building."
             )
         config = ConfigHandler(args.config)
         params = config.get_params(["DATA_DIRS"])
         data_root = params.get("KPF_DATA_OUTPUT", "/data/kpf-next/")
-        datecode = get_datecode(obs_id)
-        output_dir = os.path.join(data_root, "QLP", datecode, obs_id, args.level)
+        output_dir = kpf_directory(
+            obs_id, level=args.level, data_root=data_root, kind="QLP"
+        )
     else:
         output_dir = "."
 

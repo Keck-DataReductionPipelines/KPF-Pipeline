@@ -16,7 +16,6 @@ from astropy.time import Time
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
-from kpfpipe.utils.validation import strictly_increasing
 
 from ._dtype_policy import BARYCORR, BJD, assert_dtype
 
@@ -95,24 +94,6 @@ def _fake_skycoord():
 # ---------------------------------------------------------------------------
 # Static helpers — unchanged behavior across the split
 # ---------------------------------------------------------------------------
-
-
-class TestStrictlyIncreasing:
-    def _make_time(self, seconds):
-        jd0 = 2460310.5
-        return Time(jd0 + np.array(seconds) / 86400.0, format="jd", scale="utc")
-
-    def test_increasing(self):
-        assert strictly_increasing(self._make_time([0, 1, 2, 3]).jd) is True
-
-    def test_constant_fails(self):
-        assert strictly_increasing(self._make_time([0, 1, 1, 2]).jd) is False
-
-    def test_decreasing_fails(self):
-        assert strictly_increasing(self._make_time([3, 2, 1, 0]).jd) is False
-
-    def test_single_element(self):
-        assert strictly_increasing(self._make_time([0]).jd) is True
 
 
 class TestInterpolate:

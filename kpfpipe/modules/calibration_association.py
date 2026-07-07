@@ -6,15 +6,14 @@ file for each calibration type (bias, dark, flat, thar) by searching
 the masters directory and selecting the nearest-in-time match.
 """
 
-import glob
 import logging
 import warnings
 from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import glob_masters
-from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
+from kpfpipe.utils.io import FileHandler
+from kpfpipe.utils.kpf_utils import get_timestamp, kpf_timestamp_to_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +85,7 @@ class CalibrationAssociation:
             setattr(self, k, params.get(k, v))
 
         self._masters_root = params.get("KPF_MASTERS_OUTPUT")
+        self._file_handler = FileHandler(params)  # masters discovery
         self._calibrations = None  # per-cal {filepath} for _set_headers
         self._info = None
 
@@ -141,8 +141,7 @@ class CalibrationAssociation:
         for delta in range(days_before, days_after + 1):
             search_date = obs_date + timedelta(days=delta)
             datecode = search_date.strftime("%Y%m%d")
-            pattern = glob_masters(self._masters_root, cal_type, level, datecode)
-            for filepath in sorted(glob.glob(pattern)):
+            for filepath in self._file_handler.find_masters(cal_type, level, datecode):
                 try:
                     ts = get_timestamp(filepath)
                 except ValueError as e:

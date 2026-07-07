@@ -209,8 +209,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# KPF test data — never tracked. FITS files, generated mini-db CSVs,
-# WLS diagnostics HDF5s, etc. all live outside the repo.
+# KPF test data — never tracked. FITS files, WLS diagnostics HDF5s, etc. all
+# live outside the repo.
 tests/testdata/
 
 # Auto-generated profiling reports — regenerable via `make profile*`, so not

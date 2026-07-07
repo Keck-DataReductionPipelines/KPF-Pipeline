@@ -31,13 +31,13 @@ _OBS_ID = "KP.20240405.40113.57"
 def _make_l2(*, with_wave=True, object_name="Tau Ceti"):
     """Build a KPF2 with FLUX/VAR (and optionally WAVE) for all fibers/chips.
 
-    A FILENAME header is set so KPF2.obs_id resolves deterministically.
+    obs_id is set on the model attribute, as the pipeline populates it.
     """
     l2 = KPF2()
+    l2.obs_id = _OBS_ID
     l2.headers["PRIMARY"]["INSTRUME"] = "KPF"
     l2.headers["PRIMARY"]["OBJECT"] = object_name
     l2.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T11:08:33"
-    l2.headers["PRIMARY"]["FILENAME"] = f"{_OBS_ID}_L2.fits"
 
     rng = np.random.default_rng(42)
     for chip in _CHIPS:
@@ -70,8 +70,7 @@ def l2_no_wave():
 
 
 class TestConstructor:
-    def test_obs_id_from_filename(self, l2):
-        # KPF2 has no obs_id attribute; PlotL2 derives it from FILENAME.
+    def test_obs_id_from_attribute(self, l2):
         assert PlotL2(l2).obs_id == _OBS_ID
 
     def test_explicit_obs_id_overrides(self, l2):

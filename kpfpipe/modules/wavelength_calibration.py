@@ -110,8 +110,7 @@ class WavelengthCalibration:
 
     def _track_info(self):
         """Build and cache the info() summary text from instance attributes."""
-        receipt = self.l2_obj.headers.get("RECEIPT", {})
-        obs_id = receipt.get("ORIGID", "unknown")
+        obs_id = self.l2_obj.obs_id or "unknown"
         lines = [
             "WavelengthCalibration",
             f"  obs_id:  {obs_id}",

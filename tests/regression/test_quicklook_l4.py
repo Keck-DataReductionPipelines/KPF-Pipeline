@@ -44,13 +44,13 @@ def _make_l4(
     the science + sky orderlets, as RadialVelocity writes them; the first three
     green orders carry weight 0 (excluded from the combined RV, as the real CCF
     order-weight table does). `with_weight=False` omits the WEIGHT column to
-    exercise PlotL4's fail-loud path. A FILENAME header lets the obs_id resolve
-    deterministically.
+    exercise PlotL4's fail-loud path. obs_id is set on the model attribute, as
+    the pipeline populates it.
     """
     l4 = KPF4()
+    l4.obs_id = _OBS_ID
     l4.headers["PRIMARY"]["INSTRUME"] = "KPF"
     l4.headers["PRIMARY"]["OBJECT"] = object_name
-    l4.headers["PRIMARY"]["FILENAME"] = f"{_OBS_ID}_L4.fits"
 
     rng = np.random.default_rng(7)
     for fiber in _FIBERS:
@@ -108,8 +108,7 @@ def l4():
 
 
 class TestConstructor:
-    def test_obs_id_from_filename(self, l4):
-        # KPF4 has no obs_id attribute; PlotL4 derives it from FILENAME.
+    def test_obs_id_from_attribute(self, l4):
         assert PlotL4(l4).obs_id == _OBS_ID
 
     def test_explicit_obs_id_overrides(self, l4):
