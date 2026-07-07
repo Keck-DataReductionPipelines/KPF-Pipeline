@@ -13,6 +13,7 @@ Unit tests use synthetic FITS frames in temp trees -- no real testdata needed.
 
 import importlib.util
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -97,6 +98,7 @@ def _write_master(masters_output, datecode, cal_type, level):
 
 _OK = [sys.executable, "-c", "pass"]
 _FAIL = [sys.executable, "-c", "import sys; sys.exit(1)"]
+_SLEEP = [sys.executable, "-c", "import time; time.sleep(30)"]  # a wedged job
 _BASE_ARGS = ["--target", "10700", "--date_range", "20240101", "20240131"]
 
 
@@ -119,6 +121,7 @@ class TestParseArgs:
             ["--date_range", "20240201", "20240101"],  # start > end
             ["--file_limit", "0"],  # below 1
             ["--jobs", "0"],  # below 1
+            ["--job_timeout", "0"],  # below 1
         ],
     )
     def test_invalid_args_exit(self, rv, extra):
@@ -156,6 +159,10 @@ class TestParseArgs:
     def test_plots_only_with_output_dir_ok(self, rv):
         ns = rv.parse_args(_BASE_ARGS + ["--plots_only", "--output_dir", "/out"])
         assert ns.plots_only and ns.plot_directory == "/out/QLP/timeseries"
+
+    def test_job_timeout_default_and_override(self, rv):
+        assert rv.parse_args(_BASE_ARGS).job_timeout == 600
+        assert rv.parse_args(_BASE_ARGS + ["--job_timeout", "120"]).job_timeout == 120
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +272,63 @@ class TestRunStage:
             abort_on_failure=False,
         )
         assert failed == {"a", "b"}
+
+    def test_slow_fanout_job_is_killed_and_counts_as_failure(self, rv, tmp_path):
+        # A fanned-out job that overruns job_timeout is a wedged subprocess: it is
+        # killed and reported as a failure, so one stuck unit can't hang the batch.
+        # The canary is fast; the 30s sleeper is the fan-out job, bounded to 1s.
+        start = time.monotonic()
+        failed = rv.run_stage(
+            "masters",
+            [("canary", _OK), ("slow", _SLEEP)],
+            2,
+            str(tmp_path),
+            job_timeout=1,
+            abort_on_failure=False,
+        )
+        assert failed == {"slow"}
+        assert time.monotonic() - start < 15  # killed at ~1s, not the full 30s
+
+    def test_canary_uses_canary_timeout_not_job_timeout(self, rv, tmp_path):
+        # job_timeout bounds only the fan-out; the canary keeps its own, larger
+        # limit, so a canary slower than job_timeout is not killed by it.
+        slow_canary = [sys.executable, "-c", "import time; time.sleep(2)"]
+        failed = rv.run_stage(
+            "masters",
+            [("canary", slow_canary), ("b", _OK)],
+            2,
+            str(tmp_path),
+            job_timeout=1,
+            canary_timeout=30,
+            abort_on_failure=False,
+        )
+        assert failed == set()  # the 2s canary survived a 1s job_timeout
+
+
+class TestRunOneInterrupt:
+    def test_interrupt_in_launch_window_kills_child(self, rv, monkeypatch):
+        # Reproduce the launch-vs-track race: the interrupt lands after Popen but
+        # before the child is tracked. Wrapping Popen to set _interrupted models
+        # exactly that -- the top-of-function guard is clear, so launch proceeds,
+        # and the post-track re-check must catch it, kill the child, and return 130
+        # (a missed child would otherwise run its full 30s sleep untracked).
+        rv._interrupted.clear()  # top-level guard must pass
+        real_popen = rv.subprocess.Popen
+        launched = []
+
+        def popen_then_interrupt(*a, **k):
+            proc = real_popen(*a, **k)
+            launched.append(proc)
+            rv._interrupted.set()  # interrupt arrives in the launch/track window
+            return proc
+
+        monkeypatch.setattr(rv.subprocess, "Popen", popen_then_interrupt)
+        try:
+            rc, _ = rv._run_one(_SLEEP, timeout=None)
+        finally:
+            rv._interrupted.clear()  # module-global; don't leak to other tests
+        assert rc == 130
+        assert launched and launched[0].poll() is not None  # child killed + reaped
 
 
 class TestReportFailures:

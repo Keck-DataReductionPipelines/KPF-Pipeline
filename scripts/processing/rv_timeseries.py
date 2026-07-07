@@ -165,6 +165,17 @@ def parse_args(argv=None):
         help="max concurrent recipe subprocesses (default: %(default)s -- at "
         "most 25%% of CPUs, but up to 16 even on a small machine)",
     )
+    ap.add_argument(
+        "--job_timeout",
+        type=int,
+        default=600,
+        help="per-job wall-clock limit (seconds) for each fanned-out recipe "
+        "subprocess (default: %(default)s). A recipe normally runs in ~2 min, so "
+        "a job exceeding this is treated as wedged: its process group is killed "
+        "and the job counts as a failure, rather than hanging the whole batch. "
+        "The serial canary uses a larger, separate limit since it warms cold "
+        "caches on the first run",
+    )
     args = ap.parse_args(argv)
 
     start, end = args.date_range
@@ -177,6 +188,8 @@ def parse_args(argv=None):
         ap.error("--file_limit must be >= 1")
     if args.jobs < 1:
         ap.error("--jobs must be >= 1")
+    if args.job_timeout < 1:
+        ap.error("--job_timeout must be >= 1")
 
     # --input_dir / --output_dir are shorthands that populate the explicit
     # dir overrides below; reject giving both a shorthand and its long form.
@@ -416,7 +429,8 @@ def _run_one(argv, timeout=None):
     (seconds), used for the serial canary, bounds the run: on expiry the child's
     process group is killed and (124, note) returned -- 124 being the
     conventional timeout exit status. Returns (130, "") without launching once
-    teardown has begun (`_interrupted`).
+    teardown has begun (`_interrupted`), and also kills-then-returns 130 if
+    teardown begins in the window between launching and tracking the child.
     """
     if _interrupted.is_set():
         return 130, ""
@@ -431,6 +445,17 @@ def _run_one(argv, timeout=None):
     with _live_lock:
         _live_procs.add(proc)
     try:
+        # Close the launch-vs-track race: _terminate_all_children snapshots
+        # _live_procs under _live_lock, and _interrupted is set before it. If that
+        # snapshot ran between the Popen above and the add, it missed this child --
+        # but then _interrupted is already set (it precedes the snapshot, which
+        # the lock orders before our add), so re-checking here catches it and we
+        # kill our own child. From here on the child is tracked, so any later
+        # teardown sees it directly.
+        if _interrupted.is_set():
+            _kill_group(proc)
+            proc.communicate()  # best-effort reap
+            return 130, ""
         try:
             _out, stderr = proc.communicate(timeout=timeout)
             return proc.returncode, stderr
@@ -449,7 +474,15 @@ def _run_one(argv, timeout=None):
             _live_procs.discard(proc)
 
 
-def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800, abort_on_failure=True):
+def run_stage(
+    label,
+    tasks,
+    jobs,
+    log_dir,
+    job_timeout=600,
+    canary_timeout=1800,
+    abort_on_failure=True,
+):
     """Run `tasks`: the first serially as a canary, then the rest in a pool.
 
     tasks: list of (tag, argv). The first unit runs alone (bounded by
@@ -458,6 +491,12 @@ def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800, abort_on_failure
     tables, the matplotlib font cache, compiled bytecode -- so the parallel jobs
     hit a warm cache instead of stampeding a cold one (the thundering-herd
     failure mode).
+
+    Each fanned-out job is bounded by `job_timeout` seconds (the canary gets the
+    larger `canary_timeout`, since it alone pays the cold-cache cost): a job that
+    overruns is a wedged subprocess (a stalled NFS read, a runaway recipe), so
+    its process group is killed and it returns 124 -- counted as a failure -- so
+    one stuck unit can't hang the whole batch instead of ever completing.
 
     `abort_on_failure` controls what a nonzero exit means:
 
@@ -497,7 +536,9 @@ def run_stage(label, tasks, jobs, log_dir, canary_timeout=1800, abort_on_failure
         # night must not block the rest). Skip only when a fail-fast canary died.
         if rc == 0 or not abort_on_failure:
             pool = concurrent.futures.ThreadPoolExecutor(max_workers=jobs)
-            futures = {pool.submit(_run_one, argv): tag for tag, argv in tasks[1:]}
+            futures = {
+                pool.submit(_run_one, argv, job_timeout): tag for tag, argv in tasks[1:]
+            }
             for future in concurrent.futures.as_completed(futures):
                 tag = futures[future]
                 try:
@@ -897,7 +938,14 @@ def main(argv=None):
         ]
         # Fail-soft: a night whose masters fail (e.g. the known WLS failure mode)
         # is warned about, not fatal; its science frames are gated out below.
-        run_stage("masters", tasks, args.jobs, log_dir, abort_on_failure=False)
+        run_stage(
+            "masters",
+            tasks,
+            args.jobs,
+            log_dir,
+            job_timeout=args.job_timeout,
+            abort_on_failure=False,
+        )
 
         # Per-night gate: a night still missing a required master (whether it
         # failed just now or was never built) can only produce failed science
@@ -943,7 +991,7 @@ def main(argv=None):
             _cli_task(oid, _SCIENCE_RECIPE, args.science_config, "-o", forward)
             for oid in science_todo
         ]
-        run_stage("science", tasks, args.jobs, log_dir)
+        run_stage("science", tasks, args.jobs, log_dir, job_timeout=args.job_timeout)
 
         print(
             f"\ndone: reduced {len(science_frames)} frame(s); "
