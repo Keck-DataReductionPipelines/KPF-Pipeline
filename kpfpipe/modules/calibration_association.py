@@ -6,15 +6,14 @@ file for each calibration type (bias, dark, flat, thar) by searching
 the masters directory and selecting the nearest-in-time match.
 """
 
-import glob
 import logging
 import warnings
 from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import glob_masters
-from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
+from kpfpipe.utils.io import FileHandler
+from kpfpipe.utils.kpf_utils import get_timestamp, kpf_timestamp_to_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +76,7 @@ class CalibrationAssociation:
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_CALIBRATION_ASSOCIATION"]
+                ["DATA_DIRS", "TRACES", "MODULE_CALIBRATION_ASSOCIATION"]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
@@ -85,7 +84,8 @@ class CalibrationAssociation:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._masters_root = params.get("KPF_MASTERS_OUTPUT")
+        self._masters_output = params.get("KPF_MASTERS_OUTPUT")
+        self._file_handler = FileHandler(params)  # masters discovery
         self._calibrations = None  # per-cal {filepath} for _set_headers
         self._info = None
 
@@ -141,8 +141,7 @@ class CalibrationAssociation:
         for delta in range(days_before, days_after + 1):
             search_date = obs_date + timedelta(days=delta)
             datecode = search_date.strftime("%Y%m%d")
-            pattern = glob_masters(self._masters_root, cal_type, level, datecode)
-            for filepath in sorted(glob.glob(pattern)):
+            for filepath in self._file_handler.find_masters(cal_type, level, datecode):
                 try:
                     ts = get_timestamp(filepath)
                 except ValueError as e:
@@ -194,9 +193,9 @@ class CalibrationAssociation:
         """Build and cache the info() summary text from instance attributes."""
         lines = [
             "CalibrationAssociation",
-            f"  obs_id:        {self.l1_obj.obs_id}",
-            f"  masters root:  {self._masters_root}",
-            f"  search window: {self.masters_search_window_days} days [before, after]",
+            f"  obs_id:         {self.l1_obj.obs_id}",
+            f"  masters output: {self._masters_output}",
+            f"  search window:  {self.masters_search_window_days} days [before, after]",
             f"\n  {'cal_type':<12s} {'master file'}",
             "  " + "-" * 60,
         ]

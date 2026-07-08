@@ -24,6 +24,7 @@ from rvdata.core.models.base import RVDataModel
 # it through kpf.keyword_registry, and re-exported so sibling data_models files
 # (level2/4) import the same singleton from base.
 from kpfpipe.data_models.keyword_registry import keyword_registry
+from kpfpipe.utils.kpf_utils import is_obs_id
 
 # Receipt names that are data-model conversions / serialization rather than
 # pipeline modules — excluded from DRPSTATU so it names the last real stage.
@@ -60,6 +61,7 @@ class KPFDataModel(RVDataModel):
     def __init__(self):
         super().__init__()
         self.obs_id = None
+        self.dirname = None
 
     @classmethod
     def from_fits(cls, fn, instrument=None, **kwargs):
@@ -68,9 +70,32 @@ class KPFDataModel(RVDataModel):
         The single read chokepoint for every KPF data model: one INFO record
         per FITS read, naming the concrete class and the path, then delegate
         to the inherited reader (rvdata's for L2/L4 via RV2/RV4 in the MRO).
+
+        Ensures ``obs_id`` is carried in memory after the read. L0 (and any
+        product whose filename embeds the obs_id) resolves it during ``read``;
+        L1/L2/L4 filenames are timestamp-based, so a read there recovers the
+        obs_id from the ORIGID provenance card instead (see ``_obs_id_from_receipt``).
+        The ``to_kpfN`` converters set ``obs_id`` directly, so this only fills the
+        from_fits path.
         """
         logger.info("reading %s from %s", cls.__name__, fn)
-        return super().from_fits(fn, instrument=instrument, **kwargs)
+        obj = super().from_fits(fn, instrument=instrument, **kwargs)
+        if getattr(obj, "obs_id", None) is None:
+            obj.obs_id = obj._obs_id_from_receipt()
+        return obj
+
+    def _obs_id_from_receipt(self):
+        """Recover the obs_id from the ORIGID provenance card on RECEIPT.
+
+        ORIGID is the original L0 obs_id, stamped by ``KPF0`` and forwarded on the
+        RECEIPT header through every level, so it is the obs_id source for a
+        from_fits'd L1/L2/L4 product (whose own filename does not embed it).
+        Returns ``None`` when RECEIPT/ORIGID is absent or not a valid obs_id
+        (e.g. masters, which carry no ORIGID).
+        """
+        receipt = self.headers.get("RECEIPT")
+        origid = receipt.get("ORIGID") if receipt is not None else None
+        return origid if is_obs_id(origid) else None
 
     @staticmethod
     def as_fits_header(src):

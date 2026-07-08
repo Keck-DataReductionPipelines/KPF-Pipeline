@@ -75,7 +75,7 @@ class BaseMasterModule:
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "KPFPIPE"])
+            params = config.get_params(["DATA_DIRS", "TRACES"])
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
@@ -86,7 +86,7 @@ class BaseMasterModule:
 
         # Masters output root; CalibrationAssociation reads masters from here
         # when `_process_frame` associates a calibration for a stacked frame.
-        self._masters_root = params.get("KPF_MASTERS_OUTPUT")
+        self._masters_output = params.get("KPF_MASTERS_OUTPUT")
 
         # Forwarded to CalibrationAssociation in `_process_frame` so an operator's
         # configured search window is honored, not silently reset to the default.
@@ -195,7 +195,7 @@ class BaseMasterModule:
             self._master_paths[cal_type] = path
         return self._master_ml1[cal_type]
 
-    def _load_frame(self, fn, cache, exptime_tolerance=0.1, verbose=True):
+    def _load_frame(self, fn, cache=False, exptime_tolerance=0.1, verbose=True):
         """
         Load an L0 file and perform image assembly to produce an L1 object.
 
@@ -294,7 +294,7 @@ class BaseMasterModule:
         # filepath / KPFMasterL1 overrides are loaded directly by ImageProcessing.
         cal_types = [name for name, value in calibrations.items() if value is True]
         if cal_types:
-            ca_config = {"KPF_MASTERS_OUTPUT": self._masters_root}
+            ca_config = {"KPF_MASTERS_OUTPUT": self._masters_output}
             if self._masters_search_window_days is not None:
                 ca_config["masters_search_window_days"] = (
                     self._masters_search_window_days
@@ -461,11 +461,12 @@ class BaseMasterModule:
         -----
         Exposure time is read from the EPRV-standard PRIMARY EXPTIME (the actual
         elapsed time, mapped from the native WMKO ELAPSED), not the nominal
-        requested EXPTIME. Outlier rejection is performed jointly on CCD and VAR
-        extensions, in rate space, so frames of differing exposure are
-        comparable. Exposure times must be either all zero (≤ tolerance) or all
-        above tolerance. Raises an error if more than `max_fail_fraction` of
-        frames fail to load.
+        requested EXPTIME. Outlier rejection is performed on the CCD rate (VAR =
+        |CCD| + RN adds no independent information); rates are used so frames of
+        differing exposure are comparable, and VAR is still summed for the SNR.
+        Exposure times must be either all zero (≤ tolerance) or all above
+        tolerance. Raises an error if more than `max_fail_fraction` of frames
+        fail to load.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -537,13 +538,10 @@ class BaseMasterModule:
             stats[f"{chip}_CCD"] = {}
             stats[f"{chip}_VAR"] = {}
 
-            # Per-pixel frame-to-frame rejection: at each pixel, flag the frames
-            # whose rate deviates from the across-frame median (axis=0 is the
-            # frame axis). A frame is rejected if it is an outlier in either the
-            # counts rate or the variance rate.
-            out = flag_outliers(
-                data_cube[f"{chip}_CCD"] / T, sigma, axis=0
-            ) | flag_outliers(data_cube[f"{chip}_VAR"] / T, sigma, axis=0)
+            # Per-pixel frame-to-frame rejection on the CCD rate (axis=0 is the
+            # frame axis). VAR = |CCD| + RN is monotonic in |CCD|, so clipping it
+            # adds no independent info; VAR is only summed below for the SNR.
+            out = flag_outliers(data_cube[f"{chip}_CCD"] / T, sigma, axis=0)
 
             valid = ~out
             N = np.sum(~out, axis=0)
@@ -651,7 +649,10 @@ class BaseMasterModule:
 
         # The approximation pass stacks only the first `ndirect` frames; cache
         # them so the streaming exact pass below reuses them instead of
-        # re-reading those files from disk.
+        # re-reading and re-assembling those files from disk. The masters stage
+        # is I/O-bound, and its concurrency is capped (see rv_timeseries), so the
+        # ~1.3 GiB/job the cache costs is affordable and avoiding the redundant
+        # re-assembly is the better trade.
         approx_stats, zero_exptime = self._compute_stats_from_datacube(
             l0_file_list=l0_file_list[:ndirect],
             sigma=sigma,
@@ -725,16 +726,13 @@ class BaseMasterModule:
             T = 1.0 if is_zero else exptime
 
             for chip in self.chips:
-                # Clip each pixel against the rate bounds (joint over CCD/VAR),
-                # then accumulate counts and exposure time over the survivors.
-                clipping_mask[:] = True
-
-                for suffix in ["CCD", "VAR"]:
-                    ext = f"{chip}_{suffix}"
-                    rate = l1_obj.data[ext] / T
-                    lower = approx_stats[ext]["rate_lower"]
-                    upper = approx_stats[ext]["rate_upper"]
-                    clipping_mask &= (rate >= lower) & (rate <= upper)
+                # Clip each pixel against the CCD rate bounds (VAR = |CCD| + RN
+                # adds no independent info); the CCD mask is applied to both below.
+                ext = f"{chip}_CCD"
+                rate = l1_obj.data[ext] / T
+                lower = approx_stats[ext]["rate_lower"]
+                upper = approx_stats[ext]["rate_upper"]
+                clipping_mask[:] = (rate >= lower) & (rate <= upper)
 
                 exact_stats[f"{chip}_CCD"]["exptime_sum"] += T * clipping_mask
 

@@ -62,9 +62,7 @@ class ImageAssembly:
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_IMAGE_ASSEMBLY"]
-            )
+            params = config.get_params(["DATA_DIRS", "TRACES", "MODULE_IMAGE_ASSEMBLY"])
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 

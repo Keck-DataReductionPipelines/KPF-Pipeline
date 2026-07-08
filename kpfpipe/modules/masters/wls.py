@@ -67,7 +67,7 @@ class WLS(BaseMasterModule):
             params = config.get_params(
                 [
                     "DATA_DIRS",
-                    "KPFPIPE",
+                    "TRACES",
                     "WLS",
                     "MODULE_CALIBRATION_ASSOCIATION",
                     "MODULE_IMAGE_PROCESSING",

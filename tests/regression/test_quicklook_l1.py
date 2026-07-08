@@ -69,15 +69,19 @@ def _seed_read_noise(l1):
 
 @pytest.fixture
 def synthetic_l1(tmp_path):
-    l1 = KPF1.from_fits(_build_synthetic_l1(tmp_path))
+    obs_id = "KP.20240405.00001.00"
+    l1 = KPF1.from_fits(_build_synthetic_l1(tmp_path, obs_id=obs_id))
+    l1.obs_id = obs_id
     _seed_read_noise(l1)
     return l1
 
 
 @pytest.fixture
 def synthetic_l1_no_rn(tmp_path):
-    fn = _build_synthetic_l1(tmp_path, obs_id="KP.20240405.00002.00")
-    return KPF1.from_fits(fn)
+    obs_id = "KP.20240405.00002.00"
+    l1 = KPF1.from_fits(_build_synthetic_l1(tmp_path, obs_id=obs_id))
+    l1.obs_id = obs_id
+    return l1
 
 
 # ---------------------------------------------------------------------------

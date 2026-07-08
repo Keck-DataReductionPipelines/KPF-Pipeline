@@ -1,14 +1,12 @@
 """QC checks for KPF Level 0 (raw CCD) data products."""
 
+import os
 from datetime import datetime
 
 import numpy as np
-import pandas as pd
 
-from kpfpipe import REPO_ROOT
 from kpfpipe.quality_control.qc_flags.base import QC
-
-_JUNK_CSV = REPO_ROOT / "reference" / "junk_observations.csv"
+from kpfpipe.utils.io import load_junk_obs_ids
 
 _L0_REQUIRED_KEYS = ["DATE-OBS", "EXPTIME", "OBJECT", "OFNAME", "IMTYPE"]
 
@@ -122,17 +120,39 @@ class QCL0(QC):
     exptime_sane._qc_key = "EXPTIMOK"
 
     def not_junk(self):
-        """obs_id not in reference/junk_observations.csv."""
-        if not _JUNK_CSV.exists():
-            return True
+        """obs_id not on the observer junk list for this frame's data tree.
+
+        "Junk" is a manual observer flag (e.g. the wrong telescope settings) that
+        no automated QC can catch. The list lives at
+        ``{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv``;
+        KPF_DATA_INPUT is recovered from the frame's own source directory, which
+        rvdata records as ``self.dirname`` (``{KPF_DATA_INPUT}/L0/{datecode}``)
+        when the L0 is read. An absent list or unknown source dir yields
+        not-junk.
+        """
         obs_id = self.kpf_obj.obs_id
-        if not obs_id:
+        dirname = getattr(self.kpf_obj, "dirname", None)
+        if not obs_id or not dirname:
             return True
-        df = pd.read_csv(_JUNK_CSV)
-        if "obs_id" not in df.columns:
-            raise ValueError(
-                f"junk_observations.csv missing 'obs_id' column: {_JUNK_CSV}"
-            )
-        return obs_id not in df["obs_id"].values
+        data_input = os.path.dirname(os.path.dirname(dirname))
+        return obs_id not in load_junk_obs_ids(data_input)
 
     not_junk._qc_key = "NOTJUNK"
+
+    def radec_consistent(self):
+        """Pointing agrees with the target and catalog positions.
+
+        Thresholds the DiagL0 offsets on QUALITY_CONTROL: TARGOFF < 1", and the
+        catalog cross-matches OBJOFF/GAIAOFF < 5" (a loose bound, since the loaded
+        pointing coordinates are not Gaia/SIMBAD-derived). Each offset is checked
+        only when present, so a frame with no pointing (e.g. a calibration frame)
+        or a skipped catalog lookup passes.
+        """
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        for key, limit in (("TARGOFF", 1.0), ("OBJOFF", 5.0), ("GAIAOFF", 5.0)):
+            val = _hdr_float(hdr, key)
+            if val is not None and val >= limit:
+                return False
+        return True
+
+    radec_consistent._qc_key = "RADECOK"

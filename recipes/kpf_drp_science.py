@@ -28,7 +28,7 @@ from kpfpipe.quality_control.checkpoints import (
     CheckpointL4,
 )
 from kpfpipe.quality_control.quicklook import PlotL0, PlotL1, PlotL2, PlotL4
-from kpfpipe.utils.io import build_filepath, build_qlp_dir
+from kpfpipe.utils.io import kpf_directory, kpf_filepath
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
 # would not identify this module in the log (style guide section 6).
@@ -51,11 +51,13 @@ def main(config, args):
     data_root_in = data_dirs["KPF_DATA_INPUT"]
     data_root_science = data_dirs["KPF_SCIENCE_OUTPUT"]
 
-    l0 = KPF0.from_fits(build_filepath(obs_id, "L0", data_root=data_root_in))
+    l0 = KPF0.from_fits(kpf_filepath(obs_id, "L0", data_root=data_root_in))
 
     # Generate L0 quicklook plots
     logger.info("generating L0 quicklook plots for %s", obs_id)
-    l0_qlp_dir = build_qlp_dir(obs_id, "L0", data_root=data_root_science)
+    l0_qlp_dir = kpf_directory(
+        obs_id, level="L0", data_root=data_root_science, kind="QLP"
+    )
     PlotL0(l0, output_dir=l0_qlp_dir).run("all")
 
     # L0 processing complete: CheckpointL0.run() folds in Diagnostics + QC, then
@@ -86,7 +88,9 @@ def main(config, args):
 
     # L1 quicklook plots
     logger.info("generating L1 quicklook plots for %s", obs_id)
-    l1_qlp_dir = build_qlp_dir(obs_id, "L1", data_root=data_root_science)
+    l1_qlp_dir = kpf_directory(
+        obs_id, level="L1", data_root=data_root_science, kind="QLP"
+    )
     PlotL1(l1, output_dir=l1_qlp_dir).run("all")
 
     # L1 processing complete: CheckpointL1.run() folds in Diagnostics + QC,
@@ -115,7 +119,9 @@ def main(config, args):
 
     # L2 quicklook plots
     logger.info("generating L2 quicklook plots for %s", obs_id)
-    l2_qlp_dir = build_qlp_dir(obs_id, "L2", data_root=data_root_science)
+    l2_qlp_dir = kpf_directory(
+        obs_id, level="L2", data_root=data_root_science, kind="QLP"
+    )
     PlotL2(l2, output_dir=l2_qlp_dir, obs_id=obs_id).run("all")
 
     # L2 processing complete: CheckpointL2.run() folds in Diagnostics + QC,
@@ -124,7 +130,7 @@ def main(config, args):
     CheckpointL2(l2).run()
 
     # Write the L2 data products (extracted 1D spectra) to disk
-    l2_out_path = build_filepath(obs_id, "L2", data_root=data_root_science)
+    l2_out_path = kpf_filepath(obs_id, "L2", data_root=data_root_science)
     l2.to_fits(l2_out_path)
 
     # Cross-correlate the extracted spectra to build the per-order CCFs (L4).
@@ -139,7 +145,9 @@ def main(config, args):
 
     # L4 quicklook plots
     logger.info("generating L4 quicklook plots for %s", obs_id)
-    l4_qlp_dir = build_qlp_dir(obs_id, "L4", data_root=data_root_science)
+    l4_qlp_dir = kpf_directory(
+        obs_id, level="L4", data_root=data_root_science, kind="QLP"
+    )
     PlotL4(l4, output_dir=l4_qlp_dir, obs_id=obs_id).run("all")
 
     # L4 processing complete: CheckpointL4.run() folds in Diagnostics (DiagL4)
@@ -148,7 +156,7 @@ def main(config, args):
     CheckpointL4(l4).run()
 
     # Write the final L4 data product (RVs and CCFs) to disk
-    l4_out_path = build_filepath(obs_id, "L4", data_root=data_root_science)
+    l4_out_path = kpf_filepath(obs_id, "L4", data_root=data_root_science)
     l4.to_fits(l4_out_path)
 
     logger.info("exiting kpf_drp_science pipeline")

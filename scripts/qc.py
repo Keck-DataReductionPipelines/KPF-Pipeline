@@ -4,7 +4,7 @@ Standalone QC runner.
 
 Usage:
     python scripts/qc.py --input <file> --level L0|L1|L2 [--config <toml>] [--write]
-    python scripts/qc.py --obs_id KP.20240405.03637.74 --level L1 --config configs/kpf_drp_science.toml [--write]
+    python scripts/qc.py --obs_id <obs_id> --level L1 --config <toml> [--write]
 
 Exit codes:
     0 — ISGOOD=1 (all checks passed)
@@ -21,7 +21,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.quality_control.checkpoints import CheckpointL0, CheckpointL1, CheckpointL2
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import build_filepath
+from kpfpipe.utils.io import kpf_filepath
 
 # CheckpointL{n}.run() folds in the paired Diagnostics + QC, so the standalone
 # runner drives the whole QC stack through the Checkpoint class alone.
@@ -62,7 +62,7 @@ def main():
         config = ConfigHandler(args.config)
         params = config.get_params(["DATA_DIRS"])
         data_root = params.get("KPF_DATA_INPUT", "/data/kpf/")
-        input_file = build_filepath(args.obs_id, args.level, data_root=data_root)
+        input_file = kpf_filepath(args.obs_id, args.level, data_root=data_root)
     else:
         parser.error("Provide either --input or both --obs_id and --config")
 
@@ -80,9 +80,7 @@ def main():
         print(f"Error loading {input_file}: {exc}", file=sys.stderr)
         sys.exit(2)
 
-    obs_id = (
-        args.obs_id or getattr(data, "obs_id", None) or os.path.basename(input_file)
-    )
+    obs_id = args.obs_id or getattr(data, "obs_id", None) or "unknown"
 
     # ------------------------------------------------------------------ #
     # Run QC (via the Checkpoint stage, which folds in Diagnostics + QC and

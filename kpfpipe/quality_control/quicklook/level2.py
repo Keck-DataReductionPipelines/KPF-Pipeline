@@ -33,9 +33,8 @@ class PlotL2:
         l2_obj: KPF2 data object (post-SpectralExtraction; requires
             WavelengthCalibration to have populated the per-fiber WAVE arrays).
         output_dir: directory to save PNG files. None = return Figure only.
-        obs_id: observation ID for titles/filenames. Unlike KPF0/KPF1, KPF2
-            has no obs_id attribute, so the recipe passes it explicitly; absent
-            that, it is derived from the PRIMARY FILENAME header.
+        obs_id: observation ID for titles/filenames. If None, falls back to
+            the l2_obj.obs_id attribute (populated on every construction path).
     """
 
     _PLOT_METHODS = (
@@ -54,28 +53,8 @@ class PlotL2:
         primary = (
             l2_obj.headers.get("PRIMARY", {}) if hasattr(l2_obj, "headers") else {}
         )
-        # obs_id: explicit arg (recipe knows it) > model attr (KPF0/1 only) >
-        # FILENAME header, stripped of level/extension suffixes.
-        self.obs_id = (
-            obs_id
-            or getattr(l2_obj, "obs_id", None)
-            or self._obsid_from_filename(primary.get("FILENAME", ""))
-            or ""
-        )
+        self.obs_id = obs_id or getattr(l2_obj, "obs_id", None) or ""
         self.name = primary.get("OBJECT", "") if primary else ""
-
-    @staticmethod
-    def _obsid_from_filename(filename):
-        """Derive an obs_id from a FILENAME header (strip path/level/ext)."""
-        if not filename:
-            return ""
-        base = os.path.basename(str(filename))
-        for suffix in ("_L0", "_L1", "_L2", "_L4"):
-            base = base.replace(suffix, "")
-        for ext in (".fits", ".fits.gz"):
-            if base.endswith(ext):
-                base = base[: -len(ext)]
-        return base
 
     # ------------------------------------------------------------------
     # Data access helpers

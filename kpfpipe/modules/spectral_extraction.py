@@ -11,7 +11,6 @@ from numpy.polynomial import polynomial
 
 from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.validation import validate_array
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ class SpectralExtraction:
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_SPECTRAL_EXTRACTION"]
+                ["DATA_DIRS", "TRACES", "MODULE_SPECTRAL_EXTRACTION"]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
@@ -367,13 +366,16 @@ class SpectralExtraction:
 
         flux_1d, var_1d = extraction_fxn(D, V, W=W)
 
-        response = "warn" if verbose else "silent"
-        validate_array(
-            flux_1d, context=f"flux_1d array: {chip} {fiber} {order}", response=response
-        )
-        validate_array(
-            var_1d, context=f"var_1d array: {chip} {fiber} {order}", response=response
-        )
+        if verbose:
+            for arr, name in ((flux_1d, "flux_1d"), (var_1d, "var_1d")):
+                n_bad = int(np.sum(~np.isfinite(arr)))
+                n_neg = int(np.sum(arr < 0))
+                if n_bad or n_neg:
+                    warnings.warn(
+                        f"{name} array: {chip} {fiber} {order} has "
+                        f"{n_bad} non-finite, {n_neg} negative values",
+                        stacklevel=2,
+                    )
 
         return flux_1d, var_1d
 

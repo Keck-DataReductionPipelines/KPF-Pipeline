@@ -17,7 +17,7 @@ import pytest
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import build_filepath
+from kpfpipe.utils.io import kpf_filepath
 
 # ---------------------------------------------------------------------------
 # Test data paths and constants
@@ -73,7 +73,7 @@ class TestScienceRecipe:
         recipe = _load_recipe()
         recipe.main(config, args)
 
-        out_path = build_filepath(OBS_ID, "L2", data_root=str(tmp_path))
+        out_path = kpf_filepath(OBS_ID, "L2", data_root=str(tmp_path))
         return out_path
 
     def test_output_file_exists(self, recipe_output):

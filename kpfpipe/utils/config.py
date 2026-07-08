@@ -46,7 +46,7 @@ class ConfigHandler:
             self.load_config()
 
         if sections is None:
-            sections = ["DATA_DIRS", "KPFPIPE"]
+            sections = ["DATA_DIRS", "TRACES"]
 
         params = {}
         for section in sections:

@@ -31,7 +31,7 @@ import pandas as pd
 from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.validation import strictly_increasing
+from kpfpipe.utils.stats import strictly_increasing
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class CrossCorrelation:
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_CROSS_CORRELATION"]
+                ["DATA_DIRS", "TRACES", "MODULE_CROSS_CORRELATION"]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
@@ -593,7 +593,7 @@ class CrossCorrelation:
                 )
             info[fiber] = {"source": source, "nccf": nccf}
 
-        obs_id = self.l2_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
+        obs_id = self.l2_obj.obs_id or "unknown"
         lines = [
             "CrossCorrelation",
             f"  obs_id:         {obs_id}",

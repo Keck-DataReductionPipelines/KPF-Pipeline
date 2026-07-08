@@ -402,6 +402,17 @@ class TestComputeRVPublic:
         rv_err = rv_loaded.compute_order_by_order_rvs("GREEN", "SCI2")["rv_err"]
         assert np.all(np.isfinite(rv_err)) and np.all(rv_err > 0)
 
+    def test_nonphysical_order_degrades_to_nan(self, rv_loaded):
+        # A single order whose CCF window is non-physical (here, negative variance)
+        # degrades to NaN instead of aborting the frame; other orders are unaffected.
+        bad = 5
+        rv_loaded._ccf_var["GREEN_SCI2"][bad] = -1.0
+        res = rv_loaded.compute_order_by_order_rvs("GREEN", "SCI2")
+        assert np.isnan(res["rv"][bad]) and np.isnan(res["rv_err"][bad])
+        others = np.delete(np.arange(NORDER_GREEN), bad)
+        assert np.all(np.isfinite(res["rv"][others]))
+        assert np.all(np.isfinite(res["rv_err"][others]))
+
     def test_order_weights_read_from_rvn(self, rv_loaded):
         # _get_order_weights slices the WEIGHT column of the L4 RVn table.
         w = rv_loaded._get_order_weights("GREEN", "SCI2")

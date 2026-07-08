@@ -43,18 +43,8 @@ _prior_root_level = None
 
 
 def get_level(name):
-    """Map a level name ('debug' ... 'critical', any case) to its logging int.
-
-    Parameters
-    ----------
-    name : str
-        A standard logging level name, case-insensitive.
-
-    Returns
-    -------
-    int
-        The corresponding ``logging`` level constant.
-    """
+    """Map a level name ('debug' ... 'critical', any case) to its ``logging``
+    int; raises ``ValueError`` on an unknown name."""
     try:
         return _LEVELS[str(name).upper()]
     except KeyError:

@@ -88,6 +88,21 @@ class TestKPF2QualityControlRoundTrip:
         assert back.headers["QUALITY_CONTROL"]["NANSCI1"] == 7
         assert back.headers["BARYCORR_KMS"]["CCD1BKMS"] == -3.21
 
+    def test_from_fits_recovers_obs_id_from_origid(self, tmp_path):
+        """An L2's timestamp-based filename does not embed the obs_id, so from_fits
+        recovers it from the ORIGID card on RECEIPT (the original L0 obs_id, ridden
+        forward). This keeps obs_id populated on the from_fits construction path so
+        generate_standard_filename (which delegates to kpf_filename) works."""
+        l2 = KPF2()
+        l2.set_keyword("ORIGID", "KP.20240101.00000.00")  # 0 s of day = 00:00:00
+        fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            l2.to_fits(fn)
+            back = KPF2.from_fits(fn)
+        assert back.obs_id == "KP.20240101.00000.00"
+        assert back.generate_standard_filename() == "kpf_SL2_20240101T000000.fits"
+
 
 class TestToKPF2:
     def test_to_kpf2_creates_kpf2(self, converted_l1):

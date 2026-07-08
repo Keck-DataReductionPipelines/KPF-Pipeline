@@ -1,8 +1,8 @@
-"""
-Unit and regression tests for the master bias module.
+"""Unit and regression tests for the master bias module (`Bias`).
 
-Uses mocked stack_frames for unit tests (no real data needed).
-Real-data regression tests are gated on KPF_TESTDATA env var.
+Unit tests mock stack_frames (no real data). TestMasterBiasRegression stacks the
+bundled L0 bias frames. The shared stacking engine and L1 output contract these
+exercise (`BaseMasterModule`) are unit-tested in test_masters_base.py.
 """
 
 import os
@@ -16,13 +16,6 @@ import pytest
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
 
-from ._dtype_policy import (
-    L1_IMAGE,
-    MASK_DISK,
-    MASK_MEM,
-    assert_dtype,
-    assert_roundtrip_dtype,
-)
 from ._masters import make_l1_arrays
 
 TESTDATA_L0_DIR = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
@@ -41,40 +34,6 @@ NROW, NCOL = 10, 10  # small arrays for unit tests
 # make_l1_arrays() — shared synthetic stack_frames builder — lives in _masters.py
 
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
-
-
-# ---------------------------------------------------------------------------
-# Dtype provenance (shared master-L1 path; see tests/regression/_dtype_policy.py)
-# ---------------------------------------------------------------------------
-
-
-class TestDtypeProvenance:
-    """Master IMG/SNR are float32; MASK is bool in memory, uint8 (8-bit) on disk."""
-
-    @pytest.fixture(scope="class")
-    def master(self):
-        bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=make_l1_arrays()):
-            return bias.make_master_l1()
-
-    def test_img_snr_float32(self, master):
-        for ext in ("GREEN_IMG", "RED_IMG", "GREEN_SNR", "RED_SNR"):
-            assert_dtype(master.data[ext], L1_IMAGE, ext)
-
-    def test_mask_bool_in_memory(self, master):
-        for ext in ("GREEN_MASK", "RED_MASK"):
-            assert_dtype(master.data[ext], MASK_MEM, ext)
-
-    def test_roundtrip_img_float32_mask_uint8(self, master, tmp_path):
-        assert_roundtrip_dtype(KPFMasterL1, master, "GREEN_IMG", L1_IMAGE, tmp_path)
-        assert_roundtrip_dtype(
-            KPFMasterL1,
-            master,
-            "GREEN_MASK",
-            MASK_MEM,
-            tmp_path,
-            expected_disk=MASK_DISK,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -205,52 +164,15 @@ class TestMasterBiasRoundTrip:
 
 
 # ---------------------------------------------------------------------------
-# master_path integration with save_master
+# Signature: a bias applies no calibrations, so no bias/dark/flat kwargs
 # ---------------------------------------------------------------------------
 
 
-class TestMasterBiasSaveMaster:
-    """make_master_l1(master_path=...) should write the FITS via save_master."""
-
-    def test_master_path_writes_fits(self, tmp_path):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        master_path = tmp_path / "master_bias.fits"
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(filepath=str(master_path))
-        assert master_path.exists()
-
-    def test_master_path_creates_parent_dir(self, tmp_path):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        master_path = tmp_path / "nested" / "subdir" / "master_bias.fits"
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(filepath=str(master_path))
-        assert master_path.exists()
-
-    def test_master_path_overwrites_existing(self, tmp_path):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        master_path = tmp_path / "master_bias.fits"
-        master_path.touch()
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(filepath=str(master_path))
-        assert master_path.read_bytes()[:6] == b"SIMPLE"
-
-    def test_save_master_before_make_raises(self):
-        bias = Bias(FILE_LIST)
-        with pytest.raises(RuntimeError, match="run make_master_l1"):
-            bias.save_master("L1", "/tmp/should_not_be_created.fits")
-
-    def test_save_master_refuses_overwrite_by_default(self, tmp_path):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        master_path = tmp_path / "master_bias.fits"
-        master_path.touch()
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1()  # populates ml1_obj
-        with pytest.raises(FileExistsError, match="overwrite=True"):
-            bias.save_master("L1", str(master_path))
+class TestMasterBiasSignature:
+    @pytest.mark.parametrize("kwarg", ["bias", "dark", "flat"])
+    def test_calibration_kwargs_rejected(self, kwarg):
+        with pytest.raises(TypeError):
+            Bias(FILE_LIST).make_master_l1(**{kwarg: True})
 
 
 # ---------------------------------------------------------------------------
@@ -294,15 +216,3 @@ class TestMasterBiasRegression:
 
     def test_receipt_chain(self, master_bias):
         assert "master_bias" in master_bias.receipt["FUNCTION"].values
-
-
-# ---------------------------------------------------------------------------
-# Signature: a bias applies no calibrations, so no bias/dark/flat kwargs
-# ---------------------------------------------------------------------------
-
-
-class TestMasterBiasSignature:
-    @pytest.mark.parametrize("kwarg", ["bias", "dark", "flat"])
-    def test_calibration_kwargs_rejected(self, kwarg):
-        with pytest.raises(TypeError):
-            Bias(FILE_LIST).make_master_l1(**{kwarg: True})

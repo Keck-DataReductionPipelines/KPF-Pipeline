@@ -166,7 +166,7 @@ def _config(tmp_path, body):
 
 
 class TestResolveLogging:
-    _LOGGER_TOML = '[LOGGER]\nlog_directory = "/logs/"\nlog_level = "DEBUG"\n'
+    _LOGGER_TOML = '[LOGGER]\nlog_dir = "/logs/"\nlog_level = "DEBUG"\n'
 
     def test_resolves_config_and_tokens(self, tmp_path):
         config = ConfigHandler(_config(tmp_path, self._LOGGER_TOML))
@@ -182,17 +182,17 @@ class TestResolveLogging:
         }
 
     def test_datecode_target_and_defaults(self, tmp_path):
-        config = ConfigHandler(_config(tmp_path, '[LOGGER]\nlog_directory = "/l/"\n'))
+        config = ConfigHandler(_config(tmp_path, '[LOGGER]\nlog_dir = "/l/"\n'))
         params = resolve_logging(config, "kpf_drp_masters.py", None, "20240923")
         assert params["recipe_name"] == "masters"
         assert params["target"] == "20240923"
         assert params["level"] == "INFO"  # default when config omits log_level
 
     def test_no_target_falls_back_to_run(self, tmp_path):
-        config = ConfigHandler(_config(tmp_path, '[LOGGER]\nlog_directory = "/l/"\n'))
+        config = ConfigHandler(_config(tmp_path, '[LOGGER]\nlog_dir = "/l/"\n'))
         assert resolve_logging(config, "custom.py", None, None)["target"] == "run"
 
-    def test_missing_log_directory_raises(self, tmp_path):
+    def test_missing_log_dir_raises(self, tmp_path):
         config = ConfigHandler(_config(tmp_path, "[LOGGER]\n"))
         with pytest.raises(ValueError, match="no log directory configured"):
             resolve_logging(config, "kpf_drp_science.py", "KP.1.2.3", None)
@@ -201,7 +201,7 @@ class TestResolveLogging:
         # The CLI passes --log_dir/--log_level through ConfigHandler overrides.
         config = ConfigHandler(
             _config(tmp_path, self._LOGGER_TOML),
-            overrides={"LOGGER": {"log_directory": "/elsewhere/", "log_level": "INFO"}},
+            overrides={"LOGGER": {"log_dir": "/elsewhere/", "log_level": "INFO"}},
         )
         params = resolve_logging(config, "kpf_drp_science.py", "KP.1.2.3", None)
         assert params["log_dir"] == "/elsewhere/"

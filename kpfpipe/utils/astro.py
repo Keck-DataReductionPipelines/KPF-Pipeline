@@ -33,11 +33,8 @@ def compute_doppler_factor(v):
 def compute_redshift(v):
     """
     Relativistic redshift ``z = lambda_obs / lambda_rest - 1`` for a source
-    with radial velocity `v`.
-
-    Standard astronomical convention: a receding source (``v > 0``) gives
-    ``z > 0``, so `z` carries the same sign as `v`. Related to the Doppler
-    factor by ``z = f - 1``.
+    with radial velocity `v`. A receding source (``v > 0``) gives ``z > 0``;
+    computed as ``compute_doppler_factor(v) - 1``.
 
     Parameters
     ----------
@@ -51,15 +48,17 @@ def compute_redshift(v):
     float or ndarray
         Dimensionless redshift.
     """
-    beta = (v / c).to(u.dimensionless_unscaled).value
-    return ((1.0 + beta) / (1.0 - beta)) ** 0.5 - 1.0
+    return compute_doppler_factor(v) - 1.0
 
 
 def air_to_vac(wave_air):
     """
-    Convert air wavelengths to vacuum via the Edlén 1953 formula.
+    Convert air wavelengths to vacuum via the Edlén 1953 formula (two
+    iterations; only wavelengths > 2000 Å are modified).
 
-    Two iterations are used, and only wavelengths > 2000 Å are modified.
+    Not yet wired into a pipeline module: retained for the forthcoming
+    vacuum-wavelength work and used as a test oracle for wavelength-calibration
+    output.
 
     Parameters
     ----------

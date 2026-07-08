@@ -69,17 +69,17 @@ Build nightly calibration masters:
 
 ```bash
 kpfpipe --masters -d 20240405 \
-  --data_input /data/kpf \
-  --data_masters /data/kpf/masters-root
+  --kpf_data_input /data/kpf \
+  --kpf_masters_output /data/kpf/masters-root
 ```
 
 Reduce the canonical smoke science exposure:
 
 ```bash
 kpfpipe --science -o KP.20240405.40113.57 \
-  --data_input /data/kpf \
-  --data_masters /data/kpf/masters-root \
-  --data_science /data/kpf/science-root
+  --kpf_data_input /data/kpf \
+  --kpf_masters_output /data/kpf/masters-root \
+  --kpf_science_output /data/kpf/science-root
 ```
 
 The masters recipe writes master bias/dark L1 products and a master ThAr WLS L2

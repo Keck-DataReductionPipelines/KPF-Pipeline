@@ -150,9 +150,12 @@ collects it):
   Per-module `tests/profiling/profile_<module>.py` files drill into a single module (useful
   when re-running one module repeatedly during algorithm development). `flat` is
   skipped while stubbed. The shared stacking engine (`masters/base.py`) has no
-  dedicated harness: attribution charges its work to the right `base.py` methods
-  inside `profile_master_bias.py` / `profile_master_dark.py`, so a separate
-  engine profile would be redundant.
+  dedicated *profiling* harness: attribution charges its work to the right
+  `base.py` methods inside `profile_master_bias.py` / `profile_master_dark.py`, so
+  a separate engine profile would be redundant. (The *test* suite does isolate it —
+  see `regression/test_masters_base.py` under *Masters test layout* below —
+  because profiling partitions by wall-clock while tests partition by
+  responsibility.)
 - **Data.** Real (gitignored) `tests/testdata` frames at realistic sizes; each
   harness skips cleanly (exit 0) when the frames are absent, mirroring the
   `requires_testdata` test pattern.
@@ -241,8 +244,13 @@ see the style guide §11.)* The architecture invariants:
   PRIMARY keywords the same way (registered in `config/Masters-headers.csv`); `BUNIT` is structural, not
   registered.
 - **DRP provenance is stamped at read** (`KPF0.from_fits` → `_stamp_wmko_tracking`) onto RECEIPT, not at
-  `to_kpf1`: `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`. It rides the RECEIPT header forward downstream;
-  `DRPSTATU` is advanced per module by `_update_drpstatus`.
+  `to_kpf1`: `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID` (the original L0 obs_id). It rides the
+  RECEIPT header forward downstream; `DRPSTATU` is advanced per module by `_update_drpstatus`. `ORIGID`
+  is also the **read-path recovery source for `obs_id`**: `KPFDataModel.from_fits` reads it back into
+  `self.obs_id` for L1/L2/L4 (whose own filenames are timestamp-based and embed no obs_id, unlike L0's),
+  so **every model carries `obs_id` on every construction path** — the `to_kpfN` converters set it
+  directly, from_fits recovers it from `ORIGID`. (Masters carry no `ORIGID` and set no `obs_id`; their
+  filename comes from KOAID/MASTYPE instead — see *Filename conventions*.)
 - **QUALITY_CONTROL + RECEIPT headers propagate L0→L1→L2→L4** card-by-card via the shared helper
   `KPFDataModel._forward_headers`, making each an **append-only history** (every QC flag / processing
   step). The only QC keyword that changes per level is **`ISGOOD`**, the running AND over every QC flag
@@ -263,17 +271,21 @@ Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/
 
 ### Logging (issue #1408; WMKO DRP-RUN-07/08/09)
 
-Handler/level configuration lives in exactly one place: `kpfpipe.utils.logger.setup_logging`, called only by the CLI (`tools/cli.py`) before the recipe runs — never at import time, never in recipes/modules/tests. It writes one UT-timestamped log file per invocation under the `[LOGGER] log_directory` config key (`log_level`, `console` also supported; CLI overrides `--log_dir`/`--log_level`; `--test` defaults the log dir to `tests/testdata/logs`). Library code just declares `logger = logging.getLogger(__name__)` and must work with no handlers installed — tests call `recipe.main(config, args)` directly with no logging configured, so setup must never move into recipes. `warnings.warn` remains the recoverable-condition API, bridged into the log via `logging.captureWarnings`. Tests that call `setup_logging` must tear down via `kpfpipe.utils.logger.teardown_logging` inside the same test (see the autouse fixture in `tests/regression/test_logger.py` — pytest's per-test `catch_warnings` context otherwise strands `logging._warnings_showwarning`). *(Coding rules — levels, lazy `%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
+Handler/level configuration lives in exactly one place: `kpfpipe.utils.logger.setup_logging`, called only by the CLI (`tools/cli.py`) before the recipe runs — never at import time, never in recipes/modules/tests. It writes one UT-timestamped log file per invocation under the `[LOGGER] log_dir` config key (`log_level`, `console` also supported; CLI overrides `--log_dir`/`--log_level`; `--test` defaults the log dir to `tests/testdata/logs`). Library code just declares `logger = logging.getLogger(__name__)` and must work with no handlers installed — tests call `recipe.main(config, args)` directly with no logging configured, so setup must never move into recipes. `warnings.warn` remains the recoverable-condition API, bridged into the log via `logging.captureWarnings`. Tests that call `setup_logging` must tear down via `kpfpipe.utils.logger.teardown_logging` inside the same test (see the autouse fixture in `tests/regression/test_logger.py` — pytest's per-test `catch_warnings` context otherwise strands `logging._warnings_showwarning`). *(Coding rules — levels, lazy `%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
 
 ### Filename conventions
 
 Science: `L0 = {obs_id}.fits` (KPF-native `KP.*`); `L1 = kpf_L1_{YYYYMMDD}T{HHmmss}.fits` — note **no EPRV "S"**, because the EPRV standard defines no L1 (its filename regex only accepts `SL2`/`SL3`/`SL4`); `L2/L4 = kpf_SL{N}_…` (EPRV-standard). Masters (WMKO DRP-RUN-05): `{KOAID-of-first-input}_master_{type}_L{N}.fits`.
 
-Two authorities encode this rule and **must agree per level**: `build_filepath(obs_id, level, …)` (`utils/io.py`) is the pipeline's path builder (directory + filename, from an obs_id string) and is what recipes use to write; `<model>.generate_standard_filename()` builds only the basename from a populated object's headers and is the `to_fits(fn=None)` fallback. Like `check_filename_convention`, **every concrete model declares it explicitly** (KPF0/KPF1 build the KPF names; KPF2/KPF4 are bare pass-throughs to rvdata's EPRV builder via `RV2`/`RV4`; `KPFMasterModel` builds the master name), and `KPFDataModel`'s abstract version **raises `NotImplementedError`**. `TestFilenameConsistency` (in `tests/regression/test_masters_recipe.py`) enforces that this and `build_filepath` never drift.
+Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs_id, level, …)` (`utils/io.py`) is the pipeline's path builder (directory + filename, from an obs_id string) and is what recipes use to write; `<model>.generate_standard_filename()` builds only the basename and is the `to_fits(fn=None)` fallback. `kpf_filepath` itself decomposes into two lower-level helpers it composes: `kpf_directory(obs_id, *, level, data_root, kind)` — the single authority for an **output** directory (`kind` ∈ `science`/`masters`/`QLP`; QLP is `{data_root}/QLP/{datecode}/{obs_id}/{level}`) — and `kpf_filename(obs_id, level, *, master)` — the basename; `kpf_filepath = os.path.join(kpf_directory(…), kpf_filename(…))`. **`kpf_filename` is the single source for the naming rule**: the four science models' `generate_standard_filename` all delegate to `kpf_filename(self.obs_id, level)` (so the object- and string-keyed builders can't drift), which is why every model must carry `obs_id` on every construction path (see the `ORIGID` recovery note under *Header standardization*). Like `check_filename_convention`, **every concrete model declares it explicitly** (L0/L1/L2/L4 delegate to `kpf_filename`; `KPFMasterModel` overrides with the KOAID/MASTYPE master name, since masters carry no `obs_id`), and `KPFDataModel`'s abstract version **raises `NotImplementedError`**. `TestFilenameConsistency` (in `tests/regression/test_io.py`) enforces that `generate_standard_filename` and `kpf_filepath` never drift. (Filename *validation* — `check_filename_convention` — is separate and still delegates to rvdata's EPRV check for L2/L4.)
 
 ### Masters Pipeline
 
-`kpfpipe/modules/masters/` — stacks multiple observations to create bias, dark, flat, and wavelength solution (WLS) calibration products. Uses sigma-clipped statistics with a single-pass streaming accumulation (per-pixel counts and exposure time) for large stacks; the master image is the exposure-weighted rate `counts_sum / exptime_sum`.
+`kpfpipe/modules/masters/` — stacks multiple observations to create bias, dark, flat, and wavelength solution (WLS) calibration products. Uses sigma-clipped statistics with a single-pass streaming accumulation (per-pixel counts and exposure time) for large stacks; the master image is the exposure-weighted rate `counts_sum / exptime_sum`. The streaming accumulator's approximation pass caches the first `ndirect` assembled L1 frames (`base.py::_load_frame(cache=True)`) so the exact pass reuses them instead of re-reading/re-assembling — the masters stage is I/O-bound, so this trade favors I/O over the ~1.3 GiB/job the cache holds.
+
+**Masters concurrency is capped independently of `--jobs`, and NOT by cores or RAM.** The `rv_timeseries.py` driver fans nightly masters builds out across a process pool; a **fixed** `_MASTERS_JOBS` (16) bounds that fan-out (science keeps the cores-based `--jobs`). This is deliberate and non-obvious: the stacking stage does not bottleneck on cores or RAM. Measured on shrek (256 cores, 2 TiB), a wide masters fan-out left the CPUs ~75% idle with 1.4 TiB free and **never swapped**, yet every job crawled to `--job_timeout` (1 job alone is fast; ~56 at once wedge). The limit is the **operating system's own memory bookkeeping** (page-fault / mapping churn from streaming large arrays) coordinated across all cores — a cost that grows with the *number of concurrent jobs*, not the work each does. So the cap is a fixed, empirically tuned constant (16 ≈ 2× margin below the ~32 where such degradation appears on similar pipelines), floored by cores/RAM only for small machines. Do **not** "restore" a cores- or RAM-derived masters cap: the earlier RAM cap was built on a mistaken swap diagnosis and is inert on a big host. (Historical dead end: a masters stall once *looked* like swapping; forensics later proved zero swap traffic — the signature is idle CPU + free RAM + high system time, i.e. OS contention, not memory pressure.)
+
+**Junk-frame exclusion.** "Junk" is a manual flag observers set at exposure time (e.g. wrong telescope settings): such a frame can pass every automated QC yet be scientifically useless. The authoritative list is WMKO's `{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv` — a data-tree artifact, *not* a repo file (title line, `observation_id` header, one obs_id/row). `utils/io.py::load_junk_obs_ids(data_input)` is the single reader (absent file ⇒ empty set ⇒ no-op). It feeds two paths: (1) `FileHandler.build_mini_database` tags each frame with a derived **`ISJUNK`** column (frames are flagged, never dropped), which `FileHandler.build_calibration_stacks(exclude_junk=True)` filters out before master stacking and `rv_timeseries.py` uses to skip junk during discovery; (2) `QCL0.not_junk` populates the `NOTJUNK` QC flag on science frames, recovering `KPF_DATA_INPUT` from the L0's `self.dirname` (`{KPF_DATA_INPUT}/L0/{datecode}`, set by rvdata's `from_fits`). A mini database lacking the `ISJUNK` column makes `build_calibration_stacks(exclude_junk=True)` **fail loudly** (`KeyError: 'ISJUNK'`).
 
 **Masters header alignment (out of EPRV scope, but stylistically aligned).** Masters are *not* EPRV-governed, but follow the same keyword conventions as the science models as closely as possible:
 
@@ -281,6 +293,24 @@ Two authorities encode this rule and **must agree per level**: `build_filepath(o
 - **Masters PRIMARY is minimal — no EPRV science skeleton.** `KPFMasterL1` never runs `KPF1.__init__`; `KPFMasterL2` runs `KPF2.__init__`→`RV2.__init__` and so **clears** the inherited EPRV L2 skeleton. Both stamp `DATALVL` (`"ML1"`/`"ML2"`) in `__init__`.
 - **Extension manifests are authoritative CSVs, per master type.** `ML1-extensions.csv` builds ML1 directly. ML2 inherits the full KPF2 schema (for the alias system); `KPFMasterL2(kind=…)` takes a **required** `kind` (`"wls"`/`"flat"`) and reads `ML2-{kind}-extensions.csv` — `__init__` deletes any inherited extension the manifest omits, then creates its `Required` rows. **wls** carries `TRACE*_WAVE` + `*_WLS_COEFFS`; **flat** carries `TRACE*_FLUX`/`VAR`/`BLAZE`; both omit the per-observation extensions (`INSTRUMENT_HEADER`, `BARYCORR_*`/`BJD_TDB`, `EXPMETER`/`TELEMETRY`/`ANCILLARY_SPECTRUM`). `from_fits` infers `kind` from PRIMARY `MASTYPE`. **To add or drop an ML2 extension, edit the CSV(s).**
 - **QC infrastructure is present, checks deferred.** Both levels carry `QUALITY_CONTROL` + `RECEIPT` for later wiring; no masters QC checks or DRP-provenance stamping exist yet.
+
+**Masters test layout.** The masters tests are split by *what they exercise*, not just
+by module. `BaseMasterModule` is abstract, so `tests/regression/test_masters_base.py`
+unit-tests the **shared engine** — stacking (rate estimator, per-pixel rejection,
+datacube clipping), calibration resolve/apply/load, frame-load guards, array cleaning,
+and the shared L1 output contract (dtype provenance, `save_master`) — driving it through
+the simplest concrete vehicle for each path: `Bias` (no calibrations) for the pure L1
+output/dtype/save path, `Dark` (bias-subtracted) for the calibration-orchestration path.
+`test_master_bias.py` and `test_master_dark.py` are then **symmetric mirrors** that cover
+only each concrete module's own behavior (Unit / Info / RoundTrip / Signature /
+Regression: BUNIT `electrons` vs `electrons/sec`, receipt name, `info()` text, the
+calibration signature, and a real-data regression). `test_master_wls.py` stands apart —
+WLS builds an ML2 and does not use the L1 stacking engine, so it is tested per-WLS-method
+on its own. `test_masters_recipe.py` covers only the `kpf_drp_masters` recipe (its
+FileHandler/path-builder unit tests live in `test_io.py`). Shared synthetic fixtures live
+in `tests/regression/_masters.py`. `flat` has no test file (stubbed, no `make_master_l1`
+yet). **A test belongs in `test_masters_base.py` iff it exercises a `base.py` method
+vehicle-incidentally; module-specific behavior stays in `test_master_<type>.py`.**
 
 ### RVDataModel Base Class
 

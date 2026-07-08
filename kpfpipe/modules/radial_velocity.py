@@ -56,7 +56,7 @@ class RadialVelocity:
             params = config
         elif isinstance(config, ConfigHandler):
             params = config.get_params(
-                ["DATA_DIRS", "KPFPIPE", "MODULE_RADIAL_VELOCITY"]
+                ["DATA_DIRS", "TRACES", "MODULE_RADIAL_VELOCITY"]
             )
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
@@ -431,16 +431,26 @@ class RadialVelocity:
             vel_span_per_pixel = self._pixel_velocity_scale(
                 wave_start[o], wave_end[o], ncol
             )
-            rv[o], rv_err[o] = self._compute_rv_1d(
-                velocity_grid,
-                ccf[o],
-                ccf_var[o],
-                vel_span_per_pixel,
-                mask_width,
-                window,
-                fit_nsigma,
-                min_npts,
-            )
+            # Degrade a non-physical single order to NaN; the loud raise is kept
+            # for the fiber-summed science CCF in compute_weighted_rvs.
+            try:
+                rv[o], rv_err[o] = self._compute_rv_1d(
+                    velocity_grid,
+                    ccf[o],
+                    ccf_var[o],
+                    vel_span_per_pixel,
+                    mask_width,
+                    window,
+                    fit_nsigma,
+                    min_npts,
+                )
+            except ValueError as e:
+                logger.warning(
+                    "%s order %d: non-physical CCF window (%s); RV/RV_ERR set NaN",
+                    ext,
+                    o,
+                    e,
+                )
 
         return {"rv": rv, "rv_err": rv_err}
 
@@ -587,7 +597,7 @@ class RadialVelocity:
                 entry["mask"] = self.l4_obj.headers[f"{fiber}_CCF"].get("CCFMASK")
             info[fiber] = entry
 
-        obs_id = self.l4_obj.headers.get("RECEIPT", {}).get("ORIGID", "unknown")
+        obs_id = self.l4_obj.obs_id or "unknown"
         lines = [
             "RadialVelocity",
             f"  obs_id:     {obs_id}",

@@ -31,7 +31,7 @@ class Flat(BaseMasterModule):
             params = config.get_params(
                 [
                     "DATA_DIRS",
-                    "KPFPIPE",
+                    "TRACES",
                     "FLAT",
                     "MODULE_CALIBRATION_ASSOCIATION",
                     "MODULE_IMAGE_PROCESSING",
