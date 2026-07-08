@@ -61,14 +61,24 @@ _SCIENCE_RECIPE = os.path.join(_REPO, "recipes", "kpf_drp_science.py")
 _DEFAULT_MASTERS_CONFIG = os.path.join(_REPO, "configs", "kpf_drp_masters.toml")
 _DEFAULT_SCIENCE_CONFIG = os.path.join(_REPO, "configs", "kpf_drp_science.toml")
 
-# Approximate resident RAM (GiB) of one masters (stacking) job at its peak, used
-# by _default_jobs to cap concurrency by RAM so parallel stacks don't swap the
-# machine. The estimate assumes the stack builder holds at most 5 frames in
-# memory at once (the streaming accumulator's approximation-pass window): at
-# 4080x4080 float32 that peaks near ~2-2.5 GiB, rounded up here to leave headroom
-# for the OS, filesystem cache, and per-op transients. A larger in-memory stack
-# would raise the per-job peak and this constant with it.
-_MASTERS_JOB_GIB = 4
+# Fixed cap on concurrent masters (stacking) jobs. The stacking stage does NOT
+# bottleneck on cores or RAM -- measured on shrek (256 cores, 2 TiB), a masters
+# fan-out left the CPUs ~75% idle with 1.4 TiB free and never swapped, yet every
+# job crawled to the --job_timeout: 1 job alone is fast, ~56 at once wedge. The
+# limit is the operating system's own memory bookkeeping (page faults / mapping
+# churn) coordinated across all cores, a cost that grows with the number of
+# concurrent jobs, not with the work each does. So cap masters concurrency at a
+# fixed, empirically tuned value rather than a cores- or RAM-derived one. 16 is a
+# ~2x margin below the ~32 where such degradation has been observed on similar
+# pipelines. Override per machine with --jobs.
+_MASTERS_JOBS = 16
+
+# Approximate resident RAM (GiB) of one masters job at its peak with the L1 cache
+# enabled (~4.8 GiB measured cache-off + ~1.3 GiB for the retained assembled
+# frames). Only used as a small-machine *floor* on the fixed cap above (so a
+# high-concurrency, cache-on run can't overcommit a modest box's RAM); on a big
+# host it never binds.
+_MASTERS_JOB_GIB = 6
 
 
 def _default_jobs():
@@ -86,22 +96,24 @@ def _default_jobs():
 
 
 def _default_masters_jobs():
-    """Masters default job count: the cores-based default, further capped by RAM.
+    """Masters default job count: the fixed _MASTERS_JOBS cap, floored for small
+    machines.
 
-    A masters (stacking) job holds several full-frame cubes for its whole
-    lifetime, so on a high-core / modest-RAM machine the cores-based default can
-    launch enough concurrent jobs to oversubscribe RAM and swap the machine to a
-    crawl (every job then stalls past --job_timeout). Cap it at one job per
-    _MASTERS_JOB_GIB of physical RAM. Falls back to the cores-based default when
-    physical RAM can't be determined (e.g. os.sysconf unavailable). Science jobs
-    are far lighter, so only masters takes this cap.
+    _MASTERS_JOBS (16) is the real limit -- see its definition for why masters
+    concurrency is a tuned constant rather than a cores/RAM formula. Two floors
+    keep it sane on a small machine: never exceed the cores-based default, and
+    never run so many cache-enabled jobs that their combined footprint
+    (~_MASTERS_JOB_GIB each) overcommits physical RAM. On a big host neither floor
+    binds and the result is simply _MASTERS_JOBS. Falls back to just the cores
+    floor when physical RAM can't be determined (e.g. os.sysconf unavailable).
+    Science jobs are far lighter and take none of this -- they keep --jobs.
     """
-    cpu_cap = _default_jobs()
+    cap = min(_MASTERS_JOBS, _default_jobs())
     try:
         ram_gib = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30
     except (ValueError, OSError, AttributeError):
-        return cpu_cap
-    return max(1, min(cpu_cap, int(ram_gib // _MASTERS_JOB_GIB)))
+        return cap
+    return max(1, min(cap, int(ram_gib // _MASTERS_JOB_GIB)))
 
 
 def parse_args(argv=None):
@@ -196,9 +208,9 @@ def parse_args(argv=None):
         help=(
             "max concurrent recipe subprocesses; overrides the automatic "
             "per-stage default. Left unset, science uses a cores-based default "
-            "(~25%% of CPUs, but up to 16) and masters uses that further capped "
-            f"at one job per ~{_MASTERS_JOB_GIB} GiB of RAM, so parallel stacks "
-            "don't swap the machine"
+            "(~25%% of CPUs, but up to 16) and masters is capped at "
+            f"{_MASTERS_JOBS} (stacking degrades from OS memory contention when "
+            "too many run at once), floored by cores and RAM on small machines"
         ),
     )
     ap.add_argument(

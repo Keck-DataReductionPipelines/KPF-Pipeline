@@ -649,13 +649,15 @@ class BaseMasterModule:
 
         # The approximation pass stacks only the first `ndirect` frames; cache
         # them so the streaming exact pass below reuses them instead of
-        # re-reading those files from disk.
-        # cache=False: don't retain assembled frames -- holding them alongside the
-        # datacube spiked peak RAM into swap; re-reading in the exact pass is cheaper.
+        # re-reading and re-assembling those files from disk. The masters stage
+        # is I/O-bound, and its concurrency is capped (see rv_timeseries), so the
+        # ~1.3 GiB/job the cache costs is affordable and avoiding the redundant
+        # re-assembly is the better trade.
         approx_stats, zero_exptime = self._compute_stats_from_datacube(
             l0_file_list=l0_file_list[:ndirect],
             sigma=sigma,
             verbose=verbose,
+            cache=True,
             max_fail_fraction=max_fail_fraction,
             max_fail_number=max_fail_number,
             exptime_tolerance=exptime_tolerance,
@@ -697,9 +699,10 @@ class BaseMasterModule:
         clipping_mask = np.ones((nrow, ncol), dtype=bool)
 
         for fn in l0_file_list:
-            # Assembled fresh (no cache) -- retaining frames spiked peak RAM into swap.
+            # The first `ndirect` frames are cache hits from the approximation
+            # pass above; the rest are read once here and not worth caching.
             l1_obj, success = self._load_frame(
-                fn, exptime_tolerance=exptime_tolerance, verbose=verbose
+                fn, cache=False, exptime_tolerance=exptime_tolerance, verbose=verbose
             )
 
             if not success:

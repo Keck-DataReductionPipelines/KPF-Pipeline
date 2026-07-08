@@ -200,27 +200,34 @@ class TestDefaultMastersJobs:
         pages = int(ram_gib * 2**30) // page
         return lambda name: {"SC_PHYS_PAGES": pages, "SC_PAGE_SIZE": page}[name]
 
-    def test_ram_caps_below_cores(self, rv, monkeypatch):
-        # 64 cores -> cpu_cap 16, but a modest-RAM box caps masters far lower.
-        monkeypatch.setattr(rv.os, "cpu_count", lambda: 64)
-        monkeypatch.setattr(rv.os, "sysconf", self._fake_sysconf(16))
-        assert rv._default_masters_jobs() == 16 // rv._MASTERS_JOB_GIB
-        assert rv._default_masters_jobs() < rv._default_jobs()
+    def test_big_host_gets_fixed_cap(self, rv, monkeypatch):
+        # Many cores + ample RAM: neither floor binds, so the fixed cap wins.
+        monkeypatch.setattr(rv.os, "cpu_count", lambda: 256)
+        monkeypatch.setattr(rv.os, "sysconf", self._fake_sysconf(2048))
+        assert rv._default_masters_jobs() == rv._MASTERS_JOBS
 
-    def test_ample_ram_leaves_cores_default(self, rv, monkeypatch):
-        # Plenty of RAM -> the cores-based default wins (RAM cap doesn't bite).
+    def test_ram_floors_below_fixed_cap(self, rv, monkeypatch):
+        # Many cores but modest RAM: the RAM floor drops it below the fixed cap.
+        monkeypatch.setattr(rv.os, "cpu_count", lambda: 256)
+        monkeypatch.setattr(rv.os, "sysconf", self._fake_sysconf(24))
+        assert rv._default_masters_jobs() == 24 // rv._MASTERS_JOB_GIB
+        assert rv._default_masters_jobs() < rv._MASTERS_JOBS
+
+    def test_cores_floor_below_fixed_cap(self, rv, monkeypatch):
+        # Few cores: the cores floor drops it below the fixed cap.
         monkeypatch.setattr(rv.os, "cpu_count", lambda: 8)
         monkeypatch.setattr(rv.os, "sysconf", self._fake_sysconf(256))
         assert rv._default_masters_jobs() == rv._default_jobs() == 8
 
-    def test_unknown_ram_falls_back_to_cores(self, rv, monkeypatch):
-        monkeypatch.setattr(rv.os, "cpu_count", lambda: 8)
+    def test_unknown_ram_uses_cores_floor_only(self, rv, monkeypatch):
+        # sysconf unavailable -> only the cores floor applies (RAM floor skipped).
+        monkeypatch.setattr(rv.os, "cpu_count", lambda: 256)
 
         def _raise(_name):
             raise ValueError("SC_PHYS_PAGES unavailable")
 
         monkeypatch.setattr(rv.os, "sysconf", _raise)
-        assert rv._default_masters_jobs() == rv._default_jobs() == 8
+        assert rv._default_masters_jobs() == rv._MASTERS_JOBS
 
     def test_never_below_one(self, rv, monkeypatch):
         # Tiny RAM would floor the cap to 0; the helper clamps to 1.
