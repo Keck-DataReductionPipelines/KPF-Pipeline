@@ -83,8 +83,7 @@ line-length = 88
 # parens to that form. py313 keeps the formatter on `except (A, B):` — valid under
 # every tool. See style guide §6/§8.
 target-version = "py313"
-# scripts/ holds unimplemented pseudocode stubs that don't parse as Python yet.
-extend-exclude = ["legacy", "gjgilbert_notebooks", "scripts"]
+extend-exclude = ["legacy", "gjgilbert_notebooks"]
 
 [tool.ruff.lint]
 # E/W pycodestyle, F pyflakes, I import-sorting, B bugbear, UP pyupgrade,

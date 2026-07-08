@@ -85,6 +85,9 @@ kpfpipe --science -o KP.20240405.40113.57 \
 The masters recipe writes master bias/dark L1 products and a master ThAr WLS L2
 product. The science recipe writes L2/L4 FITS products and quicklook PNGs.
 
+`--masters`/`--science` set the recipe **and** a default config; pass `-c` to run
+that recipe against a custom config (e.g. `kpfpipe --science -c my.toml -o …`).
+
 ## Quicklook Full-Resolution Images
 
 L0 stitched-image and L1 assembled-image quicklooks support an opt-in

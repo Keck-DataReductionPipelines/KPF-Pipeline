@@ -144,7 +144,7 @@ class TestParseArgs:
         assert ns.kpf_masters_output == "/out"
         assert ns.kpf_science_output == "/out"
         assert ns.log_dir == "/out/logs"
-        assert ns.plot_directory == "/out/QLP/timeseries"
+        assert ns.plot_dir == "/out/QLP/timeseries"
 
     def test_output_dir_conflicts_with_explicit_override(self, rv):
         with pytest.raises(SystemExit):
@@ -158,7 +158,21 @@ class TestParseArgs:
 
     def test_plots_only_with_output_dir_ok(self, rv):
         ns = rv.parse_args(_BASE_ARGS + ["--plots_only", "--output_dir", "/out"])
-        assert ns.plots_only and ns.plot_directory == "/out/QLP/timeseries"
+        assert ns.plots_only and ns.plot_dir == "/out/QLP/timeseries"
+
+    def test_plot_dir_and_log_level_flags(self, rv):
+        # --plot_dir (renamed from --plot_directory) and --log_level parse and are
+        # available for forwarding to the CLI subprocesses.
+        ns = rv.parse_args(_BASE_ARGS + ["--plot_dir", "/p", "--log_level", "DEBUG"])
+        assert ns.plot_dir == "/p"
+        assert ns.log_level == "DEBUG"
+
+    def test_config_overrides_default_to_none(self, rv):
+        # Unset --masters_config/--science_config default to None so the CLI's
+        # --masters/--science shortcut supplies the config (single source).
+        ns = rv.parse_args(_BASE_ARGS)
+        assert ns.masters_config is None
+        assert ns.science_config is None
 
     def test_job_timeout_default_and_override(self, rv):
         assert rv.parse_args(_BASE_ARGS).job_timeout == 600
@@ -246,16 +260,36 @@ class TestDatecodeDirs:
 
 
 class TestCliTask:
-    def test_builds_argv(self, rv):
-        tag, argv = rv._cli_task(
-            "20240405", "/r.py", "/c.toml", "-d", ["--log_dir", "/l"]
-        )
+    def test_masters_uses_shortcut_and_datecode(self, rv):
+        tag, argv = rv._cli_task("20240405", "masters", ["--log_dir", "/l"])
         assert tag == "20240405"
         assert argv == [
             sys.executable, "-m", "tools.cli",
-            "-r", "/r.py", "-c", "/c.toml",
-            "-d", "20240405", "--log_dir", "/l",
+            "--masters", "-d", "20240405", "--log_dir", "/l",
         ]  # fmt: skip
+
+    def test_science_uses_shortcut_and_obs_id(self, rv):
+        tag, argv = rv._cli_task(
+            "KP.20240405.40113.57", "science", ["--log_level", "DEBUG"]
+        )
+        assert tag == "KP.20240405.40113.57"
+        assert argv == [
+            sys.executable, "-m", "tools.cli",
+            "--science", "-o", "KP.20240405.40113.57", "--log_level", "DEBUG",
+        ]  # fmt: skip
+
+    def test_config_override_inserts_dash_c(self, rv):
+        # A custom config is forwarded as -c, overriding the shortcut default
+        # (tools.cli relaxes --science/-c to override rather than error).
+        _, argv = rv._cli_task("KP.x", "science", [], config="/custom.toml")
+        assert argv == [
+            sys.executable, "-m", "tools.cli",
+            "--science", "-c", "/custom.toml", "-o", "KP.x",
+        ]  # fmt: skip
+
+    def test_no_config_omits_dash_c(self, rv):
+        _, argv = rv._cli_task("20240405", "masters", [])
+        assert "-c" not in argv
 
 
 class TestScienceComplete:

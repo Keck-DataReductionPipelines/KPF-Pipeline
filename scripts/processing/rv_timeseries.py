@@ -9,7 +9,7 @@ recipes. Given a target star and an inclusive datecode range, it
   3. (optionally) rebuilds the nightly calibration masters for each night,
   4. reduces every science frame end-to-end (L0 -> L4), then
   5. plots the RV timeseries (RV vs BJD_TDB, with RVERR error bars) when a
-     --plot_directory is given.
+     --plot_dir is given.
 
 It reimplements no pipeline logic: each night and each frame is dispatched as a
 separate ``python -m tools.cli`` subprocess (the pipeline's own command-line
@@ -20,7 +20,7 @@ non-fatal: it is reported as a warning and the run continues, but its science
 frames are then skipped (with a warning) rather than reduced into guaranteed
 failures, since they would be missing a required master. A science frame that
 fails still aborts the run loudly, naming the offending obs_id and its log. The
-reduced L1/L2/L4 products land in the usual output dirs; when --plot_directory
+reduced L1/L2/L4 products land in the usual output dirs; when --plot_dir
 is given, the RV timeseries plot is written there once the reducible frames are
 done.
 
@@ -49,6 +49,7 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import FileHandler, kpf_filepath
 from kpfpipe.utils.kpf_utils import get_datecode, get_obs_id, is_datecode
 from kpfpipe.utils.stats import flag_outliers
+from tools.cli import shortcut_paths
 
 # Masters every science frame depends on, as (cal_type, level). Flat masters are
 # scaffolded but not implemented, so they are not (yet) required -- this matches
@@ -56,10 +57,6 @@ from kpfpipe.utils.stats import flag_outliers
 _REQUIRED_MASTERS = [("bias", "L1"), ("dark", "L1"), ("thar", "L2")]
 
 _REPO = kpfpipe.REPO_ROOT
-_MASTERS_RECIPE = os.path.join(_REPO, "recipes", "kpf_drp_masters.py")
-_SCIENCE_RECIPE = os.path.join(_REPO, "recipes", "kpf_drp_science.py")
-_DEFAULT_MASTERS_CONFIG = os.path.join(_REPO, "configs", "kpf_drp_masters.toml")
-_DEFAULT_SCIENCE_CONFIG = os.path.join(_REPO, "configs", "kpf_drp_science.toml")
 
 # Fixed cap on concurrent masters (stacking) jobs. The stacking stage does NOT
 # bottleneck on cores or RAM -- measured on shrek (256 cores, 2 TiB), a masters
@@ -135,13 +132,15 @@ def parse_args(argv=None):
     )
     ap.add_argument(
         "--masters_config",
-        default=_DEFAULT_MASTERS_CONFIG,
-        help="masters recipe TOML (default: configs/kpf_drp_masters.toml)",
+        default=None,
+        help="masters recipe TOML override (default: the --masters shortcut's "
+        "configs/kpf_drp_masters.toml)",
     )
     ap.add_argument(
         "--science_config",
-        default=_DEFAULT_SCIENCE_CONFIG,
-        help="science recipe TOML (default: configs/kpf_drp_science.toml)",
+        default=None,
+        help="science recipe TOML override (default: the --science shortcut's "
+        "configs/kpf_drp_science.toml)",
     )
     ap.add_argument(
         "--skip_existing_masters",
@@ -160,7 +159,7 @@ def parse_args(argv=None):
         action="store_true",
         help="skip all reduction (masters + science); only (re)generate plots "
         "from L4 products already on disk. Reads L4 from --kpf_science_output "
-        "(or the config default) and writes plots to --plot_directory; "
+        "(or the config default) and writes plots to --plot_dir; "
         "--output_dir sets both at once",
     )
     ap.add_argument(
@@ -171,7 +170,7 @@ def parse_args(argv=None):
         "--output_dir",
         help="shorthand routing all outputs under one root: sets "
         "--kpf_masters_output and --kpf_science_output to it, "
-        "--log_dir to {output_dir}/logs, and --plot_directory to "
+        "--log_dir to {output_dir}/logs, and --plot_dir to "
         "{output_dir}/QLP/timeseries",
     )
     ap.add_argument("--kpf_data_input", help="override [DATA_DIRS] KPF_DATA_INPUT")
@@ -183,7 +182,10 @@ def parse_args(argv=None):
     )
     ap.add_argument("--log_dir", help="override [LOGGER] log_dir")
     ap.add_argument(
-        "--plot_directory",
+        "--log_level", help="override [LOGGER] log_level for each recipe (e.g. DEBUG)"
+    )
+    ap.add_argument(
+        "--plot_dir",
         help="directory to write the RV timeseries plot into; if omitted, the "
         "reduction still runs but no plot is produced",
     )
@@ -259,7 +261,7 @@ def parse_args(argv=None):
             "kpf_masters_output": args.output_dir,
             "kpf_science_output": args.output_dir,
             "log_dir": os.path.join(args.output_dir, "logs"),
-            "plot_directory": os.path.join(args.output_dir, "QLP", "timeseries"),
+            "plot_dir": os.path.join(args.output_dir, "QLP", "timeseries"),
         }
         clashes = [f"--{k}" for k in routed if getattr(args, k)]
         if clashes:
@@ -268,8 +270,8 @@ def parse_args(argv=None):
             setattr(args, k, v)
 
     # --plots_only with nowhere to write is a no-op; require a plot destination.
-    if args.plots_only and not args.plot_directory:
-        ap.error("--plots_only requires --plot_directory (or --output_dir)")
+    if args.plots_only and not args.plot_dir:
+        ap.error("--plots_only requires --plot_dir (or --output_dir)")
     return args
 
 
@@ -673,15 +675,20 @@ def run_stage(
     return {tag for _, tag, _, _ in failures}
 
 
-def _cli_task(unit, recipe, config, unit_flag, forward):
-    """Build a (tag, argv) task running one recipe `unit` via `python -m tools.cli`.
+def _cli_task(unit, kind, forward, config=None):
+    """Build a (tag, argv) task running one `unit` via `python -m tools.cli`.
 
-    `unit` is the datecode (masters) or obs_id (science); `unit_flag` its CLI flag
-    (`-d`/`-o`); `forward` the resolved dir/log overrides appended to every
-    invocation. The tag is the unit itself, which the sentinel/log paths key on.
+    `kind` is "masters" or "science": it selects the CLI shortcut (`--masters`/
+    `--science`, which resolves the recipe + default config) and the unit flag
+    (`-d` datecode for masters, `-o` obs_id for science). `config` overrides the
+    shortcut's default config only when given. `forward` is the resolved dir/log
+    overrides appended to every invocation. The tag is the unit itself, which the
+    sentinel/log paths key on.
     """
-    argv = [sys.executable, "-m", "tools.cli", "-r", recipe, "-c", config]
-    argv += [unit_flag, unit, *forward]
+    argv = [sys.executable, "-m", "tools.cli", f"--{kind}"]
+    if config:
+        argv += ["-c", config]
+    argv += ["-d" if kind == "masters" else "-o", unit, *forward]
     return unit, argv
 
 
@@ -1030,18 +1037,25 @@ def main(argv=None):
     args = parse_args(argv)
     start, end = args.date_range
 
+    # Resolve the configs the subprocesses will use: the --masters/--science
+    # shortcut defaults (tools.cli owns those paths) unless overridden. We read
+    # these to resolve effective dirs; the subprocess gets the config via the
+    # shortcut, plus -c only when overridden (see _cli_task).
+    masters_config = args.masters_config or shortcut_paths("masters")[1]
+    science_config = args.science_config or shortcut_paths("science")[1]
+
     # Resolve effective dirs: input/science-output/logs from the science config,
     # masters-output from the masters config (where masters are written), each
     # with any CLI override applied. Overrides are also forwarded verbatim to
     # every subprocess.
-    science_dirs = _dir_params(args.science_config, "DATA_DIRS")
+    science_dirs = _dir_params(science_config, "DATA_DIRS")
     data_input = args.kpf_data_input or science_dirs["KPF_DATA_INPUT"]
     science_output = args.kpf_science_output or science_dirs["KPF_SCIENCE_OUTPUT"]
     masters_output = (
         args.kpf_masters_output
-        or _dir_params(args.masters_config, "DATA_DIRS")["KPF_MASTERS_OUTPUT"]
+        or _dir_params(masters_config, "DATA_DIRS")["KPF_MASTERS_OUTPUT"]
     )
-    log_dir = args.log_dir or _dir_params(args.science_config, "LOGGER").get("log_dir")
+    log_dir = args.log_dir or _dir_params(science_config, "LOGGER").get("log_dir")
 
     forward = []
     for value, flag in (
@@ -1049,6 +1063,7 @@ def main(argv=None):
         (args.kpf_masters_output, "--kpf_masters_output"),
         (args.kpf_science_output, "--kpf_science_output"),
         (args.log_dir, "--log_dir"),
+        (args.log_level, "--log_level"),
     ):
         if value:
             forward += [flag, value]
@@ -1082,7 +1097,7 @@ def main(argv=None):
             if skipped:
                 print(f"skipping masters for {skipped} night(s) already complete")
         tasks = [
-            _cli_task(dc, _MASTERS_RECIPE, args.masters_config, "-d", forward)
+            _cli_task(dc, "masters", forward, config=args.masters_config)
             for dc in masters_todo
         ]
         # Fail-soft: a night whose masters fail (e.g. the known WLS failure mode)
@@ -1137,7 +1152,7 @@ def main(argv=None):
             if skipped:
                 print(f"skipping {skipped} science frame(s) already reduced to L4")
         tasks = [
-            _cli_task(oid, _SCIENCE_RECIPE, args.science_config, "-o", forward)
+            _cli_task(oid, "science", forward, config=args.science_config)
             for oid in science_todo
         ]
         run_stage(
@@ -1158,17 +1173,17 @@ def main(argv=None):
         ]
 
     # Step 5: RV timeseries plot from the L4 products -- only when a plot
-    # directory was given (no --plot_directory => reduction only; --plots_only
+    # directory was given (no --plot_dir => reduction only; --plots_only
     # always supplies one).
-    if args.plot_directory:
+    if args.plot_dir:
         plot_rv_timeseries(
             args.target,
             l4_paths,
-            args.plot_directory,
+            args.plot_dir,
             args.group_bursts,
         )
     else:
-        print("no --plot_directory given; skipping RV timeseries plot")
+        print("no --plot_dir given; skipping RV timeseries plot")
 
 
 if __name__ == "__main__":

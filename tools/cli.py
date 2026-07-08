@@ -3,6 +3,8 @@ KPF Pipeline CLI entry point.
 
 Recipe + config must be specified via --masters, --science, or an explicit
 -r/-c pair. The shortcuts resolve repo-relative, so they work from any cwd.
+The shortcuts supply defaults an explicit -r/-c overrides, so
+``--science -c my.toml`` runs the science recipe against a custom config.
 
 When running science recipes, provide an obs_id.
 When running masters recipes, provide a datecode.
@@ -38,6 +40,20 @@ _SHORTCUTS = {
     "masters": ("recipes/kpf_drp_masters.py", "configs/kpf_drp_masters.toml"),
     "science": ("recipes/kpf_drp_science.py", "configs/kpf_drp_science.toml"),
 }
+
+
+def shortcut_paths(kind):
+    """Absolute (recipe, config) paths for a ``--masters``/``--science`` shortcut.
+
+    The single source of the shortcut -> recipe/config mapping (the ``_SHORTCUTS``
+    table). Callers that fan out ``python -m tools.cli`` (e.g. the processing
+    drivers under ``scripts/``) reuse this instead of hardcoding the paths.
+    """
+    recipe_rel, config_rel = _SHORTCUTS[kind]
+    return (
+        os.path.join(_REPO_ROOT, recipe_rel),
+        os.path.join(_REPO_ROOT, config_rel),
+    )
 
 
 def main():
@@ -101,13 +117,12 @@ def main():
     args = parser.parse_args()
 
     if args.shortcut:
-        if args.recipe or args.config:
-            parser.error(
-                "--masters/--science cannot be combined with -r/--recipe or -c/--config"
-            )
-        recipe_rel, config_rel = _SHORTCUTS[args.shortcut]
-        args.recipe = os.path.join(_REPO_ROOT, recipe_rel)
-        args.config = os.path.join(_REPO_ROOT, config_rel)
+        # The shortcut supplies default recipe/config paths; an explicit
+        # -r/-c overrides the corresponding default (so `--science -c foo.toml`
+        # keeps the science recipe but swaps its config).
+        recipe_def, config_def = shortcut_paths(args.shortcut)
+        args.recipe = args.recipe or recipe_def
+        args.config = args.config or config_def
 
     if not args.recipe or not args.config:
         parser.error(
