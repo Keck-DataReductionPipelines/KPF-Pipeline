@@ -49,7 +49,7 @@ build-backend = "setuptools.build_meta"
 "kpfpipe.data_models.config" = ["*.csv"]
 
 [tool.setuptools.packages.find]
-include = ["kpfpipe*", "tools*"]
+include = ["kpfpipe*", "tools*", "scripts*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

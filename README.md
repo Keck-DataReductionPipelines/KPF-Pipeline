@@ -65,18 +65,18 @@ Run the fast synthetic/unit suite first:
 make test-fast
 ```
 
-Build nightly calibration masters:
+Build a single night's calibration masters (in-process, one recipe run):
 
 ```bash
-kpfpipe --masters -d 20240405 \
+kpfpipe run --masters -d 20240405 \
   --kpf_data_input /data/kpf \
   --kpf_masters_output /data/kpf/masters-root
 ```
 
-Reduce the canonical smoke science exposure:
+Reduce the canonical smoke science exposure (in-process):
 
 ```bash
-kpfpipe --science -o KP.20240405.40113.57 \
+kpfpipe run --science -o KP.20240405.40113.57 \
   --kpf_data_input /data/kpf \
   --kpf_masters_output /data/kpf/masters-root \
   --kpf_science_output /data/kpf/science-root
@@ -86,7 +86,16 @@ The masters recipe writes master bias/dark L1 products and a master ThAr WLS L2
 product. The science recipe writes L2/L4 FITS products and quicklook PNGs.
 
 `--masters`/`--science` set the recipe **and** a default config; pass `-c` to run
-that recipe against a custom config (e.g. `kpfpipe --science -c my.toml -o …`).
+that recipe against a custom config (e.g. `kpfpipe run --science -c my.toml -o …`).
+
+`kpfpipe` is a dispatcher: `kpfpipe run` reduces one recipe on one unit
+(above), while `kpfpipe masters` / `kpfpipe science` fan out a batch — one
+`run` subprocess per unit, each with its own log and exit code:
+
+```bash
+kpfpipe masters --datecode_list 20240405 20240712 --kpf_data_input /data/kpf ...
+kpfpipe science --obs_id_list KP.20240405.40113.57 KP.20240405.40237.36 ...
+```
 
 ## Quicklook Full-Resolution Images
 

@@ -9,7 +9,7 @@ import pytest
 
 from kpfpipe.utils import logger as kpflog
 from kpfpipe.utils.config import ConfigHandler
-from tools.cli import resolve_logging
+from scripts.processing.reduce import resolve_logging
 
 _UT_FROZEN = time.struct_time((2026, 7, 2, 14, 3, 22, 2, 183, 0))
 

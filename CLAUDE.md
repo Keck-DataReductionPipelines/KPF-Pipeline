@@ -269,9 +269,38 @@ see the style guide §11.)* The architecture invariants:
 
 Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/config/`). Detector parameters (CCD dimensions, order counts) live in `reference/detector.toml` and are exposed at the package top level as `kpfpipe.DETECTOR` (alongside `kpfpipe.DEFAULTS`/`REPO_ROOT`), loaded by `kpfpipe/__init__.py`.
 
+### CLI architecture (dispatcher → scripts → recipes → kpfpipe)
+
+`kpfpipe` (the `[project.scripts]` console entry, `tools/cli.py:main`) is a **thin,
+git-style dispatcher**: it routes a subcommand to its implementation under
+`scripts/processing/` and forwards the remaining argv verbatim (each subcommand owns
+its own argparse). The commands:
+
+- **`kpfpipe run`** → `scripts/processing/reduce.py` — the **leaf**: run one recipe on
+  one unit (`--masters -d <datecode>` / `--science -o <obs_id>`, or an explicit
+  `-r/-c` pair), in-process. Owns config-override assembly, `setup_logging`, the
+  DRP-RUN-08 banner, and the recipe `exec`.
+- **`kpfpipe masters`** → `scripts/processing/masters.py`; **`kpfpipe science`** →
+  `science.py` — **orchestrators**: fan a set of units out as one
+  `python -m scripts.processing.reduce` subprocess each (own log, clean process
+  state, independent exit), via the shared engine in `_fanout.py`. The orchestrators
+  take `--datecode_list`/`--date_range` (masters) and `--obs_id_list` (science);
+  `kpfpipe masters --datecode_list 20240405` is a batch-of-one, while
+  `kpfpipe run --masters -d 20240405` is the in-process single shot. (`kpfpipe
+  timeseries` — the `rv_timeseries.py` rewire — is a follow-up.)
+
+**The layering is strictly one-directional — each layer may import *down* but never
+up:** `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
+`scripts/` (run a recipe many times) ← `tools/` (the CLI interface). So `tools/cli.py`
+imports `scripts.processing.*`, but **the scripts must never import `tools`** — shared
+orchestration helpers live in `scripts/processing/_common.py` (the recipe registry
+`shortcut_paths`/`_SHORTCUTS`, dir helpers) and `_fanout.py` (the process-pool engine),
+both `tools`-free. When adding a script, keep it runnable on its own
+(`python -m scripts.processing.<name>`) with no knowledge of the dispatcher above it.
+
 ### Logging (issue #1408; WMKO DRP-RUN-07/08/09)
 
-Handler/level configuration lives in exactly one place: `kpfpipe.utils.logger.setup_logging`, called only by the CLI (`tools/cli.py`) before the recipe runs — never at import time, never in recipes/modules/tests. It writes one UT-timestamped log file per invocation under the `[LOGGER] log_dir` config key (`log_level`, `console` also supported; CLI overrides `--log_dir`/`--log_level`; `--test` defaults the log dir to `tests/testdata/logs`). Library code just declares `logger = logging.getLogger(__name__)` and must work with no handlers installed — tests call `recipe.main(config, args)` directly with no logging configured, so setup must never move into recipes. `warnings.warn` remains the recoverable-condition API, bridged into the log via `logging.captureWarnings`. Tests that call `setup_logging` must tear down via `kpfpipe.utils.logger.teardown_logging` inside the same test (see the autouse fixture in `tests/regression/test_logger.py` — pytest's per-test `catch_warnings` context otherwise strands `logging._warnings_showwarning`). *(Coding rules — levels, lazy `%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
+Handler/level configuration lives in exactly one place: `kpfpipe.utils.logger.setup_logging`, called only by the single-recipe leaf runner (`scripts/processing/reduce.py` — the `kpfpipe run` entry) before the recipe runs — never at import time, never in recipes/modules/tests. (The `kpfpipe masters`/`science` orchestrators fan `reduce` out as one subprocess per unit, so each reduction still gets exactly one `setup_logging` call and its own log file.) It writes one UT-timestamped log file per invocation under the `[LOGGER] log_dir` config key (`log_level`, `console` also supported; CLI overrides `--log_dir`/`--log_level`; `--test` defaults the log dir to `tests/testdata/logs`). Library code just declares `logger = logging.getLogger(__name__)` and must work with no handlers installed — tests call `recipe.main(config, args)` directly with no logging configured, so setup must never move into recipes. `warnings.warn` remains the recoverable-condition API, bridged into the log via `logging.captureWarnings`. Tests that call `setup_logging` must tear down via `kpfpipe.utils.logger.teardown_logging` inside the same test (see the autouse fixture in `tests/regression/test_logger.py` — pytest's per-test `catch_warnings` context otherwise strands `logging._warnings_showwarning`). *(Coding rules — levels, lazy `%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
 
 ### Filename conventions
 

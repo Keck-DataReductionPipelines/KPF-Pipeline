@@ -49,7 +49,7 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import FileHandler, kpf_filepath
 from kpfpipe.utils.kpf_utils import get_datecode, get_obs_id, is_datecode
 from kpfpipe.utils.stats import flag_outliers
-from tools.cli import shortcut_paths
+from scripts.processing._common import shortcut_paths
 
 # Masters every science frame depends on, as (cal_type, level). Flat masters are
 # scaffolded but not implemented, so they are not (yet) required -- this matches

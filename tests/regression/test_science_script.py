@@ -1,38 +1,37 @@
 """Tests for scripts/processing/science.py: the science-reduction driver.
 
-science.py is a standalone script (not an importable package module), so it is
-loaded by path like the recipe/masters tests. These cover the pure helpers (arg
-parsing and obs_id validation, the task/job-sizing helpers), the fail-soft
-``run_stage`` dispatch, and the ``main`` exit-code contract (nonzero iff at least
-one frame failed).
+Cover the driver's own surface: arg parsing and obs_id validation, the
+``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff
+at least one frame failed). The shared fan-out engine (``run_stage``, the
+cores-based job sizing) lives in ``_fanout`` and is tested in test_fanout.py.
 
 Unit tests use trivial subprocess stubs -- no real testdata needed.
 """
 
-import importlib.util
 import sys
-from pathlib import Path
 
 import pytest
 
-_SCIENCE_PATH = (
-    Path(__file__).parent.parent.parent / "scripts" / "processing" / "science.py"
-)
+from scripts.processing import science as _science
+
+_OID1 = "KP.20240405.40113.57"
+_OID2 = "KP.20240405.40237.36"
+
+
+class _FakeConfig:
+    """Stand-in for ConfigHandler in the exit-code tests (no real file read)."""
+
+    def __init__(self, path):
+        pass
+
+    def get_params(self, keys):
+        return {"log_dir": "/l"}
 
 
 @pytest.fixture(scope="module")
 def s():
-    """Load science.py by path (it is a script, not a package module)."""
-    spec = importlib.util.spec_from_file_location("science", _SCIENCE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_OK = [sys.executable, "-c", "pass"]
-_FAIL = [sys.executable, "-c", "import sys; sys.exit(1)"]
-_OID1 = "KP.20240405.40113.57"
-_OID2 = "KP.20240405.40237.36"
+    """The science driver module (a normal package import)."""
+    return _science
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +84,7 @@ class TestParseArgs:
 
 
 # ---------------------------------------------------------------------------
-# small helpers
+# _cli_task
 # ---------------------------------------------------------------------------
 
 
@@ -94,64 +93,20 @@ class TestCliTask:
         tag, argv = s._cli_task(_OID1, ["--log_level", "DEBUG"])
         assert tag == _OID1
         assert argv == [
-            sys.executable, "-m", "tools.cli",
+            sys.executable, "-m", "scripts.processing.reduce",
             "--science", "-o", _OID1, "--log_level", "DEBUG",
         ]  # fmt: skip
 
     def test_config_override_inserts_dash_c(self, s):
         _, argv = s._cli_task(_OID1, [], config="/custom.toml")
         assert argv == [
-            sys.executable, "-m", "tools.cli",
+            sys.executable, "-m", "scripts.processing.reduce",
             "--science", "-c", "/custom.toml", "-o", _OID1,
         ]  # fmt: skip
 
     def test_no_config_omits_dash_c(self, s):
         _, argv = s._cli_task(_OID1, [])
         assert "-c" not in argv
-
-
-class TestDefaultJobs:
-    @pytest.mark.parametrize(
-        "cpus,expected",
-        [(None, 1), (1, 1), (8, 8), (64, 16), (100, 25)],
-    )
-    def test_cap(self, s, monkeypatch, cpus, expected):
-        monkeypatch.setattr(s.os, "cpu_count", lambda: cpus)
-        assert s._default_jobs() == expected
-
-
-# ---------------------------------------------------------------------------
-# run_stage (fail-soft)
-# ---------------------------------------------------------------------------
-
-
-class TestRunStage:
-    @pytest.fixture(autouse=True)
-    def _no_throttle(self, s, monkeypatch):
-        # The 1s launch throttle is not what these dispatch tests verify; zero it
-        # so they stay fast and free of thread-timing flakiness.
-        monkeypatch.setattr(s, "_LAUNCH_INTERVAL", 0.0)
-
-    def test_empty_returns_empty_set(self, s, tmp_path):
-        assert s.run_stage("science", [], 2, str(tmp_path)) == set()
-
-    def test_all_succeed_returns_empty_set(self, s, tmp_path):
-        tasks = [(_OID1, _OK), (_OID2, _OK)]
-        assert s.run_stage("science", tasks, 2, str(tmp_path)) == set()
-
-    def test_failed_canary_still_fans_out_and_is_reported(self, s, tmp_path, capsys):
-        # Fail-soft: a bad canary frame does not stop the rest; it is collected.
-        tasks = [(_OID1, _FAIL), (_OID2, _OK)]
-        failed = s.run_stage("science", tasks, 2, str(tmp_path))
-        assert failed == {_OID1}
-        assert "continuing" in capsys.readouterr().out
-
-    def test_collects_all_failures(self, s, tmp_path):
-        tasks = [(_OID1, _OK), (_OID2, _FAIL), ("KP.20240405.50000.01", _FAIL)]
-        assert s.run_stage("science", tasks, 2, str(tmp_path)) == {
-            _OID2,
-            "KP.20240405.50000.01",
-        }
 
 
 # ---------------------------------------------------------------------------
@@ -161,10 +116,11 @@ class TestRunStage:
 
 class TestMainExitCode:
     def _patch(self, s, monkeypatch, failed):
-        # Skip the real dir/config resolution and subprocess fan-out; assert only
-        # the exit-code contract from run_stage's returned failure set.
+        # Skip the runtime setup and the real dir/config resolution + subprocess
+        # fan-out; assert only the exit-code contract from run_stage's failure set.
+        monkeypatch.setattr(s, "configure_runtime", lambda: None)
         monkeypatch.setattr(s, "shortcut_paths", lambda kind: ("/r.py", "/c.toml"))
-        monkeypatch.setattr(s, "_dir_params", lambda cfg, section: {"log_dir": "/l"})
+        monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
         monkeypatch.setattr(s, "run_stage", lambda *a, **k: set(failed))
 
     def test_exits_zero_when_all_reduced(self, s, monkeypatch):

@@ -395,9 +395,10 @@ class StageName:
     the CLI uses `"kpfpipe.cli"`. Never call the root-logger conveniences
     (`logging.info(...)` — Ruff `LOG015`).
   - **Handler/level configuration lives in exactly one place**:
-    `kpfpipe.utils.logger.setup_logging`, called only by the CLI entry point
-    (`tools/cli.py`) — never at import time, never in recipes/modules/tests. Library
-    code must work with no handlers installed (records drop silently).
+    `kpfpipe.utils.logger.setup_logging`, called only by the single-recipe leaf runner
+    (`scripts/processing/reduce.py`, the `kpfpipe run` entry) — never at import time,
+    never in recipes/modules/tests. Library code must work with no handlers installed
+    (records drop silently).
   - **Level policy**: `INFO` is the production level — reduction steps, decision
     points, file reads/writes, and end-of-`perform()` module summaries. `DEBUG` —
     inner-loop progress and counters. `WARNING` arrives via the warnings bridge (below).
@@ -415,7 +416,8 @@ class StageName:
     `logging.captureWarnings(True)` — with the default warning filter, each unique
     warning is recorded once per location per process.
 - **Raise exceptions; do not catch-and-log.** The one sanctioned catch-log-reraise
-  point is the CLI entry (`tools/cli.py`), which wraps the recipe call in
+  point is the single-recipe leaf runner (`scripts/processing/reduce.py`), which wraps
+  the recipe call in
   `logger.critical(..., exc_info=True); raise` so uncaught tracebacks land in the log
   (DRP-RUN-08) before the process exits nonzero. Everywhere else, choose the
   semantically correct type:
@@ -612,8 +614,8 @@ documented, intentional ways — follow *its* conventions when adding masters co
 ## 11. Recipes & configuration
 
 - **Recipes are plain Python modules** (not a DSL/`.recipe` file), one `def main(config, args)`
-  entry point, no top-level execution. The CLI driver (`tools/cli.py`) imports and calls
-  `main`.
+  entry point, no top-level execution. The leaf runner (`scripts/processing/reduce.py`,
+  invoked via `kpfpipe run`) imports and calls `main`.
 - **Module invocation idiom = instantiate then call**, with the variable named
   `snake_case` after the class:
   ```python

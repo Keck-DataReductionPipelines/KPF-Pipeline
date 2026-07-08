@@ -7,9 +7,10 @@ per-invocation log files that concurrent pipeline instances never share.
 Handlers are installed on the root logger so that module loggers
 (``logging.getLogger(__name__)``), the ``py.warnings`` bridge, and
 third-party libraries all reach the same file. Setup happens exactly once,
-in the CLI entry point (tools/cli.py) -- never at import time. Library code
-only ever calls ``logging.getLogger(__name__)``; with no handlers installed
-(e.g. recipes driven directly by tests) records are simply dropped.
+in the single-recipe leaf runner (scripts/processing/reduce.py, the
+``kpfpipe run`` entry) -- never at import time. Library code only ever calls
+``logging.getLogger(__name__)``; with no handlers installed (e.g. recipes
+driven directly by tests) records are simply dropped.
 """
 
 import logging
