@@ -17,11 +17,12 @@ with its own log, clean process state, and independent exit code. So this script
 owns only the discovery (steps 1-2) and the dispatch; the robust fan-out,
 canary-then-pool, timeout, and interrupt handling live in the orchestrators.
 
-Both stages are fail-soft: a night whose masters fail to build (e.g. the known
-WLS failure mode) is reported by the masters stage, and every discovered frame is
-still handed to the science stage -- a frame whose required masters are missing
-simply fails there and is reported per-frame. The run exits nonzero if either
-stage reported a failure.
+Both stages run by default; ``--no-masters`` and ``--no-science`` skip either one
+(discovery always runs, since both stages consume it). Both stages are fail-soft:
+a night whose masters fail to build (e.g. the known WLS failure mode) is reported
+by the masters stage, and every discovered frame is still handed to the science
+stage -- a frame whose required masters are missing simply fails there and is
+reported per-frame. The run exits nonzero if either stage reported a failure.
 
 Plotting the timeseries (RV vs BJD_TDB) is deferred to a follow-up; that code is
 parked verbatim in ``notes/tmp_rv_plot.py``.
@@ -84,6 +85,22 @@ def parse_args(argv=None):
         metavar=("START", "END"),
         required=True,
         help="inclusive datecode range, e.g. --date_range 20240101 20240131",
+    )
+    # Stage toggles: both stages run by default, so skipping one is an explicit
+    # opt-out (--no-masters / --no-science). These are timeseries' own toggles for
+    # which *stage* to run -- unrelated to reduce's --masters/--science recipe
+    # shortcuts (defined only on that leaf's parser, not shared here).
+    ap.add_argument(
+        "--masters",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="run the masters build stage (default: on; pass --no-masters to skip)",
+    )
+    ap.add_argument(
+        "--science",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="run the science reduction stage (default: on; pass --no-science to skip)",
     )
     # Two recipe/config pairs (masters + science), so the shared single -r/-c
     # recipe_and_config_parser does not fit; each is forwarded to its stage only
@@ -311,36 +328,50 @@ def main(argv=None):
         end,
     )
 
-    # Step 3: build every night's masters. The masters orchestrator fans out one
-    # reduce subprocess per night and streams its own batch log; it is fail-soft,
-    # so a night that fails to build is reported without aborting the run.
-    masters_argv = _orchestrator_argv(
-        "masters",
-        "--dates",
-        datecodes,
-        common_forward,
-        recipe=masters_recipe,
-        config=masters_config,
-    )
-    logger.info("dispatching masters for %d night(s)", len(datecodes))
-    masters_rc = subprocess.run(masters_argv, cwd=kpfpipe.REPO_ROOT).returncode
+    # Step 3: build every night's masters, unless --no-masters. The masters
+    # orchestrator fans out one reduce subprocess per night and streams its own
+    # batch log; it is fail-soft, so a night that fails to build is reported
+    # without aborting the run. A skipped stage's exit code is None (not a
+    # failure) so the final exit reflects only the stages that ran.
+    masters_rc = None
+    if args.masters:
+        masters_argv = _orchestrator_argv(
+            "masters",
+            "--dates",
+            datecodes,
+            common_forward,
+            recipe=masters_recipe,
+            config=masters_config,
+        )
+        logger.info("dispatching masters for %d night(s)", len(datecodes))
+        masters_rc = subprocess.run(masters_argv, cwd=kpfpipe.REPO_ROOT).returncode
+    else:
+        logger.info("skipping masters stage (--no-masters)")
 
-    # Step 4: reduce every discovered science frame. The science orchestrator fans
-    # out one reduce subprocess per frame and streams its own batch log; it is
-    # fail-soft and reports per-frame failures, so a frame whose masters failed to
-    # build simply fails there -- no gating happens in this wrapper.
-    science_argv = _orchestrator_argv(
-        "science",
-        "--obs_ids",
-        obs_ids,
-        science_forward,
-        recipe=science_recipe,
-        config=science_config,
-    )
-    logger.info("dispatching science for %d frame(s)", len(obs_ids))
-    science_rc = subprocess.run(science_argv, cwd=kpfpipe.REPO_ROOT).returncode
+    # Step 4: reduce every discovered science frame, unless --no-science. The
+    # science orchestrator fans out one reduce subprocess per frame and streams its
+    # own batch log; it is fail-soft and reports per-frame failures, so a frame
+    # whose masters failed to build simply fails there -- no gating happens here.
+    science_rc = None
+    if args.science:
+        science_argv = _orchestrator_argv(
+            "science",
+            "--obs_ids",
+            obs_ids,
+            science_forward,
+            recipe=science_recipe,
+            config=science_config,
+        )
+        logger.info("dispatching science for %d frame(s)", len(obs_ids))
+        science_rc = subprocess.run(science_argv, cwd=kpfpipe.REPO_ROOT).returncode
+    else:
+        logger.info("skipping science stage (--no-science)")
 
-    logger.info("done: masters exit %d, science exit %d", masters_rc, science_rc)
+    logger.info(
+        "done: masters exit %s, science exit %s",
+        "skipped" if masters_rc is None else masters_rc,
+        "skipped" if science_rc is None else science_rc,
+    )
     if masters_rc or science_rc:
         sys.exit(1)
 

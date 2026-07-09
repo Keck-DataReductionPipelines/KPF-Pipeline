@@ -100,6 +100,15 @@ class TestParseArgs:
         assert ns.masters_recipe == "/m.py" and ns.masters_config == "/m.toml"
         assert ns.science_recipe == "/s.py" and ns.science_config == "/s.toml"
 
+    def test_stage_toggles_default_on(self, ts):
+        # Both stages run unless explicitly opted out.
+        ns = ts.parse_args(_BASE_ARGS)
+        assert ns.masters is True and ns.science is True
+
+    def test_stage_toggles_opt_out(self, ts):
+        ns = ts.parse_args(_BASE_ARGS + ["--no-masters", "--no-science"])
+        assert ns.masters is False and ns.science is False
+
     def test_jobs_unset_stays_none(self, ts):
         # Unset --jobs is left None so each stage picks its own default; the
         # discovery scan falls back to _default_science_jobs() in main().
@@ -315,6 +324,37 @@ class TestMainDispatch:
         assert ts.DEFAULT_MASTERS_CONFIG in calls[0]
         assert ts.DEFAULT_SCIENCE_RECIPE in calls[1]
         assert ts.DEFAULT_SCIENCE_CONFIG in calls[1]
+
+    def test_no_masters_skips_masters_stage(self, ts, monkeypatch, tmp_path):
+        # --no-masters runs only the science stage.
+        a = _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS + ["--no-masters"])
+
+        assert len(calls) == 1
+        assert "scripts.processing.science" in calls[0] and a in calls[0]
+        assert not any("scripts.processing.masters" in c for c in calls)
+
+    def test_no_science_skips_science_stage(self, ts, monkeypatch, tmp_path):
+        # --no-science runs only the masters stage.
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS + ["--no-science"])
+
+        assert len(calls) == 1
+        assert "scripts.processing.masters" in calls[0]
+        assert not any("scripts.processing.science" in c for c in calls)
+
+    def test_both_stages_skipped_runs_nothing(self, ts, monkeypatch, tmp_path):
+        # Skipping both stages dispatches no subprocess and exits cleanly.
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS + ["--no-masters", "--no-science"])
+
+        assert calls == []
 
     def test_no_skip_logs_written(self, ts, monkeypatch, tmp_path):
         # The gate is gone: no stand-in per-frame skip logs are ever written.
