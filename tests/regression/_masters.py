@@ -1,4 +1,4 @@
-"""Shared helpers for master-frame unit tests (test_masters_base, bias, dark).
+"""Shared helpers for master-frame unit tests (test_master_base, bias, dark).
 
 Not a test module (no ``test_`` prefix), so pytest does not collect it.
 """

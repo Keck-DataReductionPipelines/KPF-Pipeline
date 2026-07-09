@@ -173,7 +173,7 @@ class TestRunFoldsDiagnosticsAndQC:
         assert calls[0] == "diag"
         assert calls[1] == "qc"
         assert "checkpoint" in calls[2:]
-        # QC's result dict is captured for callers (e.g. scripts/qc.py).
+        # QC's result dict is captured for callers (e.g. scripts/quality_control/qc.py).
         assert chk.qc_results == {"ISGOOD": (True, "")}
 
     def test_missing_paired_classes_skip_those_stages(self):

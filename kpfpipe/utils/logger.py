@@ -174,10 +174,12 @@ def setup_logging(
 
 
 def setup_batch_logging(log_dir, label, level="INFO", console=True):
-    """Install per-invocation handlers for a batch orchestrator (masters/science).
+    """Install per-invocation handlers for a batch driver.
 
-    Sibling to ``setup_logging``: same root-handler machinery and file layout,
-    but for the fan-out drivers rather than one recipe. Writes
+    Called by the ``masters``/``science`` orchestrators and the ``timeseries``
+    wrapper (``label`` is the stage name). Sibling to ``setup_logging``: same
+    root-handler machinery and file layout, but for the fan-out drivers rather
+    than one recipe. Writes
     ``{log_dir}/{YYYYMMDD}/kpf_{label}_batch_{stamp}.log``, recording the batch's
     own decision points -- units dispatched, canary result, per-unit ok/failed,
     and the failure sentinels -- alongside (not replacing) each unit's

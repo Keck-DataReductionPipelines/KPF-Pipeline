@@ -47,10 +47,10 @@ def _usage():
     return (
         "usage: kpfpipe <command> [options]\n\n"
         "commands:\n"
-        "  run             reduce one recipe on one unit, in-process (the leaf)\n"
-        "  masters         build nightly master calibrations for a set of datecodes\n"
-        "  science         reduce a set of science frames end-to-end (L0 -> L4)\n"
-        "  timeseries      reduce a star's RV timeseries over a datecode range\n"
+        "  run              reduce one recipe on one unit, in-process (the leaf)\n"
+        "  masters          build nightly master calibrations for a set of datecodes\n"
+        "  science          reduce a set of science frames end-to-end (L0 -> L4)\n"
+        "  timeseries       reduce a star's RV timeseries over a datecode range\n"
         "  plot-timeseries  plot a star's RV timeseries from its L4 products\n\n"
         "Run `kpfpipe <command> -h` for a command's own options."
     )

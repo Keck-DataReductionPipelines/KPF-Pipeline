@@ -3,10 +3,11 @@
 Standalone QLP (quicklook plot) generator.
 
 Usage:
-    python scripts/qlp.py --obs_id KP.20240405.03637.74 --level L0 --config <toml>
+    python scripts/quality_control/qlp.py \
+        --obs_id KP.20240405.03637.74 --level L0 --config <toml>
 
     # Or specify paths directly:
-    python scripts/qlp.py --input <file> --level L0 --output_dir <dir>
+    python scripts/quality_control/qlp.py --input <file> --level L0 --output_dir <dir>
 """
 
 import argparse

@@ -153,7 +153,7 @@ collects it):
   dedicated *profiling* harness: attribution charges its work to the right
   `base.py` methods inside `profile_master_bias.py` / `profile_master_dark.py`, so
   a separate engine profile would be redundant. (The *test* suite does isolate it —
-  see `regression/test_masters_base.py` under *Masters test layout* below —
+  see `regression/test_master_base.py` under *Masters test layout* below —
   because profiling partitions by wall-clock while tests partition by
   responsibility.)
 - **Data.** Real (gitignored) `tests/testdata` frames at realistic sizes; each
@@ -294,7 +294,10 @@ its own argparse). The commands:
   `python -m scripts.processing.science --obs_ids …` subprocess, and **one**
   `python -m scripts.plots.plot_timeseries --obs_ids …` subprocess (steps 3–5) — it
   does *not* use `_dispatch.run_stage` itself (that would fan out leaves; here the
-  two orchestrators each fan out and stream their own batch log). All three stages
+  two orchestrators each fan out and stream their own batch log). It still calls
+  `setup_batch_logging` at the top of `main()`, writing its **own**
+  `kpf_timeseries_batch_*.log` (discovery + the per-stage dispatch trail) alongside
+  each sub-orchestrator's batch log. All three stages
   are independently skippable — `--no-masters` / `--no-science` / `--no-plots`
   (default on) — and fail-soft: every discovered frame is handed to science
   regardless of the masters result (a frame whose masters failed to build simply
@@ -339,7 +342,7 @@ of the dispatcher above it.
 
 ### Logging (issue #1408; WMKO DRP-RUN-07/08/09)
 
-Handler/level configuration lives in exactly one *module*, `kpfpipe.utils.logger`, via **two sibling entry points** (never at import time, never in recipes/modules/tests): `setup_logging` — called only by the single-recipe leaf runner (`scripts/processing/reduce.py` — the `kpfpipe run` entry) before the recipe runs, writing that reduction's per-unit log with a stderr console echo; and `setup_batch_logging` — a thin wrapper called once at the top of each orchestrator's `main()` (`scripts/processing/masters.py`/`science.py`), writing a `kpf_{label}_batch_{stamp}.log` summary of the *batch's own* decision points (dispatch banner, per-unit ok/FAILED, failure sentinels) with the console echo pinned to **stdout** so an operator can watch fan-out progress live. The orchestrators (and the shared `_dispatch.py` engine) emit their narration through named loggers, not `print()`. Because the orchestrators still fan `reduce` out as one subprocess per unit, **each reduction also gets exactly one `setup_logging` call and its own per-unit log file** — the batch log sits alongside, not in place of, the per-unit logs. Both siblings write one UT-timestamped file per invocation under the `[LOGGER] log_dir` config key (`log_level`, `console` also supported; CLI overrides `--log_dir`/`--log_level`); a missing `log_dir` is fatal in the leaf *and* the orchestrators (DRP-RUN-07). Library code just declares `logger = logging.getLogger(__name__)` and must work with no handlers installed — tests call `recipe.main(config, args)` directly with no logging configured, so setup must never move into recipes. `warnings.warn` remains the recoverable-condition API, bridged into the log via `logging.captureWarnings`. Tests that call `setup_logging`/`setup_batch_logging` must tear down via `kpfpipe.utils.logger.teardown_logging` inside the same test (see the autouse fixture in `tests/regression/test_logger.py` — pytest's per-test `catch_warnings` context otherwise strands `logging._warnings_showwarning`). *(Coding rules — levels, lazy `%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
+Handler/level configuration lives in exactly one *module*, `kpfpipe.utils.logger`, via **two sibling entry points** (never at import time, never in recipes/modules/tests): `setup_logging` — called only by the single-recipe leaf runner (`scripts/processing/reduce.py` — the `kpfpipe run` entry) before the recipe runs, writing that reduction's per-unit log with a stderr console echo; and `setup_batch_logging` — a thin wrapper called once at the top of each fan-out driver's `main()` (the `scripts/processing/masters.py`/`science.py` orchestrators **and** the `timeseries.py` wrapper — three callers, `label` ∈ `masters`/`science`/`timeseries`), writing a `kpf_{label}_batch_{stamp}.log` summary of the *batch's own* decision points (dispatch banner, per-unit ok/FAILED, failure sentinels; for `timeseries`, its discovery + per-stage dispatch trail) with the console echo pinned to **stdout** so an operator can watch fan-out progress live. The orchestrators (and the shared `_dispatch.py` engine) emit their narration through named loggers, not `print()`. Because the orchestrators still fan `reduce` out as one subprocess per unit, **each reduction also gets exactly one `setup_logging` call and its own per-unit log file** — the batch log sits alongside, not in place of, the per-unit logs. Both siblings write one UT-timestamped file per invocation under the `[LOGGER] log_dir` config key (`log_level`, `console` also supported; CLI overrides `--log_dir`/`--log_level`); a missing `log_dir` is fatal in the leaf *and* the orchestrators (DRP-RUN-07). Library code just declares `logger = logging.getLogger(__name__)` and must work with no handlers installed — tests call `recipe.main(config, args)` directly with no logging configured, so setup must never move into recipes. `warnings.warn` remains the recoverable-condition API, bridged into the log via `logging.captureWarnings`. Tests that call `setup_logging`/`setup_batch_logging` must tear down via `kpfpipe.utils.logger.teardown_logging` inside the same test (see the autouse fixture in `tests/regression/test_logger.py` — pytest's per-test `catch_warnings` context otherwise strands `logging._warnings_showwarning`). *(Coding rules — levels, lazy `%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
 
 ### Filename conventions
 
@@ -363,7 +366,7 @@ Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs
 - **QC infrastructure is present, checks deferred.** Both levels carry `QUALITY_CONTROL` + `RECEIPT` for later wiring; no masters QC checks or DRP-provenance stamping exist yet.
 
 **Masters test layout.** The masters tests are split by *what they exercise*, not just
-by module. `BaseMasterModule` is abstract, so `tests/regression/test_masters_base.py`
+by module. `BaseMasterModule` is abstract, so `tests/regression/test_master_base.py`
 unit-tests the **shared engine** — stacking (rate estimator, per-pixel rejection,
 datacube clipping), calibration resolve/apply/load, frame-load guards, array cleaning,
 and the shared L1 output contract (dtype provenance, `save_master`) — driving it through
@@ -377,7 +380,7 @@ WLS builds an ML2 and does not use the L1 stacking engine, so it is tested per-W
 on its own. `test_masters_recipe.py` covers only the `kpf_drp_masters` recipe (its
 FileHandler/path-builder unit tests live in `test_io.py`). Shared synthetic fixtures live
 in `tests/regression/_masters.py`. `flat` has no test file (stubbed, no `make_master_l1`
-yet). **A test belongs in `test_masters_base.py` iff it exercises a `base.py` method
+yet). **A test belongs in `test_master_base.py` iff it exercises a `base.py` method
 vehicle-incidentally; module-specific behavior stays in `test_master_<type>.py`.**
 
 ### RVDataModel Base Class
@@ -386,7 +389,7 @@ The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (top-level Ord
 
 ### Diagnostics, QC, Checkpoints, and Quicklook
 
-Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote. The recipe drives all three through a **single `CheckpointL{n}(obj).run()` call**: `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly. The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g. `scripts/qc.py`). A level with no paired class skips that stage. The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags + `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4 products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END/ELAPSED timing-consistency flag, is an L0 check whose result rides forward this way).
+Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote. The recipe drives all three through a **single `CheckpointL{n}(obj).run()` call**: `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly. The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g. `scripts/quality_control/qc.py`). A level with no paired class skips that stage. The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags + `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4 products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END/ELAPSED timing-consistency flag, is an L0 check whose result rides forward this way).
 
 - **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
 - **QC** (`kpfpipe/quality_control/qc_flags/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. `ISGOOD` is the **running** aggregate — the AND over every QC flag accumulated on QUALITY_CONTROL so far (this level's checks *plus* those propagated from lower levels), not just this level's checks. No validation or raising — that is the Checkpoints layer's job.

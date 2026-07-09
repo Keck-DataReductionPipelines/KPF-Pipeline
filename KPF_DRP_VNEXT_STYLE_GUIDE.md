@@ -520,8 +520,8 @@ class StageName:
   (flake8-logging-format — lazy `%`-formatting in log calls), `LOG` (flake8-logging —
   named loggers only). Line length (`E501`) is
   enforced at 88. `__init__.py` is exempt from `F401` (re-exports). Ruff's scope is
-  `kpfpipe/`, `tests/`, `recipes/`; `legacy/`, `gjgilbert_notebooks/`, and `scripts/`
-  (unimplemented pseudocode stubs) are excluded.
+  `kpfpipe/`, `tests/`, `recipes/`, `scripts/`, and `tools/`; only `legacy/` and
+  `gjgilbert_notebooks/` are excluded.
 - **Quote style → double quotes** (ruff/black default). The codebase follows the formatter's
   rule (prefer `"`, but keep `'` where switching would add escapes — e.g. `'say "hi"'` stays
   single). Triple-quoted strings use `"""`; f-strings, raw, and byte strings follow the same
