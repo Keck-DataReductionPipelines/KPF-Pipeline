@@ -101,13 +101,13 @@ class TestParseArgs:
         assert ns.science_recipe == "/s.py" and ns.science_config == "/s.toml"
 
     def test_stage_toggles_default_on(self, ts):
-        # Both stages run unless explicitly opted out.
+        # All three stages run unless explicitly opted out.
         ns = ts.parse_args(_BASE_ARGS)
-        assert ns.masters is True and ns.science is True
+        assert ns.masters is True and ns.science is True and ns.plots is True
 
     def test_stage_toggles_opt_out(self, ts):
-        ns = ts.parse_args(_BASE_ARGS + ["--no-masters", "--no-science"])
-        assert ns.masters is False and ns.science is False
+        ns = ts.parse_args(_BASE_ARGS + ["--no-masters", "--no-science", "--no-plots"])
+        assert ns.masters is False and ns.science is False and ns.plots is False
 
     def test_jobs_unset_stays_none(self, ts):
         # Unset --jobs is left None so each stage picks its own default; the
@@ -143,7 +143,6 @@ class TestParseArgs:
         [
             "--file_limit",
             "--plots_only",
-            "--plot_dir",
             "--group_bursts",
             "--skip_existing_masters",
             "--skip_existing_science",
@@ -260,7 +259,7 @@ class TestDiscoverScienceObsIds:
 
 
 # ---------------------------------------------------------------------------
-# main: dispatch order (masters then science, all discovered frames)
+# main: dispatch order (masters -> science -> plots) and the stage toggles
 # ---------------------------------------------------------------------------
 
 
@@ -304,16 +303,16 @@ class TestMainDispatch:
         monkeypatch.setattr(ts.subprocess, "run", _run)
         return calls
 
-    def test_masters_then_science_all_frames(self, ts, monkeypatch, tmp_path):
-        # Every discovered frame is handed to science regardless of masters results
-        # (no gating): masters is dispatched first, then science with all frames.
+    def test_masters_science_plots_dispatch(self, ts, monkeypatch, tmp_path):
+        # All three stages run in order: masters, then science with every discovered
+        # frame (no gating), then plots handed the same frames (no rescan).
         a = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         b = _write_l0(str(tmp_path), "20240102", 3600, "10700")
         calls = self._patch(ts, monkeypatch, tmp_path)
 
         ts.main(_BASE_ARGS)
 
-        assert len(calls) == 2
+        assert len(calls) == 3
         assert "scripts.processing.masters" in calls[0]
         assert "20240101" in calls[0] and "20240102" in calls[0]  # both nights
         assert "scripts.processing.science" in calls[1]
@@ -324,35 +323,62 @@ class TestMainDispatch:
         assert ts.DEFAULT_MASTERS_CONFIG in calls[0]
         assert ts.DEFAULT_SCIENCE_RECIPE in calls[1]
         assert ts.DEFAULT_SCIENCE_CONFIG in calls[1]
+        # Plot stage: the discovered frames (no rescan), reading from the science
+        # output root, writing to its default {KPF_SCIENCE_OUTPUT}/QLP/timeseries.
+        assert "scripts.plots.plot_timeseries" in calls[2]
+        assert a in calls[2] and b in calls[2]
+        assert "/sci" in calls[2]
+        assert "/sci/QLP/timeseries" in calls[2]
+
+    def test_plot_dir_override(self, ts, monkeypatch, tmp_path):
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS + ["--plot_dir", "/custom/plots"])
+
+        assert "scripts.plots.plot_timeseries" in calls[2]
+        assert "/custom/plots" in calls[2]
 
     def test_no_masters_skips_masters_stage(self, ts, monkeypatch, tmp_path):
-        # --no-masters runs only the science stage.
+        # --no-masters runs the science and plots stages only.
         a = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         calls = self._patch(ts, monkeypatch, tmp_path)
 
         ts.main(_BASE_ARGS + ["--no-masters"])
 
-        assert len(calls) == 1
+        assert len(calls) == 2
         assert "scripts.processing.science" in calls[0] and a in calls[0]
+        assert "scripts.plots.plot_timeseries" in calls[1]
         assert not any("scripts.processing.masters" in c for c in calls)
 
-    def test_no_science_skips_science_stage(self, ts, monkeypatch, tmp_path):
-        # --no-science runs only the masters stage.
+    def test_no_science_still_plots(self, ts, monkeypatch, tmp_path):
+        # --no-science runs masters, then plots the L4 already on disk.
         _write_l0(str(tmp_path), "20240101", 3600, "10700")
         calls = self._patch(ts, monkeypatch, tmp_path)
 
         ts.main(_BASE_ARGS + ["--no-science"])
 
-        assert len(calls) == 1
+        assert len(calls) == 2
         assert "scripts.processing.masters" in calls[0]
+        assert "scripts.plots.plot_timeseries" in calls[1]
         assert not any("scripts.processing.science" in c for c in calls)
 
-    def test_both_stages_skipped_runs_nothing(self, ts, monkeypatch, tmp_path):
-        # Skipping both stages dispatches no subprocess and exits cleanly.
+    def test_no_plots_skips_plot_stage(self, ts, monkeypatch, tmp_path):
+        # --no-plots runs masters + science but no plotter.
         _write_l0(str(tmp_path), "20240101", 3600, "10700")
         calls = self._patch(ts, monkeypatch, tmp_path)
 
-        ts.main(_BASE_ARGS + ["--no-masters", "--no-science"])
+        ts.main(_BASE_ARGS + ["--no-plots"])
+
+        assert len(calls) == 2
+        assert not any("scripts.plots.plot_timeseries" in c for c in calls)
+
+    def test_all_stages_skipped_runs_nothing(self, ts, monkeypatch, tmp_path):
+        # Skipping every stage dispatches no subprocess and exits cleanly.
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS + ["--no-masters", "--no-science", "--no-plots"])
 
         assert calls == []
 

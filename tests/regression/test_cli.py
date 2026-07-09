@@ -14,7 +14,9 @@ from tools import cli
 
 
 class TestDispatch:
-    @pytest.mark.parametrize("command", ["run", "masters", "science"])
+    @pytest.mark.parametrize(
+        "command", ["run", "masters", "science", "timeseries", "plot-timeseries"]
+    )
     def test_routes_to_command_with_forwarded_argv(self, command, monkeypatch):
         seen = []
         monkeypatch.setitem(cli._COMMANDS, command, lambda rest: seen.append(rest))
@@ -33,6 +35,7 @@ class TestUsage:
         out = capsys.readouterr().out
         assert "usage: kpfpipe <command>" in out
         assert "run" in out and "masters" in out and "science" in out
+        assert "timeseries" in out and "plot-timeseries" in out
 
     @pytest.mark.parametrize("flag", ["-h", "--help"])
     def test_help_flag_prints_usage(self, flag, capsys):

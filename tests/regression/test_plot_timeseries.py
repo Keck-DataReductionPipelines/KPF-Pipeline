@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+from kpfpipe.utils.io import kpf_filepath
 from scripts.plots import plot_timeseries as _pt
 
 _BASE_ARGS = [
@@ -20,6 +21,7 @@ _BASE_ARGS = [
     "--date_range", "20240101", "20240131",
     "--data_dir", "/data", "--plot_dir", "/plots",
 ]  # fmt: skip
+_OID = "KP.20240101.03600.00"
 
 
 @pytest.fixture(scope="module")
@@ -42,6 +44,17 @@ def _write_l4(data_dir, datecode, seconds, obj, bjd, rv, rverr):
     hdr = fits.Header({"OBJECT": obj, "BJDTDB": bjd, "RV": rv, "RVERR": rverr})
     fits.PrimaryHDU(header=hdr).writeto(path)
     return str(path)
+
+
+def _write_l4_for(data_dir, obs_id, obj, bjd=2.4e6, rv=1.0, rverr=0.3):
+    """Write an L4 at the exact kpf_filepath location for `obs_id`; return the path."""
+    import os
+
+    path = kpf_filepath(obs_id, "L4", data_root=data_dir)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    hdr = fits.Header({"OBJECT": obj, "BJDTDB": bjd, "RV": rv, "RVERR": rverr})
+    fits.PrimaryHDU(header=hdr).writeto(path)
+    return path
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +99,45 @@ class TestParseArgs:
         # --group_bursts no longer exists (grouping is always on).
         with pytest.raises(SystemExit):
             pt.parse_args(_BASE_ARGS + ["--group_bursts"])
+
+    def test_obs_ids_source_valid(self, pt):
+        ns = pt.parse_args(
+            [
+                "--target",
+                "10700",
+                "--obs_ids",
+                _OID,
+                "--data_dir",
+                "/d",
+                "--plot_dir",
+                "/p",
+            ]  # fmt: skip
+        )
+        assert ns.obs_ids == [_OID] and ns.date_range is None
+
+    def test_date_range_and_obs_ids_mutually_exclusive(self, pt):
+        with pytest.raises(SystemExit):
+            pt.parse_args(_BASE_ARGS + ["--obs_ids", _OID])
+
+    def test_neither_source_errors(self, pt):
+        # Exactly one of --date_range / --obs_ids is required.
+        with pytest.raises(SystemExit):
+            pt.parse_args(["--target", "x", "--data_dir", "/d", "--plot_dir", "/p"])
+
+    def test_invalid_obs_id_errors(self, pt):
+        with pytest.raises(SystemExit):
+            pt.parse_args(
+                [
+                    "--target",
+                    "10700",
+                    "--obs_ids",
+                    "not-an-obs-id",
+                    "--data_dir",
+                    "/d",
+                    "--plot_dir",
+                    "/p",
+                ]  # fmt: skip
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +184,42 @@ class TestDiscoverL4Files:
     def test_missing_l4_root_exits(self, pt, tmp_path):
         with pytest.raises(SystemExit):
             pt.discover_l4_files(str(tmp_path), "10700", "20240101", "20240131", 4)
+
+
+# ---------------------------------------------------------------------------
+# l4_paths_for_obs_ids: explicit obs_ids, no scan
+# ---------------------------------------------------------------------------
+
+
+class TestL4PathsForObsIds:
+    def test_builds_paths_from_obs_ids(self, pt, tmp_path):
+        a = _write_l4_for(str(tmp_path), "KP.20240101.03600.00", "10700")
+        b = _write_l4_for(str(tmp_path), "KP.20240102.03600.00", "10700")
+        got = pt.l4_paths_for_obs_ids(
+            str(tmp_path), ["KP.20240102.03600.00", "KP.20240101.03600.00"], "10700"
+        )
+        assert got == sorted([a, b])
+
+    def test_skips_missing_l4(self, pt, tmp_path, capsys):
+        a = _write_l4_for(str(tmp_path), "KP.20240101.03600.00", "10700")
+        # The second obs_id has no L4 on disk -> warned and skipped, not fatal.
+        got = pt.l4_paths_for_obs_ids(
+            str(tmp_path), ["KP.20240101.03600.00", "KP.20240101.07200.00"], "10700"
+        )
+        assert got == [a]
+        assert "no L4 product for KP.20240101.07200.00" in capsys.readouterr().out
+
+    def test_mismatched_object_warns_but_kept(self, pt, tmp_path, capsys):
+        # A frame whose L4 OBJECT != target is plotted anyway, with a warning.
+        a = _write_l4_for(str(tmp_path), "KP.20240101.03600.00", "99999")
+        got = pt.l4_paths_for_obs_ids(str(tmp_path), ["KP.20240101.03600.00"], "10700")
+        assert got == [a]
+        out = capsys.readouterr().out
+        assert "not target '10700'" in out and "plotting anyway" in out
+
+    def test_exits_when_none_present(self, pt, tmp_path):
+        with pytest.raises(SystemExit):
+            pt.l4_paths_for_obs_ids(str(tmp_path), ["KP.20240101.03600.00"], "10700")
 
 
 # ---------------------------------------------------------------------------
@@ -257,3 +345,31 @@ class TestMain:
         assert captured["target"] == "10700"
         assert captured["paths"] == [a]
         assert captured["plot_dir"] == str(tmp_path / "p")
+
+    def test_obs_ids_branch_builds_paths_without_scan(self, pt, tmp_path, monkeypatch):
+        # --obs_ids builds paths directly; a bogus scan would raise if reached.
+        a = _write_l4_for(str(tmp_path), "KP.20240101.03600.00", "10700")
+        captured = {}
+        monkeypatch.setattr(
+            pt, "plot_rv_timeseries", lambda t, p, d: captured.update(paths=p)
+        )
+        monkeypatch.setattr(
+            pt,
+            "discover_l4_files",
+            lambda *a, **k: pytest.fail(
+                "discover should not be called in obs_ids mode"
+            ),
+        )
+        pt.main(
+            [
+                "--target",
+                "10700",
+                "--obs_ids",
+                "KP.20240101.03600.00",
+                "--data_dir",
+                str(tmp_path),
+                "--plot_dir",
+                str(tmp_path / "p"),
+            ]  # fmt: skip
+        )
+        assert captured["paths"] == [a]

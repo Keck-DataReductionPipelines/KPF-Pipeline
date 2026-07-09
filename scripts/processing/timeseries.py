@@ -8,24 +8,26 @@ star and an inclusive datecode range, it
   1. combs the L0 input tree for that target's raw science frames (obs_ids),
   2. infers the unique nights (datecodes) those frames span,
   3. builds the nightly calibration masters for those nights (``kpfpipe masters``),
-  4. reduces every science frame end-to-end, L0 -> L4 (``kpfpipe science``).
+  4. reduces every science frame end-to-end, L0 -> L4 (``kpfpipe science``),
+  5. plots the RV timeseries from those L4 products (``plot_timeseries``).
 
-It reimplements no pipeline logic: steps 3 and 4 each run **one**
-``python -m scripts.processing.{masters,science}`` subprocess -- the existing
-orchestrators, which themselves fan out one ``reduce`` subprocess per unit, each
-with its own log, clean process state, and independent exit code. So this script
-owns only the discovery (steps 1-2) and the dispatch; the robust fan-out,
-canary-then-pool, timeout, and interrupt handling live in the orchestrators.
+It reimplements no pipeline logic: steps 3-5 each run **one** subprocess -- the
+masters/science orchestrators (which themselves fan out one ``reduce`` subprocess
+per unit, each with its own log, clean process state, and independent exit code)
+and the standalone plotter. So this script owns only the discovery (steps 1-2) and
+the dispatch; the robust fan-out, canary-then-pool, timeout, and interrupt
+handling live in the orchestrators. The plotter is handed the already-discovered
+obs_ids (``--obs_ids``), so it does no second file scan.
 
-Both stages run by default; ``--no-masters`` and ``--no-science`` skip either one
-(discovery always runs, since both stages consume it). Both stages are fail-soft:
-a night whose masters fail to build (e.g. the known WLS failure mode) is reported
-by the masters stage, and every discovered frame is still handed to the science
-stage -- a frame whose required masters are missing simply fails there and is
-reported per-frame. The run exits nonzero if either stage reported a failure.
-
-Plotting the timeseries (RV vs BJD_TDB) is deferred to a follow-up; that code is
-parked verbatim in ``notes/tmp_rv_plot.py``.
+All three stages run by default; ``--no-masters`` / ``--no-science`` / ``--no-plots``
+skip any of them (discovery always runs, since every stage consumes it). The
+stages are fail-soft: a night whose masters fail to build (e.g. the known WLS
+failure mode) is reported by the masters stage, and every discovered frame is
+still handed to the science stage -- a frame whose required masters are missing
+simply fails there and is reported per-frame. Plotting runs independently of the
+science stage (with ``--no-science`` it plots whatever L4 is already on disk),
+writing to ``{KPF_SCIENCE_OUTPUT}/QLP/timeseries`` unless ``--plot_dir`` overrides
+it. The run exits nonzero if any stage that ran reported a failure.
 
     kpfpipe timeseries --target 10700 --date_range 20240101 20240131
 """
@@ -86,10 +88,11 @@ def parse_args(argv=None):
         required=True,
         help="inclusive datecode range, e.g. --date_range 20240101 20240131",
     )
-    # Stage toggles: both stages run by default, so skipping one is an explicit
-    # opt-out (--no-masters / --no-science). These are timeseries' own toggles for
-    # which *stage* to run -- unrelated to reduce's --masters/--science recipe
-    # shortcuts (defined only on that leaf's parser, not shared here).
+    # Stage toggles: all three stages run by default, so skipping one is an
+    # explicit opt-out (--no-masters / --no-science / --no-plots). These are
+    # timeseries' own toggles for which *stage* to run -- unrelated to reduce's
+    # --masters/--science recipe shortcuts (defined only on that leaf's parser,
+    # not shared here).
     ap.add_argument(
         "--masters",
         action=argparse.BooleanOptionalAction,
@@ -101,6 +104,19 @@ def parse_args(argv=None):
         action=argparse.BooleanOptionalAction,
         default=True,
         help="run the science reduction stage (default: on; pass --no-science to skip)",
+    )
+    ap.add_argument(
+        "--plots",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="run the RV-timeseries plotting stage (default: on; pass --no-plots "
+        "to skip)",
+    )
+    ap.add_argument(
+        "--plot_dir",
+        default=None,
+        help="directory for the RV plots (default: "
+        "{KPF_SCIENCE_OUTPUT}/QLP/timeseries)",
     )
     # Two recipe/config pairs (masters + science), so the shared single -r/-c
     # recipe_and_config_parser does not fit; each is forwarded to its stage only
@@ -307,6 +323,11 @@ def main(argv=None):
     if args.kpf_science_output:
         science_forward += ["--kpf_science_output", args.kpf_science_output]
 
+    # The plotting stage reads L4 straight from the science output root, and writes
+    # to {KPF_SCIENCE_OUTPUT}/QLP/timeseries unless --plot_dir overrides it.
+    science_output = args.kpf_science_output or science_dirs["KPF_SCIENCE_OUTPUT"]
+    plot_dir = args.plot_dir or os.path.join(science_output, "QLP", "timeseries")
+
     # Batch banner: the start of this invocation's decision trail.
     logger.info("kpfpipe %s timeseries batch starting", kpfpipe.__version__)
     logger.info("argv: %s", " ".join(sys.argv))
@@ -367,12 +388,37 @@ def main(argv=None):
     else:
         logger.info("skipping science stage (--no-science)")
 
+    # Step 5: plot the RV timeseries, unless --no-plots. The plotter builds the L4
+    # paths straight from the already-discovered obs_ids (no second scan) and reads
+    # them off the science output root. It runs independently of the science stage
+    # -- with --no-science it plots whatever L4 is already on disk.
+    plots_rc = None
+    if args.plots:
+        plot_argv = [
+            sys.executable,
+            "-m",
+            "scripts.plots.plot_timeseries",
+            "--target",
+            args.target,
+            "--data_dir",
+            science_output,
+            "--plot_dir",
+            plot_dir,
+            "--obs_ids",
+            *obs_ids,
+        ]
+        logger.info("dispatching plots for %d frame(s) -> %s", len(obs_ids), plot_dir)
+        plots_rc = subprocess.run(plot_argv, cwd=kpfpipe.REPO_ROOT).returncode
+    else:
+        logger.info("skipping plots stage (--no-plots)")
+
     logger.info(
-        "done: masters exit %s, science exit %s",
+        "done: masters exit %s, science exit %s, plots exit %s",
         "skipped" if masters_rc is None else masters_rc,
         "skipped" if science_rc is None else science_rc,
+        "skipped" if plots_rc is None else plots_rc,
     )
-    if masters_rc or science_rc:
+    if masters_rc or science_rc or plots_rc:
         sys.exit(1)
 
 

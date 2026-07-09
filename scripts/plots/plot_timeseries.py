@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Plot a single star's RV timeseries from its L4 products on disk.
 
-A lean, standalone post-reduction plotter: given a target star and an inclusive
-datecode range, it combs the L4 output tree for that target's products, reads the
-RV summary keywords from each L4 PRIMARY header, and renders the RV-vs-date plot.
-It runs *after* the reduction (``kpfpipe timeseries``) has written the L4 files;
-it reads headers only and never touches the pipeline.
+A lean, standalone post-reduction plotter. The frames come from one of two
+sources: ``--date_range`` combs the L4 output tree for a target's products over an
+inclusive datecode range, or ``--obs_ids`` names them explicitly (their L4 paths
+are built directly from ``--data_dir``, skipping the scan -- how ``kpfpipe
+timeseries`` hands off the set it already discovered). Either way it reads the RV
+summary keywords from each L4 PRIMARY header and renders the RV-vs-date plot. It
+runs *after* the reduction has written the L4 files; it reads headers only and
+never touches the pipeline.
 
 Bursts of rapid-succession frames are always collapsed to one RVERR-weighted
 point (revisits stay distinct): the individual frames are drawn as a faint grey
@@ -19,6 +22,10 @@ Two PNGs land in ``--plot_dir``: ``{target}_rv_timeseries.png`` always, and
 
     python -m scripts.plots.plot_timeseries --target 10700 \\
         --date_range 20240101 20240131 \\
+        --data_dir /data/kpf/science --plot_dir ./plots
+
+    python -m scripts.plots.plot_timeseries --target 10700 \\
+        --obs_ids KP.20240101.03600.00 KP.20240101.03660.00 \\
         --data_dir /data/kpf/science --plot_dir ./plots
 """
 
@@ -35,8 +42,8 @@ import numpy as np
 from astropy.io import fits
 
 import kpfpipe
-from kpfpipe.utils.io import datecode_dirs_in_range
-from kpfpipe.utils.kpf_utils import is_datecode
+from kpfpipe.utils.io import datecode_dirs_in_range, kpf_filepath
+from kpfpipe.utils.kpf_utils import is_datecode, is_obs_id
 from kpfpipe.utils.stats import flag_outliers
 
 _REPO = kpfpipe.REPO_ROOT
@@ -109,6 +116,46 @@ def discover_l4_files(data_dir, target, start, end, jobs):
             f"{start}..{end} under {l4_root}"
         )
     return l4_paths
+
+
+def l4_paths_for_obs_ids(data_dir, obs_ids, target):
+    """L4 product paths for an explicit obs_id list, built without a directory scan.
+
+    The counterpart to discover_l4_files for when the caller already knows the
+    frames (e.g. timeseries, which discovered and reduced them): each obs_id's L4
+    path is built directly with kpf_filepath(obs_id, 'L4', data_root=data_dir), so
+    no L4 tree is walked. Every supplied obs_id whose L4 is present is plotted --
+    including one whose L4 OBJECT does not match `target` (warned, not dropped, so
+    a header/target mismatch is surfaced without silently discarding data). An
+    obs_id whose L4 is absent or unreadable (e.g. its reduction failed) is warned
+    and skipped. Exits loudly only when none of the supplied obs_ids have an L4.
+    """
+    paths = []
+    for oid in obs_ids:
+        path = kpf_filepath(oid, "L4", data_root=data_dir)
+        if not os.path.isfile(path):
+            print(f"  warning: no L4 product for {oid} at {path}; skipping", flush=True)
+            continue
+        try:
+            obj = fits.getheader(path, 0).get("OBJECT")
+        except OSError as e:
+            print(f"  warning: skipping unreadable L4 {path}: {e}", flush=True)
+            continue
+        if str(obj).strip() != str(target):
+            print(
+                f"  warning: L4 for {oid} has OBJECT {obj!r}, not target "
+                f"{target!r}; plotting anyway",
+                flush=True,
+            )
+        paths.append(path)
+
+    paths = sorted(set(paths))
+    if not paths:
+        sys.exit(
+            f"error: none of the {len(obs_ids)} supplied obs_id(s) have an L4 "
+            f"product under {data_dir}"
+        )
+    return paths
 
 
 def _read_l4_rv(l4_paths):
@@ -443,12 +490,22 @@ def parse_args(argv=None):
         required=True,
         help="star id as it appears in the L4 OBJECT header, e.g. 10700",
     )
-    parser.add_argument(
+    # Exactly one frame source: scan a datecode range, or an explicit obs_id list
+    # (the latter lets a caller that already knows the frames skip the L4 scan).
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
         "--date_range",
         nargs=2,
         metavar=("START", "END"),
-        required=True,
-        help="inclusive datecode range, e.g. --date_range 20240101 20240131",
+        help="inclusive datecode range to scan the L4 tree over, e.g. "
+        "--date_range 20240101 20240131 (mutually exclusive with --obs_ids)",
+    )
+    source.add_argument(
+        "--obs_ids",
+        nargs="+",
+        metavar="OBS_ID",
+        help="explicit obs_ids to plot; their L4 paths are built from --data_dir "
+        "(no scan), e.g. --obs_ids KP.20240405.40113.57 (exclusive with --date_range)",
     )
     parser.add_argument(
         "--data_dir",
@@ -462,23 +519,33 @@ def parse_args(argv=None):
     )
     args = parser.parse_args(argv)
 
-    start, end = args.date_range
-    for dc in (start, end):
-        if not is_datecode(dc):
-            parser.error(f"--date_range value is not a valid datecode: {dc!r}")
-    if start > end:
-        parser.error(f"--date_range START must be <= END (got {start} > {end})")
+    if args.date_range:
+        start, end = args.date_range
+        for dc in (start, end):
+            if not is_datecode(dc):
+                parser.error(f"--date_range value is not a valid datecode: {dc!r}")
+        if start > end:
+            parser.error(f"--date_range START must be <= END (got {start} > {end})")
+    else:
+        for oid in args.obs_ids:
+            if not is_obs_id(oid):
+                parser.error(f"--obs_ids value is not a valid obs_id: {oid!r}")
     return args
 
 
 def main(argv=None):
     args = parse_args(argv)
-    start, end = args.date_range
 
-    # The discovery scan reads one PRIMARY header per L4 file; a small thread pool
-    # overlaps the (NFS) latency without needing a user-facing --jobs knob.
-    jobs = min(8, os.cpu_count() or 1)
-    l4_paths = discover_l4_files(args.data_dir, args.target, start, end, jobs)
+    if args.obs_ids:
+        # Frames known ahead of time: build L4 paths directly, no directory scan.
+        l4_paths = l4_paths_for_obs_ids(args.data_dir, args.obs_ids, args.target)
+    else:
+        start, end = args.date_range
+        # The discovery scan reads one PRIMARY header per L4 file; a small thread
+        # pool overlaps the (NFS) latency without needing a user-facing --jobs knob.
+        jobs = min(8, os.cpu_count() or 1)
+        l4_paths = discover_l4_files(args.data_dir, args.target, start, end, jobs)
+
     plot_rv_timeseries(args.target, l4_paths, args.plot_dir)
 
 

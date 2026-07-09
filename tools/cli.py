@@ -1,14 +1,15 @@
 """KPF Pipeline CLI entry point: the ``kpfpipe`` command dispatcher.
 
 ``kpfpipe`` is the single front door to the pipeline. It is a thin, git-style
-dispatcher that routes a subcommand to its implementation under
-``scripts/processing/`` and forwards the remaining arguments verbatim -- the
-subcommand owns its own argument parsing:
+dispatcher that routes a subcommand to its implementation under ``scripts/`` (the
+``processing/`` orchestrators and the ``plots/`` plotter) and forwards the
+remaining arguments verbatim -- the subcommand owns its own argument parsing:
 
-    kpfpipe run         -- reduce one recipe on one unit, in-process (the leaf)
-    kpfpipe masters     -- build nightly master calibrations for a set of datecodes
-    kpfpipe science     -- reduce a set of science frames end-to-end (L0 -> L4)
-    kpfpipe timeseries  -- reduce a star's RV timeseries over a datecode range
+    kpfpipe run             -- reduce one recipe on one unit, in-process (the leaf)
+    kpfpipe masters         -- build nightly master calibrations for a set of datecodes
+    kpfpipe science         -- reduce a set of science frames end-to-end (L0 -> L4)
+    kpfpipe timeseries      -- reduce a star's RV timeseries over a datecode range
+    kpfpipe plot-timeseries -- plot a star's RV timeseries from its L4 products
 
 Examples:
 
@@ -16,6 +17,8 @@ Examples:
     kpfpipe masters --dates 20240405 20240712         # batch (fans out `run`)
     kpfpipe science --obs_ids KP.20240405.40113.57
     kpfpipe timeseries --target 10700 --date_range 20240101 20240131
+    kpfpipe plot-timeseries --target 10700 --obs_ids KP.20240101.03600.00 \\
+        --data_dir /data/kpf/science --plot_dir ./plots
 
 Run ``kpfpipe <command> -h`` for a command's own options.
 
@@ -27,6 +30,7 @@ import sys
 
 # tools (interface) -> scripts (orchestration): a downward dependency. The
 # scripts never import back up into tools.
+from scripts.plots import plot_timeseries
 from scripts.processing import masters, reduce, science, timeseries
 
 _COMMANDS = {
@@ -34,6 +38,7 @@ _COMMANDS = {
     "masters": masters.main,
     "science": science.main,
     "timeseries": timeseries.main,
+    "plot-timeseries": plot_timeseries.main,
 }
 
 
@@ -42,10 +47,11 @@ def _usage():
     return (
         "usage: kpfpipe <command> [options]\n\n"
         "commands:\n"
-        "  run         reduce one recipe on one unit, in-process (the leaf)\n"
-        "  masters     build nightly master calibrations for a set of datecodes\n"
-        "  science     reduce a set of science frames end-to-end (L0 -> L4)\n"
-        "  timeseries  reduce a star's RV timeseries over a datecode range\n\n"
+        "  run             reduce one recipe on one unit, in-process (the leaf)\n"
+        "  masters         build nightly master calibrations for a set of datecodes\n"
+        "  science         reduce a set of science frames end-to-end (L0 -> L4)\n"
+        "  timeseries      reduce a star's RV timeseries over a datecode range\n"
+        "  plot-timeseries  plot a star's RV timeseries from its L4 products\n\n"
         "Run `kpfpipe <command> -h` for a command's own options."
     )
 

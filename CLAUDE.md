@@ -290,22 +290,29 @@ its own argparse). The commands:
 - **`kpfpipe timeseries`** → `scripts/processing/timeseries.py` — a **thin
   wrapper above the orchestrators**: given `--target` + `--date_range`, it discovers
   that star's science frames from the L0 tree (steps 1–2), then runs **one**
-  `python -m scripts.processing.masters --dates …` subprocess and **one**
-  `python -m scripts.processing.science --obs_ids …` subprocess (steps 3–4) — it
+  `python -m scripts.processing.masters --dates …` subprocess, **one**
+  `python -m scripts.processing.science --obs_ids …` subprocess, and **one**
+  `python -m scripts.plots.plot_timeseries --obs_ids …` subprocess (steps 3–5) — it
   does *not* use `_dispatch.run_stage` itself (that would fan out leaves; here the
-  two orchestrators each fan out and stream their own batch log). Both stages are
-  fail-soft: every discovered frame is handed to science regardless of the masters
-  result (a frame whose masters failed to build simply fails in the science stage
-  and is reported there — no gating in the wrapper), and the run exits nonzero if
-  either stage failed. Plotting (RV vs BJD_TDB) is a **separate standalone step**,
-  `scripts/plots/plot_timeseries.py` (run after reduction: `python -m
-  scripts.plots.plot_timeseries --target … --date_range … --data_dir
-  {KPF_SCIENCE_OUTPUT} --plot_dir …`). It reads each L4 PRIMARY (`RV`/`RVERR`/
-  `BJDTDB`), always groups bursts (RVERR-weighted), and writes
+  two orchestrators each fan out and stream their own batch log). All three stages
+  are independently skippable — `--no-masters` / `--no-science` / `--no-plots`
+  (default on) — and fail-soft: every discovered frame is handed to science
+  regardless of the masters result (a frame whose masters failed to build simply
+  fails in the science stage and is reported there — no gating in the wrapper), and
+  the run exits nonzero if any stage that ran failed. The plot stage is handed the
+  **already-discovered `obs_ids`** (so no second file scan) and runs *independently*
+  of science (with `--no-science` it plots whatever L4 is on disk), writing to
+  `{KPF_SCIENCE_OUTPUT}/QLP/timeseries` unless `--plot_dir` overrides it.
+- **`kpfpipe plot-timeseries`** → `scripts/plots/plot_timeseries.py` — a **standalone
+  post-reduction plotter** (the sole `scripts/plots/` command; the only dispatcher
+  route outside `scripts/processing/`). Frames come from **either** `--date_range`
+  (scan the L4 tree) **or** `--obs_ids` (build L4 paths directly from `--data_dir`
+  via `kpf_filepath`, no scan — the handoff `timeseries` uses). It reads each L4
+  PRIMARY (`RV`/`RVERR`/`BJDTDB`), always groups bursts (RVERR-weighted), and writes
   `{target}_rv_timeseries.png` plus `{target}_rv_nightly.png` (the latter only for
-  nights with >1 observation). It is *not* wired into the dispatcher or invoked by
-  `timeseries.py` yet — a follow-up will auto-run it after the science stage. (The
-  original parked scratchpad `notes/tmp_rv_plot.py` predates this port.)
+  nights with >1 observation). In `--obs_ids` mode a supplied frame whose L4 `OBJECT`
+  ≠ `--target` is warned but still plotted, and a missing L4 is skipped. (The parked
+  scratchpad `notes/tmp_rv_plot.py` predates this port and is now superseded.)
 
 **The layering is strictly one-directional — each layer may import *down* but never
 up:** `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
