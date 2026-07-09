@@ -297,8 +297,15 @@ its own argparse). The commands:
   fail-soft: every discovered frame is handed to science regardless of the masters
   result (a frame whose masters failed to build simply fails in the science stage
   and is reported there — no gating in the wrapper), and the run exits nonzero if
-  either stage failed. Plotting (RV vs BJD_TDB) is deferred; that code is parked
-  verbatim in `notes/tmp_rv_plot.py`.
+  either stage failed. Plotting (RV vs BJD_TDB) is a **separate standalone step**,
+  `scripts/plots/plot_timeseries.py` (run after reduction: `python -m
+  scripts.plots.plot_timeseries --target … --date_range … --data_dir
+  {KPF_SCIENCE_OUTPUT} --plot_dir …`). It reads each L4 PRIMARY (`RV`/`RVERR`/
+  `BJDTDB`), always groups bursts (RVERR-weighted), and writes
+  `{target}_rv_timeseries.png` plus `{target}_rv_nightly.png` (the latter only for
+  nights with >1 observation). It is *not* wired into the dispatcher or invoked by
+  `timeseries.py` yet — a follow-up will auto-run it after the science stage. (The
+  original parked scratchpad `notes/tmp_rv_plot.py` predates this port.)
 
 **The layering is strictly one-directional — each layer may import *down* but never
 up:** `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
