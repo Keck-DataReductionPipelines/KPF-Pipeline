@@ -9,9 +9,14 @@ and an independent exit code.
 
 It reimplements no pipeline logic and does not decide *which* frames to reduce:
 the caller supplies the obs_ids (discovering a target's frames from the L0 tree
-lives in the orchestrator, not here). The single input form is:
+lives in the orchestrator, not here). The input form is:
 
-    kpfpipe science --obs_id_list KP.20240405.40113.57 KP.20240405.40237.36
+    kpfpipe science --obs_ids KP.20240405.40113.57 KP.20240405.40237.36
+    kpfpipe science --obs_ids frames.txt        # a file of obs_ids
+
+Each ``--obs_ids`` value is either an obs_id reduced as-is or a path to a text
+file listing one obs_id per line (blank lines ignored); the two may be mixed, and
+an obs_id is always read as an obs_id even if a like-named file exists.
 
 Reductions run in a bounded process pool: the first frame runs alone as a canary
 to warm the shared on-disk caches, then the rest fan out (paced apart, since the
@@ -22,10 +27,12 @@ script exits nonzero if any frame failed, so a caller gets a meaningful exit cod
 
 import argparse
 import logging
+import os
 import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.io import read_token_file
 from kpfpipe.utils.kpf_utils import is_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
@@ -66,19 +73,35 @@ def parse_args(argv=None):
         ],
     )
     ap.add_argument(
-        "--obs_id_list",
+        "--obs_ids",
         nargs="+",
         required=True,
-        metavar="OBS_ID",
-        help="one or more obs_ids to reduce, e.g. --obs_id_list "
-        "KP.20240405.40113.57 KP.20240405.40237.36",
+        metavar="OBS_ID_OR_FILE",
+        help="one or more obs_ids to reduce, or a text file listing one obs_id per "
+        "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
+        "--obs_ids frames.txt",
     )
     args = ap.parse_args(argv)
 
-    for obs_id in args.obs_id_list:
-        if not is_obs_id(obs_id):
-            ap.error(f"not a valid obs_id: {obs_id!r}")
-    args.obs_id_list = sorted(set(args.obs_id_list))
+    # Each --obs_ids value is either an obs_id (reduced as-is) or a path to a
+    # text file listing one obs_id per line; expand file entries in place. A valid
+    # obs_id is always read as such, even if a like-named file exists.
+    obs_ids = []
+    for entry in args.obs_ids:
+        if is_obs_id(entry):
+            obs_ids.append(entry)
+        elif os.path.isfile(entry):
+            for oid in read_token_file(entry):
+                if not is_obs_id(oid):
+                    ap.error(f"not a valid obs_id in {entry}: {oid!r}")
+                obs_ids.append(oid)
+        else:
+            ap.error(
+                f"--obs_ids entry is neither an obs_id nor a readable file: {entry!r}"
+            )
+    if not obs_ids:
+        ap.error(f"--obs_ids produced no obs_ids (empty file?): {args.obs_ids}")
+    args.obs_ids = sorted(set(obs_ids))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
@@ -148,7 +171,7 @@ def main(argv=None):
         if value:
             forward += [flag, value]
 
-    obs_ids = args.obs_id_list
+    obs_ids = args.obs_ids
 
     # Batch banner: the start of this invocation's decision trail.
     logger.info("kpfpipe %s science batch starting", kpfpipe.__version__)

@@ -47,25 +47,53 @@ def s():
 
 
 class TestParseArgs:
-    def test_obs_id_list(self, s):
-        ns = s.parse_args(["--obs_id_list", _OID2, _OID1])
-        assert ns.obs_id_list == [_OID1, _OID2]  # sorted + deduped
+    def test_obs_ids(self, s):
+        ns = s.parse_args(["--obs_ids", _OID2, _OID1])
+        assert ns.obs_ids == [_OID1, _OID2]  # sorted + deduped
 
     def test_dedupes_obs_ids(self, s):
-        ns = s.parse_args(["--obs_id_list", _OID1, _OID1])
-        assert ns.obs_id_list == [_OID1]
+        ns = s.parse_args(["--obs_ids", _OID1, _OID1])
+        assert ns.obs_ids == [_OID1]
 
-    def test_obs_id_list_required(self, s):
+    def test_obs_ids_from_file(self, s, tmp_path):
+        f = tmp_path / "frames.txt"
+        f.write_text(f"{_OID2}\n\n{_OID1}\n")  # blank line skipped
+        ns = s.parse_args(["--obs_ids", str(f)])
+        assert ns.obs_ids == [_OID1, _OID2]  # sorted
+
+    def test_obs_ids_mixes_inline_and_file(self, s, tmp_path):
+        f = tmp_path / "frames.txt"
+        f.write_text(f"{_OID2}\n{_OID1}\n")  # _OID1 also given inline
+        ns = s.parse_args(["--obs_ids", _OID1, str(f)])
+        assert ns.obs_ids == [_OID1, _OID2]  # merged + deduped
+
+    def test_obs_ids_file_with_bad_obs_id_errors(self, s, tmp_path):
+        f = tmp_path / "frames.txt"
+        f.write_text(f"{_OID1}\nnot-an-obs-id\n")
+        with pytest.raises(SystemExit):
+            s.parse_args(["--obs_ids", str(f)])
+
+    def test_obs_ids_empty_file_errors(self, s, tmp_path):
+        f = tmp_path / "empty.txt"
+        f.write_text("\n  \n")
+        with pytest.raises(SystemExit):
+            s.parse_args(["--obs_ids", str(f)])
+
+    def test_obs_id_entry_neither_obs_id_nor_file_errors(self, s):
+        with pytest.raises(SystemExit):
+            s.parse_args(["--obs_ids", "/no/such/file.txt"])
+
+    def test_obs_ids_required(self, s):
         with pytest.raises(SystemExit):
             s.parse_args([])
 
     @pytest.mark.parametrize(
         "argv",
         [
-            ["--obs_id_list", "not-an-obs-id"],  # malformed obs_id
-            ["--obs_id_list", "20240405"],  # a datecode is not an obs_id
-            ["--obs_id_list", _OID1, "--jobs", "0"],  # jobs below 1
-            ["--obs_id_list", _OID1, "--job_timeout", "0"],  # timeout below 1
+            ["--obs_ids", "not-an-obs-id"],  # malformed obs_id
+            ["--obs_ids", "20240405"],  # a datecode is not an obs_id
+            ["--obs_ids", _OID1, "--jobs", "0"],  # jobs below 1
+            ["--obs_ids", _OID1, "--job_timeout", "0"],  # timeout below 1
         ],
     )
     def test_invalid_args_exit(self, s, argv):
@@ -73,26 +101,26 @@ class TestParseArgs:
             s.parse_args(argv)
 
     def test_config_defaults_to_none(self, s):
-        assert s.parse_args(["--obs_id_list", _OID1]).config is None
+        assert s.parse_args(["--obs_ids", _OID1]).config is None
 
     def test_recipe_defaults_to_none(self, s):
-        assert s.parse_args(["--obs_id_list", _OID1]).recipe is None
+        assert s.parse_args(["--obs_ids", _OID1]).recipe is None
 
     def test_recipe_override_parses(self, s):
-        ns = s.parse_args(["--obs_id_list", _OID1, "-r", "/x.py"])
+        ns = s.parse_args(["--obs_ids", _OID1, "-r", "/x.py"])
         assert ns.recipe == "/x.py"
 
     def test_jobs_unset_resolves_to_cores_default(self, s):
-        ns = s.parse_args(["--obs_id_list", _OID1])
+        ns = s.parse_args(["--obs_ids", _OID1])
         assert ns.jobs == s._default_jobs()
 
     def test_jobs_override(self, s):
-        assert s.parse_args(["--obs_id_list", _OID1, "--jobs", "3"]).jobs == 3
+        assert s.parse_args(["--obs_ids", _OID1, "--jobs", "3"]).jobs == 3
 
     def test_job_timeout_default_and_override(self, s):
-        assert s.parse_args(["--obs_id_list", _OID1]).job_timeout == 600
+        assert s.parse_args(["--obs_ids", _OID1]).job_timeout == 600
         assert (
-            s.parse_args(["--obs_id_list", _OID1, "--job_timeout", "120"]).job_timeout
+            s.parse_args(["--obs_ids", _OID1, "--job_timeout", "120"]).job_timeout
             == 120
         )
 
@@ -152,12 +180,12 @@ class TestMainExitCode:
 
     def test_exits_zero_when_all_reduced(self, s, monkeypatch):
         self._patch(s, monkeypatch, failed=[])
-        s.main(["--obs_id_list", _OID1])  # no SystemExit
+        s.main(["--obs_ids", _OID1])  # no SystemExit
 
     def test_exits_nonzero_when_any_failed(self, s, monkeypatch):
         self._patch(s, monkeypatch, failed=[_OID1])
         with pytest.raises(SystemExit) as exc:
-            s.main(["--obs_id_list", _OID1])
+            s.main(["--obs_ids", _OID1])
         assert exc.value.code == 1
 
     def test_errors_when_log_dir_unset(self, s, monkeypatch):
@@ -165,5 +193,5 @@ class TestMainExitCode:
         monkeypatch.setattr(s, "configure_runtime", lambda: None)
         monkeypatch.setattr(s, "ConfigHandler", _NoLogDirConfig)
         with pytest.raises(SystemExit) as exc:
-            s.main(["--obs_id_list", _OID1])
+            s.main(["--obs_ids", _OID1])
         assert "log directory" in str(exc.value)

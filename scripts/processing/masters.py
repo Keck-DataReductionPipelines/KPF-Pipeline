@@ -37,7 +37,7 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import datecode_dirs_in_range, read_datecodes
+from kpfpipe.utils.io import datecode_dirs_in_range, read_token_file
 from kpfpipe.utils.kpf_utils import is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
@@ -116,7 +116,7 @@ def parse_args(argv=None):
             if is_datecode(entry):
                 datecodes.append(entry)
             elif os.path.isfile(entry):
-                for dc in read_datecodes(entry):
+                for dc in read_token_file(entry):
                     if not is_datecode(dc):
                         ap.error(f"not a valid datecode in {entry}: {dc!r}")
                     datecodes.append(dc)

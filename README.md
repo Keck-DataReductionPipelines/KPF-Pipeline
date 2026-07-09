@@ -95,7 +95,8 @@ that recipe against a custom config (e.g. `kpfpipe run --science -c my.toml -o â
 ```bash
 kpfpipe masters --dates 20240405 20240712 --kpf_data_input /data/kpf ...
 kpfpipe masters --dates nights.txt   # or a file listing one datecode per line
-kpfpipe science --obs_id_list KP.20240405.40113.57 KP.20240405.40237.36 ...
+kpfpipe science --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 ...
+kpfpipe science --obs_ids frames.txt   # or a file listing one obs_id per line
 ```
 
 ## Quicklook Full-Resolution Images

@@ -80,13 +80,14 @@ def datecode_dirs_in_range(root, start, end):
     ]
 
 
-def read_datecodes(path):
-    """Read datecodes from a text file, one per line (blank lines skipped).
+def read_token_file(path):
+    """Read whitespace-stripped, non-blank lines from a text file.
 
-    Backs the masters orchestrator's ``--dates`` flag, which accepts a file
-    listing the nights to build instead of inline datecodes. Whitespace is
-    stripped from each line and blank lines are dropped; validation that each
-    entry is a real datecode is left to the caller.
+    Backs the ``--dates`` (masters) and ``--obs_ids`` (science) flags, which
+    each accept a reference file listing one unit -- a datecode or an obs_id --
+    per line instead of inline values. Whitespace is stripped from each line and
+    blank lines are dropped; validating that each token is a real datecode/obs_id
+    is left to the caller.
     """
     with open(path, encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip()]

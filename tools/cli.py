@@ -13,7 +13,7 @@ Examples:
 
     kpfpipe run --masters -d 20240405                 # one night, in-process
     kpfpipe masters --dates 20240405 20240712         # batch (fans out `run`)
-    kpfpipe science --obs_id_list KP.20240405.40113.57
+    kpfpipe science --obs_ids KP.20240405.40113.57
 
 Run ``kpfpipe <command> -h`` for a command's own options.
 
