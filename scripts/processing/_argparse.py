@@ -1,12 +1,10 @@
 """Shared argparse parent parsers for the batch processing CLI commands.
 
 Common flag groups -- recipe/config selection, data-dir overrides, logging
-overrides, and the fan-out pool controls -- factored out so the three subcommand
-parsers (``reduce``/``masters``/``science``) compose them via argparse's
-``parents=[...]`` instead of each re-declaring the same flags. Every factory
-returns a fresh ``add_help=False`` parser to slot in as a parent. (The default
-``masters``/``science`` recipe/config path constants live in the package
-``__init__``, not here.)
+overrides, and the fan-out pool controls -- factored out so the subcommand
+parsers (``reduce``/``masters``/``science``) compose them via ``parents=[...]``
+instead of each re-declaring the same flags. Every factory returns a fresh
+``add_help=False`` parser to slot in as a parent.
 
 Depends only on ``argparse`` -- never on ``tools`` -- so, like ``_dispatch.py``,
 the scripts layer stays ignorant of the CLI dispatcher above it.
@@ -22,7 +20,7 @@ def recipe_and_config_parser():
     They override the command's default recipe/config pair: for the orchestrators
     that default is their fixed kind's pair; for ``run`` it comes from a
     ``--masters``/``--science`` shortcut (or, given neither, ``-r``/``-c`` are the
-    base specification). "Overrides the default" reads correctly in every case.
+    base specification).
     """
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument(
@@ -43,9 +41,9 @@ def recipe_and_config_parser():
 def data_dirs_parser(science_output=True):
     """[DATA_DIRS] override flags, plus the ``--input_dir``/``--output_dir``
     convenience shortcuts. ``--kpf_science_output`` is included only when
-    `science_output` is true -- masters produces no science output, so its parser
-    omits it. ``--input_dir`` is a plain alias of ``--kpf_data_input``;
-    ``--output_dir`` is fanned out post-parse by `resolve_dir_shortcuts`."""
+    `science_output` is true (masters produces no science output). ``--input_dir``
+    aliases ``--kpf_data_input``; ``--output_dir`` is fanned out post-parse by
+    `resolve_dir_shortcuts`."""
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument(
         "--kpf_data_input",
@@ -72,11 +70,10 @@ def data_dirs_parser(science_output=True):
 
 
 # Where each --output_dir slot lands beneath the given root. The masters/science
-# outputs take the root verbatim (their path builders add masters/{datecode} and
-# L{N}/{datecode} substructure), while the log dir and plot dir each get a
-# conventional subdirectory so --output_dir yields the same layout an explicit
-# --log_dir/--plot_dir would -- in particular the plot subdir matches the
-# timeseries default of {science_output}/QLP/timeseries.
+# outputs take the root verbatim (their path builders add the substructure); the
+# log dir and plot dir each get a conventional subdirectory so --output_dir yields
+# the same layout an explicit --log_dir/--plot_dir would (the plot subdir matches
+# the timeseries default of {science_output}/QLP/timeseries).
 _OUTPUT_DIR_SLOTS = {
     "kpf_masters_output": (),
     "kpf_science_output": (),
@@ -88,17 +85,12 @@ _OUTPUT_DIR_SLOTS = {
 def resolve_dir_shortcuts(args):
     """Fan ``--output_dir`` out to each output directory the command left unset.
 
-    ``--output_dir`` is a convenience: one root standing in for the masters output,
-    the science output, the log dir, and (timeseries) the plot dir. The masters and
-    science outputs take the root directly; the log dir lands at
-    ``{output_dir}/logs`` and the plot dir at ``{output_dir}/QLP/timeseries`` (see
-    ``_OUTPUT_DIR_SLOTS``), so the shortcut reproduces the layout an explicit
-    ``--log_dir``/``--plot_dir`` would give rather than dumping logs and plots in the
-    root. It is a fallback, never an override -- any slot an explicit flag already
-    set keeps its value; only the unset ones, and only those the command actually
-    has (masters has no science output or plot dir), inherit ``--output_dir``. The
-    input dir is untouched (use ``--input_dir``/``--kpf_data_input``). Returns
-    `args`; each command's ``parse_args`` calls it post-parse.
+    Slots and their subdirectories are defined by ``_OUTPUT_DIR_SLOTS``. It is a
+    fallback, never an override -- any slot an explicit flag already set keeps its
+    value; only unset slots, and only those the command actually has (masters has
+    no science output or plot dir), inherit ``--output_dir``. The input dir is
+    untouched (use ``--input_dir``/``--kpf_data_input``). Returns `args`; each
+    command's ``parse_args`` calls it post-parse.
     """
     out = getattr(args, "output_dir", None)
     if not out:
@@ -135,8 +127,6 @@ def pool_parser(jobs_help):
         help="per-job wall-clock limit (seconds) for each fanned-out recipe "
         "subprocess (default: %(default)s). A recipe normally runs in ~2 min, so a "
         "job exceeding this is treated as wedged: its process group is killed and "
-        "the job counts as a failure, rather than hanging the whole batch. The "
-        "serial canary uses a larger, separate limit since it warms cold caches on "
-        "the first run",
+        "the job counts as a failure rather than hanging the whole batch",
     )
     return p

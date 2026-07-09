@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
 """Plot a single star's RV timeseries from its L4 products on disk.
 
-A lean, standalone post-reduction plotter. The frames come from one of two
-sources: ``--date_range`` combs the L4 output tree for a target's products over an
+A standalone post-reduction plotter: it reads the RV summary keywords from each L4
+PRIMARY header and renders the RV-vs-date plot, reading headers only. Frames come
+from one of two sources: ``--date_range`` scans the L4 output tree over an
 inclusive datecode range, or ``--obs_ids`` names them explicitly (their L4 paths
-are built directly from ``--data_dir``, skipping the scan -- how ``kpfpipe
-timeseries`` hands off the set it already discovered). Either way it reads the RV
-summary keywords from each L4 PRIMARY header and renders the RV-vs-date plot. It
-runs *after* the reduction has written the L4 files; it reads headers only and
-never touches the pipeline.
+built directly from ``--data_dir``, no scan -- how ``kpfpipe timeseries`` hands off
+the set it already discovered).
 
-Bursts of rapid-succession frames are always collapsed to one RVERR-weighted
-point (revisits stay distinct): the individual frames are drawn as a faint grey
-underlay and the burst means overplotted on top, and the RV_RMS/RV_ERR annotation
-and outlier flagging reflect the burst means. A per-night panel plot is also
-written, but only for nights with more than one observation (a single-frame night
-carries no within-night trend, so paneling it is meaningless).
-
-Two PNGs land in ``--plot_dir``: ``{target}_rv_timeseries.png`` always, and
+Bursts of rapid-succession frames are always collapsed to one RVERR-weighted point
+(revisits stay distinct); the individual frames stay visible as a faint grey
+underlay, and the RV_RMS/RV_ERR annotation and outlier flagging reflect the burst
+means. Two PNGs land in ``--plot_dir``: ``{target}_rv_timeseries.png`` always, and
 ``{target}_rv_nightly.png`` when at least one night has multiple observations.
 
     python -m scripts.plots.plot_timeseries --target 10700 \\
@@ -52,11 +46,10 @@ _REPO = kpfpipe.REPO_ROOT
 def _scan_nights(nights, target, worker, jobs):
     """Fan `worker(dc)` out over `nights` in a thread pool; return the pooled hits.
 
-    Scanning a night reads every L4 PRIMARY header -- slow over NFS but I/O bound,
-    so a thread pool overlaps the latency (``getheader`` releases the GIL during
-    I/O). `worker(dc)` returns ``(hits, note)``: that night's L4 paths and an
-    optional trailing note. A per-night heartbeat is printed in completion order
-    (the scan is otherwise silent).
+    Scanning a night reads every L4 PRIMARY header -- I/O bound over NFS, so a
+    thread pool overlaps the latency (``getheader`` releases the GIL during I/O).
+    `worker(dc)` returns ``(hits, note)``: that night's L4 paths and an optional
+    trailing note. A per-night heartbeat is printed in completion order.
     """
     print(
         f"scanning {len(nights)} night(s) for target {target} "
@@ -82,10 +75,8 @@ def discover_l4_files(data_dir, target, start, end, jobs):
     """L4 product paths for `target` over [start, end], scanned from the L4 tree.
 
     Enumerates the nights (datecode dirs) under {data_dir}/L4, reads each L4
-    PRIMARY OBJECT, and keeps this target's frames. Returns a sorted list of L4
-    file paths. A frame whose L4 was deleted simply doesn't appear -- the plotter
-    reads what is on disk and never depends on the L0 input tree. Exits loudly
-    when the L4 tree is missing or nothing matches.
+    PRIMARY OBJECT, and keeps this target's frames. Returns a sorted list of paths.
+    Exits loudly when the L4 tree is missing or nothing matches.
     """
     l4_root = os.path.join(data_dir, "L4")
     if not os.path.isdir(l4_root):
@@ -122,13 +113,11 @@ def l4_paths_for_obs_ids(data_dir, obs_ids, target):
     """L4 product paths for an explicit obs_id list, built without a directory scan.
 
     The counterpart to discover_l4_files for when the caller already knows the
-    frames (e.g. timeseries, which discovered and reduced them): each obs_id's L4
-    path is built directly with kpf_filepath(obs_id, 'L4', data_root=data_dir), so
-    no L4 tree is walked. Every supplied obs_id whose L4 is present is plotted --
-    including one whose L4 OBJECT does not match `target` (warned, not dropped, so
-    a header/target mismatch is surfaced without silently discarding data). An
-    obs_id whose L4 is absent or unreadable (e.g. its reduction failed) is warned
-    and skipped. Exits loudly only when none of the supplied obs_ids have an L4.
+    frames (e.g. timeseries): each obs_id's L4 path is built directly with
+    kpf_filepath, so no tree is walked. A frame whose L4 OBJECT does not match
+    `target` is warned but still plotted (surfacing the mismatch without silently
+    discarding data); one whose L4 is absent or unreadable is warned and skipped.
+    Exits loudly only when none of the supplied obs_ids have an L4.
     """
     paths = []
     for oid in obs_ids:
@@ -161,22 +150,17 @@ def l4_paths_for_obs_ids(data_dir, obs_ids, target):
 def _read_l4_rv(l4_paths):
     """Read (BJD_TDB, RV, RVERR, datecode) from each L4 product.
 
-    RV and RVERR are km/s, BJDTDB is a Julian day -- all on the L4 PRIMARY header
-    (per the EPRV standard). The datecode labels each frame's observing night for
-    the per-night panels; it is the L4 file's parent directory
-    ({data_dir}/L4/{datecode}). Frames with a non-finite RV/RVERR are skipped with
-    a warning (a real reduction should not produce them, but we do not want one
-    bad point to blow up the plot).
+    RV/RVERR are km/s, BJDTDB a Julian day -- all on the L4 PRIMARY (per EPRV). The
+    datecode (the L4 file's parent dir) labels each frame's observing night for the
+    per-night panels. Frames with a non-finite RV/RVERR are skipped with a warning.
     """
     times, rvs, errs, nights = [], [], [], []
     for path in l4_paths:
         hdr = fits.getheader(path, 0)
         vals = (hdr.get("BJDTDB"), hdr.get("RV"), hdr.get("RVERR"))
-        # A card may be missing (None) or present with a non-numeric value (e.g. a
-        # stringified 'nan' -- these bare keywords are not registry-validated), and
-        # np.isfinite raises on a str. So require every value to be a real number
-        # and finite before use; anything else skips the frame rather than aborting
-        # the whole plot on one bad header.
+        # A card may be missing (None) or a non-numeric value (e.g. a stringified
+        # 'nan'); np.isfinite raises on a str, so require every value to be a real
+        # finite number before use rather than aborting the plot on one bad header.
         if not all(isinstance(v, (int, float)) and np.isfinite(v) for v in vals):
             name = os.path.basename(path)
             print(f"  warning: {name} has no finite RV/RVERR/BJDTDB; skipping")
@@ -199,9 +183,8 @@ def _group_bursts(times, rvs, errs, gap_minutes=_BURST_GAP_MINUTES):
     """Collapse each burst of rapid-succession frames to one RVERR-weighted point.
 
     Splits the time-ordered frames wherever consecutive BJD_TDB values differ by
-    more than `gap_minutes` (as `build_calibration_stacks` clusters calibrations), then
-    combines each burst with 1/RVERR**2 weights: weighted-mean RV, error
-    1/sqrt(sum w), epoch the weighted-mean BJD_TDB.
+    more than `gap_minutes`, then combines each burst with 1/RVERR**2 weights:
+    weighted-mean RV, error 1/sqrt(sum w), epoch the weighted-mean BJD_TDB.
     """
     order = np.argsort(times)
     times, rvs, errs = times[order], rvs[order], errs[order]
@@ -251,19 +234,17 @@ def _symmetric_ylim(ax):
 def plot_nightly_panels(target, times, rvs, errs, nights, plot_directory):
     """Write a per-night multi-panel plot of the individual (ungrouped) frames.
 
-    One panel per observing night that has more than one observation -- a
-    single-frame night carries no within-night trend, so paneling it is
-    meaningless and it is skipped. Each panel shows delta-RV (m/s, about the
-    overall median) vs. minutes from that night's first frame, so within-night
-    trends are visible; panels share a y-axis to keep nights comparable. When no
-    night has multiple observations, nothing is written.
+    One panel per observing night with more than one observation (a single-frame
+    night carries no within-night trend, so it is skipped). Each panel shows
+    delta-RV (m/s, about the overall median) vs. minutes from that night's first
+    frame; panels share a y-axis to keep nights comparable. Writes nothing when no
+    night has multiple observations.
     """
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    # Only nights with more than one observation are worth a panel.
     counts = Counter(nights)
     unique = sorted(night for night, n in counts.items() if n > 1)
     if not unique:
@@ -311,29 +292,24 @@ def plot_nightly_panels(target, times, rvs, errs, nights, plot_directory):
 
 
 def plot_rv_timeseries(target, l4_paths, plot_directory):
-    """Write the RV timeseries plot, with bursts always grouped.
+    """Write the RV timeseries plot (bursts grouped) plus the per-night panels.
 
-    Plots delta-RV (m/s, relative to the median RV) vs. observation date, with
-    RVERR error bars, a zero reference line (the median), an RMS annotation, and
-    calendar-date (YYYYMMDD) x tick labels derived from BJD_TDB.
+    Plots delta-RV (m/s, relative to the median RV) vs. observation date with RVERR
+    error bars and calendar-date (YYYYMMDD) x labels. The individual frames form a
+    faint grey underlay with the burst means overplotted on top; the RV_RMS/RV_ERR
+    annotation and outlier flagging reflect the burst means. Also writes the
+    per-night panels (see plot_nightly_panels).
 
-    The individual frames are drawn as a faint grey underlay and the burst-grouped
-    means overplotted in colour on top; the RV_RMS/RV_ERR annotation and the
-    outlier flagging reflect the burst means. It also writes the per-night panel
-    plot from the ungrouped frames, for nights with multiple observations only
-    (see plot_nightly_panels).
-
-    Outliers are flagged robustly (only for series of >=10 burst means): each
-    point is compared to the local trend of the time-ordered series and >5-sigma
-    residuals are dropped (flag_outliers, trend method). RV_RMS is then the std of
-    the retained points (an outlier can't inflate it), the y-range is clipped to
-    the retained points, and each outlier is drawn as a black triangle at the
-    clipped edge (up for positive, down for negative) annotated with its delta-RV,
-    so a large outlier is flagged without rescaling the plot.
+    Outliers are flagged robustly (only for >=10 burst means): each point is
+    compared to the local trend of the time-ordered series and >5-sigma residuals
+    dropped (flag_outliers, trend method). RV_RMS is then the std of the retained
+    points, the y-range is clipped to them, and each outlier is drawn as a black
+    triangle at the clipped edge annotated with its delta-RV -- flagging a large
+    outlier without rescaling the plot.
     """
     import matplotlib
 
-    matplotlib.use("Agg")  # headless: never needs a display (e.g. on the server)
+    matplotlib.use("Agg")  # headless: no display needed
     import matplotlib.pyplot as plt
     from astropy.time import Time
     from matplotlib.ticker import FuncFormatter
@@ -342,15 +318,14 @@ def plot_rv_timeseries(target, l4_paths, plot_directory):
     if times.size == 0:
         sys.exit("error: no finite RV points to plot")
 
-    # Delta-RV about the median of the individual frames, in m/s (RV/RVERR are
-    # stored in km/s per EPRV). One reference for both layers keeps them aligned.
+    # Delta-RV about the median of the individual frames, in m/s (RV stored in km/s
+    # per EPRV); one reference for both layers keeps them aligned.
     ref = np.median(rvs)
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.axhline(0.0, color="0.6", lw=1, zorder=0)  # zero = median RV, guides the eye
+    ax.axhline(0.0, color="0.6", lw=1, zorder=0)  # zero = median RV
 
-    # Per-night panels from the individual (ungrouped) frames; self-skips when no
-    # night has multiple observations.
+    # Per-night panels from the ungrouped frames (self-skips when no multi-obs night).
     plot_nightly_panels(target, times, rvs, errs, nights, plot_directory)
 
     # Faint grey underlay: the individual (ungrouped) frames for context.
@@ -376,17 +351,16 @@ def plot_rv_timeseries(target, l4_paths, plot_directory):
     os.makedirs(plot_directory, exist_ok=True)
     out_path = os.path.join(plot_directory, f"{target}_rv_timeseries.png")
 
-    # Robust outlier flagging: compare each burst-grouped point to the local trend
-    # of the time-ordered series and flag >5-sigma residuals. Gated to >=10 points
-    # -- below that the trend is meaningless, so nothing is flagged. RV_RMS is the
-    # std of the retained points, so an outlier can't inflate it.
+    # Outlier flagging gated to >=10 points -- below that the local trend is
+    # meaningless. RV_RMS is the std of the retained points, so an outlier can't
+    # inflate it.
     outlier = np.zeros(drv.shape, dtype=bool)
     if drv.size >= 10:
         outlier[order] = flag_outliers(drv[order], 5.0, kernel_size=5, method="trend")
     rms = float(np.std(drv[~outlier])) if np.any(~outlier) else float(np.std(drv))
 
-    # Clip the y-range to the retained points so a flagged outlier doesn't
-    # compress the plot; the outliers are drawn as triangles at the edge instead.
+    # Clip the y-range to the retained points so a flagged outlier doesn't compress
+    # the plot; outliers are drawn as edge triangles instead.
     ylim = None
     if outlier.any():
         span = np.abs(drv[~outlier])
@@ -394,9 +368,8 @@ def plot_rv_timeseries(target, l4_paths, plot_directory):
         if ref_max > 0:
             ylim = 1.1 * ref_max
 
-    # Foreground series (the burst means): larger, black-outlined markers so they
-    # stand out over the grey underlay. Draw only the in-range points; flagged
-    # outliers are marked separately at the edge.
+    # Burst means: larger black-outlined markers over the grey underlay. Only the
+    # in-range points; flagged outliers are marked separately at the edge below.
     fg_kw = dict(
         fmt="o",
         capsize=3,
@@ -410,8 +383,8 @@ def plot_rv_timeseries(target, l4_paths, plot_directory):
     keep = order[~outlier[order]] if ylim is not None else order
     ax.errorbar(times[keep], drv[keep], yerr=derr[keep], **fg_kw)
 
-    # Off-plot outliers: a black up/down triangle at the clipped edge (clip_on
-    # False so the whole marker shows), annotated with the delta-RV.
+    # Off-plot outliers: an up/down triangle at the clipped edge (clip_on False so
+    # the whole marker shows), annotated with the delta-RV.
     if ylim is not None:
         up = outlier & (drv > 0)
         dn = outlier & (drv < 0)
@@ -495,8 +468,7 @@ def parse_args(argv=None):
         required=True,
         help="star id as it appears in the L4 OBJECT header, e.g. 10700",
     )
-    # Exactly one frame source: scan a datecode range, or an explicit obs_id list
-    # (the latter lets a caller that already knows the frames skip the L4 scan).
+    # Exactly one frame source: scan a datecode range, or an explicit obs_id list.
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument(
         "--date_range",
@@ -546,8 +518,8 @@ def main(argv=None):
         l4_paths = l4_paths_for_obs_ids(args.data_dir, args.obs_ids, args.target)
     else:
         start, end = args.date_range
-        # The discovery scan reads one PRIMARY header per L4 file; a small thread
-        # pool overlaps the (NFS) latency without needing a user-facing --jobs knob.
+        # One PRIMARY header read per L4 file; a small thread pool overlaps the
+        # (NFS) latency without a user-facing --jobs knob.
         jobs = min(8, os.cpu_count() or 1)
         l4_paths = discover_l4_files(args.data_dir, args.target, start, end, jobs)
 

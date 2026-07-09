@@ -36,11 +36,9 @@ import sys
 from kpfpipe.utils.io import FileHandler
 from kpfpipe.utils.kpf_utils import get_datecode, get_obs_id, get_timestamp, is_obs_id
 
-# Per-type kwargs for FileHandler.build_calibration_stacks, matching
-# recipes/kpf_drp_masters.py: bias/flat/thar use the defaults (min 5 frames, no
-# merge, HST-midnight boundary enforced); darks are sparse long exposures, so the
-# recipe drops the threshold to 3, merges undersized clusters, and lifts the
-# HST-midnight boundary since a night's darks routinely straddle it.
+# Per-type kwargs for build_calibration_stacks, matching recipes/kpf_drp_masters.py.
+# Darks are sparse long exposures whose sequences straddle HST midnight, so they
+# drop the threshold to 3, merge undersized clusters, and lift the midnight split.
 _TYPE_KWARGS = {
     "bias": {},
     "dark": {

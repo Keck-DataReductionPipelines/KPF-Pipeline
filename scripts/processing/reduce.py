@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """Run one recipe on one unit (the ``kpfpipe run`` leaf).
 
-The single-recipe, single-unit runner: read the config, apply the CLI overrides,
-configure logging, clear the unit's stale L1/L2/L4 products (see
-``clear_stale_outputs``), and exec the recipe's ``main(config, args)``. It is the
-leaf the batch orchestrators (``masters.py``/``science.py``) fan out as
-``python -m scripts.processing.reduce -r <recipe> -c <config>`` subprocesses, and
-the in-process target of ``kpfpipe run``.
+Reads the config, applies CLI overrides, configures logging, clears the unit's
+stale L1/L2/L4 products (see ``clear_stale_outputs``), and execs the recipe's
+``main(config, args)``. It is both the in-process target of ``kpfpipe run`` and
+the leaf the orchestrators (``masters.py``/``science.py``) fan out as
+``python -m scripts.processing.reduce`` subprocesses.
 
-Recipe + config come from ``--masters``/``--science`` (which resolve the
-repo-relative recipe/config pair, so they work from any cwd) or an explicit
-``-r/-c`` pair; the shortcuts supply defaults an explicit ``-r/-c`` overrides, so
-``--science -c my.toml`` runs the science recipe against a custom config. Provide
-an obs_id (``-o``) for science recipes, a datecode (``-d``) for masters.
+Recipe + config come from ``--masters``/``--science`` (repo-relative shortcuts,
+usable from any cwd) or an explicit ``-r/-c`` pair; the shortcuts supply defaults
+that ``-r/-c`` override, so ``--science -c my.toml`` runs the science recipe
+against a custom config. Provide an obs_id (``-o``) for science, a datecode
+(``-d``) for masters.
 
 The following pairs of invocations are equivalent:
 
@@ -96,9 +95,8 @@ def main(argv=None):
     args = resolve_dir_shortcuts(parser.parse_args(argv))
 
     if args.shortcut:
-        # The shortcut supplies a default (recipe, config) pair; an explicit
-        # -r/-c overrides the corresponding half (so `--science -c foo.toml`
-        # keeps the science recipe but swaps its config).
+        # An explicit -r/-c overrides the corresponding half of the shortcut's
+        # (recipe, config) default pair.
         recipe_def, config_def = args.shortcut
         args.recipe = args.recipe or recipe_def
         args.config = args.config or config_def
@@ -146,8 +144,7 @@ def main(argv=None):
     logger.info("data dirs: %s", config.get_params(["DATA_DIRS"]))
     logger.info("log file: %s", log_path)
 
-    # Before processing starts, clear any prior L1/L2/L4 products for this unit so
-    # the run's outputs stand alone rather than co-existing with a stale reduction.
+    # Clear prior L1/L2/L4 products so this run's outputs stand alone.
     clear_stale_outputs(config, args)
 
     if not os.path.isfile(args.recipe):
@@ -163,7 +160,7 @@ def main(argv=None):
         recipe.main(config, args)
     except Exception:
         # The one sanctioned catch-log-reraise point (style guide section 6):
-        # guarantee the traceback is in the log before the nonzero exit.
+        # ensure the traceback reaches the log before the nonzero exit. The
         # SystemExit usage errors above bypass this on purpose.
         logger.critical("uncaught exception; pipeline aborted", exc_info=True)
         raise
@@ -173,11 +170,10 @@ def main(argv=None):
 def resolve_logging(config, recipe_path, obs_id, datecode):
     """Resolve the [LOGGER] config into setup_logging keyword arguments.
 
-    Derives the recipe token from the recipe filename (``kpf_drp_science.py``
-    -> ``science``) and the target token from the obs_id/datecode (or
-    ``run`` when neither applies). Raises ValueError when no log directory
-    is configured -- the log location must be explicit (DRP-RUN-07), never
-    a hidden default.
+    Derives the recipe token from the recipe filename (``kpf_drp_science.py`` ->
+    ``science``) and the target token from the obs_id/datecode (or ``run`` when
+    neither applies). Raises ValueError when no log directory is configured -- the
+    log location must be explicit (DRP-RUN-07), never a hidden default.
 
     Parameters
     ----------
@@ -211,9 +207,9 @@ def resolve_logging(config, recipe_path, obs_id, datecode):
     }
 
 
-# Glob patterns for the master products a masters night regenerates: every
-# L1/L2/L4 master in the night's directory (KOAID prefix wildcarded), plus the WLS
-# L2 master's diagnostics sidecar (shares the '{obs_id}_master_thar' stem).
+# Glob patterns for a masters night's products: every L1/L2/L4 master in the
+# night's directory (KOAID prefix wildcarded), plus the WLS L2 master's
+# diagnostics sidecar.
 _MASTER_OUTPUT_GLOBS = (
     "*_master_*_L1.fits",
     "*_master_*_L2.fits",
@@ -225,18 +221,17 @@ _MASTER_OUTPUT_GLOBS = (
 def clear_stale_outputs(config, args):
     """Delete any existing L1/L2/L4 products for this unit before it is reduced.
 
-    Re-reducing a unit should overwrite -- never silently co-exist with -- a prior
-    run's products. Some are not always rewritten (the science recipe leaves L1 in
+    Re-reducing should overwrite, never silently co-exist with, a prior run's
+    products. Some are not always rewritten (the science recipe leaves L1 in
     memory), and a master's filename is keyed on its stack's first frame, so a
     changed input set can orphan a stale product under a name the rebuild never
-    reuses. Clearing the unit's outputs up front guarantees the run's results
-    stand alone.
+    reuses -- clearing up front guarantees the run's results stand alone.
 
-    Science (``-o obs_id``): the three deterministic per-obs_id paths under
+    Science (``-o obs_id``): the three per-obs_id paths under
     ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): every master product in the
-    night's masters directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix
-    wildcarded), plus the WLS diagnostics sidecar. A no-op when the relevant
-    output root is unconfigured or nothing matches.
+    night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded), plus
+    the WLS diagnostics sidecar. A no-op when the output root is unconfigured or
+    nothing matches.
     """
     data_dirs = config.get_params(["DATA_DIRS"])
     paths = []

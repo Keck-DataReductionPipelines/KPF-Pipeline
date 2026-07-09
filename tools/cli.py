@@ -28,8 +28,6 @@ layer; the scripts never import ``tools`` (see CLAUDE.md, "CLI architecture").
 
 import sys
 
-# tools (interface) -> scripts (orchestration): a downward dependency. The
-# scripts never import back up into tools.
 from scripts.plots import plot_timeseries
 from scripts.processing import masters, reduce, science, timeseries
 

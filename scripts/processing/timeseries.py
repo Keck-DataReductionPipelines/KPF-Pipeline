@@ -7,25 +7,21 @@ star and an inclusive datecode range, it
 
   1. combs the L0 input tree for that target's raw science frames (obs_ids),
   2. infers the unique nights (datecodes) those frames span,
-  3. builds the nightly calibration masters for those nights (``kpfpipe masters``),
+  3. builds the nightly calibration masters (``kpfpipe masters``),
   4. reduces every science frame end-to-end, L0 -> L4 (``kpfpipe science``),
   5. plots the RV timeseries from those L4 products (``plot_timeseries``).
 
-It reimplements no pipeline logic: steps 3-5 each run **one** subprocess -- the
-masters/science orchestrators (which themselves fan out one ``reduce`` subprocess
-per unit, each with its own log, clean process state, and independent exit code)
-and the standalone plotter. So this script owns only the discovery (steps 1-2) and
-the dispatch; the robust fan-out, canary-then-pool, timeout, and interrupt
-handling live in the orchestrators. The plotter is handed the already-discovered
-obs_ids (``--obs_ids``), so it does no second file scan.
+It reimplements no pipeline logic: this script owns only discovery (steps 1-2) and
+dispatch; steps 3-5 each run one subprocess (the two orchestrators, which fan out
+one ``reduce`` per unit, and the standalone plotter), so the robust fan-out,
+timeout, and interrupt handling live in the orchestrators. The plotter is handed
+the already-discovered obs_ids, so it does no second scan.
 
 All three stages run by default; ``--no-masters`` / ``--no-science`` / ``--no-plots``
-skip any of them (discovery always runs, since every stage consumes it). The
-stages are fail-soft: a night whose masters fail to build (e.g. the known WLS
-failure mode) is reported by the masters stage, and every discovered frame is
-still handed to the science stage -- a frame whose required masters are missing
-simply fails there and is reported per-frame. Plotting runs independently of the
-science stage (with ``--no-science`` it plots whatever L4 is already on disk),
+skip any (discovery always runs). The stages are fail-soft and independent: every
+discovered frame is handed to science regardless of the masters result (a frame
+missing its masters just fails in science, reported per-frame -- no gating here),
+and plotting runs whatever L4 is on disk (``--no-science`` plots the existing L4),
 writing to ``{KPF_SCIENCE_OUTPUT}/QLP/timeseries`` unless ``--plot_dir`` overrides
 it. The run exits nonzero if any stage that ran reported a failure.
 
@@ -93,11 +89,8 @@ def parse_args(argv=None):
         required=True,
         help="inclusive datecode range, e.g. --date_range 20240101 20240131",
     )
-    # Stage toggles: all three stages run by default, so skipping one is an
-    # explicit opt-out (--no-masters / --no-science / --no-plots). These are
-    # timeseries' own toggles for which *stage* to run -- unrelated to reduce's
-    # --masters/--science recipe shortcuts (defined only on that leaf's parser,
-    # not shared here).
+    # Stage toggles (which *stage* to run) -- unrelated to reduce's
+    # --masters/--science recipe shortcuts, which live only on that leaf's parser.
     ap.add_argument(
         "--masters",
         action=argparse.BooleanOptionalAction,
@@ -124,8 +117,7 @@ def parse_args(argv=None):
         "{KPF_SCIENCE_OUTPUT}/QLP/timeseries)",
     )
     # Two recipe/config pairs (masters + science), so the shared single -r/-c
-    # recipe_and_config_parser does not fit; each is forwarded to its stage only
-    # when set.
+    # parser does not fit; each is forwarded to its stage only when set.
     ap.add_argument(
         "--masters_recipe",
         default=None,
@@ -168,11 +160,10 @@ def parse_args(argv=None):
 def _scan_nights(nights, target, worker, jobs):
     """Fan `worker(dc)` out over `nights` in a thread pool; return the pooled hits.
 
-    Scanning a night reads every PRIMARY header -- slow over NFS but I/O bound, so
-    a thread pool overlaps the latency (``getheader`` releases the GIL during
-    I/O). `worker(dc)` returns ``(hits, note)``: that night's obs_ids and an
-    optional trailing note. A per-night heartbeat is logged in completion order
-    (the scan is otherwise silent).
+    Scanning a night reads every PRIMARY header -- I/O bound, so a thread pool
+    overlaps the NFS latency (``getheader`` releases the GIL during I/O).
+    `worker(dc)` returns ``(hits, note)``: that night's obs_ids and an optional
+    note, logged as a per-night heartbeat in completion order.
     """
     logger.info(
         "scanning %d night(s) for target %s (%d workers)...",
@@ -202,13 +193,12 @@ def _scan_nights(nights, target, worker, jobs):
 def discover_science_obs_ids(data_input, target, start, end, jobs):
     """Raw science obs_ids for `target` over [start, end], from the L0 tree.
 
-    Enumerates the nights (datecode dirs) under {data_input}/L0, scans each one's
-    PRIMARY headers via FileHandler.build_mini_database (cache=True: reuse the
-    night's on-disk mini-database CSV when present, else write it after scanning),
-    and keeps the frames whose IMTYPE is 'Object' and whose OBJECT matches
-    `target`. Non-datecode entries (backup dirs, stray files, etc.) are skipped
-    with a note; observer-flagged junk frames (the mini database's ISJUNK column)
-    are dropped. Exits loudly when the tree is missing or nothing matches.
+    Scans each night (datecode dir) under {data_input}/L0 via
+    FileHandler.build_mini_database (cache=True: reuse the night's on-disk CSV when
+    present, else write it), keeping frames whose IMTYPE is 'Object' and OBJECT
+    matches `target`. Non-datecode entries are skipped with a note; observer-flagged
+    junk frames (the ISJUNK column) are dropped. Exits loudly when the tree is
+    missing or nothing matches.
     """
     l0_root = os.path.join(data_input, "L0")
     if not os.path.isdir(l0_root):
@@ -264,12 +254,9 @@ def _orchestrator_argv(module, unit_flag, units, forward, recipe=None, config=No
     """Build the argv for one orchestrator subprocess (masters or science).
 
     Runs ``python -m scripts.processing.{module} {unit_flag} {units...}`` with the
-    resolved dir/log/pool overrides in `forward`, plus ``-r``/``-c`` when a
-    recipe/config is given -- ``main`` resolves both to the stage default when not
-    overridden and passes them explicitly, so timeseries owns exactly what runs
-    (they are omitted only if `recipe`/`config` is None). The unit list is placed
-    before `forward` so the ``--dates``/``--obs_ids`` ``nargs`` stops at the first
-    forwarded flag.
+    dir/log/pool overrides in `forward`, plus ``-r``/``-c`` when a recipe/config is
+    given. The unit list precedes `forward` so the ``--dates``/``--obs_ids``
+    ``nargs`` stops at the first forwarded flag.
     """
     argv = [sys.executable, "-m", f"scripts.processing.{module}"]
     if recipe:
@@ -284,11 +271,9 @@ def main(argv=None):
     args = parse_args(argv)
     start, end = args.date_range
 
-    # Resolve the recipe+config for each stage (its default unless overridden):
-    # timeseries is the single owner of what runs, so it passes both explicitly to
-    # the orchestrators (see the dispatch calls below) rather than leaning on their
-    # defaults. The science config also supplies this wrapper's L0 input root +
-    # log dir/level.
+    # Resolve each stage's recipe+config (its default unless overridden) and pass
+    # both explicitly, so timeseries owns exactly what runs. The science config
+    # also supplies this wrapper's L0 input root + log dir/level.
     masters_recipe = args.masters_recipe or DEFAULT_MASTERS_RECIPE
     masters_config = args.masters_config or DEFAULT_MASTERS_CONFIG
     science_recipe = args.science_recipe or DEFAULT_SCIENCE_RECIPE
@@ -304,8 +289,8 @@ def main(argv=None):
         )
 
     # The batch-summary log: this wrapper's own DRP-RUN-08 decision trail
-    # (discovery, dispatch, the per-night gate), echoed live to stdout and
-    # persisted alongside each stage's own batch log and each unit's reduction log.
+    # (discovery, dispatch), echoed to stdout and persisted alongside each stage's
+    # own batch log and each unit's reduction log.
     level = args.log_level or logger_params.get("log_level", "INFO")
     log_path = setup_batch_logging(log_dir, "timeseries", level=level)
 
@@ -322,22 +307,20 @@ def main(argv=None):
             common_forward += [flag, value]
     common_forward += ["--job_timeout", str(args.job_timeout)]
 
-    # --jobs sizes only the science fan-out. The masters orchestrator caps its own
-    # concurrency at a fixed _MASTERS_JOBS regardless of cores (see _dispatch.py);
-    # forwarding a large --jobs to it would defeat that safety cap, so --jobs rides
-    # science_forward and masters keeps its own _default_masters_jobs() sizing.
+    # --jobs sizes only the science fan-out: forwarding a large --jobs to masters
+    # would defeat its fixed _MASTERS_JOBS safety cap (see _dispatch.py), so --jobs
+    # rides science_forward and masters keeps its own default sizing.
     science_forward = list(common_forward)
     if args.jobs is not None:
         science_forward += ["--jobs", str(args.jobs)]
     if args.kpf_science_output:
         science_forward += ["--kpf_science_output", args.kpf_science_output]
 
-    # The plotting stage reads L4 straight from the science output root, and writes
-    # to {KPF_SCIENCE_OUTPUT}/QLP/timeseries unless --plot_dir overrides it.
+    # The plotting stage reads L4 from the science output root, and writes to
+    # {KPF_SCIENCE_OUTPUT}/QLP/timeseries unless --plot_dir overrides it.
     science_output = args.kpf_science_output or science_dirs["KPF_SCIENCE_OUTPUT"]
     plot_dir = args.plot_dir or os.path.join(science_output, "QLP", "timeseries")
 
-    # Batch banner: the start of this invocation's decision trail.
     logger.info("kpfpipe %s timeseries batch starting", kpfpipe.__version__)
     logger.info("argv: %s", " ".join(sys.argv))
     logger.info("target: %s  date_range: %s..%s", args.target, start, end)
@@ -358,11 +341,9 @@ def main(argv=None):
         end,
     )
 
-    # Step 3: build every night's masters, unless --no-masters. The masters
-    # orchestrator fans out one reduce subprocess per night and streams its own
-    # batch log; it is fail-soft, so a night that fails to build is reported
-    # without aborting the run. A skipped stage's exit code is None (not a
-    # failure) so the final exit reflects only the stages that ran.
+    # Step 3: build every night's masters, unless --no-masters. A skipped stage's
+    # exit code stays None (not a failure), so the final exit reflects only the
+    # stages that ran.
     masters_rc = None
     if args.masters:
         masters_argv = _orchestrator_argv(
@@ -378,10 +359,9 @@ def main(argv=None):
     else:
         logger.info("skipping masters stage (--no-masters)")
 
-    # Step 4: reduce every discovered science frame, unless --no-science. The
-    # science orchestrator fans out one reduce subprocess per frame and streams its
-    # own batch log; it is fail-soft and reports per-frame failures, so a frame
-    # whose masters failed to build simply fails there -- no gating happens here.
+    # Step 4: reduce every discovered science frame, unless --no-science. Every
+    # frame is handed over regardless of the masters result -- a frame whose masters
+    # failed simply fails here, reported per-frame; no gating happens.
     science_rc = None
     if args.science:
         science_argv = _orchestrator_argv(
@@ -397,10 +377,9 @@ def main(argv=None):
     else:
         logger.info("skipping science stage (--no-science)")
 
-    # Step 5: plot the RV timeseries, unless --no-plots. The plotter builds the L4
-    # paths straight from the already-discovered obs_ids (no second scan) and reads
-    # them off the science output root. It runs independently of the science stage
-    # -- with --no-science it plots whatever L4 is already on disk.
+    # Step 5: plot the RV timeseries, unless --no-plots. The plotter builds L4 paths
+    # from the already-discovered obs_ids (no second scan); it runs independently of
+    # science -- with --no-science it plots whatever L4 is already on disk.
     plots_rc = None
     if args.plots:
         plot_argv = [

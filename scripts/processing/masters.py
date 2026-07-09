@@ -1,33 +1,23 @@
 #!/usr/bin/env python3
 """Build nightly master calibrations for a set of datecodes (``kpfpipe masters``).
 
-A lightweight, fail-loud orchestrator. Given either an explicit list of datecodes
-or an inclusive datecode range, it dispatches each night as a separate
+A lightweight, fail-loud orchestrator: it dispatches each night as a separate
 ``python -m scripts.processing.reduce --masters -d <datecode>`` subprocess (the
 ``kpfpipe run`` leaf), so every night gets its own log file, clean process state,
-and an independent exit code.
-
-It reimplements no pipeline logic and does not decide *which* nights to build:
-the caller supplies the datecodes. The two input forms are mutually exclusive:
+and independent exit code. It reimplements no pipeline logic; the caller supplies
+which nights to build, via two mutually exclusive input forms:
 
     kpfpipe masters --dates 20240405 20240712       # explicit datecode(s)
     kpfpipe masters --dates nights.txt              # a file of datecodes
     kpfpipe masters --date_range 20240101 20240131  # every L0 night in range
 
-Each ``--dates`` value is either a datecode built as-is or a path to a text file
-listing one datecode per line (blank lines ignored); the two may be mixed, and a
-datecode is always read as a datecode even if a like-named file exists.
-
-The range form enumerates the datecode directories present under
-``{KPF_DATA_INPUT}/L0`` within [START, END]; the raw L0 location itself is
-resolved by the recipe (from its config, or a forwarded --kpf_data_input
-override) for every form, single datecode included.
+The range form enumerates the datecode dirs present under ``{KPF_DATA_INPUT}/L0``
+within [START, END].
 
 Builds run in a bounded process pool: the first night runs alone as a canary to
-warm the shared on-disk caches, then the rest fan out. The build is fail-soft --
-a night that fails to build (e.g. the known WLS failure mode) is reported and
-the run continues with the other nights -- but the script exits nonzero if any
-night failed, so a caller gets a meaningful exit code.
+warm the shared on-disk caches, then the rest fan out. The run is fail-soft (a
+night that fails to build is reported and the others continue) but exits nonzero
+if any night failed.
 """
 
 import argparse
@@ -58,7 +48,7 @@ from scripts.processing._dispatch import (
 logger = logging.getLogger(__name__)
 
 # --jobs help is command-specific (the fixed masters cap, not the cores default),
-# so it is passed into the shared pool_parser rather than living in it.
+# so it is passed into the shared pool_parser rather than baked into it.
 _JOBS_HELP = (
     "max concurrent masters builds; left unset, defaults to the "
     f"{_MASTERS_JOBS}-job cap (stacking degrades from OS memory contention when too "
@@ -96,8 +86,7 @@ def parse_args(argv=None):
     )
     args = ap.parse_args(argv)
 
-    # Exactly one input form: an explicit datecode list, or a range -- not both,
-    # not neither.
+    # Exactly one input form: an explicit datecode list, or a range.
     if bool(args.dates) == bool(args.date_range):
         ap.error("give either --dates or --date_range, not both or neither")
 
@@ -109,9 +98,9 @@ def parse_args(argv=None):
         if start > end:
             ap.error(f"--date_range START must be <= END (got {start} > {end})")
     else:
-        # Each --dates value is either a datecode (built as-is) or a path to a
-        # text file listing one datecode per line; expand file entries in place.
-        # A valid datecode is always read as such, even if a like-named file exists.
+        # Each --dates value is a datecode (built as-is) or a text file of
+        # datecodes; expand file entries in place. A valid datecode is always read
+        # as such, even if a like-named file exists.
         datecodes = []
         for entry in args.dates:
             if is_datecode(entry):
@@ -143,7 +132,7 @@ def resolve_datecodes(args, data_input):
     """The datecodes to build, from either input form.
 
     The explicit list is already validated and sorted in parse_args. A range is
-    expanded here (it needs the resolved L0 input root): the datecode dirs present
+    expanded here, since it needs the resolved L0 input root: the datecode dirs
     under {data_input}/L0 within the range. Either way an empty result is fatal.
     """
     if args.dates:
@@ -161,13 +150,11 @@ def resolve_datecodes(args, data_input):
 def _cli_task(datecode, forward, config=None, recipe=None):
     """Build a (tag, argv) task building one night via the ``kpfpipe run`` leaf.
 
-    Runs ``python -m scripts.processing.reduce -r <recipe> -c <config> -d <datecode>``
-    with the masters defaults (``DEFAULT_MASTERS_RECIPE``/``DEFAULT_MASTERS_CONFIG``)
-    unless `recipe`/`config` override them. The orchestrator passes the recipe/config
-    explicitly -- rather than leaning on the leaf's ``--masters`` shortcut -- so it is
-    the single owner of what it runs. `forward` is the resolved dir/log overrides
-    appended to every invocation. The tag is the datecode, which the sentinel/log
-    paths key on.
+    Passes recipe/config to the leaf explicitly (the masters defaults unless
+    `recipe`/`config` override) rather than leaning on its ``--masters`` shortcut,
+    so the orchestrator is the single owner of what it runs. `forward` is the
+    resolved dir/log overrides appended to every invocation; the tag (datecode)
+    keys the sentinel/log paths.
     """
     argv = [
         sys.executable,
@@ -189,8 +176,7 @@ def main(argv=None):
     args = parse_args(argv)
 
     # Read the effective config (the masters default unless -c overrides) to resolve
-    # the L0 input root + log dir; each subprocess gets the resolved recipe/config
-    # explicitly via -r/-c (see _cli_task).
+    # the L0 input root and log dir; subprocesses get recipe/config via -r/-c.
     config = ConfigHandler(args.config or DEFAULT_MASTERS_CONFIG)
     logger_params = config.get_params(["LOGGER"])
     data_input = (
@@ -203,9 +189,8 @@ def main(argv=None):
             "config file or pass --log_dir"
         )
 
-    # The batch-summary log: the orchestrator's own DRP-RUN-08 decision trail
-    # (dispatch banner, per-night ok/FAILED, summary), echoed live to stdout and
-    # persisted alongside each night's own per-reduction log.
+    # The batch-summary log: this orchestrator's own DRP-RUN-08 decision trail,
+    # echoed live to stdout, alongside each night's per-reduction log.
     level = args.log_level or logger_params.get("log_level", "INFO")
     log_path = setup_batch_logging(log_dir, "masters", level=level)
 

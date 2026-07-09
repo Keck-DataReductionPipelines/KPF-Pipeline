@@ -1,28 +1,21 @@
 #!/usr/bin/env python3
 """Reduce a set of science frames end-to-end, L0 -> L4 (``kpfpipe science``).
 
-A lightweight, fail-loud orchestrator. Given an explicit list of obs_ids, it
-dispatches each frame as a separate
+A lightweight, fail-loud orchestrator: it dispatches each frame as a separate
 ``python -m scripts.processing.reduce --science -o <obs_id>`` subprocess (the
 ``kpfpipe run`` leaf), so every frame gets its own log file, clean process state,
-and an independent exit code.
-
-It reimplements no pipeline logic and does not decide *which* frames to reduce:
-the caller supplies the obs_ids (discovering a target's frames from the L0 tree
-lives in the orchestrator, not here). The input form is:
+and independent exit code. It reimplements no pipeline logic; the caller supplies
+which frames to reduce (discovering a target's frames from the L0 tree lives in
+the orchestrator, not here), via the input form:
 
     kpfpipe science --obs_ids KP.20240405.40113.57 KP.20240405.40237.36
     kpfpipe science --obs_ids frames.txt        # a file of obs_ids
 
-Each ``--obs_ids`` value is either an obs_id reduced as-is or a path to a text
-file listing one obs_id per line (blank lines ignored); the two may be mixed, and
-an obs_id is always read as an obs_id even if a like-named file exists.
-
 Reductions run in a bounded process pool: the first frame runs alone as a canary
 to warm the shared on-disk caches, then the rest fan out (paced apart, since the
-per-frame L0 pointing QC queries SIMBAD/Gaia). The run is fail-soft -- a frame
-that fails to reduce is reported and the run continues with the others -- but the
-script exits nonzero if any frame failed, so a caller gets a meaningful exit code.
+per-frame L0 pointing QC queries SIMBAD/Gaia). The run is fail-soft (a frame that
+fails to reduce is reported and the others continue) but exits nonzero if any
+frame failed.
 """
 
 import argparse
@@ -58,7 +51,7 @@ logger = logging.getLogger(__name__)
 _LAUNCH_INTERVAL = 1.0
 
 # --jobs help is command-specific (the cores-based default, not the masters cap),
-# so it is passed into the shared pool_parser rather than living in it.
+# so it is passed into the shared pool_parser rather than baked into it.
 _JOBS_HELP = (
     "max concurrent science reductions; left unset, defaults to a cores-based "
     "value (~25%% of CPUs, but up to 16)"
@@ -88,9 +81,9 @@ def parse_args(argv=None):
     )
     args = ap.parse_args(argv)
 
-    # Each --obs_ids value is either an obs_id (reduced as-is) or a path to a
-    # text file listing one obs_id per line; expand file entries in place. A valid
-    # obs_id is always read as such, even if a like-named file exists.
+    # Each --obs_ids value is an obs_id (reduced as-is) or a text file of obs_ids;
+    # expand file entries in place. A valid obs_id is always read as such, even if
+    # a like-named file exists.
     obs_ids = []
     for entry in args.obs_ids:
         if is_obs_id(entry):
@@ -120,13 +113,11 @@ def parse_args(argv=None):
 def _cli_task(obs_id, forward, config=None, recipe=None):
     """Build a (tag, argv) task reducing one frame via the ``kpfpipe run`` leaf.
 
-    Runs ``python -m scripts.processing.reduce -r <recipe> -c <config> -o <obs_id>``
-    with the science defaults (``DEFAULT_SCIENCE_RECIPE``/``DEFAULT_SCIENCE_CONFIG``)
-    unless `recipe`/`config` override them. The orchestrator passes the recipe/config
-    explicitly -- rather than leaning on the leaf's ``--science`` shortcut -- so it is
-    the single owner of what it runs. `forward` is the resolved dir/log overrides
-    appended to every invocation. The tag is the obs_id, which the sentinel/log paths
-    key on.
+    Passes recipe/config to the leaf explicitly (the science defaults unless
+    `recipe`/`config` override) rather than leaning on its ``--science`` shortcut,
+    so the orchestrator is the single owner of what it runs. `forward` is the
+    resolved dir/log overrides appended to every invocation; the tag (obs_id)
+    keys the sentinel/log paths.
     """
     argv = [
         sys.executable,
@@ -148,8 +139,7 @@ def main(argv=None):
     args = parse_args(argv)
 
     # Read the effective config (the science default unless -c overrides) only for
-    # the log dir used in the failure sentinels; each subprocess gets the resolved
-    # recipe/config explicitly via -r/-c (see _cli_task).
+    # the log dir; subprocesses get recipe/config via -r/-c.
     config = ConfigHandler(args.config or DEFAULT_SCIENCE_CONFIG)
     logger_params = config.get_params(["LOGGER"])
     log_dir = args.log_dir or logger_params.get("log_dir")
@@ -159,9 +149,8 @@ def main(argv=None):
             "config file or pass --log_dir"
         )
 
-    # The batch-summary log: the orchestrator's own DRP-RUN-08 decision trail
-    # (dispatch banner, per-frame ok/FAILED, summary), echoed live to stdout and
-    # persisted alongside each frame's own per-reduction log.
+    # The batch-summary log: this orchestrator's own DRP-RUN-08 decision trail,
+    # echoed live to stdout, alongside each frame's per-reduction log.
     level = args.log_level or logger_params.get("log_level", "INFO")
     log_path = setup_batch_logging(log_dir, "science", level=level)
 
