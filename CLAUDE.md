@@ -284,8 +284,8 @@ its own argparse). The commands:
   `science.py` — **orchestrators**: fan a set of units out as one
   `python -m scripts.processing.reduce` subprocess each (own log, clean process
   state, independent exit), via the shared engine in `_dispatch.py`. The orchestrators
-  take `--datecode_list`/`--date_range` (masters) and `--obs_id_list` (science);
-  `kpfpipe masters --datecode_list 20240405` is a batch-of-one, while
+  take `--dates`/`--date_range` (masters) and `--obs_id_list` (science);
+  `kpfpipe masters --dates 20240405` is a batch-of-one, while
   `kpfpipe run --masters -d 20240405` is the in-process single shot. (`kpfpipe
   timeseries` — the `rv_timeseries.py` rewire — is a follow-up.)
 

@@ -10,8 +10,8 @@ and an independent exit code.
 It reimplements no pipeline logic and does not decide *which* nights to build:
 the caller supplies the datecodes. The two input forms are mutually exclusive:
 
-    kpfpipe masters --datecode_list 20240405 20240712   # explicit datecode(s)
-    kpfpipe masters --date_range 20240101 20240131      # every L0 night in range
+    kpfpipe masters --dates 20240405 20240712       # explicit datecode(s)
+    kpfpipe masters --date_range 20240101 20240131  # every L0 night in range
 
 The range form enumerates the datecode directories present under
 ``{KPF_DATA_INPUT}/L0`` within [START, END]; the raw L0 location itself is
@@ -73,11 +73,11 @@ def parse_args(argv=None):
         ],
     )
     ap.add_argument(
-        "--datecode_list",
+        "--dates",
         nargs="*",
         default=None,
         metavar="DATECODE",
-        help="one or more datecodes to build, e.g. --datecode_list 20240405 "
+        help="one or more datecodes to build, e.g. --dates 20240405 "
         "20240712 (mutually exclusive with --date_range)",
     )
     ap.add_argument(
@@ -85,14 +85,14 @@ def parse_args(argv=None):
         nargs=2,
         metavar=("START", "END"),
         help="inclusive datecode range; builds every L0 night in it, e.g. "
-        "--date_range 20240101 20240131 (mutually exclusive with --datecode_list)",
+        "--date_range 20240101 20240131 (mutually exclusive with --dates)",
     )
     args = ap.parse_args(argv)
 
     # Exactly one input form: an explicit datecode list, or a range -- not both,
     # not neither.
-    if bool(args.datecode_list) == bool(args.date_range):
-        ap.error("give either --datecode_list or --date_range, not both or neither")
+    if bool(args.dates) == bool(args.date_range):
+        ap.error("give either --dates or --date_range, not both or neither")
 
     if args.date_range:
         start, end = args.date_range
@@ -102,10 +102,10 @@ def parse_args(argv=None):
         if start > end:
             ap.error(f"--date_range START must be <= END (got {start} > {end})")
     else:
-        for dc in args.datecode_list:
+        for dc in args.dates:
             if not is_datecode(dc):
                 ap.error(f"not a valid datecode: {dc!r}")
-        args.datecode_list = sorted(set(args.datecode_list))
+        args.dates = sorted(set(args.dates))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
@@ -123,8 +123,8 @@ def resolve_datecodes(args, data_input):
     expanded here (it needs the resolved L0 input root): the datecode dirs present
     under {data_input}/L0 within the range. Either way an empty result is fatal.
     """
-    if args.datecode_list:
-        return args.datecode_list
+    if args.dates:
+        return args.dates
     l0_root = os.path.join(data_input, "L0")
     if not os.path.isdir(l0_root):
         sys.exit(f"error: L0 input directory not found: {l0_root}")

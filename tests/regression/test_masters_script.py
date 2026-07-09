@@ -46,18 +46,18 @@ def m():
 
 class TestParseArgs:
     def test_explicit_datecodes(self, m):
-        ns = m.parse_args(["--datecode_list", "20240712", "20240405"])
-        assert ns.datecode_list == ["20240405", "20240712"]  # sorted + deduped
+        ns = m.parse_args(["--dates", "20240712", "20240405"])
+        assert ns.dates == ["20240405", "20240712"]  # sorted + deduped
         assert ns.date_range is None
 
     def test_dedupes_datecodes(self, m):
-        ns = m.parse_args(["--datecode_list", "20240405", "20240405"])
-        assert ns.datecode_list == ["20240405"]
+        ns = m.parse_args(["--dates", "20240405", "20240405"])
+        assert ns.dates == ["20240405"]
 
     def test_date_range(self, m):
         ns = m.parse_args(["--date_range", "20240101", "20240131"])
         assert ns.date_range == ["20240101", "20240131"]
-        assert ns.datecode_list is None
+        assert ns.dates is None
 
     def test_neither_form_errors(self, m):
         with pytest.raises(SystemExit):
@@ -66,17 +66,17 @@ class TestParseArgs:
     def test_both_forms_error(self, m):
         with pytest.raises(SystemExit):
             m.parse_args(
-                ["--datecode_list", "20240405", "--date_range", "20240101", "20240131"]
+                ["--dates", "20240405", "--date_range", "20240101", "20240131"]
             )
 
     @pytest.mark.parametrize(
         "argv",
         [
-            ["--datecode_list", "2024"],  # malformed datecode (list form)
+            ["--dates", "2024"],  # malformed datecode (list form)
             ["--date_range", "2024", "20240131"],  # malformed datecode (range form)
             ["--date_range", "20240201", "20240101"],  # start > end
-            ["--datecode_list", "20240405", "--jobs", "0"],  # jobs below 1
-            ["--datecode_list", "20240405", "--job_timeout", "0"],  # timeout below 1
+            ["--dates", "20240405", "--jobs", "0"],  # jobs below 1
+            ["--dates", "20240405", "--job_timeout", "0"],  # timeout below 1
         ],
     )
     def test_invalid_args_exit(self, m, argv):
@@ -84,28 +84,26 @@ class TestParseArgs:
             m.parse_args(argv)
 
     def test_config_defaults_to_none(self, m):
-        assert m.parse_args(["--datecode_list", "20240405"]).config is None
+        assert m.parse_args(["--dates", "20240405"]).config is None
 
     def test_recipe_defaults_to_none(self, m):
-        assert m.parse_args(["--datecode_list", "20240405"]).recipe is None
+        assert m.parse_args(["--dates", "20240405"]).recipe is None
 
     def test_recipe_override_parses(self, m):
-        ns = m.parse_args(["--datecode_list", "20240405", "-r", "/x.py"])
+        ns = m.parse_args(["--dates", "20240405", "-r", "/x.py"])
         assert ns.recipe == "/x.py"
 
     def test_jobs_unset_resolves_to_masters_default(self, m):
-        ns = m.parse_args(["--datecode_list", "20240405"])
+        ns = m.parse_args(["--dates", "20240405"])
         assert ns.jobs == m._default_masters_jobs()
 
     def test_jobs_override(self, m):
-        assert m.parse_args(["--datecode_list", "20240405", "--jobs", "3"]).jobs == 3
+        assert m.parse_args(["--dates", "20240405", "--jobs", "3"]).jobs == 3
 
     def test_job_timeout_default_and_override(self, m):
-        assert m.parse_args(["--datecode_list", "20240405"]).job_timeout == 600
+        assert m.parse_args(["--dates", "20240405"]).job_timeout == 600
         assert (
-            m.parse_args(
-                ["--datecode_list", "20240405", "--job_timeout", "120"]
-            ).job_timeout
+            m.parse_args(["--dates", "20240405", "--job_timeout", "120"]).job_timeout
             == 120
         )
 
@@ -150,7 +148,7 @@ class TestCliTask:
 
 class TestResolveDatecodes:
     def test_explicit_list_passes_through(self, m, tmp_path):
-        args = m.parse_args(["--datecode_list", "20240405", "20240712"])
+        args = m.parse_args(["--dates", "20240405", "20240712"])
         # data_input is ignored for the explicit-list form.
         assert m.resolve_datecodes(args, str(tmp_path)) == ["20240405", "20240712"]
 
@@ -191,12 +189,12 @@ class TestMainExitCode:
 
     def test_exits_zero_when_all_built(self, m, monkeypatch):
         self._patch(m, monkeypatch, failed=[])
-        m.main(["--datecode_list", "20240405"])  # no SystemExit
+        m.main(["--dates", "20240405"])  # no SystemExit
 
     def test_exits_nonzero_when_any_failed(self, m, monkeypatch):
         self._patch(m, monkeypatch, failed=["20240405"])
         with pytest.raises(SystemExit) as exc:
-            m.main(["--datecode_list", "20240405"])
+            m.main(["--dates", "20240405"])
         assert exc.value.code == 1
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
@@ -204,5 +202,5 @@ class TestMainExitCode:
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _NoLogDirConfig)
         with pytest.raises(SystemExit) as exc:
-            m.main(["--datecode_list", "20240405"])
+            m.main(["--dates", "20240405"])
         assert "log directory" in str(exc.value)
