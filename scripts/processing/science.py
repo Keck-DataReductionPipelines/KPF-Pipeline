@@ -41,6 +41,7 @@ from scripts.processing._argparse import (
     logging_parser,
     pool_parser,
     recipe_and_config_parser,
+    resolve_dir_shortcuts,
 )
 from scripts.processing._dispatch import (
     _default_science_jobs,
@@ -113,7 +114,7 @@ def parse_args(argv=None):
         args.jobs = _default_science_jobs()
     elif args.jobs < 1:
         ap.error("--jobs must be >= 1")
-    return args
+    return resolve_dir_shortcuts(args)
 
 
 def _cli_task(obs_id, forward, config=None, recipe=None):

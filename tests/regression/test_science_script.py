@@ -124,6 +124,17 @@ class TestParseArgs:
             == 120
         )
 
+    def test_input_dir_aliases_data_input(self, s):
+        ns = s.parse_args(["--obs_ids", _OID1, "--input_dir", "/in"])
+        assert ns.kpf_data_input == "/in"
+
+    def test_output_dir_fans_out(self, s):
+        # science has masters + science output and a log dir (no plot dir).
+        ns = s.parse_args(["--obs_ids", _OID1, "--output_dir", "/out"])
+        assert ns.kpf_masters_output == "/out"
+        assert ns.kpf_science_output == "/out"
+        assert ns.log_dir == "/out"
+
 
 # ---------------------------------------------------------------------------
 # _cli_task

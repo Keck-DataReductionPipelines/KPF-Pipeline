@@ -35,6 +35,79 @@ def _run(monkeypatch, argv):
     red.main(argv)
 
 
+def _dirs_stub_recipe(tmp_path, sentinel):
+    """A recipe whose main() records the resolved DATA_DIRS + [LOGGER] log_dir."""
+    recipe = tmp_path / "rec.py"
+    recipe.write_text(
+        "def main(config, args):\n"
+        "    d = config.get_params(['DATA_DIRS'])\n"
+        "    lg = config.get_params(['LOGGER'])\n"
+        f"    with open({str(sentinel)!r}, 'w') as fh:\n"
+        "        fh.write('|'.join([d['KPF_DATA_INPUT'], d['KPF_MASTERS_OUTPUT'], "
+        "d['KPF_SCIENCE_OUTPUT'], lg['log_dir']]))\n"
+    )
+    return recipe
+
+
+def _base_cfg(tmp_path):
+    cfg = tmp_path / "custom.toml"
+    cfg.write_text(
+        "[DATA_DIRS]\n"
+        'KPF_DATA_INPUT = "/cfg/in"\n'
+        'KPF_MASTERS_OUTPUT = "/cfg/m"\n'
+        'KPF_SCIENCE_OUTPUT = "/cfg/s"\n'
+        "[LOGGER]\n"
+        'log_dir = "/cfg/l"\n'
+    )
+    return cfg
+
+
+class TestDirShortcuts:
+    def test_input_dir_overrides_data_input(self, monkeypatch, tmp_path):
+        cfg = _base_cfg(tmp_path)
+        sentinel = tmp_path / "seen.txt"
+        recipe = _dirs_stub_recipe(tmp_path, sentinel)
+        _run(
+            monkeypatch,
+            [
+                "--science",
+                "-r",
+                str(recipe),
+                "-c",
+                str(cfg),
+                "-o",
+                "KP.x",
+                "--input_dir",
+                "/aliased/in",
+            ],  # fmt: skip
+        )
+        data_input = sentinel.read_text().split("|")[0]
+        assert data_input == "/aliased/in"
+
+    def test_output_dir_sets_every_output_dir(self, monkeypatch, tmp_path):
+        # --output_dir fills masters/science output + log dir; input keeps the config.
+        cfg = _base_cfg(tmp_path)
+        sentinel = tmp_path / "seen.txt"
+        recipe = _dirs_stub_recipe(tmp_path, sentinel)
+        _run(
+            monkeypatch,
+            [
+                "--science",
+                "-r",
+                str(recipe),
+                "-c",
+                str(cfg),
+                "-o",
+                "KP.x",
+                "--output_dir",
+                "/out",
+            ],  # fmt: skip
+        )
+        data_input, masters, science, log_dir = sentinel.read_text().split("|")
+        assert data_input == "/cfg/in"  # untouched by --output_dir
+        assert masters == "/out" and science == "/out" and log_dir == "/out"
+
+
 class TestShortcutOverride:
     def test_c_and_r_override_are_accepted(self, monkeypatch, tmp_path):
         # A temp config with a distinctive data dir; --science supplies the kind,

@@ -135,6 +135,16 @@ class TestParseArgs:
             == 120
         )
 
+    def test_input_dir_aliases_data_input(self, m):
+        ns = m.parse_args(["--dates", "20240405", "--input_dir", "/in"])
+        assert ns.kpf_data_input == "/in"
+
+    def test_output_dir_fans_out(self, m):
+        # masters has no science output or plot dir -- only masters output + log dir.
+        ns = m.parse_args(["--dates", "20240405", "--output_dir", "/out"])
+        assert ns.kpf_masters_output == "/out" and ns.log_dir == "/out"
+        assert not hasattr(ns, "kpf_science_output")
+
 
 # ---------------------------------------------------------------------------
 # _cli_task / resolve_datecodes

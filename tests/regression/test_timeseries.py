@@ -109,6 +109,22 @@ class TestParseArgs:
         ns = ts.parse_args(_BASE_ARGS + ["--no-masters", "--no-science", "--no-plots"])
         assert ns.masters is False and ns.science is False and ns.plots is False
 
+    def test_input_dir_aliases_data_input(self, ts):
+        ns = ts.parse_args(_BASE_ARGS + ["--input_dir", "/in"])
+        assert ns.kpf_data_input == "/in"
+
+    def test_output_dir_fans_out_including_plot_dir(self, ts):
+        # timeseries has all four output slots: masters/science output, log, plot.
+        ns = ts.parse_args(_BASE_ARGS + ["--output_dir", "/out"])
+        assert ns.kpf_masters_output == "/out"
+        assert ns.kpf_science_output == "/out"
+        assert ns.log_dir == "/out"
+        assert ns.plot_dir == "/out"
+
+    def test_explicit_plot_dir_overrides_output_dir(self, ts):
+        ns = ts.parse_args(_BASE_ARGS + ["--output_dir", "/out", "--plot_dir", "/p"])
+        assert ns.plot_dir == "/p" and ns.kpf_science_output == "/out"
+
     def test_jobs_unset_stays_none(self, ts):
         # Unset --jobs is left None so each stage picks its own default; the
         # discovery scan falls back to _default_science_jobs() in main().
@@ -146,8 +162,6 @@ class TestParseArgs:
             "--group_bursts",
             "--skip_existing_masters",
             "--skip_existing_science",
-            "--input_dir",
-            "--output_dir",
         ],  # fmt: skip
     )
     def test_removed_flags_rejected(self, ts, flag):

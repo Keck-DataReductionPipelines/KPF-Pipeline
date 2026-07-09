@@ -48,6 +48,7 @@ from scripts.processing._argparse import (
     data_dirs_parser,
     logging_parser,
     recipe_and_config_parser,
+    resolve_dir_shortcuts,
 )
 
 logger = logging.getLogger("kpfpipe.cli")
@@ -92,7 +93,7 @@ def main(argv=None):
         default=None,
         help="obs_id, e.g. KP.20240405.40113.57 (science only; exclusive with -d)",
     )
-    args = parser.parse_args(argv)
+    args = resolve_dir_shortcuts(parser.parse_args(argv))
 
     if args.shortcut:
         # The shortcut supplies a default (recipe, config) pair; an explicit

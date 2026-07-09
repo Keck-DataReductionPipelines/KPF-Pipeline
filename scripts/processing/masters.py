@@ -46,6 +46,7 @@ from scripts.processing._argparse import (
     logging_parser,
     pool_parser,
     recipe_and_config_parser,
+    resolve_dir_shortcuts,
 )
 from scripts.processing._dispatch import (
     _MASTERS_JOBS,
@@ -135,7 +136,7 @@ def parse_args(argv=None):
         args.jobs = _default_masters_jobs()
     elif args.jobs < 1:
         ap.error("--jobs must be >= 1")
-    return args
+    return resolve_dir_shortcuts(args)
 
 
 def resolve_datecodes(args, data_input):

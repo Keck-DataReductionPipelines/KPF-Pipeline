@@ -321,9 +321,15 @@ imports `scripts.processing.*`, but **the scripts must never import `tools`** �
 orchestration helpers live in `scripts/processing/_dispatch.py` (the process-pool
 engine) and `_argparse.py` (the shared argparse parent-parser factories `recipe_and_config_parser`
 [`-r`/`-c`], `data_dirs_parser`, `logging_parser`, `pool_parser`, composed via
-`parents=[…]` so each shared flag is declared once), both `tools`-free. (The masters
-orchestrator's `--date_range` expansion reuses `kpfpipe.utils.io.datecode_dirs_in_range`
-— a downward import into the shared `kpfpipe` layer, not a scripts-local helper.) The package `__init__.py`
+`parents=[…]` so each shared flag is declared once), both `tools`-free. `data_dirs_parser`
+also carries two convenience shortcuts each of the four processing scripts (reduce/masters/
+science/timeseries) accepts: **`--input_dir`** is a plain argparse alias of `--kpf_data_input`,
+and **`--output_dir`** is a fan-out — `_argparse.resolve_dir_shortcuts(args)` (called post-parse
+by every `parse_args`) fills `kpf_masters_output`/`kpf_science_output`/`log_dir`/`plot_dir` from it
+as a *fallback* (an explicit per-dir flag wins), skipping the slots a given command lacks (masters
+has no science output or plot dir). (The masters orchestrator's `--date_range` expansion reuses
+`kpfpipe.utils.io.datecode_dirs_in_range` — a downward import into the shared `kpfpipe` layer, not a
+scripts-local helper.) The package `__init__.py`
 holds the default `masters`/`science` recipe/config path constants
 (`DEFAULT_{MASTERS,SCIENCE}_{RECIPE,CONFIG}`) — the single source `reduce`'s
 `--masters`/`--science` shortcuts and the orchestrators' fan-out (which passes them

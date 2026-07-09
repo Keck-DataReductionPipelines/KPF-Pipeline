@@ -40,11 +40,18 @@ def recipe_and_config_parser():
 
 
 def data_dirs_parser(science_output=True):
-    """[DATA_DIRS] override flags. ``--kpf_science_output`` is included only when
+    """[DATA_DIRS] override flags, plus the ``--input_dir``/``--output_dir``
+    convenience shortcuts. ``--kpf_science_output`` is included only when
     `science_output` is true -- masters produces no science output, so its parser
-    omits it."""
+    omits it. ``--input_dir`` is a plain alias of ``--kpf_data_input``;
+    ``--output_dir`` is fanned out post-parse by `resolve_dir_shortcuts`."""
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--kpf_data_input", help="override [DATA_DIRS] KPF_DATA_INPUT")
+    p.add_argument(
+        "--kpf_data_input",
+        "--input_dir",
+        dest="kpf_data_input",
+        help="override [DATA_DIRS] KPF_DATA_INPUT (--input_dir is an alias)",
+    )
     p.add_argument(
         "--kpf_masters_output", help="override [DATA_DIRS] KPF_MASTERS_OUTPUT"
     )
@@ -52,7 +59,34 @@ def data_dirs_parser(science_output=True):
         p.add_argument(
             "--kpf_science_output", help="override [DATA_DIRS] KPF_SCIENCE_OUTPUT"
         )
+    p.add_argument(
+        "--output_dir",
+        default=None,
+        help="shortcut: set every output directory not given its own explicit flag "
+        "-- the masters output, the science output (where applicable), the log dir, "
+        "and (timeseries) the plot dir -- to this one directory",
+    )
     return p
+
+
+def resolve_dir_shortcuts(args):
+    """Fan ``--output_dir`` out to each output directory the command left unset.
+
+    ``--output_dir`` is a convenience: one directory standing in for the masters
+    output, the science output, the log dir, and (timeseries) the plot dir. It is a
+    fallback, never an override -- any of those an explicit flag already set keeps
+    its value; only the unset ones, and only those the command actually has (masters
+    has no science output or plot dir), inherit ``--output_dir``. The input dir is
+    untouched (use ``--input_dir``/``--kpf_data_input``). Returns `args`; each
+    command's ``parse_args`` calls it post-parse.
+    """
+    out = getattr(args, "output_dir", None)
+    if not out:
+        return args
+    for name in ("kpf_masters_output", "kpf_science_output", "log_dir", "plot_dir"):
+        if hasattr(args, name) and getattr(args, name) is None:
+            setattr(args, name, out)
+    return args
 
 
 def logging_parser():

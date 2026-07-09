@@ -50,7 +50,12 @@ from scripts.processing import (
     DEFAULT_SCIENCE_CONFIG,
     DEFAULT_SCIENCE_RECIPE,
 )
-from scripts.processing._argparse import data_dirs_parser, logging_parser, pool_parser
+from scripts.processing._argparse import (
+    data_dirs_parser,
+    logging_parser,
+    pool_parser,
+    resolve_dir_shortcuts,
+)
 from scripts.processing._dispatch import _default_science_jobs
 
 logger = logging.getLogger(__name__)
@@ -157,7 +162,7 @@ def parse_args(argv=None):
         ap.error("--job_timeout must be >= 1")
     if args.jobs is not None and args.jobs < 1:
         ap.error("--jobs must be >= 1")
-    return args
+    return resolve_dir_shortcuts(args)
 
 
 def _scan_nights(nights, target, worker, jobs):
