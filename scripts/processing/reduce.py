@@ -2,8 +2,9 @@
 """Run one recipe on one unit (the ``kpfpipe run`` leaf).
 
 The single-recipe, single-unit runner: read the config, apply the CLI overrides,
-configure logging, and exec the recipe's ``main(config, args)``. It is the leaf
-the batch orchestrators (``masters.py``/``science.py``) fan out as
+configure logging, clear the unit's stale L1/L2/L4 products (see
+``clear_stale_outputs``), and exec the recipe's ``main(config, args)``. It is the
+leaf the batch orchestrators (``masters.py``/``science.py``) fan out as
 ``python -m scripts.processing.reduce -r <recipe> -c <config>`` subprocesses, and
 the in-process target of ``kpfpipe run``.
 
@@ -26,6 +27,7 @@ The following pairs of invocations are equivalent:
 """
 
 import argparse
+import glob
 import importlib.util
 import logging
 import os
@@ -33,6 +35,8 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.io import kpf_filepath
+from kpfpipe.utils.kpf_utils import is_obs_id
 from kpfpipe.utils.logger import setup_logging
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,
@@ -141,6 +145,10 @@ def main(argv=None):
     logger.info("data dirs: %s", config.get_params(["DATA_DIRS"]))
     logger.info("log file: %s", log_path)
 
+    # Before processing starts, clear any prior L1/L2/L4 products for this unit so
+    # the run's outputs stand alone rather than co-existing with a stale reduction.
+    clear_stale_outputs(config, args)
+
     if not os.path.isfile(args.recipe):
         raise SystemExit(f"Recipe file not found: {args.recipe}")
 
@@ -200,6 +208,55 @@ def resolve_logging(config, recipe_path, obs_id, datecode):
         "level": params.get("log_level", "INFO"),
         "console": params.get("console", True),
     }
+
+
+# Glob patterns for the master products a masters night regenerates: every
+# L1/L2/L4 master in the night's directory (KOAID prefix wildcarded), plus the WLS
+# L2 master's diagnostics sidecar (shares the '{obs_id}_master_thar' stem).
+_MASTER_OUTPUT_GLOBS = (
+    "*_master_*_L1.fits",
+    "*_master_*_L2.fits",
+    "*_master_*_L4.fits",
+    "*_master_thar_diagnostics.h5",
+)
+
+
+def clear_stale_outputs(config, args):
+    """Delete any existing L1/L2/L4 products for this unit before it is reduced.
+
+    Re-reducing a unit should overwrite -- never silently co-exist with -- a prior
+    run's products. Some are not always rewritten (the science recipe leaves L1 in
+    memory), and a master's filename is keyed on its stack's first frame, so a
+    changed input set can orphan a stale product under a name the rebuild never
+    reuses. Clearing the unit's outputs up front guarantees the run's results
+    stand alone.
+
+    Science (``-o obs_id``): the three deterministic per-obs_id paths under
+    ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): every master product in the
+    night's masters directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix
+    wildcarded), plus the WLS diagnostics sidecar. A no-op when the relevant
+    output root is unconfigured or nothing matches.
+    """
+    data_dirs = config.get_params(["DATA_DIRS"])
+    paths = []
+    if args.obs_id and is_obs_id(args.obs_id):
+        data_root = data_dirs.get("KPF_SCIENCE_OUTPUT")
+        if data_root:
+            paths = [
+                kpf_filepath(args.obs_id, level, data_root=data_root)
+                for level in ("L1", "L2", "L4")
+            ]
+    elif args.datecode:
+        data_root = data_dirs.get("KPF_MASTERS_OUTPUT")
+        if data_root:
+            masters_dir = os.path.join(data_root, "masters", args.datecode)
+            for pattern in _MASTER_OUTPUT_GLOBS:
+                paths += glob.glob(os.path.join(masters_dir, pattern))
+
+    for path in paths:
+        if os.path.isfile(path):
+            os.remove(path)
+            logger.info("removed stale output: %s", path)
 
 
 if __name__ == "__main__":

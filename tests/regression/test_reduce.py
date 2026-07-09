@@ -10,6 +10,9 @@ reduction runs.
 (``resolve_logging`` itself is unit-tested in test_logger.py.)
 """
 
+import argparse
+import os
+
 import pytest
 
 from scripts.processing import reduce as red
@@ -67,3 +70,86 @@ class TestGuards:
         # No --masters/--science and no explicit -r/-c pair.
         with pytest.raises(SystemExit):
             red.main(["-o", "KP.x"])
+
+
+class _Config:
+    """Minimal ConfigHandler stub yielding the DATA_DIRS clear_stale_outputs reads."""
+
+    def __init__(self, data_dirs):
+        self._data_dirs = data_dirs
+
+    def get_params(self, keys):
+        assert keys == ["DATA_DIRS"]
+        return self._data_dirs
+
+
+def _args(obs_id=None, datecode=None):
+    return argparse.Namespace(obs_id=obs_id, datecode=datecode)
+
+
+class TestClearStaleOutputs:
+    _OID = "KP.20240405.40113.57"
+
+    def test_science_removes_l1_l2_l4_for_obs_id(self, tmp_path):
+        science_root = str(tmp_path / "sci")
+        # Create the three deterministic per-obs_id products (plus a stray file
+        # in the same tree that must survive).
+        targets = []
+        for level in ("L1", "L2", "L4"):
+            p = red.kpf_filepath(self._OID, level, data_root=science_root)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            open(p, "w").close()
+            targets.append(p)
+        stray = os.path.join(os.path.dirname(targets[0]), "kpf_L1_other.fits")
+        open(stray, "w").close()
+
+        red.clear_stale_outputs(
+            _Config({"KPF_SCIENCE_OUTPUT": science_root}), _args(obs_id=self._OID)
+        )
+
+        assert not any(os.path.exists(p) for p in targets)
+        assert os.path.exists(stray)  # a different obs_id's product is untouched
+
+    def test_science_noop_when_output_root_unset(self, tmp_path):
+        # No KPF_SCIENCE_OUTPUT -> nothing to resolve, no error.
+        red.clear_stale_outputs(_Config({}), _args(obs_id=self._OID))
+
+    def test_science_noop_for_invalid_obs_id(self, tmp_path):
+        # A malformed obs_id can't build a path; skip rather than raise (the recipe
+        # reports the real error). This mirrors the -o KP.x guard-test case.
+        red.clear_stale_outputs(
+            _Config({"KPF_SCIENCE_OUTPUT": str(tmp_path)}), _args(obs_id="KP.x")
+        )
+
+    def test_masters_removes_night_products_and_sidecar(self, tmp_path):
+        masters_root = str(tmp_path / "m")
+        night = os.path.join(masters_root, "masters", "20240405")
+        os.makedirs(night)
+        koaid = "KP.20240405.40113.57"
+        removed = [
+            f"{koaid}_master_bias_L1.fits",
+            f"{koaid}_master_dark_L1.fits",
+            f"{koaid}_master_thar_L2.fits",
+            f"{koaid}_master_thar_diagnostics.h5",
+        ]
+        kept = [
+            "20240405_L0.csv",  # a stray non-master artifact
+            f"{koaid}_master_bias_L1.txt",  # not a .fits/.h5 product
+        ]
+        for name in removed + kept:
+            open(os.path.join(night, name), "w").close()
+
+        red.clear_stale_outputs(
+            _Config({"KPF_MASTERS_OUTPUT": masters_root}), _args(datecode="20240405")
+        )
+
+        for name in removed:
+            assert not os.path.exists(os.path.join(night, name)), name
+        for name in kept:
+            assert os.path.exists(os.path.join(night, name)), name
+
+    def test_masters_noop_when_dir_absent(self, tmp_path):
+        # A never-built night has no masters dir; glob matches nothing, no error.
+        red.clear_stale_outputs(
+            _Config({"KPF_MASTERS_OUTPUT": str(tmp_path)}), _args(datecode="20240405")
+        )
