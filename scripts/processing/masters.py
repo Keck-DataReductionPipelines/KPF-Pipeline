@@ -47,6 +47,20 @@ from scripts.processing._dispatch import (
 
 logger = logging.getLogger(__name__)
 
+# Minimum spacing (seconds) between fanned-out subprocess launches. A masters build
+# opens with an I/O-heavy stack phase -- reading and assembling the night's bias,
+# dark and ThAr L0 frames (~100 s solo) before any WLS fitting. Launched in lockstep,
+# a full pool marches through that read phase together, so the disk sees `jobs`-deep
+# read bursts and the shared phase balloons ~4-5x (measured ~465 s at 16-wide on
+# shrek), pushing the slowest nights past --job_timeout. Spacing the launches apart
+# desynchronizes the read bursts -- staggered 16-wide jobs held that phase near the
+# ~100 s solo cost -- without lowering steady-state concurrency: at 5 s the 16-job
+# first wave spreads over ~75 s (most of the read window) while staying well under
+# the throughput ceiling (~job_duration/jobs), so the pool still fills. (Tuned from
+# the 2026-07-09 shrek logs; confirm against a real run before trusting the exact
+# value.) Passed to run_stage as its launch_interval.
+_LAUNCH_INTERVAL = 5.0
+
 # --jobs help is command-specific (the fixed masters cap, not the cores default),
 # so it is passed into the shared pool_parser rather than baked into it.
 _JOBS_HELP = (
@@ -228,6 +242,7 @@ def main(argv=None):
         log_dir,
         job_timeout=args.job_timeout,
         abort_on_failure=False,
+        launch_interval=_LAUNCH_INTERVAL,
     )
 
     built = len(datecodes) - len(failed)

@@ -215,15 +215,22 @@ class TestResolveDatecodes:
 
 
 class TestMainExitCode:
-    def _patch(self, m, monkeypatch, failed):
+    def _patch(self, m, monkeypatch, failed, calls=None):
         # Skip the runtime setup and the real dir/config resolution + subprocess
         # fan-out; assert only the exit-code contract from run_stage's failure set.
         # setup_batch_logging is stubbed so main() writes no real batch log file.
+        # `calls`, if given, records run_stage's kwargs for wiring assertions.
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
         monkeypatch.setattr(m, "setup_batch_logging", lambda *a, **k: "/l/x.log")
         monkeypatch.setattr(m, "resolve_datecodes", lambda args, di: ["20240405"])
-        monkeypatch.setattr(m, "run_stage", lambda *a, **k: set(failed))
+
+        def _fake_run_stage(*a, **k):
+            if calls is not None:
+                calls.append(k)
+            return set(failed)
+
+        monkeypatch.setattr(m, "run_stage", _fake_run_stage)
 
     def test_exits_zero_when_all_built(self, m, monkeypatch):
         self._patch(m, monkeypatch, failed=[])
@@ -234,6 +241,15 @@ class TestMainExitCode:
         with pytest.raises(SystemExit) as exc:
             m.main(["--dates", "20240405"])
         assert exc.value.code == 1
+
+    def test_fan_out_is_staggered(self, m, monkeypatch):
+        # Masters must pass its stagger interval to run_stage so the lockstep
+        # disk-read wave is desynchronized (see _LAUNCH_INTERVAL).
+        calls = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+        m.main(["--dates", "20240405"])
+        assert calls[0]["launch_interval"] == m._LAUNCH_INTERVAL
+        assert m._LAUNCH_INTERVAL > 0
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
         # A missing log_dir is fatal before any fan-out (DRP-RUN-07).

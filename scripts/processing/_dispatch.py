@@ -77,9 +77,11 @@ _live_procs = set()
 _live_lock = threading.Lock()
 _interrupted = threading.Event()
 
-# Launch throttle (science only): serializes launches >= _launch_interval apart so
-# pool workers don't hammer SIMBAD/Gaia with the catalog queries the per-frame L0
-# pointing QC fires. `_last_launch` is the monotonic time of the last launch.
+# Launch throttle: serializes fan-out launches >= _launch_interval apart. Two
+# callers, two reasons -- science paces the SIMBAD/Gaia catalog queries the per-frame
+# L0 pointing QC fires; masters desynchronizes the I/O-heavy stack read/assemble
+# phase so a lockstep wave doesn't saturate the disk. `_last_launch` is the monotonic
+# time of the last launch.
 _launch_lock = threading.Lock()
 _last_launch = [0.0]
 
@@ -149,9 +151,10 @@ def _run_one(argv, timeout=None, launch_interval=0.0):
     without launching once teardown has begun (`_interrupted`), and also
     kills-then-returns 130 if teardown begins between launching and tracking.
 
-    `launch_interval` (seconds, >0 for science) throttles the launch, holding the
-    lock across the sleep so pool workers launch one interval apart (pacing the
-    SIMBAD/Gaia queries). The canary launches first, so it never waits.
+    `launch_interval` (seconds, >0 for science and masters) throttles the launch,
+    holding the lock across the sleep so pool workers launch one interval apart
+    (science paces the SIMBAD/Gaia queries; masters desynchronizes the disk-read
+    phase). The canary launches first, so it never waits.
     """
     if _interrupted.is_set():
         return 130, ""
@@ -230,7 +233,8 @@ def run_stage(
       exit, and the caller inspects the returned failure set for its exit code.
 
     `launch_interval` (seconds) spaces the fan-out launches apart (science passes
-    1.0 to rate-limit the SIMBAD/Gaia queries); the canary, running first, is
+    1.0 to rate-limit the SIMBAD/Gaia queries; masters passes a larger value to
+    desynchronize the lockstep disk-read phase); the canary, running first, is
     unaffected. On SIGINT/SIGTERM, cancel the queue and terminate every running
     child before exiting 130, so an interrupt leaves no orphaned subprocesses.
     """
