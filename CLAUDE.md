@@ -293,11 +293,12 @@ its own argparse). The commands:
 up:** `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
 `scripts/` (run a recipe many times) ← `tools/` (the CLI interface). So `tools/cli.py`
 imports `scripts.processing.*`, but **the scripts must never import `tools`** — shared
-orchestration helpers live in `scripts/processing/_common.py` (the `_datecode_dirs`
-range helper), `_dispatch.py` (the process-pool engine), and `_argparse.py` (the
-shared argparse parent-parser factories `recipe_parser` [`-r`/`-c`],
-`data_dirs_parser`, `logging_parser`, `pool_parser`, composed via `parents=[…]` so
-each shared flag is declared once), all three `tools`-free. The package `__init__.py`
+orchestration helpers live in `scripts/processing/_dispatch.py` (the process-pool
+engine) and `_argparse.py` (the shared argparse parent-parser factories `recipe_parser`
+[`-r`/`-c`], `data_dirs_parser`, `logging_parser`, `pool_parser`, composed via
+`parents=[…]` so each shared flag is declared once), both `tools`-free. (The masters
+orchestrator's `--date_range` expansion reuses `kpfpipe.utils.io.datecode_dirs_in_range`
+— a downward import into the shared `kpfpipe` layer, not a scripts-local helper.) The package `__init__.py`
 holds the default `masters`/`science` recipe/config path constants
 (`DEFAULT_{MASTERS,SCIENCE}_{RECIPE,CONFIG}`) — the single source `reduce`'s
 `--masters`/`--science` shortcuts and the orchestrators' fan-out (which passes them

@@ -18,6 +18,7 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.utils.io import (
     FileHandler,
+    datecode_dirs_in_range,
     kpf_directory,
     kpf_filename,
     kpf_filepath,
@@ -353,6 +354,23 @@ class TestBuildCalibrationStacksRealData:
         assert len(lists) == 1
         assert len(lists[0]) == 3
         assert lists[0] == sorted(lists[0])
+
+
+# ---------------------------------------------------------------------------
+# datecode_dirs_in_range
+# ---------------------------------------------------------------------------
+
+
+class TestDatecodeDirsInRange:
+    """The datecode-range discovery helper used by the masters orchestrator to
+    expand a ``--date_range`` against the L0 tree. Synthetic tmp trees only."""
+
+    def test_filters_by_range_and_sorts(self, tmp_path):
+        for name in ["20240101", "20240115", "20240201", "notadate", "20231231"]:
+            (tmp_path / name).mkdir()
+        (tmp_path / "20240110_file").write_text("x")  # datecode-ish, but not a dir
+        got = datecode_dirs_in_range(str(tmp_path), "20240101", "20240131")
+        assert got == ["20240101", "20240115"]
 
 
 # ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.io import datecode_dirs_in_range
 from kpfpipe.utils.kpf_utils import is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
@@ -41,7 +42,6 @@ from scripts.processing._argparse import (
     pool_parser,
     recipe_parser,
 )
-from scripts.processing._common import _datecode_dirs
 from scripts.processing._dispatch import (
     _MASTERS_JOBS,
     _default_masters_jobs,
@@ -129,7 +129,7 @@ def resolve_datecodes(args, data_input):
     if not os.path.isdir(l0_root):
         sys.exit(f"error: L0 input directory not found: {l0_root}")
     start, end = args.date_range
-    nights = _datecode_dirs(l0_root, start, end)
+    nights = datecode_dirs_in_range(l0_root, start, end)
     if not nights:
         sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
     return nights

@@ -15,6 +15,7 @@ from kpfpipe.utils.kpf_utils import (
     get_datecode,
     get_obs_id,
     get_timestamp,
+    is_datecode,
     is_obs_id,
     kpf_timestamp_to_datetime,
     kpf_timestamp_to_eprv_timestamp,
@@ -63,6 +64,20 @@ def load_junk_obs_ids(data_input):
         return set()
     df = pd.read_csv(junk_csv, header=1)
     return set(df.iloc[:, 0].astype(str).str.strip())
+
+
+def datecode_dirs_in_range(root, start, end):
+    """Sorted datecode subdirs of `root` within the inclusive [start, end] range.
+
+    Used by the masters orchestrator to expand a ``--date_range`` against the L0
+    tree. Non-datecode names and plain files are skipped; datecodes sort
+    lexicographically, which coincides with chronological order for ``YYYYMMDD``.
+    """
+    return [
+        d
+        for d in sorted(os.listdir(root))
+        if is_datecode(d) and start <= d <= end and os.path.isdir(os.path.join(root, d))
+    ]
 
 
 class FileHandler:

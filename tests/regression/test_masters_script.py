@@ -3,8 +3,8 @@
 Cover the driver's own surface: arg parsing and the two input forms, the
 ``_cli_task`` argv it fans out, datecode resolution, and the ``main`` exit-code
 contract (nonzero iff at least one night failed). The shared fan-out engine
-(``run_stage``, job sizing) and the ``_datecode_dirs`` helper live in
-``_dispatch``/``_common`` and are tested in test_dispatch.py / test_common.py.
+(``run_stage``, job sizing) lives in ``_dispatch`` and the ``datecode_dirs_in_range``
+helper in ``kpfpipe.utils.io``; they are tested in test_dispatch.py / test_io.py.
 
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.
 """
