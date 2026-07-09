@@ -21,10 +21,13 @@ script exits nonzero if any frame failed, so a caller gets a meaningful exit cod
 """
 
 import argparse
+import logging
 import sys
 
+import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf_utils import is_obs_id
+from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
 from scripts.processing._argparse import (
     data_dirs_parser,
@@ -33,6 +36,8 @@ from scripts.processing._argparse import (
     recipe_parser,
 )
 from scripts.processing._dispatch import _default_jobs, configure_runtime, run_stage
+
+logger = logging.getLogger(__name__)
 
 # Minimum spacing (seconds) between fanned-out subprocess launches. The per-frame
 # L0 pointing QC fires rapid SIMBAD/Gaia catalog queries at startup, so a burst of
@@ -118,7 +123,19 @@ def main(argv=None):
     # the log dir used in the failure sentinels; each subprocess gets the resolved
     # recipe/config explicitly via -r/-c (see _cli_task).
     config = ConfigHandler(args.config or DEFAULT_SCIENCE_CONFIG)
-    log_dir = args.log_dir or config.get_params(["LOGGER"]).get("log_dir")
+    logger_params = config.get_params(["LOGGER"])
+    log_dir = args.log_dir or logger_params.get("log_dir")
+    if not log_dir:
+        sys.exit(
+            "error: no log directory configured; set [LOGGER] log_dir in the "
+            "config file or pass --log_dir"
+        )
+
+    # The batch-summary log: the orchestrator's own DRP-RUN-08 decision trail
+    # (dispatch banner, per-frame ok/FAILED, summary), echoed live to stdout and
+    # persisted alongside each frame's own per-reduction log.
+    level = args.log_level or logger_params.get("log_level", "INFO")
+    log_path = setup_batch_logging(log_dir, "science", level=level)
 
     forward = []
     for value, flag in (
@@ -132,7 +149,14 @@ def main(argv=None):
             forward += [flag, value]
 
     obs_ids = args.obs_id_list
-    print(f"reducing {len(obs_ids)} science frame(s): {', '.join(obs_ids)}")
+
+    # Batch banner: the start of this invocation's decision trail.
+    logger.info("kpfpipe %s science batch starting", kpfpipe.__version__)
+    logger.info("argv: %s", " ".join(sys.argv))
+    logger.info("config: %s", args.config or DEFAULT_SCIENCE_CONFIG)
+    logger.info("jobs: %s", args.jobs)
+    logger.info("batch log: %s", log_path)
+    logger.info("reducing %d science frame(s): %s", len(obs_ids), ", ".join(obs_ids))
 
     tasks = [
         _cli_task(o, forward, config=args.config, recipe=args.recipe) for o in obs_ids
@@ -148,7 +172,7 @@ def main(argv=None):
     )
 
     reduced = len(obs_ids) - len(failed)
-    print(f"\ndone: reduced {reduced}/{len(obs_ids)} frame(s)")
+    logger.info("done: reduced %d/%d frame(s)", reduced, len(obs_ids))
     if failed:
         sys.exit(1)
 

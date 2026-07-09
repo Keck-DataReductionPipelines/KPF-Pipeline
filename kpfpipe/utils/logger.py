@@ -6,15 +6,25 @@ per-invocation log files that concurrent pipeline instances never share.
 
 Handlers are installed on the root logger so that module loggers
 (``logging.getLogger(__name__)``), the ``py.warnings`` bridge, and
-third-party libraries all reach the same file. Setup happens exactly once,
-in the single-recipe leaf runner (scripts/processing/reduce.py, the
-``kpfpipe run`` entry) -- never at import time. Library code only ever calls
-``logging.getLogger(__name__)``; with no handlers installed (e.g. recipes
-driven directly by tests) records are simply dropped.
+third-party libraries all reach the same file. Two sibling entry points
+install them, never at import time:
+
+- ``setup_logging`` -- the single-recipe leaf runner
+  (scripts/processing/reduce.py, the ``kpfpipe run`` entry) calls it once per
+  reduction, writing that recipe's per-unit log; its console echo defaults to
+  stderr.
+- ``setup_batch_logging`` -- the fan-out orchestrators (masters.py/science.py)
+  call it once per invocation, writing a batch-summary log of the dispatch's own
+  decision points; its console echo is pinned to stdout so an operator can watch
+  batch progress live. It is a thin wrapper over ``setup_logging``.
+
+Library code only ever calls ``logging.getLogger(__name__)``; with no handlers
+installed (e.g. recipes driven directly by tests) records are simply dropped.
 """
 
 import logging
 import os
+import sys
 import time
 
 # One line per record: UT timestamp, level, logger name, message.
@@ -88,8 +98,10 @@ def build_log_path(log_dir, recipe_name, target, start_time=None):
     return os.path.abspath(os.path.join(log_dir, datecode, fn))
 
 
-def setup_logging(log_dir, recipe_name, target, level="INFO", console=True):
-    """Install per-invocation file (+ optional stderr) handlers on root.
+def setup_logging(
+    log_dir, recipe_name, target, level="INFO", console=True, stream=None
+):
+    """Install per-invocation file (+ optional console) handlers on root.
 
     - Tears down any handlers a previous setup_logging installed, so
       repeated calls never duplicate handlers.
@@ -115,7 +127,11 @@ def setup_logging(log_dir, recipe_name, target, level="INFO", console=True):
     level : str
         Logging level name; INFO is the production level.
     console : bool
-        Also mirror records to stderr via a StreamHandler.
+        Also mirror records to a console via a StreamHandler.
+    stream : file-like or None
+        Console destination when ``console`` is true; ``None`` means stderr
+        (``logging.StreamHandler``'s default). The batch orchestrators pass
+        ``sys.stdout`` so their live progress stays on stdout.
 
     Returns
     -------
@@ -142,7 +158,7 @@ def setup_logging(log_dir, recipe_name, target, level="INFO", console=True):
 
     new_handlers = [file_handler]
     if console:
-        console_handler = logging.StreamHandler()  # stderr
+        console_handler = logging.StreamHandler(stream)  # stream=None -> stderr
         console_handler.set_name("kpfpipe_console")
         new_handlers.append(console_handler)
     for handler in new_handlers:
@@ -155,6 +171,46 @@ def setup_logging(log_dir, recipe_name, target, level="INFO", console=True):
 
     logging.captureWarnings(True)
     return log_path
+
+
+def setup_batch_logging(log_dir, label, level="INFO", console=True):
+    """Install per-invocation handlers for a batch orchestrator (masters/science).
+
+    Sibling to ``setup_logging``: same root-handler machinery and file layout,
+    but for the fan-out drivers rather than one recipe. Writes
+    ``{log_dir}/{YYYYMMDD}/kpf_{label}_batch_{stamp}.log``, recording the batch's
+    own decision points -- units dispatched, canary result, per-unit ok/failed,
+    and the failure sentinels -- alongside (not replacing) each unit's
+    per-reduction log. The console echo is pinned to ``sys.stdout`` so an operator
+    can watch batch progress live (parity with the ``print()``s this replaces),
+    while each record is also persisted to the batch log file. Called once at the
+    top of an orchestrator's ``main()``; ``setup_logging`` stays the leaf-only,
+    per-recipe entry.
+
+    Parameters
+    ----------
+    log_dir : str
+        The configured parent log directory (DRP-RUN-07).
+    label : str
+        Short orchestrator identifier, e.g. 'masters' or 'science'.
+    level : str
+        Logging level name; INFO is the production level.
+    console : bool
+        Also mirror records to stdout via a StreamHandler.
+
+    Returns
+    -------
+    str
+        The absolute path of the created batch log file.
+    """
+    return setup_logging(
+        log_dir,
+        recipe_name=label,
+        target="batch",
+        level=level,
+        console=console,
+        stream=sys.stdout,
+    )
 
 
 def teardown_logging():

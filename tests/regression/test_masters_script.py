@@ -26,6 +26,13 @@ class _FakeConfig:
         return {"KPF_DATA_INPUT": "/in", "log_dir": "/l"}
 
 
+class _NoLogDirConfig(_FakeConfig):
+    """A config with a resolvable data input but no configured log_dir."""
+
+    def get_params(self, keys):
+        return {"KPF_DATA_INPUT": "/in"}  # no log_dir
+
+
 @pytest.fixture(scope="module")
 def m():
     """The masters driver module (a normal package import)."""
@@ -175,8 +182,10 @@ class TestMainExitCode:
     def _patch(self, m, monkeypatch, failed):
         # Skip the runtime setup and the real dir/config resolution + subprocess
         # fan-out; assert only the exit-code contract from run_stage's failure set.
+        # setup_batch_logging is stubbed so main() writes no real batch log file.
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
+        monkeypatch.setattr(m, "setup_batch_logging", lambda *a, **k: "/l/x.log")
         monkeypatch.setattr(m, "resolve_datecodes", lambda args, di: ["20240405"])
         monkeypatch.setattr(m, "run_stage", lambda *a, **k: set(failed))
 
@@ -189,3 +198,11 @@ class TestMainExitCode:
         with pytest.raises(SystemExit) as exc:
             m.main(["--datecode_list", "20240405"])
         assert exc.value.code == 1
+
+    def test_errors_when_log_dir_unset(self, m, monkeypatch):
+        # A missing log_dir is fatal before any fan-out (DRP-RUN-07).
+        monkeypatch.setattr(m, "configure_runtime", lambda: None)
+        monkeypatch.setattr(m, "ConfigHandler", _NoLogDirConfig)
+        with pytest.raises(SystemExit) as exc:
+            m.main(["--datecode_list", "20240405"])
+        assert "log directory" in str(exc.value)

@@ -8,6 +8,7 @@ testdata needed. The launch throttle (``launch_interval``) defaults to 0 here so
 the dispatch tests stay fast and free of thread-timing flakiness.
 """
 
+import logging
 import sys
 
 import pytest
@@ -90,11 +91,13 @@ class TestRunStageFailSoft:
         tasks = [("a", _OK), ("b", _OK), ("c", _OK)]
         assert self._run(tasks, tmp_path) == set()
 
-    def test_failed_canary_still_fans_out_and_is_reported(self, tmp_path, capsys):
-        # A bad canary does not stop the rest; it is collected.
+    def test_failed_canary_still_fans_out_and_is_reported(self, tmp_path, caplog):
+        # A bad canary does not stop the rest; it is collected. The narration now
+        # flows through the batch logger, so assert against caplog, not stdout.
+        caplog.set_level(logging.INFO)
         tasks = [("a", _FAIL), ("b", _OK), ("c", _OK)]
         assert self._run(tasks, tmp_path) == {"a"}
-        assert "continuing" in capsys.readouterr().out
+        assert "continuing" in caplog.text
 
     def test_collects_all_failures(self, tmp_path):
         tasks = [("a", _OK), ("b", _FAIL), ("c", _FAIL)]
@@ -133,14 +136,16 @@ class TestRunStageFailFast:
 
 
 class TestReportFailures:
-    def test_prints_header_hint_and_stderr_tail(self, tmp_path, capsys):
+    def test_prints_header_hint_and_stderr_tail(self, tmp_path, caplog):
+        # The sentinels now flow through the batch logger, so assert on caplog.
+        caplog.set_level(logging.INFO)
         failures = [("science", "KP.x", 1, "boom line 1\nboom line 2")]
         f._report_failures(failures, str(tmp_path), header="WARNING: 1 failed")
-        err = capsys.readouterr().err
-        assert "WARNING: 1 failed" in err
-        assert "FAILED [science] KP.x (exit 1)" in err
-        assert "kpf_science_KP.x_" in err  # the log-path hint
-        assert "boom line 2" in err  # the stderr tail
+        text = caplog.text
+        assert "WARNING: 1 failed" in text
+        assert "FAILED [science] KP.x (exit 1)" in text
+        assert "kpf_science_KP.x_" in text  # the log-path hint
+        assert "boom line 2" in text  # the stderr tail
 
 
 class TestRunOneInterrupt:

@@ -394,11 +394,14 @@ class StageName:
     loggers explicitly — `logging.getLogger("kpfpipe.recipe.science")` / `".masters"`;
     the CLI uses `"kpfpipe.cli"`. Never call the root-logger conveniences
     (`logging.info(...)` — Ruff `LOG015`).
-  - **Handler/level configuration lives in exactly one place**:
-    `kpfpipe.utils.logger.setup_logging`, called only by the single-recipe leaf runner
-    (`scripts/processing/reduce.py`, the `kpfpipe run` entry) — never at import time,
-    never in recipes/modules/tests. Library code must work with no handlers installed
-    (records drop silently).
+  - **Handler/level configuration lives in exactly one module** (`kpfpipe.utils.logger`),
+    via two sibling entry points — never at import time, never in recipes/modules/tests:
+    `setup_logging` (the single-recipe leaf runner `scripts/processing/reduce.py`, the
+    `kpfpipe run` entry; per-recipe log, stderr console echo) and `setup_batch_logging`
+    (the fan-out orchestrators `scripts/processing/masters.py`/`science.py`, once per
+    invocation; a `_batch_` summary log with the console echo pinned to **stdout** for
+    live progress). Library code must work with no handlers installed (records drop
+    silently).
   - **Level policy**: `INFO` is the production level — reduction steps, decision
     points, file reads/writes, and end-of-`perform()` module summaries. `DEBUG` —
     inner-loop progress and counters. `WARNING` arrives via the warnings bridge (below).
@@ -409,6 +412,11 @@ class StageName:
     models and modules); never in `perform()`/pipeline paths. A module's `_track_info()`
     builds and caches the summary text on `self._info`; `info()` prints it and `perform()`
     logs it (`logger.info("summary:\n%s", self._info)`), so both share one rendering (see §2).
+    The batch-processing orchestrators (`masters`/`science`/`_dispatch`) are **not** an
+    exception to this: they log their fan-out narration (dispatch banner, per-unit
+    ok/FAILED, failure sentinels) through a named logger configured by
+    `setup_batch_logging`, not `print()` — the stdout console echo gives the operator the
+    same live view while also persisting a batch-summary log.
   - In-pipeline recoverable/degraded conditions → `warnings.warn(..., stacklevel=2)`,
     gated behind a `verbose` flag: `if verbose: warnings.warn(..., stacklevel=2)`. The
     explicit `stacklevel` is required (Ruff `B028`) so the warning points at the caller.

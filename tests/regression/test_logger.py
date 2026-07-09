@@ -2,6 +2,7 @@
 
 import logging
 import re
+import sys
 import time
 import warnings
 
@@ -113,6 +114,14 @@ class TestSetupLogging:
         kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
         assert not any(h.name == "kpfpipe_console" for h in root.handlers)
 
+    def test_console_defaults_to_stderr(self, tmp_path):
+        # The leaf runner's console echo stays on stderr (stream=None default).
+        kpflog.setup_logging(str(tmp_path), "science", "t", console=True)
+        (console,) = [
+            h for h in logging.getLogger().handlers if h.name == "kpfpipe_console"
+        ]
+        assert console.stream is sys.stderr
+
     def test_third_party_pins(self, tmp_path):
         kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
         assert logging.getLogger("matplotlib").level == logging.WARNING
@@ -122,6 +131,31 @@ class TestSetupLogging:
         with pytest.raises(ValueError, match="unknown log level"):
             kpflog.setup_logging(str(tmp_path), "science", "t", level="chatty")
         assert list(tmp_path.iterdir()) == []
+
+
+class TestSetupBatchLogging:
+    """The batch-orchestrator sibling: a per-invocation ``_batch_`` log echoed
+    to stdout so an operator can watch fan-out progress live."""
+
+    def test_creates_batch_file_and_returns_path(self, tmp_path):
+        path = kpflog.setup_batch_logging(str(tmp_path), "masters")
+        datecode = time.strftime("%Y%m%d", time.gmtime())
+        assert path.startswith(str(tmp_path / datecode))
+        assert re.search(r"kpf_masters_batch_\d{8}T\d{6}\.log$", path)
+        assert _read(path) == ""  # created, empty until a record arrives
+
+    def test_module_logger_record_lands_in_file(self, tmp_path):
+        path = kpflog.setup_batch_logging(str(tmp_path), "masters", console=False)
+        logging.getLogger("scripts.processing.masters").info("dispatching 3 job(s)")
+        assert "dispatching 3 job(s)" in _read(path)
+
+    def test_console_echo_is_stdout(self, tmp_path):
+        # The live-echo contract: batch progress mirrors to stdout (not stderr).
+        kpflog.setup_batch_logging(str(tmp_path), "science")
+        (console,) = [
+            h for h in logging.getLogger().handlers if h.name == "kpfpipe_console"
+        ]
+        assert console.stream is sys.stdout
 
 
 class TestTeardown:

@@ -28,6 +28,13 @@ class _FakeConfig:
         return {"log_dir": "/l"}
 
 
+class _NoLogDirConfig(_FakeConfig):
+    """A config with no configured log_dir."""
+
+    def get_params(self, keys):
+        return {}  # no log_dir
+
+
 @pytest.fixture(scope="module")
 def s():
     """The science driver module (a normal package import)."""
@@ -137,8 +144,10 @@ class TestMainExitCode:
     def _patch(self, s, monkeypatch, failed):
         # Skip the runtime setup and the real dir/config resolution + subprocess
         # fan-out; assert only the exit-code contract from run_stage's failure set.
+        # setup_batch_logging is stubbed so main() writes no real batch log file.
         monkeypatch.setattr(s, "configure_runtime", lambda: None)
         monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
+        monkeypatch.setattr(s, "setup_batch_logging", lambda *a, **k: "/l/x.log")
         monkeypatch.setattr(s, "run_stage", lambda *a, **k: set(failed))
 
     def test_exits_zero_when_all_reduced(self, s, monkeypatch):
@@ -150,3 +159,11 @@ class TestMainExitCode:
         with pytest.raises(SystemExit) as exc:
             s.main(["--obs_id_list", _OID1])
         assert exc.value.code == 1
+
+    def test_errors_when_log_dir_unset(self, s, monkeypatch):
+        # A missing log_dir is fatal before any fan-out (DRP-RUN-07).
+        monkeypatch.setattr(s, "configure_runtime", lambda: None)
+        monkeypatch.setattr(s, "ConfigHandler", _NoLogDirConfig)
+        with pytest.raises(SystemExit) as exc:
+            s.main(["--obs_id_list", _OID1])
+        assert "log directory" in str(exc.value)

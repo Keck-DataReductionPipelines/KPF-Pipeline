@@ -10,6 +10,7 @@ scripts stay ignorant of the CLI dispatcher above them.
 """
 
 import concurrent.futures
+import logging
 import os
 import signal
 import subprocess
@@ -18,6 +19,12 @@ import threading
 import time
 
 import kpfpipe
+
+# Batch narration + failure sentinels flow through this logger, so the
+# orchestrator's setup_batch_logging handlers persist them to the batch log and
+# echo them live to stdout. With no handlers installed (e.g. direct-call tests)
+# the records are simply dropped.
+logger = logging.getLogger(__name__)
 
 # Fixed cap on concurrent masters (stacking) jobs. The stacking stage does NOT
 # bottleneck on cores or RAM -- measured on shrek (256 cores, 2 TiB), a masters
@@ -256,22 +263,38 @@ def run_stage(
     """
     if not tasks:
         return set()
-    print(
-        f"[{label}] dispatching {len(tasks)} job(s): 1 serial canary, "
-        f"then up to {jobs} at once"
+    logger.info(
+        "[%s] dispatching %d job(s): 1 serial canary, then up to %d at once",
+        label,
+        len(tasks),
+        jobs,
     )
     failures = []
     pool = None
     try:
         canary_tag, canary_argv = tasks[0]
-        print(f"  [{label}] canary {canary_tag} (serial; warms shared caches)...")
+        logger.info(
+            "  [%s] canary %s (serial; warms shared caches)...", label, canary_tag
+        )
         rc, stderr = _run_one(canary_argv, timeout=canary_timeout)
         if rc != 0:
             failures.append((label, canary_tag, rc, stderr))
-            fanning = "continuing anyway" if not abort_on_failure else "not fanning out"
-            print(f"  [{label}] FAILED: canary {canary_tag} (exit {rc}); {fanning}")
+            if abort_on_failure:
+                logger.error(
+                    "  [%s] FAILED: canary %s (exit %d); not fanning out",
+                    label,
+                    canary_tag,
+                    rc,
+                )
+            else:
+                logger.warning(
+                    "  [%s] FAILED: canary %s (exit %d); continuing anyway",
+                    label,
+                    canary_tag,
+                    rc,
+                )
         else:
-            print(f"  [{label}] ok: {canary_tag}")
+            logger.info("  [%s] ok: %s", label, canary_tag)
 
         # Fan out when the canary passed, or always in fail-soft mode (a bad
         # unit must not block the rest). Skip only when a fail-fast canary died.
@@ -288,29 +311,34 @@ def run_stage(
                 except concurrent.futures.CancelledError:
                     continue
                 if rc == 0:
-                    print(f"  [{label}] ok: {tag}")
+                    logger.info("  [%s] ok: %s", label, tag)
                     continue
                 failures.append((label, tag, rc, stderr))
                 if abort_on_failure:
-                    print(
-                        f"  [{label}] FAILED: {tag} (exit {rc}); halting new "
-                        f"{label} jobs"
+                    logger.error(
+                        "  [%s] FAILED: %s (exit %d); halting new %s jobs",
+                        label,
+                        tag,
+                        rc,
+                        label,
                     )
                     for pending in futures:
                         pending.cancel()
                 else:
-                    print(f"  [{label}] FAILED: {tag} (exit {rc}); continuing")
+                    logger.warning(
+                        "  [%s] FAILED: %s (exit %d); continuing", label, tag, rc
+                    )
     except KeyboardInterrupt:
         _interrupted.set()
-        print(
-            f"\n[{label}] interrupted -- cancelling queued jobs and terminating "
-            f"running ones...",
-            file=sys.stderr,
+        logger.warning(
+            "[%s] interrupted -- cancelling queued jobs and terminating running "
+            "ones...",
+            label,
         )
         if pool is not None:
             pool.shutdown(wait=False, cancel_futures=True)
         _terminate_all_children()
-        print(f"[{label}] all child processes stopped; exiting", file=sys.stderr)
+        logger.warning("[%s] all child processes stopped; exiting", label)
         sys.exit(130)
     finally:
         if pool is not None:
@@ -334,20 +362,20 @@ def run_stage(
 
 
 def _report_failures(failures, log_dir, *, header):
-    """Print an actionable sentinel for each failed subprocess, to stderr.
+    """Log an actionable sentinel for each failed subprocess, via the batch logger.
 
     `header` is the banner line -- an ABORTED line when the stage is fatal, or a
-    WARNING line when a fail-soft stage is continuing past the failures.
+    WARNING line when a fail-soft stage is continuing past the failures. Records
+    go through the module logger at ERROR, so the orchestrator's batch log (and its
+    stdout echo) capture them; with no handlers installed they are simply dropped.
     """
-    print(f"\n{'=' * 72}", file=sys.stderr)
-    print(header, file=sys.stderr)
-    print("=" * 72, file=sys.stderr)
+    rule = "=" * 72
+    logger.error("%s\n%s\n%s", rule, header, rule)
     for label, tag, rc, stderr in failures:
         hint = os.path.join(log_dir, "*", f"kpf_{label}_{tag}_*.log")
-        print(f"\nFAILED [{label}] {tag} (exit {rc})", file=sys.stderr)
-        print(f"  inspect log: {hint}", file=sys.stderr)
+        lines = [f"FAILED [{label}] {tag} (exit {rc})", f"  inspect log: {hint}"]
         tail = (stderr or "").strip().splitlines()[-20:]
         if tail:
-            print("  --- last stderr lines ---", file=sys.stderr)
-            for line in tail:
-                print(f"  {line}", file=sys.stderr)
+            lines.append("  --- last stderr lines ---")
+            lines.extend(f"  {line}" for line in tail)
+        logger.error("\n".join(lines))

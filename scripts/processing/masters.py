@@ -26,11 +26,14 @@ night failed, so a caller gets a meaningful exit code.
 """
 
 import argparse
+import logging
 import os
 import sys
 
+import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf_utils import is_datecode
+from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
 from scripts.processing._argparse import (
     data_dirs_parser,
@@ -45,6 +48,8 @@ from scripts.processing._dispatch import (
     configure_runtime,
     run_stage,
 )
+
+logger = logging.getLogger(__name__)
 
 # --jobs help is command-specific (the fixed masters cap, not the cores default),
 # so it is passed into the shared pool_parser rather than living in it.
@@ -164,10 +169,22 @@ def main(argv=None):
     # the L0 input root + log dir; each subprocess gets the resolved recipe/config
     # explicitly via -r/-c (see _cli_task).
     config = ConfigHandler(args.config or DEFAULT_MASTERS_CONFIG)
+    logger_params = config.get_params(["LOGGER"])
     data_input = (
         args.kpf_data_input or config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
     )
-    log_dir = args.log_dir or config.get_params(["LOGGER"]).get("log_dir")
+    log_dir = args.log_dir or logger_params.get("log_dir")
+    if not log_dir:
+        sys.exit(
+            "error: no log directory configured; set [LOGGER] log_dir in the "
+            "config file or pass --log_dir"
+        )
+
+    # The batch-summary log: the orchestrator's own DRP-RUN-08 decision trail
+    # (dispatch banner, per-night ok/FAILED, summary), echoed live to stdout and
+    # persisted alongside each night's own per-reduction log.
+    level = args.log_level or logger_params.get("log_level", "INFO")
+    log_path = setup_batch_logging(log_dir, "masters", level=level)
 
     forward = []
     for value, flag in (
@@ -179,8 +196,18 @@ def main(argv=None):
         if value:
             forward += [flag, value]
 
+    # Batch banner: the start of this invocation's decision trail.
+    logger.info("kpfpipe %s masters batch starting", kpfpipe.__version__)
+    logger.info("argv: %s", " ".join(sys.argv))
+    logger.info("config: %s", args.config or DEFAULT_MASTERS_CONFIG)
+    logger.info("data input: %s", data_input)
+    logger.info("jobs: %s", args.jobs)
+    logger.info("batch log: %s", log_path)
+
     datecodes = resolve_datecodes(args, data_input)
-    print(f"building masters for {len(datecodes)} night(s): {', '.join(datecodes)}")
+    logger.info(
+        "building masters for %d night(s): %s", len(datecodes), ", ".join(datecodes)
+    )
 
     tasks = [
         _cli_task(dc, forward, config=args.config, recipe=args.recipe)
@@ -196,7 +223,7 @@ def main(argv=None):
     )
 
     built = len(datecodes) - len(failed)
-    print(f"\ndone: built masters for {built}/{len(datecodes)} night(s)")
+    logger.info("done: built masters for %d/%d night(s)", built, len(datecodes))
     if failed:
         sys.exit(1)
 
