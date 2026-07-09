@@ -32,14 +32,14 @@ def _clear_interrupted():
 # ---------------------------------------------------------------------------
 
 
-class TestDefaultJobs:
+class TestDefaultScienceJobs:
     @pytest.mark.parametrize(
         "cpus,expected",
         [(None, 1), (1, 1), (8, 8), (64, 16), (100, 25)],
     )
     def test_cap(self, monkeypatch, cpus, expected):
         monkeypatch.setattr(f.os, "cpu_count", lambda: cpus)
-        assert f._default_jobs() == expected
+        assert f._default_science_jobs() == expected
 
 
 class TestDefaultMastersJobs:
@@ -63,7 +63,7 @@ class TestDefaultMastersJobs:
     def test_cores_floor_below_fixed_cap(self, monkeypatch):
         monkeypatch.setattr(f.os, "cpu_count", lambda: 8)
         monkeypatch.setattr(f.os, "sysconf", self._fake_sysconf(256))
-        assert f._default_masters_jobs() == f._default_jobs() == 8
+        assert f._default_masters_jobs() == f._default_science_jobs() == 8
 
     def test_unknown_ram_uses_cores_floor_only(self, monkeypatch):
         monkeypatch.setattr(f.os, "cpu_count", lambda: 256)

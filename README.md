@@ -99,6 +99,15 @@ kpfpipe science --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 ...
 kpfpipe science --obs_ids frames.txt   # or a file listing one obs_id per line
 ```
 
+`kpfpipe timeseries` reduces one star's RV timeseries over a datecode range: it
+discovers that target's science frames from the L0 tree, then dispatches the
+nightly masters and the per-frame science reductions to the two orchestrators
+above (plotting is a follow-up):
+
+```bash
+kpfpipe timeseries --target 10700 --date_range 20240101 20240131 --kpf_data_input /data/kpf ...
+```
+
 ## Quicklook Full-Resolution Images
 
 L0 stitched-image and L1 assembled-image quicklooks support an opt-in

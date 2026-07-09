@@ -43,7 +43,7 @@ from scripts.processing import (
 from scripts.processing._argparse import (
     data_dirs_parser,
     logging_parser,
-    recipe_parser,
+    recipe_and_config_parser,
 )
 
 logger = logging.getLogger("kpfpipe.cli")
@@ -55,7 +55,7 @@ def main(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
-            recipe_parser(),
+            recipe_and_config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
         ],

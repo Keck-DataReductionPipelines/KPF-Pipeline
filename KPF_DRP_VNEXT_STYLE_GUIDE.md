@@ -284,7 +284,7 @@ class StageName:
   keyed by the same `datecode`: it loads `{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv`
   when present (skipping the header scan) and writes it after a scan otherwise — a
   read/write-through cache under one flag, not two. Callers that reduce a night repeatedly
-  (the masters recipe, `select_master_cals.py`, `rv_timeseries.py` discovery) pass it.
+  (the masters recipe, `select_master_cals.py`, `timeseries.py` discovery) pass it.
 - **Defaults live in the module, not the config file.** Resolution is a three-tier
   override chain, lowest precedence first: `_DEFAULTS` (the in-module default) → config
   (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword

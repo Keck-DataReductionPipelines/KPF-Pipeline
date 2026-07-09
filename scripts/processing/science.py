@@ -40,9 +40,13 @@ from scripts.processing._argparse import (
     data_dirs_parser,
     logging_parser,
     pool_parser,
-    recipe_parser,
+    recipe_and_config_parser,
 )
-from scripts.processing._dispatch import _default_jobs, configure_runtime, run_stage
+from scripts.processing._dispatch import (
+    _default_science_jobs,
+    configure_runtime,
+    run_stage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +70,7 @@ def parse_args(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
-            recipe_parser(),
+            recipe_and_config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
@@ -106,7 +110,7 @@ def parse_args(argv=None):
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
     if args.jobs is None:
-        args.jobs = _default_jobs()
+        args.jobs = _default_science_jobs()
     elif args.jobs < 1:
         ap.error("--jobs must be >= 1")
     return args

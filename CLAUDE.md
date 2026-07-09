@@ -286,15 +286,26 @@ its own argparse). The commands:
   state, independent exit), via the shared engine in `_dispatch.py`. The orchestrators
   take `--dates`/`--date_range` (masters) and `--obs_ids` (science);
   `kpfpipe masters --dates 20240405` is a batch-of-one, while
-  `kpfpipe run --masters -d 20240405` is the in-process single shot. (`kpfpipe
-  timeseries` — the `rv_timeseries.py` rewire — is a follow-up.)
+  `kpfpipe run --masters -d 20240405` is the in-process single shot.
+- **`kpfpipe timeseries`** → `scripts/processing/timeseries.py` — a **thin
+  wrapper above the orchestrators**: given `--target` + `--date_range`, it discovers
+  that star's science frames from the L0 tree (steps 1–2), then runs **one**
+  `python -m scripts.processing.masters --dates …` subprocess and **one**
+  `python -m scripts.processing.science --obs_ids …` subprocess (steps 3–4) — it
+  does *not* use `_dispatch.run_stage` itself (that would fan out leaves; here the
+  two orchestrators each fan out and stream their own batch log). Both stages are
+  fail-soft: every discovered frame is handed to science regardless of the masters
+  result (a frame whose masters failed to build simply fails in the science stage
+  and is reported there — no gating in the wrapper), and the run exits nonzero if
+  either stage failed. Plotting (RV vs BJD_TDB) is deferred; that code is parked
+  verbatim in `notes/tmp_rv_plot.py`.
 
 **The layering is strictly one-directional — each layer may import *down* but never
 up:** `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
 `scripts/` (run a recipe many times) ← `tools/` (the CLI interface). So `tools/cli.py`
 imports `scripts.processing.*`, but **the scripts must never import `tools`** — shared
 orchestration helpers live in `scripts/processing/_dispatch.py` (the process-pool
-engine) and `_argparse.py` (the shared argparse parent-parser factories `recipe_parser`
+engine) and `_argparse.py` (the shared argparse parent-parser factories `recipe_and_config_parser`
 [`-r`/`-c`], `data_dirs_parser`, `logging_parser`, `pool_parser`, composed via
 `parents=[…]` so each shared flag is declared once), both `tools`-free. (The masters
 orchestrator's `--date_range` expansion reuses `kpfpipe.utils.io.datecode_dirs_in_range`
@@ -320,9 +331,9 @@ Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs
 
 `kpfpipe/modules/masters/` — stacks multiple observations to create bias, dark, flat, and wavelength solution (WLS) calibration products. Uses sigma-clipped statistics with a single-pass streaming accumulation (per-pixel counts and exposure time) for large stacks; the master image is the exposure-weighted rate `counts_sum / exptime_sum`. The streaming accumulator's approximation pass caches the first `ndirect` assembled L1 frames (`base.py::_load_frame(cache=True)`) so the exact pass reuses them instead of re-reading/re-assembling — the masters stage is I/O-bound, so this trade favors I/O over the ~1.3 GiB/job the cache holds.
 
-**Masters concurrency is capped independently of `--jobs`, and NOT by cores or RAM.** The `rv_timeseries.py` driver fans nightly masters builds out across a process pool; a **fixed** `_MASTERS_JOBS` (16) bounds that fan-out (science keeps the cores-based `--jobs`). This is deliberate and non-obvious: the stacking stage does not bottleneck on cores or RAM. Measured on shrek (256 cores, 2 TiB), a wide masters fan-out left the CPUs ~75% idle with 1.4 TiB free and **never swapped**, yet every job crawled to `--job_timeout` (1 job alone is fast; ~56 at once wedge). The limit is the **operating system's own memory bookkeeping** (page-fault / mapping churn from streaming large arrays) coordinated across all cores — a cost that grows with the *number of concurrent jobs*, not the work each does. So the cap is a fixed, empirically tuned constant (16 ≈ 2× margin below the ~32 where such degradation appears on similar pipelines), floored by cores/RAM only for small machines. Do **not** "restore" a cores- or RAM-derived masters cap: the earlier RAM cap was built on a mistaken swap diagnosis and is inert on a big host. (Historical dead end: a masters stall once *looked* like swapping; forensics later proved zero swap traffic — the signature is idle CPU + free RAM + high system time, i.e. OS contention, not memory pressure.)
+**Masters concurrency is capped independently of `--jobs`, and NOT by cores or RAM.** The `masters` orchestrator (`_dispatch.py`) fans nightly masters builds out across a process pool; a **fixed** `_MASTERS_JOBS` (16) bounds that fan-out (science keeps the cores-based `--jobs`). This is deliberate and non-obvious: the stacking stage does not bottleneck on cores or RAM. Measured on shrek (256 cores, 2 TiB), a wide masters fan-out left the CPUs ~75% idle with 1.4 TiB free and **never swapped**, yet every job crawled to `--job_timeout` (1 job alone is fast; ~56 at once wedge). The limit is the **operating system's own memory bookkeeping** (page-fault / mapping churn from streaming large arrays) coordinated across all cores — a cost that grows with the *number of concurrent jobs*, not the work each does. So the cap is a fixed, empirically tuned constant (16 ≈ 2× margin below the ~32 where such degradation appears on similar pipelines), floored by cores/RAM only for small machines. Do **not** "restore" a cores- or RAM-derived masters cap: the earlier RAM cap was built on a mistaken swap diagnosis and is inert on a big host. (Historical dead end: a masters stall once *looked* like swapping; forensics later proved zero swap traffic — the signature is idle CPU + free RAM + high system time, i.e. OS contention, not memory pressure.)
 
-**Junk-frame exclusion.** "Junk" is a manual flag observers set at exposure time (e.g. wrong telescope settings): such a frame can pass every automated QC yet be scientifically useless. The authoritative list is WMKO's `{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv` — a data-tree artifact, *not* a repo file (title line, `observation_id` header, one obs_id/row). `utils/io.py::load_junk_obs_ids(data_input)` is the single reader (absent file ⇒ empty set ⇒ no-op). It feeds two paths: (1) `FileHandler.build_mini_database` tags each frame with a derived **`ISJUNK`** column (frames are flagged, never dropped), which `FileHandler.build_calibration_stacks(exclude_junk=True)` filters out before master stacking and `rv_timeseries.py` uses to skip junk during discovery; (2) `QCL0.not_junk` populates the `NOTJUNK` QC flag on science frames, recovering `KPF_DATA_INPUT` from the L0's `self.dirname` (`{KPF_DATA_INPUT}/L0/{datecode}`, set by rvdata's `from_fits`). A mini database lacking the `ISJUNK` column makes `build_calibration_stacks(exclude_junk=True)` **fail loudly** (`KeyError: 'ISJUNK'`).
+**Junk-frame exclusion.** "Junk" is a manual flag observers set at exposure time (e.g. wrong telescope settings): such a frame can pass every automated QC yet be scientifically useless. The authoritative list is WMKO's `{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv` — a data-tree artifact, *not* a repo file (title line, `observation_id` header, one obs_id/row). `utils/io.py::load_junk_obs_ids(data_input)` is the single reader (absent file ⇒ empty set ⇒ no-op). It feeds two paths: (1) `FileHandler.build_mini_database` tags each frame with a derived **`ISJUNK`** column (frames are flagged, never dropped), which `FileHandler.build_calibration_stacks(exclude_junk=True)` filters out before master stacking and `timeseries.py` uses to skip junk during discovery; (2) `QCL0.not_junk` populates the `NOTJUNK` QC flag on science frames, recovering `KPF_DATA_INPUT` from the L0's `self.dirname` (`{KPF_DATA_INPUT}/L0/{datecode}`, set by rvdata's `from_fits`). A mini database lacking the `ISJUNK` column makes `build_calibration_stacks(exclude_junk=True)` **fail loudly** (`KeyError: 'ISJUNK'`).
 
 **Masters header alignment (out of EPRV scope, but stylistically aligned).** Masters are *not* EPRV-governed, but follow the same keyword conventions as the science models as closely as possible:
 

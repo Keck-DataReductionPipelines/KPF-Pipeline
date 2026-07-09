@@ -45,7 +45,7 @@ from scripts.processing._argparse import (
     data_dirs_parser,
     logging_parser,
     pool_parser,
-    recipe_parser,
+    recipe_and_config_parser,
 )
 from scripts.processing._dispatch import (
     _MASTERS_JOBS,
@@ -71,7 +71,7 @@ def parse_args(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
-            recipe_parser(),
+            recipe_and_config_parser(),
             data_dirs_parser(science_output=False),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),

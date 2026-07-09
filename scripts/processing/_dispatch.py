@@ -4,9 +4,10 @@ Runs a set of recipe subprocesses -- one serial canary to warm the shared
 on-disk caches, then a bounded pool -- with per-job timeout kills, clean
 interrupt teardown, and fail-fast/fail-soft failure handling. Hoisted out of the
 per-domain drivers (``masters.py``/``science.py``) so they share one engine
-rather than each carrying a copy; ``rv_timeseries.py`` will adopt it in a
-follow-up. Depends only on stdlib + ``kpfpipe`` -- never on ``tools`` -- so the
-scripts stay ignorant of the CLI dispatcher above them.
+rather than each carrying a copy. (``timeseries.py`` does not use this engine: it
+dispatches to the masters/science orchestrators as whole subprocesses rather than
+fanning out leaves itself.) Depends only on stdlib + ``kpfpipe`` -- never on
+``tools`` -- so the scripts stay ignorant of the CLI dispatcher above them.
 """
 
 import concurrent.futures
@@ -46,14 +47,17 @@ _MASTERS_JOBS = 16
 _MASTERS_JOB_GIB = 6
 
 
-def _default_jobs():
-    """Cores-based job count: at most 25% of the CPUs, but always allow up to 16.
+def _default_science_jobs():
+    """Cores-based science job count: at most 25% of the CPUs, but always allow up
+    to 16.
 
-    The base for the science default and the masters cap's cores floor. Keeps a
-    many-core shared machine from being monopolised (the 25% cap), while still
-    letting a laptop use up to 16 cores even when that is a large fraction of
-    them. Never exceeds the actual CPU count. os.cpu_count() returns None when it
-    cannot be determined, so fall back to 1 (a valid positive default).
+    The science default; masters replicates the same cores formula inline for its
+    cores floor (see _default_masters_jobs) rather than calling this, so the two
+    defaults stay independent. Keeps a many-core shared machine from being
+    monopolised (the 25% cap), while still letting a laptop use up to 16 cores even
+    when that is a large fraction of them. Never exceeds the actual CPU count.
+    os.cpu_count() returns None when it cannot be determined, so fall back to 1 (a
+    valid positive default).
     """
     n = os.cpu_count() or 1
     return min(n, max(16, n // 4))
@@ -65,13 +69,16 @@ def _default_masters_jobs():
 
     _MASTERS_JOBS (16) is the real limit -- see its definition for why masters
     concurrency is a tuned constant rather than a cores/RAM formula. Two floors
-    keep it sane on a small machine: never exceed the cores-based default, and
-    never run so many cache-enabled jobs that their combined footprint
-    (~_MASTERS_JOB_GIB each) overcommits physical RAM. On a big host neither floor
-    binds and the result is simply _MASTERS_JOBS. Falls back to just the cores
-    floor when physical RAM can't be determined (e.g. os.sysconf unavailable).
+    keep it sane on a small machine: never exceed the cores-based count
+    (min(n, max(16, n // 4)) -- the same formula _default_science_jobs uses,
+    replicated inline here so the two defaults stay independent), and never run so
+    many cache-enabled jobs that their combined footprint (~_MASTERS_JOB_GIB each)
+    overcommits physical RAM. On a big host neither floor binds and the result is
+    simply _MASTERS_JOBS. Falls back to just the cores floor when physical RAM
+    can't be determined (e.g. os.sysconf unavailable).
     """
-    cap = min(_MASTERS_JOBS, _default_jobs())
+    n = os.cpu_count() or 1
+    cap = min(_MASTERS_JOBS, min(n, max(16, n // 4)))
     try:
         ram_gib = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30
     except (ValueError, OSError, AttributeError):

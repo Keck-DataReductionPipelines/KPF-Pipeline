@@ -112,7 +112,7 @@ class TestParseArgs:
 
     def test_jobs_unset_resolves_to_cores_default(self, s):
         ns = s.parse_args(["--obs_ids", _OID1])
-        assert ns.jobs == s._default_jobs()
+        assert ns.jobs == s._default_science_jobs()
 
     def test_jobs_override(self, s):
         assert s.parse_args(["--obs_ids", _OID1, "--jobs", "3"]).jobs == 3

@@ -20,18 +20,21 @@ def _parse(parents, argv):
 
 class TestRecipeParser:
     def test_adds_recipe_and_config(self):
-        ns = _parse([_argparse.recipe_parser()], ["-r", "/x.py", "-c", "/y.toml"])
+        ns = _parse(
+            [_argparse.recipe_and_config_parser()], ["-r", "/x.py", "-c", "/y.toml"]
+        )
         assert ns.recipe == "/x.py"
         assert ns.config == "/y.toml"
 
     def test_long_options(self):
         ns = _parse(
-            [_argparse.recipe_parser()], ["--recipe", "/x.py", "--config", "/y.toml"]
+            [_argparse.recipe_and_config_parser()],
+            ["--recipe", "/x.py", "--config", "/y.toml"],
         )
         assert (ns.recipe, ns.config) == ("/x.py", "/y.toml")
 
     def test_default_none(self):
-        ns = _parse([_argparse.recipe_parser()], [])
+        ns = _parse([_argparse.recipe_and_config_parser()], [])
         assert ns.recipe is None and ns.config is None
 
 

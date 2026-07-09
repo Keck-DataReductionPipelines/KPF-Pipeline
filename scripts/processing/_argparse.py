@@ -15,7 +15,7 @@ the scripts layer stays ignorant of the CLI dispatcher above it.
 import argparse
 
 
-def recipe_parser():
+def recipe_and_config_parser():
     """Recipe + config selection (``-r``/``-c``), shared by all three commands.
 
     They override the command's default recipe/config pair: for the orchestrators
