@@ -13,6 +13,7 @@ the scripts layer stays ignorant of the CLI dispatcher above it.
 """
 
 import argparse
+import os
 
 
 def recipe_and_config_parser():
@@ -62,30 +63,49 @@ def data_dirs_parser(science_output=True):
     p.add_argument(
         "--output_dir",
         default=None,
-        help="shortcut: set every output directory not given its own explicit flag "
-        "-- the masters output, the science output (where applicable), the log dir, "
-        "and (timeseries) the plot dir -- to this one directory",
+        help="shortcut: root for every output directory not given its own explicit "
+        "flag -- the masters output, the science output (where applicable), the log "
+        "dir ({output_dir}/logs), and (timeseries) the plot dir "
+        "({output_dir}/QLP/timeseries)",
     )
     return p
+
+
+# Where each --output_dir slot lands beneath the given root. The masters/science
+# outputs take the root verbatim (their path builders add masters/{datecode} and
+# L{N}/{datecode} substructure), while the log dir and plot dir each get a
+# conventional subdirectory so --output_dir yields the same layout an explicit
+# --log_dir/--plot_dir would -- in particular the plot subdir matches the
+# timeseries default of {science_output}/QLP/timeseries.
+_OUTPUT_DIR_SLOTS = {
+    "kpf_masters_output": (),
+    "kpf_science_output": (),
+    "log_dir": ("logs",),
+    "plot_dir": ("QLP", "timeseries"),
+}
 
 
 def resolve_dir_shortcuts(args):
     """Fan ``--output_dir`` out to each output directory the command left unset.
 
-    ``--output_dir`` is a convenience: one directory standing in for the masters
-    output, the science output, the log dir, and (timeseries) the plot dir. It is a
-    fallback, never an override -- any of those an explicit flag already set keeps
-    its value; only the unset ones, and only those the command actually has (masters
-    has no science output or plot dir), inherit ``--output_dir``. The input dir is
-    untouched (use ``--input_dir``/``--kpf_data_input``). Returns `args`; each
-    command's ``parse_args`` calls it post-parse.
+    ``--output_dir`` is a convenience: one root standing in for the masters output,
+    the science output, the log dir, and (timeseries) the plot dir. The masters and
+    science outputs take the root directly; the log dir lands at
+    ``{output_dir}/logs`` and the plot dir at ``{output_dir}/QLP/timeseries`` (see
+    ``_OUTPUT_DIR_SLOTS``), so the shortcut reproduces the layout an explicit
+    ``--log_dir``/``--plot_dir`` would give rather than dumping logs and plots in the
+    root. It is a fallback, never an override -- any slot an explicit flag already
+    set keeps its value; only the unset ones, and only those the command actually
+    has (masters has no science output or plot dir), inherit ``--output_dir``. The
+    input dir is untouched (use ``--input_dir``/``--kpf_data_input``). Returns
+    `args`; each command's ``parse_args`` calls it post-parse.
     """
     out = getattr(args, "output_dir", None)
     if not out:
         return args
-    for name in ("kpf_masters_output", "kpf_science_output", "log_dir", "plot_dir"):
+    for name, subdir in _OUTPUT_DIR_SLOTS.items():
         if hasattr(args, name) and getattr(args, name) is None:
-            setattr(args, name, out)
+            setattr(args, name, os.path.join(out, *subdir))
     return args
 
 

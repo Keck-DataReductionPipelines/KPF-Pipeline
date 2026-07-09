@@ -105,7 +105,8 @@ class TestDirShortcuts:
         )
         data_input, masters, science, log_dir = sentinel.read_text().split("|")
         assert data_input == "/cfg/in"  # untouched by --output_dir
-        assert masters == "/out" and science == "/out" and log_dir == "/out"
+        # masters/science outputs take the root; the log dir gets its subdir.
+        assert masters == "/out" and science == "/out" and log_dir == "/out/logs"
 
 
 class TestShortcutOverride:

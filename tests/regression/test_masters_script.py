@@ -142,7 +142,7 @@ class TestParseArgs:
     def test_output_dir_fans_out(self, m):
         # masters has no science output or plot dir -- only masters output + log dir.
         ns = m.parse_args(["--dates", "20240405", "--output_dir", "/out"])
-        assert ns.kpf_masters_output == "/out" and ns.log_dir == "/out"
+        assert ns.kpf_masters_output == "/out" and ns.log_dir == "/out/logs"
         assert not hasattr(ns, "kpf_science_output")
 
 

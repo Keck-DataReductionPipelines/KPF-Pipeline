@@ -88,10 +88,11 @@ class TestResolveDirShortcuts:
         ns = _argparse.resolve_dir_shortcuts(
             self._parser(plot_dir=True).parse_args(["--output_dir", "/out"])
         )
+        # masters/science outputs take the root; logs and plots get their subdirs.
         assert ns.kpf_masters_output == "/out"
         assert ns.kpf_science_output == "/out"
-        assert ns.log_dir == "/out"
-        assert ns.plot_dir == "/out"
+        assert ns.log_dir == "/out/logs"
+        assert ns.plot_dir == "/out/QLP/timeseries"
         # The input dir is never touched by --output_dir.
         assert ns.kpf_data_input is None
 
@@ -110,14 +111,15 @@ class TestResolveDirShortcuts:
         )
         assert ns.kpf_masters_output == "/m"  # explicit kept
         assert ns.plot_dir == "/p"  # explicit kept
-        assert ns.kpf_science_output == "/out" and ns.log_dir == "/out"  # unset filled
+        # unset slots filled: science takes the root, log dir gets its subdir.
+        assert ns.kpf_science_output == "/out" and ns.log_dir == "/out/logs"
 
     def test_skips_absent_slots(self):
         # masters-style parser: no science output, no plot dir -- no AttributeError.
         ns = _argparse.resolve_dir_shortcuts(
             self._parser(science_output=False).parse_args(["--output_dir", "/out"])
         )
-        assert ns.kpf_masters_output == "/out" and ns.log_dir == "/out"
+        assert ns.kpf_masters_output == "/out" and ns.log_dir == "/out/logs"
         assert not hasattr(ns, "kpf_science_output")
 
     def test_noop_without_output_dir(self):

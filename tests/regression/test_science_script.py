@@ -133,7 +133,7 @@ class TestParseArgs:
         ns = s.parse_args(["--obs_ids", _OID1, "--output_dir", "/out"])
         assert ns.kpf_masters_output == "/out"
         assert ns.kpf_science_output == "/out"
-        assert ns.log_dir == "/out"
+        assert ns.log_dir == "/out/logs"
 
 
 # ---------------------------------------------------------------------------

@@ -330,7 +330,12 @@ science/timeseries) accepts: **`--input_dir`** is a plain argparse alias of `--k
 and **`--output_dir`** is a fan-out — `_argparse.resolve_dir_shortcuts(args)` (called post-parse
 by every `parse_args`) fills `kpf_masters_output`/`kpf_science_output`/`log_dir`/`plot_dir` from it
 as a *fallback* (an explicit per-dir flag wins), skipping the slots a given command lacks (masters
-has no science output or plot dir). (The masters orchestrator's `--date_range` expansion reuses
+has no science output or plot dir). The masters/science outputs take the root **verbatim** (their
+path builders add the `masters/{datecode}` and `L{N}/{datecode}` substructure), but the log dir and
+plot dir each get a conventional subdirectory — `{output_dir}/logs` and `{output_dir}/QLP/timeseries`
+(the `_OUTPUT_DIR_SLOTS` table) — so `--output_dir` reproduces the layout explicit `--log_dir`/`--plot_dir`
+flags would give (the plot subdir matches timeseries' `{science_output}/QLP/timeseries` default) rather
+than dumping logs and plots in the root. (The masters orchestrator's `--date_range` expansion reuses
 `kpfpipe.utils.io.datecode_dirs_in_range` — a downward import into the shared `kpfpipe` layer, not a
 scripts-local helper.) The package `__init__.py`
 holds the default `masters`/`science` recipe/config path constants

@@ -118,8 +118,8 @@ class TestParseArgs:
         ns = ts.parse_args(_BASE_ARGS + ["--output_dir", "/out"])
         assert ns.kpf_masters_output == "/out"
         assert ns.kpf_science_output == "/out"
-        assert ns.log_dir == "/out"
-        assert ns.plot_dir == "/out"
+        assert ns.log_dir == "/out/logs"
+        assert ns.plot_dir == "/out/QLP/timeseries"
 
     def test_explicit_plot_dir_overrides_output_dir(self, ts):
         ns = ts.parse_args(_BASE_ARGS + ["--output_dir", "/out", "--plot_dir", "/p"])
