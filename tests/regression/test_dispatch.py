@@ -1,4 +1,4 @@
-"""Tests for scripts/processing/_fanout.py: the shared fan-out engine.
+"""Tests for scripts/processing/_dispatch.py: the shared fan-out engine.
 
 Covers the job-sizing helpers (cores-based and the masters cap), the
 ``run_stage`` dispatch in both modes (fail-soft: attempt all, return the failed
@@ -12,7 +12,7 @@ import sys
 
 import pytest
 
-from scripts.processing import _fanout as f
+from scripts.processing import _dispatch as f
 
 _OK = [sys.executable, "-c", "pass"]
 _FAIL = [sys.executable, "-c", "import sys; sys.exit(1)"]

@@ -31,12 +31,27 @@ import sys
 
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf_utils import is_datecode
-from scripts.processing._common import _datecode_dirs, shortcut_paths
-from scripts.processing._fanout import (
+from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
+from scripts.processing._argparse import (
+    data_dirs_parser,
+    logging_parser,
+    pool_parser,
+    recipe_parser,
+)
+from scripts.processing._common import _datecode_dirs
+from scripts.processing._dispatch import (
     _MASTERS_JOBS,
     _default_masters_jobs,
     configure_runtime,
     run_stage,
+)
+
+# --jobs help is command-specific (the fixed masters cap, not the cores default),
+# so it is passed into the shared pool_parser rather than living in it.
+_JOBS_HELP = (
+    "max concurrent masters builds; left unset, defaults to the "
+    f"{_MASTERS_JOBS}-job cap (stacking degrades from OS memory contention when too "
+    "many run at once), floored by cores and RAM on small machines"
 )
 
 
@@ -45,6 +60,12 @@ def parse_args(argv=None):
         prog="kpfpipe masters",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        parents=[
+            recipe_parser(),
+            data_dirs_parser(science_output=False),
+            logging_parser(),
+            pool_parser(jobs_help=_JOBS_HELP),
+        ],
     )
     ap.add_argument(
         "--datecode_list",
@@ -60,42 +81,6 @@ def parse_args(argv=None):
         metavar=("START", "END"),
         help="inclusive datecode range; builds every L0 night in it, e.g. "
         "--date_range 20240101 20240131 (mutually exclusive with --datecode_list)",
-    )
-    ap.add_argument(
-        "-c",
-        "--config",
-        default=None,
-        help="masters recipe TOML override (default: the --masters shortcut's "
-        "configs/kpf_drp_masters.toml)",
-    )
-    ap.add_argument("--kpf_data_input", help="override [DATA_DIRS] KPF_DATA_INPUT")
-    ap.add_argument(
-        "--kpf_masters_output", help="override [DATA_DIRS] KPF_MASTERS_OUTPUT"
-    )
-    ap.add_argument("--log_dir", help="override [LOGGER] log_dir")
-    ap.add_argument(
-        "--log_level", help="override [LOGGER] log_level for each recipe (e.g. DEBUG)"
-    )
-    ap.add_argument(
-        "--jobs",
-        type=int,
-        default=None,
-        help=(
-            "max concurrent masters builds; left unset, defaults to the "
-            f"{_MASTERS_JOBS}-job cap (stacking degrades from OS memory contention "
-            "when too many run at once), floored by cores and RAM on small machines"
-        ),
-    )
-    ap.add_argument(
-        "--job_timeout",
-        type=int,
-        default=600,
-        help="per-job wall-clock limit (seconds) for each fanned-out recipe "
-        "subprocess (default: %(default)s). A recipe normally runs in ~2 min, so a "
-        "job exceeding this is treated as wedged: its process group is killed and "
-        "the job counts as a failure, rather than hanging the whole batch. The "
-        "serial canary uses a larger, separate limit since it warms cold caches on "
-        "the first run",
     )
     args = ap.parse_args(argv)
 
@@ -145,19 +130,29 @@ def resolve_datecodes(args, data_input):
     return nights
 
 
-def _cli_task(datecode, forward, config=None):
+def _cli_task(datecode, forward, config=None, recipe=None):
     """Build a (tag, argv) task building one night via the ``kpfpipe run`` leaf.
 
-    Runs ``python -m scripts.processing.reduce --masters -d <datecode>`` (the leaf
-    resolves the masters recipe + default config from the --masters shortcut);
-    `config` overrides the shortcut's default config only when given. `forward` is
-    the resolved dir/log overrides appended to every invocation. The tag is the
-    datecode itself, which the sentinel/log paths key on.
+    Runs ``python -m scripts.processing.reduce -r <recipe> -c <config> -d <datecode>``
+    with the masters defaults (``DEFAULT_MASTERS_RECIPE``/``DEFAULT_MASTERS_CONFIG``)
+    unless `recipe`/`config` override them. The orchestrator passes the recipe/config
+    explicitly -- rather than leaning on the leaf's ``--masters`` shortcut -- so it is
+    the single owner of what it runs. `forward` is the resolved dir/log overrides
+    appended to every invocation. The tag is the datecode, which the sentinel/log
+    paths key on.
     """
-    argv = [sys.executable, "-m", "scripts.processing.reduce", "--masters"]
-    if config:
-        argv += ["-c", config]
-    argv += ["-d", datecode, *forward]
+    argv = [
+        sys.executable,
+        "-m",
+        "scripts.processing.reduce",
+        "-r",
+        recipe or DEFAULT_MASTERS_RECIPE,
+        "-c",
+        config or DEFAULT_MASTERS_CONFIG,
+        "-d",
+        datecode,
+        *forward,
+    ]
     return datecode, argv
 
 
@@ -165,10 +160,10 @@ def main(argv=None):
     configure_runtime()
     args = parse_args(argv)
 
-    # Read the config the subprocesses will use (the --masters shortcut default
-    # unless overridden) to resolve the effective dirs; the subprocess gets the
-    # config via the shortcut, plus -c only when overridden (see _cli_task).
-    config = ConfigHandler(args.config or shortcut_paths("masters")[1])
+    # Read the effective config (the masters default unless -c overrides) to resolve
+    # the L0 input root + log dir; each subprocess gets the resolved recipe/config
+    # explicitly via -r/-c (see _cli_task).
+    config = ConfigHandler(args.config or DEFAULT_MASTERS_CONFIG)
     data_input = (
         args.kpf_data_input or config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
     )
@@ -187,7 +182,10 @@ def main(argv=None):
     datecodes = resolve_datecodes(args, data_input)
     print(f"building masters for {len(datecodes)} night(s): {', '.join(datecodes)}")
 
-    tasks = [_cli_task(dc, forward, config=args.config) for dc in datecodes]
+    tasks = [
+        _cli_task(dc, forward, config=args.config, recipe=args.recipe)
+        for dc in datecodes
+    ]
     failed = run_stage(
         "masters",
         tasks,

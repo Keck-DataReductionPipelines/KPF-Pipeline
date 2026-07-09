@@ -4,8 +4,8 @@
 The single-recipe, single-unit runner: read the config, apply the CLI overrides,
 configure logging, and exec the recipe's ``main(config, args)``. It is the leaf
 the batch orchestrators (``masters.py``/``science.py``) fan out as
-``python -m scripts.processing.reduce --masters/--science`` subprocesses, and the
-in-process target of ``kpfpipe run``.
+``python -m scripts.processing.reduce -r <recipe> -c <config>`` subprocesses, and
+the in-process target of ``kpfpipe run``.
 
 Recipe + config come from ``--masters``/``--science`` (which resolve the
 repo-relative recipe/config pair, so they work from any cwd) or an explicit
@@ -34,11 +34,19 @@ import sys
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.logger import setup_logging
-from scripts.processing._common import _SHORTCUTS, shortcut_paths
+from scripts.processing import (
+    DEFAULT_MASTERS_CONFIG,
+    DEFAULT_MASTERS_RECIPE,
+    DEFAULT_SCIENCE_CONFIG,
+    DEFAULT_SCIENCE_RECIPE,
+)
+from scripts.processing._argparse import (
+    data_dirs_parser,
+    logging_parser,
+    recipe_parser,
+)
 
 logger = logging.getLogger("kpfpipe.cli")
-
-_TESTDATA_DIR = os.path.join(kpfpipe.REPO_ROOT, "tests", "testdata")
 
 
 def main(argv=None):
@@ -46,23 +54,26 @@ def main(argv=None):
         prog="kpfpipe run",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        parents=[
+            recipe_parser(),
+            data_dirs_parser(science_output=True),
+            logging_parser(),
+        ],
     )
-    parser.add_argument("-r", "--recipe", default=None, help="path to recipe.py file")
-    parser.add_argument("-c", "--config", default=None, help="path to TOML config file")
     shortcut = parser.add_mutually_exclusive_group()
     shortcut.add_argument(
         "--masters",
         dest="shortcut",
         action="store_const",
-        const="masters",
-        help="shorthand for default -r/-c masters pair",
+        const=(DEFAULT_MASTERS_RECIPE, DEFAULT_MASTERS_CONFIG),
+        help="shorthand for the default masters recipe/config pair",
     )
     shortcut.add_argument(
         "--science",
         dest="shortcut",
         action="store_const",
-        const="science",
-        help="shorthand for default -r/-c science pair",
+        const=(DEFAULT_SCIENCE_RECIPE, DEFAULT_SCIENCE_CONFIG),
+        help="shorthand for the default science recipe/config pair",
     )
     target = parser.add_mutually_exclusive_group()
     target.add_argument(
@@ -77,35 +88,13 @@ def main(argv=None):
         default=None,
         help="obs_id, e.g. KP.20240405.40113.57 (science only; exclusive with -d)",
     )
-    parser.add_argument(
-        "--kpf_data_input", default=None, help="override KPF_DATA_INPUT directory"
-    )
-    parser.add_argument(
-        "--kpf_masters_output",
-        default=None,
-        help="override KPF_MASTERS_OUTPUT directory",
-    )
-    parser.add_argument(
-        "--kpf_science_output",
-        default=None,
-        help="override KPF_SCIENCE_OUTPUT directory",
-    )
-    parser.add_argument("--log_dir", default=None, help="override [LOGGER] log_dir")
-    parser.add_argument(
-        "--log_level", default=None, help="override [LOGGER] log_level (e.g. DEBUG)"
-    )
-    parser.add_argument(
-        "--test",
-        action="store_true",
-        help="shorthand to use tests/testdata/ for input and output",
-    )
     args = parser.parse_args(argv)
 
     if args.shortcut:
-        # The shortcut supplies default recipe/config paths; an explicit
-        # -r/-c overrides the corresponding default (so `--science -c foo.toml`
+        # The shortcut supplies a default (recipe, config) pair; an explicit
+        # -r/-c overrides the corresponding half (so `--science -c foo.toml`
         # keeps the science recipe but swaps its config).
-        recipe_def, config_def = shortcut_paths(args.shortcut)
+        recipe_def, config_def = args.shortcut
         args.recipe = args.recipe or recipe_def
         args.config = args.config or config_def
 
@@ -114,19 +103,11 @@ def main(argv=None):
             "must specify --masters, --science, or both -r/--recipe and -c/--config"
         )
 
-    recipe_kind = {os.path.basename(r): k for k, (r, _) in _SHORTCUTS.items()}.get(
-        os.path.basename(args.recipe)
-    )
-    if recipe_kind == "masters" and args.obs_id:
+    # Guard the default recipes against the wrong target selector.
+    if args.recipe == DEFAULT_MASTERS_RECIPE and args.obs_id:
         parser.error("masters recipe takes -d/--datecode, not -o/--obs_id")
-    if recipe_kind == "science" and args.datecode:
+    if args.recipe == DEFAULT_SCIENCE_RECIPE and args.datecode:
         parser.error("science recipe takes -o/--obs_id, not -d/--datecode")
-
-    if args.test:
-        args.kpf_data_input = args.kpf_data_input or _TESTDATA_DIR
-        args.kpf_masters_output = args.kpf_masters_output or _TESTDATA_DIR
-        args.kpf_science_output = args.kpf_science_output or _TESTDATA_DIR
-        args.log_dir = args.log_dir or os.path.join(_TESTDATA_DIR, "logs")
 
     overrides = {}
     if args.kpf_data_input or args.kpf_masters_output or args.kpf_science_output:

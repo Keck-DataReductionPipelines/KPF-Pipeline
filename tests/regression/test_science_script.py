@@ -3,7 +3,7 @@
 Cover the driver's own surface: arg parsing and obs_id validation, the
 ``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff
 at least one frame failed). The shared fan-out engine (``run_stage``, the
-cores-based job sizing) lives in ``_fanout`` and is tested in test_fanout.py.
+cores-based job sizing) lives in ``_dispatch`` and is tested in test_dispatch.py.
 
 Unit tests use trivial subprocess stubs -- no real testdata needed.
 """
@@ -68,6 +68,13 @@ class TestParseArgs:
     def test_config_defaults_to_none(self, s):
         assert s.parse_args(["--obs_id_list", _OID1]).config is None
 
+    def test_recipe_defaults_to_none(self, s):
+        assert s.parse_args(["--obs_id_list", _OID1]).recipe is None
+
+    def test_recipe_override_parses(self, s):
+        ns = s.parse_args(["--obs_id_list", _OID1, "-r", "/x.py"])
+        assert ns.recipe == "/x.py"
+
     def test_jobs_unset_resolves_to_cores_default(self, s):
         ns = s.parse_args(["--obs_id_list", _OID1])
         assert ns.jobs == s._default_jobs()
@@ -89,24 +96,36 @@ class TestParseArgs:
 
 
 class TestCliTask:
-    def test_builds_science_argv(self, s):
+    def test_builds_science_argv_with_defaults(self, s):
+        # No -r/-c override: the science default recipe/config are passed explicitly.
         tag, argv = s._cli_task(_OID1, ["--log_level", "DEBUG"])
         assert tag == _OID1
         assert argv == [
             sys.executable, "-m", "scripts.processing.reduce",
-            "--science", "-o", _OID1, "--log_level", "DEBUG",
+            "-r", s.DEFAULT_SCIENCE_RECIPE, "-c", s.DEFAULT_SCIENCE_CONFIG,
+            "-o", _OID1, "--log_level", "DEBUG",
         ]  # fmt: skip
 
-    def test_config_override_inserts_dash_c(self, s):
-        _, argv = s._cli_task(_OID1, [], config="/custom.toml")
+    def test_recipe_and_config_overrides(self, s):
+        _, argv = s._cli_task(_OID1, [], config="/c.toml", recipe="/x.py")
         assert argv == [
             sys.executable, "-m", "scripts.processing.reduce",
-            "--science", "-c", "/custom.toml", "-o", _OID1,
+            "-r", "/x.py", "-c", "/c.toml", "-o", _OID1,
         ]  # fmt: skip
 
-    def test_no_config_omits_dash_c(self, s):
-        _, argv = s._cli_task(_OID1, [])
-        assert "-c" not in argv
+    def test_recipe_override_keeps_default_config(self, s):
+        _, argv = s._cli_task(_OID1, [], recipe="/x.py")
+        assert argv == [
+            sys.executable, "-m", "scripts.processing.reduce",
+            "-r", "/x.py", "-c", s.DEFAULT_SCIENCE_CONFIG, "-o", _OID1,
+        ]  # fmt: skip
+
+    def test_config_override_keeps_default_recipe(self, s):
+        _, argv = s._cli_task(_OID1, [], config="/c.toml")
+        assert argv == [
+            sys.executable, "-m", "scripts.processing.reduce",
+            "-r", s.DEFAULT_SCIENCE_RECIPE, "-c", "/c.toml", "-o", _OID1,
+        ]  # fmt: skip
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +138,6 @@ class TestMainExitCode:
         # Skip the runtime setup and the real dir/config resolution + subprocess
         # fan-out; assert only the exit-code contract from run_stage's failure set.
         monkeypatch.setattr(s, "configure_runtime", lambda: None)
-        monkeypatch.setattr(s, "shortcut_paths", lambda kind: ("/r.py", "/c.toml"))
         monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
         monkeypatch.setattr(s, "run_stage", lambda *a, **k: set(failed))
 

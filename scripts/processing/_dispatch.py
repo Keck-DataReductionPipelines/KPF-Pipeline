@@ -5,8 +5,8 @@ on-disk caches, then a bounded pool -- with per-job timeout kills, clean
 interrupt teardown, and fail-fast/fail-soft failure handling. Hoisted out of the
 per-domain drivers (``masters.py``/``science.py``) so they share one engine
 rather than each carrying a copy; ``rv_timeseries.py`` will adopt it in a
-follow-up. Depends only on stdlib + ``kpfpipe`` (via ``_common``) -- never on
-``tools`` -- so the scripts stay ignorant of the CLI dispatcher above them.
+follow-up. Depends only on stdlib + ``kpfpipe`` -- never on ``tools`` -- so the
+scripts stay ignorant of the CLI dispatcher above them.
 """
 
 import concurrent.futures
@@ -17,7 +17,7 @@ import sys
 import threading
 import time
 
-from scripts.processing._common import _REPO
+import kpfpipe
 
 # Fixed cap on concurrent masters (stacking) jobs. The stacking stage does NOT
 # bottleneck on cores or RAM -- measured on shrek (256 cores, 2 TiB), a masters
@@ -171,7 +171,7 @@ def _run_one(argv, timeout=None, launch_interval=0.0):
             return 130, ""
     proc = subprocess.Popen(
         argv,
-        cwd=_REPO,
+        cwd=kpfpipe.REPO_ROOT,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,

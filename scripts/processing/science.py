@@ -25,8 +25,14 @@ import sys
 
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf_utils import is_obs_id
-from scripts.processing._common import shortcut_paths
-from scripts.processing._fanout import _default_jobs, configure_runtime, run_stage
+from scripts.processing import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
+from scripts.processing._argparse import (
+    data_dirs_parser,
+    logging_parser,
+    pool_parser,
+    recipe_parser,
+)
+from scripts.processing._dispatch import _default_jobs, configure_runtime, run_stage
 
 # Minimum spacing (seconds) between fanned-out subprocess launches. The per-frame
 # L0 pointing QC fires rapid SIMBAD/Gaia catalog queries at startup, so a burst of
@@ -34,12 +40,25 @@ from scripts.processing._fanout import _default_jobs, configure_runtime, run_sta
 # rate-limits them. Passed to run_stage as its launch_interval.
 _LAUNCH_INTERVAL = 1.0
 
+# --jobs help is command-specific (the cores-based default, not the masters cap),
+# so it is passed into the shared pool_parser rather than living in it.
+_JOBS_HELP = (
+    "max concurrent science reductions; left unset, defaults to a cores-based "
+    "value (~25%% of CPUs, but up to 16)"
+)
+
 
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         prog="kpfpipe science",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        parents=[
+            recipe_parser(),
+            data_dirs_parser(science_output=True),
+            logging_parser(),
+            pool_parser(jobs_help=_JOBS_HELP),
+        ],
     )
     ap.add_argument(
         "--obs_id_list",
@@ -48,42 +67,6 @@ def parse_args(argv=None):
         metavar="OBS_ID",
         help="one or more obs_ids to reduce, e.g. --obs_id_list "
         "KP.20240405.40113.57 KP.20240405.40237.36",
-    )
-    ap.add_argument(
-        "-c",
-        "--config",
-        default=None,
-        help="science recipe TOML override (default: the --science shortcut's "
-        "configs/kpf_drp_science.toml)",
-    )
-    ap.add_argument("--kpf_data_input", help="override [DATA_DIRS] KPF_DATA_INPUT")
-    ap.add_argument(
-        "--kpf_masters_output", help="override [DATA_DIRS] KPF_MASTERS_OUTPUT"
-    )
-    ap.add_argument(
-        "--kpf_science_output", help="override [DATA_DIRS] KPF_SCIENCE_OUTPUT"
-    )
-    ap.add_argument("--log_dir", help="override [LOGGER] log_dir")
-    ap.add_argument(
-        "--log_level", help="override [LOGGER] log_level for each recipe (e.g. DEBUG)"
-    )
-    ap.add_argument(
-        "--jobs",
-        type=int,
-        default=None,
-        help="max concurrent science reductions; left unset, defaults to a "
-        "cores-based value (~25%% of CPUs, but up to 16)",
-    )
-    ap.add_argument(
-        "--job_timeout",
-        type=int,
-        default=600,
-        help="per-job wall-clock limit (seconds) for each fanned-out recipe "
-        "subprocess (default: %(default)s). A recipe normally runs in ~2 min, so a "
-        "job exceeding this is treated as wedged: its process group is killed and "
-        "the job counts as a failure, rather than hanging the whole batch. The "
-        "serial canary uses a larger, separate limit since it warms cold caches on "
-        "the first run",
     )
     args = ap.parse_args(argv)
 
@@ -101,19 +84,29 @@ def parse_args(argv=None):
     return args
 
 
-def _cli_task(obs_id, forward, config=None):
+def _cli_task(obs_id, forward, config=None, recipe=None):
     """Build a (tag, argv) task reducing one frame via the ``kpfpipe run`` leaf.
 
-    Runs ``python -m scripts.processing.reduce --science -o <obs_id>`` (the leaf
-    resolves the science recipe + default config from the --science shortcut);
-    `config` overrides the shortcut's default config only when given. `forward` is
-    the resolved dir/log overrides appended to every invocation. The tag is the
-    obs_id itself, which the sentinel/log paths key on.
+    Runs ``python -m scripts.processing.reduce -r <recipe> -c <config> -o <obs_id>``
+    with the science defaults (``DEFAULT_SCIENCE_RECIPE``/``DEFAULT_SCIENCE_CONFIG``)
+    unless `recipe`/`config` override them. The orchestrator passes the recipe/config
+    explicitly -- rather than leaning on the leaf's ``--science`` shortcut -- so it is
+    the single owner of what it runs. `forward` is the resolved dir/log overrides
+    appended to every invocation. The tag is the obs_id, which the sentinel/log paths
+    key on.
     """
-    argv = [sys.executable, "-m", "scripts.processing.reduce", "--science"]
-    if config:
-        argv += ["-c", config]
-    argv += ["-o", obs_id, *forward]
+    argv = [
+        sys.executable,
+        "-m",
+        "scripts.processing.reduce",
+        "-r",
+        recipe or DEFAULT_SCIENCE_RECIPE,
+        "-c",
+        config or DEFAULT_SCIENCE_CONFIG,
+        "-o",
+        obs_id,
+        *forward,
+    ]
     return obs_id, argv
 
 
@@ -121,11 +114,10 @@ def main(argv=None):
     configure_runtime()
     args = parse_args(argv)
 
-    # Read the config the subprocesses will use (the --science shortcut default
-    # unless overridden) only for the log dir (used in the failure sentinels); the
-    # subprocess gets the config via the shortcut, plus -c only when overridden
-    # (see _cli_task).
-    config = ConfigHandler(args.config or shortcut_paths("science")[1])
+    # Read the effective config (the science default unless -c overrides) only for
+    # the log dir used in the failure sentinels; each subprocess gets the resolved
+    # recipe/config explicitly via -r/-c (see _cli_task).
+    config = ConfigHandler(args.config or DEFAULT_SCIENCE_CONFIG)
     log_dir = args.log_dir or config.get_params(["LOGGER"]).get("log_dir")
 
     forward = []
@@ -142,7 +134,9 @@ def main(argv=None):
     obs_ids = args.obs_id_list
     print(f"reducing {len(obs_ids)} science frame(s): {', '.join(obs_ids)}")
 
-    tasks = [_cli_task(o, forward, config=args.config) for o in obs_ids]
+    tasks = [
+        _cli_task(o, forward, config=args.config, recipe=args.recipe) for o in obs_ids
+    ]
     failed = run_stage(
         "science",
         tasks,

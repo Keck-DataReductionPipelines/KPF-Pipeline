@@ -4,7 +4,7 @@ Cover the driver's own surface: arg parsing and the two input forms, the
 ``_cli_task`` argv it fans out, datecode resolution, and the ``main`` exit-code
 contract (nonzero iff at least one night failed). The shared fan-out engine
 (``run_stage``, job sizing) and the ``_datecode_dirs`` helper live in
-``_fanout``/``_common`` and are tested in test_fanout.py / test_common.py.
+``_dispatch``/``_common`` and are tested in test_dispatch.py / test_common.py.
 
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.
 """
@@ -79,6 +79,13 @@ class TestParseArgs:
     def test_config_defaults_to_none(self, m):
         assert m.parse_args(["--datecode_list", "20240405"]).config is None
 
+    def test_recipe_defaults_to_none(self, m):
+        assert m.parse_args(["--datecode_list", "20240405"]).recipe is None
+
+    def test_recipe_override_parses(self, m):
+        ns = m.parse_args(["--datecode_list", "20240405", "-r", "/x.py"])
+        assert ns.recipe == "/x.py"
+
     def test_jobs_unset_resolves_to_masters_default(self, m):
         ns = m.parse_args(["--datecode_list", "20240405"])
         assert ns.jobs == m._default_masters_jobs()
@@ -102,24 +109,36 @@ class TestParseArgs:
 
 
 class TestCliTask:
-    def test_builds_masters_argv(self, m):
+    def test_builds_masters_argv_with_defaults(self, m):
+        # No -r/-c override: the masters default recipe/config are passed explicitly.
         tag, argv = m._cli_task("20240405", ["--log_level", "DEBUG"])
         assert tag == "20240405"
         assert argv == [
             sys.executable, "-m", "scripts.processing.reduce",
-            "--masters", "-d", "20240405", "--log_level", "DEBUG",
+            "-r", m.DEFAULT_MASTERS_RECIPE, "-c", m.DEFAULT_MASTERS_CONFIG,
+            "-d", "20240405", "--log_level", "DEBUG",
         ]  # fmt: skip
 
-    def test_config_override_inserts_dash_c(self, m):
-        _, argv = m._cli_task("20240405", [], config="/custom.toml")
+    def test_recipe_and_config_overrides(self, m):
+        _, argv = m._cli_task("20240405", [], config="/c.toml", recipe="/x.py")
         assert argv == [
             sys.executable, "-m", "scripts.processing.reduce",
-            "--masters", "-c", "/custom.toml", "-d", "20240405",
+            "-r", "/x.py", "-c", "/c.toml", "-d", "20240405",
         ]  # fmt: skip
 
-    def test_no_config_omits_dash_c(self, m):
-        _, argv = m._cli_task("20240405", [])
-        assert "-c" not in argv
+    def test_recipe_override_keeps_default_config(self, m):
+        _, argv = m._cli_task("20240405", [], recipe="/x.py")
+        assert argv == [
+            sys.executable, "-m", "scripts.processing.reduce",
+            "-r", "/x.py", "-c", m.DEFAULT_MASTERS_CONFIG, "-d", "20240405",
+        ]  # fmt: skip
+
+    def test_config_override_keeps_default_recipe(self, m):
+        _, argv = m._cli_task("20240405", [], config="/c.toml")
+        assert argv == [
+            sys.executable, "-m", "scripts.processing.reduce",
+            "-r", m.DEFAULT_MASTERS_RECIPE, "-c", "/c.toml", "-d", "20240405",
+        ]  # fmt: skip
 
 
 class TestResolveDatecodes:
@@ -157,7 +176,6 @@ class TestMainExitCode:
         # Skip the runtime setup and the real dir/config resolution + subprocess
         # fan-out; assert only the exit-code contract from run_stage's failure set.
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
-        monkeypatch.setattr(m, "shortcut_paths", lambda kind: ("/r.py", "/c.toml"))
         monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
         monkeypatch.setattr(m, "resolve_datecodes", lambda args, di: ["20240405"])
         monkeypatch.setattr(m, "run_stage", lambda *a, **k: set(failed))

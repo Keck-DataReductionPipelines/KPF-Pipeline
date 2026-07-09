@@ -2,10 +2,10 @@
 
 reduce.py is the single-recipe, single-unit runner relocated out of the old
 tools/cli.py. These cover the shortcut/`-r`/`-c` resolution and the recipe-kind
-guards, that ``--masters``/``--science`` set a default config an explicit ``-c``
-overrides, and that ``--test`` routes the data dirs to tests/testdata. Each test
-drives ``main(argv)`` against a tiny stub recipe (which records the resolved
-config) with logging stubbed out, so no real reduction runs.
+guards, and that ``--masters``/``--science`` set a default config an explicit
+``-c`` overrides. Each test drives ``main(argv)`` against a tiny stub recipe
+(which records the resolved config) with logging stubbed out, so no real
+reduction runs.
 
 (``resolve_logging`` itself is unit-tested in test_logger.py.)
 """
@@ -52,15 +52,6 @@ class TestShortcutOverride:
             ["--science", "-r", str(recipe), "-c", str(cfg), "-o", "KP.x"],
         )
         assert sentinel.read_text() == "/custom/in"
-
-    def test_test_flag_routes_dirs_to_testdata(self, monkeypatch, tmp_path):
-        # --test defaults the data dirs (and log dir) to tests/testdata; the stub
-        # recipe should see KPF_DATA_INPUT resolved to reduce._TESTDATA_DIR. The
-        # --science shortcut supplies a valid default config; -r swaps in the stub.
-        sentinel = tmp_path / "seen.txt"
-        recipe = _stub_recipe(tmp_path, sentinel)
-        _run(monkeypatch, ["--science", "-r", str(recipe), "--test", "-o", "KP.x"])
-        assert sentinel.read_text() == red._TESTDATA_DIR
 
 
 class TestGuards:
