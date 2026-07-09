@@ -353,6 +353,20 @@ class TestMainDispatch:
         assert "scripts.plots.plot_timeseries" in calls[2]
         assert "/custom/plots" in calls[2]
 
+    def test_jobs_rides_science_not_masters(self, ts, monkeypatch, tmp_path):
+        # --jobs sizes only the science fan-out; forwarding it to masters would
+        # defeat the fixed _MASTERS_JOBS concurrency cap, so it must not reach the
+        # masters argv.
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS + ["--jobs", "8"])
+
+        assert "scripts.processing.masters" in calls[0]
+        assert "--jobs" not in calls[0]  # masters keeps its own capped sizing
+        assert "scripts.processing.science" in calls[1]
+        assert "--jobs" in calls[1] and "8" in calls[1]  # science gets it
+
     def test_no_masters_skips_masters_stage(self, ts, monkeypatch, tmp_path):
         # --no-masters runs the science and plots stages only.
         a = _write_l0(str(tmp_path), "20240101", 3600, "10700")

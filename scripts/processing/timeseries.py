@@ -309,8 +309,8 @@ def main(argv=None):
     level = args.log_level or logger_params.get("log_level", "INFO")
     log_path = setup_batch_logging(log_dir, "timeseries", level=level)
 
-    # Overrides forwarded to both orchestrators. Both parsers accept these; only
-    # the science parser accepts --kpf_science_output, so it rides science_forward.
+    # Overrides forwarded to the orchestrators. Both parsers accept the common set;
+    # --jobs and --kpf_science_output ride science_forward only (see below).
     common_forward = []
     for value, flag in (
         (args.kpf_data_input, "--kpf_data_input"),
@@ -320,11 +320,15 @@ def main(argv=None):
     ):
         if value:
             common_forward += [flag, value]
-    if args.jobs is not None:
-        common_forward += ["--jobs", str(args.jobs)]
     common_forward += ["--job_timeout", str(args.job_timeout)]
 
+    # --jobs sizes only the science fan-out. The masters orchestrator caps its own
+    # concurrency at a fixed _MASTERS_JOBS regardless of cores (see _dispatch.py);
+    # forwarding a large --jobs to it would defeat that safety cap, so --jobs rides
+    # science_forward and masters keeps its own _default_masters_jobs() sizing.
     science_forward = list(common_forward)
+    if args.jobs is not None:
+        science_forward += ["--jobs", str(args.jobs)]
     if args.kpf_science_output:
         science_forward += ["--kpf_science_output", args.kpf_science_output]
 

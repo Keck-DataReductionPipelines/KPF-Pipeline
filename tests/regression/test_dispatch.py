@@ -1,15 +1,19 @@
 """Tests for scripts/processing/_dispatch.py: the shared fan-out engine.
 
-Covers the job-sizing helpers (cores-based and the masters cap), the
-``run_stage`` dispatch in both modes (fail-soft: attempt all, return the failed
-set; fail-fast: any failure aborts the run with exit 1), the failure sentinel,
-and the ``_run_one`` interrupt guard. Trivial subprocess stubs -- no real
-testdata needed. The launch throttle (``launch_interval``) defaults to 0 here so
-the dispatch tests stay fast and free of thread-timing flakiness.
+Covers the job-sizing helpers (cores-based and the masters cap, including the
+never-below-one clamp), the ``run_stage`` dispatch in both modes (fail-soft:
+attempt all, return the failed set; fail-fast: any failure aborts the run with
+exit 1), the per-job timeout kill (a wedged fan-out job is killed and counted as a
+failure while the canary keeps its own larger timeout), the failure sentinel, and
+the ``_run_one`` interrupt guards (both the pre-launch guard and the
+launch-vs-track race re-check). Trivial subprocess stubs -- no real testdata
+needed. The launch throttle (``launch_interval``) defaults to 0 here so the
+dispatch tests stay fast and free of thread-timing flakiness.
 """
 
 import logging
 import sys
+import time
 
 import pytest
 
@@ -17,6 +21,7 @@ from scripts.processing import _dispatch as f
 
 _OK = [sys.executable, "-c", "pass"]
 _FAIL = [sys.executable, "-c", "import sys; sys.exit(1)"]
+_SLEEP = [sys.executable, "-c", "import time; time.sleep(30)"]  # a wedged job
 
 
 @pytest.fixture(autouse=True)
@@ -73,6 +78,13 @@ class TestDefaultMastersJobs:
 
         monkeypatch.setattr(f.os, "sysconf", _raise)
         assert f._default_masters_jobs() == f._MASTERS_JOBS
+
+    def test_never_below_one(self, monkeypatch):
+        # Tiny RAM would floor the cap to 0; the helper clamps to 1 (max(1, ...)),
+        # so the pool is never empty (an empty pool would silently do nothing).
+        monkeypatch.setattr(f.os, "cpu_count", lambda: 8)
+        monkeypatch.setattr(f.os, "sysconf", self._fake_sysconf(1))
+        assert f._default_masters_jobs() == 1
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +143,45 @@ class TestRunStageFailFast:
 
 
 # ---------------------------------------------------------------------------
+# run_stage -- per-job timeout kill
+# ---------------------------------------------------------------------------
+
+
+class TestRunStageTimeout:
+    def test_slow_fanout_job_is_killed_and_counts_as_failure(self, tmp_path):
+        # A fanned-out job that overruns job_timeout is a wedged subprocess: it is
+        # killed and reported as a failure, so one stuck unit can't hang the batch.
+        # The canary is fast; the 30s sleeper is the fan-out job, bounded to 1s.
+        start = time.monotonic()
+        failed = f.run_stage(
+            "job",
+            [("canary", _OK), ("slow", _SLEEP)],
+            2,
+            str(tmp_path),
+            job_timeout=1,
+            abort_on_failure=False,
+        )
+        assert failed == {"slow"}
+        assert time.monotonic() - start < 15  # killed at ~1s, not the full 30s
+
+    def test_canary_uses_canary_timeout_not_job_timeout(self, tmp_path):
+        # job_timeout bounds only the fan-out; the canary keeps its own, larger
+        # limit, so a canary slower than job_timeout is not killed by it (else the
+        # cold-cache canary would die on every real run).
+        slow_canary = [sys.executable, "-c", "import time; time.sleep(2)"]
+        failed = f.run_stage(
+            "job",
+            [("canary", slow_canary), ("b", _OK)],
+            2,
+            str(tmp_path),
+            job_timeout=1,
+            canary_timeout=30,
+            abort_on_failure=False,
+        )
+        assert failed == set()  # the 2s canary survived a 1s job_timeout
+
+
+# ---------------------------------------------------------------------------
 # _report_failures + _run_one guard
 # ---------------------------------------------------------------------------
 
@@ -153,3 +204,24 @@ class TestRunOneInterrupt:
         # The pre-launch guard: once teardown has begun, _run_one never spawns.
         f._interrupted.set()
         assert f._run_one(_OK) == (130, "")
+
+    def test_interrupt_in_launch_window_kills_child(self, monkeypatch):
+        # Reproduce the launch-vs-track race: the interrupt lands after Popen but
+        # before the child is tracked. Wrapping Popen to set _interrupted models
+        # exactly that -- the top-of-function guard is clear, so launch proceeds,
+        # and the post-track re-check must catch it, kill the child, and return 130
+        # (a missed child would otherwise run its full 30s sleep untracked).
+        # (_interrupted is reset by the autouse fixture, so it can't leak.)
+        real_popen = f.subprocess.Popen
+        launched = []
+
+        def popen_then_interrupt(*a, **k):
+            proc = real_popen(*a, **k)
+            launched.append(proc)
+            f._interrupted.set()  # interrupt arrives in the launch/track window
+            return proc
+
+        monkeypatch.setattr(f.subprocess, "Popen", popen_then_interrupt)
+        rc, _ = f._run_one(_SLEEP, timeout=None)
+        assert rc == 130
+        assert launched and launched[0].poll() is not None  # child killed + reaped

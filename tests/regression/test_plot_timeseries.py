@@ -251,6 +251,23 @@ class TestReadL4Rv:
         times, *_ = pt._read_l4_rv(["/some/L4/20240101/kpf_SL4_x.fits"])
         assert times.size == 0
 
+    def test_skips_string_valued_card_without_crashing(self, pt, tmp_path):
+        # A present-but-non-numeric card (e.g. a stringified 'nan' -- these bare
+        # keywords aren't registry-validated) must skip the one frame, not raise
+        # from np.isfinite(str) and abort the whole plot. The good frame survives.
+        good = _write_l4(str(tmp_path), "20240101", 100, "10700", 2.4e6, 1.5, 0.5)
+        bad = tmp_path / "L4" / "20240101" / "kpf_SL4_str.fits"
+        # All three cards present so the None-guard passes; RV is a string, which
+        # is exactly what would reach (and crash) np.isfinite before the fix.
+        fits.PrimaryHDU(
+            header=fits.Header(
+                {"OBJECT": "10700", "BJDTDB": 2.4e6, "RV": "nan", "RVERR": 0.5}
+            )
+        ).writeto(bad)
+
+        times, rvs, *_ = pt._read_l4_rv([good, str(bad)])
+        assert times.size == 1 and rvs[0] == 1.5
+
 
 # ---------------------------------------------------------------------------
 # _group_bursts

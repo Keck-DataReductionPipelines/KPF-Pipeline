@@ -172,7 +172,12 @@ def _read_l4_rv(l4_paths):
     for path in l4_paths:
         hdr = fits.getheader(path, 0)
         vals = (hdr.get("BJDTDB"), hdr.get("RV"), hdr.get("RVERR"))
-        if any(v is None for v in vals) or not np.all(np.isfinite(vals)):
+        # A card may be missing (None) or present with a non-numeric value (e.g. a
+        # stringified 'nan' -- these bare keywords are not registry-validated), and
+        # np.isfinite raises on a str. So require every value to be a real number
+        # and finite before use; anything else skips the frame rather than aborting
+        # the whole plot on one bad header.
+        if not all(isinstance(v, (int, float)) and np.isfinite(v) for v in vals):
             name = os.path.basename(path)
             print(f"  warning: {name} has no finite RV/RVERR/BJDTDB; skipping")
             continue
