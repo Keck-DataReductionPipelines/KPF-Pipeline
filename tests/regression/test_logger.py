@@ -157,6 +157,73 @@ class TestSetupBatchLogging:
         ]
         assert console.stream is sys.stdout
 
+    def test_filter_on_console_only_not_file(self, tmp_path):
+        # The batch console carries _BatchConsoleFilter; the log file stays raw.
+        kpflog.setup_batch_logging(str(tmp_path), "science")
+        root = logging.getLogger()
+        (console,) = [h for h in root.handlers if h.name == "kpfpipe_console"]
+        (file_h,) = [h for h in root.handlers if h.name == "kpfpipe_file"]
+        assert any(
+            isinstance(flt, kpflog._BatchConsoleFilter) for flt in console.filters
+        )
+        assert not file_h.filters
+
+    def test_library_info_off_console_but_kept_in_file(self, tmp_path, capsys):
+        # The whole point: library INFO chatter is trimmed from the live terminal
+        # echo, while the driver's own narration and any WARNING still show -- and
+        # the batch log file keeps every record regardless.
+        # A neutral third-party name (not astropy, whose logger sets
+        # propagate=False and so never reaches the root handlers).
+        path = kpflog.setup_batch_logging(str(tmp_path), "masters")
+        logging.getLogger("scripts.processing.masters").info("driver narration")
+        logging.getLogger("thirdparty.io").info("library chatter")
+        logging.getLogger("thirdparty.io").warning("library warning")
+
+        out = capsys.readouterr().out
+        assert "driver narration" in out  # scripts.* INFO echoed
+        assert "library chatter" not in out  # library INFO trimmed from terminal
+        assert "library warning" in out  # WARNING always echoed
+        text = _read(path)
+        assert {"driver narration", "library chatter", "library warning"} <= {
+            line.split(": ", 1)[-1].strip() for line in text.splitlines()
+        }  # ...but the file is unfiltered
+
+
+class TestBatchConsoleFilter:
+    """The batch stdout echo trims sub-WARNING records to the driver's own
+    ``scripts.*``/``__main__`` sources; WARNING and above always pass."""
+
+    _flt = kpflog._BatchConsoleFilter()
+
+    def _rec(self, name, level):
+        return logging.LogRecord(name, level, __file__, 1, "m", None, None)
+
+    def test_info_from_scripts_passes(self):
+        assert self._flt.filter(self._rec("scripts.processing.masters", logging.INFO))
+        assert self._flt.filter(
+            self._rec("scripts.plots.plot_timeseries", logging.INFO)
+        )
+
+    def test_info_from_main_passes(self):
+        # A driver launched as `python -m scripts.processing.<name>` logs as __main__.
+        assert self._flt.filter(self._rec("__main__", logging.INFO))
+
+    def test_info_from_library_dropped(self):
+        assert not self._flt.filter(self._rec("astropy.io.fits", logging.INFO))
+        assert not self._flt.filter(self._rec("kpfpipe.utils.io", logging.INFO))
+        assert not self._flt.filter(self._rec("py.warnings", logging.INFO))
+
+    def test_debug_is_source_filtered_too(self):
+        # Below WARNING covers DEBUG as well, not just INFO.
+        assert not self._flt.filter(self._rec("astropy", logging.DEBUG))
+        assert self._flt.filter(self._rec("scripts.processing.science", logging.DEBUG))
+
+    def test_warning_and_above_always_pass(self):
+        # Per-unit failures and warnings from anywhere are never hidden.
+        assert self._flt.filter(self._rec("astropy.io.fits", logging.WARNING))
+        assert self._flt.filter(self._rec("py.warnings", logging.WARNING))
+        assert self._flt.filter(self._rec("kpfpipe.x", logging.ERROR))
+
 
 class TestTeardown:
     def test_teardown_removes_handlers_and_restores_showwarning(self, tmp_path):

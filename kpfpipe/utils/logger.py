@@ -53,6 +53,26 @@ _installed_handlers = []
 _prior_root_level = None
 
 
+class _BatchConsoleFilter(logging.Filter):
+    """Trims the batch orchestrator's *terminal echo* -- not its log file.
+
+    A batch run's live stdout is meant to show the orchestrator's own decision
+    trail, but INFO records propagated up from library loggers in the driver
+    process (discovery, FITS/astropy chatter) make it noisy. So below WARNING,
+    only records from the orchestrator's own code reach the console -- the
+    ``scripts.*`` namespace (masters/science/_dispatch/plots) or ``__main__`` (a
+    driver launched as ``python -m scripts.processing.<name>``, whose module
+    logger is named ``__main__``). WARNING and above always pass, so per-unit
+    failures and warnings are never hidden. Attached to the console handler only,
+    so the batch *log file* keeps every record.
+    """
+
+    def filter(self, record):
+        if record.levelno >= logging.WARNING:
+            return True
+        return record.name == "__main__" or record.name.startswith("scripts.")
+
+
 def get_level(name):
     """Map a level name ('debug' ... 'critical', any case) to its ``logging``
     int; raises ``ValueError`` on an unknown name."""
@@ -99,7 +119,13 @@ def build_log_path(log_dir, recipe_name, target, start_time=None):
 
 
 def setup_logging(
-    log_dir, recipe_name, target, level="INFO", console=True, stream=None
+    log_dir,
+    recipe_name,
+    target,
+    level="INFO",
+    console=True,
+    stream=None,
+    console_filter=None,
 ):
     """Install per-invocation file (+ optional console) handlers on root.
 
@@ -132,6 +158,11 @@ def setup_logging(
         Console destination when ``console`` is true; ``None`` means stderr
         (``logging.StreamHandler``'s default). The batch orchestrators pass
         ``sys.stdout`` so their live progress stays on stdout.
+    console_filter : logging.Filter or None
+        Optional filter attached to the console handler only (never the file
+        handler), to trim what the terminal echoes. ``setup_batch_logging`` passes
+        one to quiet sub-WARNING library chatter on the batch console; ``None``
+        (the leaf default) echoes every record at the root level.
 
     Returns
     -------
@@ -160,6 +191,8 @@ def setup_logging(
     if console:
         console_handler = logging.StreamHandler(stream)  # stream=None -> stderr
         console_handler.set_name("kpfpipe_console")
+        if console_filter is not None:
+            console_handler.addFilter(console_filter)
         new_handlers.append(console_handler)
     for handler in new_handlers:
         handler.setFormatter(formatter)
@@ -185,9 +218,12 @@ def setup_batch_logging(log_dir, label, level="INFO", console=True):
     and the failure sentinels -- alongside (not replacing) each unit's
     per-reduction log. The console echo is pinned to ``sys.stdout`` so an operator
     can watch batch progress live (parity with the ``print()``s this replaces),
-    while each record is also persisted to the batch log file. Called once at the
-    top of an orchestrator's ``main()``; ``setup_logging`` stays the leaf-only,
-    per-recipe entry.
+    while each record is also persisted to the batch log file. The stdout echo is
+    filtered (``_BatchConsoleFilter``) so that below WARNING only the driver's own
+    ``scripts.*``/``__main__`` narration reaches the terminal -- library INFO
+    chatter is kept out of the live view but still written to the batch log file.
+    Called once at the top of an orchestrator's ``main()``; ``setup_logging``
+    stays the leaf-only, per-recipe entry.
 
     Parameters
     ----------
@@ -212,6 +248,7 @@ def setup_batch_logging(log_dir, label, level="INFO", console=True):
         level=level,
         console=console,
         stream=sys.stdout,
+        console_filter=_BatchConsoleFilter(),
     )
 
 
