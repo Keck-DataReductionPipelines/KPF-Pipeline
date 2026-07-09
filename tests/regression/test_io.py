@@ -23,6 +23,7 @@ from kpfpipe.utils.io import (
     kpf_filename,
     kpf_filepath,
     load_junk_obs_ids,
+    read_datecodes,
 )
 from kpfpipe.utils.kpf_utils import get_timestamp, utc_to_hst
 
@@ -371,6 +372,25 @@ class TestDatecodeDirsInRange:
         (tmp_path / "20240110_file").write_text("x")  # datecode-ish, but not a dir
         got = datecode_dirs_in_range(str(tmp_path), "20240101", "20240131")
         assert got == ["20240101", "20240115"]
+
+
+# ---------------------------------------------------------------------------
+# read_datecodes
+# ---------------------------------------------------------------------------
+
+
+class TestReadDatecodes:
+    """The --dates file reader: one datecode per line, blanks stripped/skipped."""
+
+    def test_reads_one_per_line_stripping_blanks(self, tmp_path):
+        f = tmp_path / "nights.txt"
+        f.write_text("20240405\n  20250912 \n\n20241011\n")
+        assert read_datecodes(str(f)) == ["20240405", "20250912", "20241011"]
+
+    def test_empty_file_yields_empty_list(self, tmp_path):
+        f = tmp_path / "empty.txt"
+        f.write_text("\n  \n")
+        assert read_datecodes(str(f)) == []
 
 
 # ---------------------------------------------------------------------------

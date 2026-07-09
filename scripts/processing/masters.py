@@ -11,7 +11,12 @@ It reimplements no pipeline logic and does not decide *which* nights to build:
 the caller supplies the datecodes. The two input forms are mutually exclusive:
 
     kpfpipe masters --dates 20240405 20240712       # explicit datecode(s)
+    kpfpipe masters --dates nights.txt              # a file of datecodes
     kpfpipe masters --date_range 20240101 20240131  # every L0 night in range
+
+Each ``--dates`` value is either a datecode built as-is or a path to a text file
+listing one datecode per line (blank lines ignored); the two may be mixed, and a
+datecode is always read as a datecode even if a like-named file exists.
 
 The range form enumerates the datecode directories present under
 ``{KPF_DATA_INPUT}/L0`` within [START, END]; the raw L0 location itself is
@@ -32,7 +37,7 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import datecode_dirs_in_range
+from kpfpipe.utils.io import datecode_dirs_in_range, read_datecodes
 from kpfpipe.utils.kpf_utils import is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
@@ -76,9 +81,10 @@ def parse_args(argv=None):
         "--dates",
         nargs="*",
         default=None,
-        metavar="DATECODE",
-        help="one or more datecodes to build, e.g. --dates 20240405 "
-        "20240712 (mutually exclusive with --date_range)",
+        metavar="DATECODE_OR_FILE",
+        help="one or more datecodes to build, or a text file listing one datecode "
+        "per line, e.g. --dates 20240405 20240712 or --dates nights.txt (mutually "
+        "exclusive with --date_range)",
     )
     ap.add_argument(
         "--date_range",
@@ -102,10 +108,26 @@ def parse_args(argv=None):
         if start > end:
             ap.error(f"--date_range START must be <= END (got {start} > {end})")
     else:
-        for dc in args.dates:
-            if not is_datecode(dc):
-                ap.error(f"not a valid datecode: {dc!r}")
-        args.dates = sorted(set(args.dates))
+        # Each --dates value is either a datecode (built as-is) or a path to a
+        # text file listing one datecode per line; expand file entries in place.
+        # A valid datecode is always read as such, even if a like-named file exists.
+        datecodes = []
+        for entry in args.dates:
+            if is_datecode(entry):
+                datecodes.append(entry)
+            elif os.path.isfile(entry):
+                for dc in read_datecodes(entry):
+                    if not is_datecode(dc):
+                        ap.error(f"not a valid datecode in {entry}: {dc!r}")
+                    datecodes.append(dc)
+            else:
+                ap.error(
+                    f"--dates entry is neither a datecode nor a readable file: "
+                    f"{entry!r}"
+                )
+        if not datecodes:
+            ap.error(f"--dates produced no datecodes (empty file?): {args.dates}")
+        args.dates = sorted(set(datecodes))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")

@@ -54,6 +54,34 @@ class TestParseArgs:
         ns = m.parse_args(["--dates", "20240405", "20240405"])
         assert ns.dates == ["20240405"]
 
+    def test_dates_from_file(self, m, tmp_path):
+        f = tmp_path / "nights.txt"
+        f.write_text("20240405\n20250912\n\n20241011\n")  # blank line skipped
+        ns = m.parse_args(["--dates", str(f)])
+        assert ns.dates == ["20240405", "20241011", "20250912"]  # sorted
+
+    def test_dates_mixes_inline_and_file(self, m, tmp_path):
+        f = tmp_path / "nights.txt"
+        f.write_text("20250912\n20240405\n")  # 20240405 also given inline
+        ns = m.parse_args(["--dates", "20240405", "20240712", str(f)])
+        assert ns.dates == ["20240405", "20240712", "20250912"]  # merged + deduped
+
+    def test_dates_file_with_bad_datecode_errors(self, m, tmp_path):
+        f = tmp_path / "nights.txt"
+        f.write_text("20240405\nnotadate\n")
+        with pytest.raises(SystemExit):
+            m.parse_args(["--dates", str(f)])
+
+    def test_dates_empty_file_errors(self, m, tmp_path):
+        f = tmp_path / "empty.txt"
+        f.write_text("\n  \n")
+        with pytest.raises(SystemExit):
+            m.parse_args(["--dates", str(f)])
+
+    def test_dates_entry_neither_datecode_nor_file_errors(self, m):
+        with pytest.raises(SystemExit):
+            m.parse_args(["--dates", "/no/such/file.txt"])
+
     def test_date_range(self, m):
         ns = m.parse_args(["--date_range", "20240101", "20240131"])
         assert ns.date_range == ["20240101", "20240131"]
