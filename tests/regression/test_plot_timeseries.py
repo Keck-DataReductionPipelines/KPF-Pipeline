@@ -297,6 +297,57 @@ class TestGroupBursts:
 
 
 # ---------------------------------------------------------------------------
+# _classify_observing_mode: standard / burst / high-cadence per night
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyObservingMode:
+    _MIN = 1.0 / 1440.0  # one minute in BJD days
+
+    def _mode(self, pt, times):
+        """The mode _classify_observing_mode assigns one night at the given epochs."""
+        t = np.asarray(times, dtype=float)
+        return pt._classify_observing_mode(t, np.array(["20240101"] * t.size))[
+            "20240101"
+        ]
+
+    def test_uniform_many_frames_is_high_cadence(self, pt):
+        # 40 frames at a steady ~1-min cadence: ratio ~ 1, well over the floor.
+        assert self._mode(pt, np.arange(40) * self._MIN) == pt._MODE_HIGH_CADENCE
+
+    def test_three_frame_cluster_is_burst(self, pt):
+        # A lone 3-frame burst is uniform but below the frame floor -> burst.
+        assert self._mode(pt, [0.0, self._MIN, 2 * self._MIN]) == pt._MODE_BURST
+
+    def test_isolated_singles_are_standard(self, pt):
+        # Two frames ~6 h apart (> burst gap): each isolated -> standard.
+        assert self._mode(pt, [0.0, 0.25]) == pt._MODE_STANDARD
+
+    def test_single_frame_is_standard(self, pt):
+        assert self._mode(pt, [0.0]) == pt._MODE_STANDARD
+
+    def test_multi_burst_night_is_burst_not_high_cadence(self, pt):
+        # Many frames but in two clusters hours apart: ratio >> 3 -> burst, not hicad.
+        first = np.arange(6) * self._MIN
+        second = 0.2 + np.arange(6) * self._MIN  # ~4.8 h later
+        assert self._mode(pt, np.concatenate([first, second])) == pt._MODE_BURST
+
+    def test_maps_every_night_to_its_mode(self, pt):
+        hc = np.arange(30) * self._MIN
+        burst = np.array([0.0, self._MIN, 0.5, 0.5 + self._MIN])
+        std = np.array([0.1])
+        times = np.concatenate([hc, burst, std])
+        nights = np.array(
+            ["20240926"] * hc.size + ["20240101"] * burst.size + ["20240102"]
+        )
+        assert pt._classify_observing_mode(times, nights) == {
+            "20240926": pt._MODE_HIGH_CADENCE,
+            "20240101": pt._MODE_BURST,
+            "20240102": pt._MODE_STANDARD,
+        }
+
+
+# ---------------------------------------------------------------------------
 # _delta_rv_reference: zero-point from the retained (non-outlier) points
 # ---------------------------------------------------------------------------
 
@@ -369,6 +420,35 @@ class TestPlot:
         pt.plot_rv_timeseries("10700", paths, str(plot_dir))
         assert (plot_dir / "10700_rv_timeseries.png").exists()
         assert (plot_dir / "10700_rv_nightly.png").exists()
+
+    def test_high_cadence_night_gets_own_plot_and_is_held_out(self, pt, tmp_path):
+        # A 12-frame uniform night (high cadence) plus two ordinary single-obs
+        # nights: the high-cadence night gets its own PNG and is excluded from the
+        # main plot, which is still written from the two remaining nights.
+        minute = 1.0 / 1440.0
+        spec = [("20240926", 100 + i, 2.4e6 + i * minute) for i in range(12)]
+        spec += [("20240101", 100, 2.45e6), ("20240102", 100, 2.45e6 + 1)]
+        paths = self._paths(str(tmp_path), spec)
+        plot_dir = tmp_path / "plots"
+        pt.plot_rv_timeseries("10700", paths, str(plot_dir))
+        assert (plot_dir / "10700_20240926_rv_timeseries.png").exists()
+        assert (plot_dir / "10700_rv_timeseries.png").exists()
+        # The high-cadence night is one datecode with >1 obs, but it is held out of
+        # the nightly panels, and the two survivors are single-obs -> no nightly PNG.
+        assert not (plot_dir / "10700_rv_nightly.png").exists()
+
+    def test_all_high_cadence_writes_only_per_night_plots(self, pt, tmp_path):
+        # Every night high-cadence: only the per-night plots exist, no main plot.
+        minute = 1.0 / 1440.0
+        spec = [("20240926", 100 + i, 2.4e6 + i * minute) for i in range(12)]
+        spec += [("20240927", 200 + i, 2.41e6 + i * minute) for i in range(12)]
+        paths = self._paths(str(tmp_path), spec)
+        plot_dir = tmp_path / "plots"
+        pt.plot_rv_timeseries("10700", paths, str(plot_dir))
+        assert (plot_dir / "10700_20240926_rv_timeseries.png").exists()
+        assert (plot_dir / "10700_20240927_rv_timeseries.png").exists()
+        assert not (plot_dir / "10700_rv_timeseries.png").exists()
+        assert not (plot_dir / "10700_rv_nightly.png").exists()
 
 
 # ---------------------------------------------------------------------------
