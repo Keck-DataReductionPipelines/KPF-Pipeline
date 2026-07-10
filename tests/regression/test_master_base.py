@@ -55,7 +55,7 @@ class TestMasterBaseErrors:
         fn = "/nonexistent/KP.20240101.00001.00.fits"
         m = Dark([fn])
         with pytest.warns(UserWarning, match="Failed to load"):
-            l1_obj, success = m._load_frame(fn, cache=False, verbose=True)
+            l1_obj, success = m._load_frame(fn, cache=False)
         assert l1_obj is None and success is False
 
     def test_load_frame_exptime_failure_warns_and_skips(self, monkeypatch):
@@ -69,7 +69,7 @@ class TestMasterBaseErrors:
 
         monkeypatch.setattr(m, "_check_exptime_vs_elapsed", bad_check)
         with pytest.warns(UserWarning, match="Exptime check failed"):
-            l1_obj, success = m._load_frame(fn, cache=False, verbose=True)
+            l1_obj, success = m._load_frame(fn, cache=False)
         assert l1_obj is None and success is False
 
 

@@ -195,7 +195,7 @@ class BaseMasterModule:
             self._master_paths[cal_type] = path
         return self._master_ml1[cal_type]
 
-    def _load_frame(self, fn, cache=False, exptime_tolerance=0.1, verbose=True):
+    def _load_frame(self, fn, cache=False, exptime_tolerance=0.1):
         """
         Load an L0 file and perform image assembly to produce an L1 object.
 
@@ -211,11 +211,6 @@ class BaseMasterModule:
         exptime_tolerance : float
             Maximum allowed excess of elapsed time over requested exposure time,
             in seconds (default = 0.1).
-        verbose : bool, optional
-            If True (default), emit a progress print and propagate load /
-            exptime-check failures as UserWarnings. If False, all such
-            output is suppressed; the (None, False) failure return value
-            still signals the caller.
 
         Returns
         -------
@@ -245,15 +240,13 @@ class BaseMasterModule:
                     self._l1_obj_cache[fn] = l1_obj
 
             except (FileNotFoundError, OSError) as e:
-                if verbose:
-                    warnings.warn(f"Failed to load {fn}: {e}", stacklevel=2)
+                warnings.warn(f"Failed to load {fn}: {e}", stacklevel=2)
                 return None, failure
 
         try:
             self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
         except ValueError as e:
-            if verbose:
-                warnings.warn(f"Exptime check failed for {fn}: {e}", stacklevel=2)
+            warnings.warn(f"Exptime check failed for {fn}: {e}", stacklevel=2)
             return None, failure
 
         return l1_obj, success
@@ -313,7 +306,7 @@ class BaseMasterModule:
 
         return l1_obj
 
-    def _extract_frame(self, l1_obj, verbose=True):
+    def _extract_frame(self, l1_obj):
         """
         Extract an assembled frame to L2 (for spectral masters, e.g. WLS).
 
@@ -325,8 +318,6 @@ class BaseMasterModule:
         ----------
         l1_obj : KPF1
             Assembled (and, where needed, already calibrated) L1 frame.
-        verbose : bool, optional
-            If True (default), emit progress prints during extraction.
 
         Returns
         -------
@@ -334,7 +325,7 @@ class BaseMasterModule:
             The extracted L2 spectra.
         """
         spectral_extraction = SpectralExtraction(l1_obj)
-        return spectral_extraction.perform(verbose=verbose)
+        return spectral_extraction.perform()
 
     @staticmethod
     def _check_exptime_vs_elapsed(l1_obj, exptime_tolerance):
@@ -402,7 +393,6 @@ class BaseMasterModule:
         l0_file_list=None,
         *,
         sigma=None,
-        verbose=True,
         cache=False,
         max_fail_fraction=0.2,
         max_fail_number=2,
@@ -419,9 +409,6 @@ class BaseMasterModule:
             streaming path passes only its approximation-pass frames).
         sigma : float, optional
             Sigma threshold for outlier rejection across frames.
-        verbose : bool, optional
-            If True (default), emit per-frame progress prints and load
-            failure warnings from `_load_frame`.
         cache : bool, optional
             If True, cache each loaded frame so a later pass (the streaming
             exact pass) can reuse it without re-reading from disk. Defaults to
@@ -493,7 +480,7 @@ class BaseMasterModule:
 
         for fn in l0_file_list:
             l1_obj, success = self._load_frame(
-                fn, cache=cache, exptime_tolerance=exptime_tolerance, verbose=verbose
+                fn, cache=cache, exptime_tolerance=exptime_tolerance
             )
 
             if not success:
@@ -583,7 +570,6 @@ class BaseMasterModule:
         *,
         nstream,
         sigma=None,
-        verbose=True,
         max_fail_fraction=0.2,
         max_fail_number=2,
         exptime_tolerance=0.1,
@@ -600,9 +586,6 @@ class BaseMasterModule:
             approximation pass that estimates the per-pixel clipping bounds.
         sigma : float, optional
             Sigma threshold for outlier rejection.
-        verbose : bool, optional
-            If True (default), emit per-frame progress prints and load
-            failure warnings from `_load_frame`.
         max_fail_fraction : float, optional
             Maximum fraction of frames allowed to fail loading before raising.
             Defaults to 0.2.
@@ -653,7 +636,6 @@ class BaseMasterModule:
         approx_stats, zero_exptime = self._compute_stats_from_datacube(
             l0_file_list=l0_file_list[:ndirect],
             sigma=sigma,
-            verbose=verbose,
             cache=True,
             max_fail_fraction=max_fail_fraction,
             max_fail_number=max_fail_number,
@@ -698,7 +680,7 @@ class BaseMasterModule:
             # The first `ndirect` frames are cache hits from the approximation
             # pass above; the rest are read once here and not worth caching.
             l1_obj, success = self._load_frame(
-                fn, cache=False, exptime_tolerance=exptime_tolerance, verbose=verbose
+                fn, cache=False, exptime_tolerance=exptime_tolerance
             )
 
             if not success:
@@ -868,7 +850,6 @@ class BaseMasterModule:
         l0_file_list=None,
         nstream=6,
         sigma=None,
-        verbose=True,
         cal_type=None,
         max_fail_fraction=0.2,
         max_fail_number=2,
@@ -887,9 +868,6 @@ class BaseMasterModule:
             Defaults to 6.
         sigma : float, optional
             Sigma threshold for frame-to-frame outlier rejection.
-        verbose : bool, optional
-            If True (default), emit per-frame progress prints and load
-            failure warnings during stacking.
         cal_type : {'bias', 'dark', 'flat', None}, optional
             Calibration type, forwarded to `_clean_l1_arrays` to select the
             final outlier-flagging mode. Defaults to the conservative
@@ -940,7 +918,6 @@ class BaseMasterModule:
             stats, _ = self._compute_stats_from_datacube(
                 l0_file_list,
                 sigma=sigma,
-                verbose=verbose,
                 max_fail_fraction=max_fail_fraction,
                 max_fail_number=max_fail_number,
                 exptime_tolerance=exptime_tolerance,
@@ -950,7 +927,6 @@ class BaseMasterModule:
                 l0_file_list,
                 nstream=nstream,
                 sigma=sigma,
-                verbose=verbose,
                 max_fail_fraction=max_fail_fraction,
                 max_fail_number=max_fail_number,
                 exptime_tolerance=exptime_tolerance,

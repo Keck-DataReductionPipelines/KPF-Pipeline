@@ -27,7 +27,7 @@ def run():
         title="Master WLS (WLS.make_master_l2)",
         report_name="master_wls",
         setup=setup,
-        call=lambda mod: mod.make_master_l2(verbose=False),
+        call=lambda mod: mod.make_master_l2(),
         candidate_modules=[m_wls, m_base],
     )
 

@@ -346,7 +346,7 @@ class TestSpectrumOrientation:
             ["bias", "dark", "flat", "thar"]
         )
         l1 = ImageProcessing(l1, config).perform()
-        l2 = SpectralExtraction(l1, config).perform(verbose=False)
+        l2 = SpectralExtraction(l1, config).perform()
         return WavelengthCalibration(l2, config).perform()
 
     def _anchor_cases(self, l2):

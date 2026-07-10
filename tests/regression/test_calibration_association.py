@@ -2,8 +2,6 @@
 Unit tests for CalibrationAssociation.
 """
 
-import warnings
-
 import pytest
 from astropy.io import fits
 
@@ -144,20 +142,6 @@ class TestFindMasterFiles:
 
         assert len(result) == 1
         assert result[0][0].endswith("KP.20240405.03637.74_master_bias_L1.fits")
-
-    def test_unparseable_timestamp_silent_when_verbose_false(self, tmp_path):
-        d = tmp_path / "masters" / "20240405"
-        d.mkdir(parents=True)
-        (d / "nostamp_master_bias_L1.fits").touch()
-
-        mod = _make_module(tmp_path)
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", UserWarning)
-            result = mod._find_master_files(
-                "bias", "2024-04-05T11:08:33", verbose=False
-            )
-
-        assert result == []
 
     def test_ignores_wrong_cal_type(self, tmp_path):
         d = tmp_path / "masters" / "20240405"

@@ -188,7 +188,6 @@ class WLS(BaseMasterModule):
     def _process_stack_l0_to_l2(
         self,
         l0_file_list=None,
-        verbose=True,
         max_fail_fraction=0.2,
         max_fail_number=2,
     ):
@@ -199,9 +198,6 @@ class WLS(BaseMasterModule):
         ----------
         l0_file_list : list of str, optional
             L0 files to process. Defaults to self.l0_file_list.
-        verbose : bool, optional
-            If True (default), emit progress prints and per-frame warnings
-            from the underlying L0 → L1 → L2 calls.
         max_fail_fraction : float, optional
             Maximum fraction of frames allowed to fail loading before raising.
             Defaults to 0.2.
@@ -229,7 +225,7 @@ class WLS(BaseMasterModule):
         failure = 0
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(fn, cache=False, verbose=verbose)
+            l1_obj, success = self._load_frame(fn, cache=False)
 
             if not success:
                 failure += 1
@@ -239,7 +235,7 @@ class WLS(BaseMasterModule):
                 continue
 
             l1_obj = self._process_frame(l1_obj)
-            l2_obj = self._extract_frame(l1_obj, verbose=verbose)
+            l2_obj = self._extract_frame(l1_obj)
             self._l2_obj_cache.append(l2_obj)
 
         return self._l2_obj_cache
@@ -366,7 +362,6 @@ class WLS(BaseMasterModule):
         linelist=None,
         lineprofile=None,
         window=5,
-        verbose=True,
     ):
         """
         Fit line positions across all orders and fibers of one chip.
@@ -393,8 +388,6 @@ class WLS(BaseMasterModule):
             Line profile model name. See kpfpipe.utils.stats._FUNCTIONS.
         window : int, optional
             Half-width of the per-line fit window, in pixels.
-        verbose : bool, optional
-            If True, print a progress line for each fiber.
 
         Returns
         -------
@@ -446,7 +439,7 @@ class WLS(BaseMasterModule):
                 )
 
                 nlines = len(line_dict["wav"])
-                if nlines == 0 and verbose:
+                if nlines == 0:
                     warnings.warn(
                         f"{chip} {fiber} order {o}: orderlet skipped "
                         f"(no fittable lines; flux likely NaN-filled)",
@@ -464,7 +457,7 @@ class WLS(BaseMasterModule):
             n_total = len(lines["wav"][i])
             n_good = int(np.sum(~lines["bad"][i]))
             logger.info("%s %s: %d/%d good lines", chip, fiber, n_good, n_total)
-            if n_good == 0 and verbose:
+            if n_good == 0:
                 warnings.warn(
                     f"{chip} {fiber}: no good lines retained "
                     f"({n_total} attempted; all rejected or NaN-filled)",
@@ -651,7 +644,6 @@ class WLS(BaseMasterModule):
         window=5,
         qc_sigma=2.5,
         max_bad_frac=0.05,
-        verbose=True,
     ):
         """
         Compute a master wavelength solution from a stack of extracted L2 frames.
@@ -690,8 +682,6 @@ class WLS(BaseMasterModule):
             Maximum fraction of per-line fits allowed to fail QC before a
             frame is rejected from the stack. Frames exceeding this are
             dropped; if more than one frame is rejected, an error is raised.
-        verbose : bool, optional
-            If True, print progress for each frame and fiber.
 
         Returns
         -------
@@ -744,7 +734,6 @@ class WLS(BaseMasterModule):
                 linelist=linelist,
                 lineprofile=lineprofile,
                 window=window,
-                verbose=verbose,
             )
 
             nlines = len(lines_stack[i]["bad"])
@@ -758,12 +747,11 @@ class WLS(BaseMasterModule):
                         f"{chip}: more than one frame rejected from stack "
                         f"(> {max_bad_frac:.0%} of line fits failed QC)"
                     )
-                if verbose:
-                    warnings.warn(
-                        f"{chip} frame {i + 1}: {bad_frac:.1%} of line fits failed QC "
-                        f"(> {max_bad_frac:.0%}); frame rejected from stack",
-                        stacklevel=2,
-                    )
+                warnings.warn(
+                    f"{chip} frame {i + 1}: {bad_frac:.1%} of line fits failed QC "
+                    f"(> {max_bad_frac:.0%}); frame rejected from stack",
+                    stacklevel=2,
+                )
                 continue
 
             coeffs_stack[i] = self._calculate_wls_coeffs(
@@ -827,7 +815,6 @@ class WLS(BaseMasterModule):
         flat=None,
         master_path=None,
         diagnostics_path=None,
-        verbose=True,
     ):
         """
         Build a master wavelength solution from a stack of L0 frames.
@@ -871,10 +858,6 @@ class WLS(BaseMasterModule):
             If provided, calls `self.save_diagnostics(diagnostics_path)`
             at the end to persist the per-frame coefficient and line stacks
             to an HDF5 file at this path.
-        verbose : bool, optional
-            If True (default), emit progress prints and informational
-            warnings from frame loading, spectral extraction, and the
-            per-frame WLS fit. Hard failures still raise.
 
         Returns
         -------
@@ -906,7 +889,7 @@ class WLS(BaseMasterModule):
         self._load_linelist(linelist)
 
         # _process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
-        self._process_stack_l0_to_l2(l0_file_list=l0_file_list, verbose=verbose)
+        self._process_stack_l0_to_l2(l0_file_list=l0_file_list)
 
         self.ml2_obj = KPFMasterL2(kind="wls")
 
@@ -922,7 +905,6 @@ class WLS(BaseMasterModule):
                 polyorder_x=polyorder_x,
                 polyorder_m=polyorder_m,
                 polyorder_f=polyorder_f,
-                verbose=verbose,
             )
             W, coeffs_mean, coeffs_stack, lines_stack = result
 

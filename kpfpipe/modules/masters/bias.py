@@ -56,7 +56,6 @@ class Bias(BaseMasterModule):
         nstream=6,
         sigma=None,
         filepath=None,
-        verbose=True,
     ):
         """
         Build master bias from stack.
@@ -79,8 +78,6 @@ class Bias(BaseMasterModule):
         filepath : str, optional
             If provided, calls `self.save_master('L1', filepath)` at
             the end to persist the master L1 to a FITS file at this filepath.
-        verbose : bool, optional
-            If True (default), emit per-frame progress prints during stacking.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -91,7 +88,6 @@ class Bias(BaseMasterModule):
             l0_file_list=l0_file_list,
             nstream=nstream,
             sigma=sigma,
-            verbose=verbose,
             cal_type="bias",
         )
 
