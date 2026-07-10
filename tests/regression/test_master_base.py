@@ -51,12 +51,12 @@ class TestMasterBaseErrors:
             Dark(FILE_LIST, config="not-a-config")
 
     def test_load_frame_missing_file_warns_and_skips(self):
-        # A missing/unreadable L0 frame warns and returns (None, failure), not a crash.
+        # A missing/unreadable L0 frame warns and returns None, not a crash.
         fn = "/nonexistent/KP.20240101.00001.00.fits"
         m = Dark([fn])
         with pytest.warns(UserWarning, match="Failed to load"):
-            l1_obj, success = m._load_frame(fn, cache=False)
-        assert l1_obj is None and success is False
+            l1_obj = m._load_frame(fn, cache=False)
+        assert l1_obj is None
 
     def test_load_frame_exptime_failure_warns_and_skips(self, monkeypatch):
         # A frame failing the exptime-vs-elapsed check is warned and skipped.
@@ -69,8 +69,24 @@ class TestMasterBaseErrors:
 
         monkeypatch.setattr(m, "_check_exptime_vs_elapsed", bad_check)
         with pytest.warns(UserWarning, match="Exptime check failed"):
-            l1_obj, success = m._load_frame(fn, cache=False)
-        assert l1_obj is None and success is False
+            l1_obj = m._load_frame(fn, cache=False)
+        assert l1_obj is None
+
+    def test_load_frame_qc_failure_warns_and_skips(self, monkeypatch):
+        # A frame failing a required QCL0 flag is warned and dropped before assembly.
+        m = Dark(FILE_LIST)
+        fn = FILE_LIST[0]
+        qc_result = {kw: (kw != "NOTJUNK", "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.KPF0.from_fits", lambda fn: object()
+        )
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.QCL0",
+            lambda l0: MagicMock(run=lambda: qc_result),
+        )
+        with pytest.warns(UserWarning, match="QC failed.*NOTJUNK"):
+            l1_obj = m._load_frame(fn, cache=False)
+        assert l1_obj is None
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +380,7 @@ class TestRateEstimator:
         # the approximate (clip-bound) pass, so a frame may be loaded twice.
         by_fn = dict(zip(file_list, frames, strict=True))
         with (
-            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
             return dark.stack_frames(nstream=nstream)["GREEN_IMG"]
@@ -433,7 +449,7 @@ class TestPerPixelRejection:
         dark.ccd = {"nrow": nrow, "ncol": ncol}
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
-            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
             arrays = dark.stack_frames()
@@ -466,7 +482,7 @@ class TestPerPixelRejection:
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
-            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
             # nstream = 3 -> ndirect = 2 -> approx from frames 0, 1
@@ -502,7 +518,7 @@ class TestDatacubeClipping:
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
-            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
             arrays = dark.stack_frames(nstream=10)  # > nframe, so datacube path
@@ -527,7 +543,7 @@ class TestDatacubeClipping:
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
-            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
             arrays = dark.stack_frames(nstream=10)  # > nframe, so datacube path
@@ -624,7 +640,7 @@ class TestStackingValidation:
         dark = self._dark(len(frames))
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
-            patch.object(dark, "_load_frame", lambda fn, **k: (by_fn[fn], True)),
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
             return dark.stack_frames()
@@ -647,7 +663,7 @@ class TestStackingValidation:
     def test_excessive_load_failures_raises(self):
         dark = self._dark(5)
         with (
-            patch.object(dark, "_load_frame", lambda fn, **k: (None, False)),
+            patch.object(dark, "_load_frame", lambda fn, **k: None),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
             with pytest.raises(ValueError, match="too many frames failed to load"):

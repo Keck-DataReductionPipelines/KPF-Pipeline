@@ -14,6 +14,7 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
+from kpfpipe.quality_control.qc_flags.level0 import QCL0
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
@@ -64,6 +65,11 @@ class BaseMasterModule:
         "dark": "electrons/sec",
         "flat": None,
     }
+
+    # QCL0 flags a frame must pass to enter a stack: data present, required
+    # keywords present, sane exptime, and not observer-junk. A frame failing
+    # any is dropped in `_load_frame` and counted as a load failure.
+    _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "KWRDPRL0", "EXPTIMOK", "NOTJUNK")
 
     def __init__(self, l0_file_list, config=None):
         if l0_file_list != sorted(l0_file_list):
@@ -215,9 +221,10 @@ class BaseMasterModule:
         Returns
         -------
         l1_obj : KPF1 or None
-            Assembled L1 data object if successful, otherwise None.
-        success : bool
-            True if file was successfully loaded and processed, False otherwise.
+            The assembled L1 object, or None on failure. Failure means the
+            frame could not be read/assembled, failed a required QCL0 flag
+            (`_REQUIRED_L0_QC_FLAGS`), or failed the exptime check; a warning
+            names the cause. Callers detect failure via `l1_obj is None`.
 
         Notes
         -----
@@ -225,15 +232,21 @@ class BaseMasterModule:
         reduce redundant I/O and recomputation. The streaming stats path caches
         its approximation-pass frames so the exact pass reuses them.
         """
-        success = True
-        failure = False
-
         if fn in self._l1_obj_cache:
             l1_obj = self._l1_obj_cache[fn]
 
         else:
             try:
                 l0_obj = KPF0.from_fits(fn)
+
+                qc = QCL0(l0_obj).run()
+                failed = [kw for kw in self._REQUIRED_L0_QC_FLAGS if not qc[kw][0]]
+                if failed:
+                    warnings.warn(
+                        f"QC failed for {fn}: {', '.join(failed)}", stacklevel=2
+                    )
+                    return None
+
                 l1_obj = ImageAssembly(l0_obj).perform()
 
                 if cache:
@@ -241,15 +254,15 @@ class BaseMasterModule:
 
             except (FileNotFoundError, OSError) as e:
                 warnings.warn(f"Failed to load {fn}: {e}", stacklevel=2)
-                return None, failure
+                return None
 
         try:
             self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
         except ValueError as e:
             warnings.warn(f"Exptime check failed for {fn}: {e}", stacklevel=2)
-            return None, failure
+            return None
 
-        return l1_obj, success
+        return l1_obj
 
     def _process_frame(self, l1_obj):
         """
@@ -476,17 +489,17 @@ class BaseMasterModule:
             data_cube[f"{chip}_VAR"] = np.zeros((nframe, nrow, ncol), dtype=np.float32)
 
         i = 0
-        failure = 0
+        failure_count = 0
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(
+            l1_obj = self._load_frame(
                 fn, cache=cache, exptime_tolerance=exptime_tolerance
             )
 
-            if not success:
-                failure += 1
+            if l1_obj is None:
+                failure_count += 1
                 self._check_load_failures(
-                    failure, len(l0_file_list), max_fail_fraction, max_fail_number
+                    failure_count, len(l0_file_list), max_fail_fraction, max_fail_number
                 )
                 continue
 
@@ -679,11 +692,11 @@ class BaseMasterModule:
         for fn in l0_file_list:
             # The first `ndirect` frames are cache hits from the approximation
             # pass above; the rest are read once here and not worth caching.
-            l1_obj, success = self._load_frame(
+            l1_obj = self._load_frame(
                 fn, cache=False, exptime_tolerance=exptime_tolerance
             )
 
-            if not success:
+            if l1_obj is None:
                 failure += 1
                 self._check_load_failures(
                     failure, len(l0_file_list), max_fail_fraction, max_fail_number

@@ -225,9 +225,9 @@ class WLS(BaseMasterModule):
         failure = 0
 
         for fn in l0_file_list:
-            l1_obj, success = self._load_frame(fn, cache=False)
+            l1_obj = self._load_frame(fn, cache=False)
 
-            if not success:
+            if l1_obj is None:
                 failure += 1
                 self._check_load_failures(
                     failure, len(l0_file_list), max_fail_fraction, max_fail_number
