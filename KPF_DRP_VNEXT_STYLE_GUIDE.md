@@ -284,7 +284,7 @@ class StageName:
   keyed by the same `datecode`: it loads `{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv`
   when present (skipping the header scan) and writes it after a scan otherwise — a
   read/write-through cache under one flag, not two. Callers that reduce a night repeatedly
-  (the masters recipe, `select_master_cals.py`, `rv_timeseries.py` discovery) pass it.
+  (the masters recipe, `select_master_cals.py`, `timeseries.py` discovery) pass it.
 - **Defaults live in the module, not the config file.** Resolution is a three-tier
   override chain, lowest precedence first: `_DEFAULTS` (the in-module default) → config
   (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword
@@ -394,10 +394,14 @@ class StageName:
     loggers explicitly — `logging.getLogger("kpfpipe.recipe.science")` / `".masters"`;
     the CLI uses `"kpfpipe.cli"`. Never call the root-logger conveniences
     (`logging.info(...)` — Ruff `LOG015`).
-  - **Handler/level configuration lives in exactly one place**:
-    `kpfpipe.utils.logger.setup_logging`, called only by the CLI entry point
-    (`tools/cli.py`) — never at import time, never in recipes/modules/tests. Library
-    code must work with no handlers installed (records drop silently).
+  - **Handler/level configuration lives in exactly one module** (`kpfpipe.utils.logger`),
+    via two sibling entry points — never at import time, never in recipes/modules/tests:
+    `setup_logging` (the single-recipe leaf runner `scripts/processing/reduce.py`, the
+    `kpfpipe run` entry; per-recipe log, stderr console echo) and `setup_batch_logging`
+    (the fan-out orchestrators `scripts/processing/masters.py`/`science.py`, once per
+    invocation; a `_batch_` summary log with the console echo pinned to **stdout** for
+    live progress). Library code must work with no handlers installed (records drop
+    silently).
   - **Level policy**: `INFO` is the production level — reduction steps, decision
     points, file reads/writes, and end-of-`perform()` module summaries. `DEBUG` —
     inner-loop progress and counters. `WARNING` arrives via the warnings bridge (below).
@@ -408,6 +412,11 @@ class StageName:
     models and modules); never in `perform()`/pipeline paths. A module's `_track_info()`
     builds and caches the summary text on `self._info`; `info()` prints it and `perform()`
     logs it (`logger.info("summary:\n%s", self._info)`), so both share one rendering (see §2).
+    The batch-processing orchestrators (`masters`/`science`/`_dispatch`) are **not** an
+    exception to this: they log their fan-out narration (dispatch banner, per-unit
+    ok/FAILED, failure sentinels) through a named logger configured by
+    `setup_batch_logging`, not `print()` — the stdout console echo gives the operator the
+    same live view while also persisting a batch-summary log.
   - In-pipeline recoverable/degraded conditions → `warnings.warn(..., stacklevel=2)`,
     gated behind a `verbose` flag: `if verbose: warnings.warn(..., stacklevel=2)`. The
     explicit `stacklevel` is required (Ruff `B028`) so the warning points at the caller.
@@ -415,7 +424,8 @@ class StageName:
     `logging.captureWarnings(True)` — with the default warning filter, each unique
     warning is recorded once per location per process.
 - **Raise exceptions; do not catch-and-log.** The one sanctioned catch-log-reraise
-  point is the CLI entry (`tools/cli.py`), which wraps the recipe call in
+  point is the single-recipe leaf runner (`scripts/processing/reduce.py`), which wraps
+  the recipe call in
   `logger.critical(..., exc_info=True); raise` so uncaught tracebacks land in the log
   (DRP-RUN-08) before the process exits nonzero. Everywhere else, choose the
   semantically correct type:
@@ -510,8 +520,8 @@ class StageName:
   (flake8-logging-format — lazy `%`-formatting in log calls), `LOG` (flake8-logging —
   named loggers only). Line length (`E501`) is
   enforced at 88. `__init__.py` is exempt from `F401` (re-exports). Ruff's scope is
-  `kpfpipe/`, `tests/`, `recipes/`; `legacy/`, `gjgilbert_notebooks/`, and `scripts/`
-  (unimplemented pseudocode stubs) are excluded.
+  `kpfpipe/`, `tests/`, `recipes/`, `scripts/`, and `tools/`; only `legacy/` and
+  `gjgilbert_notebooks/` are excluded.
 - **Quote style → double quotes** (ruff/black default). The codebase follows the formatter's
   rule (prefer `"`, but keep `'` where switching would add escapes — e.g. `'say "hi"'` stays
   single). Triple-quoted strings use `"""`; f-strings, raw, and byte strings follow the same
@@ -612,8 +622,8 @@ documented, intentional ways — follow *its* conventions when adding masters co
 ## 11. Recipes & configuration
 
 - **Recipes are plain Python modules** (not a DSL/`.recipe` file), one `def main(config, args)`
-  entry point, no top-level execution. The CLI driver (`tools/cli.py`) imports and calls
-  `main`.
+  entry point, no top-level execution. The leaf runner (`scripts/processing/reduce.py`,
+  invoked via `kpfpipe run`) imports and calls `main`.
 - **Module invocation idiom = instantiate then call**, with the variable named
   `snake_case` after the class:
   ```python

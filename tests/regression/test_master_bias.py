@@ -2,7 +2,7 @@
 
 Unit tests mock stack_frames (no real data). TestMasterBiasRegression stacks the
 bundled L0 bias frames. The shared stacking engine and L1 output contract these
-exercise (`BaseMasterModule`) are unit-tested in test_masters_base.py.
+exercise (`BaseMasterModule`) are unit-tested in test_master_base.py.
 """
 
 import os

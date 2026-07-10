@@ -18,10 +18,12 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.utils.io import (
     FileHandler,
+    datecode_dirs_in_range,
     kpf_directory,
     kpf_filename,
     kpf_filepath,
     load_junk_obs_ids,
+    read_token_file,
 )
 from kpfpipe.utils.kpf_utils import get_timestamp, utc_to_hst
 
@@ -353,6 +355,43 @@ class TestBuildCalibrationStacksRealData:
         assert len(lists) == 1
         assert len(lists[0]) == 3
         assert lists[0] == sorted(lists[0])
+
+
+# ---------------------------------------------------------------------------
+# datecode_dirs_in_range
+# ---------------------------------------------------------------------------
+
+
+class TestDatecodeDirsInRange:
+    """The datecode-range discovery helper used by the masters orchestrator to
+    expand a ``--date_range`` against the L0 tree. Synthetic tmp trees only."""
+
+    def test_filters_by_range_and_sorts(self, tmp_path):
+        for name in ["20240101", "20240115", "20240201", "notadate", "20231231"]:
+            (tmp_path / name).mkdir()
+        (tmp_path / "20240110_file").write_text("x")  # datecode-ish, but not a dir
+        got = datecode_dirs_in_range(str(tmp_path), "20240101", "20240131")
+        assert got == ["20240101", "20240115"]
+
+
+# ---------------------------------------------------------------------------
+# read_token_file
+# ---------------------------------------------------------------------------
+
+
+class TestReadTokenFile:
+    """The --dates / --obs_ids reference-file reader: one token per line,
+    whitespace stripped, blank lines skipped."""
+
+    def test_reads_one_per_line_stripping_blanks(self, tmp_path):
+        f = tmp_path / "nights.txt"
+        f.write_text("20240405\n  20250912 \n\n20241011\n")
+        assert read_token_file(str(f)) == ["20240405", "20250912", "20241011"]
+
+    def test_empty_file_yields_empty_list(self, tmp_path):
+        f = tmp_path / "empty.txt"
+        f.write_text("\n  \n")
+        assert read_token_file(str(f)) == []
 
 
 # ---------------------------------------------------------------------------

@@ -3,8 +3,10 @@
 Standalone QC runner.
 
 Usage:
-    python scripts/qc.py --input <file> --level L0|L1|L2 [--config <toml>] [--write]
-    python scripts/qc.py --obs_id <obs_id> --level L1 --config <toml> [--write]
+    python scripts/quality_control/qc.py \
+        --input <file> --level L0|L1|L2 [--config <toml>] [--write]
+    python scripts/quality_control/qc.py \
+        --obs_id <obs_id> --level L1 --config <toml> [--write]
 
 Exit codes:
     0 — ISGOOD=1 (all checks passed)
@@ -54,7 +56,7 @@ def main():
     args = parser.parse_args()
 
     # ------------------------------------------------------------------ #
-    # Resolve input file path (mirrors scripts/qlp.py)
+    # Resolve input file path (mirrors scripts/quality_control/qlp.py)
     # ------------------------------------------------------------------ #
     if args.input:
         input_file = args.input

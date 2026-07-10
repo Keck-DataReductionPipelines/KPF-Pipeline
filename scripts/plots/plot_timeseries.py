@@ -1,0 +1,699 @@
+#!/usr/bin/env python3
+"""Plot a single star's RV timeseries from its L4 products on disk.
+
+A standalone post-reduction plotter: it reads the RV summary keywords from each L4
+PRIMARY header and renders the RV-vs-date plot, reading headers only. Frames come
+from one of two sources: ``--date_range`` scans the L4 output tree over an
+inclusive datecode range, or ``--obs_ids`` names them explicitly (their L4 paths
+built directly from ``--data_dir``, no scan -- how ``kpfpipe timeseries`` hands off
+the set it already discovered).
+
+Frames flagged as observer junk (``QUALITY_CONTROL`` ``NOTJUNK == 0``) are skipped.
+Bursts of rapid-succession frames collapse to one RVERR-weighted point (revisits stay
+distinct), with the individual frames kept as a faint grey underlay. High-cadence
+nights (tens of near-uniform frames) are the exception: each is held out and gets its
+own ``{target}_rv_timeseries_{datecode}.png``. Writes to ``--plot_dir``:
+``{target}_rv_timeseries.png`` and, for nights with multiple observations,
+``{target}_rv_nightly.png``.
+
+    python -m scripts.plots.plot_timeseries --target 10700 \\
+        --date_range 20240101 20240131 \\
+        --data_dir /data/kpf/science --plot_dir ./plots
+
+    python -m scripts.plots.plot_timeseries --target 10700 \\
+        --obs_ids KP.20240101.03600.00 KP.20240101.03660.00 \\
+        --data_dir /data/kpf/science --plot_dir ./plots
+"""
+
+import argparse
+import concurrent.futures
+import glob
+import os
+import subprocess
+import sys
+from collections import Counter
+from datetime import UTC, datetime
+
+import numpy as np
+from astropy.io import fits
+
+import kpfpipe
+from kpfpipe.utils.io import datecode_dirs_in_range, kpf_filepath
+from kpfpipe.utils.kpf_utils import is_datecode, is_obs_id
+from kpfpipe.utils.stats import flag_outliers
+
+_REPO = kpfpipe.REPO_ROOT
+
+
+def _scan_nights(nights, target, worker, jobs):
+    """Fan `worker(dc)` out over `nights` in a thread pool; return the pooled hits.
+
+    Scanning a night reads every L4 PRIMARY header -- I/O bound over NFS, so a
+    thread pool overlaps the latency (``getheader`` releases the GIL during I/O).
+    `worker(dc)` returns ``(hits, note)``: that night's L4 paths and an optional
+    trailing note. A per-night heartbeat is printed in completion order.
+    """
+    print(
+        f"scanning {len(nights)} night(s) for target {target} "
+        f"({min(jobs, len(nights))} workers)...",
+        flush=True,
+    )
+    hits_all = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = {pool.submit(worker, dc): dc for dc in nights}
+        for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
+            dc = futures[future]
+            hits, note = future.result()
+            hits_all.extend(hits)
+            print(
+                f"  [{i}/{len(nights)}] {dc}: {len(hits)} L4 frame(s){note} "
+                f"(total {len(hits_all)})",
+                flush=True,
+            )
+    return hits_all
+
+
+def discover_l4_files(data_dir, target, start, end, jobs):
+    """L4 product paths for `target` over [start, end], scanned from the L4 tree.
+
+    Enumerates the nights (datecode dirs) under {data_dir}/L4, reads each L4
+    PRIMARY OBJECT, and keeps this target's frames. Returns a sorted list of paths.
+    Exits loudly when the L4 tree is missing or nothing matches.
+    """
+    l4_root = os.path.join(data_dir, "L4")
+    if not os.path.isdir(l4_root):
+        sys.exit(f"error: L4 output directory not found: {l4_root}")
+
+    nights = datecode_dirs_in_range(l4_root, start, end)
+    if not nights:
+        sys.exit(f"error: no L4 datecode dirs under {l4_root} in range {start}..{end}")
+
+    def _scan_night(dc):
+        hits = []
+        for path in sorted(glob.glob(os.path.join(l4_root, dc, "kpf_SL4_*.fits"))):
+            try:
+                obj = fits.getheader(path, 0).get("OBJECT")
+            except OSError as e:
+                print(f"  warning: skipping unreadable L4 {path}: {e}", flush=True)
+                continue
+            if str(obj).strip() == str(target):
+                hits.append(path)
+        return hits, ""
+
+    l4_paths = _scan_nights(nights, target, _scan_night, jobs)
+
+    l4_paths = sorted(set(l4_paths))
+    if not l4_paths:
+        sys.exit(
+            f"error: no L4 products for target {target!r} in range "
+            f"{start}..{end} under {l4_root}"
+        )
+    return l4_paths
+
+
+def l4_paths_for_obs_ids(data_dir, obs_ids, target):
+    """L4 product paths for an explicit obs_id list, built without a directory scan.
+
+    The counterpart to discover_l4_files for when the caller already knows the
+    frames (e.g. timeseries): each obs_id's L4 path is built directly with
+    kpf_filepath, so no tree is walked. A frame whose L4 OBJECT does not match
+    `target` is warned but still plotted (surfacing the mismatch without silently
+    discarding data); one whose L4 is absent or unreadable is warned and skipped.
+    Exits loudly only when none of the supplied obs_ids have an L4.
+    """
+    paths = []
+    for oid in obs_ids:
+        path = kpf_filepath(oid, "L4", data_root=data_dir)
+        if not os.path.isfile(path):
+            print(f"  warning: no L4 product for {oid} at {path}; skipping", flush=True)
+            continue
+        try:
+            obj = fits.getheader(path, 0).get("OBJECT")
+        except OSError as e:
+            print(f"  warning: skipping unreadable L4 {path}: {e}", flush=True)
+            continue
+        if str(obj).strip() != str(target):
+            print(
+                f"  warning: L4 for {oid} has OBJECT {obj!r}, not target "
+                f"{target!r}; plotting anyway",
+                flush=True,
+            )
+        paths.append(path)
+
+    paths = sorted(set(paths))
+    if not paths:
+        sys.exit(
+            f"error: none of the {len(obs_ids)} supplied obs_id(s) have an L4 "
+            f"product under {data_dir}"
+        )
+    return paths
+
+
+def _l4_is_junk(path):
+    """True if the L4's QUALITY_CONTROL marks it an observer-junk frame.
+
+    NOTJUNK is the L0 junk QC flag propagated to L4 (1 = not junk, 0 = junk). A
+    missing QUALITY_CONTROL extension or NOTJUNK card counts as not junk, mirroring
+    the observer-list no-op when the junk list itself is absent.
+    """
+    try:
+        qc = fits.getheader(path, "QUALITY_CONTROL")
+    except KeyError:
+        return False
+    return qc.get("NOTJUNK", 1) == 0
+
+
+def _read_l4_rv(l4_paths):
+    """Read (BJD_TDB, RV, RVERR, datecode) from each non-junk L4 product.
+
+    RV/RVERR are km/s, BJDTDB a Julian day -- all on the L4 PRIMARY (per EPRV). The
+    datecode (the file's parent dir) labels each frame's observing night. Frames
+    flagged junk by the QUALITY_CONTROL NOTJUNK flag, or with a non-finite
+    RV/RVERR/BJDTDB, are skipped with a warning.
+    """
+    times, rvs, errs, nights = [], [], [], []
+    for path in l4_paths:
+        name = os.path.basename(path)
+        if _l4_is_junk(path):
+            print(f"  warning: {name} is an observer-junk frame (NOTJUNK=0); skipping")
+            continue
+        hdr = fits.getheader(path, 0)
+        vals = (hdr.get("BJDTDB"), hdr.get("RV"), hdr.get("RVERR"))
+        # np.isfinite raises on a str, so require real finite numbers (a card may be
+        # missing or a stringified 'nan') rather than aborting on one bad header.
+        if not all(isinstance(v, (int, float)) and np.isfinite(v) for v in vals):
+            print(f"  warning: {name} has no finite RV/RVERR/BJDTDB; skipping")
+            continue
+        bjd, rv, err = vals
+        times.append(bjd)
+        rvs.append(rv)
+        errs.append(err)
+        nights.append(os.path.basename(os.path.dirname(path)))
+    return np.array(times), np.array(rvs), np.array(errs), np.array(nights)
+
+
+# Minimum gap separating one burst from the next. A bright-star burst is ~3-5
+# exposures at ~1-min readout cadence; revisits are tens of minutes apart, so
+# 15 min cleanly sits between the two (well above intra-burst, below inter-burst).
+_BURST_GAP_MINUTES = 15.0
+
+
+def _group_bursts(times, rvs, errs, gap_minutes=_BURST_GAP_MINUTES):
+    """Collapse each burst of rapid-succession frames to one RVERR-weighted point.
+
+    Splits the time-ordered frames wherever consecutive BJD_TDB values differ by
+    more than `gap_minutes`, then combines each burst with 1/RVERR**2 weights:
+    weighted-mean RV, error 1/sqrt(sum w), epoch the weighted-mean BJD_TDB.
+    """
+    order = np.argsort(times)
+    times, rvs, errs = times[order], rvs[order], errs[order]
+    gaps_minutes = np.diff(times) * 1440.0  # BJD_TDB days -> minutes
+    breaks = np.nonzero(gaps_minutes > gap_minutes)[0] + 1
+    g_times, g_rvs, g_errs = [], [], []
+    for sel in np.split(np.arange(times.size), breaks):
+        w = 1.0 / errs[sel] ** 2
+        g_times.append(np.sum(w * times[sel]) / np.sum(w))
+        g_rvs.append(np.sum(w * rvs[sel]) / np.sum(w))
+        g_errs.append(1.0 / np.sqrt(np.sum(w)))
+    return np.array(g_times), np.array(g_rvs), np.array(g_errs)
+
+
+# The three per-night observing modes, decided from how a night's frames are spaced:
+#   - HIGH_CADENCE: >= _HIGH_CADENCE_MIN_FRAMES at roughly uniform spacing
+#     (mean/median gap <= _HIGH_CADENCE_RATIO_MAX). Held out for its own plot.
+#   - BURST: frames cluster (a consecutive pair within _BURST_GAP_MINUTES);
+#     _group_bursts collapses each cluster to an RVERR-weighted point.
+#   - STANDARD: isolated single observations (every frame its own burst group).
+# HIGH_CADENCE is tested first (its frames all sit within the burst gap). The ratio
+# alone can't separate it from a short burst -- both near-uniform, and a 3-frame
+# night gives ratio == 1 identically -- hence the frame-count floor.
+_MODE_STANDARD = "standard"
+_MODE_BURST = "burst"
+_MODE_HIGH_CADENCE = "high cadence"
+
+_HIGH_CADENCE_RATIO_MAX = 3.0
+_HIGH_CADENCE_MIN_FRAMES = 10
+
+
+def _classify_observing_mode(times, nights, gap_minutes=_BURST_GAP_MINUTES):
+    """Map each observing night (datecode) to its observing mode.
+
+    Returns ``{datecode: mode}`` with mode one of `_MODE_STANDARD`, `_MODE_BURST`,
+    or `_MODE_HIGH_CADENCE`. See the module constants above for the full rationale
+    and the order in which the modes are decided.
+    """
+    modes = {}
+    for night in np.unique(nights):
+        t = np.sort(times[nights == night])
+        gaps = np.diff(t)
+        # High cadence first; med > 0 guards coincident timestamps (divide-by-zero).
+        if t.size >= _HIGH_CADENCE_MIN_FRAMES:
+            med = np.median(gaps)
+            if med > 0 and gaps.mean() / med <= _HIGH_CADENCE_RATIO_MAX:
+                modes[night] = _MODE_HIGH_CADENCE
+                continue
+        # Burst if any consecutive pair is within the burst gap, else isolated.
+        if gaps.size and np.any(gaps * 1440.0 <= gap_minutes):
+            modes[night] = _MODE_BURST
+        else:
+            modes[night] = _MODE_STANDARD
+    return modes
+
+
+def _delta_rv_reference(g_times, g_rvs):
+    """Zero-point and outlier mask for the grouped burst means.
+
+    Flags each mean against the local trend (`flag_outliers`, trend method), gated to
+    >=10 points; the zero-point is the median of the *retained* points, so an outlier
+    skews neither it nor the RV_RMS taken about it. The trend method is shift- and
+    scale-invariant, so the mask is well-defined before a reference is chosen. Returns
+    ``(ref, outlier_mask)``.
+    """
+    order = np.argsort(g_times)
+    outlier = np.zeros(g_rvs.shape, dtype=bool)
+    if g_rvs.size >= 10:
+        outlier[order] = flag_outliers(g_rvs[order], 5.0, kernel_size=5, method="trend")
+    ref = float(np.median(g_rvs[~outlier]) if np.any(~outlier) else np.median(g_rvs))
+    return ref, outlier
+
+
+def _stamp_provenance(fig):
+    """Footer with UT generation time + short git commit (quicklook-style)."""
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        commit = (
+            subprocess.run(
+                ["git", "-C", str(_REPO), "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout.strip()
+            or "unknown"
+        )
+    except (OSError, subprocess.SubprocessError):
+        commit = "unknown"
+    fig.text(
+        0.99,
+        0.005,
+        f"generated {now} UT · {commit}",
+        fontsize=8,
+        color="darkgray",
+        ha="right",
+        va="bottom",
+    )
+
+
+def _symmetric_ylim(ax):
+    """Set the y-limits symmetric about 0 (equal span above and below)."""
+    ymax = max(abs(v) for v in ax.get_ylim())
+    ax.set_ylim(-ymax, ymax)
+
+
+def _delta_rv_stats(rvs, errs, ref, outlier):
+    """ΔRV (m/s) and its error bars about `ref`, with RV_RMS and the median RV_ERR.
+
+    Returns ``(drv, derr, rms, med_err)``. RV_RMS is the std of the *retained*
+    (non-outlier) points, so a flagged outlier can't inflate it; an all-outlier
+    input falls back to the std over everything.
+    """
+    drv = (rvs - ref) * 1e3
+    derr = errs * 1e3
+    rms = float(np.std(drv[~outlier])) if np.any(~outlier) else float(np.std(drv))
+    return drv, derr, rms, float(np.median(derr))
+
+
+def _annotate_rms(ax, rms, med_err):
+    """Draw the standard RV_RMS / RV_ERR text box in the axes' upper-left."""
+    ax.annotate(
+        f"RV_RMS = {rms:.2f} m/s\nRV_ERR = {med_err:.2f} m/s",
+        xy=(0.02, 0.96),
+        xycoords="axes fraction",
+        va="top",
+        ha="left",
+        bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.8),
+    )
+
+
+def _new_delta_rv_axes():
+    """A fresh ``(fig, ax)`` for a ΔRV [m/s] timeseries: Agg backend, zero line, and
+    y-label -- the setup shared by the single- and multi-night plots."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.axhline(0.0, color="0.6", lw=1, zorder=0)  # zero = median of retained points
+    ax.set_ylabel(r"$\Delta$RV [m/s]")
+    return fig, ax
+
+
+def _save_figure(fig, out_path):
+    """Finalize and write one figure: tight_layout, provenance stamp, PNG, close."""
+    import matplotlib.pyplot as plt
+
+    fig.tight_layout()
+    _stamp_provenance(fig)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+
+
+def plot_nightly_panels(target, times, rvs, errs, nights, plot_directory, ref):
+    """Write a per-night multi-panel plot of the individual (ungrouped) frames.
+
+    One panel per observing night with more than one observation (a single-frame
+    night carries no within-night trend, so it is skipped). Each panel shows
+    delta-RV (m/s, about `ref` -- the shared retained-median zero-point from the
+    main timeseries, so the two plots agree) vs. minutes from that night's first
+    frame; panels share a y-axis to keep nights comparable. Writes nothing when no
+    night has multiple observations.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    counts = Counter(nights)
+    unique = sorted(night for night, n in counts.items() if n > 1)
+    if not unique:
+        print("no multi-observation nights; skipping nightly panels")
+        return
+
+    drv = (rvs - ref) * 1e3
+    derr = errs * 1e3
+
+    ncols = min(4, len(unique))
+    nrows = int(np.ceil(len(unique) / ncols))
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(3.3 * ncols, 2.7 * nrows), sharey=True, squeeze=False
+    )
+    for ax, night in zip(axes.flat, unique, strict=False):
+        sel = nights == night
+        minutes = (times[sel] - times[sel].min()) * 1440.0
+        o = np.argsort(minutes)
+        ax.axhline(0.0, color="0.6", lw=1, zorder=0)
+        ax.errorbar(
+            minutes[o],
+            drv[sel][o],
+            yerr=derr[sel][o],
+            fmt="o",
+            ms=4,
+            capsize=2,
+            color="C3",
+        )
+        ax.set_title(night, fontsize=9)
+        ax.grid(True, alpha=0.3)
+    for ax in axes.flat[len(unique) :]:
+        ax.set_visible(False)
+    _symmetric_ylim(axes.flat[0])  # sharey: one range applies to every panel
+
+    fig.supxlabel("Minutes from first frame of night")
+    fig.supylabel(r"$\Delta$RV [m/s]")
+    fig.suptitle(target)
+    out_path = os.path.join(plot_directory, f"{target}_rv_nightly.png")
+    _save_figure(fig, out_path)
+    print(f"nightly panels plot -> {out_path}  ({len(unique)} night(s))")
+
+
+def plot_single_night_timeseries(target, times, rvs, errs, night, plot_directory):
+    """Write a standalone RV timeseries for a single night's frames.
+
+    Used for high-cadence nights, which are held out of the multi-night plot (their
+    tens of near-uniform frames would otherwise collapse to one misleading burst
+    point -- see `_classify_observing_mode`). Plots delta-RV (m/s) vs minutes from
+    the night's first frame, *ungrouped* so the within-night variation is visible.
+    The zero-point and RV_RMS follow the retained (non-outlier) points, matching the
+    multi-night plot (`_delta_rv_reference`). Returns the written path.
+    """
+    order = np.argsort(times)
+    times, rvs, errs = times[order], rvs[order], errs[order]
+    ref, outlier = _delta_rv_reference(times, rvs)
+    drv, derr, rms, med_err = _delta_rv_stats(rvs, errs, ref, outlier)
+    minutes = (times - times.min()) * 1440.0
+
+    fig, ax = _new_delta_rv_axes()
+    ax.errorbar(
+        minutes, drv, yerr=derr, fmt="o", ms=5, capsize=3, color="C3", mec="black",
+        mew=0.5,
+    )  # fmt: skip
+    ax.set_xlabel("Minutes from first frame of night")
+    ax.set_title(f"{target}  {night}  (high cadence, n={times.size})")
+    _annotate_rms(ax, rms, med_err)
+    ax.grid(True, alpha=0.3)
+    _symmetric_ylim(ax)
+    out_path = os.path.join(plot_directory, f"{target}_rv_timeseries_{night}.png")
+    _save_figure(fig, out_path)
+    print(
+        f"high-cadence night plot -> {out_path}  (RV_RMS {rms:.2f} m/s, n={times.size})"
+    )
+    return out_path
+
+
+def plot_multi_night_timeseries(target, times, rvs, errs, nights, plot_directory):
+    """Write the multi-night RV timeseries (bursts grouped) plus the per-night panels.
+
+    Delta-RV (m/s, about the retained-burst-mean median) vs. observation date, with a
+    faint grey underlay of the individual frames beneath the burst means and calendar
+    (YYYYMMDD) x labels. Also writes the per-night panels (plot_nightly_panels) and
+    returns the main plot's path; the caller holds out high-cadence nights first.
+
+    Flagged outliers (>=10 burst means; see _delta_rv_reference) are drawn as
+    annotated edge triangles against a y-range clipped to the retained points, so one
+    outlier can't rescale the plot.
+    """
+    import matplotlib.pyplot as plt  # for setp; _new_delta_rv_axes builds the axes
+    from astropy.time import Time
+    from matplotlib.ticker import FuncFormatter
+
+    # Group bursts, then take the zero-point from the retained means; this one
+    # reference is shared by the underlay, burst means, and per-night panels.
+    g_times, g_rvs, g_errs = _group_bursts(times, rvs, errs)
+    ref, outlier = _delta_rv_reference(g_times, g_rvs)
+
+    fig, ax = _new_delta_rv_axes()
+
+    # Per-night panels from the ungrouped frames (self-skips when no multi-obs night).
+    plot_nightly_panels(target, times, rvs, errs, nights, plot_directory, ref)
+
+    # Faint grey underlay: the individual (ungrouped) frames for context.
+    u_order = np.argsort(times)
+    ax.errorbar(
+        times[u_order],
+        ((rvs - ref) * 1e3)[u_order],
+        yerr=(errs * 1e3)[u_order],
+        fmt="o",
+        ms=4,
+        color="0.6",
+        alpha=0.5,
+        zorder=1,
+        label="individual frames",
+    )
+
+    # From here on work with the burst means.
+    times, rvs, errs = g_times, g_rvs, g_errs
+    order = np.argsort(times)
+    drv, derr, rms, med_err = _delta_rv_stats(rvs, errs, ref, outlier)
+    out_path = os.path.join(plot_directory, f"{target}_rv_timeseries.png")
+
+    # Clip the y-range to the retained points so a flagged outlier doesn't compress
+    # the plot; outliers are drawn as edge triangles instead.
+    ylim = None
+    if outlier.any():
+        span = np.abs(drv[~outlier])
+        ref_max = float(span.max()) if span.size else float(np.abs(drv).max())
+        if ref_max > 0:
+            ylim = 1.1 * ref_max
+
+    # Burst means: larger black-outlined markers over the grey underlay. Only the
+    # in-range points; flagged outliers are marked separately at the edge below.
+    fg_kw = dict(
+        fmt="o",
+        capsize=3,
+        zorder=2,
+        color="C3",
+        ms=8,
+        mec="black",
+        mew=0.8,
+        label="burst mean",
+    )
+    keep = order[~outlier[order]] if ylim is not None else order
+    ax.errorbar(times[keep], drv[keep], yerr=derr[keep], **fg_kw)
+
+    # Off-plot outliers: an up/down triangle at the clipped edge (clip_on False so
+    # the whole marker shows), annotated with the delta-RV.
+    if ylim is not None:
+        up = outlier & (drv > 0)
+        dn = outlier & (drv < 0)
+        tri_kw = dict(ls="none", color="black", ms=9, clip_on=False, zorder=4)
+        label = r"5$\sigma$ outlier"
+        if up.any():
+            ax.plot(
+                times[up],
+                np.clip(drv[up], -ylim, ylim),
+                marker="^",
+                label=label,
+                **tri_kw,
+            )
+            label = None
+        if dn.any():
+            ax.plot(
+                times[dn],
+                np.clip(drv[dn], -ylim, ylim),
+                marker="v",
+                label=label,
+                **tri_kw,
+            )
+        for i in np.flatnonzero(outlier):
+            y = float(np.clip(drv[i], -ylim, ylim))
+            off = -12 if drv[i] > 0 else 12
+            ax.annotate(
+                f"{drv[i]:+.0f} m/s",
+                (times[i], y),
+                textcoords="offset points",
+                xytext=(0, off),
+                ha="center",
+                va="top" if drv[i] > 0 else "bottom",
+                fontsize=7,
+            )
+
+    ax.legend(loc="upper right", fontsize=8)
+
+    # Relabel the BJD_TDB axis with human-readable calendar dates (YYYYMMDD); the
+    # TDB-vs-UTC offset (~seconds) is irrelevant at day granularity.
+    ax.xaxis.set_major_formatter(
+        FuncFormatter(
+            lambda jd, _p: Time(jd, format="jd", scale="tdb").strftime("%Y%m%d")
+        )
+    )
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+
+    ax.set_xlabel("Date [UT]")
+    ax.set_title(target)
+    _annotate_rms(ax, rms, med_err)
+    ax.grid(True, alpha=0.3)
+    if ylim is not None:
+        ax.set_ylim(-ylim, ylim)
+    else:
+        _symmetric_ylim(ax)
+    _save_figure(fig, out_path)
+    print(
+        f"RV timeseries plot -> {out_path}  "
+        f"(RV_RMS {rms:.2f} m/s, RV_ERR {med_err:.2f} m/s)"
+    )
+    return out_path
+
+
+def plot_rv_timeseries(target, l4_paths, plot_directory):
+    """Read a target's L4 RVs and render its timeseries plots by observing mode.
+
+    Classifies each night (see _classify_observing_mode), then dispatches: every
+    high-cadence night is drawn on its own via plot_single_night_timeseries and held
+    out of the rest, and the remaining standard/burst nights go to
+    plot_multi_night_timeseries (the main plot + per-night panels). If every night
+    was high-cadence, only the per-night plots are written.
+    """
+    times, rvs, errs, nights = _read_l4_rv(l4_paths)
+    if times.size == 0:
+        sys.exit("error: no finite RV points to plot")
+
+    modes = _classify_observing_mode(times, nights)
+    counts = Counter(modes.values())
+    print(
+        "observing modes: "
+        + ", ".join(
+            f"{counts[m]} {m}"
+            for m in (_MODE_STANDARD, _MODE_BURST, _MODE_HIGH_CADENCE)
+            if counts[m]
+        )
+    )
+
+    # Each high-cadence night is plotted on its own and dropped from the multi-night
+    # plot, where it would otherwise collapse to a single burst point.
+    hicad = sorted(n for n, m in modes.items() if m == _MODE_HIGH_CADENCE)
+    for night in hicad:
+        sel = nights == night
+        plot_single_night_timeseries(
+            target, times[sel], rvs[sel], errs[sel], night, plot_directory
+        )
+    if hicad:
+        keep = ~np.isin(nights, hicad)
+        times, rvs, errs, nights = times[keep], rvs[keep], errs[keep], nights[keep]
+        if times.size == 0:
+            print("all observed nights were high-cadence; no multi-night plot")
+            return
+
+    plot_multi_night_timeseries(target, times, rvs, errs, nights, plot_directory)
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="plot_timeseries",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--target",
+        required=True,
+        help="star id as it appears in the L4 OBJECT header, e.g. 10700",
+    )
+    # Exactly one frame source: scan a datecode range, or an explicit obs_id list.
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
+        "--date_range",
+        nargs=2,
+        metavar=("START", "END"),
+        help="inclusive datecode range to scan the L4 tree over, e.g. "
+        "--date_range 20240101 20240131 (mutually exclusive with --obs_ids)",
+    )
+    source.add_argument(
+        "--obs_ids",
+        nargs="+",
+        metavar="OBS_ID",
+        help="explicit obs_ids to plot; their L4 paths are built from --data_dir "
+        "(no scan), e.g. --obs_ids KP.20240405.40113.57 (exclusive with --date_range)",
+    )
+    parser.add_argument(
+        "--data_dir",
+        required=True,
+        help="science output root; L4 products are read from {data_dir}/L4/{datecode}",
+    )
+    parser.add_argument(
+        "--plot_dir",
+        required=True,
+        help="directory the PNG plots are written to (created if absent)",
+    )
+    args = parser.parse_args(argv)
+
+    if args.date_range:
+        start, end = args.date_range
+        for dc in (start, end):
+            if not is_datecode(dc):
+                parser.error(f"--date_range value is not a valid datecode: {dc!r}")
+        if start > end:
+            parser.error(f"--date_range START must be <= END (got {start} > {end})")
+    else:
+        for oid in args.obs_ids:
+            if not is_obs_id(oid):
+                parser.error(f"--obs_ids value is not a valid obs_id: {oid!r}")
+    return args
+
+
+def main(argv=None):
+    args = parse_args(argv)
+
+    if args.obs_ids:
+        # Frames known ahead of time: build L4 paths directly, no directory scan.
+        l4_paths = l4_paths_for_obs_ids(args.data_dir, args.obs_ids, args.target)
+    else:
+        start, end = args.date_range
+        # One PRIMARY header read per L4 file; a small thread pool overlaps the
+        # (NFS) latency without a user-facing --jobs knob.
+        jobs = min(8, os.cpu_count() or 1)
+        l4_paths = discover_l4_files(args.data_dir, args.target, start, end, jobs)
+
+    plot_rv_timeseries(args.target, l4_paths, args.plot_dir)
+
+
+if __name__ == "__main__":
+    main()

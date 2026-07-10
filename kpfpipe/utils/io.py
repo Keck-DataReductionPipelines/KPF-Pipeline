@@ -15,6 +15,7 @@ from kpfpipe.utils.kpf_utils import (
     get_datecode,
     get_obs_id,
     get_timestamp,
+    is_datecode,
     is_obs_id,
     kpf_timestamp_to_datetime,
     kpf_timestamp_to_eprv_timestamp,
@@ -63,6 +64,33 @@ def load_junk_obs_ids(data_input):
         return set()
     df = pd.read_csv(junk_csv, header=1)
     return set(df.iloc[:, 0].astype(str).str.strip())
+
+
+def datecode_dirs_in_range(root, start, end):
+    """Sorted datecode subdirs of `root` within the inclusive [start, end] range.
+
+    Used by the masters orchestrator to expand a ``--date_range`` against the L0
+    tree. Non-datecode names and plain files are skipped; datecodes sort
+    lexicographically, which coincides with chronological order for ``YYYYMMDD``.
+    """
+    return [
+        d
+        for d in sorted(os.listdir(root))
+        if is_datecode(d) and start <= d <= end and os.path.isdir(os.path.join(root, d))
+    ]
+
+
+def read_token_file(path):
+    """Read whitespace-stripped, non-blank lines from a text file.
+
+    Backs the ``--dates`` (masters) and ``--obs_ids`` (science) flags, which
+    each accept a reference file listing one unit -- a datecode or an obs_id --
+    per line instead of inline values. Whitespace is stripped from each line and
+    blank lines are dropped; validating that each token is a real datecode/obs_id
+    is left to the caller.
+    """
+    with open(path, encoding="utf-8") as f:
+        return [line.strip() for line in f if line.strip()]
 
 
 class FileHandler:

@@ -649,10 +649,7 @@ class BaseMasterModule:
 
         # The approximation pass stacks only the first `ndirect` frames; cache
         # them so the streaming exact pass below reuses them instead of
-        # re-reading and re-assembling those files from disk. The masters stage
-        # is I/O-bound, and its concurrency is capped (see rv_timeseries), so the
-        # ~1.3 GiB/job the cache costs is affordable and avoiding the redundant
-        # re-assembly is the better trade.
+        # re-reading and re-assembling those files from disk.
         approx_stats, zero_exptime = self._compute_stats_from_datacube(
             l0_file_list=l0_file_list[:ndirect],
             sigma=sigma,
@@ -689,8 +686,7 @@ class BaseMasterModule:
 
             # Total exposure time per pixel, tracked once per chip (CCD and VAR
             # share a survivor mask); the denominator of the exposure-weighted
-            # rate in stack_frames. Reduces to the survivor count for a bias
-            # stack, where T = 1.
+            # rate in stack_frames. Reduces to survivor count for a bias stack.
             exact_stats[f"{chip}_CCD"]["exptime_sum"] = np.zeros(
                 (nrow, ncol), dtype=np.float32
             )

@@ -5,7 +5,7 @@ real master dark from the bundled L0 darks: the five frames span two default-gap
 clusters and HST midnight, so it widens cluster_gap_seconds and lifts the
 midnight boundary to group them into one stack, bias-subtracting each frame. The
 shared stacking engine these exercise (`BaseMasterModule`) is unit-tested in
-test_masters_base.py.
+test_master_base.py.
 """
 
 import os

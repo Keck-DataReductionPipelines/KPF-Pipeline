@@ -940,10 +940,10 @@ def _write_l0_fixture(path, *, passing=True):
 
 
 def _run_qc_script(fixture_path, level="L0", extra_args=None):
-    """Run scripts/qc.py via subprocess and return the CompletedProcess."""
+    """Run scripts/quality_control/qc.py via subprocess, return the CompletedProcess."""
     cmd = [
         sys.executable,
-        "scripts/qc.py",
+        "scripts/quality_control/qc.py",
         "--input",
         str(fixture_path),
         "--level",
@@ -956,7 +956,7 @@ def _run_qc_script(fixture_path, level="L0", extra_args=None):
 
 
 class TestQCScript:
-    """Smoke tests for scripts/qc.py via subprocess."""
+    """Smoke tests for scripts/quality_control/qc.py via subprocess."""
 
     def test_all_passing_exit_0_isgood_pass(self, tmp_path):
         """All-good L0 → exit code 0, stdout contains 'ISGOOD: PASS'."""
@@ -998,7 +998,7 @@ class TestQCScript:
         """No args → argparse error → non-zero exit."""
         env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
         result = subprocess.run(
-            [sys.executable, "scripts/qc.py"],
+            [sys.executable, "scripts/quality_control/qc.py"],
             cwd=_REPO_ROOT,
             env=env,
             capture_output=True,

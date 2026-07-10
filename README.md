@@ -65,18 +65,18 @@ Run the fast synthetic/unit suite first:
 make test-fast
 ```
 
-Build nightly calibration masters:
+Build a single night's calibration masters (in-process, one recipe run):
 
 ```bash
-kpfpipe --masters -d 20240405 \
+kpfpipe run --masters -d 20240405 \
   --kpf_data_input /data/kpf \
   --kpf_masters_output /data/kpf/masters-root
 ```
 
-Reduce the canonical smoke science exposure:
+Reduce the canonical smoke science exposure (in-process):
 
 ```bash
-kpfpipe --science -o KP.20240405.40113.57 \
+kpfpipe run --science -o KP.20240405.40113.57 \
   --kpf_data_input /data/kpf \
   --kpf_masters_output /data/kpf/masters-root \
   --kpf_science_output /data/kpf/science-root
@@ -84,6 +84,29 @@ kpfpipe --science -o KP.20240405.40113.57 \
 
 The masters recipe writes master bias/dark L1 products and a master ThAr WLS L2
 product. The science recipe writes L2/L4 FITS products and quicklook PNGs.
+
+`--masters`/`--science` set the recipe **and** a default config; pass `-c` to run
+that recipe against a custom config (e.g. `kpfpipe run --science -c my.toml -o …`).
+
+`kpfpipe` is a dispatcher: `kpfpipe run` reduces one recipe on one unit
+(above), while `kpfpipe masters` / `kpfpipe science` fan out a batch — one
+`run` subprocess per unit, each with its own log and exit code:
+
+```bash
+kpfpipe masters --dates 20240405 20240712 --kpf_data_input /data/kpf ...
+kpfpipe masters --dates nights.txt   # or a file listing one datecode per line
+kpfpipe science --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 ...
+kpfpipe science --obs_ids frames.txt   # or a file listing one obs_id per line
+```
+
+`kpfpipe timeseries` reduces one star's RV timeseries over a datecode range: it
+discovers that target's science frames from the L0 tree, then dispatches the
+nightly masters and the per-frame science reductions to the two orchestrators
+above (plotting is a follow-up):
+
+```bash
+kpfpipe timeseries --target 10700 --date_range 20240101 20240131 --kpf_data_input /data/kpf ...
+```
 
 ## Quicklook Full-Resolution Images
 

@@ -153,7 +153,7 @@ collects it):
   dedicated *profiling* harness: attribution charges its work to the right
   `base.py` methods inside `profile_master_bias.py` / `profile_master_dark.py`, so
   a separate engine profile would be redundant. (The *test* suite does isolate it —
-  see `regression/test_masters_base.py` under *Masters test layout* below —
+  see `regression/test_master_base.py` under *Masters test layout* below —
   because profiling partitions by wall-clock while tests partition by
   responsibility.)
 - **Data.** Real (gitignored) `tests/testdata` frames at realistic sizes; each
@@ -269,9 +269,91 @@ see the style guide §11.)* The architecture invariants:
 
 Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/config/`). Detector parameters (CCD dimensions, order counts) live in `reference/detector.toml` and are exposed at the package top level as `kpfpipe.DETECTOR` (alongside `kpfpipe.DEFAULTS`/`REPO_ROOT`), loaded by `kpfpipe/__init__.py`.
 
+### CLI architecture (dispatcher → scripts → recipes → kpfpipe)
+
+`kpfpipe` (the `[project.scripts]` console entry, `tools/cli.py:main`) is a **thin,
+git-style dispatcher**: it routes a subcommand to its implementation under
+`scripts/processing/` and forwards the remaining argv verbatim (each subcommand owns
+its own argparse). The commands:
+
+- **`kpfpipe run`** → `scripts/processing/reduce.py` — the **leaf**: run one recipe on
+  one unit (`--masters -d <datecode>` / `--science -o <obs_id>`, or an explicit
+  `-r/-c` pair), in-process. Owns config-override assembly, `setup_logging`, the
+  DRP-RUN-08 banner, and the recipe `exec`.
+- **`kpfpipe masters`** → `scripts/processing/masters.py`; **`kpfpipe science`** →
+  `science.py` — **orchestrators**: fan a set of units out as one
+  `python -m scripts.processing.reduce` subprocess each (own log, clean process
+  state, independent exit), via the shared engine in `_dispatch.py`. The orchestrators
+  take `--dates`/`--date_range` (masters) and `--obs_ids` (science);
+  `kpfpipe masters --dates 20240405` is a batch-of-one, while
+  `kpfpipe run --masters -d 20240405` is the in-process single shot.
+- **`kpfpipe timeseries`** → `scripts/processing/timeseries.py` — a **thin
+  wrapper above the orchestrators**: given `--target` + `--date_range`, it discovers
+  that star's science frames from the L0 tree (steps 1–2), then runs **one**
+  `python -m scripts.processing.masters --dates …` subprocess, **one**
+  `python -m scripts.processing.science --obs_ids …` subprocess, and **one**
+  `python -m scripts.plots.plot_timeseries --obs_ids …` subprocess (steps 3–5) — it
+  does *not* use `_dispatch.run_stage` itself (that would fan out leaves; here the
+  two orchestrators each fan out and stream their own batch log). It still calls
+  `setup_batch_logging` at the top of `main()`, writing its **own**
+  `kpf_timeseries_batch_*.log` (discovery + the per-stage dispatch trail) alongside
+  each sub-orchestrator's batch log. All three stages
+  are independently skippable — `--no-masters` / `--no-science` / `--no-plots`
+  (default on) — and fail-soft: every discovered frame is handed to science
+  regardless of the masters result (a frame whose masters failed to build simply
+  fails in the science stage and is reported there — no gating in the wrapper), and
+  the run exits nonzero if any stage that ran failed. The plot stage is handed the
+  **already-discovered `obs_ids`** (so no second file scan) and runs *independently*
+  of science (with `--no-science` it plots whatever L4 is on disk), writing to
+  `{KPF_SCIENCE_OUTPUT}/QLP/timeseries` unless `--plot_dir` overrides it.
+- **`kpfpipe plot-timeseries`** → `scripts/plots/plot_timeseries.py` — a **standalone
+  post-reduction plotter** (the sole `scripts/plots/` command; the only dispatcher
+  route outside `scripts/processing/`). Frames come from **either** `--date_range`
+  (scan the L4 tree) **or** `--obs_ids` (build L4 paths directly from `--data_dir`
+  via `kpf_filepath`, no scan — the handoff `timeseries` uses). It reads each L4
+  PRIMARY (`RV`/`RVERR`/`BJDTDB`), **skips observer-junk frames** (`QUALITY_CONTROL`
+  `NOTJUNK == 0`; a missing extension/card counts as not-junk), then classifies each
+  night's cadence (`_classify_observing_mode` → standard/burst/high cadence) and
+  dispatches: the standard/burst nights go to one grouped `{target}_rv_timeseries.png`
+  (bursts RVERR-weighted) plus `{target}_rv_nightly.png` (nights with >1 observation),
+  while each **high-cadence** night — tens of near-uniform frames spanning the night —
+  is held out of both and gets its own `{target}_{datecode}_rv_timeseries.png` instead
+  of collapsing to a single misleading burst point. In `--obs_ids` mode a supplied
+  frame whose L4 `OBJECT` ≠ `--target` is warned but still plotted, and a missing L4 is
+  skipped. (The parked scratchpad `notes/tmp_rv_plot.py` predates this port and is now
+  superseded.)
+
+**The layering is strictly one-directional — each layer may import *down* but never
+up:** `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
+`scripts/` (run a recipe many times) ← `tools/` (the CLI interface). So `tools/cli.py`
+imports `scripts.processing.*`, but **the scripts must never import `tools`** — shared
+orchestration helpers live in `scripts/processing/_dispatch.py` (the process-pool
+engine) and `_argparse.py` (the shared argparse parent-parser factories `recipe_and_config_parser`
+[`-r`/`-c`], `data_dirs_parser`, `logging_parser`, `pool_parser`, composed via
+`parents=[…]` so each shared flag is declared once), both `tools`-free. `data_dirs_parser`
+also carries two convenience shortcuts each of the four processing scripts (reduce/masters/
+science/timeseries) accepts: **`--input_dir`** is a plain argparse alias of `--kpf_data_input`,
+and **`--output_dir`** is a fan-out — `_argparse.resolve_dir_shortcuts(args)` (called post-parse
+by every `parse_args`) fills `kpf_masters_output`/`kpf_science_output`/`log_dir`/`plot_dir` from it
+as a *fallback* (an explicit per-dir flag wins), skipping the slots a given command lacks (masters
+has no science output or plot dir). The masters/science outputs take the root **verbatim** (their
+path builders add the `masters/{datecode}` and `L{N}/{datecode}` substructure), but the log dir and
+plot dir each get a conventional subdirectory — `{output_dir}/logs` and `{output_dir}/QLP/timeseries`
+(the `_OUTPUT_DIR_SLOTS` table) — so `--output_dir` reproduces the layout explicit `--log_dir`/`--plot_dir`
+flags would give (the plot subdir matches timeseries' `{science_output}/QLP/timeseries` default) rather
+than dumping logs and plots in the root. (The masters orchestrator's `--date_range` expansion reuses
+`kpfpipe.utils.io.datecode_dirs_in_range` — a downward import into the shared `kpfpipe` layer, not a
+scripts-local helper.) The package `__init__.py`
+holds the default `masters`/`science` recipe/config path constants
+(`DEFAULT_{MASTERS,SCIENCE}_{RECIPE,CONFIG}`) — the single source `reduce`'s
+`--masters`/`--science` shortcuts and the orchestrators' fan-out (which passes them
+to the leaf explicitly via `-r`/`-c`) both resolve against. When adding a script,
+keep it runnable on its own (`python -m scripts.processing.<name>`) with no knowledge
+of the dispatcher above it.
+
 ### Logging (issue #1408; WMKO DRP-RUN-07/08/09)
 
-Handler/level configuration lives in exactly one place: `kpfpipe.utils.logger.setup_logging`, called only by the CLI (`tools/cli.py`) before the recipe runs — never at import time, never in recipes/modules/tests. It writes one UT-timestamped log file per invocation under the `[LOGGER] log_dir` config key (`log_level`, `console` also supported; CLI overrides `--log_dir`/`--log_level`; `--test` defaults the log dir to `tests/testdata/logs`). Library code just declares `logger = logging.getLogger(__name__)` and must work with no handlers installed — tests call `recipe.main(config, args)` directly with no logging configured, so setup must never move into recipes. `warnings.warn` remains the recoverable-condition API, bridged into the log via `logging.captureWarnings`. Tests that call `setup_logging` must tear down via `kpfpipe.utils.logger.teardown_logging` inside the same test (see the autouse fixture in `tests/regression/test_logger.py` — pytest's per-test `catch_warnings` context otherwise strands `logging._warnings_showwarning`). *(Coding rules — levels, lazy `%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
+Handler/level configuration lives in exactly one *module*, `kpfpipe.utils.logger`, via **two sibling entry points** (never at import time, never in recipes/modules/tests): `setup_logging` — called only by the single-recipe leaf runner (`scripts/processing/reduce.py` — the `kpfpipe run` entry) before the recipe runs, writing that reduction's per-unit log with a stderr console echo; and `setup_batch_logging` — a thin wrapper called once at the top of each fan-out driver's `main()` (the `scripts/processing/masters.py`/`science.py` orchestrators **and** the `timeseries.py` wrapper — three callers, `label` ∈ `masters`/`science`/`timeseries`), writing a `kpf_{label}_batch_{stamp}.log` summary of the *batch's own* decision points (dispatch banner, per-unit ok/FAILED, failure sentinels; for `timeseries`, its discovery + per-stage dispatch trail) with the console echo pinned to **stdout** so an operator can watch fan-out progress live. That stdout echo is **source-filtered** (`_BatchConsoleFilter`, on the console handler only): below WARNING only the driver's own narration (`scripts.*` loggers, or `__main__` when a driver runs as `python -m scripts.processing.<name>`) reaches the terminal, so library INFO chatter stays out of the live view; WARNING and above always echo, and the batch log *file* keeps every record unfiltered (as does the leaf `setup_logging` console). The orchestrators (and the shared `_dispatch.py` engine) emit their narration through named loggers, not `print()`. Because the orchestrators still fan `reduce` out as one subprocess per unit, **each reduction also gets exactly one `setup_logging` call and its own per-unit log file** — the batch log sits alongside, not in place of, the per-unit logs. Both siblings write one UT-timestamped file per invocation under the `[LOGGER] log_dir` config key (`log_level`, `console` also supported; CLI overrides `--log_dir`/`--log_level`); a missing `log_dir` is fatal in the leaf *and* the orchestrators (DRP-RUN-07). Library code just declares `logger = logging.getLogger(__name__)` and must work with no handlers installed — tests call `recipe.main(config, args)` directly with no logging configured, so setup must never move into recipes. `warnings.warn` remains the recoverable-condition API, bridged into the log via `logging.captureWarnings`. Tests that call `setup_logging`/`setup_batch_logging` must tear down via `kpfpipe.utils.logger.teardown_logging` inside the same test (see the autouse fixture in `tests/regression/test_logger.py` — pytest's per-test `catch_warnings` context otherwise strands `logging._warnings_showwarning`). *(Coding rules — levels, lazy `%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
 
 ### Filename conventions
 
@@ -283,9 +365,11 @@ Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs
 
 `kpfpipe/modules/masters/` — stacks multiple observations to create bias, dark, flat, and wavelength solution (WLS) calibration products. Uses sigma-clipped statistics with a single-pass streaming accumulation (per-pixel counts and exposure time) for large stacks; the master image is the exposure-weighted rate `counts_sum / exptime_sum`. The streaming accumulator's approximation pass caches the first `ndirect` assembled L1 frames (`base.py::_load_frame(cache=True)`) so the exact pass reuses them instead of re-reading/re-assembling — the masters stage is I/O-bound, so this trade favors I/O over the ~1.3 GiB/job the cache holds.
 
-**Masters concurrency is capped independently of `--jobs`, and NOT by cores or RAM.** The `rv_timeseries.py` driver fans nightly masters builds out across a process pool; a **fixed** `_MASTERS_JOBS` (16) bounds that fan-out (science keeps the cores-based `--jobs`). This is deliberate and non-obvious: the stacking stage does not bottleneck on cores or RAM. Measured on shrek (256 cores, 2 TiB), a wide masters fan-out left the CPUs ~75% idle with 1.4 TiB free and **never swapped**, yet every job crawled to `--job_timeout` (1 job alone is fast; ~56 at once wedge). The limit is the **operating system's own memory bookkeeping** (page-fault / mapping churn from streaming large arrays) coordinated across all cores — a cost that grows with the *number of concurrent jobs*, not the work each does. So the cap is a fixed, empirically tuned constant (16 ≈ 2× margin below the ~32 where such degradation appears on similar pipelines), floored by cores/RAM only for small machines. Do **not** "restore" a cores- or RAM-derived masters cap: the earlier RAM cap was built on a mistaken swap diagnosis and is inert on a big host. (Historical dead end: a masters stall once *looked* like swapping; forensics later proved zero swap traffic — the signature is idle CPU + free RAM + high system time, i.e. OS contention, not memory pressure.)
+**Masters concurrency is capped independently of `--jobs`, and NOT by cores or RAM.** The `masters` orchestrator (`_dispatch.py`) fans nightly masters builds out across a process pool; a **fixed** `_MASTERS_JOBS` (16) bounds that fan-out (science keeps the cores-based `--jobs`). This is deliberate and non-obvious: the stacking stage does not bottleneck on cores or RAM. Measured on shrek (256 cores, 2 TiB), a wide masters fan-out left the CPUs ~75% idle with 1.4 TiB free and **never swapped**, yet every job crawled to `--job_timeout` (1 job alone is fast; ~56 at once wedge). The limit is the **operating system's own memory bookkeeping** (page-fault / mapping churn from streaming large arrays) coordinated across all cores — a cost that grows with the *number of concurrent jobs*, not the work each does. So the cap is a fixed, empirically tuned constant (16 ≈ 2× margin below the ~32 where such degradation appears on similar pipelines), floored by cores/RAM only for small machines. Do **not** "restore" a cores- or RAM-derived masters cap: the earlier RAM cap was built on a mistaken swap diagnosis and is inert on a big host. (Historical dead end: a masters stall once *looked* like swapping; forensics later proved zero swap traffic — the signature is idle CPU + free RAM + high system time, i.e. OS contention, not memory pressure.)
 
-**Junk-frame exclusion.** "Junk" is a manual flag observers set at exposure time (e.g. wrong telescope settings): such a frame can pass every automated QC yet be scientifically useless. The authoritative list is WMKO's `{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv` — a data-tree artifact, *not* a repo file (title line, `observation_id` header, one obs_id/row). `utils/io.py::load_junk_obs_ids(data_input)` is the single reader (absent file ⇒ empty set ⇒ no-op). It feeds two paths: (1) `FileHandler.build_mini_database` tags each frame with a derived **`ISJUNK`** column (frames are flagged, never dropped), which `FileHandler.build_calibration_stacks(exclude_junk=True)` filters out before master stacking and `rv_timeseries.py` uses to skip junk during discovery; (2) `QCL0.not_junk` populates the `NOTJUNK` QC flag on science frames, recovering `KPF_DATA_INPUT` from the L0's `self.dirname` (`{KPF_DATA_INPUT}/L0/{datecode}`, set by rvdata's `from_fits`). A mini database lacking the `ISJUNK` column makes `build_calibration_stacks(exclude_junk=True)` **fail loudly** (`KeyError: 'ISJUNK'`).
+**Masters fan-out launches are staggered, not lockstep** (`_LAUNCH_INTERVAL` in `masters.py`, passed to `run_stage(launch_interval=…)`; the same throttle science uses to pace SIMBAD/Gaia). A masters build opens with an I/O-heavy stack phase — read + assemble the night's bias/dark/ThAr L0 frames (~100 s alone) before any WLS fitting. Launched **in lockstep**, a full pool marches through that read phase together, so the disk sees `jobs`-deep read bursts and the shared phase balloons ~4–5× (2026-07-09 shrek logs: ~100 s solo → ~465 s at 16-wide lockstep), tipping the slowest nights past `--job_timeout`. **Spacing the launches apart desynchronizes the read bursts at the *same* concurrency**: in those same logs, 16-wide jobs that entered staggered (as pool slots freed) held that phase near the ~100 s solo cost (~105–140 s) instead of ~465 s. The interval (5.0 s) spreads the first wave over most of the read window while staying under the throughput ceiling (~`job_duration/jobs`) so the pool still fills. This is **complementary to, not a replacement for, the `_MASTERS_JOBS` cap above**: the cap bounds the higher-concurrency regime where the OS-memory-bookkeeping cost dominates (the "~56 at once wedge"); the stagger removes the lockstep disk-read spike that hits even at 16-wide. (The 5.0 s value is tuned from one night's logs — re-confirm against a real shrek run before trusting it.)
+
+**Junk-frame exclusion.** "Junk" is a manual flag observers set at exposure time (e.g. wrong telescope settings): such a frame can pass every automated QC yet be scientifically useless. The authoritative list is WMKO's `{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv` — a data-tree artifact, *not* a repo file (title line, `observation_id` header, one obs_id/row). `utils/io.py::load_junk_obs_ids(data_input)` is the single reader (absent file ⇒ empty set ⇒ no-op). It feeds two paths: (1) `FileHandler.build_mini_database` tags each frame with a derived **`ISJUNK`** column (frames are flagged, never dropped), which `FileHandler.build_calibration_stacks(exclude_junk=True)` filters out before master stacking and `timeseries.py` uses to skip junk during discovery; (2) `QCL0.not_junk` populates the `NOTJUNK` QC flag on science frames, recovering `KPF_DATA_INPUT` from the L0's `self.dirname` (`{KPF_DATA_INPUT}/L0/{datecode}`, set by rvdata's `from_fits`); this flag propagates L0→L4, and `plot_timeseries` reads it back off the L4 `QUALITY_CONTROL` to skip junk frames in `--date_range` mode (the `timeseries` `--obs_ids` handoff has already excluded them upstream). A mini database lacking the `ISJUNK` column makes `build_calibration_stacks(exclude_junk=True)` **fail loudly** (`KeyError: 'ISJUNK'`).
 
 **Masters header alignment (out of EPRV scope, but stylistically aligned).** Masters are *not* EPRV-governed, but follow the same keyword conventions as the science models as closely as possible:
 
@@ -295,7 +379,7 @@ Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs
 - **QC infrastructure is present, checks deferred.** Both levels carry `QUALITY_CONTROL` + `RECEIPT` for later wiring; no masters QC checks or DRP-provenance stamping exist yet.
 
 **Masters test layout.** The masters tests are split by *what they exercise*, not just
-by module. `BaseMasterModule` is abstract, so `tests/regression/test_masters_base.py`
+by module. `BaseMasterModule` is abstract, so `tests/regression/test_master_base.py`
 unit-tests the **shared engine** — stacking (rate estimator, per-pixel rejection,
 datacube clipping), calibration resolve/apply/load, frame-load guards, array cleaning,
 and the shared L1 output contract (dtype provenance, `save_master`) — driving it through
@@ -309,7 +393,7 @@ WLS builds an ML2 and does not use the L1 stacking engine, so it is tested per-W
 on its own. `test_masters_recipe.py` covers only the `kpf_drp_masters` recipe (its
 FileHandler/path-builder unit tests live in `test_io.py`). Shared synthetic fixtures live
 in `tests/regression/_masters.py`. `flat` has no test file (stubbed, no `make_master_l1`
-yet). **A test belongs in `test_masters_base.py` iff it exercises a `base.py` method
+yet). **A test belongs in `test_master_base.py` iff it exercises a `base.py` method
 vehicle-incidentally; module-specific behavior stays in `test_master_<type>.py`.**
 
 ### RVDataModel Base Class
@@ -318,7 +402,7 @@ The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (top-level Ord
 
 ### Diagnostics, QC, Checkpoints, and Quicklook
 
-Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote. The recipe drives all three through a **single `CheckpointL{n}(obj).run()` call**: `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly. The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g. `scripts/qc.py`). A level with no paired class skips that stage. The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags + `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4 products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END/ELAPSED timing-consistency flag, is an L0 check whose result rides forward this way).
+Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote. The recipe drives all three through a **single `CheckpointL{n}(obj).run()` call**: `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly. The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g. `scripts/quality_control/qc.py`). A level with no paired class skips that stage. The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags + `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4 products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END/ELAPSED timing-consistency flag, is an L0 check whose result rides forward this way).
 
 - **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
 - **QC** (`kpfpipe/quality_control/qc_flags/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. `ISGOOD` is the **running** aggregate — the AND over every QC flag accumulated on QUALITY_CONTROL so far (this level's checks *plus* those propagated from lower levels), not just this level's checks. No validation or raising — that is the Checkpoints layer's job.
