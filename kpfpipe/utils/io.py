@@ -2,7 +2,6 @@
 
 import glob
 import logging
-import math
 import os
 import warnings
 from datetime import datetime
@@ -51,6 +50,11 @@ _OBJECT_MAP = {
 # (build_calibration_stacks) and master-product filenames (kpf_filename) validate
 # against the same set and cannot drift.
 _CAL_TYPES = tuple(_OBJECT_MAP)
+
+# How build_calibration_stacks groups a cal_type's frames into stacks:
+# 'time_of_day' (per observing session, gap-split), 'hst_day' (per HST calendar
+# day), or 'obs_night' (the whole loaded night, one stack spanning HST midnight).
+_GROUPBY_MODES = ("time_of_day", "hst_day", "obs_night")
 
 
 def load_junk_obs_ids(data_input):
@@ -285,55 +289,43 @@ class FileHandler:
         dt = kpf_timestamp_to_datetime(get_timestamp(s))
         return int((dt - _J2000_EPOCH).total_seconds())
 
-    def _merge_undersized_clusters(
-        self, clusters, hst_day, min_file_count, enforce_hst_midnight_boundary
-    ):
+    def _identify_clusters(self, cal_df, *, cluster_gap_seconds):
         """
-        Fold each undersized cluster into its nearer chronological neighbor.
+        Group calibration frames into observing-session clusters by time gaps.
 
-        Repeatedly takes the smallest cluster below `min_file_count` and merges
-        it into whichever adjacent cluster is nearer in time, until every
-        remaining cluster meets the threshold (or none can grow). When the
-        HST-midnight boundary is enforced the neighbor must share the cluster's
-        HST day (so a master never spans HST midnight), and a cluster with no
-        same-day neighbor is dropped; otherwise any adjacent cluster is eligible.
+        Infers the morn/midday/eve/night/midnight sessions purely from the frame
+        timestamps: the OBJECT morn/eve/night suffix is only a label and does not
+        partition the result, so a mislabeled frame clusters with its true session
+        instead of splitting off. Consecutive time-sorted frames start a new
+        cluster wherever they are more than `cluster_gap_seconds` apart; for the
+        allowlisted cal types the morn and eve sessions sit hours apart, so the gap
+        alone separates them.
 
-        `clusters` is a chronologically-sorted list of filename lists and
-        `hst_day` maps each filename to its HST calendar day ('YYYYMMDD'); the
-        input is not modified and the merged clusters are returned
-        chronologically sorted.
+        Parameters
+        ----------
+        cal_df : pandas.DataFrame
+            OBJECT-filtered, junk-excluded frames for one cal_type; must be
+            non-empty and carry a FILENAME column.
+        cluster_gap_seconds : int
+            Gap [s] between consecutive frames that starts a new cluster.
+
+        Returns
+        -------
+        clusters : list of list of str
+            Chronologically-sorted filename lists, one per detected session.
         """
-        clusters = list(clusters)
-
-        def gap_to(i, j):
-            # Chronological gap [s] from cluster i to neighbor j (i - 1 or i + 1);
-            # inf when j is out of range or -- boundary enforced -- on a different
-            # HST day, marking it ineligible to merge into.
-            if not 0 <= j < len(clusters) or (
-                enforce_hst_midnight_boundary
-                and hst_day[clusters[j][0]] != hst_day[clusters[i][0]]
-            ):
-                return math.inf
-            earlier, later = sorted((i, j))
-            return self._seconds_since_j2000(
-                clusters[later][0]
-            ) - self._seconds_since_j2000(clusters[earlier][-1])
-
-        while len(clusters) > 1 and any(len(c) < min_file_count for c in clusters):
-            i = min(
-                (k for k, c in enumerate(clusters) if len(c) < min_file_count),
-                key=lambda k: len(clusters[k]),
-            )
-            prev_gap = gap_to(i, i - 1)
-            next_gap = gap_to(i, i + 1)
-            if prev_gap == next_gap == math.inf:
-                clusters.pop(i)
-                continue
-            j = i - 1 if prev_gap <= next_gap else i + 1
-            merged = sorted(clusters[i] + clusters[j], key=self._seconds_since_j2000)
-            for idx in sorted((i, j), reverse=True):
-                clusters.pop(idx)
-            clusters.append(merged)
+        timed = sorted((self._seconds_since_j2000(fn), fn) for fn in cal_df["FILENAME"])
+        clusters = []
+        cluster = [timed[0][1]]
+        prev_t = timed[0][0]
+        for t, fn in timed[1:]:
+            if t - prev_t > cluster_gap_seconds:
+                clusters.append(cluster)
+                cluster = [fn]
+            else:
+                cluster.append(fn)
+            prev_t = t
+        clusters.append(cluster)
         clusters.sort(key=lambda c: self._seconds_since_j2000(c[0]))
         return clusters
 
@@ -344,25 +336,30 @@ class FileHandler:
         mini_db=None,
         min_file_count=5,
         cluster_gap_seconds=7200,
-        merge_small_clusters=False,
-        enforce_hst_midnight_boundary=True,
+        groupby="time_of_day",
         exclude_junk=True,
     ):
         """
-        Return sorted file lists for all calibration clusters of the requested
+        Return sorted file lists for all calibration stacks of the requested
         type, grouped from the loaded mini database.
 
         Drops observer-flagged junk frames (unless `exclude_junk=False`), filters
-        by OBJECT, then groups frames into clusters by detecting gaps larger than
-        `cluster_gap_seconds` between consecutive timestamps. By default a cluster
-        never spans two HST (Hawaii) calendar days: frames on either side of HST
-        midnight are always split, even though the UTC-keyed data directory places
-        them together. Set `enforce_hst_midnight_boundary=False` to lift that split
-        (used for darks, whose sparse sequences routinely straddle HST midnight).
-        Every returned cluster has at least `min_file_count` files: undersized
-        clusters are dropped, or (with `merge_small_clusters`) folded into a
-        neighbor. Raises only when no cluster meets the threshold. Clusters the
-        mini database carried on the instance, so the recipe never handles the
+        by OBJECT, then groups the surviving frames into stacks according to
+        `groupby`:
+
+        * ``'time_of_day'`` (default) -- one stack per observing session, split
+          wherever consecutive frames are more than `cluster_gap_seconds` apart
+          (the morn/eve/night sessions). The split is purely temporal, so the
+          morn/eve/night OBJECT suffix does not partition it and a mislabeled
+          frame stacks with its true session. Used for bias and thar.
+        * ``'hst_day'`` -- one stack per HST (Hawaii) calendar day.
+        * ``'obs_night'`` -- one stack for the whole loaded night (the UTC-keyed
+          datecode), spanning HST midnight. Used for darks, whose sparse sequences
+          routinely straddle HST midnight and belong in a single nightly stack.
+
+        Every returned stack has at least `min_file_count` files; undersized
+        stacks are dropped, and it raises when none meets the threshold. Clusters
+        the mini database carried on the instance, so the recipe never handles the
         DataFrame itself.
 
         Parameters
@@ -373,34 +370,32 @@ class FileHandler:
             DataFrame to cluster; defaults to ``self._mini_db``. Pass one only to
             cluster a database the handler did not build.
         min_file_count : int, default 5
-            Minimum number of files required per cluster.
+            Minimum number of files required per stack.
         cluster_gap_seconds : int, default 7200
-            Gap [s] between consecutive frames that splits one cluster from the
-            next. The 2-hour default separates KPF morning vs. evening clusters.
-        merge_small_clusters : bool, default False
-            When False, drop clusters below `min_file_count`; when True, merge
-            each into its nearest-in-time (and, if the boundary is enforced,
-            same-HST-day) neighbor.
-        enforce_hst_midnight_boundary : bool, default True
-            Whether clusters may span HST midnight (see summary). Set False for
-            darks.
+            Gap [s] between consecutive frames that splits one session from the
+            next. The 2-hour default separates KPF morning vs. evening sessions.
+            Applies only to ``groupby='time_of_day'``; ignored otherwise.
+        groupby : {'time_of_day', 'hst_day', 'obs_night'}, default 'time_of_day'
+            How to group frames into stacks (see summary).
         exclude_junk : bool, default True
-            Drop junk frames (the ISJUNK column) before clustering. Rarely
-            disabled.
+            Drop junk frames (the ISJUNK column) before grouping. Rarely disabled.
 
         Returns
         -------
         list of list of str
-            Sorted file lists, one per cluster.
+            Sorted file lists, one per stack.
 
         Raises
         ------
         ValueError
-            If `cal_type` is not a recognized calibration type, if no mini
-            database is available (none loaded and none passed), if no calibration
-            frames of the requested type are found, or if no cluster meets
-            `min_file_count`.
+            If `groupby` or `cal_type` is not recognized, if no mini database is
+            available (none loaded and none passed), if no calibration frames of
+            the requested type are found, or if no stack meets `min_file_count`.
         """
+        if groupby not in _GROUPBY_MODES:
+            raise ValueError(
+                f"groupby must be one of {list(_GROUPBY_MODES)}; got '{groupby}'"
+            )
         if cal_type not in _OBJECT_MAP:
             raise ValueError(
                 f"cal_type must be one of {list(_OBJECT_MAP.keys())}; got '{cal_type}'"
@@ -422,45 +417,27 @@ class FileHandler:
         if cal_df.empty:
             raise ValueError(f"No '{cal_type}' calibration frames found")
 
-        # HST calendar day per file, from the mini_db HST timestamp ('YYYYMMDD...').
-        hst_day = {
-            fn: str(hst).split(".")[0]
-            for fn, hst in zip(cal_df["FILENAME"], cal_df["HST"], strict=True)
-        }
-
-        # Cluster per-OBJECT (morning vs. evening thar etc. have different OBJECT
-        # suffixes), splitting wherever consecutive frames are more than
-        # cluster_gap_seconds apart or fall on different HST days (the UTC-keyed
-        # directory can straddle HST midnight). Final list sorted chronologically.
-        clusters = []
-        for _, group in cal_df.groupby("OBJECT", dropna=False):
-            timed = sorted(
-                (self._seconds_since_j2000(fn), fn) for fn in group["FILENAME"]
+        if groupby == "time_of_day":
+            clusters = self._identify_clusters(
+                cal_df, cluster_gap_seconds=cluster_gap_seconds
             )
-            cluster = [timed[0][1]]
-            for (prev_t, prev_fn), (t, fn) in zip(timed, timed[1:], strict=False):
-                crosses_midnight = (
-                    enforce_hst_midnight_boundary and hst_day[fn] != hst_day[prev_fn]
-                )
-                if t - prev_t > cluster_gap_seconds or crosses_midnight:
-                    clusters.append(cluster)
-                    cluster = [fn]
-                else:
-                    cluster.append(fn)
-            clusters.append(cluster)
-        clusters.sort(key=lambda c: self._seconds_since_j2000(c[0]))
+        elif groupby == "hst_day":
+            # One stack per HST calendar day (the 'YYYYMMDD' HST-timestamp prefix).
+            by_day = {}
+            for fn, hst in zip(cal_df["FILENAME"], cal_df["HST"], strict=True):
+                by_day.setdefault(str(hst).split(".")[0], []).append(fn)
+            clusters = [
+                sorted(v, key=self._seconds_since_j2000)
+                for _, v in sorted(by_day.items())
+            ]
+        else:  # obs_night -- the whole loaded night, one stack spanning HST midnight
+            clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
 
-        if merge_small_clusters:
-            clusters = self._merge_undersized_clusters(
-                clusters, hst_day, min_file_count, enforce_hst_midnight_boundary
-            )
-        else:
-            # Drop undersized clusters; one usable cluster is enough.
-            clusters = [c for c in clusters if len(c) >= min_file_count]
+        clusters = [c for c in clusters if len(c) >= min_file_count]
 
-        if not any(len(c) >= min_file_count for c in clusters):
+        if not clusters:
             raise ValueError(
-                f"'{cal_type}' has no cluster with at least "
+                f"'{cal_type}' groupby={groupby} produced no cluster with at least "
                 f"min_file_count={min_file_count} files"
             )
         # Which frames feed each master is a decision point (DRP-RUN-08).

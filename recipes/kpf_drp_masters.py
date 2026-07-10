@@ -66,8 +66,7 @@ def main(config, args):
     for files in file_handler.build_calibration_stacks(
         "dark",
         min_file_count=3,
-        merge_small_clusters=True,
-        enforce_hst_midnight_boundary=False,
+        groupby="obs_night",
     ):
         dark_path = kpf_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="dark"

@@ -220,70 +220,32 @@ class TestBuildCalibrationStacks:
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_A)
 
-    def test_merge_folds_small_into_neighbor(self):
-        db, small = _mixed_bias_db()
-        lists = _cluster("bias", db, merge_small_clusters=True)
-        assert len(lists) == 1
-        assert lists[0] == sorted(_BIAS_A + small)
+    def test_invalid_groupby_raises(self):
+        with pytest.raises(ValueError, match="groupby must be one of"):
+            _cluster("bias", _make_mini_db(), groupby="bogus")
 
-    def test_merge_combines_two_small_clusters(self):
-        # Two 5-file bias clusters, each below min=6; merged into one of 10.
-        lists = _cluster(
-            "bias", _make_mini_db(), min_file_count=6, merge_small_clusters=True
-        )
-        assert len(lists) == 1
-        assert len(lists[0]) == 10
-
-    def test_merge_raises_when_total_below_min(self):
-        # 7 bias files total (5 + 2); merging cannot reach min=8 → raises.
-        db, _ = _mixed_bias_db()
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("bias", db, min_file_count=8, merge_small_clusters=True)
-
-    def test_hst_midnight_splits_cluster(self):
-        # Same-OBJECT frames <gap apart but on opposite sides of HST midnight
-        # (UTC 36000) must not share a cluster.
+    def test_time_of_day_ignores_hst_boundary(self):
+        # time_of_day splits on time gaps alone: frames <gap apart but on opposite
+        # sides of HST midnight now share one cluster (there is no midnight split).
         db, before, after = _midnight_bias_db()
         lists = _cluster("bias", db, min_file_count=5)
+        assert len(lists) == 1
+        assert lists[0] == sorted(before + after)
+
+    def test_hst_day_splits_at_midnight(self):
+        # groupby='hst_day' puts each HST calendar day in its own stack, even when
+        # the frames are <gap apart across HST midnight.
+        db, before, after = _midnight_bias_db()
+        lists = _cluster("bias", db, min_file_count=5, groupby="hst_day")
         assert len(lists) == 2
         assert lists[0] == sorted(before)
         assert lists[1] == sorted(after)
 
-    def test_hst_midnight_blocks_merge(self):
-        # A small post-midnight cluster has no same-HST-day neighbor, so it is
-        # dropped rather than merged across midnight into the pre-midnight one.
-        db, before, _ = _midnight_bias_db(n_before=5, n_after=2)
-        lists = _cluster("bias", db, min_file_count=5, merge_small_clusters=True)
-        assert len(lists) == 1
-        assert lists[0] == sorted(before)
-
-    def test_no_boundary_keeps_cross_midnight_cluster(self):
-        # With enforce_hst_midnight_boundary=False, frames <gap apart across HST
-        # midnight stay in one cluster (only cluster_gap_seconds can split them).
-        db, before, after = _midnight_bias_db()
-        lists = _cluster(
-            "bias",
-            db,
-            min_file_count=5,
-            enforce_hst_midnight_boundary=False,
-        )
-        assert len(lists) == 1
-        assert lists[0] == sorted(before + after)
-
-    def test_no_boundary_merges_across_midnight(self):
-        # Two sparse dark clusters on opposite HST days (the 20240806 case): with
-        # the boundary enforced they cannot merge and both drop; with it lifted
-        # they merge into one cluster that meets the threshold.
+    def test_obs_night_single_stack_spans_midnight(self):
+        # groupby='obs_night' groups the whole loaded night into one stack,
+        # spanning both a >2 h gap and HST midnight (the 20240806 sparse-dark case).
         db, before, after = _cross_midnight_gap_db()
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("dark", db, min_file_count=3, merge_small_clusters=True)
-        lists = _cluster(
-            "dark",
-            db,
-            min_file_count=3,
-            merge_small_clusters=True,
-            enforce_hst_midnight_boundary=False,
-        )
+        lists = _cluster("dark", db, min_file_count=3, groupby="obs_night")
         assert len(lists) == 1
         assert lists[0] == sorted(before + after)
 
@@ -338,22 +300,14 @@ class TestBuildCalibrationStacksRealData:
         with pytest.raises(ValueError, match="no cluster with at least"):
             fh.build_calibration_stacks("dark")
 
-    def test_dark_merge_respects_hst_boundary(self, fh):
-        # The 5 dark frames span two HST days (2 on one, 3 on the next), so they
-        # can never merge into a single >=5 master without crossing HST midnight.
-        # With the default min=5, no same-HST-day cluster reaches the threshold →
-        # raises even with merge_small_clusters.
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            fh.build_calibration_stacks("dark", merge_small_clusters=True)
-
-    def test_dark_merges_within_hst_day(self, fh):
-        # Lowering min to 3 lets the 3 same-HST-day darks merge into one cluster;
-        # the 2 frames on the other HST day are dropped (no same-day neighbor).
+    def test_dark_obs_night_single_stack(self, fh):
+        # The recipe's dark usage: the night's 5 dark frames span two HST days
+        # (2 + 3), and groupby='obs_night' groups them into one nightly stack.
         lists = fh.build_calibration_stacks(
-            "dark", min_file_count=3, merge_small_clusters=True
+            "dark", min_file_count=3, groupby="obs_night"
         )
         assert len(lists) == 1
-        assert len(lists[0]) == 3
+        assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
 

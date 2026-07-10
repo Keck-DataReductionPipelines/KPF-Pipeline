@@ -169,9 +169,9 @@ class TestMasterDarkSignature:
 @pytest.mark.slow
 class TestMasterDarkRegression:
     """End-to-end master dark from real L0 frames. The five bundled darks span
-    two default-gap clusters *and* HST midnight, so cluster_gap_seconds is widened
-    and the HST-midnight boundary is lifted (as the masters recipe does for darks)
-    to stack them; each frame is bias-subtracted against the bundled master bias."""
+    two default-gap clusters *and* HST midnight, so they are grouped with
+    groupby='obs_night' (the whole night in one stack, as the masters recipe does
+    for darks); each frame is bias-subtracted against the bundled master bias."""
 
     @pytest.fixture(scope="class")
     def master_dark(self):
@@ -180,8 +180,7 @@ class TestMasterDarkRegression:
         files = file_handler.build_calibration_stacks(
             "dark",
             min_file_count=5,
-            cluster_gap_seconds=24 * 3600,
-            enforce_hst_midnight_boundary=False,
+            groupby="obs_night",
         )
         assert len(files) == 1 and len(files[0]) == 5
         config = {"KPF_MASTERS_OUTPUT": str(TESTDATA_DIR)}

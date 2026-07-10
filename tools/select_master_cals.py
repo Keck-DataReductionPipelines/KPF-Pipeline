@@ -38,14 +38,11 @@ from kpfpipe.utils.kpf_utils import get_datecode, get_obs_id, get_timestamp, is_
 
 # Per-type kwargs for build_calibration_stacks, matching recipes/kpf_drp_masters.py.
 # Darks are sparse long exposures whose sequences straddle HST midnight, so they
-# drop the threshold to 3, merge undersized clusters, and lift the midnight split.
+# drop the threshold to 3 and group the whole night into one stack (obs_night);
+# bias/thar use the default time_of_day (one stack per morn/eve session).
 _TYPE_KWARGS = {
     "bias": {},
-    "dark": {
-        "min_file_count": 3,
-        "merge_small_clusters": True,
-        "enforce_hst_midnight_boundary": False,
-    },
+    "dark": {"min_file_count": 3, "groupby": "obs_night"},
     "flat": {},
     "thar": {},
 }
