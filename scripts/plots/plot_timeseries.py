@@ -199,6 +199,25 @@ def _group_bursts(times, rvs, errs, gap_minutes=_BURST_GAP_MINUTES):
     return np.array(g_times), np.array(g_rvs), np.array(g_errs)
 
 
+def _delta_rv_reference(g_times, g_rvs):
+    """Zero-point and outlier mask for the grouped burst means.
+
+    Flags each burst mean against the local trend of the time-ordered series and
+    drops >5-sigma residuals (`flag_outliers`, trend method), gated to >=10 points
+    -- below that the local trend is meaningless and nothing is flagged. The
+    reference (delta-RV zero-point) is then the median of the *retained* points, so
+    a large outlier skews neither the zero-point nor the RV_RMS taken about it. The
+    trend method is shift- and scale-invariant, so the mask is well-defined before
+    any reference is chosen. Returns ``(ref, outlier_mask)``.
+    """
+    order = np.argsort(g_times)
+    outlier = np.zeros(g_rvs.shape, dtype=bool)
+    if g_rvs.size >= 10:
+        outlier[order] = flag_outliers(g_rvs[order], 5.0, kernel_size=5, method="trend")
+    ref = float(np.median(g_rvs[~outlier]) if np.any(~outlier) else np.median(g_rvs))
+    return ref, outlier
+
+
 def _stamp_provenance(fig):
     """Footer with UT generation time + short git commit (quicklook-style)."""
     now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
@@ -231,12 +250,13 @@ def _symmetric_ylim(ax):
     ax.set_ylim(-ymax, ymax)
 
 
-def plot_nightly_panels(target, times, rvs, errs, nights, plot_directory):
+def plot_nightly_panels(target, times, rvs, errs, nights, plot_directory, ref):
     """Write a per-night multi-panel plot of the individual (ungrouped) frames.
 
     One panel per observing night with more than one observation (a single-frame
     night carries no within-night trend, so it is skipped). Each panel shows
-    delta-RV (m/s, about the overall median) vs. minutes from that night's first
+    delta-RV (m/s, about `ref` -- the shared retained-median zero-point from the
+    main timeseries, so the two plots agree) vs. minutes from that night's first
     frame; panels share a y-axis to keep nights comparable. Writes nothing when no
     night has multiple observations.
     """
@@ -251,7 +271,7 @@ def plot_nightly_panels(target, times, rvs, errs, nights, plot_directory):
         print("no multi-observation nights; skipping nightly panels")
         return
 
-    drv = (rvs - np.median(rvs)) * 1e3
+    drv = (rvs - ref) * 1e3
     derr = errs * 1e3
 
     ncols = min(4, len(unique))
@@ -294,18 +314,18 @@ def plot_nightly_panels(target, times, rvs, errs, nights, plot_directory):
 def plot_rv_timeseries(target, l4_paths, plot_directory):
     """Write the RV timeseries plot (bursts grouped) plus the per-night panels.
 
-    Plots delta-RV (m/s, relative to the median RV) vs. observation date with RVERR
-    error bars and calendar-date (YYYYMMDD) x labels. The individual frames form a
-    faint grey underlay with the burst means overplotted on top; the RV_RMS/RV_ERR
-    annotation and outlier flagging reflect the burst means. Also writes the
-    per-night panels (see plot_nightly_panels).
+    Plots delta-RV (m/s, relative to the median of the retained burst means) vs.
+    observation date with RVERR error bars and calendar-date (YYYYMMDD) x labels.
+    The individual frames form a faint grey underlay with the burst means
+    overplotted on top; the RV_RMS/RV_ERR annotation and outlier flagging reflect
+    the burst means. Also writes the per-night panels (see plot_nightly_panels).
 
     Outliers are flagged robustly (only for >=10 burst means): each point is
     compared to the local trend of the time-ordered series and >5-sigma residuals
-    dropped (flag_outliers, trend method). RV_RMS is then the std of the retained
-    points, the y-range is clipped to them, and each outlier is drawn as a black
-    triangle at the clipped edge annotated with its delta-RV -- flagging a large
-    outlier without rescaling the plot.
+    dropped (flag_outliers, trend method). The zero-point is then the median of the
+    retained points and RV_RMS their std -- so a large outlier skews neither -- the
+    y-range is clipped to them, and each outlier is drawn as a black triangle at the
+    clipped edge annotated with its delta-RV, flagging it without rescaling the plot.
     """
     import matplotlib
 
@@ -318,22 +338,26 @@ def plot_rv_timeseries(target, l4_paths, plot_directory):
     if times.size == 0:
         sys.exit("error: no finite RV points to plot")
 
-    # Delta-RV about the median of the individual frames, in m/s (RV stored in km/s
-    # per EPRV); one reference for both layers keeps them aligned.
-    ref = np.median(rvs)
+    # Collapse bursts to RVERR-weighted means, then reject outliers and take the
+    # delta-RV zero-point from the retained points -- so an outlier drags neither
+    # the zero-point nor the RV_RMS (see _delta_rv_reference). This one reference is
+    # shared by every layer -- the grey underlay, the burst means, and the per-night
+    # panels -- so all three agree on where zero sits.
+    g_times, g_rvs, g_errs = _group_bursts(times, rvs, errs)
+    ref, outlier = _delta_rv_reference(g_times, g_rvs)
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.axhline(0.0, color="0.6", lw=1, zorder=0)  # zero = median RV
+    ax.axhline(0.0, color="0.6", lw=1, zorder=0)  # zero = median of retained bursts
 
     # Per-night panels from the ungrouped frames (self-skips when no multi-obs night).
-    plot_nightly_panels(target, times, rvs, errs, nights, plot_directory)
+    plot_nightly_panels(target, times, rvs, errs, nights, plot_directory, ref)
 
     # Faint grey underlay: the individual (ungrouped) frames for context.
-    g_order = np.argsort(times)
+    u_order = np.argsort(times)
     ax.errorbar(
-        times[g_order],
-        ((rvs - ref) * 1e3)[g_order],
-        yerr=(errs * 1e3)[g_order],
+        times[u_order],
+        ((rvs - ref) * 1e3)[u_order],
+        yerr=(errs * 1e3)[u_order],
         fmt="o",
         ms=4,
         color="0.6",
@@ -341,22 +365,18 @@ def plot_rv_timeseries(target, l4_paths, plot_directory):
         zorder=1,
         label="individual frames",
     )
-    times, rvs, errs = _group_bursts(times, rvs, errs)
 
+    # From here on work with the burst means.
+    times, rvs, errs = g_times, g_rvs, g_errs
+    order = np.argsort(times)
     drv = (rvs - ref) * 1e3
     derr = errs * 1e3
     med_err = np.median(derr)  # median per-point photon uncertainty
 
-    order = np.argsort(times)
     os.makedirs(plot_directory, exist_ok=True)
     out_path = os.path.join(plot_directory, f"{target}_rv_timeseries.png")
 
-    # Outlier flagging gated to >=10 points -- below that the local trend is
-    # meaningless. RV_RMS is the std of the retained points, so an outlier can't
-    # inflate it.
-    outlier = np.zeros(drv.shape, dtype=bool)
-    if drv.size >= 10:
-        outlier[order] = flag_outliers(drv[order], 5.0, kernel_size=5, method="trend")
+    # RV_RMS is the std of the retained points, so an outlier can't inflate it.
     rms = float(np.std(drv[~outlier])) if np.any(~outlier) else float(np.std(drv))
 
     # Clip the y-range to the retained points so a flagged outlier doesn't compress

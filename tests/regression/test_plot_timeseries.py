@@ -297,6 +297,45 @@ class TestGroupBursts:
 
 
 # ---------------------------------------------------------------------------
+# _delta_rv_reference: zero-point from the retained (non-outlier) points
+# ---------------------------------------------------------------------------
+
+
+class TestDeltaRvReference:
+    def test_zero_point_excludes_outlier(self, pt):
+        # 12 points at RV=1.0 plus one gross outlier at 1000. The zero-point must be
+        # the median of the retained points (1.0), NOT the all-points median that
+        # the outlier would tug upward, and the outlier must be flagged.
+        g_times = np.arange(13, dtype=float)
+        g_rvs = np.full(13, 1.0)
+        g_rvs[6] = 1000.0
+        ref, outlier = pt._delta_rv_reference(g_times, g_rvs)
+        assert ref == pytest.approx(1.0)
+        assert outlier[6] and outlier.sum() == 1
+
+    def test_reference_is_order_independent(self, pt):
+        # The mask is found on the time-ordered series, so a shuffled input yields
+        # the same reference and the same flagged point (by identity, not index).
+        g_times = np.arange(13, dtype=float)
+        g_rvs = np.full(13, 5.0)
+        g_rvs[3] = -900.0
+        ref_a, out_a = pt._delta_rv_reference(g_times, g_rvs)
+        perm = np.array([7, 0, 3, 11, 2, 9, 1, 12, 4, 8, 5, 10, 6])
+        ref_b, out_b = pt._delta_rv_reference(g_times[perm], g_rvs[perm])
+        assert ref_a == pytest.approx(ref_b) == pytest.approx(5.0)
+        assert g_times[out_a][0] == g_times[perm][out_b][0] == 3.0
+
+    def test_below_gate_flags_nothing(self, pt):
+        # Fewer than 10 points: no trend, nothing flagged, zero-point is the plain
+        # median over all points (an outlier is not rejected here by design).
+        g_times = np.arange(5, dtype=float)
+        g_rvs = np.array([1.0, 1.0, 1.0, 1.0, 50.0])
+        ref, outlier = pt._delta_rv_reference(g_times, g_rvs)
+        assert not outlier.any()
+        assert ref == pytest.approx(np.median(g_rvs))
+
+
+# ---------------------------------------------------------------------------
 # plot outputs (establishes the repo's first Agg/PNG test)
 # ---------------------------------------------------------------------------
 
