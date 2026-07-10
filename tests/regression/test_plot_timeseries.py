@@ -34,15 +34,26 @@ def pt():
 # ---------------------------------------------------------------------------
 
 
-def _write_l4(data_dir, datecode, seconds, obj, bjd, rv, rverr):
-    """Write one bare-PRIMARY L4 frame under {data_dir}/L4/{datecode}; return path."""
+def _write_l4(data_dir, datecode, seconds, obj, bjd, rv, rverr, notjunk=None):
+    """Write one L4 frame under {data_dir}/L4/{datecode}; return path.
+
+    Bare PRIMARY by default; pass `notjunk` (0/1) to add a QUALITY_CONTROL extension
+    carrying that NOTJUNK card (the junk QC flag the plotter reads).
+    """
     from pathlib import Path
 
     l4_dir = Path(data_dir) / "L4" / datecode
     l4_dir.mkdir(parents=True, exist_ok=True)
     path = l4_dir / f"kpf_SL4_{datecode}T{seconds:06d}.fits"
     hdr = fits.Header({"OBJECT": obj, "BJDTDB": bjd, "RV": rv, "RVERR": rverr})
-    fits.PrimaryHDU(header=hdr).writeto(path)
+    hdus = [fits.PrimaryHDU(header=hdr)]
+    if notjunk is not None:
+        hdus.append(
+            fits.ImageHDU(
+                name="QUALITY_CONTROL", header=fits.Header({"NOTJUNK": notjunk})
+            )
+        )
+    fits.HDUList(hdus).writeto(path)
     return str(path)
 
 
@@ -267,6 +278,33 @@ class TestReadL4Rv:
 
         times, rvs, *_ = pt._read_l4_rv([good, str(bad)])
         assert times.size == 1 and rvs[0] == 1.5
+
+
+# ---------------------------------------------------------------------------
+# _l4_is_junk / junk exclusion: QUALITY_CONTROL NOTJUNK == 0
+# ---------------------------------------------------------------------------
+
+
+class TestJunkExclusion:
+    def test_is_junk_reads_notjunk_flag(self, pt, tmp_path):
+        junk = _write_l4(str(tmp_path), "20240101", 100, "10700", 2.4e6, 1.0, 0.5, 0)
+        good = _write_l4(str(tmp_path), "20240101", 200, "10700", 2.4e6, 1.0, 0.5, 1)
+        assert pt._l4_is_junk(junk) is True
+        assert pt._l4_is_junk(good) is False
+
+    def test_missing_qc_extension_is_not_junk(self, pt, tmp_path):
+        # A bare-PRIMARY L4 (no QUALITY_CONTROL) counts as not junk, not an error.
+        bare = _write_l4(str(tmp_path), "20240101", 100, "10700", 2.4e6, 1.0, 0.5)
+        assert pt._l4_is_junk(bare) is False
+
+    def test_read_excludes_junk_keeps_good(self, pt, tmp_path, capsys):
+        good = _write_l4(str(tmp_path), "20240101", 100, "10700", 2.4e6, 1.5, 0.5, 1)
+        junk = _write_l4(
+            str(tmp_path), "20240101", 200, "10700", 2.4e6 + 1, 9.9, 0.5, 0
+        )
+        times, rvs, *_ = pt._read_l4_rv([good, junk])
+        assert times.size == 1 and rvs[0] == 1.5
+        assert "NOTJUNK=0" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------

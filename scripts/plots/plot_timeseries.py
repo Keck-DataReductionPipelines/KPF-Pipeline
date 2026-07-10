@@ -8,6 +8,7 @@ inclusive datecode range, or ``--obs_ids`` names them explicitly (their L4 paths
 built directly from ``--data_dir``, no scan -- how ``kpfpipe timeseries`` hands off
 the set it already discovered).
 
+Frames flagged as observer junk (``QUALITY_CONTROL`` ``NOTJUNK == 0``) are skipped.
 Bursts of rapid-succession frames collapse to one RVERR-weighted point (revisits stay
 distinct), with the individual frames kept as a faint grey underlay. High-cadence
 nights (tens of near-uniform frames) are the exception: each is held out and gets its
@@ -148,21 +149,39 @@ def l4_paths_for_obs_ids(data_dir, obs_ids, target):
     return paths
 
 
+def _l4_is_junk(path):
+    """True if the L4's QUALITY_CONTROL marks it an observer-junk frame.
+
+    NOTJUNK is the L0 junk QC flag propagated to L4 (1 = not junk, 0 = junk). A
+    missing QUALITY_CONTROL extension or NOTJUNK card counts as not junk, mirroring
+    the observer-list no-op when the junk list itself is absent.
+    """
+    try:
+        qc = fits.getheader(path, "QUALITY_CONTROL")
+    except KeyError:
+        return False
+    return qc.get("NOTJUNK", 1) == 0
+
+
 def _read_l4_rv(l4_paths):
-    """Read (BJD_TDB, RV, RVERR, datecode) from each L4 product.
+    """Read (BJD_TDB, RV, RVERR, datecode) from each non-junk L4 product.
 
     RV/RVERR are km/s, BJDTDB a Julian day -- all on the L4 PRIMARY (per EPRV). The
-    datecode (the L4 file's parent dir) labels each frame's observing night for the
-    per-night panels. Frames with a non-finite RV/RVERR are skipped with a warning.
+    datecode (the file's parent dir) labels each frame's observing night. Frames
+    flagged junk by the QUALITY_CONTROL NOTJUNK flag, or with a non-finite
+    RV/RVERR/BJDTDB, are skipped with a warning.
     """
     times, rvs, errs, nights = [], [], [], []
     for path in l4_paths:
+        name = os.path.basename(path)
+        if _l4_is_junk(path):
+            print(f"  warning: {name} is an observer-junk frame (NOTJUNK=0); skipping")
+            continue
         hdr = fits.getheader(path, 0)
         vals = (hdr.get("BJDTDB"), hdr.get("RV"), hdr.get("RVERR"))
         # np.isfinite raises on a str, so require real finite numbers (a card may be
         # missing or a stringified 'nan') rather than aborting on one bad header.
         if not all(isinstance(v, (int, float)) and np.isfinite(v) for v in vals):
-            name = os.path.basename(path)
             print(f"  warning: {name} has no finite RV/RVERR/BJDTDB; skipping")
             continue
         bjd, rv, err = vals

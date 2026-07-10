@@ -311,11 +311,17 @@ its own argparse). The commands:
   route outside `scripts/processing/`). Frames come from **either** `--date_range`
   (scan the L4 tree) **or** `--obs_ids` (build L4 paths directly from `--data_dir`
   via `kpf_filepath`, no scan — the handoff `timeseries` uses). It reads each L4
-  PRIMARY (`RV`/`RVERR`/`BJDTDB`), always groups bursts (RVERR-weighted), and writes
-  `{target}_rv_timeseries.png` plus `{target}_rv_nightly.png` (the latter only for
-  nights with >1 observation). In `--obs_ids` mode a supplied frame whose L4 `OBJECT`
-  ≠ `--target` is warned but still plotted, and a missing L4 is skipped. (The parked
-  scratchpad `notes/tmp_rv_plot.py` predates this port and is now superseded.)
+  PRIMARY (`RV`/`RVERR`/`BJDTDB`), **skips observer-junk frames** (`QUALITY_CONTROL`
+  `NOTJUNK == 0`; a missing extension/card counts as not-junk), then classifies each
+  night's cadence (`_classify_observing_mode` → standard/burst/high cadence) and
+  dispatches: the standard/burst nights go to one grouped `{target}_rv_timeseries.png`
+  (bursts RVERR-weighted) plus `{target}_rv_nightly.png` (nights with >1 observation),
+  while each **high-cadence** night — tens of near-uniform frames spanning the night —
+  is held out of both and gets its own `{target}_{datecode}_rv_timeseries.png` instead
+  of collapsing to a single misleading burst point. In `--obs_ids` mode a supplied
+  frame whose L4 `OBJECT` ≠ `--target` is warned but still plotted, and a missing L4 is
+  skipped. (The parked scratchpad `notes/tmp_rv_plot.py` predates this port and is now
+  superseded.)
 
 **The layering is strictly one-directional — each layer may import *down* but never
 up:** `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
@@ -363,7 +369,7 @@ Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs
 
 **Masters fan-out launches are staggered, not lockstep** (`_LAUNCH_INTERVAL` in `masters.py`, passed to `run_stage(launch_interval=…)`; the same throttle science uses to pace SIMBAD/Gaia). A masters build opens with an I/O-heavy stack phase — read + assemble the night's bias/dark/ThAr L0 frames (~100 s alone) before any WLS fitting. Launched **in lockstep**, a full pool marches through that read phase together, so the disk sees `jobs`-deep read bursts and the shared phase balloons ~4–5× (2026-07-09 shrek logs: ~100 s solo → ~465 s at 16-wide lockstep), tipping the slowest nights past `--job_timeout`. **Spacing the launches apart desynchronizes the read bursts at the *same* concurrency**: in those same logs, 16-wide jobs that entered staggered (as pool slots freed) held that phase near the ~100 s solo cost (~105–140 s) instead of ~465 s. The interval (5.0 s) spreads the first wave over most of the read window while staying under the throughput ceiling (~`job_duration/jobs`) so the pool still fills. This is **complementary to, not a replacement for, the `_MASTERS_JOBS` cap above**: the cap bounds the higher-concurrency regime where the OS-memory-bookkeeping cost dominates (the "~56 at once wedge"); the stagger removes the lockstep disk-read spike that hits even at 16-wide. (The 5.0 s value is tuned from one night's logs — re-confirm against a real shrek run before trusting it.)
 
-**Junk-frame exclusion.** "Junk" is a manual flag observers set at exposure time (e.g. wrong telescope settings): such a frame can pass every automated QC yet be scientifically useless. The authoritative list is WMKO's `{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv` — a data-tree artifact, *not* a repo file (title line, `observation_id` header, one obs_id/row). `utils/io.py::load_junk_obs_ids(data_input)` is the single reader (absent file ⇒ empty set ⇒ no-op). It feeds two paths: (1) `FileHandler.build_mini_database` tags each frame with a derived **`ISJUNK`** column (frames are flagged, never dropped), which `FileHandler.build_calibration_stacks(exclude_junk=True)` filters out before master stacking and `timeseries.py` uses to skip junk during discovery; (2) `QCL0.not_junk` populates the `NOTJUNK` QC flag on science frames, recovering `KPF_DATA_INPUT` from the L0's `self.dirname` (`{KPF_DATA_INPUT}/L0/{datecode}`, set by rvdata's `from_fits`). A mini database lacking the `ISJUNK` column makes `build_calibration_stacks(exclude_junk=True)` **fail loudly** (`KeyError: 'ISJUNK'`).
+**Junk-frame exclusion.** "Junk" is a manual flag observers set at exposure time (e.g. wrong telescope settings): such a frame can pass every automated QC yet be scientifically useless. The authoritative list is WMKO's `{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv` — a data-tree artifact, *not* a repo file (title line, `observation_id` header, one obs_id/row). `utils/io.py::load_junk_obs_ids(data_input)` is the single reader (absent file ⇒ empty set ⇒ no-op). It feeds two paths: (1) `FileHandler.build_mini_database` tags each frame with a derived **`ISJUNK`** column (frames are flagged, never dropped), which `FileHandler.build_calibration_stacks(exclude_junk=True)` filters out before master stacking and `timeseries.py` uses to skip junk during discovery; (2) `QCL0.not_junk` populates the `NOTJUNK` QC flag on science frames, recovering `KPF_DATA_INPUT` from the L0's `self.dirname` (`{KPF_DATA_INPUT}/L0/{datecode}`, set by rvdata's `from_fits`); this flag propagates L0→L4, and `plot_timeseries` reads it back off the L4 `QUALITY_CONTROL` to skip junk frames in `--date_range` mode (the `timeseries` `--obs_ids` handoff has already excluded them upstream). A mini database lacking the `ISJUNK` column makes `build_calibration_stacks(exclude_junk=True)` **fail loudly** (`KeyError: 'ISJUNK'`).
 
 **Masters header alignment (out of EPRV scope, but stylistically aligned).** Masters are *not* EPRV-governed, but follow the same keyword conventions as the science models as closely as possible:
 
