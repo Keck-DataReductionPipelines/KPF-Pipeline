@@ -12,7 +12,7 @@ Frames flagged as observer junk (``QUALITY_CONTROL`` ``NOTJUNK == 0``) are skipp
 Bursts of rapid-succession frames collapse to one RVERR-weighted point (revisits stay
 distinct), with the individual frames kept as a faint grey underlay. High-cadence
 nights (tens of near-uniform frames) are the exception: each is held out and gets its
-own ``{target}_{datecode}_rv_timeseries.png``. Writes to ``--plot_dir``:
+own ``{target}_rv_timeseries_{datecode}.png``. Writes to ``--plot_dir``:
 ``{target}_rv_timeseries.png`` and, for nights with multiple observations,
 ``{target}_rv_nightly.png``.
 
@@ -442,7 +442,7 @@ def plot_single_night_timeseries(target, times, rvs, errs, night, plot_directory
     _annotate_rms(ax, rms, med_err)
     ax.grid(True, alpha=0.3)
     _symmetric_ylim(ax)
-    out_path = os.path.join(plot_directory, f"{target}_{night}_rv_timeseries.png")
+    out_path = os.path.join(plot_directory, f"{target}_rv_timeseries_{night}.png")
     _save_figure(fig, out_path)
     print(
         f"high-cadence night plot -> {out_path}  (RV_RMS {rms:.2f} m/s, n={times.size})"
