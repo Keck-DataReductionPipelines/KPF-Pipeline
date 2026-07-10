@@ -6,7 +6,7 @@ DRPVERNO,Pipeline version (DRP-RUN-11; EPRV equivalent is DRPTAG),RECEIPT,str,KP
 DRPSTATU,DRP reduction status (DRP-RUN-20),RECEIPT,str,KPF0.from_fits
 DATAPRL0,QC: GREEN/RED amp extensions present/non-empty,QUALITY_CONTROL,int,QCL0
 KWRDPRL0,QC: required L0 PRIMARY keywords present,QUALITY_CONTROL,int,QCL0
-EXPTIMOK,"QC: EXPTIME present, finite, non-negative",QUALITY_CONTROL,int,QCL0
+EXPTIMOK,"QC: EXPTIME finite/non-neg, matches ELAPSED",QUALITY_CONTROL,int,QCL0
 DATTIMOK,QC: Dates/times consistent (DATE-BEG/MID/END/ELAPSED),QUALITY_CONTROL,int,QCL0
 RADECOK,QC: pointing consistent with target/catalog RA/DEC,QUALITY_CONTROL,int,QCL0
 TARGOFF,Pointing offset from DCS target (arcsec),QUALITY_CONTROL,float,DiagL0

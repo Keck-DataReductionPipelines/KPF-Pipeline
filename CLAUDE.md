@@ -233,9 +233,10 @@ see the style guide §11.)* The architecture invariants:
   the native (a) never reaches PRIMARY, or (b) is one of a **coherent block of natives** where mixing
   PRIMARY + INSTRUMENT reads (or the cryptic renamed keys) would obscure intent — the WMKO astrometry/
   catalog block (`TARGRA`/`DEC`/`PM*`/`PLAX`/`TARGFRAM`/`TARGEPOC`/`TARGRADV`/`GAIAID`) in
-  `barycentric_correction`, the per-fiber illumination source (`SCI-OBJ`/`SKY-OBJ`/`CAL-OBJ`) in
-  `radial_velocity`, and the `EXPTIME`-vs-`ELAPSED` pair in masters (which name **different** quantities —
-  requested vs. elapsed — that only coexist as distinct cards on INSTRUMENT_HEADER).
+  `barycentric_correction` and the per-fiber illumination source (`SCI-OBJ`/`SKY-OBJ`/`CAL-OBJ`) in
+  `radial_velocity`. (Masters no longer read INSTRUMENT_HEADER at all: the former masters
+  `EXPTIME`-vs-`ELAPSED` load check is now `QCL0.exptime_sane`/`EXPTIMOK`, which reads the raw L0
+  PRIMARY — where both natives coexist before `to_kpf1` renames `ELAPSED`→`EXPTIME`.)
 - **Each registered keyword has one home extension** (the registry `Extension` column), which
   `set_keyword` routes to: **PRIMARY** (EPRV keywords, plus the L4 final-RV exception
   `CCD{1,2}RV`/`CCD{1,2}ERV` above), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,

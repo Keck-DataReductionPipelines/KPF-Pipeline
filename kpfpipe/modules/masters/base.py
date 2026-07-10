@@ -71,6 +71,11 @@ class BaseMasterModule:
     # any is dropped in `_load_frame` and counted as a load failure.
     _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "KWRDPRL0", "EXPTIMOK", "NOTJUNK")
 
+    # Exposure-time threshold (seconds) for the bias/zero-exposure decision in
+    # the stats methods: a frame whose exposure is <= this counts as zero
+    # (a bias, stacked with T=1), else as a real exposure (T=exptime).
+    _ZERO_EXPTIME_TOL_SECONDS = 0.1
+
     def __init__(self, l0_file_list, config=None):
         if l0_file_list != sorted(l0_file_list):
             raise ValueError("l0_file_list must be sorted in ascending order")
@@ -201,7 +206,7 @@ class BaseMasterModule:
             self._master_paths[cal_type] = path
         return self._master_ml1[cal_type]
 
-    def _load_frame(self, fn, cache=False, exptime_tolerance=0.1):
+    def _load_frame(self, fn, cache=False):
         """
         Load an L0 file and perform image assembly to produce an L1 object.
 
@@ -214,17 +219,15 @@ class BaseMasterModule:
             The caller decides which frames are worth caching (see the streaming
             stats path). A frame already cached is returned from the cache
             regardless of this flag.
-        exptime_tolerance : float
-            Maximum allowed excess of elapsed time over requested exposure time,
-            in seconds (default = 0.1).
 
         Returns
         -------
         l1_obj : KPF1 or None
             The assembled L1 object, or None on failure. Failure means the
-            frame could not be read/assembled, failed a required QCL0 flag
-            (`_REQUIRED_L0_QC_FLAGS`), or failed the exptime check; a warning
-            names the cause. Callers detect failure via `l1_obj is None`.
+            frame could not be read/assembled or failed a required QCL0 flag
+            (`_REQUIRED_L0_QC_FLAGS`, which includes the EXPTIME/ELAPSED
+            consistency check); a warning names the cause. Callers detect
+            failure via `l1_obj is None`.
 
         Notes
         -----
@@ -233,33 +236,24 @@ class BaseMasterModule:
         its approximation-pass frames so the exact pass reuses them.
         """
         if fn in self._l1_obj_cache:
-            l1_obj = self._l1_obj_cache[fn]
-
-        else:
-            try:
-                l0_obj = KPF0.from_fits(fn)
-
-                qc = QCL0(l0_obj).run()
-                failed = [kw for kw in self._REQUIRED_L0_QC_FLAGS if not qc[kw][0]]
-                if failed:
-                    warnings.warn(
-                        f"QC failed for {fn}: {', '.join(failed)}", stacklevel=2
-                    )
-                    return None
-
-                l1_obj = ImageAssembly(l0_obj).perform()
-
-                if cache:
-                    self._l1_obj_cache[fn] = l1_obj
-
-            except (FileNotFoundError, OSError) as e:
-                warnings.warn(f"Failed to load {fn}: {e}", stacklevel=2)
-                return None
+            return self._l1_obj_cache[fn]
 
         try:
-            self._check_exptime_vs_elapsed(l1_obj, exptime_tolerance)
-        except ValueError as e:
-            warnings.warn(f"Exptime check failed for {fn}: {e}", stacklevel=2)
+            l0_obj = KPF0.from_fits(fn)
+
+            qc = QCL0(l0_obj).run()
+            failed = [kw for kw in self._REQUIRED_L0_QC_FLAGS if not qc[kw][0]]
+            if failed:
+                warnings.warn(f"QC failed for {fn}: {', '.join(failed)}", stacklevel=2)
+                return None
+
+            l1_obj = ImageAssembly(l0_obj).perform()
+
+            if cache:
+                self._l1_obj_cache[fn] = l1_obj
+
+        except (FileNotFoundError, OSError) as e:
+            warnings.warn(f"Failed to load {fn}: {e}", stacklevel=2)
             return None
 
         return l1_obj
@@ -340,34 +334,6 @@ class BaseMasterModule:
         spectral_extraction = SpectralExtraction(l1_obj)
         return spectral_extraction.perform()
 
-    @staticmethod
-    def _check_exptime_vs_elapsed(l1_obj, exptime_tolerance):
-        """
-        Validate that elapsed readout time is consistent with requested exposure time.
-
-        Parameters
-        ----------
-        l1_obj : KPF1
-            Assembled L1 object whose INSTRUMENT_HEADER contains EXPTIME and ELAPSED.
-        exptime_tolerance : float
-            Maximum allowed excess of elapsed time over requested exposure time,
-            in seconds.
-
-        Raises
-        ------
-        ValueError
-            If elapsed time is less than requested (premature readout), or if the
-            excess exceeds exptime_tolerance.
-        """
-        exptime = l1_obj.headers["INSTRUMENT_HEADER"]["EXPTIME"]
-        elapsed = l1_obj.headers["INSTRUMENT_HEADER"]["ELAPSED"]
-
-        delta = elapsed - exptime
-        if delta < 0:
-            raise ValueError("premature frame readout detected")
-        if delta > exptime_tolerance:
-            raise ValueError(f"elapsed time - requested time > {exptime_tolerance}")
-
     # ------------------------------------------------------------------
     # Private helpers for frame stacking.
     # ------------------------------------------------------------------
@@ -409,7 +375,6 @@ class BaseMasterModule:
         cache=False,
         max_fail_fraction=0.2,
         max_fail_number=2,
-        exptime_tolerance=0.1,
     ):
         """
         Compute stacked statistics using an in-memory data cube.
@@ -433,10 +398,6 @@ class BaseMasterModule:
             Maximum absolute number of frames allowed to fail loading before
             raising. Defaults to 2. Stacking raises when either limit is
             exceeded.
-        exptime_tolerance : float, optional
-            Exposure-time tolerance in seconds (default 0.1): the per-frame
-            elapsed-vs-requested bound in `_load_frame`, and the threshold at or
-            below which a frame's exposure counts as zero (a bias).
 
         Returns
         -------
@@ -454,8 +415,8 @@ class BaseMasterModule:
                               bias stack, where T = 1)
         zero_exptime : bool
             True if this is a bias stack (all frames have exposure at or below
-            exptime_tolerance), used by the streaming path to validate per-frame
-            exposure consistency.
+            `_ZERO_EXPTIME_TOL_SECONDS`), used by the streaming path to validate
+            per-frame exposure consistency.
 
         Notes
         -----
@@ -464,8 +425,8 @@ class BaseMasterModule:
         requested EXPTIME. Outlier rejection is performed on the CCD rate (VAR =
         |CCD| + RN adds no independent information); rates are used so frames of
         differing exposure are comparable, and VAR is still summed for the SNR.
-        Exposure times must be either all zero (≤ tolerance) or all above
-        tolerance. Raises an error if more than `max_fail_fraction` of frames
+        Exposure times must be either all zero (≤ `_ZERO_EXPTIME_TOL_SECONDS`) or
+        all above it. Raises an error if more than `max_fail_fraction` of frames
         fail to load.
         """
         if l0_file_list is None:
@@ -492,9 +453,7 @@ class BaseMasterModule:
         failure_count = 0
 
         for fn in l0_file_list:
-            l1_obj = self._load_frame(
-                fn, cache=cache, exptime_tolerance=exptime_tolerance
-            )
+            l1_obj = self._load_frame(fn, cache=cache)
 
             if l1_obj is None:
                 failure_count += 1
@@ -521,10 +480,10 @@ class BaseMasterModule:
         if np.any(exptime < 0):
             raise ValueError(f"Exposure times cannot be negative; exptime = {exptime}")
 
-        if np.all(exptime > exptime_tolerance):
+        if np.all(exptime > self._ZERO_EXPTIME_TOL_SECONDS):
             zero_exptime = False
             T = exptime[:, None, None]
-        elif np.all(exptime <= exptime_tolerance):
+        elif np.all(exptime <= self._ZERO_EXPTIME_TOL_SECONDS):
             zero_exptime = True
             T = np.ones_like(exptime)[:, None, None]
         else:
@@ -585,7 +544,6 @@ class BaseMasterModule:
         sigma=None,
         max_fail_fraction=0.2,
         max_fail_number=2,
-        exptime_tolerance=0.1,
     ):
         """
         Compute stacked statistics with a single streaming pass over the frames.
@@ -606,10 +564,6 @@ class BaseMasterModule:
             Maximum absolute number of frames allowed to fail loading before
             raising. Defaults to 2. Stacking raises when either limit is
             exceeded.
-        exptime_tolerance : float, optional
-            Exposure-time tolerance in seconds (default 0.1): the per-frame
-            elapsed-vs-requested bound in `_load_frame`, and the threshold at or
-            below which a frame's exposure counts as zero (a bias).
 
         Returns
         -------
@@ -624,7 +578,7 @@ class BaseMasterModule:
             approximation below, and the master IMG is counts_sum / exptime_sum.)
         zero_exptime : bool
             True if this is a bias stack (all frames have exposure at or below
-            exptime_tolerance).
+            `_ZERO_EXPTIME_TOL_SECONDS`).
 
         Notes
         -----
@@ -652,7 +606,6 @@ class BaseMasterModule:
             cache=True,
             max_fail_fraction=max_fail_fraction,
             max_fail_number=max_fail_number,
-            exptime_tolerance=exptime_tolerance,
         )
 
         if len(l0_file_list) <= ndirect:
@@ -692,9 +645,7 @@ class BaseMasterModule:
         for fn in l0_file_list:
             # The first `ndirect` frames are cache hits from the approximation
             # pass above; the rest are read once here and not worth caching.
-            l1_obj = self._load_frame(
-                fn, cache=False, exptime_tolerance=exptime_tolerance
-            )
+            l1_obj = self._load_frame(fn, cache=False)
 
             if l1_obj is None:
                 failure += 1
@@ -710,7 +661,7 @@ class BaseMasterModule:
             if exptime < 0:
                 raise ValueError("Exposure times cannot be negative")
 
-            is_zero = exptime <= exptime_tolerance
+            is_zero = exptime <= self._ZERO_EXPTIME_TOL_SECONDS
             if zero_exptime != is_zero:
                 raise ValueError("Exposure times must be all zero or all non-zero")
 
@@ -866,7 +817,6 @@ class BaseMasterModule:
         cal_type=None,
         max_fail_fraction=0.2,
         max_fail_number=2,
-        exptime_tolerance=0.1,
     ):
         """
         Stack full-frame images to produce masters L1.
@@ -892,11 +842,6 @@ class BaseMasterModule:
             Maximum absolute number of frames allowed to fail loading before
             raising. Defaults to 2. Stacking raises when either limit is
             exceeded.
-        exptime_tolerance : float, optional
-            Exposure-time tolerance in seconds (default 0.1), threaded to the
-            stats sub-methods. It bounds the allowed excess of elapsed over
-            requested time in `_check_exptime_vs_elapsed`, and is the threshold
-            at or below which a frame's exposure counts as zero (a bias).
 
         Returns
         -------
@@ -933,7 +878,6 @@ class BaseMasterModule:
                 sigma=sigma,
                 max_fail_fraction=max_fail_fraction,
                 max_fail_number=max_fail_number,
-                exptime_tolerance=exptime_tolerance,
             )
         else:
             stats, _ = self._compute_stats_from_stream(
@@ -942,7 +886,6 @@ class BaseMasterModule:
                 sigma=sigma,
                 max_fail_fraction=max_fail_fraction,
                 max_fail_number=max_fail_number,
-                exptime_tolerance=exptime_tolerance,
             )
 
         for chip in self.chips:

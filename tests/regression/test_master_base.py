@@ -58,25 +58,12 @@ class TestMasterBaseErrors:
             l1_obj = m._load_frame(fn, cache=False)
         assert l1_obj is None
 
-    def test_load_frame_exptime_failure_warns_and_skips(self, monkeypatch):
-        # A frame failing the exptime-vs-elapsed check is warned and skipped.
-        m = Dark(FILE_LIST)
-        fn = FILE_LIST[0]
-        m._l1_obj_cache[fn] = object()  # cache hit bypasses real I/O
-
-        def bad_check(l1_obj, exptime_tolerance):
-            raise ValueError("elapsed exceeds exptime")
-
-        monkeypatch.setattr(m, "_check_exptime_vs_elapsed", bad_check)
-        with pytest.warns(UserWarning, match="Exptime check failed"):
-            l1_obj = m._load_frame(fn, cache=False)
-        assert l1_obj is None
-
     def test_load_frame_qc_failure_warns_and_skips(self, monkeypatch):
-        # A frame failing a required QCL0 flag is warned and dropped before assembly.
+        # A frame failing a required QCL0 flag (here the EXPTIME/ELAPSED
+        # consistency flag EXPTIMOK) is warned and dropped before assembly.
         m = Dark(FILE_LIST)
         fn = FILE_LIST[0]
-        qc_result = {kw: (kw != "NOTJUNK", "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
+        qc_result = {kw: (kw != "EXPTIMOK", "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits", lambda fn: object()
         )
@@ -84,7 +71,7 @@ class TestMasterBaseErrors:
             "kpfpipe.modules.masters.base.QCL0",
             lambda l0: MagicMock(run=lambda: qc_result),
         )
-        with pytest.warns(UserWarning, match="QC failed.*NOTJUNK"):
+        with pytest.warns(UserWarning, match="QC failed.*EXPTIMOK"):
             l1_obj = m._load_frame(fn, cache=False)
         assert l1_obj is None
 
