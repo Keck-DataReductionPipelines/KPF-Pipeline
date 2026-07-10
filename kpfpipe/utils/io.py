@@ -9,7 +9,6 @@ from datetime import datetime
 import pandas as pd
 from astropy.io import fits
 
-from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf_utils import (
     get_datecode,
     get_obs_id,
@@ -111,25 +110,21 @@ class FileHandler:
 
     Parameters
     ----------
-    config : None | dict | ConfigHandler
-        Source of the ``[DATA_DIRS]`` roots ``KPF_DATA_INPUT`` (the L0 input
-        tree) and ``KPF_MASTERS_OUTPUT`` (the masters output tree). ``None``
-        leaves both unset -- fine for an instance that only calls methods needing
-        the other root; a method whose root is unset raises ``ValueError``.
+    data_dirs : dict
+        The already-extracted ``[DATA_DIRS]`` mapping, holding the roots
+        ``KPF_DATA_INPUT`` (the L0 input tree) and ``KPF_MASTERS_OUTPUT`` (the
+        masters output tree). Required: this is a util, not a pipeline module, so
+        it has no config defaults to fall back on. Callers with a
+        ``ConfigHandler`` pass ``config.get_params(["DATA_DIRS"])`` (this class
+        deliberately does not import ``ConfigHandler``, keeping construction
+        light). Either root may be absent -- fine for an instance that only calls
+        methods needing the other root; a method whose root is unset raises
+        ``ValueError``. Pass ``{}`` for an instance that touches neither root.
     """
 
-    def __init__(self, config=None):
-        if config is None:
-            params = {}
-        elif isinstance(config, dict):
-            params = config
-        elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS"])
-        else:
-            raise TypeError("config must be None, dict, or ConfigHandler")
-
-        self._data_input = params.get("KPF_DATA_INPUT")
-        self._masters_output = params.get("KPF_MASTERS_OUTPUT")
+    def __init__(self, data_dirs):
+        self._data_input = data_dirs.get("KPF_DATA_INPUT")
+        self._masters_output = data_dirs.get("KPF_MASTERS_OUTPUT")
         self._mini_db = None  # the loaded night, set by build_mini_database
 
     def _mini_db_cache_path(self, datecode):

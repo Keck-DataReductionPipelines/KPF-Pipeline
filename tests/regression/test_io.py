@@ -152,7 +152,7 @@ def _cluster(cal_type, mini_db, **kwargs):
     (``self._mini_db``); these logic tests set a synthetic one on a bare handler
     the same way ``build_mini_database`` would.
     """
-    fh = FileHandler()
+    fh = FileHandler({})
     fh._mini_db = mini_db
     return fh.build_calibration_stacks(cal_type, **kwargs)
 
@@ -163,22 +163,22 @@ class TestSecondsSinceJ2000:
 
     def test_basic(self):
         # J2000.0 itself: 2000-01-01 12:00 UTC = '20000101.43200.00'
-        assert FileHandler()._seconds_since_j2000("20000101.43200.00") == 0
+        assert FileHandler({})._seconds_since_j2000("20000101.43200.00") == 0
 
     def test_monotonic_across_year_boundary(self):
         # Dec 31 23:59:00 -> Jan 1 00:00:00 should differ by 60s exactly.
-        fh = FileHandler()
+        fh = FileHandler({})
         end = fh._seconds_since_j2000("20231231.86340.00")
         start_next_year = fh._seconds_since_j2000("20240101.00000.00")
         assert start_next_year - end == 60
 
     def test_raises_on_invalid_timestamp(self):
         with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            FileHandler()._seconds_since_j2000("KP.20240405.99999.57.fits")
+            FileHandler({})._seconds_since_j2000("KP.20240405.99999.57.fits")
 
     def test_raises_when_no_timestamp_found(self):
         with pytest.raises(ValueError, match="No KPF timestamp found"):
-            FileHandler()._seconds_since_j2000("notimestamp.fits")
+            FileHandler({})._seconds_since_j2000("notimestamp.fits")
 
 
 class TestBuildCalibrationStacks:
@@ -512,7 +512,7 @@ class TestFindMasters:
 
     def test_raises_without_masters_output(self):
         with pytest.raises(ValueError, match="KPF_MASTERS_OUTPUT"):
-            FileHandler().find_masters("bias", "L1", "20240405")
+            FileHandler({}).find_masters("bias", "L1", "20240405")
 
     @pytest.mark.parametrize(
         "cal_type,level",
@@ -639,7 +639,7 @@ class TestBuildMiniDatabase:
 
     def test_missing_data_input_raises(self):
         with pytest.raises(ValueError, match="KPF_DATA_INPUT"):
-            FileHandler().build_mini_database("20240405")
+            FileHandler({}).build_mini_database("20240405")
 
 
 # ---------------------------------------------------------------------------
