@@ -289,31 +289,57 @@ class FileHandler:
         dt = kpf_timestamp_to_datetime(get_timestamp(s))
         return int((dt - _J2000_EPOCH).total_seconds())
 
-    def _identify_clusters(self, cal_df, *, cluster_gap_seconds):
+    def _select_frames(self, cal_type, *, exclude_junk=True):
         """
-        Group calibration frames into observing-session clusters by time gaps.
+        The junk-excluded, OBJECT-filtered frames of `cal_type` from the carried
+        mini database (``self._mini_db``).
 
-        Infers the morn/midday/eve/night/midnight sessions purely from the frame
-        timestamps: the OBJECT morn/eve/night suffix is only a label and does not
-        partition the result, so a mislabeled frame clusters with its true session
-        instead of splitting off. Consecutive time-sorted frames start a new
-        cluster wherever they are more than `cluster_gap_seconds` apart; for the
-        allowlisted cal types the morn and eve sessions sit hours apart, so the gap
-        alone separates them.
+        The single frame-selection entry point the grouping paths share. Raises
+        ``ValueError`` if no mini database is loaded (call ``build_mini_database``
+        first) or if the type has no frames; a mini database lacking the ISJUNK
+        column raises ``KeyError`` under ``exclude_junk=True`` (a fail-loud guard
+        against a database built before junk tracking existed).
+        """
+        mini_db = self._mini_db
+        if mini_db is None:
+            raise ValueError(
+                "no mini database available; call build_mini_database(datecode) first"
+            )
+        if exclude_junk:
+            mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
+        cal_df = mini_db[mini_db["OBJECT"].isin(_OBJECT_MAP[cal_type])]
+        if cal_df.empty:
+            raise ValueError(f"No '{cal_type}' calibration frames found")
+        return cal_df
+
+    def _identify_clusters(self, cal_type, *, cluster_gap_seconds, exclude_junk=True):
+        """
+        Group `cal_type` frames into observing-session clusters by time gaps.
+
+        Reads the carried mini database (``self._mini_db``) via `_select_frames`
+        and infers the morn/midday/eve/night/midnight sessions purely from the
+        frame timestamps: the OBJECT morn/eve/night suffix is only a label and
+        does not partition the result, so a mislabeled frame clusters with its
+        true session instead of splitting off. Consecutive time-sorted frames
+        start a new cluster wherever they are more than `cluster_gap_seconds`
+        apart; for the allowlisted cal types the morn and eve sessions sit hours
+        apart, so the gap alone separates them.
 
         Parameters
         ----------
-        cal_df : pandas.DataFrame
-            OBJECT-filtered, junk-excluded frames for one cal_type; must be
-            non-empty and carry a FILENAME column.
+        cal_type : str
+            Calibration frame type (a key of `_OBJECT_MAP`).
         cluster_gap_seconds : int
             Gap [s] between consecutive frames that starts a new cluster.
+        exclude_junk : bool, default True
+            Drop observer-flagged junk frames before clustering.
 
         Returns
         -------
         clusters : list of list of str
             Chronologically-sorted filename lists, one per detected session.
         """
+        cal_df = self._select_frames(cal_type, exclude_junk=exclude_junk)
         timed = sorted((self._seconds_since_j2000(fn), fn) for fn in cal_df["FILENAME"])
         clusters = []
         cluster = [timed[0][1]]
@@ -333,7 +359,6 @@ class FileHandler:
         self,
         cal_type,
         *,
-        mini_db=None,
         min_file_count=5,
         cluster_gap_seconds=7200,
         groupby="time_of_day",
@@ -341,7 +366,8 @@ class FileHandler:
     ):
         """
         Return sorted file lists for all calibration stacks of the requested
-        type, grouped from the loaded mini database.
+        type, grouped from the mini database carried on the instance
+        (``self._mini_db``, set by `build_mini_database`).
 
         Drops observer-flagged junk frames (unless `exclude_junk=False`), filters
         by OBJECT, then groups the surviving frames into stacks according to
@@ -358,17 +384,14 @@ class FileHandler:
           routinely straddle HST midnight and belong in a single nightly stack.
 
         Every returned stack has at least `min_file_count` files; undersized
-        stacks are dropped, and it raises when none meets the threshold. Clusters
-        the mini database carried on the instance, so the recipe never handles the
-        DataFrame itself.
+        stacks are dropped, and it raises when none meets the threshold. Reads the
+        mini database off the instance, so the recipe never handles the DataFrame
+        itself.
 
         Parameters
         ----------
         cal_type : str
             Calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
-        mini_db : pandas.DataFrame, optional
-            DataFrame to cluster; defaults to ``self._mini_db``. Pass one only to
-            cluster a database the handler did not build.
         min_file_count : int, default 5
             Minimum number of files required per stack.
         cluster_gap_seconds : int, default 7200
@@ -389,8 +412,8 @@ class FileHandler:
         ------
         ValueError
             If `groupby` or `cal_type` is not recognized, if no mini database is
-            available (none loaded and none passed), if no calibration frames of
-            the requested type are found, or if no stack meets `min_file_count`.
+            loaded on the instance, if no calibration frames of the requested type
+            are found, or if no stack meets `min_file_count`.
         """
         if groupby not in _GROUPBY_MODES:
             raise ValueError(
@@ -401,37 +424,25 @@ class FileHandler:
                 f"cal_type must be one of {list(_OBJECT_MAP.keys())}; got '{cal_type}'"
             )
 
-        if mini_db is None:
-            mini_db = self._mini_db
-        if mini_db is None:
-            raise ValueError(
-                "no mini database available; call build_mini_database(datecode) "
-                "first (or pass mini_db=)"
-            )
-
-        if exclude_junk:
-            mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
-
-        cal_df = mini_db[mini_db["OBJECT"].isin(_OBJECT_MAP[cal_type])]
-
-        if cal_df.empty:
-            raise ValueError(f"No '{cal_type}' calibration frames found")
-
         if groupby == "time_of_day":
             clusters = self._identify_clusters(
-                cal_df, cluster_gap_seconds=cluster_gap_seconds
+                cal_type,
+                cluster_gap_seconds=cluster_gap_seconds,
+                exclude_junk=exclude_junk,
             )
-        elif groupby == "hst_day":
-            # One stack per HST calendar day (the 'YYYYMMDD' HST-timestamp prefix).
-            by_day = {}
-            for fn, hst in zip(cal_df["FILENAME"], cal_df["HST"], strict=True):
-                by_day.setdefault(str(hst).split(".")[0], []).append(fn)
-            clusters = [
-                sorted(v, key=self._seconds_since_j2000)
-                for _, v in sorted(by_day.items())
-            ]
-        else:  # obs_night -- the whole loaded night, one stack spanning HST midnight
-            clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
+        else:
+            cal_df = self._select_frames(cal_type, exclude_junk=exclude_junk)
+            if groupby == "hst_day":
+                # One stack per HST calendar day (the 'YYYYMMDD' HST-timestamp prefix).
+                by_day = {}
+                for fn, hst in zip(cal_df["FILENAME"], cal_df["HST"], strict=True):
+                    by_day.setdefault(str(hst).split(".")[0], []).append(fn)
+                clusters = [
+                    sorted(v, key=self._seconds_since_j2000)
+                    for _, v in sorted(by_day.items())
+                ]
+            else:  # obs_night -- the whole loaded night, one stack spanning midnight
+                clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
 
         clusters = [c for c in clusters if len(c) >= min_file_count]
 

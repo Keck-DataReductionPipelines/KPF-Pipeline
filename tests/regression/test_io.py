@@ -148,10 +148,13 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
 def _cluster(cal_type, mini_db, **kwargs):
     """Cluster a synthetic mini_db through the (instance-method) API.
 
-    build_calibration_stacks reads the handler's carried mini database by default;
-    these logic tests pass a synthetic one via ``mini_db=`` on a bare handler.
+    build_calibration_stacks reads the handler's carried mini database
+    (``self._mini_db``); these logic tests set a synthetic one on a bare handler
+    the same way ``build_mini_database`` would.
     """
-    return FileHandler().build_calibration_stacks(cal_type, mini_db=mini_db, **kwargs)
+    fh = FileHandler()
+    fh._mini_db = mini_db
+    return fh.build_calibration_stacks(cal_type, **kwargs)
 
 
 class TestSecondsSinceJ2000:
@@ -180,7 +183,7 @@ class TestSecondsSinceJ2000:
 
 class TestBuildCalibrationStacks:
     """Clustering depends only on the mini database, so these exercise it with
-    synthetic DataFrames (no files on disk) via the ``mini_db=`` override."""
+    synthetic DataFrames (no files on disk) set on a bare handler."""
 
     def test_two_bias_clusters_returned_separately(self):
         lists = _cluster("bias", _make_mini_db())
