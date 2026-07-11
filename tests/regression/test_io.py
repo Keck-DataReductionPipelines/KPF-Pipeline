@@ -678,13 +678,15 @@ def _write_l0_frame(tmp_path, datecode, obs_id):
 
 
 def _seed_cache(tmp_path, datecode, filenames):
-    """Seed the on-disk mini-db cache CSV with the given FILENAME rows and return
-    its path. Only FILENAME/OBJECT are written -- enough for the guardrail
-    (row count) and cache-hit (FILENAME) assertions."""
+    """Seed the on-disk mini-db cache CSV (the full real schema, one row per
+    filename) and return its path. OBJECT is populated so the row survives the
+    readable-frame clean; the other columns are left blank -- enough for the
+    row-count / freshness / cache-hit (FILENAME) assertions."""
     cache = tmp_path / "vNext" / "mini_db" / f"{datecode}_L0.csv"
     cache.parent.mkdir(parents=True, exist_ok=True)
-    rows = "".join(f"{fn},autocal-bias\n" for fn in filenames)
-    cache.write_text("FILENAME,OBJECT\n" + rows)
+    cols = "FILENAME,TARGNAME,IMTYPE,OBJECT,EXPTIME,ELAPSED,UTC,HST,ISJUNK"
+    rows = "".join(f"{fn},,,autocal-bias,,,,,\n" for fn in filenames)
+    cache.write_text(cols + "\n" + rows)
     return cache
 
 
@@ -710,6 +712,28 @@ class TestMiniDatabaseCache:
         assert list(cached.columns) == list(db.columns)
         assert len(cached) == len(db)
         assert cached["FILENAME"].tolist() == db["FILENAME"].tolist()
+
+    def test_unreadable_frame_recorded_in_cache_not_in_memory(self, tmp_path):
+        # An unreadable frame is omitted from the in-memory db (useless for
+        # stacking) but still recorded in the on-disk cache, so the cache mirrors
+        # the directory and its row-count guardrail treats it as current, not stale.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        _write_l0_frame(tmp_path, "20240405", "KP.20240405.02000.00")
+        corrupt = tmp_path / "L0" / "20240405" / "KP.20240405.03000.00.fits"
+        corrupt.write_bytes(b"not a valid FITS file")
+
+        with pytest.warns(UserWarning, match="Could not read header"):
+            db = fh.build_mini_database("20240405", cache="rw")
+
+        assert len(db) == 2  # in-memory: only the two readable frames
+        cache = tmp_path / "vNext" / "mini_db" / "20240405_L0.csv"
+        assert len(pd.read_csv(cache)) == 3  # on-disk: one row per file present
+
+        # The count guardrail now sees 3 == 3, so the cache reads back as current.
+        cached = fh._read_mini_db_cache("20240405")
+        assert cached is not None and len(cached) == 3
+        # A full read-mode build is a cache hit and still cleans to the readable set.
+        assert len(fh.build_mini_database("20240405", cache="r")) == 2
 
     def test_cache_write_failure_leaves_no_partial_or_temp(self, tmp_path, monkeypatch):
         # The atomic write (temp file + os.replace) cleans up on failure: a to_csv

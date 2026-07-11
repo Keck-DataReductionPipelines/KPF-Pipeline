@@ -126,7 +126,8 @@ class FileHandler:
     def __init__(self, data_dirs):
         self._data_input = data_dirs.get("KPF_DATA_INPUT")
         self._masters_output = data_dirs.get("KPF_MASTERS_OUTPUT")
-        self._mini_db = None  # the loaded night, set by build_mini_database
+        self._mini_db = None  # loaded night's readable frames (build_mini_database)
+        self._full_scan_mini_db = None  # full scan of every file, written to the cache
 
     def _mini_db_cache_path(self, datecode):
         """On-disk mini-database cache path for one night:
@@ -145,9 +146,9 @@ class FileHandler:
 
         * **Count** -- the cache's row count must equal the number of FITS files
           on disk, so a frame added or removed since the cache was written
-          invalidates it. (An unreadable frame is dropped from the scan but still
-          counts on disk, so a persistently-corrupt frame defeats the cache -- an
-          acceptable, rare edge that errs toward rescanning.)
+          invalidates it. The cache records *every* file, including unreadable ones
+          (as header-null rows), so a persistently-corrupt frame no longer skews the
+          count and defeats the cache.
         * **Freshness** -- the cache must be at least as new as every input's
           timestamp: for each file the later of its modification time
           (``st_mtime``, when its contents were written) and its change time
@@ -189,8 +190,12 @@ class FileHandler:
         return cached
 
     def _write_mini_db_cache(self, datecode):
-        """Atomically write the carried mini database (``self._mini_db``) to the
-        on-disk cache CSV for `datecode`, creating the cache directory as needed.
+        """Atomically write the full scan (``self._full_scan_mini_db`` -- one row
+        per file, including unreadable frames) to the on-disk cache CSV for
+        `datecode`, creating the cache directory as needed. Writing the full scan
+        (not the cleaned ``self._mini_db``) keeps the cache a faithful mirror of the
+        L0 directory, so the row-count guardrail in ``_read_mini_db_cache`` stays
+        honest.
 
         pandas' ``to_csv`` truncates the target in place, so a concurrent reader
         could observe an empty, partial, or half-written CSV. Fill a same-dir temp
@@ -204,13 +209,23 @@ class FileHandler:
         fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
         os.close(fd)
         try:
-            self._mini_db.to_csv(tmp, index=False)
+            self._full_scan_mini_db.to_csv(tmp, index=False)
             os.replace(tmp, cache_path)
         except BaseException:
             if os.path.exists(tmp):
                 os.remove(tmp)
             raise
         logger.info("wrote mini database cache to %s", cache_path)
+
+    @staticmethod
+    def _clean_mini_db(full_scan_mini_db):
+        """The readable-frame subset of a full scan: drop rows whose header could not
+        be read (every header column null). Such frames belong in the on-disk cache
+        -- which mirrors the L0 directory -- but are useless for stacking/discovery,
+        so the in-memory ``self._mini_db`` excludes them. Re-indexes the survivors."""
+        return full_scan_mini_db.dropna(
+            subset=_MINI_DB_KEYS[1:], how="all"
+        ).reset_index(drop=True)
 
     def build_mini_database(self, datecode, cache=False):
         """
@@ -250,8 +265,10 @@ class FileHandler:
             (absolute path), TARGNAME, IMTYPE, OBJECT, EXPTIME, ELAPSED; plus
             derived UTC and HST (KPF-format timestamps from the filename, HST =
             UTC-10) and ISJUNK (frame is on the observer junk list -- flagged,
-            not dropped). A missing header key gives None for that column; an
-            unreadable frame is skipped; both warn.
+            not dropped). A missing header key gives None for that column. An
+            unreadable frame is warned and omitted from this DataFrame (useless
+            for stacking), but is still recorded -- with null header columns -- in
+            the on-disk cache, so the cache mirrors the L0 directory exactly.
 
         Raises
         ------
@@ -276,7 +293,8 @@ class FileHandler:
                     "loaded mini database cache from %s",
                     self._mini_db_cache_path(datecode),
                 )
-                self._mini_db = cached
+                self._full_scan_mini_db = cached
+                self._mini_db = self._clean_mini_db(cached)
                 return self._mini_db
 
         data_dir = os.path.join(self._data_input, "L0", datecode)
@@ -295,12 +313,12 @@ class FileHandler:
                 header = fits.getheader(fn, ext=0)
             except Exception as e:
                 warnings.warn(f"Could not read header from {fn}: {e}", stacklevel=2)
-                continue
+                header = None
 
             mini_db["FILENAME"].append(fn)
 
             for k in _MINI_DB_KEYS[1:]:
-                mini_db[k].append(header.get(k, None))
+                mini_db[k].append(header.get(k, None) if header is not None else None)
 
             # UTC is the KPF timestamp; HST is that converted to Hawaii time.
             utc = get_timestamp(fn)
@@ -308,7 +326,8 @@ class FileHandler:
             mini_db["HST"].append(utc_to_hst(utc))
             mini_db["ISJUNK"].append(get_obs_id(fn) in junk)
 
-        self._mini_db = pd.DataFrame(mini_db)
+        self._full_scan_mini_db = pd.DataFrame(mini_db)
+        self._mini_db = self._clean_mini_db(self._full_scan_mini_db)
 
         if write_cache:
             self._write_mini_db_cache(datecode)
