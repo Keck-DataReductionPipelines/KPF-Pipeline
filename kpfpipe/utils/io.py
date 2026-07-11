@@ -3,6 +3,7 @@
 import glob
 import logging
 import os
+import tempfile
 import warnings
 from datetime import datetime
 
@@ -276,8 +277,20 @@ class FileHandler:
 
         if cache:
             cache_path = self._mini_db_cache_path(datecode)
-            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-            self._mini_db.to_csv(cache_path, index=False)
+            cache_dir = os.path.dirname(cache_path)
+            os.makedirs(cache_dir, exist_ok=True)
+            # Write atomically: fill a temp file, then os.replace (atomic on
+            # POSIX) so a concurrent reader sees the old or new CSV, never a
+            # truncated/half-written one -- pandas' to_csv truncates in place.
+            fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
+            os.close(fd)
+            try:
+                self._mini_db.to_csv(tmp, index=False)
+                os.replace(tmp, cache_path)
+            except BaseException:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                raise
             logger.info("wrote mini database cache to %s", cache_path)
 
         return self._mini_db
