@@ -132,10 +132,13 @@ class FileHandler:
         ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv``."""
         return os.path.join(self._data_input, "vNext", "mini_db", f"{datecode}_L0.csv")
 
-    def _validate_mini_db_cache(self, cache_path, file_list, data_dir):
-        """True if the on-disk mini-db cache is trustworthy for the current L0
-        directory, else False (the caller then rescans). Validation only -- the
-        cache is read (loaded) separately by the caller.
+    def _load_mini_db_cache(self, datecode):
+        """The cached mini database for `datecode` as a DataFrame if the on-disk
+        cache is trustworthy for the current L0 directory, else None (the caller
+        then rescans). Reads the cache CSV at most once: the loaded frame is both
+        validated and returned. The cache path, L0 directory, and its FITS file
+        list are all derived from `datecode` plus the instance's ``KPF_DATA_INPUT``
+        root.
 
         Two guardrails protect against a stale cache:
 
@@ -152,19 +155,22 @@ class FileHandler:
           own ``st_mtime`` (its entry list changes when a file is added or
           removed). A same-count swap thus still invalidates the cache.
         """
+        cache_path = self._mini_db_cache_path(datecode)
+        data_dir = os.path.join(self._data_input, "L0", datecode)
+        file_list = sorted(glob.glob(os.path.join(data_dir, "*.fits")))
         if not file_list or not os.path.isfile(cache_path):
-            return False
+            return None
 
-        n_cached = len(pd.read_csv(cache_path))
-        if n_cached != len(file_list):
+        cached = pd.read_csv(cache_path)
+        if len(cached) != len(file_list):
             logger.info(
                 "mini database cache %s is stale (%d cached rows vs %d files on "
                 "disk); rescanning",
                 cache_path,
-                n_cached,
+                len(cached),
                 len(file_list),
             )
-            return False
+            return None
 
         cache_mtime = os.stat(cache_path).st_mtime
         newest_input = os.stat(data_dir).st_mtime
@@ -177,9 +183,9 @@ class FileHandler:
                 "rescanning",
                 cache_path,
             )
-            return False
+            return None
 
-        return True
+        return cached
 
     def build_mini_database(self, datecode, cache=False):
         """
@@ -196,7 +202,7 @@ class FileHandler:
         directory, otherwise the directory is scanned and the result written to
         the cache (directory created as needed) for next time. A cache is current
         only when it passes the count and freshness guardrails in
-        ``_validate_mini_db_cache``; a frame added, removed, replaced, or
+        ``_load_mini_db_cache``; a frame added, removed, replaced, or
         rewritten since the cache was built forces a rescan. With ``cache=False``
         (default) the directory is always scanned and nothing is read from or
         written to disk.
@@ -227,15 +233,18 @@ class FileHandler:
         if self._data_input is None:
             raise ValueError("FileHandler has no KPF_DATA_INPUT configured")
 
+        if cache:
+            cached = self._load_mini_db_cache(datecode)
+            if cached is not None:
+                logger.info(
+                    "loaded mini database cache from %s",
+                    self._mini_db_cache_path(datecode),
+                )
+                self._mini_db = cached
+                return self._mini_db
+
         data_dir = os.path.join(self._data_input, "L0", datecode)
         file_list = sorted(glob.glob(os.path.join(data_dir, "*.fits")))
-
-        cache_path = self._mini_db_cache_path(datecode)
-        if cache and self._validate_mini_db_cache(cache_path, file_list, data_dir):
-            logger.info("loading mini database cache from %s", cache_path)
-            self._mini_db = pd.read_csv(cache_path)
-            return self._mini_db
-
         if not file_list:
             raise ValueError(f"No FITS files found in {data_dir}")
 
@@ -266,6 +275,7 @@ class FileHandler:
         self._mini_db = pd.DataFrame(mini_db)
 
         if cache:
+            cache_path = self._mini_db_cache_path(datecode)
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
             self._mini_db.to_csv(cache_path, index=False)
             logger.info("wrote mini database cache to %s", cache_path)
