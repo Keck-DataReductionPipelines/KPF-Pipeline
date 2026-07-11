@@ -11,7 +11,6 @@ and written to the output data root via the pipeline path helpers.
 import logging
 import os
 
-from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.modules.masters.bias import Bias
 from kpfpipe.modules.masters.dark import Dark
 
@@ -23,14 +22,6 @@ from kpfpipe.utils.kpf_utils import get_obs_id
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
 # would not identify this module in the log (style guide section 6).
 logger = logging.getLogger("kpfpipe.recipe.masters")
-
-
-def _min_stack_size(config, cal_type):
-    """Configured minimum stack size for `cal_type`, from its ``[BIAS]``/``[DARK]``/
-    ``[FLAT]`` config section, falling back to the masters-module default when the
-    section omits it (e.g. thar, which has no dedicated section)."""
-    section = config.get_params([cal_type.upper()])
-    return section.get("min_stack_size", BaseMasterModule._DEFAULTS["min_stack_size"])
 
 
 def main(config, args):
@@ -61,7 +52,7 @@ def main(config, args):
     # Stack the bias frames into a master bias used to remove the detector
     # offset from every science and calibration frame.
     for files in file_handler.build_calibration_stacks(
-        "bias", min_stack_size=_min_stack_size(config, "bias")
+        "bias", min_stack_size=config.get_params(["BIAS"]).get("min_stack_size")
     ):
         bias_path = kpf_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="bias"
@@ -75,7 +66,7 @@ def main(config, args):
     # bias from each dark frame (via _process_frame) before stacking.
     for files in file_handler.build_calibration_stacks(
         "dark",
-        min_stack_size=_min_stack_size(config, "dark"),
+        min_stack_size=config.get_params(["DARK"]).get("min_stack_size"),
         groupby="obs_night",
     ):
         dark_path = kpf_filepath(
@@ -94,9 +85,7 @@ def main(config, args):
 
     # Stack the ThAr exposures into a master wavelength solution, since the
     # emission-line spectrum anchors the per-order wavelength calibration.
-    for files in file_handler.build_calibration_stacks(
-        "thar", min_stack_size=_min_stack_size(config, "thar")
-    ):
+    for files in file_handler.build_calibration_stacks("thar"):
         obs_id = get_obs_id(files[0])
         wls_master_path = kpf_filepath(
             obs_id, "L2", data_root=data_root_masters, master="thar"
