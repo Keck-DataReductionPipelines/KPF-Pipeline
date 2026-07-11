@@ -1030,13 +1030,17 @@ class WLS(BaseMasterModule):
 
         directory = os.path.join(os.path.dirname(master_path), "thar-wls-L2")
         os.makedirs(directory, exist_ok=True)
-        for l2_obj in self._l2_obj_cache:
-            path = os.path.join(directory, f"{l2_obj.obs_id}_thar_L2.fits")
-            if not overwrite and os.path.exists(path):
-                raise FileExistsError(
-                    f"{path} already exists; pass overwrite=True to replace it"
-                )
-            l2_obj.to_fits(path)
+        # These are deliberately non-EPRV diagnostic products; suppress KPF2.to_fits'
+        # EPRV filename-convention warning for the {obs_id}_thar_L2 name.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*EPRV naming convention.*")
+            for l2_obj in self._l2_obj_cache:
+                path = os.path.join(directory, f"{l2_obj.obs_id}_thar_L2.fits")
+                if not overwrite and os.path.exists(path):
+                    raise FileExistsError(
+                        f"{path} already exists; pass overwrite=True to replace it"
+                    )
+                l2_obj.to_fits(path)
         logger.info(
             "wrote %d individual ThAr L2 frames to %s",
             len(self._l2_obj_cache),

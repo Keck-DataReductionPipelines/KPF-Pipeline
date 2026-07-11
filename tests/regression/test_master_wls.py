@@ -4,6 +4,7 @@ Unit tests for the WLS module.
 All sub-module I/O is mocked; no real data or FITS files are required.
 """
 
+import warnings
 from unittest.mock import MagicMock
 
 import h5py
@@ -507,6 +508,25 @@ class TestMakeMasterL2:
         wls.save_reduced_frames(master_path)  # first write; overwrite defaults False
         with pytest.raises(FileExistsError, match="overwrite=True"):
             wls.save_reduced_frames(master_path)
+
+    def test_save_reduced_frames_suppresses_eprv_filename_warning(
+        self, mock_make_master_l2, tmp_path
+    ):
+        # These are deliberately non-EPRV products; KPF2.to_fits warns on the
+        # {obs_id}_thar_L2 name, which save_reduced_frames must silence.
+        class WarningL2:
+            obs_id = "KP.20240101.00000.00"
+
+            def to_fits(self, path):
+                warnings.warn(
+                    "Filename does not follow the EPRV naming convention.", stacklevel=2
+                )
+
+        wls = WLS(FILE_LIST)
+        wls._l2_obj_cache = [WarningL2()]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # any leaked warning fails the test
+            wls.save_reduced_frames(str(tmp_path / "master.fits"), overwrite=True)
 
     def test_save_master_refuses_overwrite_by_default(
         self, mock_make_master_l2, tmp_path
