@@ -397,7 +397,7 @@ class FileHandler:
         self,
         cal_type,
         *,
-        min_file_count=5,
+        min_stack_size=1,
         cluster_gap_seconds=7200,
         groupby="time_of_day",
         exclude_junk=True,
@@ -421,7 +421,7 @@ class FileHandler:
           datecode), spanning HST midnight. Used for darks, whose sparse sequences
           routinely straddle HST midnight and belong in a single nightly stack.
 
-        Every returned stack has at least `min_file_count` files; undersized
+        Every returned stack has at least `min_stack_size` files; undersized
         stacks are dropped, and it raises when none meets the threshold. Reads the
         mini database off the instance, so the recipe never handles the DataFrame
         itself.
@@ -430,8 +430,10 @@ class FileHandler:
         ----------
         cal_type : str
             Calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
-        min_file_count : int, default 5
-            Minimum number of files required per stack.
+        min_stack_size : int, default 1
+            Minimum number of files required per stack; undersized stacks are
+            dropped. The default of 1 keeps every cluster (a no-op filter); the
+            masters recipe passes the configured per-cal-type value.
         cluster_gap_seconds : int, default 7200
             Gap [s] between consecutive frames that splits one session from the
             next. The 2-hour default separates KPF morning vs. evening sessions.
@@ -451,7 +453,7 @@ class FileHandler:
         ValueError
             If `groupby` or `cal_type` is not recognized, if no mini database is
             loaded on the instance, if no calibration frames of the requested type
-            are found, or if no stack meets `min_file_count`.
+            are found, or if no stack meets `min_stack_size`.
         """
         if groupby not in _GROUPBY_MODES:
             raise ValueError(
@@ -482,12 +484,12 @@ class FileHandler:
             else:  # obs_night -- the whole loaded night, one stack spanning midnight
                 clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
 
-        clusters = [c for c in clusters if len(c) >= min_file_count]
+        clusters = [c for c in clusters if len(c) >= min_stack_size]
 
         if not clusters:
             raise ValueError(
                 f"'{cal_type}' groupby={groupby} produced no cluster with at least "
-                f"min_file_count={min_file_count} files"
+                f"min_stack_size={min_stack_size} files"
             )
         # Which frames feed each master is a decision point (DRP-RUN-08).
         logger.info(

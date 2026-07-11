@@ -46,6 +46,7 @@ class BaseMasterModule:
     _DEFAULTS = {
         **DEFAULTS,
         "stack_sigma": 5.0,
+        "min_stack_size": 5,
         "bias": True,
         "dark": True,
         "flat": False,

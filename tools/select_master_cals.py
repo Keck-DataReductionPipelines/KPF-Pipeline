@@ -42,7 +42,7 @@ from kpfpipe.utils.kpf_utils import get_datecode, get_obs_id, get_timestamp, is_
 # bias/thar use the default time_of_day (one stack per morn/eve session).
 _TYPE_KWARGS = {
     "bias": {},
-    "dark": {"min_file_count": 3, "groupby": "obs_night"},
+    "dark": {"min_stack_size": 3, "groupby": "obs_night"},
     "flat": {},
     "thar": {},
 }

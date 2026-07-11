@@ -179,7 +179,7 @@ class TestMasterDarkRegression:
         file_handler.build_mini_database("20240405")
         files = file_handler.build_calibration_stacks(
             "dark",
-            min_file_count=5,
+            min_stack_size=5,
             groupby="obs_night",
         )
         assert len(files) == 1 and len(files[0]) == 5

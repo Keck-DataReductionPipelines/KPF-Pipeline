@@ -125,7 +125,7 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
     """Sparse dark clusters on opposite HST days, split by a >2 h gap.
 
     Mirrors a real sparse-dark night (e.g. 20240806): a pre-midnight group and a
-    post-midnight group, each below the dark min_file_count and separated by both
+    post-midnight group, each below the dark min_stack_size and separated by both
     the gap and HST midnight. Returns (df, before_files, after_files).
     """
     before = [
@@ -202,24 +202,23 @@ class TestBuildCalibrationStacks:
             assert lst == sorted(lst)
 
     def test_raises_when_no_cluster_meets_min(self):
-        # min_file_count=6: both bias clusters (5 files each) fall below and are
+        # min_stack_size=6: both bias clusters (5 files each) fall below and are
         # dropped, leaving nothing → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("bias", _make_mini_db(), min_file_count=6)
+            _cluster("bias", _make_mini_db(), min_stack_size=6)
 
     def test_raises_when_no_frames_found(self):
         with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
             _cluster("flat", _make_mini_db())
 
-    def test_raises_when_only_cluster_below_default_min(self):
-        # dark cluster has only 3 files; default min_file_count=5 → dropped →
-        # raises.
+    def test_raises_when_only_cluster_below_min(self):
+        # dark cluster has only 3 files; min_stack_size=5 → dropped → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("dark", _make_mini_db())
+            _cluster("dark", _make_mini_db(), min_stack_size=5)
 
     def test_drops_small_cluster_keeps_large(self):
         db, _ = _mixed_bias_db()
-        lists = _cluster("bias", db)
+        lists = _cluster("bias", db, min_stack_size=5)
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_A)
 
@@ -231,7 +230,7 @@ class TestBuildCalibrationStacks:
         # time_of_day splits on time gaps alone: frames <gap apart but on opposite
         # sides of HST midnight now share one cluster (there is no midnight split).
         db, before, after = _midnight_bias_db()
-        lists = _cluster("bias", db, min_file_count=5)
+        lists = _cluster("bias", db, min_stack_size=5)
         assert len(lists) == 1
         assert lists[0] == sorted(before + after)
 
@@ -239,7 +238,7 @@ class TestBuildCalibrationStacks:
         # groupby='hst_day' puts each HST calendar day in its own stack, even when
         # the frames are <gap apart across HST midnight.
         db, before, after = _midnight_bias_db()
-        lists = _cluster("bias", db, min_file_count=5, groupby="hst_day")
+        lists = _cluster("bias", db, min_stack_size=5, groupby="hst_day")
         assert len(lists) == 2
         assert lists[0] == sorted(before)
         assert lists[1] == sorted(after)
@@ -248,7 +247,7 @@ class TestBuildCalibrationStacks:
         # groupby='obs_night' groups the whole loaded night into one stack,
         # spanning both a >2 h gap and HST midnight (the 20240806 sparse-dark case).
         db, before, after = _cross_midnight_gap_db()
-        lists = _cluster("dark", db, min_file_count=3, groupby="obs_night")
+        lists = _cluster("dark", db, min_stack_size=3, groupby="obs_night")
         assert len(lists) == 1
         assert lists[0] == sorted(before + after)
 
@@ -299,15 +298,15 @@ class TestBuildCalibrationStacksRealData:
 
     def test_dark_raises_on_undersized_clusters(self, fh):
         # The testdata has two dark clusters of 2 and 3 frames — both below
-        # the default min_file_count=5 and dropped, leaving nothing → raises.
+        # min_stack_size=5 and dropped, leaving nothing → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            fh.build_calibration_stacks("dark")
+            fh.build_calibration_stacks("dark", min_stack_size=5)
 
     def test_dark_obs_night_single_stack(self, fh):
         # The recipe's dark usage: the night's 5 dark frames span two HST days
         # (2 + 3), and groupby='obs_night' groups them into one nightly stack.
         lists = fh.build_calibration_stacks(
-            "dark", min_file_count=3, groupby="obs_night"
+            "dark", min_stack_size=3, groupby="obs_night"
         )
         assert len(lists) == 1
         assert len(lists[0]) == 5
@@ -799,17 +798,17 @@ class TestJunkExclusion:
     def test_exclude_junk_default_drops_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
-        lists = _cluster("bias", db, min_file_count=1)
+        lists = _cluster("bias", db, min_stack_size=1)
         assert junk_fn not in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_false_keeps_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
-        lists = _cluster("bias", db, min_file_count=1, exclude_junk=False)
+        lists = _cluster("bias", db, min_stack_size=1, exclude_junk=False)
         assert junk_fn in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias")).drop(columns="ISJUNK")
         with pytest.raises(KeyError):
-            _cluster("bias", db, min_file_count=1)
+            _cluster("bias", db, min_stack_size=1)

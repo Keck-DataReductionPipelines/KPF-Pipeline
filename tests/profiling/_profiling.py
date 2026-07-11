@@ -222,7 +222,7 @@ def masters_l0_files(imtype):
     file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
     file_handler.build_mini_database(MASTERS_DATECODE)
     if imtype == "dark":
-        kwargs = {"min_file_count": 3, "groupby": "obs_night"}
+        kwargs = {"min_stack_size": 3, "groupby": "obs_night"}
     else:
         kwargs = {"cluster_gap_seconds": MASTERS_CLUSTER_GAP_SECONDS}
     return file_handler.build_calibration_stacks(imtype, **kwargs)[0]

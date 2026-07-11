@@ -13,12 +13,18 @@ chips = ["GREEN", "RED"]
 fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
 [BIAS]
+min_stack_size = 5
+max_stack_size = 20
 stack_sigma = 5.0
 
 [DARK]
+min_stack_size = 3
+max_stack_size = 20
 stack_sigma = 5.0
 
 [FLAT]
+min_stack_size = 5
+max_stack_size = 20
 stack_sigma = 5.0
 
 [WLS]
