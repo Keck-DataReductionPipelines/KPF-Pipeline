@@ -200,10 +200,11 @@ class TestMainExitCode:
             s,
             "warm_mini_db_caches",
             lambda di, dcs, jobs, cache="rw": (
-                warm_args.update(datecodes=dcs, cache=cache) or (0, 0)
+                warm_args.update(data_input=di, datecodes=dcs, cache=cache) or (0, 0)
             ),
         )
         s.main(["--obs_ids", _OID1, _OID2])
+        assert warm_args["data_input"] == "/in"  # resolved from config DATA_DIRS
         assert warm_args["datecodes"] == ["20240405"]
         assert warm_args["cache"] == "rw"
 

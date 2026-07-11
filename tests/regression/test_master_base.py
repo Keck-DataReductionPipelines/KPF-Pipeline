@@ -75,6 +75,26 @@ class TestMasterBaseErrors:
             l1_obj = m._load_frame(fn, cache=False)
         assert l1_obj is None
 
+    def test_load_frame_qc_pass_returns_assembled(self, monkeypatch):
+        # All required QCL0 flags pass -> the frame is assembled and returned
+        # (the gate's pass-through branch, otherwise only exercised in slow tests).
+        m = Dark(FILE_LIST)
+        fn = FILE_LIST[0]
+        qc_result = {kw: (True, "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
+        assembled = object()
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.KPF0.from_fits", lambda fn: object()
+        )
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.QCL0",
+            lambda l0: MagicMock(run=lambda: qc_result),
+        )
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.ImageAssembly",
+            lambda l0: MagicMock(perform=lambda: assembled),
+        )
+        assert m._load_frame(fn, cache=False) is assembled
+
 
 # ---------------------------------------------------------------------------
 # _process_frame: bias subtraction via CalibrationAssociation + ImageProcessing

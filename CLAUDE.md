@@ -329,9 +329,13 @@ up:** `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modu
 `scripts/` (run a recipe many times) ← `tools/` (the CLI interface). So `tools/cli.py`
 imports `scripts.processing.*`, but **the scripts must never import `tools`** — shared
 orchestration helpers live in `scripts/processing/_dispatch.py` (the process-pool
-engine) and `_argparse.py` (the shared argparse parent-parser factories `recipe_and_config_parser`
-[`-r`/`-c`], `data_dirs_parser`, `logging_parser`, `pool_parser`, composed via
-`parents=[…]` so each shared flag is declared once), both `tools`-free. `data_dirs_parser`
+engine), `_argparse.py` (the shared argparse parent-parser factories `recipe_and_config_parser`
+[`-r`/`-c`], `data_dirs_parser`, `logging_parser`, `pool_parser`, `cache_parser` [`--cache`],
+composed via `parents=[…]` so each shared flag is declared once), and `_scan.py` (the
+up-front, parallel-by-datecode L0 mini-db cache **pre-scan** the orchestrators run before
+fan-out — `warm_mini_db_caches`/`scan_datecodes`/`scan_night_to_cache`, gated by `--cache`).
+`_scan.py` is deliberately where the lone `kpfpipe.utils.io` (`FileHandler`) import lives, so
+`_dispatch.py` stays io-free; all three are `tools`-free. `data_dirs_parser`
 also carries two convenience shortcuts each of the four processing scripts (reduce/masters/
 science/timeseries) accepts: **`--input_dir`** is a plain argparse alias of `--kpf_data_input`,
 and **`--output_dir`** is a fan-out — `_argparse.resolve_dir_shortcuts(args)` (called post-parse

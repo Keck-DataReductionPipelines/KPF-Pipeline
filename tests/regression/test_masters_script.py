@@ -260,7 +260,9 @@ class TestMainExitCode:
 
         def _warm(data_input, datecodes, jobs, cache="rw"):
             order.append("warm")
-            warm_args.update(datecodes=datecodes, jobs=jobs, cache=cache)
+            warm_args.update(
+                data_input=data_input, datecodes=datecodes, jobs=jobs, cache=cache
+            )
             return (len(datecodes), 0)
 
         self._patch(m, monkeypatch, failed=[])
@@ -270,6 +272,7 @@ class TestMainExitCode:
         )
         m.main(["--dates", "20240405"])
         assert order == ["warm", "run_stage"]  # pre-scan precedes fan-out
+        assert warm_args["data_input"] == "/in"  # resolved L0 input root
         assert warm_args["datecodes"] == ["20240405"]
         assert warm_args["jobs"] == m._default_masters_jobs()
         assert warm_args["cache"] == "rw"  # masters default: warm up front

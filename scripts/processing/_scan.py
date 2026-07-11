@@ -64,14 +64,16 @@ def scan_datecodes(datecodes, jobs, worker, *, label="scanning"):
 def warm_mini_db_caches(data_input, datecodes, jobs, cache="rw"):
     """Warm the mini-database cache for every datecode, up front and in parallel.
 
-    The masters/science entry point: writes each night's cache so the fan-out's
-    ``reduce`` subprocesses read it read-only. A read-only `cache` mode (no ``"w"``)
-    warms nothing, so the pre-scan is skipped entirely and ``(0, len(datecodes))``
-    is returned. Otherwise, side-effect only (DataFrames discarded); returns
-    ``(n_written, n_skipped)``. Fail-soft -- an empty night is skipped and any
-    pool-level failure is swallowed (returns ``(0, len(datecodes))``) so warming
-    never aborts the batch; each reduction falls back to an in-process scan on a
-    miss.
+    The masters/science entry point: leaves each night with a current on-disk cache
+    the fan-out's ``reduce`` subprocesses read read-only. A read-only `cache` mode
+    (no ``"w"``) warms nothing, so the pre-scan is skipped entirely and
+    ``(0, len(datecodes))`` is returned. Otherwise, side-effect only (DataFrames
+    discarded); returns ``(n_cached, n_skipped)`` where `n_cached` counts the nights
+    left with a usable cache (freshly written *or* already current -- the per-night
+    log distinguishes "wrote" from "loaded"). Fail-soft -- an empty night is skipped
+    and any pool-level failure is swallowed (returns ``(0, len(datecodes))``) so
+    warming never aborts the batch; each reduction falls back to an in-process scan
+    on a miss.
     """
     if "w" not in cache:
         logger.info("cache=%s: read-only, skipping mini-db pre-scan", cache)
@@ -88,7 +90,7 @@ def warm_mini_db_caches(data_input, datecodes, jobs, cache="rw"):
         logger.warning("mini-db pre-scan failed (%s); reduces will scan in-process", e)
         return 0, len(datecodes)
 
-    n_written = sum(1 for ok in flags if ok)
-    n_skipped = len(flags) - n_written
-    logger.info("pre-scan done: %d night(s) cached, %d skipped", n_written, n_skipped)
-    return n_written, n_skipped
+    n_cached = sum(1 for ok in flags if ok)
+    n_skipped = len(flags) - n_cached
+    logger.info("pre-scan done: %d night(s) cached, %d skipped", n_cached, n_skipped)
+    return n_cached, n_skipped

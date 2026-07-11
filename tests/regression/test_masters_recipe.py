@@ -32,6 +32,39 @@ def _load_masters_recipe():
 
 
 # ---------------------------------------------------------------------------
+# _min_stack_size: per-cal-type resolver (config section -> module default)
+# ---------------------------------------------------------------------------
+
+
+class TestMinStackSize:
+    """The recipe resolves min_stack_size from each cal_type's config section,
+    falling back to BaseMasterModule._DEFAULTS when the section omits it."""
+
+    @pytest.fixture(scope="class")
+    def recipe(self):
+        return _load_masters_recipe()
+
+    @pytest.fixture(scope="class")
+    def config(self):
+        return ConfigHandler(str(MASTERS_CONFIG_PATH))
+
+    def test_reads_bias_section(self, recipe, config):
+        assert recipe._min_stack_size(config, "bias") == 5
+
+    def test_reads_dark_section(self, recipe, config):
+        assert recipe._min_stack_size(config, "dark") == 3
+
+    def test_falls_back_when_section_absent(self, recipe, config):
+        # thar has no [THAR] config section -> the masters-module default.
+        from kpfpipe.modules.masters.base import BaseMasterModule
+
+        assert (
+            recipe._min_stack_size(config, "thar")
+            == BaseMasterModule._DEFAULTS["min_stack_size"]
+        )
+
+
+# ---------------------------------------------------------------------------
 # Masters recipe integration (real L0 data from tests/testdata/)
 # ---------------------------------------------------------------------------
 

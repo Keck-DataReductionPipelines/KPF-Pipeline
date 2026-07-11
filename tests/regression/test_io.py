@@ -222,6 +222,15 @@ class TestBuildCalibrationStacks:
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_A)
 
+    def test_default_min_stack_size_is_noop(self):
+        # The default min_stack_size=1 is a no-op filter: a lone 2-frame cluster
+        # survives with no explicit threshold (distinguishing it from any nonzero
+        # default that would drop it).
+        db = _mini_db(_rows(_BIAS_SMALL, "autocal-bias", "Bias"))
+        lists = _cluster("bias", db)
+        assert len(lists) == 1
+        assert lists[0] == sorted(_BIAS_SMALL)
+
     def test_invalid_groupby_raises(self):
         with pytest.raises(ValueError, match="groupby must be one of"):
             _cluster("bias", _make_mini_db(), groupby="bogus")
@@ -701,6 +710,22 @@ class TestMiniDatabaseCache:
         assert list(cached.columns) == list(db.columns)
         assert len(cached) == len(db)
         assert cached["FILENAME"].tolist() == db["FILENAME"].tolist()
+
+    def test_cache_write_failure_leaves_no_partial_or_temp(self, tmp_path, monkeypatch):
+        # The atomic write (temp file + os.replace) cleans up on failure: a to_csv
+        # error re-raises, leaving no partial cache CSV and no orphaned .tmp file.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+
+        def _boom(self, *a, **k):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(pd.DataFrame, "to_csv", _boom)
+        with pytest.raises(OSError, match="disk full"):
+            fh.build_mini_database("20240405", cache="w")
+
+        cache_dir = tmp_path / "vNext" / "mini_db"
+        assert not (cache_dir / "20240405_L0.csv").exists()  # no partial cache
+        assert list(cache_dir.glob("*.tmp")) == []  # temp file removed
 
     def test_cache_read_reads_current_cache_without_scanning(self, tmp_path):
         # A current cache (row count matches disk, newer than every input) is
