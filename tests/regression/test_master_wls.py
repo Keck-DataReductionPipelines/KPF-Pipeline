@@ -15,6 +15,7 @@ import kpfpipe.modules.masters.base as base_module
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
+from kpfpipe.utils.kpf_utils import get_obs_id
 
 from ._dtype_policy import WAVE, assert_dtype, assert_roundtrip_dtype
 
@@ -35,7 +36,11 @@ class MockL1:
 
 
 class MockL2:
-    pass
+    def __init__(self, obs_id=None):
+        self.obs_id = obs_id
+
+    def to_fits(self, path):
+        open(path, "w").close()
 
 
 def _linelist_df(chip, norder, waves):
@@ -195,11 +200,13 @@ def mock_make_master_l2(monkeypatch):
     without touching disk or real spectra. _compute_wls_from_stack returns
     synthetic W and coefficient arrays with chip-correct shapes.
     """
-    monkeypatch.setattr(
-        WLS, "_load_frame", lambda self, fn, cache=False, **kwargs: MockL1()
-    )
+    # Thread each source filename through as the opaque L1 token so the
+    # extracted L2 stub carries that frame's obs_id (drives per-frame naming).
+    monkeypatch.setattr(WLS, "_load_frame", lambda self, fn, cache=False, **kwargs: fn)
     monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kwargs: l1)
-    monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kwargs: MockL2())
+    monkeypatch.setattr(
+        WLS, "_extract_frame", lambda self, l1, **kwargs: MockL2(get_obs_id(l1))
+    )
 
     def mock_compute(
         self,
@@ -470,6 +477,36 @@ class TestMakeMasterL2:
         master_path = tmp_path / "nested" / "subdir" / "master.fits"
         wls.save_master("L2", str(master_path))
         assert master_path.exists()
+
+    def test_master_path_writes_per_frame_thar_l2(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        master_path = tmp_path / "masters" / "KP.20240101.00000.00_master_thar_L2.fits"
+        wls.make_master_l2(master_path=str(master_path))
+
+        thar_dir = master_path.parent / "thar-wls-L2"
+        written = sorted(p.name for p in thar_dir.iterdir())
+        expected = sorted(f"{get_obs_id(fn)}_thar_L2.fits" for fn in FILE_LIST)
+        assert written == expected
+
+    def test_no_master_path_writes_no_per_frame_thar_l2(
+        self, mock_make_master_l2, tmp_path
+    ):
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2()  # no master_path
+        assert not (tmp_path / "thar-wls-L2").exists()
+
+    def test_save_reduced_frames_before_make_raises(self, tmp_path):
+        wls = WLS(FILE_LIST)
+        with pytest.raises(RuntimeError, match="run make_master_l2"):
+            wls.save_reduced_frames(str(tmp_path / "master.fits"))
+
+    def test_save_reduced_frames_refuses_overwrite(self, mock_make_master_l2, tmp_path):
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2()  # populates _l2_obj_cache, writes nothing
+        master_path = str(tmp_path / "master.fits")
+        wls.save_reduced_frames(master_path)  # first write; overwrite defaults False
+        with pytest.raises(FileExistsError, match="overwrite=True"):
+            wls.save_reduced_frames(master_path)
 
     def test_save_master_refuses_overwrite_by_default(
         self, mock_make_master_l2, tmp_path

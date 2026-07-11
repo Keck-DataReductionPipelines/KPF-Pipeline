@@ -853,7 +853,9 @@ class WLS(BaseMasterModule):
             `dark="/path/master_dark.fits"` uses a specific master.
         master_path : str, optional
             If provided, calls `self.save_master('L2', master_path)` at
-            the end to persist the master L2 to a FITS file at this path.
+            the end to persist the master L2 to a FITS file at this path,
+            and writes each processed ThAr frame's L2 to a `thar-wls-L2/`
+            sidecar directory beside it via `save_reduced_frames()`.
         diagnostics_path : str, optional
             If provided, calls `self.save_diagnostics(diagnostics_path)`
             at the end to persist the per-frame coefficient and line stacks
@@ -951,6 +953,9 @@ class WLS(BaseMasterModule):
         if diagnostics_path is not None:
             self.save_diagnostics(diagnostics_path)
 
+        if master_path is not None:
+            self.save_reduced_frames(master_path, overwrite=True)
+
         self._track_info()
         logger.info("summary:\n%s", self._info)
 
@@ -993,6 +998,50 @@ class WLS(BaseMasterModule):
                         else:
                             frame_group.create_dataset(key, data=arr)
         logger.info("wrote WLS diagnostics to %s", path)
+
+    def save_reduced_frames(self, master_path, *, overwrite=False):
+        """
+        Write each processed ThAr frame's L2 to a `thar-wls-L2/` sidecar
+        directory beside `master_path`, as `{obs_id}_thar_L2.fits`.
+
+        Persists the per-frame L2 objects cached by make_master_l2() (every
+        frame that loaded, processed, and extracted), for follow-up ThAr
+        line/WLS-stability analysis.
+
+        Parameters
+        ----------
+        master_path : str
+            The master L2 output path; its directory anchors the
+            `thar-wls-L2/` sidecar directory.
+        overwrite : bool, optional
+            If False (default), refuse to clobber an existing per-frame file
+            and raise FileExistsError. If True, replace any existing file.
+
+        Raises
+        ------
+        RuntimeError
+            If make_master_l2() has not been run yet, or raised before
+            extracting any frame.
+        FileExistsError
+            If a per-frame file already exists and `overwrite` is False.
+        """
+        if not self._l2_obj_cache:
+            raise RuntimeError("No frames available; run make_master_l2() first")
+
+        directory = os.path.join(os.path.dirname(master_path), "thar-wls-L2")
+        os.makedirs(directory, exist_ok=True)
+        for l2_obj in self._l2_obj_cache:
+            path = os.path.join(directory, f"{l2_obj.obs_id}_thar_L2.fits")
+            if not overwrite and os.path.exists(path):
+                raise FileExistsError(
+                    f"{path} already exists; pass overwrite=True to replace it"
+                )
+            l2_obj.to_fits(path)
+        logger.info(
+            "wrote %d individual ThAr L2 frames to %s",
+            len(self._l2_obj_cache),
+            directory,
+        )
 
     def _track_info(self):
         """Build and cache the info() summary text from _stack_info."""
