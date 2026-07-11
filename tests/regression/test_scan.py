@@ -54,6 +54,16 @@ class TestScanNightToCache:
         assert len(df) == 2
         assert _cache_path(str(tmp_path), "20240101").is_file()  # cache="rw" wrote it
 
+    def test_read_only_mode_does_not_write(self, tmp_path):
+        # cache="r" scans in-process but writes no cache CSV (recipes read the
+        # cache; only the scripts layer writes it).
+        _write_l0(str(tmp_path), "20240101", 3600)
+
+        df = _scan.scan_night_to_cache(str(tmp_path), "20240101", cache="r")
+
+        assert df is not None and len(df) == 1
+        assert not _cache_path(str(tmp_path), "20240101").exists()
+
     def test_empty_night_returns_none(self, tmp_path):
         # A datecode dir with no FITS files -> ValueError inside build_mini_database,
         # swallowed here: returns None, no cache written, no raise.
@@ -118,6 +128,21 @@ class TestWarmMiniDbCaches:
         assert (written, skipped) == (2, 0)
         for dc in nights:
             assert _cache_path(str(tmp_path), dc).is_file()
+
+    def test_read_only_mode_skips_prescan(self, tmp_path):
+        # A read-only mode warms nothing: no cache is written and every night is
+        # reported skipped, without even scanning.
+        nights = ["20240101", "20240102"]
+        for dc in nights:
+            _write_l0(str(tmp_path), dc, 3600)
+
+        written, skipped = _scan.warm_mini_db_caches(
+            str(tmp_path), nights, jobs=2, cache="r"
+        )
+
+        assert (written, skipped) == (0, 2)
+        for dc in nights:
+            assert not _cache_path(str(tmp_path), dc).exists()
 
     def test_empty_night_counted_skipped(self, tmp_path):
         _write_l0(str(tmp_path), "20240101", 3600)  # good

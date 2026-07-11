@@ -192,16 +192,20 @@ class TestMainExitCode:
 
     def test_derives_datecodes_for_prescan(self, s, monkeypatch):
         # The pre-scan gets the unique-sorted nights the frames span, not the raw
-        # obs_ids: two 20240405 frames collapse to one datecode.
+        # obs_ids: two 20240405 frames collapse to one datecode. It warms up front
+        # (the science default cache="rw").
         warm_args = {}
         self._patch(s, monkeypatch, failed=[])
         monkeypatch.setattr(
             s,
             "warm_mini_db_caches",
-            lambda di, dcs, jobs: warm_args.update(datecodes=dcs) or (0, 0),
+            lambda di, dcs, jobs, cache="rw": (
+                warm_args.update(datecodes=dcs, cache=cache) or (0, 0)
+            ),
         )
         s.main(["--obs_ids", _OID1, _OID2])
         assert warm_args["datecodes"] == ["20240405"]
+        assert warm_args["cache"] == "rw"
 
     def test_exits_zero_when_all_reduced(self, s, monkeypatch):
         self._patch(s, monkeypatch, failed=[])

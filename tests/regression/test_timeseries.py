@@ -347,6 +347,10 @@ class TestMainDispatch:
         assert ts.DEFAULT_MASTERS_CONFIG in calls[0]
         assert ts.DEFAULT_SCIENCE_RECIPE in calls[1]
         assert ts.DEFAULT_SCIENCE_CONFIG in calls[1]
+        # Discovery is the sole mini-db writer; both launched stages are forced
+        # read-only (--cache r) so they don't redundantly re-warm the caches.
+        for stage in (calls[0], calls[1]):
+            assert stage[stage.index("--cache") + 1] == "r"
         # Plot stage: the discovered frames (no rescan), reading from the science
         # output root, writing to its default {KPF_SCIENCE_OUTPUT}/QLP/timeseries.
         assert "scripts.plots.plot_timeseries" in calls[2]

@@ -22,18 +22,19 @@ from kpfpipe.utils.io import FileHandler
 logger = logging.getLogger(__name__)
 
 
-def scan_night_to_cache(data_input, datecode):
-    """Scan one night's L0 headers and (re)write its mini-database cache.
+def scan_night_to_cache(data_input, datecode, cache="rw"):
+    """Scan one night's L0 headers under the given mini-database `cache` mode.
 
     Builds a fresh ``FileHandler`` for `datecode` and calls
-    ``build_mini_database(datecode, cache="rw")`` (reuse a current cache, else
-    rescan and write). Returns the scanned ``DataFrame``, or ``None`` for an
-    empty/absent night (which ``build_mini_database`` signals with ``ValueError`` --
-    warned and skipped, not fatal); any other error propagates.
+    ``build_mini_database(datecode, cache=cache)`` -- with the default ``"rw"``,
+    reuse a current cache else rescan and write. Returns the scanned ``DataFrame``,
+    or ``None`` for an empty/absent night (which ``build_mini_database`` signals
+    with ``ValueError`` -- warned and skipped, not fatal); any other error
+    propagates.
     """
     file_handler = FileHandler({"KPF_DATA_INPUT": data_input})
     try:
-        return file_handler.build_mini_database(datecode, cache="rw")
+        return file_handler.build_mini_database(datecode, cache=cache)
     except ValueError as e:
         logger.warning("  skipping night %s: %s", datecode, e)
         return None
@@ -60,19 +61,24 @@ def scan_datecodes(datecodes, jobs, worker, *, label="scanning"):
     return results
 
 
-def warm_mini_db_caches(data_input, datecodes, jobs):
+def warm_mini_db_caches(data_input, datecodes, jobs, cache="rw"):
     """Warm the mini-database cache for every datecode, up front and in parallel.
 
     The masters/science entry point: writes each night's cache so the fan-out's
-    ``reduce`` subprocesses read it read-only. Side-effect only (DataFrames
-    discarded); returns ``(n_written, n_skipped)``. Fail-soft -- an empty night is
-    skipped and any pool-level failure is swallowed (returns ``(0, len(datecodes))``)
-    so warming never aborts the batch; each reduction falls back to an in-process
-    scan on a miss.
+    ``reduce`` subprocesses read it read-only. A read-only `cache` mode (no ``"w"``)
+    warms nothing, so the pre-scan is skipped entirely and ``(0, len(datecodes))``
+    is returned. Otherwise, side-effect only (DataFrames discarded); returns
+    ``(n_written, n_skipped)``. Fail-soft -- an empty night is skipped and any
+    pool-level failure is swallowed (returns ``(0, len(datecodes))``) so warming
+    never aborts the batch; each reduction falls back to an in-process scan on a
+    miss.
     """
+    if "w" not in cache:
+        logger.info("cache=%s: read-only, skipping mini-db pre-scan", cache)
+        return 0, len(datecodes)
 
     def _worker(dc):
-        df = scan_night_to_cache(data_input, dc)
+        df = scan_night_to_cache(data_input, dc, cache=cache)
         return (df is not None, "" if df is not None else " (empty; skipped)")
 
     logger.info("pre-scanning L0 mini-db caches for %d night(s)...", len(datecodes))

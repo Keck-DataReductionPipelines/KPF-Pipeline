@@ -258,9 +258,9 @@ class TestMainExitCode:
         order = []
         warm_args = {}
 
-        def _warm(data_input, datecodes, jobs):
+        def _warm(data_input, datecodes, jobs, cache="rw"):
             order.append("warm")
-            warm_args.update(datecodes=datecodes, jobs=jobs)
+            warm_args.update(datecodes=datecodes, jobs=jobs, cache=cache)
             return (len(datecodes), 0)
 
         self._patch(m, monkeypatch, failed=[])
@@ -272,6 +272,7 @@ class TestMainExitCode:
         assert order == ["warm", "run_stage"]  # pre-scan precedes fan-out
         assert warm_args["datecodes"] == ["20240405"]
         assert warm_args["jobs"] == m._default_masters_jobs()
+        assert warm_args["cache"] == "rw"  # masters default: warm up front
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
         # A missing log_dir is fatal before any fan-out (DRP-RUN-07).

@@ -15,7 +15,9 @@ The range form enumerates the datecode dirs present under ``{KPF_DATA_INPUT}/L0`
 within [START, END].
 
 Builds run in a bounded process pool. The L0 mini-database caches are warmed up
-front by a parallel per-datecode pre-scan; the first night then runs alone as a
+front by a parallel per-datecode pre-scan (``--cache``, ``rw`` by default; ``r``
+skips the pre-scan and leaves each reduce to read-only); the first night then runs
+alone as a
 canary to warm the *other* shared caches (barycorrpy leap-seconds, astropy IERS,
 matplotlib fonts, bytecode) before the rest fan out. The run is fail-soft (a night
 that fails to build is reported and the others continue) but exits nonzero if any
@@ -34,6 +36,7 @@ from kpfpipe.utils.kpf_utils import is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
 from scripts.processing._argparse import (
+    cache_parser,
     data_dirs_parser,
     logging_parser,
     pool_parser,
@@ -83,6 +86,7 @@ def parse_args(argv=None):
             data_dirs_parser(science_output=False),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
+            cache_parser(default="rw"),
         ],
     )
     ap.add_argument(
@@ -234,8 +238,9 @@ def main(argv=None):
         "building masters for %d night(s): %s", len(datecodes), ", ".join(datecodes)
     )
 
-    # Warm the L0 mini-db caches up front, one thread per night
-    warm_mini_db_caches(data_input, datecodes, args.jobs)
+    # Warm the L0 mini-db caches up front, one thread per night (--cache, rw
+    # default; --cache r skips the pre-scan and leaves reduces to read-only).
+    warm_mini_db_caches(data_input, datecodes, args.jobs, cache=args.cache)
 
     tasks = [
         _cli_task(dc, forward, config=args.config, recipe=args.recipe)

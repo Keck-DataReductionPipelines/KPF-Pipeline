@@ -164,7 +164,7 @@ class FileHandler:
 
         cached = pd.read_csv(cache_path)
         if len(cached) != len(file_list):
-            logger.info(
+            logger.warning(
                 "mini database cache %s is stale (%d cached rows vs %d files on "
                 "disk); rescanning",
                 cache_path,
@@ -179,7 +179,7 @@ class FileHandler:
             st = os.stat(fn)
             newest_input = max(newest_input, st.st_mtime, st.st_ctime)
         if cache_mtime < newest_input:
-            logger.info(
+            logger.warning(
                 "mini database cache %s is out of date (older than an L0 input); "
                 "rescanning",
                 cache_path,

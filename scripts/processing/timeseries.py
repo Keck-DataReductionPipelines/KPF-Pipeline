@@ -17,6 +17,10 @@ one ``reduce`` per unit, and the standalone plotter), so the robust fan-out,
 timeout, and interrupt handling live in the orchestrators. The plotter is handed
 the already-discovered obs_ids, so it does no second scan.
 
+Discovery doubles as the sole L0 mini-db cache warm (``--cache``, ``rw`` by
+default); the masters and science stages it launches are told ``--cache r`` so they
+read those caches rather than redundantly re-warming them.
+
 All three stages run by default; ``--no-masters`` / ``--no-science`` / ``--no-plots``
 skip any (discovery always runs). The stages are fail-soft and independent: every
 discovered frame is handed to science regardless of the masters result (a frame
@@ -46,6 +50,7 @@ from scripts.processing import (
     DEFAULT_SCIENCE_RECIPE,
 )
 from scripts.processing._argparse import (
+    cache_parser,
     data_dirs_parser,
     logging_parser,
     pool_parser,
@@ -75,6 +80,7 @@ def parse_args(argv=None):
             data_dirs_parser(science_output=True),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
+            cache_parser(default="rw"),
         ],
     )
     ap.add_argument(
@@ -157,15 +163,17 @@ def parse_args(argv=None):
     return resolve_dir_shortcuts(args)
 
 
-def discover_science_obs_ids(data_input, target, start, end, jobs):
+def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     """Raw science obs_ids for `target` over [start, end], from the L0 tree.
 
     Scans each night (datecode dir) under {data_input}/L0 via the shared
-    ``scan_night_to_cache`` (cache="rw": reuse the night's on-disk CSV when present,
-    else write it), keeping frames whose IMTYPE is 'Object' and OBJECT matches
-    `target`. Non-datecode entries are skipped with a note; observer-flagged junk
-    frames (the ISJUNK column) are dropped. Exits loudly when the tree is missing or
-    nothing matches.
+    ``scan_night_to_cache`` under the given `cache` mode (``"rw"`` by default: reuse
+    the night's on-disk CSV when present, else write it), keeping frames whose
+    IMTYPE is 'Object' and OBJECT matches `target`. This discovery scan is the sole
+    mini-db writer in the timeseries flow -- the masters/science stages it launches
+    are told ``--cache r`` (see ``main``). Non-datecode entries are skipped with a
+    note; observer-flagged junk frames (the ISJUNK column) are dropped. Exits loudly
+    when the tree is missing or nothing matches.
     """
     l0_root = os.path.join(data_input, "L0")
     if not os.path.isdir(l0_root):
@@ -189,7 +197,7 @@ def discover_science_obs_ids(data_input, target, start, end, jobs):
         sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
 
     def _scan_night(dc):
-        df = scan_night_to_cache(data_input, dc)
+        df = scan_night_to_cache(data_input, dc, cache=cache)
         if df is None:  # empty/absent night -- already warned, skip it
             return [], ""
         is_object = df["IMTYPE"].astype(str).str.strip() == "Object"
@@ -271,6 +279,9 @@ def main(argv=None):
         if value:
             common_forward += [flag, value]
     common_forward += ["--job_timeout", str(args.job_timeout)]
+    # Discovery above is the sole mini-db writer; force both launched stages
+    # read-only so they don't redundantly re-warm the caches it just wrote.
+    common_forward += ["--cache", "r"]
 
     # --jobs sizes only the science fan-out: forwarding a large --jobs to masters
     # would defeat its fixed _MASTERS_JOBS safety cap (see _dispatch.py), so --jobs
@@ -294,7 +305,7 @@ def main(argv=None):
     # Steps 1-2: discover the target's science frames -> the nights they span.
     scan_workers = args.jobs or _default_science_jobs()
     obs_ids = discover_science_obs_ids(
-        data_input, args.target, start, end, scan_workers
+        data_input, args.target, start, end, scan_workers, cache=args.cache
     )
     datecodes = sorted({get_datecode(o) for o in obs_ids})
     logger.info(
