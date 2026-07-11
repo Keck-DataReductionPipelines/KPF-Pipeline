@@ -44,11 +44,10 @@ def main(config, args):
         raise SystemExit(f"L0 data directory not found: {l0_dir}")
 
     # Scan the night's L0 headers once; the handler carries the mini database
-    # across the per-cal-type build_calibration_stacks calls below. cache="rw"
-    # reuses the on-disk mini-database CSV when present, else writes it after the
-    # scan so re-runs of the night skip the header scan entirely.
+    # across the per-cal-type build_calibration_stacks calls below. cache="r"
+    # reuses the on-disk mini-database CSV when present.
     file_handler = FileHandler(data_dirs)
-    file_handler.build_mini_database(datecode, cache="rw")
+    file_handler.build_mini_database(datecode, cache="r")
 
     # Stack the bias frames into a master bias used to remove the detector
     # offset from every science and calibration frame.

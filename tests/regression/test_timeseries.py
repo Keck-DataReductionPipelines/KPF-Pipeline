@@ -233,6 +233,16 @@ class TestDiscoverScienceObsIds:
         assert got == sorted(expected)
         assert len(got) == len(set(got)) == 24  # no duplicates, none dropped
 
+    def test_discovery_writes_mini_db_cache(self, ts, tmp_path):
+        # Discovery scans cache="rw" through the shared primitive, so it still
+        # writes each night's on-disk CSV as a side effect.
+        self._build_tree(str(tmp_path), ["20240101"], per_night=2)
+        ts.discover_science_obs_ids(
+            str(tmp_path), "10700", "20240101", "20240131", jobs=2
+        )
+        cache = Path(tmp_path) / "vNext" / "mini_db" / "20240101_L0.csv"
+        assert cache.is_file()
+
     def test_matches_serial_result(self, ts, tmp_path):
         # The discovery is deterministic: jobs=8 equals jobs=1.
         nights = ["20240101", "20240102", "20240103", "20240104"]

@@ -224,6 +224,7 @@ class TestMainExitCode:
         monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
         monkeypatch.setattr(m, "setup_batch_logging", lambda *a, **k: "/l/x.log")
         monkeypatch.setattr(m, "resolve_datecodes", lambda args, di: ["20240405"])
+        monkeypatch.setattr(m, "warm_mini_db_caches", lambda *a, **k: (0, 0))
 
         def _fake_run_stage(*a, **k):
             if calls is not None:
@@ -250,6 +251,27 @@ class TestMainExitCode:
         m.main(["--dates", "20240405"])
         assert calls[0]["launch_interval"] == m._LAUNCH_INTERVAL
         assert m._LAUNCH_INTERVAL > 0
+
+    def test_prescans_before_fan_out(self, m, monkeypatch):
+        # The mini-db caches are warmed up front (parallel per-datecode) before the
+        # reduces fan out, with the resolved datecodes and the pool size.
+        order = []
+        warm_args = {}
+
+        def _warm(data_input, datecodes, jobs):
+            order.append("warm")
+            warm_args.update(datecodes=datecodes, jobs=jobs)
+            return (len(datecodes), 0)
+
+        self._patch(m, monkeypatch, failed=[])
+        monkeypatch.setattr(m, "warm_mini_db_caches", _warm)
+        monkeypatch.setattr(
+            m, "run_stage", lambda *a, **k: order.append("run_stage") or set()
+        )
+        m.main(["--dates", "20240405"])
+        assert order == ["warm", "run_stage"]  # pre-scan precedes fan-out
+        assert warm_args["datecodes"] == ["20240405"]
+        assert warm_args["jobs"] == m._default_masters_jobs()
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
         # A missing log_dir is fatal before any fan-out (DRP-RUN-07).

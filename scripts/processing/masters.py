@@ -14,10 +14,12 @@ which nights to build, via two mutually exclusive input forms:
 The range form enumerates the datecode dirs present under ``{KPF_DATA_INPUT}/L0``
 within [START, END].
 
-Builds run in a bounded process pool: the first night runs alone as a canary to
-warm the shared on-disk caches, then the rest fan out. The run is fail-soft (a
-night that fails to build is reported and the others continue) but exits nonzero
-if any night failed.
+Builds run in a bounded process pool. The L0 mini-database caches are warmed up
+front by a parallel per-datecode pre-scan; the first night then runs alone as a
+canary to warm the *other* shared caches (barycorrpy leap-seconds, astropy IERS,
+matplotlib fonts, bytecode) before the rest fan out. The run is fail-soft (a night
+that fails to build is reported and the others continue) but exits nonzero if any
+night failed.
 """
 
 import argparse
@@ -44,6 +46,7 @@ from scripts.processing._dispatch import (
     configure_runtime,
     run_stage,
 )
+from scripts.processing._scan import warm_mini_db_caches
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +233,9 @@ def main(argv=None):
     logger.info(
         "building masters for %d night(s): %s", len(datecodes), ", ".join(datecodes)
     )
+
+    # Warm the L0 mini-db caches up front, one thread per night
+    warm_mini_db_caches(data_input, datecodes, args.jobs)
 
     tasks = [
         _cli_task(dc, forward, config=args.config, recipe=args.recipe)
