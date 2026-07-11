@@ -194,7 +194,7 @@ def discover_science_obs_ids(data_input, target, start, end, jobs):
     """Raw science obs_ids for `target` over [start, end], from the L0 tree.
 
     Scans each night (datecode dir) under {data_input}/L0 via
-    FileHandler.build_mini_database (cache=True: reuse the night's on-disk CSV when
+    FileHandler.build_mini_database (cache="rw": reuse the night's on-disk CSV when
     present, else write it), keeping frames whose IMTYPE is 'Object' and OBJECT
     matches `target`. Non-datecode entries are skipped with a note; observer-flagged
     junk frames (the ISJUNK column) are dropped. Exits loudly when the tree is
@@ -226,7 +226,7 @@ def discover_science_obs_ids(data_input, target, start, end, jobs):
         # self._mini_db, so one instance across these pooled threads would race.
         file_handler = FileHandler({"KPF_DATA_INPUT": data_input})
         try:
-            df = file_handler.build_mini_database(dc, cache=True)
+            df = file_handler.build_mini_database(dc, cache="rw")
         except ValueError as e:
             # e.g. a datecode dir with no FITS files -- skip it, don't abort.
             logger.warning("  skipping night %s: %s", dc, e)

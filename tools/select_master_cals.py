@@ -103,7 +103,7 @@ def main():
     all_ids = []
     for dc in datecodes:
         try:
-            db = file_handler.build_mini_database(dc, cache=True)
+            db = file_handler.build_mini_database(dc, cache="rw")
         except ValueError as e:
             print(f"{dc}: {e} -- skipped", file=sys.stderr)
             continue

@@ -133,7 +133,7 @@ class FileHandler:
         ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv``."""
         return os.path.join(self._data_input, "vNext", "mini_db", f"{datecode}_L0.csv")
 
-    def _load_mini_db_cache(self, datecode):
+    def _read_mini_db_cache(self, datecode):
         """The cached mini database for `datecode` as a DataFrame if the on-disk
         cache is trustworthy for the current L0 directory, else None (the caller
         then rescans). Reads the cache CSV at most once: the loaded frame is both
@@ -188,6 +188,30 @@ class FileHandler:
 
         return cached
 
+    def _write_mini_db_cache(self, datecode):
+        """Atomically write the carried mini database (``self._mini_db``) to the
+        on-disk cache CSV for `datecode`, creating the cache directory as needed.
+
+        pandas' ``to_csv`` truncates the target in place, so a concurrent reader
+        could observe an empty, partial, or half-written CSV. Fill a same-dir temp
+        file and ``os.replace`` it into position instead (atomic on POSIX), so
+        readers always see the old or new CSV whole; clean up the temp file if the
+        write fails.
+        """
+        cache_path = self._mini_db_cache_path(datecode)
+        cache_dir = os.path.dirname(cache_path)
+        os.makedirs(cache_dir, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
+        os.close(fd)
+        try:
+            self._mini_db.to_csv(tmp, index=False)
+            os.replace(tmp, cache_path)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            raise
+        logger.info("wrote mini database cache to %s", cache_path)
+
     def build_mini_database(self, datecode, cache=False):
         """
         Scan the PRIMARY header of every L0 FITS file for one observing night,
@@ -197,24 +221,27 @@ class FileHandler:
         ``self._mini_db``, so a subsequent ``build_calibration_stacks`` needs
         only the calibration type; callers rarely need the return value directly.
 
-        With ``cache=True`` the on-disk CSV cache at
-        ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv`` is used for both
-        read and write: a *current* cache is loaded instead of re-scanning the L0
-        directory, otherwise the directory is scanned and the result written to
-        the cache (directory created as needed) for next time. A cache is current
-        only when it passes the count and freshness guardrails in
-        ``_load_mini_db_cache``; a frame added, removed, replaced, or
-        rewritten since the cache was built forces a rescan. With ``cache=False``
-        (default) the directory is always scanned and nothing is read from or
-        written to disk.
+        The on-disk CSV cache lives at
+        ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv``. `cache` selects which
+        side of it to use, read and write being independent:
+
+        * read (``"r"``) -- load a *current* cache instead of re-scanning the L0
+          directory. A cache is current only when it passes the count and
+          freshness guardrails in ``_read_mini_db_cache``; a frame added, removed,
+          replaced, or rewritten since the cache was built forces a rescan.
+        * write (``"w"``) -- after scanning, (re)write the cache (directory created
+          as needed) for next time. A cache hit on read short-circuits the scan, so
+          nothing is rewritten.
 
         Parameters
         ----------
         datecode : str
             Observing-night datecode 'YYYYMMDD'.
-        cache : bool, default False
-            When True, load the on-disk cache CSV if it is current, else scan and
-            (re)write it. When False, always scan fresh and never touch the cache.
+        cache : {False, "r", "w", "rw", "wr"}, default False
+            Which side(s) of the on-disk cache to use. ``False`` (default) always
+            scans fresh and never touches the cache. ``"r"`` reads a current cache
+            (else scans); ``"w"`` writes the scan result; ``"rw"``/``"wr"`` do both
+            (the read-then-write behavior a plain cache once had).
 
         Returns
         -------
@@ -229,13 +256,21 @@ class FileHandler:
         Raises
         ------
         ValueError
-            If KPF_DATA_INPUT is unset, or if the L0 directory holds no FITS files.
+            If `cache` is not one of the allowed modes, if KPF_DATA_INPUT is
+            unset, or if the L0 directory holds no FITS files.
         """
+        if cache not in (False, "r", "w", "rw", "wr"):
+            raise ValueError(
+                f"cache must be False or one of 'r'/'w'/'rw'/'wr', got {cache!r}"
+            )
+        read_cache = cache and "r" in cache
+        write_cache = cache and "w" in cache
+
         if self._data_input is None:
             raise ValueError("FileHandler has no KPF_DATA_INPUT configured")
 
-        if cache:
-            cached = self._load_mini_db_cache(datecode)
+        if read_cache:
+            cached = self._read_mini_db_cache(datecode)
             if cached is not None:
                 logger.info(
                     "loaded mini database cache from %s",
@@ -275,23 +310,8 @@ class FileHandler:
 
         self._mini_db = pd.DataFrame(mini_db)
 
-        if cache:
-            cache_path = self._mini_db_cache_path(datecode)
-            cache_dir = os.path.dirname(cache_path)
-            os.makedirs(cache_dir, exist_ok=True)
-            # Write atomically: fill a temp file, then os.replace (atomic on
-            # POSIX) so a concurrent reader sees the old or new CSV, never a
-            # truncated/half-written one -- pandas' to_csv truncates in place.
-            fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
-            os.close(fd)
-            try:
-                self._mini_db.to_csv(tmp, index=False)
-                os.replace(tmp, cache_path)
-            except BaseException:
-                if os.path.exists(tmp):
-                    os.remove(tmp)
-                raise
-            logger.info("wrote mini database cache to %s", cache_path)
+        if write_cache:
+            self._write_mini_db_cache(datecode)
 
         return self._mini_db
 

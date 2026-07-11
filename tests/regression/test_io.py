@@ -691,9 +691,9 @@ def _touch_newer(cache, l0_dir):
 
 
 class TestMiniDatabaseCache:
-    def test_cache_true_writes_csv_on_scan(self, tmp_path):
+    def test_cache_write_writes_csv_on_scan(self, tmp_path):
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
-        db = fh.build_mini_database("20240405", cache=True)
+        db = fh.build_mini_database("20240405", cache="rw")
 
         cache = tmp_path / "vNext" / "mini_db" / "20240405_L0.csv"
         assert cache.is_file()
@@ -703,7 +703,7 @@ class TestMiniDatabaseCache:
         assert len(cached) == len(db)
         assert cached["FILENAME"].tolist() == db["FILENAME"].tolist()
 
-    def test_cache_true_reads_current_cache_without_scanning(self, tmp_path):
+    def test_cache_read_reads_current_cache_without_scanning(self, tmp_path):
         # A current cache (row count matches disk, newer than every input) is
         # loaded verbatim, not rescanned. Prove it by seeding a SENTINEL FILENAME
         # a real scan would never produce, then asserting it survives.
@@ -711,8 +711,27 @@ class TestMiniDatabaseCache:
         cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
         _touch_newer(cache, tmp_path / "L0" / "20240405")
 
-        db = fh.build_mini_database("20240405", cache=True)
+        db = fh.build_mini_database("20240405", cache="rw")
         assert db["FILENAME"].tolist() == ["/sentinel.fits"]
+
+    def test_cache_read_only_does_not_write(self, tmp_path):
+        # "r" reads a current cache but, on a miss, never writes one back.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        db = fh.build_mini_database("20240405", cache="r")
+
+        assert len(db) == 1  # scanned fresh (no cache to read)
+        assert not (tmp_path / "vNext" / "mini_db").exists()  # and none written
+
+    def test_cache_write_only_does_not_read(self, tmp_path):
+        # "w" writes the scan result but ignores an existing cache on read: the
+        # seeded sentinel is overwritten by a real scan, not loaded.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        _touch_newer(cache, tmp_path / "L0" / "20240405")
+
+        db = fh.build_mini_database("20240405", cache="w")
+        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+        assert pd.read_csv(cache)["FILENAME"].tolist() == db["FILENAME"].tolist()
 
     def test_cache_stale_row_count_rescans(self, tmp_path):
         # Cache lists one frame but two are on disk -> count guardrail rejects it.
@@ -721,7 +740,7 @@ class TestMiniDatabaseCache:
         cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
         _touch_newer(cache, tmp_path / "L0" / "20240405")
 
-        db = fh.build_mini_database("20240405", cache=True)
+        db = fh.build_mini_database("20240405", cache="rw")
         assert len(db) == 2
         assert "/sentinel.fits" not in db["FILENAME"].tolist()
 
@@ -731,7 +750,7 @@ class TestMiniDatabaseCache:
         cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
         os.utime(cache, (1_000_000, 1_000_000))  # far in the past
 
-        db = fh.build_mini_database("20240405", cache=True)
+        db = fh.build_mini_database("20240405", cache="rw")
         assert "/sentinel.fits" not in db["FILENAME"].tolist()
         expected = os.path.join(
             str(tmp_path), "L0", "20240405", "KP.20240405.01000.00.fits"
@@ -742,6 +761,11 @@ class TestMiniDatabaseCache:
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
         fh.build_mini_database("20240405")  # cache defaults to False
         assert not (tmp_path / "vNext" / "mini_db").exists()
+
+    def test_invalid_cache_mode_raises(self, tmp_path):
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        with pytest.raises(ValueError, match="cache must be False"):
+            fh.build_mini_database("20240405", cache=True)
 
 
 # ---------------------------------------------------------------------------

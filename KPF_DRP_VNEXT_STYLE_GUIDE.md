@@ -280,11 +280,13 @@ class StageName:
   `FileHandler.build_mini_database` caches the night's DataFrame on `self._mini_db`,
   which `build_calibration_stacks` reads by default (an explicit `mini_db=` arg overrides
   it, per the "`None` means use `self`" rule), so the recipe passes a datecode once
-  and the mini database is never surfaced. Its `cache=True` flag adds an on-disk tier
-  keyed by the same `datecode`: it loads `{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv`
-  when present (skipping the header scan) and writes it after a scan otherwise — a
-  read/write-through cache under one flag, not two. Callers that reduce a night repeatedly
-  (the masters recipe, `select_master_cals.py`, `timeseries.py` discovery) pass it.
+  and the mini database is never surfaced. Its `cache` flag adds an on-disk tier
+  keyed by the same `datecode`, whose read and write sides are selected independently by a
+  mode string (`False` default / `"r"` / `"w"` / `"rw"`): read loads
+  `{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv` when present (skipping the header
+  scan), write writes it after a scan, and `"rw"` is the read/write-through cache. Callers
+  that reduce a night repeatedly (the masters recipe, `select_master_cals.py`,
+  `timeseries.py` discovery) pass `"rw"`.
 - **Defaults live in the module, not the config file.** Resolution is a three-tier
   override chain, lowest precedence first: `_DEFAULTS` (the in-module default) → config
   (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword
