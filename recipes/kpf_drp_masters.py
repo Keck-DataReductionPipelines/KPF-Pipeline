@@ -90,19 +90,11 @@ def main(config, args):
         wls_master_path = kpf_filepath(
             obs_id, "L2", data_root=data_root_masters, master="thar"
         )
-        # The diagnostics HDF5 is a sidecar of the master, in the same directory
-        # and sharing its '{obs_id}_master_thar' stem.
-        wls_diagnostics_path = os.path.join(
-            os.path.dirname(wls_master_path), f"{obs_id}_master_thar_diagnostics.h5"
-        )
-
         logger.info(
             "building WLS from %d ThAr frames -> %s", len(files), wls_master_path
         )
         wls = WLS(files, config)
-        wls.make_master_l2(
-            master_path=wls_master_path, diagnostics_path=wls_diagnostics_path
-        )
+        wls.make_master_l2(master_path=wls_master_path)
 
     logger.info("exiting kpf_drp_masters pipeline")
 

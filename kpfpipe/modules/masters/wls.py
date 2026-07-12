@@ -16,6 +16,7 @@ from kpfpipe import REPO_ROOT
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.kpf_utils import get_obs_id
 from kpfpipe.utils.stats import optimize_lsq
 
 logger = logging.getLogger(__name__)
@@ -92,10 +93,7 @@ class WLS(BaseMasterModule):
 
         self._l2_obj_cache = []  # populated by _process_stack_l0_to_l2()
         self._info = None
-        self._coeffs_stack = (
-            None  # populated by make_master_l2(); used by save_diagnostics()
-        )
-        self._lines_stack = (
+        self._frame_diagnostics = (
             None  # populated by make_master_l2(); used by save_diagnostics()
         )
 
@@ -690,18 +688,19 @@ class WLS(BaseMasterModule):
             (norder, ncol, nfiber).
         coeffs_mean : ndarray
             Outlier-rejected mean Legendre coefficient array.
-        coeffs_stack : ndarray
-            Per-frame coefficient arrays (stacked).
-        lines_stack : list of dict
-            Per-frame line dicts from `_fit_line_positions_ffi`.
+        frames : list of dict
+            Per-frame diagnostics, one entry per input frame in original
+            order. Keys: 'obs_id', 'lines' (the `_fit_line_positions_ffi`
+            dict), 'coeffs' (per-frame Legendre coefficients, or None if
+            rejected), and 'rejected' (bool). Only non-rejected frames feed
+            the combined solution.
 
         Notes
         -----
         Raises ValueError if `self._l2_obj_cache` is empty (i.e.,
         `_process_stack_l0_to_l2` has not been run), or if more than one
         frame is rejected for having > `max_bad_frac` of its line fits fail
-        QC. Rejected frames are excluded from the returned `coeffs_stack`
-        and `lines_stack`.
+        QC.
         """
         self._load_linelist(linelist)
         if lineprofile is None:
@@ -719,15 +718,13 @@ class WLS(BaseMasterModule):
 
         nobs = len(l2_obj_list)
 
-        lines_stack = [None] * nobs
-        coeffs_stack = [None] * nobs
-        keep = np.ones(nobs, dtype=bool)
+        frames = [None] * nobs
         rejected = 0
 
         for i, l2_obj in enumerate(l2_obj_list):
             logger.debug("processing observation %d of %d", i + 1, nobs)
 
-            lines_stack[i] = self._fit_line_positions_ffi(
+            lines = self._fit_line_positions_ffi(
                 l2_obj,
                 chip,
                 fibers,
@@ -736,11 +733,19 @@ class WLS(BaseMasterModule):
                 window=window,
             )
 
-            nlines = len(lines_stack[i]["bad"])
-            bad_frac = np.sum(lines_stack[i]["bad"]) / nlines if nlines else 0.0
+            frame = {
+                "obs_id": l2_obj.obs_id,
+                "lines": lines,
+                "coeffs": None,
+                "rejected": False,
+            }
+            frames[i] = frame
+
+            nlines = len(lines["bad"])
+            bad_frac = np.sum(lines["bad"]) / nlines if nlines else 0.0
 
             if bad_frac > max_bad_frac:
-                keep[i] = False
+                frame["rejected"] = True
                 rejected += 1
                 if rejected > 1:
                     raise ValueError(
@@ -754,30 +759,27 @@ class WLS(BaseMasterModule):
                 )
                 continue
 
-            coeffs_stack[i] = self._calculate_wls_coeffs(
-                lines_stack[i],
+            frame["coeffs"] = self._calculate_wls_coeffs(
+                lines,
                 self._echelle_orders[chip],
                 polyorder_x=polyorder_x,
                 polyorder_m=polyorder_m,
                 polyorder_f=polyorder_f,
             )
 
-        lines_stack = [lines_stack[i] for i in range(nobs) if keep[i]]
-        coeffs_stack = [coeffs_stack[i] for i in range(nobs) if keep[i]]
-
-        coeffs_stack = np.array(coeffs_stack)
+        coeffs_stack = np.array([fr["coeffs"] for fr in frames if not fr["rejected"]])
 
         # Non-finite coeffs compare False below and would silently poison the
         # master WAVE grid; fail loudly instead.
         if not np.isfinite(coeffs_stack).all():
-            bad_frames = [
-                i + 1
-                for i in range(len(coeffs_stack))
-                if not np.isfinite(coeffs_stack[i]).all()
+            bad_obs_ids = [
+                fr["obs_id"]
+                for fr in frames
+                if not fr["rejected"] and not np.isfinite(fr["coeffs"]).all()
             ]
             raise ValueError(
                 f"{chip}: non-finite Legendre coefficients from frame(s) "
-                f"{bad_frames}; a degenerate line fit poisoned the stack"
+                f"{bad_obs_ids}; a degenerate line fit poisoned the stack"
             )
 
         diff = np.abs(coeffs_stack - np.median(coeffs_stack, axis=0))
@@ -795,7 +797,7 @@ class WLS(BaseMasterModule):
             coeffs_mean, self._echelle_orders[chip], len(fibers)
         )
 
-        return W, coeffs_mean, coeffs_stack, lines_stack
+        return W, coeffs_mean, frames
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -814,7 +816,6 @@ class WLS(BaseMasterModule):
         dark=None,
         flat=None,
         master_path=None,
-        diagnostics_path=None,
     ):
         """
         Build a master wavelength solution from a stack of L0 frames.
@@ -823,11 +824,10 @@ class WLS(BaseMasterModule):
         computes per-chip Legendre wavelength solutions using
         `_compute_wls_from_stack`. The resulting wavelength arrays are
         written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
-        which is returned and cached on `self.ml2_obj`; pass `master_path`
-        to also persist it to disk via `save_master('L2', ...)`. Per-frame
-        coefficient and line stacks are always stashed on
-        `self._coeffs_stack` / `self._lines_stack`; pass `diagnostics_path`
-        to also persist them to disk via `save_diagnostics()`.
+        which is returned and cached on `self.ml2_obj`. Per-frame diagnostics
+        are always stashed on `self._frame_diagnostics`; pass `master_path`
+        to persist the master and, into the `thar-wls-L2/` sidecar directory
+        beside it, the per-frame L2s and the diagnostics HDF5.
 
         Parameters
         ----------
@@ -852,14 +852,11 @@ class WLS(BaseMasterModule):
             standard of bias+dark. E.g. `dark=False` extracts with bias only, and
             `dark="/path/master_dark.fits"` uses a specific master.
         master_path : str, optional
-            If provided, calls `self.save_master('L2', master_path)` at
-            the end to persist the master L2 to a FITS file at this path,
-            and writes each processed ThAr frame's L2 to a `thar-wls-L2/`
-            sidecar directory beside it via `save_reduced_frames()`.
-        diagnostics_path : str, optional
-            If provided, calls `self.save_diagnostics(diagnostics_path)`
-            at the end to persist the per-frame coefficient and line stacks
-            to an HDF5 file at this path.
+            If provided, persists the master L2 to this FITS path via
+            `save_master('L2', ...)` and, into a `thar-wls-L2/` sidecar
+            directory beside it, each processed ThAr frame's L2
+            (`save_reduced_frames()`) and the per-frame diagnostics HDF5
+            (`save_diagnostics()`).
 
         Returns
         -------
@@ -895,12 +892,11 @@ class WLS(BaseMasterModule):
 
         self.ml2_obj = KPFMasterL2(kind="wls")
 
-        self._coeffs_stack = {}
-        self._lines_stack = {}
+        self._frame_diagnostics = {}
         self._stack_info = {}
 
         for chip in self.chips:
-            result = self._compute_wls_from_stack(
+            W, coeffs_mean, frames = self._compute_wls_from_stack(
                 chip=chip,
                 fibers=self.fibers,
                 lineprofile=lineprofile,
@@ -908,14 +904,13 @@ class WLS(BaseMasterModule):
                 polyorder_m=polyorder_m,
                 polyorder_f=polyorder_f,
             )
-            W, coeffs_mean, coeffs_stack, lines_stack = result
+            self._frame_diagnostics[chip] = frames
 
+            kept = [fr["lines"] for fr in frames if not fr["rejected"]]
             self._stack_info[chip] = {
-                "n_total": sum(len(frame["wav"]) for frame in lines_stack),
-                "n_fit": sum(int(np.sum(~frame["bad"])) for frame in lines_stack),
+                "n_total": sum(len(lines["wav"]) for lines in kept),
+                "n_fit": sum(int(np.sum(~lines["bad"])) for lines in kept),
             }
-            self._coeffs_stack[chip] = coeffs_stack
-            self._lines_stack[chip] = lines_stack
 
             # W's fiber planes are ordered by physical slicer position (the fit
             # ranks fibers via fiber_positions and _evaluate_wls_coeffs emits
@@ -949,54 +944,74 @@ class WLS(BaseMasterModule):
 
         if master_path is not None:
             self.save_master("L2", master_path, overwrite=True)
-
-        if diagnostics_path is not None:
-            self.save_diagnostics(diagnostics_path)
-
-        if master_path is not None:
             self.save_reduced_frames(master_path, overwrite=True)
+            self.save_diagnostics(master_path, overwrite=True)
 
         self._track_info()
         logger.info("summary:\n%s", self._info)
 
         return self.ml2_obj
 
-    def save_diagnostics(self, path):
+    def save_diagnostics(self, master_path, *, overwrite=False):
         """
-        Write the per-frame WLS diagnostic stacks to an HDF5 file at `path`.
+        Write the per-frame WLS diagnostics to an HDF5 file in the
+        `thar-wls-L2/` sidecar directory beside `master_path`, named
+        `{obs_id}_master_thar_diagnostics.h5` (obs_id from `master_path`).
 
-        Layout: /<chip>/coeffs_stack as a dataset, /<chip>/lines_stack/
-        frame_<NNN>/<key> as per-frame subgroups, with every key from
-        the per-frame `lines` dict (e.g. wav, pix, order, fiber, bad, plus
-        diagnostics like std, amp).
+        Layout: /<obs_id>/<chip>/ per input frame and chip, each holding a
+        `coeffs` dataset (per-frame Legendre coefficients; omitted for a
+        rejected frame), a `lines/` group with every key from the per-frame
+        line dict (wav, pix, std, amp, bad, order, fiber), and a `rejected`
+        group attribute flagging whole-frame QC rejection for that chip.
+
+        Parameters
+        ----------
+        master_path : str
+            The master L2 output path; its directory anchors the
+            `thar-wls-L2/` sidecar directory and its obs_id names the file.
+        overwrite : bool, optional
+            If False (default), refuse to clobber an existing file and raise
+            FileExistsError. If True, replace any existing file.
 
         Raises
         ------
         RuntimeError
             If make_master_l2() has not been run yet, or raised before
             populating any chip.
+        FileExistsError
+            If the file already exists and `overwrite` is False.
         """
-        if not self._coeffs_stack or not self._lines_stack:
+        if not self._frame_diagnostics:
             raise RuntimeError("No diagnostics available; run make_master_l2() first")
 
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        directory = os.path.join(os.path.dirname(master_path), "thar-wls-L2")
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(
+            directory, f"{get_obs_id(master_path)}_master_thar_diagnostics.h5"
+        )
+        if not overwrite and os.path.exists(path):
+            raise FileExistsError(
+                f"{path} already exists; pass overwrite=True to replace it"
+            )
+
         str_dt = h5py.string_dtype(encoding="utf-8")
         with h5py.File(path, "w") as f:
-            for chip, coeffs_stack in self._coeffs_stack.items():
-                chip_group = f.create_group(chip)
-                chip_group.create_dataset("coeffs_stack", data=np.asarray(coeffs_stack))
+            for chip, frames in self._frame_diagnostics.items():
+                for frame in frames:
+                    grp = f.require_group(frame["obs_id"]).create_group(chip)
+                    grp.attrs["rejected"] = frame["rejected"]
+                    if frame["coeffs"] is not None:
+                        grp.create_dataset("coeffs", data=np.asarray(frame["coeffs"]))
 
-                lines_group = chip_group.create_group("lines_stack")
-                for i, lines in enumerate(self._lines_stack[chip]):
-                    frame_group = lines_group.create_group(f"frame_{i:03d}")
-                    for key, value in lines.items():
+                    lines_group = grp.create_group("lines")
+                    for key, value in frame["lines"].items():
                         arr = np.asarray(value)
                         if arr.dtype.kind in ("U", "S", "O"):
-                            frame_group.create_dataset(
+                            lines_group.create_dataset(
                                 key, data=arr.astype(object), dtype=str_dt
                             )
                         else:
-                            frame_group.create_dataset(key, data=arr)
+                            lines_group.create_dataset(key, data=arr)
         logger.info("wrote WLS diagnostics to %s", path)
 
     def save_reduced_frames(self, master_path, *, overwrite=False):
