@@ -197,8 +197,10 @@ class TestProcessIndividualFrames:
 @pytest.fixture
 def mock_make_master_l2(monkeypatch):
     """
-    Patch frame loading and _compute_wls_from_stack so make_master_l2 runs
-    without touching disk or real spectra. _compute_wls_from_stack returns
+    Patch frame loading, _fit_and_qc_lines_stack, and _combine_coeffs_stack so
+    make_master_l2 runs without touching disk or real spectra. The fitting
+    stub reports one non-rejected frame per input (FILE_LIST has 8 frames, so
+    the default min_stack_size=5 gate passes), and the combine stub returns
     synthetic W and coefficient arrays with chip-correct shapes.
     """
     # Thread each source filename through as the opaque L1 token so the
@@ -209,7 +211,7 @@ def mock_make_master_l2(monkeypatch):
         WLS, "_extract_frame", lambda self, l1, **kwargs: MockL2(get_obs_id(l1))
     )
 
-    def mock_compute(
+    def mock_fit_and_qc(
         self,
         chip,
         fibers,
@@ -223,17 +225,13 @@ def mock_make_master_l2(monkeypatch):
         polyorder_m = polyorder_m if polyorder_m is not None else self.polyorder_m
         polyorder_f = polyorder_f if polyorder_f is not None else self.polyorder_f
 
-        norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
         nfibers = len(fibers)
-
         if nfibers == 1:
-            W = np.full((norder, NCOL_TEST), 5500.0)
             coeffs = np.zeros((polyorder_x + 1, polyorder_m + 1))
         else:
-            W = np.full((norder, NCOL_TEST, nfibers), 5500.0)
             coeffs = np.zeros((polyorder_x + 1, polyorder_m + 1, polyorder_f + 1))
 
-        frames = [
+        return [
             {
                 "obs_id": l2_obj.obs_id,
                 "lines": {
@@ -252,9 +250,18 @@ def mock_make_master_l2(monkeypatch):
             }
             for l2_obj in self._l2_obj_cache
         ]
-        return W, coeffs, frames
 
-    monkeypatch.setattr(WLS, "_compute_wls_from_stack", mock_compute)
+    def mock_combine(self, frames, chip, nfibers, **kwargs):
+        norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
+        coeffs = next(fr["coeffs"] for fr in frames if not fr["rejected"])
+        if nfibers == 1:
+            W = np.full((norder, NCOL_TEST), 5500.0)
+        else:
+            W = np.full((norder, NCOL_TEST, nfibers), 5500.0)
+        return W, coeffs
+
+    monkeypatch.setattr(WLS, "_fit_and_qc_lines_stack", mock_fit_and_qc)
+    monkeypatch.setattr(WLS, "_combine_coeffs_stack", mock_combine)
 
 
 class TestMakeMasterL2:
@@ -285,25 +292,29 @@ class TestMakeMasterL2:
         monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kw: l1)
         monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kw: MockL2())
 
-        def mock_compute(self, chip, fibers, **kwargs):
-            # Plane i carries the constant value i (its physical-position rank).
-            norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
-            W = np.empty((norder, NCOL_TEST, len(fibers)))
-            for i in range(len(fibers)):
-                W[:, :, i] = float(i)
+        def mock_fit_and_qc(self, chip, fibers, **kwargs):
             coeffs = np.zeros((self.polyorder_x + 1, self.polyorder_m + 1, 1))
-            frames = [
+            return [
                 {
                     "obs_id": None,
                     "lines": {"wav": np.array([5500.0]), "isgood": np.array([True])},
                     "coeffs": coeffs,
                     "rejected": False,
                 }
-                for _ in range(3)
+                for _ in self._l2_obj_cache
             ]
-            return W, coeffs, frames
 
-        monkeypatch.setattr(WLS, "_compute_wls_from_stack", mock_compute)
+        def mock_combine(self, frames, chip, nfibers, **kwargs):
+            # Plane i carries the constant value i (its physical-position rank).
+            norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
+            W = np.empty((norder, NCOL_TEST, nfibers))
+            for i in range(nfibers):
+                W[:, :, i] = float(i)
+            coeffs = np.zeros((self.polyorder_x + 1, self.polyorder_m + 1, 1))
+            return W, coeffs
+
+        monkeypatch.setattr(WLS, "_fit_and_qc_lines_stack", mock_fit_and_qc)
+        monkeypatch.setattr(WLS, "_combine_coeffs_stack", mock_combine)
 
         wls = WLS(FILE_LIST)
         # Reorder away from physical-slicer order (here: TRACE order).
@@ -714,8 +725,10 @@ class TestMakeMasterL2:
         assert ml2.headers["PRIMARY"].get("LINELIST") == str(override)
 
     def test_single_frame_stack(self, mock_make_master_l2):
-        """A 1-frame stack should still produce a valid master L2."""
+        """A 1-frame stack still produces a valid master L2 when the survivor
+        gate allows it (min_stack_size=1)."""
         wls = WLS(FILE_LIST[:1])
+        wls.min_stack_size = 1
         ml2 = wls.make_master_l2()
         assert isinstance(ml2, KPFMasterL2)
         assert len(wls._l2_obj_cache) == 1
@@ -836,9 +849,11 @@ class TestCalculateWlsCoeffs:
 # ---------------------------------------------------------------------------
 
 
-class TestComputeWlsFrameRejection:
-    """Frame-level QC in _compute_wls_from_stack: drop frames whose line-fit
-    failure fraction exceeds max_bad_frac, and error if more than one is dropped."""
+class TestFitAndQcStack:
+    """Frame-level QC in _fit_and_qc_lines_stack: a frame whose line-fit failure
+    fraction exceeds max_bad_frac, or whose per-frame WLS fit fails, is warned
+    and dropped (rejected=True, coeffs=None) -- never raised. Every frame is
+    reported so the diagnostics stay fully populated."""
 
     def _setup(self, monkeypatch, bad_fracs, nlines=100):
         """Build a WLS whose stack yields one fake `lines` dict per entry in
@@ -859,14 +874,11 @@ class TestComputeWlsFrameRejection:
         monkeypatch.setattr(
             WLS, "_calculate_wls_coeffs", lambda self, *a, **k: np.ones((2, 2))
         )
-        monkeypatch.setattr(
-            WLS, "_evaluate_wls_coeffs", lambda self, *a, **k: np.zeros((3, 3))
-        )
         return wls
 
     def test_all_clean_frames_kept(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.01, 0.02, 0.0, 0.03, 0.01])
-        _, _, frames = wls._compute_wls_from_stack("GREEN", ["SCI1"])
+        frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
         # every input frame is reported; none rejected, all carry coeffs
         assert len(frames) == 5
         assert [fr["rejected"] for fr in frames] == [False] * 5
@@ -874,27 +886,32 @@ class TestComputeWlsFrameRejection:
 
     def test_single_bad_frame_dropped(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.01, 0.22, 0.0, 0.03, 0.01])
-        _, _, frames = wls._compute_wls_from_stack("GREEN", ["SCI1"])
+        with pytest.warns(UserWarning, match=r"line fits failed QC"):
+            frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
         # the 22%-bad frame (index 1) is flagged rejected with no coeffs, but
         # still reported alongside the four kept frames
         assert len(frames) == 5
         assert [fr["rejected"] for fr in frames] == [False, True, False, False, False]
         assert frames[1]["coeffs"] is None
 
-    def test_two_bad_frames_raises(self, monkeypatch):
+    def test_many_bad_frames_all_dropped_no_raise(self, monkeypatch):
+        # more than one over-threshold frame no longer aborts: each is warned
+        # and rejected, and every frame is still reported
         wls = self._setup(monkeypatch, [0.22, 0.01, 0.34, 0.01, 0.01])
-        with pytest.raises(ValueError, match=r"more than one frame rejected"):
-            wls._compute_wls_from_stack("GREEN", ["SCI1"])
+        with pytest.warns(UserWarning, match=r"line fits failed QC"):
+            frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
+        assert [fr["rejected"] for fr in frames] == [True, False, True, False, False]
+        assert sum(not fr["rejected"] for fr in frames) == 3
 
     def test_threshold_is_inclusive_at_max_bad_frac(self, monkeypatch):
         # exactly 5% bad is not > 5%, so the frame is kept
         wls = self._setup(monkeypatch, [0.05, 0.01], nlines=100)
-        _, _, frames = wls._compute_wls_from_stack("GREEN", ["SCI1"])
+        frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
         assert [fr["rejected"] for fr in frames] == [False, False]
 
-    def test_nonfinite_coeffs_raise(self, monkeypatch):
-        # a frame whose per-frame fit yields a NaN coefficient must fail loudly
-        # rather than silently poison the combined solution
+    def test_nonfinite_coeffs_frame_rejected_not_raised(self, monkeypatch):
+        # a per-frame fit yielding a NaN coefficient rejects (warns) that frame
+        # rather than aborting the whole build
         wls = WLS(FILE_LIST)
         wls._l2_obj_cache = [MockL2() for _ in range(3)]
         lines = {"wav": np.zeros(100), "isgood": np.ones(100, dtype=bool)}
@@ -905,11 +922,136 @@ class TestComputeWlsFrameRejection:
         monkeypatch.setattr(
             WLS, "_calculate_wls_coeffs", lambda self, *a, **k: next(coeffs)
         )
+        with pytest.warns(UserWarning, match=r"non-finite Legendre"):
+            frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
+        assert [fr["rejected"] for fr in frames] == [False, True, False]
+        assert frames[1]["coeffs"] is None
+
+    def test_underconstrained_frame_rejected_not_raised(self, monkeypatch):
+        # a per-frame fit that raises (e.g. underconstrained) rejects (warns)
+        # that frame instead of aborting
+        wls = WLS(FILE_LIST)
+        wls._l2_obj_cache = [MockL2() for _ in range(3)]
+        lines = {"wav": np.zeros(100), "isgood": np.ones(100, dtype=bool)}
+        results = iter([np.ones((2, 2)), "raise", np.ones((2, 2))])
+
+        def calc(self, *a, **k):
+            result = next(results)
+            if isinstance(result, str):
+                raise ValueError("WLS fit underconstrained: 2 good lines < 28")
+            return result
+
+        monkeypatch.setattr(WLS, "_fit_line_positions_ffi", lambda self, *a, **k: lines)
+        monkeypatch.setattr(WLS, "_calculate_wls_coeffs", calc)
+        with pytest.warns(UserWarning, match=r"WLS fit failed"):
+            frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
+        assert [fr["rejected"] for fr in frames] == [False, True, False]
+        assert frames[1]["coeffs"] is None
+
+
+class TestCombineCoeffs:
+    """_combine_coeffs_stack averages the surviving per-frame coeffs; it raises only on
+    the cross-frame degeneracy where every frame is an outlier for a coefficient."""
+
+    def _frames(self, coeffs_list):
+        return [{"coeffs": c, "rejected": False} for c in coeffs_list]
+
+    def test_averages_surviving_coeffs(self, monkeypatch):
+        wls = WLS(FILE_LIST)
         monkeypatch.setattr(
-            WLS, "_evaluate_wls_coeffs", lambda self, *a, **k: np.zeros((3, 3))
+            WLS, "_evaluate_wls_coeffs", lambda self, coeffs, *a, **k: coeffs
         )
-        with pytest.raises(ValueError, match=r"non-finite Legendre coefficients"):
-            wls._compute_wls_from_stack("GREEN", ["SCI1"])
+        frames = self._frames([np.full((2, 2), 4.0), np.full((2, 2), 6.0)])
+        W, coeffs_mean = wls._combine_coeffs_stack(frames, "GREEN", 1)
+        np.testing.assert_allclose(coeffs_mean, 5.0)
+
+    def test_rejected_frames_excluded_from_average(self, monkeypatch):
+        wls = WLS(FILE_LIST)
+        monkeypatch.setattr(
+            WLS, "_evaluate_wls_coeffs", lambda self, coeffs, *a, **k: coeffs
+        )
+        frames = [
+            {"coeffs": np.full((2, 2), 5.0), "rejected": False},
+            {"coeffs": None, "rejected": True},
+            {"coeffs": np.full((2, 2), 5.0), "rejected": False},
+        ]
+        _, coeffs_mean = wls._combine_coeffs_stack(frames, "GREEN", 1)
+        np.testing.assert_allclose(coeffs_mean, 5.0)
+
+
+class TestMinStackSizeGate:
+    """make_master_l2 gates the master on min_stack_size survivors per chip:
+    below the threshold it raises, but the diagnostics/L2 sidecars are still
+    written; at or above it, the master is produced."""
+
+    def _mock(self, monkeypatch, n_survivors, n_frames=8):
+        files = sorted(f"KP.20240101.{i:05d}.00.fits" for i in range(n_frames))
+        monkeypatch.setattr(WLS, "_load_frame", lambda self, fn, cache=False, **kw: fn)
+        monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kw: l1)
+        monkeypatch.setattr(
+            WLS, "_extract_frame", lambda self, l1, **kw: MockL2(get_obs_id(l1))
+        )
+
+        def mock_fit(self, chip, fibers, **kwargs):
+            frames = []
+            for j, l2 in enumerate(self._l2_obj_cache):
+                rejected = j >= n_survivors
+                coeffs = (
+                    None
+                    if rejected
+                    else np.zeros(
+                        (
+                            self.polyorder_x + 1,
+                            self.polyorder_m + 1,
+                            self.polyorder_f + 1,
+                        )
+                    )
+                )
+                frames.append(
+                    {
+                        "obs_id": l2.obs_id,
+                        "lines": {
+                            "wav": np.array([5500.0]),
+                            "isgood": np.array([not rejected]),
+                        },
+                        "coeffs": coeffs,
+                        "rejected": rejected,
+                    }
+                )
+            return frames
+
+        def mock_combine(self, frames, chip, nfibers, **kwargs):
+            norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
+            coeffs = np.zeros(
+                (self.polyorder_x + 1, self.polyorder_m + 1, self.polyorder_f + 1)
+            )
+            return np.full((norder, NCOL_TEST, nfibers), 5500.0), coeffs
+
+        monkeypatch.setattr(WLS, "_fit_and_qc_lines_stack", mock_fit)
+        monkeypatch.setattr(WLS, "_combine_coeffs_stack", mock_combine)
+        return WLS(files)
+
+    def test_below_min_raises_but_diagnostics_written(self, monkeypatch, tmp_path):
+        wls = self._mock(monkeypatch, n_survivors=2)
+        wls.min_stack_size = 5
+        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        with pytest.raises(ValueError, match=r"passed line-fit QC"):
+            wls.make_master_l2(master_path=str(master_path))
+
+        thar_dir = tmp_path / "thar_L2"
+        # diagnostics + per-frame L2s persist despite the abort ...
+        assert (thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5").exists()
+        assert list(thar_dir.glob("*_thar_L2.fits"))
+        # ... but the master itself is withheld.
+        assert not master_path.exists()
+
+    def test_at_min_writes_master(self, monkeypatch, tmp_path):
+        wls = self._mock(monkeypatch, n_survivors=5)
+        wls.min_stack_size = 5
+        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        ml2 = wls.make_master_l2(master_path=str(master_path))
+        assert isinstance(ml2, KPFMasterL2)
+        assert master_path.exists()
 
 
 # ---------------------------------------------------------------------------

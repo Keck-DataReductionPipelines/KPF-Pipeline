@@ -643,7 +643,7 @@ class WLS(BaseMasterModule):
         W = L / orders.reshape((-1,) + (1,) * (L.ndim - 1))
         return W
 
-    def _compute_wls_from_stack(
+    def _fit_and_qc_lines_stack(
         self,
         chip,
         fibers,
@@ -653,18 +653,16 @@ class WLS(BaseMasterModule):
         polyorder_m=None,
         polyorder_f=None,
         window=5,
-        qc_sigma=2.5,
         max_bad_frac=0.05,
     ):
         """
-        Compute a master wavelength solution from a stack of extracted L2 frames.
-
-        For each L2 frame in `self._l2_obj_cache` (populated by
-        `_process_stack_l0_to_l2`), fits line positions across the requested
-        fibers, fits a Legendre WLS to those line positions, then combines
-        the per-frame coefficient sets via per-coefficient outlier-rejected
-        averaging. The averaged coefficients are evaluated to produce a
-        master wavelength array.
+        Fit line positions and a per-frame Legendre WLS for every frame in
+        `self._l2_obj_cache`. Every frame is reported; a frame is flagged
+        `rejected` (warned, never raised) and kept out of the combined solution
+        when its line-fit QC failure fraction exceeds `max_bad_frac`, or when its
+        per-frame fit fails (too few good lines, a dropped fiber, or non-finite
+        coefficients). Survivors are gated against `min_stack_size` in
+        `make_master_l2`.
 
         Parameters
         ----------
@@ -678,29 +676,16 @@ class WLS(BaseMasterModule):
             is updated. Defaults to `self.linelist` (no reload).
         lineprofile : str, optional
             Line profile model name. Defaults to self.lineprofile.
-        polyorder_x : int, optional
-            Polynomial degree along the pixel axis.
-        polyorder_m : int, optional
-            Polynomial degree along the order axis.
-        polyorder_f : int, optional
-            Polynomial degree along the fiber axis (only used for 3-fiber fits).
+        polyorder_x, polyorder_m, polyorder_f : int, optional
+            Polynomial degrees along the pixel / order / fiber axes.
         window : int, optional
             Half-width of the per-line fit window, in pixels.
-        qc_sigma : float, optional
-            Outlier rejection threshold applied to the per-frame Legendre
-            coefficients when combining them.
         max_bad_frac : float, optional
             Maximum fraction of per-line fits allowed to fail QC before a
-            frame is rejected from the stack. Frames exceeding this are
-            dropped; if more than one frame is rejected, an error is raised.
+            frame is rejected from the stack.
 
         Returns
         -------
-        W : ndarray
-            Master wavelength array, shape (norder, ncol) or
-            (norder, ncol, nfiber).
-        coeffs_mean : ndarray
-            Outlier-rejected mean Legendre coefficient array.
         frames : list of dict
             Per-frame diagnostics, one entry per input frame in original
             order. Keys: 'obs_id', 'lines' (the `_fit_line_positions_ffi`
@@ -710,10 +695,9 @@ class WLS(BaseMasterModule):
 
         Notes
         -----
-        Raises ValueError if `self._l2_obj_cache` is empty (i.e.,
-        `_process_stack_l0_to_l2` has not been run), or if more than one
-        frame is rejected for having > `max_bad_frac` of its line fits fail
-        QC.
+        Raises ValueError only if `self._l2_obj_cache` is empty (i.e.,
+        `_process_stack_l0_to_l2` has not been run). Per-frame QC/fit problems
+        warn and reject the frame; they never raise.
         """
         self._load_linelist(linelist)
         if lineprofile is None:
@@ -730,9 +714,7 @@ class WLS(BaseMasterModule):
         l2_obj_list = self._l2_obj_cache
 
         nobs = len(l2_obj_list)
-
         frames = [None] * nobs
-        rejected = 0
 
         for i, l2_obj in enumerate(l2_obj_list):
             logger.debug("processing observation %d of %d", i + 1, nobs)
@@ -755,45 +737,87 @@ class WLS(BaseMasterModule):
             frames[i] = frame
 
             nlines = len(lines["isgood"])
-            bad_frac = np.sum(~lines["isgood"]) / nlines if nlines else 0.0
+            bad_frac = np.sum(~lines["isgood"]) / nlines if nlines else 1.0
 
             if bad_frac > max_bad_frac:
                 frame["rejected"] = True
-                rejected += 1
-                if rejected > 1:
-                    raise ValueError(
-                        f"{chip}: more than one frame rejected from stack "
-                        f"(> {max_bad_frac:.0%} of line fits failed QC)"
-                    )
                 warnings.warn(
-                    f"{chip} frame {i + 1}: {bad_frac:.1%} of line fits failed QC "
-                    f"(> {max_bad_frac:.0%}); frame rejected from stack",
+                    f"{chip} frame {l2_obj.obs_id}: {bad_frac:.1%} of line fits "
+                    f"failed QC (> {max_bad_frac:.0%}); frame rejected from stack",
                     stacklevel=2,
                 )
                 continue
 
-            frame["coeffs"] = self._calculate_wls_coeffs(
-                lines,
-                self._echelle_orders[chip],
-                polyorder_x=polyorder_x,
-                polyorder_m=polyorder_m,
-                polyorder_f=polyorder_f,
-            )
+            # A frame past the line-QC threshold can still fail its own fit;
+            # reject it rather than poisoning the stack or aborting the build.
+            try:
+                coeffs = self._calculate_wls_coeffs(
+                    lines,
+                    self._echelle_orders[chip],
+                    polyorder_x=polyorder_x,
+                    polyorder_m=polyorder_m,
+                    polyorder_f=polyorder_f,
+                )
+            except ValueError as exc:
+                frame["rejected"] = True
+                warnings.warn(
+                    f"{chip} frame {l2_obj.obs_id}: WLS fit failed ({exc}); "
+                    f"frame rejected from stack",
+                    stacklevel=2,
+                )
+                continue
 
+            if not np.isfinite(coeffs).all():
+                frame["rejected"] = True
+                warnings.warn(
+                    f"{chip} frame {l2_obj.obs_id}: non-finite Legendre "
+                    f"coefficients; frame rejected from stack",
+                    stacklevel=2,
+                )
+                continue
+
+            frame["coeffs"] = coeffs
+
+        return frames
+
+    def _combine_coeffs_stack(self, frames, chip, nfibers, qc_sigma=2.5):
+        """
+        Combine surviving per-frame coefficients into a master WLS.
+
+        Stacks the Legendre coefficients of the non-rejected `frames`, combines
+        them via per-coefficient outlier-rejected averaging (median +/- `qc_sigma`
+        MAD), and evaluates the mean coefficients to a master wavelength array.
+        Assumes at least one surviving frame -- callers gate the surviving-frame
+        count against `min_stack_size` first.
+
+        Parameters
+        ----------
+        frames : list of dict
+            Per-frame diagnostics from `_fit_and_qc_lines_stack`; only entries with
+            `rejected` False (and a non-None `coeffs`) contribute.
+        chip : str
+            Chip identifier, i.e. 'GREEN' or 'RED'.
+        nfibers : int
+            Number of fibers in the fit (sets the W fiber axis).
+        qc_sigma : float, optional
+            Outlier rejection threshold applied to the per-frame Legendre
+            coefficients when combining them.
+
+        Returns
+        -------
+        W : ndarray
+            Master wavelength array, shape (norder, ncol) or
+            (norder, ncol, nfiber).
+        coeffs_mean : ndarray
+            Outlier-rejected mean Legendre coefficient array.
+
+        Notes
+        -----
+        Raises ValueError if every surviving frame is rejected as an outlier for
+        at least one Legendre coefficient (a cross-frame degeneracy that leaves
+        the stack uncombinable).
+        """
         coeffs_stack = np.array([fr["coeffs"] for fr in frames if not fr["rejected"]])
-
-        # Non-finite coeffs compare False below and would silently poison the
-        # master WAVE grid; fail loudly instead.
-        if not np.isfinite(coeffs_stack).all():
-            bad_obs_ids = [
-                fr["obs_id"]
-                for fr in frames
-                if not fr["rejected"] and not np.isfinite(fr["coeffs"]).all()
-            ]
-            raise ValueError(
-                f"{chip}: non-finite Legendre coefficients from frame(s) "
-                f"{bad_obs_ids}; a degenerate line fit poisoned the stack"
-            )
 
         diff = np.abs(coeffs_stack - np.median(coeffs_stack, axis=0))
         sigma = mad_std(coeffs_stack, axis=0)
@@ -806,11 +830,9 @@ class WLS(BaseMasterModule):
             )
         coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0) / denom
 
-        W = self._evaluate_wls_coeffs(
-            coeffs_mean, self._echelle_orders[chip], len(fibers)
-        )
+        W = self._evaluate_wls_coeffs(coeffs_mean, self._echelle_orders[chip], nfibers)
 
-        return W, coeffs_mean, frames
+        return W, coeffs_mean
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -833,9 +855,10 @@ class WLS(BaseMasterModule):
         """
         Build a master wavelength solution from a stack of L0 frames.
 
-        Processes each input L0 frame through the L0-to-L2 pipeline, then
-        computes per-chip Legendre wavelength solutions using
-        `_compute_wls_from_stack`. The resulting wavelength arrays are
+        Processes each input L0 frame through the L0-to-L2 pipeline, fits
+        per-frame line positions and WLS coefficients (`_fit_and_qc_lines_stack`),
+        then combines the surviving frames into per-chip Legendre wavelength
+        solutions (`_combine_coeffs_stack`). The resulting wavelength arrays are
         written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
         which is returned and cached on `self.ml2_obj`. Per-frame diagnostics
         are always stashed on `self._frame_diagnostics`; pass `master_path`
@@ -882,6 +905,13 @@ class WLS(BaseMasterModule):
         -----
         Resets self._l2_obj_cache before processing so repeat calls do not
         carry stale frames forward.
+
+        Line fitting is attempted for every loaded frame; a frame whose line-fit
+        QC or per-frame fit fails is warned and dropped, never raised. The
+        per-frame L2s and diagnostics HDF5 are written before the survivor gate,
+        so they persist even on gate failure. Raises ValueError if any chip has
+        fewer than `self.min_stack_size` frames passing line-fit QC (the master
+        is then not written).
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -903,13 +933,10 @@ class WLS(BaseMasterModule):
         # _process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
         self._process_stack_l0_to_l2(l0_file_list=l0_file_list)
 
-        self.ml2_obj = KPFMasterL2(kind="wls")
-
         self._frame_diagnostics = {}
         self._stack_info = {}
-
         for chip in self.chips:
-            W, coeffs_mean, frames = self._compute_wls_from_stack(
+            frames = self._fit_and_qc_lines_stack(
                 chip=chip,
                 fibers=self.fibers,
                 lineprofile=lineprofile,
@@ -921,9 +948,34 @@ class WLS(BaseMasterModule):
 
             kept = [fr["lines"] for fr in frames if not fr["rejected"]]
             self._stack_info[chip] = {
+                "n_frames": len(frames),
+                "n_survivors": len(kept),
                 "n_total": sum(len(lines["wav"]) for lines in kept),
                 "n_fit": sum(int(np.sum(lines["isgood"])) for lines in kept),
             }
+
+        # Persist diagnostics before the gate, so a night that fails it still
+        # leaves its per-frame L2s and HDF5 on disk (only the master is withheld).
+        if master_path is not None:
+            self.save_reduced_frames(master_path, overwrite=True)
+            self.save_diagnostics(master_path, overwrite=True)
+
+        self._track_info()
+        logger.info("summary:\n%s", self._info)
+
+        for chip in self.chips:
+            n_survivors = self._stack_info[chip]["n_survivors"]
+            if n_survivors < self.min_stack_size:
+                raise ValueError(
+                    f"{chip}: only {n_survivors} frame(s) passed line-fit QC "
+                    f"(< min_stack_size={self.min_stack_size}); aborting WLS"
+                )
+
+        self.ml2_obj = KPFMasterL2(kind="wls")
+        for chip in self.chips:
+            W, coeffs_mean = self._combine_coeffs_stack(
+                self._frame_diagnostics[chip], chip, len(self.fibers)
+            )
 
             # W's fiber planes are ordered by physical slicer position (the fit
             # ranks fibers via fiber_positions and _evaluate_wls_coeffs emits
@@ -957,11 +1009,6 @@ class WLS(BaseMasterModule):
 
         if master_path is not None:
             self.save_master("L2", master_path, overwrite=True)
-            self.save_reduced_frames(master_path, overwrite=True)
-            self.save_diagnostics(master_path, overwrite=True)
-
-        self._track_info()
-        logger.info("summary:\n%s", self._info)
 
         return self.ml2_obj
 
@@ -1090,12 +1137,17 @@ class WLS(BaseMasterModule):
             f"  polyorder:       x={self.polyorder_x}, m={self.polyorder_m}, "
             f"f={self.polyorder_f}"
         )
-        lines.append(f"\n  {'chip':<8s} {'n lines fit/total'}")
-        lines.append("  " + "-" * 40)
+        lines.append(f"  min_stack_size:  {self.min_stack_size}")
+        lines.append(f"\n  {'chip':<8s} {'frames survived':<18s} {'n lines fit/total'}")
+        lines.append("  " + "-" * 48)
         for chip, stats in self._stack_info.items():
             n_fit, n_total = stats["n_fit"], stats["n_total"]
+            n_survivors, n_frames = stats["n_survivors"], stats["n_frames"]
             pct = 100.0 * n_fit / n_total if n_total else 0.0
-            lines.append(f"  {chip:<8s} {n_fit} / {n_total} ({pct:.1f}%)")
+            survived = f"{n_survivors} / {n_frames}"
+            lines.append(
+                f"  {chip:<8s} {survived:<18s} {n_fit} / {n_total} ({pct:.1f}%)"
+            )
         self._info = "\n".join(lines)
 
     def info(self):
