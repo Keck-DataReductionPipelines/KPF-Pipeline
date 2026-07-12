@@ -30,6 +30,7 @@ import glob
 import importlib.util
 import logging
 import os
+import shutil
 import sys
 
 import kpfpipe
@@ -208,14 +209,18 @@ def resolve_logging(config, recipe_path, obs_id, datecode):
 
 
 # Glob patterns for a masters night's products: every L1/L2/L4 master in the
-# night's directory (KOAID prefix wildcarded), plus the WLS L2 master's
-# diagnostics sidecar.
+# night's directory (KOAID prefix wildcarded). The WLS L2 master's sidecar
+# outputs -- the per-frame ThAr L2s and the diagnostics HDF5 -- live in a
+# thar_L2/ subdirectory that clear_stale_outputs removes wholesale.
 _MASTER_OUTPUT_GLOBS = (
     "*_master_*_L1.fits",
     "*_master_*_L2.fits",
     "*_master_*_L4.fits",
-    "*_master_thar_diagnostics.h5",
 )
+
+# WLS sidecar subdirectory (per-frame {obs_id}_thar_L2.fits + the diagnostics
+# HDF5), written by wls.py beside the thar master.
+_MASTER_SIDECAR_DIR = "thar_L2"
 
 
 def clear_stale_outputs(config, args):
@@ -230,8 +235,10 @@ def clear_stale_outputs(config, args):
     Science (``-o obs_id``): the three per-obs_id paths under
     ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): every master product in the
     night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded), plus
-    the WLS diagnostics sidecar. A no-op when the output root is unconfigured or
-    nothing matches.
+    the whole WLS ``thar_L2/`` sidecar directory (per-frame ThAr L2s and the
+    diagnostics HDF5), so a rebuilt thar master can never co-exist with a prior
+    run's frame L2s or diagnostics. A no-op when the output root is unconfigured
+    or nothing matches.
     """
     data_dirs = config.get_params(["DATA_DIRS"])
     paths = []
@@ -248,6 +255,10 @@ def clear_stale_outputs(config, args):
             masters_dir = os.path.join(data_root, "masters", args.datecode)
             for pattern in _MASTER_OUTPUT_GLOBS:
                 paths += glob.glob(os.path.join(masters_dir, pattern))
+            sidecar_dir = os.path.join(masters_dir, _MASTER_SIDECAR_DIR)
+            if os.path.isdir(sidecar_dir):
+                shutil.rmtree(sidecar_dir)
+                logger.info("removed stale output dir: %s", sidecar_dir)
 
     for path in paths:
         if os.path.isfile(path):
