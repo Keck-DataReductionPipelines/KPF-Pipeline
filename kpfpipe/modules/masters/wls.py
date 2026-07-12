@@ -163,7 +163,7 @@ class WLS(BaseMasterModule):
     def _line_fit_qc(self, lines, lineprofile, window, loc, amp_max=1.5e6, std_min=0.5):
         """
         Quality-control the per-line fits and return a boolean flag array
-        (True = line failed QC), aligned with the per-line arrays in `lines`.
+        (True = line passed QC), aligned with the per-line arrays in `lines`.
 
         `loc` is the per-line window-center pixel; a centroid more than
         `window` pixels from it is flagged as a runaway fit. Fitted amplitudes
@@ -177,7 +177,7 @@ class WLS(BaseMasterModule):
         bad |= (lines["std"] < std_min) | (lines["std"] >= window)
         bad |= np.abs(lines["pix"] - loc) > window
 
-        return bad
+        return ~bad
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -274,7 +274,7 @@ class WLS(BaseMasterModule):
         lines : dict of ndarray
             Per-line arrays of equal length. All entries are retained
             regardless of QC status; the caller is responsible for
-            filtering on 'bad' before downstream use. Lines whose fit
+            filtering on 'isgood' before downstream use. Lines whose fit
             window contains any non-finite flux are dropped silently
             before fitting. If the input order is entirely non-finite
             (e.g. an extraction-failed orderlet filled with NaN), all
@@ -283,7 +283,7 @@ class WLS(BaseMasterModule):
               'pix' - fitted pixel position
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
-              'bad' - boolean QC flag (True = line failed QC)
+              'isgood' - boolean QC flag (True = line passed QC)
         """
         # Fit in float64 (wavelength solutions are float64).
         flux1d = np.asarray(flux1d, dtype=np.float64)
@@ -295,7 +295,7 @@ class WLS(BaseMasterModule):
         ncol = len(flux1d)
 
         lines = {k: np.zeros(0, dtype="float") for k in ["wav", "pix", "std", "amp"]}
-        lines["bad"] = np.zeros(0, dtype=bool)
+        lines["isgood"] = np.zeros(0, dtype=bool)
 
         if not np.isfinite(flux1d).any():
             return lines
@@ -348,7 +348,7 @@ class WLS(BaseMasterModule):
             else:
                 raise ValueError(f"Unsupported lineprofile: {lineprofile}")
 
-        lines["bad"] = self._line_fit_qc(lines, lineprofile, window, locs)
+        lines["isgood"] = self._line_fit_qc(lines, lineprofile, window, locs)
 
         return lines
 
@@ -392,7 +392,7 @@ class WLS(BaseMasterModule):
         lines : dict of ndarray
             Flat 1D arrays, all of equal length. All lines are retained
             regardless of QC status; the caller is responsible for
-            filtering on 'bad' before downstream use. All per-line keys
+            filtering on 'isgood' before downstream use. All per-line keys
             produced by `_fit_line_positions_1d` are carried through, plus
             provenance tags identifying each line's source. Keys:
               'chip' - chip identifier ('GREEN' or 'RED')
@@ -403,7 +403,7 @@ class WLS(BaseMasterModule):
               'pix' - fitted pixel position
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
-              'bad' - boolean QC flag (True = line failed QC)
+              'isgood' - boolean QC flag (True = line passed QC)
         """
         linelist_df = self._load_linelist(linelist)
 
@@ -412,7 +412,17 @@ class WLS(BaseMasterModule):
 
         orders = self._echelle_orders[chip]
         # keys mirror _fit_line_positions_1d's output plus per-line provenance tags
-        keys = ("chip", "fiber", "index", "echelle", "wav", "pix", "std", "amp", "bad")
+        keys = (
+            "chip",
+            "fiber",
+            "index",
+            "echelle",
+            "wav",
+            "pix",
+            "std",
+            "amp",
+            "isgood",
+        )
         lines = {k: [[None] * len(orders) for _ in fibers] for k in keys}
 
         for i, fiber in enumerate(fibers):
@@ -456,7 +466,7 @@ class WLS(BaseMasterModule):
                 lines[k][i] = np.hstack(lines[k][i])
 
             n_total = len(lines["wav"][i])
-            n_good = int(np.sum(~lines["bad"][i]))
+            n_good = int(np.sum(lines["isgood"][i]))
             logger.info("%s %s: %d/%d good lines", chip, fiber, n_good, n_total)
             if n_good == 0:
                 warnings.warn(
@@ -490,8 +500,8 @@ class WLS(BaseMasterModule):
         ----------
         lines : dict of ndarray
             Flat 1D arrays as produced by `_fit_line_positions_ffi`. Lines
-            with `lines['bad']` set are excluded from the fit. Required
-            keys: 'wav', 'pix', 'order', 'fiber', 'bad'.
+            without `lines['isgood']` set are excluded from the fit. Required
+            keys: 'wav', 'pix', 'echelle', 'fiber', 'isgood'.
         orders : ndarray of int
             Physical echelle order per row (bluest first), used to rescale
             the order axis to [-1, 1].
@@ -521,7 +531,7 @@ class WLS(BaseMasterModule):
         if polyorder_f is None:
             polyorder_f = self.polyorder_f
 
-        good = ~lines["bad"]
+        good = lines["isgood"]
         wav = lines["wav"][good]
         pix = lines["pix"][good]
         order = lines["echelle"][good]
@@ -744,8 +754,8 @@ class WLS(BaseMasterModule):
             }
             frames[i] = frame
 
-            nlines = len(lines["bad"])
-            bad_frac = np.sum(lines["bad"]) / nlines if nlines else 0.0
+            nlines = len(lines["isgood"])
+            bad_frac = np.sum(~lines["isgood"]) / nlines if nlines else 0.0
 
             if bad_frac > max_bad_frac:
                 frame["rejected"] = True
@@ -912,7 +922,7 @@ class WLS(BaseMasterModule):
             kept = [fr["lines"] for fr in frames if not fr["rejected"]]
             self._stack_info[chip] = {
                 "n_total": sum(len(lines["wav"]) for lines in kept),
-                "n_fit": sum(int(np.sum(~lines["bad"])) for lines in kept),
+                "n_fit": sum(int(np.sum(lines["isgood"])) for lines in kept),
             }
 
             # W's fiber planes are ordered by physical slicer position (the fit
@@ -964,7 +974,7 @@ class WLS(BaseMasterModule):
         Layout: /<obs_id>/<chip>/ per input frame and chip, each holding a
         `coeffs` dataset (per-frame Legendre coefficients; omitted for a
         rejected frame), a `lines/` group with every key from the per-frame
-        line dict (chip, fiber, index, echelle, wav, pix, std, amp, bad), and
+        line dict (chip, fiber, index, echelle, wav, pix, std, amp, isgood), and
         a `rejected` group attribute flagging whole-frame QC rejection for
         that chip.
 

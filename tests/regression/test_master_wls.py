@@ -245,7 +245,7 @@ def mock_make_master_l2(monkeypatch):
                     "pix": np.array([100.5, 200.5]),
                     "std": np.array([0.5, 0.5]),
                     "amp": np.array([1.0, 1.0]),
-                    "bad": np.array([False, False]),
+                    "isgood": np.array([True, True]),
                 },
                 "coeffs": coeffs,
                 "rejected": False,
@@ -295,7 +295,7 @@ class TestMakeMasterL2:
             frames = [
                 {
                     "obs_id": None,
-                    "lines": {"wav": np.array([5500.0]), "bad": np.array([False])},
+                    "lines": {"wav": np.array([5500.0]), "isgood": np.array([True])},
                     "coeffs": coeffs,
                     "rejected": False,
                 }
@@ -603,14 +603,14 @@ class TestMakeMasterL2:
                         "pix",
                         "std",
                         "amp",
-                        "bad",
+                        "isgood",
                     ]:
                         assert key in lines
                     assert np.issubdtype(lines["wav"].dtype, np.floating)
                     assert np.issubdtype(lines["pix"].dtype, np.floating)
                     assert np.issubdtype(lines["index"].dtype, np.integer)
                     assert np.issubdtype(lines["echelle"].dtype, np.integer)
-                    assert lines["bad"].dtype == bool
+                    assert lines["isgood"].dtype == bool
                     assert h5py.check_string_dtype(lines["chip"].dtype) is not None
                     assert h5py.check_string_dtype(lines["fiber"].dtype) is not None
                     for key in ["wav", "pix", "std", "amp"]:
@@ -627,7 +627,7 @@ class TestMakeMasterL2:
             "pix": np.array([100.0]),
             "std": np.array([0.5]),
             "amp": np.array([1.0]),
-            "bad": np.array([True]),
+            "isgood": np.array([False]),
         }
         wls._frame_diagnostics = {
             "GREEN": [
@@ -780,7 +780,7 @@ class TestCalculateWlsCoeffs:
             "pix": np.asarray(pix, dtype=float),
             "echelle": np.asarray(ord_, dtype=int),
             "fiber": np.asarray(fib),
-            "bad": np.zeros(n * len(fibers), dtype=bool),
+            "isgood": np.ones(n * len(fibers), dtype=bool),
         }
 
     def test_underconstrained_single_fiber_raises(self):
@@ -824,7 +824,7 @@ class TestCalculateWlsCoeffs:
             "pix": np.array([float(c) for _ in orders for c in cols]),
             "echelle": np.array([o for o in orders for _ in cols]),
             "fiber": np.array(["SCI1"] * (len(orders) * len(cols))),
-            "bad": np.zeros(len(orders) * len(cols), dtype=bool),
+            "isgood": np.ones(len(orders) * len(cols), dtype=bool),
         }
         coeffs_fit = wls._calculate_wls_coeffs(lines, orders)
         wave_fit = wls._evaluate_wls_coeffs(coeffs_fit, orders, nfiber=1)
@@ -848,9 +848,9 @@ class TestComputeWlsFrameRejection:
 
         frames = []
         for frac in bad_fracs:
-            bad = np.zeros(nlines, dtype=bool)
-            bad[: int(round(frac * nlines))] = True
-            frames.append({"wav": np.zeros(nlines), "bad": bad})
+            isgood = np.ones(nlines, dtype=bool)
+            isgood[: int(round(frac * nlines))] = False
+            frames.append({"wav": np.zeros(nlines), "isgood": isgood})
         it = iter(frames)
 
         monkeypatch.setattr(
@@ -897,7 +897,7 @@ class TestComputeWlsFrameRejection:
         # rather than silently poison the combined solution
         wls = WLS(FILE_LIST)
         wls._l2_obj_cache = [MockL2() for _ in range(3)]
-        lines = {"wav": np.zeros(100), "bad": np.zeros(100, dtype=bool)}
+        lines = {"wav": np.zeros(100), "isgood": np.ones(100, dtype=bool)}
         coeffs = iter(
             [np.ones((2, 2)), np.array([[1.0, np.nan], [1.0, 1.0]]), np.ones((2, 2))]
         )
@@ -925,7 +925,7 @@ class TestFitLinePositions:
         wave = np.linspace(5000.0, 5100.0, 100)
 
         result = wls._fit_line_positions_1d(flux, wave, np.array([]))
-        for key in ["wav", "pix", "std", "amp", "bad"]:
+        for key in ["wav", "pix", "std", "amp", "isgood"]:
             assert len(result[key]) == 0
 
     def test_line_outside_rough_wls_range_raises(self):
@@ -947,8 +947,8 @@ class TestFitLinePositions:
             "pix": np.array([100.0, 103.0, 120.0]),  # offsets 0, 3, 20
         }
         loc = np.full(3, 100.0)
-        bad = wls._line_fit_qc(lines, "gaussian", window=5, loc=loc)
-        assert list(bad) == [False, False, True]
+        isgood = wls._line_fit_qc(lines, "gaussian", window=5, loc=loc)
+        assert list(isgood) == [True, True, False]
 
     def test_fit_returns_float64_from_float32_inputs(self):
         """float32 flux/wave inputs must not drag the line fit into float32."""
