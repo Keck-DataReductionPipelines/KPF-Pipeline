@@ -366,8 +366,8 @@ class WLS(BaseMasterModule):
 
         Loops over the requested fibers, calling `_fit_line_positions_1d`
         on each (order, fiber) extracted spectrum, and concatenates the
-        surviving lines into flat arrays tagged with their echelle order
-        and fiber name.
+        surviving lines into flat arrays tagged with their chip, fiber,
+        order index, and echelle order.
 
         Parameters
         ----------
@@ -394,15 +394,16 @@ class WLS(BaseMasterModule):
             regardless of QC status; the caller is responsible for
             filtering on 'bad' before downstream use. All per-line keys
             produced by `_fit_line_positions_1d` are carried through, plus
-            'order' and 'fiber' which tag each line with its source order
-            and fiber. Keys:
+            provenance tags identifying each line's source. Keys:
+              'chip' - chip identifier ('GREEN' or 'RED')
+              'fiber' - fiber name
+              'index' - KPF order index (0-based row)
+              'echelle' - physical echelle order
               'wav' - reference line wavelength
               'pix' - fitted pixel position
               'std' - fitted line sigma (Gaussian width)
               'amp' - fitted line amplitude
               'bad' - boolean QC flag (True = line failed QC)
-              'order' - physical echelle order
-              'fiber' - fiber name
         """
         linelist_df = self._load_linelist(linelist)
 
@@ -411,7 +412,7 @@ class WLS(BaseMasterModule):
 
         orders = self._echelle_orders[chip]
         # keys mirror _fit_line_positions_1d's output plus per-line provenance tags
-        keys = ("wav", "pix", "std", "amp", "bad", "order", "fiber")
+        keys = ("chip", "fiber", "index", "echelle", "wav", "pix", "std", "amp", "bad")
         lines = {k: [[None] * len(orders) for _ in fibers] for k in keys}
 
         for i, fiber in enumerate(fibers):
@@ -443,8 +444,10 @@ class WLS(BaseMasterModule):
                         f"(no fittable lines; flux likely NaN-filled)",
                         stacklevel=2,
                     )
-                line_dict["order"] = o * np.ones(nlines, dtype=int)
+                line_dict["chip"] = np.full(nlines, chip)
                 line_dict["fiber"] = np.full(nlines, fiber)
+                line_dict["index"] = j * np.ones(nlines, dtype=int)
+                line_dict["echelle"] = o * np.ones(nlines, dtype=int)
 
                 for k in keys:
                     lines[k][i][j] = line_dict[k]
@@ -521,7 +524,7 @@ class WLS(BaseMasterModule):
         good = ~lines["bad"]
         wav = lines["wav"][good]
         pix = lines["pix"][good]
-        order = lines["order"][good]
+        order = lines["echelle"][good]
         fiber_names = lines["fiber"][good]
 
         fibers = list(set(fiber_names))
@@ -826,7 +829,7 @@ class WLS(BaseMasterModule):
         written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
         which is returned and cached on `self.ml2_obj`. Per-frame diagnostics
         are always stashed on `self._frame_diagnostics`; pass `master_path`
-        to persist the master and, into the `thar-wls-L2/` sidecar directory
+        to persist the master and, into the `thar_L2/` sidecar directory
         beside it, the per-frame L2s and the diagnostics HDF5.
 
         Parameters
@@ -853,7 +856,7 @@ class WLS(BaseMasterModule):
             `dark="/path/master_dark.fits"` uses a specific master.
         master_path : str, optional
             If provided, persists the master L2 to this FITS path via
-            `save_master('L2', ...)` and, into a `thar-wls-L2/` sidecar
+            `save_master('L2', ...)` and, into a `thar_L2/` sidecar
             directory beside it, each processed ThAr frame's L2
             (`save_reduced_frames()`) and the per-frame diagnostics HDF5
             (`save_diagnostics()`).
@@ -955,20 +958,21 @@ class WLS(BaseMasterModule):
     def save_diagnostics(self, master_path, *, overwrite=False):
         """
         Write the per-frame WLS diagnostics to an HDF5 file in the
-        `thar-wls-L2/` sidecar directory beside `master_path`, named
+        `thar_L2/` sidecar directory beside `master_path`, named
         `{obs_id}_master_thar_diagnostics.h5` (obs_id from `master_path`).
 
         Layout: /<obs_id>/<chip>/ per input frame and chip, each holding a
         `coeffs` dataset (per-frame Legendre coefficients; omitted for a
         rejected frame), a `lines/` group with every key from the per-frame
-        line dict (wav, pix, std, amp, bad, order, fiber), and a `rejected`
-        group attribute flagging whole-frame QC rejection for that chip.
+        line dict (chip, fiber, index, echelle, wav, pix, std, amp, bad), and
+        a `rejected` group attribute flagging whole-frame QC rejection for
+        that chip.
 
         Parameters
         ----------
         master_path : str
             The master L2 output path; its directory anchors the
-            `thar-wls-L2/` sidecar directory and its obs_id names the file.
+            `thar_L2/` sidecar directory and its obs_id names the file.
         overwrite : bool, optional
             If False (default), refuse to clobber an existing file and raise
             FileExistsError. If True, replace any existing file.
@@ -984,7 +988,7 @@ class WLS(BaseMasterModule):
         if not self._frame_diagnostics:
             raise RuntimeError("No diagnostics available; run make_master_l2() first")
 
-        directory = os.path.join(os.path.dirname(master_path), "thar-wls-L2")
+        directory = os.path.join(os.path.dirname(master_path), "thar_L2")
         os.makedirs(directory, exist_ok=True)
         path = os.path.join(
             directory, f"{get_obs_id(master_path)}_master_thar_diagnostics.h5"
@@ -1016,7 +1020,7 @@ class WLS(BaseMasterModule):
 
     def save_reduced_frames(self, master_path, *, overwrite=False):
         """
-        Write each processed ThAr frame's L2 to a `thar-wls-L2/` sidecar
+        Write each processed ThAr frame's L2 to a `thar_L2/` sidecar
         directory beside `master_path`, as `{obs_id}_thar_L2.fits`.
 
         Persists the per-frame L2 objects cached by make_master_l2() (every
@@ -1027,7 +1031,7 @@ class WLS(BaseMasterModule):
         ----------
         master_path : str
             The master L2 output path; its directory anchors the
-            `thar-wls-L2/` sidecar directory.
+            `thar_L2/` sidecar directory.
         overwrite : bool, optional
             If False (default), refuse to clobber an existing per-frame file
             and raise FileExistsError. If True, replace any existing file.
@@ -1043,7 +1047,7 @@ class WLS(BaseMasterModule):
         if not self._l2_obj_cache:
             raise RuntimeError("No frames available; run make_master_l2() first")
 
-        directory = os.path.join(os.path.dirname(master_path), "thar-wls-L2")
+        directory = os.path.join(os.path.dirname(master_path), "thar_L2")
         os.makedirs(directory, exist_ok=True)
         # These are deliberately non-EPRV diagnostic products; suppress KPF2.to_fits'
         # EPRV filename-convention warning for the {obs_id}_thar_L2 name.

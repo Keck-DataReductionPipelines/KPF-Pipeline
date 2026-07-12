@@ -237,13 +237,15 @@ def mock_make_master_l2(monkeypatch):
             {
                 "obs_id": l2_obj.obs_id,
                 "lines": {
+                    "chip": np.array([chip] * 2),
+                    "fiber": np.array([fibers[0]] * 2),
+                    "index": np.array([0, 1]),
+                    "echelle": self._echelle_orders[chip][:2].astype(int),
                     "wav": np.array([5500.0, 5501.0]),
                     "pix": np.array([100.5, 200.5]),
-                    "order": self._echelle_orders[chip][:2],
-                    "fiber": np.array([fibers[0]] * 2),
-                    "bad": np.array([False, False]),
                     "std": np.array([0.5, 0.5]),
                     "amp": np.array([1.0, 1.0]),
+                    "bad": np.array([False, False]),
                 },
                 "coeffs": coeffs,
                 "rejected": False,
@@ -440,14 +442,14 @@ class TestMakeMasterL2:
         master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
         with pytest.raises(RuntimeError, match="run make_master_l2"):
             wls.save_diagnostics(str(master_path))
-        assert not (tmp_path / "thar-wls-L2").exists()
+        assert not (tmp_path / "thar_L2").exists()
 
     def test_master_path_writes_diagnostics_hdf5(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
         wls.make_master_l2(master_path=str(master_path))
         h5_path = (
-            tmp_path / "thar-wls-L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
+            tmp_path / "thar_L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         )
         assert h5_path.exists()
 
@@ -457,7 +459,7 @@ class TestMakeMasterL2:
         master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
         wls.save_diagnostics(str(master_path))
         h5_path = (
-            tmp_path / "thar-wls-L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
+            tmp_path / "thar_L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         )
         assert h5_path.exists()
 
@@ -497,7 +499,7 @@ class TestMakeMasterL2:
         master_path = tmp_path / "masters" / "KP.20240101.00000.00_master_thar_L2.fits"
         wls.make_master_l2(master_path=str(master_path))
 
-        thar_dir = master_path.parent / "thar-wls-L2"
+        thar_dir = master_path.parent / "thar_L2"
         written = sorted(p.name for p in thar_dir.glob("*_thar_L2.fits"))
         expected = sorted(f"{get_obs_id(fn)}_thar_L2.fits" for fn in FILE_LIST)
         assert written == expected
@@ -507,7 +509,7 @@ class TestMakeMasterL2:
     ):
         wls = WLS(FILE_LIST)
         wls.make_master_l2()  # no master_path
-        assert not (tmp_path / "thar-wls-L2").exists()
+        assert not (tmp_path / "thar_L2").exists()
 
     def test_save_reduced_frames_before_make_raises(self, tmp_path):
         wls = WLS(FILE_LIST)
@@ -571,7 +573,7 @@ class TestMakeMasterL2:
         master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
         wls.make_master_l2(master_path=str(master_path))
         h5_path = (
-            tmp_path / "thar-wls-L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
+            tmp_path / "thar_L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         )
 
         expected_coeffs_shape = (
@@ -592,12 +594,24 @@ class TestMakeMasterL2:
                     assert np.issubdtype(grp["coeffs"].dtype, np.floating)
 
                     lines = grp["lines"]
-                    for key in ["wav", "pix", "order", "fiber", "bad", "std", "amp"]:
+                    for key in [
+                        "chip",
+                        "fiber",
+                        "index",
+                        "echelle",
+                        "wav",
+                        "pix",
+                        "std",
+                        "amp",
+                        "bad",
+                    ]:
                         assert key in lines
                     assert np.issubdtype(lines["wav"].dtype, np.floating)
                     assert np.issubdtype(lines["pix"].dtype, np.floating)
-                    assert np.issubdtype(lines["order"].dtype, np.integer)
+                    assert np.issubdtype(lines["index"].dtype, np.integer)
+                    assert np.issubdtype(lines["echelle"].dtype, np.integer)
                     assert lines["bad"].dtype == bool
+                    assert h5py.check_string_dtype(lines["chip"].dtype) is not None
                     assert h5py.check_string_dtype(lines["fiber"].dtype) is not None
                     for key in ["wav", "pix", "std", "amp"]:
                         assert np.all(np.isfinite(lines[key][...]))
@@ -605,13 +619,15 @@ class TestMakeMasterL2:
     def test_rejected_frame_written_with_flag_and_no_coeffs(self, tmp_path):
         wls = WLS(FILE_LIST)
         lines = {
+            "chip": np.array(["GREEN"]),
+            "fiber": np.array(["SCI1"]),
+            "index": np.array([0]),
+            "echelle": np.array([100]),
             "wav": np.array([5500.0]),
             "pix": np.array([100.0]),
             "std": np.array([0.5]),
             "amp": np.array([1.0]),
             "bad": np.array([True]),
-            "order": np.array([100]),
-            "fiber": np.array(["SCI1"]),
         }
         wls._frame_diagnostics = {
             "GREEN": [
@@ -632,7 +648,7 @@ class TestMakeMasterL2:
         master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
         wls.save_diagnostics(str(master_path))
         h5_path = (
-            tmp_path / "thar-wls-L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
+            tmp_path / "thar_L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         )
         with h5py.File(h5_path, "r") as h5:
             kept = h5["KP.20240101.00001.00"]["GREEN"]
@@ -672,7 +688,7 @@ class TestMakeMasterL2:
             )
 
         # The NaN order (bluest RED, echelle 102) contributed no lines; rest did.
-        assert 102 not in result["order"]
+        assert 102 not in result["echelle"]
         assert len(result["wav"]) > 0
 
     def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
@@ -762,7 +778,7 @@ class TestCalculateWlsCoeffs:
         return {
             "wav": np.asarray(wav, dtype=float),
             "pix": np.asarray(pix, dtype=float),
-            "order": np.asarray(ord_, dtype=int),
+            "echelle": np.asarray(ord_, dtype=int),
             "fiber": np.asarray(fib),
             "bad": np.zeros(n * len(fibers), dtype=bool),
         }
@@ -806,7 +822,7 @@ class TestCalculateWlsCoeffs:
                 [wave_true[j, c] for j in range(len(orders)) for c in cols]
             ),
             "pix": np.array([float(c) for _ in orders for c in cols]),
-            "order": np.array([o for o in orders for _ in cols]),
+            "echelle": np.array([o for o in orders for _ in cols]),
             "fiber": np.array(["SCI1"] * (len(orders) * len(cols))),
             "bad": np.zeros(len(orders) * len(cols), dtype=bool),
         }
