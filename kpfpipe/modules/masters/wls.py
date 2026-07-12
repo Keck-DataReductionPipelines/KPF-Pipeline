@@ -944,7 +944,7 @@ class WLS(BaseMasterModule):
 
         self.ml2_obj.set_input_files(l0_file_list, "thar")
 
-        # WLS metadata is out of EPRV scope but registered in Masters-headers.csv,
+        # WLS metadata is out of EPRV scope but registered in ML2-wls-headers.csv,
         # so it routes through set_keyword (-> PRIMARY, registry comments).
         self.ml2_obj.set_keyword("ROUGHWLS", self.rough_wls_file)
         self.ml2_obj.set_keyword("LINELIST", self.linelist)

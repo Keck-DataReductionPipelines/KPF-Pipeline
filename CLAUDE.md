@@ -242,8 +242,8 @@ see the style guide §11.)* The architecture invariants:
   `CCD{1,2}RV`/`CCD{1,2}ERV` above), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
   calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths), the
   **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). Masters route their
-  PRIMARY keywords the same way (registered in `config/Masters-headers.csv`); `BUNIT` is structural, not
-  registered.
+  PRIMARY keywords the same way (registered in the per-master-type `config/ML{1,2}-*-headers.csv`
+  registries); `BUNIT` is structural, not registered.
 - **DRP provenance is stamped at read** (`KPF0.from_fits` → `_stamp_wmko_tracking`) onto RECEIPT, not at
   `to_kpf1`: `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID` (the original L0 obs_id). It rides the
   RECEIPT header forward downstream; `DRPSTATU` is advanced per module by `_update_drpstatus`. `ORIGID`
@@ -378,7 +378,7 @@ Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs
 
 **Masters header alignment (out of EPRV scope, but stylistically aligned).** Masters are *not* EPRV-governed, but follow the same keyword conventions as the science models as closely as possible:
 
-- **Keywords route through `set_keyword`.** Masters PRIMARY keywords — `MASTYPE` and the WLS metadata `ROUGHWLS`/`LINELIST`/`LINEPROF`/`POLYORDX`/`POLYORDM`/`POLYORDF` — are registered in `config/Masters-headers.csv`, all homed on PRIMARY (one registry home each). `BUNIT` (on each `{chip}_IMG`) is structural, not registered.
+- **Keywords route through `set_keyword`.** Masters PRIMARY keywords — `MASTYPE` and the WLS metadata `ROUGHWLS`/`LINELIST`/`LINEPROF`/`POLYORDX`/`POLYORDM`/`POLYORDF` — are registered in the **per-master-type** registries `config/{ML1,ML2-flat,ML2-wls}-headers.csv` (mirroring the per-type `ML*-extensions.csv` manifests), all homed on PRIMARY (one registry home each). `MASTYPE` is in every file; the WLS metadata only in `ML2-wls-headers.csv`. Level is derived from the filename (ML1→1, ML2→2), and all three union into the single global registry table (`keyword_registry._masters_rows`) — so routing/validation are unchanged today; the split sets up eventual per-type keyword enforcement when the checkpoint layer is wired onto masters. `BUNIT` (on each `{chip}_IMG`) is structural, not registered.
 - **Masters PRIMARY is minimal — no EPRV science skeleton.** `KPFMasterL1` never runs `KPF1.__init__`; `KPFMasterL2` runs `KPF2.__init__`→`RV2.__init__` and so **clears** the inherited EPRV L2 skeleton. Both stamp `DATALVL` (`"ML1"`/`"ML2"`) in `__init__`.
 - **Extension manifests are authoritative CSVs, per master type.** `ML1-extensions.csv` builds ML1 directly. ML2 inherits the full KPF2 schema (for the alias system); `KPFMasterL2(kind=…)` takes a **required** `kind` (`"wls"`/`"flat"`) and reads `ML2-{kind}-extensions.csv` — `__init__` deletes any inherited extension the manifest omits, then creates its `Required` rows. **wls** carries `TRACE*_WAVE` + `*_WLS_COEFFS`; **flat** carries `TRACE*_FLUX`/`VAR`/`BLAZE`; both omit the per-observation extensions (`INSTRUMENT_HEADER`, `BARYCORR_*`/`BJD_TDB`, `EXPMETER`/`TELEMETRY`/`ANCILLARY_SPECTRUM`). `from_fits` infers `kind` from PRIMARY `MASTYPE`. **To add or drop an ML2 extension, edit the CSV(s).**
 - **QC infrastructure is present, checks deferred.** Both levels carry `QUALITY_CONTROL` + `RECEIPT` for later wiring; no masters QC checks or DRP-provenance stamping exist yet.

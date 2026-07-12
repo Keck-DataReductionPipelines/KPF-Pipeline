@@ -359,7 +359,7 @@ class TestMakeMasterL2:
 
     def test_primary_header_keyword_comments_from_registry(self, mock_make_master_l2):
         # WLS metadata routes through set_keyword, so the FITS comments come from
-        # Masters-headers.csv (registry), not code-local strings.
+        # ML2-wls-headers.csv (registry), not code-local strings.
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
         primary = ml2.headers["PRIMARY"]
