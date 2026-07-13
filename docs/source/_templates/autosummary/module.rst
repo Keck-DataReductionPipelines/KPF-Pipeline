@@ -1,4 +1,4 @@
-{{ fullname | escape | underline }}
+{{ fullname | replace("kpfpipe.", "") | escape | underline }}
 
 .. automodule:: {{ fullname }}
    :members:
@@ -13,7 +13,7 @@
    :toctree:
    :recursive:
 {% for item in modules %}
-   {{ item }}
+   ~{{ item }}
 {%- endfor %}
 {% endif %}
 {% endblock %}

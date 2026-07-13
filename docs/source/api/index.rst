@@ -2,11 +2,14 @@ API
 ===
 
 Auto-generated reference for the ``kpfpipe`` package, built from the source
-docstrings. Pages are produced automatically by Sphinx ``autosummary`` and
-recurse through every subpackage and module.
+docstrings. The entries below are the top-level subpackages; each recurses
+automatically through its own modules.
 
 .. autosummary::
    :toctree: _generated
    :recursive:
 
-   kpfpipe
+   ~kpfpipe.data_models
+   ~kpfpipe.modules
+   ~kpfpipe.quality_control
+   ~kpfpipe.utils
