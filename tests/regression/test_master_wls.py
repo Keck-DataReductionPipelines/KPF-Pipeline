@@ -978,6 +978,17 @@ class TestCombineCoeffs:
         _, coeffs_mean = wls._combine_coeffs_stack(frames, "GREEN", 1)
         np.testing.assert_allclose(coeffs_mean, 5.0)
 
+    def test_all_outliers_raises(self):
+        # The cross-frame degeneracy: with qc_sigma tight enough that no frame
+        # survives for some coefficient (here every frame differs from the median),
+        # denom hits 0 and the stack is uncombinable, so it raises rather than
+        # producing a spurious master. (At the default qc_sigma the MAD keeps at
+        # least half the frames within threshold, so this guard needs qc_sigma=0.)
+        wls = WLS(FILE_LIST)
+        frames = self._frames([np.full((2, 2), 0.0), np.full((2, 2), 10.0)])
+        with pytest.raises(ValueError, match=r"all frames rejected as outliers"):
+            wls._combine_coeffs_stack(frames, "GREEN", 1, qc_sigma=0.0)
+
 
 class TestMinStackSizeGate:
     """make_master_l2 gates the master on min_stack_size survivors per chip:
@@ -985,6 +996,8 @@ class TestMinStackSizeGate:
     written; at or above it, the master is produced."""
 
     def _mock(self, monkeypatch, n_survivors, n_frames=8):
+        # n_survivors is an int (same count for every chip) or a {chip: count}
+        # dict, so a test can make GREEN and RED pass/fail the gate independently.
         files = sorted(f"KP.20240101.{i:05d}.00.fits" for i in range(n_frames))
         monkeypatch.setattr(WLS, "_load_frame", lambda self, fn, cache=False, **kw: fn)
         monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kw: l1)
@@ -993,9 +1006,10 @@ class TestMinStackSizeGate:
         )
 
         def mock_fit(self, chip, fibers, **kwargs):
+            n = n_survivors[chip] if isinstance(n_survivors, dict) else n_survivors
             frames = []
             for j, l2 in enumerate(self._l2_obj_cache):
-                rejected = j >= n_survivors
+                rejected = j >= n
                 coeffs = (
                     None
                     if rejected
@@ -1052,6 +1066,19 @@ class TestMinStackSizeGate:
         ml2 = wls.make_master_l2(master_path=str(master_path))
         assert isinstance(ml2, KPFMasterL2)
         assert master_path.exists()
+
+    def test_gate_is_per_chip(self, monkeypatch, tmp_path):
+        # GREEN clears the gate (5 survivors) but RED does not (2): the build
+        # raises naming the failing chip and withholds the master even though the
+        # other chip passed. The diagnostics still persist (saved before the gate).
+        wls = self._mock(monkeypatch, {"GREEN": 5, "RED": 2})
+        wls.min_stack_size = 5
+        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        with pytest.raises(ValueError, match=r"RED: only 2 frame"):
+            wls.make_master_l2(master_path=str(master_path))
+        assert not master_path.exists()
+        thar_dir = tmp_path / "thar_L2"
+        assert (thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5").exists()
 
 
 # ---------------------------------------------------------------------------

@@ -44,7 +44,7 @@ class WLS(BaseMasterModule):
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: linelist, lineprofile,
         polyorder_x, polyorder_m, polyorder_f, chips, fibers,
-        KPF_MASTERS_OUTPUT.
+        min_stack_size (per-chip line-fit-QC survivor gate), KPF_MASTERS_OUTPUT.
     """
 
     _DEFAULTS = {
