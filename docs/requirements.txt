@@ -1,5 +1,29 @@
-# Documentation build dependencies (docs-only; no kpfpipe install yet).
-# Kept minimal on purpose during the structure-only phase. Add nbsphinx /
-# myst-parser here when notebook tutorials or markdown pages are introduced.
+# Documentation build dependencies.
+#
+# Sphinx + theme, plus the kpfpipe *runtime* dependencies. The docs build does
+# NOT install the kpfpipe package itself (that would require the exact
+# "==3.14.3" interpreter pinned in pyproject.toml); instead conf.py puts the
+# source tree on sys.path and Sphinx autodoc imports it. For those imports to
+# succeed, the real third-party libraries must be present — mocking them is too
+# fragile for a package this size (module-level astropy-unit math,
+# importlib.metadata version lookups, etc. all run at import time).
+#
+# The versions below MIRROR pyproject.toml [project].dependencies and must be
+# kept in sync with it (update both together).
+
+# --- docs tooling ---
 sphinx
 sphinx-rtd-theme
+
+# --- kpfpipe runtime deps (mirror of pyproject.toml [project].dependencies) ---
+astropy==7.2.0
+astroquery==0.4.11
+barycorrpy==0.4.4
+h5py==3.15.1
+matplotlib==3.10.8
+numpy==2.4.2
+pandas==3.0.0
+pillow==12.1.1
+scipy==1.17.0
+tqdm==4.67.3
+rv-data-standard==0.4.0

@@ -1,15 +1,18 @@
 # ReadTheDocs build configuration for the KPF-DRP vNext documentation.
 # https://docs.readthedocs.io/en/stable/config-file/v2.html
 #
-# Structure-only phase: the docs build installs docs tooling only and does NOT
-# install the kpfpipe package (conf.py imports no project code). The package
-# install + Sphinx autodoc are wired in later, when API content is authored.
+# The docs build installs docs tooling + the kpfpipe runtime dependencies (see
+# docs/requirements.txt) but NOT the kpfpipe package itself — that would demand
+# the exact "==3.14.3" interpreter pinned in pyproject.toml. Sphinx autodoc
+# documents the package by putting the source tree on sys.path (see
+# docs/source/conf.py) and importing it against those real deps. Python is
+# matched to the project's 3.14 line so the source imports cleanly under autodoc.
 version: 2
 
 build:
   os: "ubuntu-24.04"
   tools:
-    python: "3.13"
+    python: "3.14"
 
 python:
   install:

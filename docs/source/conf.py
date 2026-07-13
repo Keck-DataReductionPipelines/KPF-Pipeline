@@ -2,11 +2,21 @@
 #
 # KPF-DRP vNext documentation build configuration.
 #
-# Structure-only phase: this config imports NO project code (no `import
-# kpfpipe`), so the docs build needs only Sphinx + the RTD theme and does not
-# require installing the package or its heavy dependencies. When the API pages
-# gain autodoc content, add the package install (in .readthedocs.yaml) and the
-# autodoc/napoleon extensions here.
+# The docs build does NOT install the kpfpipe package (that would demand the
+# exact "==3.14.3" interpreter pinned in pyproject.toml). Instead it puts the
+# source tree on sys.path and lets Sphinx autodoc introspect it. The package's
+# real runtime dependencies ARE installed (see docs/requirements.txt) so every
+# kpfpipe.* module imports cleanly for introspection — mocking them proved too
+# fragile for a package this size (module-level astropy-unit math,
+# importlib.metadata version lookups, etc. run at import time). The build Python
+# is matched to the project's 3.14 line (see .readthedocs.yaml).
+
+import os
+import sys
+
+# Repo root = docs/source/../.. — resolved from this file so it is independent
+# of the directory sphinx-build is invoked from.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 # -- Project information ------------------------------------------------------
 
@@ -22,6 +32,9 @@ release = "vNext"
 # -- General configuration ----------------------------------------------------
 
 extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
     "sphinx_rtd_theme",
 ]
 
@@ -31,6 +44,17 @@ master_doc = "index"
 language = "en"
 exclude_patterns = []
 pygments_style = "sphinx"
+
+# -- autodoc / autosummary ----------------------------------------------------
+
+# Generate the per-module autosummary stub pages at build time (nothing to
+# commit; the output dir is gitignored).
+autosummary_generate = True
+
+autodoc_default_options = {
+    "members": True,
+    "show-inheritance": True,
+}
 
 # -- Options for HTML output --------------------------------------------------
 

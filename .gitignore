@@ -225,3 +225,6 @@ notes/
 
 __pycache__
 kpf_drp.egg-info
+
+# Sphinx autosummary-generated API stub pages (regenerated each build).
+docs/source/api/_generated/
