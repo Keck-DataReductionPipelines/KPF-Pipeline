@@ -195,7 +195,7 @@ class TestClearStaleOutputs:
             _Config({"KPF_SCIENCE_OUTPUT": str(tmp_path)}), _args(obs_id="KP.x")
         )
 
-    def test_masters_removes_night_products_and_sidecar(self, tmp_path):
+    def test_masters_removes_night_products_and_stack_subdir(self, tmp_path):
         masters_root = str(tmp_path / "m")
         night = os.path.join(masters_root, "masters", "20240405")
         os.makedirs(night)
@@ -212,17 +212,17 @@ class TestClearStaleOutputs:
         for name in removed + kept:
             open(os.path.join(night, name), "w").close()
 
-        # The WLS sidecar dir: per-frame ThAr L2s + the diagnostics HDF5, all
+        # The WLS thar_L2/ subdir: per-frame ThAr L2s + the diagnostics HDF5, all
         # removed wholesale with the thar master.
-        sidecar = os.path.join(night, "thar_L2")
-        os.makedirs(sidecar)
-        sidecar_files = [
+        stack_subdir = os.path.join(night, "thar_L2")
+        os.makedirs(stack_subdir)
+        stack_files = [
             f"{koaid}_master_thar_diagnostics.h5",
             "KP.20240405.40113.57_thar_L2.fits",
             "KP.20240405.40200.00_thar_L2.fits",
         ]
-        for name in sidecar_files:
-            open(os.path.join(sidecar, name), "w").close()
+        for name in stack_files:
+            open(os.path.join(stack_subdir, name), "w").close()
 
         red.clear_stale_outputs(
             _Config({"KPF_MASTERS_OUTPUT": masters_root}), _args(datecode="20240405")
@@ -230,7 +230,7 @@ class TestClearStaleOutputs:
 
         for name in removed:
             assert not os.path.exists(os.path.join(night, name)), name
-        assert not os.path.exists(sidecar)  # entire sidecar dir gone
+        assert not os.path.exists(stack_subdir)  # entire subdir gone
         for name in kept:
             assert os.path.exists(os.path.join(night, name)), name
 

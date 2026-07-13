@@ -449,7 +449,7 @@ class TestKpfFilepath:
         # kpf_filepath is exactly kpf_directory joined with kpf_filename.
         obs_id = "KP.20240405.40113.57"
         assert kpf_filepath(obs_id, "L2", data_root="/data") == os.path.join(
-            kpf_directory(obs_id, level="L2", data_root="/data", kind="science"),
+            kpf_directory(kind="science", data_root="/data", level="L2", obs_id=obs_id),
             kpf_filename(obs_id, "L2"),
         )
 
@@ -576,36 +576,70 @@ class TestKpfDirectory:
     OBS_ID = "KP.20240405.49597.71"
 
     def test_science(self):
-        path = kpf_directory(self.OBS_ID, level="L2", data_root="/data", kind="science")
+        path = kpf_directory(
+            kind="science", data_root="/data", level="L2", obs_id=self.OBS_ID
+        )
         assert path == "/data/L2/20240405"
 
     def test_masters_ignores_level(self):
-        path = kpf_directory(self.OBS_ID, data_root="/data", kind="masters")
+        path = kpf_directory(kind="masters", data_root="/data", obs_id=self.OBS_ID)
+        assert path == "/data/masters/20240405"
+
+    def test_masters_by_datecode(self):
+        # masters needs only the datecode, so a bare datecode works (the CLI path).
+        path = kpf_directory(kind="masters", data_root="/data", datecode="20240405")
         assert path == "/data/masters/20240405"
 
     def test_qlp(self):
-        path = kpf_directory(self.OBS_ID, level="L0", data_root="/data", kind="QLP")
+        path = kpf_directory(
+            kind="QLP", data_root="/data", level="L0", obs_id=self.OBS_ID
+        )
         assert path == "/data/QLP/20240405/KP.20240405.49597.71/L0"
+
+    def test_qlp_rejects_datecode(self):
+        with pytest.raises(ValueError, match="requires obs_id"):
+            kpf_directory(
+                kind="QLP", data_root="/data", level="L0", datecode="20240405"
+            )
+
+    def test_both_sources_raises(self):
+        with pytest.raises(ValueError, match="exactly one of obs_id or datecode"):
+            kpf_directory(
+                kind="masters",
+                data_root="/data",
+                obs_id=self.OBS_ID,
+                datecode="20240405",
+            )
+
+    def test_neither_source_raises(self):
+        with pytest.raises(ValueError, match="exactly one of obs_id or datecode"):
+            kpf_directory(kind="masters", data_root="/data")
+
+    def test_invalid_datecode_raises(self):
+        with pytest.raises(ValueError, match="datecode must be"):
+            kpf_directory(kind="masters", data_root="/data", datecode="2024")
 
     def test_invalid_kind_raises(self):
         with pytest.raises(ValueError, match="kind must be one of"):
-            kpf_directory(self.OBS_ID, level="L0", data_root="/data", kind="logs")
+            kpf_directory(
+                kind="logs", data_root="/data", level="L0", obs_id=self.OBS_ID
+            )
 
     def test_invalid_obs_id_raises(self):
         with pytest.raises(ValueError, match="valid observation ID"):
-            kpf_directory("20240405", level="L0", data_root="/data", kind="QLP")
+            kpf_directory(kind="QLP", data_root="/data", level="L0", obs_id="20240405")
 
     def test_missing_level_raises_for_science(self):
         with pytest.raises(ValueError, match="'level' must be"):
-            kpf_directory(self.OBS_ID, data_root="/data", kind="science")
+            kpf_directory(kind="science", data_root="/data", obs_id=self.OBS_ID)
 
     def test_invalid_data_root_none_raises(self):
         with pytest.raises(ValueError, match="data_root must be a non-empty string"):
-            kpf_directory(self.OBS_ID, level="L0", data_root=None, kind="QLP")
+            kpf_directory(kind="QLP", data_root=None, level="L0", obs_id=self.OBS_ID)
 
     def test_invalid_data_root_empty_string_raises(self):
         with pytest.raises(ValueError, match="data_root must be a non-empty string"):
-            kpf_directory(self.OBS_ID, level="L0", data_root="", kind="QLP")
+            kpf_directory(kind="QLP", data_root="", level="L0", obs_id=self.OBS_ID)
 
 
 # ---------------------------------------------------------------------------

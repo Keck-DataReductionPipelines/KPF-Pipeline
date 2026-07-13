@@ -537,12 +537,10 @@ class FileHandler:
         """
         if self._masters_output is None:
             raise ValueError("FileHandler has no KPF_MASTERS_OUTPUT configured")
-        pattern = os.path.join(
-            self._masters_output,
-            "masters",
-            datecode,
-            f"*_master_{cal_type}_{level}.fits",
+        night_dir = kpf_directory(
+            kind="masters", data_root=self._masters_output, datecode=datecode
         )
+        pattern = os.path.join(night_dir, f"*_master_{cal_type}_{level}.fits")
         return sorted(glob.glob(pattern))
 
 
@@ -613,14 +611,28 @@ def kpf_filename(obs_id, level, *, master=None):
 _DIRECTORY_KINDS = ("science", "masters", "QLP")
 
 
-def kpf_directory(obs_id, *, level=None, data_root, kind):
+def masters_stack_subdir(masters, kind, level):
+    """Subdirectory of a masters night dir holding the per-frame stacked inputs
+    (and diagnostics) for a ``kind`` master at ``level`` -- e.g. ``thar``/``L2``
+    gives ``{masters}/thar_L2`` for the WLS per-frame L2s. Single source of the
+    name, shared by wls.py (writer) and reduce.py (stale-clear); future kinds:
+    flat_L2, thar_L4, and the other wls inputs (lfc, etalon)."""
+    return os.path.join(masters, f"{kind}_{level}")
+
+
+def kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None):
     """
     Output directory for a KPF product tree.
 
     The single authority for the on-disk output layout; `kpf_filepath` and the
     recipes go through it rather than re-deriving ``os.path.join(data_root, ...)``
-    by hand. The datecode is parsed from ``obs_id``. Pure path construction -- it
-    does not touch the filesystem.
+    by hand. Pure path construction -- it does not touch the filesystem.
+
+    The datecode comes from exactly one of ``obs_id`` (parsed) or ``datecode``
+    (given directly). ``QLP`` needs the full ``obs_id`` (it names a path
+    component); ``science``/``masters`` only need the datecode, so either source
+    works -- ``masters`` in particular is often built from a bare ``datecode``
+    (e.g. the CLI ``--datecode``, before any frame obs_id is in hand).
 
     ===========  =========================================================
     ``kind``     directory
@@ -632,16 +644,19 @@ def kpf_directory(obs_id, *, level=None, data_root, kind):
 
     Parameters
     ----------
-    obs_id : str
-        Observation ID (e.g. 'KP.20240405.49597.71'); the datecode source and,
-        for ``QLP``, a path component.
+    kind : str
+        Which output tree: 'science', 'masters', or 'QLP'.
+    data_root : str
+        Root data directory (e.g. '/data/kpf/'); a non-empty string.
     level : str or None, optional
         Data level 'L0'/'L1'/'L2'/'L4'. Required for ``science`` and ``QLP``;
         unused for ``masters``.
-    data_root : str
-        Root data directory (e.g. '/data/kpf/'); a non-empty string.
-    kind : str
-        Which output tree: 'science', 'masters', or 'QLP'.
+    obs_id : str or None, optional
+        Observation ID (e.g. 'KP.20240405.49597.71'); the datecode source and,
+        for ``QLP``, a path component. Mutually exclusive with ``datecode``.
+    datecode : str or None, optional
+        Datecode 'YYYYMMDD' directly. Mutually exclusive with ``obs_id``; not
+        accepted for ``QLP`` (which needs the full obs_id).
 
     Returns
     -------
@@ -651,21 +666,29 @@ def kpf_directory(obs_id, *, level=None, data_root, kind):
     Raises
     ------
     ValueError
-        If `data_root` is not a non-empty string, `kind` is unrecognized,
-        `obs_id` is invalid, or `level` is missing/invalid for a kind that needs
-        it.
+        If `data_root` is not a non-empty string, `kind` is unrecognized, the
+        obs_id/datecode source is missing/ambiguous/invalid, `datecode` is given
+        for ``QLP``, or `level` is missing/invalid for a kind that needs it.
     """
     if not isinstance(data_root, str) or not data_root:
         raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")
     if kind not in _DIRECTORY_KINDS:
         raise ValueError(f"kind must be one of {list(_DIRECTORY_KINDS)}; got {kind!r}")
-    if not is_obs_id(obs_id):
-        raise ValueError(
-            "obs_id must be a valid observation ID "
-            f"(e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
-        )
+    if (obs_id is None) == (datecode is None):
+        raise ValueError("pass exactly one of obs_id or datecode")
 
-    datecode = get_datecode(obs_id)
+    if obs_id is not None:
+        if not is_obs_id(obs_id):
+            raise ValueError(
+                "obs_id must be a valid observation ID "
+                f"(e.g. 'KP.20240405.49597.71'); got '{obs_id}'"
+            )
+        datecode = get_datecode(obs_id)
+    else:
+        if kind == "QLP":
+            raise ValueError("kind='QLP' requires obs_id, not datecode")
+        if not is_datecode(datecode):
+            raise ValueError(f"datecode must be 'YYYYMMDD'; got '{datecode}'")
 
     if kind == "masters":
         return os.path.join(data_root, "masters", datecode)
@@ -733,6 +756,6 @@ def kpf_filepath(obs_id, level, *, data_root=None, master=None):
 
     kind = "masters" if master is not None else "science"
     return os.path.join(
-        kpf_directory(obs_id, level=level, data_root=data_root, kind=kind),
+        kpf_directory(kind=kind, data_root=data_root, level=level, obs_id=obs_id),
         filename,
     )

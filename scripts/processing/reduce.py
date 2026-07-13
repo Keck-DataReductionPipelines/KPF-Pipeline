@@ -35,7 +35,7 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import kpf_filepath
+from kpfpipe.utils.io import kpf_directory, kpf_filepath, masters_stack_subdir
 from kpfpipe.utils.kpf_utils import is_obs_id
 from kpfpipe.utils.logger import setup_logging
 from scripts.processing import (
@@ -209,18 +209,14 @@ def resolve_logging(config, recipe_path, obs_id, datecode):
 
 
 # Glob patterns for a masters night's products: every L1/L2/L4 master in the
-# night's directory (KOAID prefix wildcarded). The WLS L2 master's sidecar
-# outputs -- the per-frame ThAr L2s and the diagnostics HDF5 -- live in a
-# thar_L2/ subdirectory that clear_stale_outputs removes wholesale.
+# night's directory (KOAID prefix wildcarded). The WLS L2 master's per-frame
+# ThAr L2s and diagnostics HDF5 live in a thar_L2/ subdirectory that
+# clear_stale_outputs removes wholesale.
 _MASTER_OUTPUT_GLOBS = (
     "*_master_*_L1.fits",
     "*_master_*_L2.fits",
     "*_master_*_L4.fits",
 )
-
-# WLS sidecar subdirectory (per-frame {obs_id}_thar_L2.fits + the diagnostics
-# HDF5), written by wls.py beside the thar master.
-_MASTER_SIDECAR_DIR = "thar_L2"
 
 
 def clear_stale_outputs(config, args):
@@ -235,7 +231,7 @@ def clear_stale_outputs(config, args):
     Science (``-o obs_id``): the three per-obs_id paths under
     ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): every master product in the
     night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded), plus
-    the whole WLS ``thar_L2/`` sidecar directory (per-frame ThAr L2s and the
+    the whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the
     diagnostics HDF5), so a rebuilt thar master can never co-exist with a prior
     run's frame L2s or diagnostics. A no-op when the output root is unconfigured
     or nothing matches.
@@ -252,13 +248,15 @@ def clear_stale_outputs(config, args):
     elif args.datecode:
         data_root = data_dirs.get("KPF_MASTERS_OUTPUT")
         if data_root:
-            masters_dir = os.path.join(data_root, "masters", args.datecode)
+            masters_dir = kpf_directory(
+                kind="masters", data_root=data_root, datecode=args.datecode
+            )
             for pattern in _MASTER_OUTPUT_GLOBS:
                 paths += glob.glob(os.path.join(masters_dir, pattern))
-            sidecar_dir = os.path.join(masters_dir, _MASTER_SIDECAR_DIR)
-            if os.path.isdir(sidecar_dir):
-                shutil.rmtree(sidecar_dir)
-                logger.info("removed stale output dir: %s", sidecar_dir)
+            stack_subdir = masters_stack_subdir(masters_dir, "thar", "L2")
+            if os.path.isdir(stack_subdir):
+                shutil.rmtree(stack_subdir)
+                logger.info("removed stale output dir: %s", stack_subdir)
 
     for path in paths:
         if os.path.isfile(path):

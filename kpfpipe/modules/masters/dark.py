@@ -63,13 +63,13 @@ class Dark(BaseMasterModule):
         nstream=6,
         sigma=None,
         bias=None,
-        filepath=None,
+        master_path=None,
     ):
         """
         Build master dark from stack.
 
         The constructed KPFMasterL1 is returned and cached on
-        `self.ml1_obj`; pass `filepath` to also persist it to disk
+        `self.ml1_obj`; pass `master_path` to also persist it to disk
         via `save_master('L1', ...)`.
 
         Parameters
@@ -86,9 +86,9 @@ class Dark(BaseMasterModule):
             is bias-only, so `bias=False` skips bias subtraction and
             `bias="/path/master_bias.fits"` uses a specific master. Dark/flat are
             never applied to a dark, so they are not accepted.
-        filepath : str, optional
-            If provided, calls `self.save_master('L1', filepath)` at
-            the end to persist the master L1 to a FITS file at this filepath.
+        master_path : str, optional
+            If provided, calls `self.save_master('L1', master_path)` at
+            the end to persist the master L1 to a FITS file at this path.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -111,8 +111,8 @@ class Dark(BaseMasterModule):
         self._populate_stack_info(l1_arrays)
         self._track_info()
 
-        if filepath is not None:
-            self.save_master("L1", filepath, overwrite=True)
+        if master_path is not None:
+            self.save_master("L1", master_path, overwrite=True)
 
         logger.info("summary:\n%s", self._info)
 

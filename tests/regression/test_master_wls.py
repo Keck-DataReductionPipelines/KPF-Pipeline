@@ -981,7 +981,7 @@ class TestCombineCoeffs:
 
 class TestMinStackSizeGate:
     """make_master_l2 gates the master on min_stack_size survivors per chip:
-    below the threshold it raises, but the diagnostics/L2 sidecars are still
+    below the threshold it raises, but the per-frame diagnostics/L2s are still
     written; at or above it, the master is produced."""
 
     def _mock(self, monkeypatch, n_survivors, n_frames=8):

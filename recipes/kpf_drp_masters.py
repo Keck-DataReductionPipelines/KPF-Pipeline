@@ -11,11 +11,7 @@ and written to the output data root via the pipeline path helpers.
 import logging
 import os
 
-from kpfpipe.modules.masters.bias import Bias
-from kpfpipe.modules.masters.dark import Dark
-
-# from kpfpipe.modules.masters.flat import Flat
-from kpfpipe.modules.masters.wls import WLS
+from kpfpipe.modules.masters import WLS, Bias, Dark
 from kpfpipe.utils.io import FileHandler, kpf_filepath
 from kpfpipe.utils.kpf_utils import get_obs_id
 
@@ -59,7 +55,7 @@ def main(config, args):
         )
         logger.info("stacking %d bias frames -> %s", len(files), bias_path)
         bias = Bias(files, config)
-        bias.make_master_l1(filepath=bias_path)
+        bias.make_master_l1(master_path=bias_path)
 
     # Stack the dark frames into a master dark used to remove dark current.
     # Runs after the master bias so CalibrationAssociation can subtract that
@@ -74,27 +70,25 @@ def main(config, args):
         )
         logger.info("stacking %d dark frames -> %s", len(files), dark_path)
         dark = Dark(files, config)
-        dark.make_master_l1(filepath=dark_path)
+        dark.make_master_l1(master_path=dark_path)
 
     # master flat (not yet implemented)
     # for files in file_handler.build_calibration_stacks('flat'):
     #    flat_path = kpf_filepath(get_obs_id(files[0]), 'L1',
     #                               data_root=data_root_masters, master='flat')
     #    flat = Flat(files, config)
-    #    flat.make_master_l1(filepath=flat_path)
+    #    flat.make_master_l1(master_path=flat_path)
 
     # Stack the ThAr exposures into a master wavelength solution, since the
     # emission-line spectrum anchors the per-order wavelength calibration.
     for files in file_handler.build_calibration_stacks("thar"):
         obs_id = get_obs_id(files[0])
-        wls_master_path = kpf_filepath(
+        wls_path = kpf_filepath(
             obs_id, "L2", data_root=data_root_masters, master="thar"
         )
-        logger.info(
-            "building WLS from %d ThAr frames -> %s", len(files), wls_master_path
-        )
+        logger.info("building WLS from %d ThAr frames -> %s", len(files), wls_path)
         wls = WLS(files, config)
-        wls.make_master_l2(master_path=wls_master_path)
+        wls.make_master_l2(master_path=wls_path)
 
     logger.info("exiting kpf_drp_masters pipeline")
 
