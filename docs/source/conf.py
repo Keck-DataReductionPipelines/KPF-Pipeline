@@ -51,6 +51,21 @@ pygments_style = "sphinx"
 # commit; the output dir is gitignored).
 autosummary_generate = True
 
+# Modules omitted from the generated API reference: internal machinery that is
+# not part of the user-facing surface. This is a docs-presentation choice, not
+# an API-privacy change — these modules are legitimately imported across the
+# package and tests, so they are NOT renamed private (no leading underscore).
+# The recursive autosummary template (_templates/autosummary/module.rst) reads
+# this list via autosummary_context and drops matching submodules. Use exact
+# dotted names (e.g. keep kpfpipe.utils.config, drop kpfpipe.data_models.config).
+autosummary_context = {
+    "skip_modules": [
+        "kpfpipe.data_models.config",
+        "kpfpipe.data_models.keyword_registry",
+        "kpfpipe.data_models.aliased_dict",
+    ],
+}
+
 autodoc_default_options = {
     "members": True,
     "show-inheritance": True,
