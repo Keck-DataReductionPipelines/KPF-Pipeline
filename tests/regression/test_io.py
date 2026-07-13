@@ -125,7 +125,7 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
     """Sparse dark clusters on opposite HST days, split by a >2 h gap.
 
     Mirrors a real sparse-dark night (e.g. 20240806): a pre-midnight group and a
-    post-midnight group, each below the dark min_file_count and separated by both
+    post-midnight group, each below the dark min_stack_size and separated by both
     the gap and HST midnight. Returns (df, before_files, after_files).
     """
     before = [
@@ -148,10 +148,13 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
 def _cluster(cal_type, mini_db, **kwargs):
     """Cluster a synthetic mini_db through the (instance-method) API.
 
-    build_calibration_stacks reads the handler's carried mini database by default;
-    these logic tests pass a synthetic one via ``mini_db=`` on a bare handler.
+    build_calibration_stacks reads the handler's carried mini database
+    (``self._mini_db``); these logic tests set a synthetic one on a bare handler
+    the same way ``build_mini_database`` would.
     """
-    return FileHandler().build_calibration_stacks(cal_type, mini_db=mini_db, **kwargs)
+    fh = FileHandler({})
+    fh._mini_db = mini_db
+    return fh.build_calibration_stacks(cal_type, **kwargs)
 
 
 class TestSecondsSinceJ2000:
@@ -160,27 +163,27 @@ class TestSecondsSinceJ2000:
 
     def test_basic(self):
         # J2000.0 itself: 2000-01-01 12:00 UTC = '20000101.43200.00'
-        assert FileHandler()._seconds_since_j2000("20000101.43200.00") == 0
+        assert FileHandler({})._seconds_since_j2000("20000101.43200.00") == 0
 
     def test_monotonic_across_year_boundary(self):
         # Dec 31 23:59:00 -> Jan 1 00:00:00 should differ by 60s exactly.
-        fh = FileHandler()
+        fh = FileHandler({})
         end = fh._seconds_since_j2000("20231231.86340.00")
         start_next_year = fh._seconds_since_j2000("20240101.00000.00")
         assert start_next_year - end == 60
 
     def test_raises_on_invalid_timestamp(self):
         with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            FileHandler()._seconds_since_j2000("KP.20240405.99999.57.fits")
+            FileHandler({})._seconds_since_j2000("KP.20240405.99999.57.fits")
 
     def test_raises_when_no_timestamp_found(self):
         with pytest.raises(ValueError, match="No KPF timestamp found"):
-            FileHandler()._seconds_since_j2000("notimestamp.fits")
+            FileHandler({})._seconds_since_j2000("notimestamp.fits")
 
 
 class TestBuildCalibrationStacks:
     """Clustering depends only on the mini database, so these exercise it with
-    synthetic DataFrames (no files on disk) via the ``mini_db=`` override."""
+    synthetic DataFrames (no files on disk) set on a bare handler."""
 
     def test_two_bias_clusters_returned_separately(self):
         lists = _cluster("bias", _make_mini_db())
@@ -199,91 +202,61 @@ class TestBuildCalibrationStacks:
             assert lst == sorted(lst)
 
     def test_raises_when_no_cluster_meets_min(self):
-        # min_file_count=6: both bias clusters (5 files each) fall below and are
+        # min_stack_size=6: both bias clusters (5 files each) fall below and are
         # dropped, leaving nothing → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("bias", _make_mini_db(), min_file_count=6)
+            _cluster("bias", _make_mini_db(), min_stack_size=6)
 
     def test_raises_when_no_frames_found(self):
         with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
             _cluster("flat", _make_mini_db())
 
-    def test_raises_when_only_cluster_below_default_min(self):
-        # dark cluster has only 3 files; default min_file_count=5 → dropped →
-        # raises.
+    def test_raises_when_only_cluster_below_min(self):
+        # dark cluster has only 3 files; min_stack_size=5 → dropped → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("dark", _make_mini_db())
+            _cluster("dark", _make_mini_db(), min_stack_size=5)
 
     def test_drops_small_cluster_keeps_large(self):
         db, _ = _mixed_bias_db()
-        lists = _cluster("bias", db)
+        lists = _cluster("bias", db, min_stack_size=5)
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_A)
 
-    def test_merge_folds_small_into_neighbor(self):
-        db, small = _mixed_bias_db()
-        lists = _cluster("bias", db, merge_small_clusters=True)
+    def test_default_min_stack_size_is_noop(self):
+        # The default min_stack_size=1 is a no-op filter: a lone 2-frame cluster
+        # survives with no explicit threshold (distinguishing it from any nonzero
+        # default that would drop it).
+        db = _mini_db(_rows(_BIAS_SMALL, "autocal-bias", "Bias"))
+        lists = _cluster("bias", db)
         assert len(lists) == 1
-        assert lists[0] == sorted(_BIAS_A + small)
+        assert lists[0] == sorted(_BIAS_SMALL)
 
-    def test_merge_combines_two_small_clusters(self):
-        # Two 5-file bias clusters, each below min=6; merged into one of 10.
-        lists = _cluster(
-            "bias", _make_mini_db(), min_file_count=6, merge_small_clusters=True
-        )
-        assert len(lists) == 1
-        assert len(lists[0]) == 10
+    def test_invalid_groupby_raises(self):
+        with pytest.raises(ValueError, match="groupby must be one of"):
+            _cluster("bias", _make_mini_db(), groupby="bogus")
 
-    def test_merge_raises_when_total_below_min(self):
-        # 7 bias files total (5 + 2); merging cannot reach min=8 → raises.
-        db, _ = _mixed_bias_db()
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("bias", db, min_file_count=8, merge_small_clusters=True)
-
-    def test_hst_midnight_splits_cluster(self):
-        # Same-OBJECT frames <gap apart but on opposite sides of HST midnight
-        # (UTC 36000) must not share a cluster.
+    def test_time_of_day_ignores_hst_boundary(self):
+        # time_of_day splits on time gaps alone: frames <gap apart but on opposite
+        # sides of HST midnight now share one cluster (there is no midnight split).
         db, before, after = _midnight_bias_db()
-        lists = _cluster("bias", db, min_file_count=5)
+        lists = _cluster("bias", db, min_stack_size=5)
+        assert len(lists) == 1
+        assert lists[0] == sorted(before + after)
+
+    def test_hst_day_splits_at_midnight(self):
+        # groupby='hst_day' puts each HST calendar day in its own stack, even when
+        # the frames are <gap apart across HST midnight.
+        db, before, after = _midnight_bias_db()
+        lists = _cluster("bias", db, min_stack_size=5, groupby="hst_day")
         assert len(lists) == 2
         assert lists[0] == sorted(before)
         assert lists[1] == sorted(after)
 
-    def test_hst_midnight_blocks_merge(self):
-        # A small post-midnight cluster has no same-HST-day neighbor, so it is
-        # dropped rather than merged across midnight into the pre-midnight one.
-        db, before, _ = _midnight_bias_db(n_before=5, n_after=2)
-        lists = _cluster("bias", db, min_file_count=5, merge_small_clusters=True)
-        assert len(lists) == 1
-        assert lists[0] == sorted(before)
-
-    def test_no_boundary_keeps_cross_midnight_cluster(self):
-        # With enforce_hst_midnight_boundary=False, frames <gap apart across HST
-        # midnight stay in one cluster (only cluster_gap_seconds can split them).
-        db, before, after = _midnight_bias_db()
-        lists = _cluster(
-            "bias",
-            db,
-            min_file_count=5,
-            enforce_hst_midnight_boundary=False,
-        )
-        assert len(lists) == 1
-        assert lists[0] == sorted(before + after)
-
-    def test_no_boundary_merges_across_midnight(self):
-        # Two sparse dark clusters on opposite HST days (the 20240806 case): with
-        # the boundary enforced they cannot merge and both drop; with it lifted
-        # they merge into one cluster that meets the threshold.
+    def test_obs_night_single_stack_spans_midnight(self):
+        # groupby='obs_night' groups the whole loaded night into one stack,
+        # spanning both a >2 h gap and HST midnight (the 20240806 sparse-dark case).
         db, before, after = _cross_midnight_gap_db()
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("dark", db, min_file_count=3, merge_small_clusters=True)
-        lists = _cluster(
-            "dark",
-            db,
-            min_file_count=3,
-            merge_small_clusters=True,
-            enforce_hst_midnight_boundary=False,
-        )
+        lists = _cluster("dark", db, min_stack_size=3, groupby="obs_night")
         assert len(lists) == 1
         assert lists[0] == sorted(before + after)
 
@@ -334,26 +307,18 @@ class TestBuildCalibrationStacksRealData:
 
     def test_dark_raises_on_undersized_clusters(self, fh):
         # The testdata has two dark clusters of 2 and 3 frames — both below
-        # the default min_file_count=5 and dropped, leaving nothing → raises.
+        # min_stack_size=5 and dropped, leaving nothing → raises.
         with pytest.raises(ValueError, match="no cluster with at least"):
-            fh.build_calibration_stacks("dark")
+            fh.build_calibration_stacks("dark", min_stack_size=5)
 
-    def test_dark_merge_respects_hst_boundary(self, fh):
-        # The 5 dark frames span two HST days (2 on one, 3 on the next), so they
-        # can never merge into a single >=5 master without crossing HST midnight.
-        # With the default min=5, no same-HST-day cluster reaches the threshold →
-        # raises even with merge_small_clusters.
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            fh.build_calibration_stacks("dark", merge_small_clusters=True)
-
-    def test_dark_merges_within_hst_day(self, fh):
-        # Lowering min to 3 lets the 3 same-HST-day darks merge into one cluster;
-        # the 2 frames on the other HST day are dropped (no same-day neighbor).
+    def test_dark_obs_night_single_stack(self, fh):
+        # The recipe's dark usage: the night's 5 dark frames span two HST days
+        # (2 + 3), and groupby='obs_night' groups them into one nightly stack.
         lists = fh.build_calibration_stacks(
-            "dark", min_file_count=3, merge_small_clusters=True
+            "dark", min_stack_size=3, groupby="obs_night"
         )
         assert len(lists) == 1
-        assert len(lists[0]) == 3
+        assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
 
@@ -555,7 +520,7 @@ class TestFindMasters:
 
     def test_raises_without_masters_output(self):
         with pytest.raises(ValueError, match="KPF_MASTERS_OUTPUT"):
-            FileHandler().find_masters("bias", "L1", "20240405")
+            FileHandler({}).find_masters("bias", "L1", "20240405")
 
     @pytest.mark.parametrize(
         "cal_type,level",
@@ -682,7 +647,7 @@ class TestBuildMiniDatabase:
 
     def test_missing_data_input_raises(self):
         with pytest.raises(ValueError, match="KPF_DATA_INPUT"):
-            FileHandler().build_mini_database("20240405")
+            FileHandler({}).build_mini_database("20240405")
 
 
 # ---------------------------------------------------------------------------
@@ -713,13 +678,15 @@ def _write_l0_frame(tmp_path, datecode, obs_id):
 
 
 def _seed_cache(tmp_path, datecode, filenames):
-    """Seed the on-disk mini-db cache CSV with the given FILENAME rows and return
-    its path. Only FILENAME/OBJECT are written -- enough for the guardrail
-    (row count) and cache-hit (FILENAME) assertions."""
+    """Seed the on-disk mini-db cache CSV (the full real schema, one row per
+    filename) and return its path. OBJECT is populated so the row survives the
+    readable-frame clean; the other columns are left blank -- enough for the
+    row-count / freshness / cache-hit (FILENAME) assertions."""
     cache = tmp_path / "vNext" / "mini_db" / f"{datecode}_L0.csv"
     cache.parent.mkdir(parents=True, exist_ok=True)
-    rows = "".join(f"{fn},autocal-bias\n" for fn in filenames)
-    cache.write_text("FILENAME,OBJECT\n" + rows)
+    cols = "FILENAME,TARGNAME,IMTYPE,OBJECT,EXPTIME,ELAPSED,UTC,HST,ISJUNK"
+    rows = "".join(f"{fn},,,autocal-bias,,,,,\n" for fn in filenames)
+    cache.write_text(cols + "\n" + rows)
     return cache
 
 
@@ -734,9 +701,9 @@ def _touch_newer(cache, l0_dir):
 
 
 class TestMiniDatabaseCache:
-    def test_cache_true_writes_csv_on_scan(self, tmp_path):
+    def test_cache_write_writes_csv_on_scan(self, tmp_path):
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
-        db = fh.build_mini_database("20240405", cache=True)
+        db = fh.build_mini_database("20240405", cache="rw")
 
         cache = tmp_path / "vNext" / "mini_db" / "20240405_L0.csv"
         assert cache.is_file()
@@ -746,7 +713,45 @@ class TestMiniDatabaseCache:
         assert len(cached) == len(db)
         assert cached["FILENAME"].tolist() == db["FILENAME"].tolist()
 
-    def test_cache_true_reads_current_cache_without_scanning(self, tmp_path):
+    def test_unreadable_frame_recorded_in_cache_not_in_memory(self, tmp_path):
+        # An unreadable frame is omitted from the in-memory db (useless for
+        # stacking) but still recorded in the on-disk cache, so the cache mirrors
+        # the directory and its row-count guardrail treats it as current, not stale.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        _write_l0_frame(tmp_path, "20240405", "KP.20240405.02000.00")
+        corrupt = tmp_path / "L0" / "20240405" / "KP.20240405.03000.00.fits"
+        corrupt.write_bytes(b"not a valid FITS file")
+
+        with pytest.warns(UserWarning, match="Could not read header"):
+            db = fh.build_mini_database("20240405", cache="rw")
+
+        assert len(db) == 2  # in-memory: only the two readable frames
+        cache = tmp_path / "vNext" / "mini_db" / "20240405_L0.csv"
+        assert len(pd.read_csv(cache)) == 3  # on-disk: one row per file present
+
+        # The count guardrail now sees 3 == 3, so the cache reads back as current.
+        cached = fh._read_mini_db_cache("20240405")
+        assert cached is not None and len(cached) == 3
+        # A full read-mode build is a cache hit and still cleans to the readable set.
+        assert len(fh.build_mini_database("20240405", cache="r")) == 2
+
+    def test_cache_write_failure_leaves_no_partial_or_temp(self, tmp_path, monkeypatch):
+        # The atomic write (temp file + os.replace) cleans up on failure: a to_csv
+        # error re-raises, leaving no partial cache CSV and no orphaned .tmp file.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+
+        def _boom(self, *a, **k):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(pd.DataFrame, "to_csv", _boom)
+        with pytest.raises(OSError, match="disk full"):
+            fh.build_mini_database("20240405", cache="w")
+
+        cache_dir = tmp_path / "vNext" / "mini_db"
+        assert not (cache_dir / "20240405_L0.csv").exists()  # no partial cache
+        assert list(cache_dir.glob("*.tmp")) == []  # temp file removed
+
+    def test_cache_read_reads_current_cache_without_scanning(self, tmp_path):
         # A current cache (row count matches disk, newer than every input) is
         # loaded verbatim, not rescanned. Prove it by seeding a SENTINEL FILENAME
         # a real scan would never produce, then asserting it survives.
@@ -754,8 +759,27 @@ class TestMiniDatabaseCache:
         cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
         _touch_newer(cache, tmp_path / "L0" / "20240405")
 
-        db = fh.build_mini_database("20240405", cache=True)
+        db = fh.build_mini_database("20240405", cache="rw")
         assert db["FILENAME"].tolist() == ["/sentinel.fits"]
+
+    def test_cache_read_only_does_not_write(self, tmp_path):
+        # "r" reads a current cache but, on a miss, never writes one back.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        db = fh.build_mini_database("20240405", cache="r")
+
+        assert len(db) == 1  # scanned fresh (no cache to read)
+        assert not (tmp_path / "vNext" / "mini_db").exists()  # and none written
+
+    def test_cache_write_only_does_not_read(self, tmp_path):
+        # "w" writes the scan result but ignores an existing cache on read: the
+        # seeded sentinel is overwritten by a real scan, not loaded.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        _touch_newer(cache, tmp_path / "L0" / "20240405")
+
+        db = fh.build_mini_database("20240405", cache="w")
+        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+        assert pd.read_csv(cache)["FILENAME"].tolist() == db["FILENAME"].tolist()
 
     def test_cache_stale_row_count_rescans(self, tmp_path):
         # Cache lists one frame but two are on disk -> count guardrail rejects it.
@@ -764,7 +788,7 @@ class TestMiniDatabaseCache:
         cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
         _touch_newer(cache, tmp_path / "L0" / "20240405")
 
-        db = fh.build_mini_database("20240405", cache=True)
+        db = fh.build_mini_database("20240405", cache="rw")
         assert len(db) == 2
         assert "/sentinel.fits" not in db["FILENAME"].tolist()
 
@@ -774,7 +798,7 @@ class TestMiniDatabaseCache:
         cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
         os.utime(cache, (1_000_000, 1_000_000))  # far in the past
 
-        db = fh.build_mini_database("20240405", cache=True)
+        db = fh.build_mini_database("20240405", cache="rw")
         assert "/sentinel.fits" not in db["FILENAME"].tolist()
         expected = os.path.join(
             str(tmp_path), "L0", "20240405", "KP.20240405.01000.00.fits"
@@ -785,6 +809,11 @@ class TestMiniDatabaseCache:
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
         fh.build_mini_database("20240405")  # cache defaults to False
         assert not (tmp_path / "vNext" / "mini_db").exists()
+
+    def test_invalid_cache_mode_raises(self, tmp_path):
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        with pytest.raises(ValueError, match="cache must be False"):
+            fh.build_mini_database("20240405", cache=True)
 
 
 # ---------------------------------------------------------------------------
@@ -818,17 +847,17 @@ class TestJunkExclusion:
     def test_exclude_junk_default_drops_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
-        lists = _cluster("bias", db, min_file_count=1)
+        lists = _cluster("bias", db, min_stack_size=1)
         assert junk_fn not in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_false_keeps_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
-        lists = _cluster("bias", db, min_file_count=1, exclude_junk=False)
+        lists = _cluster("bias", db, min_stack_size=1, exclude_junk=False)
         assert junk_fn in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias")).drop(columns="ISJUNK")
         with pytest.raises(KeyError):
-            _cluster("bias", db, min_file_count=1)
+            _cluster("bias", db, min_stack_size=1)

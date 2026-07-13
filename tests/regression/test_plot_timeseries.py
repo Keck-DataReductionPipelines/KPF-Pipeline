@@ -469,7 +469,7 @@ class TestPlot:
         paths = self._paths(str(tmp_path), spec)
         plot_dir = tmp_path / "plots"
         pt.plot_rv_timeseries("10700", paths, str(plot_dir))
-        assert (plot_dir / "10700_20240926_rv_timeseries.png").exists()
+        assert (plot_dir / "10700_rv_timeseries_20240926.png").exists()
         assert (plot_dir / "10700_rv_timeseries.png").exists()
         # The high-cadence night is one datecode with >1 obs, but it is held out of
         # the nightly panels, and the two survivors are single-obs -> no nightly PNG.
@@ -483,8 +483,8 @@ class TestPlot:
         paths = self._paths(str(tmp_path), spec)
         plot_dir = tmp_path / "plots"
         pt.plot_rv_timeseries("10700", paths, str(plot_dir))
-        assert (plot_dir / "10700_20240926_rv_timeseries.png").exists()
-        assert (plot_dir / "10700_20240927_rv_timeseries.png").exists()
+        assert (plot_dir / "10700_rv_timeseries_20240926.png").exists()
+        assert (plot_dir / "10700_rv_timeseries_20240927.png").exists()
         assert not (plot_dir / "10700_rv_timeseries.png").exists()
         assert not (plot_dir / "10700_rv_nightly.png").exists()
 

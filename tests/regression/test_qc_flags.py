@@ -431,6 +431,27 @@ class TestQCL0:
         del l0.headers["PRIMARY"]["EXPTIME"]
         assert QCL0(l0).exptime_sane() is False
 
+    def test_exptime_sane_pass_elapsed_within_tol(self, tmp_path):
+        # ELAPSED may exceed the requested EXPTIME by up to the timing tolerance.
+        l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 300.05})
+        assert QCL0(l0).exptime_sane() is True
+
+    def test_exptime_sane_pass_elapsed_absent(self, tmp_path):
+        # No ELAPSED card -> the consistency comparison is skipped.
+        l0 = _make_kpf0(tmp_path, exptime=300.0)
+        assert "ELAPSED" not in l0.headers["PRIMARY"]
+        assert QCL0(l0).exptime_sane() is True
+
+    def test_exptime_sane_fail_premature_readout(self, tmp_path):
+        # ELAPSED shorter than the requested EXPTIME (premature readout).
+        l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 299.0})
+        assert QCL0(l0).exptime_sane() is False
+
+    def test_exptime_sane_fail_elapsed_exceeds_tol(self, tmp_path):
+        # ELAPSED over the requested EXPTIME by more than the tolerance.
+        l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 301.0})
+        assert QCL0(l0).exptime_sane() is False
+
     # not_junk delegates all file I/O to io.load_junk_obs_ids, so these tests
     # monkeypatch that helper (no junk file is ever written to a data tree) and
     # verify only not_junk's own logic: the dirname -> data_input recovery, the
@@ -917,13 +938,15 @@ _REPO_ROOT = os.path.dirname(
 def _write_l0_fixture(path, *, passing=True):
     """Write a minimal L0 FITS fixture at path.
 
-    passing=True  → all QCL0 checks pass (valid header keywords, finite EXPTIME,
-                    amps present).
+    passing=True  → all QCL0 checks pass (valid header keywords, EXPTIME finite
+                    and consistent with ELAPSED, amps present).
     passing=False → inject a failure (negative EXPTIME so EXPTIMOK fails).
     """
     primary = fits.PrimaryHDU()
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-    primary.header["EXPTIME"] = 60.0 if passing else -1.0
+    # Requested EXPTIME within tolerance of the elapsed time (_GOOD_DATES
+    # ELAPSED = 12.07) so EXPTIMOK's ELAPSED-consistency check passes.
+    primary.header["EXPTIME"] = 12.0 if passing else -1.0
     primary.header["OBJECT"] = "synthetic"
     primary.header["OFNAME"] = os.path.basename(path)
     primary.header["IMTYPE"] = "Object"

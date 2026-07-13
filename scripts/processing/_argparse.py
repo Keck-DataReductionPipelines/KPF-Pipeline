@@ -1,10 +1,10 @@
 """Shared argparse parent parsers for the batch processing CLI commands.
 
 Common flag groups -- recipe/config selection, data-dir overrides, logging
-overrides, and the fan-out pool controls -- factored out so the subcommand
-parsers (``reduce``/``masters``/``science``) compose them via ``parents=[...]``
-instead of each re-declaring the same flags. Every factory returns a fresh
-``add_help=False`` parser to slot in as a parent.
+overrides, the fan-out pool controls, and the mini-db ``--cache`` mode -- factored
+out so the subcommand parsers (``reduce``/``masters``/``science``) compose them via
+``parents=[...]`` instead of each re-declaring the same flags. Every factory
+returns a fresh ``add_help=False`` parser to slot in as a parent.
 
 Depends only on ``argparse`` -- never on ``tools`` -- so, like ``_dispatch.py``,
 the scripts layer stays ignorant of the CLI dispatcher above it.
@@ -106,6 +106,25 @@ def logging_parser():
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--log_dir", help="override [LOGGER] log_dir")
     p.add_argument("--log_level", help="override [LOGGER] log_level (e.g. DEBUG)")
+    return p
+
+
+def cache_parser(default="r"):
+    """L0 mini-db ``--cache`` mode flag, shared by the batch orchestrators.
+
+    Controls how a command's up-front pre-scan warms the on-disk mini-database
+    cache. The factory default is ``"r"`` (read-only, no warm); the orchestrators
+    that own cache writing pass ``default="rw"``. The leaf ``reduce`` deliberately
+    has no such flag -- recipes read the cache but never write it.
+    """
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument(
+        "--cache",
+        choices=["r", "w", "rw", "wr"],
+        default=default,
+        help="L0 mini-db cache mode: 'r' read-only (skip the pre-scan), 'w' rescan "
+        "and write, 'rw' reuse a current cache else write (default: %(default)s)",
+    )
     return p
 
 

@@ -270,21 +270,27 @@ class StageName:
   Tunable params become instance attributes via the `_DEFAULTS` setattr loop.
 - **`_DEFAULTS` merges the global defaults**: `_DEFAULTS = {**DEFAULTS, "key": ...}`
   (use the `{**DEFAULTS, ...}` spread form, not `dict(DEFAULTS)`).
-- **Utility handlers in `utils/` are a lighter variant.** A config-carrying
-  discovery/IO handler (e.g. `io.FileHandler`) has no data-model object and often no
-  per-call tunables: it takes `config=None` alone, resolves only the roots it needs
-  (`config.get_params(["DATA_DIRS"])`), stores them as private attributes, and
+- **Utility handlers in `utils/` are a lighter variant.** A discovery/IO handler
+  (e.g. `io.FileHandler`) has no data-model object and often no per-call tunables: it
+  takes the already-extracted **`[DATA_DIRS]` dict** (required; the caller does the
+  `config.get_params(["DATA_DIRS"])` — the handler deliberately does not import or
+  accept `ConfigHandler`), stores the roots it needs as private attributes, and
   **omits the `_DEFAULTS` setattr loop** when there is nothing tunable to surface
   (every clustering knob stays a per-call method argument). Such a handler may also
   carry loaded working state so callers never thread an intermediate product:
   `FileHandler.build_mini_database` caches the night's DataFrame on `self._mini_db`,
   which `build_calibration_stacks` reads by default (an explicit `mini_db=` arg overrides
   it, per the "`None` means use `self`" rule), so the recipe passes a datecode once
-  and the mini database is never surfaced. Its `cache=True` flag adds an on-disk tier
-  keyed by the same `datecode`: it loads `{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv`
-  when present (skipping the header scan) and writes it after a scan otherwise — a
-  read/write-through cache under one flag, not two. Callers that reduce a night repeatedly
-  (the masters recipe, `select_master_cals.py`, `timeseries.py` discovery) pass it.
+  and the mini database is never surfaced. Its `cache` flag adds an on-disk tier
+  keyed by the same `datecode`, whose read and write sides are selected independently by a
+  mode string (`False` default / `"r"` / `"w"` / `"rw"`/`"wr"`, order-insensitive): read loads
+  `{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv` when present (skipping the header
+  scan), write writes it (atomically, temp file + `os.replace`) after a scan, and `"rw"` is
+  the read/write-through cache. Cache **writing is owned by the scripts/orchestrator layer**:
+  the batch orchestrators warm each night once up front (the `_scan.py` pre-scan,
+  `cache="rw"`) and `timeseries.py` discovery writes with `"rw"`, while the readers — the
+  reduce leaf (masters recipe) and `select_master_cals.py` — pass `"r"`. Recipes/modules
+  read the cache but never write it.
 - **Defaults live in the module, not the config file.** Resolution is a three-tier
   override chain, lowest precedence first: `_DEFAULTS` (the in-module default) → config
   (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword

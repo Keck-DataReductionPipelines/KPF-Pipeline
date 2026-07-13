@@ -17,6 +17,10 @@ one ``reduce`` per unit, and the standalone plotter), so the robust fan-out,
 timeout, and interrupt handling live in the orchestrators. The plotter is handed
 the already-discovered obs_ids, so it does no second scan.
 
+Discovery doubles as the sole L0 mini-db cache warm (``--cache``, ``rw`` by
+default); the masters and science stages it launches are told ``--cache r`` so they
+read those caches rather than redundantly re-warming them.
+
 All three stages run by default; ``--no-masters`` / ``--no-science`` / ``--no-plots``
 skip any (discovery always runs). The stages are fail-soft and independent: every
 discovered frame is handed to science regardless of the masters result (a frame
@@ -29,7 +33,6 @@ it. The run exits nonzero if any stage that ran reported a failure.
 """
 
 import argparse
-import concurrent.futures
 import logging
 import os
 import subprocess
@@ -37,7 +40,7 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import FileHandler, datecode_dirs_in_range
+from kpfpipe.utils.io import datecode_dirs_in_range
 from kpfpipe.utils.kpf_utils import get_datecode, get_obs_id, is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import (
@@ -47,12 +50,14 @@ from scripts.processing import (
     DEFAULT_SCIENCE_RECIPE,
 )
 from scripts.processing._argparse import (
+    cache_parser,
     data_dirs_parser,
     logging_parser,
     pool_parser,
     resolve_dir_shortcuts,
 )
 from scripts.processing._dispatch import _default_science_jobs
+from scripts.processing._scan import scan_datecodes, scan_night_to_cache
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +80,7 @@ def parse_args(argv=None):
             data_dirs_parser(science_output=True),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
+            cache_parser(default="rw"),
         ],
     )
     ap.add_argument(
@@ -157,48 +163,17 @@ def parse_args(argv=None):
     return resolve_dir_shortcuts(args)
 
 
-def _scan_nights(nights, target, worker, jobs):
-    """Fan `worker(dc)` out over `nights` in a thread pool; return the pooled hits.
-
-    Scanning a night reads every PRIMARY header -- I/O bound, so a thread pool
-    overlaps the NFS latency (``getheader`` releases the GIL during I/O).
-    `worker(dc)` returns ``(hits, note)``: that night's obs_ids and an optional
-    note, logged as a per-night heartbeat in completion order.
-    """
-    logger.info(
-        "scanning %d night(s) for target %s (%d workers)...",
-        len(nights),
-        target,
-        min(jobs, len(nights)),
-    )
-    hits_all = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = {pool.submit(worker, dc): dc for dc in nights}
-        for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
-            dc = futures[future]
-            hits, note = future.result()
-            hits_all.extend(hits)
-            logger.info(
-                "  [%d/%d] %s: %d matching frame(s)%s (total %d)",
-                i,
-                len(nights),
-                dc,
-                len(hits),
-                note,
-                len(hits_all),
-            )
-    return hits_all
-
-
-def discover_science_obs_ids(data_input, target, start, end, jobs):
+def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     """Raw science obs_ids for `target` over [start, end], from the L0 tree.
 
-    Scans each night (datecode dir) under {data_input}/L0 via
-    FileHandler.build_mini_database (cache=True: reuse the night's on-disk CSV when
-    present, else write it), keeping frames whose IMTYPE is 'Object' and OBJECT
-    matches `target`. Non-datecode entries are skipped with a note; observer-flagged
-    junk frames (the ISJUNK column) are dropped. Exits loudly when the tree is
-    missing or nothing matches.
+    Scans each night (datecode dir) under {data_input}/L0 via the shared
+    ``scan_night_to_cache`` under the given `cache` mode (``"rw"`` by default: reuse
+    the night's on-disk CSV when present, else write it), keeping frames whose
+    IMTYPE is 'Object' and OBJECT matches `target`. This discovery scan is the sole
+    mini-db writer in the timeseries flow -- the masters/science stages it launches
+    are told ``--cache r`` (see ``main``). Non-datecode entries are skipped with a
+    note; observer-flagged junk frames (the ISJUNK column) are dropped. Exits loudly
+    when the tree is missing or nothing matches.
     """
     l0_root = os.path.join(data_input, "L0")
     if not os.path.isdir(l0_root):
@@ -222,24 +197,22 @@ def discover_science_obs_ids(data_input, target, start, end, jobs):
         sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
 
     def _scan_night(dc):
-        # A FileHandler per night (not shared): it carries the scanned night on
-        # self._mini_db, so one instance across these pooled threads would race.
-        file_handler = FileHandler({"KPF_DATA_INPUT": data_input})
-        try:
-            df = file_handler.build_mini_database(dc, cache=True)
-        except ValueError as e:
-            # e.g. a datecode dir with no FITS files -- skip it, don't abort.
-            logger.warning("  skipping night %s: %s", dc, e)
+        df = scan_night_to_cache(data_input, dc, cache=cache)
+        if df is None:  # empty/absent night -- already warned, skip it
             return [], ""
         is_object = df["IMTYPE"].astype(str).str.strip() == "Object"
         is_target = df["OBJECT"].astype(str).str.strip() == str(target)
         matched = df.loc[is_object & is_target]
         good = matched.loc[~matched["ISJUNK"].astype(bool)]
         n_junk = len(matched) - len(good)
-        note = f", {n_junk} junk skipped" if n_junk else ""
-        return [get_obs_id(fn) for fn in good["FILENAME"]], note
+        hits = [get_obs_id(fn) for fn in good["FILENAME"]]
+        junk_note = f", {n_junk} junk skipped" if n_junk else ""
+        return hits, f": {len(hits)} matching frame(s){junk_note}"
 
-    obs_ids = _scan_nights(nights, target, _scan_night, jobs)
+    results = scan_datecodes(
+        nights, jobs, _scan_night, label=f"scanning for target {target},"
+    )
+    obs_ids = [oid for hits in results for oid in hits]
 
     obs_ids = sorted(set(obs_ids))
     if not obs_ids:
@@ -306,6 +279,9 @@ def main(argv=None):
         if value:
             common_forward += [flag, value]
     common_forward += ["--job_timeout", str(args.job_timeout)]
+    # Discovery above is the sole mini-db writer; force both launched stages
+    # read-only so they don't redundantly re-warm the caches it just wrote.
+    common_forward += ["--cache", "r"]
 
     # --jobs sizes only the science fan-out: forwarding a large --jobs to masters
     # would defeat its fixed _MASTERS_JOBS safety cap (see _dispatch.py), so --jobs
@@ -329,7 +305,7 @@ def main(argv=None):
     # Steps 1-2: discover the target's science frames -> the nights they span.
     scan_workers = args.jobs or _default_science_jobs()
     obs_ids = discover_science_obs_ids(
-        data_input, args.target, start, end, scan_workers
+        data_input, args.target, start, end, scan_workers, cache=args.cache
     )
     datecodes = sorted({get_datecode(o) for o in obs_ids})
     logger.info(

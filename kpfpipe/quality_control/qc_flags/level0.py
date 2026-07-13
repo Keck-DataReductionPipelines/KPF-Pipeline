@@ -102,20 +102,28 @@ class QCL0(QC):
     times_consistent._qc_key = "DATTIMOK"
 
     def exptime_sane(self):
-        """EXPTIME is present, finite, and non-negative.
+        """EXPTIME present, finite, non-negative, and consistent with ELAPSED.
 
         Bias frames legitimately have EXPTIME=0, so we don't require strictly
-        positive. Tightening this requires frame-type-aware filtering, which
-        is deferred until QC gains spectrum-type gating.
+        positive. When the raw ELAPSED readout time is present, it must not fall
+        short of the requested EXPTIME (premature readout) or exceed it by more
+        than ``_TIME_TOL_S`` (the elapsed-vs-requested check formerly done in the
+        masters frame loader); an absent ELAPSED skips only that comparison.
         """
         hdr = self.kpf_obj.headers["PRIMARY"]
         if "EXPTIME" not in hdr:
             return False
         try:
-            f = float(hdr.get("EXPTIME"))
+            exptime = float(hdr.get("EXPTIME"))
         except (TypeError, ValueError):
             return False
-        return np.isfinite(f) and f >= 0
+        if not (np.isfinite(exptime) and exptime >= 0):
+            return False
+
+        elapsed = _hdr_float(hdr, "ELAPSED")
+        if elapsed is not None and not (0 <= elapsed - exptime <= _TIME_TOL_S):
+            return False
+        return True
 
     exptime_sane._qc_key = "EXPTIMOK"
 

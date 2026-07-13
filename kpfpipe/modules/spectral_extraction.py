@@ -317,9 +317,7 @@ class SpectralExtraction:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def extract_orderlet(
-        self, chip, fiber, order, extraction_method=None, verbose=True
-    ):
+    def extract_orderlet(self, chip, fiber, order, extraction_method=None):
         """
         Extract a single orderlet as a 1D spectrum.
 
@@ -333,10 +331,6 @@ class SpectralExtraction:
             Spectral order number.
         extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
-        verbose : bool, optional
-            If True (default), emit warnings from per-orderlet array
-            validation (NaN / negative / non-finite flux). If False,
-            those warnings are suppressed.
 
         Returns
         -------
@@ -366,20 +360,19 @@ class SpectralExtraction:
 
         flux_1d, var_1d = extraction_fxn(D, V, W=W)
 
-        if verbose:
-            for arr, name in ((flux_1d, "flux_1d"), (var_1d, "var_1d")):
-                n_bad = int(np.sum(~np.isfinite(arr)))
-                n_neg = int(np.sum(arr < 0))
-                if n_bad or n_neg:
-                    warnings.warn(
-                        f"{name} array: {chip} {fiber} {order} has "
-                        f"{n_bad} non-finite, {n_neg} negative values",
-                        stacklevel=2,
-                    )
+        for arr, name in ((flux_1d, "flux_1d"), (var_1d, "var_1d")):
+            n_bad = int(np.sum(~np.isfinite(arr)))
+            n_neg = int(np.sum(arr < 0))
+            if n_bad or n_neg:
+                warnings.warn(
+                    f"{name} array: {chip} {fiber} {order} has "
+                    f"{n_bad} non-finite, {n_neg} negative values",
+                    stacklevel=2,
+                )
 
         return flux_1d, var_1d
 
-    def extract_ffi(self, chip, fibers=None, extraction_method=None, verbose=True):
+    def extract_ffi(self, chip, fibers=None, extraction_method=None):
         """
         Extract all spectral orders from a full-frame image (FFI).
 
@@ -391,10 +384,6 @@ class SpectralExtraction:
             Fibers identifiers, e.g. 'SCI2'
         extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
-        verbose : bool, optional
-            If True (default), emit informational warnings (per-orderlet
-            validation, expected single-orderlet failure). Hard failures
-            (>1 orderlet missing) still raise regardless.
 
         Returns
         -------
@@ -433,7 +422,7 @@ class SpectralExtraction:
             for fiber in fibers:
                 try:
                     flux_1d, var_1d = self.extract_orderlet(
-                        chip, fiber, order, extraction_method, verbose=verbose
+                        chip, fiber, order, extraction_method
                     )
                 except LookupError:
                     failure += 1
@@ -447,7 +436,7 @@ class SpectralExtraction:
         # In this case a single failure is expected from this method. Allowing
         # the loop to continue through all orders provides useful diagnostic
         # information for cases where the algorithm truly fails.
-        if failure == 1 and verbose:
+        if failure == 1:
             warnings.warn(
                 f"1 orderlet failed to extract from the {chip} CCD; filled with NaN.",
                 UserWarning,
@@ -490,7 +479,7 @@ class SpectralExtraction:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, fibers=None, *, extraction_method=None, verbose=True):
+    def perform(self, chips=None, fibers=None, *, extraction_method=None):
         """
         Execute spectral extraction. Optional keyword arguments
         default to config settings.
@@ -503,10 +492,6 @@ class SpectralExtraction:
             Fiber identifiers, e.g. 'SCI2'
         extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
-        verbose : bool, optional
-            If True (default), emit informational warnings during
-            extraction (per-orderlet array validation, expected
-            single-orderlet failure). Hard errors still raise.
 
         Returns
         -------
@@ -528,9 +513,7 @@ class SpectralExtraction:
         l2_obj = self.l1_obj.to_kpf2()
 
         for chip in chips:
-            l2_arrays = self.extract_ffi(
-                chip, fibers, extraction_method, verbose=verbose
-            )
+            l2_arrays = self.extract_ffi(chip, fibers, extraction_method)
             for fiber in fibers:
                 l2_obj.set_data(
                     f"{chip}_{fiber}_FLUX", l2_arrays[f"{chip}_{fiber}_FLUX"]

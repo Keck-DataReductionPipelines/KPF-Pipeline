@@ -11,11 +11,14 @@ the orchestrator, not here), via the input form:
     kpfpipe science --obs_ids KP.20240405.40113.57 KP.20240405.40237.36
     kpfpipe science --obs_ids frames.txt        # a file of obs_ids
 
-Reductions run in a bounded process pool: the first frame runs alone as a canary
-to warm the shared on-disk caches, then the rest fan out (paced apart, since the
-per-frame L0 pointing QC queries SIMBAD/Gaia). The run is fail-soft (a frame that
-fails to reduce is reported and the others continue) but exits nonzero if any
-frame failed.
+Reductions run in a bounded process pool. The L0 mini-database caches for the
+nights the frames span are warmed up front by a parallel per-datecode pre-scan
+(``--cache``, ``rw`` by default; ``r`` skips the pre-scan and leaves each reduce to
+read-only); the first frame then runs alone as a canary to warm the *other* shared
+caches,
+then the rest fan out (paced apart, since the per-frame L0 pointing QC queries
+SIMBAD/Gaia). The run is fail-soft (a frame that fails to reduce is reported and
+the others continue) but exits nonzero if any frame failed.
 """
 
 import argparse
@@ -26,10 +29,11 @@ import sys
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import read_token_file
-from kpfpipe.utils.kpf_utils import is_obs_id
+from kpfpipe.utils.kpf_utils import get_datecode, is_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
 from scripts.processing._argparse import (
+    cache_parser,
     data_dirs_parser,
     logging_parser,
     pool_parser,
@@ -41,6 +45,7 @@ from scripts.processing._dispatch import (
     configure_runtime,
     run_stage,
 )
+from scripts.processing._scan import warm_mini_db_caches
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +73,7 @@ def parse_args(argv=None):
             data_dirs_parser(science_output=True),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
+            cache_parser(default="rw"),
         ],
     )
     ap.add_argument(
@@ -142,6 +148,9 @@ def main(argv=None):
     # the log dir; subprocesses get recipe/config via -r/-c.
     config = ConfigHandler(args.config or DEFAULT_SCIENCE_CONFIG)
     logger_params = config.get_params(["LOGGER"])
+    data_input = (
+        args.kpf_data_input or config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
+    )
     log_dir = args.log_dir or logger_params.get("log_dir")
     if not log_dir:
         sys.exit(
@@ -174,6 +183,11 @@ def main(argv=None):
     logger.info("jobs: %s", args.jobs)
     logger.info("batch log: %s", log_path)
     logger.info("reducing %d science frame(s): %s", len(obs_ids), ", ".join(obs_ids))
+
+    # Warm the L0 mini-db caches up front, one thread per night (--cache, rw
+    # default; --cache r skips the pre-scan and leaves reduces to read-only).
+    datecodes = sorted({get_datecode(o) for o in obs_ids})
+    warm_mini_db_caches(data_input, datecodes, args.jobs, cache=args.cache)
 
     tasks = [
         _cli_task(o, forward, config=args.config, recipe=args.recipe) for o in obs_ids

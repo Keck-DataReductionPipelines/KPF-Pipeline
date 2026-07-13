@@ -2,15 +2,14 @@
 
 import glob
 import logging
-import math
 import os
+import tempfile
 import warnings
 from datetime import datetime
 
 import pandas as pd
 from astropy.io import fits
 
-from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf_utils import (
     get_datecode,
     get_obs_id,
@@ -51,6 +50,11 @@ _OBJECT_MAP = {
 # (build_calibration_stacks) and master-product filenames (kpf_filename) validate
 # against the same set and cannot drift.
 _CAL_TYPES = tuple(_OBJECT_MAP)
+
+# How build_calibration_stacks groups a cal_type's frames into stacks:
+# 'time_of_day' (per observing session, gap-split), 'hst_day' (per HST calendar
+# day), or 'obs_night' (the whole loaded night, one stack spanning HST midnight).
+_GROUPBY_MODES = ("time_of_day", "hst_day", "obs_night")
 
 
 def load_junk_obs_ids(data_input):
@@ -107,44 +111,44 @@ class FileHandler:
 
     Parameters
     ----------
-    config : None | dict | ConfigHandler
-        Source of the ``[DATA_DIRS]`` roots ``KPF_DATA_INPUT`` (the L0 input
-        tree) and ``KPF_MASTERS_OUTPUT`` (the masters output tree). ``None``
-        leaves both unset -- fine for an instance that only calls methods needing
-        the other root; a method whose root is unset raises ``ValueError``.
+    data_dirs : dict
+        The already-extracted ``[DATA_DIRS]`` mapping, holding the roots
+        ``KPF_DATA_INPUT`` (the L0 input tree) and ``KPF_MASTERS_OUTPUT`` (the
+        masters output tree). Required: this is a util, not a pipeline module, so
+        it has no config defaults to fall back on. Callers with a
+        ``ConfigHandler`` pass ``config.get_params(["DATA_DIRS"])`` (this class
+        deliberately does not import ``ConfigHandler``, keeping construction
+        light). Either root may be absent -- fine for an instance that only calls
+        methods needing the other root; a method whose root is unset raises
+        ``ValueError``. Pass ``{}`` for an instance that touches neither root.
     """
 
-    def __init__(self, config=None):
-        if config is None:
-            params = {}
-        elif isinstance(config, dict):
-            params = config
-        elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS"])
-        else:
-            raise TypeError("config must be None, dict, or ConfigHandler")
-
-        self._data_input = params.get("KPF_DATA_INPUT")
-        self._masters_output = params.get("KPF_MASTERS_OUTPUT")
-        self._mini_db = None  # the loaded night, set by build_mini_database
+    def __init__(self, data_dirs):
+        self._data_input = data_dirs.get("KPF_DATA_INPUT")
+        self._masters_output = data_dirs.get("KPF_MASTERS_OUTPUT")
+        self._mini_db = None  # loaded night's readable frames (build_mini_database)
+        self._full_scan_mini_db = None  # full scan of every file, written to the cache
 
     def _mini_db_cache_path(self, datecode):
         """On-disk mini-database cache path for one night:
         ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv``."""
         return os.path.join(self._data_input, "vNext", "mini_db", f"{datecode}_L0.csv")
 
-    def _validate_mini_db_cache(self, cache_path, file_list, data_dir):
-        """True if the on-disk mini-db cache is trustworthy for the current L0
-        directory, else False (the caller then rescans). Validation only -- the
-        cache is read (loaded) separately by the caller.
+    def _read_mini_db_cache(self, datecode):
+        """The cached mini database for `datecode` as a DataFrame if the on-disk
+        cache is trustworthy for the current L0 directory, else None (the caller
+        then rescans). Reads the cache CSV at most once: the loaded frame is both
+        validated and returned. The cache path, L0 directory, and its FITS file
+        list are all derived from `datecode` plus the instance's ``KPF_DATA_INPUT``
+        root.
 
         Two guardrails protect against a stale cache:
 
         * **Count** -- the cache's row count must equal the number of FITS files
           on disk, so a frame added or removed since the cache was written
-          invalidates it. (An unreadable frame is dropped from the scan but still
-          counts on disk, so a persistently-corrupt frame defeats the cache -- an
-          acceptable, rare edge that errs toward rescanning.)
+          invalidates it. The cache records *every* file, including unreadable ones
+          (as header-null rows), so a persistently-corrupt frame no longer skews the
+          count and defeats the cache.
         * **Freshness** -- the cache must be at least as new as every input's
           timestamp: for each file the later of its modification time
           (``st_mtime``, when its contents were written) and its change time
@@ -153,19 +157,22 @@ class FileHandler:
           own ``st_mtime`` (its entry list changes when a file is added or
           removed). A same-count swap thus still invalidates the cache.
         """
+        cache_path = self._mini_db_cache_path(datecode)
+        data_dir = os.path.join(self._data_input, "L0", datecode)
+        file_list = sorted(glob.glob(os.path.join(data_dir, "*.fits")))
         if not file_list or not os.path.isfile(cache_path):
-            return False
+            return None
 
-        n_cached = len(pd.read_csv(cache_path))
-        if n_cached != len(file_list):
-            logger.info(
+        cached = pd.read_csv(cache_path)
+        if len(cached) != len(file_list):
+            logger.warning(
                 "mini database cache %s is stale (%d cached rows vs %d files on "
                 "disk); rescanning",
                 cache_path,
-                n_cached,
+                len(cached),
                 len(file_list),
             )
-            return False
+            return None
 
         cache_mtime = os.stat(cache_path).st_mtime
         newest_input = os.stat(data_dir).st_mtime
@@ -173,14 +180,52 @@ class FileHandler:
             st = os.stat(fn)
             newest_input = max(newest_input, st.st_mtime, st.st_ctime)
         if cache_mtime < newest_input:
-            logger.info(
+            logger.warning(
                 "mini database cache %s is out of date (older than an L0 input); "
                 "rescanning",
                 cache_path,
             )
-            return False
+            return None
 
-        return True
+        return cached
+
+    def _write_mini_db_cache(self, datecode):
+        """Atomically write the full scan (``self._full_scan_mini_db`` -- one row
+        per file, including unreadable frames) to the on-disk cache CSV for
+        `datecode`, creating the cache directory as needed. Writing the full scan
+        (not the cleaned ``self._mini_db``) keeps the cache a faithful mirror of the
+        L0 directory, so the row-count guardrail in ``_read_mini_db_cache`` stays
+        honest.
+
+        pandas' ``to_csv`` truncates the target in place, so a concurrent reader
+        could observe an empty, partial, or half-written CSV. Fill a same-dir temp
+        file and ``os.replace`` it into position instead (atomic on POSIX), so
+        readers always see the old or new CSV whole; clean up the temp file if the
+        write fails.
+        """
+        cache_path = self._mini_db_cache_path(datecode)
+        cache_dir = os.path.dirname(cache_path)
+        os.makedirs(cache_dir, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
+        os.close(fd)
+        try:
+            self._full_scan_mini_db.to_csv(tmp, index=False)
+            os.replace(tmp, cache_path)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            raise
+        logger.info("wrote mini database cache to %s", cache_path)
+
+    @staticmethod
+    def _clean_mini_db(full_scan_mini_db):
+        """The readable-frame subset of a full scan: drop rows whose header could not
+        be read (every header column null). Such frames belong in the on-disk cache
+        -- which mirrors the L0 directory -- but are useless for stacking/discovery,
+        so the in-memory ``self._mini_db`` excludes them. Re-indexes the survivors."""
+        return full_scan_mini_db.dropna(
+            subset=_MINI_DB_KEYS[1:], how="all"
+        ).reset_index(drop=True)
 
     def build_mini_database(self, datecode, cache=False):
         """
@@ -191,24 +236,27 @@ class FileHandler:
         ``self._mini_db``, so a subsequent ``build_calibration_stacks`` needs
         only the calibration type; callers rarely need the return value directly.
 
-        With ``cache=True`` the on-disk CSV cache at
-        ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv`` is used for both
-        read and write: a *current* cache is loaded instead of re-scanning the L0
-        directory, otherwise the directory is scanned and the result written to
-        the cache (directory created as needed) for next time. A cache is current
-        only when it passes the count and freshness guardrails in
-        ``_validate_mini_db_cache``; a frame added, removed, replaced, or
-        rewritten since the cache was built forces a rescan. With ``cache=False``
-        (default) the directory is always scanned and nothing is read from or
-        written to disk.
+        The on-disk CSV cache lives at
+        ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv``. `cache` selects which
+        side of it to use, read and write being independent:
+
+        * read (``"r"``) -- load a *current* cache instead of re-scanning the L0
+          directory. A cache is current only when it passes the count and
+          freshness guardrails in ``_read_mini_db_cache``; a frame added, removed,
+          replaced, or rewritten since the cache was built forces a rescan.
+        * write (``"w"``) -- after scanning, (re)write the cache (directory created
+          as needed) for next time. A cache hit on read short-circuits the scan, so
+          nothing is rewritten.
 
         Parameters
         ----------
         datecode : str
             Observing-night datecode 'YYYYMMDD'.
-        cache : bool, default False
-            When True, load the on-disk cache CSV if it is current, else scan and
-            (re)write it. When False, always scan fresh and never touch the cache.
+        cache : {False, "r", "w", "rw", "wr"}, default False
+            Which side(s) of the on-disk cache to use. ``False`` (default) always
+            scans fresh and never touches the cache. ``"r"`` reads a current cache
+            (else scans); ``"w"`` writes the scan result; ``"rw"``/``"wr"`` do both
+            (the read-then-write behavior a plain cache once had).
 
         Returns
         -------
@@ -217,26 +265,40 @@ class FileHandler:
             (absolute path), TARGNAME, IMTYPE, OBJECT, EXPTIME, ELAPSED; plus
             derived UTC and HST (KPF-format timestamps from the filename, HST =
             UTC-10) and ISJUNK (frame is on the observer junk list -- flagged,
-            not dropped). A missing header key gives None for that column; an
-            unreadable frame is skipped; both warn.
+            not dropped). A missing header key gives None for that column. An
+            unreadable frame is warned and omitted from this DataFrame (useless
+            for stacking), but is still recorded -- with null header columns -- in
+            the on-disk cache, so the cache mirrors the L0 directory exactly.
 
         Raises
         ------
         ValueError
-            If KPF_DATA_INPUT is unset, or if the L0 directory holds no FITS files.
+            If `cache` is not one of the allowed modes, if KPF_DATA_INPUT is
+            unset, or if the L0 directory holds no FITS files.
         """
+        if cache not in (False, "r", "w", "rw", "wr"):
+            raise ValueError(
+                f"cache must be False or one of 'r'/'w'/'rw'/'wr', got {cache!r}"
+            )
+        read_cache = cache and "r" in cache
+        write_cache = cache and "w" in cache
+
         if self._data_input is None:
             raise ValueError("FileHandler has no KPF_DATA_INPUT configured")
 
+        if read_cache:
+            cached = self._read_mini_db_cache(datecode)
+            if cached is not None:
+                logger.info(
+                    "loaded mini database cache from %s",
+                    self._mini_db_cache_path(datecode),
+                )
+                self._full_scan_mini_db = cached
+                self._mini_db = self._clean_mini_db(cached)
+                return self._mini_db
+
         data_dir = os.path.join(self._data_input, "L0", datecode)
         file_list = sorted(glob.glob(os.path.join(data_dir, "*.fits")))
-
-        cache_path = self._mini_db_cache_path(datecode)
-        if cache and self._validate_mini_db_cache(cache_path, file_list, data_dir):
-            logger.info("loading mini database cache from %s", cache_path)
-            self._mini_db = pd.read_csv(cache_path)
-            return self._mini_db
-
         if not file_list:
             raise ValueError(f"No FITS files found in {data_dir}")
 
@@ -251,12 +313,12 @@ class FileHandler:
                 header = fits.getheader(fn, ext=0)
             except Exception as e:
                 warnings.warn(f"Could not read header from {fn}: {e}", stacklevel=2)
-                continue
+                header = None
 
             mini_db["FILENAME"].append(fn)
 
             for k in _MINI_DB_KEYS[1:]:
-                mini_db[k].append(header.get(k, None))
+                mini_db[k].append(header.get(k, None) if header is not None else None)
 
             # UTC is the KPF timestamp; HST is that converted to Hawaii time.
             utc = get_timestamp(fn)
@@ -264,12 +326,11 @@ class FileHandler:
             mini_db["HST"].append(utc_to_hst(utc))
             mini_db["ISJUNK"].append(get_obs_id(fn) in junk)
 
-        self._mini_db = pd.DataFrame(mini_db)
+        self._full_scan_mini_db = pd.DataFrame(mini_db)
+        self._mini_db = self._clean_mini_db(self._full_scan_mini_db)
 
-        if cache:
-            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-            self._mini_db.to_csv(cache_path, index=False)
-            logger.info("wrote mini database cache to %s", cache_path)
+        if write_cache:
+            self._write_mini_db_cache(datecode)
 
         return self._mini_db
 
@@ -285,55 +346,69 @@ class FileHandler:
         dt = kpf_timestamp_to_datetime(get_timestamp(s))
         return int((dt - _J2000_EPOCH).total_seconds())
 
-    def _merge_undersized_clusters(
-        self, clusters, hst_day, min_file_count, enforce_hst_midnight_boundary
-    ):
+    def _select_frames(self, cal_type, *, exclude_junk=True):
         """
-        Fold each undersized cluster into its nearer chronological neighbor.
+        The junk-excluded, OBJECT-filtered frames of `cal_type` from the carried
+        mini database (``self._mini_db``).
 
-        Repeatedly takes the smallest cluster below `min_file_count` and merges
-        it into whichever adjacent cluster is nearer in time, until every
-        remaining cluster meets the threshold (or none can grow). When the
-        HST-midnight boundary is enforced the neighbor must share the cluster's
-        HST day (so a master never spans HST midnight), and a cluster with no
-        same-day neighbor is dropped; otherwise any adjacent cluster is eligible.
-
-        `clusters` is a chronologically-sorted list of filename lists and
-        `hst_day` maps each filename to its HST calendar day ('YYYYMMDD'); the
-        input is not modified and the merged clusters are returned
-        chronologically sorted.
+        The single frame-selection entry point the grouping paths share. Raises
+        ``ValueError`` if no mini database is loaded (call ``build_mini_database``
+        first) or if the type has no frames; a mini database lacking the ISJUNK
+        column raises ``KeyError`` under ``exclude_junk=True`` (a fail-loud guard
+        against a database built before junk tracking existed).
         """
-        clusters = list(clusters)
-
-        def gap_to(i, j):
-            # Chronological gap [s] from cluster i to neighbor j (i - 1 or i + 1);
-            # inf when j is out of range or -- boundary enforced -- on a different
-            # HST day, marking it ineligible to merge into.
-            if not 0 <= j < len(clusters) or (
-                enforce_hst_midnight_boundary
-                and hst_day[clusters[j][0]] != hst_day[clusters[i][0]]
-            ):
-                return math.inf
-            earlier, later = sorted((i, j))
-            return self._seconds_since_j2000(
-                clusters[later][0]
-            ) - self._seconds_since_j2000(clusters[earlier][-1])
-
-        while len(clusters) > 1 and any(len(c) < min_file_count for c in clusters):
-            i = min(
-                (k for k, c in enumerate(clusters) if len(c) < min_file_count),
-                key=lambda k: len(clusters[k]),
+        mini_db = self._mini_db
+        if mini_db is None:
+            raise ValueError(
+                "no mini database available; call build_mini_database(datecode) first"
             )
-            prev_gap = gap_to(i, i - 1)
-            next_gap = gap_to(i, i + 1)
-            if prev_gap == next_gap == math.inf:
-                clusters.pop(i)
-                continue
-            j = i - 1 if prev_gap <= next_gap else i + 1
-            merged = sorted(clusters[i] + clusters[j], key=self._seconds_since_j2000)
-            for idx in sorted((i, j), reverse=True):
-                clusters.pop(idx)
-            clusters.append(merged)
+        if exclude_junk:
+            mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
+        cal_df = mini_db[mini_db["OBJECT"].isin(_OBJECT_MAP[cal_type])]
+        if cal_df.empty:
+            raise ValueError(f"No '{cal_type}' calibration frames found")
+        return cal_df
+
+    def _identify_clusters(self, cal_type, *, cluster_gap_seconds, exclude_junk=True):
+        """
+        Group `cal_type` frames into observing-session clusters by time gaps.
+
+        Reads the carried mini database (``self._mini_db``) via `_select_frames`
+        and infers the morn/midday/eve/night/midnight sessions purely from the
+        frame timestamps: the OBJECT morn/eve/night suffix is only a label and
+        does not partition the result, so a mislabeled frame clusters with its
+        true session instead of splitting off. Consecutive time-sorted frames
+        start a new cluster wherever they are more than `cluster_gap_seconds`
+        apart; for the allowlisted cal types the morn and eve sessions sit hours
+        apart, so the gap alone separates them.
+
+        Parameters
+        ----------
+        cal_type : str
+            Calibration frame type (a key of `_OBJECT_MAP`).
+        cluster_gap_seconds : int
+            Gap [s] between consecutive frames that starts a new cluster.
+        exclude_junk : bool, default True
+            Drop observer-flagged junk frames before clustering.
+
+        Returns
+        -------
+        clusters : list of list of str
+            Chronologically-sorted filename lists, one per detected session.
+        """
+        cal_df = self._select_frames(cal_type, exclude_junk=exclude_junk)
+        timed = sorted((self._seconds_since_j2000(fn), fn) for fn in cal_df["FILENAME"])
+        clusters = []
+        cluster = [timed[0][1]]
+        prev_t = timed[0][0]
+        for t, fn in timed[1:]:
+            if t - prev_t > cluster_gap_seconds:
+                clusters.append(cluster)
+                cluster = [fn]
+            else:
+                cluster.append(fn)
+            prev_t = t
+        clusters.append(cluster)
         clusters.sort(key=lambda c: self._seconds_since_j2000(c[0]))
         return clusters
 
@@ -341,127 +416,99 @@ class FileHandler:
         self,
         cal_type,
         *,
-        mini_db=None,
-        min_file_count=5,
+        min_stack_size=1,
         cluster_gap_seconds=7200,
-        merge_small_clusters=False,
-        enforce_hst_midnight_boundary=True,
+        groupby="time_of_day",
         exclude_junk=True,
     ):
         """
-        Return sorted file lists for all calibration clusters of the requested
-        type, grouped from the loaded mini database.
+        Return sorted file lists for all calibration stacks of the requested
+        type, grouped from the mini database carried on the instance
+        (``self._mini_db``, set by `build_mini_database`).
 
         Drops observer-flagged junk frames (unless `exclude_junk=False`), filters
-        by OBJECT, then groups frames into clusters by detecting gaps larger than
-        `cluster_gap_seconds` between consecutive timestamps. By default a cluster
-        never spans two HST (Hawaii) calendar days: frames on either side of HST
-        midnight are always split, even though the UTC-keyed data directory places
-        them together. Set `enforce_hst_midnight_boundary=False` to lift that split
-        (used for darks, whose sparse sequences routinely straddle HST midnight).
-        Every returned cluster has at least `min_file_count` files: undersized
-        clusters are dropped, or (with `merge_small_clusters`) folded into a
-        neighbor. Raises only when no cluster meets the threshold. Clusters the
-        mini database carried on the instance, so the recipe never handles the
-        DataFrame itself.
+        by OBJECT, then groups the surviving frames into stacks according to
+        `groupby`:
+
+        * ``'time_of_day'`` (default) -- one stack per observing session, split
+          wherever consecutive frames are more than `cluster_gap_seconds` apart
+          (the morn/eve/night sessions). The split is purely temporal, so the
+          morn/eve/night OBJECT suffix does not partition it and a mislabeled
+          frame stacks with its true session. Used for bias and thar.
+        * ``'hst_day'`` -- one stack per HST (Hawaii) calendar day.
+        * ``'obs_night'`` -- one stack for the whole loaded night (the UTC-keyed
+          datecode), spanning HST midnight. Used for darks, whose sparse sequences
+          routinely straddle HST midnight and belong in a single nightly stack.
+
+        Every returned stack has at least `min_stack_size` files; undersized
+        stacks are dropped, and it raises when none meets the threshold. Reads the
+        mini database off the instance, so the recipe never handles the DataFrame
+        itself.
 
         Parameters
         ----------
         cal_type : str
             Calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
-        mini_db : pandas.DataFrame, optional
-            DataFrame to cluster; defaults to ``self._mini_db``. Pass one only to
-            cluster a database the handler did not build.
-        min_file_count : int, default 5
-            Minimum number of files required per cluster.
+        min_stack_size : int, default 1
+            Minimum number of files required per stack; undersized stacks are
+            dropped. The default of 1 keeps every cluster (a no-op filter); the
+            masters recipe passes the configured per-cal-type value.
         cluster_gap_seconds : int, default 7200
-            Gap [s] between consecutive frames that splits one cluster from the
-            next. The 2-hour default separates KPF morning vs. evening clusters.
-        merge_small_clusters : bool, default False
-            When False, drop clusters below `min_file_count`; when True, merge
-            each into its nearest-in-time (and, if the boundary is enforced,
-            same-HST-day) neighbor.
-        enforce_hst_midnight_boundary : bool, default True
-            Whether clusters may span HST midnight (see summary). Set False for
-            darks.
+            Gap [s] between consecutive frames that splits one session from the
+            next. The 2-hour default separates KPF morning vs. evening sessions.
+            Applies only to ``groupby='time_of_day'``; ignored otherwise.
+        groupby : {'time_of_day', 'hst_day', 'obs_night'}, default 'time_of_day'
+            How to group frames into stacks (see summary).
         exclude_junk : bool, default True
-            Drop junk frames (the ISJUNK column) before clustering. Rarely
-            disabled.
+            Drop junk frames (the ISJUNK column) before grouping. Rarely disabled.
 
         Returns
         -------
         list of list of str
-            Sorted file lists, one per cluster.
+            Sorted file lists, one per stack.
 
         Raises
         ------
         ValueError
-            If `cal_type` is not a recognized calibration type, if no mini
-            database is available (none loaded and none passed), if no calibration
-            frames of the requested type are found, or if no cluster meets
-            `min_file_count`.
+            If `groupby` or `cal_type` is not recognized, if no mini database is
+            loaded on the instance, if no calibration frames of the requested type
+            are found, or if no stack meets `min_stack_size`.
         """
+        if groupby not in _GROUPBY_MODES:
+            raise ValueError(
+                f"groupby must be one of {list(_GROUPBY_MODES)}; got '{groupby}'"
+            )
         if cal_type not in _OBJECT_MAP:
             raise ValueError(
                 f"cal_type must be one of {list(_OBJECT_MAP.keys())}; got '{cal_type}'"
             )
 
-        if mini_db is None:
-            mini_db = self._mini_db
-        if mini_db is None:
-            raise ValueError(
-                "no mini database available; call build_mini_database(datecode) "
-                "first (or pass mini_db=)"
-            )
-
-        if exclude_junk:
-            mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
-
-        cal_df = mini_db[mini_db["OBJECT"].isin(_OBJECT_MAP[cal_type])]
-
-        if cal_df.empty:
-            raise ValueError(f"No '{cal_type}' calibration frames found")
-
-        # HST calendar day per file, from the mini_db HST timestamp ('YYYYMMDD...').
-        hst_day = {
-            fn: str(hst).split(".")[0]
-            for fn, hst in zip(cal_df["FILENAME"], cal_df["HST"], strict=True)
-        }
-
-        # Cluster per-OBJECT (morning vs. evening thar etc. have different OBJECT
-        # suffixes), splitting wherever consecutive frames are more than
-        # cluster_gap_seconds apart or fall on different HST days (the UTC-keyed
-        # directory can straddle HST midnight). Final list sorted chronologically.
-        clusters = []
-        for _, group in cal_df.groupby("OBJECT", dropna=False):
-            timed = sorted(
-                (self._seconds_since_j2000(fn), fn) for fn in group["FILENAME"]
-            )
-            cluster = [timed[0][1]]
-            for (prev_t, prev_fn), (t, fn) in zip(timed, timed[1:], strict=False):
-                crosses_midnight = (
-                    enforce_hst_midnight_boundary and hst_day[fn] != hst_day[prev_fn]
-                )
-                if t - prev_t > cluster_gap_seconds or crosses_midnight:
-                    clusters.append(cluster)
-                    cluster = [fn]
-                else:
-                    cluster.append(fn)
-            clusters.append(cluster)
-        clusters.sort(key=lambda c: self._seconds_since_j2000(c[0]))
-
-        if merge_small_clusters:
-            clusters = self._merge_undersized_clusters(
-                clusters, hst_day, min_file_count, enforce_hst_midnight_boundary
+        if groupby == "time_of_day":
+            clusters = self._identify_clusters(
+                cal_type,
+                cluster_gap_seconds=cluster_gap_seconds,
+                exclude_junk=exclude_junk,
             )
         else:
-            # Drop undersized clusters; one usable cluster is enough.
-            clusters = [c for c in clusters if len(c) >= min_file_count]
+            cal_df = self._select_frames(cal_type, exclude_junk=exclude_junk)
+            if groupby == "hst_day":
+                # One stack per HST calendar day (the 'YYYYMMDD' HST-timestamp prefix).
+                by_day = {}
+                for fn, hst in zip(cal_df["FILENAME"], cal_df["HST"], strict=True):
+                    by_day.setdefault(str(hst).split(".")[0], []).append(fn)
+                clusters = [
+                    sorted(v, key=self._seconds_since_j2000)
+                    for _, v in sorted(by_day.items())
+                ]
+            else:  # obs_night -- the whole loaded night, one stack spanning midnight
+                clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
 
-        if not any(len(c) >= min_file_count for c in clusters):
+        clusters = [c for c in clusters if len(c) >= min_stack_size]
+
+        if not clusters:
             raise ValueError(
-                f"'{cal_type}' has no cluster with at least "
-                f"min_file_count={min_file_count} files"
+                f"'{cal_type}' groupby={groupby} produced no cluster with at least "
+                f"min_stack_size={min_stack_size} files"
             )
         # Which frames feed each master is a decision point (DRP-RUN-08).
         logger.info(

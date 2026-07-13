@@ -26,8 +26,7 @@ class Dark(BaseMasterModule):
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to stack.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: stack_sigma,
-        exptime_tolerance, chips.
+        Module configuration. Recognized keys: stack_sigma, chips.
     """
 
     _STANDARD_CALIBRATIONS = ("bias",)
@@ -65,7 +64,6 @@ class Dark(BaseMasterModule):
         sigma=None,
         bias=None,
         filepath=None,
-        verbose=True,
     ):
         """
         Build master dark from stack.
@@ -91,8 +89,6 @@ class Dark(BaseMasterModule):
         filepath : str, optional
             If provided, calls `self.save_master('L1', filepath)` at
             the end to persist the master L1 to a FITS file at this filepath.
-        verbose : bool, optional
-            If True (default), emit per-frame progress prints during stacking.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -105,7 +101,6 @@ class Dark(BaseMasterModule):
             l0_file_list=l0_file_list,
             nstream=nstream,
             sigma=sigma,
-            verbose=verbose,
             cal_type="dark",
         )
 

@@ -204,10 +204,9 @@ def bary_l2(config):
 
 # --- masters inputs --------------------------------------------------------
 
-# The bundled darks span two default-gap clusters, so we widen the gap to group
-# the five frames into one stack — the same accommodation the master-dark
-# regression test makes (see tests/regression/test_master_dark.py). Harmless
-# for bias/thar, which already form a single cluster.
+# Widen the time_of_day gap so bias/thar's frames form a single representative
+# stack rather than splitting morn/eve. Darks instead use groupby='obs_night'
+# (the whole night in one stack), matching recipes/kpf_drp_masters.py.
 MASTERS_CLUSTER_GAP_SECONDS = 24 * 3600
 
 # Reading masters (bias/dark/flat/thar) for the dark and WLS harnesses, which
@@ -222,9 +221,11 @@ def masters_l0_files(imtype):
 
     file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
     file_handler.build_mini_database(MASTERS_DATECODE)
-    return file_handler.build_calibration_stacks(
-        imtype, cluster_gap_seconds=MASTERS_CLUSTER_GAP_SECONDS
-    )[0]
+    if imtype == "dark":
+        kwargs = {"min_stack_size": 3, "groupby": "obs_night"}
+    else:
+        kwargs = {"cluster_gap_seconds": MASTERS_CLUSTER_GAP_SECONDS}
+    return file_handler.build_calibration_stacks(imtype, **kwargs)[0]
 
 
 # ---------------------------------------------------------------------------

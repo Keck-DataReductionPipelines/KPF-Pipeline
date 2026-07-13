@@ -152,7 +152,7 @@ class TestProcessIndividualFrames:
     def test_returns_l2_objects_for_all_frames(self, mock_pipeline, monkeypatch):
         wls = WLS(FILE_LIST)
         monkeypatch.setattr(
-            wls, "_load_frame", lambda fn, cache=False, **kwargs: (MockL1(), True)
+            wls, "_load_frame", lambda fn, cache=False, **kwargs: MockL1()
         )
         result = wls._process_stack_l0_to_l2()
         assert len(result) == len(FILE_LIST)
@@ -161,22 +161,20 @@ class TestProcessIndividualFrames:
     def test_file_list_override(self, mock_pipeline, monkeypatch):
         wls = WLS(FILE_LIST)
         monkeypatch.setattr(
-            wls, "_load_frame", lambda fn, cache=False, **kwargs: (MockL1(), True)
+            wls, "_load_frame", lambda fn, cache=False, **kwargs: MockL1()
         )
         result = wls._process_stack_l0_to_l2(l0_file_list=FILE_LIST[:3])
         assert len(result) == 3
 
     def test_raises_when_failures_exceed_threshold(self, monkeypatch):
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(
-            wls, "_load_frame", lambda fn, cache=False, **kwargs: (None, False)
-        )
+        monkeypatch.setattr(wls, "_load_frame", lambda fn, cache=False, **kwargs: None)
         with pytest.raises(ValueError, match="too many frames failed to load"):
             wls._process_stack_l0_to_l2()
 
     def test_tolerates_minority_failure(self, mock_pipeline, monkeypatch):
         # 1 failure out of 8 = 12.5%, below the 20% threshold
-        calls = iter([(None, False)] + [(MockL1(), True)] * 7)
+        calls = iter([None] + [MockL1()] * 7)
         wls = WLS(FILE_LIST)
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, cache=False, **kwargs: next(calls)
@@ -198,7 +196,7 @@ def mock_make_master_l2(monkeypatch):
     synthetic W and coefficient arrays with chip-correct shapes.
     """
     monkeypatch.setattr(
-        WLS, "_load_frame", lambda self, fn, cache=False, **kwargs: (MockL1(), True)
+        WLS, "_load_frame", lambda self, fn, cache=False, **kwargs: MockL1()
     )
     monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kwargs: l1)
     monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kwargs: MockL2())
@@ -268,7 +266,7 @@ class TestMakeMasterL2:
         CAL and vice versa.
         """
         monkeypatch.setattr(
-            WLS, "_load_frame", lambda self, fn, cache=False, **kw: (MockL1(), True)
+            WLS, "_load_frame", lambda self, fn, cache=False, **kw: MockL1()
         )
         monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kw: l1)
         monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kw: MockL2())
@@ -741,17 +739,13 @@ class TestComputeWlsFrameRejection:
 
     def test_all_clean_frames_kept(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.01, 0.02, 0.0, 0.03, 0.01])
-        _, _, coeffs_stack, lines_stack = wls._compute_wls_from_stack(
-            "GREEN", ["SCI1"], verbose=False
-        )
+        _, _, coeffs_stack, lines_stack = wls._compute_wls_from_stack("GREEN", ["SCI1"])
         assert len(coeffs_stack) == 5
         assert len(lines_stack) == 5
 
     def test_single_bad_frame_dropped(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.01, 0.22, 0.0, 0.03, 0.01])
-        _, _, coeffs_stack, lines_stack = wls._compute_wls_from_stack(
-            "GREEN", ["SCI1"], verbose=False
-        )
+        _, _, coeffs_stack, lines_stack = wls._compute_wls_from_stack("GREEN", ["SCI1"])
         # the 22%-bad frame is excluded from both stacks
         assert len(coeffs_stack) == 4
         assert len(lines_stack) == 4
@@ -759,14 +753,12 @@ class TestComputeWlsFrameRejection:
     def test_two_bad_frames_raises(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.22, 0.01, 0.34, 0.01, 0.01])
         with pytest.raises(ValueError, match=r"more than one frame rejected"):
-            wls._compute_wls_from_stack("GREEN", ["SCI1"], verbose=False)
+            wls._compute_wls_from_stack("GREEN", ["SCI1"])
 
     def test_threshold_is_inclusive_at_max_bad_frac(self, monkeypatch):
         # exactly 5% bad is not > 5%, so the frame is kept
         wls = self._setup(monkeypatch, [0.05, 0.01], nlines=100)
-        _, _, coeffs_stack, _ = wls._compute_wls_from_stack(
-            "GREEN", ["SCI1"], verbose=False
-        )
+        _, _, coeffs_stack, _ = wls._compute_wls_from_stack("GREEN", ["SCI1"])
         assert len(coeffs_stack) == 2
 
     def test_nonfinite_coeffs_raise(self, monkeypatch):
@@ -786,7 +778,7 @@ class TestComputeWlsFrameRejection:
             WLS, "_evaluate_wls_coeffs", lambda self, *a, **k: np.zeros((3, 3))
         )
         with pytest.raises(ValueError, match=r"non-finite Legendre coefficients"):
-            wls._compute_wls_from_stack("GREEN", ["SCI1"], verbose=False)
+            wls._compute_wls_from_stack("GREEN", ["SCI1"])
 
 
 # ---------------------------------------------------------------------------
@@ -860,8 +852,8 @@ class TestFitLinePositions:
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0])
 
         # The fabricated all-NaN fiber makes the code warn once per synthetic order
-        # (verbose=True) plus once at the fiber level; capture them all so the
-        # per-order ones don't leak to the run summary, and assert the fiber-level one.
+        # plus once at the fiber level; capture them all so the per-order ones don't
+        # leak to the run summary, and assert the fiber-level one.
         with pytest.warns(UserWarning) as record:
             result = wls._fit_line_positions_ffi(
                 StubL2(),
@@ -871,8 +863,8 @@ class TestFitLinePositions:
         assert any("RED SCI1: no good lines retained" in str(w.message) for w in record)
         assert len(result["wav"]) == 0
 
-    def test_nan_orderlet_warning_suppressed_when_verbose_false(self, recwarn):
-        """verbose=False should silence the per-orderlet skip warning."""
+    def test_nan_orderlet_emits_skip_warning(self):
+        """A single NaN-filled orderlet emits the per-orderlet skip warning."""
         wls = WLS(FILE_LIST)
         ncol = wls.ccd["ncol"]
         norder = wls.norder["RED"]
@@ -888,31 +880,10 @@ class TestFitLinePositions:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
 
-        wls._fit_line_positions_ffi(StubL2(), "RED", ["SCI1"], verbose=False)
+        with pytest.warns(UserWarning) as record:
+            wls._fit_line_positions_ffi(StubL2(), "RED", ["SCI1"])
 
-        skipped = [w for w in recwarn if "orderlet skipped" in str(w.message)]
-        assert len(skipped) == 0
-
-    def test_all_nan_fiber_warning_suppressed_when_verbose_false(self, recwarn):
-        """verbose=False should silence the fiber-level no-good-lines warning."""
-        wls = WLS(FILE_LIST)
-        ncol = wls.ccd["ncol"]
-        norder = wls.norder["RED"]
-
-        flux = np.full((norder, ncol), np.nan)
-
-        class StubL2:
-            data = {"RED_SCI1_FLUX": flux}
-
-        wls.rough_wls["RED_SCI1_WAVE"] = np.tile(
-            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
-        )
-        wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0])
-
-        wls._fit_line_positions_ffi(StubL2(), "RED", ["SCI1"], verbose=False)
-
-        fiber_level = [w for w in recwarn if "no good lines retained" in str(w.message)]
-        assert len(fiber_level) == 0
+        assert any("orderlet skipped" in str(w.message) for w in record)
 
 
 # ---------------------------------------------------------------------------

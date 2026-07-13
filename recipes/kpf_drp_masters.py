@@ -44,15 +44,16 @@ def main(config, args):
         raise SystemExit(f"L0 data directory not found: {l0_dir}")
 
     # Scan the night's L0 headers once; the handler carries the mini database
-    # across the per-cal-type build_calibration_stacks calls below. cache=True
-    # reuses the on-disk mini-database CSV when present, else writes it after the
-    # scan so re-runs of the night skip the header scan entirely.
-    file_handler = FileHandler(config)
-    file_handler.build_mini_database(datecode, cache=True)
+    # across the per-cal-type build_calibration_stacks calls below. cache="r"
+    # reuses the on-disk mini-database CSV when present.
+    file_handler = FileHandler(data_dirs)
+    file_handler.build_mini_database(datecode, cache="r")
 
     # Stack the bias frames into a master bias used to remove the detector
     # offset from every science and calibration frame.
-    for files in file_handler.build_calibration_stacks("bias"):
+    for files in file_handler.build_calibration_stacks(
+        "bias", min_stack_size=config.get_params(["BIAS"]).get("min_stack_size")
+    ):
         bias_path = kpf_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="bias"
         )
@@ -65,9 +66,8 @@ def main(config, args):
     # bias from each dark frame (via _process_frame) before stacking.
     for files in file_handler.build_calibration_stacks(
         "dark",
-        min_file_count=3,
-        merge_small_clusters=True,
-        enforce_hst_midnight_boundary=False,
+        min_stack_size=config.get_params(["DARK"]).get("min_stack_size"),
+        groupby="obs_night",
     ):
         dark_path = kpf_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="dark"
