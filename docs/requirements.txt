@@ -1,0 +1,5 @@
+# Documentation build dependencies (docs-only; no kpfpipe install yet).
+# Kept minimal on purpose during the structure-only phase. Add nbsphinx /
+# myst-parser here when notebook tutorials or markdown pages are introduced.
+sphinx
+sphinx-rtd-theme
