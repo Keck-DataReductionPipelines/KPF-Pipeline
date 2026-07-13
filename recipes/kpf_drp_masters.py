@@ -48,7 +48,9 @@ def main(config, args):
     # Stack the bias frames into a master bias used to remove the detector
     # offset from every science and calibration frame.
     for files in file_handler.build_calibration_stacks(
-        "bias", min_stack_size=config.get_params(["BIAS"]).get("min_stack_size")
+        "bias",
+        min_stack_size=config.get_params(["BIAS"]).get("min_stack_size"),
+        groupby="time_of_day",
     ):
         bias_path = kpf_filepath(
             get_obs_id(files[0]), "L1", data_root=data_root_masters, master="bias"
@@ -81,7 +83,11 @@ def main(config, args):
 
     # Stack the ThAr exposures into a master wavelength solution, since the
     # emission-line spectrum anchors the per-order wavelength calibration.
-    for files in file_handler.build_calibration_stacks("thar"):
+    for files in file_handler.build_calibration_stacks(
+        "thar",
+        min_stack_size=config.get_params(["WLS"]).get("min_stack_size"),
+        groupby="time_of_day",
+    ):
         obs_id = get_obs_id(files[0])
         wls_path = kpf_filepath(
             obs_id, "L2", data_root=data_root_masters, master="thar"
