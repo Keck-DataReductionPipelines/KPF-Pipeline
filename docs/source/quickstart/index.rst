@@ -1,12 +1,12 @@
+==========
 Quickstart
 ==========
 
-To quickly install and run the KPF data reduction pipeline, follow the quickstart
-guide below.
+To install and run the DRP, follow the quickstart guide below.
 
 
 Installation
-------------
+============
 
 The pipeline runs in a dedicated conda environment (``kpfpipe``, Python 3.14).
 Clone the repository, create the environment, and install the package in
@@ -22,7 +22,7 @@ editable mode:
 
 
 Running the DRP
----------------
+===============
 
 The easiest way to run the KPF DRP is via the command line interface (CLI).
 
@@ -31,7 +31,8 @@ calibration products (bias, dark, flat, wavelength solution), and ``science``
 reduces science exposures into RVs. Each takes input/output data directories
 and a datecode (masters) or obs_id (science) to act on.
 
-**Masters**
+Masters
+-------
 
 Build master calibrations for one or more nights (identified by a ``YYYYMMDD``
 datecode) directly in the CLI:
@@ -48,7 +49,7 @@ Or by passing a plain text file which lists a single datecode per line:
 .. code-block:: bash
 
    kpfpipe masters \
-       --kpf_data_dir /path/to/data \
+       --kpf_data_input /path/to/data \
        --kpf_masters_output /path/to/masters/output \
        --dates /path/to/datecodes.txt
 
@@ -62,14 +63,15 @@ You can also generate masters over a range of nights:
        --date_range 20240405 20240418
 
 
-**Science**
+Science
+-------
 
 Reduce one or more science frames (identified by their obs_ids):
 
 .. code-block:: bash
 
    kpfpipe science \
-       --input_input /path/to/data \
+       --kpf_data_input /path/to/data \
        --kpf_science_output /path/to/science/output \
        --kpf_masters_output /path/to/masters/output \
        --obs_ids KP.20240405.40113.57 KP.20240912.84491.73
@@ -89,7 +91,8 @@ to run the masters pipeline so the science pipeline knows where to look for
 masters calibrations.
 
 
-**Timeseries**
+Timeseries
+----------
 
 To conveniently process all masters and science for a single star over a
 given date range, use the timeseries command:
@@ -98,7 +101,7 @@ given date range, use the timeseries command:
 
    kpfpipe timeseries \
        --target 10700 \
-       --input_dir /path/to/data \
+       --kpf_data_input /path/to/data \
        --kpf_science_output /path/to/science/output \
        --kpf_masters_output /path/to/masters/output \
        --date_range 20240405 20240418
