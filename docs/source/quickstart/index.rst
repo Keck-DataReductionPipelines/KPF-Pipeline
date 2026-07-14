@@ -31,6 +31,12 @@ calibration products (bias, dark, flat, wavelength solution), and ``science``
 reduces science exposures into RVs. Each takes input/output data directories
 and a datecode (masters) or obs_id (science) to act on.
 
+Input/output directories specify the root directory for the data files:
+
+* Input L0 data files should be placed in {kpf_data_input}/L0/
+* Reduced L1/L2/L4 science files will output to {kpf_science_output}/L{n}
+* Masters files will output to {kpf_masters_output}/masters
+
 Masters
 -------
 
@@ -84,7 +90,7 @@ Or by passing a plain text file which lists a single obs_id per line:
        --kpf_data_input /path/to/data \
        --kpf_science_output /path/to/science/output \
        --kpf_masters_output /path/to/masters/output \
-       --dates /path/to/obs_ids.txt
+       --obs_ids /path/to/obs_ids.txt
 
 Make sure that ``--kpf_masters_output`` specifies the same directory you used
 to run the masters pipeline so the science pipeline knows where to look for
