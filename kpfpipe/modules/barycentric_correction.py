@@ -2,32 +2,12 @@
 KPF Barycentric Correction module.
 
 Computes per-order barycentric corrections from the EXPMETER_SCI flux-weighted
-midpoint times and stores them on the L2. WAVE arrays are not modified.
+midpoint times and stores them on the L2 as BJD_TDB, BARYCORR_KMS, and
+BARYCORR_Z (per spectral order), plus per-CCD scalar summaries in the
+barycentric extension headers. Wavelength arrays are not modified.
 
-Outputs (EPRV-standard ImageHDUs, shape (NORDER,)):
-  - BJD_TDB       photon-weighted midpoint in BJD_TDB per spectral order
-  - BARYCORR_KMS  barycentric velocity per spectral order [km/s]
-  - BARYCORR_Z    barycentric redshift per spectral order
-
-Per-CCD scalar summaries (at each chip's flux-weighted photon-midpoint time)
-written to the per-CCD barycentric extension headers (BJD_TDB / BARYCORR_KMS /
-BARYCORR_Z) as registered KPF-pipeline keywords (config/L2-headers.csv):
-  - CCD1BJD       GREEN photon-weighted mid-time (BJD_TDB)
-  - CCD1BKMS      GREEN barycentric velocity [km/s]
-  - CCD1BZ        GREEN barycentric redshift
-  - CCD2BJD       RED   photon-weighted mid-time (BJD_TDB)
-  - CCD2BKMS      RED   barycentric velocity [km/s]
-  - CCD2BZ        RED   barycentric redshift
-
-CCD1BJD/CCD2BJD match the legacy keyword names and semantics; the *BKMS/*BZ
-companions follow the same CCD{n} naming pattern. INSTRUMENT_HEADER is an
-immutable pure pass-through of the raw instrument header and is never written.
-
-Notes
------
-Follows the barycentric correction approach described in:
-- Wright & Eastman (2014) — velocity calculation (barycorrpy)
-- Butler et al. (1996)    — flux-weighted midpoint time
+Follows the barycentric-correction approach of Wright & Eastman (2014,
+barycorrpy) with the flux-weighted midpoint time of Butler et al. (1996).
 """
 
 import logging

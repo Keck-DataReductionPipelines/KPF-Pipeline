@@ -34,8 +34,8 @@ class WLS(BaseMasterModule):
     wavelength solutions.
 
     Standard reduction: like science, a WLS frame is bias- and dark-subtracted
-    before extraction (`_STANDARD_CALIBRATIONS = ("bias", "dark")`); flat
-    division is part of the standard reduction but stays off until it is implemented.
+    before extraction; flat division is part of the standard reduction but
+    stays off until it is implemented.
 
     Parameters
     ----------

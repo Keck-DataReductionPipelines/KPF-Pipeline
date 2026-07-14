@@ -18,8 +18,8 @@ class Bias(BaseMasterModule):
     and performs a final outlier pass on the combined image. Outputs a
     KPFMasterL1 containing per-chip IMG, SNR, and MASK extensions.
 
-    Standard reduction: a bias receives no calibration
-    (`_STANDARD_CALIBRATIONS` is empty), so raw frames are stacked as-is.
+    Standard reduction: a bias receives no calibration, so raw frames are
+    stacked as-is.
 
     Parameters
     ----------

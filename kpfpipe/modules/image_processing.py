@@ -3,10 +3,8 @@ KPF Image Processing module.
 
 Applies the standard CCD calibration sequence to an assembled L1 frame, in
 order: bias subtraction, then dark subtraction (an exposure-scaled rate), then
-flat division. Which steps run is set by the bias/dark/flat flags, resolved
-DEFAULTS < [MODULE_IMAGE_PROCESSING] config < perform() kwargs. The masters
-modules drive these same flags per file type (see kpfpipe/modules/masters);
-science applies the full sequence. Flat division is not yet implemented.
+flat division. Which steps run is set by the bias/dark/flat flags. Flat
+division is not yet implemented.
 """
 
 import logging

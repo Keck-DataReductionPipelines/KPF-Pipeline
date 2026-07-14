@@ -14,12 +14,11 @@ class Dark(BaseMasterModule):
     """
     Construct a master dark frame from a stack of L0 dark exposures.
 
-    Standard reduction: a dark is bias-subtracted (`_STANDARD_CALIBRATIONS =
-    ("bias",)`). The associated master bias is subtracted from each frame via
-    the shared `_process_frame` hook (CalibrationAssociation + ImageProcessing)
-    before stacking with sigma-clipped statistics, interpolating bad pixels,
-    and performing a final outlier pass. Outputs a KPFMasterL1 containing
-    per-chip IMG, SNR, and MASK extensions, with IMG in electrons/sec.
+    Standard reduction: a dark is bias-subtracted. The associated master bias
+    is subtracted from each frame before stacking with sigma-clipped
+    statistics, interpolating bad pixels, and performing a final outlier pass.
+    Outputs a KPFMasterL1 containing per-chip IMG, SNR, and MASK extensions,
+    with IMG in electrons/sec.
 
     Parameters
     ----------

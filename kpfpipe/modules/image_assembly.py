@@ -43,7 +43,7 @@ RN_KEYS = {
 
 class ImageAssembly:
     """
-    This class performs CCD-level processing to convert L0 data to L1.
+    Assemble a raw L0 readout into an L1 full-frame image.
 
     Operations include:
       - orienting amplifier channels

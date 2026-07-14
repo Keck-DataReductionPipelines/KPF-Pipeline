@@ -23,19 +23,12 @@ class BaseMasterModule:
     """
     Base class for KPF masters generation.
 
-    The class should not be called directly, but is used for inheritance
-    of masters subclasses: Bias, Dark, Flat, WLS. Masters modules read a
-    stack of L0 files from disk and output a masters L1 object.
-
-    Each frame is calibrated before stacking/extraction following standard CCD
-    reduction: bias gets no calibration, dark is bias-subtracted, flat is
-    bias+dark-subtracted, and WLS (like science) is bias+dark-subtracted then
-    flat-divided. Each subclass declares its standard set via
-    `_STANDARD_CALIBRATIONS`. Which of those actually run is the standard set
-    intersected with the resolved bias/dark/flat flags
-    (DEFAULTS < [MODULE_IMAGE_PROCESSING] config < make_master kwargs): a flag
-    can only turn a standard calibration off, never enable one a master type
-    does not use.
+    Not called directly; the concrete masters subclasses (Bias, Dark, Flat,
+    WLS) inherit it. A masters module reads a stack of L0 files from disk and
+    outputs a masters L1 object. Each frame is calibrated before
+    stacking/extraction following standard CCD reduction: a bias gets no
+    calibration, a dark is bias-subtracted, and a flat and WLS are bias- and
+    dark-subtracted.
     """
 
     # Module defaults; subclasses extend via `{**BaseMasterModule._DEFAULTS, ...}`.

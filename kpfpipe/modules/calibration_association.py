@@ -52,19 +52,13 @@ class CalibrationAssociation:
     Parameters
     ----------
     l1_obj : KPF1
-        KPF observation frame. For now this is always an L1 frame. The
-        observation timestamp is read from its PRIMARY header (DATE-OBS).
+        KPF observation frame. The observation timestamp is read from its
+        PRIMARY header (DATE-OBS).
     config : None | dict | ConfigHandler
-        Module configuration. Recognised keys:
-            KPF_MASTERS_OUTPUT : str
-                Root directory under which master calibration files live
-                (searched as {root}/masters/{datecode}/). This is where the
-                masters recipe writes its products.
-            masters_search_window_days : [int, int]
-                Search window as [days_before, days_after] relative to the
-                science frame's observation date. Negative values are in the
-                past, positive in the future. Default: [-1, 0] (search up to
-                1 day before and same day only).
+        Module configuration. Recognized keys: KPF_MASTERS_OUTPUT (root
+        directory holding the master calibration files) and
+        masters_search_window_days ([days_before, days_after] search window
+        relative to the frame's observation date; default [-1, 0]).
     """
 
     def __init__(self, l1_obj, config=None):

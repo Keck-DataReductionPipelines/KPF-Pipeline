@@ -1,5 +1,8 @@
 """
 KPF Spectral Extraction module.
+
+Extracts per-order 1D spectra from an assembled L1 frame into a KPF2 (L2),
+populating the per-fiber FLUX and VAR arrays.
 """
 
 import logging
@@ -19,20 +22,7 @@ _DEFAULTS = {**DEFAULTS, "extraction_method": "box"}
 
 class SpectralExtraction:
     """
-    This class performs spectral extraction of the 1D spectrum.
-    Processes data from KPF1 to KPF2.
-
-    Notes
-    -----
-    Single-letter variable names for 2D images in this class follow
-    Horne 1986 optimal extraction, with small modifcations:
-      - D = data
-      - V = variance
-      - S = sky / scattered light
-      - F = flat
-      - P = profile
-      - M = mask
-      - W = weight
+    Extract per-order 1D spectra from a KPF1, producing a KPF2.
     """
 
     def __init__(self, l1_obj, config=None):
@@ -229,6 +219,11 @@ class SpectralExtraction:
             Extracted 1D flux spectrum.
         var_1d : ndarray
             Corresponding 1D variance spectrum.
+
+        Notes
+        -----
+        The single-letter array names (D, V, S, M, W) follow the Horne (1986)
+        optimal-extraction convention.
         """
         if S is None:
             S = np.zeros_like(D)
@@ -276,7 +271,8 @@ class SpectralExtraction:
 
         Notes
         -----
-        Follows Horne (1986) optimal extraction algorithm.
+        Follows the Horne (1986) optimal extraction algorithm; the single-letter
+        array names (D, V, S, M, W, P) follow its convention.
         """
         raise NotImplementedError("optimal extraction not yet implemented")
 

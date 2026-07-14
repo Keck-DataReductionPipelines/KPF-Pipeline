@@ -8,8 +8,8 @@ class Flat(BaseMasterModule):
     """
     Construct a master flat frame from a stack of L0 flat exposures.
 
-    Standard reduction: a flat is bias- and dark-subtracted
-    (`_STANDARD_CALIBRATIONS = ("bias", "dark")`). Not yet implemented.
+    Standard reduction: a flat is bias- and dark-subtracted. Not yet
+    implemented.
 
     Parameters
     ----------

@@ -6,13 +6,6 @@ functions were already built by CrossCorrelation. For each illuminated orderlet
 it fits the per-order CCFs to radial velocities, collapses them into RVs per
 order, orderlet, and CCD (weighted where appropriate), and fills the results into
 the L4's per-order RV tables and headers plus the PRIMARY combined RV.
-
-Everything the fit needs is read from the L4: the CCF cubes (CCFn) and their
-per-bin variances (CCF_VARn); the velocity grid, reconstructed from each CCFn
-header (VELSTART/VELSTEP/VELNSTEP); the mask width (VELMASK); and the per-order
-WEIGHT / BERV / BJD_TDB / WAVE_START / WAVE_END columns of the RVn tables. The
-native per-pixel velocity scale for the photon error comes from the WAVE
-endpoints and the detector column count (detector.toml ncol).
 """
 
 import logging

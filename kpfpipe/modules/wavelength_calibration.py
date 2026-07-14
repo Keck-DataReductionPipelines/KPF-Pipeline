@@ -2,9 +2,7 @@
 KPF Wavelength Calibration module.
 
 Copies the per-fiber wavelength solution from a precomputed master WLS L2
-product onto a science L2. The master is located by CalibrationAssociation,
-which writes the full WLSFILE path to the RECEIPT header (its registry home);
-to_kpf2 forwards the L1 RECEIPT header to the L2, where this module reads it.
+product onto a science L2. The master is located by CalibrationAssociation.
 """
 
 import logging
@@ -25,10 +23,9 @@ class WavelengthCalibration:
     """
     Apply a precomputed wavelength solution to an extracted KPF L2 frame.
 
-    Reads `WLSFILE` (full path, legacy convention) from the L2 RECEIPT
-    header (written by CalibrationAssociation on the L1 RECEIPT and carried
-    through by to_kpf2), loads the corresponding KPFMasterL2, and copies each
-    per-fiber {CHIP}_{FIBER}_WAVE array onto the science L2.
+    Reads the master WLS path from the L2 RECEIPT header (`WLSFILE`, written
+    by CalibrationAssociation), loads the corresponding KPFMasterL2, and copies
+    each per-fiber {CHIP}_{FIBER}_WAVE array onto the science L2.
 
     Parameters
     ----------
