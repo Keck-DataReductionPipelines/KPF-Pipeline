@@ -87,14 +87,6 @@ autosummary_context = {
     # Subpackages that keep their own page even when the parent package is
     # curated (has __all__) and its leaf submodules are collapsed inline.
     "subpackages": _find_subpackages(_repo_root),
-    # Sidebar/page-title overrides. The default title is the stemless leaf name
-    # (e.g. "barycentric_correction", "level0"); an entry here replaces it for
-    # that exact module (e.g. show both masters subpackages simply as "Masters").
-    # Keyed by full dotted name.
-    "title_overrides": {
-        "kpfpipe.modules.masters": "Masters",
-        "kpfpipe.data_models.masters": "Masters",
-    },
 }
 
 autodoc_default_options = {

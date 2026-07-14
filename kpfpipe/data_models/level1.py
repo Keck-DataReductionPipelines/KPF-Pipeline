@@ -1,12 +1,9 @@
 """
 KPF Level 1 (assembled FFI) data model.
 
-Represents an assembled CCD frame after combining amplifier readouts.
-Also used for master calibration products (bias, dark, flat) which
-share the same structure (mean + variance frames for GREEN and RED).
-
-Subclasses RVDataModel (via KPFDataModel) to reuse its extension/header/data
-infrastructure and receipt system.
+Assembled CCD frames (GREEN and RED, with variance) built by combining the
+L0 amplifier readouts. Also used for 2D master calibrations (bias, dark,
+flat), which share the same structure.
 """
 
 import importlib.resources
@@ -40,14 +37,11 @@ class KPF1(KPFDataModel):
     """
     KPF Level 1 assembled FFI data model.
 
-    After image assembly, the L1 product contains assembled GREEN_CCD
-    and RED_CCD frames with corresponding variance frames, plus
-    pass-through extensions from L0 (CA_HK, exposure meter, telemetry).
-
-    Also used for master calibration products (bias, dark, flat).
-    Construct from a FITS file with `KPF1.from_fits(path)`, then read the
-    assembled 4080x4080 frames from `data` (e.g. `data["GREEN_CCD"]`,
-    `data["RED_CCD"]`).
+    Contains the assembled GREEN_CCD and RED_CCD frames with their variance
+    frames, plus pass-through extensions from L0 (CA_HK, exposure meter,
+    telemetry). Construct from a FITS file with ``KPF1.from_fits(path)``, then
+    read the assembled frames from ``data`` (e.g. ``data["GREEN_CCD"]``,
+    ``data["RED_CCD"]``).
     """
 
     _DATALVL = "L1"

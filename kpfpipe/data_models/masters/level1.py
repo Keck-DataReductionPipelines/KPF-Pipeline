@@ -1,21 +1,9 @@
 """
 KPF Masters Level 1 data model.
 
-Stacked 2D calibration frame product (bias, dark, flat).
-
-Inherits from KPFMasterModel and KPF1. All KPF1 methods (from_fits,
-to_fits, _read, info, to_kpf2) are inherited unchanged. Extension names
-differ from science L1 to reflect masters-specific normalization:
-
-    GREEN_IMG  -- stacked mean image
-    GREEN_SNR  -- signal-to-noise ratio
-    GREEN_MASK -- boolean bad pixel mask (1=good, 0=bad)
-    RED_IMG, RED_SNR, RED_MASK -- same for red chip
-
-Filename convention (WMKO DRP-RUN-05): masters are written as
-{KOAID-of-first-input}_master_{type}_L1.fits (e.g.
-KP.20240405.49597.71_master_bias_L1.fits), built by
-KPFMasterModel.generate_standard_filename().
+Stacked FFI calibration (bias, dark, flat). Extends KPF1 with
+masters-specific extension names (GREEN_IMG, GREEN_SNR, GREEN_MASK and the
+red-chip equivalents) that reflect the calibration normalization.
 """
 
 import importlib.resources
@@ -32,7 +20,7 @@ _ML1_EXTENSIONS = pd.read_csv(_config_path / "ML1-extensions.csv")
 
 class KPFMasterL1(KPFMasterModel, KPF1):
     """
-    KPF Masters Level 1 stacked calibration frame.
+    KPF Masters Level 1 stacked FFI calibration.
 
     Thin wrapper around KPF1 with masters-specific extension names.
     Inherits all KPF1 methods (from_fits, to_fits, _read, info).

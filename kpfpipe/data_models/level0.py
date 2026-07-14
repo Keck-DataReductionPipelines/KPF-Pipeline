@@ -1,12 +1,9 @@
 """
 KPF Level 0 (raw CCD) data model.
 
-Reads raw FITS files from the KPF instrument at Keck Observatory.
-L0 files contain amplifier readouts, exposure meter tables, guide camera,
-telemetry, and telescope metadata. Extensions vary between observations.
-
-Subclasses RVDataModel (via KPFDataModel) to reuse its extension/header/data
-infrastructure and receipt system.
+Raw FITS readout from the KPF instrument: amplifier arrays plus exposure
+meter, guide camera, telemetry, and telescope metadata. The extensions
+present vary between observations.
 """
 
 import importlib.resources
@@ -46,12 +43,10 @@ class KPF0(KPFDataModel):
     """
     KPF Level 0 raw data model.
 
-    Represents a raw CCD readout from the KPF instrument. Extensions
-    vary between observations; the reader accepts whatever is present
-    in the FITS file. Construct from a FITS file with
-    `KPF0.from_fits(path)`, then read amplifier arrays from `data`
-    (e.g. `data["GREEN_AMP1"]`) and header dicts from `headers`
-    (e.g. `headers["PRIMARY"]`).
+    Represents a raw CCD readout from the KPF instrument. Construct from a
+    FITS file with ``KPF0.from_fits(path)``, then read amplifier arrays from
+    ``data`` (e.g. ``data["GREEN_AMP1"]``) and header dicts from ``headers``
+    (e.g. ``headers["PRIMARY"]``).
     """
 
     def __init__(self):

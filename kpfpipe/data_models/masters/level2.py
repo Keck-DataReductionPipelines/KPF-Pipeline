@@ -1,26 +1,9 @@
 """
 KPF Masters Level 2 data model.
 
-Extracted-spectrum-level masters calibration product (e.g., master
-wavelength solutions, master flats).
-
-Inherits from KPFMasterModel and KPF2. The full L2 schema and the KPF
-alias system are inherited from KPF2 (see aliases.csv and
-trace-map.csv for the mapping between KPF-internal fiber names like
-SCI2_WAVE and the EPRV standard names like TRACE3_WAVE).
-
-An L2 master carries a different extension set per *type*: a WLS master
-holds wavelength solutions (TRACE*_WAVE) and fit coefficients
-(*_WLS_COEFFS); a flat master holds extracted spectra (TRACE*_FLUX/VAR/
-BLAZE). Each type has its own authoritative manifest -- ML2-wls-extensions.csv
-and ML2-flat-extensions.csv -- selected by the required `kind` argument
-(see __init__). Construction is explicit; from_fits infers `kind` from the
-file's PRIMARY MASTYPE.
-
-Filename convention (WMKO DRP-RUN-05): masters are written as
-{KOAID-of-first-input}_master_{type}_L2.fits (e.g.
-KP.20240405.49597.71_master_thar_L2.fits), built by
-KPFMasterModel.generate_standard_filename().
+Extracted-spectrum-level calibration (wavelength solution, flat). Extends
+KPF2 with a per-type extension set: a WLS master (kind="wls") holds wavelength
+solutions, while a flat master (kind="flat") holds extracted spectra.
 """
 
 import importlib.resources
@@ -48,16 +31,16 @@ _ML2_MANIFESTS = {"wls": _ML2_WLS_EXTENSIONS, "flat": _ML2_FLAT_EXTENSIONS}
 
 class KPFMasterL2(KPFMasterModel, KPF2):
     """
-    KPF Masters Level 2 extracted-spectrum calibration product.
+    KPF Masters Level 2 extracted-spectrum calibration.
 
-    Thin wrapper around KPF2 with masters-specific DATALVL, filename
-    prefix, and INPUT_FILES extension. Inherits the full L2 schema and
-    the KPF2 alias system (e.g., SCI2_WAVE -> TRACE3_WAVE, with chip-
-    prefix access GREEN_SCI2_WAVE / RED_SCI2_WAVE).
+    Thin wrapper around KPF2 with masters-specific extension names.
+    Inherits the full L2 schema and the KPF2 alias system (e.g.
+    SCI2_WAVE -> TRACE3_WAVE, with chip-prefix access GREEN_SCI2_WAVE /
+    RED_SCI2_WAVE).
 
-    Construct with an explicit type, `KPFMasterL2(kind="wls")` or
-    `kind="flat"`, or load a product from disk with
-    `KPFMasterL2.from_fits(path)` (which infers the kind from MASTYPE).
+    Construct with an explicit type, e.g. `KPFMasterL2(kind="wls")`, or
+    load a product from disk with `KPFMasterL2.from_fits(path)`, which
+    infers the kind from header keyword MASTYPE.
     """
 
     _DATALVL = "ML2"

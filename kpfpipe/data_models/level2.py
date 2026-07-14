@@ -1,16 +1,10 @@
 """
 KPF Level 2 (extracted spectra) data model.
 
-Inherits from RV2 (EPRV standard) and adds KPF-friendly extension aliases
-so pipeline code can use either EPRV names (TRACE3_FLUX) or KPF names
-(SCI2_FLUX). Per-chip access (GREEN_SCI2_FLUX, RED_SCI2_FLUX) is handled
-transparently — these return numpy views into the concatenated trace arrays.
-
-Each trace stores green+red orders concatenated (green first), matching the
-EPRV standard. The chip prefix dynamically slices using NORDER_GREEN.
-
-The alias mechanism (AliasedOrderedDict) is generic and could be
-upstreamed into the EPRV standard (which rvdata implements).
+Extracted, wavelength-calibrated spectra. Extends the EPRV RV2 model with
+KPF-friendly extension aliases, so data can be accessed by either EPRV name
+(``TRACE3_FLUX``) or KPF name (``SCI2_FLUX``), including per-chip views
+(``GREEN_SCI2_FLUX``, ``RED_SCI2_FLUX``).
 """
 
 import importlib.resources
@@ -155,18 +149,12 @@ class KPF2(KPFDataModel, RV2):
     """
     KPF Level 2 extracted spectra data model.
 
-    Extends RV2 with KPF-friendly extension aliases and per-chip
-    access. EPRV-standard extension names remain canonical;
-    aliases are transparent synonyms.
-
-    Each trace contains green+red orders concatenated (35 green + 32 red
-    = 67 orders total). Per-chip access via GREEN_/RED_ prefix returns
-    numpy views into the concatenated array. As examples of the aliasing,
-    `data["SCI2_FLUX"]` is `data["TRACE3_FLUX"]`, `data["CAL_WAVE"]` is
-    `data["TRACE1_WAVE"]`, and `data["CA_HK"]` is
-    `data["ANCILLARY_SPECTRUM"]`; per-chip, `data["GREEN_SCI2_FLUX"]`
-    returns `TRACE3_FLUX[:35]` (the green orders) and
-    `data["RED_SCI2_FLUX"]` returns `TRACE3_FLUX[35:]` (the red orders).
+    Extends RV2 with KPF-friendly extension aliases and per-chip access;
+    EPRV-standard names remain canonical and aliases are transparent
+    synonyms. Each trace holds the green and red orders concatenated (green
+    first); a GREEN_/RED_ prefix returns a numpy view of that chip's orders.
+    For example, ``data["SCI2_FLUX"]`` is ``data["TRACE3_FLUX"]`` and
+    ``data["GREEN_SCI2_FLUX"]`` returns its green orders.
     """
 
     def __init__(self):

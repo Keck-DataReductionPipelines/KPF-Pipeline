@@ -1,12 +1,9 @@
 """
 KPF base data model.
 
-Thin layer on top of RVDataModel that adds KPF-specific attributes and the
-behaviour shared by every KPF data model: fits.Header storage, the DRPSTATU
-receipt stamp, alias-aware set_data/set_header, and lossless PRIMARY
-serialization. All four KPF models inherit it — L0/L1 directly, and L2/L4 via
-multiple inheritance alongside rvdata's RV2/RV4 (KPFDataModel listed first so
-its overrides win while RV2/RV4 remain reachable through ``super()``).
+Shared base for every KPF data model (L0, L1, L2, L4). Extends the EPRV
+``RVDataModel`` with the behaviour common to all KPF products: FITS-header
+storage, provenance receipts, and alias-aware data and header access.
 """
 
 import logging
@@ -47,8 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 class KPFDataModel(RVDataModel):
-    """Shared base for every KPF data model (L0, L1, and — multiply-inherited
-    with RV2/RV4 — L2, L4)."""
+    """Shared base for every KPF data model (L0, L1, L2, L4)."""
 
     # The keyword registry singleton, surfaced as a class attribute so anything
     # handed a KPF data model (the checkpoints header validator, level0's

@@ -1,25 +1,12 @@
 """
-KPF masters base data model.
+KPF Masters base data model.
 
-Base class for all masters calibration data models. Inherits from
-KPFDataModel and initializes the data model infrastructure without
-creating any science-level extensions.
-
-Level-specific masters classes use double inheritance (e.g. KPFMasterL1
-subclasses both KPFMasterModel and KPF1). This gives the level-specific
-class access to science model methods (from_fits, to_fits, _read, info,
-etc.) while the extension setup is controlled entirely by KPFMasterModel
-and its subclasses.
+Shared base for the masters calibration products. Extends KPFDataModel
+without creating any science-level extensions, leaving each level-specific
+subclass (KPFMasterL1/L2/L4) to install its own masters extensions.
 
 Masters products differ from science products in extension naming to
-avoid confusion: units and normalization conventions differ by
-calibration type (bias, dark, flat) and are not the same as raw
-science counts (e.g., GREEN_CCD).
-
-Filename convention (WMKO DRP-RUN-05): masters are written as
-``{KOAID-of-first-input}_master_{type}_L{level}.fits`` (e.g.
-``KP.20240405.49597.71_master_bias_L1.fits``), built by
-``generate_standard_filename()``.
+avoid confusion (see KPFMasterL1/L2/L4)
 """
 
 import os
@@ -46,7 +33,6 @@ class KPFMasterModel(KPFDataModel):
     Inherits from KPFDataModel and initializes only the base data model
     infrastructure. Science-level extension setup is intentionally skipped
     so that level-specific subclasses can install masters extensions instead.
-    Normalization conventions differ by calibration type (bias, dark, flat).
     """
 
     def __init__(self):
