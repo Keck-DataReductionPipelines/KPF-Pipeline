@@ -2,19 +2,19 @@
 Quickstart
 ==========
 
-To install and run the DRP, follow the quickstart guide below.
+To install and run the vNext pipeline, follow the quickstart guide below.
 
 
 Installation
 ============
 
-The pipeline runs in a dedicated conda environment (``kpfpipe``, Python 3.14).
+The vNext pipeline runs in a dedicated conda environment (``kpfpipe``, Python 3.14).
 Clone the repository, create the environment, and install the package in
 editable mode:
 
 .. code-block:: bash
 
-   git clone https://github.com/Keck-DataReductionPipelines/KPF-Pipeline.git
+   git clone -b kpf-next https://github.com/Keck-DataReductionPipelines/KPF-Pipeline.git
    cd KPF-Pipeline
    conda env create -f environment.yml
    conda activate kpfpipe
@@ -24,7 +24,7 @@ editable mode:
 Running the DRP
 ===============
 
-The easiest way to run the KPF DRP is via the command line interface (CLI).
+The easiest way to run the pipeline is via the command line interface (CLI).
 
 The ``kpfpipe`` command has two main entry points: ``masters`` builds nightly
 calibration products (bias, dark, flat, wavelength solution), and ``science``
