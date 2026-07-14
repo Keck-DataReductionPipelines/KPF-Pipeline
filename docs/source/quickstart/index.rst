@@ -34,8 +34,8 @@ and a datecode (masters) or obs_id (science) to act on.
 Input/output directories specify the root directory for the data files:
 
 * Input L0 data files should be placed in {kpf_data_input}/L0/
-* Reduced L1/L2/L4 science files will output to {kpf_science_output}/L{n}
-* Masters files will output to {kpf_masters_output}/masters
+* Reduced L1/L2/L4 science files will output to {kpf_science_output}/L{n}/
+* Masters files will output to {kpf_masters_output}/masters/
 
 Masters
 -------
