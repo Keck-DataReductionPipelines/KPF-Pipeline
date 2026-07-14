@@ -1,12 +1,4 @@
-"""L4 quicklook plots for KPF cross-correlation functions (CCFs) and RVs.
-
-Ports the per-order CCF grid from the v2.12 ``AnalyzeL2`` class (the old
-pipeline's "L2" level is vNext's L4: CCFs and RVs live in the L4 product).
-The CCF grid shows, for each illuminated orderlet, every order's CCF stacked
-vertically so the per-order consistency of the dip is visible at a glance.
-
-Pure visualization — no science computation is written back to the product.
-"""
+"""L4 quicklook plots for KPF cross-correlation functions (CCFs) and RVs."""
 
 import os
 from datetime import UTC, datetime
@@ -35,11 +27,15 @@ class PlotL4:
     """
     Quicklook plots for KPF L4 (RVs and CCFs) data.
 
-    Args:
-        l4_obj: KPF4 data object (post-CrossCorrelation + RadialVelocity).
-        output_dir: directory to save PNG files. None = return Figure only.
-        obs_id: observation ID for titles/filenames. If None, falls back to
-            the l4_obj.obs_id attribute (populated on every construction path).
+    Parameters
+    ----------
+    l4_obj : KPF4
+        L4 frame (post-CrossCorrelation + RadialVelocity).
+    output_dir : str or None
+        Directory to save PNG files. None returns the Figure only.
+    obs_id : str or None
+        Observation ID for titles/filenames. If None, falls back to
+        ``l4_obj.obs_id`` (populated on every construction path).
     """
 
     _PLOT_METHODS = ("ccf_grid",)

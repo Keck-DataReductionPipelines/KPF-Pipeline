@@ -1,1 +1,1 @@
-"""Quality control: diagnostics, QC flags, and quicklook plots."""
+"""Quality control: diagnostics, QC flags, checkpoints, and quicklook plots."""

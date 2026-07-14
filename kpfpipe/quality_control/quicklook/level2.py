@@ -1,14 +1,4 @@
-"""L2 quicklook plots for extracted KPF 1D spectra.
-
-Ports the extracted-spectrum quicklook plots from the v2.12 ``AnalyzeL1``
-class (the old pipeline's "L1" level is vNext's L2). These plots REQUIRE an
-attached wavelength solution: the per-fiber ``{chip}_{fiber}_WAVE`` arrays
-must be populated (i.e. WavelengthCalibration has run). If they are not, the
-plot methods raise rather than silently producing a pixel-axis plot that
-could be mistaken for a wavelength-calibrated one (charter: fail loudly).
-
-Pure visualization — no science computation is written back to the product.
-"""
+"""L2 quicklook plots for extracted KPF 1D spectra."""
 
 import os
 from datetime import UTC, datetime
@@ -29,12 +19,16 @@ class PlotL2:
     """
     Quicklook plots for KPF L2 (extracted 1D spectra) data.
 
-    Args:
-        l2_obj: KPF2 data object (post-SpectralExtraction; requires
-            WavelengthCalibration to have populated the per-fiber WAVE arrays).
-        output_dir: directory to save PNG files. None = return Figure only.
-        obs_id: observation ID for titles/filenames. If None, falls back to
-            the l2_obj.obs_id attribute (populated on every construction path).
+    Parameters
+    ----------
+    l2_obj : KPF2
+        Extracted L2 frame (post-SpectralExtraction; requires
+        WavelengthCalibration to have populated the per-fiber WAVE arrays).
+    output_dir : str or None
+        Directory to save PNG files. None returns the Figure only.
+    obs_id : str or None
+        Observation ID for titles/filenames. If None, falls back to
+        ``l2_obj.obs_id`` (populated on every construction path).
     """
 
     _PLOT_METHODS = (

@@ -1,3 +1,5 @@
+"""QC flags: per-level pass/fail checks written to QUALITY_CONTROL."""
+
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.quality_control.qc_flags.level0 import QCL0
 from kpfpipe.quality_control.qc_flags.level1 import QCL1

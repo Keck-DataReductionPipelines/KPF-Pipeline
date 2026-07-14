@@ -1,17 +1,9 @@
 """Diagnostics framework base class.
 
-Each Diagnostics subclass defines methods that compute metrics from a
-finished data product and return a dict of {keyword: (value, comment)}.
-The runner writes each via ``set_keyword`` (which routes the keyword to its
-registry-home extension — DiagL2 metrics land on QUALITY_CONTROL) and stores
-them on self.results.
-
-A method opts in by setting `_diag_name` on the function object.
-If a method raises, run() raises (loud failure, no silent suppression).
-
-Diagnostics is read-only with respect to the data extensions — it only
-adds header keywords via ``set_keyword``. Pair with QC, which reads the
-metrics Diagnostics writes and applies pass/fail thresholds.
+The first of the three quality-control stages (Diagnostics -> QC -> Checkpoints).
+Each Diagnostics subclass computes metrics from a finished data product and writes
+them to the product headers via ``set_keyword``; it never modifies the science
+extensions. QC then reads those metrics and applies pass/fail thresholds.
 """
 
 

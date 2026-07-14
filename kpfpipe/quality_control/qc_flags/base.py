@@ -1,17 +1,9 @@
 """QC framework base class.
 
-Each QC subclass defines check methods. A check is a method whose function
-object has a `_qc_key` (8-char FITS keyword) attribute. The runner walks all
-such methods, calls each one, writes a 0/1 result via ``set_keyword`` (which
-routes it to its registry home, QUALITY_CONTROL, with the registry ``Description``
-as the FITS comment), and aggregates ISGOOD = AND of all checks. The per-check
-comment lives once — in the registry ``Description`` — not on the method. If any
-check raises, run() raises (loud failure, no silent suppression).
-
-QC writes only 0/1 keywords. Header validation (unregistered cards, missing
-required keywords) is NOT done here -- it lives in the separate ``checkpoints``
-layer, which reads these flags plus the product headers and emits warnings or
-raises. The pipeline order is: science modules -> Diagnostics -> QC -> Checkpoints.
+The second of three quality-control stages (Diagnostics -> QC -> Checkpoints).
+Each QC subclass runs pass/fail check methods, writing a 0/1 flag per check to
+QUALITY_CONTROL via ``set_keyword`` and aggregating ISGOOD as the AND of all
+checks. Header validation and raising live in the separate Checkpoints layer.
 """
 
 
