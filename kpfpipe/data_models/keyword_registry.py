@@ -11,10 +11,10 @@ WMKO->EPRV mapping, tests) reach the registry through ``kpf.keyword_registry``
 rather than importing from here.
 
 Source of truth: ``self.table``, one DataFrame unioning the KPF
-``L{0,1,2,4}-headers.csv`` registries (plus ``Masters-headers.csv`` for the
-out-of-EPRV-scope masters keywords, which still route through ``set_keyword``)
-with the EPRV keyword definitions (rvdata's ``LEVEL2/4_PRIMARY_KEYWORDS`` plus the
-per-extension keyword CSVs). Columns:
+``L{0,1,2,4}-headers.csv`` registries (plus the per-master-type
+``ML{1,2}-*-headers.csv`` registries for the out-of-EPRV-scope masters keywords,
+which still route through ``set_keyword``) with the EPRV keyword definitions
+(rvdata's ``LEVEL2/4_PRIMARY_KEYWORDS`` plus the per-extension keyword CSVs). Columns:
 ``Keyword, Description, Extension, DataType, PopulatedBy, Required, Level, Default,
 Units`` (``Default``/``Units`` carry the EPRV CSV values for EPRV rows, ``""`` for
 KPF rows). The ``routing``/``allowed``/``required``/``eprv_primary_*`` lookups are
@@ -422,18 +422,26 @@ class KeywordRegistry:
 
     @classmethod
     def _masters_rows(cls):
-        """KPF masters keyword rows from config/Masters-headers.csv.
+        """KPF masters keyword rows from the per-master-type registries
+        config/{ML1,ML2-flat,ML2-wls}-headers.csv.
 
         Masters (bias/dark/flat/WLS calibration products) are out of EPRV scope
         but route their PRIMARY keywords (MASTYPE + the WLS metadata) through
-        ``set_keyword`` like the science models, so they are registered here. Level
-        comes from the CSV's own ``Level`` column (masters span L1/L2, not one
-        per-file level).
+        ``set_keyword`` like the science models, so they are registered here. One
+        file per master type (mirroring the per-type ``ML*-extensions.csv`` manifests);
+        Level is derived from the filename like ``_kpf_rows`` (ML1 -> 1, ML2 -> 2).
+        MASTYPE appears in every file (harmless: it dedups in ``registered`` and has a
+        single PRIMARY home). All three union into the one global table.
         """
-        df = pd.read_csv(_kpf_pipe_cfg / "Masters-headers.csv")
-        return cls._parse_kpf_keyword_config(
-            df, "Masters-headers.csv", lambda r: int(r["Level"])
-        )
+        rows = []
+        for fname, level in (
+            ("ML1-headers.csv", 1),
+            ("ML2-flat-headers.csv", 2),
+            ("ML2-wls-headers.csv", 2),
+        ):
+            df = pd.read_csv(_kpf_pipe_cfg / fname)
+            rows += cls._parse_kpf_keyword_config(df, fname, lambda r, lvl=level: lvl)
+        return rows
 
     @classmethod
     def _build_rows(cls):

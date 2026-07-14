@@ -56,7 +56,7 @@ def main(config, args):
     # Generate L0 quicklook plots
     logger.info("generating L0 quicklook plots for %s", obs_id)
     l0_qlp_dir = kpf_directory(
-        obs_id, level="L0", data_root=data_root_science, kind="QLP"
+        kind="QLP", data_root=data_root_science, level="L0", obs_id=obs_id
     )
     PlotL0(l0, output_dir=l0_qlp_dir).run("all")
 
@@ -89,7 +89,7 @@ def main(config, args):
     # L1 quicklook plots
     logger.info("generating L1 quicklook plots for %s", obs_id)
     l1_qlp_dir = kpf_directory(
-        obs_id, level="L1", data_root=data_root_science, kind="QLP"
+        kind="QLP", data_root=data_root_science, level="L1", obs_id=obs_id
     )
     PlotL1(l1, output_dir=l1_qlp_dir).run("all")
 
@@ -120,7 +120,7 @@ def main(config, args):
     # L2 quicklook plots
     logger.info("generating L2 quicklook plots for %s", obs_id)
     l2_qlp_dir = kpf_directory(
-        obs_id, level="L2", data_root=data_root_science, kind="QLP"
+        kind="QLP", data_root=data_root_science, level="L2", obs_id=obs_id
     )
     PlotL2(l2, output_dir=l2_qlp_dir, obs_id=obs_id).run("all")
 
@@ -146,7 +146,7 @@ def main(config, args):
     # L4 quicklook plots
     logger.info("generating L4 quicklook plots for %s", obs_id)
     l4_qlp_dir = kpf_directory(
-        obs_id, level="L4", data_root=data_root_science, kind="QLP"
+        kind="QLP", data_root=data_root_science, level="L4", obs_id=obs_id
     )
     PlotL4(l4, output_dir=l4_qlp_dir, obs_id=obs_id).run("all")
 

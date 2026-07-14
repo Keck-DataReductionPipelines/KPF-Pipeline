@@ -1,0 +1,2 @@
+Keyword,Description,Extension,DataType,PopulatedBy
+MASTYPE,Master calibration type,PRIMARY,str,KPFMasterModel.set_input_files

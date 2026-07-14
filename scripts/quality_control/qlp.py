@@ -75,7 +75,7 @@ def main():
         params = config.get_params(["DATA_DIRS"])
         data_root = params.get("KPF_DATA_OUTPUT", "/data/kpf-next/")
         output_dir = kpf_directory(
-            obs_id, level=args.level, data_root=data_root, kind="QLP"
+            kind="QLP", data_root=data_root, level=args.level, obs_id=obs_id
         )
     else:
         output_dir = "."

@@ -788,37 +788,37 @@ class TestDtypeProvenance:
 
 
 # ---------------------------------------------------------------------------
-# save_master / make_master_l1(filepath=...) — the shared write path
+# save_master / make_master_l1(master_path=...) — the shared write path
 # ---------------------------------------------------------------------------
 
 
 class TestSaveMaster:
-    """save_master / make_master_l1(filepath=...) is shared base behavior,
+    """save_master / make_master_l1(master_path=...) is shared base behavior,
     exercised here through Bias (the simplest master)."""
 
-    def test_filepath_writes_fits(self, tmp_path):
+    def test_master_path_writes_fits(self, tmp_path):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         master_path = tmp_path / "master_bias.fits"
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(filepath=str(master_path))
+            bias.make_master_l1(master_path=str(master_path))
         assert master_path.exists()
 
-    def test_filepath_creates_parent_dir(self, tmp_path):
+    def test_master_path_creates_parent_dir(self, tmp_path):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         master_path = tmp_path / "nested" / "subdir" / "master_bias.fits"
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(filepath=str(master_path))
+            bias.make_master_l1(master_path=str(master_path))
         assert master_path.exists()
 
-    def test_filepath_overwrites_existing(self, tmp_path):
+    def test_master_path_overwrites_existing(self, tmp_path):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
         master_path = tmp_path / "master_bias.fits"
         master_path.touch()
         with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(filepath=str(master_path))
+            bias.make_master_l1(master_path=str(master_path))
         assert master_path.read_bytes()[:6] == b"SIMPLE"
 
     def test_save_master_before_make_raises(self):

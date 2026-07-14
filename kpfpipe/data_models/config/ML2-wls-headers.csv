@@ -1,0 +1,8 @@
+Keyword,Description,Extension,DataType,PopulatedBy
+MASTYPE,Master calibration type,PRIMARY,str,KPFMasterModel.set_input_files
+ROUGHWLS,Rough WLS reference file,PRIMARY,str,WLS.make_master_l2
+LINELIST,Line list reference file,PRIMARY,str,WLS.make_master_l2
+LINEPROF,Line profile model used in WLS fit,PRIMARY,str,WLS.make_master_l2
+POLYORDX,"WLS polynomial degree, pixel axis",PRIMARY,int,WLS.make_master_l2
+POLYORDM,"WLS polynomial degree, order axis",PRIMARY,int,WLS.make_master_l2
+POLYORDF,"WLS polynomial degree, fiber axis",PRIMARY,int,WLS.make_master_l2
