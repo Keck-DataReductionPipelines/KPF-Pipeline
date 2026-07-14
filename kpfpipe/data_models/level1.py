@@ -1,5 +1,5 @@
 """
-KPF Level 1 (assembled 2D frame) data model.
+KPF Level 1 (assembled FFI) data model.
 
 Represents an assembled CCD frame after combining amplifier readouts.
 Also used for master calibration products (bias, dark, flat) which
@@ -38,7 +38,7 @@ _L1_FILENAME_PATTERN = re.compile(r"kpf_L1_\d{8}T\d{6}\.fits")
 
 class KPF1(KPFDataModel):
     """
-    KPF Level 1 assembled 2D frame data model.
+    KPF Level 1 assembled FFI data model.
 
     After image assembly, the L1 product contains assembled GREEN_CCD
     and RED_CCD frames with corresponding variance frames, plus

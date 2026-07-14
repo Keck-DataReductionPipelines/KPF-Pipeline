@@ -1,5 +1,5 @@
 """
-KPF-specific base data model.
+KPF base data model.
 
 Thin layer on top of RVDataModel that adds KPF-specific attributes and the
 behaviour shared by every KPF data model: fits.Header storage, the DRPSTATU

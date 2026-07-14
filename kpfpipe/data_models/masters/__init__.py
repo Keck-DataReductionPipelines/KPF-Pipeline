@@ -1,9 +1,9 @@
 """
-KPF masters calibration data models.
+KPF masters data models.
 
-KPFMasterL1 -- Stacked 2D calibration frames (bias, dark, flat)
-KPFMasterL2 -- Extracted masters spectra (stub)
-KPFMasterL4 -- Masters RV/CCF products (stub)
+KPFMasterL1 -- FFI calibrations (bias, dark, flat)
+KPFMasterL2 -- Extracted spectra (stub)
+KPFMasterL4 -- RV/CCF products (stub)
 """
 
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
