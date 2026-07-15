@@ -10,13 +10,21 @@ radial-velocity step later fills with fitted RVs.
 Each fiber's mask, barycentric handling, and CCF grid center are dispatched from
 its illumination source (SCI-OBJ/SKY-OBJ/CAL-OBJ in INSTRUMENT_HEADER):
 
-  source   mask                 barycorr  grid center
-  target   TARGTEFF-lookup      yes       TARGRADV (systemic)
-  sky      G2_espresso (solar)  yes       0
-  thar     ThAr list (unit wt)  no        0
-  etalon   [NOT IMPLEMENTED]
-  lfc      [NOT IMPLEMENTED]
-  none     not illuminated -> skipped (no CCF)
+  +--------+-------------------------------------+----------+---------------------+
+  | source | mask                                | barycorr | grid center         |
+  +========+=====================================+==========+=====================+
+  | target | TARGTEFF-lookup                     | yes      | TARGRADV (systemic) |
+  +--------+-------------------------------------+----------+---------------------+
+  | sky    | G2_espresso (solar)                 | yes      | 0                   |
+  +--------+-------------------------------------+----------+---------------------+
+  | thar   | ThAr list (unit wt)                 | no       | 0                   |
+  +--------+-------------------------------------+----------+---------------------+
+  | etalon | [NOT IMPLEMENTED]                   |          |                     |
+  +--------+-------------------------------------+----------+---------------------+
+  | lfc    | [NOT IMPLEMENTED]                   |          |                     |
+  +--------+-------------------------------------+----------+---------------------+
+  | none   | not illuminated -> skipped (no CCF) |          |                     |
+  +--------+-------------------------------------+----------+---------------------+
 
 All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.

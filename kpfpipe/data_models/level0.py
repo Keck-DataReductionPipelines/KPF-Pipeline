@@ -2,8 +2,7 @@
 KPF Level 0 (raw CCD) data model.
 
 Raw FITS readout from the KPF instrument: amplifier arrays plus exposure
-meter, guide camera, telemetry, and telescope metadata. The extensions
-present vary between observations.
+meter, guide camera, telemetry, and telescope metadata.
 """
 
 import importlib.resources

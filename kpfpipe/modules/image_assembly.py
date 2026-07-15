@@ -1,11 +1,15 @@
 """
 KPF Image Assembly module.
 
-Assembles a raw L0 readout into a single L1 full-frame image (overscan
-correction, amplifier stitching). It applies no calibrations:
-bias/dark/flat are handled downstream by ImageProcessing following the
-standard CCD reduction sequence (bias subtraction, then exposure-scaled dark
-subtraction, then flat division), gated per file type by the masters modules.
+Assembles a raw L0 readout into a single L1 full-frame image (FFI). Automatically
+detects whether observations were obtained in 2- or 4-amplifier mode, subtracts
+per-amplifier overscan bias, measures read noise, and stitches together the FFI
+(4080 x 4080 arrays) for both GREEN and RED CCDs.
+
+ImageAssembly applies no external calibrations: bias/dark/flat are handled
+downstream by ImageProcessing following the standard CCD reduction sequence
+(bias subtraction, then exposure-scaled dark subtraction, then flat division),
+gated per file type by the masters modules.
 """
 
 import logging
