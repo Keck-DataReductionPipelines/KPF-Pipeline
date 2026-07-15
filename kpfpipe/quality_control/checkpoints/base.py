@@ -111,7 +111,8 @@ class Checkpoint:
     def _iter_checkpoints(self):
         """Yield each ``(name, method)`` tagged ``_checkpoint_name``.
 
-        MRO-walk discovery; the mechanism is documented in style guide §11.
+        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
+        subclass first.
         """
         seen = set()
         for cls in type(self).__mro__:

@@ -166,7 +166,7 @@ with one module singleton `keyword_registry`, imported **only** by `data_models/
 the `KPFDataModel.keyword_registry` class attribute. It derives its mapping/validation/routing lookups
 from a **single source-of-truth table** unioning the `L{0,1,2,4}-headers.csv` registries with the EPRV
 keyword defs. *(Coding rules — reading/writing headers, `set_keyword`, registering keywords — are in the
-style guide §10.)*
+style guide §B.4.)*
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
 routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
@@ -339,7 +339,7 @@ with no handlers installed — tests call `recipe.main(config, args)` directly w
 setup must never move into recipes. `warnings.warn` stays the recoverable-condition API, bridged in
 via `logging.captureWarnings`; tests that configure logging must tear down with `teardown_logging`
 (see the autouse fixture in `tests/regression/test_logger.py`). *(Coding rules — levels, lazy
-`%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
+`%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §B.6.)*
 
 
 ## File handling
@@ -400,7 +400,7 @@ for L2/L4.
 with `tests/conftest.py` at the root serving both (its fixtures and the `requires_testdata`
 marker) and the real frames under the gitignored `tests/testdata/`. This section covers how the
 suites are **laid out**; how to *write* a regression test or profiling harness is in the style
-guide §12 (same two subsections), and *when* to run which tier is in CLAUDE.md.
+guide §C.8 (same two subsections), and *when* to run which tier is in CLAUDE.md.
 
 ### Regression
 
@@ -414,7 +414,7 @@ The masters tests mirror the masters subpackage by *responsibility*: `test_maste
 the shared stacking engine (`BaseMasterModule`), `test_master_bias.py`/`test_master_dark.py` the
 concrete bias/dark modules, `test_master_wls.py` the WLS path (a separate ML2), and
 `test_masters_recipe.py` the `kpf_drp_masters` recipe; `flat` has no test file while stubbed.
-(Which file a new masters test belongs in is a style-guide §12 rule.)
+(Which file a new masters test belongs in is a style-guide §C.8 rule.)
 
 ### Profiling
 
@@ -426,4 +426,4 @@ one module. `flat` is skipped while stubbed, and the shared stacking engine (`ma
 has no dedicated harness — its work is attributed to `base.py` methods inside the bias/dark
 harnesses (whereas the *test* suite isolates the engine in `test_master_base.py`, because
 profiling partitions by wall-clock and tests by responsibility). How a harness attributes time
-and flags hotspots is specified in the style guide §12.
+and flags hotspots is specified in the style guide §C.8.

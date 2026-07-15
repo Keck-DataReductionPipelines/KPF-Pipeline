@@ -115,8 +115,8 @@ class KeywordRegistry:
     }
 
     # rvdata's header_map numbers per-trace keywords CAL-first (trace 1=CAL .. 5=SKY),
-    # the stale translator convention; KPF is SKY-first (1=SKY .. 5=CAL, see
-    # EPRV_DATA_STANDARD.md and trace-map.csv). These are the fiber-indexed families
+    # the stale translator convention; KPF is SKY-first (1=SKY .. 5=CAL, per the
+    # EPRV frame; see trace-map.csv). These are the fiber-indexed families
     # whose STANDARD index _load_header_map realigns 1<->5. NOT here (also end in 1/5
     # but not fiber-indexed): EXSNR/EXSNRW (wavelength band 452/852nm), DQLVL, T*.
     _FIBER_INDEXED_BASES = (

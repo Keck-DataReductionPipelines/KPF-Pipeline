@@ -85,7 +85,7 @@ is ruff-only). Match the scope to the change instead of defaulting to the full s
 The fast subset skips the `slow` integration tests (real-frame assembly/overscan, master
 stacking, full L0→L2, WLS orientation), which is why the full-suite triggers above are what
 catch those. How the suite is laid out and split — and the masters test layout — is in the
-architecture guide (*Tests → Regression*); test-writing conventions are in the style guide §12.
+architecture guide (*Tests → Regression*); test-writing conventions are in the style guide §C.8.
 
 ## Architecture
 

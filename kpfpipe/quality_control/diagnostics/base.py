@@ -69,7 +69,8 @@ class Diagnostics:
     def _iter_methods(self):
         """Yield each ``(name, method)`` tagged ``_diag_name``.
 
-        MRO-walk discovery; the mechanism is documented in style guide §11.
+        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
+        subclass first.
         """
         seen = set()
         for cls in type(self).__mro__:

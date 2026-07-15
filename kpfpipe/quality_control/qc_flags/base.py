@@ -44,7 +44,7 @@ class QC:
 
             kw = fn._qc_key
             # Mirror the registry Description into results (the FITS comment
-            # source; see ``_tag`` and style guide §11).
+            # source; see ``_tag``).
             comment = self.kpf_obj.keyword_registry.routing.get(kw, (None, ""))[1]
             self.results[kw] = (passed, comment)
             self.kpf_obj.set_keyword(kw, 1 if passed else 0)
@@ -79,7 +79,8 @@ class QC:
     def _iter_checks(self):
         """Yield each ``(name, method)`` tagged ``_qc_key``.
 
-        MRO-walk discovery; the mechanism is documented in style guide §11.
+        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
+        subclass first.
         """
         seen = set()
         for cls in type(self).__mro__:

@@ -170,7 +170,7 @@ class KPF2(KPFDataModel, RV2):
         # ANCILLARY_SPECTRUM (Ca H&K) as an ImageHDU, but we keep it a BinTableHDU
         # placeholder for now -- Ca H&K extraction is WIP and existing L2/master
         # products encode it as BinTableHDU, so flipping the type breaks reading
-        # them back. See EPRV_DATA_STANDARD.md §8 (deviations). QUALITY_CONTROL is
+        # them back (a deliberate EPRV deviation). QUALITY_CONTROL is
         # created here (L2 has no extensions CSV); RECEIPT and barycentric/RV#
         # already exist via RV2.
         for ext, ext_type in [

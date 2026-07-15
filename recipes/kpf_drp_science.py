@@ -31,7 +31,7 @@ from kpfpipe.quality_control.quicklook import PlotL0, PlotL1, PlotL2, PlotL4
 from kpfpipe.utils.io import kpf_directory, kpf_filepath
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
-# would not identify this module in the log (style guide section 6).
+# would not identify this module in the log.
 logger = logging.getLogger("kpfpipe.recipe.science")
 
 
